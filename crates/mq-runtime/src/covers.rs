@@ -70,6 +70,15 @@ impl Core {
             .and_then(|addons| addons.iter().find_map(|a| rpdb_key_in(&a.transport_url)))
     }
 
+    /// A title's IMDb id: its own, or the one its addon gave (kept by
+    /// `learn_imdb_ids`) for an id that is not IMDb's.
+    pub(crate) fn imdb_id_of(&self, id: &str) -> Option<String> {
+        if is_imdb(id) {
+            return Some(id.to_owned());
+        }
+        self.library().imdb_ids(&[id]).ok()?.remove(id)
+    }
+
     /// `covers` with a key read before.
     pub(crate) fn covers_with<'a>(
         &self,

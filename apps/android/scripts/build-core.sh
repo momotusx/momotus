@@ -33,8 +33,9 @@ source "$ROOT/apps/android/scripts/core-engine.sh"
 if [ "$(core_kind)" = store ]; then echo "build-core.sh: store core (STORE=1): no torrent engine"; fi
 # The Trakt app (client id and redirect URI, read by `option_env!`) when this machine has it:
 # .env.trakt.local at the repository root, gitignored. Without the file the core has no Trakt app
-# (notConfigured), as in CI or a fresh clone.
-for env in "$ROOT/.env.trakt.local"; do
+# (notConfigured), as in CI or a fresh clone. The TMDB read token (MARQUEE_TMDB_READ_TOKEN) the same
+# way, from .env.tmdb.local: the title page's TMDB score.
+for env in "$ROOT/.env.trakt.local" "$ROOT/.env.tmdb.local"; do
   if [ -f "$env" ]; then
     set -a
     source "$env"
@@ -77,6 +78,12 @@ case "${1:-}" in
     ;;
   *) usage ;;
 esac
+# A release core carries TMDB (plans/title-page-ratings-genres-similar.md), the store core (STORE=1)
+# too: it never ships without the token by accident. Only a dev core may lack it.
+if [ "$DEV_ASSERTIONS" = false ] && [ -z "${MARQUEE_TMDB_READ_TOKEN:-}" ]; then
+  echo "build-core.sh: no TMDB token: copy .env.tmdb.local to the repository root" >&2
+  exit 1
+fi
 
 cd "$ROOT"
 

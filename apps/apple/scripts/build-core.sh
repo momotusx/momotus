@@ -29,7 +29,9 @@ root="$(cd "$apple/../.." && pwd)"
 # The Trakt app (client id and redirect URI, read by `option_env!`) when this
 # machine has it: .env.trakt.local at the repository root, gitignored. Without
 # the file the core has no Trakt app (notConfigured), as in CI or a fresh clone.
-for env in "$root/.env.trakt.local"; do
+# The TMDB read token (MARQUEE_TMDB_READ_TOKEN) the same way, from
+# .env.tmdb.local: the title page's TMDB score.
+for env in "$root/.env.trakt.local" "$root/.env.tmdb.local"; do
   if [[ -f "$env" ]]; then
     set -a
     source "$env"
@@ -50,6 +52,13 @@ elif [[ "${1:-}" == "--dev" ]]; then
   target_dir="${target_dir}-dev"
 fi
 export CARGO_PROFILE_RELEASE_DEBUG_ASSERTIONS=$dev_assertions
+# A release core carries TMDB (plans/title-page-ratings-genres-similar.md), the
+# store core (STORE=1) too: it never ships without the token by accident. Only a
+# dev core (--dev) may lack it.
+if [[ "$dev_assertions" == false && -z "${MARQUEE_TMDB_READ_TOKEN:-}" ]]; then
+  echo "build-core.sh: no TMDB token: copy .env.tmdb.local to the repository root" >&2
+  exit 1
+fi
 features=(--features torrent)
 if [[ "${STORE:-}" == 1 ]]; then
   features=()

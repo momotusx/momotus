@@ -32,6 +32,29 @@ pub fn dev_trakt(core: &Core) {
 #[cfg(not(debug_assertions))]
 pub fn dev_trakt(_: &Core) {}
 
+/// Development builds only, on the same rule: `MQ_DEV_TMDB=<loopback url>`
+/// points TMDB at a local fake with a test token, so the web e2e shows the
+/// title page's TMDB score without the owner's token.
+#[cfg(debug_assertions)]
+pub fn dev_tmdb(core: &Core) {
+    let Ok(url) = std::env::var("MQ_DEV_TMDB") else {
+        return;
+    };
+    if !loopback_url(&url) {
+        tracing::warn!("MQ_DEV_TMDB ignored: only an http URL on this machine is taken");
+        eprintln!("MQ_DEV_TMDB ignored: only an http URL on this machine is taken");
+        return;
+    }
+    core.set_tmdb_host(mq_runtime::TmdbHost {
+        url,
+        token: Some("marquee-dev".into()),
+        local: true,
+    });
+}
+
+#[cfg(not(debug_assertions))]
+pub fn dev_tmdb(_: &Core) {}
+
 /// Development builds only, on the same rule: `MQ_DEV_SEGMENTS=<loopback
 /// base url>` asks a local fake for skip segments (TheIntroDB at
 /// `<base>/theintrodb`, IntroDB at `<base>/introdb`, AniSkip at

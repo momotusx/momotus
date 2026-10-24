@@ -3,12 +3,15 @@
 //! into the library through the tracker intents, and their views.
 
 mod login;
+mod lookups;
 mod map;
 mod pull;
 mod scrobble;
 mod search;
 
 pub use login::{TraktLoginSnapshot, TraktLoginView};
+pub(crate) use lookups::MIN_VOTES;
+pub use lookups::TmdbHost;
 pub use pull::TraktReport;
 pub use scrobble::TraktPlayback;
 pub(crate) use scrobble::{Scrobble, Target as ScrobbleTarget};
@@ -157,6 +160,8 @@ pub(crate) struct Trakt {
     sessions: AtomicU64,
     /// Title search answers for the search page (`search.rs`).
     search: Mutex<search::Memory>,
+    /// The title page's TMDB and Trakt lookups (`lookups.rs`).
+    lookups: Mutex<lookups::Memory>,
     /// Cancelled when the device's runtime goes: every worker, scheduler
     /// and sign-in ends, and the tokens leave memory with them.
     shutdown: CancellationToken,
@@ -230,6 +235,7 @@ impl Trakt {
             boot: bytes.iter().map(|b| format!("{b:02x}")).collect(),
             sessions: AtomicU64::new(0),
             search: Mutex::default(),
+            lookups: Mutex::default(),
         })
     }
 

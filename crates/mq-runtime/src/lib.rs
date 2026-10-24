@@ -25,8 +25,8 @@ pub use crate::debrid::{
 };
 pub use crate::profiles::{MAX_PROFILES, ProfileError};
 pub use crate::trakt::{
-    TraktConfig, TraktImporting, TraktLoginSnapshot, TraktLoginView, TraktPlayback, TraktReport,
-    TraktState, TraktStatus, TraktUnmapped, TraktView,
+    TmdbHost, TraktConfig, TraktImporting, TraktLoginSnapshot, TraktLoginView, TraktPlayback,
+    TraktReport, TraktState, TraktStatus, TraktUnmapped, TraktView,
 };
 pub use mq_debrid::StoreId;
 pub use mq_import::Endpoints as StremioEndpoints;

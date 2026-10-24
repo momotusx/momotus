@@ -3,3 +3,5 @@
 //! app's keystore.
 
 pub mod trakt;
+
+pub mod tmdb;

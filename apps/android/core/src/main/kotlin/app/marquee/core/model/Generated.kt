@@ -1484,6 +1484,25 @@ sealed interface SignInSnapshot {
     ) : SignInSnapshot
 }
 
+/** One source's number on the title page (plans/title-page-ratings-genres-similar.md): `pending` while an answer can still come (keep the slot's width), `shown` with the number as written, `none` when there is none or no call will be made (draw nothing, take no space). */
+@Serializable
+@JsonClassDiscriminator("state")
+sealed interface Slot {
+    @Serializable
+    @SerialName("pending")
+    data object Pending : Slot
+
+    @Serializable
+    @SerialName("shown")
+    data class Shown(
+        val text: String,
+    ) : Slot
+
+    @Serializable
+    @SerialName("none")
+    data object None : Slot
+}
+
 /** How a stream starts (plans/m13-stream-choice.md 3.2). */
 @Serializable(with = SourceClass.Serializer::class)
 enum class SourceClass(
@@ -1736,6 +1755,8 @@ data class TitleDetails(
     val ratings: Ratings = Ratings(),
     /** The title's IMDb page, for the IMDb score to link to; null for an id that is not IMDb's. */
     val imdbUrl: String? = null,
+    /** TMDB's and Trakt's numbers, asked once the page is visible (`titleVisible`). */
+    val scores: TitleScores = TitleScores(Slot.None, Slot.None),
     val source: String,
     /** Trailers the metadata names (YouTube), first is the main one. */
     val trailers: List<Trailer> = emptyList(),
@@ -1748,6 +1769,8 @@ data class TitleHeader(
     val inLibrary: Boolean,
     /** Add to Library can be offered: false on a kids profile, whose Library is the owner's list (`setInLibrary` is refused there). Hide the button when false. */
     val librarySettable: Boolean = true,
+    /** Genres open Discover: false on a kids profile, which has no Discover (plans/m11-kids.md 14.1). Show the genres as plain text when false. */
+    val genresLinked: Boolean = true,
     /** Subtitles for the video Play plays (core backlog C34): what the subtitles addons list for it, for the CC and SDH badges. Null until they answered, and with no subtitles addon. */
     val captions: Captions? = null,
     val seasons: List<Int> = emptyList(),
@@ -1760,10 +1783,19 @@ data class TitleHeader(
     val watched: Boolean,
 )
 
+/** The title page's numbers beyond the addon's IMDb score, per source: TMDB's user score and Trakt's community score, each as a percentage ("87%", "92%"), shown only with at least 10 votes. */
+@Serializable
+data class TitleScores(
+    val tmdb: Slot,
+    val trakt: Slot,
+)
+
 @Serializable
 data class TitleSnapshot(
     val header: TitleHeader,
     val episodes: List<Episode> = emptyList(),
+    /** "More like this": empty until it lands, and for a kids profile. */
+    val similar: List<Tile> = emptyList(),
 )
 
 @Serializable
@@ -1797,6 +1829,12 @@ sealed interface TitleUpdate {
     @SerialName("episodes")
     data class Episodes(
         val diffs: List<ListDiff<Episode>> = emptyList(),
+    ) : TitleUpdate
+
+    @Serializable
+    @SerialName("similar")
+    data class Similar(
+        val tiles: List<Tile> = emptyList(),
     ) : TitleUpdate
 }
 

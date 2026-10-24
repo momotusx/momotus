@@ -30,6 +30,7 @@ async fn main() {
     .expect("open core");
     core.set_debrid_keys(&StoreId::keys_from_env());
     mq_bridge::dev_trakt(&core);
+    mq_bridge::dev_tmdb(&core);
     mq_bridge::dev_segments(&core);
     mq_bridge::dev_replay();
     let mut app = Router::new().route("/ws", get(ws)).with_state(core);

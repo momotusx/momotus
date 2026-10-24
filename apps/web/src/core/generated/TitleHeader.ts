@@ -12,6 +12,11 @@ export type TitleHeader = { state: TitleState, details: TitleDetails | null, inL
  */
 librarySettable: boolean, 
 /**
+ * Genres open Discover: false on a kids profile, which has no Discover
+ * (plans/m11-kids.md 14.1). Show the genres as plain text when false.
+ */
+genresLinked: boolean, 
+/**
  * Subtitles for the video Play plays (core backlog C34): what the
  * subtitles addons list for it, for the CC and SDH badges. Null until
  * they answered, and with no subtitles addon.

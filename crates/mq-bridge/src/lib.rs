@@ -46,7 +46,7 @@ use tokio::sync::{broadcast, watch};
 
 mod dev;
 pub mod output;
-pub use dev::{dev_replay, dev_segments, dev_trakt};
+pub use dev::{dev_replay, dev_segments, dev_tmdb, dev_trakt};
 pub use output::{Outgoing, Output, SendError};
 use tokio::task::JoinHandle;
 
@@ -1888,6 +1888,13 @@ impl Session {
             .and_then(Value::as_str)
             .unwrap_or_default();
         match (&subscription.view, kind) {
+            (View::Title(title), "titleVisible") => {
+                let visible = command
+                    .get("visible")
+                    .and_then(Value::as_bool)
+                    .ok_or("visible missing")?;
+                title.set_visible(visible);
+            }
             (View::Title(title), "selectSeason") => {
                 let season = command
                     .get("season")

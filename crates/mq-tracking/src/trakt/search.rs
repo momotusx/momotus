@@ -25,6 +25,52 @@ pub async fn titles(api: &Api, query: &str, token: Option<&str>) -> Answer {
     api.read(&path, token).await
 }
 
+/// Trakt's path segment for a kind: `movies` for a movie, `shows` for a
+/// series.
+fn plural(kind: &str) -> &'static str {
+    if kind == "movie" { "movies" } else { "shows" }
+}
+
+/// Trakt's community score for a title by its IMDb id (`kind` is `movie`
+/// or `series`), for the title page (plans/title-page-ratings-genres-similar.md).
+pub async fn ratings(api: &Api, kind: &str, imdb: &str, token: Option<&str>) -> Answer {
+    api.read(&format!("/{}/{imdb}/ratings", plural(kind)), token)
+        .await
+}
+
+/// Up to 20 titles Trakt relates to this one, for "More like this".
+pub async fn related(api: &Api, kind: &str, imdb: &str, token: Option<&str>) -> Answer {
+    api.read(&format!("/{}/{imdb}/related?limit=20", plural(kind)), token)
+        .await
+}
+
+/// The rating (0 to 10) and vote count of a ratings answer.
+pub fn score(body: &Value) -> Option<(f64, u64)> {
+    let rating = body["rating"]
+        .as_f64()
+        .filter(|r| (0.0..=10.0).contains(r))?;
+    Some((rating, body["votes"].as_u64()?))
+}
+
+/// The titles of a related answer that carry an IMDb id, in Trakt's order,
+/// as `kind` (`movie` or `series`): the related titles share the kind.
+pub fn related_found(body: &Value, kind: &'static str) -> Vec<Found> {
+    body.as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|item| {
+            let imdb_id = item["ids"]["imdb"]
+                .as_str()
+                .filter(|id| id.starts_with("tt"))?;
+            Some(Found {
+                kind,
+                imdb_id: imdb_id.to_owned(),
+                title: item["title"].as_str()?.to_owned(),
+            })
+        })
+        .collect()
+}
+
 /// The hits of a search answer that carry an IMDb id, in Trakt's order.
 pub fn found(body: &Value) -> Vec<Found> {
     body.as_array()
@@ -51,6 +97,40 @@ pub fn found(body: &Value) -> Vec<Found> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A ratings answer gives its rating and votes; a rating off the scale
+    /// or a missing field gives nothing.
+    #[test]
+    fn a_ratings_answer_gives_rating_and_votes() {
+        let body =
+            serde_json::json!({"rating": 9.16432, "votes": 48623, "distribution": {"10": 1}});
+        assert_eq!(score(&body), Some((9.16432, 48623)));
+        assert_eq!(
+            score(&serde_json::json!({"rating": 11.0, "votes": 3})),
+            None
+        );
+        assert_eq!(score(&serde_json::json!({"votes": 3})), None);
+        assert_eq!(score(&serde_json::Value::Null), None);
+    }
+
+    /// Related titles keep Trakt's order and their IMDb ids; one with none
+    /// is dropped.
+    #[test]
+    fn related_titles_read_as_imdb_ids() {
+        let body = serde_json::json!([
+            {"title": "Cool Hand Luke", "year": 1967, "ids": {"imdb": "tt0061512", "tmdb": 903}},
+            {"title": "No Id", "ids": {"imdb": null}},
+            {"title": "Papillon", "ids": {"imdb": "tt0070511"}},
+        ]);
+        let found = related_found(&body, "movie");
+        assert_eq!(
+            found
+                .iter()
+                .map(|f| (f.kind, f.imdb_id.as_str()))
+                .collect::<Vec<_>>(),
+            [("movie", "tt0061512"), ("movie", "tt0070511")]
+        );
+    }
 
     /// Shows read as series; a hit with no IMDb id, or of another type, is
     /// dropped; Trakt's order stays.

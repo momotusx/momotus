@@ -5,6 +5,7 @@
 use crate::Core;
 use crate::live::{FRAME, ListDiff, coalesce};
 use crate::ratings::Ratings;
+use crate::views::home::Tile;
 use crate::views::playback::{aired, following};
 use eyeball::SharedObservable;
 use eyeball_im::ObservableVector;
@@ -15,6 +16,7 @@ use serde::Serialize;
 use std::collections::HashSet;
 use std::pin::Pin;
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 use stremio_core::types::resource::{SeriesInfo, StreamSource, Video};
 use tokio::task::JoinSet;
 
@@ -52,6 +54,9 @@ pub struct TitleDetails {
     /// The title's IMDb page, for the IMDb score to link to; null for an id
     /// that is not IMDb's.
     pub imdb_url: Option<String>,
+    /// TMDB's and Trakt's numbers, asked once the page is visible
+    /// (`titleVisible`).
+    pub scores: TitleScores,
     pub source: String,
     /// Trailers the metadata names (YouTube), first is the main one.
     pub trailers: Vec<Trailer>,
@@ -70,6 +75,41 @@ pub struct Trailer {
     /// The watch page, for apps that hand trailers to a browser or the
     /// YouTube app.
     pub url: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[cfg_attr(
+    feature = "ts",
+    derive(ts_rs::TS),
+    ts(export, export_to = "../../../apps/web/src/core/generated/")
+)]
+#[serde(tag = "state", rename_all = "camelCase")]
+/// One source's number on the title page (plans/title-page-ratings-genres-similar.md):
+/// `pending` while an answer can still come (keep the slot's width),
+/// `shown` with the number as written, `none` when there is none or no
+/// call will be made (draw nothing, take no space).
+pub enum Slot {
+    Pending,
+    Shown {
+        text: String,
+    },
+    #[serde(rename = "none")]
+    Empty,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[cfg_attr(
+    feature = "ts",
+    derive(ts_rs::TS),
+    ts(export, export_to = "../../../apps/web/src/core/generated/")
+)]
+#[serde(rename_all = "camelCase")]
+/// The title page's numbers beyond the addon's IMDb score, per source:
+/// TMDB's user score and Trakt's community score, each as a percentage
+/// ("87%", "92%"), shown only with at least 10 votes.
+pub struct TitleScores {
+    pub tmdb: Slot,
+    pub trakt: Slot,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -100,6 +140,9 @@ pub struct TitleHeader {
     /// Library is the owner's list (`setInLibrary` is refused there). Hide
     /// the button when false.
     pub library_settable: bool,
+    /// Genres open Discover: false on a kids profile, which has no Discover
+    /// (plans/m11-kids.md 14.1). Show the genres as plain text when false.
+    pub genres_linked: bool,
     /// Subtitles for the video Play plays (core backlog C34): what the
     /// subtitles addons list for it, for the CC and SDH badges. Null until
     /// they answered, and with no subtitles addon.
@@ -186,8 +229,16 @@ pub struct Captions {
 )]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum TitleUpdate {
-    Header { header: Box<TitleHeader> },
-    Episodes { diffs: Vec<ListDiff<Episode>> },
+    Header {
+        header: Box<TitleHeader>,
+    },
+    Episodes {
+        diffs: Vec<ListDiff<Episode>>,
+    },
+    /// "More like this", sent whole when it lands.
+    Similar {
+        tiles: Vec<Tile>,
+    },
 }
 
 struct State {
@@ -195,6 +246,9 @@ struct State {
     selected_season: Option<u32>,
     /// The subtitles addons' answer, for the video it was asked for.
     captions: Option<(String, Captions)>,
+    /// TMDB's and Trakt's answers, once each landed.
+    tmdb: Option<Slot>,
+    trakt: Option<Slot>,
 }
 
 /// A live title page. Dropping it cancels its work.
@@ -209,6 +263,9 @@ pub struct TitleView {
     header: SharedObservable<TitleHeader>,
     episodes: Arc<Mutex<ObservableVector<Episode>>>,
     state: Arc<Mutex<State>>,
+    similar: SharedObservable<Vec<Tile>>,
+    /// The TMDB and Trakt lookup, alive only while the page is visible.
+    lookup: Mutex<JoinSet<()>>,
     _tasks: JoinSet<()>,
 }
 
@@ -222,6 +279,8 @@ pub struct TitleView {
 pub struct TitleSnapshot {
     pub header: TitleHeader,
     pub episodes: Vec<Episode>,
+    /// "More like this": empty until it lands, and for a kids profile.
+    pub similar: Vec<Tile>,
 }
 
 impl TitleView {
@@ -234,6 +293,7 @@ impl TitleView {
             details: None,
             in_library: false,
             library_settable: !policy.kids(),
+            genres_linked: !policy.kids(),
             captions: None,
             seasons: Vec::new(),
             selected_season: None,
@@ -253,7 +313,11 @@ impl TitleView {
                 meta: None,
                 selected_season: None,
                 captions: None,
+                tmdb: None,
+                trakt: None,
             })),
+            similar: SharedObservable::new(Vec::new()),
+            lookup: Mutex::new(JoinSet::new()),
             _tasks: JoinSet::new(),
         };
         if !view.denied {
@@ -282,6 +346,7 @@ impl TitleView {
             header: self.header.clone(),
             episodes: self.episodes.clone(),
             state: self.state.clone(),
+            similar: self.similar.clone(),
         }
     }
 
@@ -289,6 +354,7 @@ impl TitleView {
         TitleSnapshot {
             header: self.header.get(),
             episodes: lock(&self.episodes).iter().cloned().collect(),
+            similar: self.similar.get(),
         }
     }
 
@@ -304,6 +370,7 @@ impl TitleView {
         let snapshot = TitleSnapshot {
             header: self.header.get(),
             episodes: values.into_iter().collect(),
+            similar: self.similar.get(),
         };
         let episodes = episode_stream.map(|batch| {
             vec![TitleUpdate::Episodes {
@@ -315,8 +382,30 @@ impl TitleView {
                 header: Box::new(header),
             }]
         });
-        let merged = futures_util::stream::select(episodes, headers);
+        let similar = self
+            .similar
+            .subscribe()
+            .map(|tiles| vec![TitleUpdate::Similar { tiles }]);
+        let merged =
+            futures_util::stream::select(futures_util::stream::select(episodes, headers), similar);
         (snapshot, Box::pin(coalesce(Box::pin(merged), FRAME)))
+    }
+
+    /// The page shows or stops showing (`titleVisible`): the apps send it
+    /// on appearing and on leaving the foreground (the player over it, the
+    /// app in the background). TMDB and Trakt are asked only after the page
+    /// has been visible for `VISIBLE_FOR` without a break; hidden stops an
+    /// unanswered lookup, and the next visible starts it again. Answers
+    /// already in stay.
+    pub fn set_visible(&self, visible: bool) {
+        let mut lookup = lock(&self.lookup);
+        while lookup.try_join_next().is_some() {}
+        if !visible {
+            lookup.abort_all();
+        } else if lookup.is_empty() && !self.denied && !self.kids {
+            // A repeated visible keeps the running wait and lookup.
+            lookup.spawn(look_up(self.ctx()));
+        }
     }
 
     pub fn select_season(&self, season: u32) {
@@ -398,10 +487,89 @@ struct Ctx {
     header: SharedObservable<TitleHeader>,
     episodes: Arc<Mutex<ObservableVector<Episode>>>,
     state: Arc<Mutex<State>>,
+    similar: SharedObservable<Vec<Tile>>,
 }
 
 fn lock<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
     m.lock().unwrap_or_else(|p| p.into_inner())
+}
+
+/// How long the page must stay visible before TMDB and Trakt are asked: a
+/// glance while browsing asks nothing.
+const VISIBLE_FOR: Duration = Duration::from_secs(1);
+/// "More like this" shows at most this many titles.
+const SIMILAR: usize = 20;
+
+/// The kind TMDB and Trakt are asked as: a movie or a series as itself; an
+/// anime by what TMDB says its IMDb id is (`None` here); other kinds not at
+/// all.
+enum Asked {
+    As(&'static str),
+    ByTmdb,
+}
+
+fn asked(kind: &str) -> Option<Asked> {
+    match kind {
+        "movie" => Some(Asked::As("movie")),
+        "series" => Some(Asked::As("series")),
+        "anime" => Some(Asked::ByTmdb),
+        _ => None,
+    }
+}
+
+/// A source's number as the page writes it: a percentage of its 0 to 10
+/// score, only with enough votes.
+fn percent(score: Option<(f64, u64)>) -> Slot {
+    match score {
+        Some((score, votes)) if votes >= crate::trakt::MIN_VOTES => Slot::Shown {
+            text: format!("{:.0}%", score * 10.0),
+        },
+        _ => Slot::Empty,
+    }
+}
+
+/// The TMDB and Trakt lookup (plans/title-page-ratings-genres-similar.md),
+/// once the page has been visible `VISIBLE_FOR` and its meta is in: for a
+/// movie or a series TMDB and Trakt are asked together, so a TMDB outage
+/// never holds Trakt back; an anime asks TMDB first for its IMDb id's kind,
+/// and with no answer asks Trakt nothing. Each answer patches the page.
+async fn look_up(ctx: Ctx) {
+    // From the moment the page shows; answers kept from an earlier visit
+    // show at once, with no wait.
+    let wait = tokio::time::sleep(VISIBLE_FOR);
+    let mut header = ctx.header.subscribe();
+    while ctx.header.get().state == TitleState::Loading {
+        if header.next().await.is_none() {
+            return;
+        }
+    }
+    if lock(&ctx.state).meta.is_none() {
+        return;
+    }
+    let (Some(asked), Some(imdb)) = (asked(&ctx.kind), ctx.core.imdb_id_of(&ctx.id)) else {
+        return;
+    };
+    let kind = match asked {
+        Asked::As(kind) => Some(kind),
+        Asked::ByTmdb => None,
+    };
+    if !ctx.core.lookups_held(kind, &imdb) {
+        wait.await;
+    }
+    let tmdb = async {
+        let found = ctx.core.tmdb_find(&imdb).await;
+        ctx.put(|s| s.tmdb = Some(percent(found.map(|f| (f.score, f.votes)))));
+        found
+    };
+    match asked {
+        Asked::As(kind) => {
+            tokio::join!(tmdb, ctx.ask_trakt(kind, &imdb));
+        }
+        Asked::ByTmdb => match tmdb.await {
+            Some(found) => ctx.ask_trakt(found.kind, &imdb).await,
+            None => ctx.put(|s| s.trakt = Some(Slot::Empty)),
+        },
+    }
 }
 
 async fn load_meta(ctx: Ctx) {
@@ -518,6 +686,95 @@ async fn watch_library(ctx: Ctx) {
 }
 
 impl Ctx {
+    /// The page's TMDB and Trakt slots: an answer that landed, `pending`
+    /// while one can still come, `none` when no call will be made.
+    fn scores(&self) -> TitleScores {
+        let (tmdb, trakt) = {
+            let state = lock(&self.state);
+            (state.tmdb.clone(), state.trakt.clone())
+        };
+        let asked = asked(&self.kind);
+        let imdb = asked.is_some() && !self.kids && self.core.imdb_id_of(&self.id).is_some();
+        let tmdb_asked = imdb && self.core.tmdb_ready();
+        let trakt_asked = imdb
+            && self.core.trakt_lookup_ready()
+            && (!matches!(asked, Some(Asked::ByTmdb)) || tmdb_asked);
+        let planned = |asked: bool| if asked { Slot::Pending } else { Slot::Empty };
+        TitleScores {
+            tmdb: tmdb.unwrap_or_else(|| planned(tmdb_asked)),
+            trakt: trakt.unwrap_or_else(|| planned(trakt_asked)),
+        }
+    }
+
+    /// Puts an answer in and renders the page with it.
+    fn put(&self, f: impl FnOnce(&mut State)) {
+        f(&mut lock(&self.state));
+        self.render();
+    }
+
+    /// Trakt's score and related titles for the title as `kind`, together.
+    async fn ask_trakt(&self, kind: &'static str, imdb: &str) {
+        let score = async {
+            let score = self.core.trakt_score(kind, imdb).await;
+            self.put(|s| s.trakt = Some(percent(score)));
+        };
+        let related = async {
+            let found = self.core.trakt_related(kind, imdb).await;
+            let tiles = self.similar_tiles(imdb, found);
+            if self.similar.get() != tiles {
+                self.similar.set(tiles);
+            }
+        };
+        tokio::join!(score, related);
+    }
+
+    /// "More like this" from Trakt's related titles: never the title itself,
+    /// each once, those the profile's policy allows (kids get none anyway:
+    /// defence in depth), each with its rated cover and Stremio's public
+    /// poster (the one Cinemeta uses) under it, so a profile with no RPDB
+    /// key still sees posters.
+    fn similar_tiles(
+        &self,
+        imdb: &str,
+        found: Vec<mq_tracking::trakt::search::Found>,
+    ) -> Vec<Tile> {
+        let policy = self.core.policy();
+        let mut seen = HashSet::new();
+        let found: Vec<_> = found
+            .into_iter()
+            .filter(|f| f.imdb_id != imdb && f.imdb_id != self.id)
+            .filter(|f| policy.allows(f.kind, &f.imdb_id))
+            .filter(|f| seen.insert(f.imdb_id.clone()))
+            .take(SIMILAR)
+            .collect();
+        let covers = self.core.covers(found.iter().map(|f| f.imdb_id.as_str()));
+        found
+            .into_iter()
+            .map(|f| {
+                Tile {
+                    poster: Some(format!(
+                        "https://images.metahub.space/poster/medium/{}/img",
+                        f.imdb_id
+                    )),
+                    id: f.imdb_id,
+                    kind: f.kind.to_owned(),
+                    name: f.title,
+                    poster_fallback: None,
+                    background: None,
+                    logo: None,
+                    poster_shape: "poster".into(),
+                    release_info: None,
+                    progress: None,
+                    video_id: None,
+                    rating: None,
+                    ratings: Ratings::default(),
+                    blurb: None,
+                }
+                .rated_cover(&covers)
+            })
+            .collect()
+    }
+
     fn render(&self) {
         let source = self
             .header
@@ -592,7 +849,7 @@ impl Ctx {
         let now = mq_library::hlc::now_ms() as i64;
         let (play_target, next_airs) = play_target(&meta, &self.kind, resume, &watched, now);
         let rated_poster = self.core.covers([self.id.as_str()]).url(&self.id);
-        let mut details = details(&meta, source, rated_poster);
+        let mut details = details(&meta, source, rated_poster, self.scores());
         if self.kids {
             // A trailer is a YouTube hand-off: it leaves the app.
             details.trailers.clear();
@@ -602,6 +859,7 @@ impl Ctx {
             details: Some(details),
             in_library,
             library_settable: !self.kids,
+            genres_linked: !self.kids,
             // Only the answer for the video Play plays now.
             captions: captions
                 .filter(|(video, _)| play_target.as_ref().is_some_and(|t| t.video_id == *video))
@@ -764,7 +1022,12 @@ fn episode_label(meta: &MetaItem, video_id: &str) -> Option<String> {
     Some(format!("S{}:E{}", info.season, info.episode))
 }
 
-fn details(meta: &MetaItem, source: &str, rated_poster: Option<String>) -> TitleDetails {
+fn details(
+    meta: &MetaItem,
+    source: &str,
+    rated_poster: Option<String>,
+    scores: TitleScores,
+) -> TitleDetails {
     let p = &meta.preview;
     let links = |category: &str| -> Vec<String> {
         p.links
@@ -791,6 +1054,7 @@ fn details(meta: &MetaItem, source: &str, rated_poster: Option<String>) -> Title
         ratings: Ratings::of(links("imdb").first().map(String::as_str)),
         imdb_url: crate::segments::is_imdb(&p.id)
             .then(|| format!("https://www.imdb.com/title/{}/", p.id)),
+        scores,
         source: source.to_owned(),
         trailers: p
             .trailer_streams

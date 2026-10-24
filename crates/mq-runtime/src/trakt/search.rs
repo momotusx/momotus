@@ -51,7 +51,9 @@ impl Memory {
         }
     }
 
-    fn quiet(&self, now: Instant) -> bool {
+    /// Trakt's quiet time after a 429: one host and one limit, shared by
+    /// Search and the title page's lookups (`lookups.rs`).
+    pub(super) fn quiet(&self, now: Instant) -> bool {
         self.quiet_until.is_some_and(|until| now < until)
     }
 
@@ -67,7 +69,7 @@ impl Memory {
     }
 
     /// A 429: no call for its `Retry-After`, and never under a minute.
-    fn throttled(&mut self, now: Instant, retry_after: Option<Duration>) {
+    pub(super) fn throttled(&mut self, now: Instant, retry_after: Option<Duration>) {
         self.quiet_until = Some(now + retry_after.unwrap_or(QUIET).max(QUIET));
     }
 }
