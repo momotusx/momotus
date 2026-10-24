@@ -147,6 +147,10 @@ androidComponents {
         // Their own package beside a device's Marquee: a benchmark run installs and uninstalls it, never the viewer's
         // app or its data.
         if (benchmark) variant.applicationId.set("app.marquee.android.benchmark")
+        // A walk build's own package (gradle property marquee.applicationIdSuffix, for example .walk), so a walk
+        // never installs over the owner's app (plans/accounts-social-sync.md H14). Empty for every other build.
+        val walkSuffix = property("marquee.applicationIdSuffix").toString()
+        if (!benchmark && walkSuffix.isNotEmpty()) variant.applicationId.set("app.marquee.android$walkSuffix")
         // One versionCode per ABI APK, so two APKs of one release never share one (arm64 above armeabi-v7a,
         // so a device that runs both takes arm64).
         variant.outputs.forEach { output ->
