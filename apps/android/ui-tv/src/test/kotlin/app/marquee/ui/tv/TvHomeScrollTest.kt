@@ -451,6 +451,27 @@ class TvHomeScrollTest {
     }
 
     @Test
+    fun `Right along a lane leaves the page still`() {
+        show()
+        downTo(SETTLED)
+        // The owner's walk on the Fire TV (2026-10-25): about 15 presses along a row, the page bobbing on each.
+        val moves =
+            (2..16).map { tile ->
+                press(Key.DirectionRight).also {
+                    assertTrue(focused("Title $SETTLED.$tile"), "focus went to tile $tile")
+                }
+            }
+        println(
+            "BENCH lane-still " + moves.joinToString(",") { "%.1f".format(it.frames.sumOf { f -> abs(f).toDouble() }) },
+        )
+        // Home's page has its own anchor, which leaves a row in view alone; a page on the TV's default pivot moved
+        // with the focus tween on every press (FocusStillTest).
+        moves.forEachIndexed { i, move ->
+            assertTrue(move.frames.all { abs(it) < 0.5f }, "the page moved on Right ${i + 1}: ${move.frames}")
+        }
+    }
+
+    @Test
     fun `Up into Continue Watching, then to the hero's Play, each move the page once`() {
         show(hero = true)
         downTo(2)
@@ -533,7 +554,7 @@ class TvHomeScrollTest {
         /** The most tiles a 1920 point lane shows. */
         const val LANE_TILES = 8
 
-        /** The focused tile grows as it comes to rest, and the anchor takes its grown top. */
-        const val ANCHOR_SLACK = 20f
+        /** The page anchors the focused tile where it is laid out, not its scaled top (FocusStillTest): whole points. */
+        const val ANCHOR_SLACK = 2f
     }
 }

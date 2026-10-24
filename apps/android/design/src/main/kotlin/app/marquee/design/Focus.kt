@@ -45,6 +45,7 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.ContentDrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipPath
+import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.shadow.Shadow
@@ -83,8 +84,9 @@ import kotlin.math.sin
  *
  * Cost on weak GPUs: the shadow is one blurred shape, the rest a few rounded rects, only while
  * focused. The focus flag and the animation are read inside the graphics layer and the draw
- * lambdas, so a focus change redraws this node and never recomposes the caller. The rise is drawn,
- * not laid out, so focus search and the rows' anchoring keep the card's place. Content that scales,
+ * lambdas, so a focus change redraws this node and never recomposes the caller. The scale and the
+ * rise are drawn, not laid out or set on a layer, so focus search and the scrolls that bring a card into
+ * view keep the card's place. Content that scales,
  * rises or draws outside its bounds needs room around it (`Tokens` tile `pad`, [liftRoom]), because
  * parents clip. A new focus target cancels the fade of the old one, so a held D-pad leaves no trail.
  *
@@ -138,10 +140,12 @@ fun Modifier.marqueeFocus(
         .then(
             // The phone's keyboard focus is the ring alone: nothing scales there.
             if (tv) {
-                Modifier.graphicsLayer {
-                    val s = 1f + (scale - 1f) * progress.value
-                    scaleX = s
-                    scaleY = s
+                // Drawn, not a layer's transform: the scroll that brings a focused node into view reads its bounds through
+                // every layer, so a scaled layer grew the tile's top on each frame of the tween, and a page that pivots on
+                // it (a TV's default, as on Discover) went up and down with every move along a row (FocusStillTest).
+                // The plain layer keeps the redraw of each frame inside this node.
+                Modifier.graphicsLayer().drawWithContent {
+                    scale(1f + (scale - 1f) * progress.value) { this@drawWithContent.drawContent() }
                 }
             } else {
                 Modifier
