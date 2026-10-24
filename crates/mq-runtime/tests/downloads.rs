@@ -89,9 +89,19 @@ async fn origin(data: Arc<Vec<u8>>, how: How) -> (String, Seen) {
                     ("206 Partial Content".to_owned(), start)
                 };
                 let body = &data[from..];
+                let cut = match how.cut_first_after {
+                    Some(n) if nth == 0 => n.min(body.len()),
+                    _ => body.len(),
+                };
+                // A cut answer names no length: its body just ends early,
+                // as a connection the origin closed does.
+                let length = if cut < body.len() && status.starts_with("206") {
+                    String::new()
+                } else {
+                    format!("Content-Length: {}\r\n", body.len())
+                };
                 let mut head = format!(
-                    "HTTP/1.1 {status}\r\nContent-Type: video/mp4\r\nContent-Length: {}\r\nConnection: close\r\n",
-                    body.len()
+                    "HTTP/1.1 {status}\r\nContent-Type: video/mp4\r\n{length}Connection: close\r\n"
                 );
                 if status.starts_with("206") {
                     head.push_str(&format!(
@@ -102,10 +112,6 @@ async fn origin(data: Arc<Vec<u8>>, how: How) -> (String, Seen) {
                 }
                 head.push_str("\r\n");
                 let _ = socket.write_all(head.as_bytes()).await;
-                let cut = match how.cut_first_after {
-                    Some(n) if nth == 0 => n.min(body.len()),
-                    _ => body.len(),
-                };
                 let _ = socket.write_all(&body[..cut]).await;
             });
         }
@@ -307,6 +313,7 @@ async fn a_download_plays_offline_before_any_addon_answers() {
     assert_eq!(pick.on_device.as_deref(), Some("Downloaded"));
     assert!(snapshot.empty.is_none());
 
+    let asked = SUBTITLE_ASKS.load(Ordering::SeqCst);
     let playback = PlaybackView::open_picked(&core, view.pick(&pick.key), target(), &view.plays());
     let deadline = std::time::Instant::now() + Duration::from_secs(20);
     while playback.snapshot().phase != PlaybackPhase::Ready {
@@ -318,7 +325,6 @@ async fn a_download_plays_offline_before_any_addon_answers() {
         tokio::time::sleep(Duration::from_millis(20)).await;
     }
     // Offline no subtitle source is asked.
-    let asked = SUBTITLE_ASKS.load(Ordering::SeqCst);
     tokio::time::sleep(Duration::from_millis(1500)).await;
     assert_eq!(SUBTITLE_ASKS.load(Ordering::SeqCst), asked);
     assert!(!playback.snapshot().subtitles_pending);
@@ -585,9 +591,9 @@ async fn a_launch_resumes_a_killed_download_from_its_checkpoint() {
     row.bytes_done = 8 << 20;
     row.bytes_total = Some(data.len() as i64);
     core.library().add_download(&row).unwrap();
-    // 12 MiB on disk: 8 checkpointed, then 4 of junk.
+    // 24 MiB on disk: 8 checkpointed, then 16 of junk, past the file's end.
     let mut part = data[..8 << 20].to_vec();
-    part.extend(std::iter::repeat_n(0xEE, 4 << 20));
+    part.extend(std::iter::repeat_n(0xEE, 16 << 20));
     put(&core, "k1", "video.mp4.part", &part);
     core.downloads().relaunch();
     core.downloads().set_link(Link::default());
