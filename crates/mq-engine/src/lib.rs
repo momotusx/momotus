@@ -2174,9 +2174,11 @@ impl Engine {
                 other => other,
             };
         }
-        // Live, with the file selected and its check over: an eviction
-        // skips pieces of a torrent that is not.
-        self.select_file(h, "", &FileHint::Index(file)).await?;
+        // Live, with the file and the kept ones selected and its check
+        // over: an eviction skips pieces of a torrent that is not.
+        for f in std::iter::once(file).chain(left.iter().copied()) {
+            self.select_file(h, "", &FileHint::Index(f)).await?;
+        }
         let managed = t.live.lock().await.as_ref().map(|l| l.managed.clone());
         if let Some(managed) = managed {
             managed.wait_until_initialized().await?;
