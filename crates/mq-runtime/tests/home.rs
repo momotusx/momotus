@@ -148,7 +148,9 @@ async fn rows_fill_in_place_and_mirror_matches_view() {
     let hero = view
         .snapshot()
         .header
-        .hero
+        .heroes
+        .first()
+        .cloned()
         .expect("hero picked from artwork");
     assert_eq!(hero.tile.id, "tt0111161");
     // The hero carries what a featured title shows; rows carry only the rating.
@@ -414,7 +416,7 @@ async fn a_finished_episode_leaves_its_next_one_in_continue_watching() {
     );
     // The hero features a catalog, never the first Continue Watching tile
     // right below it; with no catalog rows there is none.
-    assert!(view.snapshot().header.hero.is_none());
+    assert!(view.snapshot().header.heroes.is_empty());
 }
 
 /// Kitsu's answer for an anime: a series meta with season 1 episodes.
@@ -578,7 +580,10 @@ async fn home_follows_addon_changes_without_reopening() {
     core.library().set_addons("p", &[], &core.hlc()).unwrap();
     until(&mut updates, &mut mirror, |m| m.is_empty(), |_| {}).await;
     assert_eq!(mirror, view.snapshot().rows);
-    assert!(view.snapshot().header.hero.is_none(), "no catalog, no hero");
+    assert!(
+        view.snapshot().header.heroes.is_empty(),
+        "no catalog, no hero"
+    );
 }
 
 const SERIES_WITH_STILLS: &str = r#"{"meta":{"id":"tt9","type":"series","name":"Show",
@@ -1071,7 +1076,7 @@ async fn retrying_a_row_asks_only_its_catalog() {
 /// The reason of the first hero Home shows.
 async fn first_hero(view: &HomeView) -> String {
     for _ in 0..300 {
-        if let Some(hero) = view.snapshot().header.hero {
+        if let Some(hero) = view.snapshot().header.heroes.first().cloned() {
             return hero.reason;
         }
         tokio::time::sleep(Duration::from_millis(5)).await;
@@ -1098,7 +1103,7 @@ async fn rows_until(view: &HomeView, want: &[&str]) {
 
 /// No addon's name anywhere on Home (the owner, 2026-10-22): a row titled as
 /// one before it in addon order, in any case, stays off Home until the user
-/// turns it on in Customize Home, and the hero says only "#1 in" its row.
+/// turns it on in Customize Home, and the hero says only its row's title.
 #[tokio::test]
 async fn a_later_twin_row_stays_off_home_until_turned_on() {
     let core = Core::temporary("p").unwrap();
@@ -1127,15 +1132,12 @@ async fn a_later_twin_row_stays_off_home_until_turned_on() {
     let ids: Vec<String> = core.home_catalogs().into_iter().map(|c| c.row_id).collect();
     let view = HomeView::open(&core);
     rows_until(&view, &[&ids[0]]).await;
-    assert_eq!(first_hero(&view).await, "#1 in Popular Movies");
+    assert_eq!(first_hero(&view).await, "Popular Movies");
 
     // Turned on, the twin shows; the hero still names no addon.
     core.set_home_row_hidden(&ids[1], false).unwrap();
     rows_until(&view, &[&ids[0], &ids[1]]).await;
-    assert_eq!(
-        view.snapshot().header.hero.unwrap().reason,
-        "#1 in Popular Movies"
-    );
+    assert_eq!(view.snapshot().header.heroes[0].reason, "Popular Movies");
     assert_eq!(core.prefs().home_rows.shown, [ids[1].clone()]);
     // Turned off again, it goes, and the choice to show it with it.
     core.set_home_row_hidden(&ids[1], true).unwrap();
@@ -1164,7 +1166,8 @@ async fn hero_until(view: &HomeView, id: &str, reason: &str) {
         if view
             .snapshot()
             .header
-            .hero
+            .heroes
+            .first()
             .is_some_and(|h| h.tile.id == id && h.reason == reason)
         {
             return;
@@ -1173,7 +1176,7 @@ async fn hero_until(view: &HomeView, id: &str, reason: &str) {
     }
     panic!(
         "wanted {id} {reason:?}, got {:?}",
-        view.snapshot().header.hero
+        view.snapshot().header.heroes.first()
     );
 }
 
@@ -1191,10 +1194,10 @@ async fn the_kept_hero_goes_with_its_row() {
         .set_addons("p", &[first, trending], &core.hlc())
         .unwrap();
     let view = HomeView::open(&core);
-    hero_until(&view, "tt0111161", "#1 in Popular Movies").await;
+    hero_until(&view, "tt0111161", "Popular Movies").await;
     let own = view.snapshot().rows[0].row_id.clone();
     core.set_home_row_hidden(&own, true).unwrap();
-    hero_until(&view, "tt0068646", "#1 in Trending Movies").await;
+    hero_until(&view, "tt0068646", "Trending Movies").await;
 }
 
 /// The kept hero's row must still hold it: a row of the same title that no
@@ -1208,11 +1211,11 @@ async fn the_kept_hero_needs_its_row_to_hold_it() {
         .set_addons("p", &[first], &core.hlc())
         .unwrap();
     let view = HomeView::open(&core);
-    hero_until(&view, "tt0111161", "#1 in Popular Movies").await;
+    hero_until(&view, "tt0111161", "Popular Movies").await;
     core.library()
         .set_addons("p", &[other], &core.hlc())
         .unwrap();
-    hero_until(&view, "tt0068646", "#1 in Popular Movies").await;
+    hero_until(&view, "tt0068646", "Popular Movies").await;
 }
 
 /// A clash that appears after the hero shows changes nothing on screen: the
@@ -1227,7 +1230,7 @@ async fn a_twin_installed_after_the_hero_shows_changes_nothing() {
         .set_addons("p", std::slice::from_ref(&first), &core.hlc())
         .unwrap();
     let view = HomeView::open(&core);
-    hero_until(&view, "tt0111161", "#1 in Popular Movies").await;
+    hero_until(&view, "tt0111161", "Popular Movies").await;
     let shown = view.snapshot().rows[0].row_id.clone();
     core.library()
         .set_addons("p", &[first, second], &core.hlc())
@@ -1248,10 +1251,10 @@ async fn a_twin_installed_after_the_hero_shows_changes_nothing() {
     // Give an open Home the time to follow the install.
     tokio::time::sleep(Duration::from_millis(300)).await;
     rows_until(&view, &[&shown]).await;
-    let hero = view.snapshot().header.hero.unwrap();
+    let hero = view.snapshot().header.heroes[0].clone();
     assert_eq!(
         (hero.tile.id.as_str(), hero.reason.as_str()),
-        ("tt0111161", "#1 in Popular Movies")
+        ("tt0111161", "Popular Movies")
     );
 }
 
@@ -1389,7 +1392,7 @@ async fn until_cover(view: &HomeView, poster: &str, what: &str) {
     for _ in 0..300 {
         let snap = view.snapshot();
         let tile = snap.rows.first().and_then(|r| r.tiles.first());
-        let hero = snap.header.hero.as_ref().map(|h| h.tile.poster.clone());
+        let hero = snap.header.heroes.first().map(|h| h.tile.poster.clone());
         if tile.is_some_and(|t| t.poster.as_deref() == Some(poster))
             && hero.is_none_or(|h| h.as_deref() == Some(poster))
         {
@@ -1441,4 +1444,227 @@ async fn a_live_home_follows_the_rpdb_key_as_the_addon_comes_and_goes() {
     let banded = view.snapshot().rows[0].tiles[0].clone();
     assert_eq!(banded.poster_fallback.as_deref(), Some(own));
     assert_eq!(banded.poster_shape, "poster");
+}
+
+/// A catalog body of `n` movies with backdrops, ids `tt<prefix>00` up; the
+/// first `bare` have no backdrop, each has two genres and a trailer.
+fn movies(prefix: &str, n: usize, bare: usize) -> &'static str {
+    let metas: Vec<String> = (0..n)
+        .map(|i| {
+            let id = format!("tt{prefix}{i:02}");
+            let bg = if i < bare {
+                String::new()
+            } else {
+                format!(r#","background":"https://images.metahub.space/background/medium/{id}/img""#)
+            };
+            format!(
+                r#"{{"id":"{id}","type":"movie","name":"{id}"{bg},"links":[{{"name":"Drama","category":"Genres","url":"stremio:///discover"}},{{"name":"Crime","category":"Genres","url":"stremio:///discover"}}],"trailerStreams":[{{"title":"{id}","ytId":"cdx31ak4KbQ"}}]}}"#
+            )
+        })
+        .collect();
+    Box::leak(format!(r#"{{"metas":[{}]}}"#, metas.join(",")).into_boxed_str())
+}
+
+fn hero_ids(view: &HomeView) -> Vec<String> {
+    view.snapshot()
+        .header
+        .heroes
+        .iter()
+        .map(|h| h.tile.id.clone())
+        .collect()
+}
+
+/// Waits up to 5 s for `ok` on the snapshot.
+async fn view_until(view: &HomeView, what: &str, ok: impl Fn(&HomeView) -> bool) {
+    for _ in 0..500 {
+        if ok(view) {
+            return;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    let rows: Vec<_> = view
+        .snapshot()
+        .rows
+        .into_iter()
+        .map(|r| (r.title, r.state))
+        .collect();
+    panic!("{what}: {:?} {rows:?}", view.snapshot().header.heroes);
+}
+
+/// The carousel: rows count only up to the first one still loading, so a
+/// fast row further down never jumps ahead; round one takes each row's first
+/// backdrop, and only once nothing loads do later rounds take a second, at
+/// most 2 from a row and 8 in all. Pages only grow, and moving a row moves
+/// none of them.
+#[tokio::test]
+async fn heroes_take_rows_in_order_two_at_most_eight_in_all() {
+    let core = Core::temporary("p").unwrap();
+    let mut addons = Vec::new();
+    for (i, prefix) in ["10", "20", "30", "40", "50"].into_iter().enumerate() {
+        let delay = if i == 1 {
+            Duration::from_millis(600)
+        } else {
+            Duration::ZERO
+        };
+        let mut addon = named_catalog_addon(
+            &format!("a{i}"),
+            &format!("List {i}"),
+            delay,
+            200,
+            movies(prefix, 3, 0),
+        )
+        .await;
+        addon.position = i as i64;
+        addons.push(addon);
+    }
+    core.library()
+        .set_addons("p", &addons, &core.hlc())
+        .unwrap();
+    let view = HomeView::open(&core);
+    view_until(
+        &view,
+        "the first row alone, the second still loading",
+        |v| {
+            let rows = v.snapshot().rows;
+            rows[0].state == RowState::Ready && rows[2].state == RowState::Ready
+        },
+    )
+    .await;
+    assert_eq!(rows_loading(&view), 1, "the slow row still loads");
+    assert_eq!(hero_ids(&view), ["tt1000"], "nothing past a loading row");
+    view_until(&view, "every row in", |v| {
+        v.snapshot().header.heroes.len() == 8
+    })
+    .await;
+    assert_eq!(
+        hero_ids(&view),
+        [
+            "tt1000", "tt2000", "tt3000", "tt4000", "tt5000", "tt1001", "tt2001", "tt3001"
+        ]
+    );
+    let heroes = view.snapshot().header.heroes;
+    assert_eq!(
+        heroes[1].reason, "List 1 Movies",
+        "no number outside a ranking"
+    );
+    assert_eq!(heroes[0].trailer.as_deref(), Some("cdx31ak4KbQ"));
+    // Moving a row moves no page.
+    let third = view.snapshot().rows[2].row_id.clone();
+    core.move_home_row(&third, -2).unwrap();
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    assert_eq!(view.snapshot().rows[0].row_id, third, "the row moved");
+    assert_eq!(
+        hero_ids(&view),
+        [
+            "tt1000", "tt2000", "tt3000", "tt4000", "tt5000", "tt1001", "tt2001", "tt3001"
+        ]
+    );
+}
+
+fn rows_loading(view: &HomeView) -> usize {
+    view.snapshot()
+        .rows
+        .iter()
+        .filter(|r| r.state == RowState::Loading)
+        .count()
+}
+
+/// Cinemeta's Popular is a ranking: its row reads "Top 10 Movies" and holds
+/// 10 tiles with their place and first genre, and a hero from it names the
+/// catalog with its real place ("#3": the first two have no backdrop).
+/// Another addon's catalog of the same id is no ranking.
+#[tokio::test]
+async fn a_ranked_catalog_is_a_top_10_row_with_real_places() {
+    let core = Core::temporary("p").unwrap();
+    let mut cinemeta = catalog_addon(
+        "com.linvo.cinemeta",
+        Duration::ZERO,
+        200,
+        movies("60", 12, 2),
+    )
+    .await;
+    let mut other = catalog_addon("other", Duration::ZERO, 200, movies("70", 12, 2)).await;
+    (cinemeta.position, other.position) = (0, 1);
+    core.library()
+        .set_addons("p", &[cinemeta, other], &core.hlc())
+        .unwrap();
+    let view = HomeView::open(&core);
+    view_until(&view, "both rows in", |v| {
+        v.snapshot().rows.iter().all(|r| r.state == RowState::Ready)
+    })
+    .await;
+    let rows = view.snapshot().rows;
+    assert_eq!(rows[0].title, "Top 10 Movies");
+    assert!(rows[0].ranked);
+    assert_eq!(rows[0].tiles.len(), 10);
+    let places: Vec<Option<u8>> = rows[0].tiles.iter().map(|t| t.rank).collect();
+    assert_eq!(places, (1..=10).map(Some).collect::<Vec<_>>());
+    assert_eq!(rows[0].tiles[0].genre.as_deref(), Some("Drama"));
+    assert!(!rows[0].title.to_lowercase().contains("cinemeta"));
+    // The other addon's catalog keeps its own name and draws no numerals.
+    assert_eq!(rows[1].title, "Popular Movies");
+    assert!(!rows[1].ranked);
+    assert_eq!(rows[1].tiles.len(), 12);
+    assert!(
+        rows[1]
+            .tiles
+            .iter()
+            .all(|t| t.rank.is_none() && t.genre.is_none())
+    );
+    let heroes = view.snapshot().header.heroes;
+    assert_eq!(
+        (heroes[0].tile.id.as_str(), heroes[0].reason.as_str()),
+        ("tt6002", "#3 in Popular Movies")
+    );
+    assert_eq!(heroes[1].reason, "Popular Movies");
+    // Customize Home keeps the row's id, so a hidden Top 10 stays hidden.
+    let id = rows[0].row_id.clone();
+    assert!(
+        core.home_catalogs()
+            .iter()
+            .any(|c| c.row_id == id && c.title == "Top 10 Movies")
+    );
+    core.set_home_row_hidden(&id, true).unwrap();
+    rows_until(&view, &[&rows[1].row_id]).await;
+}
+
+/// A trailer id goes into a player's page, so only YouTube's own shape
+/// passes: anything else leaves the hero without a trailer.
+#[tokio::test]
+async fn only_a_checked_youtube_id_is_a_hero_trailer() {
+    const BODY: &str = r#"{"metas":[
+      {"id":"tt0111161","type":"movie","name":"A","background":"https://images.metahub.space/background/medium/tt0111161/img","trailerStreams":[{"title":"A","ytId":"cdx31ak4KbQ&list=PLx"}]}
+    ]}"#;
+    let core = Core::temporary("p").unwrap();
+    let addon = catalog_addon("a", Duration::ZERO, 200, BODY).await;
+    core.library()
+        .set_addons("p", &[addon], &core.hlc())
+        .unwrap();
+    let view = HomeView::open(&core);
+    view_until(&view, "a hero", |v| !v.snapshot().header.heroes.is_empty()).await;
+    assert_eq!(view.snapshot().header.heroes[0].trailer, None);
+}
+
+/// Two rows of five backdrops give four pages, two from each: one catalog
+/// never fills the carousel.
+#[tokio::test]
+async fn a_row_gives_the_carousel_two_pages_at_most() {
+    let core = Core::temporary("p").unwrap();
+    let mut a = named_catalog_addon("a", "List a", Duration::ZERO, 200, movies("80", 5, 0)).await;
+    let mut b = named_catalog_addon("b", "List b", Duration::ZERO, 200, movies("90", 5, 0)).await;
+    (a.position, b.position) = (0, 1);
+    core.library()
+        .set_addons("p", &[a, b], &core.hlc())
+        .unwrap();
+    let view = HomeView::open(&core);
+    view_until(&view, "both rows in", |v| {
+        v.snapshot().rows.iter().all(|r| r.state == RowState::Ready)
+    })
+    .await;
+    view_until(&view, "four pages", |v| {
+        v.snapshot().header.heroes.len() >= 4
+    })
+    .await;
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    assert_eq!(hero_ids(&view), ["tt8000", "tt9000", "tt8001", "tt9001"]);
 }

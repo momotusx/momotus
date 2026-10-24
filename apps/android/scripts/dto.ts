@@ -60,6 +60,9 @@ const FLOAT = new Set(["progress", "bitrateMbps", "needMbps", "haveMbps", "mbps"
  * value the core uses when the key is absent. It must equal the core's serde default: kotlinx
  * leaves a field at its default out when encoding, and the core then fills in its own. */
 const DEFAULTED = new Map([
+  // Recorded Home traces from before the hero carousel and Top 10 rows (plans/appletv-polish.md H1, R1).
+  ["Hero.rowId", "\"\""],
+  ["HomeRow.ranked", "false"],
   ["AddonsSnapshot.fresh", "false"],
   ["AddonInfo.builtIn", "false"],
   ["SubtitleTrack.language", "\"\""],
@@ -115,6 +118,8 @@ const DEFAULTED = new Map([
   ["PlaybackSnapshot.engine", "null"],
 ]);
 const INT = new Set([
+  // Tile.rank: a Top 10 tile's place, 1 to 10.
+  "rank",
   "overCount",
   // Captions.languages: how many subtitle languages a video has (C34).
   "languages",

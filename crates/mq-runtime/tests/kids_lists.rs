@@ -288,7 +288,7 @@ async fn a_kids_home_asks_no_catalog_and_shows_its_list() {
     let rows: Vec<String> = home.snapshot().rows.into_iter().map(|r| r.row_id).collect();
     assert_eq!(rows, [KIDS_ROW_ID]);
     assert_eq!(row_ids(&home, KIDS_ROW_ID), ["tt2", "tt1"], "newest first");
-    assert!(home.snapshot().header.hero.is_none());
+    assert!(home.snapshot().header.heroes.is_empty());
     assert!(
         fixture.asked("/catalog/").is_empty(),
         "{:?}",

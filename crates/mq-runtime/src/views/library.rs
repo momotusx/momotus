@@ -243,6 +243,8 @@ fn tile(e: &LibraryEntry, covers: &crate::covers::Covers) -> Tile {
         blurb: None,
         own_shape: None,
         poster_fallback: None,
+        rank: None,
+        genre: None,
     }
     .rated_stored_cover(covers)
 }

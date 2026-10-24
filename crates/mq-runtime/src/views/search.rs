@@ -435,6 +435,8 @@ fn render(
                 source: source.into(),
                 state: state.clone(),
                 tiles,
+                ranked: false,
+                list: None,
             })
         };
     let top =
@@ -625,6 +627,8 @@ fn kids_matches(core: &Core, query: &str) -> Vec<HomeRow> {
         source: "Your list".into(),
         state: RowState::Ready,
         tiles: found.into_iter().map(|(_, t)| t).collect(),
+        ranked: false,
+        list: None,
     }]
 }
 

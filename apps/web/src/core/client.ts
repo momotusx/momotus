@@ -176,11 +176,11 @@ export function homeView(): HomeState {
   home = state;
   homeOpening = bridge
     .subscribe<HomeSnapshot, HomeUpdate>("home", {}, {
-      snapshot: (snapshot) => setState({ status: { state: "open" }, hero: snapshot.header.hero, rows: snapshot.rows }),
+      snapshot: (snapshot) => setState({ status: { state: "open" }, hero: snapshot.header.heroes[0] ?? null, rows: snapshot.rows }),
       updates: (updates) =>
         batch(() => {
           for (const u of updates) {
-            if (u.kind === "header") setState("hero", reconcile(u.header.hero));
+            if (u.kind === "header") setState("hero", reconcile(u.header.heroes[0] ?? null));
             else setState("rows", reconcile(applyDiffs(state.rows, u.diffs), { key: "rowId" }));
           }
         }),

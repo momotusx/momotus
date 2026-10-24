@@ -3,11 +3,21 @@ import type { Tile } from "./Tile";
 
 export type Hero = { tile: Tile, 
 /**
- * One line telling the user why this title is here: "#1 in Popular
- * Movies", never with the addon's name.
+ * The row it was taken from.
+ */
+rowId: string, 
+/**
+ * One line telling the user why this title is here, never with the
+ * addon's name: "#3 in Popular Movies" from a ranked catalog, else the
+ * row's title.
  */
 reason: string, description: string | null, 
 /**
  * At most three, in the addon's order.
  */
-genres: Array<string>, runtime: string | null, };
+genres: Array<string>, runtime: string | null, 
+/**
+ * A YouTube video id to play muted in the hero, when the addon names a
+ * trailer.
+ */
+trailer: string | null, };

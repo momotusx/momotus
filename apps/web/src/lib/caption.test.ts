@@ -16,6 +16,8 @@ const tile = (t: Partial<Tile>): Tile => ({
   videoId: null,
   rating: null,
   ratings: { imdb: null },
+  rank: null,
+  genre: null,
   ...t,
 });
 

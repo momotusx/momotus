@@ -12,7 +12,7 @@ const top = (page: Page) => page.evaluate(() => document.querySelector("[data-vs
 
 type Row = { rowId: string; state: { state: string }; tiles: unknown[] };
 type Diff = { op: string; value?: Row; values?: Row[]; index?: number; length?: number };
-type Update = { kind: string; header?: { hero: unknown }; diffs?: Diff[] };
+type Update = { kind: string; header?: { heroes: unknown[] }; diffs?: Diff[] };
 
 /** The core's list diff (src/core/diff.ts), to follow Home's real rows at the socket. */
 function apply(list: Row[], d: Diff): Row[] {
@@ -59,7 +59,7 @@ async function held(browser: Browser, mode: "catalogs" | "hero" | "failed", ms: 
     let sub: number | null = null;
     let holding = false;
     let rows: Row[] = [];
-    let header: { hero: unknown } = { hero: null };
+    let header: { heroes: unknown[] } = { heroes: [] };
     const shown = (list: Row[]) => (mode === "catalogs" ? list.map(loading) : mode === "failed" ? list.map(failing) : list);
     ws.onMessage((m) => {
       const msg = JSON.parse(String(m));
@@ -77,7 +77,7 @@ async function held(browser: Browser, mode: "catalogs" | "hero" | "failed", ms: 
             holding = false;
             ws.send(JSON.stringify({ sub, updates: [{ kind: "rows", diffs: [{ op: "reset", values: rows }] }, { kind: "header", header }] }));
           }, ms);
-        return void ws.send(JSON.stringify({ ...msg, result: { ...msg.result, snapshot: { header: { hero: null }, rows: shown(rows) } } }));
+        return void ws.send(JSON.stringify({ ...msg, result: { ...msg.result, snapshot: { header: { heroes: [] }, rows: shown(rows) } } }));
       }
       if (!holding || msg.sub !== sub) return void ws.send(m);
       const updates = msg.updates as Update[];

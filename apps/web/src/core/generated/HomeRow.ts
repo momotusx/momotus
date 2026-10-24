@@ -2,4 +2,9 @@
 import type { RowState } from "./RowState";
 import type { Tile } from "./Tile";
 
-export type HomeRow = { rowId: string, title: string, source: string, state: RowState, tiles: Array<Tile>, };
+export type HomeRow = { rowId: string, title: string, source: string, state: RowState, tiles: Array<Tile>, 
+/**
+ * A Top 10 row: the first ranked catalog of its kind, titled "Top 10
+ * Movies", its 10 tiles carrying `rank` and `genre`.
+ */
+ranked: boolean, };

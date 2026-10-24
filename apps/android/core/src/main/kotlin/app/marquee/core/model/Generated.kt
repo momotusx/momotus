@@ -542,12 +542,16 @@ enum class Group(
 @Serializable
 data class Hero(
     val tile: Tile,
-    /** One line telling the user why this title is here: "#1 in Popular Movies", never with the addon's name. */
+    /** The row it was taken from. */
+    val rowId: String = "",
+    /** One line telling the user why this title is here, never with the addon's name: "#3 in Popular Movies" from a ranked catalog, else the row's title. */
     val reason: String,
     val description: String? = null,
     /** At most three, in the addon's order. */
     val genres: List<String> = emptyList(),
     val runtime: String? = null,
+    /** A YouTube video id to play muted in the hero, when the addon names a trailer. */
+    val trailer: String? = null,
 )
 
 @Serializable
@@ -589,7 +593,8 @@ data class HomeCatalog(
 
 @Serializable
 data class HomeHeader(
-    val hero: Hero? = null,
+    /** The hero carousel's pages, in order, at most `HERO_MAX`; empty while nothing is ready and on a kids profile. It only grows, except that a page whose row no longer holds its title leaves. */
+    val heroes: List<Hero> = emptyList(),
 )
 
 @Serializable
@@ -599,6 +604,8 @@ data class HomeRow(
     val source: String,
     val state: RowState,
     val tiles: List<Tile> = emptyList(),
+    /** A Top 10 row: the first ranked catalog of its kind, titled "Top 10 Movies", its 10 tiles carrying `rank` and `genre`. */
+    val ranked: Boolean = false,
 )
 
 /** Home rows the user hid, showed or moved, by row id (`<addonId>:<type>:<catalogId>`). Rows in `order` come first in that order, then the rest in addon order. `shown` holds the twins the user turned on (a row titled as one before it is hidden until then). Ids of catalogs that are gone are kept, so a reinstalled addon gets its place back. */
@@ -1733,6 +1740,10 @@ data class Tile(
     val rating: String? = null,
     /** The IMDb score to show, from the addon's own rating (`rating`). */
     val ratings: Ratings = Ratings(),
+    /** The tile's place, 1 to 10, in a Top 10 row (`HomeRow::ranked`); none anywhere else. */
+    val rank: Int? = null,
+    /** The tile's first genre, under a Top 10 tile; none anywhere else. */
+    val genre: String? = null,
 )
 
 @Serializable

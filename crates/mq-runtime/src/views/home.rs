@@ -28,6 +28,17 @@ pub const CONTINUE_ROW_ID: &str = "continue-watching";
 /// A kids profile's own titles, on Home and in Search.
 pub const KIDS_ROW_ID: &str = "kids-titles";
 const ROW_TILES: usize = 20;
+/// Home's hero carousel: at most this many pages, and at most `HERO_PER_ROW`
+/// from one row, so one catalog that answers first never fills it.
+const HERO_MAX: usize = 8;
+const HERO_PER_ROW: usize = 2;
+/// A Top 10 row's tiles.
+const RANKED_TILES: usize = 10;
+/// Catalogs that are a popularity ranking, by addon manifest id and catalog
+/// id: only these read "Top 10" and "#3 in" (the lead, 2026-10-24). Cinemeta's
+/// Popular is sorted by popularity; another catalog joins only once its
+/// order is checked.
+const RANKED: &[(&str, &str)] = &[("com.linvo.cinemeta", "top")];
 const SOFT_DEADLINE: Duration = Duration::from_millis(2500);
 const HARD_DEADLINE: Duration = Duration::from_secs(12);
 
@@ -61,6 +72,11 @@ pub struct Tile {
     pub rating: Option<String>,
     /// The IMDb score to show, from the addon's own rating (`rating`).
     pub ratings: Ratings,
+    /// The tile's place, 1 to 10, in a Top 10 row (`HomeRow::ranked`); none
+    /// anywhere else.
+    pub rank: Option<u8>,
+    /// The tile's first genre, under a Top 10 tile; none anywhere else.
+    pub genre: Option<String>,
     /// What the hero shows beyond the tile; kept off the wire for rows.
     #[serde(skip)]
     #[cfg_attr(feature = "ts", ts(skip))]
@@ -128,6 +144,19 @@ pub(crate) struct Blurb {
     pub description: Option<String>,
     pub genres: Vec<String>,
     pub runtime: Option<String>,
+    /// The first trailer the addon names, a checked YouTube id.
+    pub trailer: Option<String>,
+}
+
+/// A YouTube video id as YouTube writes it (11 letters, digits, `-` or
+/// `_`), or none: it goes into a player's page and URLs, so an addon's
+/// free text never does.
+pub(crate) fn youtube_id(raw: &str) -> Option<&str> {
+    (raw.len() == 11
+        && raw
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_'))
+    .then_some(raw)
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -158,6 +187,14 @@ pub struct HomeRow {
     pub source: String,
     pub state: RowState,
     pub tiles: Vec<Tile>,
+    /// A Top 10 row: the first ranked catalog of its kind, titled "Top 10
+    /// Movies", its 10 tiles carrying `rank` and `genre`.
+    pub ranked: bool,
+    /// A Top 10 row's catalog as its own row would read ("Popular Movies"),
+    /// for the hero's reason.
+    #[serde(skip)]
+    #[cfg_attr(feature = "ts", ts(skip))]
+    pub(crate) list: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize)]
@@ -168,7 +205,10 @@ pub struct HomeRow {
 )]
 #[serde(rename_all = "camelCase")]
 pub struct HomeHeader {
-    pub hero: Option<Hero>,
+    /// The hero carousel's pages, in order, at most `HERO_MAX`; empty while
+    /// nothing is ready and on a kids profile. It only grows, except that a
+    /// page whose row no longer holds its title leaves.
+    pub heroes: Vec<Hero>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -180,13 +220,19 @@ pub struct HomeHeader {
 #[serde(rename_all = "camelCase")]
 pub struct Hero {
     pub tile: Tile,
-    /// One line telling the user why this title is here: "#1 in Popular
-    /// Movies", never with the addon's name.
+    /// The row it was taken from.
+    pub row_id: String,
+    /// One line telling the user why this title is here, never with the
+    /// addon's name: "#3 in Popular Movies" from a ranked catalog, else the
+    /// row's title.
     pub reason: String,
     pub description: Option<String>,
     /// At most three, in the addon's order.
     pub genres: Vec<String>,
     pub runtime: Option<String>,
+    /// A YouTube video id to play muted in the hero, when the addon names a
+    /// trailer.
+    pub trailer: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -203,6 +249,8 @@ pub enum HomeUpdate {
 
 struct CatalogSlot {
     row_id: String,
+    /// The first ranked catalog of its kind (`RANKED`): a Top 10 row.
+    ranked: bool,
     addon: InstalledAddon,
     path: ResourcePath,
 }
@@ -346,13 +394,23 @@ fn lock<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
 /// catalogs are skipped), in addon then catalog order.
 fn catalog_slots(addons: &[InstalledAddon]) -> Vec<CatalogSlot> {
     let mut slots = Vec::new();
+    let mut ranked_kinds = HashSet::new();
     for addon in addons {
         for catalog in &addon.manifest.catalogs {
             let Some(extra) = catalog.default_required_extra() else {
                 continue;
             };
+            // Only a catalog listed in `RANKED`, with nothing to pick, and of a
+            // kind Home names; the first such of each kind in addon order.
+            let ranked = extra.is_empty()
+                && kind_label(&catalog.r#type).is_some()
+                && RANKED
+                    .iter()
+                    .any(|&(a, c)| a == addon.id() && c == catalog.id)
+                && ranked_kinds.insert(catalog.r#type.clone());
             slots.push(CatalogSlot {
                 row_id: row_id(addon, &catalog.r#type, &catalog.id),
+                ranked,
                 addon: addon.clone(),
                 path: ResourcePath {
                     resource: "catalog".into(),
@@ -567,6 +625,8 @@ fn loading_row(slot: &CatalogSlot) -> HomeRow {
         source: slot.addon.manifest.name.clone(),
         state: RowState::Loading,
         tiles: Vec::new(),
+        ranked: slot.ranked,
+        list: slot.ranked.then(|| list_title(slot)),
     }
 }
 
@@ -657,26 +717,35 @@ fn recover_home(
 ) {
     let mut rows = lock(rows);
     let mut next: Vec<HomeRow> = rows.iter().cloned().collect();
-    let mut hero = header.get().hero;
+    let mut heroes = header.get().heroes;
     recover_tiles(
         core,
         old,
         new,
         next.iter_mut()
             .flat_map(|r| r.tiles.iter_mut())
-            .chain(hero.iter_mut().map(|h| &mut h.tile)),
+            .chain(heroes.iter_mut().map(|h| &mut h.tile)),
     );
     for (i, row) in next.into_iter().enumerate() {
         if row != rows[i] {
             rows.set(i, row);
         }
     }
-    if hero != header.get().hero {
-        header.set(HomeHeader { hero });
+    if heroes != header.get().heroes {
+        header.set(HomeHeader { heroes });
     }
 }
 
+/// A row's title; a Top 10 row reads "Top 10 Movies".
 fn row_title(slot: &CatalogSlot) -> String {
+    match kind_label(&slot.path.r#type) {
+        Some(label) if slot.ranked => format!("Top 10 {label}"),
+        _ => list_title(slot),
+    }
+}
+
+/// The catalog's own title ("Popular Movies").
+fn list_title(slot: &CatalogSlot) -> String {
     let name = slot
         .addon
         .manifest
@@ -705,11 +774,14 @@ pub(crate) fn catalog_title(name: &str, kind: &str, source: &str) -> String {
     }
 }
 
-/// The hero's caption: "#1 in Popular Movies", never with the addon's name
-/// (the owner, 2026-10-22); a twin row is off Home by default, so the title
-/// says enough.
-fn hero_reason(title: &str) -> String {
-    format!("#1 in {title}")
+/// The hero's caption, never with the addon's name (the owner, 2026-10-22):
+/// "#3 in Popular Movies", the tile's real place, only in a ranked catalog;
+/// any other row's title alone, since a place there ranks nothing.
+fn hero_reason(row: &HomeRow, place: usize) -> String {
+    match &row.list {
+        Some(list) => format!("#{place} in {list}"),
+        None => row.title.clone(),
+    }
 }
 
 /// Lowercase words of letters and digits.
@@ -885,7 +957,14 @@ fn apply_catalog(
             return;
         }
         match outcome {
-            Ok(tiles) => {
+            Ok(mut tiles) => {
+                if row.ranked {
+                    tiles.truncate(RANKED_TILES);
+                    for (place, tile) in (1u8..).zip(tiles.iter_mut()) {
+                        tile.rank = Some(place);
+                        tile.genre = tile.blurb.as_ref().and_then(|b| b.genres.first().cloned());
+                    }
+                }
                 row.tiles = tiles;
                 row.state = if row.tiles.is_empty() {
                     RowState::Empty
@@ -936,6 +1015,12 @@ pub(crate) fn tile_from_preview(m: mq_protocol::MetaItemPreview, covers: &Covers
         description: m.description.clone(),
         genres: links("Genres").into_iter().take(3).collect(),
         runtime: m.runtime.clone(),
+        trailer: m.trailer_streams.iter().find_map(|s| match &s.source {
+            stremio_core::types::resource::StreamSource::YouTube { yt_id } => {
+                youtube_id(yt_id).map(str::to_owned)
+            }
+            _ => None,
+        }),
     };
     Tile {
         id: m.id,
@@ -956,50 +1041,71 @@ pub(crate) fn tile_from_preview(m: mq_protocol::MetaItemPreview, covers: &Covers
         blurb: Some(blurb),
         own_shape: None,
         poster_fallback: None,
+        rank: None,
+        genre: None,
     }
     .rated_cover(covers)
 }
 
-/// The hero is the first catalog item with a background, never from Continue
-/// Watching. Once shown it stays put while its row holds it, so the screen
-/// does not shift under the user as later rows arrive; its row hidden or gone,
-/// or an answer without it, lets the first candidate take its place.
+/// The hero carousel's pages. Rows count in display order only up to the
+/// first one still loading, so a page never comes from a row further down
+/// just because it answered first; Continue Watching never feeds it (the
+/// hero repeating its first tile reads as a mistake). Round one takes each
+/// such row's first tile with a background; once no row is loading, later
+/// rounds take each row's next one, at most `HERO_PER_ROW` from a row and
+/// `HERO_MAX` in all, with no title twice. Pages only grow: one stays while
+/// its row holds its title, and new ones join at the end, so nothing moves
+/// under the user. A kids Home has none: its tiles carry no background.
 fn maybe_pick_hero(rows: &Mutex<ObservableVector<HomeRow>>, header: &SharedObservable<HomeHeader>) {
     let rows = lock(rows);
-    // Walk rows in display order and stop at the first one still loading, so
-    // the hero is deterministic and never taken from a row further down just
-    // because it answered first. Slow, failed and empty rows are skipped.
-    let candidate = rows
+    let settled = rows.iter().all(|row| row.state != RowState::Loading);
+    let ready: Vec<&HomeRow> = rows
         .iter()
         .take_while(|row| row.state != RowState::Loading)
-        // Continue Watching is the first row already; the hero repeating its
-        // first tile reads as a mistake (design audit), so it features a
-        // catalog. A kids Home has none, and its own tiles carry no
-        // background, so it has no hero.
         .filter(|row| row.row_id != CONTINUE_ROW_ID)
-        .find_map(|row| {
-            let tile = row.tiles.iter().find(|t| t.background.is_some())?;
-            let blurb = tile.blurb.clone().unwrap_or_default();
-            Some(Hero {
-                tile: tile.clone(),
-                reason: hero_reason(&row.title),
-                description: blurb.description,
-                genres: blurb.genres,
-                runtime: blurb.runtime,
+        .collect();
+    let current = header.get().heroes;
+    let mut next: Vec<Hero> = current
+        .iter()
+        .filter(|hero| {
+            rows.iter().any(|r| {
+                r.row_id == hero.row_id
+                    && r.tiles
+                        .iter()
+                        .any(|t| t.id == hero.tile.id && t.background.is_some())
             })
-        });
-    let current = header.get().hero;
-    // Its row is the one its reason names, and it must still hold the tile.
-    let kept = current.clone().filter(|hero| {
-        rows.iter().any(|r| {
-            r.row_id != CONTINUE_ROW_ID
-                && hero_reason(&r.title) == hero.reason
-                && r.tiles.iter().any(|t| t.id == hero.tile.id)
         })
-    });
-    let next = kept.or(candidate);
+        .cloned()
+        .collect();
+    let rounds = if settled { HERO_PER_ROW } else { 1 };
+    for round in 1..=rounds {
+        for row in &ready {
+            if next.len() >= HERO_MAX {
+                break;
+            }
+            if next.iter().filter(|h| h.row_id == row.row_id).count() >= round {
+                continue;
+            }
+            let pick =
+                row.tiles.iter().enumerate().find(|(_, t)| {
+                    t.background.is_some() && !next.iter().any(|h| h.tile.id == t.id)
+                });
+            if let Some((index, tile)) = pick {
+                let blurb = tile.blurb.clone().unwrap_or_default();
+                next.push(Hero {
+                    tile: tile.clone(),
+                    row_id: row.row_id.clone(),
+                    reason: hero_reason(row, index + 1),
+                    description: blurb.description,
+                    genres: blurb.genres,
+                    runtime: blurb.runtime,
+                    trailer: blurb.trailer,
+                });
+            }
+        }
+    }
     if current != next {
-        header.set(HomeHeader { hero: next });
+        header.set(HomeHeader { heroes: next });
     }
 }
 
@@ -1088,6 +1194,8 @@ fn kids_row(core: &Core) -> HomeRow {
             RowState::Ready
         },
         tiles,
+        ranked: false,
+        list: None,
     }
 }
 
@@ -1108,6 +1216,8 @@ pub(crate) fn kids_tile(row: &AllowedRow, covers: &Covers) -> Tile {
         blurb: None,
         own_shape: None,
         poster_fallback: None,
+        rank: None,
+        genre: None,
     }
     .rated_stored_cover(covers)
 }
@@ -1273,6 +1383,8 @@ fn apply_continue(
             source: "Library".into(),
             state: RowState::Ready,
             tiles,
+            ranked: false,
+            list: None,
         }),
         (None, true) => {}
     }
@@ -1299,6 +1411,8 @@ fn tile_for_next(meta: &mq_protocol::MetaItem, next: NextEpisode, covers: &Cover
         blurb: None,
         own_shape: None,
         poster_fallback: None,
+        rank: None,
+        genre: None,
     }
     .rated_cover(covers)
 }
@@ -1363,6 +1477,8 @@ fn tile_from_continue(
         blurb: None,
         own_shape: None,
         poster_fallback: None,
+        rank: None,
+        genre: None,
     }
     .rated_cover(covers)
 }
@@ -1530,6 +1646,8 @@ mod tests {
             name: "x".into(),
             poster: poster.map(str::to_owned),
             poster_fallback: None,
+            rank: None,
+            genre: None,
             background: None,
             logo: None,
             poster_shape: shape.into(),

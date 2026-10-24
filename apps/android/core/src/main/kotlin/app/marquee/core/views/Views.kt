@@ -64,7 +64,7 @@ class HomeView(
         private set
 
     override fun applySnapshot(snapshot: HomeSnapshot) {
-        hero = snapshot.header.hero
+        hero = snapshot.header.heroes.firstOrNull()
         rows.clear()
         rows.addAll(snapshot.rows)
         logFailures()
@@ -93,7 +93,7 @@ class HomeView(
     override fun applyUpdates(updates: List<HomeUpdate>) {
         for (update in updates) {
             when (update) {
-                is HomeUpdate.Header -> hero = update.header.hero
+                is HomeUpdate.Header -> hero = update.header.heroes.firstOrNull()
                 is HomeUpdate.Rows -> rows.applyDiffs(update.diffs)
             }
         }

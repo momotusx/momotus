@@ -11,7 +11,7 @@ final class HomeModel {
     }
 
     private(set) var phase = Phase.opening
-    private(set) var header = HomeHeader(hero: nil)
+    private(set) var header = HomeHeader(heroes: [])
     private(set) var rows: [HomeRow] = []
     /// Bumping this restarts `run()` through the view's `.task(id:)`.
     private(set) var generation = 0

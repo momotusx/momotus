@@ -4,7 +4,7 @@
  "result": {
   "snapshot": {
    "header": {
-    "hero": null
+    "heroes": []
    },
    "rows": [
     {

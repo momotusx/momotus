@@ -9,6 +9,7 @@ const row = (state: RowState, tiles = 0): HomeRow => ({
   title: "Popular",
   source: "Cinemeta",
   state,
+  ranked: false,
   tiles: Array.from({ length: tiles }, (_, i) => ({ id: `t${i}`, kind: "movie", name: "T", posterShape: "poster" }) as HomeRow["tiles"][number]),
 });
 

@@ -4,21 +4,23 @@
   "updates": [
    {
     "header": {
-     "hero": {
-      "reason": "#1 in Popular Movies on Cinemeta",
-      "tile": {
-       "background": "https://images.metahub.space/background/medium/tt22084616/img",
-       "id": "tt22084616",
-       "kind": "movie",
-       "logo": "https://images.metahub.space/logo/medium/tt22084616/img",
-       "name": "Spider-Man: Brand New Day",
-       "poster": "https://images.metahub.space/poster/small/tt22084616/img",
-       "posterShape": "poster",
-       "progress": null,
-       "releaseInfo": "2026",
-       "videoId": null
+     "heroes": [
+      {
+       "reason": "#1 in Popular Movies on Cinemeta",
+       "tile": {
+        "background": "https://images.metahub.space/background/medium/tt22084616/img",
+        "id": "tt22084616",
+        "kind": "movie",
+        "logo": "https://images.metahub.space/logo/medium/tt22084616/img",
+        "name": "Spider-Man: Brand New Day",
+        "poster": "https://images.metahub.space/poster/small/tt22084616/img",
+        "posterShape": "poster",
+        "progress": null,
+        "releaseInfo": "2026",
+        "videoId": null
+       }
       }
-     }
+     ]
     },
     "kind": "header"
    },

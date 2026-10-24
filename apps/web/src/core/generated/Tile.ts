@@ -28,4 +28,13 @@ rating: string | null,
 /**
  * The IMDb score to show, from the addon's own rating (`rating`).
  */
-ratings: Ratings, };
+ratings: Ratings, 
+/**
+ * The tile's place, 1 to 10, in a Top 10 row (`HomeRow::ranked`); none
+ * anywhere else.
+ */
+rank: number | null, 
+/**
+ * The tile's first genre, under a Top 10 tile; none anywhere else.
+ */
+genre: string | null, };

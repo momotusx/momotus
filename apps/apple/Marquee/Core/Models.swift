@@ -68,18 +68,27 @@ func posterLabel(_ parts: [String?], _ ratings: Ratings?) -> String {
 
 struct Hero: Decodable, Hashable, Sendable {
     let tile: Tile
-    /// One line telling the user why this title is here: "#1 in Popular
-    /// Movies", never with the addon's name.
+    /// The row it was taken from. Optional here only so replies recorded
+    /// before the field existed still decode.
+    let rowId: String?
+    /// One line telling the user why this title is here, never with the
+    /// addon's name: "#3 in Popular Movies" from a ranked catalog, else the
+    /// row's title.
     let reason: String
     let description: String?
     /// At most three, in the addon's order. Optional here only so replies
     /// recorded before the field existed still decode.
     let genres: [String]?
     let runtime: String?
+    /// A YouTube video id to play muted in the hero.
+    let trailer: String?
 }
 
 struct HomeHeader: Decodable, Hashable, Sendable {
-    let hero: Hero?
+    /// The hero carousel's pages, in order.
+    let heroes: [Hero]
+    /// The first page, which Home shows until the carousel lands.
+    var hero: Hero? { heroes.first }
 }
 
 enum RowState: Decodable, Hashable, Sendable {

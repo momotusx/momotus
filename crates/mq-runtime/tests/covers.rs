@@ -191,7 +191,7 @@ async fn every_surface_that_shows_a_cover_shows_the_band() {
     })
     .await;
     all_three("Home row", &row.tiles);
-    let hero = until("the hero", || home.snapshot().header.hero).await;
+    let hero = until("the hero", || home.snapshot().header.heroes.first().cloned()).await;
     assert_eq!(
         hero.tile.poster.as_deref(),
         Some(rpdb("tt0111161").as_str()),

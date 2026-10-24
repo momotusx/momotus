@@ -516,8 +516,10 @@ async fn home(core: &Core, timeout: Duration) -> Result<(), String> {
     let hero = view
         .snapshot()
         .header
-        .hero
-        .map(|h| json!({ "name": h.tile.name, "reason": h.reason }));
+        .heroes
+        .iter()
+        .map(|h| json!({ "name": h.tile.name, "reason": h.reason }))
+        .collect::<Vec<_>>();
     emit(json!({ "event": "home_done", "hero": hero, "ms": ms(started.elapsed()) }));
     Ok(())
 }

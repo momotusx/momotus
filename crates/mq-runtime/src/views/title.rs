@@ -834,6 +834,8 @@ impl Ctx {
                     kind: f.kind.to_owned(),
                     name: f.title,
                     poster_fallback: None,
+                    rank: None,
+                    genre: None,
                     background: None,
                     logo: None,
                     poster_shape: "poster".into(),
