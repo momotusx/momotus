@@ -1,0 +1,28 @@
+# AS41 (bench/versions-ux/apple-second-engine.jsonl): the walk app's own log lines, trimmed, for Big Buck Bunny row 3 (the Blu-ray ISO) and row 4 (the 3D MKV), 2026-10-25, Mac, Debug walk app app.marquee.walk.
+# Filter: app\.marquee:core\] (metric |source failed)|open timings|NativeAVPlayerHost\] #[0-9]+ errorLog|#561|seg0: cache miss; at most three errorLog lines per row (they repeat every 4 s)
+## row 3, BIG_BUCK_BUNNY.iso
+2026-10-25 20:06:27.958 Df Momotus[64342:6f7ad16] [app.marquee:core] metric playback_ready_ms=36614 host=127.0.0.1
+2026-10-25 20:06:28.089 Df Momotus[64342:6f7ad16] [app.marquee:core] metric engine_fallback_ms=36746 why=decode
+2026-10-25 20:06:42.170 Df Momotus[64342:6f7aead] [de.superuser404.AetherEngine:demux] [Demuxer] open timings (pump): connect 15ms, open_input 5419ms, find_stream_info 8557ms, total 13992ms; 2 stream(s), probesize 8 MiB, analyzeduration 60 s
+2026-10-25 20:06:46.361 Df Momotus[64342:6f7ad16] [de.superuser404.AetherEngine:engine] [NativeAVPlayerHost] #1 errorLog code=-12889 domain=CoreMediaErrorDomain uri=http://127.0.0.1:64485/<redacted>/seg0.mp4 'No response for media file in 4s'
+2026-10-25 20:07:10.413 Df Momotus[64342:6f7ad16] [de.superuser404.AetherEngine:engine] [NativeAVPlayerHost] #1 errorLog code=-12889 domain=CoreMediaErrorDomain uri=- 'The operation couldn’t be completed. (CoreMediaErrorDomain error -12889.)'
+2026-10-25 20:07:12.368 Df Momotus[64342:6f7b8f1] [de.superuser404.AetherEngine:session] [HLSVideoEngine] seg0: cache miss after 30010ms (cache=0 restarted=false)
+2026-10-25 20:07:15.435 Df Momotus[64342:6f7ad16] [de.superuser404.AetherEngine:engine] [NativeAVPlayerHost] #1 #561 AVPlayer refused the media (CoreMediaErrorDomain/-12889) at 0.00s; handing the session to the engine's own decoder instead of surfacing: The operation couldn’t be completed. (CoreMediaErrorDomain error -12889.)
+2026-10-25 20:07:15.437 Df Momotus[64342:6f7ad16] [de.superuser404.AetherEngine:engine] [AetherEngine] #561 AVPlayer refused the media (CoreMediaErrorDomain/-12889) at 0.00s; rebuilding this session on the software path, which decodes it with libavcodec instead: The operation couldn’t be completed. (CoreMediaErrorDomain error -12889.)
+2026-10-25 20:07:15.437 Df Momotus[64342:6f7ad16] [de.superuser404.AetherEngine:engine] [NativeAVPlayerHost] #1 errorLog code=-12889 domain=CoreMediaErrorDomain uri=http://127.0.0.1:64485/<redacted>/seg0.mp4 'No response for media file in 4s'
+2026-10-25 20:07:15.491 Df Momotus[64342:6f7b889] [de.superuser404.AetherEngine:demux] [Demuxer] open timings (pump): connect 13ms, open_input 1ms, find_stream_info 24ms, total 39ms; 2 stream(s), probesize 8 MiB, analyzeduration 60 s
+2026-10-25 20:07:15.668 Df Momotus[64342:6f7ad16] [de.superuser404.AetherEngine:engine] [AetherEngine] #561 rebuilt on the software path
+2026-10-25 20:07:15.671 Df Momotus[64342:6f7ad16] [app.marquee:core] metric engine_start probe_ms=14069 session_ms=69 frame_ms=33431 probe_mib=8 path=software
+2026-10-25 20:07:15.671 Df Momotus[64342:6f7ad16] [app.marquee:core] metric first_frame_ms=84327 key=bt backend=aether
+2026-10-25 20:07:15.700 Df Momotus[64342:6f7bc33] [de.superuser404.AetherEngine:session] [HLSVideoEngine] seg0: cache miss after 25328ms (cache=0 restarted=false)
+2026-10-25 20:07:15.700 Df Momotus[64342:6f7c05f] [de.superuser404.AetherEngine:session] [HLSVideoEngine] seg0: cache miss after 4279ms (cache=0 restarted=false)
+2026-10-25 20:07:15.700 Df Momotus[64342:6f7b8d2] [de.superuser404.AetherEngine:session] [HLSVideoEngine] seg0: cache miss after 29338ms (cache=0 restarted=false)
+2026-10-25 20:07:15.700 Df Momotus[64342:6f7be6f] [de.superuser404.AetherEngine:session] [HLSVideoEngine] seg0: cache miss after 13300ms (cache=0 restarted=false)
+2026-10-25 20:07:15.700 Df Momotus[64342:6f7be12] [de.superuser404.AetherEngine:session] [HLSVideoEngine] seg0: cache miss after 17311ms (cache=0 restarted=false)
+2026-10-25 20:07:15.700 Df Momotus[64342:6f7bf2e] [de.superuser404.AetherEngine:session] [HLSVideoEngine] seg0: cache miss after 9292ms (cache=0 restarted=false)
+2026-10-25 20:07:15.700 Df Momotus[64342:6f7bd49] [de.superuser404.AetherEngine:session] [HLSVideoEngine] seg0: cache miss after 21319ms (cache=0 restarted=false)
+## row 4, Big_Buck_Bunny.Rip_by_SeRoGa00.mkv
+2026-10-25 20:09:39.276 Df Momotus[66153:6f7d235] [app.marquee:core] metric playback_ready_ms=82103 host=127.0.0.1
+2026-10-25 20:09:39.306 Df Momotus[66153:6f7e292] [de.superuser404.AetherEngine:demux] [Demuxer] open timings (pump): connect 5ms, open_input 2ms, find_stream_info 4ms, total 12ms; 2 stream(s), probesize 1 MiB, analyzeduration 2 s
+2026-10-25 20:09:47.760 E  Momotus[66153:6f7d235] [app.marquee:core] source failed: the second player did not start this source in time
+2026-10-25 20:09:47.770 Df Momotus[66153:6f7e50a] [de.superuser404.AetherEngine:session] [HLSVideoEngine] seg0: cache miss after 8159ms (cache=0 restarted=false)
