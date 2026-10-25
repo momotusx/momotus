@@ -14,6 +14,10 @@ export type TitleDetails = { id: string, kind: string, name: string, description
  */
 ratedPoster: string | null, background: string | null, logo: string | null, releaseInfo: string | null, runtime: string | null, genres: Array<string>, cast: Array<string>, directors: Array<string>, 
 /**
+ * From the meta's `Writers` links, as `cast` and `directors`.
+ */
+writers: Array<string>, 
+/**
  * The IMDb rating the addon gave, as written ("8.4").
  */
 rating: string | null, 
@@ -23,7 +27,7 @@ rating: string | null,
 ratings: Ratings, 
 /**
  * The title's IMDb page, for the IMDb score to link to; null for an id
- * that is not IMDb's.
+ * that is not IMDb's, and on a kids profile (no way out to the web).
  */
 imdbUrl: string | null, 
 /**

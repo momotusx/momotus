@@ -47,7 +47,7 @@ impl Fake {
     }
 }
 
-const MOVIE: &str = r#"{"meta":{"id":"tt0111161","type":"movie","name":"The Shawshank Redemption","links":[{"name":"9.3","category":"imdb","url":"https://imdb.com/title/tt0111161"},{"name":"Drama","category":"Genres","url":"stremio:///discover"}]}}"#;
+const MOVIE: &str = r#"{"meta":{"id":"tt0111161","type":"movie","name":"The Shawshank Redemption","links":[{"name":"9.3","category":"imdb","url":"https://imdb.com/title/tt0111161"},{"name":"Drama","category":"Genres","url":"stremio:///discover"},{"name":"Frank Darabont","category":"Writers","url":"stremio:///search?search=Frank%20Darabont"}]}}"#;
 const SERIES: &str =
     r#"{"meta":{"id":"tt0903747","type":"series","name":"Breaking Bad","videos":[]}}"#;
 const ANIME: &str = r#"{"meta":{"id":"kitsu:50016","type":"anime","name":"Cyberpunk: Edgerunners II","imdb_id":"tt12590266","videos":[]}}"#;
@@ -60,6 +60,7 @@ const RELATED: &str = r#"[
   {"title":"Cool Hand Luke","year":1967,"ids":{"imdb":"tt0061512"}},
   {"title":"The Shawshank Redemption","ids":{"imdb":"tt0111161"}},
   {"title":"No Id","ids":{"imdb":null}},
+  {"title":"Bad Id","ids":{"imdb":"tt1/../x"}},
   {"title":"Cool Hand Luke","ids":{"imdb":"tt0061512"}},
   {"title":"Papillon","ids":{"imdb":"tt0070511"}}
 ]"#;
@@ -190,15 +191,37 @@ fn ready(snap: &TitleSnapshot) -> bool {
 }
 
 fn shown(text: &str) -> Slot {
-    Slot::Shown { text: text.into() }
+    Slot::Shown {
+        text: text.into(),
+        url: None,
+    }
 }
 
-/// The two slots; both pending before the meta is in.
+/// The two slots, links left out (`links` reads them); both pending
+/// before the meta is in.
 fn scores(snap: &TitleSnapshot) -> (Slot, Slot) {
+    let plain = |slot: &Slot| match slot {
+        Slot::Shown { text, .. } => shown(text),
+        other => other.clone(),
+    };
     match &snap.header.details {
-        Some(d) => (d.scores.tmdb.clone(), d.scores.trakt.clone()),
+        Some(d) => (plain(&d.scores.tmdb), plain(&d.scores.trakt)),
         None => (Slot::Pending, Slot::Pending),
     }
+}
+
+/// The IMDb, TMDB and Trakt links the page carries.
+fn links(snap: &TitleSnapshot) -> [Option<String>; 3] {
+    let url = |slot: &Slot| match slot {
+        Slot::Shown { url, .. } => url.clone(),
+        _ => None,
+    };
+    let d = snap.header.details.as_ref().unwrap();
+    [
+        d.imdb_url.clone(),
+        url(&d.scores.tmdb),
+        url(&d.scores.trakt),
+    ]
 }
 
 fn lookups(fake: &Fake) -> usize {
@@ -226,6 +249,18 @@ async fn scores_and_similar_land_once_the_page_is_visible() {
         scores(s) == (shown("87%"), shown("92%")) && s.similar.len() == 2
     })
     .await;
+    // Each badge links to the title's own page there, built from checked
+    // ids; the names the meta links carry, writers too.
+    assert_eq!(
+        links(&snap),
+        [
+            Some("https://www.imdb.com/title/tt0111161/".into()),
+            Some("https://www.themoviedb.org/movie/278".into()),
+            Some("https://trakt.tv/movies/tt0111161".into()),
+        ]
+    );
+    let details = snap.header.details.as_ref().unwrap();
+    assert_eq!(details.writers, ["Frank Darabont"]);
     let similar: Vec<(&str, &str, Option<&str>)> = snap
         .similar
         .iter()
@@ -495,6 +530,8 @@ async fn a_kids_profile_asks_nothing() {
     let snap = until(&view, "the meta", ready).await;
     assert!(!snap.header.genres_linked);
     assert_eq!(scores(&snap), (Slot::Empty, Slot::Empty));
+    // No badge leads out of the app: IMDb's page is the open web.
+    assert_eq!(links(&snap), [None, None, None]);
     view.set_visible(true);
     tokio::time::sleep(Duration::from_millis(1600)).await;
     assert_eq!(lookups(&fake), 0);

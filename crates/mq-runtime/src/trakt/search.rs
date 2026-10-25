@@ -14,6 +14,15 @@ use tokio::time::Instant;
 const FRESH: Duration = Duration::from_secs(10 * 60);
 /// The least quiet time after a 429.
 const QUIET: Duration = Duration::from_secs(60);
+/// The longest a 429 quiets: a `Retry-After` of a day must not silence
+/// Search and the title page for a day.
+const QUIET_AT_MOST: Duration = Duration::from_secs(15 * 60);
+
+/// How long a 429 quiets a host: its `Retry-After`, between a minute and
+/// a quarter of an hour. Trakt's and TMDB's quiet times both use it.
+pub(super) fn quiet_for(retry_after: Option<Duration>) -> Duration {
+    retry_after.unwrap_or(QUIET).clamp(QUIET, QUIET_AT_MOST)
+}
 /// ponytail: a flat map, emptied of old answers (or cleared) at this size;
 /// an LRU if searches ever outgrow it.
 const KEPT: usize = 200;
@@ -68,9 +77,9 @@ impl Memory {
         self.answers.insert(key.to_owned(), (now, hits));
     }
 
-    /// A 429: no call for its `Retry-After`, and never under a minute.
+    /// A 429: no call for its `Retry-After`, never under a minute.
     pub(super) fn throttled(&mut self, now: Instant, retry_after: Option<Duration>) {
-        self.quiet_until = Some(now + retry_after.unwrap_or(QUIET).max(QUIET));
+        self.quiet_until = Some(now + quiet_for(retry_after));
     }
 }
 

@@ -1496,6 +1496,8 @@ sealed interface Slot {
     @SerialName("shown")
     data class Shown(
         val text: String,
+        /** The source's page for the title (phone, desktop and web link to it, never TV), built only from checked ids; null when there is none. */
+        val url: String? = null,
     ) : Slot
 
     @Serializable
@@ -1749,11 +1751,13 @@ data class TitleDetails(
     val genres: List<String> = emptyList(),
     val cast: List<String> = emptyList(),
     val directors: List<String> = emptyList(),
+    /** From the meta's `Writers` links, as `cast` and `directors`. */
+    val writers: List<String> = emptyList(),
     /** The IMDb rating the addon gave, as written ("8.4"). */
     val rating: String? = null,
     /** The IMDb score to show, as on tiles. */
     val ratings: Ratings = Ratings(),
-    /** The title's IMDb page, for the IMDb score to link to; null for an id that is not IMDb's. */
+    /** The title's IMDb page, for the IMDb score to link to; null for an id that is not IMDb's, and on a kids profile (no way out to the web). */
     val imdbUrl: String? = null,
     /** TMDB's and Trakt's numbers, asked once the page is visible (`titleVisible`). */
     val scores: TitleScores = TitleScores(Slot.None, Slot.None),

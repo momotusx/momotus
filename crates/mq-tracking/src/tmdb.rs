@@ -75,6 +75,8 @@ impl Tmdb {
 pub struct Found {
     /// `movie` or `series`, as addons name the kinds.
     pub kind: &'static str,
+    /// TMDB's own id, for its page.
+    pub id: u64,
     /// TMDB's user score, 0 to 10.
     pub score: f64,
     pub votes: u64,
@@ -89,6 +91,7 @@ pub fn found(body: &Value) -> Option<Found> {
     };
     Some(Found {
         kind,
+        id: item["id"].as_u64()?,
         score: item["vote_average"]
             .as_f64()
             .filter(|s| (0.0..=10.0).contains(s))?,
@@ -109,6 +112,7 @@ mod tests {
             found(&movie),
             Some(Found {
                 kind: "movie",
+                id: 278,
                 score: 8.733,
                 votes: 31655
             })
@@ -117,7 +121,7 @@ mod tests {
         assert_eq!(found(&show).map(|f| f.kind), Some("series"));
         let none = serde_json::json!({"movie_results": [], "tv_results": [], "person_results": []});
         assert_eq!(found(&none), None);
-        let odd = serde_json::json!({"movie_results": [{"vote_average": 12.0, "vote_count": 3}]});
+        let odd = serde_json::json!({"movie_results": [{"id": 1, "vote_average": 12.0, "vote_count": 3}]});
         assert_eq!(found(&odd), None);
     }
 

@@ -6,4 +6,10 @@
  * `shown` with the number as written, `none` when there is none or no
  * call will be made (draw nothing, take no space).
  */
-export type Slot = { "state": "pending" } | { "state": "shown", text: string, } | { "state": "none" };
+export type Slot = { "state": "pending" } | { "state": "shown", text: string, 
+/**
+ * The source's page for the title (phone, desktop and web link to
+ * it, never TV), built only from checked ids; null when there is
+ * none.
+ */
+url: string | null, } | { "state": "none" };

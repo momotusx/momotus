@@ -18,7 +18,6 @@ use tokio::time::Instant;
 
 const KEPT_FOR: Duration = Duration::from_secs(24 * 3600);
 const REST: Duration = Duration::from_secs(60);
-const QUIET: Duration = Duration::from_secs(60);
 const KEPT: usize = 200;
 /// TMDB's and Trakt's numbers show only with at least this many votes: a
 /// handful of votes is noise, and one reads 10.0.
@@ -145,8 +144,10 @@ fn kept<T>(
 ) -> Option<Got<T>> {
     match answer {
         Answer::Ok { body, .. } => Some(Got::Answer(read(body))),
-        // TMDB or Trakt has no such title (a 404): an empty answer.
-        Answer::Refused { .. } => Some(Got::Answer(empty)),
+        // TMDB or Trakt has no such title (a 404): an empty answer. Any
+        // other refusal (a revoked token, a passing 401 or 403) rests the
+        // title a minute, never a day.
+        Answer::Refused { status: 404, .. } => Some(Got::Answer(empty)),
         failed if failed.throttled() => None,
         _ => Some(Got::Rest),
     }
@@ -223,7 +224,7 @@ impl Core {
         let mut memory = lock(&trakt.lookups);
         let now = Instant::now();
         if answer.throttled() {
-            memory.tmdb_quiet = Some(now + retry_after(&answer).unwrap_or(QUIET).max(QUIET));
+            memory.tmdb_quiet = Some(now + super::search::quiet_for(retry_after(&answer)));
         }
         let got = kept(&answer, tmdb::found, None)?;
         let found = match &got {
@@ -334,6 +335,33 @@ async fn send(api: &Api, read: Read, kind: &str, imdb: &str, token: Option<&str>
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Only a 404 is kept as "none" for a day; another refusal rests a
+    /// minute; a 429 keeps nothing (it quiets), and quiets 1 to 15 minutes.
+    #[test]
+    fn only_a_404_is_an_answer_and_quiet_is_bounded() {
+        let refused = |status| Answer::Refused {
+            status,
+            error: None,
+        };
+        assert!(matches!(
+            kept(&refused(404), |_| 1, 0),
+            Some(Got::Answer(0))
+        ));
+        assert!(matches!(kept(&refused(401), |_| 1, 0), Some(Got::Rest)));
+        assert!(matches!(kept(&refused(403), |_| 1, 0), Some(Got::Rest)));
+        let day = Some(Duration::from_secs(86_400));
+        assert_eq!(
+            crate::trakt::search::quiet_for(day),
+            Duration::from_secs(900)
+        );
+        let minute = Duration::from_secs(60);
+        assert_eq!(
+            crate::trakt::search::quiet_for(Some(Duration::from_secs(5))),
+            minute
+        );
+        assert_eq!(crate::trakt::search::quiet_for(None), minute);
+    }
 
     /// An answer is kept 24 hours, a rest a minute; at 200 titles the
     /// oldest written goes, not all of them.

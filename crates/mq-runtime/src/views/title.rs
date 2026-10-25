@@ -47,12 +47,14 @@ pub struct TitleDetails {
     pub genres: Vec<String>,
     pub cast: Vec<String>,
     pub directors: Vec<String>,
+    /// From the meta's `Writers` links, as `cast` and `directors`.
+    pub writers: Vec<String>,
     /// The IMDb rating the addon gave, as written ("8.4").
     pub rating: Option<String>,
     /// The IMDb score to show, as on tiles.
     pub ratings: Ratings,
     /// The title's IMDb page, for the IMDb score to link to; null for an id
-    /// that is not IMDb's.
+    /// that is not IMDb's, and on a kids profile (no way out to the web).
     pub imdb_url: Option<String>,
     /// TMDB's and Trakt's numbers, asked once the page is visible
     /// (`titleVisible`).
@@ -92,6 +94,10 @@ pub enum Slot {
     Pending,
     Shown {
         text: String,
+        /// The source's page for the title (phone, desktop and web link to
+        /// it, never TV), built only from checked ids; null when there is
+        /// none.
+        url: Option<String>,
     },
     #[serde(rename = "none")]
     Empty,
@@ -519,13 +525,29 @@ fn asked(kind: &str) -> Option<Asked> {
 
 /// A source's number as the page writes it: a percentage of its 0 to 10
 /// score, only with enough votes.
-fn percent(score: Option<(f64, u64)>) -> Slot {
+/// A 0 to 10 score as a whole percentage (8.74 is "87%", 8.75 "88%"); the
+/// apps show the text as written and never round.
+fn percent(score: Option<(f64, u64)>, url: Option<String>) -> Slot {
     match score {
         Some((score, votes)) if votes >= crate::trakt::MIN_VOTES => Slot::Shown {
-            text: format!("{:.0}%", score * 10.0),
+            text: format!("{}%", (score * 10.0).round() as i64),
+            url,
         },
         _ => Slot::Empty,
     }
+}
+
+/// TMDB's page for the title, from find's numeric id.
+fn tmdb_url(found: &mq_tracking::tmdb::Found) -> String {
+    let path = if found.kind == "movie" { "movie" } else { "tv" };
+    format!("https://www.themoviedb.org/{path}/{}", found.id)
+}
+
+/// Trakt's page for the title, by its IMDb id (Trakt opens a movie or a
+/// show by it, checked 2026-10-24); none for an id that is not IMDb's.
+fn trakt_url(kind: &str, imdb: &str) -> Option<String> {
+    let path = if kind == "movie" { "movies" } else { "shows" };
+    crate::segments::is_imdb(imdb).then(|| format!("https://trakt.tv/{path}/{imdb}"))
 }
 
 /// The TMDB and Trakt lookup (plans/title-page-ratings-genres-similar.md),
@@ -558,7 +580,8 @@ async fn look_up(ctx: Ctx) {
     }
     let tmdb = async {
         let found = ctx.core.tmdb_find(&imdb).await;
-        ctx.put(|s| s.tmdb = Some(percent(found.map(|f| (f.score, f.votes)))));
+        let url = found.as_ref().map(tmdb_url);
+        ctx.put(|s| s.tmdb = Some(percent(found.map(|f| (f.score, f.votes)), url)));
         found
     };
     match asked {
@@ -716,7 +739,7 @@ impl Ctx {
     async fn ask_trakt(&self, kind: &'static str, imdb: &str) {
         let score = async {
             let score = self.core.trakt_score(kind, imdb).await;
-            self.put(|s| s.trakt = Some(percent(score)));
+            self.put(|s| s.trakt = Some(percent(score, trakt_url(kind, imdb))));
         };
         let related = async {
             let found = self.core.trakt_related(kind, imdb).await;
@@ -742,6 +765,9 @@ impl Ctx {
         let mut seen = HashSet::new();
         let found: Vec<_> = found
             .into_iter()
+            // Trakt's ids become tile ids, poster URLs and title pages: IMDb's
+            // shape only.
+            .filter(|f| crate::segments::is_imdb(&f.imdb_id))
             .filter(|f| f.imdb_id != imdb && f.imdb_id != self.id)
             .filter(|f| policy.allows(f.kind, &f.imdb_id))
             .filter(|f| seen.insert(f.imdb_id.clone()))
@@ -851,8 +877,10 @@ impl Ctx {
         let rated_poster = self.core.covers([self.id.as_str()]).url(&self.id);
         let mut details = details(&meta, source, rated_poster, self.scores());
         if self.kids {
-            // A trailer is a YouTube hand-off: it leaves the app.
+            // A trailer is a YouTube hand-off and IMDb's page the open web:
+            // both leave the app.
             details.trailers.clear();
+            details.imdb_url = None;
         }
         let header = TitleHeader {
             state: TitleState::Ready,
@@ -1050,6 +1078,7 @@ fn details(
         genres: links("Genres"),
         cast: links("Cast"),
         directors: links("Directors"),
+        writers: links("Writers"),
         rating: links("imdb").into_iter().next(),
         ratings: Ratings::of(links("imdb").first().map(String::as_str)),
         imdb_url: crate::segments::is_imdb(&p.id)
@@ -1078,6 +1107,33 @@ fn details(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A badge links only from a checked id, whatever an addon wrote, and
+    /// rounds half up as the apps show it.
+    #[test]
+    fn badge_links_come_from_checked_ids() {
+        assert_eq!(
+            trakt_url("series", "tt0903747").as_deref(),
+            Some("https://trakt.tv/shows/tt0903747")
+        );
+        assert_eq!(trakt_url("movie", "tt1/../../evil"), None);
+        assert_eq!(trakt_url("movie", "https://example.com"), None);
+        let found = mq_tracking::tmdb::Found {
+            kind: "series",
+            id: 1396,
+            score: 9.0,
+            votes: 18925,
+        };
+        assert_eq!(tmdb_url(&found), "https://www.themoviedb.org/tv/1396");
+        let text = |score| match percent(Some((score, 50)), None) {
+            Slot::Shown { text, .. } => text,
+            other => panic!("{other:?}"),
+        };
+        assert_eq!(
+            (text(8.74), text(8.75), text(8.65)),
+            ("87%".into(), "88%".into(), "87%".into())
+        );
+    }
 
     /// S1:E1 to E4 out, and E5 out only `later` (else no E5); a special.
     fn show(e5: Option<&str>) -> MetaItem {
