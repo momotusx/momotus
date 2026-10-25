@@ -45,12 +45,15 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import app.marquee.core.Format
+import app.marquee.core.Mark
 import app.marquee.core.PlayTo
-import app.marquee.core.TileCopy
 import app.marquee.core.TitleCopy
 import app.marquee.core.VersionLine
 import app.marquee.core.VersionsCopy
 import app.marquee.core.model.Episode
+import app.marquee.core.model.Tile
+import app.marquee.core.model.TitleDetails
+import app.marquee.core.model.TitleHeader
 import app.marquee.core.model.TitleState
 import app.marquee.core.model.VersionsSnapshot
 import app.marquee.core.views.TitleView
@@ -63,16 +66,21 @@ import app.marquee.design.Icons
 import app.marquee.design.KeepInView
 import app.marquee.design.LightStatusBarIcons
 import app.marquee.design.Logo
+import app.marquee.design.Marks
 import app.marquee.design.Marquee
 import app.marquee.design.MenuAction
 import app.marquee.design.MqIcon
 import app.marquee.design.MqText
+import app.marquee.design.People
 import app.marquee.design.PlayFilled
+import app.marquee.design.PosterTile
 import app.marquee.design.PrimaryButton
 import app.marquee.design.ProgressBar
-import app.marquee.design.RatingLine
+import app.marquee.design.RatedCover
 import app.marquee.design.RemoteImage
 import app.marquee.design.RoundButton
+import app.marquee.design.RowHeader
+import app.marquee.design.Score
 import app.marquee.design.Scrims
 import app.marquee.design.SecondaryButton
 import app.marquee.design.Skeleton
@@ -80,6 +88,7 @@ import app.marquee.design.StateMessage
 import app.marquee.design.Status
 import app.marquee.design.StatusNote
 import app.marquee.design.TextRole
+import app.marquee.design.TitleRatingLine
 import app.marquee.design.Tokens
 import app.marquee.design.focusClickable
 import app.marquee.design.liftRoom
@@ -111,6 +120,12 @@ fun PhoneTitle(
     onEpisodeVersions: (Episode) -> Unit,
     modifier: Modifier = Modifier,
     versionsFailed: Boolean = false,
+    /** A genre chip: Discover on the title's kind and that genre. */
+    onGenre: (kind: String, genre: String) -> Unit = { _, _ -> },
+    /** A title in More like this. */
+    onOpen: (Tile) -> Unit = {},
+    /** A person's name: Search for them. */
+    onPerson: (String) -> Unit = {},
 ) {
     val header = title.header
     val details = header?.details
@@ -182,7 +197,7 @@ fun PhoneTitle(
                     ) { Hero(details.background ?: details.poster, details.logo, details.name, hasArt, side) }
                     item(
                         key = "info",
-                    ) { Info(title, versions, versionsFailed, onPlay, onVersions) }
+                    ) { Info(title, versions, versionsFailed, onPlay, onVersions, onGenre) }
                     if (header.seasons.isNotEmpty()) {
                         item(key = "seasons") {
                             val compact = TitleCopy.compactSeasons(header.seasons)
@@ -221,6 +236,18 @@ fun PhoneTitle(
                             onMore = { menuFor = episode },
                         )
                     }
+                    // Rotten Tomatoes shows on the page through the rated cover, above Information
+                    // (plans/title-page-ratings-genres-similar.md): wide enough that the band reads.
+                    details.ratedPoster?.let { cover ->
+                        item(key = "cover") { RatedCover(cover, COVER_WIDTH, Modifier.padding(horizontal = side)) }
+                    }
+                    if (title.similar.isNotEmpty()) {
+                        item(key = "similar") { MoreLikeThis(title.similar, onOpen) }
+                    }
+                    val people = TitleCopy.people(details)
+                    if (people.isNotEmpty()) {
+                        item(key = "people") { People(people, onPerson, Modifier.padding(horizontal = side)) }
+                    }
                     val facts = TitleCopy.facts(details, TitleCopy.seasonCount(header.seasons))
                     if (facts.isNotEmpty()) {
                         item(key = "details") { FactsTable(facts, Modifier.padding(horizontal = side).fillMaxWidth()) }
@@ -240,6 +267,81 @@ fun PhoneTitle(
 }
 
 private const val HERO_RATIO = 1.45f
+
+/** The rated cover's width on a phone: the band's digits stay legible from 200 dp up. */
+private val COVER_WIDTH = 200.dp
+
+/** The marks of the title page's ratings row. */
+internal fun scores(details: TitleDetails): List<Score> =
+    TitleCopy.scoreItems(details.ratings.imdb, details.scores, details.imdbUrl).map {
+        Score(
+            when (it.mark) {
+                Mark.Imdb -> Marks.Imdb
+                Mark.Tmdb -> Marks.Tmdb
+                Mark.Trakt -> Marks.Trakt
+            },
+            it.text,
+            it.spoken,
+            it.url,
+            when (it.mark) {
+                Mark.Imdb -> "IMDb"
+                Mark.Tmdb -> "TMDB"
+                Mark.Trakt -> "Trakt"
+            },
+        )
+    }
+
+/**
+ * The genres, a row of their own under the meta line (design/DECISION.md, Title page): chips that open Discover on
+ * the title's kind and that genre, or plain words on a kids profile, which has no Discover.
+ */
+@Composable
+internal fun Genres(
+    header: TitleHeader,
+    details: TitleDetails,
+    onGenre: (String, String) -> Unit,
+) {
+    val genres = details.genres.take(3)
+    if (genres.isEmpty()) return
+    if (!header.genresLinked) {
+        MqText(genres.joinToString(", "), role = TextRole.Callout, color = Marquee.colors.muted)
+        return
+    }
+    FlowRow(
+        horizontalArrangement = Arrangement.spacedBy(Marquee.space.xs),
+        verticalArrangement = Arrangement.spacedBy(Marquee.space.xs),
+    ) {
+        genres.forEach { genre -> Chip(label = genre, selected = false, onClick = { onGenre(details.kind, genre) }) }
+    }
+}
+
+/** "More like this": the titles Trakt relates to this one, 2:3 posters as on Home, no source named. */
+@Composable
+private fun MoreLikeThis(
+    tiles: List<Tile>,
+    onOpen: (Tile) -> Unit,
+) {
+    val side = Marquee.safe.side
+    val metrics = Marquee.tiles
+    Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.xs)) {
+        RowHeader("More like this", null, Modifier.padding(horizontal = side))
+        LazyRow(
+            contentPadding = PaddingValues(horizontal = side),
+            horizontalArrangement = Arrangement.spacedBy(metrics.gap),
+        ) {
+            items(tiles, key = { it.id }) { tile ->
+                PosterTile(
+                    title = tile.name,
+                    imageUrl = tile.poster,
+                    fallbackImageUrl = tile.posterFallback,
+                    onClick = { onOpen(tile) },
+                    modifier = Modifier.padding(top = metrics.pad),
+                    captioned = false,
+                )
+            }
+        }
+    }
+}
 
 /** The narrowest the title's primary gets beside Watched before Watched moves under it. */
 private val PRIMARY_MIN = 220.dp
@@ -313,6 +415,7 @@ private fun Info(
     versionsFailed: Boolean,
     onPlay: (String?, String) -> Unit,
     onVersions: (String) -> Unit,
+    onGenre: (String, String) -> Unit,
 ) {
     val header = checkNotNull(title.header)
     val details = checkNotNull(header.details)
@@ -324,13 +427,13 @@ private fun Info(
         verticalArrangement = Arrangement.spacedBy(Marquee.space.s),
     ) {
         val context = LocalContext.current
-        // The IMDb score links to the title's IMDb page.
-        val imdb = details.imdbUrl?.takeIf { details.ratings.imdb != null }
-        RatingLine(
-            TileCopy.ratings(details.ratings),
-            TitleCopy.meta(details, TitleCopy.seasonCount(header.seasons)),
-            onFirst = imdb?.let { url -> { openLink(context, url) } },
+        // Each score links to the title's page on its service (none on a kids profile: the core sends no URL).
+        TitleRatingLine(
+            TitleCopy.meta(details, TitleCopy.seasonCount(header.seasons), genres = false),
+            scores(details),
+            onOpen = { url -> openLink(context, url) },
         )
+        Genres(header, details, onGenre)
         details.description?.let { Synopsis(it) }
         // As the web lays a phone title out: the primary with Watched beside it as a pill (movies),
         // then the other actions as equal circles in one row, their words on up to two lines. On a

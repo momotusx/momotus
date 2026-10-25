@@ -48,12 +48,15 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
 import app.marquee.core.Format
+import app.marquee.core.Mark
 import app.marquee.core.PlayTo
-import app.marquee.core.TileCopy
 import app.marquee.core.TitleCopy
 import app.marquee.core.VersionLine
 import app.marquee.core.VersionsCopy
 import app.marquee.core.model.Episode
+import app.marquee.core.model.Tile
+import app.marquee.core.model.TitleDetails
+import app.marquee.core.model.TitleHeader
 import app.marquee.core.model.TitleState
 import app.marquee.core.model.VersionsSnapshot
 import app.marquee.core.views.TitleView
@@ -66,19 +69,25 @@ import app.marquee.design.FactsTable
 import app.marquee.design.Icons
 import app.marquee.design.KeepInView
 import app.marquee.design.Logo
+import app.marquee.design.Marks
 import app.marquee.design.Marquee
 import app.marquee.design.MenuAction
 import app.marquee.design.MqText
+import app.marquee.design.People
 import app.marquee.design.PlayFilled
+import app.marquee.design.PosterTile
 import app.marquee.design.PrimaryButton
-import app.marquee.design.RatingLine
+import app.marquee.design.RatedCover
 import app.marquee.design.RoundButton
+import app.marquee.design.RowHeader
+import app.marquee.design.Score
 import app.marquee.design.Scrims
 import app.marquee.design.Skeleton
 import app.marquee.design.StateMessage
 import app.marquee.design.Status
 import app.marquee.design.StatusNote
 import app.marquee.design.TextRole
+import app.marquee.design.TitleRatingLine
 import app.marquee.design.endFade
 import app.marquee.design.episodeLaneHeight
 import app.marquee.design.laneHeight
@@ -92,6 +101,7 @@ private const val EPISODES = "episodes"
 private const val SEASONS = "seasons"
 private const val ACTIONS = "actions"
 private const val RETRY = "retry"
+private const val SIMILAR = "similar"
 
 /**
  * A title on TV: artwork behind the facts, then the primary action (Play, always, with the version it
@@ -118,6 +128,12 @@ fun TvTitle(
     onEpisodeVersions: (Episode) -> Unit,
     modifier: Modifier = Modifier,
     versionsFailed: Boolean = false,
+    /** A genre chip: Discover on the title's kind and that genre. */
+    onGenre: (kind: String, genre: String) -> Unit = { _, _ -> },
+    /** A title in More like this. */
+    onOpen: (Tile) -> Unit = {},
+    /** A person's name: Search for them. */
+    onPerson: (String) -> Unit = {},
 ) {
     val safe = Marquee.safe
     val header = title.header
@@ -195,17 +211,33 @@ fun TvTitle(
                                     focus,
                                     onPlay,
                                     onVersions,
+                                    onGenre,
                                 )
                             }
-                            FactsTable(
-                                TitleCopy.facts(details, TitleCopy.seasonCount(header.seasons)),
+                            Column(
                                 Modifier.width(560.dp).padding(top = Marquee.space.xl),
-                            )
+                                verticalArrangement = Arrangement.spacedBy(Marquee.space.m),
+                            ) {
+                                // Rotten Tomatoes shows on the page through the rated cover, at the right over
+                                // the art (plans/title-page-ratings-genres-similar.md): decoration, no focus stop,
+                                // beside the facts and the people so the column stays inside the safe area.
+                                Row(horizontalArrangement = Arrangement.spacedBy(Marquee.space.m)) {
+                                    details.ratedPoster?.let { RatedCover(it, COVER_WIDTH) }
+                                    Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.m)) {
+                                        FactsTable(TitleCopy.facts(details, TitleCopy.seasonCount(header.seasons)))
+                                        // Each name opens Search for that person, a few of each.
+                                        People(TitleCopy.people(details), onPerson)
+                                    }
+                                }
+                            }
                         }
                     }
                     if (header.seasons.isNotEmpty()) item(key = "seasons") { Seasons(title, focus) }
                     if (title.episodes.isNotEmpty()) {
                         item(key = "episodes") { Episodes(title, focus, onEpisode, onEpisodeVersions) }
+                    }
+                    if (title.similar.isNotEmpty()) {
+                        item(key = "similar") { MoreLikeThis(title.similar, focus, onOpen) }
                     }
                 }
             }
@@ -261,6 +293,96 @@ private fun Synopsis(text: String) {
 /** The open synopsis' height: from under a two-line title to the safe foot of a 1080 canvas. */
 private val OPEN_MAX = 600.dp
 
+/** The rated cover's width on TV: 300 by 450 on the 1920 canvas (TvCanvas: one dp is one canvas point). */
+private val COVER_WIDTH = 300.dp
+
+/** The marks of the title page's ratings row. */
+private fun scores(details: TitleDetails): List<Score> =
+    TitleCopy.scoreItems(details.ratings.imdb, details.scores, details.imdbUrl).map {
+        Score(
+            when (it.mark) {
+                Mark.Imdb -> Marks.Imdb
+                Mark.Tmdb -> Marks.Tmdb
+                Mark.Trakt -> Marks.Trakt
+            },
+            it.text,
+            it.spoken,
+            it.url,
+            when (it.mark) {
+                Mark.Imdb -> "IMDb"
+                Mark.Tmdb -> "TMDB"
+                Mark.Trakt -> "Trakt"
+            },
+        )
+    }
+
+/** The genres as focusable chips that open Discover; on a kids profile, which has no Discover, plain words. */
+@Composable
+private fun Genres(
+    header: TitleHeader,
+    details: TitleDetails,
+    onGenre: (String, String) -> Unit,
+) {
+    val genres = details.genres.take(3)
+    if (genres.isEmpty()) return
+    if (!header.genresLinked) {
+        MqText(genres.joinToString(", "), role = TextRole.Callout, color = Marquee.colors.muted)
+        return
+    }
+    // Entering the row from below lands on its first chip, as the D-pad reads left to right.
+    val first = remember { FocusRequester() }
+    Row(
+        Modifier.focusProperties { enter = { first } }.focusGroup(),
+        horizontalArrangement = Arrangement.spacedBy(Marquee.space.xs),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        genres.forEachIndexed { i, genre ->
+            Chip(
+                label = genre,
+                selected = false,
+                onClick = { onGenre(details.kind, genre) },
+                focusRequester = if (i == 0) first else null,
+            )
+        }
+    }
+}
+
+/** "More like this": the titles Trakt relates to this one, 2:3 posters with their captions, no source named. */
+@Composable
+private fun MoreLikeThis(
+    tiles: List<Tile>,
+    focus: FocusMemory,
+    onOpen: (Tile) -> Unit,
+) {
+    val side = Marquee.safe.side
+    val metrics = Marquee.tiles
+    Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.xs)) {
+        RowHeader("More like this", null, Modifier.padding(horizontal = side))
+        LazyRow(
+            // Back from a title opened here lands on its tile (the page's first focus takes the last key).
+            modifier =
+                Modifier
+                    .focusProperties { enter = { focus.rowEntry(SIMILAR) ?: FocusRequester.Default } }
+                    .focusGroup(),
+            contentPadding = PaddingValues(horizontal = side, vertical = metrics.pad),
+            horizontalArrangement = Arrangement.spacedBy(metrics.gap),
+        ) {
+            items(tiles, key = { it.id }) { tile ->
+                val key = "similar:${tile.id}"
+                PosterTile(
+                    title = tile.name,
+                    imageUrl = tile.poster,
+                    fallbackImageUrl = tile.posterFallback,
+                    onClick = { onOpen(tile) },
+                    caption = tile.releaseInfo,
+                    focusRequester = focus.requesterFor(key),
+                    onFocusChange = focus.watch(SIMILAR, key),
+                )
+            }
+        }
+    }
+}
+
 @Composable
 private fun Info(
     title: TitleView,
@@ -269,6 +391,7 @@ private fun Info(
     focus: FocusMemory,
     onPlay: (String?, String) -> Unit,
     onVersions: (String) -> Unit,
+    onGenre: (String, String) -> Unit,
 ) {
     val header = checkNotNull(title.header)
     val details = checkNotNull(header.details)
@@ -278,11 +401,14 @@ private fun Info(
     val context = LocalContext.current
     Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.s)) {
         Logo(details.logo, details.name, height = 160.dp, maxWidth = 480.dp)
-        RatingLine(
-            TileCopy.ratings(details.ratings),
-            TitleCopy.meta(details, TitleCopy.seasonCount(header.seasons)),
+        TitleRatingLine(
+            TitleCopy.meta(details, TitleCopy.seasonCount(header.seasons), genres = false),
+            scores(details),
             Modifier.widthIn(max = 760.dp),
         )
+        // Their own row between the meta line and the synopsis (design/DECISION.md): Up from the synopsis
+        // (or from Play when the synopsis fits) reaches them.
+        Genres(header, details, onGenre)
         details.description?.let { Synopsis(it) }
         Row(
             Modifier

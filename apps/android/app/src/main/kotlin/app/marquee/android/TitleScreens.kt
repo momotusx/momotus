@@ -20,6 +20,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalAccessibilityManager
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.createSavedStateHandle
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -30,6 +31,7 @@ import app.marquee.core.TitleCopy
 import app.marquee.core.client.TitleFacts
 import app.marquee.core.model.Episode
 import app.marquee.core.model.LearnedNote
+import app.marquee.core.model.Tile
 import app.marquee.core.route.Route
 import app.marquee.core.session.CoreSession
 import app.marquee.core.views.TitleView
@@ -75,6 +77,18 @@ class TitleHolder(
     override fun onCleared() = view.close()
 }
 
+/**
+ * Tells the core whether the title page shows (`titleVisible`): TMDB and Trakt are asked only while it does, so it is
+ * true once resumed and false when paused (the player or another screen on top, the app in the background) or gone.
+ */
+@Composable
+internal fun TitleVisibility(view: TitleView) {
+    LifecycleResumeEffect(view) {
+        view.setVisible(true)
+        onPauseOrDispose { view.setVisible(false) }
+    }
+}
+
 /** The Versions screen's TV focus memory. */
 class VersionsFocus : ViewModel() {
     val focus = FocusMemory()
@@ -99,6 +113,9 @@ fun TitleScreen(
     onPlay: (key: String?, videoId: String, title: String) -> Unit,
     onVersions: (videoId: String, title: String) -> Unit,
     onPlayEpisode: (videoId: String, title: String) -> Unit,
+    onGenre: (kind: String, genre: String) -> Unit,
+    onOpen: (Tile) -> Unit,
+    onPerson: (String) -> Unit,
 ) {
     val holder =
         viewModel<TitleHolder>(
@@ -108,6 +125,7 @@ fun TitleScreen(
                     initializer { TitleHolder(session, route.kind, route.id, route.season, createSavedStateHandle()) }
                 },
         )
+    TitleVisibility(holder.view)
     val header = holder.view.header
     val name = header?.details?.name
     // Fully drawn once the details show, when a start opens on a title page.
@@ -155,6 +173,9 @@ fun TitleScreen(
                 onEpisode = episode,
                 onEpisodeVersions = episodeVersions,
                 versionsFailed = failed,
+                onGenre = onGenre,
+                onOpen = onOpen,
+                onPerson = onPerson,
             )
         } else {
             PhoneTitle(
@@ -165,6 +186,9 @@ fun TitleScreen(
                 onEpisode = episode,
                 onEpisodeVersions = episodeVersions,
                 versionsFailed = failed,
+                onGenre = onGenre,
+                onOpen = onOpen,
+                onPerson = onPerson,
             )
         }
         note?.let { (id, words) ->

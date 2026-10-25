@@ -53,6 +53,15 @@ class AppState(
     /** The one open Versions view, shared by the title page, the Versions screen and the player. */
     val versions = VersionsHolder(session, caps, viewModelScope)
 
+    /**
+     * A genre chip's ask of Discover (a kind and a genre), sent once Discover has its first snapshot: a select sent
+     * before it may be dropped (plans/title-page-ratings-genres-similar.md). The one route every genre link takes.
+     */
+    var discoverRequest: DiscoverRequest? by mutableStateOf(null)
+
+    /** A person's name from a title page, for Search to look up once it is open. */
+    var searchRequest: String? by mutableStateOf(null)
+
     /** Find addons cards' Installing and failure states: they outlive the page, never the profile. */
     val installCards = InstallCards(viewModelScope)
 
@@ -199,3 +208,9 @@ private fun mainThreadStack(): String =
         .thread.stackTrace
         .take(24)
         .joinToString(" < ") { "${it.className.substringAfterLast('.')}.${it.methodName}:${it.lineNumber}" }
+
+/** Discover on [kind], filtered to [genre]: the core opens the first catalog of the kind that lists it (C40). */
+data class DiscoverRequest(
+    val kind: String,
+    val genre: String,
+)

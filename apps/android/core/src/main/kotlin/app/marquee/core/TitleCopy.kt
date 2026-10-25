@@ -3,7 +3,9 @@ package app.marquee.core
 import app.marquee.core.model.EmptyAction
 import app.marquee.core.model.Episode
 import app.marquee.core.model.PlayTarget
+import app.marquee.core.model.Slot
 import app.marquee.core.model.TitleDetails
+import app.marquee.core.model.TitleScores
 import app.marquee.core.model.VersionsSnapshot
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -37,8 +39,77 @@ sealed interface PlayTo {
     data object Nowhere : PlayTo
 }
 
+/** One item of the title page's ratings row: the service's [mark], its number as shown ([text] null while it is
+ * pending, keeping its place), what a screen reader says, and the title's page there ([url], when the core gave a
+ * checked one: the phone links it, TV never). */
+data class ScoreItem(
+    val mark: Mark,
+    val text: String?,
+    val spoken: String,
+    val url: String? = null,
+)
+
+/** The services whose marks the title page's ratings row shows. */
+enum class Mark { Imdb, Tmdb, Trakt }
+
 /** The words of the title page, shared by both UI trees and equal to the web family's. */
 object TitleCopy {
+    /**
+     * The title page's ratings row (plans/title-page-ratings-genres-similar.md): IMDb as x/10 (the addon's score),
+     * TMDB and Trakt as percentages, in that order. A pending slot keeps its place; a none slot and a missing IMDb
+     * score have none.
+     */
+    fun scoreItems(
+        imdb: String?,
+        scores: TitleScores?,
+        imdbUrl: String? = null,
+    ): List<ScoreItem> =
+        buildList {
+            imdb?.let { add(ScoreItem(Mark.Imdb, "$it/10", "IMDb $it out of 10", outLink(imdbUrl))) }
+
+            fun slot(
+                mark: Mark,
+                name: String,
+                slot: Slot?,
+            ) {
+                when (slot) {
+                    is Slot.Shown -> {
+                        val spoken = "$name ${slot.text.replace("%", " percent")}"
+                        add(ScoreItem(mark, slot.text, spoken, outLink(slot.url)))
+                    }
+
+                    Slot.Pending -> {
+                        add(ScoreItem(mark, null, ""))
+                    }
+
+                    else -> {
+                        Unit
+                    }
+                }
+            }
+            slot(Mark.Tmdb, "TMDB", scores?.tmdb)
+            slot(Mark.Trakt, "Trakt", scores?.trakt)
+        }
+
+    private val HOSTS = setOf("imdb.com", "www.imdb.com", "themoviedb.org", "www.themoviedb.org", "trakt.tv")
+
+    /** A badge's link: only an https page on IMDb, TMDB or Trakt; anything else is no link. */
+    fun outLink(url: String?): String? =
+        url?.takeIf {
+            runCatching { java.net.URI(it) }.getOrNull()?.let { u -> u.scheme == "https" && u.host in HOSTS } == true
+        }
+
+    /**
+     * The people on the title page, each name a link to Search: at most four of the cast and two directors and
+     * writers, so the TV column stays inside the safe area (plans/title-page-ratings-genres-similar.md, 4).
+     */
+    fun people(details: TitleDetails): List<Pair<String, List<String>>> =
+        listOf(
+            "Starring" to details.cast.take(4),
+            "Directed by" to details.directors.take(2),
+            "Written by" to details.writers.take(2),
+        ).filter { it.second.isNotEmpty() }
+
     private const val NBSP = ' '
 
     /**
@@ -142,12 +213,14 @@ object TitleCopy {
     fun meta(
         details: TitleDetails,
         seasons: Int = 0,
+        /** False on a title page, whose genres have a row of their own (design/DECISION.md, Title page). */
+        genres: Boolean = true,
     ): String =
         listOfNotNull(
             details.releaseInfo,
             details.genres
                 .take(3)
-                .takeIf { it.isNotEmpty() }
+                .takeIf { genres && it.isNotEmpty() }
                 ?.joinToString(", "),
             seasons.takeIf { it > 0 }?.let { "$it ${if (it == 1) "season" else "seasons"}" }
                 ?: details.runtime.takeIf { details.kind == "movie" },
@@ -155,7 +228,8 @@ object TitleCopy {
 
     /**
      * The facts table: label and value, in the web's words, left out when empty. Not where the details or the
-     * scores came from: no addon's name on a title page (design/DECISION.md, Shelves).
+     * scores came from: no addon's name on a title page (design/DECISION.md, Shelves). The people are [people],
+     * links of their own.
      */
     fun facts(
         details: TitleDetails,
@@ -165,8 +239,6 @@ object TitleCopy {
             (if (details.kind == "movie") "Released" else "Aired") to (details.releaseInfo ?: ""),
             "Seasons" to (seasons.takeIf { it > 0 }?.toString() ?: ""),
             "Runtime" to (details.runtime?.let { if (details.kind == "movie") it else "$it an episode" } ?: ""),
-            "Directed by" to details.directors.take(2).joinToString(", "),
-            "Starring" to details.cast.take(3).joinToString(", "),
         ).filter { it.second.isNotBlank() }
 
     /** "Watched, S1:E2, The Kingsroad" (and "Airs Nov 3, 2026" when it is not out): what a screen reader says for an episode. */

@@ -30,6 +30,7 @@ import app.marquee.core.model.ProfilesSnapshot
 import app.marquee.core.model.RowState
 import app.marquee.core.model.SearchSnapshot
 import app.marquee.core.model.SignInSnapshot
+import app.marquee.core.model.Tile
 import app.marquee.core.model.TitleHeader
 import app.marquee.core.model.TitleSnapshot
 import app.marquee.core.model.TitleUpdate
@@ -121,10 +122,15 @@ class TitleView(
         private set
     val episodes: SnapshotStateList<Episode> = mutableStateListOf()
 
+    /** "More like this": empty until it lands, and for a kids profile. */
+    var similar: List<Tile> by mutableStateOf(emptyList())
+        private set
+
     override fun applySnapshot(snapshot: TitleSnapshot) {
         header = snapshot.header
         episodes.clear()
         episodes.addAll(snapshot.episodes)
+        similar = snapshot.similar
     }
 
     override fun applyUpdates(updates: List<TitleUpdate>) {
@@ -132,9 +138,16 @@ class TitleView(
             when (update) {
                 is TitleUpdate.Header -> header = update.header
                 is TitleUpdate.Episodes -> episodes.applyDiffs(update.diffs)
+                is TitleUpdate.Similar -> if (update.tiles != similar) similar = update.tiles
             }
         }
     }
+
+    /**
+     * The page shows or stops showing: the core asks TMDB and Trakt only while it shows
+     * (plans/title-page-ratings-genres-similar.md), so send it on resume and on pause or leaving.
+     */
+    fun setVisible(visible: Boolean) = post(command("titleVisible") { put("visible", visible) })
 
     fun selectSeason(season: Int) = post(command("selectSeason") { put("season", season) })
 

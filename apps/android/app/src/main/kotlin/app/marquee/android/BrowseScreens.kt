@@ -111,6 +111,12 @@ class DiscoverHolder(
     override fun onCleared() = view.close()
 }
 
+/** A genre chip's ask goes only once Discover has its first snapshot: a select sent before it may be dropped. */
+internal fun genreAsk(
+    request: DiscoverRequest?,
+    opened: Boolean,
+): DiscoverRequest? = request?.takeIf { opened }
+
 /**
  * Where a browse page starts and ends: under the TV pill, or under the status bar and over the phone
  * bar. A deep page ([framed] false) has no pill above it on TV, so it starts at the safe area.
@@ -226,6 +232,9 @@ internal fun Note(
 fun SearchScreen(
     session: CoreSession,
     onOpen: (Tile) -> Unit,
+    /** A person's name from a title page: searched once, as if typed. */
+    request: String? = null,
+    onRequestSent: () -> Unit = {},
     /** No addon can search: the recommended addons, which include one that does. */
     onAddons: () -> Unit,
 ) {
@@ -238,6 +247,12 @@ fun SearchScreen(
     fun send(text: String) {
         holder.query = text
         view.setQuery(text)
+    }
+    LaunchedEffect(request) {
+        request?.let {
+            send(it)
+            onRequestSent()
+        }
     }
     val searching = holder.query.isNotBlank()
     val loading = snapshot?.rows.orEmpty().any { it.notice() is RowNotice.Waiting }
@@ -432,6 +447,9 @@ fun DiscoverScreen(
     onOpen: (Tile) -> Unit,
     onSetup: () -> Unit,
     onAddons: () -> Unit,
+    /** A genre chip's ask (a title page's genre), sent once Discover has its first snapshot. */
+    request: DiscoverRequest? = null,
+    onRequestSent: () -> Unit = {},
 ) {
     val holder =
         viewModel<DiscoverHolder>(
@@ -440,6 +458,12 @@ fun DiscoverScreen(
         )
     val view = holder.view
     val snapshot = view.snapshot
+    // One select of the kind and the genre, after the first snapshot: the core picks the catalog (C40).
+    LaunchedEffect(request, snapshot != null) {
+        val ask = genreAsk(request, opened = snapshot != null) ?: return@LaunchedEffect
+        view.select(kind = ask.kind, genre = GenreChange.To(ask.genre))
+        onRequestSent()
+    }
     val metrics = Marquee.tiles
     val side = Marquee.safe.side
     val grid = rememberLazyGridState()

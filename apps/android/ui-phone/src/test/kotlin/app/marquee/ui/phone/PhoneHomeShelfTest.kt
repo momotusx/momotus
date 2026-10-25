@@ -115,7 +115,7 @@ class PhoneHomeShelfTest {
         posterShape = "poster",
         releaseInfo = line,
         progress = progress,
-        ratings = Ratings("8.4", "87%"),
+        ratings = Ratings("8.4"),
     )
 
     private fun show(
@@ -129,7 +129,7 @@ class PhoneHomeShelfTest {
                     "Night of the Living Dead",
                     "movie",
                     "1968",
-                ).copy(logo = art("logo.png"), ratings = Ratings("7.8", "96%")),
+                ).copy(logo = art("logo.png"), ratings = Ratings("7.8")),
                 "#1 in Popular Movies",
                 "A ragtag group barricade themselves in an old Pennsylvania farmhouse.",
                 listOf("Horror", "Thriller"),

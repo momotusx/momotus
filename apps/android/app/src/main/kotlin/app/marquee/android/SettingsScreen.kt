@@ -1,5 +1,6 @@
 package app.marquee.android
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -9,6 +10,7 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -76,6 +78,7 @@ import app.marquee.design.FocusInk
 import app.marquee.design.Form
 import app.marquee.design.Icons
 import app.marquee.design.LiveSpoken
+import app.marquee.design.Marks
 import app.marquee.design.Marquee
 import app.marquee.design.MqIcon
 import app.marquee.design.MqText
@@ -938,10 +941,21 @@ private fun About() {
                 color = Marquee.colors.muted,
             )
             MqText(AddonsCopy.TURKCEALTYAZI_CREDIT, role = TextRole.Caption, color = Marquee.colors.muted)
+            // TMDB's terms: its logo and this line wherever its data shows.
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(Marquee.space.xs),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Image(Marks.Tmdb, contentDescription = "TMDB", modifier = Modifier.height(16.dp))
+                MqText(TMDB_CREDIT, role = TextRole.Caption, color = Marquee.colors.muted)
+            }
             if (CoreBuild.missing) MqText(CoreBuild.ABOUT_LINE, role = TextRole.Caption, color = Marquee.colors.muted)
         }
     }
 }
+
+/** TMDB's attribution line (its terms ask for it with the logo). */
+internal const val TMDB_CREDIT = "This product uses the TMDB API but is not endorsed or certified by TMDB."
 
 /** The subtitle sizes Settings offers, in order (the profile's, on every device). */
 internal val SUBTITLE_SIZES =

@@ -117,7 +117,6 @@ class TvHomeShelfTest {
         year: String? = null,
         progress: Float? = null,
         imdb: String? = "8.4",
-        rt: String? = "87%",
     ) = Tile(
         id = id,
         kind = kind,
@@ -127,7 +126,7 @@ class TvHomeShelfTest {
         posterShape = "poster",
         releaseInfo = year,
         progress = progress,
-        ratings = Ratings(imdb, rt),
+        ratings = Ratings(imdb),
     )
 
     private val hero =
@@ -138,7 +137,6 @@ class TvHomeShelfTest {
                 "movie",
                 "1968",
                 imdb = "7.8",
-                rt = "96%",
             ).copy(logo = art("logo.png")),
             "#1 in Popular Movies",
             "A ragtag group barricade themselves in an old Pennsylvania farmhouse to remain safe from a horde of " +
@@ -182,7 +180,7 @@ class TvHomeShelfTest {
                         "Popular Series",
                         "Cinemeta",
                         RowState.Ready,
-                        (1..8).map { tile("s$it", "Series $it", "series", "2022–", rt = null) },
+                        (1..8).map { tile("s$it", "Series $it", "series", "2022–") },
                     ),
                 ),
             )

@@ -95,10 +95,17 @@ class TitleCopyTest {
             listOf(
                 "Released" to "2010",
                 "Runtime" to "52 min",
-                "Directed by" to "X, Y",
-                "Starring" to "A, B, C",
             ),
             TitleCopy.facts(details()),
+        )
+        // The people are links of their own, at most four of the cast and two of each crew.
+        assertEquals(
+            listOf(
+                "Starring" to listOf("A", "B", "C", "D"),
+                "Directed by" to listOf("X", "Y"),
+                "Written by" to listOf("W"),
+            ),
+            TitleCopy.people(details().copy(cast = listOf("A", "B", "C", "D", "E"), writers = listOf("W"))),
         )
         assertEquals(
             listOf("Aired" to "2011-2019", "Seasons" to "8"),
@@ -262,5 +269,86 @@ class TitleCopyTest {
         assertEquals(PlayTo.Versions, to(empty(EmptyKind.NoSource, EmptyAction.SettingsAddons, null)))
         assertEquals(PlayTo.Nowhere, to(empty(EmptyKind.NoResults, EmptyAction.None, null)))
         assertEquals(PlayTo.Nowhere, TitleCopy.playTo(PrimaryAction("Play"), null, null), "no video")
+    }
+
+    @Test
+    fun `the ratings row reads IMDb as x of 10, TMDB and Trakt as percentages, each spoken once`() {
+        val items =
+            TitleCopy.scoreItems(
+                "9.3",
+                app.marquee.core.model.TitleScores(
+                    app.marquee.core.model.Slot
+                        .Shown("87%"),
+                    app.marquee.core.model.Slot
+                        .Shown("92%"),
+                ),
+            )
+        assertEquals(
+            listOf(
+                ScoreItem(Mark.Imdb, "9.3/10", "IMDb 9.3 out of 10"),
+                ScoreItem(Mark.Tmdb, "87%", "TMDB 87 percent"),
+                ScoreItem(Mark.Trakt, "92%", "Trakt 92 percent"),
+            ),
+            items,
+        )
+    }
+
+    @Test
+    fun `a pending slot keeps its place and a none slot takes none`() {
+        val none = app.marquee.core.model.Slot.None
+        val pending = app.marquee.core.model.Slot.Pending
+        assertEquals(
+            listOf(ScoreItem(Mark.Trakt, null, "")),
+            TitleCopy.scoreItems(
+                null,
+                app.marquee.core.model
+                    .TitleScores(none, pending),
+            ),
+        )
+        // No token in the build: both none from the first render, nothing reserved.
+        assertEquals(
+            emptyList(),
+            TitleCopy.scoreItems(
+                null,
+                app.marquee.core.model
+                    .TitleScores(none, none),
+            ),
+        )
+        // An older core sends no scores: IMDb alone.
+        assertEquals(listOf(Mark.Imdb), TitleCopy.scoreItems("7.4", null).map { it.mark })
+    }
+
+    @Test
+    fun `a badge links only to an https page on IMDb, TMDB or Trakt`() {
+        val items =
+            TitleCopy.scoreItems(
+                "9.3",
+                app.marquee.core.model.TitleScores(
+                    app.marquee.core.model.Slot
+                        .Shown("87%", "https://www.themoviedb.org/movie/278"),
+                    app.marquee.core.model.Slot
+                        .Shown("92%", "https://trakt.tv/movies/tt0111161"),
+                ),
+                "https://www.imdb.com/title/tt0111161/",
+            )
+        assertEquals(
+            listOf(
+                "https://www.imdb.com/title/tt0111161/",
+                "https://www.themoviedb.org/movie/278",
+                "https://trakt.tv/movies/tt0111161",
+            ),
+            items.map { it.url },
+        )
+        // Another host, plain http, a script or nothing (a kids profile gets no URL): no link.
+        for (bad in listOf(
+            "https://evil.example/tt1",
+            "http://www.imdb.com/title/tt1/",
+            "javascript:alert(1)",
+            "https://trakt.tv.evil.example/x",
+            "",
+            null,
+        )) {
+            assertEquals(null, TitleCopy.outLink(bad), "$bad")
+        }
     }
 }

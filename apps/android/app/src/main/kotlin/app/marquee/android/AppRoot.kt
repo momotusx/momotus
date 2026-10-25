@@ -533,6 +533,8 @@ private fun AppNav(
                         SearchScreen(
                             session,
                             ::open,
+                            request = app.searchRequest,
+                            onRequestSent = { app.searchRequest = null },
                             onAddons = { backStack.add(Route.Defaults(DefaultsMode.Settings)) },
                         )
                     }
@@ -540,6 +542,8 @@ private fun AppNav(
                         DiscoverScreen(
                             session,
                             ::open,
+                            request = app.discoverRequest,
+                            onRequestSent = { app.discoverRequest = null },
                             onSetup = { backStack.add(Route.Onboarding) },
                             onAddons = { choose(Route.Settings) },
                         )
@@ -688,6 +692,15 @@ private fun AppNav(
                             },
                             onPlayEpisode = { videoId, name ->
                                 backStack.add(Route.Player(route.kind, route.id, videoId, name))
+                            },
+                            onGenre = { kind, genre ->
+                                app.discoverRequest = DiscoverRequest(kind, genre)
+                                choose(Route.Discover)
+                            },
+                            onOpen = ::open,
+                            onPerson = { name ->
+                                app.searchRequest = name
+                                choose(Route.Search)
                             },
                         )
                     }
