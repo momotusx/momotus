@@ -10,6 +10,7 @@ import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
 import android.util.Rational
+import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.annotation.RequiresApi
 import androidx.compose.runtime.Composable
@@ -26,6 +27,7 @@ import androidx.core.util.Consumer
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import androidx.lifecycle.Lifecycle
 import app.marquee.player.PlaybackController
 import app.marquee.player.PlaybackController.Stage
 import app.marquee.player.ScreenBrightness
@@ -153,7 +155,15 @@ fun rememberPlayerWindow(
             val system =
                 object : ContentObserver(Handler(Looper.getMainLooper())) {
                     override fun onChange(selfChange: Boolean) {
-                        if (owns()) screenBrightness.release(activity.window, forget = true)
+                        // Only the viewer's own change counts: one while our override is on the window and the
+                        // player is in front. With it dropped (picture in picture, the background) the panel follows
+                        // the system, which then writes the setting itself under adaptive brightness (bench PGA9):
+                        // the held level stays, to come back with the player.
+                        val override = activity.window.attributes.screenBrightness
+                        val front = activity.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)
+                        if (owns() && front && override != WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE) {
+                            screenBrightness.release(activity.window, forget = true)
+                        }
                     }
                 }
             activity.contentResolver.registerContentObserver(

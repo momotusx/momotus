@@ -10,6 +10,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.lifecycle.Lifecycle
 import androidx.media3.common.SimpleBasePlayer
 import app.marquee.player.PlaybackController
 import app.marquee.player.ScreenBrightness
@@ -99,5 +100,34 @@ class PlayerWindowTest {
         assertEquals(0.5f, brightness.level)
         compose.runOnIdle { compose.activity.onPictureInPictureModeChanged(false, Configuration()) }
         assertEquals(brightnessToWindow(0.5f), override())
+    }
+
+    @Test
+    fun `the system's own write while the small window shows keeps the viewer's brightness`() {
+        players()
+        compose.runOnIdle { brightness.set(window(), 0.5f) }
+        compose.runOnIdle { compose.activity.onPictureInPictureModeChanged(true, Configuration()) }
+        // Adaptive brightness writes the setting itself once the panel follows the system again (bench PGA9).
+        systemWrites(41)
+        assertEquals(0.5f, brightness.level)
+        compose.runOnIdle { compose.activity.onPictureInPictureModeChanged(false, Configuration()) }
+        assertEquals(brightnessToWindow(0.5f), override())
+    }
+
+    @Test
+    fun `the system's own write while the app is behind another keeps the viewer's brightness`() {
+        players()
+        compose.runOnIdle { brightness.set(window(), 0.5f) }
+        compose.activityRule.scenario.moveToState(Lifecycle.State.STARTED)
+        systemWrites(42)
+        assertEquals(0.5f, brightness.level)
+        compose.activityRule.scenario.moveToState(Lifecycle.State.RESUMED)
+        assertEquals(brightnessToWindow(0.5f), override())
+    }
+
+    private fun systemWrites(value: Int) {
+        Settings.System.putInt(compose.activity.contentResolver, Settings.System.SCREEN_BRIGHTNESS, value)
+        shadowOf(Looper.getMainLooper()).idle()
+        compose.waitForIdle()
     }
 }
