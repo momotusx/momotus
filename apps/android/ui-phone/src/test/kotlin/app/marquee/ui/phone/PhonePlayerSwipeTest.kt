@@ -23,6 +23,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performMouseInput
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipe
+import androidx.compose.ui.unit.dp
 import androidx.core.graphics.Insets
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
@@ -43,6 +44,8 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
+import org.robolectric.util.ReflectionHelpers
+import java.lang.reflect.Proxy
 import kotlin.coroutines.CoroutineContext
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -224,6 +227,18 @@ class PhonePlayerSwipeTest {
         playing()
         if (!controlsShown()) compose.onRoot().performTouchInput { click(center) }
         compose.waitUntil(3_000) { controlsShown() }
+        // The drag starts above the foot's band, so it is the bar that takes it, not the band that refuses it.
+        val bar = compose.onNodeWithContentDescription("Position").fetchSemanticsNode().boundsInRoot
+        val band = with(compose.density) { 32.dp.toPx() }
+        val rootHeight =
+            compose
+                .onRoot()
+                .fetchSemanticsNode()
+                .size.height
+        assertTrue(
+            bar.center.y < rootHeight - band,
+            "the bar's middle ${bar.center.y} sits above the band at ${rootHeight - band}",
+        )
         compose.onNodeWithContentDescription("Position").performTouchInput {
             val from = Offset(width * 0.75f, centerY)
             swipe(from, from + Offset(0f, -120f), 300)
@@ -270,6 +285,10 @@ class PhonePlayerSwipeTest {
         compose.mainClock.advanceTimeBy(4_000)
         compose.waitForIdle()
         assertTrue(!controlsShown(), "they hide 4 s after the last move")
+        // Hidden, a swipe leaves them hidden.
+        drag(0.75f, 0.45f, -120f)
+        compose.mainClock.advanceTimeBy(1_000)
+        assertTrue(!controlsShown(), "a swipe never shows them")
     }
 
     @Test
@@ -299,8 +318,26 @@ class PhonePlayerSwipeTest {
 
     @Test
     fun `a fixed volume has no swipe`() {
-        // The audio service answers isVolumeFixed, which Robolectric cannot set: the seam takes it.
-        assertEquals(null, MediaVolume(audio, fixed = true).start())
-        assertEquals(MediaVolume(audio, fixed = false).level(), MediaVolume(audio, fixed = false).start())
+        // The audio service answers isVolumeFixed (Robolectric's shadow does not): a stand-in service says fixed.
+        val service = Class.forName("android.media.IAudioService")
+        val fixed =
+            Proxy.newProxyInstance(service.classLoader, arrayOf(service)) { _, method, _ ->
+                when {
+                    method.name == "isVolumeFixed" -> true
+                    method.returnType == java.lang.Boolean.TYPE -> false
+                    method.returnType == Integer.TYPE -> 0
+                    else -> null
+                }
+            }
+        val real = ReflectionHelpers.getStaticField<Any?>(AudioManager::class.java, "sService")
+        ReflectionHelpers.setStaticField(AudioManager::class.java, "sService", fixed)
+        try {
+            playing()
+            drag(0.75f, 0.45f, -120f)
+            assertEquals(7, volume())
+            assertEquals(0, compose.onAllNodesWithTag(LEVEL_TAG).fetchSemanticsNodes().size)
+        } finally {
+            ReflectionHelpers.setStaticField(AudioManager::class.java, "sService", real)
+        }
     }
 }

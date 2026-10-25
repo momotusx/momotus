@@ -103,14 +103,12 @@ internal fun reachedEnd(
 /** The media volume as the right-hand swipe sets it, with no system panel over ours. */
 internal class MediaVolume(
     private val audio: AudioManager,
-    /** The device's volume cannot change (the audio service says so; a test sets it). */
-    private val fixed: Boolean = audio.isVolumeFixed,
 ) {
     private val min = if (Build.VERSION.SDK_INT >= 28) audio.getStreamMinVolume(STREAM) else 0
     private val max = audio.getStreamMaxVolume(STREAM)
 
     /** Where a swipe starts; none on a device whose volume is fixed. */
-    fun start(): Float? = if (fixed) null else level()
+    fun start(): Float? = if (audio.isVolumeFixed) null else level()
 
     fun level(): Float = indexLevel(audio.getStreamVolume(STREAM), min, max)
 
@@ -150,8 +148,12 @@ internal fun Modifier.levelSwipes(
         if (!enabled) return@pointerInput
         awaitEachGesture {
             val down = awaitFirstDown(requireUnconsumed = true)
-            // Debug builds only (CoreLog's debug lines): what a walk's injected touch is, and the bands it meets.
-            CoreLog.d("picture touch ${down.type}, bands ${bands()}")
+            // Once per process, debug builds only (CoreLog's debug lines): what a walk's injected touch is, and the
+            // bands it meets.
+            if (!touchLogged) {
+                touchLogged = true
+                CoreLog.d("picture touch ${down.type}, bands ${bands()}")
+            }
             if (down.type == PointerType.Mouse) return@awaitEachGesture
             val side = swipeSide(down.position, size.toSize(), bands()) ?: return@awaitEachGesture
             val from = awaitCommit(down.id, down.position, COMMIT.toPx()) ?: return@awaitEachGesture
@@ -245,6 +247,9 @@ internal fun LevelIndicator(
         )
     }
 }
+
+/** The first touch on the picture has been logged (the walk reads it once). */
+private var touchLogged = false
 
 /** The level indicator, for tests. */
 internal const val LEVEL_TAG = "player-level"

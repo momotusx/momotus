@@ -41,6 +41,8 @@ class ScreenBrightness {
         forget: Boolean,
     ) {
         if (forget) level = null
+        // No layout pass when nothing was swiped.
+        if (window.attributes.screenBrightness == WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE) return
         window.attributes =
             window.attributes.apply { screenBrightness = WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE }
     }
