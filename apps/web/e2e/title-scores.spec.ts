@@ -67,6 +67,11 @@ function fakeServer(): Promise<Server> {
       return json({ id: "dev.marquee.scores", version: "1.0.0", name: "Scores Test", resources: ["meta"], types: ["movie", "series"], idPrefixes: ["tt"], catalogs: [] });
     }
     if (url.startsWith("/meta/series/tt0903747")) return json(SERIES);
+    // A series with More like this: its cover sits beside the row.
+    if (url.startsWith("/meta/series/tt0903749")) return json({ meta: { ...SERIES.meta, id: "tt0903749", name: "With Similar" } });
+    if (url.startsWith("/shows/tt0903749/related")) return json(RELATED);
+    // A series with no episodes yet: its page has nothing under Play.
+    if (url.startsWith("/meta/series/tt0903748")) return json({ meta: { ...SERIES.meta, id: "tt0903748", name: "No Episodes", videos: [] } });
     const movie = /^\/meta\/movie\/(tt\d+)\.json$/.exec(url)?.[1];
     if (movie && MAIN.includes(movie)) return json(meta(movie));
     if (movie) return json({ meta: { id: movie, type: "movie", name: RELATED.find((r) => r.ids.imdb === movie)?.title ?? "Other" } });
@@ -285,5 +290,43 @@ test("tv: Down reveals a series' lone rated cover, and Up returns", async ({ bro
   expect(await page.evaluate(() => !!document.activeElement?.closest(".rated-cover"))).toBe(false);
   await page.keyboard.press("ArrowUp");
   await expect.poll(scrolled, { timeout: 5_000 }).toBe(0);
+  await page.context().close();
+});
+
+// TV: Up with nowhere to go (the page's topmost control focused) still brings the hero back when the page has scrolled,
+// on a series with no episodes and no More like this.
+test("tv: Up with nowhere to go brings the page back to the top", async ({ browser }) => {
+  const page = await open(browser, "tv");
+  await page.goto("/title/series/tt0903748?form=tv");
+  await expect(page.locator(".info .play")).toBeVisible({ timeout: 30_000 });
+  await expect(page.locator(".eps")).toHaveCount(0);
+  await expect(page.locator('.row[aria-label="More like this"]')).toHaveCount(0);
+  const focusedKey = () => page.evaluate(() => (document.activeElement as HTMLElement | null)?.dataset.f ?? null);
+  await expect.poll(focusedKey, { timeout: 30_000 }).not.toBeNull();
+  const top = await focusedKey();
+  const scroller = page.locator(".title-scr");
+  await scroller.evaluate((el) => (el.scrollTop = el.scrollHeight));
+  expect(await scroller.evaluate((el) => el.scrollTop)).toBeGreaterThan(0);
+  // Up from the topmost control moves nowhere, and the page comes back.
+  await page.keyboard.press("ArrowUp");
+  await expect.poll(() => scroller.evaluate((el) => el.scrollTop), { timeout: 5_000 }).toBe(0);
+  expect(await focusedKey()).toBe(top);
+  await page.context().close();
+});
+
+// TV: Down on a More like this tile with nothing below leaves the page where it is (the card is in view beside the row).
+test("tv: Down on a More like this tile does not move the page", async ({ browser }) => {
+  const page = await open(browser, "tv");
+  await page.goto("/title/series/tt0903749?form=tv");
+  const tile = page.locator('.row[aria-label="More like this"] .tile').first();
+  await expect(tile).toBeVisible({ timeout: 30_000 });
+  await tile.focus();
+  const scroller = page.locator(".title-scr");
+  await page.waitForTimeout(800);
+  const at = await scroller.evaluate((el) => el.scrollTop);
+  await page.keyboard.press("ArrowDown");
+  await page.waitForTimeout(800);
+  expect(await page.evaluate(() => !!document.activeElement?.closest(".title-more"))).toBe(true);
+  expect(await scroller.evaluate((el) => el.scrollTop)).toBe(at);
   await page.context().close();
 });

@@ -94,13 +94,17 @@ function TitlePage(props: { kind: string; id: string; retry: () => void }) {
   onCleanup(() => document.removeEventListener("visibilitychange", onVisibility));
   // TV: a series' rated cover may sit alone under the hero (no More like this to focus there), and it is never a focus
   // stop. Down with nowhere to go scrolls the page to it; Up moves focus in the hero, which brings the page back to the
-  // top (`data-reveal-top`, and the episodes' `toTop`).
+  // top (`data-reveal-top`, and the episodes' `toTop`), and Up with nowhere to go brings it back too.
   let before: Element | null = null;
   const tvKeyFirst = () => {
     before = document.activeElement;
   };
   const tvKeyAfter = (e: KeyboardEvent) => {
-    if (form() !== "tv" || !page || e.key !== "ArrowDown" || document.activeElement !== before) return;
+    if (form() !== "tv" || !page || document.activeElement !== before) return;
+    // Up with nowhere to go (the hero's topmost control focused) still brings the hero back.
+    if (e.key === "ArrowUp" && page.scrollTop > 0) return toTop();
+    // A tile of More like this has the card beside it in view already: the page stays put.
+    if (e.key !== "ArrowDown" || document.activeElement?.closest(".title-more")) return;
     const cover = page.querySelector<HTMLElement>(".title-more .rated-cover");
     if (cover) cover.scrollIntoView({ block: "end", behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
   };
