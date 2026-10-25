@@ -94,6 +94,10 @@ struct KeeperLogic {
     /// review r1 M3).
     static func reportsFreeBytes(_ platform: KeeperPlatform) -> Bool { platform != .mac }
 
+    /// The continued task's one identifier, under the `<bundle>.downloads.*` wildcard Info.plist permits:
+    /// registered once, every submit reuses it.
+    static func taskIdentifier(bundle: String) -> String { "\(bundle).downloads.queue" }
+
     /// Whether quitting asks first (macOS): "Downloads are in progress."
     static func asksBeforeQuit(_ facts: KeeperFacts?) -> Bool { (facts?.left ?? 0) > 0 }
 

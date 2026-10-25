@@ -220,21 +220,26 @@ final class DownloadKeeper {
     #if os(iOS)
     private func submit(_ progress: KeeperProgress) {
         guard #available(iOS 26, *), let bundle = Bundle.main.bundleIdentifier else { return handle(.expired) }
-        // One identifier per submit under the wildcard in Info.plist (`<bundle>.downloads.*`).
-        let id = "\(bundle).downloads.\(UUID().uuidString)"
-        let registered = BGTaskScheduler.shared.register(forTaskWithIdentifier: id, using: .main) { [weak self] task in
-            MainActor.assumeIsolated {
-                guard let self, let task = task as? BGContinuedProcessingTask, self.submitted == id else {
-                    task.setTaskCompleted(success: true)
-                    return
+        // One identifier, under the wildcard in Info.plist (`<bundle>.downloads.*`), registered once for the
+        // process: a handler per submit would stay registered for good (review r1 m5).
+        let id = KeeperLogic.taskIdentifier(bundle: bundle)
+        if !handlerRegistered {
+            handlerRegistered = BGTaskScheduler.shared.register(forTaskWithIdentifier: id, using: .main) { [weak self] task in
+                MainActor.assumeIsolated {
+                    // A request ended before the system started it: nothing to keep.
+                    guard let self, let task = task as? BGContinuedProcessingTask, self.submitted != nil else {
+                        task.setTaskCompleted(success: true)
+                        return
+                    }
+                    self.task = task
+                    task.expirationHandler = { [weak self] in
+                        MainActor.assumeIsolated { self?.handle(.expired) }
+                    }
+                    if let last = self.lastProgress { self.show(last) }
                 }
-                self.task = task
-                task.expirationHandler = { [weak self] in
-                    MainActor.assumeIsolated { self?.handle(.expired) }
-                }
-                if let last = self.lastProgress { self.show(last) }
             }
         }
+        let registered = handlerRegistered
         let request = BGContinuedProcessingTaskRequest(identifier: id, title: progress.title, subtitle: progress.subtitle)
         request.strategy = .queue
         do {
@@ -250,6 +255,7 @@ final class DownloadKeeper {
     }
 
     @ObservationIgnored private var lastProgress: KeeperProgress?
+    @ObservationIgnored private var handlerRegistered = false
 
     private func show(_ progress: KeeperProgress) {
         lastProgress = progress

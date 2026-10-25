@@ -373,6 +373,19 @@ private func submits(_ effects: [KeeperEffect]) -> Int {
     #expect(keeper.contains("if KeeperLogic.reportsFreeBytes(Self.platform), let free = freeBytes() { fields[\"freeBytes\"] = free }"))
 }
 
+// One continued-task identifier for the process, under the wildcard Info.plist permits, registered once (review r1 m5).
+@Test func theContinuedTaskHasOneIdentifierRegisteredOnce() throws {
+    let id = KeeperLogic.taskIdentifier(bundle: "app.marquee.dev")
+    #expect(id == KeeperLogic.taskIdentifier(bundle: "app.marquee.dev"))
+    #expect(id == "app.marquee.dev.downloads.queue")
+    let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appending(path: "..")
+    let spec = try String(contentsOf: root.appending(path: "project.yml"), encoding: .utf8)
+    #expect(spec.contains(#"BGTaskSchedulerPermittedIdentifiers: ["$(PRODUCT_BUNDLE_IDENTIFIER).downloads.*"]"#))
+    let keeper = try String(contentsOf: root.appending(path: "Marquee/Downloads/DownloadKeeper.swift"), encoding: .utf8)
+    #expect(keeper.contains("if !handlerRegistered {\n            handlerRegistered = BGTaskScheduler.shared.register(forTaskWithIdentifier: id"))
+    #expect(!keeper.contains("UUID()"))
+}
+
 @Test func theKeeperOnlyPerformsTheReducersEffects() throws {
     // Read from the sources: the iOS keeper submits, ends and sends only what `KeeperLogic` decides.
     let app = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appending(path: "../Marquee")
