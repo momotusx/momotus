@@ -1,8 +1,6 @@
 #if os(iOS)
 import AVFoundation
 import AVKit
-import AetherEngine
-import CoreMedia
 import SwiftUI
 
 /// Picture in Picture on the player's own layer: a button while the system
@@ -17,8 +15,6 @@ final class PictureInPicture {
     /// The surface of a page shown again while the window still floats: the
     /// controller moves to it once the window closes.
     @ObservationIgnored private var waiting: (@MainActor () -> Void)?
-    /// The software path's playback, which the content source holds weakly.
-    @ObservationIgnored private var playback: SoftwarePlayback?
     /// The addon subtitle note was said for this film.
     @ObservationIgnored var told = false
     /// The window's own watch of the first frame, on the layer it keeps: a
@@ -47,25 +43,9 @@ final class PictureInPicture {
         }
         guard let controller = AVPictureInPictureController(playerLayer: layer) else { return }
         install(controller)
-        playback = nil
         frames = Self.watchFrames(layer) { [weak self] in
             Task { @MainActor in self?.onFrame?() }
         }
-    }
-
-    /// The second engine's software path (plans/iphone-mkv.md): its sample buffer layer, played, paused and skipped
-    /// through the engine. Its first frame comes from the engine itself, so the window watches none.
-    func attach(software source: SoftwarePiPSource) {
-        guard controller?.contentSource?.sampleBufferDisplayLayer !== source.layer,
-              AVPictureInPictureController.isPictureInPictureSupported() else { return }
-        if controller?.isPictureInPictureActive == true {
-            waiting = { [weak self] in self?.attach(software: source) }
-            return
-        }
-        let playback = SoftwarePlayback(source)
-        install(AVPictureInPictureController(contentSource: .init(sampleBufferDisplayLayer: source.layer, playbackDelegate: playback)))
-        self.playback = playback
-        frames = nil
     }
 
     private func install(_ controller: AVPictureInPictureController) {
@@ -76,6 +56,13 @@ final class PictureInPicture {
         observation = Self.watch(controller) { [weak self] possible in
             Task { @MainActor in self?.possible = possible }
         }
+    }
+
+    /// A source moved off the second engine: no button from the engine's layer, which no longer plays. A controller
+    /// already on `player`'s own layer stays (the new surface may attach first), and none goes while the window is up.
+    func detach(keeping player: AVPlayer) {
+        guard controller?.isPictureInPictureActive != true, controller?.playerLayer.player !== player else { return }
+        (controller, observation, frames, possible) = (nil, nil, nil, false)
     }
 
     func start() {
@@ -132,37 +119,6 @@ final class PictureInPicture {
         coreLog.error("picture in picture did not start: \((error as NSError).domain, privacy: .public) \((error as NSError).code, privacy: .public)")
         restore?()
         stop?()
-    }
-}
-
-/// The window over the engine's software path: play, pause, the playable range and the skip buttons go to the
-/// engine. UIKit calls it on the main thread, which the conformance checks at run time.
-@MainActor private final class SoftwarePlayback: NSObject, @preconcurrency AVPictureInPictureSampleBufferPlaybackDelegate {
-    let source: SoftwarePiPSource
-
-    init(_ source: SoftwarePiPSource) {
-        self.source = source
-    }
-
-    func pictureInPictureController(_ controller: AVPictureInPictureController, setPlaying playing: Bool) {
-        source.setPlaying(playing)
-    }
-
-    func pictureInPictureControllerTimeRangeForPlayback(_ controller: AVPictureInPictureController) -> CMTimeRange {
-        source.timeRange()
-    }
-
-    func pictureInPictureControllerIsPlaybackPaused(_ controller: AVPictureInPictureController) -> Bool {
-        source.isPaused
-    }
-
-    func pictureInPictureController(_ controller: AVPictureInPictureController, didTransitionToRenderSize newRenderSize: CMVideoDimensions) {}
-
-    func pictureInPictureController(
-        _ controller: AVPictureInPictureController, skipByInterval skipInterval: CMTime, completion completionHandler: @escaping () -> Void
-    ) {
-        source.skip(by: skipInterval.seconds)
-        completionHandler()
     }
 }
 

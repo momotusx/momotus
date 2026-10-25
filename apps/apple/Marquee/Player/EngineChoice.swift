@@ -15,31 +15,53 @@ enum EngineChoice {
     }
 
     /// The switch per platform: the Mac on since the end of phase B (walked, bench AS18 to AS38; the owner,
-    /// 2026-10-23), the iPhone at the end of phase C after its walk and resource gate, tvOS off in v1 (unwalked; the
-    /// owner, 2026-10-21).
-    static func enabled(on platform: Platform) -> Bool {
+    /// 2026-10-23), the iPhone in the last commit of plans/iphone-mkv.md after its gate, walk and played bar, tvOS
+    /// off in v1 (unwalked; the owner, 2026-10-21).
+    static func switchOn(_ platform: Platform) -> Bool {
         switch platform {
         case .mac: true
-        case .phone: phone(switchOn: phoneSwitch, build: CoreBuild.field)
+        case .phone: false
         case .tv: false
         }
     }
 
-    /// The iPhone's switch (plans/iphone-mkv.md): on in the last commit of that plan.
-    static let phoneSwitch = false
+    /// Where the engine is on: its platform's switch, in own builds only. A store build, and one whose Info.plist names
+    /// no build, keeps it off on every platform: the engine decodes HEVC, DTS and TrueHD in-process under copyright
+    /// licences only (plans/apple-second-engine.md 6). Its frameworks stay linked there, unused; a store archive is
+    /// made with `MARQUEE_CORE_BUILD=store`.
+    static func enabled(on platform: Platform, build: Any? = Bundle.main.object(forInfoDictionaryKey: "MarqueeCoreBuild")) -> Bool {
+        switchOn(platform) && ownBuild(build)
+    }
 
-    /// The iPhone plays MKV on the engine in own builds only: a store build keeps it hidden, as the engine decodes
-    /// HEVC, DTS and TrueHD in-process under copyright licences only (plans/apple-second-engine.md 6).
-    static func phone(switchOn: Bool, build: String) -> Bool {
-        switchOn && build == "own"
+    /// The build field says own, and nothing else does: a missing or empty field is not an own build.
+    static func ownBuild(_ field: Any?) -> Bool {
+        (field as? String) == "own"
     }
 
     /// Whether the engine may decode video in software here. The caps hide software codecs by their names, but the
     /// engine picks its software host from the stream too (interlaced or 4:2:2 H.264, MVC, anything the hardware
-    /// refuses): where this is false such a session fails and the core moves to the next version. The Mac admits it
-    /// (walked, bench AS31, AS38); the iPhone admits none in v1 (plans/iphone-mkv.md).
+    /// refuses): where this is false such a session is refused (`refuses`). The Mac admits it (walked, bench AS31,
+    /// AS38); the iPhone admits none in v1 (plans/iphone-mkv.md).
     static func allowsSoftwareVideo(on platform: Platform) -> Bool {
         platform == .mac
+    }
+
+    /// A session the engine sent to its software host, where the platform admits no software video.
+    static func refuses(softwareHost: Bool, on platform: Platform) -> Bool {
+        softwareHost && !allowsSoftwareVideo(on: platform)
+    }
+
+    /// The failure kind an engine failure reaches the core with. A refused software host is `decode`: the core then
+    /// skips that version's other sources and remembers the refusal for this device, so the next play does not try
+    /// it again (playback.rs); any other engine failure is `other`.
+    static func failureKind(refused: Bool) -> String {
+        refused ? "decode" : "other"
+    }
+
+    /// A new source while Picture in Picture is up loads in place: the engine hands the item over in its window (a
+    /// stop first would close the window and end the film). Otherwise the old session stops first.
+    static func stopsBeforeLoad(pictureInPictureActive: Bool) -> Bool {
+        !pictureInPictureActive
     }
 
     static var platform: Platform {

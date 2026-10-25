@@ -7,9 +7,9 @@ import Testing
 @Test func theSecondEngineIsOnWhereItsPhaseTurnedItOn() {
     // Phase B turned the Mac on in its last commit (the owner, 2026-10-23); phase C turns the iPhone on; tvOS stays
     // off in v1.
-    #expect(EngineChoice.enabled(on: .mac))
-    #expect(!EngineChoice.enabled(on: .phone))
-    #expect(!EngineChoice.enabled(on: .tv))
+    #expect(EngineChoice.switchOn(.mac))
+    #expect(!EngineChoice.switchOn(.phone))
+    #expect(!EngineChoice.switchOn(.tv))
 }
 
 @Test func whereTheSwitchIsOffEverythingStaysOnAVPlayer() {
@@ -81,7 +81,7 @@ import Testing
 /// plans/iphone-mkv.md: the iPhone's caps while its switch is off (MKV hidden as today), and what it sends once the
 /// last commit of that plan turns it on: every engine container and audio, hardware video only.
 @Test func theIPhonesCapsWithItsSwitchOffAndOn() {
-    let phone = EngineChoice.enabled(on: .phone)
+    let phone = EngineChoice.switchOn(.phone)
     #expect(EngineChoice.containers(enabled: phone) == ["mp4", "m4v", "mov", "m3u8"])
     #expect(EngineChoice.audioDecoders(enabled: phone) == EngineChoice.avPlayerAudio)
     #expect(EngineChoice.containers(enabled: true).contains("mkv"))
@@ -89,51 +89,55 @@ import Testing
     #expect(EngineChoice.decoders(hardware: ["h264", "h265"], enabled: true, on: .phone) == ["h264", "h265"])
 }
 
-/// plans/iphone-mkv.md: Picture in Picture on the second engine, the native path's layer before the software
-/// path's, nothing on AVPlayer (its layer attaches itself) or before the engine shows a surface.
-@Test func pictureInPictureTakesTheEnginesSurface() throws {
-    #expect(PlayerLayout.pipSurface(engine: true, native: true, software: true) == .engineNative)
-    #expect(PlayerLayout.pipSurface(engine: true, native: false, software: true) == .engineSoftware)
-    #expect(PlayerLayout.pipSurface(engine: true, native: false, software: false) == nil)
-    #expect(PlayerLayout.pipSurface(engine: false, native: true, software: true) == nil)
-    // Wiring: the screen attaches the engine's surface once it shows, and tells the engine the window is up.
-    let dir = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appending(path: "../Marquee/Player")
-    let screen = try String(contentsOf: dir.appending(path: "PlayerScreen.swift"), encoding: .utf8)
-    #expect(screen.contains(".onChange(of: model.firstFrameMs) { attachEngine() }"))
-    let float = try body(of: "private func float()", in: screen)
-    #expect(float.contains("model.pictureInPicture(active: true)"))
-    #expect(float.contains("model.pictureInPicture(active: false)"))
-    // A film brought back from the window plays on, on whichever engine.
-    let pip = try String(contentsOf: dir.appending(path: "PictureInPicture.swift"), encoding: .utf8)
-    #expect(try body(of: "func stopped(_ model: PlayerModel)", in: pip).contains("model.resume()"))
-    #expect(!pip.contains("model.player."))
+/// Review r1 (code) finding 4: the engine is on in own builds only, on every platform, and a missing or empty build
+/// field is not an own build.
+@Test func theEngineIsOnInOwnBuildsOnly() {
+    #expect(EngineChoice.ownBuild("own"))
+    for field: Any? in ["store", "", nil, 1] {
+        #expect(!EngineChoice.ownBuild(field), "\(String(describing: field))")
+    }
+    #expect(EngineChoice.enabled(on: .mac, build: "own"))
+    #expect(!EngineChoice.enabled(on: .mac, build: "store"))
+    #expect(!EngineChoice.enabled(on: .mac, build: nil))
+    #expect(!EngineChoice.enabled(on: .phone, build: "own"), "the iPhone's switch is still off")
+    #expect(!EngineChoice.enabled(on: .tv, build: "own"))
 }
 
-/// plans/iphone-mkv.md, review r1 finding 2: the iPhone's switch counts in own builds only; a store build keeps MKV
-/// hidden whatever the switch says.
-@Test func theIPhoneSwitchCountsInOwnBuildsOnly() {
-    #expect(EngineChoice.phone(switchOn: true, build: "own"))
-    #expect(!EngineChoice.phone(switchOn: true, build: "store"))
-    #expect(!EngineChoice.phone(switchOn: false, build: "own"))
-    #expect(EngineChoice.enabled(on: .phone) == EngineChoice.phone(switchOn: EngineChoice.phoneSwitch, build: CoreBuild.field))
-}
-
-/// Review r1 finding 1: software video only where admitted, with the path named in the start log; finding 5: a
-/// loading engine session runs no picture clock; the AirPlay button goes when the engine opens.
-@MainActor @Test func theEngineKeepsToWhatThePlatformAdmits() throws {
-    #expect(EngineChoice.allowsSoftwareVideo(on: .mac))
-    #expect(!EngineChoice.allowsSoftwareVideo(on: .phone))
-    #expect(!EngineChoice.allowsSoftwareVideo(on: .tv))
+/// Code r1 finding 1: a session on the engine's software host is refused where the platform admits no software
+/// video, and reaches the core as `decode`, which skips the version's other sources and is remembered for the device.
+@MainActor @Test func aRefusedSoftwareSessionReachesTheCoreAsADecodeFailure() {
+    #expect(EngineChoice.refuses(softwareHost: true, on: .phone))
+    #expect(EngineChoice.refuses(softwareHost: true, on: .tv))
+    #expect(!EngineChoice.refuses(softwareHost: true, on: .mac))
+    #expect(!EngineChoice.refuses(softwareHost: false, on: .phone))
+    #expect(EngineChoice.failureKind(refused: true) == "decode")
+    #expect(EngineChoice.failureKind(refused: false) == "other")
+    // The start log names the path.
     #expect(AetherSession.path(native: true, software: false) == "native")
     #expect(AetherSession.path(native: false, software: true) == "software")
     #expect(AetherSession.path(native: false, software: false) == "other")
-    let dir = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appending(path: "../Marquee/Player")
-    let session = try String(contentsOf: dir.appending(path: "AetherSession.swift"), encoding: .utf8)
-    #expect(session.contains("guard mine(), source != nil, !EngineChoice.allowsSoftwareVideo(on: EngineChoice.platform) else { return }"))
-    #expect(session.contains("path=\\(Self.path(native: host.nativePlayerLayer != nil, software: host.softwarePiPSource != nil)"))
-    // The segment 0 wait reports loading: not playing, so the watchdog's clock does not run.
+}
+
+/// Code r1 finding 2: a new source while the window is up loads in place, so the window and the film go on.
+@Test func aSourceChangeWithTheWindowUpLoadsInPlace() {
+    #expect(!EngineChoice.stopsBeforeLoad(pictureInPictureActive: true))
+    #expect(EngineChoice.stopsBeforeLoad(pictureInPictureActive: false))
+}
+
+/// The AirPlay button: AVPlayer's loopback rule, and never on the second engine, so none survives a fallback.
+@Test func theAirPlayButtonFollowsTheBackend() throws {
+    let direct = try #require(URL(string: "https://cdn.example.com/film.mp4"))
+    let loopback = try #require(URL(string: "http://127.0.0.1:11470/film.mkv"))
+    #expect(PlayerLayout.airPlayable(on: .avPlayer, direct))
+    #expect(!PlayerLayout.airPlayable(on: .avPlayer, loopback))
+    #expect(!PlayerLayout.airPlayable(on: .aether, direct))
+}
+
+/// Plan finding 5 (r1): the segment 0 wait reports loading, which is not playing, so the picture watchdog's clock
+/// does not run on the engine; and the window attaches to each engine session's first picture (one wiring check).
+@MainActor @Test func theEngineSessionsPictureDrivesTheWindowNotTheWatchdog() throws {
     #expect(!AetherSession.playState(.loading, buffering: false).playing)
-    let model = try String(contentsOf: dir.appending(path: "PlayerModel.swift"), encoding: .utf8)
-    #expect(try body(of: "private func engineState(", in: model).contains("playingSince = playing ? playingSince ?? .now : nil"))
-    #expect(try body(of: "private func openOnEngine(", in: model).contains("airPlayable = false"))
+    let dir = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appending(path: "../Marquee/Player")
+    let screen = try String(contentsOf: dir.appending(path: "PlayerScreen.swift"), encoding: .utf8)
+    #expect(screen.contains(".onChange(of: model.enginePictures) { attachEngine() }"))
 }

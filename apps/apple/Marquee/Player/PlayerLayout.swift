@@ -99,6 +99,12 @@ enum PlayerLayout {
         return !(host == "localhost" || host == "::1" || host == "[::1]" || host.hasPrefix("127."))
     }
 
+    /// The AirPlay button for a source: AVPlayer's rule above; never on the second engine, whose players refuse
+    /// external playback (plans/apple-second-engine.md patch 2), so none is left from a source before a fallback.
+    static func airPlayable(on backend: Backend, _ url: URL) -> Bool {
+        backend == .avPlayer && allowsExternalPlayback(url)
+    }
+
     /// The subtitle timing stepper, as Stremio's (stremio-web subtitleDelay.ts; the web's lib/delay.ts
     /// and Android's SubtitleTiming.kt): 0.1 s a press; held, the first repeat comes at 350 ms, then one
     /// every 100 ms moving 0.1 s times min(whole seconds held + 3, 6); within 60 s either way. Plus
@@ -421,17 +427,6 @@ enum PlayerLayout {
     /// 2). iOS never says when a menu closes, so one dismissed by a tap outside
     /// keeps the controls up this long, unless the player is touched first; a
     /// minute held them over the film too long (review apple-journey r3 P3-1).
-    /// The second engine's surface Picture in Picture takes (plans/iphone-mkv.md): the native path's AVPlayerLayer
-    /// first, else the software path's sample buffer layer; none before either exists or on AVPlayer, whose own layer
-    /// attaches itself.
-    enum PipSurface: Equatable { case engineNative, engineSoftware }
-
-    static func pipSurface(engine: Bool, native: Bool, software: Bool) -> PipSurface? {
-        guard engine else { return nil }
-        if native { return .engineNative }
-        return software ? .engineSoftware : nil
-    }
-
     // ponytail: a fixed cap; a UIKit menu with willEnd would end the hold exactly.
     static let menuHoldLimit: Duration = .seconds(30)
 

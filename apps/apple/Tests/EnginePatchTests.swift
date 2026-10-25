@@ -116,7 +116,7 @@ private let fixtures = URL(fileURLWithPath: #filePath).deletingLastPathComponent
 
 extension AetherSession.Events {
     static var none: Self {
-        .init(time: { _ in }, duration: { _ in }, state: { _, _ in }, firstFrame: {}, ended: {}, failed: { _ in }, tracks: { _ in }, cues: { _, _ in }, videoSize: { _ in })
+        .init(time: { _ in }, duration: { _ in }, state: { _, _ in }, firstFrame: {}, ended: {}, failed: { _ in }, refused: { _ in }, tracks: { _ in }, cues: { _, _ in }, videoSize: { _ in })
     }
 }
 

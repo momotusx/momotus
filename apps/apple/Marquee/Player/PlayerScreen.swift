@@ -279,7 +279,9 @@ struct PlayerScreen: View {
             if phase == .background || (phase == .active && keeper.pending) { keeper.restore() }
         }
         // The second engine's picture goes to Picture in Picture once it shows (plans/iphone-mkv.md).
-        .onChange(of: model.firstFrameMs) { attachEngine() }
+        // Each engine session's first picture, failovers included; a source that leaves the engine takes its button.
+        .onChange(of: model.enginePictures) { attachEngine() }
+        .onChange(of: model.backend) { old, _ in if old == .aether { pip.detach(keeping: model.player) } }
         // The volume swipe turned off under the finger: its indicator goes at once.
         .onChange(of: volume.off) { _, off in if off, levels.side == .volume { levels.hideNow() } }
         .onReceive(NotificationCenter.default.publisher(for: UIAccessibility.voiceOverStatusDidChangeNotification)) { _ in
@@ -507,17 +509,13 @@ struct PlayerScreen: View {
     #endif
 
     #if os(iOS)
-    /// The second engine's surface for Picture in Picture, once it shows a picture: the native path's AVPlayerLayer, else
-    /// the software path's sample buffer layer. AVPlayer's own layer attaches itself from `VideoSurface`.
+    /// The second engine's surface for Picture in Picture, once it shows a picture: the native path's AVPlayerLayer.
+    /// AVPlayer's own layer attaches itself from `VideoSurface`.
+    // ponytail: the software path's sample buffer window comes back when a platform with Picture in Picture admits
+    // software video (`EngineChoice.allowsSoftwareVideo`); the iPhone refuses that path in v1.
     private func attachEngine() {
-        guard let engine = model.aether?.engine else { return }
-        let surface = PlayerLayout.pipSurface(
-            engine: model.backend == .aether, native: engine.nativePlayerLayer != nil, software: engine.softwarePiPSource != nil)
-        switch surface {
-        case .engineNative: if let layer = engine.nativePlayerLayer { pip.attach(layer) }
-        case .engineSoftware: if let source = engine.softwarePiPSource { pip.attach(software: source) }
-        case nil: break
-        }
+        guard model.backend == .aether, let layer = model.aether?.engine.nativePlayerLayer else { return }
+        pip.attach(layer)
     }
     #endif
 

@@ -18,6 +18,8 @@ final class AetherSession {
         var ended: () -> Void
         /// The engine could not play the source, in its own words; the model sends it to the core.
         var failed: (String) -> Void
+        /// The engine sent the source to its software decoders where the platform admits none (`EngineChoice.refuses`).
+        var refused: (String) -> Void
         /// The file's audio and subtitle tracks, and the one each plays.
         var tracks: (Tracks) -> Void
         /// The selected file subtitle's cues so far: text, and bitmaps (PGS, DVD, DVB) drawn as images.
@@ -64,7 +66,8 @@ final class AetherSession {
         _ source: MediaSource, container: String?, at start: Double, rate: Float, muted: Bool, autoplay: Bool = true,
         openWithin: Duration, events: Events
     ) {
-        stop()
+        // With the window up the engine swaps the item in place; a stop would close the window and end the film.
+        if EngineChoice.stopsBeforeLoad(pictureInPictureActive: engine.pictureInPictureActive) { stop() } else { release() }
         load += 1
         let load = load
         engine.volume = muted ? 0 : 1
@@ -147,9 +150,9 @@ final class AetherSession {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] source in
                 MainActor.assumeIsolated {
-                    guard mine(), source != nil, !EngineChoice.allowsSoftwareVideo(on: EngineChoice.platform) else { return }
+                    guard mine(), EngineChoice.refuses(softwareHost: source != nil, on: EngineChoice.platform) else { return }
                     self?.stop()
-                    events.failed("this device does not decode this picture in software")
+                    events.refused("this device does not decode this picture in software")
                 }
             }
             .store(in: &bag)
@@ -264,11 +267,16 @@ final class AetherSession {
 
     /// Ends the session: its events stop, the engine tears down.
     func stop() {
+        release()
+        engine.stop()
+    }
+
+    /// Lets go of this load's subscriptions, open and bound, and keeps the engine's player.
+    private func release() {
         load += 1
         heldBound = nil
         bag = []
         opening?.cancel()
         opening = nil
-        engine.stop()
     }
 }

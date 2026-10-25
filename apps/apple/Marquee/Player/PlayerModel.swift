@@ -18,6 +18,9 @@ final class PlayerModel {
     private(set) var backend: Backend = .avPlayer
     /// The second engine, made the first time a source needs it.
     @ObservationIgnored private(set) var aether: AetherSession?
+    /// One more each time a source on the second engine shows its first frame, failovers included: the window
+    /// attaches to that session's layer (`firstFrameMs` is set once a play).
+    private(set) var enginePictures = 0
     /// The current source reached the second engine because AVPlayer refused it: its first frame tells the core
     /// (`playedOn`), so the next play of the version goes there first.
     @ObservationIgnored private var fellBack = false
@@ -604,7 +607,7 @@ final class PlayerModel {
     }
 
     /// The film plays now, on whichever engine: a film brought back from Picture in Picture reads it.
-    var playingNow: Bool { backend == .aether ? playing : player.rate > 0 }
+    var playingNow: Bool { backend == .aether ? playing || waiting : player.rate > 0 }
 
     /// Plays on, on whichever engine.
     func resume() {
@@ -909,7 +912,7 @@ final class PlayerModel {
         (pictureShown, loadStart, playingSince) = (false, start, nil)
         // An AirPlay receiver would be handed this URL and ask itself for it:
         // a loopback stream stays on this device (mirroring still works).
-        airPlayable = PlayerLayout.allowsExternalPlayback(address)
+        airPlayable = PlayerLayout.airPlayable(on: .avPlayer, address)
         player.allowsExternalPlayback = airPlayable
         let item = AVPlayerItem(url: address)
         textSize(item)
@@ -1024,7 +1027,7 @@ final class PlayerModel {
         backend = .aether
         self.fellBack = fellBack
         // The engine's players refuse external playback (patch 2): no AirPlay button left from AVPlayer's source.
-        airPlayable = false
+        airPlayable = PlayerLayout.airPlayable(on: .aether, address)
         guard let session = aether ?? AetherSession() else {
             fail(PlayerFailure(kind: "other", error: "the second player could not start on this device"), notice: "This source failed. Trying the next one.")
             return
@@ -1048,7 +1051,11 @@ final class PlayerModel {
             ended: { [weak self] in if mine() { self?.engineEnded() } },
             failed: { [weak self] words in
                 guard mine() else { return }
-                self?.fail(PlayerFailure(kind: "other", error: words), notice: "This source failed: \(words). Trying the next one.")
+                self?.fail(PlayerFailure(kind: EngineChoice.failureKind(refused: false), error: words), notice: "This source failed: \(words). Trying the next one.")
+            },
+            refused: { [weak self] words in
+                guard mine() else { return }
+                self?.fail(PlayerFailure(kind: EngineChoice.failureKind(refused: true), error: words), notice: "This version does not play on this device. Trying the next one.")
             },
             tracks: { [weak self] tracks in if mine() { self?.engineTracks(tracks) } },
             cues: { [weak self] text, images in if mine(), let self { (self.engineCues, self.engineImages) = (text, images) } },
@@ -1089,6 +1096,7 @@ final class PlayerModel {
 
     private func engineFirstFrame() {
         pendingStart = nil
+        enginePictures += 1
         firstFrame()
         guard fellBack, let sub, let key = loadedKey else { return }
         fellBack = false
