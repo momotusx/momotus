@@ -3,9 +3,8 @@ package app.marquee.core.session
 import android.content.Context
 import android.content.pm.ApplicationInfo
 import androidx.annotation.VisibleForTesting
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshots.Snapshot
 import app.marquee.core.NativeCore
 import app.marquee.core.client.BridgeMetrics
 import app.marquee.core.client.CoreClient
@@ -154,9 +153,19 @@ class CoreSession(
      */
     val serverMoved = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
 
-    /** What the UI shows when the core is not running. Written by the boot and state threads. */
-    var health: CoreHealth by mutableStateOf(CoreHealth.Starting)
-        private set
+    private val healthState = mutableStateOf<CoreHealth>(CoreHealth.Starting)
+
+    /**
+     * What the UI shows when the core is not running. Written by the boot and state threads, so each write sends its
+     * own apply notification: Compose sends them only once a composition runs, and a wait that listens from the app's
+     * start (the profiles gate) would otherwise never hear the core open (a fresh install sat on Starting, bench PGA12).
+     */
+    var health: CoreHealth
+        get() = healthState.value
+        private set(value) {
+            healthState.value = value
+            Snapshot.sendApplyNotifications()
+        }
 
     @Volatile
     var openMillis: Long = -1

@@ -1,11 +1,14 @@
 package app.marquee.core
 
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.snapshots.Snapshot
 import app.marquee.core.session.CoreHealth
 import app.marquee.core.session.CoreSession
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
@@ -47,6 +50,21 @@ class CoreStartTest {
             composition.dispose()
             withTimeout(1_000) { decided!!.join() }
             assertEquals(CoreHealth.Running, session.health)
+        }
+
+    @Test
+    fun `a wait on the core's health hears the boot thread with nothing else applying the change`() =
+        runBlocking {
+            // A fresh install on the Pixel (bench PGA12): the profiles gate waits on the health from the app's start,
+            // before any composition, so nothing but the boot thread's own write can tell it the core runs.
+            val session = CoreSession(RuntimeEnvironment.getApplication())
+            val waiting =
+                CoroutineScope(Dispatchers.Default).launch {
+                    snapshotFlow { session.health }.first { it == CoreHealth.Running }
+                }
+            delay(200)
+            thread { session.opened(running = true) }.join()
+            withTimeout(2_000) { waiting.join() }
         }
 
     @Test
