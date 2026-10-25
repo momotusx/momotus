@@ -571,3 +571,32 @@ async fn a_playing_torrent_counts_in_the_budget() {
     until("the idle torrent goes", || async { !idle.exists() }).await;
     assert!(root.path().join(&a.info_hash).exists());
 }
+
+/// A file deleted while it plays is kept no more: nothing is evicted under
+/// the play, and once it ends the budget's sweep takes the torrent like any
+/// stream's (code review r1 M1).
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_file_deleted_under_its_play_is_swept_once_the_play_ends() {
+    use tokio::io::AsyncReadExt;
+    let s = support::swarm_big(16 << 20, PIECE).await;
+    let root = tempfile::tempdir().unwrap();
+    // A budget the kept file is over: only its kept mark holds it.
+    let e = engine(root.path(), Vec::new(), 12 * MIB).await;
+    let (t, file, handle) = download(&e, &s, "movie.mkv").await;
+    handle.stop().await;
+    let claim = e.claim(t, "default").unwrap();
+    let reader = e.open_reader(t, "default", file).await.unwrap();
+    let mut head = reader.range(0, Some(MIB)).await.unwrap();
+    head.read_to_end(&mut Vec::new()).await.unwrap();
+    e.delete_file(&s.info_hash, file).await.unwrap();
+    let dir = root.path().join(&s.info_hash);
+    assert!(dir.exists(), "taken under its play");
+    drop(head);
+    drop(reader);
+    drop(claim);
+    until("the deleted file is swept", || {
+        let dir = dir.clone();
+        async move { !dir.exists() }
+    })
+    .await;
+}
