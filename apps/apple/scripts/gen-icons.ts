@@ -16,8 +16,8 @@ const ICONS = [
   "list", "list-checks", "list-filter", "list-video", "loader-circle", "lock", "log-out", "minus", "monitor-check",
   "monitor-smartphone", "moon", "package-search", "pause", "pause-fill", "pencil", "play", "play-fill", "plus", "popcorn",
   "power", "puzzle", "qr-code", "refresh-cw", "rocket", "rotate-ccw", "rotate-cw", "search", "settings",
-  "shield-alert", "skip-forward", "sparkle", "star-fill", "text-align-start", "trash", "triangle-alert", "tv", "undo-2", "users",
-  "volume-2", "wrench", "x", "zap",
+  "shield-alert", "skip-forward", "sparkle", "star-fill", "sun", "text-align-start", "trash", "triangle-alert", "tv", "undo-2", "users",
+  "volume-1", "volume-2", "volume-x", "wrench", "x", "zap",
 ];
 
 const source = process.argv[2];

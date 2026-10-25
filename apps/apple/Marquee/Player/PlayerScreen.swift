@@ -35,6 +35,20 @@ struct PlayerScreen: View {
     #if os(iOS)
     @State private var pip = PictureInPicture()
     @Environment(FloatingPlayer.self) private var floating
+    @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    /// The level swipes (plans/player-gestures.md): the picture layer's size, the safe area's top, what the
+    /// indicator shows, the system volume and brightness they set.
+    @State private var swipeArea: CGSize = .zero
+    @State private var safeTop: CGFloat = 0
+    @State private var levels = SwipeLevel()
+    @State private var volume = SystemVolume()
+    @State private var keeper = BrightnessKeeper()
+    /// VoiceOver or Switch Control, kept from their notifications so the body follows when either starts.
+    @State private var assistive = false
+    /// The double tap's answer: the side, and a count so a second one restarts it.
+    @State private var seekForward: Bool?
+    @State private var seekTaps = 0
     #endif
     let core: CoreClient
 
@@ -92,14 +106,44 @@ struct PlayerScreen: View {
                     #if os(macOS)
                     // A double click fills the screen, as in every Mac player.
                     .onTapGesture(count: 2) { NSApp.keyWindow?.toggleFullScreen(nil) }
-                    #endif
                     .onTapGesture { touched(toggle: true) }
+                    #else
+                    // A double tap on either half steps 10 s, as Android does; the single tap waits for it.
+                    .onGeometryChange(for: CGSize.self) { $0.size } action: { swipeArea = $0 }
+                    .gesture(
+                        SpatialTapGesture(count: 2).onEnded { seekTap($0.location) }
+                            .exclusively(before: TapGesture().onEnded { touched(toggle: true) })
+                    )
+                    .gesture(levelSwipe)
+                    #endif
                     // With the controls hidden, VoiceOver finds one element that brings them back.
                     .accessibilityElement()
                     .accessibilityLabel("Show controls")
                     .accessibilityAddTraits(.isButton)
                     .accessibilityAction { touched(toggle: false) }
                     .accessibilityHidden(controls)
+                #endif
+                #if os(iOS)
+                if levels.shown {
+                    LevelIndicator(levels: levels)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: levels.side == .brightness ? .leading : .trailing)
+                        .padding(.horizontal, 40)
+                        .transition(.opacity)
+                }
+                if let forward = seekForward {
+                    SeekHint(forward: forward)
+                        .id(seekTaps)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: forward ? .trailing : .leading)
+                        .padding(.horizontal, 64)
+                }
+                // In the window for the volume swipe, and so the player answers the buttons; never under VoiceOver or
+                // Switch Control, whose viewers keep the system's own volume HUD.
+                if !assistive {
+                    VolumeControl(volume: volume)
+                        .frame(width: 1, height: 1)
+                        .allowsHitTesting(false)
+                        .accessibilityHidden(true)
+                }
                 #endif
                 StatusOverlay(
                     model: model, back: close, chooseVersion: model.versions == nil ? nil : { openVersions() },
@@ -220,6 +264,24 @@ struct PlayerScreen: View {
         }
         .onGeometryChange(for: CGFloat.self) { $0.size.height + $0.safeAreaInsets.top + $0.safeAreaInsets.bottom } action: { windowHeight = $0 }
         .onGeometryChange(for: CGFloat.self) { $0.safeAreaInsets.bottom } action: { safeBottom = $0 }
+        #if os(iOS)
+        .onGeometryChange(for: CGFloat.self) { $0.safeAreaInsets.top } action: { safeTop = $0 }
+        .animation(reduceMotion ? nil : .easeOut(duration: levels.shown ? 0.18 : 0.26), value: levels.shown)
+        .sensoryFeedback(.impact(weight: .light), trigger: levels.ends)
+        .task(id: seekTaps) {
+            guard seekForward != nil else { return }
+            do { try await Task.sleep(for: .milliseconds(700)) } catch { return }
+            seekForward = nil
+        }
+        // The system brightness goes back when the app does; Control Center (inactive) changes nothing.
+        .onChange(of: scenePhase) { _, phase in if phase == .background { keeper.restore() } }
+        .onReceive(NotificationCenter.default.publisher(for: UIAccessibility.voiceOverStatusDidChangeNotification)) { _ in
+            assistive = assistiveTechRunning
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIAccessibility.switchControlStatusDidChangeNotification)) { _ in
+            assistive = assistiveTechRunning
+        }
+        #endif
         .animation(Theme.Motion.panel, value: model.showNext)
         .animation(Theme.Motion.panel, value: model.showEndCard)
         .animation(Theme.Motion.panel, value: model.segment)
@@ -266,12 +328,25 @@ struct PlayerScreen: View {
             #endif
             PlayerOrientation.enter(across: PlayerLayout.opensAcross(lastAcross: model.lastAcross))
             float()
+            assistive = assistiveTechRunning
+            let levels = levels
+            volume.watch { value in
+                // The buttons' answer on the right; under VoiceOver the system's HUD answers instead.
+                if !(UIAccessibility.isVoiceOverRunning || UIAccessibility.isSwitchControlRunning) { levels.show(.volume, at: Double(value)) }
+            }
+            #if DEBUG
+            WalkLevels.begin(volume: volume.level)
+            #endif
             #endif
         }
         .onDisappear {
             immersion.active = false
             #if os(iOS)
             if let across = PlayerOrientation.leave() { model.lastAcross = across }
+            keeper.restore()
+            #if DEBUG
+            WalkLevels.end(volume)
+            #endif
             #endif
             // A film floating in Picture in Picture plays on with its page gone.
             if !model.floating { model.close() }
@@ -335,6 +410,57 @@ struct PlayerScreen: View {
     }
 
     #if os(iOS)
+    /// The picture takes level swipes now (`SwipeRules.active`).
+    private var swipesOn: Bool {
+        SwipeRules.active(
+            phone: UIDevice.current.userInterfaceIdiom == .phone, across: swipeArea.width > swipeArea.height,
+            status: overlayStatus, endCard: model.showEndCard, pickerOpen: model.pickerOpen, versions: showVersions,
+            floating: model.floating, assistive: assistive)
+    }
+
+    /// What the overlay shows over the picture, as `StatusOverlay` decides it.
+    private var overlayStatus: PlayerStatus {
+        PlayerLayout.status(
+            phase: model.playback?.phase, cannotOpen: model.openError != nil,
+            firstFrameShown: model.firstFrameMs != nil, waiting: model.waiting, noPick: model.noPick)
+    }
+
+    private var levelSwipe: LevelSwipe {
+        let (levels, volume, keeper) = (levels, volume, keeper)
+        return LevelSwipe(
+            enabled: swipesOn, size: swipeArea, bands: SwipeRules.bands(safeTop: safeTop, safeBottom: safeBottom),
+            onStart: { side in
+                let start: Double? =
+                    switch side {
+                    case .brightness: keeper.start()
+                    case .volume: volume.off ? nil : Double(volume.level)
+                    }
+                if let start { levels.begin(side, at: start) }
+                return start
+            },
+            onLevel: { side, level in
+                switch side {
+                case .brightness: keeper.apply(level)
+                case .volume: volume.set(Float(level))
+                }
+                levels.move(to: level)
+                lastTouch = .now
+            },
+            onEnd: { levels.end() })
+    }
+
+    /// A double tap steps 10 s back on the left half, forward on the right, while the picture shows.
+    private func seekTap(_ at: CGPoint) {
+        let seeks = SwipeRules.active(
+            phone: false, across: true, status: overlayStatus, endCard: model.showEndCard, pickerOpen: model.pickerOpen,
+            versions: showVersions, floating: model.floating, assistive: false)
+        guard seeks, swipeArea.width > 0 else { return }
+        let forward = at.x >= swipeArea.width / 2
+        model.skip(forward ? 10 : -10)
+        seekForward = forward
+        seekTaps += 1
+    }
+
     /// Picture in Picture leaves the page for the places with the film playing
     /// on; bringing it back shows the player again over them; the window's X
     /// ends the film as Back does. A film started here closes a floating one.
@@ -420,6 +546,10 @@ struct PlayerScreen: View {
     }
 
     private func close() {
+        #if os(iOS) && DEBUG
+        // While the volume view is still in the window.
+        WalkLevels.end(volume)
+        #endif
         model.close()
         sync.schedule()
         dismiss()

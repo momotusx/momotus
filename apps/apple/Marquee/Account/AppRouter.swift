@@ -39,6 +39,8 @@ final class AppRouter {
 /// Hands the quick action to the router, at launch or while running.
 final class SceneDelegate: NSObject, UIWindowSceneDelegate {
     func scene(_ scene: UIScene, willConnectTo session: UISceneSession, options: UIScene.ConnectionOptions) {
+        // A brightness the player changed and a crash left behind goes back (plans/player-gestures.md 3.5).
+        MainActor.assumeIsolated { BrightnessKeeper.repair((scene as? UIWindowScene)?.screen) }
         if options.shortcutItem?.type == AppRouter.signInAnotherType {
             MainActor.assumeIsolated { AppRouter.shared.requestScan() }
         }
