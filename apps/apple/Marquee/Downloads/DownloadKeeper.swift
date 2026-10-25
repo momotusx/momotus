@@ -137,7 +137,17 @@ final class DownloadKeeper {
         if let season { fields["season"] = season }
         if let pick { fields["pick"] = ["versionsSub": pick.sub, "key": pick.key] as [String: any Sendable] }
         send("downloadAdd", fields)
+        tapped()
+    }
+
+    /// A tap that starts work: the continued task, then `settle` a few seconds on, which lets the task go
+    /// when the core counted nothing to download.
+    private func tapped() {
         handle(.userAction)
+        Task { [weak self] in
+            try? await Task.sleep(for: .seconds(5))
+            self?.handle(.settle)
+        }
     }
 
     /// Pause, Resume, Cancel or Delete (remove), Try again.
@@ -145,7 +155,7 @@ final class DownloadKeeper {
         var fields = target.fields
         if mobileData { fields["mobileData"] = true }
         send(op.rawValue, fields)
-        if op == .resume || op == .retry { handle(.userAction) }
+        if op == .resume || op == .retry { tapped() }
     }
 
     /// An item of an existing download that is an op: sent, true. The rest go somewhere and are the caller's.

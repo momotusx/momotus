@@ -41,6 +41,8 @@ enum KeeperEvent: Equatable, Sendable {
     case foreground
     /// Once a minute while downloads run.
     case minute
+    /// A few seconds after a tap: a tap the core never counted (nothing to download) lets the task go.
+    case settle
 }
 
 /// The system progress item's words and units: 100 units an item.
@@ -110,10 +112,12 @@ struct KeeperLogic {
         case .facts(let now):
             let before = facts
             facts = now
-            taps = 0
+            // A snapshot already on its way when the user tapped still says nothing runs: the tap stays
+            // counted, and the task stays, until the core counts it (or `settle`) (review r1 m1).
+            if now.left > 0 { taps = 0 }
             if now.left > 0, (before?.left ?? 0) == 0, !task { doneBefore = before?.done ?? now.done }
             if task {
-                if now.left == 0 {
+                if now.left == 0, taps == 0 {
                     task = false
                     out.append(.end(success: true))
                 } else {
@@ -143,6 +147,12 @@ struct KeeperLogic {
             force = true
         case .minute:
             force = (facts?.left ?? 0) > 0
+        case .settle:
+            if task, (facts?.left ?? 0) == 0 {
+                taps = 0
+                task = false
+                out.append(.end(success: true))
+            }
         }
         allowed(&out, force: force)
         return out

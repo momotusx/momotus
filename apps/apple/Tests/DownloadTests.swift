@@ -246,6 +246,28 @@ private func submits(_ effects: [KeeperEffect]) -> Int {
     #expect(submits(keeper.on(.userAction)) == 1)
 }
 
+// A snapshot already on its way when the user tapped (nothing running yet) never ends the task the tap
+// submitted; the core counting the add does, and so does `settle` when the core counted nothing (review r1 m1).
+@Test func aStaleSnapshotAroundATapKeepsTheTask() {
+    var keeper = KeeperLogic(platform: .continued)
+    _ = keeper.on(.facts(facts(left: 0)))
+    #expect(submits(keeper.on(.userAction)) == 1)
+    #expect(!keeper.on(.facts(facts(left: 0))).contains(.end(success: true)))
+    #expect(keeper.task)
+    let counted = keeper.on(.facts(facts(left: 1)))
+    #expect(counted.contains { if case .progress = $0 { true } else { false } })
+    #expect(keeper.on(.facts(facts(left: 0, done: ["a"]))).contains(.end(success: true)))
+    // A tap that adds nothing: the task goes at `settle`.
+    #expect(submits(keeper.on(.userAction)) == 1)
+    #expect(!keeper.on(.facts(facts(left: 0, done: ["a"]))).contains(.end(success: true)))
+    #expect(keeper.on(.settle).contains(.end(success: true)))
+    #expect(!keeper.task)
+    // With work running, `settle` leaves the task alone.
+    _ = keeper.on(.userAction)
+    _ = keeper.on(.facts(facts(left: 1)))
+    #expect(!keeper.on(.settle).contains(.end(success: true)))
+}
+
 @Test func expirationSendsDownloadsAllowedFalse() {
     var keeper = KeeperLogic(platform: .continued)
     _ = keeper.on(.facts(facts(left: 2)))
