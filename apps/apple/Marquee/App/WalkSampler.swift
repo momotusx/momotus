@@ -11,6 +11,9 @@ enum WalkSampler {
     @MainActor static func start() {
         #if os(iOS)
         UIDevice.current.isBatteryMonitoringEnabled = true
+        // The device gate's inputs, once (plans/iphone-mkv.md phase 3, the first gate row).
+        let memory = ProcessInfo.processInfo.physicalMemory
+        coreLog.notice("metric device machine=\(EngineChoice.machine, privacy: .public) memory_bytes=\(memory, privacy: .public) admits=\(EngineChoice.admits(memoryBytes: memory, model: EngineChoice.machine), privacy: .public)")
         #endif
         Task { @MainActor in
             while !Task.isCancelled {

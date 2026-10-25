@@ -105,7 +105,7 @@ enum EngineChoice {
 
     #if os(iOS)
     /// The hardware model (`iPhone14,2`, `iPad13,4`), read without the main actor.
-    private static var machine: String {
+    static var machine: String {
         var info = utsname()
         uname(&info)
         return withUnsafeBytes(of: info.machine) { String(decoding: $0.prefix { $0 != 0 }, as: UTF8.self) }
