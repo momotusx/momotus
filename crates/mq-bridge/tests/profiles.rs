@@ -1144,3 +1144,63 @@ async fn a_kids_profile_made_here_changes_no_download() {
     c.ok(json!({"op": "downloadsAllowed", "allowed": true}))
         .await;
 }
+
+/// A download row as the library keeps it.
+fn download(id: &str, item: &str, state: &str) -> mq_library::DownloadRecord {
+    mq_library::DownloadRecord {
+        id: id.into(),
+        added_by: "default".into(),
+        kind: "movie".into(),
+        item_id: item.into(),
+        video_id: item.into(),
+        season: None,
+        episode: None,
+        facts: json!({ "name": format!("Title {item}") }).to_string(),
+        request: "{}".into(),
+        version: None,
+        state: state.into(),
+        reason: (state == "waiting").then(|| "wifi".into()),
+        mobile_data: false,
+        hand_picked: false,
+        bytes_done: 10,
+        bytes_total: Some(100),
+        moves: 0,
+        subtitles: "[]".into(),
+        subtitles_state: "done".into(),
+        position: 0,
+        created_ms: 1,
+        done_ms: None,
+        smart: None,
+    }
+}
+
+/// A locked session (a cold start on a PIN profile, the picker) may follow
+/// the downloads, for the platform keeper: the device's counts and holds,
+/// with no title and no row; unlocked, the same view lists them (code
+/// review r1, Apple M2).
+#[tokio::test]
+async fn a_locked_session_follows_the_downloads_counts_and_no_titles() {
+    let core = Core::temporary("default").unwrap();
+    core.library()
+        .add_download(&download("w1", "tt1", "waiting"))
+        .unwrap();
+    core.library()
+        .add_download(&download("d1", "tt2", "done"))
+        .unwrap();
+    let mut c = Client::new(core.clone());
+    assert_eq!(c.set_pin("default", Some("2580"), None).await, "ok");
+
+    let mut c = Client::new(core);
+    let locked = c.ok(json!({"op": "subscribe", "view": "downloads"})).await;
+    let snapshot = &locked["snapshot"];
+    assert_eq!(snapshot["active"]["waiting"], 1, "{snapshot}");
+    assert!(snapshot["active"]["title"].is_null(), "{snapshot}");
+    assert_eq!(snapshot["downloading"], json!([]), "{snapshot}");
+    assert_eq!(snapshot["titles"], json!([]), "{snapshot}");
+    assert!(!snapshot.to_string().contains("Title tt"), "{snapshot}");
+
+    c.ok(json!({"op": "unlockProfile", "pin": "2580"})).await;
+    let open = c.ok(json!({"op": "subscribe", "view": "downloads"})).await;
+    assert_eq!(open["snapshot"]["titles"][0]["name"], "Title tt2", "{open}");
+    assert_eq!(open["snapshot"]["downloading"][0]["id"], "w1", "{open}");
+}

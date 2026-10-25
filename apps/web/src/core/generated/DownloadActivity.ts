@@ -2,6 +2,17 @@
 
 export type DownloadActivity = { running: number, queued: number, bytesDone: number, bytesTotal: number, 
 /**
- * The title the first running download belongs to.
+ * Waiting for Wi-Fi, a connection, room or the app: left to do, so the
+ * keeper holds on for them (code review r1 C1).
+ */
+waiting: number, 
+/**
+ * One left to do was let onto mobile data: the keeper asks for any
+ * network, not Wi-Fi alone.
+ */
+mobileData: boolean, 
+/**
+ * The title the first running download belongs to; none on a locked
+ * profile and for a title the profile may not see.
  */
 title: string | null, };

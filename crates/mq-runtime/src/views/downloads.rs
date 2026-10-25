@@ -62,7 +62,14 @@ pub struct DownloadActivity {
     pub bytes_done: u64,
     #[cfg_attr(feature = "ts", ts(type = "number"))]
     pub bytes_total: u64,
-    /// The title the first running download belongs to.
+    /// Waiting for Wi-Fi, a connection, room or the app: left to do, so the
+    /// keeper holds on for them (code review r1 C1).
+    pub waiting: u32,
+    /// One left to do was let onto mobile data: the keeper asks for any
+    /// network, not Wi-Fi alone.
+    pub mobile_data: bool,
+    /// The title the first running download belongs to; none on a locked
+    /// profile and for a title the profile may not see.
     pub title: Option<String>,
 }
 
@@ -91,9 +98,20 @@ pub struct DownloadsView {
 
 impl DownloadsView {
     pub fn open(core: &Core) -> Self {
+        Self::opened(core, false)
+    }
+
+    /// For a locked profile or the picker: the platform keeper's view, with
+    /// the device's counts, progress and holds alone, no title and no row
+    /// (code review r1, Apple M2).
+    pub fn open_locked(core: &Core) -> Self {
+        Self::opened(core, true)
+    }
+
+    fn opened(core: &Core, locked: bool) -> Self {
         let downloads = core.downloads();
         let mut boards = downloads.board().subscribe();
-        let snapshot = SharedObservable::new(render(core, &downloads.board().get()));
+        let snapshot = SharedObservable::new(render(core, &downloads.board().get(), locked));
         let (core2, out) = (core.clone(), snapshot.clone());
         let mut changes = core.library().subscribe();
         let task = tokio::spawn(async move {
@@ -101,13 +119,13 @@ impl DownloadsView {
                 tokio::select! {
                     board = boards.next() => {
                         let Some(board) = board else { return };
-                        out.set(render(&core2, &board));
+                        out.set(render(&core2, &board, locked));
                     }
                     // A kids list changed: the rows it allows change.
                     tables = crate::views::next_change(&mut changes) => {
                         let Some(tables) = tables else { return };
                         if tables.contains(&mq_library::Table::Access) {
-                            out.set(render(&core2, &core2.downloads().board().get()));
+                            out.set(render(&core2, &core2.downloads().board().get(), locked));
                         }
                     }
                 }
@@ -151,8 +169,12 @@ pub(crate) fn visible(core: &Core, board: &Board) -> Vec<DownloadRow> {
         .collect()
 }
 
-fn render(core: &Core, board: &Board) -> DownloadsSnapshot {
-    let rows = visible(core, board);
+fn render(core: &Core, board: &Board, locked: bool) -> DownloadsSnapshot {
+    let rows = if locked {
+        Vec::new()
+    } else {
+        visible(core, board)
+    };
     let is_kept = |r: &&DownloadRow| {
         matches!(
             r.state,
@@ -216,6 +238,21 @@ fn render(core: &Core, board: &Board) -> DownloadsSnapshot {
                 .count() as u32,
             bytes_done,
             bytes_total,
+            waiting: board
+                .rows
+                .iter()
+                .filter(|r| r.state == DownloadState::Waiting)
+                .count() as u32,
+            mobile_data: board.rows.iter().any(|r| {
+                r.mobile_data
+                    && !matches!(
+                        r.state,
+                        DownloadState::Paused
+                            | DownloadState::Done
+                            | DownloadState::Failed
+                            | DownloadState::Missing
+                    )
+            }),
             title: running
                 .first()
                 .filter(|r| rows.iter().any(|v| v.id == r.id))

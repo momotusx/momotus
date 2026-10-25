@@ -467,7 +467,11 @@ data class DownloadActivity(
     val queued: Int,
     val bytesDone: Long,
     val bytesTotal: Long,
-    /** The title the first running download belongs to. */
+    /** Waiting for Wi-Fi, a connection, room or the app: left to do, so the keeper holds on for them (code review r1 C1). */
+    val waiting: Int,
+    /** One left to do was let onto mobile data: the keeper asks for any network, not Wi-Fi alone. */
+    val mobileData: Boolean,
+    /** The title the first running download belongs to; none on a locked profile and for a title the profile may not see. */
     val title: String? = null,
 )
 

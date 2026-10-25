@@ -631,7 +631,9 @@ impl Request {
         match self {
             // The debrid view carries rotated records the keystore must get
             // even while locked.
-            Request::Subscribe { view, .. } => view == "profiles" || view == "debrid",
+            Request::Subscribe { view, .. } => {
+                view == "profiles" || view == "debrid" || view == "downloads"
+            }
             Request::Unsubscribe { .. }
             | Request::UnlockProfile { .. }
             | Request::SwitchProfile { .. }
@@ -2188,7 +2190,14 @@ impl Session {
                 (View::Search(search), to_value(&snapshot)?, forward)
             }
             "downloads" => {
-                let downloads = DownloadsView::open(&core);
+                // Locked or on the picker: the keeper's counts alone, so the
+                // app keeps downloads running (and its Dock bar and Quit
+                // question) with no profile open (code review r1, Apple M2).
+                let downloads = if lock(&self.shared).locked {
+                    DownloadsView::open_locked(&core)
+                } else {
+                    DownloadsView::open(&core)
+                };
                 let (snapshot, updates) = downloads.subscribe();
                 let forward = tokio::spawn(forward(sub, updates, out, fence));
                 (
