@@ -318,10 +318,11 @@ impl Core {
 
     /// One Trakt read for the title page, with the profile's own token when
     /// it is signed in here and the app's id otherwise, as Search does.
-    /// `None` when Trakt cannot be asked (no app, kids) or is quiet. A 429
+    /// `None` when Trakt cannot be asked (no app) or is quiet. A 429
     /// quiets every Trakt call.
     async fn trakt_read(&self, read: Read, kind: &str, imdb: &str) -> Option<Answer> {
-        if kids(self) || !crate::segments::is_imdb(imdb) {
+        // Kids are refused by both callers, before the memory.
+        if !crate::segments::is_imdb(imdb) {
             return None;
         }
         let trakt = self.trakt();
@@ -410,6 +411,31 @@ mod tests {
         );
         assert_eq!(kid.trakt_score("movie", "tt0111161").await, None);
         assert!(kid.trakt_related("movie", "tt0111161").await.is_empty());
+        // TMDB's kept answer too, with a token set.
+        owner.set_tmdb_host(TmdbHost {
+            url: "http://127.0.0.1:9".into(),
+            token: Some("test".into()),
+            local: true,
+        });
+        let found = tmdb::Found {
+            kind: "movie",
+            id: 278,
+            score: 8.7,
+            votes: 500,
+        };
+        lock(&owner.trakt().lookups).tmdb.put(
+            "tt0111161".into(),
+            Got::Answer(tmdb::Finds {
+                movie: Some(found),
+                show: None,
+            }),
+            Instant::now(),
+        );
+        assert_eq!(
+            owner.tmdb_find("tt0111161", Some("movie")).await,
+            Some(found)
+        );
+        assert_eq!(kid.tmdb_find("tt0111161", Some("movie")).await, None);
     }
 
     /// Only a 404 is kept as "none" for a day; another refusal rests a

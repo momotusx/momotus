@@ -1144,6 +1144,24 @@ fn details(
 mod tests {
     use super::*;
 
+    /// The view's own kids check: a kids page starts no lookup at all, so
+    /// it never waits, renders or reaches the core's refusals. The page is
+    /// marked kids by hand, so the core's own kids checks play no part.
+    #[tokio::test]
+    async fn a_kids_page_starts_no_lookup() {
+        let core = Core::temporary("p").unwrap();
+        let adult = TitleView::open(&core, "movie", "tt0111161");
+        adult.set_visible(true);
+        assert!(!lock(&adult.lookup).is_empty(), "an adult page starts one");
+        let mut kids = TitleView::open(&core, "movie", "tt0111161");
+        kids.kids = true;
+        kids.set_visible(true);
+        assert!(
+            lock(&kids.lookup).is_empty(),
+            "a kids page started a lookup"
+        );
+    }
+
     /// A badge links only from a checked id, whatever an addon wrote, and
     /// rounds half up as the apps show it.
     #[test]
