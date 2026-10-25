@@ -440,6 +440,23 @@ async fn hidden_mid_answer_keeps_nothing_and_visible_asks_again() {
     assert_eq!(fake.asked("/3/find/tt0111161"), 2);
 }
 
+/// Hidden then visible in the same tick (the player pushed and popped, two
+/// commands in one read): the lookup starts again and the scores land.
+#[tokio::test]
+async fn hidden_then_visible_at_once_starts_again() {
+    let fake = fake().await;
+    let core = core(&fake, Some("test-token"));
+    let view = TitleView::open(&core, "movie", "tt0111161");
+    until(&view, "the meta", ready).await;
+    view.set_visible(true);
+    view.set_visible(false);
+    view.set_visible(true);
+    until(&view, "the scores", |s| {
+        scores(s) == (shown("87%"), shown("92%"))
+    })
+    .await;
+}
+
 /// A repeated visible keeps the running wait: the lookup starts a second
 /// after the first one, not after the last.
 #[tokio::test]

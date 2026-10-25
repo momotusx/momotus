@@ -407,7 +407,10 @@ impl TitleView {
         let mut lookup = lock(&self.lookup);
         while lookup.try_join_next().is_some() {}
         if !visible {
-            lookup.abort_all();
+            // Dropping the set aborts its tasks and empties it at once: an
+            // aborted task stays in a set until the runtime reaps it, so a
+            // visible right after would see it and start nothing.
+            *lookup = tokio::task::JoinSet::new();
         } else if lookup.is_empty() && !self.denied && !self.kids {
             // A repeated visible keeps the running wait and lookup.
             lookup.spawn(look_up(self.ctx()));
