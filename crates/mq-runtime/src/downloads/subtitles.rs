@@ -59,6 +59,8 @@ pub(super) enum Kept {
 /// device's languages want.
 pub(super) async fn keep(d: &Downloads, core: &Core, row: &DownloadRecord) -> Kept {
     let core = core.for_profile(&row.added_by);
+    // The built-in Turkish source is left out on purpose: it reads a site,
+    // release by release, at play time (plans/offline-downloads.md 8a).
     let installed: Vec<_> = core
         .installed_addons()
         .unwrap_or_default()
@@ -92,8 +94,10 @@ pub(super) async fn keep(d: &Downloads, core: &Core, row: &DownloadRecord) -> Ke
         .filter(|a| a.supports(&path))
         .cloned()
         .collect();
+    // No subtitles addon yet: one installed later still fills this download
+    // at a later look (code review r1, runtime P3-7).
     if asked.is_empty() {
-        return Kept::Done(Vec::new());
+        return Kept::Later;
     }
     let mut listed = Vec::new();
     let mut answered = 0;

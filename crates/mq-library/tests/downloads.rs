@@ -26,6 +26,7 @@ fn row(id: &str, item: &str, video: &str) -> DownloadRecord {
         position: 0,
         created_ms: 1,
         done_ms: None,
+        smart: None,
     }
 }
 

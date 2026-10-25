@@ -39,7 +39,7 @@ pub(super) async fn fetch(
         Ok(engine) => engine,
         Err(e) => {
             tracing::warn!("the torrent engine did not start: {e}");
-            return Ended::Wait(DownloadReason::Space);
+            return Ended::Move(DownloadReason::Source);
         }
     };
     let Ok(mut version) = serde_json::from_str::<Version>(row.version.as_deref().unwrap_or(""))
@@ -118,6 +118,7 @@ pub(super) async fn fetch(
         let p = handle.progress().await;
         let received = p.have.saturating_sub(last);
         d.progress(&row.id, p.have, Some(len), received);
+        d.swarm(&row.id, p.peers);
         if p.have != last {
             (last, last_change) = (p.have, Instant::now());
         }
@@ -137,15 +138,61 @@ pub(super) async fn fetch(
             d.ran_out(&row.id);
             return Ended::Wait(DownloadReason::Space);
         }
+        // A full disk waits for space; any other stop is the source's, or
+        // it would wait as "Not enough space" and restart in a loop (code
+        // review r1, runtime P2-4).
         if let Some(why) = p.failed {
             tracing::info!("download torrent stopped: {why}");
             handle.stop().await;
-            return Ended::Wait(DownloadReason::Space);
+            let ended = stopped(&why);
+            if matches!(ended, Ended::Wait(_)) {
+                d.ran_out(&row.id);
+            }
+            return ended;
         }
         if last_change.elapsed() >= STALL {
             handle.stop().await;
             return Ended::Move(DownloadReason::Source);
         }
         tokio::time::sleep(LOOK_EVERY).await;
+    }
+}
+
+/// What a torrent the engine stopped means for its job.
+fn stopped(why: &str) -> Ended {
+    if mq_engine::is_space_failure(why) {
+        Ended::Wait(DownloadReason::Space)
+    } else {
+        Ended::Move(DownloadReason::Source)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Only a full disk waits for space; librqbit's other errors move to
+    /// the next source, so nothing waits as "Not enough space" in a loop.
+    #[test]
+    fn only_a_full_disk_waits_for_space() {
+        for why in [
+            "storage full",
+            "this storage cannot free space while playing",
+            "error writing piece: No space left on device (os error 28)",
+        ] {
+            assert!(
+                matches!(stopped(why), Ended::Wait(DownloadReason::Space)),
+                "{why}"
+            );
+        }
+        for why in [
+            "Permission denied (os error 13)",
+            "error checking file: bad length",
+        ] {
+            assert!(
+                matches!(stopped(why), Ended::Move(DownloadReason::Source)),
+                "{why}"
+            );
+        }
     }
 }

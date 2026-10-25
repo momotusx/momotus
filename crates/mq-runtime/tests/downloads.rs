@@ -27,7 +27,7 @@ fn video(len: usize) -> Arc<Vec<u8>> {
 }
 
 /// How the test origin answers.
-#[derive(Clone, Copy, Default)]
+#[derive(Clone, Default)]
 struct How {
     /// The first answer stops after this many body bytes.
     cut_first_after: Option<usize>,
@@ -37,6 +37,9 @@ struct How {
     html: bool,
     /// The body in 64 KiB pieces 20 ms apart.
     slow: bool,
+    /// Every answer after the first serves this file instead: a link
+    /// resolved again that names another file.
+    then: Option<Arc<Vec<u8>>>,
 }
 
 #[derive(Clone, Default)]
@@ -56,12 +59,13 @@ async fn origin(data: Arc<Vec<u8>>, how: How) -> (String, Seen) {
             let Ok((mut socket, _)) = listener.accept().await else {
                 return;
             };
-            let (data, seen) = (data.clone(), out.clone());
+            let (data, seen, how) = (data.clone(), out.clone(), how.clone());
             tokio::spawn(async move {
                 let mut buf = vec![0u8; 4096];
                 let n = socket.read(&mut buf).await.unwrap_or(0);
                 let head = String::from_utf8_lossy(&buf[..n]).to_ascii_lowercase();
                 let nth = seen.answers.fetch_add(1, Ordering::SeqCst);
+                let data = how.then.clone().filter(|_| nth > 0).unwrap_or(data);
                 if how.html {
                     // 20 MB of page: the head check stops it at its start.
                     let page = "<!doctype html><html><body>expired</body></html>".repeat(400_000);
@@ -174,6 +178,8 @@ struct Extras {
     /// A name that resolves public to this server (`test_dns`): the meta's
     /// poster is `http://<name>:<port>/poster.jpg`.
     public_name: Option<&'static str>,
+    /// Its subtitles answer 503: no source answers the subtitle step.
+    subtitles_fail: bool,
 }
 
 /// The poster a test addon serves.
@@ -213,6 +219,7 @@ async fn addon_serving(stream: serde_json::Value, delay: Duration, extras: Extra
         ]
     }})
     .to_string();
+    let subtitles_fail = extras.subtitles_fail;
     tokio::spawn(async move {
         loop {
             let Ok((mut socket, _)) = listener.accept().await else {
@@ -234,6 +241,14 @@ async fn addon_serving(stream: serde_json::Value, delay: Duration, extras: Extra
                         .unwrap()
                         .entry(addr.port())
                         .or_default() += 1;
+                    if subtitles_fail {
+                        let _ = socket
+                            .write_all(
+                                b"HTTP/1.1 503 Service Unavailable\r\nContent-Length: 0\r\n\r\n",
+                            )
+                            .await;
+                        return;
+                    }
                 }
                 if head.starts_with("GET /poster.jpg") {
                     let mut resp = format!(
@@ -454,6 +469,70 @@ async fn a_cut_download_resumes_from_its_checkpoint() {
     assert!(second > 0 && second <= 20 << 20, "{ranges:?}");
 }
 
+/// A subtitle step no source answers asks again only after a wait, never
+/// at every look of the queue; back online it asks at once.
+#[tokio::test]
+async fn a_subtitle_step_no_source_answers_waits_to_ask_again() {
+    let (url, _) = origin(video(4 << 20), How::default()).await;
+    let stream = serde_json::json!({
+        "name": "Direct\n1080p", "title": "Sintel.2010.1080p.WEB-DL.mp4", "url": url,
+        "behaviorHints": { "filename": "Sintel.2010.1080p.WEB-DL.mp4" }
+    });
+    let extras = Extras {
+        subtitles_fail: true,
+        ..Extras::default()
+    };
+    let row = addon_serving(stream, Duration::ZERO, extras).await;
+    let core = core_with(row.clone()).await;
+    let film = mq_runtime::downloads::add(&core, movie()).await.unwrap();
+    until(&core, &film[0], "done", |r| r.state == DownloadState::Done).await;
+    let deadline = std::time::Instant::now() + Duration::from_secs(20);
+    while asks(&row) == 0 {
+        assert!(std::time::Instant::now() < deadline, "the step never asked");
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    // Every link report is a look of the queue: none asks again.
+    for _ in 0..10 {
+        core.downloads().set_link(Link::default());
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+    assert_eq!(asks(&row), 1);
+    // Back online after a spell offline: it asks at once.
+    core.downloads().set_link(Link {
+        offline: true,
+        ..Link::default()
+    });
+    core.downloads().set_link(Link::default());
+    while asks(&row) < 2 {
+        assert!(std::time::Instant::now() < deadline, "no ask back online");
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+}
+
+/// A resume whose answer is another file (a link resolved again names
+/// another file of a pack, of another size): the file starts again from 0
+/// instead of growing the old one's start with the new one's end.
+#[tokio::test]
+async fn a_resume_onto_another_file_starts_again() {
+    let first = video(30 << 20);
+    let other = video(24 << 20);
+    let (url, seen) = origin(
+        first,
+        How {
+            cut_first_after: Some(20 << 20),
+            then: Some(other.clone()),
+            ..How::default()
+        },
+    )
+    .await;
+    let core = core_with(addon(&url, Duration::ZERO).await).await;
+    let ids = mq_runtime::downloads::add(&core, movie()).await.unwrap();
+    until(&core, &ids[0], "done", |r| r.state == DownloadState::Done).await;
+    assert_eq!(file_of(&core, &ids[0]), *other);
+    let ranges = seen.ranges.lock().unwrap().clone();
+    assert_eq!(ranges.last().map(String::as_str), Some("0-"), "{ranges:?}");
+}
+
 /// An origin that ignores ranges on a resume sends it all again: the file
 /// starts over instead of growing a second copy.
 #[tokio::test]
@@ -561,11 +640,67 @@ async fn the_queue_waits_for_what_holds_it() {
     .await;
 }
 
+/// A network play holds downloads only while it plays: paused, they go on
+/// (the film itself, kept for later); played on, they wait again.
+#[tokio::test]
+async fn a_paused_network_play_holds_no_download() {
+    let (url, _) = origin(
+        video(32 << 20),
+        How {
+            slow: true,
+            ..How::default()
+        },
+    )
+    .await;
+    let core = core_with(addon(&url, Duration::ZERO).await).await;
+    let view = VersionsView::open(&core, params());
+    let deadline = std::time::Instant::now() + Duration::from_secs(20);
+    while view.snapshot().recommended.is_none() {
+        assert!(std::time::Instant::now() < deadline);
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    let key = view.snapshot().recommended.unwrap().key;
+    let playback = PlaybackView::open_picked(&core, view.pick(&key), target(), &view.plays());
+    while playback.snapshot().phase != PlaybackPhase::Ready {
+        assert!(
+            std::time::Instant::now() < deadline,
+            "{:?}",
+            playback.snapshot()
+        );
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    // The film itself, kept for later while it streams.
+    let ids = mq_runtime::downloads::add(&core, movie()).await.unwrap();
+    let id = &ids[0];
+    until(&core, id, "waits while the film plays", |r| {
+        r.reason == Some(DownloadReason::Playing)
+    })
+    .await;
+    playback.report_progress(10_000, 900_000, true);
+    until(&core, id, "runs while the film is paused", |r| {
+        r.state == DownloadState::Running
+    })
+    .await;
+    playback.report_progress(10_000, 900_000, false);
+    until(&core, id, "waits again once it plays on", |r| {
+        r.reason == Some(DownloadReason::Playing)
+    })
+    .await;
+}
+
 /// A season's add queues its aired episodes in order and never one not out
-/// yet; a kids profile adds nothing and sees only its list.
+/// yet; a kids profile adds nothing and sees only its list, while `active`
+/// still counts the owner's downloads for the keeper, unnamed.
 #[tokio::test]
 async fn a_season_queues_its_aired_episodes_and_kids_add_nothing() {
-    let (url, _) = origin(video(1 << 20), How::default()).await;
+    let (url, _) = origin(
+        video(1 << 20),
+        How {
+            slow: true,
+            ..How::default()
+        },
+    )
+    .await;
     let core = core_with(addon(&url, Duration::ZERO).await).await;
     core.downloads().set_link(Link {
         offline: true,
@@ -599,6 +734,20 @@ async fn a_season_queues_its_aired_episodes_and_kids_add_nothing() {
     // Nothing of its list is downloaded: its view lists nothing.
     let view = mq_runtime::DownloadsView::open(&kid);
     assert!(view.snapshot().downloading.is_empty() && view.snapshot().titles.is_empty());
+    // Online the owner's season runs: the kid's keeper keeps the app running
+    // for it, and its notification names no title outside the kid's list.
+    core.downloads().set_link(Link::default());
+    let deadline = std::time::Instant::now() + Duration::from_secs(30);
+    while view.snapshot().active.running == 0 {
+        assert!(
+            std::time::Instant::now() < deadline,
+            "the owner's season never ran"
+        );
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    let s = view.snapshot();
+    assert!(s.downloading.is_empty());
+    assert_eq!(s.active.title, None);
 }
 
 /// A stored download row as a launch finds it.
@@ -636,6 +785,7 @@ fn record(
         position: 0,
         created_ms: 1,
         done_ms: None,
+        smart: None,
     }
 }
 
@@ -689,6 +839,32 @@ async fn a_launch_resumes_a_killed_download_from_its_checkpoint() {
     until(&core, "k1", "done", |r| r.state == DownloadState::Done).await;
     assert_eq!(file_of(&core, "k1"), *data);
     assert_eq!(seen.ranges.lock().unwrap()[0], format!("{}-", 8 << 20));
+}
+
+/// Killed between the last checkpoint and the rename: the whole file is in
+/// its `.part`, and the launch finishes it with no request (a request for
+/// nothing would answer 416 and throw the file away).
+#[tokio::test]
+async fn a_launch_finishes_a_whole_part_without_asking() {
+    let data = video(4 << 20);
+    let (url, seen) = origin(data.clone(), How::default()).await;
+    let core = bare();
+    let mut row = record(
+        "w1",
+        ITEM,
+        ITEM,
+        "running",
+        kept_version(&url, "http://127.0.0.1:9/manifest.json"),
+    );
+    row.bytes_done = data.len() as i64;
+    row.bytes_total = Some(data.len() as i64);
+    core.library().add_download(&row).unwrap();
+    put(&core, "w1", "video.mp4.part", &data);
+    core.downloads().relaunch();
+    core.downloads().set_link(Link::default());
+    until(&core, "w1", "done", |r| r.state == DownloadState::Done).await;
+    assert_eq!(file_of(&core, "w1"), *data);
+    assert!(seen.ranges.lock().unwrap().is_empty());
 }
 
 /// A launch finds a done download's file cut short: it reads "Download
@@ -976,6 +1152,44 @@ async fn a_torrent_download_plays_offline() {
         "{:?}",
         others.board().get()
     );
+    drop(playback);
+    drop(view);
+
+    // Online, a paused partial whose head is on disk but whose swarm is not
+    // answering now is no pick: it would stall at its first missing piece
+    // ahead of a ready version (code review r1 P2-5).
+    let mut stored = core
+        .library()
+        .downloads()
+        .unwrap()
+        .into_iter()
+        .find(|r| r.id == ids[0])
+        .unwrap();
+    stored.state = "paused".into();
+    stored.bytes_done = (s.movie.len() / 2) as i64;
+    core.library().save_download(&stored).unwrap();
+    // The device's torrent folder is the leecher's, so its start reads as
+    // on disk.
+    let _ = std::fs::remove_dir(core.torrent_dir());
+    std::os::unix::fs::symlink(s.leech_dir(), core.torrent_dir()).unwrap();
+    core.downloads().relaunch();
+    core.downloads().set_link(Link::default());
+    let view = VersionsView::open(&core, params());
+    let deadline = std::time::Instant::now() + Duration::from_secs(20);
+    while !view.snapshot().done {
+        assert!(
+            std::time::Instant::now() < deadline,
+            "{:?}",
+            view.snapshot()
+        );
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    let s = view.snapshot();
+    assert!(!s.frozen);
+    assert_ne!(
+        s.recommended.and_then(|r| r.on_device).as_deref(),
+        Some("Downloaded")
+    );
 }
 
 /// Online, a partial torrent download whose start is not on disk (its
@@ -1029,7 +1243,7 @@ async fn subtitles_download_with_the_video_and_play_offline() {
             ("tr1", "tur", false),
             ("fr1", "fre", false),
         ],
-        public_name: None,
+        ..Extras::default()
     };
     let source = addon_serving(stream, Duration::ZERO, extras).await;
     let core = core_with(source.clone()).await;
@@ -1150,14 +1364,11 @@ async fn a_downloads_poster_is_kept_and_served() {
     assert_eq!(&http.get(&poster, &opts).await.unwrap().body[..], POSTER);
 }
 
-/// Smart downloads: a downloaded episode watched to its end brings the
-/// next one, and goes once the next is done; a kid half way through it
-/// keeps it (4.14).
-#[tokio::test]
-async fn a_finished_episode_brings_the_next_and_goes() {
-    // Slow enough that a deletion before e2 is whole would show.
+/// A series with one stream at `url` (slow, so a deletion before e2 is
+/// whole would show), e1 downloaded.
+async fn series_with_e1(slow_bytes: usize) -> (Core, String) {
     let (url, _) = origin(
-        video(2 << 20),
+        video(slow_bytes),
         How {
             slow: true,
             ..How::default()
@@ -1180,7 +1391,12 @@ async fn a_finished_episode_brings_the_next_and_goes() {
         r.state == DownloadState::Done
     })
     .await;
-    let e1 = || PlayTarget {
+    (core, ids[0].clone())
+}
+
+/// Plays downloaded e1 to its end.
+async fn play_e1_to_the_end(core: &Core) {
+    let e1 = PlayTarget {
         kind: "series".into(),
         item_id: "tt9".into(),
         video_id: "tt9:2:1".into(),
@@ -1189,33 +1405,34 @@ async fn a_finished_episode_brings_the_next_and_goes() {
         season: Some(2),
         episode: Some(1),
     };
-    let play_to_the_end = |core: Core| async move {
-        let view = VersionsView::open(
-            &core,
-            VersionsParams {
-                kind: "series".into(),
-                video_id: "tt9:2:1".into(),
-                target: Target {
-                    title: "Show".into(),
-                    year: None,
-                    season: Some(2),
-                    episode: Some(1),
-                },
-                ..params()
+    let view = VersionsView::open(
+        core,
+        VersionsParams {
+            kind: "series".into(),
+            video_id: "tt9:2:1".into(),
+            target: Target {
+                title: "Show".into(),
+                year: None,
+                season: Some(2),
+                episode: Some(1),
             },
-        );
-        let pick = view.snapshot().recommended.expect("e1 downloaded");
-        let playback = PlaybackView::open_picked(&core, view.pick(&pick.key), e1(), &view.plays());
-        let deadline = std::time::Instant::now() + Duration::from_secs(20);
-        while playback.snapshot().phase != PlaybackPhase::Ready {
-            assert!(std::time::Instant::now() < deadline);
-            tokio::time::sleep(Duration::from_millis(20)).await;
-        }
-        playback.report_progress(3_000_000, 3_100_000, false);
-        tokio::time::sleep(Duration::from_millis(300)).await;
-        drop(playback);
-    };
-    play_to_the_end(core.clone()).await;
+            ..params()
+        },
+    );
+    let pick = view.snapshot().recommended.expect("e1 downloaded");
+    let playback = PlaybackView::open_picked(core, view.pick(&pick.key), e1, &view.plays());
+    let deadline = std::time::Instant::now() + Duration::from_secs(20);
+    while playback.snapshot().phase != PlaybackPhase::Ready {
+        assert!(std::time::Instant::now() < deadline);
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    playback.report_progress(3_000_000, 3_100_000, false);
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    drop(playback);
+}
+
+/// Waits until e2 is done and e1 gone, and never sees e1 go first.
+async fn e1_goes_after_e2(core: &Core) {
     let board = || core.downloads().board().get().rows;
     let deadline = std::time::Instant::now() + Duration::from_secs(30);
     loop {
@@ -1231,4 +1448,33 @@ async fn a_finished_episode_brings_the_next_and_goes() {
         assert!(std::time::Instant::now() < deadline, "{rows:?}");
         tokio::time::sleep(Duration::from_millis(50)).await;
     }
+}
+
+/// Smart downloads: a finished episode brings the next one and goes once
+/// it is whole.
+#[tokio::test]
+async fn a_finished_episode_brings_the_next_and_goes() {
+    let (core, _) = series_with_e1(2 << 20).await;
+    play_e1_to_the_end(&core).await;
+    e1_goes_after_e2(&core).await;
+}
+
+/// Finished offline (the meta cannot be read): nothing is added and
+/// nothing deleted; the step outlives a relaunch, and online the next one
+/// comes and the finished one goes after it.
+#[tokio::test]
+async fn a_smart_step_waits_offline_and_outlives_a_relaunch() {
+    let (core, e1) = series_with_e1(2 << 20).await;
+    core.downloads().set_link(Link {
+        offline: true,
+        ..Link::default()
+    });
+    play_e1_to_the_end(&core).await;
+    tokio::time::sleep(Duration::from_millis(800)).await;
+    let rows = core.downloads().board().get().rows;
+    assert!(rows.iter().any(|r| r.id == e1), "{rows:?}");
+    assert!(!rows.iter().any(|r| r.video_id == "tt9:2:2"), "{rows:?}");
+    core.downloads().relaunch();
+    core.downloads().set_link(Link::default());
+    e1_goes_after_e2(&core).await;
 }

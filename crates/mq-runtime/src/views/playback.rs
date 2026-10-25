@@ -655,9 +655,13 @@ struct State {
     /// The playing source's token: its URL and its subtitles' URLs live as
     /// long as it is kept here.
     lease: Option<Lease>,
-    /// Held while the playing source streams from the network: downloads
-    /// wait meanwhile (plans/offline-downloads.md 4.4).
+    /// Held while the playing source streams from the network and plays:
+    /// downloads wait meanwhile (plans/offline-downloads.md 4.4). A pause
+    /// lets go of it and a play takes it again (code review r1 P2-6).
     streaming: Option<crate::downloads::Streaming>,
+    /// The playing source streams from the network (with its torrent's
+    /// hash, if a torrent): what `streaming` is taken again for.
+    network: Option<Option<String>>,
     /// Bumped under this lock by every new resolve and every failover; a
     /// resolve task adopts a lease, and publishes tracks, only while its own
     /// number is the newest.
@@ -827,6 +831,7 @@ impl State {
             retry_until: None,
             lease: None,
             streaming: None,
+            network: None,
             run: 0,
             closed: false,
             pick: None,
@@ -1444,6 +1449,15 @@ impl PlaybackView {
                 s.played_ms += step;
             }
             s.advancing = step.is_some() && !paused;
+            // A paused network play holds no download; playing on holds
+            // them again.
+            if let Some(torrent) = &s.network {
+                if paused {
+                    s.streaming = None;
+                } else if s.streaming.is_none() {
+                    s.streaming = Some(self.core.downloads().streaming(torrent.as_deref()));
+                }
+            }
             // Playing on ends a stall whose `stalled(false)` never came: its
             // watcher stands down, and a later stall counts as new.
             if s.advancing && s.stall_on == Some(s.stall) {
@@ -1928,6 +1942,7 @@ fn release_all(s: &mut State) {
     s.order.clear();
     s.lease = None;
     s.streaming = None;
+    s.network = None;
 }
 
 /// The container of the file a source opened (plans/apple-second-engine.md
@@ -2406,7 +2421,10 @@ async fn resolve_next(
                     if !adopt(&mut s, run, lease) {
                         return;
                     }
-                    s.streaming = streams_from_network(&core, &stream, &target, &upstream)
+                    s.network = streams_from_network(&core, &stream, &target, &upstream);
+                    s.streaming = s
+                        .network
+                        .as_ref()
                         .map(|torrent| core.downloads().streaming(torrent.as_deref()));
                     let proven = s.dead.reached();
                     if let Some(pick) = &s.pick {

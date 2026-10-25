@@ -185,11 +185,16 @@ fn render(core: &Core, board: &Board) -> DownloadsSnapshot {
             .rows
             .sort_by_key(|r| (r.season.unwrap_or(0), r.episode.unwrap_or(0)));
     }
-    let running: Vec<&DownloadRow> = downloading
+    // `active` is the device's: a kids session keeps the owner's downloads
+    // running in the background, and names only a title the kid may see
+    // (code review r1 P2-1).
+    let running: Vec<&DownloadRow> = board
+        .rows
         .iter()
         .filter(|r| r.state == DownloadState::Running)
         .collect();
-    let active_rows = downloading
+    let active_rows = board
+        .rows
         .iter()
         .filter(|r| matches!(r.state, DownloadState::Running | DownloadState::Queued));
     let (bytes_done, bytes_total) = active_rows.fold((0, 0), |(d, t), r| {
@@ -198,19 +203,23 @@ fn render(core: &Core, board: &Board) -> DownloadsSnapshot {
     DownloadsSnapshot {
         storage: DownloadStorage {
             downloads_bytes: rows.iter().map(|r| r.bytes_done).sum(),
-            free_bytes: core.free_bytes(),
+            free_bytes: core.downloads().free(core),
             needed_bytes: board.needed_bytes,
         },
         settings: board.settings,
         active: DownloadActivity {
             running: running.len() as u32,
-            queued: downloading
+            queued: board
+                .rows
                 .iter()
                 .filter(|r| r.state == DownloadState::Queued)
                 .count() as u32,
             bytes_done,
             bytes_total,
-            title: running.first().map(|r| r.name.clone()),
+            title: running
+                .first()
+                .filter(|r| rows.iter().any(|v| v.id == r.id))
+                .map(|r| r.name.clone()),
         },
         downloading,
         titles,

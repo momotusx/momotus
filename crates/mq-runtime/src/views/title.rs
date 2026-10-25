@@ -731,16 +731,40 @@ async fn watch_downloads(ctx: Ctx) {
     let mut boards = downloads.board().subscribe();
     let mut offline = downloads.link().offline;
     let mut shown = Vec::new();
-    while let Some(board) = boards.next().await {
+    // A page that fell back while online (the meta failed) reads it again
+    // now and then (code review r1 P3-3).
+    let mut again = tokio::time::interval(META_AGAIN);
+    again.tick().await;
+    loop {
+        let board = tokio::select! {
+            board = boards.next() => match board {
+                Some(board) => board,
+                None => return,
+            },
+            _ = again.tick() => {
+                if !downloads.link().offline && lock(&ctx.state).offline {
+                    tokio::spawn(load_meta(ctx.clone()));
+                }
+                continue;
+            }
+        };
         if offline && !board.link.offline && lock(&ctx.state).offline {
             tokio::spawn(load_meta(ctx.clone()));
         }
         offline = board.link.offline;
-        // Only this title's rows move its page.
+        // Only this title's badges move its page: a state, or a percent,
+        // not every byte (code review r1 P3-2).
         let mine: Vec<_> = board
             .rows
-            .into_iter()
+            .iter()
             .filter(|r| r.item_id == ctx.id)
+            .map(|r| {
+                let percent = r
+                    .bytes_total
+                    .filter(|t| *t > 0)
+                    .map(|t| r.bytes_done * 100 / t);
+                (r.id.clone(), r.state, r.reason, r.mobile_data, percent)
+            })
             .collect();
         if mine != shown {
             shown = mine;
@@ -748,6 +772,10 @@ async fn watch_downloads(ctx: Ctx) {
         }
     }
 }
+
+/// How often a title page built from its downloads while online reads the
+/// meta again.
+const META_AGAIN: std::time::Duration = std::time::Duration::from_secs(30);
 
 /// Asks the subtitles addons about the video Play plays, each time that
 /// video changes (a series moves on) and each time the addons change, for

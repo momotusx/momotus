@@ -39,6 +39,9 @@ const PUBLISH_EVERY: Duration = Duration::from_millis(500);
 const REPORT_FRESH: Duration = Duration::from_secs(120);
 /// Moves to the next source of a pick before a job fails (4.3).
 const MAX_MOVES: i64 = 2;
+/// The first wait before a subtitle step no source answered asks again.
+const SUBTITLE_WAIT: Duration = Duration::from_secs(10 * 60);
+const SUBTITLE_WAIT_MAX: Duration = Duration::from_secs(6 * 60 * 60);
 
 /// Where a download stands.
 #[cfg_attr(
@@ -186,6 +189,10 @@ pub(crate) struct Version {
     /// A torrent the engine keeps: its file, once chosen.
     #[serde(default)]
     pub(crate) torrent: Option<TorrentRef>,
+    /// The first answer's `ETag` or `Last-Modified`, sent as `If-Range` on
+    /// a resume: a changed file answers whole instead of a wrong range.
+    #[serde(default)]
+    pub(crate) validator: Option<String>,
 }
 
 /// A downloaded file of a torrent, in the engine's folder.
@@ -339,6 +346,8 @@ struct Running {
     /// Bytes this run received, for its speed.
     total: Option<u64>,
     speed: Speed,
+    /// A torrent's connected peers at its last look.
+    peers: usize,
 }
 
 /// Bytes over the last seconds.
@@ -401,19 +410,25 @@ pub struct Downloads {
     space_since: Mutex<HashMap<String, std::time::Instant>>,
     /// Downloads whose subtitles are being fetched.
     subtitling: Mutex<std::collections::HashSet<String>>,
-    /// Smart downloads waiting for their next episode (4.14).
-    smart: Mutex<Vec<Smart>>,
+    /// Subtitle steps no source answered: when each asks again, and the
+    /// wait after that (code review r1, runtime P2-3).
+    subtitle_waits: Mutex<HashMap<String, (std::time::Instant, Duration)>>,
+    /// Smart steps whose next episode is being looked up (4.14).
+    smart_looking: Mutex<std::collections::HashSet<String>>,
     /// The loopback URLs of downloads' posters and stills (4.11), by file,
     /// with the server port they were made on.
     images: Mutex<HashMap<PathBuf, (u16, String, mq_server::Lease)>>,
 }
 
-/// A finished episode a smart download deletes once `next` is done.
-struct Smart {
-    finished: String,
-    next: Option<String>,
+/// A smart download's step, kept on the episode it finished (4.14).
+#[derive(Debug, Serialize, Deserialize)]
+struct SmartStep {
     /// The profile that finished it.
     by: String,
+    /// The next episode's download id once known; empty when there is no
+    /// next episode; none while it was not looked up (or could not be).
+    #[serde(default)]
+    next: Option<String>,
 }
 
 /// Held by a playback streaming from the network: downloads wait while
@@ -456,7 +471,8 @@ impl Downloads {
             strict: Mutex::default(),
             space_since: Mutex::default(),
             subtitling: Mutex::default(),
-            smart: Mutex::default(),
+            subtitle_waits: Mutex::default(),
+            smart_looking: Mutex::default(),
             images: Mutex::default(),
         })
     }
@@ -517,7 +533,11 @@ impl Downloads {
     }
 
     pub fn set_link(&self, link: Link) {
-        *lock(&self.link) = link;
+        let was = std::mem::replace(&mut *lock(&self.link), link);
+        // Back online: a subtitle step that found no source asks at once.
+        if was.offline && !link.offline {
+            lock(&self.subtitle_waits).clear();
+        }
         self.changed();
     }
 
@@ -562,6 +582,17 @@ impl Downloads {
     /// names (a wipe, a crash between a delete and its files) go.
     fn recover(&self) {
         let Some(core) = self.core() else { return };
+        // The folders first, then the rows: a job added in between has its
+        // row in the list, so its new folder is never taken for a leftover
+        // (code review r1 P3-1).
+        let folders: Vec<(String, PathBuf)> = std::fs::read_dir(&self.dir)
+            .map(|entries| {
+                entries
+                    .flatten()
+                    .map(|e| (e.file_name().to_string_lossy().into_owned(), e.path()))
+                    .collect()
+            })
+            .unwrap_or_default();
         let Ok(rows) = core.library().downloads() else {
             return;
         };
@@ -584,12 +615,9 @@ impl Downloads {
                 let _ = core.library().save_download(&row);
             }
         }
-        if let Ok(entries) = std::fs::read_dir(&self.dir) {
-            for entry in entries.flatten() {
-                let name = entry.file_name().to_string_lossy().into_owned();
-                if !rows.iter().any(|r| r.id == name) {
-                    let _ = std::fs::remove_dir_all(entry.path());
-                }
+        for (name, path) in folders {
+            if !rows.iter().any(|r| r.id == name) {
+                let _ = std::fs::remove_dir_all(path);
             }
         }
         self.publish();
@@ -730,6 +758,7 @@ impl Downloads {
                     chain: chain.iter().map(StoredStream::of).collect(),
                     ext: None,
                     torrent: None,
+                    validator: None,
                 })
                 .ok()
             });
@@ -757,6 +786,7 @@ impl Downloads {
                 position: 0,
                 created_ms: mq_library::hlc::now_ms() as i64,
                 done_ms: None,
+                smart: None,
             };
             let mut stored = core.library().add_download(&record)?;
             let state = DownloadState::read(&stored.state);
@@ -1083,6 +1113,14 @@ impl Downloads {
         lock(&self.allowed).free = Some((free, at));
     }
 
+    /// The device's free space as downloads count it: the disk's figure, or
+    /// the platform's fresh report when larger (iOS counts purgeable space),
+    /// for the Downloads screen and the download ranking (code review r1
+    /// P3-4).
+    pub(crate) fn free(&self, core: &Core) -> Option<u64> {
+        self.base_free(core, "")
+    }
+
     /// The figure the downloads' space rule starts from for job `id` (4.9).
     fn base_free(&self, core: &Core, id: &str) -> Option<u64> {
         let disk = core.free_bytes();
@@ -1172,7 +1210,7 @@ impl Downloads {
         let Ok(rows) = core.library().downloads() else {
             return;
         };
-        self.settle_smart(&core);
+        self.settle_smart(&core, &rows);
         // Runs whose row went or stopped being running.
         let gone: Vec<String> = lock(&self.running)
             .keys()
@@ -1239,10 +1277,14 @@ impl Downloads {
         self.publish();
     }
 
-    /// Fetches a done download's subtitles once (4.10), and again at a
-    /// later look while no source answered.
+    /// Fetches a done download's subtitles once (4.10), and again while no
+    /// source answered: after [`SUBTITLE_WAIT`], doubling up to
+    /// [`SUBTITLE_WAIT_MAX`], never at every look of the queue.
     fn keep_subtitles(self: &Arc<Self>, core: &Core, row: DownloadRecord) {
-        if self.link().offline || !lock(&self.subtitling).insert(row.id.clone()) {
+        let waiting = lock(&self.subtitle_waits)
+            .get(&row.id)
+            .is_some_and(|(at, _)| std::time::Instant::now() < *at);
+        if waiting || self.link().offline || !lock(&self.subtitling).insert(row.id.clone()) {
             return;
         }
         let me = Arc::downgrade(self);
@@ -1252,8 +1294,14 @@ impl Downloads {
             let kept = subtitles::keep(&d, &core, &row).await;
             lock(&d.subtitling).remove(&row.id);
             let subtitles::Kept::Done(kept) = kept else {
+                let mut waits = lock(&d.subtitle_waits);
+                let step = waits
+                    .get(&row.id)
+                    .map_or(SUBTITLE_WAIT, |(_, s)| (*s * 2).min(SUBTITLE_WAIT_MAX));
+                waits.insert(row.id.clone(), (std::time::Instant::now() + step, step));
                 return;
             };
+            lock(&d.subtitle_waits).remove(&row.id);
             let Ok(Some(mut row)) = core
                 .library()
                 .downloads()
@@ -1273,33 +1321,47 @@ impl Downloads {
     /// next aired episode is added (ranked as the finished one was), and the
     /// finished one goes once the next is done, or at once with no next;
     /// never while another profile, a kids one included, has it started and
-    /// unfinished. A kids profile triggers nothing.
+    /// unfinished. A kids profile triggers nothing. The step is kept on the
+    /// finished row, so a relaunch goes on with it, and a meta that cannot be
+    /// read now (offline) is looked up again later (code review r1 P2-2).
     pub(crate) fn finished(self: &Arc<Self>, core: &Core, item_id: &str, video_id: &str) {
         if !self.settings().smart || core.policy().kids() {
             return;
         }
-        let Ok(Some(row)) = core.library().download_of(item_id, video_id) else {
+        let Ok(Some(mut row)) = core.library().download_of(item_id, video_id) else {
             return;
         };
-        if DownloadState::read(&row.state) != DownloadState::Done || row.season.is_none() {
-            return;
-        }
         // Each save past the end calls again: once is enough.
-        if lock(&self.smart).iter().any(|s| s.finished == row.id) {
+        if DownloadState::read(&row.state) != DownloadState::Done
+            || row.season.is_none()
+            || row.smart.is_some()
+        {
             return;
         }
-        lock(&self.smart).push(Smart {
-            finished: row.id.clone(),
-            next: Some(String::new()),
+        let step = SmartStep {
             by: core.profile().to_owned(),
-        });
+            next: None,
+        };
+        row.smart = serde_json::to_string(&step).ok();
+        let _ = core.library().save_download(&row);
+        self.changed();
+    }
+
+    /// Looks up the next episode of a smart step whose next is not known
+    /// yet, once at a time, and keeps what it found on the row.
+    fn smart_lookup(self: &Arc<Self>, core: &Core, row: DownloadRecord) {
+        if self.link().offline || !lock(&self.smart_looking).insert(row.id.clone()) {
+            return;
+        }
         let me = Arc::downgrade(self);
         let core = core.clone();
         tokio::spawn(async move {
             let Some(d) = me.upgrade() else { return };
-            let next = smart_next(&core, &row).await;
-            let added = match next {
-                Some(video) => {
+            let next = match smart_next(&core, &row).await {
+                Next::Unreadable => None,
+                Next::None => Some(String::new()),
+                Next::Has(id) => Some(id),
+                Next::Add(video) => {
                     let request = serde_json::from_str(&row.request).unwrap_or_default();
                     d.add(
                         &row.added_by,
@@ -1312,43 +1374,50 @@ impl Downloads {
                     .ok()
                     .and_then(|ids| ids.into_iter().next())
                 }
-                None => None,
             };
-            if let Some(s) = lock(&d.smart).iter_mut().find(|s| s.finished == row.id) {
-                s.next = added;
+            if let Some(next) = next
+                && let Ok(Some(mut row)) = core.library().download_of(&row.item_id, &row.video_id)
+                && let Some(mut step) = row
+                    .smart
+                    .as_deref()
+                    .and_then(|s| serde_json::from_str::<SmartStep>(s).ok())
+            {
+                step.next = Some(next);
+                row.smart = serde_json::to_string(&step).ok();
+                let _ = core.library().save_download(&row);
             }
+            lock(&d.smart_looking).remove(&row.id);
             d.changed();
         });
     }
 
-    /// Smart downloads whose next episode is done (or that have none)
-    /// delete the finished one, unless another profile is part way in.
-    fn settle_smart(&self, core: &Core) {
-        let rows = core.library().downloads().unwrap_or_default();
-        let state = |id: &str| {
-            rows.iter()
-                .find(|r| r.id == id)
-                .map(|r| DownloadState::read(&r.state))
-        };
-        let ready: Vec<Smart> = {
-            let mut smart = lock(&self.smart);
-            // `Some("")`: the next one is still being looked up.
-            let (ready, wait): (Vec<Smart>, Vec<Smart>) = smart.drain(..).partition(|s| {
-                s.next.as_deref().is_none_or(|n| {
-                    !n.is_empty() && matches!(state(n), Some(DownloadState::Done) | None)
-                })
-            });
-            *smart = wait;
-            ready
-        };
-        for s in ready {
-            let Some(row) = rows.iter().find(|r| r.id == s.finished) else {
+    /// Smart steps: the next episode looked up where it is not known yet;
+    /// the finished one deleted once its next is done (or gone, or there is
+    /// none), unless another profile is part way in.
+    fn settle_smart(self: &Arc<Self>, core: &Core, rows: &[DownloadRecord]) {
+        for row in rows {
+            let Some(step) = row
+                .smart
+                .as_deref()
+                .and_then(|s| serde_json::from_str::<SmartStep>(s).ok())
+            else {
                 continue;
             };
-            if part_way_elsewhere(core, row, &s.by) {
-                continue;
+            let ready = match step.next.as_deref() {
+                None => {
+                    self.smart_lookup(core, row.clone());
+                    false
+                }
+                // No next episode.
+                Some("") => true,
+                Some(next) => rows
+                    .iter()
+                    .find(|r| r.id == next)
+                    .is_none_or(|r| DownloadState::read(&r.state) == DownloadState::Done),
+            };
+            if ready && !part_way_elsewhere(core, row, &step.by) {
+                let _ = self.act(std::slice::from_ref(&row.id), Action::Remove);
             }
-            let _ = self.act(std::slice::from_ref(&s.finished), Action::Remove);
         }
     }
 
@@ -1400,6 +1469,7 @@ impl Downloads {
                 held,
                 total: row.bytes_total.map(|t| t as u64),
                 speed: Speed::default(),
+                peers: 0,
             },
         );
         drop(running);
@@ -1449,6 +1519,20 @@ impl Downloads {
         row.state = state.word().into();
         row.reason = reason.map(DownloadReason::word);
         let _ = core.library().save_download(&row);
+    }
+
+    /// A torrent job's connected peers now.
+    #[cfg(feature = "torrent")]
+    fn swarm(&self, id: &str, peers: usize) {
+        if let Some(run) = lock(&self.running).get_mut(id) {
+            run.peers = peers;
+        }
+    }
+
+    /// Whether the torrent of the running job `id` has peers now: a partial
+    /// one is recommended online only then (code review r1, runtime P2-5).
+    pub(crate) fn has_peers(&self, id: &str) -> bool {
+        lock(&self.running).get(id).is_some_and(|run| run.peers > 0)
     }
 
     /// A run's progress: `held` bytes on disk of `total`, and `received`
@@ -1581,6 +1665,7 @@ async fn run_job(me: std::sync::Weak<Downloads>, core: Core, mut row: DownloadRe
                     chain: chain.iter().map(StoredStream::of).collect(),
                     ext: None,
                     torrent: None,
+                    validator: None,
                 })
                 .ok();
                 let _ = core.library().save_download(&row);
@@ -1629,10 +1714,34 @@ async fn run_job(me: std::sync::Weak<Downloads>, core: Core, mut row: DownloadRe
                 if row.moves + 1 > MAX_MOVES {
                     return Outcome::Fail(DownloadReason::Retries);
                 }
-                // The next source of the pick, from its start.
+                // The next source of the pick, from its start: what the last
+                // one's answers named (its extension, validator, torrent
+                // file) is not this one's.
                 row.moves += 1;
                 row.bytes_done = 0;
                 row.bytes_total = None;
+                if let Some(mut moved) = row
+                    .version
+                    .as_deref()
+                    .and_then(|v| serde_json::from_str::<Version>(v).ok())
+                {
+                    moved.ext = None;
+                    moved.validator = None;
+                    // A torrent left for another source is no longer kept.
+                    #[cfg(feature = "torrent")]
+                    if let Some(t) = moved.torrent.take() {
+                        let core = core.clone();
+                        tokio::spawn(async move {
+                            if let Ok(engine) = core.torrent_engine().await
+                                && let Err(e) = engine.delete_file(&t.hash, t.file).await
+                            {
+                                tracing::warn!("download move: {e}");
+                            }
+                        });
+                    }
+                    moved.torrent = None;
+                    row.version = serde_json::to_string(&moved).ok();
+                }
                 if let Some(d) = me.upgrade() {
                     d.forget_files(&row.id);
                 }
@@ -1829,22 +1938,33 @@ fn sanitize(name: &str) -> String {
         .collect()
 }
 
-/// The aired episode after `row`'s, as a download wants it, when the
-/// title's meta can be read and it has no download yet.
-async fn smart_next(core: &Core, row: &DownloadRecord) -> Option<AddVideo> {
-    let (meta, _) = core.fetch_meta(&row.kind, &row.item_id).await.ok()?;
-    let (next, _) = crate::views::playback::following(&meta, &row.video_id)?;
+/// What a smart step's lookup found.
+enum Next {
+    /// The meta cannot be read now (offline): look again later.
+    Unreadable,
+    /// No aired episode follows.
+    None,
+    /// The next episode already has this download: wait for it.
+    Has(String),
+    Add(AddVideo),
+}
+
+/// The aired episode after `row`'s, as a download wants it.
+async fn smart_next(core: &Core, row: &DownloadRecord) -> Next {
+    let Ok((meta, _)) = core.fetch_meta(&row.kind, &row.item_id).await else {
+        return Next::Unreadable;
+    };
+    let Some((next, _)) = crate::views::playback::following(&meta, &row.video_id) else {
+        return Next::None;
+    };
     let now = mq_library::hlc::now_ms() as i64;
     if !crate::views::playback::aired(next, now) {
-        return None;
+        return Next::None;
     }
-    if core
-        .library()
-        .download_of(&row.item_id, &next.id)
-        .ok()?
-        .is_some()
-    {
-        return None;
+    match core.library().download_of(&row.item_id, &next.id) {
+        Ok(Some(existing)) => return Next::Has(existing.id),
+        Ok(None) => {}
+        Err(_) => return Next::Unreadable,
     }
     let req = AddRequest {
         kind: row.kind.clone(),
@@ -1855,7 +1975,10 @@ async fn smart_next(core: &Core, row: &DownloadRecord) -> Option<AddVideo> {
         params: serde_json::Value::Null,
         pick: None,
     };
-    expand(&meta, &req, now).into_iter().next()
+    expand(&meta, &req, now)
+        .into_iter()
+        .next()
+        .map_or(Next::None, Next::Add)
 }
 
 /// Another profile on the device has `row`'s video started and not

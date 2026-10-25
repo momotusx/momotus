@@ -1114,15 +1114,16 @@ fn line(
     }
 }
 
-/// Bounded 0..=1000 score among rows whose key fields tie (3.6).
-/// A download's tiebreak: the smaller file higher, in MB; an unknown size
-/// last.
+/// A download's tiebreak in place of [`within`]: the smaller file higher,
+/// in MB; an unknown size last. Its own scale (up to `u16::MAX`), only ever
+/// compared with other download rows' (code review r1 P3-5).
 fn smaller(size: Option<u64>) -> u16 {
     size.map_or(0, |b| {
         u16::MAX - (b / 1_000_000).min(u64::from(u16::MAX) - 1) as u16
     })
 }
 
+/// Bounded 0..=1000 score among rows whose key fields tie (3.6).
 fn within(
     s: &ParsedStream,
     class: SourceClass,

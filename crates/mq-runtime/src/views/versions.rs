@@ -1022,7 +1022,11 @@ impl VersionsView {
             http: core.speed(crate::speed::Kind::Http),
             p2p: core.speed(crate::speed::Kind::P2p),
             p2p_thin: core.speed(crate::speed::Kind::P2pThin),
-            free_bytes: core.free_bytes(),
+            free_bytes: if download {
+                core.downloads().free(core)
+            } else {
+                core.free_bytes()
+            },
             engine: core.has_engine(),
             debrid: core.debrid().is_some(),
             dead_swarms: crate::speed::dead_swarms(core.library(), mq_library::hlc::now_ms()),
@@ -2271,13 +2275,15 @@ fn downloaded(core: &Core, s: &State, ranking: &Ranking) -> Option<RankedRow> {
     let downloads = core.downloads();
     let (stream, row) = downloads.kept(&ranking.item_id, &ranking.params.video_id)?;
     let partial = row.bytes_done > 0 && row.state != crate::downloads::DownloadState::Done;
-    // A partial torrent plays at once when its start is on disk (its reader
-    // fetches the rest first); a dead swarm's never beats a ready version
-    // (apps r2 P2-2).
-    let start_on_disk =
-        partial && torrent_start_on_disk(core, &ranking.item_id, &ranking.params.video_id);
+    // Online, a partial torrent plays at once when its start is on disk and
+    // its swarm answers now (its reader fetches the rest first); a dead
+    // swarm's never beats a ready version (apps r2 P2-2, code review r1
+    // P2-5).
+    let swarm_ready = partial
+        && downloads.has_peers(&row.id)
+        && torrent_start_on_disk(core, &ranking.item_id, &ranking.params.video_id);
     let plays = row.state == crate::downloads::DownloadState::Done
-        || start_on_disk
+        || swarm_ready
         || (partial && downloads.link().offline);
     if !plays {
         return None;

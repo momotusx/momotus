@@ -466,6 +466,7 @@ CREATE TABLE downloads (
     position        INTEGER NOT NULL,
     created_ms      INTEGER NOT NULL,
     done_ms         INTEGER,
+    smart           TEXT,
     UNIQUE (item_id, video_id)
 );
 CREATE INDEX downloads_queue ON downloads (state, position);

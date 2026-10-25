@@ -113,6 +113,21 @@ fn extension(filename: Option<&str>, content_type: Option<&str>) -> String {
     })
 }
 
+/// `Content-Range`'s first byte (`bytes 100-199/1000`).
+fn range_start(headers: &mq_http::HeaderMap) -> Option<u64> {
+    headers
+        .get("content-range")?
+        .to_str()
+        .ok()?
+        .trim()
+        .strip_prefix("bytes ")?
+        .split_once('-')?
+        .0
+        .trim()
+        .parse()
+        .ok()
+}
+
 /// `Content-Range`'s total, else the length of a whole answer.
 fn total_of(status: u16, headers: &mq_http::HeaderMap) -> Option<u64> {
     let header = |name: &str| headers.get(name).and_then(|v| v.to_str().ok());
@@ -138,6 +153,7 @@ pub(super) async fn fetch(
     }
     let mut tries = 0usize;
     let mut asked_again = false;
+    let mut restarted = false;
     loop {
         if d.link().offline {
             return Ended::Wait(DownloadReason::Network);
@@ -163,6 +179,9 @@ pub(super) async fn fetch(
                 }
             }
             Request::Refused => return Ended::Move(DownloadReason::Source),
+            // Once from 0; a source that changes again is not this file.
+            Request::Restart if !restarted => restarted = true,
+            Request::Restart => return Ended::Move(DownloadReason::Source),
             Request::Failed { progressed } => {
                 if progressed {
                     tries = 0;
@@ -191,6 +210,9 @@ enum Request {
     Ended(Ended),
     /// 403, 404 or 410: the link is dead.
     Refused,
+    /// The answer is another file or another range than the one resumed:
+    /// the file starts again from 0, at once.
+    Restart,
     /// The network or the origin failed; `progressed` when bytes came first.
     Failed {
         progressed: bool,
@@ -209,6 +231,22 @@ async fn one_request(
         _ => return Request::Ended(Ended::Move(DownloadReason::NoVersion)),
     };
     let from = row.bytes_done.max(0) as u64;
+    let known = row.bytes_total.and_then(|t| u64::try_from(t).ok());
+    // Killed between the last checkpoint and the rename: the file is whole
+    // already, and a request for nothing would answer 416 (code review r1,
+    // engine P2-7).
+    if let (Some(ext), Some(total)) = (version.ext.clone(), known)
+        && from == total
+        && total > 0
+    {
+        let part = dir.join(format!("video.{ext}.part"));
+        if tokio::fs::metadata(&part)
+            .await
+            .is_ok_and(|m| m.len() == total)
+        {
+            return finish(&part, &dir.join(format!("video.{ext}"))).await;
+        }
+    }
     let scope = link
         .addon_url
         .as_ref()
@@ -216,10 +254,16 @@ async fn one_request(
         .map(mq_http::local_addrs)
         .unwrap_or_default();
     let http = core.http().scoped(&scope);
+    let mut headers = link.headers.clone();
+    if from > 0
+        && let Some(v) = &version.validator
+    {
+        headers.push(("If-Range".into(), v.clone()));
+    }
     let opts = RequestOptions {
         priority: Priority::Playback,
         timeout: IDLE,
-        headers: link.headers.clone(),
+        headers,
         ..Default::default()
     };
     let mut answer = match http
@@ -242,8 +286,34 @@ async fn one_request(
         // No length: completeness cannot be checked (4.8).
         return Request::Ended(Ended::Move(DownloadReason::Source));
     };
-    // An origin that ignores ranges sends it all again.
-    let from = if answer.status == 200 { 0 } else { from };
+    // A resume must get the same file from where it stopped: a link
+    // resolved again can name another file of a pack, or answer another
+    // range (code review r1, runtime P2-7, engine P2-6). From 0 the body is
+    // the file's start anyway.
+    let start = range_start(&answer.headers);
+    if answer.status == 206
+        && start != Some(0)
+        && (start != Some(from) || known.is_some_and(|k| k != total))
+    {
+        row.bytes_done = 0;
+        let _ = core.library().save_download(row);
+        return Request::Restart;
+    }
+    // An origin that ignores ranges, or a changed file under `If-Range`,
+    // sends it all again.
+    let from = if answer.status == 200 || start == Some(0) {
+        0
+    } else {
+        from
+    };
+    if from == 0 {
+        let header = |name: &str| answer.headers.get(name).and_then(|v| v.to_str().ok());
+        version.validator = header("etag")
+            .filter(|e| !e.starts_with("W/"))
+            .or_else(|| header("last-modified"))
+            .map(str::to_owned);
+        row.version = serde_json::to_string(&version).ok();
+    }
     if version.ext.is_none() {
         let content_type = answer
             .headers
@@ -339,11 +409,15 @@ async fn one_request(
         return Request::Failed { progressed };
     }
     drop(file);
-    let whole = dir.join(format!("video.{ext}"));
-    if !whole_video(&part).await {
+    finish(&part, &dir.join(format!("video.{ext}"))).await
+}
+
+/// A whole `.part`: checked as a video, then given its final name.
+async fn finish(part: &Path, whole: &Path) -> Request {
+    if !whole_video(part).await {
         return Request::Ended(Ended::Move(DownloadReason::NotVideo));
     }
-    if let Err(e) = tokio::fs::rename(&part, &whole).await {
+    if let Err(e) = tokio::fs::rename(part, whole).await {
         tracing::warn!("download not renamed: {e}");
         return Request::Failed { progressed: false };
     }

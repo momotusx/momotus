@@ -7,7 +7,7 @@ use crate::store::{Library, LibraryError};
 use rusqlite::{OptionalExtension, Row, params};
 
 /// One download as stored. The JSON columns (`facts`, `request`, `version`,
-/// `subtitles`) belong to the runtime.
+/// `subtitles`, `smart`) belong to the runtime.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DownloadRecord {
     pub id: String,
@@ -32,11 +32,14 @@ pub struct DownloadRecord {
     pub position: i64,
     pub created_ms: i64,
     pub done_ms: Option<i64>,
+    /// A smart download's step on the episode it finished: kept here so a
+    /// relaunch goes on with it.
+    pub smart: Option<String>,
 }
 
 const COLUMNS: &str = "id, added_by, kind, item_id, video_id, season, episode, facts, request, \
      version, state, reason, mobile_data, hand_picked, bytes_done, bytes_total, moves, \
-     subtitles, subtitles_state, position, created_ms, done_ms";
+     subtitles, subtitles_state, position, created_ms, done_ms, smart";
 
 fn record(r: &Row<'_>) -> rusqlite::Result<DownloadRecord> {
     Ok(DownloadRecord {
@@ -62,6 +65,7 @@ fn record(r: &Row<'_>) -> rusqlite::Result<DownloadRecord> {
         position: r.get(19)?,
         created_ms: r.get(20)?,
         done_ms: r.get(21)?,
+        smart: r.get(22)?,
     })
 }
 
@@ -153,7 +157,8 @@ fn put(c: &rusqlite::Connection, r: &DownloadRecord) -> rusqlite::Result<()> {
     c.execute(
         &format!(
             "INSERT OR REPLACE INTO downloads ({COLUMNS}) VALUES \
-             (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22)"
+             (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, \
+             ?23)"
         ),
         params![
             r.id,
@@ -178,6 +183,7 @@ fn put(c: &rusqlite::Connection, r: &DownloadRecord) -> rusqlite::Result<()> {
             r.position,
             r.created_ms,
             r.done_ms,
+            r.smart,
         ],
     )?;
     Ok(())

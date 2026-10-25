@@ -807,9 +807,10 @@ impl Core {
         self.inner.engine.get().is_some()
     }
 
-    /// Where the engine keeps torrents, running or not.
+    /// Where the engine keeps torrents, running or not (tests read it).
     #[cfg(feature = "torrent")]
-    pub(crate) fn torrent_dir(&self) -> &std::path::Path {
+    #[doc(hidden)]
+    pub fn torrent_dir(&self) -> &std::path::Path {
         &self.inner.torrent_dir
     }
 
