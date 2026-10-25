@@ -396,7 +396,7 @@ export default function SettingsScreen() {
         <h2>About</h2>
         <p class="note">{turkceAltyaziCredit}</p>
         <p class="note credit">
-          <img class="credit-mark" src={markSrc("tmdb")} alt="TMDB" />
+          <img class="credit-mark" src={markSrc("tmdb")} alt="" />
           {tmdbCredit}
         </p>
       </section>
