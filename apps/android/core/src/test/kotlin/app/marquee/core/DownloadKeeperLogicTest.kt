@@ -8,6 +8,12 @@ import app.marquee.core.KeeperEffect.Keep
 import app.marquee.core.KeeperEffect.Progress
 import app.marquee.core.KeeperEffect.Release
 import app.marquee.core.KeeperEffect.SettleLater
+import app.marquee.core.model.DownloadActivity
+import app.marquee.core.model.DownloadRow
+import app.marquee.core.model.DownloadSettings
+import app.marquee.core.model.DownloadState
+import app.marquee.core.model.DownloadStorage
+import app.marquee.core.model.DownloadsSnapshot
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -20,7 +26,8 @@ class DownloadKeeperLogicTest {
         bytesDone: Long = 0,
         bytesTotal: Long = 0,
         needed: Long? = null,
-    ) = KeeperEvent.Facts(KeeperFacts(left, bytesDone, bytesTotal, "Severance", done, failed, needed))
+        unmetered: Boolean = false,
+    ) = KeeperEvent.Facts(KeeperFacts(left, bytesDone, bytesTotal, "Severance", done, failed, needed, unmetered))
 
     private fun KeeperEffect.isProgress() = this is Progress
 
@@ -84,5 +91,74 @@ class DownloadKeeperLogicTest {
         assertEquals(emptyList(), keeper.on(facts(0, failed = mapOf("old" to "Sintel", "new" to "Severance S1:E4"))))
         assertEquals(listOf<KeeperEffect>(Allocate(500)), keeper.on(facts(0, needed = 500)))
         assertEquals(emptyList(), keeper.on(facts(0, needed = 500)))
+    }
+
+    /**
+     * A download waiting for Wi-Fi is still left to do: the job stays scheduled, with Wi-Fi as its network, so the
+     * system starts it when the phone joins Wi-Fi with the app away, and the core hears it may run (code review r1
+     * C1).
+     */
+    @Test
+    fun `a download waiting for Wi-Fi keeps the job, which starts on Wi-Fi with the app away`() {
+        val keeper = DownloadKeeperLogic()
+        keeper.on(KeeperEvent.Visible(true))
+        val held = keeper.on(facts(1, bytesTotal = 2_000, unmetered = true))
+        assertEquals(Keep(2_000, unmetered = true), held[0])
+        // The app leaves; nothing settles while the download waits.
+        assertEquals(emptyList(), keeper.on(KeeperEvent.Visible(false)))
+        assertEquals(
+            emptyList(),
+            keeper.on(facts(1, bytesTotal = 2_000, unmetered = true)).filterNot { it.isProgress() },
+        )
+        // Wi-Fi: the system starts the job, and downloads may run.
+        keeper.on(KeeperEvent.Stopped)
+        assertEquals(listOf<KeeperEffect>(Allowed(true)), keeper.on(KeeperEvent.Started))
+    }
+
+    /** The system starting the job again with nothing left lets it go after the settle (code review r1 M1). */
+    @Test
+    fun `a job started again with nothing left settles and lets go`() {
+        val keeper = DownloadKeeperLogic()
+        keeper.on(KeeperEvent.Visible(true))
+        keeper.on(facts(1))
+        keeper.on(facts(0))
+        keeper.on(KeeperEvent.Settled)
+        keeper.on(KeeperEvent.Visible(false))
+        assertTrue(SettleLater in keeper.on(KeeperEvent.Started))
+        assertTrue(Release in keeper.on(KeeperEvent.Settled))
+    }
+
+    /** Paused downloads are not left to do; waiting ones are, and a mobile-data release needs any network. */
+    @Test
+    fun `the facts count all but paused, and Wi-Fi only asks for Wi-Fi unless one goes on mobile data`() {
+        fun row(
+            id: String,
+            state: DownloadState,
+            mobileData: Boolean = false,
+        ) = DownloadRow(
+            id = id,
+            kind = "movie",
+            itemId = id,
+            videoId = id,
+            name = id,
+            state = state,
+            mobileData = mobileData,
+            bytesDone = 0,
+        )
+
+        fun snapshot(
+            vararg rows: DownloadRow,
+            wifiOnly: Boolean = true,
+        ) = DownloadsSnapshot(
+            storage = DownloadStorage(0),
+            settings = DownloadSettings(wifiOnly = wifiOnly, smart = true),
+            active = DownloadActivity(0, 0, 0, 0),
+            downloading = rows.toList(),
+        )
+        val waiting = snapshot(row("a", DownloadState.Waiting), row("b", DownloadState.Paused))
+        assertEquals(1, KeeperFacts.of(waiting).left)
+        assertTrue(KeeperFacts.of(waiting).unmetered)
+        assertEquals(false, KeeperFacts.of(snapshot(row("a", DownloadState.Waiting, mobileData = true))).unmetered)
+        assertEquals(false, KeeperFacts.of(snapshot(row("a", DownloadState.Queued), wifiOnly = false)).unmetered)
     }
 }

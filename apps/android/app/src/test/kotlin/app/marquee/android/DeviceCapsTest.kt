@@ -144,6 +144,23 @@ class DeviceCapsTest {
     }
 
     @Test
+    fun `a start with no network at all says none once, and a network after it is sent`() {
+        val sent = mutableListOf<Pair<Network?, Boolean>>()
+        val default = DefaultNetwork { type, metered -> sent += type to metered }
+        default.noneAtStart()
+        default.noneAtStart()
+        assertEquals(listOf<Pair<Network?, Boolean>>(null to false), sent)
+        default.seen("net-1", Network.Wifi, false)
+        assertEquals(listOf<Pair<Network?, Boolean>>(null to false, Network.Wifi to false), sent)
+        // A network seen first: nothing more at start.
+        val later = mutableListOf<Network?>()
+        val first = DefaultNetwork { type, _ -> later += type }
+        first.seen("net-1", Network.Wifi, false)
+        first.noneAtStart()
+        assertEquals(listOf<Network?>(Network.Wifi), later)
+    }
+
+    @Test
     fun `each new default network is sent once with its type, the one at start too`() {
         val sent = mutableListOf<Network?>()
         val default = DefaultNetwork { type, _ -> sent += type }

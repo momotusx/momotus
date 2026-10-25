@@ -93,6 +93,9 @@ class AppLifecycle(
                     override fun onLost(network: Network) = default.lost(network)
                 },
             )
+            // No default network at all calls no callback: a start in airplane mode says none itself (code review r1
+            // C2).
+            if (connectivity.activeNetwork == null) default.noneAtStart()
         } catch (e: SecurityException) {
             CoreLog.w("network changes are not reported: ${e.message}")
         }
@@ -120,6 +123,7 @@ internal class DefaultNetwork(
     private var blocked = false
     private var said: Triple<Any?, NetworkType?, Boolean>? = null
 
+    @Synchronized
     fun seen(
         network: Any,
         type: NetworkType,
@@ -132,6 +136,7 @@ internal class DefaultNetwork(
         say()
     }
 
+    @Synchronized
     fun blocked(
         network: Any,
         blocked: Boolean,
@@ -141,10 +146,17 @@ internal class DefaultNetwork(
         say()
     }
 
+    @Synchronized
     fun lost(network: Any) {
         if (network != current) return
         current = null
         say()
+    }
+
+    /** Nothing reported yet and no default network: none, once. */
+    @Synchronized
+    fun noneAtStart() {
+        if (said == null && current == null) say()
     }
 
     private fun say() {

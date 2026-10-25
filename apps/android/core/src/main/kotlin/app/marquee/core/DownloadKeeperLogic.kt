@@ -31,9 +31,13 @@ sealed interface KeeperEvent {
 
 /** What the keeper does; the job, the service and the notifications only perform these. */
 sealed interface KeeperEffect {
-    /** A user-initiated data transfer job (API 34+) or the `dataSync` service, with the bytes it expects. */
+    /**
+     * A user-initiated data transfer job (API 34+) or the `dataSync` service, with the bytes it expects; [unmetered]
+     * when every download waits for Wi-Fi only, so the system starts the job when Wi-Fi comes.
+     */
     data class Keep(
         val bytes: Long,
+        val unmetered: Boolean = false,
     ) : KeeperEffect
 
     /** The progress notification. */
@@ -73,7 +77,7 @@ sealed interface KeeperEffect {
 
 /** What the keeper reads from a `downloads` snapshot. */
 data class KeeperFacts(
-    /** Running and queued. */
+    /** Running, queued and waiting (Wi-Fi, a connection, room, the app): all but paused (code review r1 C1). */
     val left: Int,
     val bytesDone: Long,
     val bytesTotal: Long,
@@ -83,12 +87,14 @@ data class KeeperFacts(
     /** Failed downloads: id to "Severance S1 E4". */
     val failed: Map<String, String>,
     val neededBytes: Long?,
+    /** Download on Wi-Fi only is on and no download was let onto mobile data. */
+    val unmetered: Boolean = false,
 ) {
     companion object {
         fun of(snapshot: DownloadsSnapshot): KeeperFacts {
             val kept = snapshot.titles.flatMap { it.rows }
             return KeeperFacts(
-                left = snapshot.active.running + snapshot.active.queued,
+                left = snapshot.downloading.count { it.state != DownloadState.Paused },
                 bytesDone = snapshot.active.bytesDone,
                 bytesTotal = snapshot.active.bytesTotal,
                 title = snapshot.active.title,
@@ -102,6 +108,7 @@ data class KeeperFacts(
                             ).joinToString(" ")
                     },
                 neededBytes = snapshot.storage.neededBytes,
+                unmetered = snapshot.settings.wifiOnly && snapshot.downloading.none { it.mobileData },
             )
         }
     }
@@ -128,12 +135,31 @@ class DownloadKeeperLogic {
     fun on(event: KeeperEvent): List<KeeperEffect> =
         buildList {
             when (event) {
-                is KeeperEvent.Facts -> facts(event.facts)
-                is KeeperEvent.Visible -> visible(event.visible)
-                KeeperEvent.Stopped -> held = false
-                KeeperEvent.Started -> held = true
-                KeeperEvent.Settled -> settled()
-                KeeperEvent.Minute -> if ((facts?.left ?: 0) > 0) add(KeeperEffect.Allowed(visible || held))
+                is KeeperEvent.Facts -> {
+                    facts(event.facts)
+                }
+
+                is KeeperEvent.Visible -> {
+                    visible(event.visible)
+                }
+
+                KeeperEvent.Stopped -> {
+                    held = false
+                }
+
+                KeeperEvent.Started -> {
+                    held = true
+                    // Started again with nothing left: it settles and lets go (code review r1 M1).
+                    if ((facts?.left ?: 0) == 0) add(KeeperEffect.SettleLater)
+                }
+
+                KeeperEvent.Settled -> {
+                    settled()
+                }
+
+                KeeperEvent.Minute -> {
+                    if ((facts?.left ?: 0) > 0) add(KeeperEffect.Allowed(visible || held))
+                }
             }
             allowed()
         }
@@ -162,7 +188,7 @@ class DownloadKeeperLogic {
         }
         if (!held && visible) {
             held = true
-            add(KeeperEffect.Keep(maxOf(0L, now.bytesTotal - now.bytesDone)))
+            add(KeeperEffect.Keep(maxOf(0L, now.bytesTotal - now.bytesDone), now.unmetered))
         }
         if (held) add(progress(now))
     }
@@ -172,7 +198,12 @@ class DownloadKeeperLogic {
         val left = facts?.left ?: 0
         if (now && left > 0 && !held) {
             held = true
-            add(KeeperEffect.Keep(facts?.let { maxOf(0L, it.bytesTotal - it.bytesDone) } ?: 0L))
+            add(
+                KeeperEffect.Keep(
+                    facts?.let { maxOf(0L, it.bytesTotal - it.bytesDone) } ?: 0L,
+                    facts?.unmetered == true,
+                ),
+            )
             facts?.let { add(progress(it)) }
         }
         // The core hears it at every foreground.

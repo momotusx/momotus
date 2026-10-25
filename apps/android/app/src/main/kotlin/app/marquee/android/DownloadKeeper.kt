@@ -80,7 +80,7 @@ class DownloadKeeper(
     private fun perform(effect: KeeperEffect) {
         when (effect) {
             is KeeperEffect.Keep -> {
-                keep(effect.bytes)
+                keep(effect.bytes, effect.unmetered)
             }
 
             is KeeperEffect.Progress -> {
@@ -117,12 +117,15 @@ class DownloadKeeper(
         }
     }
 
-    private fun keep(bytes: Long) {
+    private fun keep(
+        bytes: Long,
+        unmetered: Boolean,
+    ) {
         try {
             if (Build.VERSION.SDK_INT >=
                 34
             ) {
-                schedule(bytes)
+                schedule(bytes, unmetered)
             } else {
                 ContextCompat.startForegroundService(app, serviceIntent())
             }
@@ -132,16 +135,29 @@ class DownloadKeeper(
         }
     }
 
+    /**
+     * The user-initiated job, with Wi-Fi as its network when every download waits for it: the system starts it when
+     * Wi-Fi comes, the app away (code review r1 C1). A refused schedule (the quota, the app not in front) lets go of
+     * the hold, so the next front or snapshot tries again (M2).
+     */
     @RequiresApi(34)
-    private fun schedule(bytes: Long) {
+    private fun schedule(
+        bytes: Long,
+        unmetered: Boolean,
+    ) {
+        val network = if (unmetered) JobInfo.NETWORK_TYPE_UNMETERED else JobInfo.NETWORK_TYPE_ANY
         val info =
             JobInfo
                 .Builder(JOB_ID, ComponentName(app, DownloadJob::class.java))
                 .setUserInitiated(true)
-                .setRequiredNetworkType(JobInfo.NETWORK_TYPE_ANY)
+                .setRequiredNetworkType(network)
                 .setEstimatedNetworkBytes(if (bytes > 0) bytes else JobInfo.NETWORK_BYTES_UNKNOWN.toLong(), 0)
                 .build()
-        app.getSystemService(JobScheduler::class.java)?.schedule(info)
+        val scheduled = app.getSystemService(JobScheduler::class.java)?.schedule(info)
+        if (scheduled != JobScheduler.RESULT_SUCCESS) {
+            CoreLog.w("the downloads job was not scheduled: $scheduled")
+            session.scope.launch(Dispatchers.Main) { on(KeeperEvent.Stopped) }
+        }
     }
 
     private fun release() {
