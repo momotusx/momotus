@@ -93,15 +93,11 @@ function TitlePage(props: { kind: string; id: string; retry: () => void }) {
   document.addEventListener("visibilitychange", onVisibility);
   onCleanup(() => document.removeEventListener("visibilitychange", onVisibility));
   // TV: a series' rated cover may sit alone under the hero (no More like this to focus there), and it is never a focus
-  // stop. Down with nowhere to go scrolls the page to it; Up from the hero brings the page back to the top.
+  // stop. Down with nowhere to go scrolls the page to it; Up moves focus in the hero, which brings the page back to the
+  // top (`data-reveal-top`, and the episodes' `toTop`).
   let before: Element | null = null;
-  const tvKeyFirst = (e: KeyboardEvent) => {
+  const tvKeyFirst = () => {
     before = document.activeElement;
-    if (form() !== "tv" || !page || e.key !== "ArrowUp" || page.scrollTop === 0) return;
-    if (document.activeElement?.closest(".title-more")) return;
-    e.preventDefault();
-    e.stopImmediatePropagation();
-    toTop();
   };
   const tvKeyAfter = (e: KeyboardEvent) => {
     if (form() !== "tv" || !page || e.key !== "ArrowDown" || document.activeElement !== before) return;
