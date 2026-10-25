@@ -2,6 +2,8 @@
 
 package app.marquee.ui.tv
 
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.Arrangement
@@ -23,10 +25,14 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.withFrameNanos
@@ -36,6 +42,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalAccessibilityManager
@@ -48,6 +59,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.compose.currentStateAsState
 import app.marquee.core.PendingRemoval
 import app.marquee.core.TileCopy
 import app.marquee.core.client.CoreLog
@@ -65,7 +79,10 @@ import app.marquee.core.views.HomeView
 import app.marquee.core.views.ViewStatus
 import app.marquee.design.ActionMenu
 import app.marquee.design.Backdrop
+import app.marquee.design.HeroClock
+import app.marquee.design.HeroDots
 import app.marquee.design.Icons
+import app.marquee.design.LocalReducedMotion
 import app.marquee.design.Logo
 import app.marquee.design.Marquee
 import app.marquee.design.MenuAction
@@ -75,6 +92,7 @@ import app.marquee.design.PosterTile
 import app.marquee.design.PrimaryButton
 import app.marquee.design.RatingLine
 import app.marquee.design.RowHeader
+import app.marquee.design.RunHeroClock
 import app.marquee.design.Scrims
 import app.marquee.design.SecondaryButton
 import app.marquee.design.Skeleton
@@ -82,10 +100,13 @@ import app.marquee.design.StateMessage
 import app.marquee.design.TextRole
 import app.marquee.design.TileMetrics
 import app.marquee.design.TileShape
+import app.marquee.design.Tokens
 import app.marquee.design.actionWindow
 import app.marquee.design.describe
 import app.marquee.design.focusSoon
+import app.marquee.design.heroPageAt
 import app.marquee.design.laneHeight
+import app.marquee.design.windowDp
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
@@ -156,6 +177,39 @@ fun TvHome(
 ) {
     val safe = Marquee.safe
     val metrics = Marquee.tiles
+    // The hero carousel (plans/appletv-polish.md 4.1): one page, kept by its title so a page leaving before it never
+    // moves it, read by the art behind the page and by the column over it, so the two never disagree after Back;
+    // one clock for the dots and the timed pages.
+    val heroes = home.heroes
+    var heroId by rememberSaveable { mutableStateOf<String?>(null) }
+    val heroPage = heroes.indexOfFirst { it.tile.id == heroId }.coerceAtLeast(0)
+    // B2: the page going out and the new one slide together, the art at 0.85 of the words.
+    var heroFrom by remember { mutableStateOf<Hero?>(null) }
+    var heroDir by remember { mutableIntStateOf(1) }
+    val heroSlide = remember { Animatable(1f) }
+    val heroClock = remember { HeroClock(heroes.size) }
+    SideEffect { heroClock.count = heroes.size }
+    val reduced = LocalReducedMotion.current
+    val resumed by LocalLifecycleOwner.current.lifecycle.currentStateAsState()
+    val slideScope = rememberCoroutineScope()
+    val pageHero: (Int, Int) -> Unit = { to, dir ->
+        heroes.getOrNull(to)?.let { next ->
+            heroFrom = heroes.getOrNull(heroPage)
+            heroDir = dir
+            heroId = next.tile.id
+            slideScope.launch {
+                heroSlide.snapTo(if (reduced) 1f else 0f)
+                heroSlide.animateTo(1f, tween(HeroClock.SLIDE_MS, easing = Tokens.ease))
+                heroFrom = null
+            }
+        }
+    }
+    RunHeroClock(
+        heroClock,
+        running =
+            resumed.isAtLeast(Lifecycle.State.RESUMED) && !reduced && heroes.size > 1 && heroFrom == null &&
+                state.page.firstVisibleItemIndex == 0,
+    ) { pageHero((heroPage + 1) % heroes.size, 1) }
     // The held tile and its key, while its menu is open.
     var menuFor by remember { mutableStateOf<Pair<Tile, String>?>(null) }
     val scope = rememberCoroutineScope()
@@ -251,7 +305,12 @@ fun TvHome(
     // its header's room lower than the content's top (the lanes scroll on their own, TileLane).
     var headerRoom by remember { mutableStateOf(0.dp) }
     Box(modifier.fillMaxSize()) {
-        home.hero?.let { TopShelfArt(it.tile, state.page) }
+        heroFrom?.let { gone ->
+            key(gone.tile.id) { TopShelfArt(gone.tile, state.page) { heroPageAt(false, heroDir, heroSlide.value) } }
+        }
+        heroes.getOrNull(heroPage)?.let { shown ->
+            key(shown.tile.id) { TopShelfArt(shown.tile, state.page) { heroPageAt(true, heroDir, heroSlide.value) } }
+        }
         // A focused card's art is what the page brings into view; its lines under it must show too, so the
         // page moves whenever they would be cut (a card under the top shelf).
         val onFirst = state.focus.onFirstRow
@@ -267,8 +326,17 @@ fun TvHome(
                 contentPadding = PaddingValues(top = tvContentTop(), bottom = safe.bottom),
                 verticalArrangement = Arrangement.spacedBy(Marquee.space.s),
             ) {
-                val hero = home.hero
-                if (hero != null) item(key = "hero") { TvHero(hero, state, onOpen, onPlay) }
+                val hero = heroes.getOrNull(heroPage)
+                if (hero != null) {
+                    item(key = "hero") {
+                        TvHero(hero, state, onOpen, onPlay, heroPage, heroes.size, heroClock, heroFrom, {
+                            heroPageAt(it, heroDir, heroSlide.value)
+                        }) { to ->
+                            heroClock.manual()
+                            pageHero(to, if (to > heroPage) 1 else -1)
+                        }
+                    }
+                }
                 if (home.rows.isEmpty()) {
                     item(
                         key = "state",
@@ -386,6 +454,8 @@ private fun AllFailed(
 private fun TopShelfArt(
     tile: Tile,
     page: LazyListState,
+    /** Where the page sits in a slide, in page widths (heroPageAt), read while drawing. */
+    at: () -> Float = { 0f },
 ) {
     val room = TvNavRoom.current
     // Known without seeing the hero: back from a title page the list can come back with the hero already gone.
@@ -398,6 +468,7 @@ private fun TopShelfArt(
                 val art = measurable.measure(Constraints.fixed(constraints.maxWidth, constraints.maxHeight + up))
                 layout(constraints.maxWidth, constraints.maxHeight) { art.place(0, -up) }
             }.graphicsLayer {
+                translationX = at() * size.width
                 // Read here, while drawing: a scroll moves the art and recomposes nothing. The art reaches below the
                 // hero item, behind the first row, so it follows the hero's real place, and once the hero has left the
                 // list's layout, the first row's; it goes only when both have.
@@ -414,6 +485,7 @@ private fun TopShelfArt(
         side = Scrims.topShelfSide,
         foot = Scrims.topShelfFoot,
         alignment = if (tile.background == null) Alignment.TopCenter else Alignment.Center,
+        lag = at,
     )
 }
 
@@ -435,11 +507,20 @@ private fun TvHero(
     state: TvHomeState,
     onOpen: (Tile) -> Unit,
     onPlay: (Tile) -> Unit,
+    page: Int,
+    pages: Int,
+    clock: HeroClock,
+    /** The page sliding out, drawn without buttons beside the new one until the slide ends. */
+    from: Hero?,
+    /** Where the incoming (true) or outgoing (false) page sits in the slide, in page widths. */
+    at: (Boolean) -> Float,
+    onPage: (Int) -> Unit,
 ) {
-    val colors = Marquee.colors
     val tile = hero.tile
     val playRequester = state.focus.requesterFor(HERO_PLAY)
     val detailsRequester = state.focus.requesterFor(HERO_DETAILS)
+    val width = with(LocalDensity.current) { windowDp().width.toPx() }
+    var focused by remember { mutableStateOf<String?>(null) }
     Box(Modifier.fillMaxWidth().height(heroHeight())) {
         Column(
             Modifier
@@ -448,39 +529,20 @@ private fun TvHero(
                 // Held on the ramps' dark side; DesignTest checks each line over white art there.
                 .widthIn(max = HERO_TEXT),
         ) {
-            Logo(tile.logo, tile.name, height = TopShelf.LOGO, maxWidth = TopShelf.LOGO_WIDTH, color = colors.text)
-            MqText(
-                TileCopy.heroGenres(hero),
-                Modifier.padding(top = TopShelf.UNDER_LOGO),
-                role = TextRole.Body,
-                weight = FontWeight.SemiBold,
-                maxLines = 1,
-            )
-            hero.description?.let {
-                MqText(
-                    it,
-                    Modifier.padding(top = TopShelf.UNDER_GENRES).widthIn(max = TopShelf.SYNOPSIS),
-                    role = TextRole.Body,
-                    color = colors.muted,
-                    weight = FontWeight.Medium,
-                    maxLines = 2,
-                )
-            }
-            RatingLine(
-                TileCopy.ratings(tile.ratings),
-                TileCopy.heroFacts(hero).orEmpty(),
-                Modifier.padding(top = TopShelf.LINE_GAP),
-                factsColor = colors.dim,
-            )
-            // The core's reason on Apple's explainability line, 16 over the buttons; never an eyebrow.
-            if (hero.reason.isNotBlank()) {
-                MqText(
-                    hero.reason,
-                    Modifier.padding(top = TopShelf.LINE_GAP),
-                    role = TextRole.Caption,
-                    weight = FontWeight.SemiBold,
-                    maxLines = 1,
-                )
+            // The words slide with their art; the buttons stay where they are, so the focus never moves.
+            Box(contentAlignment = Alignment.BottomStart) {
+                from?.let { gone ->
+                    key(gone.tile.id) {
+                        TvHeroLines(
+                            gone,
+                            Modifier.graphicsLayer {
+                                translationX =
+                                    at(false) * width
+                            },
+                        )
+                    }
+                }
+                key(tile.id) { TvHeroLines(hero, Modifier.graphicsLayer { translationX = at(true) * width }) }
             }
             // Coming up from the rows, focus lands on Play, the hero's primary, wherever it came from.
             val playable = tile.playable()
@@ -488,7 +550,30 @@ private fun TvHero(
                 Modifier
                     .padding(top = Marquee.space.s)
                     .focusProperties { enter = { if (playable) playRequester else FocusRequester.Default } }
-                    .focusGroup(),
+                    .focusGroup()
+                    // Right from the last button pages on, Left from the first comes back, the focus staying on the
+                    // same button; no wrap by key. Any other key starts the page's time over.
+                    .onPreviewKeyEvent { e ->
+                        if (e.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                        clock.input()
+                        val last = HERO_DETAILS
+                        val first = if (playable) HERO_PLAY else HERO_DETAILS
+                        when {
+                            e.key == Key.DirectionRight && focused == last && page < pages - 1 -> {
+                                onPage(
+                                    page + 1,
+                                ).let { true }
+                            }
+
+                            e.key == Key.DirectionLeft && focused == first && page > 0 -> {
+                                onPage(page - 1).let { true }
+                            }
+
+                            else -> {
+                                false
+                            }
+                        }
+                    },
                 horizontalArrangement = Arrangement.spacedBy(TopShelf.BUTTON_GAP),
                 verticalAlignment = Alignment.Top,
             ) {
@@ -499,7 +584,16 @@ private fun TvHero(
                         onClick = { onPlay(tile) },
                         modifier = Modifier.describe("Play ${tile.name}"),
                         focusRequester = playRequester,
-                        onFocusChange = state.focus.watch(HERO_ROW, HERO_PLAY),
+                        onFocusChange =
+                            state.focus.watch(HERO_ROW, HERO_PLAY).let { watch ->
+                                { f: Boolean ->
+                                    watch(f)
+                                    if (f) {
+                                        focused =
+                                            HERO_PLAY
+                                    }
+                                }
+                            },
                     )
                 }
                 SecondaryButton(
@@ -507,9 +601,76 @@ private fun TvHero(
                     { onOpen(tile) },
                     icon = Icons.Info,
                     focusRequester = detailsRequester,
-                    onFocusChange = state.focus.watch(HERO_ROW, HERO_DETAILS),
+                    onFocusChange =
+                        state.focus.watch(HERO_ROW, HERO_DETAILS).let { watch ->
+                            { f: Boolean ->
+                                watch(f)
+                                if (f) {
+                                    focused =
+                                        HERO_DETAILS
+                                }
+                            }
+                        },
                 )
             }
+        }
+        if (pages > 1) {
+            HeroDots(
+                pages,
+                page,
+                { clock.progress },
+                Modifier.align(Alignment.BottomCenter).padding(bottom = 18.dp),
+                tv = true,
+            )
+        }
+    }
+}
+
+/**
+ * A top shelf page's words (the home-tv frame): the logo, the kind and genres, two lines of synopsis, the facts and
+ * the ratings row, and the core's reason on Apple's explainability line 16 over the buttons.
+ */
+@Composable
+private fun TvHeroLines(
+    hero: Hero,
+    modifier: Modifier = Modifier,
+) {
+    val colors = Marquee.colors
+    val tile = hero.tile
+    Column(modifier) {
+        Logo(tile.logo, tile.name, height = TopShelf.LOGO, maxWidth = TopShelf.LOGO_WIDTH, color = colors.text)
+        MqText(
+            TileCopy.heroGenres(hero),
+            Modifier.padding(top = TopShelf.UNDER_LOGO),
+            role = TextRole.Body,
+            weight = FontWeight.SemiBold,
+            maxLines = 1,
+        )
+        hero.description?.let {
+            MqText(
+                it,
+                Modifier.padding(top = TopShelf.UNDER_GENRES).widthIn(max = TopShelf.SYNOPSIS),
+                role = TextRole.Body,
+                color = colors.muted,
+                weight = FontWeight.Medium,
+                maxLines = 2,
+            )
+        }
+        RatingLine(
+            TileCopy.ratings(tile.ratings),
+            TileCopy.heroFacts(hero).orEmpty(),
+            Modifier.padding(top = TopShelf.LINE_GAP),
+            factsColor = colors.dim,
+        )
+        // The core's reason on Apple's explainability line, 16 over the buttons; never an eyebrow.
+        if (hero.reason.isNotBlank()) {
+            MqText(
+                hero.reason,
+                Modifier.padding(top = TopShelf.LINE_GAP),
+                role = TextRole.Caption,
+                weight = FontWeight.SemiBold,
+                maxLines = 1,
+            )
         }
     }
 }
@@ -680,7 +841,8 @@ private fun TvTile(
         modifier = Modifier.padding(top = Marquee.tiles.pad),
         shape = shape,
         progress = tile.progress,
-        caption = TileCopy.caption(rowId, tile) ?: tile.releaseInfo,
+        // A Top 10 tile reads its genre under its name, as Apple's (plans/appletv-polish.md 4.3).
+        caption = TileCopy.caption(rowId, tile) ?: tile.genre ?: tile.releaseInfo,
         // Continue Watching carries the core's line alone, no scores or badges; every other card its year and scores.
         ratings = if (TileCopy.isContinue(rowId)) emptyList() else TileCopy.ratings(tile.ratings),
         // A poster in a 16:9 card keeps its upper part, where the title and faces are.
@@ -689,6 +851,7 @@ private fun TvTile(
         onFocusChange = { if (it) state.focus.arrived(rowId, key) else state.focus.lost(key) },
         onLongClick = onHold?.let { { it(tile, key) } },
         longClickLabel = "More options".takeIf { onHold != null },
+        rank = tile.rank,
     )
 }
 

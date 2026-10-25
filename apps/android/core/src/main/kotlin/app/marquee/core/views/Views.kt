@@ -60,11 +60,16 @@ class HomeView(
         HomeUpdate.serializer(),
     ) {
     val rows: SnapshotStateList<HomeRow> = mutableStateListOf()
-    var hero: Hero? by mutableStateOf(null)
+
+    /** The hero carousel's pages, in the core's order (plans/appletv-polish.md H1). */
+    var heroes: List<Hero> by mutableStateOf(emptyList())
         private set
 
+    /** The first page: what the TV's start focus and the app's checks ask about. */
+    val hero: Hero? get() = heroes.firstOrNull()
+
     override fun applySnapshot(snapshot: HomeSnapshot) {
-        hero = snapshot.header.heroes.firstOrNull()
+        heroes = snapshot.header.heroes
         rows.clear()
         rows.addAll(snapshot.rows)
         logFailures()
@@ -93,7 +98,7 @@ class HomeView(
     override fun applyUpdates(updates: List<HomeUpdate>) {
         for (update in updates) {
             when (update) {
-                is HomeUpdate.Header -> hero = update.header.heroes.firstOrNull()
+                is HomeUpdate.Header -> heroes = update.header.heroes
                 is HomeUpdate.Rows -> rows.applyDiffs(update.diffs)
             }
         }

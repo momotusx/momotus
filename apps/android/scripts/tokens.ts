@@ -196,6 +196,10 @@ export function generate(t: Tokens): string {
     "",
     `    const val FOCUS_MS = ${t.motion.focusMs}`,
     `    const val PANEL_MS = ${t.motion.panelMs}`,
+    // The Home hero carousel (the owner's B2): how long a page stays, its slide, and its art's speed against its words.
+    `    const val HERO_DWELL_MS = ${t.motion.heroDwellMs}L`,
+    `    const val HERO_SLIDE_MS = ${t.motion.heroSlideMs}`,
+    `    const val HERO_PARALLAX = ${t.motion.heroParallax}f`,
     `    val ease = CubicBezierEasing(${float(x1 as number)}, ${float(y1 as number)}, ${float(x2 as number)}, ${float(y2 as number)})`,
     "",
     "    object Fonts {",

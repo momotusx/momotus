@@ -138,6 +138,7 @@ class TvHomeShelfTest {
                 "1968",
                 imdb = "7.8",
             ).copy(logo = art("logo.png")),
+            "",
             "#1 in Popular Movies",
             "A ragtag group barricade themselves in an old Pennsylvania farmhouse to remain safe from a horde of " +
                 "flesh-eating ghouls that are ravaging the Northeast of the United States, and the night is long.",
@@ -156,7 +157,7 @@ class TvHomeShelfTest {
     ) {
         val snapshot =
             HomeSnapshot(
-                HomeHeader(hero.takeIf { withHero }),
+                HomeHeader(listOfNotNull(hero.takeIf { withHero })),
                 listOf(
                     HomeRow(
                         TileCopy.CONTINUE_ROW,

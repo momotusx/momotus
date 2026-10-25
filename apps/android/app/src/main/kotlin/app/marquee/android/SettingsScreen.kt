@@ -92,6 +92,7 @@ import app.marquee.design.StatusWord
 import app.marquee.design.SwitchRow
 import app.marquee.design.TextRole
 import app.marquee.design.Tokens
+import app.marquee.design.TrailerPreviews
 import app.marquee.design.focusClickable
 import app.marquee.design.focusPalette
 import app.marquee.design.focusSoon
@@ -800,6 +801,26 @@ private fun Playback(
                 },
                 switch = true,
             )
+            // This device only, never synced (plans/appletv-polish.md decision 13); TV forms show none yet.
+            if (Marquee.form != Form.Tv) {
+                val context = LocalContext.current
+                var previews by remember { mutableStateOf(TrailerPreviews.on(context)) }
+                MqText("Trailer previews on Home", role = TextRole.Headline, weight = FontWeight.Bold)
+                Chip(
+                    if (previews) "On" else "Off",
+                    selected = previews,
+                    onClick = {
+                        previews = !previews
+                        TrailerPreviews.set(context, previews)
+                    },
+                    switch = true,
+                )
+                MqText(
+                    "Plays trailers muted, from YouTube, when the connection is not metered.",
+                    role = TextRole.Caption,
+                    color = Marquee.colors.dim,
+                )
+            }
         }
     }
 }

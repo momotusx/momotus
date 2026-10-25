@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
@@ -18,6 +19,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
@@ -25,6 +29,7 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.semantics.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -110,6 +115,10 @@ fun PosterTile(
     onFocusChange: ((Boolean) -> Unit)? = null,
     onLongClick: (() -> Unit)? = null,
     longClickLabel: String? = null,
+    /** A Top 10 tile's place, drawn over the art's top left (plans/appletv-polish.md 4.3). */
+    rank: Int? = null,
+    /** A Top 10 tile's genre, one line under the art when the tile has no caption. */
+    genre: String? = null,
 ) {
     val metrics = Marquee.tiles
     val colors = Marquee.colors
@@ -119,7 +128,8 @@ fun PosterTile(
     // What a screen reader says after the title: the caption, or the watched share; the scores; and Watched.
     val state =
         (
-            listOfNotNull(caption ?: progress?.let { "${(it * 100).roundToInt()}% watched" }) +
+            listOfNotNull(rank?.let { "Number $it" }, genre) +
+                listOfNotNull(caption ?: progress?.let { "${(it * 100).roundToInt()}% watched" }) +
                 ratings +
                 listOfNotNull("Watched".takeIf { watched })
         ).joinToString(", ").ifEmpty { null }
@@ -151,11 +161,26 @@ fun PosterTile(
                 fallbackUrl = fallbackImageUrl,
                 alignment = artAlignment,
             ) {
+                if (rank != null) RankNumeral(rank, Modifier.align(Alignment.TopStart))
                 if (watched) WatchedChip(Modifier.align(Alignment.TopStart))
                 if (progress != null) ProgressBar(progress, Modifier.align(Alignment.BottomStart))
             }
         }
-        if (!captioned) return@Column
+        if (!captioned) {
+            // A Top 10 poster with no caption keeps its genre, one quiet line (the owner's group C, C2 until picked).
+            if (genre != null) {
+                MqText(
+                    genre,
+                    Modifier.clearAndSetSemantics {
+                        testTag = RANK_GENRE_TAG
+                    },
+                    role = TextRole.Caption,
+                    color = colors.dim,
+                    maxLines = 1,
+                )
+            }
+            return@Column
+        }
         // Read as part of the tile above.
         Column(Modifier.clearAndSetSemantics { }) {
             MqText(title, role = TextRole.Callout, weight = FontWeight.SemiBold, maxLines = 1)
@@ -163,7 +188,7 @@ fun PosterTile(
             val line: @Composable (String) -> Unit = {
                 MqText(it, role = TextRole.Caption, color = colors.dim, weight = FontWeight.Medium, maxLines = 1)
             }
-            line(caption.orEmpty())
+            line(caption ?: genre.orEmpty())
         }
     }
 }
@@ -271,3 +296,36 @@ private val EPISODE_PAD = 16.dp
 @Composable
 private fun Modifier.keyline(shape: Shape): Modifier =
     border(if (Marquee.form == Form.Tv) 1.dp else 0.5.dp, Marquee.colors.lineStrong, shape)
+
+/** A Top 10 tile's place: white over a soft shade in the art's corner; phone 27, TV 57, bold. */
+@Composable
+private fun RankNumeral(
+    rank: Int,
+    modifier: Modifier = Modifier,
+) {
+    val tv = Marquee.form == Form.Tv
+    Box(
+        modifier
+            .size(if (tv) 160.dp else 72.dp)
+            .background(
+                Brush.radialGradient(
+                    0f to Color.Black.copy(alpha = 0.45f),
+                    0.45f to Color.Transparent,
+                    center = Offset.Zero,
+                    radius = if (tv) 300f else 140f,
+                ),
+            ),
+    ) {
+        MqText(
+            rank.toString(),
+            Modifier.padding(start = if (tv) 16.dp else 9.dp, top = if (tv) 6.dp else 3.dp),
+            role = TextRole.Title1,
+            weight = FontWeight.Bold,
+            color = Color.White,
+            maxLines = 1,
+        )
+    }
+}
+
+/** A Top 10 tile's genre line, for tests of where it sits. */
+const val RANK_GENRE_TAG = "rank-genre"

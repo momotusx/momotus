@@ -18,9 +18,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -247,6 +249,12 @@ fun Backdrop(
     /** Drawn under the picture until it lands (an image already in the cache: a large cover's small poster), so
      * the box never shows blank. */
     under: String? = null,
+    /** The picture's own alpha, read while drawing: the hero's art fades over its trailer, the scrims staying. */
+    artAlpha: () -> Float = { 1f },
+    /** Drawn over the page color and under the picture: the hero's trailer. */
+    trailer: (@Composable BoxScope.() -> Unit)? = null,
+    /** The picture's lag behind its page, in pages (B2's depth), read while drawing; null draws it as it is. */
+    lag: (() -> Float)? = null,
 ) {
     val page = Marquee.colors.bg
     val scrims =
@@ -265,7 +273,14 @@ fun Backdrop(
                 brushes.forEach { drawRect(it) }
             }
         }
-    Box(modifier.background(Marquee.colors.surface).then(scrims)) {
+    // A lagging picture is scaled past its box: the box clips it, so two pages meet at a hard edge.
+    Box(
+        modifier
+            .background(Marquee.colors.surface)
+            .then(if (lag != null) Modifier.clipToBounds() else Modifier)
+            .then(scrims),
+    ) {
+        trailer?.invoke(this)
         if (under != null) {
             // Painted at once from the memory cache when a tile drew it (at the tile's size), while its own load runs.
             val context = LocalContext.current
@@ -291,7 +306,17 @@ fun Backdrop(
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 alignment = alignment,
-                modifier = Modifier.matchParentSize(),
+                modifier =
+                    Modifier.matchParentSize().graphicsLayer {
+                        alpha = artAlpha()
+                        // The art moves at HERO_PARALLAX of its page, so it lags by the rest of the page's offset; the
+                        // scale gives it the room it lags into.
+                        if (lag != null) {
+                            scaleX = 1f + (1f - Tokens.HERO_PARALLAX)
+                            scaleY = scaleX
+                            translationX = -lag() * size.width * (1f - Tokens.HERO_PARALLAX)
+                        }
+                    },
                 onError = { onError?.invoke() },
             )
         }

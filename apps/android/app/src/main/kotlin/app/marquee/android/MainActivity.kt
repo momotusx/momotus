@@ -54,6 +54,7 @@ class MainActivity : ComponentActivity() {
 
         if (debuggable) {
             WalkMute.read(this, intent)
+            app.marquee.design.HeroTrailers.walk = WalkMute.on
             WalkLog.read(this, intent)
         }
         DebugEntry.launched(this)
@@ -85,6 +86,7 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         if (applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0) {
             WalkMute.read(this, intent)
+            app.marquee.design.HeroTrailers.walk = WalkMute.on
             WalkLog.read(this, intent)
         }
         addonLink(intent)?.let { (application as MarqueeApp).addonLink = it }

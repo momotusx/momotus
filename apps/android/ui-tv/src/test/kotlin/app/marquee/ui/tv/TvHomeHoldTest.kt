@@ -113,7 +113,7 @@ class TvHomeHoldTest {
             }
         val snapshot =
             HomeSnapshot(
-                HomeHeader(hero),
+                HomeHeader(listOfNotNull(hero)),
                 listOfNotNull(
                     HomeRow(
                         TileCopy.CONTINUE_ROW,
@@ -323,7 +323,7 @@ class TvHomeHoldTest {
         val tile =
             Tile(id = "tt9", kind = "movie", name = "Project Hail Mary and the Very Long Title", posterShape = "poster")
         val text = (1..60).joinToString(" ") { "word$it" }
-        show(hero = Hero(tile, "#1 in Popular Movies", text, listOf("Drama"), "2 h 36 min"))
+        show(hero = Hero(tile, "", "#1 in Popular Movies", text, listOf("Drama"), "2 h 36 min"))
         waitFor("the hero draws") {
             compose.onAllNodesWithText("Details").fetchSemanticsNodes().isNotEmpty()
         }

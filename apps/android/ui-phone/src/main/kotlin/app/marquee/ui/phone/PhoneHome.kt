@@ -1,9 +1,13 @@
 package app.marquee.ui.phone
 
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.DragInteraction
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
@@ -24,14 +28,24 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.Role
@@ -43,6 +57,9 @@ import androidx.compose.ui.semantics.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.compose.currentStateAsState
 import app.marquee.core.TileCopy
 import app.marquee.core.model.Hero
 import app.marquee.core.model.HomeRow
@@ -57,7 +74,11 @@ import app.marquee.core.views.HomeView
 import app.marquee.core.views.ViewStatus
 import app.marquee.design.ActionMenu
 import app.marquee.design.Backdrop
+import app.marquee.design.HeroClock
+import app.marquee.design.HeroDots
+import app.marquee.design.HeroTrailers
 import app.marquee.design.Icons
+import app.marquee.design.LocalReducedMotion
 import app.marquee.design.Logo
 import app.marquee.design.Marquee
 import app.marquee.design.MenuAction
@@ -68,14 +89,25 @@ import app.marquee.design.PrimaryButton
 import app.marquee.design.RatingsRow
 import app.marquee.design.RoundButton
 import app.marquee.design.RowHeader
+import app.marquee.design.RunHeroClock
 import app.marquee.design.Scrims
 import app.marquee.design.Skeleton
 import app.marquee.design.StateMessage
 import app.marquee.design.TextRole
 import app.marquee.design.TileShape
+import app.marquee.design.Tokens
+import app.marquee.design.TrailerHost
+import app.marquee.design.TrailerPreviews
+import app.marquee.design.TrailerState
+import app.marquee.design.TrailerSurface
 import app.marquee.design.describe
+import app.marquee.design.heroClockRuns
 import app.marquee.design.laneHeight
+import app.marquee.design.rememberTrailerHost
+import app.marquee.design.trailerAllowed
 import app.marquee.design.windowDp
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 /**
  * Home on a phone, as the iPhone TV app (design/DECISION.md, Home and Shelves): the 390 by 680 hero full bleed
@@ -113,6 +145,15 @@ fun PhoneHome(
     val hold: ((Tile) -> Unit)? = onRemove?.let { { tile -> menuFor = tile } }
     val listState = rememberLazyListState()
     val hasHero = home.hero != null
+    // One trailer player per Home visit, above the list, so a scroll never makes a new one (plans/appletv-polish.md 4.2).
+    val trailers = rememberTrailerHost()
+    // At least half the hero on screen: the carousel's clock and its trailer run only then.
+    val heroVisible by remember(listState) {
+        derivedStateOf {
+            val item = listState.layoutInfo.visibleItemsInfo.firstOrNull { it.key == "hero" }
+            item != null && item.size > 0 && (item.size + minOf(0, item.offset)) * 2 >= item.size
+        }
+    }
     // The list keeps the first lane where it is when a hero arrives above it; someone who has not
     // scrolled yet should see the hero.
     LaunchedEffect(hasHero) {
@@ -129,7 +170,11 @@ fun PhoneHome(
         verticalArrangement = Arrangement.spacedBy(Marquee.space.m),
     ) {
         val hero = home.hero
-        if (hero != null) item(key = "hero") { PhoneHero(hero, onOpen, onPlay) }
+        if (hero !=
+            null
+        ) {
+            item(key = "hero") { PhoneHeroCarousel(home.heroes, onOpen, onPlay, trailers) { heroVisible } }
+        }
         if (home.rows.isEmpty()) item(key = "state") { HomeState(home, onSetup, onAddons, rowsHidden, onHomeRows) }
         if (hero == null && home.rows.toList().allFailed()) {
             item(key = "failed") { AllFailed(home, Modifier.padding(horizontal = Marquee.safe.side)) }
@@ -221,15 +266,151 @@ private fun AllFailed(
 }
 
 /**
- * The iPhone's hero (the home-phone frame): the art full bleed, 390 by 680 on a 390 wide phone, the large title
- * over it, and a centered column at its foot: the logo, the kind and genres with the ratings row, the core's
- * reason, then the 178 by 48 Play pill and the 48 round Details. A tap on the art opens the details too.
+ * The hero carousel (plans/appletv-polish.md 4.1, 4.2): the core's pages side by side, swiped by hand or paged by
+ * the clock on input idle, the dots in the hero's foot, the large title and the sound switch fixed over them. The
+ * page shown plays its trailer under its art, which fades once YouTube's start controls have gone.
+ */
+@Composable
+private fun PhoneHeroCarousel(
+    heroes: List<Hero>,
+    onOpen: (Tile) -> Unit,
+    onPlay: (Tile) -> Unit,
+    trailers: TrailerHost,
+    visible: () -> Boolean,
+) {
+    val pager = rememberPagerState { heroes.size }
+    val clock = remember { HeroClock(heroes.size) }
+    SideEffect { clock.count = heroes.size }
+    val trailer = remember { TrailerState() }
+    val context = LocalContext.current
+    val reduced = LocalReducedMotion.current
+    val scope = rememberCoroutineScope()
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    val resumed by lifecycle.currentStateAsState()
+    val active = resumed.isAtLeast(Lifecycle.State.RESUMED)
+    // A drag by hand: no more timed pages this session.
+    LaunchedEffect(pager) {
+        pager.interactionSource.interactions.collect { if (it is DragInteraction.Start) clock.manual() }
+    }
+    RunHeroClock(
+        clock,
+        running = heroClockRuns(active, visible(), reduced, pager.isScrollInProgress, trailer.playing, heroes.size),
+    ) {
+        scope.launch {
+            pager.animateScrollToPage(
+                (pager.currentPage + 1) % heroes.size,
+                animationSpec = tween(HeroClock.SLIDE_MS, easing = Tokens.ease),
+            )
+        }
+    }
+    LaunchedEffect(trailer) { snapshotFlow { trailer.fraction }.collect { if (trailer.playing) clock.trailer(it) } }
+    // The settled page's trailer, once it is due and every condition holds (decision 5).
+    val shownId = heroes.getOrNull(pager.settledPage)?.tile?.id
+    LaunchedEffect(shownId, active, visible()) {
+        trailers.stop()
+        val page = heroes.getOrNull(pager.settledPage) ?: return@LaunchedEffect
+        val id = HeroTrailers.checkedId(page.trailer)
+        if (!active || !visible() || id == null) return@LaunchedEffect
+        delay(TRAILER_DELAY_MS)
+        val allowed =
+            trailerAllowed(
+                TrailerPreviews.signals(
+                    context,
+                    visible = true,
+                    reducedMotion = reduced,
+                    tv = false,
+                    hasTrailer =
+                        page.tile.id !in spentTrailers,
+                ),
+            )
+        if (!allowed) return@LaunchedEffect
+        trailers.play(id, trailer) { why ->
+            if (why != "stopped") spentTrailers += page.tile.id
+            // Played to its cap: the art fades back, and the same clock pages on 600 ms later.
+            if (why == "cap") clock.trailer(1f - 600f / HeroClock.DWELL_MS)
+        }
+    }
+    DisposableEffect(Unit) { onDispose { trailers.stop() } }
+    val art by animateFloatAsState(if (trailer.shown) 0f else 1f, tween(600, easing = Tokens.ease), label = "heroArt")
+    Box(
+        Modifier.pointerInput(Unit) {
+            // Any touch starts the dwell over; the gesture still goes to the pager and the list.
+            awaitPointerEventScope {
+                while (true) {
+                    awaitPointerEvent(PointerEventPass.Initial)
+                    clock.input()
+                }
+            }
+        },
+    ) {
+        HorizontalPager(state = pager, beyondViewportPageCount = 1, key = { heroes[it].tile.id }) { page ->
+            val on = page == pager.settledPage
+            PhoneHero(
+                heroes[page],
+                onOpen,
+                onPlay,
+                artAlpha = { if (on) art else 1f },
+                under = if (on && trailer.loading) ({ TrailerSurface(trailers, Modifier.matchParentSize()) }) else null,
+                lag = { pager.getOffsetDistanceInPages(page) },
+            )
+        }
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .windowInsetsPadding(WindowInsets.statusBars)
+                .padding(start = 16.dp, end = 16.dp, top = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            MqText("Home", Modifier.weight(1f).semantics { heading() }, role = TextRole.Hero, maxLines = 1)
+            if (trailer.shown && !HeroTrailers.walk) {
+                var sound by remember { mutableStateOf(false) }
+                RoundButton(if (sound) Icons.Volume2 else Icons.VolumeX, if (sound) "Sound on" else "Sound off", {
+                    sound = !sound
+                    trailers.sound(sound)
+                })
+            }
+        }
+        if (heroes.size > 1) {
+            HeroDots(
+                heroes.size,
+                pager.currentPage,
+                { clock.progress },
+                Modifier.align(Alignment.BottomCenter).padding(bottom = 18.dp),
+                label = { "Page ${it + 1} of ${heroes.size}, ${heroes[it].tile.name}" },
+                onPick = { i ->
+                    clock.manual()
+                    scope.launch {
+                        pager.animateScrollToPage(
+                            i,
+                            animationSpec = tween(HeroClock.SLIDE_MS, easing = Tokens.ease),
+                        )
+                    }
+                },
+            )
+        }
+    }
+}
+
+/** Pages whose trailer ended, failed or was cut this session: they do not play again. */
+private val spentTrailers = mutableSetOf<String>()
+
+/** The page settles, then the player starts loading under its art. */
+private const val TRAILER_DELAY_MS = 700L
+
+/**
+ * One page of the iPhone's hero (the home-phone frame): the art full bleed, 390 by 680 on a 390 wide phone, and a
+ * centered column at its foot: the logo, the kind and genres with the ratings row, the core's reason, then the
+ * 178 by 48 Play pill and the 48 round Details. A tap on the art opens the details too. The trailer, when it plays,
+ * sits [under] the art, whose alpha is [artAlpha].
  */
 @Composable
 private fun PhoneHero(
     hero: Hero,
     onOpen: (Tile) -> Unit,
     onPlay: (Tile) -> Unit,
+    artAlpha: () -> Float = { 1f },
+    under: (@Composable BoxScope.() -> Unit)? = null,
+    lag: (() -> Float)? = null,
 ) {
     val tile = hero.tile
     BoxWithConstraints(Modifier.fillMaxWidth()) {
@@ -255,15 +436,9 @@ private fun PhoneHero(
                 foot = Scrims.phoneHomeFoot,
                 top = Scrims.phoneHomeTop,
                 alignment = if (tile.background == null) Alignment.TopCenter else Alignment.Center,
-            )
-            MqText(
-                "Home",
-                Modifier
-                    .windowInsetsPadding(WindowInsets.statusBars)
-                    .padding(start = 16.dp, top = 4.dp)
-                    .semantics { heading() },
-                role = TextRole.Hero,
-                maxLines = 1,
+                artAlpha = artAlpha,
+                trailer = under,
+                lag = lag,
             )
             Column(
                 Modifier
@@ -335,7 +510,7 @@ private const val HERO_RATIO = 680f / 390f
 /** The most of the window's height a hero takes. */
 private const val HERO_WINDOW = 0.85f
 
-/** The buttons' foot over the hero's (the frame's 56; its carousel dots wait for a source). */
+/** The buttons' foot over the hero's: the frame's 56, the dots in it. */
 private val HERO_FOOT = 56.dp
 
 /** Continue Watching is a lane of 16:9 stills; every catalog row is posters, as Stremio shows them. */
@@ -421,6 +596,9 @@ private fun SkeletonLane(
 
 private const val SKELETON_TILES = 4
 
+/** The genre line under a Top 10 poster. */
+private val RANK_GENRE = 22.dp
+
 @Composable
 private fun TileLane(
     row: HomeRow,
@@ -432,7 +610,11 @@ private fun TileLane(
     val keys = remember(row.tiles) { row.tileKeys() }
     val captioned = captioned(row)
     LazyRow(
-        modifier = Modifier.height(Marquee.tiles.laneHeight(shape, captioned)),
+        // A Top 10 row gives each poster its genre, one line under the art.
+        modifier =
+            Modifier.height(
+                Marquee.tiles.laneHeight(shape, captioned) + if (row.ranked && !captioned) RANK_GENRE else 0.dp,
+            ),
         contentPadding = PaddingValues(horizontal = Marquee.safe.side),
         horizontalArrangement = Arrangement.spacedBy(metrics.gap),
     ) {
@@ -459,6 +641,8 @@ private fun TileLane(
                     },
                 onLongClick = onHold?.let { { it(tile) } },
                 longClickLabel = "More options".takeIf { onHold != null },
+                rank = tile.rank,
+                genre = tile.genre,
             )
         }
     }

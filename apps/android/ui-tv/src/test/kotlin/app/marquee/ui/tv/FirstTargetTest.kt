@@ -22,8 +22,8 @@ class FirstTargetTest {
         tiles = tiles.map { Tile(id = it, kind = "movie", name = it, posterShape = "poster") },
     )
 
-    private val movieHero = Hero(Tile(id = "h", kind = "movie", name = "H", posterShape = "poster"), "reason")
-    private val seriesHero = Hero(Tile(id = "s", kind = "series", name = "S", posterShape = "poster"), "reason")
+    private val movieHero = Hero(Tile(id = "h", kind = "movie", name = "H", posterShape = "poster"), "", "reason")
+    private val seriesHero = Hero(Tile(id = "s", kind = "series", name = "S", posterShape = "poster"), "", "reason")
 
     @Test
     fun `the first tile of the first lane wins when there is no hero`() {

@@ -130,6 +130,7 @@ class PhoneHomeShelfTest {
                     "movie",
                     "1968",
                 ).copy(logo = art("logo.png"), ratings = Ratings("7.8")),
+                "",
                 "#1 in Popular Movies",
                 "A ragtag group barricade themselves in an old Pennsylvania farmhouse.",
                 listOf("Horror", "Thriller"),
@@ -137,7 +138,7 @@ class PhoneHomeShelfTest {
             )
         val snapshot =
             HomeSnapshot(
-                HomeHeader(hero),
+                HomeHeader(listOf(hero)),
                 listOf(
                     HomeRow(
                         TileCopy.CONTINUE_ROW,

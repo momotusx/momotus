@@ -332,6 +332,9 @@ object Tokens {
 
     const val FOCUS_MS = 180
     const val PANEL_MS = 260
+    const val HERO_DWELL_MS = 8000L
+    const val HERO_SLIDE_MS = 650
+    const val HERO_PARALLAX = 0.85f
     val ease = CubicBezierEasing(0.22f, 1f, 0.36f, 1f)
 
     object Fonts {

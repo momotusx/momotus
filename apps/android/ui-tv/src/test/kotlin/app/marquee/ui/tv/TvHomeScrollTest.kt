@@ -166,6 +166,7 @@ class TvHomeScrollTest {
             if (hero) {
                 Hero(
                     tile("h1", "Sintel"),
+                    "",
                     "#1 in Popular Movies",
                     "A girl and a dragon.",
                     listOf("Drama"),
@@ -174,7 +175,7 @@ class TvHomeScrollTest {
             } else {
                 null
             }
-        val snapshot = HomeSnapshot(HomeHeader(top), rows)
+        val snapshot = HomeSnapshot(HomeHeader(listOfNotNull(top)), rows)
         client.attach { text ->
             val msg = CoreJson.parseToJsonElement(text).jsonObject
             val id = msg["id"]?.jsonPrimitive?.longOrNull ?: return@attach
