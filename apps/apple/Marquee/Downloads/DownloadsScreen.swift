@@ -250,7 +250,8 @@ private struct DownloadRowView: View {
                 .accessibilityElement(children: .combine)
                 .accessibilityHint(RowActions.plays(row) ? "Plays it" : "")
             if !actions.kids {
-                DownloadControlButton(control: DownloadCopy.control(DownloadCopy.badge(row)), look: .bare, entries: actions.entries(row))
+                DownloadControlButton(control: DownloadCopy.control(DownloadCopy.badge(row)), look: .bare, entries: actions.entries(row),
+                                      name: [title, subtitle].compactMap { $0 }.joined(separator: " "))
             }
         }
         .listRow()

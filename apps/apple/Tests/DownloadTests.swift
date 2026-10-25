@@ -167,6 +167,9 @@ private let hint = "Shows download options"
     #expect(DownloadCopy.subtitlesLine(["en", "tr", "en", "pt-BR"]) == "Subtitles: English, Turkish, Portuguese (Brazil)")
     #expect(DownloadCopy.subtitlesLine([]) == nil)
     #expect(DownloadCopy.subtitlesLine(nil) == nil)
+    // A Downloads row's control names what it is for (review r1 m8).
+    #expect(DownloadCopy.spoken(DownloadCopy.control(badge(.done)), for: "Severance E3 In Perpetuity") == "Downloaded, Severance E3 In Perpetuity")
+    #expect(DownloadCopy.spoken(DownloadCopy.control(badge(.done)), for: nil) == "Downloaded")
     // An episode card's spoken value gains the state.
     #expect(DownloadCopy.spokenState(badge(.done)) == "Downloaded")
     #expect(DownloadCopy.spokenState(badge(.running, progress: 0.45)) == "Downloading, 45 percent")

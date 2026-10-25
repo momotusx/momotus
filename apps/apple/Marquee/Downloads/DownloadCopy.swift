@@ -308,6 +308,13 @@ enum DownloadCopy {
             progress: row.bytesTotal.flatMap { $0 > 0 ? Double(row.bytesDone) / Double($0) : nil }, bytesTotal: row.bytesTotal)
     }
 
+    /// The control's VoiceOver label with what it is for: "Downloaded, Severance E3 In Perpetuity", so a list
+    /// of rows is not a list of identical buttons (review r1 m8).
+    static func spoken(_ control: DownloadControl, for name: String?) -> String {
+        guard let name, !name.isEmpty else { return control.spoken }
+        return "\(control.spoken), \(name)"
+    }
+
     /// The subtitles kept with a download, by their English names in the core's order: "Subtitles:
     /// English, Turkish"; nil with none.
     static func subtitlesLine(_ tags: [String]?) -> String? {

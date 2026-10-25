@@ -66,6 +66,8 @@ struct DownloadControlButton: View {
     var start: () -> Void = {}
     /// "Choose a version to download" where a tap starts the download.
     var choose: (() -> Void)?
+    /// What the control is for, where the row's name is not beside it for VoiceOver (the Downloads rows).
+    var name: String?
     @Environment(\.metrics) private var metrics
 
     var body: some View {
@@ -75,7 +77,7 @@ struct DownloadControlButton: View {
                 .contextMenu {
                     if let choose { Button(DownloadItem.choose.label, glyph: DownloadItem.choose.glyph, action: choose) }
                 }
-                .accessibilityLabel(control.spoken)
+                .accessibilityLabel(DownloadCopy.spoken(control, for: name))
                 .accessibilityActions {
                     if let choose { Button(DownloadItem.choose.label, action: choose) }
                 }
@@ -90,7 +92,7 @@ struct DownloadControlButton: View {
                 .menuStyle(.button)
                 .menuIndicator(.hidden)
                 .modifier(Chrome(look: look))
-                .accessibilityLabel(control.spoken)
+                .accessibilityLabel(DownloadCopy.spoken(control, for: name))
                 .accessibilityValue(control.value ?? "")
                 .accessibilityHint(control.hint ?? "")
         }
@@ -118,7 +120,8 @@ struct DownloadControlButton: View {
             .textFont(13, weight: .semibold, relativeTo: .footnote)
             .foregroundStyle(.white)
             .padding(.horizontal, 12)
-            .frame(height: 28)
+            // Grows with the larger text sizes instead of clipping its word.
+            .frame(minHeight: 28)
             .background(SecondaryFill(shape: Capsule()))
         case .round:
             DownloadRing(control: control, size: control.ring == nil ? 20 : 24)
