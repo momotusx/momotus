@@ -54,6 +54,7 @@ import app.marquee.core.route.Route
 import app.marquee.core.route.afterChoice
 import app.marquee.core.route.calendarInLibrary
 import app.marquee.core.route.isTopLevel
+import app.marquee.core.route.linkedTo
 import app.marquee.core.route.restoredStack
 import app.marquee.core.route.switchedTo
 import app.marquee.core.session.CoreSession
@@ -274,6 +275,13 @@ private fun AppNav(
 
     fun choose(place: Route) {
         val next = switchedTo(routes, place)
+        backStack.clear()
+        backStack.addAll(next)
+    }
+
+    // A title page's link (a genre, a name) keeps the title under the place it opens: Back returns to it.
+    fun link(place: Route) {
+        val next = linkedTo(routes, place)
         backStack.clear()
         backStack.addAll(next)
     }
@@ -695,12 +703,12 @@ private fun AppNav(
                             },
                             onGenre = { kind, genre ->
                                 app.discoverRequest = DiscoverRequest(kind, genre)
-                                choose(Route.Discover)
+                                link(Route.Discover)
                             },
                             onOpen = ::open,
                             onPerson = { name ->
                                 app.searchRequest = name
-                                choose(Route.Search)
+                                link(Route.Search)
                             },
                         )
                     }

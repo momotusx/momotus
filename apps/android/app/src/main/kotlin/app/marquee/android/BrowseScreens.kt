@@ -28,6 +28,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -459,6 +460,8 @@ fun DiscoverScreen(
     val view = holder.view
     val snapshot = view.snapshot
     // One select of the kind and the genre, after the first snapshot: the core picks the catalog (C40).
+    // An ask that could not go this visit (no snapshot came) is dropped on leaving, never sent on a later one.
+    DisposableEffect(Unit) { onDispose { onRequestSent() } }
     LaunchedEffect(request, snapshot != null) {
         val ask = genreAsk(request, opened = snapshot != null) ?: return@LaunchedEffect
         view.select(kind = ask.kind, genre = GenreChange.To(ask.genre))

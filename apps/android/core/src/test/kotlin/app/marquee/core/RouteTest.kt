@@ -11,6 +11,7 @@ import app.marquee.core.route.Route
 import app.marquee.core.route.afterChoice
 import app.marquee.core.route.calendarInLibrary
 import app.marquee.core.route.isTopLevel
+import app.marquee.core.route.linkedTo
 import app.marquee.core.route.restoredStack
 import app.marquee.core.route.switchedTo
 import kotlin.test.Test
@@ -31,6 +32,17 @@ class RouteTest {
             switchedTo(listOf(Route.Home, Route.Search, title), Route.Library),
         )
         assertEquals(listOf(Route.Home), switchedTo(listOf(Route.Home, Route.Search, title), Route.Home))
+    }
+
+    @Test
+    fun `a title's genre or name opens its place over the title, so Back returns to it`() {
+        assertEquals(listOf(Route.Home, title, Route.Discover), linkedTo(listOf(Route.Home, title), Route.Discover))
+        // Discover was already below: it moves on top, appearing once.
+        assertEquals(
+            listOf(Route.Home, title, Route.Discover),
+            linkedTo(listOf(Route.Home, Route.Discover, title), Route.Discover),
+        )
+        assertEquals(listOf(Route.Home, title, Route.Search), linkedTo(listOf(Route.Home, title), Route.Search))
     }
 
     @Test

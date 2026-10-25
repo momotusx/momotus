@@ -190,6 +190,15 @@ fun switchedTo(
     return if (destination == root) listOf(root) else listOf(root, destination)
 }
 
+/**
+ * The back stack after a title page's link to a top-level place (a genre to Discover, a name to Search): the place
+ * goes on top, so Back returns to the title. It is taken out of the stack first, since a route appears once.
+ */
+fun linkedTo(
+    stack: List<Route>,
+    destination: Route,
+): List<Route> = stack.filter { it != destination } + destination
+
 /** Where the recommended addons step was opened from, which decides its rows and where it goes next. */
 @Serializable
 enum class DefaultsMode {
