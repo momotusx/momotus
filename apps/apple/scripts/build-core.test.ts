@@ -170,6 +170,9 @@ test("the Xcode phase fails an own build on a stale core without the engine", ()
 test("the build says own unless it is a store build, for the app to read", () => {
   const yml = readFileSync(join(scripts, "..", "project.yml"), "utf8");
   expect(yml).toContain("    MARQUEE_CORE_BUILD: own\n");
+  // A Release build is a store build unless the xcodebuild line says own.
+  expect(yml).toContain("  configs:\n    # A Release build (an archive) is a store build");
+  expect(yml).toMatch(/    Release:\n      MARQUEE_CORE_BUILD: store\n/);
   // Every app target's Info.plist carries it.
   expect(yml.split("MarqueeCoreBuild: $(MARQUEE_CORE_BUILD)").length - 1).toBe(3);
 });

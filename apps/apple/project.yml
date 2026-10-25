@@ -40,6 +40,12 @@ settings:
     MARQUEE_WALK_BUILD: ""
     # The app's bundle id; a walk build takes its own (app.marquee.walk) so it never installs over the owner's app.
     MARQUEE_APP_ID: app.marquee.dev
+  configs:
+    # A Release build (an archive) is a store build unless it says otherwise: MARQUEE_CORE_BUILD=own on the
+    # xcodebuild line for an own Release build, so the second engine is never on in an archive by accident (the
+    # torrent core is its own choice: STORE=1 for build-core.sh).
+    Release:
+      MARQUEE_CORE_BUILD: store
 targetTemplates:
   App:
     type: application
