@@ -30,7 +30,7 @@ pub const FLOOR_BYTES: u64 = RESERVE_BYTES / 4 * 3;
 /// `DEFAULT_FULL_THRESHOLD_BYTES`): the system, the library's SQLite and
 /// the sync journal keep room.
 pub const STOP_BYTES: u64 = 256 * MIB;
-pub const RESUME_BYTES: u64 = STOP_BYTES + 32 * MIB;
+pub const RESUME_BYTES: u64 = STOP_BYTES + 64 * MIB;
 
 /// How often the keeper reads the free space when nothing wakes it.
 const GUARD_EVERY: Duration = Duration::from_secs(1);
@@ -63,12 +63,17 @@ pub fn available_ram() -> Option<u64> {
     }
     #[cfg(any(target_os = "ios", target_os = "tvos"))]
     {
+        // A simulator has no memory limit of its own: the ceiling holds.
+        if cfg!(target_abi = "sim") {
+            return None;
+        }
         unsafe extern "C" {
             fn os_proc_available_memory() -> usize;
         }
-        // SAFETY: no arguments; it reads the process's memory limit.
-        let bytes = unsafe { os_proc_available_memory() } as u64;
-        (bytes > 0).then_some(bytes)
+        // SAFETY: no arguments; it reads the process's memory limit. On a
+        // device 0 means the app is at or over it: no RAM ring (review r2
+        // N6).
+        Some(unsafe { os_proc_available_memory() } as u64)
     }
     #[cfg(not(any(
         target_os = "linux",
@@ -79,6 +84,13 @@ pub fn available_ram() -> Option<u64> {
     {
         None
     }
+}
+
+/// A torrent librqbit holds still: paused, or stopped by a fatal error (a
+/// full disk).
+pub(crate) fn halted(managed: &librqbit::ManagedTorrent) -> bool {
+    managed.is_paused()
+        || managed.with_state(|s| matches!(s, librqbit::ManagedTorrentState::Error(_)))
 }
 
 /// A walk build's window of at most `limit` bytes (plans/streaming-window.md
@@ -244,13 +256,15 @@ impl Engine {
             let Some((file, bytes_per_s, readahead)) = *lock(&t.rate) else {
                 continue;
             };
-            if free < FLOOR_BYTES && !t.unpunched.load(Ordering::Relaxed) {
-                if self.replan(h, file, bytes_per_s, false, free, seen).await {
-                    let _ = self.keep(h);
-                }
+            if free < FLOOR_BYTES
+                && !t.unpunched.load(Ordering::Relaxed)
+                && self.replan(h, file, bytes_per_s, false, free, seen).await
+            {
+                let _ = self.keep(h);
                 continue;
             }
-            if self.space_stop(&t, free).await {
+            // A whole file only grows.
+            if self.space_stop(&t, free, true).await {
                 continue;
             }
             let starved = t.starved.load(Ordering::Relaxed);
@@ -278,8 +292,9 @@ impl Engine {
     /// The one way a window is planned again for space
     /// (plans/no-space-warnings.md): under the floor, at `free` and counting
     /// no idle torrent, a ring, in RAM where the torrent is piece files, and
-    /// only while `seen` still holds. Whatever must stay whole and on disk
-    /// (an offline download) is kept out here. Whether it was set.
+    /// only while `seen` still holds. Whether it was set. Once offline
+    /// downloads land, whatever must stay whole and on disk is to be kept
+    /// out here (the plan's rebase note).
     pub(crate) async fn replan(
         &self,
         h: TorrentHandle,
@@ -319,12 +334,14 @@ impl Engine {
         set.unwrap_or(false)
     }
 
-    /// The silent stop ([`STOP_BYTES`]): at or under it a torrent writing to
-    /// disk pauses with no words, its reads waiting; over [`RESUME_BYTES`]
-    /// it fetches again. Whether it is stopped.
-    pub(crate) async fn space_stop(&self, t: &Torrent, free: u64) -> bool {
+    /// The silent stop ([`STOP_BYTES`]): at or under it a torrent that is
+    /// `growing` on disk pauses with no words, its reads waiting; over
+    /// [`RESUME_BYTES`], or once it no longer grows, it fetches again.
+    /// Whether it is stopped.
+    pub(crate) async fn space_stop(&self, t: &Torrent, free: u64, growing: bool) -> bool {
         let was = t.space_stopped.load(Ordering::Relaxed);
         let now = match () {
+            _ if !growing => false,
             _ if free <= STOP_BYTES => true,
             _ if free > RESUME_BYTES => false,
             _ => was,
@@ -335,11 +352,11 @@ impl Engine {
         let live = t.live.lock().await;
         if let Some(l) = live.as_ref() {
             let _round = t.keeper.lock().await;
-            let done = if now && !l.managed.is_paused() {
+            let done = if now && !halted(&l.managed) {
                 let paused = self.inner.session.pause(&l.managed).await;
                 let _ = l.msgs.send(adapter::Msg::Stopped);
                 paused
-            } else if !now && l.managed.is_paused() && t.claimed() {
+            } else if !now && halted(&l.managed) && t.claimed() {
                 self.inner.session.unpause(&l.managed).await
             } else {
                 Ok(())
@@ -519,11 +536,9 @@ async fn keep_windows(engine: &Weak<Inner>, h: TorrentHandle, t: &Arc<Torrent>) 
         // fetching (plans/no-space-warnings.md).
         if free < FLOOR_BYTES && !state.floor {
             let (file, bitrate, metered) = (state.file, state.bitrate, state.metered);
-            engine.replan(h, file, bitrate, metered, free, seen).await;
-            continue;
-        }
-        if engine.space_stop(t, free).await {
-            continue;
+            if engine.replan(h, file, bitrate, metered, free, seen).await {
+                continue;
+            }
         }
         // The space guard (2.4): the scheduler may hold what it holds and the
         // free space over the reserve, never more than its full budget, so
@@ -550,29 +565,33 @@ async fn keep_windows(engine: &Weak<Inner>, h: TorrentHandle, t: &Arc<Torrent>) 
             engine.set_shortfall(t, state.generation, shortfall).await;
         }
         engine.clear_filled_holes(t, state).await;
-        let Some(pieces) = engine.ask(t, adapter::Msg::ToEvict).await else {
-            continue;
-        };
-        if pieces.is_empty() {
-            continue;
+        // The round comes first: what the window holds past its budget
+        // leaves before any stop (review r2 N1).
+        if let Some(pieces) = engine.ask(t, adapter::Msg::ToEvict).await
+            && !pieces.is_empty()
+        {
+            t.rounds.fetch_add(1, Ordering::Relaxed);
+            punched = Some(std::time::Instant::now());
+            match engine.evict_pieces(h, &pieces).await {
+                Ok(r) if r.error.is_none() => failed.clear(),
+                Ok(r) => failed.extend(r.error),
+                Err(e) => failed.push(e.to_string()),
+            }
+            // Punches that keep failing free nothing: the file plays on
+            // whole, never ended for space (plans/no-space-warnings.md).
+            if failed.len() as u32 >= FAILED_ROUNDS {
+                tracing::warn!("{}: punches fail, playing whole: {failed:?}", t.info_hash);
+                t.unpunched.store(true, Ordering::Relaxed);
+                engine
+                    .put_window(t, None, None, Some(state.generation))
+                    .await;
+                break;
+            }
         }
-        t.rounds.fetch_add(1, Ordering::Relaxed);
-        punched = Some(std::time::Instant::now());
-        match engine.evict_pieces(h, &pieces).await {
-            Ok(r) if r.error.is_none() => failed.clear(),
-            Ok(r) => failed.extend(r.error),
-            Err(e) => failed.push(e.to_string()),
-        }
-        // Punches that keep failing free nothing: the file plays on whole,
-        // never ended for space (plans/no-space-warnings.md).
-        if failed.len() as u32 >= FAILED_ROUNDS {
-            tracing::warn!("{}: punches fail, playing whole: {failed:?}", t.info_hash);
-            t.unpunched.store(true, Ordering::Relaxed);
-            engine
-                .put_window(t, None, None, Some(state.generation))
-                .await;
-            break;
-        }
+        // The stop is for growth only: a window that holds its budget
+        // writes a piece for each one it frees (review r2 N2).
+        let growing = written + state.plan.slack < full.saturating_sub(shortfall);
+        engine.space_stop(t, free, growing).await;
     }
 }
 

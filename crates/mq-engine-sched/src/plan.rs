@@ -167,9 +167,10 @@ impl WindowPlan {
 /// Sizes a window with `cfg`'s windows. A room under `W_min + 64 MiB` gets
 /// a ring of `max(room, RING)` instead, in RAM when the room is under the
 /// ring (plans/streaming-window-chunks.md): a version never fails for
-/// space. A RAM ring holds at most a quarter of the free memory, within
-/// [`RAM_CEILING_BYTES`], with two pieces open; one whose two pieces do not
-/// fit there stays on disk (plans/no-space-warnings.md).
+/// space. A ring keeps at least a piece to play in past its pins and `B`.
+/// A RAM ring holds at most a quarter of the free memory, within
+/// [`RAM_CEILING_BYTES`], with two pieces open; one whose least ring does
+/// not fit there stays on disk (plans/no-space-warnings.md).
 pub fn window_plan(cfg: &Config, i: WindowInputs) -> WindowPlan {
     let (r, piece) = (i.bitrate.max(1), i.piece_len.max(1));
     let round = |b: u64| b.div_ceil(piece) * piece;
@@ -193,12 +194,15 @@ pub fn window_plan(cfg: &Config, i: WindowInputs) -> WindowPlan {
     let fixed = fixed + playing;
     let floor = fixed + playing;
     if room < floor + 64 * MIB {
-        let mut budget = room.max(RING_BYTES.max(2 * piece));
+        // The least ring that plays: two pieces, and past `B` (a quarter)
+        // and the pins at least a piece to play in (review r2 N9).
+        let least = (2 * piece).max((pinned + APFS_HEAD_BYTES + piece).div_ceil(3) * 4);
+        let mut budget = room.max(RING_BYTES.max(least));
         let ram = i
             .available_ram
             .map_or(RAM_CEILING_BYTES, |a| a / 4)
             .min(RAM_CEILING_BYTES);
-        let memory = room < budget.min(ram) && 2 * piece <= ram;
+        let memory = room < budget.min(ram) && least <= ram;
         if memory {
             budget = budget.min(ram);
         }

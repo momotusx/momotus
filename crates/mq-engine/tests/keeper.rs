@@ -317,7 +317,9 @@ async fn a_ram_ring_of_large_pieces_plays() {
             ..Default::default()
         },
     );
-    assert!(ring.memory && ring.budget == RING_BYTES, "{ring:?}");
+    // A piece to play in past the pins and `B` (review r2 N9).
+    assert!(ring.memory && ring.playing >= u64::from(BIG), "{ring:?}");
+    let budget = ring.budget;
     // The scheduler's budget leaves out APFS's head on this Mac.
     ring.budget += APFS_HEAD_BYTES;
     let s = support::swarm_big(128 << 20, BIG).await;
@@ -341,7 +343,7 @@ async fn a_ram_ring_of_large_pieces_plays() {
     watch.abort();
     assert!(got == w.s.movie, "bytes differ");
     let held = held.load(Ordering::Relaxed);
-    assert!(held <= RING_BYTES + 2 * u64::from(BIG), "held {held}");
+    assert!(held <= budget + 2 * u64::from(BIG), "held {held}");
 }
 
 /// m. A parked read whose readahead (12 MiB here) wants more than the
@@ -1083,8 +1085,14 @@ async fn under_the_floor_a_whole_file_plays_on_in_a_ring() {
 async fn at_the_stop_a_read_waits_and_finishes_once_space_is_back() {
     let w = windowed(48 << 20, plan(), None).await;
     assert!(w.read(0, 4 * MIB).await == w.movie(0, 4 * MIB));
+    // A 64 MiB band: a fast link does not stop and resume in one tick
+    // (review r2 N11).
+    const { assert!(RESUME_BYTES - STOP_BYTES >= 64 * MIB) };
     test_hooks::set_free(&w.engine, Some(STOP_BYTES));
     until("paused at the stop", || async { w.stats().await.paused }).await;
+    // Blocks already past the write call when it paused may still land
+    // (review r2): a second for them, then nothing more.
+    tokio::time::sleep(Duration::from_secs(1)).await;
     let before = allocated(&w.dir());
     let reader = w.engine.open_reader(w.t, "default", w.movie).await.unwrap();
     let len = w.s.movie.len() as u64;
@@ -1109,6 +1117,85 @@ async fn a_torrent_a_full_disk_stopped_plays_again_at_the_next_read() {
     let w = windowed(48 << 20, plan(), None).await;
     assert!(w.read(0, 4 * MIB).await == w.movie(0, 4 * MIB));
     test_hooks::fail_torrent(&w.engine, w.t).await;
+    assert!(w.read(8 * MIB, 12 * MIB).await == w.movie(8 * MIB, 12 * MIB));
+}
+
+/// Review r2 N1, N2: a window holding more than its ring when the disk
+/// falls under the stop is not stopped: its round frees what is past the
+/// ring first, and a ring that holds its budget plays on (each piece it
+/// writes follows one it freed), never paused, to the end.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn under_the_stop_a_full_window_evicts_to_its_ring_and_plays_on() {
+    let wide = WindowPlan {
+        budget: 72 * MIB + APFS_HEAD_BYTES,
+        ahead: 8 * MIB,
+        ..plan()
+    };
+    let w = windowed(128 << 20, wide, None).await;
+    assert!(w.read(0, 64 * MIB).await == w.movie(0, 64 * MIB));
+    let held = w.stats().await.held_bytes.unwrap();
+    let ring = RING_BYTES.max(2 * u64::from(PIECE));
+    assert!(held > ring + 8 * MIB, "held {held}");
+    // Free space follows the folder, starting just under the stop.
+    test_hooks::set_free_base(&w.engine, Some(allocated(&w.dir()) + STOP_BYTES - MIB));
+    let paused = Arc::new(AtomicBool::new(false));
+    let watch = tokio::spawn({
+        let (engine, t, paused) = (w.engine.clone(), w.t, paused.clone());
+        async move {
+            loop {
+                if engine.stats(t).await.is_ok_and(|s| s.paused) {
+                    paused.store(true, Ordering::Relaxed);
+                }
+                tokio::time::sleep(Duration::from_millis(5)).await;
+            }
+        }
+    });
+    until("the ring", || async {
+        w.stats().await.window_bytes == Some(ring)
+    })
+    .await;
+    // The player reads on, as it does through a replan: the keeper evicts
+    // only once a player read is open (plans/streaming-window.md 2.3).
+    let len = w.s.movie.len() as u64;
+    let reader = w.engine.open_reader(w.t, "default", w.movie).await.unwrap();
+    let mut range = reader.range(64 * MIB, Some(len)).await.unwrap();
+    let rest = tokio::spawn(async move {
+        let mut got = Vec::new();
+        range.read_to_end(&mut got).await.map(|_| got)
+    });
+    until("held within the ring", || async {
+        w.stats().await.held_bytes.is_some_and(|h| h <= ring)
+    })
+    .await;
+    let got = within(60, rest).await.unwrap().unwrap();
+    assert!(got == w.movie(64 * MIB, len), "bytes differ");
+    watch.abort();
+    assert!(!paused.load(Ordering::Relaxed), "the ring was stopped");
+    test_hooks::set_free_base(&w.engine, None);
+}
+
+/// Review r2 N4: a torrent a fatal write error stopped is not started again
+/// into a disk at the stop: a range fails quietly with the full disk's error
+/// (the core says "did not start here"), and once space is back the next
+/// range starts it again and reads.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn at_the_stop_a_failed_torrent_waits_for_space() {
+    let w = windowed(48 << 20, plan(), None).await;
+    assert!(w.read(0, 4 * MIB).await == w.movie(0, 4 * MIB));
+    test_hooks::set_free(&w.engine, Some(STOP_BYTES));
+    test_hooks::fail_torrent(&w.engine, w.t).await;
+    let reader = w.engine.open_reader(w.t, "default", w.movie).await.unwrap();
+    for _ in 0..3 {
+        match reader.range(8 * MIB, Some(12 * MIB)).await {
+            Err(EngineError::Torrent(e)) => {
+                assert!(format!("{e:#}").contains("os error 28"), "{e:#}")
+            }
+            Err(e) => panic!("{e}"),
+            Ok(_) => panic!("started into a full disk"),
+        }
+        tokio::time::sleep(Duration::from_millis(500)).await;
+    }
+    test_hooks::set_free(&w.engine, None);
     assert!(w.read(8 * MIB, 12 * MIB).await == w.movie(8 * MIB, 12 * MIB));
 }
 
@@ -1294,12 +1381,12 @@ fn a_device_under_the_window_floor_plays_in_a_ring() {
     let ram = plan(RESERVE_BYTES + 32 * MIB, 4 * MIB);
     assert_eq!((ram.budget, ram.memory), (RING_BYTES, true));
     assert_eq!(plan(0, 4 * MIB).budget, RING_BYTES, "a full disk too");
-    assert_eq!(
-        plan(0, 16 * MIB).budget,
-        RING_BYTES,
-        "45 MiB at 16 MiB pieces"
-    );
-    assert_eq!(plan(0, 32 * MIB).budget, 64 * MIB, "two pieces");
+    // Large pieces: past the pins and `B` the ring keeps a piece to play in
+    // (review r2 N9).
+    for piece in [16 * MIB, 32 * MIB, 64 * MIB] {
+        let p = plan(0, piece);
+        assert!(p.budget == p.floor && p.playing >= piece, "{p:?}");
+    }
     assert!(
         disk.within(disk.budget - 1).is_none(),
         "a walk under the ring"
@@ -1339,6 +1426,8 @@ fn a_ram_ring_stays_within_the_devices_memory() {
             },
         )
     };
+    // A device at its memory limit (iOS reads 0): no RAM ring (review r2 N6).
+    assert!(!plan(MIB, Some(0)).memory, "a RAM ring at no memory");
     // No word from the platform: the ceiling. A Mac's 45 MiB ring.
     let mac = plan(MIB, None);
     assert_eq!((mac.budget, mac.memory), (RING_BYTES, true));
@@ -1346,13 +1435,15 @@ fn a_ram_ring_stays_within_the_devices_memory() {
     let stick = plan(MIB, Some(120 * MIB));
     assert_eq!((stick.budget, stick.memory), (30 * MIB, true));
     assert!(stick.open_cap <= 2 * MIB, "{stick:?}");
-    // 16 MiB pieces with 400 MiB free: two pieces open, under 100 MiB.
-    let big = plan(16 * MIB, Some(400 * MIB));
-    assert!(big.memory && big.budget <= 100 * MIB, "{big:?}");
+    // 16 MiB pieces with 600 MiB free: two pieces open, within the
+    // ceiling, a piece to play in.
+    let big = plan(16 * MIB, Some(600 * MIB));
+    assert!(big.memory && big.budget <= RAM_CEILING_BYTES, "{big:?}");
     assert!(
         big.open_floor <= 32 * MIB && big.open_cap <= 32 * MIB,
         "{big:?}"
     );
+    assert!(big.playing >= 16 * MIB, "{big:?}");
     // 64 MiB pieces with 400 MiB free: two do not fit in 100 MiB, so a
     // disk ring.
     let huge = plan(64 * MIB, Some(400 * MIB));

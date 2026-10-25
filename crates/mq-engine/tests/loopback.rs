@@ -454,9 +454,15 @@ async fn a_whole_file_stays_whole_where_the_volume_punches() {
         resume_at: None,
     };
     again.window(t, movie, w).await.unwrap();
-    mq_engine::test_hooks::set_free(&again, Some(64 << 20));
+    // Under the floor, over the stop: the window plays on (review r2 N3).
+    mq_engine::test_hooks::set_free(&again, Some(mq_engine::FLOOR_BYTES - 1));
     let len = s.movie.len() as u64;
-    let got = read_range(&again, t, movie, 0, len).await;
+    let got = tokio::time::timeout(
+        Duration::from_secs(60),
+        read_range(&again, t, movie, 0, len),
+    )
+    .await
+    .expect("the whole file under the floor did not finish in 60 s");
     assert!(got == s.movie, "the whole file under the floor read wrong");
     // A fresh folder in the same state gets piece files.
     let fresh = tempfile::tempdir().unwrap();

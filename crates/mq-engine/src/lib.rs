@@ -1681,6 +1681,10 @@ impl Engine {
         if self.kept_of(&t).contains(&file) || lock(&t.downloading).contains_key(&file) {
             return self.play_whole(h, file).await;
         }
+        // Stale already: no idle torrent is deleted for it (review r2 N8).
+        if after.is_some_and(|seen| seen != window::Seen::of(&t)) {
+            return Ok(false);
+        }
         // A ring the disk cannot hold keeps its pieces in RAM, where they are
         // piece files (plans/streaming-window-chunks.md); it needs no disk.
         // Never on a torrent with a download: the switch is the torrent's,
@@ -1949,18 +1953,22 @@ impl Engine {
         let Some(l) = live.as_ref() else {
             return Ok(None);
         };
-        // Paused for space, it stays paused until the space is back: the
-        // read waits (plans/no-space-warnings.md). One a fatal write error
-        // stopped (a full disk) starts again, from its check, so Try again
-        // plays it (review r1 m5).
-        let stopped = t.space_stopped.load(Ordering::Relaxed)
-            && self.free().is_some_and(|free| free <= window::RESUME_BYTES);
-        let failed = l
-            .managed
-            .with_state(|s| matches!(s, librqbit::ManagedTorrentState::Error(_)));
-        if (l.managed.is_paused() || failed) && !stopped {
-            self.inner.session.unpause(&l.managed).await?;
-            t.space_stopped.store(false, Ordering::Relaxed);
+        // A held torrent (paused, or stopped by a fatal error such as a full
+        // disk) starts again, from its check, so Try again plays it (review
+        // r1 m5); but not into a disk at the stop: it stays stopped, the read
+        // waits, and the keeper or the guard starts it once space is back or
+        // the window needs none (review r2 N4, plans/no-space-warnings.md).
+        if window::halted(&l.managed) {
+            let was = t.space_stopped.load(Ordering::Relaxed);
+            let full = self.free().is_some_and(|free| {
+                free <= window::STOP_BYTES || (was && free <= window::RESUME_BYTES)
+            });
+            if full && !t.memory.load(Ordering::Relaxed) {
+                t.space_stopped.store(true, Ordering::Relaxed);
+            } else {
+                self.inner.session.unpause(&l.managed).await?;
+                t.space_stopped.store(false, Ordering::Relaxed);
+            }
         }
         Ok(Some((l.managed.clone(), l.msgs.clone())))
     }
