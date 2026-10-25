@@ -77,7 +77,8 @@ struct KeeperLogic {
     private(set) var task = false
     private var facts: KeeperFacts?
     private var activity = false
-    private var dockShown = false
+    /// The fraction the Dock tile shows, nil with no bar.
+    private var dockShown: Double?
     /// What was last sent, so `downloadsAllowed` goes on every change.
     private var sent: (allowed: Bool, left: Int)?
     /// Done ids when the batch began, and taps the core has not counted yet.
@@ -190,11 +191,15 @@ struct KeeperLogic {
         guard platform == .mac, let facts else { return }
         if facts.left > 0 {
             if !activity { activity = true; out.append(.beginActivity) }
-            dockShown = true
-            out.append(.dock(facts.fraction ?? 0))
+            // The tile redraws for a move of 1 percent or more, not for every snapshot (review r1 m9).
+            let fraction = facts.fraction ?? 0
+            if dockShown.map({ abs($0 - fraction) >= 0.01 }) ?? true {
+                dockShown = fraction
+                out.append(.dock(fraction))
+            }
         } else {
             if activity { activity = false; out.append(.endActivity) }
-            if dockShown { dockShown = false; out.append(.dock(nil)) }
+            if dockShown != nil { dockShown = nil; out.append(.dock(nil)) }
         }
     }
 

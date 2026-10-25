@@ -338,6 +338,15 @@ private func submits(_ effects: [KeeperEffect]) -> Int {
     #expect(KeeperLogic.asksBeforeQuit(facts(left: 1)))
 }
 
+// The Dock tile redraws when the bar moves a percent or more, not on every snapshot (review r1 m9).
+@Test func theDockRedrawsOnlyForAVisibleMove() {
+    var keeper = KeeperLogic(platform: .mac)
+    #expect(keeper.on(.facts(facts(left: 1, bytes: (100, 1000)))).contains(.dock(0.1)))
+    #expect(!keeper.on(.facts(facts(left: 1, bytes: (105, 1000)))).contains { if case .dock = $0 { true } else { false } })
+    #expect(keeper.on(.facts(facts(left: 1, bytes: (120, 1000)))).contains(.dock(0.12)))
+    #expect(keeper.on(.facts(facts(left: 0))).contains(.dock(nil)))
+}
+
 @Test func downloadsAllowedGoesOnEveryChangeEveryMinuteAndAtForeground() {
     var keeper = KeeperLogic(platform: .continued)
     #expect(keeper.on(.facts(facts(left: 1))) == [.allowed(true, reason: nil)])
