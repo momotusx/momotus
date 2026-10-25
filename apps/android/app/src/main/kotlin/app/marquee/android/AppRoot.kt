@@ -346,7 +346,7 @@ private fun AppNav(
             onBack = {
                 // TV: Back in a place's content first puts focus on its tab, as Menu does on Apple TV; Back on the bar
                 // then goes Home. Home keeps its own chain (HomeBackHandler).
-                val toBar = tv && top.isTopLevel && !tvNav.held && tvNav.take()
+                val toBar = tv && top.isTopLevel && tvNav.backToBar()
                 if (!toBar && backStack.size > 1) backStack.removeAt(backStack.lastIndex)
             },
             entryDecorators =

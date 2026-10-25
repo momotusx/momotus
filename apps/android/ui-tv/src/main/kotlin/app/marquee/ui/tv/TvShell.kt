@@ -100,6 +100,7 @@ fun TvShell(
                 if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                 if (event.key in dpadKeys) {
                     KeyPresses.pressed()
+                    nav.keys++
                     onKey()
                 }
                 val axis =
@@ -149,11 +150,24 @@ class TvNavFocus {
     var held = false
         internal set
 
-    /** The place the bar itself showed last. */
+    /**
+     * D-pad keys pressed while this bar was composed. It starts again with the activity (a configuration change), so
+     * a start that finds the system's default focus on the bar is told apart from a viewer who put it there.
+     */
+    var keys = 0
+        internal set
+
+    /** The place the bar itself asked for, until it shows. */
     internal var asked: Route? = null
 
     /** Puts focus on the current place's tab; false when the bar is not there. */
     fun take(): Boolean = runCatching { current.requestFocus() }.getOrDefault(false)
+
+    /** Back in a place's content: focus goes to its tab. False when the bar holds focus already (Back goes on) or is gone. */
+    fun backToBar(): Boolean = !held && take()
+
+    /** True while the bar holds focus that a key put there (not the system's default focus at a start). */
+    val heldByKey: Boolean get() = held && keys > 0
 }
 
 /** The bar of the shell around this screen (null outside one). */
@@ -221,13 +235,19 @@ private fun TvTopNav(
         val tab = resting ?: return@LaunchedEffect
         if (tab == shown) return@LaunchedEffect
         delay(TAB_SETTLE_MS)
-        show(tab)
+        // A Select during the settle showed it already.
+        if (tab != shown) show(tab)
     }
     // The place changed from elsewhere while focus sat on another tab (Back from the bar went Home): focus
     // follows it, so the settle never takes the viewer back.
     LaunchedEffect(selected) {
+        // The bar's own switch: the viewer may have moved on to another tab in the frame before; that move stands.
+        if (selected == nav.asked) {
+            nav.asked = null
+            return@LaunchedEffect
+        }
         val tab = resting ?: return@LaunchedEffect
-        if (tab != selected && selected != nav.asked) nav.take()
+        if (tab != selected) nav.take()
     }
     // Select on the place shown enters it, as on Apple TV; on another place it shows that one at once.
     val choose: (Route) -> Unit = { route ->

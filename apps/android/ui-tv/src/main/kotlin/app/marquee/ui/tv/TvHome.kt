@@ -229,7 +229,7 @@ fun TvHome(
     // At a start the system's own focus may sit on the bar before any key; Home takes it then.
     val nav = LocalTvNav.current
     LaunchedEffect(state) {
-        if (nav?.held == true && state.focus.interactions > 0) return@LaunchedEffect
+        if (nav?.heldByKey == true) return@LaunchedEffect
         restoreFocus(home, state, state.focus.focusedKey)
     }
     // On the first lane the hero shows above it: the page rests at its top. The page's anchor leaves

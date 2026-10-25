@@ -5,6 +5,10 @@ import android.os.Handler
 import android.os.Looper
 import androidx.activity.ComponentActivity
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
@@ -93,6 +97,9 @@ class TvHomeShelfTest {
             }
         }
     private val scope = CoroutineScope(SupervisorJob() + main)
+
+    // Bumped to take Home out of the composition and bring it back.
+    private var epoch by mutableIntStateOf(0)
 
     @After
     fun stop() {
@@ -199,14 +206,17 @@ class TvHomeShelfTest {
         compose.setContent {
             MarqueeTheme(Form.Tv) {
                 val page = @Composable {
-                    TvHome(
-                        home,
-                        state,
-                        onOpen = {},
-                        onPlay = {},
-                        onSetup = {},
-                        onAddons = {},
-                    )
+                    // A new epoch takes Home out and brings it back, as a place switch does.
+                    key(epoch) {
+                        TvHome(
+                            home,
+                            state,
+                            onOpen = {},
+                            onPlay = {},
+                            onSetup = {},
+                            onAddons = {},
+                        )
+                    }
                 }
                 // In its frame the top shelf's art runs up behind the bar.
                 if (framed) {
@@ -386,6 +396,29 @@ class TvHomeShelfTest {
             focusedOn("Play Night of the Living Dead"),
             "Down did not come back to Play",
         )
+    }
+
+    @Test
+    fun `Home shown again from the bar leaves the focus on its tab, and Down comes back to Play`() {
+        show()
+        compose
+            .onNodeWithContentDescription(
+                "Play Night of the Living Dead",
+            ).performSemanticsAction(SemanticsActions.RequestFocus)
+        waitFor("Play takes the focus") { focusedOn("Play Night of the Living Dead") }
+        press(Key.DirectionUp)
+        val homeTab = isFocused() and hasText("Home")
+        assertTrue(compose.onAllNodes(homeTab).fetchSemanticsNodes().isNotEmpty(), "Up missed the bar")
+        // Home leaves and comes back while the bar holds the focus a key put there (a settle onto its tab).
+        compose.runOnIdle { epoch++ }
+        compose.waitForIdle()
+        compose.onAllNodes(hasContentDescription("Play Night of the Living Dead")).fetchSemanticsNodes().single()
+        // Its restore would land on Play within frames; give it a second.
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.waitForIdle()
+        assertTrue(compose.onAllNodes(homeTab).fetchSemanticsNodes().isNotEmpty(), "Home took the focus off its tab")
+        press(Key.DirectionDown)
+        assertTrue(focusedOn("Play Night of the Living Dead"), "Down did not come back to Play")
     }
 
     @Test

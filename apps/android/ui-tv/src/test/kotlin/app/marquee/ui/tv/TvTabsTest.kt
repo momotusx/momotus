@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.semantics.SemanticsActions
@@ -44,6 +45,7 @@ class TvTabsTest {
 
     private var selected by mutableStateOf<Route>(Route.Home)
     private val opened = mutableListOf<Route>()
+    private val nav = TvNavFocus()
 
     private fun show() {
         compose.setContent {
@@ -58,6 +60,7 @@ class TvTabsTest {
                     contentEntry = { null },
                     onNavFocus = {},
                     onKey = {},
+                    nav = nav,
                 ) {
                     // Each place: one focusable item named after it.
                     Box(Modifier.size(200.dp).semantics { contentDescription = "page $selected" }.focusable())
@@ -74,6 +77,15 @@ class TvTabsTest {
 
     private fun press(key: Key) {
         compose.onNode(isFocused()).performKeyInput { pressKey(key) }
+        compose.mainClock.advanceTimeByFrame()
+    }
+
+    /** The place changes from outside the bar (Back popped the stack, or the content chose a place). */
+    private fun elsewhere(route: Route) {
+        compose.runOnIdle {
+            selected = route
+            Snapshot.sendApplyNotifications()
+        }
         compose.mainClock.advanceTimeByFrame()
     }
 
@@ -113,5 +125,65 @@ class TvTabsTest {
         compose.mainClock.advanceTimeByFrame()
         page(Route.Home).assertIsFocused()
         assertEquals(emptyList(), opened)
+    }
+
+    @Test
+    fun `Back in a place's content puts focus on its tab, and Back on the bar goes on`() {
+        show()
+        press(Key.DirectionDown)
+        page(Route.Home).assertIsFocused()
+        assertEquals(true, compose.runOnIdle { nav.backToBar() })
+        tab("Home").assertIsFocused()
+        // On the bar Back is not taken: the stack pops.
+        assertEquals(false, compose.runOnIdle { nav.backToBar() })
+    }
+
+    @Test
+    fun `a place changed from elsewhere moves bar focus to its tab, and the settle never goes back`() {
+        show()
+        press(Key.DirectionRight)
+        compose.mainClock.advanceTimeBy(TAB_SETTLE_MS * 2)
+        page(Route.Discover).assertExists()
+        // Back on the bar pops to Home.
+        elsewhere(Route.Home)
+        compose.mainClock.advanceTimeByFrame()
+        tab("Home").assertIsFocused()
+        compose.mainClock.advanceTimeBy(TAB_SETTLE_MS * 2)
+        page(Route.Home).assertExists()
+        assertEquals(listOf<Route>(Route.Discover), opened)
+    }
+
+    @Test
+    fun `after a place changed from its content, Back on the bar still moves focus to the place shown`() {
+        show()
+        // The bar shows Discover, then Home again.
+        press(Key.DirectionRight)
+        compose.mainClock.advanceTimeBy(TAB_SETTLE_MS * 2)
+        press(Key.DirectionLeft)
+        compose.mainClock.advanceTimeBy(TAB_SETTLE_MS * 2)
+        page(Route.Home).assertExists()
+        // Down into Home; something there opens Settings (as Calendar's Discover or Settings' addons do).
+        press(Key.DirectionDown)
+        elsewhere(Route.Settings)
+        // Up to the bar on Settings, Left to Search, and Back on the bar pops to Home before the settle.
+        press(Key.DirectionUp)
+        tab("Settings").assertIsFocused()
+        press(Key.DirectionLeft)
+        tab("Search").assertIsFocused()
+        elsewhere(Route.Home)
+        compose.mainClock.advanceTimeByFrame()
+        tab("Home").assertIsFocused()
+        compose.mainClock.advanceTimeBy(TAB_SETTLE_MS * 2)
+        page(Route.Home).assertExists()
+    }
+
+    @Test
+    fun `Select during the settle shows the place once`() {
+        show()
+        press(Key.DirectionRight)
+        compose.onNode(isFocused()).performKeyInput { pressKey(Key.DirectionCenter) }
+        compose.mainClock.advanceTimeBy(TAB_SETTLE_MS * 2)
+        page(Route.Discover).assertExists()
+        assertEquals(listOf<Route>(Route.Discover), opened)
     }
 }
