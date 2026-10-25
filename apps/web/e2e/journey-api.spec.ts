@@ -1220,27 +1220,37 @@ test("TV: closing Search leaves the page where it was scrolled", async ({ browse
 });
 
 test("TV: Up Next waits while a panel is open", async ({ browser }) => {
-  const c = new Client(`ws://127.0.0.1:${JOURNEY_PORT}/ws`);
-  await c.req("setPrefs", { patch: { autoplayNext: false } }).finally(() => c.close());
-  const { context, page: p } = await page(browser, { width: 1920, height: 1080 });
-  await p.goto("/play/series/mqj2/mqj2:1:1?form=tv");
-  await expect(p.locator('[data-f="player:toggle"]')).toBeVisible({ timeout: 30_000 });
-  await startIfPaused(p);
-  await p.locator('[data-f="player:subs"]').focus();
-  await p.keyboard.press("Enter");
-  await expect.poll(() => focusedKey(p)).toBe("sub:off");
-  // The credits start with the Subtitles panel open.
-  await p.evaluate(() => {
-    const v = document.querySelector("video");
-    if (v) v.currentTime = v.duration - 15;
-  });
-  await p.waitForTimeout(1500);
-  await expect(p.locator(".next")).toHaveCount(0);
-  expect(await focusedKey(p)).toMatch(/^sub:/);
-  // Closed, Up Next comes.
-  await p.keyboard.press("Escape");
-  await expect(p.locator(".next")).toBeVisible({ timeout: 10_000 });
-  await context.close();
+  // No subtitle on at the start, so the panel opens on Off: the file's profile has English (beforeAll), and the core
+  // turns its start subtitle on within a second, which raced the panel opening. Restored after.
+  const before = (await prefs()).subtitleLanguages;
+  const set = async (patch: { autoplayNext?: boolean; subtitleLanguages: string[] }) => {
+    const c = new Client(`ws://127.0.0.1:${JOURNEY_PORT}/ws`);
+    await c.req("setPrefs", { patch }).finally(() => c.close());
+  };
+  await set({ autoplayNext: false, subtitleLanguages: [] });
+  try {
+    const { context, page: p } = await page(browser, { width: 1920, height: 1080 });
+    await p.goto("/play/series/mqj2/mqj2:1:1?form=tv");
+    await expect(p.locator('[data-f="player:toggle"]')).toBeVisible({ timeout: 30_000 });
+    await startIfPaused(p);
+    await p.locator('[data-f="player:subs"]').focus();
+    await p.keyboard.press("Enter");
+    await expect.poll(() => focusedKey(p)).toBe("sub:off");
+    // The credits start with the Subtitles panel open.
+    await p.evaluate(() => {
+      const v = document.querySelector("video");
+      if (v) v.currentTime = v.duration - 15;
+    });
+    await p.waitForTimeout(1500);
+    await expect(p.locator(".next")).toHaveCount(0);
+    expect(await focusedKey(p)).toMatch(/^sub:/);
+    // Closed, Up Next comes.
+    await p.keyboard.press("Escape");
+    await expect(p.locator(".next")).toBeVisible({ timeout: 10_000 });
+    await context.close();
+  } finally {
+    await set({ subtitleLanguages: before });
+  }
 });
 
 /** A Discover catalog that pages: its first answer fails, then 30 titles;
