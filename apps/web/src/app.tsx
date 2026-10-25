@@ -6,7 +6,7 @@ import House from "lucide-solid/icons/house";
 import LibraryBig from "lucide-solid/icons/library-big";
 import SearchIcon from "lucide-solid/icons/search";
 import Settings from "lucide-solid/icons/settings";
-import { type Component, createEffect, createMemo, createSignal, For, on, Show, untrack } from "solid-js";
+import { type Component, createEffect, createMemo, createSignal, For, on, onCleanup, Show, untrack } from "solid-js";
 import { ProfileButton } from "./components/avatar";
 import { bridgeUrl, link } from "./core/client";
 // The debrid accounts follow the core from the start, whatever screen is open.
@@ -15,7 +15,7 @@ import "./core/trakt";
 // A sign-out with removal that a reload cut short goes on (D13).
 import "./core/wipe";
 import { gateOpen, profiles, profilesFailed } from "./core/profiles";
-import { installFocus, restoreSoon } from "./focus/dom";
+import { focusRail, installFocus, move, restoreSoon } from "./focus/dom";
 import { form } from "./form";
 import { entryOwner, historyBase, historyDepth, markBack, resetHistoryBase, stampEntriesWith, takeAfterBack, takeBack } from "./history";
 import Addons from "./screens/addons";
@@ -72,6 +72,10 @@ export function parentOf(path: string): string | null {
 }
 
 
+/** How long the focus rests on a TV tab before its place shows: the androidx.tv TabRow's debounce. Longer than a
+ * held arrow's repeat, so a sweep across the bar opens no place on the way. */
+const TAB_SETTLE_MS = 250;
+
 /** Search opens as a palette over the screen you are on; its route stays for
  * deep links (and is where the palette lives when you are already there). */
 const paletteClick = (path: string) => (e: MouseEvent) => {
@@ -86,9 +90,37 @@ const paletteClick = (path: string) => (e: MouseEvent) => {
  * and the profile at the right. */
 function TopNav() {
   const location = useLocation();
+  const navigate = useNavigate();
   const tv = () => form() === "tv";
+  // TV: a tab that keeps the focus for TAB_SETTLE_MS shows its place, as Apple TV's tab bar does; the focus stays
+  // on it. A replace, as a tab bar switches: Back from any place still goes Home (parentOf).
+  let settle: ReturnType<typeof setTimeout> | undefined;
+  const rest = (path: string) => {
+    clearTimeout(settle);
+    if (!tv() || section(location.pathname) === path) return;
+    settle = setTimeout(() => navigate(path, { replace: true }), TAB_SETTLE_MS);
+  };
+  onCleanup(() => clearTimeout(settle));
+  // TV: Select on the place shown goes into it, as on Apple TV.
+  const select = (path: string) => (e: MouseEvent) => {
+    if (tv() && section(location.pathname) === path) {
+      e.preventDefault();
+      move("down");
+      return;
+    }
+    paletteClick(path)(e);
+  };
   const link = (d: Destination) => (
-    <A href={d.path} end class="nav" classList={{ on: section(location.pathname) === d.path }} data-f={`nav:${d.path}`} on:click={paletteClick(d.path)}>
+    <A
+      href={d.path}
+      end
+      class="nav"
+      classList={{ on: section(location.pathname) === d.path }}
+      data-f={`nav:${d.path}`}
+      on:click={select(d.path)}
+      on:focus={() => rest(d.path)}
+      on:blur={() => clearTimeout(settle)}
+    >
       <Show when={d.tool && tv()}>
         <d.icon aria-hidden />
       </Show>
@@ -142,6 +174,10 @@ function Shell(props: RouteSectionProps) {
   const location = useLocation();
   const navigate = useNavigate();
   const back = () => {
+    // TV: Back in a place's content puts the focus on its tab first, as Menu does on Apple TV; Back on the bar goes on.
+    // Home keeps its own (the platform's exit).
+    const place = location.pathname !== "/" && destinations.some((d) => d.path === location.pathname);
+    if (form() === "tv" && place && focusRail()) return;
     if (historyDepth() > historyBase()) {
       markBack();
       history.back();

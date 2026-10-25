@@ -273,6 +273,18 @@ export function move(dir: Direction): boolean {
   return true;
 }
 
+const railOf = (el: Element | null) => el?.closest<HTMLElement>('[data-fgroup="rail"]') ?? null;
+
+/** Puts the focus on the bar's tab of the place shown; false when the bar has it already or is not there. */
+export function focusRail(): boolean {
+  if (railOf(document.activeElement)) return false;
+  const tab = document.querySelector<HTMLElement>('[data-fgroup="rail"] [data-f].on');
+  if (!tab || tab.closest("[inert]")) return false;
+  cancelRestore();
+  focusEl(tab);
+  return true;
+}
+
 /** A profile switch: where focus was belongs to the old profile's screens. */
 export function forgetFocus() {
   cancelRestore();
@@ -304,6 +316,14 @@ export function cancelRestore() {
 export function restore(back: boolean, asked = inputs) {
   cancelRestore();
   if (!mayAutoFocus() || inputs !== asked) return;
+  // TV: a place shown from the bar (focus rested on its tab, or Back on the bar went Home) leaves the focus on the
+  // bar, on that place's tab: Down goes in.
+  const rail = railOf(document.activeElement);
+  if (rail && document.documentElement.dataset.form === "tv") {
+    const tab = rail.querySelector<HTMLElement>("[data-f].on");
+    if (tab && tab !== document.activeElement) focusEl(tab);
+    return;
+  }
   const want = back ? screens.get(path()) : undefined;
   const spot = back ? spots.get(path()) : undefined;
   const started = performance.now();
