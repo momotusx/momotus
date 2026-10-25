@@ -139,6 +139,11 @@ struct MainShell: View {
     @State private var navHeight: CGFloat = 0
     /// The top bar's link with focus (nil: focus is elsewhere). Menu in a place's content puts it on that place.
     @FocusState private var navFocus: AppTab?
+    /// The profile avatar at the end of the bar has focus: the bar too, for Menu.
+    @FocusState private var avatarFocus: Bool
+    /// The places under the bar: Select on the shown link sends focus into the shown one.
+    @Namespace private var placesScope
+    @Environment(\.resetFocus) private var resetFocus
     #endif
     /// Places opened so far, kept alive so each keeps its place (a query, a
     /// catalog and its scroll, a filter, an open title) as a tab bar does.
@@ -293,7 +298,7 @@ struct MainShell: View {
             // Top-level places only, as on Android: a pushed page has no pill to wander into.
             if !immersion.active && !pageOver {
                 let away = TVTopBar.hidden(atHome: tab == .home, scrolledDown: homeScrolled)
-                TopNav(selection: tab, select: { select($0) }, profiles: { showProfiles = true }, focused: $navFocus).padding(.bottom, Theme.Space.m)
+                TopNav(selection: tab, select: { select($0) }, enter: { resetFocus(in: placesScope) }, profiles: { showProfiles = true }, focused: $navFocus, avatar: $avatarFocus).padding(.bottom, Theme.Space.m)
                     .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { navHeight = $0 }
                     // Kept in the layout, so the page under it never jumps.
                     .offset(y: away ? -navHeight : 0)
@@ -321,7 +326,9 @@ struct MainShell: View {
     /// goes to its top row, else nothing here and the app exits.
     private var back: (() -> Void)? {
         guard !pageOver else { return nil }
-        switch TVBack.step(atHome: tab == .home, scrolledDown: homeScrolled, inBar: navFocus != nil) {
+        // The player covering the places leaves no bar to go to: Menu there goes on as before.
+        let inBar = navFocus != nil || avatarFocus || immersion.active
+        switch TVBack.step(atHome: tab == .home, scrolledDown: homeScrolled, inBar: inBar) {
         case .toBar: return { navFocus = tab }
         case .goHome: return { select(.home) }
         case .toTop: return { homeTop += 1 }
@@ -384,6 +391,9 @@ struct MainShell: View {
                     #endif
             }
         }
+        #if os(tvOS)
+        .focusScope(placesScope)
+        #endif
     }
 
     @ViewBuilder private func screen(_ tab: AppTab) -> some View {
@@ -699,13 +709,15 @@ private struct SearchGlyphStyle: ButtonStyle {
 private struct TopNav: View {
     let selection: AppTab
     let select: (AppTab) -> Void
+    /// Select on the shown place's link: focus goes into the place, as the tvOS tab bar does.
+    let enter: () -> Void
     /// The active profile's avatar at the end, opening the picker.
     var profiles: (() -> Void)?
     /// Which link has focus: Up from a page enters on the current place, not the nearest link. A link that
     /// keeps it for the settle shows its place, as the tvOS tab bar does; focus stays on it.
     var focused: FocusState<AppTab?>.Binding
-    /// The place this bar showed last, so a change from elsewhere (Menu on the bar goes Home) moves focus.
-    @State private var asked: AppTab?
+    /// The avatar has focus (Menu there goes Home, as on a link).
+    var avatar: FocusState<Bool>.Binding
 
     var body: some View {
         HStack(spacing: 2) {
@@ -715,7 +727,7 @@ private struct TopNav: View {
             ForEach(AppTab.allCases.filter { !$0.isTool }, id: \.self) { link($0) }
             Capsule().fill(Theme.Palette.lineStrong).frame(width: 1.5, height: Self.mark).padding(.horizontal, 8)
             ForEach(AppTab.allCases.filter(\.isTool), id: \.self) { link($0) }
-            if let profiles { ProfileButton(size: Self.mark + 8, action: profiles).padding(.leading, 6) }
+            if let profiles { ProfileButton(size: Self.mark + 8, action: profiles).focused(avatar).padding(.leading, 6) }
         }
         .padding(Self.inset)
         .fixedSize()
@@ -728,17 +740,18 @@ private struct TopNav: View {
             guard let item = focused.wrappedValue, item != selection else { return }
             try? await Task.sleep(for: .milliseconds(250))
             guard !Task.isCancelled else { return }
-            asked = item
             select(item)
         }
+        // The place changed from elsewhere while focus sat on another link (Menu on the bar went Home): focus follows
+        // it, so the settle never takes the viewer back. The bar's own switch finds focus on that link already.
         .onChange(of: selection) { _, now in
-            if let item = focused.wrappedValue, item != now, now != asked { focused.wrappedValue = now }
+            if let item = focused.wrappedValue, item != now { focused.wrappedValue = now }
         }
         #endif
     }
 
     private func link(_ item: AppTab) -> some View {
-        Button { select(item) } label: {
+        Button { item == selection ? enter() : select(item) } label: {
             if item.isTool { Label(item.title, glyph: item.symbol) } else { Text(item.title) }
         }
         .buttonStyle(NavLinkStyle(on: item == selection))
