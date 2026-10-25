@@ -1,3 +1,4 @@
+import AVFoundation
 import XCTest
 
 /// The iPhone walk of plans/player-gestures.md 7.2: real touches on the walk build's player, which only XCUITest can
@@ -27,14 +28,43 @@ import XCTest
         continueAfterFailure = true
         let app = app
         app.launchArguments = ["-MQMute", "YES", "-MQOpenTitle", "movie:tt1727587", "-MQAutoPlay", "YES"]
+        // The walk install's source (MQ_WALK_ARGS from the wrapper, for example -MQInstallAddons <manifest URLs>).
+        app.launchArguments += (ProcessInfo.processInfo.environment["MQ_WALK_ARGS"] ?? "").split(separator: " ").map(String.init)
         app.launch()
+        // A fresh walk install asks for the local network (its test source is on the Mac) and opens on the first-run
+        // choice: allow the one for this walk app, browse past the other, then launch again so the title opens and plays.
+        let allow = XCUIApplication(bundleIdentifier: "com.apple.springboard").buttons["Allow"]
+        if allow.waitForExistence(timeout: 15) { allow.tap() }
+        let browse = app.buttons["Browse first"]
+        if browse.waitForExistence(timeout: 10) {
+            browse.tap()
+            sleep(5)
+            app.terminate()
+            app.launch()
+        }
         XCUIDevice.shared.orientation = .landscapeLeft
         let picture = app.descendants(matching: .any)["Show controls"]
-        XCTAssertTrue(picture.waitForExistence(timeout: 90), "the player shows the picture")
+        // The title page waits on Play when no version was picked by itself (the full film's file): press it.
+        if !picture.waitForExistence(timeout: 30), app.buttons["Play"].exists { app.buttons["Play"].tap() }
+        // No drag ever lands on anything but the playing picture.
+        guard picture.waitForExistence(timeout: 120) else {
+            shot("no picture")
+            XCTFail("the player never showed the picture")
+            return
+        }
         // The controls hide by themselves after 4 s.
         sleep(6)
         XCTAssertFalse(controlsShown, "the controls hid")
-        let height = app.windows.firstMatch.frame.height
+        let height = app.frame.height
+        // What the phone showed before the walk's first swipe: the brightness the player puts back, the volume the walk
+        // build puts back on close.
+        let walkStart = (brightness: screenBrightness, volume: AVAudioSession.sharedInstance().outputVolume)
+        // Every drag is measured against the app's frame, across: anything else and no drag is sent.
+        guard app.frame.width > app.frame.height, height > 200 else {
+            shot("no frame across")
+            XCTFail("the app's frame is not across: \(app.frame)")
+            return
+        }
 
         // Volume: up by at most 0.1 of the range (80 percent of the height is all of it), then down to the end stop.
         drag("volume up", at: CGPoint(x: 0.75, y: 0.6), by: CGVector(dx: 0, dy: -0.08 * height))
@@ -43,7 +73,7 @@ import XCTest
         drag("brightness up", at: CGPoint(x: 0.25, y: 0.7), by: CGVector(dx: 0, dy: -0.4 * height))
         drag("brightness down", at: CGPoint(x: 0.25, y: 0.3), by: CGVector(dx: 0, dy: 0.3 * height))
         // From the side band, and diagonally: neither changes a level. A diagonal drag stays a tap on the picture.
-        drag("left band", at: CGPoint(x: 10 / app.windows.firstMatch.frame.width, y: 0.5), by: CGVector(dx: 0, dy: -0.3 * height))
+        drag("left band", at: CGPoint(x: 10 / app.frame.width, y: 0.5), by: CGVector(dx: 0, dy: -0.3 * height))
         drag("diagonal", at: CGPoint(x: 0.75, y: 0.5), by: CGVector(dx: 60, dy: -60), toggles: true)
         if controlsShown { point(CGPoint(x: 0.5, y: 0.4)).tap() }
         sleep(1)
@@ -67,7 +97,8 @@ import XCTest
             let on = bar.coordinate(withNormalizedOffset: CGVector(dx: 0.75, dy: 0.5))
             on.press(forDuration: 0.05, thenDragTo: on.withOffset(CGVector(dx: 0, dy: -80)), withVelocity: 300, thenHoldForDuration: 0.2)
             shot("on the position bar")
-            XCTAssertTrue(controlsShown, "a drag on the bar leaves the controls up")
+            // Read once the scrub has settled: right after it the Back button can be missing from the tree for a moment.
+            XCTAssertTrue(app.buttons["Back"].waitForExistence(timeout: 2), "a drag on the bar leaves the controls up")
         } else {
             XCTFail("no position bar with the controls up")
         }
@@ -90,23 +121,31 @@ import XCTest
         app.activate()
         sleep(3)
         let back = screenBrightness
-        let found = "brightness before \(before), swiped \(swiped), at Home \(away), back in the app \(back)"
+        let found = "brightness at the walk's start \(walkStart.brightness), before the last swipe \(before), swiped \(swiped), at Home \(away), back in the app \(back)"
         let note = XCTAttachment(string: found)
         note.name = "brightness return"
         note.lifetime = .keepAlways
         add(note)
         XCTAssertNotEqual(swiped, before, accuracy: 0.02, "the swipe moved the brightness: \(found)")
-        XCTAssertEqual(away, before, accuracy: 0.02, "Home put the brightness back: \(found)")
-        XCTAssertEqual(back, before, accuracy: 0.02, "and coming back left it there: \(found)")
+        // The player puts back what it found before its first brightness swipe: the brightness at the walk's start.
+        XCTAssertEqual(away, walkStart.brightness, accuracy: 0.02, "Home put the walk's first brightness back: \(found)")
+        XCTAssertEqual(back, walkStart.brightness, accuracy: 0.02, "and coming back left it there: \(found)")
 
         sleep(2)
         if !controlsShown { point(CGPoint(x: 0.5, y: 0.4)).tap() }
         if app.buttons["Back"].waitForExistence(timeout: 3) { app.buttons["Back"].tap() }
         sleep(2)
+        // The walk build put back on close the volume it found at its first volume swipe: the walk's start.
+        let end = AVAudioSession.sharedInstance().outputVolume
+        let levels = XCTAttachment(string: "volume at the walk's start \(walkStart.volume), after close \(end)")
+        levels.name = "volume return"
+        levels.lifetime = .keepAlways
+        add(levels)
+        XCTAssertEqual(end, walkStart.volume, accuracy: 0.01, "the walk left the volume as it found it")
     }
 
     private func point(_ at: CGPoint) -> XCUICoordinate {
-        let frame = app.windows.firstMatch.frame
+        let frame = app.frame
         return app.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(dx: at.x * frame.width, dy: at.y * frame.height))
     }
 
