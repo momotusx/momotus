@@ -430,3 +430,144 @@ async fn a_played_download_pauses_after_keep_warm() {
     }
     panic!("a played download never paused");
 }
+
+/// The usual pack case after a relaunch: e01 downloaded yesterday, e02
+/// streamed today in a small window on a fresh engine. The engine tells the
+/// torrent's scheduler its kept file as it goes live, so the window never
+/// counts e01 and its keeper never evicts it; e01's bytes are no room a
+/// window could free either (code review r1, engine P1-1 and P2-2).
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_stream_of_a_packs_other_file_keeps_the_download() {
+    use tokio::io::AsyncReadExt;
+    let s = support::swarm_pack(&[("e01.mkv", 16 << 20), ("e02.mkv", 48 << 20)], PIECE).await;
+    let root = tempfile::tempdir().unwrap();
+    let e01 = {
+        let e = engine(root.path(), Vec::new(), u64::MAX).await;
+        let (_, e01, handle) = download(&e, &s, "e01.mkv").await;
+        handle.stop().await;
+        e01
+    };
+    let dir = root.path().to_owned();
+    let hash = s.info_hash.clone();
+    until("e01 is whole on disk", || {
+        let (dir, hash) = (dir.clone(), hash.clone());
+        async move { complete_on_disk(&dir, &hash, e01) }
+    })
+    .await;
+    let before = read(root.path(), &s.info_hash, "e01.mkv");
+    let e = engine(root.path(), vec![(s.info_hash.clone(), e01)], u64::MAX).await;
+    let t = e
+        .add_magnet(&s.info_hash, &[], &[s.seeder_addr])
+        .await
+        .unwrap();
+    let e02 = e
+        .select_file(t, "default", &FileHint::Name("e02.mkv".into()))
+        .await
+        .unwrap();
+    let claim = e.claim(t, "default").unwrap();
+    let w = Window {
+        // The keeper tests' plan: a 24 MiB window under a 48 MiB file.
+        plan: WindowPlan {
+            budget: 24 * MIB + mq_engine::APFS_HEAD_BYTES,
+            behind: 2 * MIB,
+            slack: 4 * MIB,
+            ahead: 4 * MIB,
+            open_floor: 2 * MIB,
+            open_cap: 4 * MIB,
+            floor: 12 * MIB,
+            playing: 6 * MIB,
+            memory: false,
+        },
+        bitrate: 64 << 10,
+        metered: false,
+        resume_at: None,
+    };
+    e.window(t, e02, w).await.unwrap();
+    let held = e.stats(t).await.unwrap().held_bytes.unwrap_or(0);
+    assert!(held < 2 * MIB, "e01 counted in the window: {held}");
+    assert!(
+        e.reclaimable(Some(t)).await < 2 * MIB,
+        "e01 counted as room"
+    );
+    // e02 to its end through the window: the keeper runs its rounds.
+    let reader = e.open_reader(t, "default", e02).await.unwrap();
+    let mut range = reader.range(0, None).await.unwrap();
+    let mut got = Vec::new();
+    tokio::time::timeout(Duration::from_secs(120), range.read_to_end(&mut got))
+        .await
+        .expect("e02 read in time")
+        .unwrap();
+    assert!(got == s.others[0]);
+    drop(range);
+    drop(reader);
+    drop(claim);
+    assert!(complete_on_disk(root.path(), &s.info_hash, e01));
+    assert!(read(root.path(), &s.info_hash, "e01.mkv") == before);
+}
+
+/// A delete under a playback of the same file evicts nothing, even with
+/// another file of the pack still kept: the reader's bytes stay on disk to
+/// the end (code review r1, engine P2-3).
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_delete_under_its_own_playback_evicts_nothing() {
+    use tokio::io::AsyncReadExt;
+    let s = support::swarm_pack(&[("e01.mkv", 12 << 20), ("e02.mkv", 8 << 20)], PIECE).await;
+    let root = tempfile::tempdir().unwrap();
+    let e = engine(root.path(), Vec::new(), u64::MAX).await;
+    let (t, e01, first) = download(&e, &s, "e01.mkv").await;
+    first.stop().await;
+    let (_, _, second) = download(&e, &s, "e02.mkv").await;
+    second.stop().await;
+    let path = root.path().join(&s.info_hash).join("e01.mkv");
+    let size = || std::os::unix::fs::MetadataExt::blocks(&std::fs::metadata(&path).unwrap()) * 512;
+    let before = size();
+    let claim = e.claim(t, "default").unwrap();
+    let reader = e.open_reader(t, "default", e01).await.unwrap();
+    // Playing: a first read wakes the torrent.
+    let mut head = reader.range(0, Some(MIB)).await.unwrap();
+    head.read_to_end(&mut Vec::new()).await.unwrap();
+    e.delete_file(&s.info_hash, e01).await.unwrap();
+    assert!(
+        size() + MIB >= before,
+        "evicted under its reader: {before} then {}",
+        size()
+    );
+    let mut range = reader.range(0, None).await.unwrap();
+    let mut got = Vec::new();
+    range.read_to_end(&mut got).await.unwrap();
+    assert!(got == s.movie);
+    drop(claim);
+}
+
+/// A playing torrent still counts in the cache's budget, though no round
+/// deletes it: over the budget, the idle one goes (code review r1, engine
+/// P2-1).
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_playing_torrent_counts_in_the_budget() {
+    use tokio::io::AsyncReadExt;
+    let a = support::swarm_pack(&[("a.mkv", 8 << 20)], PIECE).await;
+    let b = support::swarm_pack(&[("b.mkv", 8 << 20)], PIECE).await;
+    let root = tempfile::tempdir().unwrap();
+    let e = engine(root.path(), Vec::new(), 12 * MIB).await;
+    let read_whole = |s: &support::Swarm, name: &'static str| {
+        let (e, hash, seeder) = (e.clone(), s.info_hash.clone(), s.seeder_addr);
+        async move {
+            let t = e.add_magnet(&hash, &[], &[seeder]).await.unwrap();
+            let file = e
+                .select_file(t, "default", &FileHint::Name(name.into()))
+                .await
+                .unwrap();
+            let claim = e.claim(t, "default").unwrap();
+            let reader = e.open_reader(t, "default", file).await.unwrap();
+            let mut range = reader.range(0, None).await.unwrap();
+            range.read_to_end(&mut Vec::new()).await.unwrap();
+            claim
+        }
+    };
+    // b played and left; a playing now.
+    drop(read_whole(&b, "b.mkv").await);
+    let _playing = read_whole(&a, "a.mkv").await;
+    let idle = root.path().join(&b.info_hash);
+    until("the idle torrent goes", || async { !idle.exists() }).await;
+    assert!(root.path().join(&a.info_hash).exists());
+}
