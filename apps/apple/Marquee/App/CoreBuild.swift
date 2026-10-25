@@ -15,8 +15,16 @@ enum CoreBuild {
         field != "store" && !hasEngine
     }
 
-    /// Once at launch: the log line and, in Debug, the assertion.
+    /// The launch line: the build's field as written (none when missing) and whether the second engine is on, so a
+    /// store build (every Release build without MARQUEE_CORE_BUILD=own) never passes for an engine build in a walk.
+    static func launchLine(field: Any?, engineOn: Bool) -> String {
+        "core build \(field as? String ?? "none"): second engine \(engineOn ? "on" : "off")"
+    }
+
+    /// Once at launch: the build line, then the mismatch line and, in Debug, the assertion.
     static func check() {
+        let line = launchLine(field: Bundle.main.object(forInfoDictionaryKey: "MarqueeCoreBuild"), engineOn: EngineChoice.enabledHere)
+        coreLog.notice("\(line, privacy: .public)")
         guard missingEngine(field: field, hasEngine: hasEngine()) else { return }
         coreLog.error("core build \(field, privacy: .public): \(aboutLine, privacy: .public)")
         assertionFailure(aboutLine)

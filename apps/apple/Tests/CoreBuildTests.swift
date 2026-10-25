@@ -25,3 +25,13 @@ import Testing
     #expect(!(try read("Player/PlayerModel.swift")).contains("CoreBuild"))
     #expect(CoreBuild.aboutLine == "This build's core has no torrent engine")
 }
+
+/// Code r3 finding 1: a Release build is a store build unless the line says MARQUEE_CORE_BUILD=own, so the launch log
+/// names the build and the second engine, and a store build never passes for an engine build in a walk.
+@Test func theLaunchLogNamesTheBuildAndTheEngine() throws {
+    #expect(CoreBuild.launchLine(field: "own", engineOn: true) == "core build own: second engine on")
+    #expect(CoreBuild.launchLine(field: "store", engineOn: false) == "core build store: second engine off")
+    #expect(CoreBuild.launchLine(field: nil, engineOn: false) == "core build none: second engine off")
+    let check = try body(of: "    static func check()", in: String(contentsOf: URL(fileURLWithPath: #filePath).deletingLastPathComponent().appending(path: "../Marquee/App/CoreBuild.swift"), encoding: .utf8))
+    #expect(check.contains("engineOn: EngineChoice.enabledHere)\n        coreLog.notice(\"\\(line, privacy: .public)\")\n        guard"), "logged before the mismatch guard, on every launch")
+}

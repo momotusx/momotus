@@ -36,7 +36,9 @@ settings:
     # engine-free on purpose (STORE=1 for build-core.sh). The app reads it as MarqueeCoreBuild.
     MARQUEE_CORE_BUILD: own
     # A walk build (plans/apple-second-engine.md section 3): Release with MARQUEE_WALK_BUILD="DEBUG MARQUEE_WALK"
-    # on the xcodebuild line, the walk hooks and the sampler compiled into the app only, never into the engine.
+    # and MARQUEE_CORE_BUILD=own on the xcodebuild line (without it a Release build is a store build, the second
+    # engine off; the launch log says which), the walk hooks and the sampler compiled into the app only, never
+    # into the engine.
     MARQUEE_WALK_BUILD: ""
     # The app's bundle id; a walk build takes its own (app.marquee.walk) so it never installs over the owner's app.
     MARQUEE_APP_ID: app.marquee.dev
