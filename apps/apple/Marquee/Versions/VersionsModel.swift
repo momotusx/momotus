@@ -9,11 +9,19 @@ final class VersionsModel {
     let target: PlayTargetInfo
     @ObservationIgnored private let record: LiveRecord<VersionsSnapshot>
 
+    /// `purpose` "download": the versions to keep on this device (plans/offline-downloads.md 3.2).
+    let purpose: String?
+
     /// `bingeGroup`: the playing stream's, so the next episode keeps its release line.
-    init(target: PlayTargetInfo, core: CoreClient, bingeGroup: String? = nil) {
+    init(target: PlayTargetInfo, core: CoreClient, bingeGroup: String? = nil, purpose: String? = nil) {
         self.target = target
+        self.purpose = purpose
         var params = DeviceCaps.params()
         if let bingeGroup { params["bingeGroup"] = bingeGroup }
+        if let purpose {
+            params["purpose"] = purpose
+            params["itemId"] = target.itemId
+        }
         params["kind"] = target.kind
         params["videoId"] = target.videoId
         params["title"] = target.title

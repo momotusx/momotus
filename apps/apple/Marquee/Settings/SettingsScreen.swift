@@ -43,6 +43,9 @@ struct SettingsScreen: View {
     /// Where the menu holds and a section lands: under the window's top bar.
     @State private var stickTop: CGFloat = 0
     @FocusState private var focus: SettingsFocus?
+    #if !os(tvOS)
+    @Environment(DownloadKeeper.self) private var keeper: DownloadKeeper?
+    #endif
 
     /// TV: the profile block, a menu entry, or a section's first row.
     enum SettingsFocus: Hashable {
@@ -59,7 +62,15 @@ struct SettingsScreen: View {
     }
 
     private var sizes: SettingsRules.Sizes { tvForm ? .tv : metrics.wide ? .wide : .phone }
-    private var sections: [SettingsSection] { SettingsSection.shown(tv: tvForm) }
+    private var sections: [SettingsSection] { SettingsSection.shown(tv: tvForm, downloads: downloadsShown) }
+    /// Settings' Downloads (plans/offline-downloads.md 3.7): iOS and macOS, never a kids profile.
+    private var downloadsShown: Bool {
+        #if os(tvOS)
+        false
+        #else
+        keeper?.snapshot != nil && DownloadGate.controls(tv: DownloadGate.tv, kids: kids)
+        #endif
+    }
     private var me: ProfileInfo? { profiles.snapshot?.current }
     private var kids: Bool { me?.kids == true }
     private var art: Tile? { SettingsRules.art(rows: home.rows, heroes: home.header.heroes, kids: kids) }
@@ -340,6 +351,9 @@ struct SettingsScreen: View {
                 }
             }
             #if !os(tvOS)
+            if downloadsShown, let keeper, let snapshot = keeper.snapshot {
+                section(.downloads) { DownloadSettingsSection(keeper: keeper, snapshot: snapshot) }
+            }
             section(.device) {
                 panel { trailerPreviews }
             }

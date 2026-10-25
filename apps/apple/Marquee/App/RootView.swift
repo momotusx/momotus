@@ -22,6 +22,10 @@ struct OpenTitleAction {
 /// `SearchInput` instead.
 @MainActor @Observable final class LinkRequests {
     var discover: DiscoverRequest?
+    #if !os(tvOS)
+    /// A page of Library to open (Home's offline banner asks for Downloads); Library clears it.
+    var library: LibraryRoute?
+    #endif
 }
 
 extension EnvironmentValues {

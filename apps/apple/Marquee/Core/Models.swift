@@ -96,15 +96,21 @@ struct HomeHeader: Decodable, Hashable, Sendable {
     let heroes: [Hero]
     /// The first page, which Home shows until the carousel lands.
     var hero: Hero? { heroes.first }
+    /// No network, and downloads to play: "You're offline. Your downloads still play." (3.5).
+    var offline: HomeOffline? = nil
 
-    init(heroes: [Hero]) { self.heroes = heroes }
+    init(heroes: [Hero], offline: HomeOffline? = nil) {
+        self.heroes = heroes
+        self.offline = offline
+    }
 
     init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         heroes = try c.decodeIfPresent([Hero].self, forKey: .heroes) ?? []
+        offline = try c.decodeIfPresent(HomeOffline.self, forKey: .offline)
     }
 
-    private enum CodingKeys: String, CodingKey { case heroes }
+    private enum CodingKeys: String, CodingKey { case heroes, offline }
 }
 
 enum RowState: Decodable, Hashable, Sendable {
@@ -342,6 +348,13 @@ struct TitleHeader: Decodable, Hashable, Sendable {
     /// False on a kids profile, which has no Discover: genres show as plain text. An older core sends
     /// nothing, which counts as true.
     let genresLinked: Bool?
+    /// A movie's download on this device (plans/offline-downloads.md 3.1).
+    var download: DownloadBadge? = nil
+    /// The selected season's downloads and every regular season's, for the series menu.
+    var seasonDownload: GroupDownload? = nil
+    var seriesDownload: GroupDownload? = nil
+    /// The meta could not be read: the page shows what the downloads kept (4.18).
+    var offline: Bool? = nil
 
     /// Whether the title offers Add to Library.
     var canSetLibrary: Bool { librarySettable ?? true }
@@ -360,6 +373,8 @@ struct Episode: Decodable, Hashable, Sendable {
     let watched: Bool
     let progress: Double?
     let leftMs: Int64?
+    /// Its download on this device.
+    var download: DownloadBadge? = nil
 }
 
 struct TitleSnapshot: Decodable, Sendable {

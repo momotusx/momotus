@@ -6,6 +6,11 @@ struct LibraryScreen: View {
     let core: CoreClient
     @State private var library: LiveRecord<LibrarySnapshot>
     @Environment(\.metrics) private var metrics
+    #if !os(tvOS)
+    @Environment(DownloadKeeper.self) private var keeper: DownloadKeeper?
+    @Environment(\.linkRequests) private var links
+    @State private var showDownloads = false
+    #endif
 
     init(core: CoreClient) {
         self.core = core
@@ -19,6 +24,13 @@ struct LibraryScreen: View {
         ScrollView(.vertical) {
             VStack(alignment: .leading, spacing: Theme.Space.m) {
                 ScreenTitle(text: "Library")
+                #if !os(tvOS)
+                // Downloads first (plans/offline-downloads.md 3.4), then the iPhone's Calendar.
+                if let keeper, DownloadGate.shows(tv: DownloadGate.tv) {
+                    DownloadsRow(keeper: keeper) { showDownloads = true }
+                        .frame(maxWidth: metrics.wide ? 480 : .infinity, alignment: .leading)
+                }
+                #endif
                 #if os(iOS)
                 CalendarRow()
                 #endif
@@ -59,6 +71,17 @@ struct LibraryScreen: View {
         .onChange(of: library.snapshot) { _, now in restore(now) }
         .topScrim()
         .task(id: library.taskId) { library.start() }
+        #if !os(tvOS)
+        .navigationDestination(isPresented: $showDownloads) {
+            if let keeper { DownloadsScreen(keeper: keeper, core: core) }
+        }
+        // Home's offline banner: Downloads, once Library can show it.
+        .onChange(of: links?.library, initial: true) { _, route in
+            guard route == .downloads else { return }
+            links?.library = nil
+            showDownloads = true
+        }
+        #endif
     }
 
     /// The core's caption when it sends one, else the episode ("S2:E3") or the

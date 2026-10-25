@@ -4,7 +4,7 @@ import SwiftUI
 /// backdrop, then a section menu beside grouped lists in one centered column (TV and wide screens), or the
 /// groups one after another (the phone). The menu's entries in page order.
 enum SettingsSection: String, CaseIterable, Identifiable {
-    case profiles, sources, account, home, playback, device, about
+    case profiles, sources, account, home, playback, downloads, device, about
 
     var id: String { rawValue }
 
@@ -15,6 +15,7 @@ enum SettingsSection: String, CaseIterable, Identifiable {
         case .account: "Account"
         case .home: "Home"
         case .playback: "Playback"
+        case .downloads: "Downloads"
         case .device: "This device"
         case .about: "About"
         }
@@ -27,6 +28,7 @@ enum SettingsSection: String, CaseIterable, Identifiable {
         case .account: .sky
         case .home: .mint
         case .playback: .teal
+        case .downloads: .blue
         case .device: .sea
         case .about: .grey
         }
@@ -39,14 +41,22 @@ enum SettingsSection: String, CaseIterable, Identifiable {
         case .account: "monitor-smartphone"
         case .home: "rows-3"
         case .playback: "circle-play"
+        case .downloads: "arrow-down-to-line"
         case .device: "monitor"
         case .about: "info"
         }
     }
 
     /// This device holds the trailer previews switch; tvOS has none, so it has no such section (as Android TV).
-    static func shown(tv: Bool) -> [SettingsSection] {
-        tv ? allCases.filter { $0 != .device } : allCases
+    /// Downloads shows where the device downloads (plans/offline-downloads.md 3.7), never on TV.
+    static func shown(tv: Bool, downloads: Bool) -> [SettingsSection] {
+        allCases.filter { s in
+            switch s {
+            case .device: !tv
+            case .downloads: downloads && !tv
+            default: true
+            }
+        }
     }
 }
 

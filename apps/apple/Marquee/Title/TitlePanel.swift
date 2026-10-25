@@ -203,6 +203,10 @@ private struct PanelRow: View {
             pill(1, episode.watched ? "Mark as not watched" : "Mark as watched", glyph: episode.watched ? "eye-off" : "eye") {
                 actions.setWatched(episode.videoId, !episode.watched)
             }
+            // The third trailing item (plans/offline-downloads.md 3.2).
+            if let downloads = actions.downloads {
+                downloads.control(episode, look: .smallPill).focused($pillFocused, equals: 2)
+            }
         }
     }
 
@@ -226,6 +230,7 @@ private struct PanelRow: View {
             round(episode.watched ? "eye-off" : "eye", label: episode.watched ? "Mark as not watched" : "Mark as watched") {
                 actions.setWatched(episode.videoId, !episode.watched)
             }
+            if let downloads = actions.downloads { downloads.control(episode, look: .round) }
         }
     }
 
@@ -247,6 +252,10 @@ private struct PanelRow: View {
             Button("Choose Version", glyph: "layers") { actions.chooseVersion(episode) }
             Button(episode.watched ? "Mark as Not Watched" : "Mark as Watched", glyph: episode.watched ? "eye-off" : "eye") {
                 actions.setWatched(episode.videoId, !episode.watched)
+            }
+            if let downloads = actions.downloads {
+                Divider()
+                DownloadMenuItems(entries: downloads.menu(episode))
             }
         }
     }

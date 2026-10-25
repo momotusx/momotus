@@ -6,26 +6,34 @@ import SwiftUI
 final class SystemEvents {
     private let memory = DispatchSource.makeMemoryPressureSource(eventMask: [.warning, .critical], queue: .main)
     private let network = NWPathMonitor()
-    private var sawFirstPath = false
 
     init(core: CoreClient) {
         memory.setEventHandler {
             MainActor.assumeIsolated { core.lifecycle("memoryPressure") }
         }
         memory.resume()
-        network.pathUpdateHandler = { [weak self] path in
+        network.pathUpdateHandler = { path in
             MainActor.assumeIsolated {
-                guard let self else { return }
-                let kind = StreamChoice.network(
-                    wifi: path.usesInterfaceType(.wifi), ethernet: path.usesInterfaceType(.wiredEthernet),
-                    cellular: path.usesInterfaceType(.cellular))
-                DeviceCaps.network = kind
-                // The first update is the current path, not a change.
-                if self.sawFirstPath { core.lifecycle("networkChanged", ["network": kind]) }
-                self.sawFirstPath = true
+                let report = NetworkReport.of(
+                    satisfied: path.status == .satisfied, wifi: path.usesInterfaceType(.wifi),
+                    ethernet: path.usesInterfaceType(.wiredEthernet), cellular: path.usesInterfaceType(.cellular),
+                    expensive: path.isExpensive, constrained: path.isConstrained, desktop: Self.desktop)
+                // With no network the last real one stays the one speeds are read for.
+                if report.network != "none" { DeviceCaps.network = report.network }
+                // The first update too: a launch with no network, or on a metered one, holds downloads
+                // from the start (plans/offline-downloads.md 4.13).
+                core.lifecycle("networkChanged", report.fields)
             }
         }
         network.start(queue: .main)
+    }
+
+    private static var desktop: Bool {
+        #if os(macOS)
+        true
+        #else
+        false
+        #endif
     }
 }
 
@@ -33,6 +41,10 @@ final class SystemEvents {
 struct ScenePhaseForward: ViewModifier {
     let core: CoreClient
     let sync: SyncModel
+    #if !os(tvOS)
+    /// Tells the keeper, which holds or lets go of downloads (plans/offline-downloads.md 5).
+    var downloads: DownloadKeeper?
+    #endif
     @Environment(\.scenePhase) private var phase
 
     func body(content: Content) -> some View {
@@ -40,9 +52,16 @@ struct ScenePhaseForward: ViewModifier {
             switch phase {
             case .active:
                 Task { await core.foreground() }
+                #if !os(tvOS)
+                downloads?.handle(.foreground)
+                #endif
                 // Pull what other devices changed while this one was away.
                 if sync.joined { sync.request() }
             case .background:
+                #if !os(tvOS)
+                // Below iOS 26 the downloads wait (`app`) before the system suspends the app.
+                downloads?.handle(.background)
+                #endif
                 #if os(iOS) || os(tvOS)
                 // Trakt's scrobbles go before the app is suspended: the system waits for the
                 // answer (4.5 s at most), and ends the wait itself if its own time runs out first.

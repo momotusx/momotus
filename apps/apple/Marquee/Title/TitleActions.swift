@@ -114,9 +114,10 @@ struct PlayBlock: View {
     }
 }
 
-/// The Mac hero's action row: the primary, Trailer, the marks capsule, Versions
-/// (plans/design-v3-phase3-apple.md 2.1).
-struct WideActions<Play: View>: View {
+/// The Mac hero's action row: the primary, Trailer, the marks capsule, Versions, then Download
+/// (plans/design-v3-phase3-apple.md 2.1, plans/offline-downloads.md 3.2). A title shown offline from
+/// its downloads has no Versions.
+struct WideActions<Play: View, Download: View>: View {
     /// Plays the trailer in the app, full screen; nil without one.
     let trailer: (() -> Void)?
     let marks: [TitleMark]
@@ -126,7 +127,9 @@ struct WideActions<Play: View>: View {
     /// The header trailer's sound switch, last in the row so nothing moves when it comes and goes; nil while none plays.
     var sound: (() -> Void)?
     var soundOn = false
+    var versionsShown = true
     @ViewBuilder let play: Play
+    @ViewBuilder let download: Download
 
     var body: some View {
         FlowRow(spacing: 12) {
@@ -136,9 +139,12 @@ struct WideActions<Play: View>: View {
                     .buttonStyle(PillButtonStyle())
             }
             if !marks.isEmpty { MarkCapsule(marks: marks, toggle: toggle) }
-            Button(action: showVersions) { Label("Versions", glyph: "layers", size: HeroLayout.icon) }
-                .buttonStyle(PillButtonStyle())
-                .disabled(!versionsReady)
+            if versionsShown {
+                Button(action: showVersions) { Label("Versions", glyph: "layers", size: HeroLayout.icon) }
+                    .buttonStyle(PillButtonStyle())
+                    .disabled(!versionsReady)
+            }
+            download
             if let sound {
                 Button(action: sound) { Label("Sound", glyph: soundOn ? "volume-2" : "volume-x", size: HeroLayout.icon) }
                     .buttonStyle(PillButtonStyle())
@@ -147,5 +153,12 @@ struct WideActions<Play: View>: View {
                     .accessibilityValue(soundOn ? "On" : "Off")
             }
         }
+    }
+}
+
+extension WideActions where Download == EmptyView {
+    init(trailer: (() -> Void)?, marks: [TitleMark], toggle: @escaping (TitleMark) -> Void, versionsReady: Bool, showVersions: @escaping () -> Void,
+         @ViewBuilder play: () -> Play) {
+        self.init(trailer: trailer, marks: marks, toggle: toggle, versionsReady: versionsReady, showVersions: showVersions, play: play, download: { EmptyView() })
     }
 }

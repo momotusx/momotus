@@ -32,7 +32,8 @@ private func noRoom() throws -> VersionsSnapshot {
         conditions: nil, note: nil, empty: empty)
 }
 
-/// The Mac's real action row (TitleScreen's `wideActions`): the primary, Trailer, the marks capsule, Versions.
+/// The Mac's real action row (TitleScreen's `wideActions`): the primary, Trailer, the marks capsule, Versions,
+/// Download at its widest likely word on a Mac ("Waiting for a connection", plans/offline-downloads.md 3.2).
 private struct Row: View {
     let kind: String
     let target: PlayTarget?
@@ -48,6 +49,11 @@ private struct Row: View {
             PlayBlock(
                 target: target, nextAirs: nil, hasEpisodes: kind == "series", runtime: "148 min", versions: versions,
                 failure: nil, wide: true, play: { _ in }, focus: $focused, v3: true)
+        } download: {
+            let waiting = DownloadBadge(id: "d", state: .waiting, reason: .network, mobileData: false, progress: 0.4, bytesTotal: 1)
+            DownloadControlButton(
+                control: DownloadCopy.control(waiting), look: .pill,
+                entries: [DownloadMenuEntry(id: "cancel", label: DownloadItem.cancel.label, glyph: DownloadItem.cancel.glyph, run: {})])
         }
     }
 }
@@ -110,10 +116,12 @@ private func spot(_ part: CGRect, in box: CGRect) -> (top: CGFloat, end: CGFloat
             #expect(part.end <= 40 + BackdropStops.heroSynopsisWidth + 1, "\(name) ends \(part.end) in")
         }
         // Each part sits no higher than the glass check's spot for it (TitleSpots).
-        #expect(meta.top <= TitleSpots.meta + 1, "meta top \(meta.top) at \(width)")
-        #expect(chips.top <= TitleSpots.chips + 1, "chips top \(chips.top) at \(width)")
+        // The narrowest window takes the row in three lines, 1440 in two.
+        let narrow = width < 1440
+        #expect(meta.top <= (narrow ? TitleSpots.meta : TitleSpots.wideMeta) + 1, "meta top \(meta.top) at \(width)")
+        #expect(chips.top <= (narrow ? TitleSpots.chips : TitleSpots.wideChips) + 1, "chips top \(chips.top) at \(width)")
         #expect(synopsis.top <= TitleSpots.synopsis + 1, "synopsis top \(synopsis.top) at \(width)")
-        #expect(actions.top <= TitleSpots.upperRow + 40 + 1, "actions top \(actions.top) at \(width)")
+        #expect(actions.top <= (narrow ? TitleSpots.topRow : TitleSpots.upperRow) + 40 + 1, "actions top \(actions.top) at \(width)")
         // The hero grows to its words at the floor.
         #expect(box.height >= floor)
     }
@@ -146,8 +154,9 @@ private func spot(_ part: CGRect, in box: CGRect) -> (top: CGFloat, end: CGFloat
         let box = try #require(frames[.box])
         let meta = spot(try #require(frames[.meta]), in: box)
         let chips = spot(try #require(frames[.chips]), in: box)
-        #expect(meta.top <= TitleSpots.meta + 1, "meta top \(meta.top) at \(width)")
-        #expect(chips.top <= TitleSpots.chips + 1, "chips top \(chips.top) at \(width)")
+        let narrow = width < 1440
+        #expect(meta.top <= (narrow ? TitleSpots.meta : TitleSpots.wideMeta) + 1, "meta top \(meta.top) at \(width)")
+        #expect(chips.top <= (narrow ? TitleSpots.chips : TitleSpots.wideChips) + 1, "chips top \(chips.top) at \(width)")
         #expect(chips.end <= 40 + BackdropStops.heroSynopsisWidth + 1, "chips end \(chips.end) at \(width)")
     }
 }

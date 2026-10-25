@@ -168,6 +168,8 @@ targets:
         UILaunchScreen:
           UIColorName: LaunchBackground
           UIImageName: LaunchMark
+        # iOS 26 and later: one continued task per download queue (plans/offline-downloads.md 5).
+        BGTaskSchedulerPermittedIdentifiers: ["$(PRODUCT_BUNDLE_IDENTIFIER).downloads.*"]
         # xcodegen writes 1.0 and 1 otherwise, over the build settings.
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
@@ -310,6 +312,13 @@ targets:
       # Tests/FirstRunB4Tests.swift).
       - path: Marquee/Settings/SettingsRules.swift
       - path: Marquee/Onboarding/FilmLayout.swift
+      # Offline downloads: the models, the control's words, the keeper's reducer, the network report and the
+      # control as drawn (Tests/DownloadTests.swift, the Mac row in Tests/TitleHeroTests.swift).
+      - path: Marquee/Core/DownloadModels.swift
+      - path: Marquee/Downloads/DownloadCopy.swift
+      - path: Marquee/Downloads/KeeperLogic.swift
+      - path: Marquee/Downloads/DownloadControlView.swift
+      - path: Marquee/App/NetworkReport.swift
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: app.momotus.dev.tests

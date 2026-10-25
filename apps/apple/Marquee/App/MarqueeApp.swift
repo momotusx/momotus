@@ -5,6 +5,10 @@ struct MarqueeApp: App {
     #if os(iOS)
     @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     #endif
+    #if os(macOS)
+    /// Quit while downloads run asks first.
+    @NSApplicationDelegateAdaptor(MacAppDelegate.self) private var macDelegate
+    #endif
     @State private var core: CoreClient
     @State private var profiles: ProfileSession
     @State private var system: SystemEvents
@@ -12,6 +16,10 @@ struct MarqueeApp: App {
     @State private var debrid: DebridSession
     @State private var trakt: TraktModel
     @State private var wipe: AccountWipe
+    #if !os(tvOS)
+    /// The downloads view for the app's life, and the platform's keeper (plans/offline-downloads.md 5).
+    @State private var downloads: DownloadKeeper
+    #endif
 
     init() {
         Fonts.register()
@@ -27,6 +35,9 @@ struct MarqueeApp: App {
         let core = CoreClient()
         _core = State(initialValue: core)
         _system = State(initialValue: SystemEvents(core: core))
+        #if !os(tvOS)
+        _downloads = State(initialValue: DownloadKeeper(core: core))
+        #endif
         let sync = SyncModel(core: core, leftover: leftover)
         _sync = State(initialValue: sync)
         #if DEBUG
@@ -63,6 +74,13 @@ struct MarqueeApp: App {
         return "\(core.generation)/\(profiles.snapshot?.active ?? "")"
     }
 
+    /// The downloads view opens again for each profile that opens (a start, an unlock, a switch, a new
+    /// core), and closes while none is.
+    private var downloadsKey: String {
+        guard profiles.open, let active = profiles.snapshot?.active else { return "" }
+        return "\(core.generation)/\(active)/\(profiles.epoch)"
+    }
+
     /// Which profile's Trakt runs: none while the picker shows, a new one for every
     /// core and after the wipe (the same owner id, its view closed by the core).
     private var traktKey: String {
@@ -80,7 +98,13 @@ struct MarqueeApp: App {
                 .environment(core)
                 .environment(sync)
                 .environment(profiles)
+                #if os(tvOS)
                 .modifier(ScenePhaseForward(core: core, sync: sync))
+                #else
+                .modifier(ScenePhaseForward(core: core, sync: sync, downloads: downloads))
+                .environment(downloads)
+                .task(id: downloadsKey) { downloads.begin(open: !downloadsKey.isEmpty) }
+                #endif
                 #if DEBUG
                 .task {
                     guard DebugHooks.killCoreAfter > 0 else { return }

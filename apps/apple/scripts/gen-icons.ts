@@ -8,7 +8,7 @@ import { join } from "node:path";
 
 const VERSION = "1.58.0";
 const ICONS = [
-  "arrow-down", "arrow-up", "ban", "bookmark-check", "bookmark-plus", "calendar", "calendar-x", "camera", "captions", "cat",
+  "arrow-down", "arrow-down-to-line", "arrow-up", "ban", "bookmark-check", "bookmark-plus", "calendar", "calendar-x", "camera", "captions", "cat",
   "check", "chevron-down", "chevron-left", "chevron-right", "chevrons-up-down", "circle-alert", "circle-check", "circle-dashed",
   "circle-minus", "circle-play", "circle-slash", "circle-x", "clapperboard", "clock", "clock-alert", "compass", "copy", "delete",
   "dog", "door-open", "download", "ellipsis", "external-link", "eye", "eye-off", "film", "flame", "gamepad-2", "gauge", "gem",
@@ -16,9 +16,9 @@ const ICONS = [
   "link-2", "list", "list-checks", "list-filter", "list-video", "loader-circle", "lock", "log-out", "mail", "minus", "monitor",
   "monitor-check", "monitor-smartphone", "moon", "package-search", "pause", "pause-fill", "pencil", "play", "play-fill", "plus",
   "popcorn", "power", "puzzle", "qr-code", "radio", "refresh-cw", "rocket", "rotate-ccw", "rotate-cw", "rows-3", "search",
-  "settings", "shield-alert", "skip-forward", "sliders-horizontal", "sparkle", "sparkles", "star-fill", "sun",
+  "settings", "shield-alert", "skip-forward", "sliders-horizontal", "smartphone", "sparkle", "sparkles", "square-fill", "star-fill", "sun",
   "text-align-start", "trash", "triangle-alert", "tv", "undo-2", "user", "user-pen", "users", "volume-1", "volume-2", "volume-x",
-  "wrench", "x", "zap",
+  "wifi-off", "wrench", "x", "zap",
 ];
 
 const source = process.argv[2];

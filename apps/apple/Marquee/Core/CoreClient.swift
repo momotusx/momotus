@@ -46,7 +46,7 @@ final class CoreClient {
     /// Opens the core in the app's data directory; tests pass a directory of their own.
     init(directory: URL = CoreClient.dataDirectory()) {
         self.directory = directory
-        CoreClient.excludeTorrentsFromBackup(dataDirectory: directory)
+        CoreClient.excludeFromBackup(dataDirectory: directory)
         openCore()
     }
 
@@ -312,15 +312,21 @@ final class CoreClient {
         dataDirectory.appending(path: "torrents", directoryHint: .isDirectory)
     }
 
-    /// Torrent data is a cache: made before the core opens and left out of
-    /// iCloud and Time Machine backups (engine review r3 P3-9). tvOS keeps the
-    /// whole data directory under Caches already.
-    nonisolated static func excludeTorrentsFromBackup(dataDirectory: URL) {
-        var folder = torrentDirectory(in: dataDirectory)
-        try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-        var values = URLResourceValues()
-        values.isExcludedFromBackup = true
-        try? folder.setResourceValues(values)
+    /// Where the core keeps downloads (plans/offline-downloads.md 4.2): `downloads` in its data directory.
+    nonisolated static func downloadDirectory(in dataDirectory: URL) -> URL {
+        dataDirectory.appending(path: "downloads", directoryHint: .isDirectory)
+    }
+
+    /// Torrent data is a cache, and downloads are videos the device can fetch again: both are made
+    /// before the core opens and left out of iCloud and Time Machine backups (engine review r3 P3-9,
+    /// plans/offline-downloads.md 4.2). tvOS keeps the whole data directory under Caches already.
+    nonisolated static func excludeFromBackup(dataDirectory: URL) {
+        for var folder in [torrentDirectory(in: dataDirectory), downloadDirectory(in: dataDirectory)] {
+            try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            var values = URLResourceValues()
+            values.isExcludedFromBackup = true
+            try? folder.setResourceValues(values)
+        }
     }
 
     static func dataDirectory() -> URL {

@@ -62,6 +62,13 @@ struct TitleScreen: View {
     @State private var inFront = false
     @Environment(\.openTab) private var openTab
     @Environment(SearchInput.self) private var searchInput: SearchInput?
+    @Environment(ProfileSession.self) private var profiles: ProfileSession?
+    #if !os(tvOS)
+    /// Downloads (plans/offline-downloads.md 3.2): the keeper's ops, and Versions to choose what to keep.
+    @Environment(DownloadKeeper.self) private var keeper: DownloadKeeper?
+    @State private var downloadVersions: VersionsModel?
+    @State private var showDownloadVersions = false
+    #endif
 
     init(route: TitleRoute, core: CoreClient) {
         _model = State(initialValue: TitleModel(route: route, core: core))
@@ -127,6 +134,13 @@ struct TitleScreen: View {
                 VersionsScreen(model: episodeVersions, heading: heading(episodeVersions.target), core: core)
             }
         }
+        #if !os(tvOS)
+        .navigationDestination(isPresented: $showDownloadVersions) {
+            if let downloadVersions {
+                VersionsScreen(model: downloadVersions, heading: heading(downloadVersions.target), core: core, keep: keep)
+            }
+        }
+        #endif
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
         #endif
@@ -166,6 +180,12 @@ struct TitleScreen: View {
                 v3Hero
                 VStack(alignment: .leading, spacing: Theme.Space.s) {
                     if !metrics.wide, let details { phoneWords(details) }
+                    // A title shown from its downloads with no connection (plans/offline-downloads.md 3.5).
+                    if offline {
+                        Label(DownloadCopy.titleOffline, glyph: "wifi-off")
+                            .textFont(Theme.type.callout, relativeTo: .callout)
+                            .foregroundStyle(Theme.Palette.muted)
+                    }
                     // Why Resume cannot start, under the hero, never over the art.
                     VersionNote(target: model.header?.playTarget, versions: versions?.snapshot, failure: versions?.failure)
                     if let failure = model.failure, fallback != .failed(failure) {
@@ -214,7 +234,7 @@ struct TitleScreen: View {
         .overlay { if fullTrailer { fullTrailerView } }
         #endif
         // The header's trailer: the page in front, the hero half on screen, nothing over it (decision 3).
-        .task(id: HeaderTrailerKey(id: details?.trailers.first?.youtubeId, live: pageVisible && heroVisible && !fullTrailer)) {
+        .task(id: HeaderTrailerKey(id: details?.trailers.first?.youtubeId, live: pageVisible && heroVisible && !fullTrailer && !offline)) {
             await startHeaderTrailer()
         }
         // Covered (the player, Versions) or gone: its player and web view go too.
@@ -243,7 +263,8 @@ struct TitleScreen: View {
             // background is not a cut).
             if !heroVisible, let id = details?.id { HeaderTrailers.spent.insert(id) }
         }
-        guard !fullTrailer, pageVisible, heroVisible, let details,
+        // Offline the page plays no trailer (plans/offline-downloads.md 4.18).
+        guard !fullTrailer, !offline, pageVisible, heroVisible, let details,
               let id = HeroTrailers.checkedId(details.trailers.first?.youtubeId),
               !HeaderTrailers.spent.contains(details.id) else { return }
         try? await Task.sleep(for: .milliseconds(300))
@@ -425,7 +446,7 @@ struct TitleScreen: View {
             play: { play($0) }, chooseVersion: chooseVersion,
             setWatched: { model.setWatched($0, $1); sync.schedule() }, allEpisodes: { openEpisodes(from: $0) }, focus: $openerFocus,
             resumable: (model.header?.playTarget?.resumeMs ?? 0) > 0 ? model.header?.playTarget?.videoId : nil,
-            startOver: { play(fromStart: true) })
+            startOver: { play(fromStart: true) }, downloads: episodeDownloads)
     }
 
     private func openEpisodes(from: PanelOpener? = nil) {
@@ -487,7 +508,7 @@ struct TitleScreen: View {
 
     /// The Mac's action row: the primary, Trailer, the Library and Watched capsule, Versions.
     private func wideActions(_ details: TitleDetails) -> some View {
-        let trailer: (() -> Void)? = details.trailers.isEmpty ? nil : { openTrailer(details) }
+        let trailer: (() -> Void)? = details.trailers.isEmpty || offline ? nil : { openTrailer(details) }
         let sound: (() -> Void)? = headerSoundShown ? { toggleHeaderSound() } : nil
         return WideActions(
             trailer: trailer,
@@ -495,8 +516,8 @@ struct TitleScreen: View {
                 kind: details.kind, inLibrary: model.header?.inLibrary ?? false, watched: model.header?.watched ?? false,
                 librarySettable: model.header?.canSetLibrary == true),
             toggle: { toggle($0, details) }, versionsReady: versions != nil, showVersions: { showVersions = true },
-            sound: sound, soundOn: TrailerState.shared.sound
-        ) { playBlock(details) }
+            sound: sound, soundOn: TrailerState.shared.sound, versionsShown: !offline
+        ) { playBlock(details) } download: { titleDownload(details) }
         // Starring keeps clear of the row as drawn (review P2-1).
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { actionsWidth = $0 }
     }
@@ -531,13 +552,17 @@ struct TitleScreen: View {
     /// not fit. Watched sits beside Library, a small round toggle.
     private func phoneSecondaries(_ details: TitleDetails) -> some View {
         FlowRow(spacing: 8, centered: true) {
-            if !details.trailers.isEmpty {
+            if !offline, !details.trailers.isEmpty {
                 Button { openTrailer(details) } label: { Label("Trailer", glyph: "film") }
                     .buttonStyle(PillButtonStyle())
             }
-            Button { showVersions = true } label: { Label("Versions", glyph: "layers") }
-                .buttonStyle(PillButtonStyle())
-                .disabled(versions == nil)
+            if !offline {
+                Button { showVersions = true } label: { Label("Versions", glyph: "layers") }
+                    .buttonStyle(PillButtonStyle())
+                    .disabled(versions == nil)
+            }
+            // After Versions, never in the panel rows (plans/offline-downloads.md 3.2).
+            titleDownload(details)
         }
     }
 
@@ -576,6 +601,101 @@ struct TitleScreen: View {
             searchInput?.link(name)
             openTab(.search, link: true)
         }
+    }
+
+    /// A title shown from its downloads with no connection: no Trailer and no Versions.
+    private var offline: Bool { model.header?.offline == true }
+
+    private var kids: Bool { profiles?.snapshot?.current?.kids == true }
+
+    /// The control and its items: not on a kids profile, whose download ops the core refuses.
+    private var downloadsHere: Bool { keeper != nil && DownloadGate.controls(tv: DownloadGate.tv, kids: kids) }
+
+    /// The title's Download: a movie's control, or a series' menu of its seasons; on a kids profile only
+    /// "Downloaded" as a plain badge.
+    @ViewBuilder private func titleDownload(_ details: TitleDetails) -> some View {
+        let header = model.header
+        let series = !(header?.seasons.isEmpty ?? true)
+        if downloadsHere, let keeper {
+            if series {
+                let season = header?.selectedSeason
+                DownloadControlButton(
+                    control: DownloadCopy.seriesControl(header?.seriesDownload), look: .pill,
+                    entries: seriesEntries(details, keeper: keeper),
+                    start: { if let season { keeper.add(kind: details.kind, itemId: details.id, scope: "season", season: season) } })
+            } else {
+                let badge = header?.download
+                DownloadControlButton(
+                    control: DownloadCopy.control(badge), look: .pill,
+                    entries: badge.map { videoEntries($0, keeper: keeper, play: { play(fromStart: false) }, choose: { chooseDownload(videoId: details.id) }) } ?? [],
+                    start: { keeper.add(kind: details.kind, itemId: details.id, scope: "video", videoId: details.id) },
+                    choose: { chooseDownload(videoId: details.id) })
+            }
+        } else if keeper != nil, kids, series ? (header?.seriesDownload?.downloaded ?? 0) > 0 : header?.download?.state == .done {
+            DownloadedBadge()
+        }
+    }
+
+    /// A video's items as menu entries: the ops go to the core, Play and the versions go somewhere.
+    private func videoEntries(_ badge: DownloadBadge, keeper: DownloadKeeper, play: @escaping () -> Void, choose: @escaping () -> Void) -> [DownloadMenuEntry] {
+        DownloadCopy.control(badge).items.map { item in
+            DownloadMenuEntry(id: item.rawValue, label: item.label, glyph: item.glyph) {
+                switch item {
+                case .play: play()
+                case .another, .choose: choose()
+                default: _ = keeper.run(item, id: badge.id)
+                }
+            }
+        }
+    }
+
+    /// "Download Season 2 (8 episodes)", "Download every season (3 seasons, 28 episodes)", the
+    /// season's state and its delete.
+    private func seriesEntries(_ details: TitleDetails, keeper: DownloadKeeper) -> [DownloadMenuEntry] {
+        let header = model.header
+        let season = header?.selectedSeason
+        return DownloadCopy.seriesMenu(season: season, group: header?.seasonDownload, series: header?.seriesDownload).map { item in
+            let run: (() -> Void)? = switch item.act {
+            case .downloadSeason: { if let season { keeper.add(kind: details.kind, itemId: details.id, scope: "season", season: season) } }
+            case .downloadSeries: { keeper.add(kind: details.kind, itemId: details.id, scope: "series") }
+            case .deleteSeason: {
+                let ids = model.episodes.filter { $0.season == season }.compactMap { $0.download?.id }
+                if !ids.isEmpty { keeper.act(.remove, .ids(ids)) }
+            }
+            case .status: nil
+            }
+            return DownloadMenuEntry(id: item.label, label: item.label, glyph: item.act == .deleteSeason ? DownloadItem.delete.glyph : item.act == .status ? nil : DownloadItem.start.glyph, run: run)
+        }
+    }
+
+    /// The episodes' downloads, for the cards, the panel rows and their menus.
+    private var episodeDownloads: EpisodeDownloads? {
+        guard downloadsHere, let keeper, let details else { return nil }
+        return EpisodeDownloads(
+            entries: { episode in
+                episode.download.map { videoEntries($0, keeper: keeper, play: { play(episode) }, choose: { chooseDownload(videoId: episode.videoId) }) } ?? []
+            },
+            start: { keeper.add(kind: details.kind, itemId: details.id, scope: "video", videoId: $0.videoId) },
+            choose: { chooseDownload(videoId: $0.videoId) })
+    }
+
+    /// "Choose a version to download": Versions ranked to keep on this device.
+    private func chooseDownload(videoId: String) {
+        guard let details else { return }
+        let model = VersionsModel(
+            target: withFacts(PlayTargetInfo(
+                kind: details.kind, itemId: details.id, videoId: videoId, title: details.name, poster: details.poster, resumeMs: nil), details),
+            core: core, purpose: "download")
+        model.start()
+        downloadVersions = model
+        showDownloadVersions = true
+    }
+
+    /// A version picked to keep: added with that row, then back to the title.
+    private func keep(_ key: String) {
+        guard let keeper, let model = downloadVersions, let sub = model.sub else { return }
+        keeper.add(kind: model.target.kind, itemId: model.target.itemId, scope: "video", videoId: model.target.videoId, pick: (sub, key))
+        showDownloadVersions = false
     }
     #endif
 

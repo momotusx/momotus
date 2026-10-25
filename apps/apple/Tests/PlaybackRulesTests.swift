@@ -590,16 +590,21 @@ private func route(_ key: String, sub: UInt64 = 3) -> PlayRoute {
     #expect(PlayerLayout.cannotOpenActions(canChoose: false) == [.retry, .back])
 }
 
-@Test func torrentDataIsLeftOutOfBackups() throws {
+@Test func torrentDataAndDownloadsAreLeftOutOfBackups() throws {
     let data = FileManager.default.temporaryDirectory.appending(path: "mq-backup-\(UUID().uuidString)", directoryHint: .isDirectory)
     defer { try? FileManager.default.removeItem(at: data) }
     // The core's folder: \`torrents\` in the data directory.
     let torrents = CoreClient.torrentDirectory(in: data)
     #expect(torrents.lastPathComponent == "torrents" && torrents.deletingLastPathComponent().standardizedFileURL == data.standardizedFileURL)
-    CoreClient.excludeTorrentsFromBackup(dataDirectory: data)
-    let values = try torrents.resourceValues(forKeys: [.isExcludedFromBackupKey, .isDirectoryKey])
-    #expect(values.isDirectory == true)
-    #expect(values.isExcludedFromBackup == true)
+    // Downloads beside it (plans/offline-downloads.md 4.2).
+    let downloads = CoreClient.downloadDirectory(in: data)
+    #expect(downloads.lastPathComponent == "downloads" && downloads.deletingLastPathComponent().standardizedFileURL == data.standardizedFileURL)
+    CoreClient.excludeFromBackup(dataDirectory: data)
+    for folder in [torrents, downloads] {
+        let values = try folder.resourceValues(forKeys: [.isExcludedFromBackupKey, .isDirectoryKey])
+        #expect(values.isDirectory == true, "\(folder.lastPathComponent)")
+        #expect(values.isExcludedFromBackup == true, "\(folder.lastPathComponent)")
+    }
 }
 
 @Test func airPlayIsNotHandedALoopbackStream() throws {

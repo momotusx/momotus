@@ -15,6 +15,47 @@ struct EpisodeActionsSet {
     /// The episode Resume plays from its resume point, whose menu also starts it over.
     var resumable: String?
     var startOver: () -> Void = {}
+    /// The episodes' downloads: nil on a kids profile, which has no control and no items.
+    var downloads: EpisodeDownloads?
+}
+
+/// What an episode's download offers (plans/offline-downloads.md 3.2): with none, Download and Choose a
+/// version to download; else the state's items.
+@MainActor struct EpisodeDownloads {
+    /// The state's items of an episode that has a download.
+    let entries: (Episode) -> [DownloadMenuEntry]
+    let start: (Episode) -> Void
+    let choose: (Episode) -> Void
+
+    /// The items the "..." menu, the context menu and the accessibility actions carry.
+    func menu(_ episode: Episode) -> [DownloadMenuEntry] {
+        guard episode.download == nil else { return entries(episode) }
+        return [
+            DownloadMenuEntry(id: "start", label: DownloadItem.start.label, glyph: DownloadItem.start.glyph) { start(episode) },
+            DownloadMenuEntry(id: "choose", label: DownloadItem.choose.label, glyph: DownloadItem.choose.glyph) { choose(episode) },
+        ]
+    }
+
+    /// The control itself, where a row shows it.
+    func control(_ episode: Episode, look: DownloadControlLook) -> DownloadControlButton {
+        DownloadControlButton(
+            control: DownloadCopy.control(episode.download), look: look,
+            entries: episode.download == nil ? [] : entries(episode),
+            start: { start(episode) }, choose: { choose(episode) })
+    }
+}
+
+/// A download's entries as menu buttons (the "..." menu, a context menu, the accessibility actions).
+struct DownloadMenuItems: View {
+    let entries: [DownloadMenuEntry]
+
+    var body: some View {
+        ForEach(entries) { entry in
+            if let run = entry.run {
+                if let glyph = entry.glyph { Button(entry.label, glyph: glyph, action: run) } else { Button(entry.label, action: run) }
+            }
+        }
+    }
 }
 
 /// The v3 episode card (plans/design-v3-phase3-apple.md 2.1, 2.2): the still with its words on a
@@ -41,7 +82,7 @@ struct EpisodeCard: View {
                 .disabled(unaired)
                 .accessibilityElement(children: .combine)
                 .accessibilityLabel("Episode \(episode.episode), \(name)")
-                .accessibilityValue(cardCaption(episode, minutes: minutes))
+                .accessibilityValue([cardCaption(episode, minutes: minutes), DownloadCopy.spokenState(episode.download)].compactMap { $0 }.joined(separator: ", "))
                 .accessibilityHint(unaired ? "" : "Plays this episode")
                 .accessibilityActions { menuItems }
                 .contextMenu { menuItems }
@@ -91,6 +132,10 @@ struct EpisodeCard: View {
                     .frame(height: 4)
                 }
             }
+            // Its download's state at the still's top leading corner, clear of "..." on both forms.
+            .overlay(alignment: .topLeading) {
+                if let badge = episode.download { DownloadStateMark(badge: badge).padding(9) }
+            }
             .cardArt(radius: radius)
     }
 
@@ -128,6 +173,10 @@ struct EpisodeCard: View {
             Button("Choose Version", glyph: "layers") { actions.chooseVersion(episode) }
             Button(episode.watched ? "Mark as Not Watched" : "Mark as Watched", glyph: episode.watched ? "eye-off" : "eye") {
                 actions.setWatched(episode.videoId, !episode.watched)
+            }
+            if let downloads = actions.downloads {
+                Divider()
+                DownloadMenuItems(entries: downloads.menu(episode))
             }
         }
         Button("All Episodes", glyph: "list") { actions.allEpisodes(.card(episode.videoId, unaired: unaired)) }

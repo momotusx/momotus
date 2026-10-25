@@ -134,15 +134,20 @@ private let narrowestMac = Double(BackdropStops.macMinWidth)
 /// measures them on the real hero at 720 and 1440, so each spot reads a part at or above its real
 /// place (less cover there). The column ends 40 + `heroSynopsisWidth` in.
 enum TitleSpots {
-    /// The action row at 720 wraps into two rows of 40, 12 apart, over the 75 pt foot.
+    /// The action row at 720 wraps into three rows of 40, 12 apart, over the 75 pt foot: Download joined its
+    /// end (plans/offline-downloads.md 3.2).
     static let lowerRow: CGFloat = 75 + 10.5
     static let upperRow: CGFloat = 75 + 40 + 12 + 10.5
-    static let synopsis: CGFloat = 246
-    static let chips: CGFloat = 324
-    /// 356 with the 13 pt line; the ratings row's 24 pt height (its marks) lifts it 8.
-    static let meta: CGFloat = 364
-    /// The hero at 720 grown by `heroFrame` to hold the column, logo at the top (445 measured).
-    static let grown: CGFloat = 445
+    static let topRow: CGFloat = 75 + 2 * (40 + 12) + 10.5
+    static let synopsis: CGFloat = 298
+    static let chips: CGFloat = 376
+    /// 408 with the 13 pt line; the ratings row's 24 pt height (its marks) lifts it 8.
+    static let meta: CGFloat = 416
+    /// The hero at 720 grown by `heroFrame` to hold the column, logo at the top (498 measured).
+    static let grown: CGFloat = 498
+    /// At 1440 the row takes two lines: the chips and the meta row sit lower.
+    static let wideChips: CGFloat = 324
+    static let wideMeta: CGFloat = 364
     static var end: Double { 40 + Double(BackdropStops.heroSynopsisWidth) }
 }
 
@@ -184,11 +189,12 @@ private let spots = [
     // the chips (white on the fill) and the meta row (64 percent), each ending 520 in.
     Spot(name: "title, Mac, lower row", page: "bgDesktop", layers: titleHero(width: narrowestMac, height: TitleSpots.grown, end: TitleSpots.end, top: TitleSpots.lowerRow), word: false),
     Spot(name: "title, Mac, upper row", page: "bgDesktop", layers: titleHero(width: narrowestMac, height: TitleSpots.grown, end: TitleSpots.end, top: TitleSpots.upperRow), word: false),
+    Spot(name: "title, Mac, top row", page: "bgDesktop", layers: titleHero(width: narrowestMac, height: TitleSpots.grown, end: TitleSpots.end, top: TitleSpots.topRow), word: false),
     Spot(name: "title, Mac, synopsis", page: "bgDesktop", layers: titleHero(width: narrowestMac, height: TitleSpots.grown, end: TitleSpots.end, top: TitleSpots.synopsis), word: false, text: 0.7),
     Spot(name: "title, Mac, chips", page: "bgDesktop", layers: titleHero(width: narrowestMac, height: TitleSpots.grown, end: TitleSpots.end, top: TitleSpots.chips), word: false),
     Spot(name: "title, Mac, meta", page: "bgDesktop", layers: titleHero(width: narrowestMac, height: TitleSpots.grown, end: TitleSpots.end, top: TitleSpots.meta), word: false, text: 0.64),
-    Spot(name: "title, Mac 1440, meta", page: "bgDesktop", layers: titleHero(width: 1440, height: 810, end: TitleSpots.end, top: TitleSpots.meta), word: false, text: 0.64),
-    Spot(name: "title, Mac 1440, chips", page: "bgDesktop", layers: titleHero(width: 1440, height: 810, end: TitleSpots.end, top: TitleSpots.chips), word: false),
+    Spot(name: "title, Mac 1440, meta", page: "bgDesktop", layers: titleHero(width: 1440, height: 810, end: TitleSpots.end, top: TitleSpots.wideMeta), word: false, text: 0.64),
+    Spot(name: "title, Mac 1440, chips", page: "bgDesktop", layers: titleHero(width: 1440, height: 810, end: TitleSpots.end, top: TitleSpots.wideChips), word: false),
     // Starring at the right, 75 above the foot, three lines of 18 (top 129), its "Starring" key at 64
     // percent, read where it first shows (WideLayout.starringFrom, 1240) and at 1440.
     Spot(name: "title, Mac, Starring 1240", page: "bgDesktop", layers: titleHero(width: 1240, height: Double(WideLayout.titleHeroHeight(width: 1240, height: 800)), end: 1200, top: 129), word: false, text: 0.64),
@@ -200,6 +206,10 @@ private let spots = [
     // The ramp covers the Mac card's lower 141 and the iPhone card's lower 170.
     // The Mac card's "..." glyph over the still's top, past the ramp: on its black disc alone.
     Spot(name: "card, Mac, more", page: "bgDesktop", layers: [(false, BackdropStops.cardMoreBacking)], word: false, text: 1),
+    // A download's state glyph at the still's top leading corner, on the same disc, on both forms
+    // (plans/offline-downloads.md 3.2): over the still's top, above the ramp.
+    Spot(name: "card, Mac, download state", page: "bgDesktop", layers: [(false, BackdropStops.cardMoreBacking)], word: false, text: 1),
+    Spot(name: "card, iPhone, download state", page: "bgPhone", layers: [(false, BackdropStops.cardMoreBacking)], word: false, text: 1),
     Spot(name: "card, Mac, tag", page: "bgDesktop", layers: [(false, BackdropStops.alpha(BackdropStops.cardRamp, at: 98.0 / 141))], word: false, text: 0.7),
     Spot(name: "card, Mac, name", page: "bgDesktop", layers: [(false, BackdropStops.alpha(BackdropStops.cardRamp, at: 83.0 / 141))], word: false, text: 1),
     Spot(name: "card, Mac, overview", page: "bgDesktop", layers: [(false, BackdropStops.alpha(BackdropStops.cardRamp, at: 63.0 / 141))], word: false, text: 0.7),

@@ -59,6 +59,13 @@ struct HomeScreen: View {
                 // One account card, by priority (plans/accounts.md 4.3).
                 AccountCard { showAccount = true }
                     .padding(.horizontal, metrics.gutter)
+                #if !os(tvOS)
+                // No network and downloads to play (plans/offline-downloads.md 3.5), above the rows.
+                if let offline = model.header.offline, offline.downloads > 0, DownloadGate.shows(tv: DownloadGate.tv) {
+                    OfflineBanner(open: openDownloads)
+                        .padding(.horizontal, metrics.gutter)
+                }
+                #endif
                 content
             }
             .padding(.bottom, Theme.Space.xl)
@@ -204,6 +211,17 @@ struct HomeScreen: View {
     }
 
     private var continueRow: String { "continue-watching" }
+
+    #if !os(tvOS)
+    @Environment(\.openTab) private var openTab
+    @Environment(\.linkRequests) private var links
+
+    /// Library's Downloads page, from its first page.
+    private func openDownloads() {
+        links?.library = .downloads
+        openTab(.library, link: true)
+    }
+    #endif
 
     /// "New recommended addons", once per profile and list version.
     @ViewBuilder private var offerCard: some View {

@@ -12,6 +12,8 @@ struct VersionsScreen: View {
     /// the rows hold their order while the page is open.
     var choose: ((String) -> Void)?
     var back: (() -> Void)?
+    /// The download purpose (plans/offline-downloads.md 3.2): a pick keeps that version on this device.
+    var keep: ((String) -> Void)?
     @State private var playing: PlayRoute?
     @State private var addSource = false
     /// The learning note was undone here: it goes at once.
@@ -59,6 +61,7 @@ struct VersionsScreen: View {
             PlayerScreen(route: route, versions: model, core: core)
         }
         .navigationDestination(isPresented: $addSource) { AddonsPage(core: core, sourcesOnly: true) }
+        .environment(\.versionAct, keep == nil ? .play : .keep)
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
         #endif
@@ -68,7 +71,7 @@ struct VersionsScreen: View {
 
     /// Plays `key`: back in the player under the page, else a new player.
     private func play(_ key: String) {
-        if let choose { choose(key) } else { playing = model.play(key) }
+        if let keep { keep(key) } else if let choose { choose(key) } else { playing = model.play(key) }
     }
 
     private func leave() {
@@ -146,13 +149,13 @@ struct VersionsScreen: View {
                         Label(shortcut.label, glyph: shortcut.row.key == snapshot?.smaller?.key ? "gauge" : "gem")
                     }
                     .buttonStyle(PillButtonStyle())
-                    .accessibilityHint("Plays this version")
+                    .accessibilityHint(keep == nil ? VersionAct.play.hint : VersionAct.keep.hint)
                 }
             }
         } else if snapshot?.done != true {
             // The pick's shape while the addons answer, so nothing below moves when it fills.
             VStack(alignment: .leading, spacing: 10) {
-                PickCard.kicker
+                PickCard.kicker(keep == nil ? .play : .keep)
                 ForEach([(160.0, 36.0), (240, 20), (200, 20)], id: \.0) { width, height in
                     RoundedRectangle(cornerRadius: 6, style: .continuous).fill(Theme.Palette.surface).frame(width: width, height: height)
                 }
@@ -300,15 +303,17 @@ private struct PickCard: View {
     /// TV: the page enters on Play.
     var focus: FocusState<Bool>.Binding
 
-    static var kicker: some View {
-        Text(VersionWords.kicker)
+    @Environment(\.versionAct) private var act
+
+    static func kicker(_ act: VersionAct = .play) -> some View {
+        Text(act == .keep ? DownloadCopy.pick : VersionWords.kicker)
             .textFont(Theme.type.caption, weight: .semibold, relativeTo: .caption)
             .foregroundStyle(Theme.Palette.dim)
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Self.kicker
+            Self.kicker(act)
             BadgeRow(badges: VersionWords.badges(row), big: true)
             // One line; the whole sentence is read out.
             Text(VersionWords.why(row))
@@ -317,7 +322,7 @@ private struct PickCard: View {
                 .lineLimit(1)
                 .truncationMode(.tail)
             Button(action: play) {
-                Label("Play this version", glyph: "play-fill").frame(maxWidth: .infinity)
+                Label(act.label, glyph: act.glyph).frame(maxWidth: .infinity)
             }
             .buttonStyle(PillButtonStyle(prominent: true))
             .focused(focus)
@@ -404,6 +409,7 @@ private struct VersionRowView: View {
     @State private var sheet = false
     /// VoiceOver goes back to the row when the sheet closes.
     @AccessibilityFocusState private var rowFocused: Bool
+    @Environment(\.versionAct) private var act
 
     /// Touch (iPhone, and an iPad with no pointer): no hover or focus shows the details, so an info
     /// button opens them in a sheet. An iPad with a pointer has both.
@@ -434,6 +440,7 @@ private struct VersionRowView: View {
                         sheet = false
                         play()
                     }
+                    .environment(\.versionAct, act)
                 }
             }
         }
@@ -470,7 +477,7 @@ private struct VersionRowView: View {
         .accessibilityLabel(VersionWords.rowSpoken(row, dimmed: dimmed?.text))
         // The details are read after the row (they show on focus or hover, which VoiceOver has not).
         .accessibilityValue(VersionWords.details(row))
-        .accessibilityHint("Plays this version")
+        .accessibilityHint(act.hint)
         .accessibilityActions {
             if touch { Button(StreamChoice.words.page.details) { sheet = true } }
         }
@@ -502,6 +509,7 @@ private struct DetailsSheet: View {
     let row: VersionRow
     let dimmed: (text: String, glyph: String)?
     let play: () -> Void
+    @Environment(\.versionAct) private var act
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -515,7 +523,7 @@ private struct DetailsSheet: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
             Button(action: play) {
-                Label("Play this version", glyph: "play-fill").frame(maxWidth: .infinity)
+                Label(act.label, glyph: act.glyph).frame(maxWidth: .infinity)
             }
             .buttonStyle(PillButtonStyle(prominent: true))
             .padding(.top, 6)
@@ -586,4 +594,17 @@ extension VersionWords.Tone {
         case .bad: Theme.Palette.bad
         }
     }
+}
+
+/// What a version's action does here: play it, or keep it on this device (the download purpose).
+enum VersionAct {
+    case play, keep
+
+    var label: String { self == .keep ? DownloadCopy.pickAction : "Play this version" }
+    var glyph: String { self == .keep ? "arrow-down-to-line" : "play-fill" }
+    var hint: String { self == .keep ? "Downloads this version" : "Plays this version" }
+}
+
+extension EnvironmentValues {
+    @Entry var versionAct = VersionAct.play
 }
