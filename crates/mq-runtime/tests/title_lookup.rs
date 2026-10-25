@@ -649,7 +649,11 @@ async fn the_tmdb_token_never_reaches_a_log_line() {
         .with_ansi(false)
         .with_writer(move || writer.clone())
         .finish();
-    let _log = tracing::subscriber::set_default(subscriber);
+    // The process's subscriber, not this thread's: other tests' threads run
+    // at the same time, and a call site one of them registers with no
+    // subscriber would stay silent here. Only this test sets one; their
+    // lines carry other tokens.
+    tracing::subscriber::set_global_default(subscriber).expect("one subscriber");
     let token = "secret-tmdb-token-4f2a";
     let fake = fake().await;
     fake.route("/3/find/tt0111161", 500, "{}");
