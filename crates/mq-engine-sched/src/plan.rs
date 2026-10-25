@@ -18,6 +18,10 @@ pub const RESERVE_BYTES: u64 = 512 * MIB;
 /// RAM.
 pub const RING_BYTES: u64 = 45 * MIB;
 
+/// The most a RAM ring holds, whatever the device's memory
+/// (plans/no-space-warnings.md): under three times Stremio's 45 MiB ring.
+pub const RAM_CEILING_BYTES: u64 = 128 * MIB;
+
 /// APFS keeps a file's first 16 MiB allocated through a punch (2.6): on
 /// Apple targets a window counts it in `F`, and the scheduler's budget
 /// leaves it out, so the folder stays within `W`.
@@ -49,6 +53,9 @@ pub struct WindowInputs {
     /// What a whole file writes into its neighbours: its first and last
     /// pieces' bytes of the files beside it in a multi-file torrent.
     pub boundary: u64,
+    /// The memory the device has free, when the platform says: a RAM ring
+    /// takes at most a quarter of it, within [`RAM_CEILING_BYTES`].
+    pub available_ram: Option<u64>,
 }
 
 impl WindowInputs {
@@ -150,11 +157,6 @@ impl WindowPlan {
         })
     }
 
-    /// A ring (plans/streaming-window-chunks.md): its budget is its floor.
-    pub fn ring(&self) -> bool {
-        self.budget == self.floor
-    }
-
     /// Seconds of the file kept ahead of the read: `(W - F - B) / r`, the
     /// readahead and the critical and playback windows (3.1).
     pub fn ahead_secs(&self, bitrate: u64) -> u64 {
@@ -165,7 +167,9 @@ impl WindowPlan {
 /// Sizes a window with `cfg`'s windows. A room under `W_min + 64 MiB` gets
 /// a ring of `max(room, RING)` instead, in RAM when the room is under the
 /// ring (plans/streaming-window-chunks.md): a version never fails for
-/// space.
+/// space. A RAM ring holds at most a quarter of the free memory, within
+/// [`RAM_CEILING_BYTES`], with two pieces open; one whose two pieces do not
+/// fit there stays on disk (plans/no-space-warnings.md).
 pub fn window_plan(cfg: &Config, i: WindowInputs) -> WindowPlan {
     let (r, piece) = (i.bitrate.max(1), i.piece_len.max(1));
     let round = |b: u64| b.div_ceil(piece) * piece;
@@ -189,8 +193,19 @@ pub fn window_plan(cfg: &Config, i: WindowInputs) -> WindowPlan {
     let fixed = fixed + playing;
     let floor = fixed + playing;
     if room < floor + 64 * MIB {
-        let budget = room.max(RING_BYTES.max(2 * piece));
-        let (_, slack, open_floor, open_cap, _) = parts(budget);
+        let mut budget = room.max(RING_BYTES.max(2 * piece));
+        let ram = i
+            .available_ram
+            .map_or(RAM_CEILING_BYTES, |a| a / 4)
+            .min(RAM_CEILING_BYTES);
+        let memory = room < budget.min(ram) && 2 * piece <= ram;
+        if memory {
+            budget = budget.min(ram);
+        }
+        let (_, slack, mut open_floor, mut open_cap, _) = parts(budget);
+        if memory {
+            (open_floor, open_cap) = (open_floor.min(2 * piece), open_cap.min(2 * piece));
+        }
         let behind = budget / 4;
         return WindowPlan {
             budget,
@@ -201,7 +216,7 @@ pub fn window_plan(cfg: &Config, i: WindowInputs) -> WindowPlan {
             open_cap,
             floor: budget,
             playing: budget.saturating_sub(behind + pinned + APFS_HEAD_BYTES),
-            memory: room < budget,
+            memory,
         };
     }
     let cap = fixed + behind + playing + 600 * r;

@@ -11,13 +11,26 @@ use std::time::Duration;
 use crate::{DeviceClass, Engine, Inner, Torrent, TorrentHandle, adapter, lock};
 
 pub use mq_engine_sched::{
-    APFS_HEAD_BYTES, HeldBytes, RESERVE_BYTES, RING_BYTES, WindowInputs, WindowPlan,
+    APFS_HEAD_BYTES, HeldBytes, RAM_CEILING_BYTES, RESERVE_BYTES, RING_BYTES, WindowInputs,
+    WindowPlan,
 };
 
-/// Under a quarter of the reserve a window plays on in a ring, in RAM where
-/// the torrent is piece files, and a whole file becomes one; no playback
-/// ends for space (plans/no-space-warnings.md).
-const FLOOR_BYTES: u64 = RESERVE_BYTES / 4;
+const MIB: u64 = 1 << 20;
+
+/// Under three quarters of the reserve a window plays on in a ring, in RAM
+/// where the torrent is piece files, and a whole file becomes one; no
+/// playback ends for space (plans/no-space-warnings.md).
+pub const FLOOR_BYTES: u64 = RESERVE_BYTES / 4 * 3;
+
+/// The silent stop (plans/no-space-warnings.md): with this little free a
+/// torrent writing to disk stops fetching, with no words, and the read
+/// waits as on a slow network; over [`RESUME_BYTES`] it fetches again.
+/// Half of Android's low-storage mark (`min(5% of the volume, 500 MiB)`)
+/// and 256 times its full mark (1 MiB, `StorageManager`
+/// `DEFAULT_FULL_THRESHOLD_BYTES`): the system, the library's SQLite and
+/// the sync journal keep room.
+pub const STOP_BYTES: u64 = 256 * MIB;
+pub const RESUME_BYTES: u64 = STOP_BYTES + 32 * MIB;
 
 /// How often the keeper reads the free space when nothing wakes it.
 const GUARD_EVERY: Duration = Duration::from_secs(1);
@@ -35,6 +48,37 @@ const FAILED_ROUNDS: u32 = 3;
 /// is under `W_min + 64 MiB` (plans/streaming-window-chunks.md).
 pub fn window_plan(class: DeviceClass, i: WindowInputs) -> WindowPlan {
     mq_engine_sched::window_plan(&class.sched(), i)
+}
+
+/// The memory the device has free, for a RAM ring's cap: `MemAvailable`
+/// on Linux and Android, `os_proc_available_memory` on iOS and tvOS; none
+/// elsewhere, where the ceiling alone holds.
+pub fn available_ram() -> Option<u64> {
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    {
+        let info = std::fs::read_to_string("/proc/meminfo").ok()?;
+        let line = info.lines().find(|l| l.starts_with("MemAvailable:"))?;
+        let kib: u64 = line.split_whitespace().nth(1)?.parse().ok()?;
+        Some(kib * 1024)
+    }
+    #[cfg(any(target_os = "ios", target_os = "tvos"))]
+    {
+        unsafe extern "C" {
+            fn os_proc_available_memory() -> usize;
+        }
+        // SAFETY: no arguments; it reads the process's memory limit.
+        let bytes = unsafe { os_proc_available_memory() } as u64;
+        (bytes > 0).then_some(bytes)
+    }
+    #[cfg(not(any(
+        target_os = "linux",
+        target_os = "android",
+        target_os = "ios",
+        target_os = "tvos"
+    )))]
+    {
+        None
+    }
 }
 
 /// A walk build's window of at most `limit` bytes (plans/streaming-window.md
@@ -117,6 +161,27 @@ pub(crate) struct WindowState {
     /// The playback's claim came before its window (the app's order): a
     /// stop before the keeper's first look still trims.
     pub claimed: bool,
+    /// Planned for space under the floor: not planned again for it
+    /// (plans/no-space-warnings.md).
+    pub floor: bool,
+}
+
+/// What a replan read of a torrent's windows (review r1 M1): the newest
+/// window's generation and the window there now, if any. A replan sets its
+/// window only while both still hold.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct Seen {
+    newest: u64,
+    now: Option<u64>,
+}
+
+impl Seen {
+    pub fn of(t: &Torrent) -> Self {
+        Self {
+            newest: t.window_generation.load(Ordering::Relaxed),
+            now: lock(&t.window).map(|w| w.generation),
+        }
+    }
 }
 
 impl WindowState {
@@ -160,8 +225,8 @@ impl Engine {
     /// The space guard for whole files (2.4), on the maintenance tick:
     /// under the reserve a claimed playback's readahead stops, and comes
     /// back over the reserve plus 8 MiB; under the floor it plays on in a
-    /// ring window, which frees what is behind the read
-    /// (plans/no-space-warnings.md).
+    /// ring window, which frees what is behind the read, and at the stop it
+    /// stops fetching (plans/no-space-warnings.md).
     pub(crate) async fn guard_whole_files(&self) {
         let Some(free) = self.free() else {
             return;
@@ -171,18 +236,21 @@ impl Engine {
             .map(|(h, t)| (*h, t.clone()))
             .collect();
         for (h, t) in all {
-            if !t.claimed() || lock(&t.window).is_some() {
+            // Read first: a window set after it makes the replan stand down.
+            let seen = Seen::of(&t);
+            if !t.claimed() || seen.now.is_some() {
                 continue;
             }
             let Some((file, bytes_per_s, readahead)) = *lock(&t.rate) else {
                 continue;
             };
             if free < FLOOR_BYTES && !t.unpunched.load(Ordering::Relaxed) {
-                if let Some(w) = self.floor_window(h, file, bytes_per_s, false, free).await
-                    && let Err(e) = self.window(h, file, w).await
-                {
-                    tracing::warn!("a whole file under the floor: {e}");
+                if self.replan(h, file, bytes_per_s, false, free, seen).await {
+                    let _ = self.keep(h);
                 }
+                continue;
+            }
+            if self.space_stop(&t, free).await {
                 continue;
             }
             let starved = t.starved.load(Ordering::Relaxed);
@@ -207,17 +275,20 @@ impl Engine {
 }
 
 impl Engine {
-    /// `file`'s window under the floor, at `free` and counting no idle
-    /// torrent (plans/no-space-warnings.md): a ring, in RAM where the
-    /// torrent is piece files.
-    async fn floor_window(
+    /// The one way a window is planned again for space
+    /// (plans/no-space-warnings.md): under the floor, at `free` and counting
+    /// no idle torrent, a ring, in RAM where the torrent is piece files, and
+    /// only while `seen` still holds. Whatever must stay whole and on disk
+    /// (an offline download) is kept out here. Whether it was set.
+    pub(crate) async fn replan(
         &self,
         h: TorrentHandle,
         file: usize,
         bitrate: u64,
         metered: bool,
         free: u64,
-    ) -> Option<crate::Window> {
+        seen: Seen,
+    ) -> bool {
         let plan = match self.window_inputs(h, file, free, bitrate, 0).await {
             Ok(i) => window_plan(
                 self.device_class(),
@@ -227,22 +298,60 @@ impl Engine {
                 },
             ),
             Err(e) => {
-                tracing::warn!("planning a window at {free} bytes free: {e}");
-                return None;
+                tracing::debug!("planning a window at {free} bytes free: {e}");
+                return false;
             }
         };
-        tracing::info!(
-            budget = plan.budget,
-            memory = plan.memory,
-            free,
-            "window under the floor"
-        );
-        Some(crate::Window {
+        let window = crate::Window {
             plan,
             bitrate,
             metered,
             resume_at: None,
-        })
+        };
+        let set = self.set_window(h, file, window, Some(seen)).await;
+        tracing::info!(
+            budget = plan.budget,
+            memory = plan.memory,
+            free,
+            ?set,
+            "window under the floor"
+        );
+        set.unwrap_or(false)
+    }
+
+    /// The silent stop ([`STOP_BYTES`]): at or under it a torrent writing to
+    /// disk pauses with no words, its reads waiting; over [`RESUME_BYTES`]
+    /// it fetches again. Whether it is stopped.
+    pub(crate) async fn space_stop(&self, t: &Torrent, free: u64) -> bool {
+        let was = t.space_stopped.load(Ordering::Relaxed);
+        let now = match () {
+            _ if free <= STOP_BYTES => true,
+            _ if free > RESUME_BYTES => false,
+            _ => was,
+        };
+        if now == was {
+            return now;
+        }
+        let live = t.live.lock().await;
+        if let Some(l) = live.as_ref() {
+            let _round = t.keeper.lock().await;
+            let done = if now && !l.managed.is_paused() {
+                let paused = self.inner.session.pause(&l.managed).await;
+                let _ = l.msgs.send(adapter::Msg::Stopped);
+                paused
+            } else if !now && l.managed.is_paused() && t.claimed() {
+                self.inner.session.unpause(&l.managed).await
+            } else {
+                Ok(())
+            };
+            if let Err(e) = done {
+                tracing::warn!("{}: fetching for space: {e:#}", t.info_hash);
+                return was;
+            }
+        }
+        t.space_stopped.store(now, Ordering::Relaxed);
+        tracing::info!(free, stopped = now, "{}: fetching for space", t.info_hash);
+        now
     }
 
     /// APFS fills the holes between small extents at the data sync after a
@@ -382,6 +491,8 @@ async fn keep_windows(engine: &Weak<Inner>, h: TorrentHandle, t: &Arc<Torrent>) 
             break;
         };
         let engine = Engine { inner };
+        // Read first: a window set after it makes a replan stand down.
+        let seen = Seen::of(t);
         let Some(state) = *lock(&t.window) else {
             break;
         };
@@ -404,17 +515,14 @@ async fn keep_windows(engine: &Weak<Inner>, h: TorrentHandle, t: &Arc<Torrent>) 
             engine.free().unwrap_or(u64::MAX)
         };
         // Under the floor the window plays on in a ring: in RAM where the
-        // torrent is piece files, else on disk (plans/no-space-warnings.md).
-        let ram = !state.plan.memory && t.chunked.load(Ordering::Relaxed);
-        if free < FLOOR_BYTES && (!state.plan.ring() || ram) {
-            let w = engine
-                .floor_window(h, state.file, state.bitrate, state.metered, free)
-                .await;
-            if let Some(w) = w
-                && let Err(e) = engine.set_window(h, state.file, w).await
-            {
-                tracing::warn!("a window under the floor: {e}");
-            }
+        // torrent is piece files, else on disk; at the stop it stops
+        // fetching (plans/no-space-warnings.md).
+        if free < FLOOR_BYTES && !state.floor {
+            let (file, bitrate, metered) = (state.file, state.bitrate, state.metered);
+            engine.replan(h, file, bitrate, metered, free, seen).await;
+            continue;
+        }
+        if engine.space_stop(t, free).await {
             continue;
         }
         // The space guard (2.4): the scheduler may hold what it holds and the

@@ -52,6 +52,27 @@ pub fn set_free_base(engine: &Engine, base: Option<u64>) {
     *lock(&engine.inner.free_base) = base;
 }
 
+/// What a replan of `h` would read of its windows now (review r1 M1).
+pub struct SeenWindows(crate::window::Seen);
+
+pub fn seen(engine: &Engine, h: crate::TorrentHandle) -> Option<SeenWindows> {
+    let t = engine.torrent(h).ok()?;
+    Some(SeenWindows(crate::window::Seen::of(&t)))
+}
+
+/// A replan under the floor of `file` at `free`, after `seen`: whether it
+/// set its window.
+pub async fn replan(
+    engine: &Engine,
+    h: crate::TorrentHandle,
+    file: usize,
+    bitrate: u64,
+    free: u64,
+    seen: SeenWindows,
+) -> bool {
+    engine.replan(h, file, bitrate, false, free, seen.0).await
+}
+
 /// Holds every range `engine` opens from now on at the barrier, until
 /// [`Hold::open`].
 pub fn hold_ranges(engine: &Engine) -> Arc<Hold> {

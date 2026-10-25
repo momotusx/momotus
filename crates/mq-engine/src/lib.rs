@@ -30,8 +30,9 @@ pub use pick::FileHint;
 pub use reader::{RangeReader, StreamReader};
 pub use scrape::{SwarmCount, TrackerTrace};
 pub use window::{
-    APFS_HEAD_BYTES, Counted, HeldBytes, RESERVE_BYTES, RING_BYTES, WindowInputs, WindowPlan,
-    counted_on_disk, counted_on_disk_keeping, free_space, window_plan, window_within,
+    APFS_HEAD_BYTES, Counted, FLOOR_BYTES, HeldBytes, RAM_CEILING_BYTES, RESERVE_BYTES,
+    RESUME_BYTES, RING_BYTES, STOP_BYTES, WindowInputs, WindowPlan, available_ram, counted_on_disk,
+    counted_on_disk_keeping, free_space, window_plan, window_within,
 };
 
 use std::collections::{HashMap, HashSet};
@@ -342,6 +343,8 @@ pub struct TorrentStats {
     pub readahead_bytes: Option<u64>,
     /// The window's budget `W` while one plays ([`Engine::window`]).
     pub window_bytes: Option<u64>,
+    /// The window's pieces stay in RAM (plans/streaming-window-chunks.md).
+    pub window_in_ram: bool,
     /// What the scheduler counts as held: verified pieces and open ones at
     /// full size (a window's only).
     pub held_bytes: Option<u64>,
@@ -491,6 +494,9 @@ pub(crate) struct Torrent {
     /// Its punches failed: it plays whole from then on, never in a window
     /// for space (plans/no-space-warnings.md).
     unpunched: std::sync::atomic::AtomicBool,
+    /// Paused for space ([`window::STOP_BYTES`]): a read does not wake it
+    /// until the space is back.
+    space_stopped: std::sync::atomic::AtomicBool,
     /// The last window's generation.
     window_generation: AtomicU64,
     /// The player is paused (`Engine::set_paused`).
@@ -886,6 +892,7 @@ impl Engine {
             keeper_wake: Arc::default(),
             keeping: Default::default(),
             unpunched: Default::default(),
+            space_stopped: Default::default(),
             window_generation: AtomicU64::new(0),
             player_paused: Default::default(),
             starved: Default::default(),
@@ -1231,6 +1238,7 @@ impl Engine {
         s.received_bytes = snap.received_bytes;
         (s.bytes_per_s, s.readahead_bytes) = (snap.rate.map(|r| r.1), snap.rate.map(|r| r.2));
         s.window_bytes = lock(&t.window).map(|w| w.plan.budget);
+        s.window_in_ram = t.memory.load(Ordering::Relaxed);
         s.held_bytes = snap.held_bytes;
         s.evict_rounds = t.rounds.load(Ordering::Relaxed);
         s.refetched_bytes = snap.refetched_bytes;
@@ -1580,6 +1588,7 @@ impl Engine {
             fill,
             own,
             own_file,
+            available_ram: window::available_ram(),
             // Verifying the file's first and last pieces writes its
             // neighbours' bytes too (review r3 A R4).
             boundary: if t.files.len() > 1 {
@@ -1639,20 +1648,30 @@ impl Engine {
     /// claim drops and the keeper trims it. The file is selected first
     /// (`NoFile` otherwise), and before its reader opens.
     pub async fn window(&self, h: TorrentHandle, file: usize, w: Window) -> Result<()> {
-        let t = self.set_window(h, file, w).await?;
+        self.set_window(h, file, w, None).await?;
+        self.keep(h)
+    }
+
+    /// Starts `h`'s keeper task unless one runs.
+    pub(crate) fn keep(&self, h: TorrentHandle) -> Result<()> {
+        let t = self.torrent(h)?;
         if !t.keeping.swap(true, Ordering::AcqRel) {
-            tokio::spawn(window::keep(Arc::downgrade(&self.inner), h, t.clone()));
+            tokio::spawn(window::keep(Arc::downgrade(&self.inner), h, t));
         }
         Ok(())
     }
 
-    /// [`Engine::window`] but its keeper: what a keeper calls itself.
+    /// [`Engine::window`] but its keeper. With `after`, only while the
+    /// torrent's window is still the one a replan read (the newest window's
+    /// generation and that window's, or none): a replan never replaces a
+    /// newer window (review r1 M1). Whether the window was set.
     pub(crate) async fn set_window(
         &self,
         h: TorrentHandle,
         file: usize,
         w: Window,
-    ) -> Result<Arc<Torrent>> {
+        after: Option<window::Seen>,
+    ) -> Result<bool> {
         let t = self.torrent(h)?;
         if t.live.lock().await.is_none() {
             return Err(EngineError::NoFile);
@@ -1670,7 +1689,6 @@ impl Engine {
             && t.chunked.load(Ordering::Relaxed)
             && self.kept_of(&t).is_empty()
             && !t.downloading();
-        t.memory.store(memory, Ordering::Relaxed);
         if !memory {
             let dir = t.dir.clone();
             let held = tokio::task::spawn_blocking(move || allocated(&dir))
@@ -1679,6 +1697,12 @@ impl Engine {
             let need = (w.plan.budget + RESERVE_BYTES).saturating_sub(held);
             self.enforce_budget(Some(h), need).await;
         }
+        // Checked and set under the `live` lock: no window comes between.
+        let live = t.live.lock().await;
+        if after.is_some_and(|seen| seen != window::Seen::of(&t)) {
+            return Ok(false);
+        }
+        t.memory.store(memory, Ordering::Relaxed);
         let state = window::WindowState {
             file,
             plan: w.plan,
@@ -1687,11 +1711,12 @@ impl Engine {
             shortfall: 0,
             generation: t.window_generation.fetch_add(1, Ordering::Relaxed) + 1,
             claimed: t.claimed(),
+            floor: after.is_some(),
         };
         let sched = self.sched_config();
         *lock(&t.rate) = Some((file, w.bitrate, state.ahead(sched.readahead_bytes)));
-        self.put_window(&t, Some(state), w.resume_at, None).await;
-        Ok(t)
+        self.put_window_in(&t, live.as_ref(), Some(state), w.resume_at, None);
+        Ok(true)
     }
 
     /// The player paused or plays again (`report_progress`): a paused
@@ -1729,6 +1754,19 @@ impl Engine {
         resume_at: Option<u64>,
         only: Option<u64>,
     ) -> bool {
+        let live = t.live.lock().await;
+        self.put_window_in(t, live.as_ref(), state, resume_at, only)
+    }
+
+    /// [`Engine::put_window`] for a caller holding the `live` lock.
+    fn put_window_in(
+        &self,
+        t: &Torrent,
+        live: Option<&Live>,
+        state: Option<window::WindowState>,
+        resume_at: Option<u64>,
+        only: Option<u64>,
+    ) -> bool {
         let sched = self.sched_config();
         let floor = |bitrate| {
             readahead_for(
@@ -1745,7 +1783,6 @@ impl Engine {
             bitrate: state.map_or(0, |s| s.bitrate),
             resume_at,
         };
-        let live = t.live.lock().await;
         {
             let mut window = lock(&t.window);
             if only.is_some() && window.map(|w| w.generation) != only {
@@ -1753,7 +1790,7 @@ impl Engine {
             }
             *window = state;
         }
-        if let Some(l) = live.as_ref() {
+        if let Some(l) = live {
             let _ = l.msgs.send(msg);
         }
         true
@@ -1912,8 +1949,13 @@ impl Engine {
         let Some(l) = live.as_ref() else {
             return Ok(None);
         };
-        if l.managed.is_paused() {
+        // Paused for space, it stays paused until the space is back: the
+        // read waits (plans/no-space-warnings.md).
+        let stopped = t.space_stopped.load(Ordering::Relaxed)
+            && self.free().is_some_and(|free| free <= window::RESUME_BYTES);
+        if l.managed.is_paused() && !stopped {
             self.inner.session.unpause(&l.managed).await?;
+            t.space_stopped.store(false, Ordering::Relaxed);
         }
         Ok(Some((l.managed.clone(), l.msgs.clone())))
     }

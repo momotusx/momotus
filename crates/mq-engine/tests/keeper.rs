@@ -17,8 +17,9 @@ use std::time::{Duration, Instant};
 
 use mq_engine::librqbit::sync_log::{self, Fail, Point};
 use mq_engine::{
-    APFS_HEAD_BYTES, Claim, Engine, EngineError, FileHint, RESERVE_BYTES, RING_BYTES,
-    TorrentHandle, Window, WindowPlan, test_hooks,
+    APFS_HEAD_BYTES, Claim, Engine, EngineError, FLOOR_BYTES, FileHint, RAM_CEILING_BYTES,
+    RESERVE_BYTES, RESUME_BYTES, RING_BYTES, STOP_BYTES, TorrentHandle, Window, WindowPlan,
+    test_hooks,
 };
 use tokio::io::AsyncReadExt;
 
@@ -721,11 +722,12 @@ async fn the_next_file_of_a_live_torrent_gets_its_round_and_ends_the_window() {
     test_hooks::set_free(&w.engine, None);
 }
 
-/// f. Every punch refused: after three failed rounds the keeper stops its
-/// rounds and the playback plays on to the end, every byte right; it never
-/// ends for space (plans/no-space-warnings.md).
+/// f. Every punch refused: after three failed rounds the window drops and
+/// the file plays on whole to the end, every byte right; it never ends for
+/// space. Under the floor it is not made a window again, and at the stop it
+/// stops fetching, with no error (plans/no-space-warnings.md).
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn refused_punches_play_on_to_the_end() {
+async fn refused_punches_play_on_whole_and_stop_at_the_stop() {
     let s = support::swarm_big(48 << 20, PIECE).await;
     let root = tempfile::tempdir().unwrap();
     let folder = root.path().join(&s.info_hash);
@@ -737,6 +739,18 @@ async fn refused_punches_play_on_to_the_end() {
     assert!(got == w.s.movie, "bytes differ");
     let rounds = w.stats().await.evict_rounds;
     assert!(rounds > 0 && rounds <= 3, "{rounds} rounds");
+    until("the window dropped", || async {
+        w.stats().await.window_bytes.is_none()
+    })
+    .await;
+    // Under the floor: two maintenance ticks and no window.
+    test_hooks::set_free(&w.engine, Some(FLOOR_BYTES - 1));
+    tokio::time::sleep(Duration::from_secs(11)).await;
+    assert_eq!(w.stats().await.window_bytes, None, "made a window again");
+    // At the stop: paused, and a read gets no error.
+    test_hooks::set_free(&w.engine, Some(STOP_BYTES));
+    until("paused at the stop", || async { w.stats().await.paused }).await;
+    assert!(w.read(0, MIB).await == w.movie(0, MIB));
 }
 
 /// f, second half (reviews P1-1, r2 P2-2). Free space that follows the
@@ -962,20 +976,23 @@ async fn a_starved_whole_file_stays_starved_through_a_network_change() {
     .await;
 }
 
-/// q. Under the floor (a quarter of the reserve) a window plays on in a
-/// ring and reads to the end, every byte right (plans/no-space-warnings.md).
+/// q. Under the floor a window plays on in a disk ring (the torrent keeps
+/// whole files here) and reads to the end, every byte right
+/// (plans/no-space-warnings.md).
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn under_the_floor_a_window_plays_on_in_a_ring() {
     let w = windowed(48 << 20, plan(), None).await;
     assert!(w.read(0, 4 * MIB).await == w.movie(0, 4 * MIB));
-    test_hooks::set_free(&w.engine, Some(RESERVE_BYTES / 4 - 1));
+    test_hooks::set_free(&w.engine, Some(FLOOR_BYTES - 1));
+    let ring = RING_BYTES.max(2 * u64::from(PIECE));
     until("a ring", || async {
-        w.stats()
-            .await
-            .window_bytes
-            .is_some_and(|b| b != plan().budget)
+        w.stats().await.window_bytes == Some(ring)
     })
     .await;
+    assert!(
+        !w.stats().await.window_in_ram,
+        "whole files keep a disk ring"
+    );
     let len = w.s.movie.len() as u64;
     assert!(w.read(4 * MIB, len).await == w.movie(4 * MIB, len));
     assert!(!w.stats().await.paused, "fetching stopped");
@@ -991,27 +1008,26 @@ async fn under_the_floor_piece_files_play_on_from_ram() {
     sync_log::fail(root.path(), Fail::PunchRefused, usize::MAX);
     let w = windowed_on(s, root, plan(), None).await;
     assert!(w.read(0, 4 * MIB).await == w.movie(0, 4 * MIB));
-    test_hooks::set_free(&w.engine, Some(RESERVE_BYTES / 4 - 1));
-    until("a ring", || async {
-        w.stats()
-            .await
-            .window_bytes
-            .is_some_and(|b| b != plan().budget)
-    })
-    .await;
+    test_hooks::set_free(&w.engine, Some(FLOOR_BYTES - 1));
+    until("a RAM ring", || async { w.stats().await.window_in_ram }).await;
     let movie = w.dir().join(&w.engine.files(w.t).unwrap()[w.movie].path);
     let on_disk = || std::fs::read_dir(&movie).map_or(0, |d| d.count());
     let before = on_disk();
     let len = w.s.movie.len() as u64;
     assert!(w.read(4 * MIB, len).await == w.movie(4 * MIB, len));
     assert!(on_disk() <= before, "pieces went to disk");
+    // A RAM ring writes nothing to disk: the stop never pauses it.
+    test_hooks::set_free(&w.engine, Some(STOP_BYTES));
+    tokio::time::sleep(Duration::from_secs(2)).await;
+    assert!(!w.stats().await.paused, "a RAM ring stopped for the disk");
 }
 
 /// q for a whole file: under the floor a playback with no window becomes a
-/// ring window (the maintenance tick) and reads to the end.
+/// ring window (the maintenance tick), and the ring holds a file several
+/// times its size within its budget to the end.
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn under_the_floor_a_whole_file_plays_on_in_a_ring() {
-    let s = support::swarm(true).await;
+    let s = support::swarm_big(160 << 20, PIECE).await;
     let root = tempfile::tempdir().unwrap();
     let engine = engine_on(root.path()).await;
     let t = engine
@@ -1028,15 +1044,87 @@ async fn under_the_floor_a_whole_file_plays_on_in_a_ring() {
     within(30, reader.range(0, Some(MIB)).await.unwrap().ready())
         .await
         .unwrap();
-    test_hooks::set_free(&engine, Some(RESERVE_BYTES / 4 - 1));
+    test_hooks::set_free(&engine, Some(FLOOR_BYTES - 1));
+    let ring = RING_BYTES.max(2 * u64::from(PIECE));
     until("a ring window", || async {
-        engine.stats(t).await.unwrap().window_bytes.is_some()
+        engine.stats(t).await.unwrap().window_bytes == Some(ring)
     })
     .await;
+    let held = Arc::new(AtomicU64::new(0));
+    let watch = tokio::spawn({
+        let (engine, held) = (engine.clone(), held.clone());
+        async move {
+            loop {
+                if let Ok(s) = engine.stats(t).await {
+                    held.fetch_max(s.held_bytes.unwrap_or(0), Ordering::Relaxed);
+                }
+                tokio::time::sleep(Duration::from_millis(5)).await;
+            }
+        }
+    });
     let mut got = Vec::new();
     let mut range = reader.range(0, None).await.unwrap();
-    within(60, range.read_to_end(&mut got)).await.unwrap();
+    within(120, range.read_to_end(&mut got)).await.unwrap();
+    watch.abort();
     assert!(got == s.movie, "bytes differ");
+    // The ring, plus what 2.4's ceiling lets a blocking window start.
+    let held = held.load(Ordering::Relaxed);
+    assert!(
+        held > 0 && held <= ring + 2 * MIB,
+        "held {held} past the ring"
+    );
+}
+
+/// The silent stop (plans/no-space-warnings.md): at the stop a window on
+/// disk stops fetching, a read waits with no error and nothing more reaches
+/// the disk; once space is back over the resume mark the read finishes,
+/// every byte right.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn at_the_stop_a_read_waits_and_finishes_once_space_is_back() {
+    let w = windowed(48 << 20, plan(), None).await;
+    assert!(w.read(0, 4 * MIB).await == w.movie(0, 4 * MIB));
+    test_hooks::set_free(&w.engine, Some(STOP_BYTES));
+    until("paused at the stop", || async { w.stats().await.paused }).await;
+    let before = allocated(&w.dir());
+    let reader = w.engine.open_reader(w.t, "default", w.movie).await.unwrap();
+    let len = w.s.movie.len() as u64;
+    let mut range = reader.range(4 * MIB, Some(len)).await.unwrap();
+    let rest = tokio::spawn(async move {
+        let mut got = Vec::new();
+        range.read_to_end(&mut got).await.map(|_| got)
+    });
+    tokio::time::sleep(Duration::from_secs(3)).await;
+    assert!(!rest.is_finished(), "the read went on past the stop");
+    assert!(w.stats().await.paused, "a read woke it");
+    assert!(allocated(&w.dir()) <= before, "bytes reached the disk");
+    test_hooks::set_free(&w.engine, Some(RESUME_BYTES + 1));
+    let got = within(60, rest).await.unwrap().unwrap();
+    assert!(got == w.movie(4 * MIB, len), "bytes differ");
+}
+
+/// Review r1 M1: a replan that read the windows before a newer one was set
+/// stands down, and the newer window stays.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_stale_replan_never_replaces_a_newer_window() {
+    let w = windowed(48 << 20, plan(), None).await;
+    let seen = test_hooks::seen(&w.engine, w.t).unwrap();
+    let newer = WindowPlan {
+        budget: 20 * MIB + APFS_HEAD_BYTES,
+        ..plan()
+    };
+    let window = Window {
+        plan: newer,
+        bitrate: RATE,
+        metered: false,
+        resume_at: None,
+    };
+    w.engine.window(w.t, w.movie, window).await.unwrap();
+    let set = test_hooks::replan(&w.engine, w.t, w.movie, RATE, FLOOR_BYTES - 1, seen).await;
+    assert!(!set, "a stale replan set its window");
+    assert_eq!(w.stats().await.window_bytes, Some(newer.budget));
+    // Read now, it replans.
+    let seen = test_hooks::seen(&w.engine, w.t).unwrap();
+    assert!(test_hooks::replan(&w.engine, w.t, w.movie, RATE, FLOOR_BYTES - 1, seen).await);
 }
 
 /// g. A window's budget round deletes idle torrents, oldest first, until
@@ -1219,8 +1307,49 @@ fn a_device_under_the_window_floor_plays_in_a_ring() {
         },
         32 * MIB,
     );
-    assert!(walk.ring(), "{walk:?}");
+    assert_eq!(walk.budget, walk.floor, "not a ring: {walk:?}");
     assert_eq!((walk.budget, walk.memory), (RING_BYTES, true));
+}
+
+/// Review r1 M3 (plans/no-space-warnings.md): a RAM ring holds at most a
+/// quarter of the device's free memory, within the ceiling, with two pieces
+/// open; one whose two pieces do not fit there stays on disk.
+#[test]
+fn a_ram_ring_stays_within_the_devices_memory() {
+    let plan = |piece_len: u64, available_ram: Option<u64>| {
+        mq_engine::window_plan(
+            mq_engine::DeviceClass::Standard,
+            mq_engine::WindowInputs {
+                free: 0,
+                bitrate: 4_775_000,
+                piece_len,
+                fill: 5_000_000,
+                available_ram,
+                ..Default::default()
+            },
+        )
+    };
+    // No word from the platform: the ceiling. A Mac's 45 MiB ring.
+    let mac = plan(MIB, None);
+    assert_eq!((mac.budget, mac.memory), (RING_BYTES, true));
+    // A 1 GB stick with 120 MiB free: a 30 MiB ring in RAM.
+    let stick = plan(MIB, Some(120 * MIB));
+    assert_eq!((stick.budget, stick.memory), (30 * MIB, true));
+    assert!(stick.open_cap <= 2 * MIB, "{stick:?}");
+    // 16 MiB pieces with 400 MiB free: two pieces open, under 100 MiB.
+    let big = plan(16 * MIB, Some(400 * MIB));
+    assert!(big.memory && big.budget <= 100 * MIB, "{big:?}");
+    assert!(
+        big.open_floor <= 32 * MIB && big.open_cap <= 32 * MIB,
+        "{big:?}"
+    );
+    // 64 MiB pieces with 400 MiB free: two do not fit in 100 MiB, so a
+    // disk ring.
+    let huge = plan(64 * MIB, Some(400 * MIB));
+    assert!(!huge.memory, "{huge:?}");
+    // Plenty of memory still stops at the ceiling.
+    let tv = plan(16 * MIB, Some(8 << 30));
+    assert!(tv.memory && tv.budget <= RAM_CEILING_BYTES, "{tv:?}");
 }
 
 /// 2.1's worked numbers: a 40 GiB remux at 4.775 MB/s on a phone with
