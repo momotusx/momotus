@@ -1,7 +1,11 @@
 package app.marquee.ui.phone
 
+import android.media.AudioManager
+import android.view.HapticFeedbackConstants
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.LocalActivity
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
@@ -20,6 +24,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.systemGestures
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
@@ -29,9 +34,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
@@ -44,7 +51,10 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.onClick
@@ -72,6 +82,7 @@ import app.marquee.player.PlaybackController
 import app.marquee.player.PlaybackController.Stage
 import app.marquee.player.PlayerStatus
 import app.marquee.player.PlayerVideo
+import app.marquee.player.ScreenBrightness
 import app.marquee.player.Scrim
 import app.marquee.player.Scrubber
 import app.marquee.player.SkipButton
@@ -105,13 +116,15 @@ private enum class Panel { Audio, Subtitles }
 
 /**
  * The player on a phone, in landscape: tap shows or hides the controls, a double tap on the left or
- * right half steps back or forward 10 s, and the position bar can be dragged. From the top: back,
+ * right half steps back or forward 10 s, a vertical swipe on the left half sets the brightness and on
+ * the right half the volume (plans/player-gestures.md), and the position bar can be dragged. From the top: back,
  * title and the small window; from the foot: the transport, the position bar, then the actions,
  * with the transport never crossing the bar. Scrims run edge to edge. In the picture-in-picture
  * window only the picture shows.
  *
  * @param inPip the window is the small picture-in-picture one.
  * @param onPictureInPicture the viewer asked for the small window.
+ * @param brightness the window's brightness as the left-hand swipe sets it, shared by every player.
  */
 @Composable
 fun PhonePlayer(
@@ -130,6 +143,7 @@ fun PhonePlayer(
     onSubtitleSize: (SubtitleSize) -> Unit = {},
     /** The failure card's Settings: the addons (noSource). */
     onSettings: ((EmptyKind) -> Unit)? = null,
+    brightness: ScreenBrightness = remember { ScreenBrightness() },
 ) {
     val stage = controller.stage
     // Back from Settings opened on the failure card: the start runs again when the player resumes, so what was added
@@ -218,6 +232,35 @@ fun PhonePlayer(
     LaunchedEffect(stage) {
         if (stage == Stage.Ended && autoplayNext && next != null) onNext(next, controller.bingeGroup)
     }
+
+    // The level swipes: the level is read only by the indicator, so a swipe's moves recompose nothing here.
+    val window = LocalActivity.current?.window
+    val context = LocalContext.current
+    val view = LocalView.current
+    val volume = remember(context) { context.getSystemService(AudioManager::class.java)?.let(::MediaVolume) }
+    val swipeLevel = remember { mutableFloatStateOf(0f) }
+    var levelSide by remember { mutableStateOf(SwipeSide.Volume) }
+    var levelShown by remember { mutableStateOf(false) }
+    var swiping by remember { mutableStateOf(false) }
+    LaunchedEffect(swiping, levelShown) {
+        if (!swiping && levelShown) {
+            kotlinx.coroutines.delay(LEVEL_HOLD_MS)
+            levelShown = false
+        }
+    }
+    // The system's own edges, from the window as it is now (rotation, the back gesture's width), never below the floors.
+    val gestureInsets = WindowInsets.systemGestures
+    val direction = LocalLayoutDirection.current
+    val bands by rememberUpdatedState(
+        with(density) {
+            EdgeBands(
+                left = maxOf(gestureInsets.getLeft(density, direction).toFloat(), SIDE_BAND.toPx()),
+                top = maxOf(gestureInsets.getTop(density).toFloat(), END_BAND.toPx()),
+                right = maxOf(gestureInsets.getRight(density, direction).toFloat(), SIDE_BAND.toPx()),
+                bottom = maxOf(gestureInsets.getBottom(density).toFloat(), END_BAND.toPx()),
+            )
+        },
+    )
     // A list that was open when the film ended closes: the end card is the only thing to answer.
     LaunchedEffect(ended) { if (ended) panel = null }
     BackHandler {
@@ -271,6 +314,42 @@ fun PhonePlayer(
             subtitleCeiling = if (showControls) maxOf(titleFoot, transportFoot) else 0.dp,
             subtitleCorner = corner.takeIf { showSkip || showNextCard },
             addonCues = { controller.addonCues() }.takeIf { controller.addonOn },
+        )
+        // The level swipes' own layer, right over the picture: the controls, lists and cards drawn after it are hit
+        // first, so a touch on any of them never reaches it, and the picture's taps (on the Box) still see the rest.
+        Box(
+            Modifier.fillMaxSize().levelSwipes(
+                // Never over a list, the loading or end screens, the small window or TalkBack (its two-finger
+                // scroll arrives as a one-finger drag).
+                enabled = live && !opening && !ended && panel == null && !inPip && !exploring,
+                bands = { bands },
+                onStart = { side ->
+                    when (side) {
+                        SwipeSide.Brightness -> window?.let { brightness.start(context.contentResolver) }
+                        SwipeSide.Volume -> volume?.start()
+                    }?.also {
+                        swipeLevel.floatValue = it
+                        levelSide = side
+                        levelShown = true
+                        swiping = true
+                        wake++
+                    }
+                },
+                onLevel = { side, to ->
+                    val took =
+                        when (side) {
+                            SwipeSide.Brightness -> to.also { window?.let { brightness.set(it, to) } }
+                            SwipeSide.Volume -> volume?.set(to) ?: to
+                        }
+                    // Compose's SegmentTick is the API 34 constant itself, nothing below it: CLOCK_TICK runs from 24 on.
+                    val end = reachedEnd(swipeLevel.floatValue, took)
+                    if (end) view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+                    swipeLevel.floatValue = took
+                    // The controls stay up while the finger moves.
+                    wake++
+                },
+                onEnd = { swiping = false },
+            ),
         )
 
         // The loading screen until the picture comes, and over the paused picture while it stalls with the controls
@@ -342,6 +421,18 @@ fun PhonePlayer(
                             .align(if (side > 0) Alignment.CenterEnd else Alignment.CenterStart)
                             .padding(horizontal = 64.dp),
                 )
+            }
+            AnimatedVisibility(
+                visible = levelShown,
+                modifier =
+                    Modifier
+                        .align(if (levelSide == SwipeSide.Brightness) Alignment.CenterStart else Alignment.CenterEnd)
+                        .windowInsetsPadding(WindowInsets.displayCutout)
+                        .padding(horizontal = 40.dp),
+                enter = fadeIn(tween(Marquee.focusMs)),
+                exit = fadeOut(tween(Marquee.panelMs)),
+            ) {
+                LevelIndicator(levelSide, { swipeLevel.floatValue })
             }
             // While the loading screen shows, it says the status under the mark.
             val status = controller.status.takeUnless { opening || stalled }
@@ -710,6 +801,13 @@ private val ACTION_GAP = 28.dp
 
 /** The options row, for tests of the layout. */
 internal const val ACTIONS_TAG = "player-actions"
+
+/** How long the level indicator stays after a swipe ends, before it fades. */
+private const val LEVEL_HOLD_MS = 800L
+
+/** The bands along the sides and the ends where a touch is the system's, at the least. */
+private val SIDE_BAND = 24.dp
+private val END_BAND = 32.dp
 
 /** Below this window height Up Next and the controls do not show together. */
 private val UP_NEXT_ROOM = 420.dp

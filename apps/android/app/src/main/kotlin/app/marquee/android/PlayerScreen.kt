@@ -320,6 +320,7 @@ fun PlayerScreen(
             onOffer = offer,
             onSubtitleSize = holder::setSubtitleSize,
             onSettings = onSettings,
+            brightness = window.brightness,
         )
     }
 }

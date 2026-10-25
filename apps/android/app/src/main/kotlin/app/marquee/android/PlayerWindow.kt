@@ -4,7 +4,11 @@ import android.app.PictureInPictureParams
 import android.content.Context
 import android.content.ContextWrapper
 import android.content.pm.ActivityInfo
+import android.database.ContentObserver
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
+import android.provider.Settings
 import android.util.Rational
 import androidx.activity.ComponentActivity
 import androidx.annotation.RequiresApi
@@ -24,6 +28,7 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import app.marquee.player.PlaybackController
 import app.marquee.player.PlaybackController.Stage
+import app.marquee.player.ScreenBrightness
 
 /** What the activity needs from the player screen before Android 12, where it enters picture-in-picture itself. */
 object PipHooks {
@@ -39,6 +44,9 @@ class PlayerWindow(
 ) {
     var inPip by mutableStateOf(activity?.isInPictureInPictureMode == true)
         internal set
+
+    /** The window's brightness as the phone player's swipe sets it; one for every player. */
+    val brightness: ScreenBrightness get() = screenBrightness
 
     fun enterPip() {
         val host = activity ?: return
@@ -91,12 +99,16 @@ internal class WindowClaim {
 
 private val windowClaim = WindowClaim()
 
+/** One for every player, so the next episode starts from the viewer's brightness (plans/player-gestures.md 3.5). */
+private val screenBrightness = ScreenBrightness()
+
 /**
  * What the window does while the player is up. On every form the screen stays awake while
  * something plays or loads and the system bars are hidden. On a phone the player also locks to
  * landscape and goes to a small picture-in-picture window when the viewer leaves while it plays (Android 12
- * and later do that by themselves once told; before it, the activity asks through [PipHooks]).
- * All of it is put back when the player leaves, unless another player has taken the window ([WindowClaim]).
+ * and later do that by themselves once told; before it, the activity asks through [PipHooks]). A brightness
+ * the viewer swiped holds in the window until the player leaves, the small window opens (it comes back after)
+ * or the system's brightness changes, so its own slider is never dead in the player. All of it is put back when the player leaves, unless another player has taken the window ([WindowClaim]).
  */
 @Composable
 fun rememberPlayerWindow(
@@ -137,6 +149,23 @@ fun rememberPlayerWindow(
             if (owns()) activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
             onDispose { if (owns()) activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED }
         }
+        DisposableEffect(activity) {
+            val system =
+                object : ContentObserver(Handler(Looper.getMainLooper())) {
+                    override fun onChange(selfChange: Boolean) {
+                        if (owns()) screenBrightness.release(activity.window, forget = true)
+                    }
+                }
+            activity.contentResolver.registerContentObserver(
+                Settings.System.getUriFor(Settings.System.SCREEN_BRIGHTNESS),
+                false,
+                system,
+            )
+            onDispose {
+                activity.contentResolver.unregisterContentObserver(system)
+                if (owns()) screenBrightness.release(activity.window, forget = true)
+            }
+        }
         if (Build.VERSION.SDK_INT >= 26) {
             val playing = controller.stage == Stage.Playing
             val ratio = controller.videoRatio
@@ -148,7 +177,18 @@ fun rememberPlayerWindow(
                 onDispose { if (owns()) PipHooks.enter = null }
             }
             DisposableEffect(activity) {
-                val listener = Consumer<PictureInPictureModeChangedInfo> { window.inPip = it.isInPictureInPictureMode }
+                val listener =
+                    Consumer<PictureInPictureModeChangedInfo> {
+                        window.inPip = it.isInPictureInPictureMode
+                        // The small window must not dim or light the screen under other apps.
+                        if (owns()) {
+                            if (it.isInPictureInPictureMode) {
+                                screenBrightness.release(activity.window, forget = false)
+                            } else {
+                                screenBrightness.apply(activity.window)
+                            }
+                        }
+                    }
                 activity.addOnPictureInPictureModeChangedListener(listener)
                 onDispose {
                     activity.removeOnPictureInPictureModeChangedListener(listener)
