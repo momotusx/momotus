@@ -752,9 +752,12 @@ impl Ctx {
         })
     }
 
-    /// RPDB's cover for the title with the key the addons give now.
+    /// RPDB's cover for the title with the key the addons give now, for the
+    /// same IMDb id as the badges.
     fn reread_cover(&self) {
-        let url = self.core.covers([self.id.as_str()]).url(&self.id);
+        let url = self
+            .imdb()
+            .and_then(|imdb| self.core.covers([imdb.as_str()]).url(&imdb));
         lock(&self.state).rated_poster = url;
     }
 

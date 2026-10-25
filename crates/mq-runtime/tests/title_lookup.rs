@@ -605,9 +605,31 @@ async fn a_title_opened_by_another_id_uses_its_metas_imdb_id() {
     let fake = fake().await;
     fake.route("/meta/movie/tmdb:278", 200, MOVIE);
     let core = core(&fake, Some("test-token"));
+    // An addon configured with RPDB's key, so the page has a rated cover.
+    let mut keyed = addon(&fake.base);
+    keyed.transport_url = format!(
+        "{}/%7B%22rpdb_key%22%3A%22t0-free-rpdb%22%7D/manifest.json",
+        fake.base
+    );
+    keyed.position = 1;
+    core.library()
+        .set_addons("p", &[addon(&fake.base), keyed], &core.hlc())
+        .unwrap();
     let view = TitleView::open(&core, "movie", "tmdb:278");
     let snap = until(&view, "the meta", ready).await;
     assert_eq!(scores(&snap), (Slot::Pending, Slot::Pending));
+    // The cover is the meta's IMDb id's, as the badges are.
+    assert_eq!(
+        snap.header
+            .details
+            .as_ref()
+            .unwrap()
+            .rated_poster
+            .as_deref(),
+        Some(
+            "https://api.ratingposterdb.com/t0-free-rpdb/imdb/poster-default/tt0111161.jpg?fallback=true"
+        )
+    );
     view.set_visible(true);
     let snap = until(&view, "the scores", |s| {
         scores(s) == (shown("87%"), shown("92%"))
