@@ -74,6 +74,11 @@ private var landed: [String: Any] { [
     let before = heroParts(try details(scores: pending))
     let after = heroParts(try details(scores: landed))
     let meta = try #require(before[.meta])
+    // A linked score is a finger-sized target (44 pt) inside a row that stays 24 tall.
+    for name in ["IMDb", "TMDB", "Trakt"] {
+        let target = try #require(after[.link(name)], "no link for \(name)")
+        #expect(target.height >= 44, "\(name) target \(target)")
+    }
     // The meta line holds the 24 pt ratings row from the first draw.
     #expect(meta.height >= ScoreRow.height, "meta \(meta)")
     for part in [HeroPart.box, .meta, .chips, .synopsis, .actions] {
@@ -85,7 +90,7 @@ private var landed: [String: Any] { [
 /// The chips ChipGroups draws, and those that are links (a button to press).
 @MainActor private func chips(linksGenres: Bool) -> (drawn: Int, links: Int) {
     let parts = Parts()
-    let host = NSHostingView(rootView: ChipGroups(genres: ["Drama", "Crime"], directors: [], linksGenres: linksGenres, open: { _ in })
+    let host = NSHostingView(rootView: ChipGroups(genres: ["Drama", "Crime"], directors: ["Frank Darabont"], linked: linksGenres, open: { _ in })
         .frame(width: 480, alignment: .leading)
         .environment(\.heroProbe, HeroProbeSink { part, frame in parts.frames[part] = frame }))
     host.frame = CGRect(x: 0, y: 0, width: 480, height: 100)
@@ -93,8 +98,9 @@ private var landed: [String: Any] { [
         host.layoutSubtreeIfNeeded()
         RunLoop.main.run(until: Date().addingTimeInterval(0.01))
     }
-    let drawn = ["Drama", "Crime"].filter { (parts.frames[.chip($0)]?.width ?? 0) > 0 }.count
-    let links = ["Drama", "Crime"].filter { (parts.frames[.link($0)]?.width ?? 0) > 0 }.count
+    let names = ["Drama", "Crime", "Frank Darabont"]
+    let drawn = names.filter { (parts.frames[.chip($0)]?.width ?? 0) > 0 }.count
+    let links = names.filter { (parts.frames[.link($0)]?.width ?? 0) > 0 }.count
     return (drawn, links)
 }
 
@@ -102,11 +108,12 @@ private var landed: [String: Any] { [
     // The core says so (`genresLinked`, false on a kids profile, which has no Discover); an older core sends none.
     let header = try JSONDecoder().decode(TitleHeader.self, from: Data(#"{"state": {"state": "loading"}, "details": null, "seasons": [], "selectedSeason": null, "inLibrary": false, "playTarget": null, "watched": false, "genresLinked": false}"#.utf8))
     #expect(!header.linksGenres)
-    // Linked, each genre is a button; for a kids profile the same chips show with nothing to press.
+    // Linked, each genre and name is a button; for a kids profile, whose Search finds only its list, the same chips
+    // show with nothing to press.
     let linked = chips(linksGenres: true)
-    #expect(linked.drawn == 2 && linked.links == 2, "linked: \(linked)")
+    #expect(linked.drawn == 3 && linked.links == 3, "linked: \(linked)")
     let words = chips(linksGenres: false)
-    #expect(words.drawn == 2 && words.links == 0, "kids: \(words)")
+    #expect(words.drawn == 3 && words.links == 0, "kids: \(words)")
 }
 
 @Test func theCoverCardFitsBesideTheWordsAndAboveTheRow() {

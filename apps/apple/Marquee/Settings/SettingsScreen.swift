@@ -144,8 +144,8 @@ struct SettingsScreen: View {
                     .fixedSize(horizontal: false, vertical: true)
                 // TMDB's terms: its logo and this line wherever its data shows.
                 HStack(spacing: Theme.Space.xs) {
-                    Image(ScoreMark.tmdb.asset).resizable().aspectRatio(contentMode: .fit).frame(height: 16)
-                        .accessibilityLabel("TMDB")
+                    // Decorative: the line beside it names TMDB.
+                    Image(decorative: ScoreMark.tmdb.asset).resizable().aspectRatio(contentMode: .fit).frame(height: 16)
                     Text("This product uses the TMDB API but is not endorsed or certified by TMDB.")
                         .textFont(Theme.type.callout, relativeTo: .callout)
                         .foregroundStyle(Theme.Palette.muted)

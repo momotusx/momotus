@@ -65,6 +65,8 @@ enum ScoreRow {
     static let height: CGFloat = 24
     static let mark: CGFloat = 18
     #endif
+    /// A linked score's target reaches 44 pt tall around the row (not on TV, which has no links).
+    static let targetInset: CGFloat = max(0, (44 - height) / 2)
 }
 
 /// One score: the service's mark in its own colours, then the number. A pending one keeps its width and
@@ -78,7 +80,9 @@ struct ScoreMarkView: View {
                 .resizable()
                 .aspectRatio(contentMode: .fit)
                 .frame(height: ScoreRow.mark)
-            Text(item.text ?? "00%")
+            // Tabular digits, and a pending slot as wide as a two-digit percentage: nothing shifts when it lands.
+            Text(item.text ?? "88%")
+                .monospacedDigit()
                 .fontWeight(.semibold)
                 .foregroundStyle(.white)
                 .lineLimit(1)

@@ -297,20 +297,21 @@ struct InfoList: View {
     let directors: [String]
     var writers: [String] = []
     let rows: [(key: String, value: String)]
-    /// False on a kids profile: the genres are words, not links.
-    var linksGenres = true
+    /// False on a kids profile: the genres and names are words, not links (its Search finds only its list).
+    var linked = true
     let open: (TitleLink) -> Void
 
     var body: some View {
-        let genreLink: ((String) -> TitleLink)? = linksGenres ? { .genre($0) } : nil
+        let genreLink: ((String) -> TitleLink)? = linked ? { .genre($0) } : nil
+        let personLink: ((String) -> TitleLink)? = linked ? { .person($0) } : nil
         return VStack(alignment: .leading, spacing: 12) {
             Text("Information")
                 .textFont(22, weight: .bold, relativeTo: .title2)
                 .foregroundStyle(Theme.Palette.text)
                 .accessibilityAddTraits(.isHeader)
             chipRow("Genres", genres, genreLink)
-            chipRow("Directors", directors, TitleLink.person)
-            chipRow("Writers", writers, TitleLink.person)
+            chipRow("Directors", directors, personLink)
+            chipRow("Writers", writers, personLink)
             ForEach(rows.filter { $0.key != "Genres" }, id: \.key) { row in
                 VStack(alignment: .leading, spacing: 2) {
                     Text(row.key).textFont(12, relativeTo: .caption).foregroundStyle(Theme.Palette.text)

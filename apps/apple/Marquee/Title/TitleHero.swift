@@ -167,7 +167,7 @@ struct TitleHeroWide<Actions: View>: View {
                 .padding(.top, 7)
                 .heroProbe(.meta)
             if !facts.genres.isEmpty || !facts.directors.isEmpty {
-                ChipGroups(genres: facts.genres, directors: facts.directors, linksGenres: facts.linksGenres, open: open)
+                ChipGroups(genres: facts.genres, directors: facts.directors, linked: facts.linksGenres, open: open)
                     .frame(maxWidth: min(cap, columnWidth), alignment: .leading)
                     .padding(.top, 5)
                     .heroProbe(.chips)
@@ -221,16 +221,18 @@ struct ChipGroups: View {
     let genres: [String]
     let directors: [String]
     var writers: [String] = []
-    /// False on a kids profile: the genres are words on the chip fill, with nothing to press.
-    var linksGenres = true
+    /// False on a kids profile: the genres and names are words on the chip fill, with nothing to press (its
+    /// Search finds only its list).
+    var linked = true
     let open: (TitleLink) -> Void
 
     var body: some View {
-        let genreLink: ((String) -> TitleLink)? = linksGenres ? { .genre($0) } : nil
+        let genreLink: ((String) -> TitleLink)? = linked ? { .genre($0) } : nil
+        let personLink: ((String) -> TitleLink)? = linked ? { .person($0) } : nil
         return VStack(alignment: .leading, spacing: 10) {
             group("Genres", genres, genreLink, hint: "Opens Discover")
-            group("Directors", directors, TitleLink.person, hint: "Searches for their titles")
-            group("Writers", writers, TitleLink.person, hint: "Searches for their titles")
+            group("Directors", directors, personLink, hint: "Searches for their titles")
+            group("Writers", writers, personLink, hint: "Searches for their titles")
         }
     }
 

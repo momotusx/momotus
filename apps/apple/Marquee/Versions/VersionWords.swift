@@ -39,7 +39,11 @@ enum WideLayout {
     }
     static let starringFrom: CGFloat = 1240
     /// The rated cover card at the hero's right (plans/title-page-ratings-genres-similar.md): a fixed 2:3 poster.
+    #if os(tvOS)
+    static let coverWidth: CGFloat = 300
+    #else
     static let coverWidth: CGFloat = 240
+    #endif
     /// The card shows where it clears the hero's words (held to 480 from the 40 margin) with 40 on every side,
     /// and where the hero is tall enough for it above the action row's height and the foot.
     static func coverFits(window: CGFloat, hero: CGFloat) -> Bool {

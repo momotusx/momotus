@@ -30,14 +30,16 @@ struct MetaLine: View {
             }
             ForEach(Array(marks.enumerated()), id: \.offset) { _, item in
                 if let url = markLink(item) {
-                    Link(destination: url) { ScoreMarkView(item: item) }
-                        .buttonStyle(.plain)
-                        #if os(iOS)
-                        // A finger-sized target that does not grow the row: 44 tall, and half the 8 pt gap each side.
-                        .padding(.vertical, 10).padding(.horizontal, 4)
-                        .contentShape(Rectangle())
-                        .padding(.vertical, -10).padding(.horizontal, -4)
-                        #endif
+                    // A finger-sized target that does not grow the row: 44 tall, and half the 8 pt gap each side. The
+                    // room is inside the link's label (a tap lands only on the label), given back outside it.
+                    Link(destination: url) {
+                        ScoreMarkView(item: item)
+                            .padding(.vertical, ScoreRow.targetInset).padding(.horizontal, 4)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .heroProbe(.link(item.mark.name))
+                    .padding(.vertical, -ScoreRow.targetInset).padding(.horizontal, -4)
                 } else {
                     ScoreMarkView(item: item)
                 }

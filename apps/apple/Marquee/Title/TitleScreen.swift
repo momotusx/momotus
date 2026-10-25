@@ -248,12 +248,14 @@ struct TitleScreen: View {
                 }
                 // After the episodes and before Cast; it lands late, under what it follows.
                 SimilarRow(tiles: model.similar)
+                // A kids profile's Search finds only its list: its names are not links.
+                let linked = model.header?.linksGenres ?? true
                 if !details.cast.isEmpty {
-                    CastShelf(cast: details.cast, open: { openLink(.person($0)) }).padding(.horizontal, metrics.wide ? metrics.gutter : 20)
+                    CastShelf(cast: details.cast, open: linked ? { openLink(.person($0)) } : nil).padding(.horizontal, metrics.wide ? metrics.gutter : 20)
                 }
                 // The writers link as the directors do; on the phone Information lists them.
                 if metrics.wide, let writers = details.writers, !writers.isEmpty {
-                    ChipGroups(genres: [], directors: [], writers: Array(writers.prefix(3)), open: openLink)
+                    ChipGroups(genres: [], directors: [], writers: Array(writers.prefix(3)), linked: linked, open: openLink)
                         .padding(.horizontal, metrics.gutter)
                 }
                 let rows = informationRows(genres: details.genres, directors: metrics.wide ? details.directors : [], runtime: details.runtime, seasons: seasons,
@@ -266,7 +268,7 @@ struct TitleScreen: View {
                         RatedCover(url: cover, width: 200).frame(maxWidth: .infinity)
                     }
                     InfoList(genres: Array(details.genres.prefix(3)), directors: details.directors, writers: details.writers ?? [], rows: rows,
-                             linksGenres: model.header?.linksGenres ?? true, open: openLink)
+                             linked: linked, open: openLink)
                         .padding(.horizontal, 20)
                 }
             }
