@@ -412,6 +412,9 @@ impl std::fmt::Debug for Engine {
 struct Inner {
     session: Arc<Session>,
     cfg: EngineConfig,
+    /// Bytes the app's own downloads (HTTP files outside the engine) will
+    /// still write: part of `C`, so a window leaves them their room.
+    outside: AtomicU64,
     scopes: Scopes,
     scraper: scrape::Scraper,
     torrents: Mutex<HashMap<TorrentHandle, Arc<Torrent>>>,
@@ -659,6 +662,7 @@ impl Engine {
             inner: Arc::new(Inner {
                 session,
                 cfg,
+                outside: AtomicU64::new(0),
                 scopes,
                 scraper,
                 torrents: Mutex::default(),
@@ -1628,7 +1632,14 @@ impl Engine {
                 .map_or(0, |l| lock(&l.snapshot).held_bytes.unwrap_or(0));
             sum += w.plan.budget.saturating_sub(held);
         }
-        sum
+        sum + self.inner.outside.load(Ordering::Relaxed)
+    }
+
+    /// What the app's downloads outside the engine will still write (its
+    /// HTTP files): counted in every window.s `C` and the ranking.s (plans/
+    /// offline-downloads.md 4.9, code review r1 m10).
+    pub fn set_committed_outside(&self, bytes: u64) {
+        self.inner.outside.store(bytes, Ordering::Relaxed);
     }
 
     /// Plays `file` of `h` in a window (plans/streaming-window.md 2.1): a
@@ -2254,17 +2265,6 @@ impl Engine {
     /// its folder, else its folder is left to the budget's sweep.
     pub async fn delete_file(&self, info_hash: &str, file: usize) -> Result<()> {
         let hex = hex_hash(info_hash.trim()).ok_or(EngineError::BadInfoHash)?;
-        // Played now: nothing changes under its reader, offline the rest of
-        // the file is nowhere else (code review r1, engine P2-3). ponytail:
-        // it stays kept until the next launch, whose kept list no longer
-        // names it, and the sweep takes it then.
-        let playing = lock(&self.inner.torrents)
-            .values()
-            .find(|t| t.info_hash == hex)
-            .is_some_and(|t| t.claimed() || t.readers.load(Ordering::Relaxed) > 0);
-        if playing {
-            return Ok(());
-        }
         let left = {
             let mut kept = lock(&self.inner.kept);
             let files = kept.entry(hex.clone()).or_default();
@@ -2275,6 +2275,23 @@ impl Engine {
             }
             left
         };
+        // Played now: the file is kept no more, but nothing is evicted under
+        // its reader (offline the rest of the file is nowhere else); the
+        // budget's sweep takes it once idle, as any stream's (plans/offline-
+        // downloads.md 4.6 step 9, code review r1 M1).
+        let playing = lock(&self.inner.torrents)
+            .values()
+            .find(|t| t.info_hash == hex)
+            .filter(|t| t.claimed() || t.readers.load(Ordering::Relaxed) > 0)
+            .cloned();
+        if let Some(t) = playing {
+            if let Some(l) = t.live.lock().await.as_ref() {
+                let _ = l.msgs.send(adapter::Msg::Bulk { file, on: false });
+            }
+            lock(&t.downloading).remove(&file);
+            self.send_kept(&t).await;
+            return Ok(());
+        }
         let loaded = lock(&self.inner.torrents)
             .iter()
             .find(|(_, t)| t.info_hash == hex)
