@@ -68,6 +68,25 @@ class FrameBenchmark {
             },
         ) { scrollTvGrid() }
 
+    /**
+     * The TV bar's places in a fresh process, each shown by focus resting on its tab: Discover and Library open
+     * for the first time, then Discover again and Home (2026-10-25: no frame for 1.4 s when Discover first opened).
+     */
+    @Test
+    fun tvTabsFirstOpen() =
+        rule.measureRepeated(
+            packageName = PACKAGE,
+            metrics = listOf(FrameTimingMetric()),
+            iterations = 5,
+            startupMode = null,
+            compilationMode = CompilationMode.Partial(),
+            setupBlock = {
+                killProcess()
+                startTv()
+                openHome()
+            },
+        ) { sweepTvTabs() }
+
     @Test
     fun playbackStart() =
         rule.measureRepeated(

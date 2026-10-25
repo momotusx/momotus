@@ -135,3 +135,24 @@ fun MacrobenchmarkScope.scrollTvGrid() {
     dpad(down = true, times = 16, gapMs = HELD_MS)
     dpad(down = false, times = 24, gapMs = HELD_MS)
 }
+
+/** Long enough for a place's first page to come and draw after its tab's settle. */
+private const val TAB_MS = 3_000L
+
+/**
+ * Up from Home's first focus into the bar, Right onto Discover and Library (first opens in this process), then Left
+ * back over Discover and Home: no Select, each place shows once focus rests on its tab.
+ */
+fun MacrobenchmarkScope.sweepTvTabs() {
+    device.pressDPadUp()
+    Thread.sleep(STEP_MS)
+    repeat(2) {
+        device.pressDPadRight()
+        Thread.sleep(TAB_MS)
+    }
+    repeat(2) {
+        device.pressDPadLeft()
+        Thread.sleep(TAB_MS)
+    }
+    device.waitForIdle()
+}
