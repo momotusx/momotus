@@ -300,9 +300,10 @@ test("tv: the action row keeps its box from the first frame, however late Home a
       }),
     );
   const remove = page.locator('[data-f="title:uncontinue"]');
-  // Big Buck Bunny is in Continue Watching (the run's seed): its Remove is there with the first frame.
-  await expect(remove).toHaveCount(1);
+  // Measured at once, with no waiting: Big Buck Bunny is in Continue Watching (the run's seed), so its Remove is
+  // there with the first frame.
   const first = await boxes();
+  expect(await remove.count()).toBe(1);
   // Home answers after 3 s; by 4.5 s everything that comes has come.
   await page.waitForTimeout(4500);
   expect(await boxes()).toEqual(first);
