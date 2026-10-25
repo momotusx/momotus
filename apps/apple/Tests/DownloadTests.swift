@@ -398,6 +398,12 @@ private func submits(_ effects: [KeeperEffect]) -> Int {
     #expect(!keeper.asksBeforeQuit)
 }
 
+// A download keeps App Nap off, not the Mac awake (review r1 m3).
+@MainActor @Test func theMacActivityLetsTheMacSleep() {
+    #expect(DownloadKeeper.activityOptions == .userInitiatedAllowingIdleSystemSleep)
+    #expect(!DownloadKeeper.activityOptions.contains(.idleSystemSleepDisabled))
+}
+
 // Quit waits for the core to checkpoint and hold the downloads before the app goes (review r1 M4).
 @MainActor @Test func quitWaitsForTheCoresAnswer() async throws {
     let core = RealCore()

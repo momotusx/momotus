@@ -99,6 +99,11 @@ final class DownloadKeeper {
         }
     }
 
+    #if os(macOS)
+    /// Downloads keep App Nap off, never the Mac awake: an idle Mac on battery may still sleep (review r1 m3).
+    static let activityOptions: ProcessInfo.ActivityOptions = .userInitiatedAllowingIdleSystemSleep
+    #endif
+
     /// Quitting the Mac asks first while downloads run.
     var asksBeforeQuit: Bool { KeeperLogic.asksBeforeQuit(logic.current) }
 
@@ -191,7 +196,7 @@ final class DownloadKeeper {
         case .end(let success): end(success: success)
         case .beginActivity:
             #if os(macOS)
-            activity = ProcessInfo.processInfo.beginActivity(options: .userInitiated, reason: "Downloading")
+            activity = ProcessInfo.processInfo.beginActivity(options: Self.activityOptions, reason: "Downloading")
             #endif
         case .endActivity:
             #if os(macOS)
