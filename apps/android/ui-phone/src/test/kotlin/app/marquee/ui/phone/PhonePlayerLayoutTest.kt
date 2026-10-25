@@ -195,7 +195,12 @@ class PhonePlayerLayoutTest {
         player.say("Who are you, and what are you doing here")
         controlsHidden()
         val hidden = cues()
-        assertEquals(root.bottom, hidden.foot, "on the bottom line again, as the file has it")
+        assertEquals(
+            root.height * (1 - SubtitleView.DEFAULT_BOTTOM_PADDING_FRACTION),
+            hidden.foot,
+            0.5f,
+            "at the foot again, 8% over the screen's, not on its last pixel",
+        )
         assertEquals(full(SubtitleSize.Medium), hidden.text, "full size")
     }
 

@@ -128,7 +128,7 @@ fun PlayerVideo(
                 }
             }
         // The view keeps the whole picture area, so the cues keep their size and a picture cue (PGS) its shape.
-        Subtitles(cues, frame, lifted = subtitleLift > 0.dp, Modifier.fillMaxSize().testTag(SUBTITLES_TAG))
+        Subtitles(cues, frame, Modifier.fillMaxSize().testTag(SUBTITLES_TAG))
     }
 }
 
@@ -235,14 +235,13 @@ fun subtitleScale(size: SubtitleSize): Float =
 private fun Subtitles(
     cues: List<Cue>,
     frame: CueFrame,
-    lifted: Boolean,
     modifier: Modifier,
 ) {
     AndroidView(
         factory = { context -> SubtitleView(context).also { it.setUserDefaultStyle() } },
         update = {
             it.setFractionalTextSize(frame.text)
-            it.setCues(cues.map { cue -> frame.fit(cue, lifted) })
+            it.setCues(cues.map { cue -> frame.fit(cue) })
         },
         modifier = modifier,
     )
@@ -267,24 +266,23 @@ private fun linesOverFoot(cue: Cue): Float? =
 private const val SSA_FOOT = 0.9f
 
 /**
- * A cue set from the foot, kept to the frame's width; while [lifted], with its foot at the frame's (a cue stacked
- * over another, line -2 and up, a line higher each), as the view's own bottom padding moves only cues with no line.
+ * A cue set from the foot, kept to the frame's width, with its foot at the frame's and its lines growing up from it
+ * (a cue stacked over another, line -2 and up, a line higher each), the controls up or not. The view's own bottom
+ * padding moves only cues with no line: Media3 draws a WebVTT bottom line (every addon line) on the view's last
+ * pixel, which on a TV is past the overscan-safe line and, under wide video, on the black bar.
  */
-internal fun CueFrame.fit(
-    cue: Cue,
-    lifted: Boolean,
-): Cue {
+internal fun CueFrame.fit(cue: Cue): Cue {
     val over = linesOverFoot(cue) ?: return cue
-    if (width >= 1f && !lifted) return cue
-    val fitted = cue.buildUpon()
+    val fitted =
+        cue
+            .buildUpon()
+            .setLine(1f - bottom - over * CUE_LINE * text, Cue.LINE_TYPE_FRACTION)
+            .setLineAnchor(Cue.ANCHOR_TYPE_END)
     if (width < 1f) {
         fitted
             .setSize(if (cue.size == Cue.DIMEN_UNSET) width else minOf(cue.size, width))
             .setPosition(center)
             .setPositionAnchor(Cue.ANCHOR_TYPE_MIDDLE)
-    }
-    if (lifted) {
-        fitted.setLine(1f - bottom - over * CUE_LINE * text, Cue.LINE_TYPE_FRACTION).setLineAnchor(Cue.ANCHOR_TYPE_END)
     }
     return fitted.build()
 }

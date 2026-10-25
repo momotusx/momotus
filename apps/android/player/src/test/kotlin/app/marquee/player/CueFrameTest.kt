@@ -8,8 +8,9 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
-/** Where the phone's cues go beside a control in the bottom corner, on a 900 by 400 screen, and which cues the lift moves. */
+/** Where the phone's cues go beside a control in the bottom corner, on a 900 by 400 screen, and which cues hang from the foot. */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [36])
 class CueFrameTest {
@@ -43,6 +44,9 @@ class CueFrameTest {
 
     private val lifted = CueFrame(bottom = 0.5f, text = text)
 
+    /** The controls hidden: the foot at Media3's own bottom padding, 8% over the screen's. */
+    private val plain = CueFrame(bottom = 0.08f, text = text)
+
     @Test
     fun `while lifted, a cue on a bottom line ends at the foot, one stacked over it a line higher`() {
         val bottomLine =
@@ -51,17 +55,17 @@ class CueFrameTest {
                 .setText("a")
                 .setLine(-1f, Cue.LINE_TYPE_NUMBER)
                 .build()
-        val fitted = lifted.fit(bottomLine, lifted = true)
+        val fitted = lifted.fit(bottomLine)
         assertEquals(Cue.LINE_TYPE_FRACTION, fitted.lineType)
         assertEquals(Cue.ANCHOR_TYPE_END, fitted.lineAnchor)
         assertEquals(0.5f, fitted.line, 1e-6f)
-        val stacked = lifted.fit(bottomLine.buildUpon().setLine(-2f, Cue.LINE_TYPE_NUMBER).build(), lifted = true)
+        val stacked = lifted.fit(bottomLine.buildUpon().setLine(-2f, Cue.LINE_TYPE_NUMBER).build())
         assertEquals(0.5f - CUE_LINE * text, stacked.line, 1e-6f)
-        assertEquals(0.5f, lifted.fit(Cue.Builder().setText("a").build(), lifted = true).line, 1e-6f)
+        assertEquals(0.5f, lifted.fit(Cue.Builder().setText("a").build()).line, 1e-6f)
     }
 
     @Test
-    fun `a picture cue, a cue on a line of its own, or any cue unlifted stays where the file put it`() {
+    fun `a picture cue or a cue on a line of its own stays where the file put it`() {
         val picture =
             Cue
                 .Builder()
@@ -81,14 +85,37 @@ class CueFrameTest {
                 .setText("a")
                 .setLine(2f, Cue.LINE_TYPE_NUMBER)
                 .build()
-        val bottomLine =
+        for (cue in listOf(picture, placed, fromTop)) {
+            assertEquals(cue.line, lifted.fit(cue).line)
+            assertEquals(cue.line, plain.fit(cue).line)
+        }
+    }
+
+    @Test
+    fun `with the controls hidden two lines on the bottom line hang from the foot, over the safe line, growing up`() {
+        // A WebVTT bottom line (every addon line): Media3 draws line -1 on the view's last pixel.
+        val twoLines =
             Cue
                 .Builder()
-                .setText("a")
+                .setText("MI5 SECURITY SERVICE\nSECRET")
                 .setLine(-1f, Cue.LINE_TYPE_NUMBER)
                 .build()
-        for (cue in listOf(picture, placed, fromTop)) assertEquals(cue.line, lifted.fit(cue, lifted = true).line)
-        assertEquals(-1f, lifted.fit(bottomLine, lifted = false).line)
+        val fitted = plain.fit(twoLines)
+        assertEquals(Cue.LINE_TYPE_FRACTION, fitted.lineType)
+        assertEquals(Cue.ANCHOR_TYPE_END, fitted.lineAnchor, "anchored at its foot: the second line grows upward")
+        assertEquals(0.92f, fitted.line, 1e-6f)
+        // Both lines' box, as fractions of the screen, between the top and the 5% title-safe line.
+        val top = fitted.line - 2 * CUE_LINE * text
+        assertTrue(fitted.line <= 0.95f && top >= 0f, "the box $top..${fitted.line} is inside the safe area")
+        // A cue with no line (SubRip) keeps the foot the view's padding gave it; SSA's foot line comes up to it.
+        assertEquals(0.92f, plain.fit(Cue.Builder().setText("a").build()).line, 1e-6f)
+        val ssa =
+            twoLines
+                .buildUpon()
+                .setLine(0.95f, Cue.LINE_TYPE_FRACTION)
+                .setLineAnchor(Cue.ANCHOR_TYPE_END)
+                .build()
+        assertEquals(0.92f, plain.fit(ssa).line, 1e-6f)
     }
 
     @Test
@@ -102,7 +129,7 @@ class CueFrameTest {
                 .setPosition(0.5f)
                 .setPositionAnchor(Cue.ANCHOR_TYPE_MIDDLE)
                 .build()
-        assertEquals(0.5f, lifted.fit(dialogue, lifted = true).line, 1e-6f)
+        assertEquals(0.5f, lifted.fit(dialogue).line, 1e-6f)
         val sign =
             dialogue
                 .buildUpon()
@@ -111,7 +138,7 @@ class CueFrameTest {
                     Cue.LINE_TYPE_FRACTION,
                 ).setLineAnchor(Cue.ANCHOR_TYPE_START)
                 .build()
-        assertEquals(0.05f, lifted.fit(sign, lifted = true).line, 1e-6f)
+        assertEquals(0.05f, lifted.fit(sign).line, 1e-6f)
     }
 
     @Test

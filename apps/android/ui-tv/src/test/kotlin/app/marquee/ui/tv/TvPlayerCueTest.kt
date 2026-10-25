@@ -29,7 +29,11 @@ import kotlin.coroutines.CoroutineContext
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
-/** The TV player's cues while the controls show: their foot 8 dp over the controls band, as on the phone (the Fire TV walk). */
+/**
+ * The TV player's cues while the controls show: their foot 8 dp over the controls band, as on the phone (the Fire TV walk);
+ * hidden, 8% over the screen's foot, inside the overscan-safe area (the Fire TV, 2026-10-24: a two-line addon cue on
+ * wide video ended on the screen's last pixel).
+ */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [36], qualifiers = "w960dp-h540dp")
 class TvPlayerCueTest {
@@ -59,11 +63,26 @@ class TvPlayerCueTest {
 
     /** The first cue's foot, in px from the top, as the subtitle view will draw it. */
     private fun cueFoot(): Float {
+        val cue = cue()
+        val height = view().height.toFloat()
+        return when {
+            cue.lineType == Cue.LINE_TYPE_FRACTION && cue.lineAnchor == Cue.ANCHOR_TYPE_END -> cue.line * height
+            cue.lineType == Cue.LINE_TYPE_NUMBER && cue.line == -1f -> height
+            else -> error("a cue on a line of its own: $cue")
+        }
+    }
+
+    private fun view(): SubtitleView {
         fun find(view: View): SubtitleView? =
             view as? SubtitleView ?: (view as? ViewGroup)?.let { group ->
                 (0 until group.childCount).firstNotNullOfOrNull { find(group.getChildAt(it)) }
             }
-        val view = requireNotNull(find(compose.activity.window.decorView)) { "no subtitle view" }
+        return requireNotNull(find(compose.activity.window.decorView)) { "no subtitle view" }
+    }
+
+    /** The first cue the subtitle view draws. */
+    private fun cue(): Cue {
+        val view = view()
 
         // Media3 keeps the cues in a private field (as the phone's layout test reads them too).
         val field =
@@ -72,13 +91,7 @@ class TvPlayerCueTest {
             }
 
         @Suppress("UNCHECKED_CAST")
-        val cue = (field.apply { isAccessible = true }.get(view) as List<Cue>).first()
-        val height = view.height.toFloat()
-        return when {
-            cue.lineType == Cue.LINE_TYPE_FRACTION && cue.lineAnchor == Cue.ANCHOR_TYPE_END -> cue.line * height
-            cue.lineType == Cue.LINE_TYPE_NUMBER && cue.line == -1f -> height
-            else -> error("a cue on a line of its own: $cue")
-        }
+        return (field.apply { isAccessible = true }.get(view) as List<Cue>).first()
     }
 
     @Test
@@ -86,7 +99,8 @@ class TvPlayerCueTest {
         compose.setContent { MarqueeTheme(Form.Tv) { TvPlayer(controller, false, {}, null, { _, _ -> }, {}) } }
         compose.runOnIdle { player.open() }
         compose.waitUntil(10_000) { controller.stage == PlaybackController.Stage.Playing }
-        player.say("Who are you, and what are you doing here")
+        // Two lines on the bottom line, as a WebVTT addon file gives them.
+        player.say("MI5 SECURITY SERVICE\nSECRET")
         compose.waitForIdle()
         val bar = compose.onNodeWithContentDescription("Position").fetchSemanticsNode().boundsInRoot
         val transport = compose.onNodeWithContentDescription("Back 10 seconds").fetchSemanticsNode().boundsInRoot
@@ -97,13 +111,11 @@ class TvPlayerCueTest {
             compose.onAllNodesWithContentDescription("Back 10 seconds").fetchSemanticsNodes().isEmpty()
         }
         compose.waitForIdle()
-        assertEquals(
-            compose
-                .onRoot()
-                .fetchSemanticsNode()
-                .boundsInRoot.bottom,
-            cueFoot(),
-            "at the foot again",
-        )
+        val root = compose.onRoot().fetchSemanticsNode().boundsInRoot
+        val foot = cueFoot()
+        assertEquals(root.height * (1 - SubtitleView.DEFAULT_BOTTOM_PADDING_FRACTION), foot, 0.5f, "at the foot again")
+        // Anchored at its foot, so the second line grows upward: both lines over the 5% title-safe line.
+        assertTrue(foot <= root.height * 0.95f, "the lines end over the safe line: $foot of ${root.height}")
+        assertEquals(Cue.ANCHOR_TYPE_END, cue().lineAnchor, "hung from the foot")
     }
 }
