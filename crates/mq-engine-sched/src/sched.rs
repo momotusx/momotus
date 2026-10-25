@@ -141,6 +141,10 @@ pub struct Scheduler {
     kept_files: Bitfield,
     /// A reader opened with none before: queued Bulk blocks give way.
     preempt_bulk: bool,
+    /// When the last reader closed: a player that closes one range just
+    /// before it opens the next (AVPlayer) is still the same reader for
+    /// `GRACE_US`, and cancels no download blocks (code review r1 P3-1).
+    reader_closed_us: Option<u64>,
     /// A download stopped: requests for pieces no class wants go.
     drop_unwanted: bool,
 }
@@ -198,6 +202,7 @@ impl Scheduler {
             bulk: vec![false; files],
             kept_files: Bitfield::new(pieces),
             preempt_bulk: false,
+            reader_closed_us: None,
             drop_unwanted: false,
         }
     }
@@ -360,7 +365,10 @@ impl Scheduler {
                     _ => start,
                 };
                 if !probe {
-                    if !self.demands.iter().any(|d| !d.probe) {
+                    let quiet = self
+                        .reader_closed_us
+                        .is_none_or(|at| self.now >= at + GRACE_US);
+                    if quiet && !self.demands.iter().any(|d| !d.probe) {
                         self.preempt_bulk = true;
                     }
                     self.player_read = true;
@@ -430,6 +438,9 @@ impl Scheduler {
                 if let Some(i) = self.demands.iter().position(|d| d.id == demand) {
                     let focused = self.focus().is_some_and(|f| f.id == demand);
                     let d = self.demands.remove(i);
+                    if !d.probe && !self.demands.iter().any(|o| !o.probe) {
+                        self.reader_closed_us = Some(self.now);
+                    }
                     if focused {
                         // Its position is the anchor until a read opens: an
                         // older range left open (parked, abandoned) does not

@@ -2143,3 +2143,48 @@ fn a_readers_first_range_cancels_queued_download_blocks() {
         "no playback piece asked: {asked:?}"
     );
 }
+
+/// A player that closes a range just before it opens the next (AVPlayer's
+/// small ranges) is the same reader: the download's queued blocks stay, and
+/// only a reader after a quiet spell takes their place (code review r1
+/// P3-1).
+#[test]
+fn a_range_reopened_at_once_keeps_the_download_queued() {
+    let g = Geometry::new(64 * KIB as u32, &[4 * MIB, 4 * MIB]).unwrap();
+    let cfg = Config {
+        max_depth: 8,
+        min_depth: 8,
+        ..small_cfg()
+    };
+    let mut h = Harness::new(g, cfg);
+    for piece in 0..64 {
+        h.send(Event::PieceVerified { piece });
+    }
+    h.s.set_bulk(1, true);
+    h.peer(1, 4 * MIB);
+    open(&mut h, 1, 0, 0, None);
+    h.send(Event::RangeClosed { demand: 1 });
+    h.tick(1);
+    assert_eq!(h.peer_out(1), 8, "full of the download");
+    let cancels = |acts: &[Action]| {
+        acts.iter()
+            .filter(|a| matches!(a, Action::Cancel { .. }))
+            .count()
+    };
+    let acts = h.send(Event::RangeOpened {
+        demand: 2,
+        file: 0,
+        start: 1 << 20,
+        end_hint: None,
+    });
+    assert_eq!(cancels(&acts), 0, "the same reader, a moment later");
+    h.send(Event::RangeClosed { demand: 2 });
+    h.tick(6_000);
+    let acts = h.send(Event::RangeOpened {
+        demand: 3,
+        file: 0,
+        start: 2 << 20,
+        end_hint: None,
+    });
+    assert!(cancels(&acts) > 0, "a new reader after a quiet spell");
+}
