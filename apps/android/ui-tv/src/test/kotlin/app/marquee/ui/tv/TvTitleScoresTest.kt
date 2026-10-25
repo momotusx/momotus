@@ -390,4 +390,32 @@ class TvTitleScoresTest {
         compose.onAllNodes(hasText("Actor Number 1", substring = true) and hasClickAction()).assertCountEquals(0)
         compose.onAllNodes(hasText("Drama", substring = true) and hasClickAction()).assertCountEquals(0)
     }
+
+    @Test
+    fun `a series shows its rated cover too`() {
+        // Rotten Tomatoes is never dropped from the page: a series' cover sits beside its facts, as a movie's does.
+        val file = File.createTempFile("cover", ".png").apply { deleteOnExit() }
+        file.outputStream().use {
+            Bitmap.createBitmap(20, 30, Bitmap.Config.ARGB_8888).compress(Bitmap.CompressFormat.PNG, 100, it)
+        }
+        val movie = page(cover = file.absolutePath)
+        val series =
+            movie.copy(
+                header =
+                    movie.header.copy(
+                        details = movie.header.details!!.copy(kind = "series"),
+                        seasons = listOf(1),
+                        selectedSeason = 1,
+                    ),
+            )
+        show(series)
+        val deadline = System.currentTimeMillis() + 60_000
+        while (compose.onAllNodes(hasContentDescription("Cover with ratings")).fetchSemanticsNodes().isEmpty()) {
+            check(System.currentTimeMillis() < deadline) { "the series' cover never drew" }
+            Snapshot.sendApplyNotifications()
+            compose.waitForIdle()
+            Thread.sleep(10)
+        }
+        compose.onAllNodes(hasContentDescription("Cover with ratings")).assertCountEquals(1)
+    }
 }

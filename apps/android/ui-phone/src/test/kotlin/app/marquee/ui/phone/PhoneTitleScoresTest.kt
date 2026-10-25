@@ -325,4 +325,40 @@ class PhoneTitleScoresTest {
         assertTrue(trakt.top >= line.bottom, "the ratings ($trakt) wrap under the facts ($line)")
         assertTrue(trakt.right <= 360.dp, "the ratings end at ${trakt.right}, past the screen")
     }
+
+    // Real image decoding: the cover hides itself when its image does not load.
+    @Test
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun `a series shows its rated cover in the body`() {
+        // Rotten Tomatoes is never dropped from the page: a series' cover sits above Information, as a movie's does.
+        val file =
+            java.io.File
+                .createTempFile("cover", ".png")
+                .apply { deleteOnExit() }
+        file.outputStream().use {
+            android.graphics.Bitmap
+                .createBitmap(20, 30, android.graphics.Bitmap.Config.ARGB_8888)
+                .compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it)
+        }
+        val base = header(TitleScores(Slot.None, Slot.None))
+        val series =
+            base.copy(
+                details = base.details!!.copy(kind = "series", ratedPoster = file.absolutePath),
+                seasons = listOf(1),
+                selectedSeason = 1,
+            )
+        val view = open(TitleSnapshot(series))
+        compose.setContent { MarqueeTheme(Form.Phone) { PhoneTitle(view, null, { _, _ -> }, {}, {}, {}) } }
+        compose.waitForIdle()
+        view.open()
+        waitFor("Play")
+        val deadline = System.currentTimeMillis() + 60_000
+        while (compose.onAllNodes(hasContentDescription("Cover with ratings")).fetchSemanticsNodes().isEmpty()) {
+            check(System.currentTimeMillis() < deadline) { "the series' cover never drew" }
+            Snapshot.sendApplyNotifications()
+            compose.waitForIdle()
+            Thread.sleep(10)
+        }
+        compose.onAllNodes(hasContentDescription("Cover with ratings")).assertCountEquals(1)
+    }
 }
