@@ -48,16 +48,58 @@ fn adds_append_to_the_queue_and_one_video_has_one_row() {
 }
 
 #[test]
-fn a_save_after_a_delete_writes_nothing() {
+fn an_update_after_a_delete_writes_nothing() {
     let lib = Library::temporary().unwrap();
-    let mut a = lib.add_download(&row("a", "tt1", "tt1")).unwrap();
-    a.bytes_done = 8 << 20;
-    assert!(lib.save_download(&a).unwrap());
-    assert_eq!(lib.downloads().unwrap()[0].bytes_done, 8 << 20);
+    lib.add_download(&row("a", "tt1", "tt1")).unwrap();
+    let written = lib
+        .update_download("a", |r| {
+            r.bytes_done = 8 << 20;
+            true
+        })
+        .unwrap();
+    assert_eq!(written.map(|r| r.bytes_done), Some(8 << 20));
     assert!(lib.delete_download("a").unwrap());
     // A late checkpoint never brings a cancelled download back.
-    assert!(!lib.save_download(&a).unwrap());
+    let late = lib.update_download("a", |r| {
+        r.bytes_done = 16 << 20;
+        true
+    });
+    assert!(late.unwrap().is_none());
     assert!(lib.downloads().unwrap().is_empty());
+}
+
+/// Each writer changes its own fields on the row as it is now: a pause
+/// written between a run's read and its checkpoint stays, and a change
+/// that finds the row no longer as it expects writes nothing.
+#[test]
+fn updates_change_only_their_fields_on_the_fresh_row() {
+    let lib = Library::temporary().unwrap();
+    lib.add_download(&row("a", "tt1", "tt1")).unwrap();
+    lib.update_download("a", |r| {
+        r.state = "paused".into();
+        true
+    })
+    .unwrap();
+    // A run's checkpoint, from a copy read before the pause.
+    lib.update_download("a", |r| {
+        r.bytes_done = 8 << 20;
+        true
+    })
+    .unwrap();
+    let a = lib.downloads().unwrap().remove(0);
+    assert_eq!((a.state.as_str(), a.bytes_done), ("paused", 8 << 20));
+    // A start that expects a queued row finds it paused and leaves it.
+    let started = lib
+        .update_download("a", |r| {
+            if r.state != "queued" {
+                return false;
+            }
+            r.state = "running".into();
+            true
+        })
+        .unwrap();
+    assert!(started.is_none());
+    assert_eq!(lib.downloads().unwrap()[0].state, "paused");
 }
 
 #[test]

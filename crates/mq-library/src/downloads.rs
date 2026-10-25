@@ -127,23 +127,32 @@ impl Library {
         })
     }
 
-    /// Writes `row` over the stored one with its id (the manager is the
-    /// one writer of these rows). False when it was deleted meanwhile: a
-    /// cancel is never undone by a late checkpoint.
-    pub fn save_download(&self, row: &DownloadRecord) -> Result<bool, LibraryError> {
+    /// Changes the stored row `id` in one write: `change` gets the row as it
+    /// is now and says whether it changed it. Every writer goes through
+    /// this, touching only its own fields on the fresh row, so a pause, a
+    /// checkpoint and a state change never undo one another. The row as
+    /// written, or `None` when it is gone or `change` left it.
+    pub fn update_download(
+        &self,
+        id: &str,
+        change: impl FnOnce(&mut DownloadRecord) -> bool,
+    ) -> Result<Option<DownloadRecord>, LibraryError> {
         self.write(|c| {
-            let there: Option<i64> = c
+            let row = c
                 .query_row(
-                    "SELECT 1 FROM downloads WHERE id = ?1",
-                    params![row.id],
-                    |r| r.get(0),
+                    &format!("SELECT {COLUMNS} FROM downloads WHERE id = ?1"),
+                    params![id],
+                    record,
                 )
                 .optional()?;
-            if there.is_none() {
-                return Ok(false);
+            let Some(mut row) = row else {
+                return Ok(None);
+            };
+            if !change(&mut row) {
+                return Ok(None);
             }
-            put(c, row)?;
-            Ok(true)
+            put(c, &row)?;
+            Ok(Some(row))
         })
     }
 
