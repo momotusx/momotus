@@ -232,6 +232,10 @@ enum DownloadCopy {
         return out
     }
 
+    /// Whether a series menu item asks before it acts: deleting a season's downloads does, with the words of
+    /// a series delete ("Delete 8 downloaded episodes of Severance?"), on every platform.
+    static func asksFirst(_ act: GroupItem.Act) -> Bool { act == .deleteSeason }
+
     /// The series' action-row control: Download, or where its downloads stand; a tap always opens its menu.
     static func seriesControl(_ series: GroupDownload?) -> DownloadControl {
         var control: DownloadControl

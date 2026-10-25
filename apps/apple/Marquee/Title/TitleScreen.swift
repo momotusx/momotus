@@ -68,6 +68,8 @@ struct TitleScreen: View {
     @Environment(DownloadKeeper.self) private var keeper: DownloadKeeper?
     @State private var downloadVersions: VersionsModel?
     @State private var showDownloadVersions = false
+    /// A season's downloads to delete once its confirmation says yes.
+    @State private var deletingSeason: [String]?
     #endif
 
     init(route: TitleRoute, core: CoreClient) {
@@ -139,6 +141,13 @@ struct TitleScreen: View {
             if let downloadVersions {
                 VersionsScreen(model: downloadVersions, heading: heading(downloadVersions.target), core: core, keep: keep)
             }
+        }
+        // "Delete Season N downloads" asks first, as a series and Delete all do (review r1 M5).
+        .downloadConfirm(
+            DownloadCopy.deleteSeries(deletingSeason?.count ?? 0, details?.name ?? model.route.name),
+            isPresented: Binding(get: { deletingSeason != nil }, set: { if !$0 { deletingSeason = nil } })
+        ) {
+            if let ids = deletingSeason { keeper?.act(.remove, .ids(ids)) }
         }
         #endif
         #if os(iOS)
@@ -660,7 +669,9 @@ struct TitleScreen: View {
             case .downloadSeries: { keeper.add(kind: details.kind, itemId: details.id, scope: "series") }
             case .deleteSeason: {
                 let ids = model.episodes.filter { $0.season == season }.compactMap { $0.download?.id }
-                if !ids.isEmpty { keeper.act(.remove, .ids(ids)) }
+                if !ids.isEmpty {
+                    if DownloadCopy.asksFirst(item.act) { deletingSeason = ids } else { keeper.act(.remove, .ids(ids)) }
+                }
             }
             case .status: nil
             }

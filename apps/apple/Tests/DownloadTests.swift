@@ -120,6 +120,10 @@ private let hint = "Shows download options"
     // One season, or everything kept: no "every season".
     let one = GroupDownload(seasons: 1, episodes: 8, downloaded: 0, active: 0)
     #expect(DownloadCopy.seriesMenu(season: 1, group: one, series: one) == [GroupItem(label: "Download Season 1 (8 episodes)", act: .downloadSeason)])
+    // Deleting a season asks first, in a series delete's words; nothing else in the menu does (review r1 M5).
+    #expect(DownloadCopy.asksFirst(.deleteSeason))
+    #expect(!DownloadCopy.asksFirst(.downloadSeason) && !DownloadCopy.asksFirst(.downloadSeries) && !DownloadCopy.asksFirst(.status))
+    #expect(DownloadCopy.deleteSeries(8, "Severance") == "Delete 8 downloaded episodes of Severance?")
     // The action-row control always opens the menu.
     #expect(DownloadCopy.seriesControl(nil).label == "Download" && DownloadCopy.seriesControl(nil).hint == hint)
     #expect(DownloadCopy.seriesControl(GroupDownload(seasons: 3, episodes: 28, downloaded: 4, active: 2)).label == "Downloading")
