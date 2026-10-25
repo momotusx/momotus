@@ -16,7 +16,7 @@ const FRESH: Duration = Duration::from_secs(10 * 60);
 const QUIET: Duration = Duration::from_secs(60);
 /// The longest a 429 quiets: a `Retry-After` of a day must not silence
 /// Search and the title page for a day.
-const QUIET_AT_MOST: Duration = Duration::from_secs(15 * 60);
+pub(super) const QUIET_AT_MOST: Duration = Duration::from_secs(15 * 60);
 
 /// How long a 429 quiets a host: its `Retry-After`, between a minute and
 /// a quarter of an hour. Trakt's and TMDB's quiet times both use it.

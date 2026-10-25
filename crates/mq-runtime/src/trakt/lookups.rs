@@ -240,7 +240,7 @@ impl Core {
                 ..
             }
         ) {
-            memory.tmdb_quiet = Some(now + super::search::quiet_for(Some(Duration::MAX)));
+            memory.tmdb_quiet = Some(now + super::search::QUIET_AT_MOST);
         }
         let got = kept(&answer, tmdb::finds, tmdb::Finds::default())?;
         let found = match &got {
