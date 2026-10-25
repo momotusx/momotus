@@ -91,6 +91,12 @@ struct KeeperLogic {
 
     var current: KeeperFacts? { facts }
 
+    /// A view opened again (a new core, another profile): whatever was sent went to a core that may be
+    /// gone, so the next event says `downloadsAllowed` again.
+    mutating func resend() {
+        sent = nil
+    }
+
     mutating func on(_ event: KeeperEvent) -> [KeeperEffect] {
         var out: [KeeperEffect] = []
         var force = false

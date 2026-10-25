@@ -68,6 +68,7 @@ final class DownloadKeeper {
     /// Opens the view for a profile (a start, an unlock, a switch, a new core); `nil` closes it.
     func begin(open: Bool) {
         guard open else { view = nil; return }
+        logic.resend()
         let record = LiveRecord<DownloadsSnapshot>("downloads", core: core)
         record.onSnapshot = { [weak self] snapshot in self?.handle(.facts(KeeperFacts.of(snapshot))) }
         record.start()

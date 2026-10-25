@@ -299,6 +299,28 @@ private func submits(_ effects: [KeeperEffect]) -> Int {
     #expect(keeper.on(.minute) == [])
 }
 
+// A core opened again knows neither the platform's hold nor the network: the next event says the hold again
+// (review r1 M1).
+@Test func aViewOpenedAgainHearsDownloadsAllowedAgain() {
+    var keeper = KeeperLogic(platform: .foreground)
+    _ = keeper.on(.facts(facts(left: 1)))
+    _ = keeper.on(.background)
+    // Nothing changed: nothing to say.
+    #expect(keeper.on(.facts(facts(left: 1))) == [])
+    keeper.resend()
+    #expect(keeper.on(.facts(facts(left: 1))) == [.allowed(false, reason: "app")])
+}
+
+@Test func aCoreOpenedAgainHearsTheNetworkAndTheHold() throws {
+    let app = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appending(path: "../Marquee")
+    let events = try String(contentsOf: app.appending(path: "App/SystemEvents.swift"), encoding: .utf8)
+    let shell = try String(contentsOf: app.appending(path: "App/MarqueeApp.swift"), encoding: .utf8)
+    let keeper = try String(contentsOf: app.appending(path: "Downloads/DownloadKeeper.swift"), encoding: .utf8)
+    #expect(events.contains("if let last { core.lifecycle(\"networkChanged\", last.fields) }"))
+    #expect(shell.contains(".task(id: core.generation) { system.resend() }"))
+    #expect(keeper.contains("logic.resend()"))
+}
+
 @Test func theKeeperOnlyPerformsTheReducersEffects() throws {
     // Read from the sources: the iOS keeper submits, ends and sends only what `KeeperLogic` decides.
     let app = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appending(path: "../Marquee")

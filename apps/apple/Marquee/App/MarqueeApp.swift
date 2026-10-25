@@ -115,6 +115,8 @@ struct MarqueeApp: App {
                 .environment(debrid)
                 // The debrid accounts, on every core open before the app shows anything.
                 .task(id: core.generation) { await debrid.opened() }
+                // A core opened again hears the network it missed (offline downloads review r1 M1).
+                .task(id: core.generation) { system.resend() }
                 .environment(trakt)
                 .environment(wipe)
                 .task(id: wipeKey) {

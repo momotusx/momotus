@@ -6,13 +6,17 @@ import SwiftUI
 final class SystemEvents {
     private let memory = DispatchSource.makeMemoryPressureSource(eventMask: [.warning, .critical], queue: .main)
     private let network = NWPathMonitor()
+    private let core: CoreClient
+    /// The last path as told to the core, for a core opened again (`resend`).
+    private var last: NetworkReport?
 
     init(core: CoreClient) {
+        self.core = core
         memory.setEventHandler {
             MainActor.assumeIsolated { core.lifecycle("memoryPressure") }
         }
         memory.resume()
-        network.pathUpdateHandler = { path in
+        network.pathUpdateHandler = { [weak self] path in
             MainActor.assumeIsolated {
                 let report = NetworkReport.of(
                     satisfied: path.status == .satisfied, wifi: path.usesInterfaceType(.wifi),
@@ -22,10 +26,17 @@ final class SystemEvents {
                 if report.network != "none" { DeviceCaps.network = report.network }
                 // The first update too: a launch with no network, or on a metered one, holds downloads
                 // from the start (plans/offline-downloads.md 4.13).
+                self?.last = report
                 core.lifecycle("networkChanged", report.fields)
             }
         }
         network.start(queue: .main)
+    }
+
+    /// A core opened again (a restart after an overflow or a death) knows no network, and runs no download
+    /// before it hears one: it is told the current path, which `NWPathMonitor` only reports on a change.
+    func resend() {
+        if let last { core.lifecycle("networkChanged", last.fields) }
     }
 
     private static var desktop: Bool {
