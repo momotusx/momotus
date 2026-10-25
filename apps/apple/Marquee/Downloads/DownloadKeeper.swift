@@ -65,9 +65,16 @@ final class DownloadKeeper {
         #endif
     }
 
-    /// Opens the view for a profile (a start, an unlock, a switch, a new core); `nil` closes it.
+    /// Opens the view for a profile (a start, an unlock, a switch, a new core); `false` closes it. The core
+    /// closes every view with the profile (a lock, the picker) and opens `downloads` only for an open one,
+    /// so a closed view reads as nothing running: the Dock bar, the activity, the continued task, the
+    /// minute and the Quit question all end with it (review r1 M2).
     func begin(open: Bool) {
-        guard open else { view = nil; return }
+        guard open else {
+            view = nil
+            handle(.facts(KeeperFacts(left: 0, bytesDone: 0, bytesTotal: 0, title: nil, done: logic.current?.done ?? [])))
+            return
+        }
         logic.resend()
         let record = LiveRecord<DownloadsSnapshot>("downloads", core: core)
         record.onSnapshot = { [weak self] snapshot in self?.handle(.facts(KeeperFacts.of(snapshot))) }
@@ -257,6 +264,8 @@ final class DownloadKeeper {
     }
 
     static func show(_ fraction: Double?) {
+        // No application (a test host): no Dock tile to draw on.
+        guard NSApp != nil else { return }
         let tile = NSApp.dockTile
         if let fraction {
             let bar = tile.contentView as? Bar ?? Bar(frame: NSRect(origin: .zero, size: tile.size))

@@ -334,6 +334,19 @@ private func submits(_ effects: [KeeperEffect]) -> Int {
     #expect(count("case .beginActivity:") == 1)
 }
 
+// The view closes with the profile (a lock, the picker): nothing reads as running any more (review r1 M2).
+@MainActor @Test func aClosedViewUnwindsTheKeeper() async throws {
+    let core = RealCore()
+    #expect(await core.ready())
+    let keeper = DownloadKeeper(core: core.client)
+    keeper.begin(open: true)
+    keeper.handle(.facts(facts(left: 2, bytes: (10, 100))))
+    #expect(keeper.asksBeforeQuit)
+    keeper.begin(open: false)
+    #expect(keeper.view == nil)
+    #expect(!keeper.asksBeforeQuit)
+}
+
 // MARK: The network (plans/offline-downloads.md 4.13)
 
 @Test func thePathMapsToNoneMeteredAndLowData() {

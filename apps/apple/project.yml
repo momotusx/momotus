@@ -318,6 +318,7 @@ targets:
       - path: Marquee/Downloads/DownloadCopy.swift
       - path: Marquee/Downloads/KeeperLogic.swift
       - path: Marquee/Downloads/DownloadControlView.swift
+      - path: Marquee/Downloads/DownloadKeeper.swift
       - path: Marquee/App/NetworkReport.swift
     settings:
       base:
