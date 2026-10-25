@@ -240,6 +240,7 @@
 .score { box-sizing: content-box; height: 100%; display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; color: #fff; text-decoration: none; }
 .score .mark { display: block; height: 18px; width: auto; }
 .score.pending { visibility: hidden; }
+.scores .slot { display: contents; }
 /* A link's target: 44 tall around the 24 row, and half the 22 gap each side, so neighbours split it and the row never grows. */
 a.score { padding: 10px 11px; margin: -10px -11px; }
 [data-form="tv"] .scores { height: 36px; gap: 30px; margin-left: 30px; }
@@ -261,7 +262,9 @@ a.score { padding: 10px 11px; margin: -10px -11px; }
 [data-form="phone"] .rated-cover { position: relative; right: auto; top: auto; flex: none; width: 200px; height: 300px; margin-top: 24px; align-self: center; border-radius: 12px; }
 
 /* More like this, under the hero on TV and desktop: the page scrolls to it, and nothing above moves when it lands. */
-.title-more { position: absolute; left: 0; right: 0; top: 100%; padding-bottom: var(--safe-bottom); }
-.title-more .row { margin-top: 0; }
+.title-more { position: absolute; left: 0; right: 0; top: 100%; padding-bottom: var(--safe-bottom); display: flex; align-items: flex-start; }
+.title-more .row { margin-top: 0; flex: 1; min-width: 0; }
+/* A series' cover in the body, at the row's left (the panel holds the hero's right). */
+.title-more .rated-cover { position: relative; right: auto; top: auto; flex: none; margin-left: var(--safe-side); }
 [data-form="phone"] .info > .row { align-self: stretch; margin: 28px -16px 0; text-align: left; }
 :is([data-form="tv"], [data-form="desktop"]) .title-scr { overflow-x: hidden; overflow-y: auto; }

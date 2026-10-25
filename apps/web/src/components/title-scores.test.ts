@@ -27,3 +27,9 @@ test("a badge links only to an https page on IMDb, TMDB or Trakt", () => {
     expect(outLink(bad)).toBeNull();
   }
 });
+
+test("a kids profile's row: the core sends no URL and no TMDB or Trakt, so IMDb alone and no link", () => {
+  // What the core sends a kids profile (crates/mq-runtime/tests/title_lookup.rs a_kids_profile_asks_nothing).
+  const items = scoreItems("9.3", { tmdb: { state: "none" }, trakt: { state: "none" } }, null);
+  expect(items).toEqual([{ mark: "imdb", text: "9.3/10", spoken: "IMDb 9.3 out of 10", href: null }]);
+});

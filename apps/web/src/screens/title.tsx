@@ -93,7 +93,7 @@ function TitlePage(props: { kind: string; id: string; retry: () => void }) {
   document.addEventListener("visibilitychange", onVisibility);
   onCleanup(() => document.removeEventListener("visibilitychange", onVisibility));
   createEffect(() => {
-    if (view.state.status.state === "open") void view.command({ type: "titleVisible", visible: shown() });
+    if (view.state.status.state === "open") view.command({ type: "titleVisible", visible: shown() }).catch(() => undefined);
   });
   // Closing returns focus to the button that opened it.
   const closeTrailer = () => {
@@ -351,13 +351,17 @@ function TitlePage(props: { kind: string; id: string; retry: () => void }) {
                   <Episodes view={view} kind={props.kind} id={props.id} runtime={runtimeMinutes(x().runtime)} art={x().background ?? x().poster} />
                 </div>
               </Show>
-              {/* TV and desktop: the rated cover at the hero's right, for a movie (a series' episodes panel
-                  holds that place); More like this under the hero, where the page scrolls. */}
+              {/* TV and desktop: the rated cover at the hero's right for a movie; a series' episodes panel holds
+                  that place, so its cover leads the body under the hero, beside More like this (Rotten Tomatoes is
+                  never dropped from the page). More like this sits under the hero, where the page scrolls. */}
               <Show when={form() !== "phone"}>
                 <Show when={!series()}>
                   <RatedCover src={x().ratedPoster} />
                 </Show>
                 <div class="title-more">
+                  <Show when={series()}>
+                    <RatedCover src={x().ratedPoster} />
+                  </Show>
                   <Similar view={view} root={() => page ?? null} />
                 </div>
               </Show>

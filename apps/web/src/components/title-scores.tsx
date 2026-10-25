@@ -58,10 +58,14 @@ export function TitleScores(props: { imdb: string | null | undefined; scores: Sc
                 </span>
               }
             >
+              {/* The list item wraps the link, so the link keeps its role (a screen reader's links list finds it);
+                  `display: contents` keeps the anchor's box the row's item. */}
               {(href) => (
-                <a class="score" role="listitem" href={href()} target="_blank" rel="noopener noreferrer" data-f={`title:${item.mark}`} aria-label={`${item.spoken}, on ${NAMES[item.mark]}`}>
-                  {body(item)}
-                </a>
+                <span class="slot" role="listitem">
+                  <a class="score" href={href()} target="_blank" rel="noopener noreferrer" data-f={`title:${item.mark}`} aria-label={`${item.spoken}, on ${NAMES[item.mark]}`}>
+                    {body(item)}
+                  </a>
+                </span>
               )}
             </Show>
           )}

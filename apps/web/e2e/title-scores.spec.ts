@@ -44,7 +44,11 @@ const meta = (id: string) => ({
     ],
   },
 });
-const MAIN = Object.values(ROW_ID) as string[];
+/** The hidden-tab test's own title, so no other test has asked for it first. */
+const HIDDEN_ID = "tt0111164";
+const MAIN = [...Object.values(ROW_ID), HIDDEN_ID] as string[];
+/** Every path the fake answered, in order. */
+const asked: string[] = [];
 
 let core: { proc: ChildProcess; data: string } | null = null;
 let fake: Server | null = null;
@@ -58,6 +62,7 @@ function fakeServer(): Promise<Server> {
       res.end(JSON.stringify(body));
     };
     const url = decodeURIComponent(req.url ?? "");
+    asked.push(url);
     if (url === "/manifest.json") {
       return json({ id: "dev.marquee.scores", version: "1.0.0", name: "Scores Test", resources: ["meta"], types: ["movie", "series"], idPrefixes: ["tt"], catalogs: [] });
     }
@@ -66,11 +71,11 @@ function fakeServer(): Promise<Server> {
     if (movie && MAIN.includes(movie)) return json(meta(movie));
     if (movie) return json({ meta: { id: movie, type: "movie", name: RELATED.find((r) => r.ids.imdb === movie)?.title ?? "Other" } });
     const held = (body: unknown) => setTimeout(() => json(body), HOLD_MS);
-    const asked = /^\/(?:3\/find|movies)\/(tt\d+)(\/ratings|\/related)?/.exec(url);
-    if (asked && MAIN.includes(asked[1] as string)) {
+    const lookup = /^\/(?:3\/find|movies)\/(tt\d+)(\/ratings|\/related)?/.exec(url);
+    if (lookup && MAIN.includes(lookup[1] as string)) {
       if (url.startsWith("/3/find/")) return held({ movie_results: [{ id: 278, vote_average: 8.733, vote_count: 31655 }], tv_results: [] });
-      if (asked[2] === "/ratings") return held({ rating: 9.16432, votes: 48623 });
-      if (asked[2] === "/related") return held(RELATED);
+      if (lookup[2] === "/ratings") return held({ rating: 9.16432, votes: 48623 });
+      if (lookup[2] === "/related") return held(RELATED);
     }
     res.writeHead(404);
     res.end();
@@ -158,6 +163,9 @@ for (const form of ["tv", "desktop", "phone"] as const) {
     expect(labels).toEqual([`IMDb 9.3 out of 10${on("IMDb")}`, `TMDB 87 percent${on("TMDB")}`, `Trakt 92 percent${on("Trakt")}`]);
     // Off TV each badge opens the title's page there; TV has no links at all.
     const hrefs = await scores.locator("a.score").evaluateAll((els) => els.map((e) => e.getAttribute("href")));
+    // Each badge stays a link to a screen reader (its list item wraps it), one list item per number.
+    expect(await scores.locator("a.score").evaluateAll((els) => els.map((e) => e.getAttribute("role")))).toEqual(form === "tv" ? [] : [null, null, null]);
+    await expect(scores.locator('[role="listitem"]')).toHaveCount(3);
     expect(hrefs).toEqual(form === "tv" ? [] : [`https://www.imdb.com/title/${id}/`, "https://www.themoviedb.org/movie/278", `https://trakt.tv/movies/${id}`]);
     // The targets split the gaps: no two meet (edges may touch), and none reaches the chips below.
     const targets = await scores.locator("a.score").evaluateAll((els) => els.map((e) => e.getBoundingClientRect().toJSON() as DOMRect));
@@ -212,7 +220,7 @@ for (const form of ["tv", "desktop", "phone"] as const) {
     await page.context().close();
   });
 
-  test(`${form}: the rated cover is gone when RPDB fails, and beside a series' episodes it is not drawn`, async ({ browser }) => {
+  test(`${form}: the rated cover is gone when RPDB fails, and a series shows it clear of its episodes`, async ({ browser }) => {
     const page = await open(browser, form, 404);
     await page.goto(`/title/movie/tt0111161?form=${form}`);
     await expect(page.locator(".info .meta .scores .score").first()).toBeVisible({ timeout: 30_000 });
@@ -221,9 +229,38 @@ for (const form of ["tv", "desktop", "phone"] as const) {
     const series = await open(browser, form);
     await series.goto(`/title/series/tt0903747?form=${form}`);
     await expect(series.locator(".eps")).toBeVisible({ timeout: 30_000 });
-    // The phone draws it in the body; TV and desktop leave the episodes panel's place alone.
-    if (form === "phone") await expect(series.locator(".rated-cover img")).toBeVisible();
-    else await expect(series.locator(".rated-cover")).toHaveCount(0);
+    // Rotten Tomatoes is never dropped: a series shows its cover on every form. The phone draws it in the body; TV
+    // and desktop leave the episodes panel's place alone and lead the body under the hero with it.
+    const cover = series.locator(".rated-cover img");
+    await expect(cover).toHaveCount(1, { timeout: 30_000 });
+    if (form === "phone") await expect(cover).toBeVisible();
+    else {
+      await expect(series.locator(".title-more .rated-cover")).toHaveCount(1);
+      const [card, eps] = [(await rect(series, ".rated-cover"))!, (await rect(series, ".eps"))!];
+      expect(card.y, "the cover sits under the hero").toBeGreaterThanOrEqual(eps.y + eps.h);
+    }
     await series.context().close();
   });
 }
+
+// A tab in the background asks TMDB and Trakt nothing: the page sends visible only once it shows.
+test("desktop: a hidden tab asks nothing until it shows", async ({ browser }) => {
+  const page = await open(browser, "desktop");
+  await page.addInitScript(() => {
+    let hidden = true;
+    Object.defineProperty(Document.prototype, "hidden", { configurable: true, get: () => hidden });
+    Object.defineProperty(Document.prototype, "visibilityState", { configurable: true, get: () => (hidden ? "hidden" : "visible") });
+    (window as unknown as { show: () => void }).show = () => {
+      hidden = false;
+      document.dispatchEvent(new Event("visibilitychange"));
+    };
+  });
+  await page.goto(`/title/movie/${HIDDEN_ID}?form=desktop`);
+  await expect(page.locator(".info .meta .scores .score").first()).toBeVisible({ timeout: 30_000 });
+  await page.waitForTimeout(2500);
+  expect(asked.filter((p) => p.includes(`/${HIDDEN_ID}/`) || p.startsWith(`/3/find/${HIDDEN_ID}`))).toEqual([]);
+  await page.evaluate(() => (window as unknown as { show: () => void }).show());
+  await expect(page.locator(".info .meta .scores .score.pending")).toHaveCount(0, { timeout: 30_000 });
+  expect(asked.some((p) => p.startsWith(`/3/find/${HIDDEN_ID}`))).toBe(true);
+  await page.context().close();
+});
