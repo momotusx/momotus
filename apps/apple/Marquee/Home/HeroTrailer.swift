@@ -214,7 +214,8 @@ final class TrailerPlayer: NSObject {
     private static let page = """
     <!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1">
     <style>html,body{margin:0;height:100%;background:transparent;overflow:hidden}
-    #p,#p iframe{width:100%;height:100%;border:0;display:block;pointer-events:none}</style></head>
+    #p{position:fixed;inset:0;pointer-events:none}
+    #p iframe{width:100%;height:100%;border:0;display:block;pointer-events:none}</style></head>
     <body><div id="p"></div><script>
     let player=null, timers=[], ended=true, playing=false, poll=null, api=null;
     const say=(o)=>window.webkit.messageHandlers.trailer.postMessage(JSON.stringify(o));

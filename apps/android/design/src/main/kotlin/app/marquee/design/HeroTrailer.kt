@@ -5,6 +5,7 @@ import android.app.ActivityManager
 import android.content.Context
 import android.net.ConnectivityManager
 import android.os.PowerManager
+import android.util.Log
 import android.view.MotionEvent
 import android.view.ViewGroup
 import android.view.accessibility.AccessibilityManager
@@ -273,7 +274,10 @@ class TrailerHost internal constructor(
     private fun onMessage(json: String) {
         val m = runCatching { JSONObject(json) }.getOrNull() ?: return
         val s = state ?: return
-        when (m.optString("event")) {
+        val event = m.optString("event")
+        // A walk's evidence that a trailer played (plans/appletv-polish.md 9): its state, never its id.
+        if (event != "time") Log.i("MarqueeTrailer", "trailer $event ${m.optString("why")}".trim())
+        when (event) {
             "playing" -> {
                 s.playing = true
                 main.postDelayed(reveal, HeroTrailers.REVEAL_MS)
@@ -307,7 +311,8 @@ class TrailerHost internal constructor(
             """
             <!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1">
             <style>html,body{margin:0;height:100%;background:transparent;overflow:hidden}
-            #p,#p iframe{width:100%;height:100%;border:0;display:block;pointer-events:none}</style></head>
+            #p{position:fixed;inset:0;pointer-events:none}
+            #p iframe{width:100%;height:100%;border:0;display:block;pointer-events:none}</style></head>
             <body><div id="p"></div><script>
             let player=null, timers=[], ended=true, playing=false, poll=null;
             const say=(o)=>console.log("MQT "+JSON.stringify(o));
