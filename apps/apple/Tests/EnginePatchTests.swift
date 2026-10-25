@@ -120,13 +120,16 @@ extension AetherSession.Events {
     }
 }
 
-/// Matroska starts at a 1 MiB probe (its codec parameters sit in its header), everything else at 8 MiB; a probe that
-/// came back with the picture and the audio's parameters needs no second one.
+/// Matroska starts at a 1 MiB probe (its codec parameters sit in its header), everything else at 2 MiB (8 MiB cost 28 s
+/// on a slow swarm, bench AS42); 8 MiB is the retry. A probe that came back with the picture and the audio's
+/// parameters needs no second one.
 @MainActor @Test func matroskaProbesSmallFirst() throws {
     #expect(AetherSession.firstProbeMiB(container: "mkv") == 1)
     #expect(AetherSession.firstProbeMiB(container: "WEBM") == 1)
-    #expect(AetherSession.firstProbeMiB(container: "mp4") == 8)
-    #expect(AetherSession.firstProbeMiB(container: nil) == 8)
+    #expect(AetherSession.firstProbeMiB(container: "mp4") == 2)
+    #expect(AetherSession.firstProbeMiB(container: "iso") == 2)
+    #expect(AetherSession.firstProbeMiB(container: nil) == 2)
+    #expect(AetherSession.options(probeMiB: 2).probesize == 2 << 20)
     #expect(AetherSession.options(probeMiB: 1).probesize == 1 << 20)
     #expect(AetherSession.options(probeMiB: 8).maxAnalyzeDuration == nil)
     let mkv = try Data(contentsOf: fixtures.appending(path: "tiny.mkv"))

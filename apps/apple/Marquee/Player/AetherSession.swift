@@ -111,8 +111,9 @@ final class AetherSession {
         let loaded = ContinuousClock.now
         var passed: [StartupCheckpoint: ContinuousClock.Instant] = [:]
         var logged = false
-        // Matroska carries its codec parameters in its header: 1 MiB first, 8 MiB once more only when what plays
-        // came back without its parameters.
+        // A small probe first (Matroska carries its codec parameters in its header: 1 MiB; any other container 2 MiB,
+        // since 8 MiB at a slow swarm's 0.29 MiB/s cost 28 s before the picture, bench AS42), 8 MiB once more only when
+        // what plays came back without its parameters.
         var probeMiB: Int64 = Self.firstProbeMiB(container: container)
         let host = engine
         // The failure the engine absorbed when it rerouted this load to its software host (AVPlayer gave up), as
@@ -224,7 +225,7 @@ final class AetherSession {
     }
 
     static func firstProbeMiB(container: String?) -> Int64 {
-        ["mkv", "webm"].contains(container?.lowercased() ?? "") ? 1 : 8
+        ["mkv", "webm"].contains(container?.lowercased() ?? "") ? 1 : 2
     }
 
     /// Whether the probe came back with what plays: the picture's size, and the playing audio's rate and channels.
