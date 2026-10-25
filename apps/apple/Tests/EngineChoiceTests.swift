@@ -1,3 +1,4 @@
+import AetherEngine
 import Combine
 import Foundation
 import Testing
@@ -113,8 +114,8 @@ import Testing
     #expect(!EngineChoice.refuses(softwareHost: false, on: .phone))
     #expect(EngineChoice.failureKind(refused: true) == "decode")
     #expect(EngineChoice.failureKind(refused: false) == "other")
-    // A reroute after a native session (AVPlayer gave up on a slow first segment) is not the device's: not remembered.
-    #expect(EngineChoice.failureKind(refused: true, afterNative: true) == "other")
+    // A reroute because AVPlayer waited on bytes (a slow first segment) is not the device's: not remembered.
+    #expect(EngineChoice.failureKind(refused: true, waited: true) == "other")
     // The start log names the path.
     #expect(AetherSession.path(native: true, software: false) == "native")
     #expect(AetherSession.path(native: false, software: true) == "software")
@@ -182,6 +183,46 @@ import Testing
     let dir = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appending(path: "../Marquee/Player")
     let model = try String(contentsOf: dir.appending(path: "PlayerModel.swift"), encoding: .utf8)
     let session = try String(contentsOf: dir.appending(path: "AetherSession.swift"), encoding: .utf8)
-    #expect(model.contains("refused: { [weak self] words, afterNative in\n                guard mine() else { return }\n                self?.fail(PlayerFailure(kind: EngineChoice.failureKind(refused: true, afterNative: afterNative)"))
-    #expect(try body(of: "    func load(", in: session).contains("if EngineChoice.stopsBeforeLoad(pictureInPictureActive: engine.pictureInPictureActive) { stop() } else { release() }"))
+    #expect(model.contains("refused: { [weak self] words, waited in\n                guard mine() else { return }\n                self?.fail(PlayerFailure(kind: EngineChoice.failureKind(refused: true, waited: waited)"))
+    let load = try body(of: "    func load(", in: session)
+    #expect(load.contains("if EngineChoice.stopsBeforeLoad(pictureInPictureActive: engine.pictureInPictureActive) { stop() } else { release() }"))
+    // Code r3: the refusal reads the reroute the engine announced in this load.
+    #expect(load.contains("Self.recording(engine.softwarePathEscalations) { failure in\n            MainActor.assumeIsolated { if mine() { rerouted = failure } }"))
+    #expect(load.contains("let waited = rerouted.map { EngineChoice.waited(domain: $0.underlyingDomain, code: $0.underlyingCode) } ?? false"))
+    #expect(load.contains("decode this picture in software\", waited)"))
+    #expect(load.contains("rerouted=\\(rerouted == nil ? 0 : 1"))
+}
+
+/// Code r3: the reroute is classified on the failure the engine absorbed, so AVPlayer waiting on bytes is told apart
+/// from AVPlayer refusing the picture, which stays `decode` and is remembered for the device.
+@Test func aRerouteIsClassifiedOnWhyAVPlayerGaveUp() {
+    #expect(EngineChoice.waited(domain: "CoreMediaErrorDomain", code: -12889), "no media segment in time (AS41)")
+    #expect(EngineChoice.waited(domain: "CoreMediaErrorDomain", code: -12888), "a playlist that stopped growing")
+    #expect(EngineChoice.waited(domain: "CoreMediaErrorDomain", code: nil), "item death at a frozen position")
+    #expect(!EngineChoice.waited(domain: "CoreMediaErrorDomain", code: -12911), "a decode refusal")
+    #expect(!EngineChoice.waited(domain: "CoreMediaErrorDomain", code: -11821))
+    #expect(!EngineChoice.waited(domain: "AetherEngine.LiveJoin", code: nil), "no entry point: about the media")
+    #expect(!EngineChoice.waited(domain: nil, code: nil))
+}
+
+/// Code r3: the reroute is recorded the moment the engine announces it, not on a later main-queue turn, so the
+/// refusal after it reads what happened.
+@MainActor @Test func aRerouteIsRecordedWhenTheEngineAnnouncesIt() {
+    let escalations = PassthroughSubject<SoftwarePathEscalationEvent, Never>()
+    var got: PlaybackErrorInfo?
+    let watch = AetherSession.recording(escalations) { got = $0 }
+    let failure = PlaybackErrorInfo(kind: .nativeItemFailed, message: "no response", underlyingDomain: "CoreMediaErrorDomain", underlyingCode: -12889)
+    escalations.send(SoftwarePathEscalationEvent(absorbedFailure: failure, positionSeconds: 0, duringStartup: true))
+    #expect(got == failure)
+    _ = watch
+}
+
+/// Code r3 suggestion 3: every engine value goes through `fresh`, so no later subscription replays the previous
+/// source's value into an in-place load. A source check: the sites are the code.
+@Test func everyEngineValueGoesThroughFresh() throws {
+    let dir = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appending(path: "../Marquee/Player")
+    let session = try String(contentsOf: dir.appending(path: "AetherSession.swift"), encoding: .utf8)
+    let lines = session.split(separator: "\n").filter { $0.contains(/\.\$[a-zA-Z]/) }
+    #expect(lines.count >= 8)
+    #expect(lines.allSatisfy { $0.contains("Self.fresh(") }, "\(lines.filter { !$0.contains("Self.fresh(") })")
 }

@@ -1053,9 +1053,9 @@ final class PlayerModel {
                 guard mine() else { return }
                 self?.fail(PlayerFailure(kind: EngineChoice.failureKind(refused: false), error: words), notice: "This source failed: \(words). Trying the next one.")
             },
-            refused: { [weak self] words, afterNative in
+            refused: { [weak self] words, waited in
                 guard mine() else { return }
-                self?.fail(PlayerFailure(kind: EngineChoice.failureKind(refused: true, afterNative: afterNative), error: words), notice: afterNative ? "This source did not start in time. Trying the next one." : "This version does not play on this device. Trying the next one.")
+                self?.fail(PlayerFailure(kind: EngineChoice.failureKind(refused: true, waited: waited), error: words), notice: waited ? "This source did not start in time. Trying the next one." : "This version does not play on this device. Trying the next one.")
             },
             tracks: { [weak self] tracks in if mine() { self?.engineTracks(tracks) } },
             cues: { [weak self] text, images in if mine(), let self { (self.engineCues, self.engineImages) = (text, images) } },

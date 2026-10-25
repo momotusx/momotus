@@ -51,13 +51,21 @@ enum EngineChoice {
         softwareHost && !allowsSoftwareVideo(on: platform)
     }
 
-    /// The failure kind an engine failure reaches the core with. A software host refused at the start is `decode`: the
-    /// device cannot decode this picture, so the core skips that version's other sources and remembers the refusal
-    /// (playback.rs). One refused after a native session in the same load is the engine's reroute once AVPlayer gave
-    /// up on a slow first segment (bench AS41): `other`, so a slow swarm is never remembered as a picture this device
-    /// cannot show. Any other engine failure is `other`.
-    static func failureKind(refused: Bool, afterNative: Bool = false) -> String {
-        refused && !afterNative ? "decode" : "other"
+    /// The failure kind an engine failure reaches the core with. A refused software host is `decode`: the device
+    /// cannot decode this picture, so the core skips that version's other sources and remembers the refusal
+    /// (playback.rs). One the engine rerouted there because AVPlayer waited on bytes that did not come (`waited`, a
+    /// slow first segment, bench AS41) is `other`, so a slow swarm is never remembered as a picture this device cannot
+    /// show. Any other engine failure is `other`.
+    static func failureKind(refused: Bool, waited: Bool = false) -> String {
+        refused && !waited ? "decode" : "other"
+    }
+
+    /// Whether the failure the engine absorbed when it rerouted to its software host (`softwarePathEscalations`) was
+    /// AVPlayer waiting on bytes rather than refusing the picture: CoreMedia's -12889 (no media segment in time),
+    /// -12888 (a playlist that stopped growing), or no code (the engine's item death at a frozen position after its
+    /// -12889 revives). Any other code, and the engine's live-join verdict, is about the media.
+    static func waited(domain: String?, code: Int?) -> Bool {
+        domain == "CoreMediaErrorDomain" && [nil, -12889, -12888].contains(code)
     }
 
     /// A new source while Picture in Picture is up loads in place: the engine hands the item over in its window (a

@@ -19,8 +19,8 @@ final class AetherSession {
         /// The engine could not play the source, in its own words; the model sends it to the core.
         var failed: (String) -> Void
         /// The engine sent the source to its software decoders where the platform admits none (`EngineChoice.refuses`);
-        /// true when that came after a native session in the same load.
-        var refused: (String, _ afterNative: Bool) -> Void
+        /// true when the engine rerouted it there because AVPlayer waited on bytes (`EngineChoice.waited`).
+        var refused: (String, _ waited: Bool) -> Void
         /// The file's audio and subtitle tracks, and the one each plays.
         var tracks: (Tracks) -> Void
         /// The selected file subtitle's cues so far: text, and bitmaps (PGS, DVD, DVB) drawn as images.
@@ -115,14 +115,17 @@ final class AetherSession {
         // came back without its parameters.
         var probeMiB: Int64 = Self.firstProbeMiB(container: container)
         let host = engine
-        // A native session was built in this load: a software host after it is the engine's reroute once AVPlayer
-        // gave up (a first segment that did not come in time on a slow swarm, bench AS41), not the codec.
-        var hadNative = false
+        // The failure the engine absorbed when it rerouted this load to its software host (AVPlayer gave up), as
+        // the engine announced it: a refusal later in the load reads why, not the engine's hosts on a later turn.
+        var rerouted: PlaybackErrorInfo?
+        Self.recording(engine.softwarePathEscalations) { failure in
+            MainActor.assumeIsolated { if mine() { rerouted = failure } }
+        }
+        .store(in: &bag)
         Self.fresh(engine.$startupProgress)
             .sink { progress in
                 MainActor.assumeIsolated {
                     guard mine(), let progress else { return }
-                    if progress.checkpoint == .sessionConstructed, host.nativePlayerLayer != nil { hadNative = true }
                     guard passed[progress.checkpoint] == nil else { return }
                     passed[progress.checkpoint] = .now
                 }
@@ -139,7 +142,7 @@ final class AetherSession {
                         from.flatMap { from in to.map { "\(Int(($0 - from) / .milliseconds(1)))" } } ?? "n/a"
                     }
                     let (probed, session) = (passed[.streamsProbed], passed[.sessionConstructed])
-                    coreLog.notice("metric engine_start probe_ms=\(ms(loaded, probed), privacy: .public) session_ms=\(ms(probed, session), privacy: .public) frame_ms=\(ms(session, .now), privacy: .public) probe_mib=\(probeMiB, privacy: .public) path=\(Self.path(native: host.nativePlayerLayer != nil, software: host.softwarePiPSource != nil), privacy: .public)")
+                    coreLog.notice("metric engine_start probe_ms=\(ms(loaded, probed), privacy: .public) session_ms=\(ms(probed, session), privacy: .public) frame_ms=\(ms(session, .now), privacy: .public) probe_mib=\(probeMiB, privacy: .public) path=\(Self.path(native: host.nativePlayerLayer != nil, software: host.softwarePiPSource != nil), privacy: .public) rerouted=\(rerouted == nil ? 0 : 1, privacy: .public)")
                 }
             }
             .store(in: &bag)
@@ -150,7 +153,8 @@ final class AetherSession {
                 MainActor.assumeIsolated {
                     guard mine(), EngineChoice.refuses(softwareHost: source != nil, on: EngineChoice.platform) else { return }
                     self?.stop()
-                    events.refused("this device does not decode this picture in software", hadNative)
+                    let waited = rerouted.map { EngineChoice.waited(domain: $0.underlyingDomain, code: $0.underlyingCode) } ?? false
+                    events.refused(waited ? "AVPlayer did not get this source's first segment in time" : "this device does not decode this picture in software", waited)
                 }
             }
             .store(in: &bag)
@@ -183,6 +187,13 @@ final class AetherSession {
     /// duration, first-frame flag, position and state, which must not reach the new one.
     static func fresh<P: Publisher>(_ publisher: P) -> AnyPublisher<P.Output, P.Failure> {
         publisher.dropFirst().receive(on: DispatchQueue.main).eraseToAnyPublisher()
+    }
+
+    /// The engine's reroutes, each passed on as the engine sends it (on the main actor, before its rebuild). Not
+    /// through `fresh`: an event has no held value to drop, and dropping the first would lose the only one.
+    static func recording<P: Publisher>(_ escalations: P, _ record: @escaping (PlaybackErrorInfo) -> Void) -> AnyCancellable
+    where P.Output == SoftwarePathEscalationEvent, P.Failure == Never {
+        escalations.sink { record($0.absorbedFailure) }
     }
 
     /// The engine's path for the start log: native (remuxed for AVPlayer), software (its own decoders), or other.
