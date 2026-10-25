@@ -33,12 +33,14 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.focusRestorer
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -117,6 +119,29 @@ internal fun genreAsk(
     request: DiscoverRequest?,
     opened: Boolean,
 ): DiscoverRequest? = request?.takeIf { opened }
+
+/**
+ * A title page's genre ask on Discover: one [select] once Discover is [ready] (its first snapshot), then [onSent]
+ * clears it. An ask that could not go is dropped when Discover really leaves, never sent on a later visit; a
+ * configuration change ([changingConfigurations]) keeps it for the Discover that comes back.
+ */
+@Composable
+internal fun GenreAskEffect(
+    request: DiscoverRequest?,
+    ready: Boolean,
+    select: (DiscoverRequest) -> Unit,
+    onSent: () -> Unit,
+    changingConfigurations: () -> Boolean,
+) {
+    val sent by rememberUpdatedState(onSent)
+    val changing by rememberUpdatedState(changingConfigurations)
+    DisposableEffect(Unit) { onDispose { if (!changing()) sent() } }
+    LaunchedEffect(request, ready) {
+        val ask = genreAsk(request, opened = ready) ?: return@LaunchedEffect
+        select(ask)
+        onSent()
+    }
+}
 
 /**
  * Where a browse page starts and ends: under the TV pill, or under the status bar and over the phone
@@ -460,13 +485,14 @@ fun DiscoverScreen(
     val view = holder.view
     val snapshot = view.snapshot
     // One select of the kind and the genre, after the first snapshot: the core picks the catalog (C40).
-    // An ask that could not go this visit (no snapshot came) is dropped on leaving, never sent on a later one.
-    DisposableEffect(Unit) { onDispose { onRequestSent() } }
-    LaunchedEffect(request, snapshot != null) {
-        val ask = genreAsk(request, opened = snapshot != null) ?: return@LaunchedEffect
-        view.select(kind = ask.kind, genre = GenreChange.To(ask.genre))
-        onRequestSent()
-    }
+    val activity = LocalContext.current as? android.app.Activity
+    GenreAskEffect(
+        request,
+        ready = snapshot != null,
+        select = { view.select(kind = it.kind, genre = GenreChange.To(it.genre)) },
+        onSent = onRequestSent,
+        changingConfigurations = { activity?.isChangingConfigurations == true },
+    )
     val metrics = Marquee.tiles
     val side = Marquee.safe.side
     val grid = rememberLazyGridState()

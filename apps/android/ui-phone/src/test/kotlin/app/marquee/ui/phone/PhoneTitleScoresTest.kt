@@ -145,6 +145,14 @@ class PhoneTitleScoresTest {
         return TitleView(client, scope, "movie", "tt0111161")
     }
 
+    /** The label of the click a screen reader offers on the chip that shows [text]. */
+    private fun clickLabel(text: String): String? =
+        compose
+            .onNodeWithText(text)
+            .fetchSemanticsNode()
+            .config[SemanticsActions.OnClick]
+            .label
+
     private fun waitFor(text: String) {
         val deadline = System.currentTimeMillis() + 120_000
         while (compose.onAllNodesWithText(text).fetchSemanticsNodes().isEmpty()) {
@@ -222,6 +230,8 @@ class PhoneTitleScoresTest {
         // The genres are a row of chips: one asks for Discover on the kind and that genre.
         compose.onNodeWithText("Drama").performClick()
         assertEquals(listOf("movie" to "Drama"), genres)
+        // A screen reader says what the chip opens.
+        assertEquals("Opens Discover", clickLabel("Drama"))
     }
 
     @Test
@@ -238,6 +248,7 @@ class PhoneTitleScoresTest {
         compose.onNodeWithText("Morgan Freeman").performClick()
         compose.onNodeWithText("Frank Darabont").performClick()
         assertEquals(listOf("Morgan Freeman", "Frank Darabont"), people)
+        assertEquals("Searches for their titles", clickLabel("Morgan Freeman"))
     }
 
     @Test
