@@ -294,7 +294,8 @@ class TvTitleScoresTest {
         val focus = FocusMemory()
         var shown by mutableStateOf(true)
         // The page leaves the composition and comes back as the back stack keeps it: its saved state kept.
-        show(page(cover = null, similar = tiles), focus) { view ->
+        // A title Trakt lists twice shows once: a repeated key would crash the row.
+        show(page(cover = null, similar = tiles + tiles.first()), focus) { view ->
             val saved = rememberSaveableStateHolder()
             if (shown) saved.SaveableStateProvider("title") { TvTitle(view, null, focus, { _, _ -> }, {}, {}, {}) }
         }

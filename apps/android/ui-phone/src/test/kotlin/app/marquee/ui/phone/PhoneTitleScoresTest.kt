@@ -258,7 +258,8 @@ class PhoneTitleScoresTest {
 
     @Test
     fun `More like this opens its titles`() {
-        val view = open(TitleSnapshot(header(TitleScores(Slot.None, Slot.None)), similar = similar))
+        // A title Trakt lists twice shows once: a repeated key would crash the row.
+        val view = open(TitleSnapshot(header(TitleScores(Slot.None, Slot.None)), similar = similar + similar))
         val opened = mutableListOf<String>()
         compose.setContent {
             MarqueeTheme(Form.Phone) { PhoneTitle(view, null, { _, _ -> }, {}, {}, {}, onOpen = { opened += it.id }) }
