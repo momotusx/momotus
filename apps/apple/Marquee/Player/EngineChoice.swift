@@ -51,11 +51,13 @@ enum EngineChoice {
         softwareHost && !allowsSoftwareVideo(on: platform)
     }
 
-    /// The failure kind an engine failure reaches the core with. A refused software host is `decode`: the core then
-    /// skips that version's other sources and remembers the refusal for this device, so the next play does not try
-    /// it again (playback.rs); any other engine failure is `other`.
-    static func failureKind(refused: Bool) -> String {
-        refused ? "decode" : "other"
+    /// The failure kind an engine failure reaches the core with. A software host refused at the start is `decode`: the
+    /// device cannot decode this picture, so the core skips that version's other sources and remembers the refusal
+    /// (playback.rs). One refused after a native session in the same load is the engine's reroute once AVPlayer gave
+    /// up on a slow first segment (bench AS41): `other`, so a slow swarm is never remembered as a picture this device
+    /// cannot show. Any other engine failure is `other`.
+    static func failureKind(refused: Bool, afterNative: Bool = false) -> String {
+        refused && !afterNative ? "decode" : "other"
     }
 
     /// A new source while Picture in Picture is up loads in place: the engine hands the item over in its window (a
@@ -76,20 +78,22 @@ enum EngineChoice {
 
     static var enabledHere: Bool { enabled(on: platform) && admitsThisDevice }
 
-    /// The phone's switch covers what its gate measured: 6 GB iPhones (iphone-a), not iPads and not smaller phones
-    /// (plans/iphone-mkv.md). A 6 GB iPhone reports about 5.7e9 bytes, a 4 GB one about 3.8e9.
+    /// The phone's switch covers iPhones with 6 GB or more (iphone-a's class; 8 GB phones too), not iPads and not smaller
+    /// phones (plans/iphone-mkv.md; the lead, 2026-10-25). The model must read as an iPhone, so a failed read, an
+    /// iPad or an iPhone build on a Mac closes it. The bound sits between 4 GB (about 4.3e9 bytes less the kernel's
+    /// share) and 6 GB (about 6.4e9 less it); iphone-a's own `physicalMemory` goes in the first gate row.
     static func admits(memoryBytes: UInt64, model: String) -> Bool {
-        !model.hasPrefix("iPad") && memoryBytes >= 5_000_000_000
+        model.hasPrefix("iPhone") && memoryBytes >= 5_000_000_000
     }
 
-    /// This device, on the iPhone build; every Mac.
-    private static var admitsThisDevice: Bool {
+    /// This device, on the iPhone build, read once; every Mac.
+    private static let admitsThisDevice: Bool = {
         #if os(iOS)
         admits(memoryBytes: ProcessInfo.processInfo.physicalMemory, model: machine)
         #else
         true
         #endif
-    }
+    }()
 
     #if os(iOS)
     /// The hardware model (`iPhone14,2`, `iPad13,4`), read without the main actor.

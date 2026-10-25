@@ -18,8 +18,9 @@ final class AetherSession {
         var ended: () -> Void
         /// The engine could not play the source, in its own words; the model sends it to the core.
         var failed: (String) -> Void
-        /// The engine sent the source to its software decoders where the platform admits none (`EngineChoice.refuses`).
-        var refused: (String) -> Void
+        /// The engine sent the source to its software decoders where the platform admits none (`EngineChoice.refuses`);
+        /// true when that came after a native session in the same load.
+        var refused: (String, _ afterNative: Bool) -> Void
         /// The file's audio and subtitle tracks, and the one each plays.
         var tracks: (Tracks) -> Void
         /// The selected file subtitle's cues so far: text, and bitmaps (PGS, DVD, DVB) drawn as images.
@@ -72,16 +73,13 @@ final class AetherSession {
         let load = load
         engine.volume = muted ? 0 : 1
         let mine = { [weak self] in self?.load == load }
-        engine.clock.$currentTime
-            .receive(on: DispatchQueue.main)
+        Self.fresh(engine.clock.$currentTime)
             .sink { time in MainActor.assumeIsolated { if mine() { events.time(time) } } }
             .store(in: &bag)
-        engine.$duration
-            .receive(on: DispatchQueue.main)
+        Self.fresh(engine.$duration)
             .sink { duration in MainActor.assumeIsolated { if mine(), duration > 0 { events.duration(duration) } } }
             .store(in: &bag)
-        engine.$state.combineLatest(engine.$isBuffering)
-            .receive(on: DispatchQueue.main)
+        Self.fresh(engine.$state.combineLatest(engine.$isBuffering))
             .sink { state, buffering in
                 MainActor.assumeIsolated {
                     guard mine() else { return }
@@ -95,16 +93,14 @@ final class AetherSession {
                 }
             }
             .store(in: &bag)
-        engine.$audioTracks.combineLatest(engine.$activeAudioTrackIndex, engine.$subtitleTracks, engine.$activeSubtitleTrackIndex)
-            .receive(on: DispatchQueue.main)
+        Self.fresh(engine.$audioTracks.combineLatest(engine.$activeAudioTrackIndex, engine.$subtitleTracks, engine.$activeSubtitleTrackIndex))
             .sink { audio, activeAudio, text, activeText in
                 MainActor.assumeIsolated {
                     if mine() { events.tracks(Tracks(audio: audio, activeAudio: activeAudio, text: text, activeText: activeText)) }
                 }
             }
             .store(in: &bag)
-        engine.$subtitleCues
-            .receive(on: DispatchQueue.main)
+        Self.fresh(engine.$subtitleCues)
             .sink { cues in
                 MainActor.assumeIsolated { if mine() { events.cues(cues.compactMap(Self.cue), cues.compactMap(Self.image)) } }
             }
@@ -118,18 +114,21 @@ final class AetherSession {
         // Matroska carries its codec parameters in its header: 1 MiB first, 8 MiB once more only when what plays
         // came back without its parameters.
         var probeMiB: Int64 = Self.firstProbeMiB(container: container)
-        engine.$startupProgress
-            .receive(on: DispatchQueue.main)
+        let host = engine
+        // A native session was built in this load: a software host after it is the engine's reroute once AVPlayer
+        // gave up (a first segment that did not come in time on a slow swarm, bench AS41), not the codec.
+        var hadNative = false
+        Self.fresh(engine.$startupProgress)
             .sink { progress in
                 MainActor.assumeIsolated {
-                    guard mine(), let progress, passed[progress.checkpoint] == nil else { return }
+                    guard mine(), let progress else { return }
+                    if progress.checkpoint == .sessionConstructed, host.nativePlayerLayer != nil { hadNative = true }
+                    guard passed[progress.checkpoint] == nil else { return }
                     passed[progress.checkpoint] = .now
                 }
             }
             .store(in: &bag)
-        let host = engine
-        engine.$hasFirstFrameReadyForDisplay
-            .receive(on: DispatchQueue.main)
+        Self.fresh(engine.$hasFirstFrameReadyForDisplay)
             .sink { shown in
                 MainActor.assumeIsolated {
                     guard mine(), shown else { return }
@@ -146,13 +145,12 @@ final class AetherSession {
             .store(in: &bag)
         // Software video only where the platform admits it (plans/iphone-mkv.md): a session the engine sent to its
         // software host fails here, and the core moves to the next version.
-        engine.$softwarePiPSource
-            .receive(on: DispatchQueue.main)
+        Self.fresh(engine.$softwarePiPSource)
             .sink { [weak self] source in
                 MainActor.assumeIsolated {
                     guard mine(), EngineChoice.refuses(softwareHost: source != nil, on: EngineChoice.platform) else { return }
                     self?.stop()
-                    events.refused("this device does not decode this picture in software")
+                    events.refused("this device does not decode this picture in software", hadNative)
                 }
             }
             .store(in: &bag)
@@ -178,6 +176,13 @@ final class AetherSession {
             }
         }
         if autoplay { armBound(openWithin, failed: events.failed) } else { heldBound = (openWithin, events.failed) }
+    }
+
+    /// An engine value for this load only: on the main queue, without the value it holds when this load subscribes.
+    /// After a stop that value is a reset one; on an in-place load (the window up) it is the previous source's
+    /// duration, first-frame flag, position and state, which must not reach the new one.
+    static func fresh<P: Publisher>(_ publisher: P) -> AnyPublisher<P.Output, P.Failure> {
+        publisher.dropFirst().receive(on: DispatchQueue.main).eraseToAnyPublisher()
     }
 
     /// The engine's path for the start log: native (remuxed for AVPlayer), software (its own decoders), or other.

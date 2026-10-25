@@ -1,3 +1,4 @@
+import Combine
 import Foundation
 import Testing
 
@@ -112,6 +113,8 @@ import Testing
     #expect(!EngineChoice.refuses(softwareHost: false, on: .phone))
     #expect(EngineChoice.failureKind(refused: true) == "decode")
     #expect(EngineChoice.failureKind(refused: false) == "other")
+    // A reroute after a native session (AVPlayer gave up on a slow first segment) is not the device's: not remembered.
+    #expect(EngineChoice.failureKind(refused: true, afterNative: true) == "other")
     // The start log names the path.
     #expect(AetherSession.path(native: true, software: false) == "native")
     #expect(AetherSession.path(native: false, software: true) == "software")
@@ -148,4 +151,37 @@ import Testing
     #expect(EngineChoice.admits(memoryBytes: 5_700_000_000, model: "iPhone14,2"))
     #expect(!EngineChoice.admits(memoryBytes: 3_800_000_000, model: "iPhone14,7"))
     #expect(!EngineChoice.admits(memoryBytes: 8_000_000_000, model: "iPad13,4"))
+    // 6 GB or more: an 8 GB iPhone passes (the lead, 2026-10-25); a model that does not read as an iPhone closes it.
+    #expect(EngineChoice.admits(memoryBytes: 7_700_000_000, model: "iPhone17,1"))
+    #expect(!EngineChoice.admits(memoryBytes: 8_000_000_000, model: ""))
+    #expect(!EngineChoice.admits(memoryBytes: 8_000_000_000, model: "arm64"))
+}
+
+/// Code r2 finding 1: a load with the window up keeps the engine, so each engine value it subscribes to still holds
+/// the previous source's (its duration, first-frame flag, position, state). The session takes values for this load
+/// only: none of the old ones, every new one.
+@MainActor @Test func aLoadInTheWindowGetsItsOwnValuesNotThePreviousSources() async {
+    let duration = CurrentValueSubject<Double, Never>(596)  // the episode before
+    let shown = CurrentValueSubject<Bool, Never>(true)
+    var got: [Double] = []
+    var frames: [Bool] = []
+    let a = AetherSession.fresh(duration).sink { got.append($0) }
+    let b = AetherSession.fresh(shown).sink { frames.append($0) }
+    duration.send(1320)  // this episode
+    shown.send(false)
+    shown.send(true)
+    for _ in 0..<20 { await Task.yield() }
+    try? await Task.sleep(for: .milliseconds(50))
+    #expect(got == [1320])
+    #expect(frames == [false, true])
+    _ = (a, b)
+}
+
+/// Code r2 finding 5: the call sites of the refusal and the in-place load.
+@Test func theRefusalAndTheInPlaceLoadAreWired() throws {
+    let dir = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appending(path: "../Marquee/Player")
+    let model = try String(contentsOf: dir.appending(path: "PlayerModel.swift"), encoding: .utf8)
+    let session = try String(contentsOf: dir.appending(path: "AetherSession.swift"), encoding: .utf8)
+    #expect(model.contains("refused: { [weak self] words, afterNative in\n                guard mine() else { return }\n                self?.fail(PlayerFailure(kind: EngineChoice.failureKind(refused: true, afterNative: afterNative)"))
+    #expect(try body(of: "    func load(", in: session).contains("if EngineChoice.stopsBeforeLoad(pictureInPictureActive: engine.pictureInPictureActive) { stop() } else { release() }"))
 }
