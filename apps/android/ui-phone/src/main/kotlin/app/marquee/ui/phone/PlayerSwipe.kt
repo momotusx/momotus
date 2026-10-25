@@ -148,10 +148,10 @@ internal fun Modifier.levelSwipes(
         if (!enabled) return@pointerInput
         awaitEachGesture {
             val down = awaitFirstDown(requireUnconsumed = true)
-            // Once per process, debug builds only (CoreLog's debug lines): what a walk's injected touch is, and the
-            // bands it meets.
-            if (!touchLogged) {
-                touchLogged = true
+            // Debug builds only (CoreLog's debug lines), each time the pointer type changes: what a walk's injected
+            // touch is beside the setup taps, and the bands it meets.
+            if (down.type != loggedType) {
+                loggedType = down.type
                 CoreLog.d("picture touch ${down.type}, bands ${bands()}")
             }
             if (down.type == PointerType.Mouse) return@awaitEachGesture
@@ -248,8 +248,8 @@ internal fun LevelIndicator(
     }
 }
 
-/** The first touch on the picture has been logged (the walk reads it once). */
-private var touchLogged = false
+/** The pointer type the picture last logged (the walk reads the type of its injected touch). */
+private var loggedType: PointerType? = null
 
 /** The level indicator, for tests. */
 internal const val LEVEL_TAG = "player-level"
