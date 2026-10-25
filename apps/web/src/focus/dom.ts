@@ -235,6 +235,8 @@ function initial(): HTMLElement | null {
 // such a move put it there, not a first focus or a stopgap that fell back on the lit tab.
 let viewerMove = false;
 let railByViewer = false;
+/** True while a viewer's move (an arrow, or Back to the bar) is placing the focus: a focus event now is theirs. */
+export const viewerMoving = () => viewerMove;
 
 export function move(dir: Direction): boolean {
   viewerMove = true;

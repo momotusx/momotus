@@ -15,7 +15,7 @@ import "./core/trakt";
 // A sign-out with removal that a reload cut short goes on (D13).
 import "./core/wipe";
 import { gateOpen, profiles, profilesFailed } from "./core/profiles";
-import { focusRail, installFocus, move, railHasFocus, restoreSoon } from "./focus/dom";
+import { focusRail, installFocus, move, railHasFocus, restoreSoon, viewerMoving } from "./focus/dom";
 import { form } from "./form";
 import { backThenReplace, entryOwner, historyBase, historyDepth, markBack, resetHistoryBase, stampEntriesWith, takeAfterBack, takeBack } from "./history";
 import Addons from "./screens/addons";
@@ -92,8 +92,8 @@ function TopNav() {
   const location = useLocation();
   const navigate = useNavigate();
   const tv = () => form() === "tv";
-  // TV: a tab that keeps the focus for TAB_SETTLE_MS shows its place, as Apple TV's tab bar does; the focus stays
-  // on it. A replace, as a tab bar switches: Back from any place still goes Home (parentOf).
+  // TV: a tab the viewer moves onto (an arrow) and keeps the focus on for TAB_SETTLE_MS shows its place, as Apple TV's
+  // tab bar does; the focus stays on it. A focus put back on a tab (the Search palette closing) shows nothing. A replace, as a tab bar switches: Back from any place still goes Home (parentOf).
   let settle: ReturnType<typeof setTimeout> | undefined;
   const rest = (path: string) => {
     clearTimeout(settle);
@@ -119,7 +119,7 @@ function TopNav() {
       classList={{ on: section(location.pathname) === d.path }}
       data-f={`nav:${d.path}`}
       on:click={select(d.path)}
-      on:focus={() => rest(d.path)}
+      on:focus={() => viewerMoving() && rest(d.path)}
       on:blur={() => clearTimeout(settle)}
     >
       <Show when={d.tool && tv()}>
