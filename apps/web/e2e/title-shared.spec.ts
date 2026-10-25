@@ -269,8 +269,9 @@ for (const form of Object.keys(FORMS) as Form[]) {
   });
 }
 
-// TV's action row is drawn whole from the first frame: Remove from Continue Watching comes with the title's own
-// header, so a late Home (its subscription held back here) grows nothing after the page shows.
+// The TV title page is drawn whole from its first frame: Remove from Continue Watching comes with the title's own
+// header, the Versions button holds the width of its widest count, and the logo's box has its shape before the page
+// shows. Here Home and Versions answer 3 s late and the logo 1 s late, and nothing moves after the first frame.
 test("tv: the action row keeps its box from the first frame, however late Home answers", async ({ browser }) => {
   const [width, height] = FORMS.tv;
   const context = await browser.newContext({ viewport: { width, height }, reducedMotion: "reduce" });
@@ -281,7 +282,7 @@ test("tv: the action row keeps its box from the first frame, however late Home a
       let home = false;
       try {
         const m = JSON.parse(text) as { op?: string; view?: string };
-        home = m.op === "subscribe" && m.view === "home";
+        home = m.op === "subscribe" && (m.view === "home" || m.view === "versions");
       } catch {
         // Not JSON: passed on as it is.
       }
@@ -289,12 +290,13 @@ test("tv: the action row keeps its box from the first frame, however late Home a
       else server.send(text);
     });
   });
+  await context.route(/\/logo\//, (route) => setTimeout(() => void route.continue(), 1000));
   const page = await context.newPage();
   await page.goto(`/title/movie/${BBB_ID}?form=tv`);
   await expect(page.locator('[data-f="title:play"]')).toBeVisible({ timeout: 30_000 });
   const boxes = () =>
     page.evaluate(() =>
-      [".info .acts", ".info .vnote", ".info .facts"].map((s) => {
+      [".info .title-logo", ".info .meta", ".info .acts", ".info .vnote", ".info .facts"].map((s) => {
         const r = document.querySelector(s)?.getBoundingClientRect();
         return r ? [s, Math.round(r.x), Math.round(r.y), Math.round(r.width), Math.round(r.height)] : [s];
       }),

@@ -268,3 +268,8 @@ a.score { padding: 10px 11px; margin: -10px -11px; }
 .title-more .rated-cover { position: relative; right: auto; top: auto; flex: none; margin-left: var(--safe-side); }
 [data-form="phone"] .info > .row { align-self: stretch; margin: 28px -16px 0; text-align: left; }
 :is([data-form="tv"], [data-form="desktop"]) .title-scr { overflow-x: hidden; overflow-y: auto; }
+/* The Versions label over its widest count, unseen (title.tsx): the button is as wide from the first frame as it
+   will be with the count. */
+.vlabel { display: inline-grid; justify-items: center; }
+.vlabel > span { grid-area: 1 / 1; white-space: nowrap; }
+.vlabel .vsizer { visibility: hidden; }

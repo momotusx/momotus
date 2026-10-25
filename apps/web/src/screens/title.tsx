@@ -10,8 +10,8 @@ import Layers from "lucide-solid/icons/layers";
 import Play from "lucide-solid/icons/play";
 import RefreshCw from "lucide-solid/icons/refresh-cw";
 import RotateCcw from "lucide-solid/icons/rotate-ccw";
-import { createEffect, createMemo, createSignal, For, type JSX, Match, onCleanup, Show, Switch } from "solid-js";
-import { Backdrop, Logo } from "../components/art";
+import { createEffect, createMemo, createSignal, For, type JSX, Match, on, onCleanup, Show, Switch } from "solid-js";
+import { Backdrop, Logo, useTrimmedLogo } from "../components/art";
 import { SynopsisDialog } from "../components/synopsis";
 import { TitleScores } from "../components/title-scores";
 import { KeyedPage } from "../components/keyed-page";
@@ -44,6 +44,9 @@ export default function Title() {
     />
   );
 }
+
+/** How long the title page waits for its logo's cut before it shows the name instead. */
+const LOGO_WAIT = 1500;
 
 // The core's empty states whose only action is Back (plans/play-every-version.md).
 const BACK_ONLY = new Set<EmptyKind>(["noRoom", "needsAccount", "kidsNothing", "noResults"]);
@@ -81,6 +84,22 @@ function TitlePage(props: { kind: string; id: string; retry: () => void }) {
     });
   };
   const [artMissing, setArtMissing] = createSignal(false);
+  // The logo's box is sized by its shape, known once its cut lands: the page waits for it, so nothing under the
+  // logo moves after the first frame. A logo slower than LOGO_WAIT gives way to the name, for good on this page.
+  const logo = useTrimmedLogo(() => d()?.logo);
+  const [logoGivenUp, setLogoGivenUp] = createSignal(false);
+  createEffect(
+    on(
+      () => d()?.logo,
+      (url) => {
+        setLogoGivenUp(false);
+        if (!url) return;
+        const timer = setTimeout(() => logo() === undefined && setLogoGivenUp(true), LOGO_WAIT);
+        onCleanup(() => clearTimeout(timer));
+      },
+    ),
+  );
+  const logoSettled = () => !d()?.logo || logo() !== undefined || logoGivenUp();
   // TV and desktop scroll the page below the hero for More like this; the phone scrolls the document.
   let page: HTMLDivElement | undefined;
   const toTop = () => {
@@ -219,11 +238,11 @@ function TitlePage(props: { kind: string; id: string; retry: () => void }) {
             </div>
           </section>
         </Match>
-        <Match when={d()}>
+        <Match when={logoSettled() && d()}>
           {(x) => (
             <>
               <section class="info" aria-label={x().name} data-reveal-top>
-                <Logo src={x().logo} name={x().name} class="title-logo" />
+                <Logo src={logoGivenUp() ? null : x().logo} name={x().name} class="title-logo" />
                 <p class="meta" ref={separators}>
                   {/* DECISION's order: the year first, then the rest of the line, then the ratings row at
                       its end, each number after its service's mark; IMDb's links to its page, except on TV. */}
@@ -298,12 +317,19 @@ function TitlePage(props: { kind: string; id: string; retry: () => void }) {
                     {(t) => (
                       <A class="btn" href={versionsPath(props.kind, props.id, t().videoId)} data-f="title:versions" data-autofocus={first() === "title:versions" ? "" : undefined}>
                         <Layers aria-hidden />
-                        {/* One inline label, so the count never wraps apart from its word. */}
-                        <span>
-                          Versions
-                          <Show when={versionCount(versions()?.state.data ?? null)}>
-                            {(n) => <span class="num"> ({n()})</span>}
-                          </Show>
+                        {/* One inline label, so the count never wraps apart from its word. The count comes with
+                            the versions, after the first frame: under the label, unseen, the widest it shows holds
+                            the button's width from the start, so the row never grows when it lands. */}
+                        <span class="vlabel">
+                          <span>
+                            Versions
+                            <Show when={versionCount(versions()?.state.data ?? null)}>
+                              {(n) => <span class="num"> ({n()})</span>}
+                            </Show>
+                          </span>
+                          <span class="vsizer" aria-hidden="true">
+                            Versions <span class="num">(000)</span>
+                          </span>
                         </span>
                       </A>
                     )}
