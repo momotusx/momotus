@@ -8,13 +8,13 @@
  * and its page groups them by season; a download held for Wi-Fi goes on over mobile data when asked; a
  * kids profile sees Play only. */
 
-import { type Browser, expect, type Page, test } from "@playwright/test";
+import { type Browser, type BrowserContextOptions, expect, type Page, test } from "@playwright/test";
 import type { ChildProcess } from "node:child_process";
 import { createReadStream, statSync } from "node:fs";
 import { createServer, type Server, type ServerResponse } from "node:http";
 import type { AddressInfo, Socket } from "node:net";
 import { Client, cleanup, DOWNLOADS_PORT, startBridge } from "./core";
-import { type Json, patchedContext } from "./patch";
+import { patchedContext } from "./patch";
 import { BBB_ID, FILM_FILE, NAME } from "./source";
 
 const SIZE = statSync(FILM_FILE).size;
@@ -25,8 +25,6 @@ let core: { proc: ChildProcess; data: string } | null = null;
 let origin: Server | null = null;
 let addon: Server | null = null;
 let series: Server | null = null;
-// How often the subtitles source served its file: once with the download kept.
-let keptSubtitle = 0;
 const SRT = "1\n00:00:00,500 --> 00:10:00,000\nA kept line\n";
 const SERIES = "mqd1";
 const AIRED = "2020-01-01T00:00:00.000Z";
@@ -99,7 +97,6 @@ test.beforeAll(async () => {
     // Asked as a playback asks, with the file's hash and name; kept as WebVTT beside the download.
     if (url.startsWith(`/subtitles/movie/${BBB_ID}`)) return json({ subtitles: [{ id: "kept-en", lang: "eng", url: `${addonUrl}/kept.srt` }] });
     if (url === "/kept.srt") {
-      keptSubtitle++;
       res.writeHead(200, { "content-type": "text/plain" });
       return res.end(SRT);
     }
@@ -149,8 +146,8 @@ test.afterAll(() => {
 });
 
 /** A page on the spec's core (the app's socket goes to it, never to the shared one). */
-async function openPage(browser: Browser, path: string, patch: (view: string, s: Json) => Json = (_view, s) => s) {
-  const { context } = await patchedContext(browser, DOWNLOADS_PORT, { viewport: { width: 1440, height: 900 } }, patch);
+async function openPage(browser: Browser, path: string, options: BrowserContextOptions = { viewport: { width: 1440, height: 900 } }) {
+  const { context } = await patchedContext(browser, DOWNLOADS_PORT, options, (_view, s) => s);
   const page = await context.newPage();
   const errors: string[] = [];
   page.on("pageerror", (e) => errors.push(e.message));
@@ -196,13 +193,14 @@ async function downloads(until: (rows: Row[]) => boolean): Promise<Row[]> {
 test("a film downloads from the title page with its ring, pauses and resumes until it is done", async ({ browser }) => {
   const { context, page, errors } = await openPage(browser, `/title/movie/${BBB_ID}?form=desktop`);
   // Download, last in the action row, starts it at once: the ring shows its value under the held origin.
-  await expect(control(page)).toHaveAttribute("aria-label", "Download");
+  // Its name starts with what it shows, then its state, its value and the title (M3).
+  await expect(control(page)).toHaveAttribute("aria-label", "Download, Big Buck Bunny");
   await control(page).click();
-  await expect(control(page)).toHaveAttribute("aria-label", "Downloading", { timeout: 30_000 });
+  await expect(control(page)).toHaveAttribute("aria-label", /^\d+%, Downloading, Big Buck Bunny$/, { timeout: 30_000 });
   await expect(control(page).locator(".dl-mark.ring")).toBeVisible();
-  await expect(control(page)).toHaveAttribute("aria-valuetext", /^\d+ percent$/);
+  await expect(control(page)).not.toHaveAttribute("aria-valuetext", /.*/);
   await expect(control(page)).toHaveAttribute("aria-haspopup", "menu");
-  const held = Number((await control(page).getAttribute("aria-valuetext"))?.split(" ")[0]);
+  const held = Number((await control(page).getAttribute("aria-label"))?.split("%")[0]);
   expect(held).toBeGreaterThan(0);
   expect(held).toBeLessThan(100);
   await expect(control(page)).toContainText(`${held}%`);
@@ -211,7 +209,7 @@ test("a film downloads from the title page with its ring, pauses and resumes unt
   await control(page).click();
   await expect(page.getByRole("dialog")).toContainText("Big Buck Bunny");
   await item(page, "Pause download").click();
-  await expect(control(page)).toHaveAttribute("aria-label", "Paused");
+  await expect(control(page)).toHaveAttribute("aria-label", /^Paused, \d+ percent, Big Buck Bunny$/);
   await expect(control(page).locator(".dl-mark.ring")).toBeVisible();
   await expect(page.getByRole("dialog")).toHaveCount(0);
   await control(page).click();
@@ -223,8 +221,7 @@ test("a film downloads from the title page with its ring, pauses and resumes unt
   await control(page).click();
   await item(page, "Resume download").click();
   letGo();
-  await expect(control(page)).toHaveAttribute("aria-label", "Downloaded", { timeout: 30_000 });
-  await expect(control(page)).not.toHaveAttribute("aria-valuetext", /.*/);
+  await expect(control(page)).toHaveAttribute("aria-label", "Downloaded, Big Buck Bunny", { timeout: 30_000 });
   await expect(control(page).locator(".dl-mark.ring")).toHaveCount(0);
 
   // Library's way in, then the row with its size and its control.
@@ -237,7 +234,9 @@ test("a film downloads from the title page with its ring, pauses and resumes unt
   await expect(page.locator(".dl-storage-line")).toHaveText(/^Downloads use 922 KB( · .+ free on this device)?$/);
   const row = page.locator(".dlrow", { hasText: "Big Buck Bunny" });
   await expect(row).toContainText("922 KB");
-  await expect(row.getByRole("button", { name: "Downloaded" })).toBeVisible();
+  await expect(row.getByRole("button", { name: "Downloaded, Big Buck Bunny" })).toBeVisible();
+  // The film's English subtitle, kept with it (the device's language, which the add carries).
+  await expect(row.locator(".dlrow-subs")).toHaveText("Subtitles: English", { timeout: 30_000 });
   expect(errors).toEqual([]);
   await context.close();
 });
@@ -254,6 +253,11 @@ test("the TV form shows no control, no Downloads entry, no section and no offlin
   await page.goto("/settings");
   await expect(page.getByRole("heading", { name: "Playback", exact: true })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Downloads", exact: true })).toHaveCount(0);
+  // Downloads' own pages give way to Home on TV, even by address.
+  for (const path of ["/library/downloads", `/library/downloads/${SERIES}`, `/title/movie/${BBB_ID}/versions/${BBB_ID}?purpose=download`]) {
+    await page.goto(path);
+    await expect(page, path).toHaveURL(/\/$/);
+  }
   // Offline with a film kept: the desktop says so on Home (the browser's own offline event tells the
   // core), the TV does not.
   const desk = await openPage(browser, "/?form=desktop");
@@ -273,13 +277,13 @@ test("the TV form shows no control, no Downloads entry, no section and no offlin
 test("offline, Home says the downloads play, one plays from Downloads, then it is deleted", async ({ browser }) => {
   // The origin and the addon are gone. Playwright's offline also cuts the page from the core's loopback
   // stream server, which a browser without a network still reaches, so the bridge is told `none` here,
-  // as the app tells it on the browser's offline event (the previous test).
-  // The download kept its English subtitle (the device's language, which the add carries).
-  await expect.poll(() => keptSubtitle, { timeout: 30_000 }).toBeGreaterThan(0);
+  // as the app tells it on the browser's offline event (the previous test). The page tells its network at
+  // load, so the core hears `none` once the page is up, and the page then moves within the app.
   down = true;
   for (const s of sockets) s.destroy();
-  await network("none");
   const { context, page, errors } = await openPage(browser, "/?form=desktop");
+  await expect(page.locator('[data-f="nav:/"]')).toBeVisible({ timeout: 30_000 });
+  await network("none");
   await expect(banner(page)).toContainText("You're offline. Your downloads still play.", { timeout: 30_000 });
   await banner(page).getByRole("link", { name: "Go to Downloads" }).click();
   await expect(page).toHaveURL(/\/library\/downloads$/);
@@ -319,7 +323,7 @@ test("Choose a version to download keeps the version picked on Versions, and Set
   down = false;
   await network("other");
   const { context, page, errors } = await openPage(browser, `/title/movie/${BBB_ID}?form=desktop`);
-  await expect(control(page)).toHaveAttribute("aria-label", "Download", { timeout: 30_000 });
+  await expect(control(page)).toHaveAttribute("aria-label", "Download, Big Buck Bunny", { timeout: 30_000 });
   // A secondary press on Download (a right click, a long press, the menu key) offers the version too.
   await control(page).click({ button: "right" });
   await expect(item(page, "Download")).toBeVisible();
@@ -332,7 +336,7 @@ test("Choose a version to download keeps the version picked on Versions, and Set
   await keep.click();
   // Back on the title page, the version picked is on its way, then kept.
   await expect(page).toHaveURL(new RegExp(`/title/movie/${BBB_ID}`));
-  await expect(control(page)).toHaveAttribute("aria-label", "Downloaded", { timeout: 30_000 });
+  await expect(control(page)).toHaveAttribute("aria-label", "Downloaded, Big Buck Bunny", { timeout: 30_000 });
 
   // Settings: Smart downloads with its line, the storage line, Delete all downloads with its confirmation;
   // no Wi-Fi switch on the web.
@@ -356,22 +360,38 @@ test("Choose a version to download keeps the version picked on Versions, and Set
   await context.close();
 });
 
+test("on touch, a tap on Download offers the version too, since no secondary press reaches it", async ({ browser }) => {
+  const phone = { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true };
+  const { context, page, errors } = await openPage(browser, `/title/movie/${BBB_ID}?form=phone`, phone);
+  await expect(control(page)).toHaveAttribute("aria-label", "Download, Big Buck Bunny", { timeout: 30_000 });
+  await control(page).tap();
+  await expect(item(page, "Choose a version to download")).toBeVisible();
+  await item(page, "Download").tap();
+  await expect(control(page)).toHaveAttribute("aria-label", "Downloaded, Big Buck Bunny", { timeout: 30_000 });
+  await control(page).tap();
+  await item(page, "Delete download").tap();
+  await expect(control(page)).toHaveAttribute("aria-label", "Download, Big Buck Bunny");
+  expect(errors).toEqual([]);
+  await context.close();
+});
+
 test("a download held for Wi-Fi says so, and Download now on mobile data lets it go on", async ({ browser }) => {
   // Download on Wi-Fi only (no switch on the web; a phone sets it), on a metered network.
+  // The page tells its own network at load, so the metered one is told once it is up.
   await ask("setDownloadSettings", { wifiOnly: true });
-  await network("cellular", true);
   const { context, page, errors } = await openPage(browser, `/title/movie/${BBB_ID}?form=desktop`);
-  await expect(control(page)).toHaveAttribute("aria-label", "Download", { timeout: 30_000 });
+  await expect(control(page)).toHaveAttribute("aria-label", "Download, Big Buck Bunny", { timeout: 30_000 });
+  await network("cellular", true);
   await control(page).click();
-  await expect(control(page)).toHaveAttribute("aria-label", "Waiting for Wi-Fi", { timeout: 30_000 });
+  await expect(control(page)).toHaveAttribute("aria-label", /^Waiting for Wi-Fi(, \d+ percent)?, Big Buck Bunny$/, { timeout: 30_000 });
   await expect(control(page)).toContainText("Waiting for Wi-Fi");
   await control(page).click();
   await expect(page.getByRole("dialog")).toContainText("Download on Wi-Fi only is on, and this network uses mobile data.");
   await item(page, "Download now on mobile data").click();
-  await expect(control(page)).toHaveAttribute("aria-label", "Downloaded", { timeout: 30_000 });
+  await expect(control(page)).toHaveAttribute("aria-label", "Downloaded, Big Buck Bunny", { timeout: 30_000 });
   await control(page).click();
   await item(page, "Delete download").click();
-  await expect(control(page)).toHaveAttribute("aria-label", "Download");
+  await expect(control(page)).toHaveAttribute("aria-label", "Download, Big Buck Bunny");
   await ask("setDownloadSettings", { wifiOnly: false });
   await network("wifi");
   expect(errors).toEqual([]);
@@ -380,18 +400,28 @@ test("a download held for Wi-Fi says so, and Download now on mobile data lets it
 
 test("a series queues a season's aired episodes, then every season's; its page groups them and deletes them all", async ({ browser }) => {
   const { context, page, errors } = await openPage(browser, `/title/series/${SERIES}?form=desktop`);
-  await expect(control(page)).toHaveAttribute("aria-label", "Download", { timeout: 30_000 });
+  await expect(control(page)).toHaveAttribute("aria-label", "Download, Download Series", { timeout: 30_000 });
   await control(page).click();
   await expect(item(page, "Download every season (2 seasons, 5 episodes)")).toBeVisible();
   await item(page, "Download Season 1 (3 episodes)").click();
   const ids = (rows: Row[]) => rows.map((r) => r.videoId).sort();
-  expect(ids(await downloads((rows) => rows.length >= 3))).toEqual([`${SERIES}:1:1`, `${SERIES}:1:2`, `${SERIES}:1:3`]);
-  // The season is kept or on its way; every season adds the rest that aired, never the one to come.
+  expect(ids(await downloads((rows) => rows.length >= 3 && rows.every((r) => r.state === "done")))).toEqual([`${SERIES}:1:1`, `${SERIES}:1:2`, `${SERIES}:1:3`]);
+  // Three of five kept is not the series downloaded: the control still reads Download.
+  await expect(control(page)).toHaveAttribute("aria-label", "Download, Download Series");
+  // Deleting a season asks first; Cancel, where the focus waits, keeps it.
   await control(page).click();
-  await expect(item(page, "Delete Season 1 downloads")).toBeVisible();
+  await item(page, "Delete Season 1 downloads").click();
+  await expect(page.getByRole("dialog")).toContainText("Delete 3 downloaded episodes of Download Series?");
+  await expect(item(page, "Cancel")).toBeFocused();
+  await item(page, "Cancel").click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  expect(await downloads((rows) => rows.length === 3)).toHaveLength(3);
+  // Every season adds the rest that aired, never the one to come.
+  await control(page).click();
   await item(page, "Download every season (2 seasons, 5 episodes)").click();
   const all = await downloads((rows) => rows.length >= 5 && rows.every((r) => r.state === "done"));
   expect(ids(all)).toEqual([`${SERIES}:1:1`, `${SERIES}:1:2`, `${SERIES}:1:3`, `${SERIES}:2:1`, `${SERIES}:2:2`]);
+  await expect(control(page)).toHaveAttribute("aria-label", "Downloaded, Download Series");
 
   // Downloads lists the series with a chevron; its page holds the episodes by season.
   await page.goto("/library/downloads?form=desktop");
@@ -423,16 +453,22 @@ test("a kids profile sees its downloaded title with Play only, and no control on
   // The film kept on this device.
   await ask("downloadAdd", { kind: "movie", itemId: BBB_ID, scope: "video", videoId: BBB_ID, params: { language: "en" } });
   await downloads((rows) => rows.length === 1 && rows[0]?.state === "done");
-  // The dev bridge makes no kids profile (its allow list is the phone's and the TV's), so the page is told
-  // its profile is a kids one, as the core says it for one: the screens' rule is what this pins.
-  const kids = (view: string, snap: Json) => {
-    if (view === "profiles" && snap?.profiles) {
-      snap.kids = true;
-      for (const p of snap.profiles) if (p.id === snap.active) p.kids = true;
-    }
-    return snap;
-  };
-  const { context, page, errors } = await openPage(browser, "/library/downloads?form=desktop", kids);
+  // A kids profile allowed the film (the owner needs a PIN first), all in one session: a new one opens
+  // locked once the owner has a PIN. The device's sessions then open as the kid's.
+  const c = new Client(`ws://127.0.0.1:${DOWNLOADS_PORT}/ws`);
+  try {
+    await c.req("setPin", { profile: "default", pin: "4826" });
+    type Profiles = { profiles: { id: string; kids: boolean }[] };
+    const kid = (await c.req<Profiles>("createProfile", { name: "Kid", avatar: "letter:sky", kids: true })).profiles.find((p) => p.kids)?.id as string;
+    await c.req("allowTitle", { profile: kid, kind: "movie", itemId: BBB_ID });
+    await c.req("switchProfile", { profile: kid });
+  } finally {
+    c.close();
+  }
+  const { context, page, errors } = await openPage(browser, "/library/downloads?form=desktop");
+  // The picker asks who is watching on this browser's first open: the kid.
+  await page.getByRole("button", { name: "Kid, current profile" }).click();
+  await page.goto("/library/downloads?form=desktop");
   const row = page.locator(".dlrow", { hasText: "Big Buck Bunny" });
   await expect(row).toBeVisible({ timeout: 30_000 });
   await expect(row.locator("button")).toHaveCount(0);
