@@ -243,7 +243,7 @@ export function DownloadedSeries() {
     if (view.state.data && rows().length === 0) navigate(DOWNLOADS, { replace: true });
   });
   createEffect(() => {
-    if (name()) document.title = `${name()} · Downloads · Marquee`;
+    if (name()) document.title = `${name()} · Downloads · Momotus`;
   });
   return (
     <>

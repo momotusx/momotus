@@ -30,7 +30,7 @@ import Home from "./screens/home";
 import HomeRows from "./screens/home-rows";
 import StreamChoice from "./screens/stream-choice";
 import Import from "./screens/import";
-import Downloads, { DownloadedSeries } from "./screens/downloads";
+import Downloads, { DOWNLOADS, DownloadedSeries } from "./screens/downloads";
 import Library from "./screens/library";
 import Onboarding, { RecommendedAddons } from "./screens/onboarding";
 import Pairing from "./screens/pairing";
@@ -303,8 +303,9 @@ function Shell(props: RouteSectionProps) {
         // any other screen ends it.
         if (!path.startsWith("/play/") && document.fullscreenElement) void document.exitFullscreen().catch(() => undefined);
         if (!path.startsWith("/title/") && !path.startsWith("/play/")) {
-          const named = destinations.find((d) => d.path === section(path));
-          document.title = named ? `${named.label} · Momotus` : "Momotus";
+          // Downloads sits under Library but names itself (plans/offline-downloads.md 3.4).
+          const named = path.startsWith(DOWNLOADS) ? "Downloads" : destinations.find((d) => d.path === section(path))?.label;
+          document.title = named ? `${named} · Momotus` : "Momotus";
         }
         // A new screen (a result was opened, or Back) leaves the palette.
         leaveSearch(location.pathname + location.search);
