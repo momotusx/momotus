@@ -27,6 +27,11 @@ import androidx.compose.ui.unit.dp
 import androidx.core.graphics.Insets
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.media3.common.C
+import androidx.media3.common.Format
+import androidx.media3.common.MimeTypes
+import androidx.media3.common.TrackGroup
+import androidx.media3.common.Tracks
 import app.marquee.design.Form
 import app.marquee.design.MarqueeTheme
 import app.marquee.player.PlaybackController
@@ -185,11 +190,14 @@ class PhonePlayerSwipeTest {
         compose.onRoot().performTouchInput {
             down(0, Offset(width * 0.75f, height * 0.45f))
             down(1, Offset(width * 0.85f, height * 0.45f))
-            moveBy(0, Offset(0f, -120f))
+            moveBy(0, Offset(0f, -20f))
+            moveBy(0, Offset(0f, -100f))
             up(0)
             up(1)
         }
         assertEquals(7, volume())
+        // Not even begun: no indicator.
+        assertEquals(0, compose.onAllNodesWithTag(LEVEL_TAG).fetchSemanticsNodes().size)
         // A swipe, then a second finger: further moves change nothing.
         compose.onRoot().performTouchInput {
             down(0, Offset(width * 0.75f, height * 0.45f))
@@ -254,6 +262,35 @@ class PhonePlayerSwipeTest {
         compose.onNodeWithContentDescription("Subtitles", substring = true).performClick()
         compose.waitForIdle()
         drag(0.1f, 0.45f, -120f)
+        assertEquals(WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE, windowBrightness())
+    }
+
+    @Test
+    fun `with the audio list open the picture takes no swipe`() {
+        // Two audio tracks, so the Audio action shows; its list is a side sheet with no scrim, the picture beside it.
+        player.tracks =
+            Tracks(
+                listOf("en", "de").map {
+                    Tracks.Group(
+                        TrackGroup(
+                            Format
+                                .Builder()
+                                .setSampleMimeType(MimeTypes.AUDIO_AAC)
+                                .setLanguage(it)
+                                .build(),
+                        ),
+                        false,
+                        intArrayOf(C.FORMAT_HANDLED),
+                        booleanArrayOf(it == "en"),
+                    )
+                },
+            )
+        playing()
+        if (!controlsShown()) compose.onRoot().performTouchInput { click(center) }
+        compose.waitUntil(3_000) { controlsShown() }
+        compose.onNodeWithContentDescription("Audio", substring = true).performClick()
+        compose.waitForIdle()
+        drag(0.15f, 0.45f, -120f)
         assertEquals(WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE, windowBrightness())
     }
 

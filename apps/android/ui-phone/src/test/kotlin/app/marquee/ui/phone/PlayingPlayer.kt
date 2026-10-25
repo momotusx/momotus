@@ -3,6 +3,7 @@ package app.marquee.ui.phone
 import android.os.Looper
 import androidx.media3.common.Player
 import androidx.media3.common.SimpleBasePlayer
+import androidx.media3.common.Tracks
 import androidx.media3.common.text.Cue
 import androidx.media3.common.text.CueGroup
 import com.google.common.util.concurrent.Futures
@@ -18,6 +19,9 @@ internal class PlayingPlayer : SimpleBasePlayer(Looper.getMainLooper()) {
     /** A source was set and prepared before the file opens: Media3 buffers it. */
     private var prepared = false
     private var cues = emptyList<Cue>()
+
+    /** The file's tracks once it is open; none unless a test sets them. */
+    var tracks: Tracks = Tracks.EMPTY
 
     override fun getState(): State {
         val state =
@@ -41,8 +45,15 @@ internal class PlayingPlayer : SimpleBasePlayer(Looper.getMainLooper()) {
         }
         if (!ready) return state.setPlaybackState(Player.STATE_IDLE).build()
         return state
-            .setPlaylist(listOf(MediaItemData.Builder("film").setDurationUs(600_000_000L).build()))
-            .setPlaybackState(Player.STATE_READY)
+            .setPlaylist(
+                listOf(
+                    MediaItemData
+                        .Builder("film")
+                        .setDurationUs(600_000_000L)
+                        .setTracks(tracks)
+                        .build(),
+                ),
+            ).setPlaybackState(Player.STATE_READY)
             .build()
     }
 
