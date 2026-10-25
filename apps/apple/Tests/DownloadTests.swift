@@ -435,17 +435,29 @@ private func submits(_ effects: [KeeperEffect]) -> Int {
     #expect(count("case .beginActivity:") == 1)
 }
 
-// The view closes with the profile (a lock, the picker): nothing reads as running any more (review r1 M2).
-@MainActor @Test func aClosedViewUnwindsTheKeeper() async throws {
+// The keeper follows `downloads` for the core's life: a locked session (a cold start on a PIN profile, the picker)
+// subscribes too and hears the device's `active` (review r1 M2, the core's 0ba7e2f63).
+@MainActor @Test func theKeeperFollowsDownloadsWhileLocked() async throws {
     let core = RealCore()
     #expect(await core.ready())
+    try await core.client.perform("setPin", ["profile": "default", "pin": "4829"])
+    try await core.client.perform("lockSession")
+    // A profile's view is refused while locked; the keeper's is not.
+    let library = LiveRecord<LibrarySnapshot>("library", core: core.client)
+    library.start()
+    #expect(await eventually { library.failure != nil })
     let keeper = DownloadKeeper(core: core.client)
-    keeper.begin(open: true)
-    keeper.handle(.facts(facts(left: 2, bytes: (10, 100))))
-    #expect(keeper.asksBeforeQuit)
-    keeper.begin(open: false)
-    #expect(keeper.view == nil)
-    #expect(!keeper.asksBeforeQuit)
+    keeper.begin()
+    #expect(await eventually { keeper.snapshot != nil })
+    #expect(keeper.view?.failure == nil)
+    #expect(keeper.snapshot?.downloading.isEmpty == true && keeper.snapshot?.active.title == nil)
+    // The app opens it with no profile gate, again on every core, switch, lock and unlock.
+    let app = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appending(path: "../Marquee")
+    let shell = try String(contentsOf: app.appending(path: "App/MarqueeApp.swift"), encoding: .utf8)
+    #expect(shell.contains(".task(id: downloadsKey) { downloads.begin() }"))
+    let key = try #require(shell.range(of: "private var downloadsKey: String {")).upperBound
+    let body = shell[key...].prefix { $0 != "}" }
+    #expect(!body.contains("profiles.open") && body.contains("core.generation") && body.contains("locked") && body.contains("epoch"))
 }
 
 // Logout, restart and shutdown hold the downloads without asking; a user's Quit asks (review r1 m4).

@@ -74,11 +74,10 @@ struct MarqueeApp: App {
         return "\(core.generation)/\(profiles.snapshot?.active ?? "")"
     }
 
-    /// The downloads view opens again for each profile that opens (a start, an unlock, a switch, a new
-    /// core), and closes while none is.
+    /// The downloads view follows the core for its life, locked or not: it opens again for each core and
+    /// after every switch, lock or unlock, which close a session's views.
     private var downloadsKey: String {
-        guard profiles.open, let active = profiles.snapshot?.active else { return "" }
-        return "\(core.generation)/\(active)/\(profiles.epoch)"
+        "\(core.generation)/\(profiles.epoch)/\(profiles.snapshot?.active ?? "")/\(profiles.snapshot?.locked ?? false)"
     }
 
     /// Which profile's Trakt runs: none while the picker shows, a new one for every
@@ -103,7 +102,7 @@ struct MarqueeApp: App {
                 #else
                 .modifier(ScenePhaseForward(core: core, sync: sync, downloads: downloads))
                 .environment(downloads)
-                .task(id: downloadsKey) { downloads.begin(open: !downloadsKey.isEmpty) }
+                .task(id: downloadsKey) { downloads.begin() }
                 #endif
                 #if DEBUG
                 .task {

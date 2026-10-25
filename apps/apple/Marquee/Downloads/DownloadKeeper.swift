@@ -65,16 +65,11 @@ final class DownloadKeeper {
         #endif
     }
 
-    /// Opens the view for a profile (a start, an unlock, a switch, a new core); `false` closes it. The core
-    /// closes every view with the profile (a lock, the picker) and opens `downloads` only for an open one,
-    /// so a closed view reads as nothing running: the Dock bar, the activity, the continued task, the
-    /// minute and the Quit question all end with it (review r1 M2).
-    func begin(open: Bool) {
-        guard open else {
-            view = nil
-            handle(.facts(KeeperFacts(left: 0, bytesDone: 0, bytesTotal: 0, title: nil, done: logic.current?.done ?? [])))
-            return
-        }
+    /// Opens the view for the life of the core: at core open and again after every profile switch, lock or
+    /// unlock, since the core closes a session's views then. A locked session (a cold start on a PIN profile,
+    /// the picker) gets the device's `active` and `settings` alone, so the Dock bar, the Mac's activity, the
+    /// Quit question and the continued task stay right before anyone unlocks (review r1 M2).
+    func begin() {
         logic.resend()
         let record = LiveRecord<DownloadsSnapshot>("downloads", core: core)
         record.onSnapshot = { [weak self] snapshot in self?.handle(.facts(KeeperFacts.of(snapshot))) }
