@@ -11,7 +11,7 @@ import { cpSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFi
 import { dirname, join, relative } from "node:path";
 
 const here = import.meta.dir;
-const PAGES = ["pair/index.html", "delete/index.html", "delete/delete.js", "privacy/index.html", "linkhost.css", "_headers"];
+const PAGES = ["pair/index.html", "delete/index.html", "delete/delete.js", "privacy/index.html", "terms/index.html", "linkhost.css", "_headers"];
 const KNOWN_PROVIDERS = ["apple", "google", "facebook"];
 
 type Env = Record<string, string | undefined>;

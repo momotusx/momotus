@@ -40,7 +40,8 @@ MQ_RELAY_SSH=... deploy/relay/deploy.sh
 RELAY_URL=https://momotus.normalisdead.mom PROVIDERS=google,facebook \
 ANDROID_PACKAGES=app.marquee.android,app.marquee.android.walk \
 ANDROID_SIGNING_SHA256=<the signing certificate's SHA-256> bun apps/linkhost/build.ts
-(cd apps/linkhost && cf deploy --dry-run && cf deploy)
+# wrangler, not cf deploy: cf deploy ignores wrangler.jsonc and makes a new project
+(cd apps/linkhost && bunx wrangler@4.45.0 deploy --dry-run && bunx wrangler@4.45.0 deploy)
 ```
 
 Rollback: the saved tunnel config back, the CNAME deleted, the Worker deleted.

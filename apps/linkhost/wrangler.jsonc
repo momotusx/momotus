@@ -15,6 +15,7 @@
     { "pattern": "momotus.normalisdead.mom/pair*", "zone_name": "normalisdead.mom" },
     { "pattern": "momotus.normalisdead.mom/delete*", "zone_name": "normalisdead.mom" },
     { "pattern": "momotus.normalisdead.mom/privacy*", "zone_name": "normalisdead.mom" },
+    { "pattern": "momotus.normalisdead.mom/terms*", "zone_name": "normalisdead.mom" },
     { "pattern": "momotus.normalisdead.mom/.well-known/*", "zone_name": "normalisdead.mom" },
     { "pattern": "momotus.normalisdead.mom/linkhost.css", "zone_name": "normalisdead.mom" }
   ]

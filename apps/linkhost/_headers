@@ -14,5 +14,8 @@
 /privacy*
   Content-Security-Policy: default-src 'none'; style-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'
 
+/terms*
+  Content-Security-Policy: default-src 'none'; style-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'
+
 /.well-known/apple-app-site-association
   Content-Type: application/json

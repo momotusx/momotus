@@ -83,6 +83,7 @@ test("the build fills every placeholder and lists every file, .well-known includ
     "linkhost.css",
     "pair/index.html",
     "privacy/index.html",
+    "terms/index.html",
   ]);
   for (const file of files) expect(read(file)).not.toContain("{{");
   expect(read("delete/delete.js")).toContain('export const RELAY = "https://sync.example.org";');
@@ -140,6 +141,18 @@ test("the privacy page keeps the strict policy and says what the service keeps a
   expect(html).toContain("up to 14 days more");
   expect(html).toContain("hey@normalisdead.mom");
   expect(read("delete/index.html")).toContain("up to 14 days more");
+});
+
+test("the terms page keeps the strict policy, and the privacy and deletion pages link it", () => {
+  const html = read("terms/index.html");
+  expect(html).not.toMatch(/<script|\sstyle=|<style/);
+  expect(html).toMatch(/default-src 'none'/);
+  expect(read("_headers")).toMatch(/\/terms\*\n {2}Content-Security-Policy: default-src 'none'; style-src 'self';[^\n]*frame-ancestors 'none'/);
+  expect(html).toContain("as is");
+  expect(html).toContain('href="/delete"');
+  expect(html).toContain("hey@normalisdead.mom");
+  expect(read("privacy/index.html")).toContain('href="/terms"');
+  expect(read("delete/index.html")).toContain('href="/terms"');
 });
 
 test("a placeholder no value fills stops the build", () => {
