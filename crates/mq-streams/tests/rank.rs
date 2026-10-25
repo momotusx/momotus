@@ -2426,21 +2426,21 @@ fn direct(title: &str, url: &str, size: u64) -> serde_json::Value {
             "behaviorHints": { "videoSize": size, "filename": format!("{title}.mkv") } })
 }
 
-/// A download keeps no playlist and no file a service has yet to prepare,
-/// and what does not fit whole with 1 GiB to spare is hidden for space.
+/// A download keeps no playlist and no file a service has yet to prepare;
+/// a file that does not fit now is never hidden for space: its job waits
+/// for room instead (code review r1 M2).
 #[test]
-fn a_download_keeps_only_files_that_fit_whole() {
+fn a_download_keeps_only_files_and_never_hides_for_space() {
     let all = streams(
         "direct",
         0,
         json!({ "streams": [
             direct("Sintel.2010.1080p.WEB-DL", "https://cdn.example/sintel/master.m3u8", 0),
-            direct("Sintel.2010.2160p.WEB-DL", "https://cdn.example/sintel4k.mkv", 9 << 30),
-            direct("Sintel.2010.720p.WEB-DL", "https://cdn.example/sintel720.mkv", 1 << 30),
+            direct("Sintel.2010.1080p.BluRay", "https://cdn.example/sintel-big.mkv", 4 << 30),
         ]}),
     );
     let prefs = StreamPrefs::default();
-    let c = to_download(6, 100.0);
+    let c = to_download(2, 100.0);
     let input = RankInput {
         caps: &DeviceCaps::basic_1080p(),
         prefs: &prefs,
@@ -2451,11 +2451,7 @@ fn a_download_keeps_only_files_that_fit_whole() {
     };
     let ranked = rank(all, &input);
     let reasons: Vec<_> = ranked.hidden.iter().map(|h| h.reason).collect();
-    assert!(
-        reasons.contains(&HideReason::UnsupportedSource),
-        "{reasons:?}"
-    );
-    assert!(reasons.contains(&HideReason::NoSpace), "{reasons:?}");
+    assert_eq!(reasons, vec![HideReason::UnsupportedSource]);
     assert_eq!(ranked.rows.len(), 1);
     assert!(ranked.rows[0].stream.raw_name.contains("Direct"));
 }

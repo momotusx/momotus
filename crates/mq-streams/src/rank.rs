@@ -120,7 +120,7 @@ fn gate(s: &ParsedStream, input: &RankInput<'_>) -> Result<SourceClass, HideReas
     }
     let class = class(s, input.conditions).ok_or(HideReason::NeedsDebrid)?;
     if input.conditions.download {
-        return download_gate(s, class, input).map(|()| class);
+        return download_gate(s, class).map(|()| class);
     }
     // The engine fetches one episode of a pack, so the pack guard's size
     // is what must fit (code review r2 P2-4).
@@ -133,17 +133,11 @@ fn gate(s: &ParsedStream, input: &RankInput<'_>) -> Result<SourceClass, HideReas
     Ok(class)
 }
 
-/// Free space a download leaves (plans/offline-downloads.md decision 11).
-const DOWNLOAD_RESERVE: u64 = 1 << 30;
-
 /// What a download cannot keep (plans/offline-downloads.md 4.5): a playlist
-/// (HLS, DASH), a file a service has not prepared, and a file that does
-/// not fit whole with 1 GiB to spare, the idle stream cache counted free.
-fn download_gate(
-    s: &ParsedStream,
-    class: SourceClass,
-    input: &RankInput<'_>,
-) -> Result<(), HideReason> {
+/// (HLS, DASH) and a file a service has not prepared. Space hides nothing
+/// here: a job whose file does not fit yet waits for room (4.9; code review
+/// r1 M2).
+fn download_gate(s: &ParsedStream, class: SourceClass) -> Result<(), HideReason> {
     let playlist = match &s.source {
         Source::Http { url } => {
             let path = url.path().to_ascii_lowercase();
@@ -153,13 +147,6 @@ fn download_gate(
     };
     if playlist || class == SourceClass::Fetch {
         return Err(HideReason::UnsupportedSource);
-    }
-    let c = input.conditions;
-    if let (Some(free), Some(size)) = (c.free_bytes, file_size(s, input)) {
-        let room = (free + c.reclaimable_bytes.unwrap_or(0)).saturating_sub(c.committed_bytes);
-        if size + DOWNLOAD_RESERVE > room {
-            return Err(HideReason::NoSpace);
-        }
     }
     Ok(())
 }
