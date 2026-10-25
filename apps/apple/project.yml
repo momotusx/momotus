@@ -235,6 +235,7 @@ targets:
       - path: Marquee/Core/Models.swift
       - path: Marquee/Theme/ThemeSupport.swift
       - path: Marquee/Theme/Theme.generated.swift
+      - path: Marquee/Home/HeroPager.swift
       - path: Marquee/Core/PlaybackModels.swift
       - path: Marquee/Core/ScreenModels.swift
       - path: Marquee/Core/AccountModels.swift

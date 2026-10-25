@@ -14,6 +14,14 @@ struct HeroView: View {
     var startScope: Namespace.ID?
     /// Plays the hero's video, as the title page's Play does.
     var play: (Tile) -> Void = { _ in }
+    /// The carousel draws the large title once over its pages: each page keeps the room it takes (HeroFrameTests).
+    var showsTitle = true
+    /// The art's own opacity: it fades over the trailer, the ramps staying (plans/appletv-polish.md 4.2).
+    var artOpacity: Double = 1
+    /// Drawn under the art: the hero's trailer.
+    var under: AnyView? = nil
+    /// A carousel page: its art lags its words (the owner's B2).
+    var parallax = false
     @Environment(\.metrics) private var metrics
 
     var body: some View {
@@ -35,13 +43,19 @@ struct HeroView: View {
                     .accessibilityAddTraits(.isHeader)
                     .padding(.leading, 16)
                     .padding(.top, 2)
+                    .opacity(showsTitle ? 1 : 0)
+                    .accessibilityHidden(!showsTitle)
             }
         }
         .background {
             // The phone's art runs up under the status bar; the Mac's starts under the black header.
             ZStack {
+                if let under { under }
                 ArtImage(url: hero?.tile.background ?? hero?.tile.plainPoster, maxPixels: ArtSize.backdrop)
                     .accessibilityHidden(true)
+                    .modifier(Lag(on: parallax))
+                    .opacity(artOpacity)
+                    .animation(.timingCurve(0.22, 1, 0.36, 1, duration: 0.6), value: artOpacity)
                 HeroScrims(wide: metrics.wide, page: Theme.Palette.bg)
             }
             .ignoresSafeArea(edges: metrics.wide ? [] : .top)
@@ -154,5 +168,23 @@ struct StartFocus: ViewModifier {
         #else
         content
         #endif
+    }
+}
+
+/// B2's depth: the art moves at `Theme.Motion.heroParallax` of its page while the pages slide, so it lags by the
+/// rest of the page's offset; the scale gives it the room it lags into.
+private struct Lag: ViewModifier {
+    let on: Bool
+
+    func body(content: Content) -> some View {
+        if on {
+            content
+                .scaleEffect(2 - Theme.Motion.heroParallax)
+                .visualEffect { view, proxy in
+                    view.offset(x: -proxy.frame(in: .scrollView(axis: .horizontal)).minX * (1 - Theme.Motion.heroParallax))
+                }
+        } else {
+            content
+        }
     }
 }

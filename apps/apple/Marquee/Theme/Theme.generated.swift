@@ -132,6 +132,10 @@ enum Theme {
     enum Motion {
         static let focus = Animation.timingCurve(0.22, 1, 0.36, 1, duration: 0.18)
         static let panel = Animation.timingCurve(0.22, 1, 0.36, 1, duration: 0.26)
+        /// The Home hero carousel (the owner's B2): a page's time, its slide, and its art's speed against its words.
+        static let heroDwell: Double = 8
+        static let heroSlide = Animation.timingCurve(0.22, 1, 0.36, 1, duration: 0.65)
+        static let heroParallax: CGFloat = 0.85
     }
 
     enum Poster {

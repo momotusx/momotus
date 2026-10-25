@@ -36,11 +36,17 @@ struct HomeScreen: View {
             LazyVStack(alignment: .leading, spacing: metrics.rowSpacing) {
                 // Without catalogs, or with none answering, there is no art to show.
                 if !model.needsSetup && !model.allFailed {
-                    HeroView(hero: model.header.hero, height: heroHeight, startScope: start == .hero ? startScopeID : nil, play: playHero)
+                    hero
                         // Phone and tablet: the profile button, with Sign in another device
-                        // in its menu (4.2), sits at the header's top right.
+                        // in its menu (4.2), sits at the header's top right; the trailer's sound switch beside it.
                         .overlay(alignment: .topTrailing) {
-                            if showsProfileButton { ProfileButton(signInAnother: signInAnother) { showProfiles = true }.padding(.trailing, 14).padding(.top, 5) }
+                            HStack(spacing: 10) {
+                                #if !os(tvOS)
+                                if TrailerState.shared.shown && !walkMuted { TrailerMute() }
+                                #endif
+                                if showsProfileButton { ProfileButton(signInAnother: signInAnother) { showProfiles = true } }
+                            }
+                            .padding(.trailing, 14).padding(.top, 5)
                         }
                         // The first shelf follows the hero's foot as the frames have it: 12 pt on a wide
                         // screen, none on the phone, where the ramp has reached the black page.
@@ -160,6 +166,29 @@ struct HomeScreen: View {
         // Back alone would be a dead end: nothing opens, as the title's inert Play.
         case .inert: break
         }
+    }
+
+    /// The carousel on the phone and the Mac; tvOS keeps its single hero, so its start focus and Menu-back stay
+    /// as they are (plans/appletv-polish.md 4.1).
+    @ViewBuilder private var hero: some View {
+        #if os(tvOS)
+        HeroView(hero: model.header.hero, height: heroHeight, startScope: start == .hero ? startScopeID : nil, play: playHero)
+        #else
+        if model.header.heroes.isEmpty {
+            HeroView(hero: nil, height: heroHeight, play: playHero)
+        } else {
+            HeroCarousel(heroes: model.header.heroes, height: heroHeight, play: playHero)
+        }
+        #endif
+    }
+
+    /// A walk build never draws the sound switch (`-MQMute YES`).
+    private var walkMuted: Bool {
+        #if DEBUG
+        DebugHooks.mute
+        #else
+        false
+        #endif
     }
 
     private var continueRow: String { "continue-watching" }

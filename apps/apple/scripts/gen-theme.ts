@@ -104,6 +104,10 @@ ${radius}
     enum Motion {
         static let focus = Animation.timingCurve(${ease.join(", ")}, duration: ${tokens.motion.focusMs / 1000})
         static let panel = Animation.timingCurve(${ease.join(", ")}, duration: ${tokens.motion.panelMs / 1000})
+        /// The Home hero carousel (the owner's B2): a page's time, its slide, and its art's speed against its words.
+        static let heroDwell: Double = ${tokens.motion.heroDwellMs / 1000}
+        static let heroSlide = Animation.timingCurve(${ease.join(", ")}, duration: ${tokens.motion.heroSlideMs / 1000})
+        static let heroParallax: CGFloat = ${tokens.motion.heroParallax}
     }
 
     enum Poster {

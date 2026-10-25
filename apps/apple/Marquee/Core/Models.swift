@@ -24,6 +24,10 @@ struct Tile: Decodable, Hashable, Sendable {
     /// The scores the core gives (IMDb's is the one text shows). Optional here
     /// only so replies recorded before the field existed still decode.
     let ratings: Ratings?
+    /// A Top 10 tile's place, 1 to 10 (`HomeRow.ranked`); nil everywhere else and in older replies.
+    var rank: Int? = nil
+    /// A Top 10 tile's first genre.
+    var genre: String? = nil
 
     /// The addon's own poster: what goes anywhere but a cover (a backdrop stand-in, the player, the core's
     /// play target), as a ratings band belongs on a cover only.
@@ -120,6 +124,8 @@ struct HomeRow: Decodable, Hashable, Sendable {
     let source: String
     let state: RowState
     let tiles: [Tile]
+    /// A Top 10 row (the first ranked catalog of its kind); nil in replies recorded before it existed.
+    var ranked: Bool? = nil
 }
 
 extension HomeRow {
