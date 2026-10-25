@@ -277,6 +277,9 @@
 .hero-player iframe { display: block; width: 100%; height: 100%; border: 0; pointer-events: none; }
 .hero-track { z-index: 1; }
 .hero-page .hero-bd img { transition: opacity 600ms var(--ease); }
+/* B2's depth (components/hero.tsx): the art reaches 7.5 percent past each side, the most it lags its page while
+ * that page is in view. */
+.hero-page .hero-bd { left: -7.5%; right: -7.5%; will-change: transform; }
 .hero.trailer-on .hero-page.on .hero-bd img { opacity: 0; }
 .trailer-mute { display: grid; place-items: center; padding: 0; border: 0; border-radius: 50%; color: #fff; background: rgba(255, 255, 255, .16); cursor: pointer; }
 @media (prefers-reduced-motion: reduce) { .hero-dots .dot, .hero-page .hero-bd img { transition: none; } }

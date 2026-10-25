@@ -8,6 +8,7 @@ import Play from "lucide-solid/icons/play";
 import Volume2 from "lucide-solid/icons/volume-2";
 import VolumeX from "lucide-solid/icons/volume-x";
 import { createEffect, createSignal, For, on, onCleanup, onMount, Show, untrack } from "solid-js";
+import tokens from "../../../../design/tokens.json";
 import type { Hero } from "../core/generated/Hero";
 import { form } from "../form";
 import { reducedMotion } from "../focus/dom";
@@ -21,9 +22,11 @@ import { Ratings } from "./ratings";
 import { separators } from "./separators";
 import { muted, playTrailer, setMuted, stopTrailer, trailerPlaying } from "./yt-player";
 
-// ponytail: the owner's group B pick is open (2026-10-24); the plan's recommendation, B2, until then.
-const DWELL_MS = 8000;
-const SLIDE_MS = 650;
+// The owner's B2 (2026-10-24, design/tokens.json motion): a page stays 8 s, slides in 650 ms, its art moving at 0.85
+// of its words.
+const DWELL_MS = tokens.motion.heroDwellMs;
+const SLIDE_MS = tokens.motion.heroSlideMs;
+const PARALLAX = tokens.motion.heroParallax;
 // The player starts loading as soon as a page has settled, under its art (plans/appletv-polish.md 4.2).
 const TRAILER_DELAY_MS = 700;
 const TRAILER_CAP_S = 45;
@@ -96,6 +99,16 @@ export function HeroCarousel(props: { heroes: Hero[]; waiting: boolean; playHref
   createEffect(on(() => props.heroes.map((h) => h.tile.id).join(" "), () => (sliding ? (pending = [...props.heroes]) : apply([...props.heroes]))));
 
   const width = () => track?.clientWidth || 1;
+  /** B2's depth: a page's art moves at PARALLAX of its words, so it lags `(1 - PARALLAX)` of the page's offset. */
+  const depth = () => {
+    if (!track || reducedMotion()) return;
+    for (const page of track.querySelectorAll<HTMLElement>(".hero-page")) {
+      const offset = page.offsetLeft - track.scrollLeft;
+      if (Math.abs(offset) > width() * 1.5) continue;
+      const art = page.querySelector<HTMLElement>(".hero-bd");
+      if (art) art.style.transform = `translateX(${(-offset * (1 - PARALLAX)).toFixed(1)}px)`;
+    }
+  };
   const jump = (i: number) => {
     if (track) track.scrollLeft = i * width();
   };
@@ -113,6 +126,8 @@ export function HeroCarousel(props: { heroes: Hero[]; waiting: boolean; playHref
     const step = (now: number) => {
       const t = Math.min(1, (now - start) / SLIDE_MS);
       track.scrollLeft = from + (to - from) * ease(t);
+      // The art follows in the same frame; the scroll event would place it a frame late.
+      depth();
       if (t < 1) return void requestAnimationFrame(step);
       track.style.scrollSnapType = "";
       sliding = false;
@@ -287,6 +302,7 @@ export function HeroCarousel(props: { heroes: Hero[]; waiting: boolean; playHref
         ref={track}
         class="hero-track"
         data-hscroll="0"
+        onScroll={depth}
         onPointerDown={() => (manual = true)}
         onWheel={(e) => Math.abs(e.deltaX) > Math.abs(e.deltaY) && (manual = true)}
       >

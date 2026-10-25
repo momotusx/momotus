@@ -173,3 +173,73 @@ test("phone: a trailer YouTube refuses leaves the art as it was", async ({ brows
   await expect(page.locator(".hero-page.on .hero-bd img").first()).toHaveCSS("opacity", "1");
   await context.close();
 });
+
+test("desktop: the owner's B2, a page stays 8 s, slides in 650 ms, its art lagging at 0.85", async ({ browser }) => {
+  const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  const page = await home(context, "desktop");
+  const base = await activePage(page);
+  const scroll = () => page.evaluate(() => document.querySelector(".hero-track")!.scrollLeft);
+  const width = await page.evaluate(() => document.querySelector(".hero-track")!.clientWidth);
+  const start = await scroll();
+  // Not before its 8 s.
+  await page.clock.runFor(7800);
+  expect(await activePage(page)).toBe(base);
+  expect(await scroll()).toBe(start);
+  // Moving 300 ms into its slide, then still short of the page at 600 ms (the ease lands softly), there by 700.
+  await page.clock.runFor(200 + 300);
+  const mid = await scroll();
+  expect(mid).toBeGreaterThan(start);
+  expect(mid).toBeLessThan(start + width);
+  // The incoming page's art lags its words: shifted against the slide by 15 percent of its offset.
+  const lag = await page.evaluate((i) => {
+    const p = document.querySelectorAll<HTMLElement>(".hero-page")[i]!;
+    const offset = p.offsetLeft - document.querySelector(".hero-track")!.scrollLeft;
+    const m = /translateX\((-?[\d.]+)px\)/.exec(p.querySelector<HTMLElement>(".hero-bd")!.style.transform);
+    return { offset, shift: m ? Number(m[1]) : null };
+  }, base + 1);
+  expect(lag.shift).not.toBeNull();
+  expect(lag.shift!).toBeCloseTo(-lag.offset * 0.15, 0);
+  await page.clock.runFor(400);
+  expect(Math.round(await scroll())).toBe(Math.round(start + width));
+  await context.close();
+});
+
+for (const form of ["phone", "desktop"] as const) {
+  test(`${form}: the owner's C2, a Top 10 place over the cover's top left, its genre under the art`, async ({ browser }) => {
+    const context = await browser.newContext({ viewport: form === "phone" ? { width: 390, height: 844 } : { width: 1440, height: 900 }, reducedMotion: "reduce" });
+    const page = await context.newPage();
+    await page.goto(`/?form=${form}`);
+    const row = page.locator(".row", { has: page.locator("h2", { hasText: "Top 10 Movies" }) });
+    await row.scrollIntoViewIfNeeded({ timeout: 30_000 });
+    const tile = row.locator(".tile").first();
+    await expect(tile.locator(".rank")).toHaveText("1", { timeout: 30_000 });
+    const box = await tile.evaluate((t) => {
+      const pic = t.querySelector(".pic")!.getBoundingClientRect();
+      const rank = t.querySelector(".rank")!.getBoundingClientRect();
+      const genre = t.querySelector(".rank-genre")?.getBoundingClientRect();
+      return { pic: [pic.left, pic.top, pic.width, pic.bottom], rank: [rank.left, rank.top, rank.right, rank.bottom], genreTop: genre?.top ?? null };
+    });
+    const [left = 0, top = 0, width = 0] = box.pic;
+    // Inside the art, in its top left quarter.
+    expect(box.rank[0] ?? -1).toBeGreaterThanOrEqual(left);
+    expect(box.rank[1] ?? -1).toBeGreaterThanOrEqual(top);
+    expect(box.rank[2] ?? Infinity).toBeLessThan(left + width / 2);
+    // The genre under the art, never over the cover's ratings band.
+    expect(box.genreTop).not.toBeNull();
+    expect(box.genreTop!).toBeGreaterThanOrEqual(box.pic[3] ?? 0);
+    await context.close();
+  });
+}
+
+test("phone: the 8 s dwell never cuts a playing trailer", async ({ browser }) => {
+  const { context, page } = await (await trailerPage(false))({ browser });
+  const base = await activePage(page);
+  await page.clock.runFor(1500);
+  await expect.poll(() => page.evaluate(() => (window as unknown as { ytLog: string[] }).ytLog.some((l) => l.startsWith("playVideo"))), { timeout: 10_000 }).toBe(true);
+  // Well past the dwell: the same page, the trailer still playing, its player not torn down.
+  await page.clock.runFor(14_000);
+  expect(await activePage(page)).toBe(base);
+  await expect(page.locator(".hero.trailer-on")).toHaveCount(1);
+  expect(await page.evaluate(() => (window as unknown as { ytLog: string[] }).ytLog.includes("destroy"))).toBe(false);
+  await context.close();
+});
