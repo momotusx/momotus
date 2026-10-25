@@ -254,6 +254,7 @@ targets:
       - path: Marquee/Theme/Glyph.swift
       - path: Marquee/Title/TitleHero.swift
       - path: Marquee/Title/TitleScores.swift
+      - path: Marquee/Title/TitleEpisodes.swift
       - path: Marquee/Title/TitleActions.swift
       - path: Marquee/Theme/Components.swift
       - path: Marquee/Player/CaptionStyle.swift

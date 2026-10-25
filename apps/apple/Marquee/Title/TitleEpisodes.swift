@@ -209,10 +209,16 @@ struct CastShelf: View {
             ScrollView(.horizontal) {
                 HStack(alignment: .top, spacing: 20) {
                     ForEach(cast, id: \.self) { name in
-                        Button { open?(name) } label: { person(name, side: side) }
-                            .buttonStyle(FocusPlainStyle(shape: RoundedRectangle(cornerRadius: 12, style: .continuous), scale: 1))
-                            .disabled(open == nil)
-                            .accessibilityHint("Searches for their titles")
+                        // With no link (a kids profile, whose Search finds only its list) a person is a plain
+                        // view: no button, no hint of an action that is not there.
+                        if let open {
+                            Button { open(name) } label: { person(name, side: side) }
+                                .buttonStyle(FocusPlainStyle(shape: RoundedRectangle(cornerRadius: 12, style: .continuous), scale: 1))
+                                .accessibilityHint("Searches for their titles")
+                                .heroProbe(.link(name))
+                        } else {
+                            person(name, side: side)
+                        }
                     }
                 }
             }
@@ -236,6 +242,7 @@ struct CastShelf: View {
                 .frame(width: side)
         }
         .accessibilityElement(children: .combine)
+        .heroProbe(.chip(name))
     }
 
     private func initials(_ name: String) -> String {

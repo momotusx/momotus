@@ -142,3 +142,38 @@ private var landed: [String: Any] { [
     #expect(outLink("javascript:alert(1)") == nil)
     #expect(outLink(nil) == nil)
 }
+
+/// The people the cast shelf draws, and those that are buttons.
+@MainActor private func castPeople(linked: Bool) -> (drawn: Int, links: Int) {
+    let parts = Parts()
+    let names = ["Tim Robbins", "Morgan Freeman"]
+    let host = NSHostingView(rootView: CastShelf(cast: names, open: linked ? { _ in } : nil)
+        .frame(width: 600, alignment: .leading)
+        .environment(\.metrics, .regular)
+        .environment(\.heroProbe, HeroProbeSink { part, frame in parts.frames[part] = frame }))
+    host.frame = CGRect(x: 0, y: 0, width: 600, height: 300)
+    for _ in 0..<50 {
+        host.layoutSubtreeIfNeeded()
+        RunLoop.main.run(until: Date().addingTimeInterval(0.01))
+    }
+    let drawn = names.filter { (parts.frames[.chip($0)]?.width ?? 0) > 0 }.count
+    let links = names.filter { (parts.frames[.link($0)]?.width ?? 0) > 0 }.count
+    return (drawn, links)
+}
+
+// A kids profile's cast is drawn with no button: VoiceOver hears a name, not a dimmed button with a hint.
+@MainActor @Test func aKidsProfilesCastIsNamesNotButtons() {
+    let linked = castPeople(linked: true)
+    #expect(linked.drawn == 2 && linked.links == 2, "linked: \(linked)")
+    let kids = castPeople(linked: false)
+    #expect(kids.drawn == 2 && kids.links == 0, "kids: \(kids)")
+}
+
+// tvOS has no browser: a score is never a link there. The tvOS branch cannot run in the Mac tests, so its source is
+// read: `markLink` answers nil on tvOS.
+@Test func tvOSNeverLinksAScore() throws {
+    let file = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appending(path: "../Marquee/Home/HeroText.swift")
+    let text = try String(contentsOf: file, encoding: .utf8)
+    let markLink = try #require(text.range(of: #"private func markLink\(_ item: ScoreItem\) -> URL\? \{\s*#if os\(tvOS\)\s*nil\s*#else"#, options: .regularExpression))
+    #expect(!markLink.isEmpty)
+}
