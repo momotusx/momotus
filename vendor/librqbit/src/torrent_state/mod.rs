@@ -298,6 +298,13 @@ impl ManagedTorrent {
         self.live()
     }
 
+    /// Marquee fork, tests only: the torrent stops as on a fatal write error
+    /// (plans/no-space-warnings.md, review r1 m5).
+    #[cfg(feature = "sync-log")]
+    pub fn stop_with_error_for_tests(&self, error: anyhow::Error) {
+        self.stop_with_error(error)
+    }
+
     fn stop_with_error(&self, error: anyhow::Error) {
         let mut g = self.locked.write();
 

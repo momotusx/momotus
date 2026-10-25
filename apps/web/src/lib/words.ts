@@ -9,6 +9,7 @@ import type { VersionRow } from "../core/generated/VersionRow";
 import type { VersionStatus } from "../core/generated/VersionStatus";
 import type { BlockedReason } from "../core/generated/BlockedReason";
 import type { EmptyAction } from "../core/generated/EmptyAction";
+import type { EmptyKind } from "../core/generated/EmptyKind";
 import type { EmptyVersions } from "../core/generated/EmptyVersions";
 import type { LearnedChoice } from "../core/generated/LearnedChoice";
 import type { Network } from "../core/generated/Network";
@@ -758,8 +759,14 @@ function says(face: string, part: string): boolean {
  * table): Play from this device with a kept source and Try again when no source answered, else the
  * kind's one action. Back follows every list. Choose a version is the player's and the title's,
  * never Versions' own (`onVersions`). */
+/** An empty state's words; a kind this build does not know (an older or newer bridge) reads as noResults's
+ * quiet line, as on Android. */
+export function emptyEntry(kind: EmptyKind): { text: string; action?: string; row?: string } {
+  return (choice.empty as Partial<Record<string, { text: string; action?: string; row?: string }>>)[kind] ?? choice.empty.noResults;
+}
+
 export function emptyWords(e: Pick<EmptyVersions, "kind" | "action">, onVersions = false) {
-  const w: { text: string; action?: string } = choice.empty[e.kind];
+  const w = emptyEntry(e.kind);
   const steps: { step: Exclude<EmptyAction, "none">; text: string }[] = [];
   if (e.action === "playFromDevice") steps.push({ step: "playFromDevice", text: choice.empty.unreachable.playFromDevice });
   if (e.kind === "unreachable") steps.push({ step: "tryAgain", text: choice.empty.unreachable.action });

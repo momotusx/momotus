@@ -32,6 +32,7 @@ import { entryFrom, ownState } from "../history";
 import { onProfileReset } from "../core/profiles";
 import {
   bestFor,
+  emptyEntry,
   emptyWords,
   choiceWords,
   counted,
@@ -169,7 +170,7 @@ export function VersionsPage(props: { kind: string; id: string; videoId: string;
   // A dimmed row says why in place of its own line, with a ban.
   const dimWord = () => {
     const e = empty();
-    return e && dimmed() ? ((choiceWords.empty[e.kind] as { row?: string }).row ?? null) : null;
+    return e && dimmed() ? (emptyEntry(e.kind).row ?? null) : null;
   };
   // The one-time learning note (3.9), until Undo.
   const [undone, setUndone] = createSignal(false);

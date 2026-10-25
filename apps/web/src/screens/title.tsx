@@ -35,7 +35,7 @@ import { focusEl, reducedMotion, remember } from "../focus/dom";
 import { form, viewport } from "../form";
 import { airDate, clock, decoded, episodeLabel, initials, offersLibrary, parseVideo, pct, playPath, playState, runtimeMinutes, seasonName, versionsPath } from "../lib/format";
 import { capableNow, coverSize, headerOnTvNow, meteredNow, previewsOn, REVEAL_MS, trailerAllowed, walkNow } from "../lib/trailers";
-import { blockedWords, choiceWords, problemWords } from "../lib/words";
+import { blockedWords, choiceWords, emptyEntry, problemWords } from "../lib/words";
 import { deleteSeason, type DownloadItem, downloadControl, downloadWords, seriesControl, seriesMenu } from "../lib/download";
 import { firstFocus } from "./title-focus";
 import "./home.css";
@@ -797,7 +797,7 @@ function VersionNote(props: { target: boolean; noVideo: boolean; view: LiveView<
     if (!e) return null;
     // Versions that need an account are said quietly, with their count and no way to an account (the
     // owner, 2026-10-23: accounts are set up in Settings only), as Android and Apple say it.
-    return e.kind === "needsAccount" ? blockedWords("needsAccount", e.count).text : choiceWords.empty[e.kind].text;
+    return e.kind === "needsAccount" ? blockedWords("needsAccount", e.count).text : emptyEntry(e.kind).text;
   };
   return (
     <p class="vnote" role="status">

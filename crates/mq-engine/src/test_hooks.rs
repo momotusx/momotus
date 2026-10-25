@@ -52,6 +52,15 @@ pub fn set_free_base(engine: &Engine, base: Option<u64>) {
     *lock(&engine.inner.free_base) = base;
 }
 
+/// `h` stops as on a fatal write error (review r1 m5).
+pub async fn fail_torrent(engine: &Engine, h: crate::TorrentHandle) {
+    let Ok(t) = engine.torrent(h) else { return };
+    if let Some(l) = t.live.lock().await.as_ref() {
+        l.managed
+            .stop_with_error_for_tests(anyhow::Error::from(std::io::Error::from_raw_os_error(28)));
+    }
+}
+
 /// What a replan of `h` would read of its windows now (review r1 M1).
 pub struct SeenWindows(crate::window::Seen);
 

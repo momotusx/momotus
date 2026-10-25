@@ -142,6 +142,10 @@ test("every zero-playable state reads its shared line with its actions in the ta
     expect(steps(kind, "none")).toEqual([]);
     expect(emptyWords({ kind, action: "none" }).text).toBe(shared.empty[kind].text);
   }
+  // An older bridge's kind (noRoom, gone) or a newer one reads as noResults's quiet line, never a crash.
+  for (const kind of ["noRoom", "somethingNew"] as unknown as EmptyKind[]) {
+    expect(emptyWords({ kind, action: "none" })).toEqual({ text: shared.empty.noResults.text, steps: [] });
+  }
   expect(counted("versions", 2000)).toBe("2,000 versions");
 });
 

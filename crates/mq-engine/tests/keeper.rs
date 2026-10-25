@@ -1102,6 +1102,16 @@ async fn at_the_stop_a_read_waits_and_finishes_once_space_is_back() {
     assert!(got == w.movie(4 * MIB, len), "bytes differ");
 }
 
+/// Review r1 m5: a torrent a fatal write error stopped (a full disk) starts
+/// again at the next read, so Try again plays it.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_torrent_a_full_disk_stopped_plays_again_at_the_next_read() {
+    let w = windowed(48 << 20, plan(), None).await;
+    assert!(w.read(0, 4 * MIB).await == w.movie(0, 4 * MIB));
+    test_hooks::fail_torrent(&w.engine, w.t).await;
+    assert!(w.read(8 * MIB, 12 * MIB).await == w.movie(8 * MIB, 12 * MIB));
+}
+
 /// Review r1 M1: a replan that read the windows before a newer one was set
 /// stands down, and the newer window stays.
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]

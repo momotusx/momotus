@@ -5846,8 +5846,9 @@ mod tests {
         use mq_engine::EngineError;
         let enospc = || std::io::Error::from_raw_os_error(28);
         assert!(disk_full(&EngineError::Io(enospc())));
-        // librqbit's fatal write error keeps the cause in its text only, as
-        // anyhow's Debug of it prints ("fatal error: {e:?}").
+        // librqbit's fatal write error keeps the cause in its text only
+        // ("fatal error: {e:?}"); anyhow's Debug of a bare io error prints
+        // its Display, which this builds.
         let fatal = std::io::Error::other(format!("fatal error: {}", enospc()));
         assert!(disk_full(&EngineError::Torrent(fatal.into())));
         assert!(disk_full(&EngineError::Torrent(enospc().into())));

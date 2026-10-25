@@ -1950,10 +1950,15 @@ impl Engine {
             return Ok(None);
         };
         // Paused for space, it stays paused until the space is back: the
-        // read waits (plans/no-space-warnings.md).
+        // read waits (plans/no-space-warnings.md). One a fatal write error
+        // stopped (a full disk) starts again, from its check, so Try again
+        // plays it (review r1 m5).
         let stopped = t.space_stopped.load(Ordering::Relaxed)
             && self.free().is_some_and(|free| free <= window::RESUME_BYTES);
-        if l.managed.is_paused() && !stopped {
+        let failed = l
+            .managed
+            .with_state(|s| matches!(s, librqbit::ManagedTorrentState::Error(_)));
+        if (l.managed.is_paused() || failed) && !stopped {
             self.inner.session.unpause(&l.managed).await?;
             t.space_stopped.store(false, Ordering::Relaxed);
         }

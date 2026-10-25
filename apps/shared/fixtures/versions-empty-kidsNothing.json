@@ -21,8 +21,7 @@
     },
     "runtimeMin": null,
     "screenClass": 1080,
-    "sizeLimitBytes": 5368709120,
-    "window": false
+    "sizeLimitBytes": 5368709120
   },
   "done": true,
   "empty": {
