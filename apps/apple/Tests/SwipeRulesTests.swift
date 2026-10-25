@@ -101,7 +101,12 @@ private let bands = SwipeRules.Bands(left: 24, top: 32, right: 24, bottom: 32)
     #expect(try body(of: "func start() -> Double?", in: keeper).contains("held = screen"))
     let restore = try body(of: "func restore()", in: keeper)
     #expect(restore.contains("SwipeRules.brightnessReturn("))
-    #expect(restore.contains("SwipeRules.took(brightness:"))
+    #expect(restore.contains("SwipeRules.took(brightness: screen.brightness, put: value, active: Self.active)"))
+    // The launch's first activation repairs once more, and only the first.
+    let router = try String(contentsOf: dir.appending(path: "../Account/AppRouter.swift"), encoding: .utf8)
+    let active = try body(of: "func sceneDidBecomeActive(", in: router)
+    #expect(active.contains("guard !BrightnessKeeper.repairedOnActive else { return }"))
+    #expect(active.contains("BrightnessKeeper.repair("))
     #expect(!restore.contains("defer"))
     // The volume swipe that turned off hides its indicator.
     #expect(try body(of: "private var levelSwipe: LevelSwipe", in: screen).contains("if volume.off {\n                        levels.hideNow()"))
@@ -125,8 +130,10 @@ private let bands = SwipeRules.Bands(left: 24, top: 32, right: 24, bottom: 32)
     #expect(SwipeRules.brightnessReturn(found: nil, set: nil, current: 0.70) == .forget)
     // The record goes only once the screen shows the put: a write the system ignored from the background reads back
     // as the old value and is tried again.
-    #expect(SwipeRules.took(brightness: 0.50, put: 0.50))
-    #expect(!SwipeRules.took(brightness: 0.90, put: 0.50))
+    #expect(SwipeRules.took(brightness: 0.50, put: 0.50, active: true))
+    #expect(!SwipeRules.took(brightness: 0.90, put: 0.50, active: true))
+    // From the background the getter may echo the written value: no proof, the record stays.
+    #expect(!SwipeRules.took(brightness: 0.50, put: 0.50, active: false))
 }
 
 @Test func aSmallFirstVolumeSetIsNotTheReadBack() {

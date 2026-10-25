@@ -13,6 +13,9 @@ import XCTest
     // Every instance reaches the same running app, so the helpers ask for their own.
     private var app: XCUIApplication { XCUIApplication(bundleIdentifier: Self.walkApp) }
     private var controlsShown: Bool { app.buttons["Back"].exists }
+    /// The system brightness, read from the runner (it is the same for every app). The runner has no window scene of
+    /// its own to ask, so this is the one place `UIScreen.main` is read.
+    private var screenBrightness: CGFloat { UIScreen.main.brightness }
 
     func testSwipesTapsAndButtons() throws {
         // The wrapper names the walk app it built; anything else stops here, before a launch.
@@ -74,6 +77,27 @@ import XCTest
         shot("volume button down")
         XCUIDevice.shared.press(.volumeUp)
         shot("volume button up")
+
+        // The brightness return from the background (code review R2-3): swipe it up, press Home, read it (it should be
+        // back), return to the app, read it again. Last, since Home may take the film to Picture in Picture.
+        sleep(6)
+        let before = screenBrightness
+        drag("brightness up before Home", at: CGPoint(x: 0.25, y: 0.7), by: CGVector(dx: 0, dy: -0.3 * height))
+        let swiped = screenBrightness
+        XCUIDevice.shared.press(.home)
+        sleep(3)
+        let away = screenBrightness
+        app.activate()
+        sleep(3)
+        let back = screenBrightness
+        let found = "brightness before \(before), swiped \(swiped), at Home \(away), back in the app \(back)"
+        let note = XCTAttachment(string: found)
+        note.name = "brightness return"
+        note.lifetime = .keepAlways
+        add(note)
+        XCTAssertNotEqual(swiped, before, accuracy: 0.02, "the swipe moved the brightness: \(found)")
+        XCTAssertEqual(away, before, accuracy: 0.02, "Home put the brightness back: \(found)")
+        XCTAssertEqual(back, before, accuracy: 0.02, "and coming back left it there: \(found)")
 
         sleep(2)
         if !controlsShown { point(CGPoint(x: 0.5, y: 0.4)).tap() }

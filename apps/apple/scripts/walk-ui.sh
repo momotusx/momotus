@@ -18,6 +18,8 @@ cd "$apple"
 xcodegen generate -q
 # The id goes to the build (MARQUEE_APP_ID) and to the test (MQ_WALK_APP, through xcodebuild's TEST_RUNNER_ prefix);
 # both refuse anything else.
+# -allowProvisioningUpdates lets xcodebuild register app.marquee.walk (and the runner, app.marquee.walk.uitests) and
+# their development profiles in the owner's Apple developer team, from the signing settings passed after the UDID.
 TEST_RUNNER_MQ_WALK_APP=$app_id xcodebuild test -project Marquee.xcodeproj -scheme MarqueeWalkUITests \
   -destination "id=$udid" -derivedDataPath "$out/dd" -resultBundlePath "$out/walk-$(date +%Y%m%d-%H%M%S).xcresult" \
   -allowProvisioningUpdates "${@:2}" MARQUEE_APP_ID=$app_id

@@ -224,7 +224,7 @@ struct VolumeControl: UIViewRepresentable {
             pending = true
         case .put(let value):
             screen?.brightness = value
-            if let screen, SwipeRules.took(brightness: screen.brightness, put: value) { forget() } else { pending = true }
+            if let screen, SwipeRules.took(brightness: screen.brightness, put: value, active: Self.active) { forget() } else { pending = true }
         }
     }
 
@@ -234,6 +234,14 @@ struct VolumeControl: UIViewRepresentable {
         pending = false
         Self.clear()
     }
+
+    /// A scene is in the foreground and active: only then does a read-back prove a write took.
+    private static var active: Bool {
+        UIApplication.shared.connectedScenes.contains { ($0 as? UIWindowScene)?.activationState == .foregroundActive }
+    }
+
+    /// The launch's first activation has run the repair (later ones must not: a player may be up).
+    static var repairedOnActive = false
 
     /// At launch: a record a crash left behind is put back by the same rule.
     static func repair(_ screen: UIScreen?) {
@@ -310,10 +318,13 @@ struct VolumeControl: UIViewRepresentable {
 /// closes, so a walk never leaves the owner's phone louder or quieter. The record outlives a crash: the next player to
 /// open, once its volume view is in the window, puts it back.
 @MainActor enum WalkLevels {
-    /// The player opened: a record a crashed run left is put back once the volume view is in the window.
+    /// The player opened: a record a crashed run left is put back once the volume view is in the window, once per
+    /// process (a later open, back from Versions, would put back this run's own record mid-walk).
     static func begin(_ volume: SystemVolume) {
         guard DebugHooks.mute else { return }
         coreLog.notice("debug: walk opened, brightness \(Self.brightness, privacy: .public)")
+        guard !repaired else { return }
+        repaired = true
         guard UserDefaults.standard.object(forKey: key) != nil else { return }
         Task { @MainActor in
             try? await Task.sleep(for: .seconds(1))
@@ -343,6 +354,9 @@ struct VolumeControl: UIViewRepresentable {
     private static var brightness: Double {
         Double(UIApplication.shared.connectedScenes.lazy.compactMap { $0 as? UIWindowScene }.first?.screen.brightness ?? -1)
     }
+
+    /// The crash repair of `begin` has run in this process.
+    private static var repaired = false
 
     private static let key = "MQWalkVolume"
 }

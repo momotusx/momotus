@@ -46,6 +46,17 @@ final class SceneDelegate: NSObject, UIWindowSceneDelegate {
         }
     }
 
+    /// The launch's first activation repairs once more: at connect the scene is not active yet, so a put there may not
+    /// take and its record waits. Only the first: no player is up yet, while a later activation (after Control Center)
+    /// would undo a brightness the viewer just swiped.
+    func sceneDidBecomeActive(_ scene: UIScene) {
+        MainActor.assumeIsolated {
+            guard !BrightnessKeeper.repairedOnActive else { return }
+            BrightnessKeeper.repairedOnActive = true
+            BrightnessKeeper.repair((scene as? UIWindowScene)?.screen)
+        }
+    }
+
     func windowScene(_ windowScene: UIWindowScene, performActionFor shortcutItem: UIApplicationShortcutItem, completionHandler: @escaping (Bool) -> Void) {
         let ours = shortcutItem.type == AppRouter.signInAnotherType
         if ours { MainActor.assumeIsolated { AppRouter.shared.requestScan() } }

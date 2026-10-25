@@ -91,10 +91,11 @@ enum SwipeRules {
         return shouldRestore(current: current, set: set) ? .put(found) : .forget
     }
 
-    /// The screen read back after a put shows it: only then is the record cleared (a write from a scene in the
-    /// background can be ignored, and the record then repairs it later).
-    static func took(brightness readBack: CGFloat, put: CGFloat) -> Bool {
-        shouldRestore(current: readBack, set: put)
+    /// The screen read back after a put shows it while a scene is active: only then is the record cleared. A write
+    /// from a scene in the background can be ignored, and the getter may still echo the written value, so a read-back
+    /// there proves nothing; the record then repairs it later.
+    static func took(brightness readBack: CGFloat, put: CGFloat, active: Bool) -> Bool {
+        active && shouldRestore(current: readBack, set: put)
     }
 
     /// The volume read-back runs on a set at least one hardware step (1/16) from where the play's sets began: a first
