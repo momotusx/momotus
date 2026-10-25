@@ -360,6 +360,24 @@ private func submits(_ effects: [KeeperEffect]) -> Int {
     #expect(!keeper.asksBeforeQuit)
 }
 
+// Quit waits for the core to checkpoint and hold the downloads before the app goes (review r1 M4).
+@MainActor @Test func quitWaitsForTheCoresAnswer() async throws {
+    let core = RealCore()
+    #expect(await core.ready())
+    let keeper = DownloadKeeper(core: core.client)
+    var answered = 0
+    keeper.holdForQuit { answered += 1 }
+    // Not before the core has answered.
+    #expect(answered == 0)
+    #expect(await eventually { answered == 1 })
+    // Once, though the time limit comes after the answer.
+    try await Task.sleep(for: .milliseconds(2300))
+    #expect(answered == 1)
+    let app = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appending(path: "../Marquee")
+    let text = try String(contentsOf: app.appending(path: "Downloads/DownloadKeeper.swift"), encoding: .utf8)
+    #expect(text.contains("keeper.holdForQuit { sender.reply(toApplicationShouldTerminate: true) }\n            return .terminateLater"))
+}
+
 // MARK: The network (plans/offline-downloads.md 4.13)
 
 @Test func thePathMapsToNoneMeteredAndLowData() {

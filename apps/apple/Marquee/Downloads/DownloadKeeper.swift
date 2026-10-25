@@ -102,9 +102,29 @@ final class DownloadKeeper {
     /// Quitting the Mac asks first while downloads run.
     var asksBeforeQuit: Bool { KeeperLogic.asksBeforeQuit(logic.current) }
 
-    /// Quit: the core checkpoints and holds the downloads until the next launch.
-    func holdForQuit() {
-        core.sendNow("downloadsAllowed", ["allowed": false, "reason": "app"]) { _ in }
+    /// Quit: the core checkpoints and holds the downloads until the next launch; `done` runs once it has
+    /// answered, or after `limit` at most, so the app exits after the checkpoint, never before it (review r1 M4).
+    func holdForQuit(within limit: Duration = .seconds(2), done: @escaping @MainActor () -> Void) {
+        let once = Once(done)
+        core.sendNow("downloadsAllowed", ["allowed": false, "reason": "app"]) { _ in once() }
+        Task {
+            try? await Task.sleep(for: limit)
+            once()
+        }
+    }
+
+    /// The first of two answers runs; the other is dropped.
+    @MainActor private final class Once {
+        private var run: (@MainActor () -> Void)?
+
+        init(_ run: @escaping @MainActor () -> Void) {
+            self.run = run
+        }
+
+        func callAsFunction() {
+            run?()
+            run = nil
+        }
     }
 
     // MARK: Ops (plans/core-protocol.md, Ops)
@@ -289,8 +309,9 @@ final class MacAppDelegate: NSObject, NSApplicationDelegate {
             alert.addButton(withTitle: "Keep downloading")
             alert.addButton(withTitle: "Quit")
             guard alert.runModal() == .alertSecondButtonReturn else { return .terminateCancel }
-            keeper.holdForQuit()
-            return .terminateNow
+            // The app goes once the core has checkpointed and held the downloads.
+            keeper.holdForQuit { sender.reply(toApplicationShouldTerminate: true) }
+            return .terminateLater
         }
     }
 }
