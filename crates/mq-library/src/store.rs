@@ -788,7 +788,7 @@ impl Library {
         profile: &str,
         limit: usize,
     ) -> Result<Vec<ContinueItem>, LibraryError> {
-        self.latest_per_title(profile, limit, false)
+        self.latest_per_title(profile, limit, false, None)
     }
 
     /// Series whose most recent video was finished, newest first: the
@@ -798,7 +798,21 @@ impl Library {
         profile: &str,
         limit: usize,
     ) -> Result<Vec<ContinueItem>, LibraryError> {
-        self.latest_per_title(profile, limit, true)
+        self.latest_per_title(profile, limit, true, None)
+    }
+
+    /// One title's place in Continue Watching, as the two lists above would
+    /// give it: its video in progress, or (`finished`) the video of a series
+    /// it finished, the candidate for Next Up. A title page reads it.
+    pub fn continue_entry(
+        &self,
+        profile: &str,
+        item_id: &str,
+        finished: bool,
+    ) -> Result<Option<ContinueItem>, LibraryError> {
+        Ok(self
+            .latest_per_title(profile, 1, finished, Some(item_id))?
+            .pop())
     }
 
     fn latest_per_title(
@@ -806,6 +820,7 @@ impl Library {
         profile: &str,
         limit: usize,
         finished: bool,
+        item: Option<&str>,
     ) -> Result<Vec<ContinueItem>, LibraryError> {
         // Progress written after the watched mark (a newer register) is a
         // rewatch in progress: unfinished again until it is marked again.
@@ -828,6 +843,7 @@ impl Library {
                  LEFT JOIN library_items i ON i.profile_id = p.profile_id AND i.item_id = p.item_id
                  LEFT JOIN watched w ON w.profile_id = p.profile_id AND w.video_id = p.video_id
                  WHERE p.profile_id = ?1
+                   AND (?4 IS NULL OR p.item_id = ?4)
                    AND {condition}
                    AND NOT EXISTS (SELECT 1 FROM dismissed d
                                    WHERE d.profile_id = p.profile_id AND d.item_id = p.item_id
@@ -838,7 +854,7 @@ impl Library {
                  ORDER BY p.updated_ms DESC
                  LIMIT ?3",
             ))?;
-            stmt.query_map(params![profile, FINISHED_RATIO, limit as i64], |r| {
+            stmt.query_map(params![profile, FINISHED_RATIO, limit as i64, item], |r| {
                 Ok(ContinueItem {
                     item_id: r.get(0)?,
                     video_id: r.get(1)?,

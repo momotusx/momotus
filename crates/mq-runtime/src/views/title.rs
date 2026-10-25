@@ -168,6 +168,12 @@ pub struct TitleHeader {
     /// counts; core backlog C41). Toggled with `setWatched` on the title's
     /// id: with episodes that marks or unmarks every such one.
     pub watched: bool,
+    /// The title is in Continue Watching on this profile: a video in
+    /// progress, or a series finished up to an episode with a next one out
+    /// (Next Up), as Home's row has it. With the header from the first
+    /// render, so a control that depends on it (TV's Remove from Continue
+    /// Watching) is drawn at once, never late.
+    pub continuing: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -309,6 +315,7 @@ impl TitleView {
             play_target: None,
             next_airs: None,
             watched: false,
+            continuing: false,
         });
         let mut view = Self {
             core: core.clone(),
@@ -907,6 +914,18 @@ impl Ctx {
 
         let now = mq_library::hlc::now_ms() as i64;
         let (play_target, next_airs) = play_target(&meta, &self.kind, resume, &watched, now);
+        // As Home's Continue Watching row reads it: a video in progress, or
+        // a finished series with a next episode (Next Up).
+        let entry = |finished| {
+            library
+                .continue_entry(profile, &self.id, finished)
+                .ok()
+                .flatten()
+        };
+        let continuing = entry(false).is_some()
+            || entry(true).is_some_and(|done| {
+                crate::views::playback::next_after(&meta, &done.video_id).is_some()
+            });
         let rated_poster = lock(&self.state).rated_poster.clone();
         let imdb = self.imdb();
         let mut details = details(&meta, source, rated_poster, imdb.as_deref(), self.scores());
@@ -936,6 +955,7 @@ impl Ctx {
             } else {
                 watched.contains(&self.id)
             },
+            continuing,
         };
         if self.header.get() != header {
             self.header.set(header);

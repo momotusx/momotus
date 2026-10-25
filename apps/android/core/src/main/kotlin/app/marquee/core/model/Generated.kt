@@ -1785,6 +1785,8 @@ data class TitleHeader(
     val nextAirs: String? = null,
     /** A movie the user watched, or a title with episodes (a series, an anime) whose every aired regular episode is watched (specials left out, as Trakt counts a show complete; an episode with no season counts; core backlog C41). Toggled with `setWatched` on the title's id: with episodes that marks or unmarks every such one. */
     val watched: Boolean,
+    /** The title is in Continue Watching on this profile: a video in progress, or a series finished up to an episode with a next one out (Next Up), as Home's row has it. With the header from the first render, so a control that depends on it (TV's Remove from Continue Watching) is drawn at once, never late. */
+    val continuing: Boolean,
 )
 
 /** The title page's numbers beyond the addon's IMDb score, per source: TMDB's user score and Trakt's community score, each as a percentage ("87%", "92%"), shown only with at least 10 votes. */

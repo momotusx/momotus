@@ -40,4 +40,12 @@ nextAirs: string | null,
  * counts; core backlog C41). Toggled with `setWatched` on the title's
  * id: with episodes that marks or unmarks every such one.
  */
-watched: boolean, };
+watched: boolean, 
+/**
+ * The title is in Continue Watching on this profile: a video in
+ * progress, or a series finished up to an episode with a next one out
+ * (Next Up), as Home's row has it. With the header from the first
+ * render, so a control that depends on it (TV's Remove from Continue
+ * Watching) is drawn at once, never late.
+ */
+continuing: boolean, };

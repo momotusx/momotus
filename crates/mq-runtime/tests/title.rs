@@ -642,3 +642,72 @@ async fn the_captions_follow_the_installed_addons() {
         }
     }
 }
+
+/// The header says whether the title is in Continue Watching from its first
+/// ready render, so TV's Remove from Continue Watching is drawn with the
+/// rest of the actions, never late: a video in progress, or a finished
+/// series with a next episode (Next Up); not after a removal, and not with
+/// nothing played.
+#[tokio::test]
+async fn the_header_says_whether_the_title_is_in_continue_watching() {
+    let core = Core::temporary("p").unwrap();
+    core.library()
+        .set_addons("p", &[meta_addon(SHOW).await], &core.hlc())
+        .unwrap();
+    let first = |core: &Core| {
+        let core = core.clone();
+        async move {
+            let view = TitleView::open(&core, "series", "tt0944947");
+            settle(&view).await.header.continuing
+        }
+    };
+    assert!(!first(&core).await, "nothing played");
+    let progress = |video_id, position_ms, updated_ms| ProgressRow {
+        video_id,
+        item_id: "tt0944947",
+        position_ms,
+        duration_ms: 3_000,
+        updated_ms,
+    };
+    core.library()
+        .set_progress("p", progress("tt0944947:1:1", 1_000, 1), &core.hlc())
+        .unwrap();
+    assert!(first(&core).await, "an episode in progress");
+
+    // Removed on this page or elsewhere: the open page follows.
+    let view = TitleView::open(&core, "series", "tt0944947");
+    assert!(settle(&view).await.header.continuing);
+    core.remove_from_continue("tt0944947").unwrap();
+    let mut gone = false;
+    for _ in 0..100 {
+        if !view.snapshot().header.continuing {
+            gone = true;
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    assert!(gone, "still continuing after the removal");
+
+    // An episode finished with one after it: Next Up (a series the library
+    // knows as one, as Home reads it).
+    let row = mq_library::LibraryItemRow {
+        item_id: "tt0944947".into(),
+        kind: "series".into(),
+        name: "Game of Thrones".into(),
+        poster: None,
+        poster_shape: None,
+        added_ms: 1,
+    };
+    core.library()
+        .upsert_item("p", &row, true, &core.hlc())
+        .unwrap();
+    core.library()
+        .set_progress("p", progress("tt0944947:1:2", 3_000, 2), &core.hlc())
+        .unwrap();
+    assert!(first(&core).await, "Next Up");
+    // The last episode finished: nothing after it, so not in the row.
+    core.library()
+        .set_progress("p", progress("tt0944947:2:1", 3_000, 3), &core.hlc())
+        .unwrap();
+    assert!(!first(&core).await, "the series finished");
+}
