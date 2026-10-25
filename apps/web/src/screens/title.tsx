@@ -35,7 +35,7 @@ import { form, viewport } from "../form";
 import { airDate, clock, decoded, episodeLabel, offersLibrary, parseVideo, pct, playPath, playState, runtimeMinutes, seasonName, versionsPath } from "../lib/format";
 import { capableNow, coverSize, headerOnTvNow, meteredNow, previewsOn, REVEAL_MS, trailerAllowed, walkNow } from "../lib/trailers";
 import { blockedWords, choiceWords, problemWords } from "../lib/words";
-import { deleteSeries, type DownloadItem, downloadControl, downloadWords, seriesControl, seriesMenu } from "../lib/download";
+import { deleteSeason, type DownloadItem, downloadControl, downloadWords, seriesControl, seriesMenu } from "../lib/download";
 import { firstFocus } from "./title-focus";
 import "./home.css";
 import "./title.css";
@@ -155,7 +155,8 @@ function TitlePage(props: { kind: string; id: string; retry: () => void }) {
     const h = header();
     if (!h) return;
     const season = h.selectedSeason;
-    const ids = view.state.episodes.filter((e) => e.season === season).flatMap((e) => (e.download ? [e.download.id] : []));
+    const kept = view.state.episodes.filter((e) => e.season === season && e.download);
+    const ids = kept.flatMap((e) => (e.download ? [e.download.id] : []));
     const run = (act: string | null) => {
       if (act === "season" && season !== null) return () => downloadAdd(props.kind, props.id, "season", { season });
       if (act === "series") return () => downloadAdd(props.kind, props.id, "series");
@@ -163,7 +164,7 @@ function TitlePage(props: { kind: string; id: string; retry: () => void }) {
       if (act === "deleteSeason")
         return () =>
           setMenu({
-            title: deleteSeries(ids.length, d()?.name ?? ""),
+            title: deleteSeason(season ?? 0, kept.map((e) => e.download), d()?.name ?? ""),
             entries: [
               { key: "delete", label: "Delete", icon: ITEM_ICON.delete, run: () => downloadAct("downloadRemove", { ids }) },
               { key: "cancel", label: "Cancel", run: () => undefined },

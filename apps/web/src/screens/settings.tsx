@@ -26,7 +26,7 @@ import { focusEl, reducedMotion } from "../focus/dom";
 import type { AddonsSnapshot } from "../core/generated/AddonsSnapshot";
 import type { DownloadsSnapshot } from "../core/generated/DownloadsSnapshot";
 import { downloadAct, downloadsHere } from "../components/download";
-import { deleteAll, downloadWords } from "../lib/download";
+import { deleteAll, downloadWords, shownDownloads } from "../lib/download";
 import { focusOn, StorageLine } from "./downloads";
 import type { LanguageChoice } from "../core/generated/LanguageChoice";
 import type { Prefs } from "../core/generated/Prefs";
@@ -616,7 +616,7 @@ function DownloadsSection() {
   const [confirm, setConfirm] = createSignal(false);
   const [error, setError] = createSignal<string | null>(null);
   return (
-    <Show when={view.state.data}>
+    <Show when={shownDownloads(view.state.data)}>
       {(s) => (
         <section class="set-sec dl-settings" id="set-downloads" aria-labelledby="set-h-downloads">
           <h2 id="set-h-downloads" tabindex="-1">

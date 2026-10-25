@@ -15,7 +15,7 @@ import type { DownloadRow } from "../core/generated/DownloadRow";
 import type { DownloadsSnapshot } from "../core/generated/DownloadsSnapshot";
 import type { DownloadStorage } from "../core/generated/DownloadStorage";
 import { decoded, episodeLabel, playPath, seasonName, versionsPath } from "../lib/format";
-import { badgeOf, deleteSeries, downloadControl, type DownloadItem, downloadWords, episodeLine, episodeName, progressLine, storageLine, subtitlesLine, titleLine } from "../lib/download";
+import { badgeOf, deleteSeries, downloadControl, type DownloadItem, downloadWords, episodeLine, episodeName, progressLine, shownDownloads, storageLine, subtitlesLine, titleLine } from "../lib/download";
 import "./browse.css";
 import "./settings.css";
 
@@ -107,7 +107,7 @@ const rowName = (r: DownloadRow) => (r.episode === null ? r.name : `${r.name} ·
 
 export default function Downloads() {
   const view = liveView<DownloadsSnapshot>("downloads");
-  const s = () => view.state.data;
+  const s = () => shownDownloads(view.state.data);
   const kids = kidsProfile;
   awayFromTv();
   const { menu, setMenu, open } = useRowMenu();
@@ -231,8 +231,9 @@ export function DownloadedSeries() {
   awayFromTv();
   const { menu, setMenu, open } = useRowMenu();
   const [confirm, setConfirm] = createSignal(false);
-  const title = () => view.state.data?.titles.find((t) => t.itemId === itemId()) ?? null;
-  const rows = () => [...(title()?.rows ?? []), ...(view.state.data?.downloading.filter((r) => r.itemId === itemId()) ?? [])];
+  const shown = () => shownDownloads(view.state.data);
+  const title = () => shown()?.titles.find((t) => t.itemId === itemId()) ?? null;
+  const rows = () => [...(title()?.rows ?? []), ...(shown()?.downloading.filter((r) => r.itemId === itemId()) ?? [])];
   const name = () => title()?.name ?? rows()[0]?.name ?? "";
   const seasons = () => {
     const by = new Map<number, DownloadRow[]>();
@@ -244,7 +245,7 @@ export function DownloadedSeries() {
   };
   // Nothing of it left (the last episode deleted): back to Downloads.
   createEffect(() => {
-    if (view.state.data && rows().length === 0) navigate(DOWNLOADS, { replace: true });
+    if (shown() && rows().length === 0) navigate(DOWNLOADS, { replace: true });
   });
   createEffect(() => {
     if (name()) document.title = `${name()} · Downloads · Momotus`;

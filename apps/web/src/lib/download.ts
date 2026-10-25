@@ -261,6 +261,13 @@ export const episodeLine = (r: DownloadRow) => {
 };
 
 export const deleteSeries = (count: number, name: string) => `Delete ${count === 1 ? "1 downloaded episode" : `${count} downloaded episodes`} of ${name}?`;
+
+/** A season's delete question: the episodes already downloaded, never the queued or running ones it
+ * also cancels; with none done yet, the season's downloads by name. */
+export function deleteSeason(season: number, badges: readonly (DownloadBadge | null)[], name: string): string {
+  const done = badges.filter((b) => b?.state === "done").length;
+  return done > 0 ? deleteSeries(done, name) : `Delete Season ${season} downloads of ${name}?`;
+}
 export const deleteAll = (n: number) => `Delete all downloads on this device? ${bytes(n)}`;
 
 export const downloadWords = {
@@ -274,3 +281,9 @@ export const downloadWords = {
   pick: "Pick the version to keep on this device",
   pickAction: "Download this version",
 };
+
+/** The snapshot a screen shows: none while the session is locked. A locked session's `downloads` view
+ * carries counts only (no titles, nothing done or failed), so a screen still up for a frame as the
+ * lock lands reads it as still opening: no "Nothing downloaded yet", no series page that thinks its
+ * last episode went. */
+export const shownDownloads = <S extends object>(s: S | null | undefined): S | null => (s && !(s as { locked?: boolean }).locked ? s : null);

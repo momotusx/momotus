@@ -10,6 +10,8 @@ import {
   type DownloadControl,
   type DownloadItem,
   controlName,
+  shownDownloads,
+  deleteSeason,
   episodeLine,
   episodeName,
   itemOp,
@@ -173,4 +175,22 @@ test("a profile not yet known, or not found, gets no download controls, as a kid
 test("the subtitles kept with a download, by language name", () => {
   expect(subtitlesLine(["en", "tr"])).toBe("Subtitles: English, Turkish");
   expect(subtitlesLine([])).toBeNull();
+});
+
+test("a season's delete counts the episodes already downloaded, never the queued ones it also cancels", () => {
+  const b = (state: DownloadState) => badge(state);
+  const season = [b("done"), b("done"), b("done"), ...Array.from({ length: 9 }, () => b("queued"))];
+  expect(deleteSeason(2, season, "Severance")).toBe("Delete 3 downloaded episodes of Severance?");
+  expect(deleteSeason(2, [b("done"), b("running")], "Severance")).toBe("Delete 1 downloaded episode of Severance?");
+  // Nothing done yet: the season's downloads, with no count that is not true.
+  expect(deleteSeason(2, [b("queued"), b("running"), null], "Severance")).toBe("Delete Season 2 downloads of Severance?");
+});
+
+test("a locked session's counts-only snapshot is never shown, so no screen reads it as empty", () => {
+  const open = { downloading: [], titles: [], locked: false };
+  expect(shownDownloads(open)).toBe(open);
+  expect(shownDownloads({ ...open, locked: true })).toBeNull();
+  expect(shownDownloads(null)).toBeNull();
+  // A core from before the field: shown as it always was.
+  expect(shownDownloads({ downloading: [], titles: [] })).toEqual({ downloading: [], titles: [] });
 });
