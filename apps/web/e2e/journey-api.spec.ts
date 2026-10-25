@@ -1551,14 +1551,23 @@ test("TV: a cue its file placed stays there with its styling, and no line draws 
     await expect(p.locator(".cue-at", { hasText: /Ninety/ })).toHaveCount(0);
     const deep = p.locator(".cue-at", { hasText: "DEEP" });
     await expect(deep).toBeVisible();
-    await expect
-      .poll(() =>
-        deep.evaluate((el) => {
-          const box = (document.querySelector("video") as HTMLVideoElement).getBoundingClientRect();
-          return (box.bottom - el.getBoundingClientRect().bottom) / box.height;
-        }),
-      )
-      .toBeGreaterThanOrEqual(0.05 - 0.002);
+    // Its foot at the foot block's floor, within 1% of the height either way (too low is cut or under a control;
+    // too high is not the floor): the 5% line with the controls hidden, 8 px over the scrubber with them up.
+    const deepFoot = () =>
+      deep.evaluate((el) => {
+        const box = (document.querySelector("video") as HTMLVideoElement).getBoundingClientRect();
+        const scrub = (document.querySelector(".player-scr .scrub") as HTMLElement).getBoundingClientRect();
+        const k = box.height / (document.querySelector("video") as HTMLVideoElement).offsetHeight;
+        const foot = el.getBoundingClientRect().bottom;
+        return { safe: (box.bottom - box.height * 0.05 - foot) / box.height, scrub: (scrub.top - 8 * k - foot) / box.height };
+      });
+    await expect(p.locator(".player-scr")).toHaveClass(/idle/, { timeout: 10_000 });
+    await expect.poll(async () => Math.abs((await deepFoot()).safe)).toBeLessThanOrEqual(0.01);
+    await p.keyboard.press("ArrowUp");
+    await expect(p.locator(".player-scr")).not.toHaveClass(/idle/);
+    await expect.poll(async () => Math.abs((await deepFoot()).scrub)).toBeLessThanOrEqual(0.01);
+    // The controls' fade done, for the shot.
+    await p.waitForTimeout(400);
     await p.screenshot({ path: `${SHOTS}/tv-player-placed-cue.png` });
 
     // A re-buffer (the element waits for data past the stall time): the loading layer comes up and the lines go.

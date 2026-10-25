@@ -406,26 +406,30 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
     const screen = video.getBoundingClientRect();
     const k = video.offsetHeight ? screen.height / video.offsetHeight : 1;
     const local = (r: DOMRect) => ({ top: r.top / k, bottom: r.bottom / k, width: r.width / k, height: r.height / k });
-    // A cue the file placed keeps its foot over the title-safe line: one placed low, or many lines down, comes up.
-    const safe = local(screen).bottom - local(screen).height * SAFE_LINE;
-    for (const el of document.querySelectorAll<HTMLElement>(".player-scr .cue-at")) {
-      el.style.transform = "";
-      const over = local(el.getBoundingClientRect()).bottom - safe;
-      if (over > 0) el.style.transform = `translateY(${-over}px)`;
-    }
-    if (!cuesEl?.isConnected) return;
     const rect = (sel: string) => {
       const r = document.querySelector<HTMLElement>(`.player-scr ${sel}`)?.getBoundingClientRect();
       return r && local(r);
     };
     const bar = rect(".osd");
+    const scrubber = rect(".scrub");
+    const up = osd() && !ended() && !!bar;
+    // A cue the file placed keeps the foot block's floor: over the title-safe line, and 8 px over the scrubber
+    // while the controls show; one placed low, or many lines down, comes up to it.
+    const safe = local(screen).bottom - local(screen).height * SAFE_LINE;
+    const floor = up && scrubber ? Math.min(safe, scrubber.top - 8) : safe;
+    for (const el of document.querySelectorAll<HTMLElement>(".player-scr .cue-at")) {
+      el.style.transform = "";
+      const over = local(el.getBoundingClientRect()).bottom - floor;
+      if (over > 0) el.style.transform = `translateY(${-over}px)`;
+    }
+    if (!cuesEl?.isConnected) return;
     const place = cuePlace({
       box: local(screen),
       video: { width: video.videoWidth, height: video.videoHeight },
       bar,
-      scrubber: rect(".scrub"),
+      scrubber,
       transport: rect(".transport"),
-      up: osd() && !ended() && !!bar,
+      up,
       // The lines' height at full size (drawn now at 85% when shrunk).
       lines: cuesEl.getBoundingClientRect().height / k / (shrink() ? 0.85 : 1),
     });
