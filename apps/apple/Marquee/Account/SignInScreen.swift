@@ -234,7 +234,7 @@ struct SignInScreen: View {
     /// The passkey's `user.name`: "<owner profile name> (Marquee)" (3.1).
     private var userName: String {
         let owner = profiles.snapshot?.profiles.first(where: \.isOwner)?.name ?? DeviceName.current
-        return "\(owner) (Marquee)"
+        return "\(owner) (Momotus)"
     }
 }
 #endif

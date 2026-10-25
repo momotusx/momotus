@@ -562,6 +562,6 @@ export function defaultDeviceName(): string {
   } catch {
     // Private mode: the form's name.
   }
-  return `Marquee ${form() === "tv" ? "TV" : form() === "phone" ? "phone" : "desktop"}`;
+  return `Momotus ${form() === "tv" ? "TV" : form() === "phone" ? "phone" : "desktop"}`;
 }
 export const passkeyAvailable = vault.available;

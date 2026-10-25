@@ -59,7 +59,7 @@
       "tone": "warn",
       "text": "Large file",
       "textChosen": "Larger than the size you chose",
-      "details": ["{size}; Marquee prefers files up to {limit}"]
+      "details": ["{size}; Momotus prefers files up to {limit}"]
     },
     "few": {
       "tone": "warn",
@@ -96,7 +96,7 @@
       "text": "Found {versions}, but none plays on this device."
     },
     "noSpace": {
-      "text": "Marquee found {versions}, but this device is nearly full, so none can play here.",
+      "text": "Momotus found {versions}, but this device is nearly full, so none can play here.",
       "textNoWindow": "{versionsAre} too large for this storage.",
       "action": "Show them"
     },
@@ -140,20 +140,20 @@
   },
   "learned": {
     "size": {
-      "up": "On {device} you often picked bigger files, so Marquee now picks files up to {limit}.",
-      "down": "On {device} you often picked smaller files, so Marquee now picks files up to {limit}."
+      "up": "On {device} you often picked bigger files, so Momotus now picks files up to {limit}.",
+      "down": "On {device} you often picked smaller files, so Momotus now picks files up to {limit}."
     },
     "height": {
-      "up": "On {device} you often picked sharper versions, so Marquee now picks up to {height}.",
-      "down": "On {device} you often picked lower resolutions, so Marquee now picks up to {height}."
+      "up": "On {device} you often picked sharper versions, so Momotus now picks up to {height}.",
+      "down": "On {device} you often picked lower resolutions, so Momotus now picks up to {height}."
     },
     "ready": {
-      "up": "On {device} you often picked files ready on your streaming service, so Marquee now prefers them.",
-      "down": "On {device} you often picked torrents over ready files, so Marquee now treats them like the rest."
+      "up": "On {device} you often picked files ready on your streaming service, so Momotus now prefers them.",
+      "down": "On {device} you often picked torrents over ready files, so Momotus now treats them like the rest."
     },
     "hdr": {
-      "up": "On {device} you often picked HDR versions, so Marquee now prefers HDR.",
-      "down": "On {device} you often picked versions without HDR, so Marquee now leaves HDR off."
+      "up": "On {device} you often picked HDR versions, so Momotus now prefers HDR.",
+      "down": "On {device} you often picked versions without HDR, so Momotus now leaves HDR off."
     },
     "undo": "Undo",
     "settingsLines": {
@@ -182,7 +182,7 @@
     }
   },
   "question": {
-    "title": "How should Marquee pick what to play?",
+    "title": "How should Momotus pick what to play?",
     "lead": "You can change this later in Settings, under Stream choice.",
     "fast": {
       "label": "Start fast",
@@ -207,7 +207,7 @@
   },
   "settings": {
     "title": "Stream choice",
-    "lede": "How Marquee picks the version to play. Every version stays in the list, so you can always pick another.",
+    "lede": "How Momotus picks the version to play. Every version stays in the list, so you can always pick another.",
     "summary": "{size}, shared by at least {people}",
     "size": {
       "label": "File size",

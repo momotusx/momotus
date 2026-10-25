@@ -59,7 +59,7 @@ const LIST_MAX_BYTES: usize = 1024 * 1024;
 const MANIFEST_MAX_BYTES: usize = 256 * 1024;
 const NAME_MAX: usize = 80;
 const DESCRIPTION_MAX: usize = 300;
-const UNREADABLE: &str = "Cinemeta sent a list Marquee cannot read";
+const UNREADABLE: &str = "Cinemeta sent a list Momotus cannot read";
 
 /// The lists, in order: Official, then Community.
 const LISTS: [(&str, &str); 2] = [("official", "Official"), ("community", "Community")];
@@ -794,7 +794,7 @@ fn mark_installed(core: &Core, snapshot: &mut AddonCatalogSnapshot) {
             for list in &mut snapshot.lists {
                 if list.state == ListState::Ready {
                     list.state = ListState::Failed {
-                        words: "Marquee could not read your addons".into(),
+                        words: "Momotus could not read your addons".into(),
                     };
                     list.entries.clear();
                 }

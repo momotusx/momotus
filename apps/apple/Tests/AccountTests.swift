@@ -116,7 +116,7 @@ private func announcement(_ kind: String, member: String? = "m", by: String? = "
     #expect(AccountRules.homeCard(deletion: nil, gone: false, announcements: [], secondWayIn: true, owner: false, kids: false) == nil)
     #expect(AccountRules.homeCard(deletion: deletion, gone: false, announcements: [], secondWayIn: true, owner: false, kids: false) == .deletion(deletion))
     // The web page's deletion names its provider; a Start over names none.
-    #expect(AccountRules.deletionText(deletion).hasPrefix("Someone signed in with your Google account and asked to delete your Marquee account on "))
+    #expect(AccountRules.deletionText(deletion).hasPrefix("Someone signed in with your Google account and asked to delete your Momotus account on "))
     #expect(AccountRules.deletionText(ScheduledDeletion(dueMs: 0, provider: nil)).hasPrefix("Your account will be deleted on "))
 }
 
@@ -136,11 +136,11 @@ private func announcement(_ kind: String, member: String? = "m", by: String? = "
 @Test func eachSignInStateSaysItsWords() throws {
     #expect(AccountRules.trouble("cancelled") == nil, "a closed sheet says nothing")
     let unreachable = try #require(AccountRules.trouble("unreachable"))
-    #expect(unreachable.text == "Marquee can't reach its sync service right now.")
+    #expect(unreachable.text == "Momotus can't reach its sync service right now.")
     #expect(unreachable.actions == ["Try again", "Not now"])
     #expect(AccountRules.trouble("kitUnknown")?.actions == ["Use a recovery kit", "I can't use any of these"])
-    #expect(AccountRules.trouble("signupLimit", provider: "apple")?.text == "This Apple Account has made several Marquee accounts lately. Try again later or use another way.")
-    #expect(AccountRules.trouble("linkedElsewhere", provider: "google")?.text == "This Google account already signs in to another Marquee account.")
+    #expect(AccountRules.trouble("signupLimit", provider: "apple")?.text == "This Apple Account has made several Momotus accounts lately. Try again later or use another way.")
+    #expect(AccountRules.trouble("linkedElsewhere", provider: "google")?.text == "This Google account already signs in to another Momotus account.")
     #expect(AccountRules.trouble("linkedElsewhere", provider: "google")?.actions == ["Use it for this account instead", "Cancel"])
     #expect(AccountRules.trouble("ticketExpired")?.actions == ["Continue"])
     #expect(AccountRules.trouble("notOwner")?.text == "Only the main profile can do that.")

@@ -283,7 +283,7 @@ struct AddonInfo: Decodable, Hashable, Sendable, Identifiable {
     var id: String { url }
 
     /// What the card shows under the name: the host, or that it runs here.
-    var hostLine: String { builtIn == true ? "Built into Marquee, runs on this device" : host }
+    var hostLine: String { builtIn == true ? "Built into Momotus, runs on this device" : host }
 }
 
 /// Find addons: Cinemeta's two lists, Official then Community (plans/core-protocol.md).

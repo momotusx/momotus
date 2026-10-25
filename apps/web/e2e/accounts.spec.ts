@@ -232,8 +232,8 @@ test.describe.serial("accounts on the web", () => {
     const [again] = await Promise.all([desk.waitForEvent("popup"), desk.locator('[data-f="signin:retry"]').click()]);
     await again.getByText("Sign in as alice").click();
     await expect(desk).toHaveURL(/\/sign-in\/new\?from=welcome$/);
-    await expect(desk.locator("h1")).toHaveText("Create your Marquee account");
-    await expect(desk.locator('[data-f="signin:already"]')).toHaveText("I already use Marquee on another device");
+    await expect(desk.locator("h1")).toHaveText("Create your Momotus account");
+    await expect(desk.locator('[data-f="signin:already"]')).toHaveText("I already use Momotus on another device");
     await shot(desk, "accounts-create-desktop");
     await desk.locator('[data-f="signin:create"]').click();
     // The web has no account passkey (D11): the recovery kit step comes next, then the doors.
@@ -282,7 +282,7 @@ test.describe.serial("accounts on the web", () => {
     await closed.getByText("Sign in as alice").waitFor();
     await closed.close();
     await desk.evaluate(() => dispatchEvent(new Event("focus")));
-    await expect(section.locator(".sign-in-failure .st")).toHaveText("Apple did not confirm, so your Apple Account may still list Marquee.");
+    await expect(section.locator(".sign-in-failure .st")).toHaveText("Apple did not confirm, so your Apple Account may still list Momotus.");
     await expect(rows).toHaveCount(2);
     await section.locator('[data-f="sync:identity:anyway"]').click();
     await expect(rows).toHaveCount(1);
@@ -352,7 +352,7 @@ test.describe.serial("accounts on the web", () => {
   test("the TV's first run is the code for a phone: Desk approves it, and the TV skips the doors", async () => {
     await go(tv, "/welcome");
     await expect(tv.locator("h1")).toHaveText("Sign in with your phone");
-    await expect(tv.getByText("On your phone, open Marquee and tap Sign in another device")).toBeVisible();
+    await expect(tv.getByText("On your phone, open Momotus and tap Sign in another device")).toBeVisible();
     await expect(tv.locator(".qrbox svg")).toBeVisible();
     await expect(tv.locator('[data-f="signin:tv-without"]')).toHaveText("Use without an account");
     await expect(tv.locator('[data-f="signin:tv-kit"]')).toHaveText("Use a recovery kit");
@@ -372,7 +372,7 @@ test.describe.serial("accounts on the web", () => {
     await providerPage(phone, "signin:mock", "alice");
     await expect(phone).toHaveURL(/\/sign-in\/found\?from=welcome$/);
     await expect(phone.locator(".lead")).toHaveText(
-      "This sign-in already has a Marquee account. Scan this code with your phone, where Marquee is signed in, to add this browser.",
+      "This sign-in already has a Momotus account. Scan this code with your phone, where Momotus is signed in, to add this browser.",
     );
     await expect(phone.locator(".qrbox svg")).toBeVisible();
     await expect(phone.locator('[data-f="signin:found-kit"]')).toHaveText("Use a recovery kit");
@@ -392,7 +392,7 @@ test.describe.serial("accounts on the web", () => {
     await go(tv, "/");
     const card = tv.locator(".account-card");
     await expect(card).toHaveAttribute("data-card", "announcement");
-    await expect(card).toContainText("A new device joined: Marquee phone.");
+    await expect(card).toContainText("A new device joined: Momotus phone.");
     // Its place: after the first row (or under the hero when there is no row), never between the hero and
     // the row that rises into it (plans/design-v3-phase2-web.md, the account card).
     const before = await card.evaluate((el) => {
@@ -419,7 +419,7 @@ test.describe.serial("accounts on the web", () => {
     await go(tv, "/");
     const card = tv.locator(".account-card");
     await expect(card).toHaveAttribute("data-card", "deletion");
-    await expect(card).toContainText("Someone signed in with your mock account and asked to delete your Marquee account on");
+    await expect(card).toContainText("Someone signed in with your mock account and asked to delete your Momotus account on");
     await expect(card.locator(".btn")).toHaveText(["Cancel deletion", "Cancel and turn off mock sign-in"]);
     await shot(tv, "accounts-deletion-tv");
     // Any profile cancels (D16); the card goes once the round says so.
@@ -443,7 +443,7 @@ test.describe.serial("accounts on the web", () => {
     await desk.locator('[data-f="sync:delete"]').click();
     const [revoke] = await Promise.all([desk.waitForEvent("popup"), desk.locator('[data-f="sync:delete-confirm"]').click()]);
     await revoke.getByText("Sign in as alice").click();
-    await expect(desk.getByText("Your Marquee account was deleted. Your library stays on this device.")).toBeVisible();
+    await expect(desk.getByText("Your Momotus account was deleted. Your library stays on this device.")).toBeVisible();
     expect(asked.filter((a) => a.port === P.a && a.op === "deleteAccount").at(-1)?.fields).toContain("receipt");
 
     // The TV hears it at its next call to the sync service: Account's own reads, or Sync now.

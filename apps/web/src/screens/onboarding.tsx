@@ -101,7 +101,7 @@ export default function Onboarding() {
   return (
     <main class="welcome page" data-vscroll>
       <header class="welcome-head">
-        <div class="brand">Marquee</div>
+        <div class="brand">Momotus</div>
         {/* Browse first still passes the switches: nothing is installed unasked. */}
         <Show when={step() === 1 || step() === "doors"}>
           <A class="skip" href={fresh() ? "/welcome?step=2&then=home" : "/"} replace={!fresh()} onClick={() => !fresh() && resetHistoryBase()} data-f="welcome:skip">
@@ -201,7 +201,7 @@ function Doors(props: { onFresh: () => void }) {
           <A class="door" href="/pair" data-f="welcome:pair">
             <QrCode aria-hidden />
             <span>
-              <b>I already use Marquee</b>
+              <b>I already use Momotus</b>
               <small>Join your other device's sync account with a code. Library and addons follow.</small>
             </span>
             <ChevronRight aria-hidden class="chev" />

@@ -152,11 +152,11 @@ fun subtitleNoteWords(note: SubtitleNote): String =
         }
 
         SubtitleProblem.Blocked -> {
-            "${note.source} is turning requests away. Marquee will try again in a few minutes."
+            "${note.source} is turning requests away. Momotus will try again in a few minutes."
         }
 
         SubtitleProblem.Changed -> {
-            "${note.source} changed its pages, so Marquee cannot read them. An update will fix this."
+            "${note.source} changed its pages, so Momotus cannot read them. An update will fix this."
         }
 
         SubtitleProblem.TrackFailed -> {

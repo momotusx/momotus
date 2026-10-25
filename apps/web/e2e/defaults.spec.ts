@@ -150,7 +150,7 @@ test("Start fresh: nothing installed before Continue, two switches turned off st
   await page.locator('[data-f="welcome:next"]').click();
   // The one stream choice question, then the setup check.
   await expect(page).toHaveURL(/step=choice/);
-  await expect(page.locator("h1")).toHaveText("How should Marquee pick what to play?");
+  await expect(page.locator("h1")).toHaveText("How should Momotus pick what to play?");
   await shot(page, "stream-choice-question", "desktop");
   await page.locator('[data-f="welcome:best"]').click();
   // Then the subtitle language: on an English browser English leads the
@@ -490,7 +490,7 @@ test("Subtitles: Skip waits while Continue saves, so the step leaves once", asyn
   expect((await client.req<Prefs>("setPrefs", { patch: {} })).subtitleLanguages).toEqual(["de"]);
 });
 
-test("after an import, Back from the setup check does not call Marquee's own installs From Stremio", async ({ browser }) => {
+test("after an import, Back from the setup check does not call Momotus's own installs From Stremio", async ({ browser }) => {
   const page = await device(browser, "desktop", { importDone: true });
   await page.goto("/welcome?form=desktop");
   await page.locator('[data-f="welcome:stremio"]').click();
@@ -515,7 +515,7 @@ test("after an import, Back from the setup check does not call Marquee's own ins
   await expect(page.locator(".drow.fixed", { hasText: "From Stremio" })).toHaveCount(0);
 });
 
-test("an empty Home offers Set up Marquee alone, not the defaults card beside it", async ({ browser }) => {
+test("an empty Home offers Set up Momotus alone, not the defaults card beside it", async ({ browser }) => {
   // A list with no catalog addon: Home is empty, and the profile is no longer fresh.
   await install("https://torrentio.strem.fun/manifest.json");
   const page = await device(browser, "desktop");
@@ -543,7 +543,7 @@ test("the built-in TurkceAltyazi.org row says where it runs instead of a host", 
   const page = await device(browser, "desktop");
   await page.goto("/addons?form=desktop");
   const builtIn = page.locator("li.addon", { hasText: "TurkceAltyazi" });
-  await expect(builtIn.locator(".host")).toHaveText("Built into Marquee, runs on this device");
+  await expect(builtIn.locator(".host")).toHaveText("Built into Momotus, runs on this device");
   // Never configurable: its old host is never opened.
   await expect(builtIn).not.toContainText("Settings live on its website");
   await expect(page.locator("li.addon", { hasText: "Cinemeta" }).locator(".host")).toHaveText("v3-cinemeta.strem.io");

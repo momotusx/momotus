@@ -66,14 +66,14 @@ async fn alldebrid_pin_expired_is_terminal() {
     assert!(matches!(login.poll().await.unwrap(), LoginPoll::Expired));
 }
 
-const TB_START: &str = r#"{"success":true,"error":null,"detail":"ok","data":{"device_code":"TBDEVICESECRET","code":"123456","interval":5,"expires_in":600,"expires_at":"2026-10-17T12:00:00Z","verification_url":"https://torbox.app/oauth/device?app=Marquee","verification_url_complete":"https://torbox.app/oauth/device?app=Marquee&code=123456","friendly_verification_url":"https://tor.box/link"}}"#;
+const TB_START: &str = r#"{"success":true,"error":null,"detail":"ok","data":{"device_code":"TBDEVICESECRET","code":"123456","interval":5,"expires_in":600,"expires_at":"2026-10-17T12:00:00Z","verification_url":"https://torbox.app/oauth/device?app=Momotus","verification_url_complete":"https://torbox.app/oauth/device?app=Momotus&code=123456","friendly_verification_url":"https://tor.box/link"}}"#;
 const TB_PENDING: &str =
     r#"{"success":false,"error":"DEVICE_CODE_NOT_USED","detail":"wait","data":null}"#;
 
 #[tokio::test]
 async fn torbox_device_flow_ends_in_a_key() {
     let server = Server::start(vec![
-        route("GET", "/v1/api/user/auth/device/start", 200, TB_START).query("app=Marquee"),
+        route("GET", "/v1/api/user/auth/device/start", 200, TB_START).query("app=Momotus"),
         route("POST", "/v1/api/user/auth/device/token", 400, TB_PENDING).then(
             200,
             r#"{"success":true,"error":null,"detail":"ok","data":{"access_token":"TBKEY"}}"#,
@@ -87,7 +87,7 @@ async fn torbox_device_flow_ends_in_a_key() {
     assert_eq!(code.user_code, "123456");
     assert_eq!(
         code.qr,
-        "https://torbox.app/oauth/device?app=Marquee&code=123456"
+        "https://torbox.app/oauth/device?app=Momotus&code=123456"
     );
     assert!(!code.qr.contains("TBDEVICESECRET"));
     assert!(matches!(login.poll().await.unwrap(), LoginPoll::Pending));

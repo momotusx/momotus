@@ -300,8 +300,8 @@ struct SubtitleNote: Decodable, Hashable, Sendable {
     var words: String {
         switch problem {
         case "unreachable": "\(source) did not answer. Try its subtitles again in a moment."
-        case "blocked": "\(source) is turning requests away. Marquee will try again in a few minutes."
-        case "changed": "\(source) changed its pages, so Marquee cannot read them. An update will fix this."
+        case "blocked": "\(source) is turning requests away. Momotus will try again in a few minutes."
+        case "changed": "\(source) changed its pages, so Momotus cannot read them. An update will fix this."
         case "trackFailed": "This subtitle could not be read."
         default: "Subtitles from \(source) did not load."
         }

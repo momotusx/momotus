@@ -79,7 +79,7 @@ struct SyncJoinScreen: View {
         if kit, text.isEmpty { error = W.noKitEntered; return }
         // A live account is replaced only after the user says so.
         if sync.joined, !confirmed { replacing = true; return }
-        let device = name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Marquee" : name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let device = name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Momotus" : name.trimmingCharacters(in: .whitespacesAndNewlines)
         busy = true
         error = nil
         Task {

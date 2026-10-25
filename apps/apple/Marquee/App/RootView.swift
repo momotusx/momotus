@@ -477,10 +477,10 @@ struct Wordmark: View {
     var size: CGFloat = Theme.type.title3
 
     var body: some View {
-        Text("Marquee").display(size)
+        Text("Momotus").display(size)
         .foregroundStyle(Theme.Palette.text)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Marquee")
+        .accessibilityLabel("Momotus")
         .accessibilityAddTraits(.isHeader)
     }
 }
@@ -942,7 +942,7 @@ private struct CoreStopped: View {
 
     var body: some View {
         VStack(spacing: Theme.Space.m) {
-            Text("Marquee stopped")
+            Text("Momotus stopped")
                 .display(Theme.type.title1)
             Text(message)
                 .textFont(Theme.type.body)

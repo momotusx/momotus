@@ -39,13 +39,13 @@ object AccountCopy {
     const val USE_RECOVERY_KIT = "Use a recovery kit"
     const val USE_OWN_SERVER = "Use my own sync server"
     const val NOT_NOW = "Not now"
-    const val PASSKEY_HERE = "You have a Marquee passkey on this device"
-    const val CREATE_ACCOUNT = "Create your Marquee account"
-    const val ALREADY_USE = "I already use Marquee on another device"
+    const val PASSKEY_HERE = "You have a Momotus passkey on this device"
+    const val CREATE_ACCOUNT = "Create your Momotus account"
+    const val ALREADY_USE = "I already use Momotus on another device"
     const val LIBRARY_ADDED = "This device's library will be added to your account."
     const val CANT_USE_ANY = "I can't use any of these"
     const val TV_SIGN_IN = "Sign in with your phone"
-    const val TV_SIGN_IN_HOW = "On your phone, open Marquee and tap Sign in another device"
+    const val TV_SIGN_IN_HOW = "On your phone, open Momotus and tap Sign in another device"
     const val TV_WITHOUT_ACCOUNT = "Use without an account"
     const val SWITCH_PROFILE = "Switch profile"
     const val SIGN_IN_ANOTHER = "Sign in another device"
@@ -63,20 +63,20 @@ object AccountCopy {
     const val KIT_HERE = "Your passkey already works on this device."
     const val KIT_DROPPED = "This passkey was removed from your account. Save a new one."
     const val TOO_MANY_KITS = "Your account has 8 passkeys and recovery kits. Remove one first."
-    const val KIT_TAKEN = "This passkey belongs to another Marquee account. Save a new passkey."
+    const val KIT_TAKEN = "This passkey belongs to another Momotus account. Save a new passkey."
     const val PLAIN_LINK =
-        "Passkeys don't work on this page: its link to Marquee is not encrypted. Use the app on this " +
+        "Passkeys don't work on this page: its link to Momotus is not encrypted. Use the app on this " +
             "device."
     const val DEBRID_CONNECTED =
         "Your streaming service accounts are still connected here. Disconnect them, then try again."
     const val TRAKT_CONNECTED = "A profile is still signed in to Trakt here. Sign it out, then try again."
     const val UNLINK_ANYWAY = "Unlink anyway"
     const val DELETE_ANYWAY = "Delete anyway"
-    const val ACCOUNT_GONE = "Your Marquee account was deleted. Your library stays on this device."
+    const val ACCOUNT_GONE = "Your Momotus account was deleted. Your library stays on this device."
     val ACCOUNT_GONE_ACTIONS = listOf("Sign in", "Remove from this device", "OK")
     const val DELETION_SCHEDULED = "Your account will be deleted on {date}."
     const val DELETION_SCHEDULED_BY =
-        "Someone signed in with your {provider} account and asked to delete your Marquee account on " +
+        "Someone signed in with your {provider} account and asked to delete your Momotus account on " +
             "{date}. Not you? Cancel, and turn off {provider} sign-in."
     const val DELETION_CANCEL = "Cancel deletion"
     const val DELETION_CANCEL_UNLINK = "Cancel and turn off {provider} sign-in"
@@ -86,7 +86,7 @@ object AccountCopy {
     const val REMOVE_LIBRARY_ASK = "Remove your profiles and library from this device?"
     const val REMOVE_LIBRARY_DEBRID = "Also disconnect your streaming service accounts"
     val REPORT_LOST_REMOVE = listOf("Remove {n} device", "Remove {n} devices")
-    const val UNREACHABLE = "Marquee can't reach its sync service right now."
+    const val UNREACHABLE = "Momotus can't reach its sync service right now."
     val UNREACHABLE_ACTIONS = listOf("Try again", "Not now")
     const val NO_REDIRECT = "Didn't finish signing in?"
     val NO_REDIRECT_ACTIONS = listOf("Try again", "Other ways to sign in")
@@ -102,10 +102,10 @@ object AccountCopy {
     const val TICKET_EXPIRED = "Sign in again to finish."
     val TICKET_EXPIRED_ACTIONS = listOf("Continue")
     const val SIGNUP_LIMIT =
-        "This {providerAccount} has made several Marquee accounts lately. Try again later or use another " +
+        "This {providerAccount} has made several Momotus accounts lately. Try again later or use another " +
             "way."
     val SIGNUP_LIMIT_ACTIONS = listOf("Other ways to sign in")
-    const val LINKED_ELSEWHERE = "This {providerAccount} already signs in to another Marquee account."
+    const val LINKED_ELSEWHERE = "This {providerAccount} already signs in to another Momotus account."
     val LINKED_ELSEWHERE_ACTIONS = listOf("Use it for this account instead", "Cancel")
     const val BUSY = "Too many sign-ins from this network just now. Try again in a minute."
     const val OTHER_RELAY = "This sign-in finished for another sync service. Start again here."
@@ -113,12 +113,12 @@ object AccountCopy {
     val OTHER_RELAY_CODE_ACTIONS = listOf("Scan again")
     const val SIGN_IN_REFUSED = "The sign-in did not work. Try again or use another way."
     const val SIGN_IN_WINDOW = "Finish signing in in the window that opened."
-    const val POPUP_BLOCKED = "Your browser blocked the sign-in window. Allow pop-ups for Marquee, then try again."
-    const val RETURN_CLOSE = "You can close this window and go back to Marquee."
+    const val POPUP_BLOCKED = "Your browser blocked the sign-in window. Allow pop-ups for Momotus, then try again."
+    const val RETURN_CLOSE = "You can close this window and go back to Momotus."
     const val OWN_SERVER_LABEL = "Your sync server's address"
     const val OWN_SERVER_USE = "Use this sync server"
     const val FOUND_WEB =
-        "This sign-in already has a Marquee account. Scan this code with your phone, where Marquee is " +
+        "This sign-in already has a Momotus account. Scan this code with your phone, where Momotus is " +
             "signed in, to add this browser."
     const val START_OVER = "Start over"
     const val SIGNED_IN_WITH = "Signed in with"
@@ -127,7 +127,7 @@ object AccountCopy {
     const val UNLINK = "Unlink"
     const val SAVE_PASSKEY_HERE = "Save a passkey here"
     const val UNLINK_LAST = "Without a linked sign-in, you sign in with a passkey or another device."
-    const val APPLE_REVOKE_FAILED = "Apple did not confirm, so your Apple Account may still list Marquee."
+    const val APPLE_REVOKE_FAILED = "Apple did not confirm, so your Apple Account may still list Momotus."
     const val WIPING = "Removing your profiles and library"
     const val WIPE_FAILED = "Signed out, but your profiles and library are still on this device. Try again."
     const val SECOND_WAY_IN_TEXT =

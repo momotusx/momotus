@@ -99,13 +99,13 @@ enum SyncWords {
     static let deleteButton = "Delete account"
     static let deleteAsk = "Your profiles, library, progress and settings are deleted from the sync service. This device keeps its own copy."
     static let deleting = "Deleting"
-    static let accountGone = "Your Marquee account was deleted. Your library stays on this device."
+    static let accountGone = "Your Momotus account was deleted. Your library stays on this device."
     static let ok = "OK"
     static let forgetHere = "Forget it on this device"
     static let forgetHereText = "This device deletes the account's key from its Keychain. Your library stays here."
     static let keyUnreadable = "This device cannot read its sync key from the Keychain right now, so it cannot tell whether it syncs. Try again in a moment; if it keeps failing, restart the device."
-    static let keyLeftover = "A sync key from an earlier install of Marquee is still in this device's Keychain: Marquee could not delete it, so it does not use it. Try again."
-    static let keyLeft = "This device stopped syncing, but its sync key is still in the Keychain: Marquee could not delete it. Try again."
+    static let keyLeftover = "A sync key from an earlier install of Momotus is still in this device's Keychain: Momotus could not delete it, so it does not use it. Try again."
+    static let keyLeft = "This device stopped syncing, but its sync key is still in the Keychain: Momotus could not delete it. Try again."
     static let listStale = "This list and the 12 characters may be out of date: this device could not read the list again."
     static let removeStale = "The list could not be read again, so the recovery kits named here may be out of date. Try again before you remove."
     static let dismiss = "Dismiss"
@@ -136,7 +136,7 @@ enum SyncWords {
     static let copyHelp = "No camera? Copy the code, then paste it on the other device under Add a device."
     // Recovery kit
     static let kitLede = "A recovery kit gets your account back when you have none of your devices. Anyone who has it can join your account, so keep it somewhere private, like a password manager."
-    static let kitOnce = "Marquee shows the kit once and keeps no copy."
+    static let kitOnce = "Momotus shows the kit once and keeps no copy."
     static let makeKit = "Make the kit"
     static let makingKit = "Making the kit"
     static let kitShown = "Your recovery kit"
@@ -148,11 +148,11 @@ enum SyncWords {
     static let kitWaiting = "Your new recovery kit is not saved yet. Show it again and save it."
     static let showKitAgain = "Show the kit"
     static let kitAskShow = "The kit is shown again only after your passcode, Face ID or Touch ID."
-    static let kitUnseen = "A recovery kit was made here and not said saved before Marquee let go of it (when the app closed, or five minutes after you left its page), so it cannot be shown again. Make a new one: Marquee removes the unseen one."
-    static let kitExpired = "A recovery kit was made here and left unsaved for five minutes after you left its page, so Marquee let go of it and cannot show it again. Make a new one: Marquee removes the unseen one."
+    static let kitUnseen = "A recovery kit was made here and not said saved before Momotus let go of it (when the app closed, or five minutes after you left its page), so it cannot be shown again. Make a new one: Momotus removes the unseen one."
+    static let kitExpired = "A recovery kit was made here and left unsaved for five minutes after you left its page, so Momotus let go of it and cannot show it again. Make a new one: Momotus removes the unseen one."
     static let makeNewKit = "Make a new kit"
-    static let kitIdUnknown = "Marquee could not tell which recovery kit in the device list is this one. If you do not save it, check the recovery kits in the list."
-    static let kitUnseenUnknown = "A recovery kit was made here and never said saved, and Marquee cannot tell which one it is. Check the recovery kits in the list and remove those you do not hold."
+    static let kitIdUnknown = "Momotus could not tell which recovery kit in the device list is this one. If you do not save it, check the recovery kits in the list."
+    static let kitUnseenUnknown = "A recovery kit was made here and never said saved, and Momotus cannot tell which one it is. Check the recovery kits in the list and remove those you do not hold."
     static let checked = "I checked"
     static let macCapture = "Screen recording and screen sharing can capture what this window shows. So on a Mac the kit shows for 20 seconds after you confirm it is you, and Hold to show works for a minute after that."
     static let kitHidden = "Hidden. Press and hold Hold to show, or choose Show for 20 seconds."
@@ -208,7 +208,7 @@ enum SyncWords {
         let parts = [
             failed.refused > 0 ? "\(count(failed.refused, "edit", "edits")) from this device could not be sent and \(failed.refused == 1 ? "stays" : "stay") here only" : nil,
             failed.unreadable > 0 ? "\(count(failed.unreadable, "change", "changes")) from other devices could not be read" : nil,
-            failed.newer > 0 ? "\(count(failed.newer, "change", "changes")) from a newer version of Marquee \(failed.newer == 1 ? "waits" : "wait") for an update here" : nil,
+            failed.newer > 0 ? "\(count(failed.newer, "change", "changes")) from a newer version of Momotus \(failed.newer == 1 ? "waits" : "wait") for an update here" : nil,
         ].compactMap { $0 }
         return parts.isEmpty ? nil : "Since this device joined, \(parts.joined(separator: ", and "))."
     }
@@ -296,7 +296,7 @@ struct SyncProblem: Equatable {
         case "storage": return "This device could not store the sync account's key, so sync is paused. Free some storage, then sync again."
         case "unconfirmed":
             return action == .differ ? "The approval is still open: this device did not confirm it is you." : "Nothing changed: this device did not confirm it is you."
-        case "noPasscode": return "Set a device passcode first: Marquee asks for it before changing your devices or making a kit."
+        case "noPasscode": return "Set a device passcode first: Momotus asks for it before changing your devices or making a kit."
         case "keyUnreadable": return SyncWords.keyUnreadable
         // A kit, a passkey or a wipe is the main profile's (D13, D17).
         case "notOwner": return "Only the main profile can do that."
@@ -368,7 +368,7 @@ extension SyncReport {
             notes.append("\(unreadable == 1 ? "1 change" : "\(unreadable) changes") from another device did not open with this account's key and were skipped.")
         }
         if newer > 0 {
-            notes.append("\(newer == 1 ? "1 change comes" : "\(newer) changes come") from a newer version of Marquee. Update the app to see \(newer == 1 ? "it" : "them").")
+            notes.append("\(newer == 1 ? "1 change comes" : "\(newer) changes come") from a newer version of Momotus. Update the app to see \(newer == 1 ? "it" : "them").")
         }
         switch blocked {
         case "rotationPending": notes.append("Edits wait until the account finishes a device change.")

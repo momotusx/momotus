@@ -217,7 +217,7 @@ struct ProfilePicker: View {
     private func ownerNote(_ target: ProfileInfo, _ snapshot: ProfilesSnapshot) -> String? {
         guard target.isOwner else { return nil }
         #if os(tvOS)
-        return "Forgot the PIN? Reset it from Marquee on your phone or Mac. This device gets the change at its next sync."
+        return "Forgot the PIN? Reset it from Momotus on your phone or Mac. This device gets the change at its next sync."
         #else
         return "Forgot the PIN?"
         #endif

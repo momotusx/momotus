@@ -219,7 +219,7 @@ class SyncAccountTest {
             until("forgotten") { !sync.joined }
             assertNull(store.held)
             assertEquals(SyncAccount.GONE, sync.problem?.code)
-            assertEquals("Your Marquee account was deleted. Your library stays on this device.", sync.problem?.words)
+            assertEquals("Your Momotus account was deleted. Your library stays on this device.", sync.problem?.words)
             assertEquals(listOf(true), kept.toList())
             // The next launch says it again.
             val restarted = SyncAccount(CoreOps(client), Store(null), scope, io = Dispatchers.IO, goneAtStart = true)

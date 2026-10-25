@@ -14,7 +14,7 @@ object FindAddonsCopy {
             "Home on all your devices."
     const val CONFIGURE_HELP = "Set it up on its website, copy the link it gives you, then paste it here."
     const val CONFIGURE_TV =
-        "Set it up on its website, then add the link in Marquee on your phone or computer. With sync on, it " +
+        "Set it up on its website, then add the link in Momotus on your phone or computer. With sync on, it " +
             "follows you here."
     const val PASTE_LINK = "Paste a link"
     const val LIST_LABEL = "List"

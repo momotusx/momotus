@@ -126,7 +126,7 @@ test("a delete keeps the account until the sync server confirmed it, then forget
   deletes()[1]?.answer({});
   await deleting;
   expect(sync.joined()).toBe(false);
-  expect(sync.notice()).toBe("Your Marquee account was deleted. Your library stays on this device.");
+  expect(sync.notice()).toBe("Your Momotus account was deleted. Your library stays on this device.");
 });
 
 test("accountGone from a round forgets the account and keeps the line until OK", async () => {
@@ -137,7 +137,7 @@ test("accountGone from a round forgets the account and keeps the line until OK",
     goneNext = true;
     await sync.syncNow();
     expect(sync.joined()).toBe(false);
-    expect(sync.problem()).toEqual({ code: "accountGone", words: "Your Marquee account was deleted. Your library stays on this device." });
+    expect(sync.problem()).toEqual({ code: "accountGone", words: "Your Momotus account was deleted. Your library stays on this device." });
     // Kept for the next load of the page, until OK.
     expect(kept.get("mq.syncGone")).toBe("1");
     sync.clearProblem();

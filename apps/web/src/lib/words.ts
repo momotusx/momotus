@@ -78,9 +78,9 @@ export function subtitleNote({ source, problem }: SubtitleNote): string {
     case "unreachable":
       return `${source} did not answer. Try its subtitles again in a moment.`;
     case "blocked":
-      return `${source} is turning requests away. Marquee will try again in a few minutes.`;
+      return `${source} is turning requests away. Momotus will try again in a few minutes.`;
     case "changed":
-      return `${source} changed its pages, so Marquee cannot read them. An update will fix this.`;
+      return `${source} changed its pages, so Momotus cannot read them. An update will fix this.`;
     case "trackFailed":
       return "This subtitle could not be read.";
   }
@@ -157,7 +157,7 @@ export function plainAddress(url: string): boolean {
 /** A pasted link whose settings carry a sign-in (`tokenInLink`). */
 /** Where an addon runs, shown instead of its host: the core reads a
  * built-in source itself (`AddonInfo.builtIn`). */
-export const addonHost = (a: { builtIn: boolean; host: string }) => (a.builtIn ? "Built into Marquee, runs on this device" : a.host);
+export const addonHost = (a: { builtIn: boolean; host: string }) => (a.builtIn ? "Built into Momotus, runs on this device" : a.host);
 
 /** Settings, About: the built-in source's credit (plans/m13-turkcealtyazi.md 7). */
 export const turkceAltyaziCredit = "Turkish subtitles from TurkceAltyazi.org, fetched by this device when you play.";
@@ -222,7 +222,7 @@ export const findAddons = {
   lede: "Most of these add subtitles and catalogs. Sources usually come as a link from the addon's own website.",
   community: "Community addons are made by other people. They see what you open in them, and their catalogs show on Home on all your devices.",
   configureHelp: "Set it up on its website, copy the link it gives you, then paste it here.",
-  configureTv: "Set it up on its website, then add the link in Marquee on your phone or computer. With sync on, it follows you here.",
+  configureTv: "Set it up on its website, then add the link in Momotus on your phone or computer. With sync on, it follows you here.",
   pasteLink: "Paste a link",
   listLabel: "List",
   official: "Official",
@@ -285,7 +285,7 @@ export const syncWords = {
   recovering: "Joining",
   wrongKit: "The sync server does not know this kit. Check the letters and try again.",
   alreadyJoined: "This device already syncs. To join another account, stop syncing here first.",
-  plainLink: "Sync is off on this page: its link to Marquee's core is not encrypted. Open Marquee on the computer that runs the core, or use the app.",
+  plainLink: "Sync is off on this page: its link to Momotus's core is not encrypted. Open Momotus on the computer that runs the core, or use the app.",
   syncNow: "Sync now",
   syncing: "Syncing",
   notSynced: "Not synced yet",
@@ -327,7 +327,7 @@ export const syncWords = {
   deleteButton: "Delete account",
   deleteAsk: "Your profiles, library, progress and settings are deleted from the sync service. This device keeps its own copy.",
   deleting: "Deleting",
-  accountGone: "Your Marquee account was deleted. Your library stays on this device.",
+  accountGone: "Your Momotus account was deleted. Your library stays on this device.",
   ok: "OK",
   // A different device list on the server
   useServer: "Compare device lists",
@@ -373,12 +373,12 @@ export const syncWords = {
   kitLede: "A recovery kit gets your account back when you have none of your devices. Anyone who has it can join your account, so keep it somewhere private, like a password manager.",
   kitFirst: "Your account is ready. Make its recovery kit now: without one, losing this device means losing what it syncs.",
   later: "Later",
-  kitOnce: "Marquee shows the kit once and keeps no copy.",
+  kitOnce: "Momotus shows the kit once and keeps no copy.",
   makeKit: "Make the kit",
   makingKit: "Making the kit",
   kitShown: "Your recovery kit",
   kitWarning: "Save it now. It is not shown again, and anyone who has it can join your account.",
-  kitClipboard: "The kit is on your clipboard. Paste it into your password manager now: Marquee empties the clipboard when you leave this page.",
+  kitClipboard: "The kit is on your clipboard. Paste it into your password manager now: Momotus empties the clipboard when you leave this page.",
   copyKit: "Copy",
   savedKit: "I saved it",
   // Remove and report lost
@@ -563,7 +563,7 @@ export function reportNotes(r: Facts): string[] {
   if (r.refused > 0)
     notes.push(`${r.refused === 1 ? "1 edit" : `${r.refused} edits`} from this device could not be sent: the sync server does not take ${r.refused === 1 ? "it" : "them"}, so ${r.refused === 1 ? "it stays" : "they stay"} on this device only.`);
   if (r.unreadable > 0) notes.push(`${r.unreadable === 1 ? "1 change from another device" : `${r.unreadable} changes from other devices`} could not be read and ${r.unreadable === 1 ? "was" : "were"} skipped.`);
-  if (r.newer > 0) notes.push(`${r.newer === 1 ? "1 change comes" : `${r.newer} changes come`} from a newer version of Marquee. Update Marquee here to see ${r.newer === 1 ? "it" : "them"}.`);
+  if (r.newer > 0) notes.push(`${r.newer === 1 ? "1 change comes" : `${r.newer} changes come`} from a newer version of Momotus. Update Momotus here to see ${r.newer === 1 ? "it" : "them"}.`);
   const gap = Math.abs(r.clockGapMs);
   if (gap > 600_000) {
     const minutes = Math.round(gap / 60_000);
@@ -588,7 +588,7 @@ export function failedSince(refused: number, unreadable: number, newer = 0): str
   const parts = [
     refused ? `${count(refused, "edit", "edits")} from this device could not be sent and stay${refused === 1 ? "s" : ""} here only` : "",
     unreadable ? `${count(unreadable, "change", "changes")} from other devices could not be read` : "",
-    newer ? `${count(newer, "change", "changes")} from a newer version of Marquee wait${newer === 1 ? "s" : ""} for an update here` : "",
+    newer ? `${count(newer, "change", "changes")} from a newer version of Momotus wait${newer === 1 ? "s" : ""} for an update here` : "",
   ].filter(Boolean);
   return parts.length ? `Since this device joined, ${parts.join(", and ")}.` : null;
 }
@@ -857,8 +857,8 @@ export function problemWords(reason: string): { text: string; raw: string | null
   }
   if (/^timed out/i.test(r)) return said("It did not answer in time. Check the connection, then try again.");
   if (/^network:/i.test(r)) return said("It could not be reached. Check the connection, then try again.");
-  if (/^(decode:|response larger than)/i.test(r)) return said("It sent something Marquee cannot read.");
-  if (/^blocked private address/i.test(r)) return said("It points to a private network address, which Marquee does not open.");
+  if (/^(decode:|response larger than)/i.test(r)) return said("It sent something Momotus cannot read.");
+  if (/^blocked private address/i.test(r)) return said("It points to a private network address, which Momotus does not open.");
   if (/^addon returned no catalog items/i.test(r)) return said("It sent an empty list.");
   return { text: r, raw: null };
 }

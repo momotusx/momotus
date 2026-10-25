@@ -101,7 +101,7 @@ class FindAddonsTest {
         )
         val plexio = entry(name = "Plexio", provides = listOf("stream"), configuration = Configuration.Required)
         assertEquals(
-            "Plexio, streams. Set it up on its website, then add the link in Marquee on your phone or computer. " +
+            "Plexio, streams. Set it up on its website, then add the link in Momotus on your phone or computer. " +
                 "With sync on, it follows you here.",
             FindAddons.described(plexio, Action.None(""), false, help = FindAddonsCopy.CONFIGURE_TV),
         )

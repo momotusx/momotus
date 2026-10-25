@@ -181,8 +181,8 @@ export async function enable(record: SyncRecord): Promise<void> {
   try {
     made = (await navigator.credentials.create({
       publicKey: {
-        rp: { name: "Marquee" },
-        user: { id: random(16), name: "Marquee sync", displayName: "Marquee sync" },
+        rp: { name: "Momotus" },
+        user: { id: random(16), name: "Momotus sync", displayName: "Momotus sync" },
         challenge: random(32),
         pubKeyCredParams: [
           { type: "public-key", alg: -7 },

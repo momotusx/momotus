@@ -5,7 +5,7 @@ import app.marquee.core.model.AddonInfo
 /** Settings' addon words (plans/m13-turkcealtyazi.md 6.1), as the web's `addonHost` and `turkceAltyaziCredit`. */
 object AddonsCopy {
     /** In place of the host on a row the core runs itself (TurkceAltyazi.org). */
-    const val BUILT_IN = "Built into Marquee, runs on this device"
+    const val BUILT_IN = "Built into Momotus, runs on this device"
 
     /** Settings, About: always shown. */
     const val TURKCEALTYAZI_CREDIT =

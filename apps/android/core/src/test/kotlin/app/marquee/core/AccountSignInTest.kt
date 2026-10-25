@@ -236,7 +236,7 @@ class AccountSignInTest {
                 .jsonPrimitive.content,
         )
         assertEquals(
-            "Robin (Marquee)",
+            "Robin (Momotus)",
             made
                 .getValue("user")
                 .jsonObject
@@ -296,7 +296,7 @@ class AccountSignInTest {
     }
 
     @Test
-    fun `new with a Marquee passkey here signs in with it and links the identity`() {
+    fun `new with a Momotus passkey here signs in with it and links the identity`() {
         platform.get = { PasskeyResult.Used("cred", "QUNDT1VOVA", "cHJm") }
         val s = signIn()
         ready(s)
@@ -355,7 +355,7 @@ class AccountSignInTest {
     }
 
     @Test
-    fun `I already use Marquee links the new identity once the QR joined, a found one is not linked again`() {
+    fun `I already use Momotus links the new identity once the QR joined, a found one is not linked again`() {
         val s = signIn()
         ready(s)
         broker(s, """{"phase":"new","ticket":"T4"}""")

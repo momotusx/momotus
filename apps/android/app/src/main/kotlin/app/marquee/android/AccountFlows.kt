@@ -104,7 +104,7 @@ class AccountFlows(
         app.profiles.snapshot
             ?.profiles
             ?.firstOrNull { it.isOwner }
-            ?.name ?: "Marquee"
+            ?.name ?: "Momotus"
 
     private fun profileIds(): List<String> =
         app.profiles.snapshot

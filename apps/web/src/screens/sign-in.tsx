@@ -133,7 +133,7 @@ function Frame(props: { label: string; children: JSX.Element }) {
   return (
     <main class="welcome page" data-vscroll>
       <header class="welcome-head">
-        <div class="brand">Marquee</div>
+        <div class="brand">Momotus</div>
       </header>
       <section class="step-body" aria-label={props.label}>
         {props.children}
@@ -213,7 +213,7 @@ export default function SignInScreen() {
     <Show when={!sync.joined()} fallback={<Navigate href="/sync" />}>
       <main class="welcome page" data-vscroll>
         <header class="welcome-head">
-          <div class="brand">Marquee</div>
+          <div class="brand">Momotus</div>
         </header>
         <SignInStart from={fromOf(q)} doors={() => <Navigate href="/sync" />} />
       </main>

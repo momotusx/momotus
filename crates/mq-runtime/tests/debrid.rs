@@ -306,7 +306,7 @@ async fn alldebrid_first_poll_waits_5_s() {
     );
 }
 
-const TB_START: &str = r#"{"success":true,"error":null,"detail":"ok","data":{"device_code":"TBDEVICE","code":"123456","interval":1,"expires_in":600,"verification_url":"https://torbox.app/oauth/device?app=Marquee","verification_url_complete":"https://torbox.app/oauth/device?app=Marquee&code=123456"}}"#;
+const TB_START: &str = r#"{"success":true,"error":null,"detail":"ok","data":{"device_code":"TBDEVICE","code":"123456","interval":1,"expires_in":600,"verification_url":"https://torbox.app/oauth/device?app=Momotus","verification_url_complete":"https://torbox.app/oauth/device?app=Momotus&code=123456"}}"#;
 const TB_PENDING: &str =
     r#"{"success":false,"error":"DEVICE_CODE_NOT_USED","detail":"wait","data":null}"#;
 const TB_PATH: &str = "/v1/api/user/auth/device/token";

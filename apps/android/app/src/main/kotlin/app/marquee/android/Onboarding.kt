@@ -115,7 +115,7 @@ fun OnboardingScreen(
         verticalArrangement = Arrangement.spacedBy(Marquee.space.l),
     ) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            MqText("Marquee", role = TextRole.Title2, modifier = Modifier.weight(1f))
+            MqText("Momotus", role = TextRole.Title2, modifier = Modifier.weight(1f))
             SkipLink("Browse first", onDefaults)
         }
         // Scrolls when it does not fit (a small phone at a large font scale); centered when it does.
@@ -152,7 +152,7 @@ fun OnboardingScreen(
                     )
                     onPair?.let {
                         Door(
-                            "I already use Marquee",
+                            "I already use Momotus",
                             "Join your other device's sync account with a code. Library and addons follow.",
                             Icons.QrCode,
                             it,
@@ -214,7 +214,7 @@ fun StreamQuestionScreen(
         verticalArrangement = Arrangement.spacedBy(Marquee.space.l),
     ) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            MqText("Marquee", role = TextRole.Title2, modifier = Modifier.weight(1f))
+            MqText("Momotus", role = TextRole.Title2, modifier = Modifier.weight(1f))
             SkipLink(StreamChoiceCopy.SKIP, onDone)
         }
         // In the middle of the screen when it fits, as the first step; it scrolls when it does not.
@@ -325,7 +325,7 @@ internal fun SubtitleStepPage(
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            MqText("Marquee", role = TextRole.Title2, modifier = Modifier.weight(1f))
+            MqText("Momotus", role = TextRole.Title2, modifier = Modifier.weight(1f))
             // Not while Continue saves: the step leaves once.
             SkipLink(SubtitleStep.SKIP, { if (!step.busy) onDone() })
         }

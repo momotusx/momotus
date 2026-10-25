@@ -195,7 +195,7 @@ class AccountActionsTest {
         core.waitFor("run") { actions.run != null }
         finish("signIn", """{"phase":"found","ticket":"T9","account":"OTHER"}""")
         core.waitFor("asked") { actions.failure != null }
-        assertEquals("This Google account already signs in to another Marquee account.", actions.failure!!.text)
+        assertEquals("This Google account already signs in to another Momotus account.", actions.failure!!.text)
         actions.goOn()
         core.waitFor("moved") {
             core.asked.any {

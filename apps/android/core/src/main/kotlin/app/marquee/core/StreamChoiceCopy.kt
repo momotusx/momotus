@@ -117,7 +117,7 @@ object StreamChoiceCopy {
                 LineWords(
                     warn,
                     "Large file",
-                    listOf("{size}; Marquee prefers files up to {limit}"),
+                    listOf("{size}; Momotus prefers files up to {limit}"),
                     textChosen = "Larger than the size you chose",
                 ),
             "few" to LineWords(warn, "May start slowly", listOf("shared by {people}")),
@@ -154,7 +154,7 @@ object StreamChoiceCopy {
             // Said quietly, with no action: an account is set up in Settings only.
             BlockedReason.NeedsAccount to ("Found {versions}, but none plays on this device." to null),
             BlockedReason.NoSpace to
-                ("Marquee found {versions}, but this device is nearly full, so none can play here." to "Show them"),
+                ("Momotus found {versions}, but this device is nearly full, so none can play here." to "Show them"),
             BlockedReason.NothingPlaysHere to ("Found {versions}, but none plays on this device." to "Show them"),
         )
 
@@ -249,23 +249,23 @@ object StreamChoiceCopy {
         mapOf(
             LearnedChoice.Size to
                 UpDown(
-                    "On {device} you often picked bigger files, so Marquee now picks files up to {limit}.",
-                    "On {device} you often picked smaller files, so Marquee now picks files up to {limit}.",
+                    "On {device} you often picked bigger files, so Momotus now picks files up to {limit}.",
+                    "On {device} you often picked smaller files, so Momotus now picks files up to {limit}.",
                 ),
             LearnedChoice.Height to
                 UpDown(
-                    "On {device} you often picked sharper versions, so Marquee now picks up to {height}.",
-                    "On {device} you often picked lower resolutions, so Marquee now picks up to {height}.",
+                    "On {device} you often picked sharper versions, so Momotus now picks up to {height}.",
+                    "On {device} you often picked lower resolutions, so Momotus now picks up to {height}.",
                 ),
             LearnedChoice.Ready to
                 UpDown(
-                    "On {device} you often picked files ready on your streaming service, so Marquee now prefers them.",
-                    "On {device} you often picked torrents over ready files, so Marquee now treats them like the rest.",
+                    "On {device} you often picked files ready on your streaming service, so Momotus now prefers them.",
+                    "On {device} you often picked torrents over ready files, so Momotus now treats them like the rest.",
                 ),
             LearnedChoice.Hdr to
                 UpDown(
-                    "On {device} you often picked HDR versions, so Marquee now prefers HDR.",
-                    "On {device} you often picked versions without HDR, so Marquee now leaves HDR off.",
+                    "On {device} you often picked HDR versions, so Momotus now prefers HDR.",
+                    "On {device} you often picked versions without HDR, so Momotus now leaves HDR off.",
                 ),
         )
     const val UNDO = "Undo"
@@ -297,7 +297,7 @@ object StreamChoiceCopy {
             480 to "SD screens",
         )
 
-    const val QUESTION_TITLE = "How should Marquee pick what to play?"
+    const val QUESTION_TITLE = "How should Momotus pick what to play?"
     const val QUESTION_LEAD = "You can change this later in Settings, under Stream choice."
     val FAST = Answer("Start fast", "Smaller files that many people share. Starts in seconds.", 5 * GIB, 50)
     val BEST = Answer("Best quality", "The best version your screen and connection can play.", null, 20)
@@ -308,7 +308,7 @@ object StreamChoiceCopy {
 
     const val TITLE = "Stream choice"
     const val LEDE =
-        "How Marquee picks the version to play. Every version stays in the list, so you can always pick another."
+        "How Momotus picks the version to play. Every version stays in the list, so you can always pick another."
     const val SUMMARY = "{size}, shared by at least {people}"
     val SIZE =
         Setting(

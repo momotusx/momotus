@@ -602,7 +602,7 @@ private func golden<T: Decodable>(_ name: String, as type: T.Type) throws -> T {
     // A ready file: "2 GB, ready now" says both parts.
     #expect(VersionWords.sheetDetails(try r(#"{"kind": "ready", "service": null, "sizeBytes": \#(2 * gib)}"#, status: #"{"kind": "ready", "service": null}"#, size: 2 * gib)) == "")
     // On this device: the size limit stays, as the face does not say it.
-    #expect(VersionWords.sheetDetails(try r(#"{"kind": "large", "sizeBytes": \#(4 * gib), "limitBytes": \#(2 * gib), "chosen": false}"#, status: #"{"kind": "direct"}"#, onDevice: "On this device")) == "4 GB; Marquee prefers files up to 2 GB")
+    #expect(VersionWords.sheetDetails(try r(#"{"kind": "large", "sizeBytes": \#(4 * gib), "limitBytes": \#(2 * gib), "chosen": false}"#, status: #"{"kind": "direct"}"#, onDevice: "On this device")) == "4 GB; Momotus prefers files up to 2 GB")
     // A part is said only whole: "14 GB" does not say "4 GB".
     #expect(VersionWords.says("14 GB, shared by 89 people", "4 GB") == false)
     #expect(VersionWords.says("1.4 GB, shared by 89 people", "4 GB") == false)

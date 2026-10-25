@@ -955,7 +955,7 @@ function JoinForm(props: { kit: boolean }) {
     setBusy(true);
     setError(null);
     try {
-      const n = name().trim() || "Marquee";
+      const n = name().trim() || "Momotus";
       if (props.kit) await sync.recover(s, extra().trim(), n);
       else await sync.createAccount(s, n, extra().trim());
       sync.rememberJoin(s, n);

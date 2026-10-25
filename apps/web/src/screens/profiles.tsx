@@ -291,7 +291,7 @@ export function Picker(props: { mode: "start" | "locked" | "switch" }) {
   const manages = () => props.mode === "switch" && owner() && !locked();
   const canAdd = () => manages() && (s()?.profiles.length ?? 0) < (s()?.max ?? 0);
   const forgot = () =>
-    target()?.isOwner ? "Forgot the PIN? Reset it from Marquee on your phone or TV, in Settings, Profiles. This device gets the change at its next sync." : undefined;
+    target()?.isOwner ? "Forgot the PIN? Reset it from Momotus on your phone or TV, in Settings, Profiles. This device gets the change at its next sync." : undefined;
 
   return (
     <main class="profiles page" data-vscroll>

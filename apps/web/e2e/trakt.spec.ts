@@ -249,7 +249,7 @@ test.describe.serial("Trakt on the web", () => {
   test("a build without a Trakt app says so and offers nothing to press", async () => {
     await go(plain, "/trakt");
     await expect(card(plain)).toHaveAttribute("data-state", "notConfigured");
-    await expect(card(plain)).toContainText("Trakt is not set up in this build of Marquee");
+    await expect(card(plain)).toContainText("Trakt is not set up in this build of Momotus");
     await expect(card(plain).locator("button")).toHaveCount(0);
     // The one way on, focused for the remote.
     await expect.poll(() => plain.evaluate(() => (document.activeElement as HTMLElement | null)?.dataset.f)).toBe("trakt:back");

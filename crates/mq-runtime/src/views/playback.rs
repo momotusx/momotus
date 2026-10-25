@@ -1981,7 +1981,7 @@ fn out_of_budget(s: &mut State) {
     if s.retry_until.is_some() {
         s.snapshot.attempts.push(Attempt {
             key: String::new(),
-            via: "Marquee".into(),
+            via: "Momotus".into(),
             error: RETRY_GAVE_UP.into(),
         });
     }
@@ -2238,7 +2238,7 @@ async fn resolve_next(
             let mut s = lock(&state);
             s.snapshot.attempts.push(Attempt {
                 key: String::new(),
-                via: "Marquee".into(),
+                via: "Momotus".into(),
                 error: format!("local stream server did not start: {e}"),
             });
             failed(&mut s);

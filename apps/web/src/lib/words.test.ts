@@ -53,8 +53,8 @@ test("pairing keeps the core's own reasons and never shows an address", () => {
 test("a subtitle note names its source and what to do", () => {
   const say = (problem: Parameters<typeof subtitleNote>[0]["problem"]) => subtitleNote({ source: "OpenSubtitles v3", problem });
   expect(say("unreachable")).toBe("OpenSubtitles v3 did not answer. Try its subtitles again in a moment.");
-  expect(say("blocked")).toBe("OpenSubtitles v3 is turning requests away. Marquee will try again in a few minutes.");
-  expect(say("changed")).toBe("OpenSubtitles v3 changed its pages, so Marquee cannot read them. An update will fix this.");
+  expect(say("blocked")).toBe("OpenSubtitles v3 is turning requests away. Momotus will try again in a few minutes.");
+  expect(say("changed")).toBe("OpenSubtitles v3 changed its pages, so Momotus cannot read them. An update will fix this.");
   expect(say("trackFailed")).toBe("This subtitle could not be read.");
 });
 
@@ -100,7 +100,7 @@ test("a detail with an unknown number is left out, never shown with a gap", () =
 
 test("a large file says whether the size was the user's choice", () => {
   const large: ReasonLine = { kind: "large", sizeBytes: 7.4 * GiB, limitBytes: 5 * GiB, chosen: false };
-  expect(lineWords(large)).toEqual({ tone: "warn", text: "Large file", details: "7.4 GB; Marquee prefers files up to 5 GB" });
+  expect(lineWords(large)).toEqual({ tone: "warn", text: "Large file", details: "7.4 GB; Momotus prefers files up to 5 GB" });
   expect(lineWords({ ...large, chosen: true }).text).toBe("Larger than the size you chose");
 });
 
@@ -161,9 +161,9 @@ test("the device line reads as one sentence, leaving out what is not known", () 
 });
 
 test("a learned note names the device and the preferences now in effect", () => {
-  expect(learnedNote("size", true, "tv", { sizeLimitBytes: 10 * GiB, maxHeight: null })).toBe("On this TV you often picked bigger files, so Marquee now picks files up to 10 GB.");
-  expect(learnedNote("height", false, "phone", { sizeLimitBytes: null, maxHeight: 720 })).toBe("On this phone you often picked lower resolutions, so Marquee now picks up to 720p.");
-  expect(learnedNote("hdr", true, "desktop", { sizeLimitBytes: null, maxHeight: null })).toBe("On this computer you often picked HDR versions, so Marquee now prefers HDR.");
+  expect(learnedNote("size", true, "tv", { sizeLimitBytes: 10 * GiB, maxHeight: null })).toBe("On this TV you often picked bigger files, so Momotus now picks files up to 10 GB.");
+  expect(learnedNote("height", false, "phone", { sizeLimitBytes: null, maxHeight: 720 })).toBe("On this phone you often picked lower resolutions, so Momotus now picks up to 720p.");
+  expect(learnedNote("hdr", true, "desktop", { sizeLimitBytes: null, maxHeight: null })).toBe("On this computer you often picked HDR versions, so Momotus now prefers HDR.");
   // No number to name: no note rather than a gap.
   expect(learnedNote("size", true, "tv", { sizeLimitBytes: null, maxHeight: null })).toBeNull();
 });
@@ -202,7 +202,7 @@ test("a display's lines fall into the core's screen classes", () => {
 });
 
 test("a built-in source says where it runs instead of a host", () => {
-  expect(addonHost({ builtIn: true, host: "5a0d1888fa64-turkcealtyaziorg.baby-beamup.club" })).toBe("Built into Marquee, runs on this device");
+  expect(addonHost({ builtIn: true, host: "5a0d1888fa64-turkcealtyaziorg.baby-beamup.club" })).toBe("Built into Momotus, runs on this device");
   expect(addonHost({ builtIn: false, host: "v3-cinemeta.strem.io" })).toBe("v3-cinemeta.strem.io");
 });
 
@@ -233,7 +233,7 @@ test("raw reasons read as sentences, the raw text kept", () => {
   expect(problemWords("http status 429").text).toBe("It is busy; try again soon (429).");
   expect(problemWords("http status 502").text).toBe("It had an error on its side (502).");
   expect(problemWords("http status 400").text).toBe("It answered with an error (400).");
-  expect(problemWords("decode: expected value at line 1").text).toBe("It sent something Marquee cannot read.");
+  expect(problemWords("decode: expected value at line 1").text).toBe("It sent something Momotus cannot read.");
   expect(problemWords("addon returned no catalog items").text).toBe("It sent an empty list.");
   // The core's own sentences stay as they are.
   expect(problemWords("Cinemeta did not answer in time")).toEqual({ text: "Cinemeta did not answer in time", raw: null });
@@ -278,7 +278,7 @@ test("the sheet says nothing twice: it drops each part the face says, and keeps 
   expect(sheetDetails(row({ kind: "ready", service: null, sizeBytes: 2 * GiB }, null, { kind: "ready", service: null }))).toBeNull();
   // "On this device" names no people and no limit: they stay, the size goes.
   expect(sheetDetails(row({ kind: "quick", seeders: 1204, sizeBytes: 2 * GiB }, "On this device"))).toBe("Shared by 1,204 people");
-  expect(sheetDetails(row({ kind: "large", sizeBytes: 7.4 * GiB, limitBytes: 5 * GiB, chosen: false }, "On this device", { kind: "direct" }, 7.4 * GiB))).toBe("7.4 GB; Marquee prefers files up to 5 GB");
+  expect(sheetDetails(row({ kind: "large", sizeBytes: 7.4 * GiB, limitBytes: 5 * GiB, chosen: false }, "On this device", { kind: "direct" }, 7.4 * GiB))).toBe("7.4 GB; Momotus prefers files up to 5 GB");
   // "117 MB, may not start" says no people: they follow.
   expect(sheetDetails(row({ kind: "veryFew", seeders: 2 }))).toBe("Shared by 2 people");
   // A part is said only whole: "14 GB" and "1.4 GB" do not say "4 GB".

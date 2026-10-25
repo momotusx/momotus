@@ -388,7 +388,7 @@ export default function Home() {
           {(s) => (
             <section class="problem home-problem">
               <CircleAlert aria-hidden class="problem-icon" />
-              <h2>Marquee cannot reach its core</h2>
+              <h2>Momotus cannot reach its core</h2>
               <p>{"reason" in s() ? (s() as { reason: string }).reason : ""}</p>
               <button class="btn primary" data-f="home:retry" data-autofocus onClick={() => location.reload()}>
                 <RefreshCw aria-hidden />
@@ -406,7 +406,7 @@ export default function Home() {
               {/* Past first run: the recommended addons to switch, not the first-run doors. */}
               <A class="btn primary" href={addons.state.data?.fresh ? "/welcome" : "/welcome?step=2&review=1"} data-f="home:setup" data-autofocus>
                 <Wrench aria-hidden />
-                Set up Marquee
+                Set up Momotus
               </A>
               <A class="btn" href="/addons" data-f="home:addons">
                 <Puzzle aria-hidden />
@@ -421,7 +421,7 @@ export default function Home() {
           fallback={
             <>
               {/* Under Continue Watching, or first when there is none; an empty
-                  Home already offers Set up Marquee, so not beside it. */}
+                  Home already offers Set up Momotus, so not beside it. */}
               <Show when={!hasContinue() && !empty()}>
                 <DefaultsCard />
               </Show>

@@ -5,20 +5,20 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="referrer" content="no-referrer" />
     <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'self'; base-uri 'none'; form-action 'none'" />
-    <title>Marquee privacy</title>
+    <title>Momotus privacy</title>
     <link rel="stylesheet" href="/linkhost.css" />
   </head>
   <body>
     <main>
-      <h1>Marquee privacy</h1>
-      <p>This page covers Marquee's sync service, the server your devices use to keep your library the same everywhere. Marquee works without it: an account is optional.</p>
+      <h1>Momotus privacy</h1>
+      <p>This page covers Momotus's sync service, the server your devices use to keep your library the same everywhere. Momotus works without it: an account is optional.</p>
 
       <h2>What the sync service keeps</h2>
       <ul>
         <li>Your synced data: profiles, addons and their addresses, library, progress, watched marks and settings. Your devices encrypt it before sending it, and the service cannot read it. Only your devices hold the key.</li>
         <li>For each device in your account: a public key, its encrypted name, and when it joined.</li>
-        <li>For each sign-in you link (Google, Facebook): a keyed hash of the account number that provider gives Marquee. Not your email, name, photo or any token from the provider.</li>
-        <li>To limit abuse: that keyed hash with the time of each Marquee account it created, kept 30 days.</li>
+        <li>For each sign-in you link (Google, Facebook): a keyed hash of the account number that provider gives Momotus. Not your email, name, photo or any token from the provider.</li>
+        <li>To limit abuse: that keyed hash with the time of each Momotus account it created, kept 30 days.</li>
         <li>While you sign in: a record of that sign-in, kept 10 minutes.</li>
       </ul>
       <p>The service keeps no access log, shows no ads, has no analytics and sells nothing. It holds network addresses in memory only, to limit how often one address can call it, and writes none to disk: a sign-in in progress keeps a keyed hash of its address for 10 minutes. Cloudflare carries the traffic to it and sees addresses as part of that.</p>

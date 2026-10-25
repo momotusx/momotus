@@ -31,7 +31,7 @@ class StremioLinkTest {
     private val link = "stremio://torrentio.strem.fun/manifest.json"
 
     @Test
-    fun `an Install button's link opens Marquee, and only a stremio link counts`() {
+    fun `an Install button's link opens Momotus, and only a stremio link counts`() {
         val view = Intent(Intent.ACTION_VIEW, Uri.parse(link)).addCategory(Intent.CATEGORY_BROWSABLE)
         val found = RuntimeEnvironment.getApplication().packageManager.queryIntentActivities(view, 0)
         assertEquals(listOf(MainActivity::class.java.name), found.map { it.activityInfo.name })

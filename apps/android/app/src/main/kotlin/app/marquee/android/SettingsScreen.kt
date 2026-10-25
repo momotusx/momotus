@@ -246,7 +246,7 @@ fun SettingsScreen(
                 )
             }
         } else {
-            item(key = "head") { BrowseHeader("Your Marquee") }
+            item(key = "head") { BrowseHeader("Your Momotus") }
         }
         if (!sourcesOnly) {
             gate.snapshot?.let { s ->
@@ -933,7 +933,7 @@ private fun About() {
         }
     Section {
         Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.xs)) {
-            MqText("Marquee ${version.orEmpty()}", role = TextRole.Headline, weight = FontWeight.Bold)
+            MqText("Momotus ${version.orEmpty()}", role = TextRole.Headline, weight = FontWeight.Bold)
             MqText("Free software under the GPL 3.", role = TextRole.Caption, color = Marquee.colors.muted)
             MqText(
                 "Type: Inter (SIL Open Font License). Icons: Lucide (ISC). Flags: circle-flags (MIT).",

@@ -52,9 +52,9 @@ const WORDS = {
   stranger: "This sign-in was not started on this page. Choose a sign-in to start again.",
   busy: "Too many sign-ins from this network just now. Try again in a minute.",
   failed: "The sign-in did not work. Try again in a moment.",
-  noAccount: "This sign-in has no Marquee account. Nothing was deleted.",
-  ask: "Delete your Marquee account? It is deleted for every device in 7 days. Until then, any of your devices can cancel it from Home.",
-  asked: "Your Marquee account will be deleted on {date}. Any of your devices can cancel it from Home before then.",
+  noAccount: "This sign-in has no Momotus account. Nothing was deleted.",
+  ask: "Delete your Momotus account? It is deleted for every device in 7 days. Until then, any of your devices can cancel it from Home.",
+  asked: "Your Momotus account will be deleted on {date}. Any of your devices can cancel it from Home before then.",
 };
 
 function say(text, tone = "") {

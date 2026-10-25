@@ -174,7 +174,7 @@ class PlayerLoadingTest {
 
     @Test
     fun `a pick with nothing to play offers a version, never an account`() {
-        controller.fail("Marquee found 3 versions.")
+        controller.fail("Momotus found 3 versions.")
         show()
         compose.onAllNodesWithText("Add an account").assertCountEquals(0)
         compose.onNodeWithText("Choose a version").assertExists()

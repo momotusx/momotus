@@ -719,16 +719,16 @@ test("a trailer pauses and plays from the bar and the remote's play key", async 
 test("screen readers: each page is named, the title has its heading, episodes say their number", async ({ browser }) => {
   const { context, page: p } = await page(browser);
   await p.goto("/library?form=desktop");
-  await expect(p).toHaveTitle("Library · Marquee", { timeout: 30_000 });
+  await expect(p).toHaveTitle("Library · Momotus", { timeout: 30_000 });
   await p.goto("/title/series/mqj2?form=desktop");
-  await expect(p).toHaveTitle("Journey Finished · Marquee", { timeout: 30_000 });
+  await expect(p).toHaveTitle("Journey Finished · Momotus", { timeout: 30_000 });
   await expect(p.getByRole("heading", { level: 1 })).toHaveText("Journey Finished");
   // The season's episodes are the panel its tab controls; each says its number.
   await expect(p.locator('[role="tab"][aria-selected="true"]')).toHaveAttribute("aria-controls", "season-episodes");
   await expect(p.locator('#season-episodes[role="tabpanel"]')).toBeVisible();
   await expect(p.getByRole("link", { name: /^Episode 2, Chapter 2/ })).toBeVisible();
   await p.goto("/title/series/mqj2/versions/mqj2:1:1?form=desktop");
-  await expect(p).toHaveTitle(/^Versions · .+ · Marquee$/, { timeout: 30_000 });
+  await expect(p).toHaveTitle(/^Versions · .+ · Momotus$/, { timeout: 30_000 });
   await context.close();
 });
 
@@ -737,7 +737,7 @@ test("before the core answers, the wordmark shows, never a blank screen", async 
   const { context, page: p } = await page(browser, undefined, (m) => (m.op === "subscribe" && m.view === "profiles" ? null : undefined));
   await p.goto("/?form=desktop");
   const mark = p.locator(".boot.brand");
-  await expect(mark).toHaveText("Marquee");
+  await expect(mark).toHaveText("Momotus");
   await expect(mark).toHaveAttribute("role", "status");
   await context.close();
   // Once it has, the app replaces it.

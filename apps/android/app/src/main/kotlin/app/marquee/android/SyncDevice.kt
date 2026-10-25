@@ -143,7 +143,7 @@ fun rememberOwnerCheck(): OwnerCheck {
 
 /** The clipboard, for a pairing code (public, no secret in it) and a recovery kit (secret). */
 object SyncClipboard {
-    private const val KIT_LABEL = "Marquee recovery kit"
+    private const val KIT_LABEL = "Momotus recovery kit"
 
     fun copyCode(
         context: Context,
@@ -152,7 +152,7 @@ object SyncClipboard {
         context
             .getSystemService(
                 ClipboardManager::class.java,
-            )?.setPrimaryClip(ClipData.newPlainText("Marquee pairing code", code))
+            )?.setPrimaryClip(ClipData.newPlainText("Momotus pairing code", code))
     }
 
     /**

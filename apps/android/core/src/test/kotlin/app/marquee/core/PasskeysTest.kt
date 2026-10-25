@@ -28,7 +28,7 @@ class PasskeysTest {
         )
         val user = r.getValue("user").jsonObject
         assertEquals("QUNDT1VOVA", user.getValue("id").jsonPrimitive.content)
-        assertEquals("Robin (Marquee)", user.getValue("name").jsonPrimitive.content)
+        assertEquals("Robin (Momotus)", user.getValue("name").jsonPrimitive.content)
         val sel = r.getValue("authenticatorSelection").jsonObject
         assertEquals("required", sel.getValue("residentKey").jsonPrimitive.content)
         assertEquals("required", sel.getValue("userVerification").jsonPrimitive.content)

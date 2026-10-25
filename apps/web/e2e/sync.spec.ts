@@ -602,7 +602,7 @@ test.describe.serial("sync across three devices", () => {
     await expect(phone.locator(".sync-kit .sync-callout")).toContainText("It is not shown again");
     await phone.locator('[data-f="sync-kit:copy"]').click();
     await expect(phone.locator('[data-f="sync-kit:copy"]')).toHaveText("Copied");
-    await expect(phone.locator(".sync-kit .st.warn")).toContainText("Marquee empties the clipboard when you leave this page.");
+    await expect(phone.locator(".sync-kit .st.warn")).toContainText("Momotus empties the clipboard when you leave this page.");
     expect(await phone.evaluate(() => navigator.clipboard.readText())).toBe(kit);
     // A throwaway kit of this run's own server.
     await shot(phone, "sync-kit-phone");
@@ -1092,7 +1092,7 @@ test.describe.serial("sync across three devices", () => {
   });
 
   test("the TV hears its account was deleted and says so once, then deletes one of its own with the remote", async () => {
-    const gone = tv.getByText("Your Marquee account was deleted. Your library stays on this device.");
+    const gone = tv.getByText("Your Momotus account was deleted. Your library stays on this device.");
     const start = async () => {
       await go(tv, "/sync/start");
       await tv.locator('[data-f="sync-form:server"]').fill(SERVER);

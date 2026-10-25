@@ -12,10 +12,10 @@ import app.marquee.core.route.DefaultsMode
  */
 object DefaultsCopy {
     const val TITLE = "Recommended addons"
-    const val LEAD = "Marquee starts with these. Turn off any you do not want; you can change this later in Settings."
+    const val LEAD = "Momotus starts with these. Turn off any you do not want; you can change this later in Settings."
     const val REVIEW_TITLE = "New recommended addons"
-    const val REVIEW_LEAD = "Marquee now also recommends these. Turn off any you do not want."
-    const val SETTINGS_LEAD = "The addons Marquee starts with. Turn any on or off, or add back one you removed."
+    const val REVIEW_LEAD = "Momotus now also recommends these. Turn off any you do not want."
+    const val SETTINGS_LEAD = "The addons Momotus starts with. Turn any on or off, or add back one you removed."
     const val NO_CATALOG = "Home and search need a catalog addon."
     const val FROM_STREMIO = "From Stremio"
     const val TV_MORE = "Add more later from your phone or computer."
@@ -27,7 +27,7 @@ object DefaultsCopy {
     const val REVIEW = "Review"
     const val NOT_NOW = "Not now"
     const val SETTINGS_ROW = "Recommended addons"
-    const val SETTINGS_ROW_LINE = "Turn the addons Marquee starts with on or off, or add back one you removed."
+    const val SETTINGS_ROW_LINE = "Turn the addons Momotus starts with on or off, or add back one you removed."
 
     /** The group of the defaults that give Home and search their titles. */
     const val CATALOGS = "catalogs"
@@ -42,7 +42,7 @@ object DefaultsCopy {
         }
 
     /** The card's line: the defaults this profile does not have yet. */
-    fun cardLine(missing: List<String>): String = "Marquee now also recommends ${names(missing)}."
+    fun cardLine(missing: List<String>): String = "Momotus now also recommends ${names(missing)}."
 
     private fun names(list: List<String>): String =
         when (list.size) {

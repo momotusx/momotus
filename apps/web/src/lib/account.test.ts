@@ -125,7 +125,7 @@ test("Home's one account card goes by priority", () => {
   expect(homeCard({ ...gone, profile: other })).toMatchObject({ kind: "gone", remove: false });
   const asked = homeCard({ ...gone, deletion: { dueMs: 1, provider: "google" } });
   expect(asked).toMatchObject({ kind: "deletion", provider: "google" });
-  expect(asked?.text).toBe("Someone signed in with your Google account and asked to delete your Marquee account on 28 Oct. Not you? Cancel, and turn off Google sign-in.");
+  expect(asked?.text).toBe("Someone signed in with your Google account and asked to delete your Momotus account on 28 Oct. Not you? Cancel, and turn off Google sign-in.");
   expect(homeCard({ ...gone, deletion: { dueMs: 1, provider: null } })?.text).toBe("Your account will be deleted on 28 Oct.");
 });
 
@@ -154,7 +154,7 @@ test("every sign-in failure has its words and buttons, and a cancel says nothing
   expect(kinds("ticketExpired")).toEqual(["retry"]);
   expect(signInFailure("signupLimit", "apple")?.text).toContain("This Apple Account has made several");
   expect(kinds("signupLimit")).toEqual(["other"]);
-  expect(signInFailure("linkedElsewhere", "mock")?.text).toBe("This mock sign-in already signs in to another Marquee account.");
+  expect(signInFailure("linkedElsewhere", "mock")?.text).toBe("This mock sign-in already signs in to another Momotus account.");
   expect(labels("linkedElsewhere")).toEqual(["Use it for this account instead", "Cancel"]);
   expect(kinds("linkedElsewhere")).toEqual(["move", "cancel"]);
   expect(labels("unreachable")).toEqual(["Try again", "Not now"]);

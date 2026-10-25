@@ -109,7 +109,7 @@ object SyncCopy {
         "Your profiles, library, progress and settings are deleted from the sync service. This device keeps its " +
             "own copy."
     const val DELETING = "Deleting"
-    const val ACCOUNT_GONE = "Your Marquee account was deleted. Your library stays on this device."
+    const val ACCOUNT_GONE = "Your Momotus account was deleted. Your library stays on this device."
     const val OK = "OK"
 
     // Add a device
@@ -122,9 +122,9 @@ object SyncCopy {
 
     // Only a live scan approves (plans/accounts.md D6): no paste field, so no words for one.
     const val NO_CAMERA = "The camera is not available."
-    const val NOT_A_CODE = "This code is not a Marquee pairing code."
+    const val NOT_A_CODE = "This code is not a Momotus pairing code."
     const val NEXT = "Next"
-    const val CAMERA_DENIED = "Marquee may not use the camera. Allow it in the system settings."
+    const val CAMERA_DENIED = "Momotus may not use the camera. Allow it in the system settings."
 
     /** The step before approving: the code's server is always this account's own, so it asks about the device. */
     const val REVIEW_ASK = "Approve a new device?"
@@ -182,7 +182,7 @@ object SyncCopy {
     const val KIT_LEDE =
         "A recovery kit gets your account back when you have none of your devices. Anyone who has it can join your " +
             "account, so keep it somewhere private, like a password manager."
-    const val KIT_ONCE = "Marquee shows the kit once and keeps no copy."
+    const val KIT_ONCE = "Momotus shows the kit once and keeps no copy."
     const val MAKE_KIT = "Make the kit"
     const val MAKING_KIT = "Making the kit"
     const val KIT_SHOWN = "Your recovery kit"
@@ -191,22 +191,22 @@ object SyncCopy {
 
     /** Android: the clipboard has no expiry, so the app clears it, and marks the kit private for previews. */
     const val COPY_KIT_HELP =
-        "Copying puts it on this device's clipboard, marked private. Marquee empties the clipboard after a " +
+        "Copying puts it on this device's clipboard, marked private. Momotus empties the clipboard after a " +
             "minute, or when you leave this page."
     const val KIT_COPIED =
-        "The kit is on your clipboard for a minute. Paste it into your password manager now: Marquee empties " +
+        "The kit is on your clipboard for a minute. Paste it into your password manager now: Momotus empties " +
             "the clipboard after that, or when you leave this page."
     const val SAVED_KIT = "I saved it"
     const val KIT_WAITING = "Your new recovery kit is not saved yet. Show it again and save it."
     const val SHOW_KIT = "Show the kit"
     const val KIT_UNSEEN =
-        "A recovery kit was made here and not said saved before Marquee let go of it (when the app closed, or " +
-            "five minutes after you left its page), so it cannot be shown again. Make a new one: Marquee removes " +
+        "A recovery kit was made here and not said saved before Momotus let go of it (when the app closed, or " +
+            "five minutes after you left its page), so it cannot be shown again. Make a new one: Momotus removes " +
             "the unseen one."
     const val MAKE_NEW_KIT = "Make a new kit"
     const val KIT_EXPIRED =
-        "A recovery kit was made here and left unsaved for five minutes after you left its page, so Marquee let " +
-            "go of it and cannot show it again. Make a new one: Marquee removes the unseen one."
+        "A recovery kit was made here and left unsaved for five minutes after you left its page, so Momotus let " +
+            "go of it and cannot show it again. Make a new one: Momotus removes the unseen one."
     const val KIT_ASK_SHOW = "The kit is shown again only after your screen lock."
 
     // Remove and report lost
@@ -408,7 +408,7 @@ object SyncCopy {
             }
 
             "noLock" -> {
-                return "Set a screen lock first: Marquee asks for it before changing your devices or making a kit."
+                return "Set a screen lock first: Momotus asks for it before changing your devices or making a kit."
             }
 
             // A kit, a passkey or a wipe is the main profile's (D13, D17).
@@ -502,7 +502,7 @@ object SyncCopy {
                 val n = report.newer
                 val changes = if (n == 1) "1 change comes" else "$n changes come"
                 val them = if (n == 1) "it" else "them"
-                add("$changes from a newer version of Marquee. Update Marquee here to see $them.")
+                add("$changes from a newer version of Momotus. Update Momotus here to see $them.")
             }
             val gap = abs(report.clockGapMs)
             if (gap > 600_000) {
@@ -606,7 +606,7 @@ object SyncCopy {
                 "${count(unreadable, "change", "changes")} from other devices could not be read"
                     .takeIf { unreadable > 0 },
                 (
-                    "${count(newer, "change", "changes")} from a newer version of Marquee " +
+                    "${count(newer, "change", "changes")} from a newer version of Momotus " +
                         "wait${if (newer == 1) "s" else ""} for an update here"
                 ).takeIf { newer > 0 },
             )

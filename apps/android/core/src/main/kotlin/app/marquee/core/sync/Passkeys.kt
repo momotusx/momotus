@@ -57,7 +57,7 @@ object Passkeys {
     fun challenge(): String = b64(ByteArray(32).also(random::nextBytes))
 
     /** "<owner profile name> (Marquee)": the passkey's `user.name` (3.1). */
-    fun userName(owner: String) = "$owner (Marquee)"
+    fun userName(owner: String) = "$owner (Momotus)"
 
     private fun prfEval() =
         buildJsonObject {
@@ -84,7 +84,7 @@ object Passkeys {
                 "rp",
                 buildJsonObject {
                     put("id", rpId)
-                    put("name", "Marquee")
+                    put("name", "Momotus")
                 },
             )
             put(

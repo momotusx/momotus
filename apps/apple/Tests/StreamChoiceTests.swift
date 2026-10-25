@@ -63,7 +63,7 @@ private func prefs(uhd: String = learned(), fhd: String = learned(), epoch: Int 
     let large = try line(#"{"kind": "large", "sizeBytes": 9663676416, "limitBytes": 5368709120}"#)
     #expect(StreamChoice.lineWords(large)?.text == "Large file")
     #expect(StreamChoice.lineWords(large, limitChosen: true)?.text == "Larger than the size you chose")
-    #expect(StreamChoice.lineWords(large)?.details == "9 GB; Marquee prefers files up to 5 GB")
+    #expect(StreamChoice.lineWords(large)?.details == "9 GB; Momotus prefers files up to 5 GB")
     // A window: its minutes ahead, or on mobile data a short stretch.
     #expect(try words(#"{"kind": "buffer", "seeders": 214, "sizeBytes": 42949672960, "aheadMin": 7, "budgetBytes": 2684354560}"#)
         == LineWords(tone: .ok, text: "Plays without storing the whole file", details: "Shared by 214 people, 40 GB, room for about 7 min ahead in 2.5 GB"))
@@ -104,7 +104,7 @@ private func prefs(uhd: String = learned(), fhd: String = learned(), epoch: Int 
 
 @Test func learnedNotesNameTheirNumbersAndSettingsListsWhatIsLearned() throws {
     let note = try JSONDecoder().decode(LearnedNote.self, from: Data(#"{"screenClass": 2160, "choice": "size", "up": true, "prefs": \#(streams.replacingOccurrences(of: "5368709120", with: "10737418240"))}"#.utf8))
-    #expect(StreamChoice.learnedNote(note, device: "tv") == "On this TV you often picked bigger files, so Marquee now picks files up to 10 GB.")
+    #expect(StreamChoice.learnedNote(note, device: "tv") == "On this TV you often picked bigger files, so Momotus now picks files up to 10 GB.")
     // A change that names no number (the screen's resolution) has no note.
     let height = try JSONDecoder().decode(LearnedNote.self, from: Data(#"{"screenClass": 1080, "choice": "height", "up": true, "prefs": \#(streams)}"#.utf8))
     #expect(StreamChoice.learnedNote(height, device: "desktop") == nil)

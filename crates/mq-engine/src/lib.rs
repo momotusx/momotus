@@ -202,7 +202,7 @@ fn session_options(cfg: &EngineConfig, scopes: &Scopes) -> SessionOptions {
             ),
         )),
         client_name_and_version: Some(format!(
-            "Marquee {version} (librqbit {})",
+            "Momotus {version} (librqbit {})",
             librqbit::version()
         )),
         listen: Some(ListenerOptions {

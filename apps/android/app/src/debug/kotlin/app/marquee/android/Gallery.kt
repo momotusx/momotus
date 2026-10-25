@@ -80,7 +80,7 @@ private fun Gallery() {
             .padding(start = safe.side, end = safe.side, top = safe.top, bottom = safe.bottom),
         verticalArrangement = Arrangement.spacedBy(if (tv) 40.dp else 24.dp),
     ) {
-        MqText("Marquee design system", role = TextRole.Title1)
+        MqText("Momotus design system", role = TextRole.Title1)
         MqText(
             "${if (tv) "TV canvas, points on 1920x1080" else "Phone, dp"}. Real titles and posters from Cinemeta.",
             role = TextRole.Callout,

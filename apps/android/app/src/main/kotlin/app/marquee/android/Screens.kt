@@ -77,7 +77,7 @@ fun StartingScreen() {
         verticalArrangement = Arrangement.spacedBy(Marquee.space.s, Alignment.CenterVertically),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        MqText("Marquee", role = TextRole.Title1)
+        MqText("Momotus", role = TextRole.Title1)
         Row(
             horizontalArrangement = Arrangement.spacedBy(Marquee.space.xs),
             verticalAlignment = Alignment.CenterVertically,
@@ -130,8 +130,8 @@ fun CoreStoppedOverlay(session: CoreSession) {
     ) {
         if (health is CoreHealth.Stopped) {
             StateMessage(
-                title = "Marquee stopped",
-                body = "The engine behind Marquee stopped working. Restart it to carry on.",
+                title = "Momotus stopped",
+                body = "The engine behind Momotus stopped working. Restart it to carry on.",
                 icon = Icons.CircleAlert,
                 actionLabel = "Restart",
                 onAction = session::restart,
@@ -140,7 +140,7 @@ fun CoreStoppedOverlay(session: CoreSession) {
         } else {
             // Nothing to press while it restarts, but focus must stay on the cover.
             Box(Modifier.focusRequester(focus).focusable()) {
-                StateMessage(title = "Restarting", body = "Marquee is starting its engine again.")
+                StateMessage(title = "Restarting", body = "Momotus is starting its engine again.")
             }
         }
     }

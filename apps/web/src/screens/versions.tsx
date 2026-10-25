@@ -141,7 +141,7 @@ export function VersionsPage(props: { kind: string; id: string; videoId: string;
   const ctx = videoContext(props.kind, props.id, props.videoId, props.binge);
   createEffect(() => {
     const name = ctx.label() ?? ctx.details()?.name;
-    if (name) document.title = `Versions · ${name} · Marquee`;
+    if (name) document.title = `Versions · ${name} · Momotus`;
   });
   const snap = (): VersionsSnapshot | null => ctx.versions()?.state.data ?? null;
   // Why nothing can play (plans/play-every-version.md, the shared Step 3 table): the rows found, if

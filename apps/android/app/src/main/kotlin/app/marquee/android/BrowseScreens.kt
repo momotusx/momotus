@@ -544,8 +544,8 @@ fun DiscoverScreen(
                         title = "Nothing to browse yet",
                         body =
                             "Discover lists the catalogs of the addons you have on, and none of them has one. " +
-                                "Set up Marquee offers the recommended addons in one step.",
-                        actionLabel = "Set up Marquee",
+                                "Set up Momotus offers the recommended addons in one step.",
+                        actionLabel = "Set up Momotus",
                         onAction = onSetup,
                         secondaryLabel = "Add an addon",
                         onSecondary = onAddons,

@@ -195,7 +195,7 @@ test("a round is complete, waiting or failed, never green while changes failed",
   expect(failedSince(0, 0)).toBeNull();
   expect(failedSince(1, 0)).toBe("Since this device joined, 1 edit from this device could not be sent and stays here only.");
   expect(failedSince(2, 3)).toBe("Since this device joined, 2 edits from this device could not be sent and stay here only, and 3 changes from other devices could not be read.");
-  expect(failedSince(0, 0, 1)).toBe("Since this device joined, 1 change from a newer version of Marquee waits for an update here.");
+  expect(failedSince(0, 0, 1)).toBe("Since this device joined, 1 change from a newer version of Momotus waits for an update here.");
 });
 
 test("each fact of a sync round has its sentence, and a quiet round has none", () => {
@@ -214,7 +214,7 @@ test("each fact of a sync round has its sentence, and a quiet round has none", (
   expect(reportNotes({ ...quiet, refused: 1 })[0]).toBe("1 edit from this device could not be sent: the sync server does not take it, so it stays on this device only.");
   expect(reportNotes({ ...quiet, refused: 2 })[0]).toContain("does not take them, so they stay");
   expect(reportNotes({ ...quiet, unreadable: 1 })[0]).toBe("1 change from another device could not be read and was skipped.");
-  expect(reportNotes({ ...quiet, newer: 3 })[0]).toBe("3 changes come from a newer version of Marquee. Update Marquee here to see them.");
+  expect(reportNotes({ ...quiet, newer: 3 })[0]).toBe("3 changes come from a newer version of Momotus. Update Momotus here to see them.");
   expect(reportNotes({ ...quiet, again: true })[0]).toContain("stopped before it finished");
 });
 
@@ -229,7 +229,7 @@ test("sync failures read by code and by action, and never show the server's addr
   expect(syncProblem("rosterChanged", "x")).toBe(syncWords.forkChanged);
   // A deleted account says so plainly, whichever call heard it. A delete without an answer claims
   // nothing: the sync server may have deleted it before the answer was lost.
-  expect(syncProblem("accountGone", "this account was deleted")).toBe("Your Marquee account was deleted. Your library stays on this device.");
+  expect(syncProblem("accountGone", "this account was deleted")).toBe("Your Momotus account was deleted. Your library stays on this device.");
   expect(stepProblem(undefined, "http status 502", "delete")).toBe("The deletion was not confirmed. The sync server did not answer. Try again in a moment.");
   expect(syncWords.deleteAsk).toBe("Your profiles, library, progress and settings are deleted from the sync service. This device keeps its own copy.");
   // Remembering fails in this browser's storage, never on the sync server.
@@ -269,8 +269,8 @@ test("device lines name the day, the time and the device that added it", () => {
   const day = Date.UTC(2026, 9, 19, 12);
   const time = String.raw`\d{1,2}:\d{2}\s[AP]M`;
   expect(addedLine(false, day, null)).toMatch(new RegExp(`^Added Oct 19, 2026, ${time}, the first device$`));
-  expect(addedLine(false, day, "Marquee phone")).toMatch(new RegExp(`^Added Oct 19, 2026, ${time} through Marquee phone$`));
-  expect(addedLine(true, day, "Marquee phone")).toMatch(new RegExp(`^Made Oct 19, 2026, ${time} on Marquee phone$`));
+  expect(addedLine(false, day, "Momotus phone")).toMatch(new RegExp(`^Added Oct 19, 2026, ${time} through Momotus phone$`));
+  expect(addedLine(true, day, "Momotus phone")).toMatch(new RegExp(`^Made Oct 19, 2026, ${time} on Momotus phone$`));
   expect(lostButton(1)).toBe("Remove 1 device");
   expect(lostButton(3)).toBe("Remove 3 devices");
   expect(lostKits(1)).toStartWith("1 recovery kit made on these devices stops working.");
@@ -298,7 +298,7 @@ test("Settings names what failed or waits before the time, and a lock or a probl
   expect(syncSummary({ ...base, report: { ...quiet, blocked: "notActive" } })).toBe("The sync server does not take edits from this device yet, so they were not sent.");
   expect(syncSummary({ ...base, report: { ...quiet, refused: 1 } })).toStartWith("1 edit from this device could not be sent");
   expect(syncSummary({ ...base, refused: 2 })).toStartWith("Since this device joined, 2 edits");
-  expect(syncSummary({ ...base, newer: 2 })).toContain("2 changes from a newer version of Marquee wait");
+  expect(syncSummary({ ...base, newer: 2 })).toContain("2 changes from a newer version of Momotus wait");
   expect(syncSummary({ ...base, problem: "The sync server did not answer." })).toBe("The sync server did not answer.");
   expect(syncSummary({ ...base, joined: false })).toBe(syncWords.offLine);
   expect(syncSummary({ ...base, joined: false, locked: true })).toBe(syncWords.locked);

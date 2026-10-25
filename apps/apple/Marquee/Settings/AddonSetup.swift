@@ -13,10 +13,10 @@ enum DefaultsRules {
         ("catalogs", "Catalogs and details"), ("streams", "Streams"), ("subtitles", "Subtitles"), ("lists", "Lists"),
     ]
     static let title = "Recommended addons"
-    static let lead = "Marquee starts with these. Turn off any you do not want; you can change this later in Settings."
+    static let lead = "Momotus starts with these. Turn off any you do not want; you can change this later in Settings."
     static let reviewLead = "Turn off any you do not want; you can change this later in Settings."
-    static let settingsLead = "The addons Marquee recommends. A switch turned on adds the addon; Addons lists everything you have."
-    static let settingsDetail = "Catalogs, streams, subtitles and lists Marquee recommends, a switch each."
+    static let settingsLead = "The addons Momotus recommends. A switch turned on adds the addon; Addons lists everything you have."
+    static let settingsDetail = "Catalogs, streams, subtitles and lists Momotus recommends, a switch each."
     static let catalogWarning = "Home and search need a catalog addon."
 
     static func shown(_ list: [DefaultAddonInfo], scope: Scope) -> [DefaultAddonInfo] {

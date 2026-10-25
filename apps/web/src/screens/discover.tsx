@@ -103,7 +103,7 @@ function DiscoverPage(props: { retry: () => void }) {
               {/* The recommended addons to switch on, not the first-run doors. */}
               <A class="btn primary" href="/welcome?step=2&review=1" data-f="discover:setup" data-autofocus>
                 <Wrench aria-hidden />
-                Set up Marquee
+                Set up Momotus
               </A>
               <A class="btn" href="/addons" data-f="discover:addons">
                 <Puzzle aria-hidden />

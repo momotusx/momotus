@@ -58,7 +58,7 @@ function TitlePage(props: { kind: string; id: string; retry: () => void }) {
   const uncontinue = askOnce(() => removeFromContinue(props.id));
   createEffect(() => {
     const name = d()?.name;
-    if (name) document.title = `${name} · Marquee`;
+    if (name) document.title = `${name} · Momotus`;
   });
   const series = () => props.kind !== "movie" && (header()?.seasons.length ?? 0) > 0;
   const [trailerOpen, setTrailerOpen] = createSignal(false);

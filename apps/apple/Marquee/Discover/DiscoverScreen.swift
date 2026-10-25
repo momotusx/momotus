@@ -135,7 +135,7 @@ struct DiscoverScreen: View {
         if s.kinds.isEmpty {
             CatalogSetup(
                 title: "Nothing to browse yet",
-                text: "Discover lists the catalogs of the addons you have on, and none of them has one. Set up Marquee offers the recommended addons.",
+                text: "Discover lists the catalogs of the addons you have on, and none of them has one. Set up Momotus offers the recommended addons.",
                 titleSize: Theme.type.title2, core: core, setUp: { onboarding = true })
         } else {
             if s.items.isEmpty, s.state == .loading {

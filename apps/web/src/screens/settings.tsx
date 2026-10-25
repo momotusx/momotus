@@ -282,7 +282,7 @@ export default function SettingsScreen() {
             fkey="settings:recommended"
             icon={<Sparkle aria-hidden />}
             title={defaultsWords.title}
-            text="Catalogs, streams, subtitles and lists Marquee recommends, a switch each."
+            text="Catalogs, streams, subtitles and lists Momotus recommends, a switch each."
           />
           <LinkRow href="/find-addons" fkey="settings:find-addons" icon={<PackageSearch aria-hidden />} title={findAddons.title} text={findAddons.lede} />
           <LinkRow

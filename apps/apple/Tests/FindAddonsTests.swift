@@ -182,7 +182,7 @@ private func recorded() throws -> AddonCatalogSnapshot {
         #expect(plexio.cardLabel(.configure, sameName: false, tv: false)
             == "Configure Plexio, streams. Set it up on its website, copy the link it gives you, then paste it here.")
         #expect(plexio.cardLabel(.configure, sameName: false, tv: true)
-            == "Configure Plexio, streams. Set it up on its website, then add the link in Marquee on your phone or computer. With sync on, it follows you here.")
+            == "Configure Plexio, streams. Set it up on its website, then add the link in Momotus on your phone or computer. With sync on, it follows you here.")
         #expect(plexio.cardLabel(.install(configure: false), sameName: false, tv: true) == "Install Plexio, streams")
         #expect(plexio.cardLabel(.none(word: "Installed"), sameName: false, tv: false) == "Plexio, streams, installed")
     }

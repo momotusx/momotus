@@ -85,7 +85,7 @@ class AccountRulesTest {
         assertEquals("Sign in again to finish.", expired.text)
         assertEquals(listOf(Act.Retry), expired.actions.map { it.act })
         val elsewhere = AccountRules.signInFailure("linkedElsewhere", "google")!!
-        assertEquals("This Google account already signs in to another Marquee account.", elsewhere.text)
+        assertEquals("This Google account already signs in to another Momotus account.", elsewhere.text)
         assertEquals(listOf(Act.Move, Act.Cancel), elsewhere.actions.map { it.act })
         assertEquals(listOf(Act.Retry, Act.NotNow), AccountRules.signInFailure("unreachable")!!.actions.map { it.act })
         assertEquals(listOf(Act.Kit, Act.CantUse), AccountRules.signInFailure("kitUnknown")!!.actions.map { it.act })

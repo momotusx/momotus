@@ -222,8 +222,8 @@ private func snapshot(next: String = next, nextAtMs: String = "null", segments: 
     let words = ["unreachable", "blocked", "changed", "trackFailed", "somethingNew"].map { SubtitleNote(source: "OpenSubtitles v3", problem: $0).words }
     #expect(words == [
         "OpenSubtitles v3 did not answer. Try its subtitles again in a moment.",
-        "OpenSubtitles v3 is turning requests away. Marquee will try again in a few minutes.",
-        "OpenSubtitles v3 changed its pages, so Marquee cannot read them. An update will fix this.",
+        "OpenSubtitles v3 is turning requests away. Momotus will try again in a few minutes.",
+        "OpenSubtitles v3 changed its pages, so Momotus cannot read them. An update will fix this.",
         "This subtitle could not be read.",
         "Subtitles from OpenSubtitles v3 did not load.",
     ])

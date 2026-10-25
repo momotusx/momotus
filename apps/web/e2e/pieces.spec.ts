@@ -252,7 +252,7 @@ test("phone: Calendar is a row at the top of Library, and Library stays lit on i
   await row.tap();
   await expect(page).toHaveURL(/\/calendar/);
   await expect(page.locator("nav.tabs a.on")).toHaveText("Library");
-  await expect(page).toHaveTitle("Calendar · Marquee");
+  await expect(page).toHaveTitle("Calendar · Momotus");
   await context.close();
 });
 

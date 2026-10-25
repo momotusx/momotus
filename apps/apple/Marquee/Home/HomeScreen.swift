@@ -208,7 +208,7 @@ struct HomeScreen: View {
             }
             CatalogSetup(
                 title: "Home fills up from your addons",
-                text: "None of the addons you have on shows a catalog here. Set up Marquee offers the recommended addons, or add an addon yourself.",
+                text: "None of the addons you have on shows a catalog here. Set up Momotus offers the recommended addons, or add an addon yourself.",
                 core: core, setUp: { onboarding = true })
         }
         .padding(.top, metrics.wide ? Theme.Space.xxl : Theme.Space.xxl - 20)
@@ -266,7 +266,7 @@ struct CatalogSetup: View {
                 .foregroundStyle(Theme.Palette.muted)
                 .fixedSize(horizontal: false, vertical: true)
             FlowRow(spacing: 12) {
-                Button(action: setUp) { Label("Set up Marquee", glyph: "wrench") }
+                Button(action: setUp) { Label("Set up Momotus", glyph: "wrench") }
                     .buttonStyle(PillButtonStyle(prominent: true))
                     .focused($primary)
                 NavigationLink { AddonsPage(core: core) } label: { Label("Add an addon", glyph: "puzzle") }

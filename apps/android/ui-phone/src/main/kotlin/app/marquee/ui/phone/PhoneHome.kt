@@ -193,8 +193,8 @@ private fun HomeState(
                 title = "Home fills up from your addons",
                 body =
                     "None of the addons you have on shows a catalog here. " +
-                        "Set up Marquee offers the recommended addons in one step, or add an addon yourself.",
-                actionLabel = "Set up Marquee",
+                        "Set up Momotus offers the recommended addons in one step, or add an addon yourself.",
+                actionLabel = "Set up Momotus",
                 onAction = onSetup,
                 secondaryLabel = "Add an addon",
                 onSecondary = onAddons,

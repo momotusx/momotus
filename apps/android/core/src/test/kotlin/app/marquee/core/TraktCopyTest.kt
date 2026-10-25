@@ -94,7 +94,7 @@ class TraktCopyTest {
         assertEquals("Connected as tester", TraktCopy.state(status("connected"), time))
         assertEquals(TraktCopy.CONNECTED_NO_USER, TraktCopy.state(status("connected", user = null), time))
         assertEquals(
-            "Trakt has not answered since T5: http 503. Marquee keeps trying, and nothing waiting here is lost.",
+            "Trakt has not answered since T5: http 503. Momotus keeps trying, and nothing waiting here is lost.",
             TraktCopy.state(status("failing", sinceMs = 5, reason = "http 503"), time),
         )
         assertEquals(

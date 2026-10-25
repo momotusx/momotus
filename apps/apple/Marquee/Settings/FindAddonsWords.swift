@@ -6,7 +6,7 @@ enum FindAddonsWords {
     static let lede = "Most of these add subtitles and catalogs. Sources usually come as a link from the addon's own website."
     static let community = "Community addons are made by other people. They see what you open in them, and their catalogs show on Home on all your devices."
     static let configureHelp = "Set it up on its website, copy the link it gives you, then paste it here."
-    static let configureTv = "Set it up on its website, then add the link in Marquee on your phone or computer. With sync on, it follows you here."
+    static let configureTv = "Set it up on its website, then add the link in Momotus on your phone or computer. With sync on, it follows you here."
     static let pasteLink = "Paste a link"
     static let listLabel = "List"
     static let official = "Official"

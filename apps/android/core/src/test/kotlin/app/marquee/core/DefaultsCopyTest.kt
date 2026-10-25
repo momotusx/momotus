@@ -108,9 +108,9 @@ class DefaultsCopyTest {
     @Test
     fun `words for groups and the card`() {
         assertEquals("Catalogs and details", DefaultsCopy.group("catalogs"))
-        assertEquals("Marquee now also recommends Torrentio.", DefaultsCopy.cardLine(listOf("Torrentio")))
+        assertEquals("Momotus now also recommends Torrentio.", DefaultsCopy.cardLine(listOf("Torrentio")))
         assertEquals(
-            "Marquee now also recommends Torrentio, SubSense and Trakt.",
+            "Momotus now also recommends Torrentio, SubSense and Trakt.",
             DefaultsCopy.cardLine(listOf("Torrentio", "SubSense", "Trakt")),
         )
     }

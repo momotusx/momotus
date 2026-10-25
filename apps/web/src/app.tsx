@@ -132,7 +132,7 @@ function TopNav() {
   const search = destinations.find((d) => d.path === "/search") as Destination;
   return (
     <nav class="topnav" aria-label="Main" data-fgroup="rail" inert={searchOpen() || undefined}>
-      <span class="brand">Marquee</span>
+      <span class="brand">Momotus</span>
       <div class="tabbar">
         <For each={tv() ? destinations : destinations.filter((d) => d !== search)}>{link}</For>
         <Show when={tv()}>
@@ -265,7 +265,7 @@ function Shell(props: RouteSectionProps) {
         if (!path.startsWith("/play/") && document.fullscreenElement) void document.exitFullscreen().catch(() => undefined);
         if (!path.startsWith("/title/") && !path.startsWith("/play/")) {
           const named = destinations.find((d) => d.path === section(path));
-          document.title = named ? `${named.label} · Marquee` : "Marquee";
+          document.title = named ? `${named.label} · Momotus` : "Momotus";
         }
         // A new screen (a result was opened, or Back) leaves the palette.
         leaveSearch(location.pathname + location.search);
@@ -285,7 +285,7 @@ function Shell(props: RouteSectionProps) {
         <Show
           when={profiles()}
           fallback={
-            <Show when={profilesFailed()} fallback={<div class="boot brand" role="status" aria-label="Marquee is starting">Marquee</div>}>
+            <Show when={profilesFailed()} fallback={<div class="boot brand" role="status" aria-label="Momotus is starting">Momotus</div>}>
               {(r) => <p class="banner bad">{r()}</p>}
             </Show>
           }
@@ -319,7 +319,7 @@ function Shell(props: RouteSectionProps) {
   );
 }
 
-const NotFound = () => <Stub title="Not found" text="This page does not exist in Marquee." />;
+const NotFound = () => <Stub title="Not found" text="This page does not exist in Momotus." />;
 
 export function App() {
   return (

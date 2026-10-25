@@ -287,7 +287,7 @@ struct SavePasskeyRow: View {
         said = nil
         do {
             let owner = profiles.snapshot?.profiles.first(where: \.isOwner)?.name ?? DeviceName.current
-            if try await PasskeySave.here(sync: sync, userName: "\(owner) (Marquee)") == .alreadyHere {
+            if try await PasskeySave.here(sync: sync, userName: "\(owner) (Momotus)") == .alreadyHere {
                 said = (.ok, AccountWords.shared.kitHere)
             }
         } catch {

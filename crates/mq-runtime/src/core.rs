@@ -844,7 +844,7 @@ impl Core {
             };
             let Some(raw) = raw else {
                 unknown = Some(false);
-                reason = format!("{name} sent details Marquee cannot read");
+                reason = format!("{name} sent details Momotus cannot read");
                 continue;
             };
             if !raw["meta"].is_object() {
@@ -914,7 +914,7 @@ impl Core {
                     Ok(_) => last_error = format!("{name} has no details for this title"),
                     Err(e) => {
                         tracing::debug!("{name} sent unreadable details: {e}");
-                        last_error = format!("{name} sent details Marquee cannot read");
+                        last_error = format!("{name} sent details Momotus cannot read");
                     }
                 },
                 Err(e) => {
@@ -1559,7 +1559,7 @@ fn meta_failure(name: &str, error: &AddonError) -> String {
             format!("{name} points to a private network address")
         }
         AddonError::Http(HttpError::TooLarge { .. } | HttpError::Decode(_)) => {
-            format!("{name} sent details Marquee cannot read")
+            format!("{name} sent details Momotus cannot read")
         }
         _ => format!("{name} could not be reached"),
     }
@@ -1685,11 +1685,11 @@ mod tests {
             ),
             (
                 AddonError::Http(HttpError::TooLarge { limit: 1 }),
-                "sent details Marquee cannot read",
+                "sent details Momotus cannot read",
             ),
             (
                 AddonError::Http(HttpError::Decode("x".into())),
-                "sent details Marquee cannot read",
+                "sent details Momotus cannot read",
             ),
             (
                 AddonError::Http(HttpError::Network("dns".into())),

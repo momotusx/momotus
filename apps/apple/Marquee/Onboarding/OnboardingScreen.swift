@@ -384,7 +384,7 @@ struct OnboardingScreen: View {
                 }
                 if !sync.joined {
                     Button { showPairing = true } label: {
-                        Door(symbol: "qr-code", title: "I already use Marquee", text: "Join your other device's sync account with a code. Library and addons follow.")
+                        Door(symbol: "qr-code", title: "I already use Momotus", text: "Join your other device's sync account with a code. Library and addons follow.")
                     }
                 }
             }

@@ -415,7 +415,7 @@ impl Device {
 
     pub(crate) async fn start(http: &HttpClient, base: &str) -> Result<(Self, Code), DebridError> {
         let api = Api::new(http.clone(), base);
-        let path = with_query("/v1/api/user/auth/device/start", &[("app", "Marquee")]);
+        let path = with_query("/v1/api/user/auth/device/start", &[("app", "Momotus")]);
         let envelope: Envelope<DeviceStart> = api
             .call(Method::GET, &path, None, Vec::new())
             .await

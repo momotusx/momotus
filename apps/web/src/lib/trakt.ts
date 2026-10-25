@@ -14,7 +14,7 @@ import type { TraktStatus } from "../core/generated/TraktStatus";
 export const traktWords = {
   ...shared,
   loading: "Reading Trakt's state",
-  waiting: "Waiting for you to approve Marquee on Trakt.",
+  waiting: "Waiting for you to approve Momotus on Trakt.",
   signingOut: "Signing out",
   keptInTab: "The sign-in lasts until this tab closes or reloads. With sync on, Remember this browser on the Account page keeps it.",
   keptSealed: "The sign-in is kept in this browser, locked with your passkey.",
@@ -25,7 +25,7 @@ export const traktWords = {
   deleteFailed: "Signed out of Trakt, but this browser could not delete the sign-in it keeps. Try again.",
   readFailed: "This browser could not read the Trakt sign-ins it keeps, so it stores no new one over them. Try again.",
   tryAgain: "Try again",
-  plainLink: "Trakt is off on this page: its link to Marquee's core is not encrypted, so no Trakt sign-in may travel over it. Open Marquee on the computer that runs the core, or use the app.",
+  plainLink: "Trakt is off on this page: its link to Momotus's core is not encrypted, so no Trakt sign-in may travel over it. Open Momotus on the computer that runs the core, or use the app.",
   backToSettings: "Back to Settings",
   importLabel: "Trakt history brought in",
 } as const;

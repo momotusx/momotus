@@ -370,7 +370,7 @@ class StreamChoiceCopyTest {
     @Test
     fun `a large file says whether the size was the user's choice`() {
         val large = ReasonLine.Large((7.4 * gib).toLong(), 5 * gib, chosen = false)
-        assertEquals(StreamChoiceCopy.Line(warn, "Large file", "7.4 GB; Marquee prefers files up to 5 GB"), line(large))
+        assertEquals(StreamChoiceCopy.Line(warn, "Large file", "7.4 GB; Momotus prefers files up to 5 GB"), line(large))
         assertEquals("Larger than the size you chose", line(large.copy(chosen = true)).text)
     }
 
@@ -507,15 +507,15 @@ class StreamChoiceCopyTest {
     @Test
     fun `a learned note names the device and the preferences now in effect`() {
         assertEquals(
-            "On this TV you often picked bigger files, so Marquee now picks files up to 10 GB.",
+            "On this TV you often picked bigger files, so Momotus now picks files up to 10 GB.",
             StreamChoiceCopy.learnedNote(LearnedChoice.Size, true, tv = true, streams(sizeLimitBytes = 10 * gib)),
         )
         assertEquals(
-            "On this phone you often picked lower resolutions, so Marquee now picks up to 720p.",
+            "On this phone you often picked lower resolutions, so Momotus now picks up to 720p.",
             StreamChoiceCopy.learnedNote(LearnedChoice.Height, false, tv = false, streams(maxHeight = 720)),
         )
         assertEquals(
-            "On this TV you often picked HDR versions, so Marquee now prefers HDR.",
+            "On this TV you often picked HDR versions, so Momotus now prefers HDR.",
             StreamChoiceCopy.learnedNote(LearnedChoice.Hdr, true, tv = true, streams()),
         )
         // No number to name: no note rather than a gap.

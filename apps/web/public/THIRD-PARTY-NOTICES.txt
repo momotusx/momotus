@@ -1,4 +1,4 @@
-Third-party material in the Marquee web app
+Third-party material in the Momotus web app
 
 The web build ships these with their own licenses. Each section below is
 the license text as its project publishes it.

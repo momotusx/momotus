@@ -739,7 +739,7 @@ private fun ForgotPin(
         // of offering a button that cannot work. A phone can add one, so it keeps the button.
         if (tv && !keyguard.isDeviceSecure) {
             MqText(
-                "This device has no screen lock, so the PIN cannot be reset here. Reset it from Marquee on a phone " +
+                "This device has no screen lock, so the PIN cannot be reset here. Reset it from Momotus on a phone " +
                     "with a screen lock: Settings, Profiles. This device gets the change at its next sync.",
                 modifier = Modifier.widthIn(max = 720.dp),
                 role = TextRole.Callout,

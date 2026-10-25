@@ -136,7 +136,7 @@ class SyncCopyTest {
                 "1 edit from this device could not be sent: the sync server does not take it, so it stays on this " +
                     "device only.",
                 "1 change from another device could not be read and was skipped.",
-                "1 change comes from a newer version of Marquee. Update Marquee here to see it.",
+                "1 change comes from a newer version of Momotus. Update Momotus here to see it.",
                 "1 edit waits for the sync server's clock to catch up. Nothing is lost.",
                 "1 change from another device waits until this device catches up with a device change.",
             ),
@@ -152,7 +152,7 @@ class SyncCopyTest {
                 "2 edits from this device could not be sent: the sync server does not take them, so they stay on " +
                     "this device only.",
                 "2 changes from other devices could not be read and were skipped.",
-                "4 changes come from a newer version of Marquee. Update Marquee here to see them.",
+                "4 changes come from a newer version of Momotus. Update Momotus here to see them.",
                 "The sync server's clock and this device's disagree by 15 minutes, so edits sync in the order they are sent.",
                 "2 edits wait for the sync server's clock to catch up. Nothing is lost.",
                 "3 changes from other devices wait until this device catches up with a device change.",
@@ -300,7 +300,7 @@ class SyncCopyTest {
         assertEquals("On. Synced at 3:15 PM.", SyncCopy.summary(true, null, null, report(), "3:15 PM"))
         assertEquals(null, SyncCopy.failedSince(0, 0, 0))
         assertEquals(
-            "Since this device joined, 1 change from a newer version of Marquee waits for an update here.",
+            "Since this device joined, 1 change from a newer version of Momotus waits for an update here.",
             SyncCopy.failedSince(0, 0, 1),
         )
     }

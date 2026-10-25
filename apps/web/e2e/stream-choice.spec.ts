@@ -858,7 +858,7 @@ test.describe("Versions", () => {
     });
     await page.goto(path("desktop"));
     const note = page.locator(".lnote");
-    await expect(note).toContainText("On this computer you often picked bigger files, so Marquee now picks files up to 10 GB.", { timeout: 60_000 });
+    await expect(note).toContainText("On this computer you often picked bigger files, so Momotus now picks files up to 10 GB.", { timeout: 60_000 });
     await shot(page, "stream-choice-note", "desktop");
     await page.locator('[data-f="versions:undo"]').click();
     await expect(note).toHaveCount(0);

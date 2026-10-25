@@ -175,7 +175,7 @@ private func report(_ changes: [String: Any] = [:]) throws -> SyncReport {
         // Removed or deleted: this device forgets the account and keeps its library; a fork does not.
         #expect(SyncRules.forgets("dropped") && SyncRules.forgets("accountGone"))
         #expect(!SyncRules.forgets("fork") && !SyncRules.forgets(nil))
-        #expect(SyncProblem(code: "accountGone", message: "this account was deleted").words == "Your Marquee account was deleted. Your library stays on this device.")
+        #expect(SyncProblem(code: "accountGone", message: "this account was deleted").words == "Your Momotus account was deleted. Your library stays on this device.")
         // Whichever call heard it, the words are the same.
         #expect(SyncProblem(code: "accountGone", message: "x", action: .delete).words == W.accountGone)
         // The relay may have deleted it before the answer was lost: the words claim nothing.
@@ -215,7 +215,7 @@ private func report(_ changes: [String: Any] = [:]) throws -> SyncReport {
             ("refused", 1, "1 edit was too large or malformed"),
             ("refused", 3, "they stay only on this device"),
             ("unreadable", 2, "2 changes from another device did not open"),
-            ("newer", 1, "from a newer version of Marquee"),
+            ("newer", 1, "from a newer version of Momotus"),
             ("blocked", "rotationPending", "until the account finishes a device change"),
             ("blocked", "notActive", "does not take edits from this device yet"),
             ("blocked", "relayDisagrees", "disagrees about your device list"),
@@ -239,7 +239,7 @@ private func report(_ changes: [String: Any] = [:]) throws -> SyncReport {
         failed = failed.adding(try report())
         #expect(failed == SyncFailed(refused: 2, unreadable: 1, newer: 0))
         failed = failed.adding(try report(["newer": 1]))
-        #expect(W.failedSince(failed) == "Since this device joined, 2 edits from this device could not be sent and stay here only, and 1 change from other devices could not be read, and 1 change from a newer version of Marquee waits for an update here.")
+        #expect(W.failedSince(failed) == "Since this device joined, 2 edits from this device could not be sent and stay here only, and 1 change from other devices could not be read, and 1 change from a newer version of Momotus waits for an update here.")
         #expect(W.failedSince(SyncFailed()) == nil)
     }
 

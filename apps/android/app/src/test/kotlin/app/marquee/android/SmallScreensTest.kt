@@ -65,6 +65,6 @@ class SmallScreensTest {
         compose.onAllNodesWithText(STARTING).assertCountEquals(0)
         // Half a second of real time: the wait is not on the test clock.
         compose.waitUntil(5_000) { compose.onAllNodesWithText(STARTING).fetchSemanticsNodes().isNotEmpty() }
-        compose.onNodeWithText("Marquee").assertExists()
+        compose.onNodeWithText("Momotus").assertExists()
     }
 }

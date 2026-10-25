@@ -33,7 +33,7 @@ export default function Debrid() {
     <main class="browse page settings-page column debrid-page" data-vscroll>
       <h1>Debrid services</h1>
       <p class="lede">A debrid account plays torrents as fast direct links. Sign-ins and keys are never shown again or synced.</p>
-      <p class="note small">A browser cannot store them safely: they last while Marquee's core runs. The apps keep them encrypted on the device.</p>
+      <p class="note small">A browser cannot store them safely: they last while Momotus's core runs. The apps keep them encrypted on the device.</p>
       <div class="dcards">
         <For each={SERVICES}>
           {(s) => (

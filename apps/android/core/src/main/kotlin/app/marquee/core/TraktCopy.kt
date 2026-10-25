@@ -21,14 +21,14 @@ object TraktCopy {
     const val CONNECTED = "Connected as {user}"
     const val CONNECTED_NO_USER = "Connected to Trakt"
     const val FAILING =
-        "Trakt has not answered since {time}: {reason}. Marquee keeps trying, and nothing waiting here is " +
+        "Trakt has not answered since {time}: {reason}. Momotus keeps trying, and nothing waiting here is " +
             "lost."
     const val RECONNECT = "Trakt needs you to sign in again ({reason}). Until then nothing is sent or brought in."
     const val OFF = "Not connected."
     const val THIS_DEVICE_OFF =
         "This profile uses Trakt on another device, but this device is not signed in, so what you play here " +
             "does not reach Trakt."
-    const val NOT_CONFIGURED = "Trakt is not set up in this build of Marquee, so nothing is sent to Trakt."
+    const val NOT_CONFIGURED = "Trakt is not set up in this build of Momotus, so nothing is sent to Trakt."
     const val CONNECT = "Connect Trakt"
     const val SIGN_IN_AGAIN = "Sign in again"
     const val SIGN_IN_HERE = "Sign in on this device"
@@ -66,7 +66,7 @@ object TraktCopy {
         "Kept for this session only: this device could not store the sign-in. Sign in again after the app " +
             "restarts."
     const val UNMAPPED_TITLE = "Not matched"
-    const val UNMAPPED_LEDE = "Trakt and Marquee could not agree on these, so they are not sent or brought in."
+    const val UNMAPPED_LEDE = "Trakt and Momotus could not agree on these, so they are not sent or brought in."
     const val PLAYER_ON = "Trakt: this play is recorded"
     const val PLAYER_UNMAPPED = "Trakt: this title could not be matched, so this play is not recorded"
     const val PLAYER_THIS_DEVICE_OFF = "Trakt: this device is not signed in, so this play is not recorded"

@@ -209,7 +209,7 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
   const backWords = () => (entryFrom() === titlePath(props.kind, props.id) ? `Back to ${ctx.details()?.name ?? "the title"}` : "Back");
   createEffect(() => {
     const name = ctx.details()?.name;
-    if (name && !layer()) document.title = `${name} · Marquee`;
+    if (name && !layer()) document.title = `${name} · Momotus`;
   });
   const prefs = prefsView();
   const versions = () => ctx.versions()?.state.data ?? null;

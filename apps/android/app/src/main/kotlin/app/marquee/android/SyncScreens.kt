@@ -138,7 +138,7 @@ internal fun Context.rememberJoin(
 /** How other devices list this one: the name it joined with last, else one by its form. */
 internal fun Context.deviceName(tv: Boolean): String =
     getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(NAME, null)?.trim()?.ifEmpty { null }
-        ?: if (tv) "Marquee TV" else "Marquee phone"
+        ?: if (tv) "Momotus TV" else "Momotus phone"
 
 private fun clock(ms: Long) = DateFormat.getTimeInstance(DateFormat.SHORT).format(Date(ms))
 
@@ -1123,7 +1123,7 @@ fun SyncJoinScreen(
             return
         }
         replacing = false
-        val n = name.trim().ifEmpty { "Marquee" }
+        val n = name.trim().ifEmpty { "Momotus" }
         // No screen lock here: typing the kit is the proof, and a device that has not joined has nothing to guard.
         scope.launch { join(s, n) }
     }
@@ -1175,7 +1175,7 @@ fun SyncJoinScreen(
                 )
             }
             Labeled(SyncCopy.DEVICE) {
-                MqTextField(name, { name = it }, label = SyncCopy.DEVICE, placeholder = "Marquee")
+                MqTextField(name, { name = it }, label = SyncCopy.DEVICE, placeholder = "Momotus")
             }
             MqText(SyncCopy.DEVICE_HELP, role = TextRole.Caption, color = Marquee.colors.muted)
             if (!kit) {
@@ -2091,7 +2091,7 @@ fun PairingScreen(
         // An address with a user name or password is never kept or sent.
         badAddress = s.isNotEmpty() && !SyncRules.plainAddress(s)
         if (s.isNotEmpty() && !badAddress) {
-            val n = name.trim().ifEmpty { "Marquee" }
+            val n = name.trim().ifEmpty { "Momotus" }
             context.rememberJoin(s, n)
             holder.start(s, n)
         }
@@ -2155,7 +2155,7 @@ fun PairingScreen(
                         }
                         if (badAddress) Note(SyncCopy.BAD_ADDRESS, failed = true, side = 0.dp)
                         Labeled(SyncCopy.DEVICE) {
-                            MqTextField(name, { name = it }, label = SyncCopy.DEVICE, placeholder = "Marquee")
+                            MqTextField(name, { name = it }, label = SyncCopy.DEVICE, placeholder = "Momotus")
                         }
                         PrimaryButton("Show a code", begin, icon = Icons.QrCode, enabled = server.isNotBlank())
                     }

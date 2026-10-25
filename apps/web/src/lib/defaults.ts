@@ -15,15 +15,15 @@ export const groupTitles: Record<string, string> = {
 
 export const defaultsWords = {
   title: "Recommended addons",
-  lead: "Marquee starts with these. Turn off any you do not want; you can change this later in Settings.",
+  lead: "Momotus starts with these. Turn off any you do not want; you can change this later in Settings.",
   review: "Turn off any you do not want; you can change this later in Settings.",
-  settingsLede: "The addons Marquee recommends. A switch turned on adds the addon; Addons lists everything you have.",
+  settingsLede: "The addons Momotus recommends. A switch turned on adds the addon; Addons lists everything you have.",
   noCatalog: "Home and search need a catalog addon.",
   cardTitle: "New recommended addons",
   tvMore: "Add more later from your phone or computer.",
   // Set up Marquee opens the welcome steps, where the recommended addons are.
-  emptyHome: "None of the addons you have on shows a catalog here. Set up Marquee offers the recommended addons, or add an addon yourself.",
-  emptyDiscover: "Discover lists the catalogs of the addons you have on, and none of them has one. Set up Marquee offers the recommended addons.",
+  emptyHome: "None of the addons you have on shows a catalog here. Set up Momotus offers the recommended addons, or add an addon yourself.",
+  emptyDiscover: "Discover lists the catalogs of the addons you have on, and none of them has one. Set up Momotus offers the recommended addons.",
 };
 
 /** The defaults grouped for display: groups in the order they first come,

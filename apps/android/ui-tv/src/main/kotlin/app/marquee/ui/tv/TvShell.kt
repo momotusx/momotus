@@ -256,7 +256,7 @@ private fun TvTopNav(
     Box(modifier) {
         // The wordmark: the name alone, with no dot; not focusable.
         MqText(
-            "Marquee",
+            "Momotus",
             Modifier.align(Alignment.CenterStart).padding(start = Marquee.safe.side).clearAndSetSemantics { },
             role = TextRole.Title3,
             maxLines = 1,

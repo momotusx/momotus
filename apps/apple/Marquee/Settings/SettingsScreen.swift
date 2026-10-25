@@ -129,7 +129,7 @@ struct SettingsScreen: View {
                     StateLine(symbol: "triangle-alert", text: failure, action: ("Try again", { prefs.retry(); addons.retry() }))
                 }
                 section("About").padding(.top, Theme.Space.s)
-                Text("Marquee \(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? ""), core \(core.version)")
+                Text("Momotus \(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? ""), core \(core.version)")
                     .textFont(Theme.type.callout, relativeTo: .callout)
                     .foregroundStyle(Theme.Palette.muted)
                 if CoreBuild.missingEngine(field: CoreBuild.field, hasEngine: hasEngine()) {

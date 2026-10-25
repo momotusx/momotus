@@ -129,12 +129,12 @@ private func browse(_ url: String, as subject: String) async throws -> String {
         await flow.continueWith("mock", name: "Phone")
         guard case .new(let ticket) = flow.stage else { Issue.record("not new: \(flow.stage)"); return }
         #expect(sheets.passkeys == [true])
-        await flow.create(ticket: ticket, name: "Phone", userName: "Robin (Marquee)")
+        await flow.create(ticket: ticket, name: "Phone", userName: "Robin (Momotus)")
         // The new passkey gave no PRF output: 4.1.6.
         #expect(phone.joined && flow.stage == .noSecondWayIn && sheets.created == 1)
         // Try again: saved, and the first-run steps go on.
         sheets.create = .success(PasskeyContract.challenge())
-        await flow.savePasskey(userName: "Robin (Marquee)")
+        await flow.savePasskey(userName: "Robin (Momotus)")
         #expect(flow.stage == .done)
         #expect(phone.devices?.members.contains { $0.passkey } == true)
         #expect(try await phone.identities().map(\.provider) == ["mock"])
@@ -218,11 +218,11 @@ private func browse(_ url: String, as subject: String) async throws -> String {
         let sheets = ScriptedSheets()
         sheets.passkey = .success(.init(prf: theirs, user: try accountID(phone)))
         sheets.create = .success(PasskeyContract.challenge())
-        #expect(try await PasskeySave.here(sync: tablet, sheets: sheets.calls, userName: "Robin (Marquee)") == .saved)
+        #expect(try await PasskeySave.here(sync: tablet, sheets: sheets.calls, userName: "Robin (Momotus)") == .saved)
         #expect(sheets.created == 1)
         // This account's own passkey: it already works here, nothing saved.
         sheets.passkey = .success(.init(prf: ours, user: try accountID(tablet)))
-        #expect(try await PasskeySave.here(sync: tablet, sheets: sheets.calls, userName: "Robin (Marquee)") == .alreadyHere)
+        #expect(try await PasskeySave.here(sync: tablet, sheets: sheets.calls, userName: "Robin (Momotus)") == .alreadyHere)
         #expect(sheets.created == 1)
         withExtendedLifetime((phoneCore, tabletCore)) {}
     }

@@ -187,8 +187,8 @@ function PairForm() {
     // An address with a user name or password is never kept or sent.
     setBad(s !== "" && !plainAddress(s));
     if (!s || bad()) return;
-    sync.rememberJoin(s, name().trim() || "Marquee");
-    setRun({ server: s, name: name().trim() || "Marquee", n: (run()?.n ?? 0) + 1 });
+    sync.rememberJoin(s, name().trim() || "Momotus");
+    setRun({ server: s, name: name().trim() || "Momotus", n: (run()?.n ?? 0) + 1 });
   };
   return (
     <>

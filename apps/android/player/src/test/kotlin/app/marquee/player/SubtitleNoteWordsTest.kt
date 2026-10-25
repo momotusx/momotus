@@ -15,8 +15,8 @@ class SubtitleNoteWordsTest {
         assertEquals(
             listOf(
                 "TurkceAltyazi.org did not answer. Try its subtitles again in a moment.",
-                "TurkceAltyazi.org is turning requests away. Marquee will try again in a few minutes.",
-                "TurkceAltyazi.org changed its pages, so Marquee cannot read them. An update will fix this.",
+                "TurkceAltyazi.org is turning requests away. Momotus will try again in a few minutes.",
+                "TurkceAltyazi.org changed its pages, so Momotus cannot read them. An update will fix this.",
                 "This subtitle could not be read.",
                 "Subtitles from TurkceAltyazi.org did not load.",
             ),
@@ -35,7 +35,7 @@ class SubtitleNoteWordsTest {
         val notes = listOf(note(SubtitleProblem.Blocked), SubtitleNote("SubSense", SubtitleProblem.Unreachable))
         assertEquals(
             "Still asking subtitle addons\n" +
-                "TurkceAltyazi.org is turning requests away. Marquee will try again in a few minutes.\n" +
+                "TurkceAltyazi.org is turning requests away. Momotus will try again in a few minutes.\n" +
                 "SubSense did not answer. Try its subtitles again in a moment.",
             subtitlePanelNote(pending = true, notes = notes),
         )

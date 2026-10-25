@@ -404,7 +404,7 @@ class VersionsCopyTest {
                 onDevice = "On this device",
                 line = ReasonLine.Large((7.4 * gib).toLong(), 5 * gib, chosen = false),
             )
-        assertEquals("7.4 GB; Marquee prefers files up to 5 GB", VersionsCopy.sheetDetails(large, null))
+        assertEquals("7.4 GB; Momotus prefers files up to 5 GB", VersionsCopy.sheetDetails(large, null))
         // A part is said only whole: "14 GB" and "1.4 GB" do not say "4 GB".
         assertEquals(
             "4 GB",

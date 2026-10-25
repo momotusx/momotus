@@ -550,7 +550,7 @@ async fn a_list_over_a_megabyte_is_not_read() {
     let source = Source::start(&padded, COMMUNITY).await;
     let core = Core::temporary("p").unwrap();
     let failed = ListState::Failed {
-        words: "Cinemeta sent a list Marquee cannot read".into(),
+        words: "Cinemeta sent a list Momotus cannot read".into(),
     };
     let snapshot = settled(&AddonCatalogView::open_from(&core, &source.url(), false)).await;
     assert_eq!(snapshot.lists[0].state, failed);
@@ -664,7 +664,7 @@ async fn unreadable_addons_fail_the_lists_instead_of_reading_absent() {
         assert_eq!(
             list.state,
             ListState::Failed {
-                words: "Marquee could not read your addons".into()
+                words: "Momotus could not read your addons".into()
             }
         );
         assert!(list.entries.is_empty());
@@ -721,7 +721,7 @@ async fn an_unreadable_list_fails_alone() {
     assert_eq!(
         snapshot.lists[0].state,
         ListState::Failed {
-            words: "Cinemeta sent a list Marquee cannot read".into()
+            words: "Cinemeta sent a list Momotus cannot read".into()
         }
     );
     assert_eq!(snapshot.lists[1].state, ListState::Ready);
