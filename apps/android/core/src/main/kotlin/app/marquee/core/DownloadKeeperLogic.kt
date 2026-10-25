@@ -94,7 +94,7 @@ data class KeeperFacts(
         fun of(snapshot: DownloadsSnapshot): KeeperFacts {
             val kept = snapshot.titles.flatMap { it.rows }
             return KeeperFacts(
-                left = snapshot.downloading.count { it.state != DownloadState.Paused },
+                left = snapshot.active.running + snapshot.active.queued + snapshot.active.waiting,
                 bytesDone = snapshot.active.bytesDone,
                 bytesTotal = snapshot.active.bytesTotal,
                 title = snapshot.active.title,
@@ -108,7 +108,7 @@ data class KeeperFacts(
                             ).joinToString(" ")
                     },
                 neededBytes = snapshot.storage.neededBytes,
-                unmetered = snapshot.settings.wifiOnly && snapshot.downloading.none { it.mobileData },
+                unmetered = snapshot.settings.wifiOnly && !snapshot.active.mobileData,
             )
         }
     }

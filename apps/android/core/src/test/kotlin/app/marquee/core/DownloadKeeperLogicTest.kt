@@ -9,9 +9,7 @@ import app.marquee.core.KeeperEffect.Progress
 import app.marquee.core.KeeperEffect.Release
 import app.marquee.core.KeeperEffect.SettleLater
 import app.marquee.core.model.DownloadActivity
-import app.marquee.core.model.DownloadRow
 import app.marquee.core.model.DownloadSettings
-import app.marquee.core.model.DownloadState
 import app.marquee.core.model.DownloadStorage
 import app.marquee.core.model.DownloadsSnapshot
 import kotlin.test.Test
@@ -128,37 +126,24 @@ class DownloadKeeperLogicTest {
         assertTrue(Release in keeper.on(KeeperEvent.Settled))
     }
 
-    /** Paused downloads are not left to do; waiting ones are, and a mobile-data release needs any network. */
+    /**
+     * The core counts what is left for the keeper, waiting downloads included, also for a locked profile with no row
+     * to read; a download let onto mobile data needs any network.
+     */
     @Test
-    fun `the facts count all but paused, and Wi-Fi only asks for Wi-Fi unless one goes on mobile data`() {
-        fun row(
-            id: String,
-            state: DownloadState,
-            mobileData: Boolean = false,
-        ) = DownloadRow(
-            id = id,
-            kind = "movie",
-            itemId = id,
-            videoId = id,
-            name = id,
-            state = state,
-            mobileData = mobileData,
-            bytesDone = 0,
-        )
-
+    fun `the facts count running, queued and waiting, and Wi-Fi only asks for Wi-Fi unless one goes on mobile data`() {
         fun snapshot(
-            vararg rows: DownloadRow,
+            waiting: Int,
+            mobileData: Boolean = false,
             wifiOnly: Boolean = true,
         ) = DownloadsSnapshot(
             storage = DownloadStorage(0),
             settings = DownloadSettings(wifiOnly = wifiOnly, smart = true),
-            active = DownloadActivity(0, 0, 0, 0),
-            downloading = rows.toList(),
+            active = DownloadActivity(1, 1, 0, 0, waiting = waiting, mobileData = mobileData),
         )
-        val waiting = snapshot(row("a", DownloadState.Waiting), row("b", DownloadState.Paused))
-        assertEquals(1, KeeperFacts.of(waiting).left)
-        assertTrue(KeeperFacts.of(waiting).unmetered)
-        assertEquals(false, KeeperFacts.of(snapshot(row("a", DownloadState.Waiting, mobileData = true))).unmetered)
-        assertEquals(false, KeeperFacts.of(snapshot(row("a", DownloadState.Queued), wifiOnly = false)).unmetered)
+        assertEquals(3, KeeperFacts.of(snapshot(waiting = 1)).left)
+        assertTrue(KeeperFacts.of(snapshot(waiting = 1)).unmetered)
+        assertEquals(false, KeeperFacts.of(snapshot(waiting = 1, mobileData = true)).unmetered)
+        assertEquals(false, KeeperFacts.of(snapshot(waiting = 0, wifiOnly = false)).unmetered)
     }
 }
