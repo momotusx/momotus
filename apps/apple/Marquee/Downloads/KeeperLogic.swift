@@ -94,6 +94,10 @@ struct KeeperLogic {
     /// review r1 M3).
     static func reportsFreeBytes(_ platform: KeeperPlatform) -> Bool { platform != .mac }
 
+    /// A window went to the background: the app left only when no other window is in front (an iPad shows
+    /// several), so a second window going away never holds the downloads of the one in use.
+    static func appLeft(windowsInFront: Int) -> Bool { windowsInFront == 0 }
+
     /// The continued task's one identifier, under the `<bundle>.downloads.*` wildcard Info.plist permits:
     /// registered once, every submit reuses it.
     static func taskIdentifier(bundle: String) -> String { "\(bundle).downloads.queue" }

@@ -50,6 +50,15 @@ final class SystemEvents {
 
 /// Forwards foreground and background to the core.
 struct ScenePhaseForward: ViewModifier {
+    /// The app's windows still in front (an iPad can show several); the Mac's are never held.
+    @MainActor static var windowsInFront: Int {
+        #if os(iOS)
+        UIApplication.shared.connectedScenes.filter { $0.activationState == .foregroundActive || $0.activationState == .foregroundInactive }.count
+        #else
+        0
+        #endif
+    }
+
     let core: CoreClient
     let sync: SyncModel
     #if !os(tvOS)
@@ -70,8 +79,9 @@ struct ScenePhaseForward: ViewModifier {
                 if sync.joined { sync.request() }
             case .background:
                 #if !os(tvOS)
-                // Below iOS 26 the downloads wait (`app`) before the system suspends the app.
-                downloads?.handle(.background)
+                // Below iOS 26 the downloads wait (`app`) before the system suspends the app: when the last window
+                // leaves, never while another iPad window is in front (review r1 m7).
+                if KeeperLogic.appLeft(windowsInFront: Self.windowsInFront) { downloads?.handle(.background) }
                 #endif
                 #if os(iOS) || os(tvOS)
                 // Trakt's scrobbles go before the app is suspended: the system waits for the

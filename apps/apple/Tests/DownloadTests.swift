@@ -294,6 +294,16 @@ private func submits(_ effects: [KeeperEffect]) -> Int {
     #expect(keeper.on(.background).contains(.allowed(false, reason: "app")))
 }
 
+// An iPad window going away while another is in front does not hold the downloads (review r1 m7).
+@Test func onlyTheLastWindowLeavingHoldsDownloads() throws {
+    #expect(KeeperLogic.appLeft(windowsInFront: 0))
+    #expect(!KeeperLogic.appLeft(windowsInFront: 1))
+    #expect(!KeeperLogic.appLeft(windowsInFront: 2))
+    let app = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appending(path: "../Marquee")
+    let events = try String(contentsOf: app.appending(path: "App/SystemEvents.swift"), encoding: .utf8)
+    #expect(events.contains("if KeeperLogic.appLeft(windowsInFront: Self.windowsInFront) { downloads?.handle(.background) }"))
+}
+
 @Test func belowIOS26TheBackgroundHoldsDownloads() {
     var keeper = KeeperLogic(platform: .foreground)
     _ = keeper.on(.facts(facts(left: 1)))
