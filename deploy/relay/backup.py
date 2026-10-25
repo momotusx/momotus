@@ -20,6 +20,7 @@ import sqlite3
 import sys
 import tempfile
 import time
+from contextlib import closing
 from pathlib import Path
 
 DB = "relay.sqlite"
@@ -37,7 +38,7 @@ def sha256(path: Path) -> str:
 def check_integrity(path: Path) -> None:
     """Raises unless SQLite finds the copy whole."""
     try:
-        with sqlite3.connect(path) as conn:
+        with closing(sqlite3.connect(path)) as conn:
             result = conn.execute("PRAGMA integrity_check").fetchone()[0]
     except sqlite3.DatabaseError as e:
         raise RuntimeError(f"{path.name}: {e}") from e
@@ -52,7 +53,9 @@ def back_up(data: Path, keep: int = 14) -> str:
     tmp_db = out / f".{stamp}.sqlite.tmp"
     tmp_journal = out / f".{stamp}.roster.jsonl.tmp"
     try:
-        with sqlite3.connect(data / DB) as src, sqlite3.connect(tmp_db) as dst:
+        # closing(): a sqlite3 connection's own `with` commits but never closes, and an open
+        # copy keeps its -wal and -shm files beside the temporary name after the rename.
+        with closing(sqlite3.connect(data / DB)) as src, closing(sqlite3.connect(tmp_db)) as dst:
             src.backup(dst)
         check_integrity(tmp_db)
         # The relay appends while this runs: a line it is still writing is
@@ -123,6 +126,9 @@ def self_test() -> None:
             back_up(data, keep=2)
         sets = sorted(p.name for p in (data / "backups").glob("*.SHA256SUMS"))
         assert len(sets) == 2 and stamp + ".SHA256SUMS" not in sets, f"pruning kept {sets}"
+        # prune() never removes a dot file, so a temporary one left behind stays for good.
+        left = [p.name for p in (data / "backups").iterdir() if p.name.startswith(".")]
+        assert not left, f"temporary files left behind: {left}"
         live.close()
     print("backup.py self-test: ok")
 
