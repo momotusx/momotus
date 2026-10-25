@@ -111,3 +111,44 @@ test("TV: Back on the bar of a pushed Settings page goes Home", async ({ browser
   await expect.poll(() => focused(page)).toBe("nav:/");
   await context.close();
 });
+
+test("TV: a pointer's click on a tab stays a link: one more history entry, and the focus goes on into the place", async ({ browser }) => {
+  const context = await browser.newContext({ viewport: { width: 1920, height: 1080 }, reducedMotion: "reduce" });
+  const page = await context.newPage();
+  await page.goto("/?form=tv");
+  await expect(page.locator('[data-f="nav:/library"]')).toBeVisible({ timeout: 30_000 });
+  await expect.poll(() => focused(page), { timeout: 30_000 }).not.toBeNull();
+  const before = await depth(page);
+  await page.click('[data-f="nav:/library"]');
+  await expect(page).toHaveURL(/\/library/);
+  expect(await depth(page)).toBe(before + 1);
+  // Not a viewer's move along the bar: the place takes its first focus as before.
+  await expect.poll(() => focused(page)).not.toMatch(/^nav:/);
+  await context.close();
+});
+
+test("TV: Select during the settle navigates once", async ({ browser }) => {
+  const context = await browser.newContext({ viewport: { width: 1920, height: 1080 }, reducedMotion: "reduce" });
+  const page = await context.newPage();
+  await page.goto("/?form=tv");
+  const home = page.locator('[data-f="nav:/"]');
+  await expect(home).toBeVisible({ timeout: 30_000 });
+  await expect.poll(() => focused(page), { timeout: 30_000 }).not.toBeNull();
+  await home.focus();
+  await page.evaluate(() => {
+    const w = window as unknown as { replaced: string[] };
+    w.replaced = [];
+    const replace = history.replaceState.bind(history);
+    history.replaceState = (data, unused, url) => {
+      if (url) w.replaced.push(String(url));
+      replace(data, unused, url);
+    };
+  });
+  await page.keyboard.press("ArrowRight");
+  await page.keyboard.press("Enter");
+  await expect(page).toHaveURL(/\/discover/);
+  await page.waitForTimeout(500);
+  const replaced = await page.evaluate(() => (window as unknown as { replaced: string[] }).replaced.filter((u) => u.includes("/discover")));
+  expect(replaced).toHaveLength(1);
+  await context.close();
+});
