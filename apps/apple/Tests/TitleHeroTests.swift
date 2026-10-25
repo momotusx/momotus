@@ -25,8 +25,8 @@ private func details(_ overrides: [String: Any] = [:]) throws -> TitleDetails {
 }
 
 /// A version list where nothing plays and the way on would hold only Back: Resume stays, inert.
-private func noRoom() throws -> VersionsSnapshot {
-    let empty = try JSONDecoder().decode(EmptyVersions.self, from: Data(#"{"kind": "noRoom", "count": 0, "rows": [], "key": null}"#.utf8))
+private func nothingForKids() throws -> VersionsSnapshot {
+    let empty = try JSONDecoder().decode(EmptyVersions.self, from: Data(#"{"kind": "kidsNothing", "count": 0, "rows": [], "key": null}"#.utf8))
     return VersionsSnapshot(
         recommended: nil, rows: [], pendingAddons: [], slowAddons: [], failedAddons: [], done: true, frozen: false,
         conditions: nil, note: nil, empty: empty)
@@ -62,7 +62,7 @@ private struct Row: View {
 private func rows() throws -> [(String, Row)] {
     let resume = { (label: String) in PlayTarget(videoId: "v", label: label, resumeMs: 1_800_000, leftMs: 3_720_000) }
     return [
-        ("movie, inert", Row(kind: "movie", target: resume("Resume"), versions: try noRoom())),
+        ("movie, inert", Row(kind: "movie", target: resume("Resume"), versions: try nothingForKids())),
         ("movie, resume", Row(kind: "movie", target: resume("Resume"), versions: nil)),
         ("series, resume", Row(kind: "series", target: resume("Resume S6:E2"), versions: nil)),
     ]

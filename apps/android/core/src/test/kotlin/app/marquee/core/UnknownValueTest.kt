@@ -80,10 +80,10 @@ class UnknownValueTest {
         assertEquals("\"tooLarge\"", CoreJson.encodeToString(HideReason.TooLarge))
         assertEquals(HideReason.NotForKids, CoreJson.decodeFromString(HideReason.serializer(), "\"notForKids\""))
         // M13's hide reasons are known.
-        val m13 = snapshot.replace("geoBlocked", "needsDebrid").replace("expired", "noSpace")
+        val m13 = snapshot.replace("geoBlocked", "needsDebrid").replace("expired", "notForKids")
         val known = CoreJson.decodeFromString(VersionsSnapshot.serializer(), m13)
         assertEquals(
-            listOf(HideReason.NeedsDebrid, HideReason.TooLarge, HideReason.NoSpace),
+            listOf(HideReason.NeedsDebrid, HideReason.TooLarge, HideReason.NotForKids),
             known.hidden.byReason.map { it.first },
         )
         // A zero-playable state from a newer core reads as Unknown, and its line as noResults's.

@@ -119,8 +119,6 @@ const DEFAULTED = new Map([
   // Offline downloads: an older core never shows a title built from them.
   ["TitleHeader.offline", "false"],
   ["Devices.account", "\"\""],
-  // The streaming window's no-punch words: an older core says nothing, as on a volume without windows.
-  ["VersionsConditions.window", "false"],
   // The IMDb score: an older core or recording has no score to show.
   ["Tile.ratings", "Ratings()"],
   ["TitleDetails.ratings", "Ratings()"],

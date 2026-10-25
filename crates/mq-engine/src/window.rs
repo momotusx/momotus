@@ -14,8 +14,9 @@ pub use mq_engine_sched::{
     APFS_HEAD_BYTES, HeldBytes, RESERVE_BYTES, RING_BYTES, WindowInputs, WindowPlan,
 };
 
-/// Under a quarter of the reserve the playback ends with "storage full"
-/// before any write fails (2.4).
+/// Under a quarter of the reserve a window plays on in a ring, in RAM where
+/// the torrent is piece files, and a whole file becomes one; no playback
+/// ends for space (plans/no-space-warnings.md).
 const FLOOR_BYTES: u64 = RESERVE_BYTES / 4;
 
 /// How often the keeper reads the free space when nothing wakes it.
@@ -26,13 +27,28 @@ const GUARD_EVERY: Duration = Duration::from_secs(1);
 const HOLES_EVERY: Duration = Duration::from_millis(100);
 const HOLES_FOR: Duration = Duration::from_secs(2);
 
-/// Failed rounds in a row that end the playback (2.4).
+/// Failed rounds in a row after which a window's file plays on whole,
+/// freeing nothing (plans/no-space-warnings.md).
 const FAILED_ROUNDS: u32 = 3;
 
 /// Sizes a window with `class`'s windows (2.1, 2.2), a ring when `room`
 /// is under `W_min + 64 MiB` (plans/streaming-window-chunks.md).
 pub fn window_plan(class: DeviceClass, i: WindowInputs) -> WindowPlan {
     mq_engine_sched::window_plan(&class.sched(), i)
+}
+
+/// A walk build's window of at most `limit` bytes (plans/streaming-window.md
+/// 4): under the window's floor, the ring of `limit`, never a refusal.
+pub fn window_within(class: DeviceClass, i: WindowInputs, limit: u64) -> WindowPlan {
+    window_plan(class, i).within(limit).unwrap_or_else(|| {
+        let ring = WindowInputs {
+            free: limit + RESERVE_BYTES,
+            reclaimable: 0,
+            committed: 0,
+            ..i
+        };
+        window_plan(class, ring)
+    })
 }
 
 /// `f_bavail × f_frsize` of the volume holding `dir`.
@@ -142,25 +158,33 @@ impl WindowState {
 
 impl Engine {
     /// The space guard for whole files (2.4), on the maintenance tick:
-    /// under the terminal floor a claimed playback ends with "storage
-    /// full"; under the reserve its readahead stops, and comes back over
-    /// the reserve plus 8 MiB.
+    /// under the reserve a claimed playback's readahead stops, and comes
+    /// back over the reserve plus 8 MiB; under the floor it plays on in a
+    /// ring window, which frees what is behind the read
+    /// (plans/no-space-warnings.md).
     pub(crate) async fn guard_whole_files(&self) {
         let Some(free) = self.free() else {
             return;
         };
-        let all: Vec<Arc<Torrent>> = lock(&self.inner.torrents).values().cloned().collect();
-        for t in all {
-            if !t.claimed() || lock(&t.window).is_some() || lock(&t.ended).is_some() {
-                continue;
-            }
-            if free < FLOOR_BYTES {
-                self.end_window(&t, "storage full", None).await;
+        let all: Vec<(TorrentHandle, Arc<Torrent>)> = lock(&self.inner.torrents)
+            .iter()
+            .map(|(h, t)| (*h, t.clone()))
+            .collect();
+        for (h, t) in all {
+            if !t.claimed() || lock(&t.window).is_some() {
                 continue;
             }
             let Some((file, bytes_per_s, readahead)) = *lock(&t.rate) else {
                 continue;
             };
+            if free < FLOOR_BYTES && !t.unpunched.load(Ordering::Relaxed) {
+                if let Some(w) = self.floor_window(h, file, bytes_per_s, false, free).await
+                    && let Err(e) = self.window(h, file, w).await
+                {
+                    tracing::warn!("a whole file under the floor: {e}");
+                }
+                continue;
+            }
             let starved = t.starved.load(Ordering::Relaxed);
             let now = match () {
                 _ if free < RESERVE_BYTES => true,
@@ -183,6 +207,44 @@ impl Engine {
 }
 
 impl Engine {
+    /// `file`'s window under the floor, at `free` and counting no idle
+    /// torrent (plans/no-space-warnings.md): a ring, in RAM where the
+    /// torrent is piece files.
+    async fn floor_window(
+        &self,
+        h: TorrentHandle,
+        file: usize,
+        bitrate: u64,
+        metered: bool,
+        free: u64,
+    ) -> Option<crate::Window> {
+        let plan = match self.window_inputs(h, file, free, bitrate, 0).await {
+            Ok(i) => window_plan(
+                self.device_class(),
+                WindowInputs {
+                    reclaimable: 0,
+                    ..i
+                },
+            ),
+            Err(e) => {
+                tracing::warn!("planning a window at {free} bytes free: {e}");
+                return None;
+            }
+        };
+        tracing::info!(
+            budget = plan.budget,
+            memory = plan.memory,
+            free,
+            "window under the floor"
+        );
+        Some(crate::Window {
+            plan,
+            bitrate,
+            metered,
+            resume_at: None,
+        })
+    }
+
     /// APFS fills the holes between small extents at the data sync after a
     /// punch: pieces with no block written read back as data. When the file
     /// holds more than the scheduler counts plus `h`, the pieces the file
@@ -285,18 +347,6 @@ fn data_pieces(_path: &Path, _offset: u64, _piece_len: u64) -> Vec<u32> {
     Vec::new()
 }
 
-/// Why a window ended the playback (2.4).
-fn storage_error(errors: &[String]) -> String {
-    if errors
-        .iter()
-        .any(|e| e.contains("No space left") || e.contains("os error 28"))
-    {
-        "storage full".into()
-    } else {
-        "this storage cannot free space while playing".into()
-    }
-}
-
 /// The keeper of one windowed torrent (2.4): one round at a time, woken by
 /// the adapter when the torrent holds more than `W - h / 2` and every
 /// second for the space guard. When the last claim drops it trims the
@@ -353,11 +403,19 @@ async fn keep_windows(engine: &Weak<Inner>, h: TorrentHandle, t: &Arc<Torrent>) 
         } else {
             engine.free().unwrap_or(u64::MAX)
         };
-        if free < FLOOR_BYTES {
-            engine
-                .end_window(t, "storage full", Some(state.generation))
+        // Under the floor the window plays on in a ring: in RAM where the
+        // torrent is piece files, else on disk (plans/no-space-warnings.md).
+        let ram = !state.plan.memory && t.chunked.load(Ordering::Relaxed);
+        if free < FLOOR_BYTES && (!state.plan.ring() || ram) {
+            let w = engine
+                .floor_window(h, state.file, state.bitrate, state.metered, free)
                 .await;
-            break;
+            if let Some(w) = w
+                && let Err(e) = engine.set_window(h, state.file, w).await
+            {
+                tracing::warn!("a window under the floor: {e}");
+            }
+            continue;
         }
         // The space guard (2.4): the scheduler may hold what it holds and the
         // free space over the reserve, never more than its full budget, so
@@ -375,7 +433,9 @@ async fn keep_windows(engine: &Weak<Inner>, h: TorrentHandle, t: &Arc<Torrent>) 
             ..state
         }
         .budget();
-        let shortfall = full.saturating_sub(live);
+        // Never under the window's floor: what it needs to play
+        // (plans/no-space-warnings.md).
+        let shortfall = full.saturating_sub(live.max(state.plan.floor));
         let moved = shortfall.abs_diff(state.shortfall) > state.plan.slack / 2
             || (shortfall == 0) != (state.shortfall == 0);
         if moved {
@@ -395,9 +455,13 @@ async fn keep_windows(engine: &Weak<Inner>, h: TorrentHandle, t: &Arc<Torrent>) 
             Ok(r) => failed.extend(r.error),
             Err(e) => failed.push(e.to_string()),
         }
+        // Punches that keep failing free nothing: the file plays on whole,
+        // never ended for space (plans/no-space-warnings.md).
         if failed.len() as u32 >= FAILED_ROUNDS {
+            tracing::warn!("{}: punches fail, playing whole: {failed:?}", t.info_hash);
+            t.unpunched.store(true, Ordering::Relaxed);
             engine
-                .end_window(t, &storage_error(&failed), Some(state.generation))
+                .put_window(t, None, None, Some(state.generation))
                 .await;
             break;
         }

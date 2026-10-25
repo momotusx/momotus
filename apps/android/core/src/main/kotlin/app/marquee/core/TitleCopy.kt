@@ -19,7 +19,7 @@ import kotlin.math.roundToInt
  */
 data class PrimaryAction(
     val label: String,
-    /** A state whose only way on is Back (noRoom, kidsNothing, noResults): in place, dimmed, not focusable, no action. */
+    /** A state whose only way on is Back (kidsNothing, noResults): in place, dimmed, not focusable, no action. */
     val inert: Boolean = false,
     /** No addon answered and this device keeps the version last played (unreachable): Play plays it. */
     val keptKey: String? = null,
@@ -153,7 +153,7 @@ object TitleCopy {
     /**
      * What Play does (plans/play-every-version.md, the title-page row in the shared table). While versions arrive
      * and once one is recommended it plays it. When nothing can play the core's line sits under it, and: unreachable
-     * with a kept version plays that version; noRoom, needsAccount, kidsNothing and noResults leave it inert (a Play that opens a
+     * with a kept version plays that version; needsAccount, kidsNothing and noResults leave it inert (a Play that opens a
      * page holding only Back is a dead end); every other state opens Versions, which holds the line, its action
      * and the rows that can still start.
      */

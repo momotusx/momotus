@@ -268,7 +268,7 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
   });
   const snap = () => playback()?.state.data ?? null;
   const failed = () => snap()?.phase === "failed";
-  // A failed play's reason in the shared table: no room (Back only), unreachable (Try again), none plays
+  // A failed play's reason in the shared table: unreachable (Try again), none plays
   // here (another version); notStarted keeps Try again and Choose another version. A hand pick with an
   // offer keeps the offer's card.
   const failedAs = () => (failed() && !snap()?.offer ? (snap()?.empty ?? null) : null);
@@ -1188,7 +1188,7 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
                   </Show>
                   {/* This play again from its first pick (`retry`), or the
                       playback opened again: what failed may be the moment. */}
-                  <Show when={(failed() || openError() || titleError()) && failedAs() !== "noRoom" && failedAs() !== "nothingPlaysHere"}>
+                  <Show when={(failed() || openError() || titleError()) && failedAs() !== "nothingPlaysHere"}>
                     <button
                       class="btn big"
                       classList={{ primary: !snap()?.offer && (!openError() || !!titleError()) }}
@@ -1200,7 +1200,7 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
                       Try again
                     </button>
                   </Show>
-                  <Show when={!openError() && !titleError() && !s().empty && failedAs() !== "noRoom" && failedAs() !== "unreachable"}>{chooseVersion()}</Show>
+                  <Show when={!openError() && !titleError() && !s().empty && failedAs() !== "unreachable"}>{chooseVersion()}</Show>
                   {/* The one way on when nothing plays and the state has no action of its own. */}
                   <button
                     class="btn big"

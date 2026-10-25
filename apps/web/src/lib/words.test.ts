@@ -138,7 +138,7 @@ test("every zero-playable state reads its shared line with its actions in the ta
   expect(steps("nothingPlaysHere", "chooseVersion")).toEqual(["Choose a version"]);
   // Choose a version is the player's and the title's, never Versions' own.
   expect(steps("nothingPlaysHere", "chooseVersion", true)).toEqual([]);
-  for (const kind of ["noRoom", "kidsNothing", "noResults"] as const) {
+  for (const kind of ["kidsNothing", "noResults"] as const) {
     expect(steps(kind, "none")).toEqual([]);
     expect(emptyWords({ kind, action: "none" }).text).toBe(shared.empty[kind].text);
   }
@@ -152,7 +152,7 @@ test("the device line reads as one sentence, leaving out what is not known", () 
   expect(conditionsLine({ screenClass: 1080, hdr: false, network: "cellular", speed: prior, freeBytes: null })).toBe("1080p, mobile data");
   const v: VersionsConditions = {
     screenClass: 480, hdr: false, network: "other", http: prior, p2p: measured, freeBytes: null,
-    runtimeMin: 52, sizeLimitBytes: 5 * GiB, minSeeders: 50, engine: true, account: false, window: true,
+    runtimeMin: 52, sizeLimitBytes: 5 * GiB, minSeeders: 50, engine: true, account: false,
   };
   // No account and the engine: the torrent speed decides; with an account, or without the engine, the HTTP one does.
   expect(speedFor(v, false)).toBe(measured);

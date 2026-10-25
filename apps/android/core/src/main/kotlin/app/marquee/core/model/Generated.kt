@@ -132,7 +132,6 @@ enum class BlockedReason(
     val wire: String,
 ) {
     NeedsAccount("needsAccount"),
-    NoSpace("noSpace"),
     NothingPlaysHere("nothingPlaysHere"),
 
     /** A value from a newer core that this app does not know yet. */
@@ -636,7 +635,6 @@ enum class EmptyKind(
 ) {
     NoSource("noSource"),
     Unreachable("unreachable"),
-    NoRoom("noRoom"),
     NeedsAccount("needsAccount"),
     KidsNothing("kidsNothing"),
     NoResults("noResults"),
@@ -789,7 +787,6 @@ enum class HideReason(
     LeavesApp("leavesApp"),
     NotForKids("notForKids"),
     NeedsDebrid("needsDebrid"),
-    NoSpace("noSpace"),
 
     /** A value from a newer core that this app does not know yet. */
     Unknown(""),
@@ -1334,7 +1331,7 @@ data class PlaybackSnapshot(
     val moved: String? = null,
     /** The start has taken `CHOOSE_AFTER` (20 s): the loading screen shows the quiet "Choose another version" beside Back (plans/play-every-version.md 2e). */
     val chooseAnother: Boolean = false,
-    /** Why nothing played, once `phase` is `failed`: the zero-playable words for what happened (`empty.<kind>` in stream-choice-words.json): notStarted when the start's budget ran out; else noRoom when every failure was a refusal for room, nothingPlaysHere when every failure was the versions' own on this device, else unreachable. */
+    /** Why nothing played, once `phase` is `failed`: the zero-playable words for what happened (`empty.<kind>` in stream-choice-words.json): notStarted when the start's budget ran out; else nothingPlaysHere when every failure was the versions' own on this device, else unreachable. */
     val empty: EmptyKind? = null,
     /** When a first play's start budget (90 s from its first attempt's add) ends, in epoch ms, while it runs: from the first attempt until a source played past its start (or the playback failed). Time the app spends after `ready` (another player engine opening the file) counts against it too (plans/apple-second-engine.md 2.3). Null otherwise. An app reads it only while it is still opening the source: a video that plays, or is paused, before its first 30 s is never failed by it. */
     val startBudgetEndsAt: Long? = null,
@@ -2414,8 +2411,6 @@ data class VersionsConditions(
     val engine: Boolean,
     /** The profile has a streaming service account. */
     val account: Boolean,
-    /** A torrent too big for the free space may play in a window here (plans/streaming-window.md 2.6). Off, such a row is too large for this storage, whatever its free space. */
-    val window: Boolean = false,
 )
 
 /** One quality section of the Versions page (plans/play-every-version.md 2f). */

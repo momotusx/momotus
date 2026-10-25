@@ -145,7 +145,7 @@ private func prefs(uhd: String = learned(), fhd: String = learned(), epoch: Int 
     #expect(row.line?.kind == "few" && row.line?.seeders == 7 && row.sourceClass == "swarm")
     #expect(try JSONDecoder().decode(VersionRow.self, from: Data((rowJSON + "}").utf8)).line == nil)
     let snap = #"{"recommended": null, "rows": [], "hidden": {"count": 0, "byReason": []}, "pendingAddons": [], "slowAddons": [], "failedAddons": [], "done": true, "frozen": false"#
-    let full = try JSONDecoder().decode(VersionsSnapshot.self, from: Data((snap + #", "conditions": {"screenClass": 2160, "hdr": true, "network": "wifi", "http": {"mbps": 15, "samples": 0}, "p2p": {"mbps": 10, "samples": 0}, "freeBytes": 1024, "runtimeMin": 22, "sizeLimitBytes": null, "minSeeders": 50, "engine": true, "account": false}, "blocked": {"reason": "noSpace", "count": 2, "rows": []}, "note": null}"#).utf8))
+    let full = try JSONDecoder().decode(VersionsSnapshot.self, from: Data((snap + #", "conditions": {"screenClass": 2160, "hdr": true, "network": "wifi", "http": {"mbps": 15, "samples": 0}, "p2p": {"mbps": 10, "samples": 0}, "freeBytes": 1024, "runtimeMin": 22, "sizeLimitBytes": null, "minSeeders": 50, "engine": true, "account": false}, "blocked": {"reason": "nothingPlaysHere", "count": 2, "rows": []}, "note": null}"#).utf8))
     // `blocked` and `hidden` are still sent (plans/play-every-version.md 2c) and no longer read.
     #expect(full.conditions?.screenClass == 2160 && full.empty == nil && full.note == nil)
     #expect(try JSONDecoder().decode(VersionsSnapshot.self, from: Data((snap + "}").utf8)).conditions == nil)

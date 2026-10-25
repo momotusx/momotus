@@ -666,8 +666,8 @@ fun PlayerStatus(
                         focusRequester = focus,
                     )
                     SecondaryButton(CHOOSE_ANOTHER, onVersions, icon = Icons.Layers)
-                } else if (empty == EmptyKind.NoRoom || empty == EmptyKind.KidsNothing ||
-                    empty == EmptyKind.NoResults || empty == EmptyKind.NeedsAccount
+                } else if (empty == EmptyKind.KidsNothing || empty == EmptyKind.NoResults ||
+                    empty == EmptyKind.NeedsAccount
                 ) {
                     // Nothing to do here but leave: Back alone, never a way to a page that holds only Back.
                     // needsAccount too: an account is set up in Settings only (the owner, 2026-10-23).

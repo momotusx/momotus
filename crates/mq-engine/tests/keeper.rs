@@ -721,58 +721,22 @@ async fn the_next_file_of_a_live_torrent_gets_its_round_and_ends_the_window() {
     test_hooks::set_free(&w.engine, None);
 }
 
-/// f. Every punch refused: after three failed rounds the playback ends,
-/// before any write fails, and ranges fail with the reason.
+/// f. Every punch refused: after three failed rounds the keeper stops its
+/// rounds and the playback plays on to the end, every byte right; it never
+/// ends for space (plans/no-space-warnings.md).
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn refused_punches_end_the_playback_cleanly() {
+async fn refused_punches_play_on_to_the_end() {
     let s = support::swarm_big(48 << 20, PIECE).await;
     let root = tempfile::tempdir().unwrap();
     let folder = root.path().join(&s.info_hash);
     std::fs::create_dir_all(&folder).unwrap();
     sync_log::fail(&folder, Fail::PunchRefused, usize::MAX);
     let w = windowed_on(s, root, plan(), None).await;
-    // What the scheduler holds, sampled through the read (review r2 B).
-    let held = Arc::new(AtomicU64::new(0));
-    let watch = tokio::spawn({
-        let (engine, t, held) = (w.engine.clone(), w.t, held.clone());
-        async move {
-            loop {
-                if let Ok(s) = engine.stats(t).await {
-                    held.fetch_max(s.held_bytes.unwrap_or(0), Ordering::Relaxed);
-                }
-                tokio::time::sleep(Duration::from_millis(5)).await;
-            }
-        }
-    });
-    let reader = w.engine.open_reader(w.t, "default", w.movie).await.unwrap();
-    let mut range = reader.range(0, None).await.unwrap();
-    let mut got = Vec::new();
-    let err = within(60, range.read_to_end(&mut got)).await.unwrap_err();
-    watch.abort();
-    assert_eq!(
-        err.to_string(),
-        "this storage cannot free space while playing"
-    );
-    assert!(
-        got[..] == w.s.movie[..got.len()],
-        "every byte read is right"
-    );
-    match reader.range(0, None).await {
-        Err(EngineError::Storage(why)) => {
-            assert_eq!(why, "this storage cannot free space while playing")
-        }
-        other => panic!("{:?}", other.err()),
-    }
-    // Nothing past the budget but what 2.4's ceiling lets the player's
-    // blocking window take while the rounds fail: that window rounded out
-    // to pieces, plus a piece (2 MiB here).
-    let max = allocated(&w.dir());
-    assert!(max <= W + 2 * MIB, "no fetch past the ceiling: {max}");
-    let held = held.load(Ordering::Relaxed);
-    assert!(
-        held > 0 && held <= W + 2 * MIB,
-        "held past the ceiling: {held}"
-    );
+    let len = w.s.movie.len() as u64;
+    let got = w.read(0, len).await;
+    assert!(got == w.s.movie, "bytes differ");
+    let rounds = w.stats().await.evict_rounds;
+    assert!(rounds > 0 && rounds <= 3, "{rounds} rounds");
 }
 
 /// f, second half (reviews P1-1, r2 P2-2). Free space that follows the
@@ -998,30 +962,55 @@ async fn a_starved_whole_file_stays_starved_through_a_network_change() {
     .await;
 }
 
-/// q. Under the terminal floor (a quarter of the reserve) the playback ends
-/// with "storage full" before any write fails.
+/// q. Under the floor (a quarter of the reserve) a window plays on in a
+/// ring and reads to the end, every byte right (plans/no-space-warnings.md).
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn under_the_floor_the_playback_ends_with_storage_full() {
+async fn under_the_floor_a_window_plays_on_in_a_ring() {
     let w = windowed(48 << 20, plan(), None).await;
     assert!(w.read(0, 4 * MIB).await == w.movie(0, 4 * MIB));
     test_hooks::set_free(&w.engine, Some(RESERVE_BYTES / 4 - 1));
-    let reader = w.engine.open_reader(w.t, "default", w.movie).await.unwrap();
-    until("storage full", || async {
-        matches!(reader.range(0, None).await, Err(EngineError::Storage(ref why)) if why == "storage full")
+    until("a ring", || async {
+        w.stats()
+            .await
+            .window_bytes
+            .is_some_and(|b| b != plan().budget)
     })
     .await;
-    assert!(w.stats().await.paused, "fetching stopped");
-    // The scheduler's window and cap end too (review P2-5).
-    until("no window in the scheduler", || async {
-        w.stats().await.held_bytes.is_none()
-    })
-    .await;
+    let len = w.s.movie.len() as u64;
+    assert!(w.read(4 * MIB, len).await == w.movie(4 * MIB, len));
+    assert!(!w.stats().await.paused, "fetching stopped");
 }
 
-/// q for a whole file: under the floor a playback with no window ends
-/// with "storage full" too (the maintenance tick).
+/// q where the torrent is piece files: under the floor its window turns to
+/// a RAM ring, so no new piece reaches the disk, and the read goes on to
+/// the end.
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn under_the_floor_a_whole_file_ends_with_storage_full() {
+async fn under_the_floor_piece_files_play_on_from_ram() {
+    let s = support::swarm_big(48 << 20, PIECE).await;
+    let root = tempfile::tempdir().unwrap();
+    sync_log::fail(root.path(), Fail::PunchRefused, usize::MAX);
+    let w = windowed_on(s, root, plan(), None).await;
+    assert!(w.read(0, 4 * MIB).await == w.movie(0, 4 * MIB));
+    test_hooks::set_free(&w.engine, Some(RESERVE_BYTES / 4 - 1));
+    until("a ring", || async {
+        w.stats()
+            .await
+            .window_bytes
+            .is_some_and(|b| b != plan().budget)
+    })
+    .await;
+    let movie = w.dir().join(&w.engine.files(w.t).unwrap()[w.movie].path);
+    let on_disk = || std::fs::read_dir(&movie).map_or(0, |d| d.count());
+    let before = on_disk();
+    let len = w.s.movie.len() as u64;
+    assert!(w.read(4 * MIB, len).await == w.movie(4 * MIB, len));
+    assert!(on_disk() <= before, "pieces went to disk");
+}
+
+/// q for a whole file: under the floor a playback with no window becomes a
+/// ring window (the maintenance tick) and reads to the end.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn under_the_floor_a_whole_file_plays_on_in_a_ring() {
     let s = support::swarm(true).await;
     let root = tempfile::tempdir().unwrap();
     let engine = engine_on(root.path()).await;
@@ -1034,15 +1023,20 @@ async fn under_the_floor_a_whole_file_ends_with_storage_full() {
         .await
         .unwrap();
     let _claim = engine.claim(t, "default").unwrap();
+    engine.set_rate(t, movie, RATE, false).await.unwrap();
     let reader = engine.open_reader(t, "default", movie).await.unwrap();
     within(30, reader.range(0, Some(MIB)).await.unwrap().ready())
         .await
         .unwrap();
     test_hooks::set_free(&engine, Some(RESERVE_BYTES / 4 - 1));
-    until("storage full", || async {
-        matches!(reader.range(0, None).await, Err(EngineError::Storage(ref why)) if why == "storage full")
+    until("a ring window", || async {
+        engine.stats(t).await.unwrap().window_bytes.is_some()
     })
     .await;
+    let mut got = Vec::new();
+    let mut range = reader.range(0, None).await.unwrap();
+    within(60, range.read_to_end(&mut got)).await.unwrap();
+    assert!(got == s.movie, "bytes differ");
 }
 
 /// g. A window's budget round deletes idle torrents, oldest first, until
@@ -1212,6 +1206,21 @@ fn a_device_under_the_window_floor_plays_in_a_ring() {
         disk.within(disk.budget - 1).is_none(),
         "a walk under the ring"
     );
+    // A walk build's override under the floor plays the ring of its
+    // limit, never a refusal (plans/no-space-warnings.md).
+    let walk = mq_engine::window_within(
+        mq_engine::DeviceClass::Standard,
+        mq_engine::WindowInputs {
+            free: 100 << 30,
+            bitrate: 4_775_000,
+            piece_len: 4 * MIB,
+            fill: 5_000_000,
+            ..Default::default()
+        },
+        32 * MIB,
+    );
+    assert!(walk.ring(), "{walk:?}");
+    assert_eq!((walk.budget, walk.memory), (RING_BYTES, true));
 }
 
 /// 2.1's worked numbers: a 40 GiB remux at 4.775 MB/s on a phone with

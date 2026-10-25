@@ -213,10 +213,6 @@ pub struct VersionsConditions {
     pub engine: bool,
     /// The profile has a streaming service account.
     pub account: bool,
-    /// A torrent too big for the free space may play in a window here
-    /// (plans/streaming-window.md 2.6). Off, such a row is too large for
-    /// this storage, whatever its free space.
-    pub window: bool,
 }
 
 /// Why nothing is listed (3.11), how many versions were found, and those
@@ -244,9 +240,6 @@ pub struct BlockedVersions {
 pub enum BlockedReason {
     /// Torrents this build opens only through a paid streaming service.
     NeedsAccount,
-    /// Torrents larger than the free space. Sent until every app reads
-    /// `empty` (noRoom) instead (plans/play-every-version.md 2c, Step 3).
-    NoSpace,
     /// Nothing found plays on this device.
     NothingPlaysHere,
 }
@@ -319,9 +312,6 @@ pub enum EmptyKind {
     /// Every addon failed (offline included: the network has no offline
     /// kind).
     Unreachable,
-    /// Every version needs more room than this device has, not even the
-    /// playback window fits (`Room::None`).
-    NoRoom,
     /// Every version plays only through a streaming account the viewer has
     /// not set up.
     NeedsAccount,
@@ -1029,13 +1019,10 @@ impl VersionsView {
         };
         let eligible = eligible(core, &path);
         let facts = &params.facts;
-        // A window frees space on any volume: punched, or piece files
-        // deleted (plans/streaming-window-chunks.md).
         #[cfg(feature = "torrent")]
-        let (window, (reclaimable_bytes, committed_bytes, held)) = (true, core.room_counts());
+        let (reclaimable_bytes, committed_bytes, held) = core.room_counts();
         #[cfg(not(feature = "torrent"))]
-        let (window, (reclaimable_bytes, committed_bytes, held)) =
-            (false, (None, 0, Default::default()));
+        let (reclaimable_bytes, committed_bytes, held) = (None, 0, Default::default());
         let conditions = Conditions {
             runtime_s: facts.runtime_s,
             title_year: facts.title_year,
@@ -1057,7 +1044,6 @@ impl VersionsView {
             did_not_play: crate::speed::did_not_play(core.library(), mq_library::hlc::now_ms()),
             wrong_file: crate::speed::wrong_file(core.library(), mq_library::hlc::now_ms()),
             containers: crate::speed::containers(core.library()),
-            window,
             reclaimable_bytes,
             committed_bytes,
             metered: core.network() == crate::speed::Network::Cellular,
@@ -2174,16 +2160,16 @@ fn apply_cache(
 /// later change (the network, a failure learned) never leaves them stale.
 fn reblock(s: &mut State, ranking: &Ranking) {
     use BlockedReason::*;
-    s.blocked = blocked(s, ranking, [NeedsAccount, NoSpace, NothingPlaysHere]);
-    s.why = blocked(s, ranking, [NeedsAccount, NothingPlaysHere, NoSpace]);
+    s.blocked = blocked(s, ranking, [NeedsAccount, NothingPlaysHere]);
+    s.why = blocked(s, ranking, [NeedsAccount, NothingPlaysHere]);
 }
 
 /// Every addon answered, nothing is listed, and the hidden rows say why
 /// (3.11): the first reason in `order` that hid any, how many, and those
 /// rows ranked as they would be once it is fixed. `blocked` puts an account
-/// first (it opens the most), then free space, then a device that plays
-/// nothing found.
-fn blocked(s: &State, ranking: &Ranking, order: [BlockedReason; 3]) -> Option<BlockedVersions> {
+/// first (it opens the most), then a device that plays nothing found. No
+/// version is ever hidden for space (plans/no-space-warnings.md).
+fn blocked(s: &State, ranking: &Ranking, order: [BlockedReason; 2]) -> Option<BlockedVersions> {
     if !s.done || !s.ranked.rows.is_empty() {
         return None;
     }
@@ -2203,7 +2189,6 @@ fn blocked(s: &State, ranking: &Ranking, order: [BlockedReason; 3]) -> Option<Bl
         .map(|reason| {
             let hidden = match reason {
                 BlockedReason::NeedsAccount => HideReason::NeedsDebrid,
-                BlockedReason::NoSpace => HideReason::NoSpace,
                 BlockedReason::NothingPlaysHere => HideReason::Unplayable,
             };
             (reason, of(hidden))
@@ -2211,7 +2196,6 @@ fn blocked(s: &State, ranking: &Ranking, order: [BlockedReason; 3]) -> Option<Bl
         .find(|(_, streams)| !streams.is_empty())?;
     match reason {
         BlockedReason::NeedsAccount => c.debrid = true,
-        BlockedReason::NoSpace => c.free_bytes = None,
         BlockedReason::NothingPlaysHere => caps.has_fallback_engine = true,
     }
     let count = streams.len() as u32;
@@ -2477,7 +2461,6 @@ fn view_conditions(core: &Core, params: &VersionsParams, c: &Conditions) -> Vers
         min_seeders: prefs.min_seeders,
         engine: core.has_engine(),
         account: core.debrid().is_some(),
-        window: c.window,
     }
 }
 
@@ -2624,15 +2607,11 @@ fn empty(s: &State) -> Option<EmptyVersions> {
     if s.kids {
         return named(EmptyKind::KidsNothing, EmptyAction::None);
     }
-    // A device that plays nothing found comes before free space: those
-    // versions stay startable ("Choose a version").
     if let Some(b) = &s.why {
         let (kind, action) = match b.reason {
             // Said quietly, with no action: an account is set up in
             // Settings only (the owner, 2026-10-23).
             BlockedReason::NeedsAccount => (EmptyKind::NeedsAccount, EmptyAction::None),
-            // The one storage line, with no count (2c).
-            BlockedReason::NoSpace => return named(EmptyKind::NoRoom, EmptyAction::None),
             BlockedReason::NothingPlaysHere => {
                 (EmptyKind::NothingPlaysHere, EmptyAction::ChooseVersion)
             }

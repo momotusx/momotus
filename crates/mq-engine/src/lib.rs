@@ -31,7 +31,7 @@ pub use reader::{RangeReader, StreamReader};
 pub use scrape::{SwarmCount, TrackerTrace};
 pub use window::{
     APFS_HEAD_BYTES, Counted, HeldBytes, RESERVE_BYTES, RING_BYTES, WindowInputs, WindowPlan,
-    counted_on_disk, counted_on_disk_keeping, free_space, window_plan,
+    counted_on_disk, counted_on_disk_keeping, free_space, window_plan, window_within,
 };
 
 use std::collections::{HashMap, HashSet};
@@ -252,15 +252,6 @@ pub enum EngineError {
     /// folder would evict each other's data.
     #[error("the torrent data folder is in use by another engine")]
     DataInUse,
-    /// A window would not fit (plans/streaming-window.md 2.1): refused
-    /// before any write.
-    #[error("this device is full")]
-    DeviceFull,
-    /// A window or whole file ended its playback before a write could fail
-    /// (2.4): "storage full", or "this storage cannot free space while
-    /// playing".
-    #[error("{0}")]
-    Storage(String),
     #[error("torrent: {0:#}")]
     Torrent(#[from] anyhow::Error),
     #[error("io: {0}")]
@@ -497,11 +488,11 @@ pub(crate) struct Torrent {
     keeper_wake: Arc<tokio::sync::Notify>,
     /// A keeper task runs.
     keeping: std::sync::atomic::AtomicBool,
+    /// Its punches failed: it plays whole from then on, never in a window
+    /// for space (plans/no-space-warnings.md).
+    unpunched: std::sync::atomic::AtomicBool,
     /// The last window's generation.
     window_generation: AtomicU64,
-    /// Why a window ended the playback; ranges fail with it until the next
-    /// window or file choice.
-    ended: Mutex<Option<String>>,
     /// The player is paused (`Engine::set_paused`).
     player_paused: std::sync::atomic::AtomicBool,
     /// A whole file's readahead stopped under the reserve (2.4).
@@ -894,8 +885,8 @@ impl Engine {
             window: Mutex::new(None),
             keeper_wake: Arc::default(),
             keeping: Default::default(),
+            unpunched: Default::default(),
             window_generation: AtomicU64::new(0),
-            ended: Mutex::new(None),
             player_paused: Default::default(),
             starved: Default::default(),
             rounds: AtomicU64::new(0),
@@ -1014,7 +1005,6 @@ impl Engine {
             let need = self.free_for_whole(&t, idx, t.files[idx].len).await;
             self.enforce_budget(Some(h), need).await;
         }
-        lock(&t.ended).take();
         let mut live = t.live.lock().await;
         // A round between the two may have evicted it.
         if !lock(&self.inner.torrents).contains_key(&h) {
@@ -1649,6 +1639,20 @@ impl Engine {
     /// claim drops and the keeper trims it. The file is selected first
     /// (`NoFile` otherwise), and before its reader opens.
     pub async fn window(&self, h: TorrentHandle, file: usize, w: Window) -> Result<()> {
+        let t = self.set_window(h, file, w).await?;
+        if !t.keeping.swap(true, Ordering::AcqRel) {
+            tokio::spawn(window::keep(Arc::downgrade(&self.inner), h, t.clone()));
+        }
+        Ok(())
+    }
+
+    /// [`Engine::window`] but its keeper: what a keeper calls itself.
+    pub(crate) async fn set_window(
+        &self,
+        h: TorrentHandle,
+        file: usize,
+        w: Window,
+    ) -> Result<Arc<Torrent>> {
         let t = self.torrent(h)?;
         if t.live.lock().await.is_none() {
             return Err(EngineError::NoFile);
@@ -1675,7 +1679,6 @@ impl Engine {
             let need = (w.plan.budget + RESERVE_BYTES).saturating_sub(held);
             self.enforce_budget(Some(h), need).await;
         }
-        lock(&t.ended).take();
         let state = window::WindowState {
             file,
             plan: w.plan,
@@ -1688,10 +1691,7 @@ impl Engine {
         let sched = self.sched_config();
         *lock(&t.rate) = Some((file, w.bitrate, state.ahead(sched.readahead_bytes)));
         self.put_window(&t, Some(state), w.resume_at, None).await;
-        if !t.keeping.swap(true, Ordering::AcqRel) {
-            tokio::spawn(window::keep(Arc::downgrade(&self.inner), h, t.clone()));
-        }
-        Ok(())
+        Ok(t)
     }
 
     /// The player paused or plays again (`report_progress`): a paused
@@ -1835,29 +1835,6 @@ impl Engine {
         }
         // A window set meanwhile (the same file opened again) stays.
         self.put_window(t, None, None, Some(w.generation)).await;
-    }
-
-    /// Ends a windowed playback before a write fails (2.4): fetching stops,
-    /// and every range fails with `why` until the next window or file
-    /// choice.
-    async fn end_window(&self, t: &Torrent, why: &str, generation: Option<u64>) {
-        tracing::warn!("{}: {why}", t.info_hash);
-        *lock(&t.ended) = Some(why.to_owned());
-        // The scheduler's window and cap end too: the same file played again
-        // after space was freed may fit (review P2-5). A window set since
-        // (a reopen) is not this one's to end.
-        self.put_window(t, None, None, generation).await;
-        let live = t.live.lock().await;
-        if let Some(l) = live.as_ref() {
-            if !l.managed.is_paused() {
-                let _round = t.keeper.lock().await;
-                if let Err(e) = self.inner.session.pause(&l.managed).await {
-                    tracing::warn!("pausing a full torrent: {e:#}");
-                }
-                let _ = l.msgs.send(adapter::Msg::Stopped);
-            }
-            l.managed.ext_wake_streams();
-        }
     }
 
     /// The free space a whole file needs before it starts (2.1): when it

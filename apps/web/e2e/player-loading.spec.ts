@@ -518,7 +518,6 @@ test("a play that failed says why in the shared words, with that state's actions
   const CASES = [
     ["notStarted", "This didn't start", ["Try again", "Choose another version", "Back"]],
     ["unreachable", "Can't reach any source", ["Try again", "Back"]],
-    ["noRoom", "This device needs a little free space to play this", ["Back"]],
     ["nothingPlaysHere", "None of these plays on this device", ["Choose another version", "Back"]],
   ] as const;
   let kind: string = CASES[0][0];

@@ -62,9 +62,6 @@ impl StreamReader {
                 "range starts past its end",
             )));
         }
-        if let Some(why) = lock(&self.torrent.ended).clone() {
-            return Err(EngineError::Storage(why));
-        }
         let (managed, msgs) = self
             .engine
             .wake(&self.torrent, &self.profile)
@@ -137,9 +134,6 @@ impl AsyncRead for RangeReader {
         buf: &mut ReadBuf<'_>,
     ) -> Poll<std::io::Result<()>> {
         let this = self.get_mut();
-        if let Some(why) = lock(&this.torrent.ended).clone() {
-            return Poll::Ready(Err(std::io::Error::other(why)));
-        }
         let want = (this.end - this.pos).min(buf.remaining() as u64) as usize;
         let Some(inner) = this.inner.as_mut().filter(|_| want > 0) else {
             return Poll::Ready(Ok(()));

@@ -297,13 +297,12 @@ enum PlayerLayout {
 
     /// The card's actions as the shared table orders them, Back last. A version picked by hand that
     /// failed offers the ranking's next; the start's budget ran out (notStarted, or an older core):
-    /// Try again; no room: Back only; no source in reach: the source kept here, then Try again; none
+    /// Try again; no source in reach: the source kept here, then Try again; none
     /// plays here: another version.
     static func failureActions(empty: String?, offer: Bool, kept: Bool = false, canChoose: Bool) -> [FailureAction] {
         let choose: [FailureAction] = canChoose ? [.choose] : []
         if offer { return [.offer] + choose + [.back] }
         return switch empty {
-        case "noRoom": [.back]
         case "unreachable": (kept ? [.playFromDevice] : []) + [.retry, .back]
         case "nothingPlaysHere": choose + [.back]
         default: [.retry] + choose + [.back]

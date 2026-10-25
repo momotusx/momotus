@@ -3,7 +3,6 @@
   "plurals": {
     "playbacks": ["{n} playback", "{n} playbacks"],
     "versions": ["{n} version", "{n} versions"],
-    "versionsAre": ["{n} version is", "{n} versions are"],
     "people": ["{n} person", "{n} people"]
   },
   "lines": {
@@ -95,11 +94,6 @@
     "needsAccount": {
       "text": "Found {versions}, but none plays on this device."
     },
-    "noSpace": {
-      "text": "Momotus found {versions}, but this device is nearly full, so none can play here.",
-      "textNoWindow": "{versionsAre} too large for this storage.",
-      "action": "Show them"
-    },
     "nothingPlaysHere": {
       "text": "Found {versions}, but none plays on this device.",
       "action": "Show them"
@@ -109,7 +103,6 @@
   "empty": {
     "noSource": { "text": "Add a source in Settings", "action": "Settings" },
     "unreachable": { "text": "Can't reach any source", "action": "Try again", "playFromDevice": "Play from this device" },
-    "noRoom": { "text": "This device needs a little free space to play this" },
     "needsAccount": { "text": "None of these plays on this device", "row": "Won't play here" },
     "kidsNothing": { "text": "There's nothing here for you to watch" },
     "noResults": { "text": "No source has this yet" },

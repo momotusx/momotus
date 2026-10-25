@@ -2,7 +2,6 @@ package app.marquee.core
 
 import app.marquee.core.StreamChoiceCopy.Setting
 import app.marquee.core.StreamChoiceCopy.UpDown
-import app.marquee.core.model.BlockedReason
 import app.marquee.core.model.EmptyKind
 import app.marquee.core.model.Learned
 import app.marquee.core.model.LearnedByClass
@@ -135,7 +134,6 @@ class StreamChoiceCopyTest {
                                 reason.wire,
                                 buildJsonObject {
                                     put("text", w.first)
-                                    if (reason == BlockedReason.NoSpace) put("textNoWindow", NO_SPACE_NO_WINDOW)
                                     w.second?.let { put("action", it) }
                                 },
                             )

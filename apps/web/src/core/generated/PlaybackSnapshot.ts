@@ -142,9 +142,9 @@ chooseAnother: boolean,
 /**
  * Why nothing played, once `phase` is `failed`: the zero-playable words
  * for what happened (`empty.<kind>` in stream-choice-words.json):
- * notStarted when the start's budget ran out; else noRoom when every
- * failure was a refusal for room, nothingPlaysHere when every failure
- * was the versions' own on this device, else unreachable.
+ * notStarted when the start's budget ran out; else nothingPlaysHere
+ * when every failure was the versions' own on this device, else
+ * unreachable.
  */
 empty: EmptyKind | null, 
 /**

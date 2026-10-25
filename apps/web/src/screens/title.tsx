@@ -55,7 +55,7 @@ export default function Title() {
 }
 
 // The core's empty states whose only action is Back (plans/play-every-version.md).
-const BACK_ONLY = new Set<EmptyKind>(["noRoom", "needsAccount", "kidsNothing", "noResults"]);
+const BACK_ONLY = new Set<EmptyKind>(["needsAccount", "kidsNothing", "noResults"]);
 
 const released = (e: Episode) => !e.released || new Date(e.released).getTime() <= Date.now();
 

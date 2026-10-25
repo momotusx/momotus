@@ -59,7 +59,7 @@ struct HiddenSummary: Decodable, Hashable, Sendable {
 /// Why nothing can play (plans/play-every-version.md 2a), with what the
 /// shared table offers for it.
 struct EmptyVersions: Decodable, Hashable, Sendable {
-    /// "noSource", "unreachable", "noRoom", "needsAccount", "kidsNothing",
+    /// "noSource", "unreachable", "needsAccount", "kidsNothing",
     /// "noResults" or "nothingPlaysHere"; a string, so a newer state still decodes.
     let kind: String
     /// The versions found, for the states that have some.
@@ -94,9 +94,6 @@ struct VersionsConditions: Decodable, Hashable, Sendable {
     let engine: Bool
     /// A streaming service account is connected.
     let account: Bool
-    /// A torrent too big for the free space plays in a window here; off (or
-    /// from an older core), such a row is too large for this storage.
-    var window: Bool?
 }
 
 /// A measured speed; 0 samples is the estimate.
@@ -240,7 +237,7 @@ struct PlaybackSnapshot: Decodable, Hashable, Sendable {
     /// lasts: "Choose another version" shows (plans/play-every-version.md 2e).
     var chooseAnother: Bool?
     /// Why nothing played, once `failed`: an `empty` kind ("notStarted",
-    /// "noRoom", "nothingPlaysHere", "unreachable"); nil from an older core.
+    /// "nothingPlaysHere", "unreachable"); nil from an older core.
     var empty: String?
     /// The track the core turns on at start (plans/m13-subtitle-languages.md 6),
     /// once the list has settled; nil for none (optional for older cores).

@@ -122,14 +122,8 @@ fn gate(s: &ParsedStream, input: &RankInput<'_>) -> Result<SourceClass, HideReas
     if input.conditions.download {
         return download_gate(s, class).map(|()| class);
     }
-    // The engine fetches one episode of a pack, so the pack guard's size
-    // is what must fit (code review r2 P2-4).
-    if class == SourceClass::Swarm
-        && let (Some(free), Some(size)) = (input.conditions.free_bytes, file_size(s, input))
-        && room(s, input, free, size) == Room::None
-    {
-        return Err(HideReason::NoSpace);
-    }
+    // No version is hidden for space: one that does not fit plays in a
+    // window, a ring at the least (plans/no-space-warnings.md).
     Ok(class)
 }
 
@@ -158,8 +152,6 @@ enum Room {
     Whole,
     /// In a window of `budget` bytes holding `ahead_s` of it ahead.
     Window { ahead_s: u64, budget: u64 },
-    /// Nowhere: no windows here (a build without the engine).
-    None,
 }
 
 /// A swarm row's window, when it plays in one.
@@ -225,9 +217,6 @@ fn room(s: &ParsedStream, input: &RankInput<'_>, free: u64, size: u64) -> Room {
     .with_held(held, file, estimated_piece(size));
     if i.fits_whole(size) {
         return Room::Whole;
-    }
-    if !c.window {
-        return Room::None;
     }
     // The rate the app plays it with: the file over the runtime when known
     // (a pack's episode over the episode's), else the guess (2.2).

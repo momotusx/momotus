@@ -150,6 +150,11 @@ impl WindowPlan {
         })
     }
 
+    /// A ring (plans/streaming-window-chunks.md): its budget is its floor.
+    pub fn ring(&self) -> bool {
+        self.budget == self.floor
+    }
+
     /// Seconds of the file kept ahead of the read: `(W - F - B) / r`, the
     /// readahead and the critical and playback windows (3.1).
     pub fn ahead_secs(&self, bitrate: u64) -> u64 {

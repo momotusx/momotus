@@ -148,14 +148,6 @@ class PlayerFailureCardTest {
     }
 
     @Test
-    fun `no room here offers Back alone, focused`() {
-        show(""","empty":"noRoom"""")
-        compose.onNodeWithText("This device needs a little free space to play this").assertExists()
-        buttons("Back")
-        compose.onNodeWithText("Back").assertIsFocused()
-    }
-
-    @Test
     fun `a search that ends empty after Play opened the player shows the shared table's actions for each state`() {
         val events = mutableListOf<String>()
         compose.setContent {
@@ -181,7 +173,7 @@ class PlayerFailureCardTest {
         }
         // Nothing to do but leave: Back alone, focused; never a way to a page that holds only Back. needsAccount
         // too: an account is set up in Settings only, so the card has no Settings and no account words.
-        for (kind in listOf(EmptyKind.NoRoom, EmptyKind.NeedsAccount, EmptyKind.KidsNothing, EmptyKind.NoResults)) {
+        for (kind in listOf(EmptyKind.NeedsAccount, EmptyKind.KidsNothing, EmptyKind.NoResults)) {
             fail(kind, null)
             buttons("Back")
             compose.onNodeWithText("Back").assertIsFocused()

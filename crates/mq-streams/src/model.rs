@@ -172,10 +172,6 @@ pub struct Conditions {
     /// the prior for an 18-seeder swarm, scaled per seeder for each row.
     pub p2p_thin: Speed,
     pub free_bytes: Option<u64>,
-    /// A torrent that does not fit may play in a window here
-    /// (plans/streaming-window.md 2.6): a build with the engine, on any
-    /// volume (plans/streaming-window-chunks.md).
-    pub window: bool,
     /// `R`: what idle torrents hold, which a playback may delete.
     pub reclaimable_bytes: Option<u64>,
     /// `C`: what the windows playing will still take.
@@ -249,7 +245,6 @@ impl Default for Conditions {
             did_not_play: Vec::new(),
             wrong_file: Vec::new(),
             containers: Vec::new(),
-            window: false,
             reclaimable_bytes: None,
             committed_bytes: 0,
             metered: false,
@@ -395,8 +390,6 @@ pub enum HideReason {
     /// A torrent with no engine and no debrid account, or a row only a
     /// debrid account resolves.
     NeedsDebrid,
-    /// A torrent larger than the free space, less 1 GiB.
-    NoSpace,
 }
 
 /// Lexicographic sort key (plans/m13-stream-choice.md 3.5): earlier fields

@@ -76,7 +76,6 @@ object StreamChoiceCopy {
         mapOf(
             "playbacks" to ("{n} playback" to "{n} playbacks"),
             "versions" to ("{n} version" to "{n} versions"),
-            "versionsAre" to ("{n} version is" to "{n} versions are"),
             "people" to ("{n} person" to "{n} people"),
         )
 
@@ -153,8 +152,6 @@ object StreamChoiceCopy {
         mapOf(
             // Said quietly, with no action: an account is set up in Settings only.
             BlockedReason.NeedsAccount to ("Found {versions}, but none plays on this device." to null),
-            BlockedReason.NoSpace to
-                ("Momotus found {versions}, but this device is nearly full, so none can play here." to "Show them"),
             BlockedReason.NothingPlaysHere to ("Found {versions}, but none plays on this device." to "Show them"),
         )
 
@@ -163,7 +160,6 @@ object StreamChoiceCopy {
         mapOf(
             EmptyKind.NoSource to ("Add a source in Settings" to "Settings"),
             EmptyKind.Unreachable to ("Can't reach any source" to "Try again"),
-            EmptyKind.NoRoom to ("This device needs a little free space to play this" to null),
             // Said quietly, with no action: an account is set up in Settings only (the owner, 2026-10-23).
             EmptyKind.NeedsAccount to ("None of these plays on this device" to null),
             EmptyKind.KidsNothing to ("There's nothing here for you to watch" to null),
@@ -188,9 +184,6 @@ object StreamChoiceCopy {
 
     /** The action for `playFromDevice`, with the unreachable kind's words. */
     const val PLAY_FROM_DEVICE = "Play from this device"
-
-    /** The no-room text on a storage that plays no window: too large for it, whatever its free space. */
-    const val NO_SPACE_NO_WINDOW = "{versionsAre} too large for this storage."
 
     const val SHOW_ROWS = "Show them"
 

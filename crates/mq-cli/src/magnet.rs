@@ -579,9 +579,7 @@ async fn run(
             .window_inputs(t, file, engine.free().unwrap_or(0), rate, FILL_ESTIMATE)
             .await
             .map_err(|e| e.to_string())?;
-        let mut plan = mq_engine::window_plan(engine.device_class(), inputs)
-            .within(limit)
-            .ok_or_else(|| mq_engine::EngineError::DeviceFull.to_string())?;
+        let mut plan = mq_engine::window_within(engine.device_class(), inputs, limit);
         if o.no_open_limit {
             (plan.open_floor, plan.open_cap) = (1 << 40, 1 << 40);
         }

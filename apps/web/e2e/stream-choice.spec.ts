@@ -402,7 +402,6 @@ test.describe("Versions", () => {
     ["noSource", "settingsAddons", false, ["Settings", "Back"], ["Settings", "Back"]],
     ["unreachable", "playFromDevice", true, ["Play from this device", "Try again", "Back"], ["Play from this device", "Try again", "Back"]],
     ["unreachable", "tryAgain", false, ["Try again", "Back"], ["Try again", "Back"]],
-    ["noRoom", "none", false, ["Back"], ["Back"]],
     ["needsAccount", "none", false, ["Back"], ["Back"]],
     ["kidsNothing", "none", false, ["Back"], ["Back"]],
     ["noResults", "none", false, ["Back"], ["Back"]],

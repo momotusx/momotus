@@ -696,10 +696,8 @@ export function lineParts(l: ReasonLine): string[] {
 // ponytail: the title page's old reads (blockedWords, noVersionWords) stay until design-web's title
 // step moves it to the empty state; delete both then.
 /** Why no version is visible (3.11). */
-export function blockedWords(reason: BlockedReason, count: number, window = true) {
-  const w = choice.blocked[reason];
-  const text = !window && "textNoWindow" in w ? w.textNoWindow : w.text;
-  return { text: text.replace("{versions}", counted("versions", count)).replace("{versionsAre}", counted("versionsAre", count)) };
+export function blockedWords(reason: BlockedReason, count: number) {
+  return { text: choice.blocked[reason].text.replace("{versions}", counted("versions", count)) };
 }
 
 /** No addon found a stream: the title page's wording. */

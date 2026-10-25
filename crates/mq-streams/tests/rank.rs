@@ -979,29 +979,26 @@ fn seeders_count_up_to_1000_then_the_file_decides() {
     );
 }
 
-/// plans/streaming-window.md 3.1 and 3.2, plans/streaming-window-chunks.md:
-/// where windows play, a torrent that does not fit shows however little its
-/// window holds ahead (a ring plays it, as Stremio's does); without windows
-/// it hides as before, with the engine's 512 MiB reserve, so a small file
-/// on a nearly full device fits.
+/// plans/streaming-window.md 3.1 and 3.2, plans/streaming-window-chunks.md,
+/// plans/no-space-warnings.md: a torrent that does not fit shows however
+/// little its window holds ahead (a ring plays it, as Stremio's does), with
+/// the engine's 512 MiB reserve, so a small file on a nearly full device
+/// fits.
 #[test]
 fn a_torrent_that_does_not_fit_shows_in_a_window_however_short() {
-    let case = |free: u64, window: bool, runtime_s: u32| Case {
+    let case = |free: u64, runtime_s: u32| Case {
         conditions: Conditions {
             runtime_s: Some(runtime_s),
             free_bytes: Some(free),
-            window,
             ..engine().clone()
         },
         ..Case::stick()
     };
     // 0.53 GiB in 12 min 14 s (Tears of Steel) with 1.1 GB free: the 3.2
-    // table's 9.6 min ahead, shown; without windows it does not fit.
+    // table's 9.6 min ahead, shown.
     let tos = || vec![seeded(1, "Movie.2012.1080p.WEB.x264-GRP", 300, 0.53)];
-    let shown = case(1_100_000_000, true, 734).rank(tos());
+    let shown = case(1_100_000_000, 734).rank(tos());
     assert_eq!(shown.rows.len(), 1, "{:?}", shown.hidden);
-    let whole = case(1_100_000_000, false, 734).rank(tos());
-    assert_eq!(hidden(&whole, HideReason::NoSpace), 1);
     // A 60 GiB remux in 2 h with 1.5 GiB free: about 40 s ahead, shown
     // (it was hidden under 2 minutes).
     let remux = || {
@@ -1012,11 +1009,11 @@ fn a_torrent_that_does_not_fit_shows_in_a_window_however_short() {
             60.0,
         )]
     };
-    let ranked = case(3 << 29, true, 7200).rank(remux());
+    let ranked = case(3 << 29, 7200).rank(remux());
     assert_eq!(ranked.rows.len(), 1, "{:?}", ranked.hidden);
     // And with no room at all: a ring, under a minute ahead. No "about 0
     // min ahead": it reads as the large file it is.
-    let full = case(0, true, 7200).rank(remux());
+    let full = case(0, 7200).rank(remux());
     assert!(
         matches!(full.rows[0].line, ReasonLine::Large { .. }),
         "{:?}",
@@ -1037,7 +1034,7 @@ fn a_torrent_that_does_not_fit_shows_in_a_window_however_short() {
     );
     // 0.13 GiB with 1.1 GB free fits whole (the 1 GiB spare hid it).
     let small = vec![seeded(3, "Movie.2010.1080p.WEB.x264-GRP", 300, 0.133)];
-    assert_eq!(case(1_100_000_000, false, 888).rank(small).rows.len(), 1);
+    assert_eq!(case(1_100_000_000, 888).rank(small).rows.len(), 1);
 }
 
 /// Where windows play, with a measured 60 Mbit/s line (so no remux row
@@ -1058,7 +1055,6 @@ fn prior_case(free: u64, runtime_s: Option<u32>, caps: DeviceCaps) -> Case {
         conditions: Conditions {
             runtime_s,
             free_bytes: Some(free),
-            window: true,
             ..engine().clone()
         },
         ..Case::stick()
@@ -1146,8 +1142,9 @@ fn the_window_rows_of_the_worked_table() {
         (remux, 20.0, 7200, 400 << 30, stick(), fast, None),
     ];
     for (release, gb, runtime, free, caps, case, want) in cases {
+        // With no free space known a row plays whole, as before windows.
         let mut whole = case(free, Some(runtime), caps.clone());
-        whole.conditions.window = false;
+        whole.conditions.free_bytes = None;
         let line = line_of(&case(free, Some(runtime), caps), release, gb);
         assert_eq!(
             minutes(&line),
@@ -1226,7 +1223,7 @@ fn a_file_that_fits_ranks_as_without_windows() {
     };
     let with = windowed_case(100 << 30, Some(7200), DeviceCaps::basic_1080p());
     let mut without = windowed_case(100 << 30, Some(7200), DeviceCaps::basic_1080p());
-    without.conditions.window = false;
+    without.conditions.free_bytes = None;
     let (a, b) = (with.rank(rows()), without.rank(rows()));
     let lines = |r: &Ranked| {
         r.rows
@@ -1309,7 +1306,6 @@ fn a_season_pack_row_is_judged_by_the_episode_it_plays() {
             runtime_s: Some(2700),
             episodes_in_season: episodes,
             free_bytes: Some(free),
-            window: true,
             p2p: Speed {
                 mbps: 60.0,
                 samples: 3,
@@ -1374,7 +1370,6 @@ fn an_episode_row_under_a_pack_title_keeps_its_files_size() {
             runtime_s: Some(2700),
             episodes_in_season: Some(10),
             free_bytes: Some(free),
-            window: true,
             ..engine().clone()
         },
         ..Case::stick()
@@ -1444,25 +1439,25 @@ fn on_mobile_data_a_windowed_row_says_no_minutes() {
     assert_eq!(minutes(&line), None);
 }
 
-/// Mutation 6: a torrent larger than the free space less 512 MiB is hidden.
+/// Mutation 6 (plans/no-space-warnings.md): no torrent is hidden for space,
+/// with a little free space or none at all.
 #[test]
-fn no_room_hides_a_torrent_larger_than_the_free_space() {
-    let case = Case {
-        conditions: Conditions {
-            free_bytes: Some(10 << 30),
-            ..engine().clone()
-        },
-        ..Case::stick()
-    };
-    let ranked = case.rank(vec![
-        seeded(1, "Movie.2020.1080p.BluRay.x264-BIG", 300, 12.0),
-        seeded(2, "Movie.2020.1080p.BluRay.x264-FIT", 300, 8.5),
-    ]);
-    assert_eq!(hidden(&ranked, HideReason::NoSpace), 1);
-    assert_eq!(
-        first_line(ranked.best().unwrap()),
-        "Movie.2020.1080p.BluRay.x264-FIT"
-    );
+fn no_torrent_is_hidden_for_space() {
+    for free in [10 << 30, 0] {
+        let case = Case {
+            conditions: Conditions {
+                free_bytes: Some(free),
+                ..engine().clone()
+            },
+            ..Case::stick()
+        };
+        let ranked = case.rank(vec![
+            seeded(1, "Movie.2020.1080p.BluRay.x264-BIG", 300, 12.0),
+            seeded(2, "Movie.2020.1080p.BluRay.x264-FIT", 300, 8.5),
+        ]);
+        assert!(ranked.hidden.is_empty(), "{free}: {:?}", ranked.hidden);
+        assert_eq!(ranked.rows.len(), 2);
+    }
 }
 
 /// Mutation 7 and 3.2: with no engine and no account a torrent and a
@@ -1984,12 +1979,7 @@ fn a_season_pack_needs_room_for_one_episode() {
         ..Case::stick()
     };
     let ranked = case.rank(vec![seeded(1, "Show.S01.1080p.BluRay.x264-GRP", 500, 40.0)]);
-    assert_eq!(
-        hidden(&ranked, HideReason::NoSpace),
-        0,
-        "{:?}",
-        ranked.hidden
-    );
+    assert!(ranked.hidden.is_empty(), "{:?}", ranked.hidden);
     assert_eq!(ranked.rows.len(), 1);
 }
 

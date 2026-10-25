@@ -352,18 +352,6 @@ class TvVersionsTest {
     }
 
     @Test
-    fun `no room says the one storage line with Back only`() {
-        show(snapshot(empty = EmptyVersions(EmptyKind.NoRoom, EmptyAction.None, 0)))
-        compose
-            .onNodeWithText(
-                "This device needs a little free space to play this",
-                useUnmergedTree = true,
-            ).assertExists()
-        actions("Back")
-        compose.onNodeWithText("Back").assertIsFocused()
-    }
-
-    @Test
     fun `the learned note shows with Undo under the list, and Undo sends it back`() {
         val note = LearnedNote(2160, LearnedChoice.Hdr, up = false, prefs = streams(null))
         show(snapshot(row("best", ReasonLine.Ready("TorBox", gib)), note = note))

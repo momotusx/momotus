@@ -158,9 +158,9 @@ pub struct PlaybackSnapshot {
     pub choose_another: bool,
     /// Why nothing played, once `phase` is `failed`: the zero-playable words
     /// for what happened (`empty.<kind>` in stream-choice-words.json):
-    /// notStarted when the start's budget ran out; else noRoom when every
-    /// failure was a refusal for room, nothingPlaysHere when every failure
-    /// was the versions' own on this device, else unreachable.
+    /// notStarted when the start's budget ran out; else nothingPlaysHere
+    /// when every failure was the versions' own on this device, else
+    /// unreachable.
     pub empty: Option<EmptyKind>,
     /// When a first play's start budget (90 s from its first attempt's add)
     /// ends, in epoch ms, while it runs: from the first attempt until a
@@ -2024,26 +2024,20 @@ fn current(s: &State, run: u64) -> bool {
 }
 
 /// A source failed (its attempt just listed): what it says of the start,
-/// for `empty`. A refusal for room reads noRoom, a failure of the version's
-/// own on this device nothingPlaysHere, a swarm that did not start
-/// notStarted, while every failure says the same; anything else (a source
-/// that could not be reached) reads unreachable.
+/// for `empty`. A failure of the version's own on this device
+/// nothingPlaysHere, a swarm that did not start notStarted, while every
+/// failure says the same; anything else (a source that could not be
+/// reached) reads unreachable.
 fn note_failure(s: &mut State) {
-    let no_room = (s.snapshot.attempts.last()).is_some_and(|a| a.error == no_room_line());
-    let kind = if no_room {
-        EmptyKind::NoRoom
-    } else if s.version_failed == Some(NOT_HERE) {
+    let kind = if s.version_failed == Some(NOT_HERE) {
         EmptyKind::NothingPlaysHere
     } else if s.version_failed == Some(NOT_STARTED) {
         EmptyKind::NotStarted
     } else {
         EmptyKind::Unreachable
     };
-    use EmptyKind::{NoRoom, NotStarted, Unreachable};
     s.failed_as = Some(match (s.failed_as, kind) {
-        // Room refused some, the others did not start: they did not start.
-        (Some(NoRoom), NotStarted) | (Some(NotStarted), NoRoom) => NotStarted,
-        (Some(was), kind) if was != kind => Unreachable,
+        (Some(was), kind) if was != kind => EmptyKind::Unreachable,
         (_, kind) => kind,
     });
 }
@@ -2207,35 +2201,20 @@ fn attempt(stream: &ParsedStream, error: &str) -> Attempt {
     }
 }
 
-/// An engine error as the viewer reads it: its refusals for room (a window
-/// that does not fit, one that ended its playback) are the one storage line
-/// (plans/play-every-version.md 2c), the reason kept in the log. Read from
-/// the error's type, so a service's own words about its storage stay its.
+/// An engine error that a write met on a full disk (ENOSPC), however the
+/// torrent wrapped it.
 #[cfg(feature = "torrent")]
-fn engine_words(e: &mq_engine::EngineError) -> String {
+fn disk_full(e: &mq_engine::EngineError) -> bool {
     use mq_engine::EngineError;
+    let io = |e: &std::io::Error| e.kind() == std::io::ErrorKind::StorageFull;
     match e {
-        EngineError::DeviceFull | EngineError::Storage(_) => {
-            tracing::info!(error = %e, "no room to play");
-            no_room_line().to_owned()
+        EngineError::Io(e) => io(e),
+        EngineError::Torrent(e) => {
+            e.chain().any(|c| c.downcast_ref().is_some_and(io))
+                || format!("{e:#}").contains("(os error 28)")
         }
-        e => e.to_string(),
+        _ => false,
     }
-}
-
-/// `empty.noRoom.text` from stream-choice-words.json.
-fn no_room_line() -> &'static str {
-    static LINE: OnceLock<String> = OnceLock::new();
-    LINE.get_or_init(|| {
-        let words: serde_json::Value = serde_json::from_str(include_str!(
-            "../../../../apps/shared/stream-choice-words.json"
-        ))
-        .expect("the shared words");
-        words["empty"]["noRoom"]["text"]
-            .as_str()
-            .expect("empty.noRoom.text")
-            .to_owned()
-    })
 }
 
 /// Saves a position. At the end it marks the video watched, with the write
@@ -3255,9 +3234,6 @@ async fn open_torrent(
         Ok::<_, mq_engine::EngineError>((file, info, ready))
     };
     let started = started.await;
-    // Refused before any write ("this device is full"): what the folder
-    // holds stays (a pack's other episodes, a warm window), review r3 B P3-1.
-    let refused = matches!(started, Err(mq_engine::EngineError::DeviceFull));
     // Another source of a swarm that did not start is skipped in this view.
     if started
         .as_ref()
@@ -3318,13 +3294,20 @@ async fn open_torrent(
             not_here(state);
             why
         }
-        Ok((_, _, Started::Ready(Err(e)))) | Err(e) => engine_words(&e),
+        Ok((_, _, Started::Ready(Err(e)))) | Err(e) if disk_full(&e) => {
+            // The true floor (plans/no-space-warnings.md): said as a start
+            // that failed, never as storage.
+            tracing::info!(error = %e, "a write found the disk full");
+            failed_to_start(&mut lock(state));
+            NOT_STARTED.to_owned()
+        }
+        Ok((_, _, Started::Ready(Err(e)))) | Err(e) => e.to_string(),
     };
     // The next candidate plays instead: stop downloading this one, unless
     // another playback still claims it (the engine then keeps it). What it
     // held before this start stays.
     drop(claim);
-    let _ = engine.remove(torrent, refused || kept).await;
+    let _ = engine.remove(torrent, kept).await;
     Err(failed)
 }
 
@@ -3363,10 +3346,10 @@ async fn open_window(
         // ends with it.
         return engine.play_whole(torrent, file).await;
     }
-    let mut plan = mq_engine::window_plan(engine.device_class(), inputs);
-    if let Some(w) = walk {
-        plan = plan.within(w).ok_or(mq_engine::EngineError::DeviceFull)?;
-    }
+    let plan = match walk {
+        Some(w) => mq_engine::window_within(engine.device_class(), inputs, w),
+        None => mq_engine::window_plan(engine.device_class(), inputs),
+    };
     tracing::info!(
         budget = plan.budget,
         free = inputs.free,
@@ -5853,24 +5836,25 @@ mod tests {
         );
     }
 
-    /// Plans/play-every-version.md 2c: every refusal for room the engine
-    /// gives reads as the one storage line, from the error's type; other
-    /// errors, and anyone else's words about storage, stay as they are.
+    /// The true floor (plans/no-space-warnings.md): a write that met a full
+    /// disk, as the engine or the torrent wraps it, reads as a start that
+    /// failed; other errors, and anyone else's words about storage, stay as
+    /// they are.
     #[cfg(feature = "torrent")]
     #[test]
-    fn a_refusal_for_room_reads_as_the_one_storage_line() {
+    fn a_full_disk_reads_as_a_start_that_failed() {
         use mq_engine::EngineError;
-        const LINE: &str = "This device needs a little free space to play this";
-        let refusals = [
-            EngineError::DeviceFull,
-            EngineError::Storage("storage full".into()),
-            EngineError::Storage("this storage cannot free space while playing".into()),
-        ];
-        for e in refusals {
-            assert_eq!(engine_words(&e), LINE, "{e}");
-        }
-        let other = EngineError::Io(std::io::Error::other("no peer sent"));
-        assert_eq!(engine_words(&other), other.to_string());
+        let enospc = || std::io::Error::from_raw_os_error(28);
+        assert!(disk_full(&EngineError::Io(enospc())));
+        // librqbit's fatal write error keeps the cause in its text only, as
+        // anyhow's Debug of it prints ("fatal error: {e:?}").
+        let fatal = std::io::Error::other(format!("fatal error: {}", enospc()));
+        assert!(disk_full(&EngineError::Torrent(fatal.into())));
+        assert!(disk_full(&EngineError::Torrent(enospc().into())));
+        assert!(!disk_full(&EngineError::Io(std::io::Error::other(
+            "no peer sent"
+        ))));
+        assert!(!disk_full(&EngineError::NoFile));
         // A service's words about its own storage stay its (review P3-1).
         let link = stream(r#"{"url":"https://cdn.example/v.mkv"}"#);
         let said = attempt(&link, "Your storage is full, the torrent was not added");
@@ -5878,24 +5862,18 @@ mod tests {
             said.error,
             "Your storage is full, the torrent was not added"
         );
-    }
-
-    /// Review 2026-10-23 P3-2: refusals for room mixed with swarms that did
-    /// not start read notStarted; with a source that could not be reached,
-    /// unreachable.
-    #[test]
-    fn room_and_not_started_read_not_started() {
-        let link = stream(r#"{"url":"https://cdn.example/v.mkv"}"#);
+        // It reads notStarted, beside swarms that did not start too; with a
+        // source that could not be reached, unreachable (review 2026-10-23
+        // P3-2).
         let fail = |s: &mut State, error: &str, why: Option<&'static str>| {
             s.snapshot.attempts.push(attempt(&link, error));
             s.version_failed = why;
             note_failure(s);
         };
         let mut s = State::new(Vec::new(), None);
-        fail(&mut s, no_room_line(), None);
-        fail(&mut s, "the swarm sent almost nothing", Some(NOT_STARTED));
+        fail(&mut s, NOT_STARTED, Some(NOT_STARTED));
         assert_eq!(s.failed_as, Some(EmptyKind::NotStarted));
-        fail(&mut s, no_room_line(), None);
+        fail(&mut s, "the swarm sent almost nothing", Some(NOT_STARTED));
         assert_eq!(s.failed_as, Some(EmptyKind::NotStarted));
         fail(&mut s, "The source could not be reached", None);
         assert_eq!(s.failed_as, Some(EmptyKind::Unreachable));

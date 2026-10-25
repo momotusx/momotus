@@ -32,7 +32,7 @@ private func snapshot(_ empty: EmptyVersions?, pick: VersionRow? = nil, done: Bo
     // Choose a version is the title's and the player's: on Versions the rows are listed, each startable.
     #expect(VersionWords.emptyActs(empty("nothingPlaysHere")) == [.back])
     // No account call to action anywhere but Settings (the owner's rule): needsAccount offers Back alone.
-    for kind in ["noRoom", "kidsNothing", "noResults", "needsAccount", "somethingNew"] {
+    for kind in ["kidsNothing", "noResults", "needsAccount", "somethingNew"] {
         #expect(VersionWords.emptyActs(empty(kind)) == [.back], "\(kind)")
     }
     #expect(VersionWords.emptyActs(empty("unreachable", key: "k")).map(VersionWords.emptyActWord) == ["Play from this device", "Try again", "Back"])
@@ -51,8 +51,8 @@ private func snapshot(_ empty: EmptyVersions?, pick: VersionRow? = nil, done: Bo
     let locked = try versions("needs-account")
     #expect(VersionWords.sections(locked).flatMap(\.rows).map(\.key) == ["rd:1", "rd:2", "rd:3"])
     #expect(VersionWords.count(locked) == "3 versions")
-    #expect(VersionWords.count(try versions("no-room")) == nil)
-    #expect(VersionWords.sections(try versions("no-room")).isEmpty)
+    #expect(VersionWords.count(snapshot(empty("noResults"))) == nil)
+    #expect(VersionWords.sections(snapshot(empty("noResults"))).isEmpty)
 }
 
 @Test func theTitlesPlayFollowsTheSharedTable() throws {
@@ -67,7 +67,7 @@ private func snapshot(_ empty: EmptyVersions?, pick: VersionRow? = nil, done: Bo
         #expect(TitlePlay.of(snapshot(empty(kind))) == .versions, "\(kind)")
     }
     // Back alone would be a dead end: Play stays, inert.
-    for kind in ["noRoom", "kidsNothing", "noResults", "needsAccount"] {
+    for kind in ["kidsNothing", "noResults", "needsAccount"] {
         #expect(TitlePlay.of(snapshot(empty(kind))) == .inert, "\(kind)")
     }
 }
@@ -77,7 +77,6 @@ private func snapshot(_ empty: EmptyVersions?, pick: VersionRow? = nil, done: Bo
     let notStarted = try playback("playback-not-started")
     #expect(PlayerLayout.failureHeadline(empty: notStarted.empty, offer: false) == "This didn't start")
     #expect(PlayerLayout.failureActions(empty: "notStarted", offer: false, canChoose: true) == [.retry, .choose, .back])
-    #expect(PlayerLayout.failureActions(empty: "noRoom", offer: false, canChoose: true) == [.back])
     #expect(PlayerLayout.failureActions(empty: "unreachable", offer: false, kept: true, canChoose: true) == [.playFromDevice, .retry, .back])
     #expect(PlayerLayout.failureActions(empty: "unreachable", offer: false, canChoose: true) == [.retry, .back])
     #expect(PlayerLayout.failureActions(empty: "nothingPlaysHere", offer: false, canChoose: true) == [.choose, .back])
@@ -97,7 +96,7 @@ private func snapshot(_ empty: EmptyVersions?, pick: VersionRow? = nil, done: Bo
     #expect(PlayerLayout.noPickActions(empty("unreachable", key: "bt:kept"), canChoose: true) == [.playFromDevice, .retry, .back])
     #expect(PlayerLayout.noPickActions(empty("unreachable"), canChoose: true) == [.retry, .back])
     #expect(PlayerLayout.noPickActions(empty("nothingPlaysHere"), canChoose: true) == [.versions, .back])
-    for kind in ["noRoom", "kidsNothing", "noResults", "needsAccount"] {
+    for kind in ["kidsNothing", "noResults", "needsAccount"] {
         #expect(PlayerLayout.noPickActions(empty(kind), canChoose: true) == [.back], "\(kind)")
     }
     #expect(PlayerLayout.noPickHeadline(empty("needsAccount")) == "None of these plays on this device")
@@ -237,11 +236,13 @@ private func literals(_ source: String) -> [String] {
 
 @Test func noViewerReadsTheOldDeadEndWordsOnVersionsTheTitleOrThePlayer() throws {
     let app = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appending(path: "../Marquee")
-    let banned = ["no playable", "not measured", "estimated", "add an account", "show them", "hidden (", "via "]
+    // No free space or storage warning anywhere (plans/no-space-warnings.md).
+    let banned = ["no playable", "not measured", "estimated", "add an account", "show them", "hidden (", "via ",
+                  "free space", "nearly full", "device is full", "storage full", "no room", "for this storage"]
     // The shared words too: every string but the rules text, by its path. The dead keys that wait for every
     // app to read `empty` (plan Step 3 item 6).
     let pending: Set = [
-        "blocked.nothingPlaysHere.action", "blocked.noSpace.action", "blocked.showRows",
+        "blocked.nothingPlaysHere.action", "blocked.showRows",
     ]
     let json = try JSONSerialization.jsonObject(with: Data(contentsOf: app.appending(path: "../../shared/stream-choice-words.json")))
     var hits: [String] = []
@@ -428,7 +429,7 @@ private func row(_ json: String) throws -> VersionRow {
     #expect(titleWarning(nil) == nil)
     #expect(titleWarning(snapshot(nil, done: false)) == nil)
     #expect(titleWarning(try versions("shortcuts")) == nil)
-    #expect(titleWarning(try versions("no-room")) == "This device needs a little free space to play this")
+    #expect(titleWarning(snapshot(empty("kidsNothing"))) == "There's nothing here for you to watch")
     let title = try String(contentsOf: URL(fileURLWithPath: #filePath).deletingLastPathComponent()
         .appending(path: "../Marquee/Title/TitleScreen.swift"), encoding: .utf8)
     let line = try body(of: "struct VersionLine: View", in: title)
@@ -518,7 +519,6 @@ private func golden<T: Decodable>(_ name: String, as type: T.Type) throws -> T {
         ("unreachable", .versions, [.tryAgain, .back], "tryAgain"),
         ("needsAccount", .inert, [.back], "none"),
         ("nothingPlaysHere", .versions, [.back], "chooseVersion"),
-        ("noRoom", .inert, [.back], "none"),
         ("kidsNothing", .inert, [.back], "none"),
         ("noResults", .inert, [.back], "none"),
     ]
@@ -550,12 +550,10 @@ private func golden<T: Decodable>(_ name: String, as type: T.Type) throws -> T {
     let notStarted = try golden("playback-empty-notStarted", as: PlaybackSnapshot.self)
     #expect(PlayerLayout.failureHeadline(empty: notStarted.empty, offer: notStarted.offer != nil) == "This didn't start")
     #expect(PlayerLayout.failureActions(empty: notStarted.empty, offer: notStarted.offer != nil, canChoose: true) == [.retry, .choose, .back])
-    let noRoom = try golden("playback-empty-noRoom", as: PlaybackSnapshot.self)
-    #expect(PlayerLayout.failureActions(empty: noRoom.empty, offer: noRoom.offer != nil, canChoose: true) == [.back])
     let foreign = try golden("playback-empty-nothingPlaysHere", as: PlaybackSnapshot.self)
     #expect(PlayerLayout.failureActions(empty: foreign.empty, offer: foreign.offer != nil, canChoose: true) == [.choose, .back])
     // The attempt history never names the addon the core still sends as `via`.
-    for p in [notStarted, noRoom, foreign] {
+    for p in [notStarted, foreign] {
         #expect(!PlayerLayout.failureLines(p.attempts).joined().contains("Test"))
     }
     // Over a stalled frame the core says Choose another version, and the player shows it.

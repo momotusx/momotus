@@ -8,8 +8,10 @@ import ts from "typescript";
 import shared from "../../../shared/stream-choice-words.json";
 
 const SOURCES = ["screens/versions.tsx", "screens/title.tsx", "screens/player.tsx", "player/loading.tsx", "lib/words.ts", "components/empty-acts.tsx"];
+// No free space or storage warning: only the parts watched are downloaded (the owner, plans/no-space-warnings.md).
+const SPACE = [/free space/i, /nearly full/i, /device is full/i, /storage full/i, /no room/i, /for this storage/i, /not enough (space|room|storage)/i];
 // No account step off Settings: no link to the accounts screen and no service name (the owner, 2026-10-23).
-const BANNED = [/no playable/i, /not found/i, /not measured/i, /add an account/i, /show them/i, /hidden \(/i, /\bvia\b/i, /estimated/i, /\u2014/, /\w--\w/, /^\/debrid\b/, /real-debrid|torbox|alldebrid|premiumize/i];
+const BANNED = [/no playable/i, /not found/i, /not measured/i, /add an account/i, /show them/i, /hidden \(/i, /\bvia\b/i, /estimated/i, /\u2014/, /\w--\w/, /^\/debrid\b/, /real-debrid|torbox|alldebrid|premiumize/i, ...SPACE];
 
 // Still said until another step removes them, each named exactly: a new one fails.
 // ponytail: the list empties as those steps land; delete each entry with its words.
@@ -18,7 +20,6 @@ const PENDING = new Set([
   "lib/words.ts: No playable version found",
   // The blocked words, until every app reads `empty` (plan Step 3.6).
   "json blocked.nothingPlaysHere.action: Show them",
-  "json blocked.noSpace.action: Show them",
   "json blocked.showRows: Show them",
 ]);
 
