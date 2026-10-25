@@ -77,3 +77,34 @@ import Testing
 @Test func theMacDoesNotClaimDolbyVisionYet() {
     #expect(!DeviceCaps.claimsDolbyVision)
 }
+
+/// plans/iphone-mkv.md: the iPhone's caps while its switch is off (MKV hidden as today), and what it sends once the
+/// last commit of that plan turns it on: every engine container and audio, hardware video only.
+@Test func theIPhonesCapsWithItsSwitchOffAndOn() {
+    let phone = EngineChoice.enabled(on: .phone)
+    #expect(EngineChoice.containers(enabled: phone) == ["mp4", "m4v", "mov", "m3u8"])
+    #expect(EngineChoice.audioDecoders(enabled: phone) == EngineChoice.avPlayerAudio)
+    #expect(EngineChoice.containers(enabled: true).contains("mkv"))
+    #expect(EngineChoice.audioDecoders(enabled: true).contains("true_hd"))
+    #expect(EngineChoice.decoders(hardware: ["h264", "h265"], enabled: true, on: .phone) == ["h264", "h265"])
+}
+
+/// plans/iphone-mkv.md: Picture in Picture on the second engine, the native path's layer before the software
+/// path's, nothing on AVPlayer (its layer attaches itself) or before the engine shows a surface.
+@Test func pictureInPictureTakesTheEnginesSurface() throws {
+    #expect(PlayerLayout.pipSurface(engine: true, native: true, software: true) == .engineNative)
+    #expect(PlayerLayout.pipSurface(engine: true, native: false, software: true) == .engineSoftware)
+    #expect(PlayerLayout.pipSurface(engine: true, native: false, software: false) == nil)
+    #expect(PlayerLayout.pipSurface(engine: false, native: true, software: true) == nil)
+    // Wiring: the screen attaches the engine's surface once it shows, and tells the engine the window is up.
+    let dir = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appending(path: "../Marquee/Player")
+    let screen = try String(contentsOf: dir.appending(path: "PlayerScreen.swift"), encoding: .utf8)
+    #expect(screen.contains(".onChange(of: model.firstFrameMs) { attachEngine() }"))
+    let float = try body(of: "private func float()", in: screen)
+    #expect(float.contains("model.pictureInPicture(active: true)"))
+    #expect(float.contains("model.pictureInPicture(active: false)"))
+    // A film brought back from the window plays on, on whichever engine.
+    let pip = try String(contentsOf: dir.appending(path: "PictureInPicture.swift"), encoding: .utf8)
+    #expect(try body(of: "func stopped(_ model: PlayerModel)", in: pip).contains("model.resume()"))
+    #expect(!pip.contains("model.player."))
+}

@@ -1,6 +1,8 @@
 #if os(iOS)
 import AVFoundation
 import AVKit
+import AetherEngine
+import CoreMedia
 import SwiftUI
 
 /// Picture in Picture on the player's own layer: a button while the system
@@ -12,9 +14,11 @@ final class PictureInPicture {
     @ObservationIgnored private var controller: AVPictureInPictureController?
     @ObservationIgnored private var observation: NSKeyValueObservation?
     @ObservationIgnored private let delegate = PipDelegate()
-    /// The layer of a page shown again while the window still floats: the
+    /// The surface of a page shown again while the window still floats: the
     /// controller moves to it once the window closes.
-    @ObservationIgnored private weak var waiting: AVPlayerLayer?
+    @ObservationIgnored private var waiting: (@MainActor () -> Void)?
+    /// The software path's playback, which the content source holds weakly.
+    @ObservationIgnored private var playback: SoftwarePlayback?
     /// The addon subtitle note was said for this film.
     @ObservationIgnored var told = false
     /// The window's own watch of the first frame, on the layer it keeps: a
@@ -31,26 +35,46 @@ final class PictureInPicture {
         delegate.restore = restore
         delegate.stop = { [weak self] in
             stop()
-            if let self, let layer = self.waiting { self.attach(layer) }
+            self?.waiting?()
         }
     }
 
     func attach(_ layer: AVPlayerLayer) {
         guard controller?.playerLayer !== layer, AVPictureInPictureController.isPictureInPictureSupported() else { return }
         if controller?.isPictureInPictureActive == true {
-            waiting = layer
+            waiting = { [weak self, weak layer] in if let self, let layer { self.attach(layer) } }
             return
         }
         guard let controller = AVPictureInPictureController(playerLayer: layer) else { return }
+        install(controller)
+        playback = nil
+        frames = Self.watchFrames(layer) { [weak self] in
+            Task { @MainActor in self?.onFrame?() }
+        }
+    }
+
+    /// The second engine's software path (plans/iphone-mkv.md): its sample buffer layer, played, paused and skipped
+    /// through the engine. Its first frame comes from the engine itself, so the window watches none.
+    func attach(software source: SoftwarePiPSource) {
+        guard controller?.contentSource?.sampleBufferDisplayLayer !== source.layer,
+              AVPictureInPictureController.isPictureInPictureSupported() else { return }
+        if controller?.isPictureInPictureActive == true {
+            waiting = { [weak self] in self?.attach(software: source) }
+            return
+        }
+        let playback = SoftwarePlayback(source)
+        install(AVPictureInPictureController(contentSource: .init(sampleBufferDisplayLayer: source.layer, playbackDelegate: playback)))
+        self.playback = playback
+        frames = nil
+    }
+
+    private func install(_ controller: AVPictureInPictureController) {
         waiting = nil
         controller.canStartPictureInPictureAutomaticallyFromInline = true
         controller.delegate = delegate
         self.controller = controller
         observation = Self.watch(controller) { [weak self] possible in
             Task { @MainActor in self?.possible = possible }
-        }
-        frames = Self.watchFrames(layer) { [weak self] in
-            Task { @MainActor in self?.onFrame?() }
         }
     }
 
@@ -111,6 +135,37 @@ final class PictureInPicture {
     }
 }
 
+/// The window over the engine's software path: play, pause, the playable range and the skip buttons go to the
+/// engine. UIKit calls it on the main thread, which the conformance checks at run time.
+@MainActor private final class SoftwarePlayback: NSObject, @preconcurrency AVPictureInPictureSampleBufferPlaybackDelegate {
+    let source: SoftwarePiPSource
+
+    init(_ source: SoftwarePiPSource) {
+        self.source = source
+    }
+
+    func pictureInPictureController(_ controller: AVPictureInPictureController, setPlaying playing: Bool) {
+        source.setPlaying(playing)
+    }
+
+    func pictureInPictureControllerTimeRangeForPlayback(_ controller: AVPictureInPictureController) -> CMTimeRange {
+        source.timeRange()
+    }
+
+    func pictureInPictureControllerIsPlaybackPaused(_ controller: AVPictureInPictureController) -> Bool {
+        source.isPaused
+    }
+
+    func pictureInPictureController(_ controller: AVPictureInPictureController, didTransitionToRenderSize newRenderSize: CMVideoDimensions) {}
+
+    func pictureInPictureController(
+        _ controller: AVPictureInPictureController, skipByInterval skipInterval: CMTime, completion completionHandler: @escaping () -> Void
+    ) {
+        source.skip(by: skipInterval.seconds)
+        completionHandler()
+    }
+}
+
 /// A film that plays on in Picture in Picture after its page left, so the
 /// viewer can browse; bringing it back shows it full screen over the places
 /// (review apple-journey P2-4).
@@ -144,7 +199,7 @@ final class FloatingPlayer {
 
     func restore() {
         shown = held
-        playingAtRestore = (held?.model.player.rate ?? 0) > 0
+        playingAtRestore = held?.model.playingNow ?? false
     }
 
     /// The film was playing when the viewer brought it back. On the iPhone it
@@ -160,8 +215,8 @@ final class FloatingPlayer {
         model.floating = false
         let back = shown?.model === model
         // Brought back playing: it plays on, as the window showed it.
-        if back, PlayerLayout.resumesAfterRestore(playingAtRestore: playingAtRestore, playingNow: model.player.rate > 0) {
-            model.player.play()
+        if back, PlayerLayout.resumesAfterRestore(playingAtRestore: playingAtRestore, playingNow: model.playingNow) {
+            model.resume()
         }
         playingAtRestore = false
         return back

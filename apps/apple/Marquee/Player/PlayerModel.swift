@@ -603,6 +603,20 @@ final class PlayerModel {
         opens += 1
     }
 
+    /// The film plays now, on whichever engine: a film brought back from Picture in Picture reads it.
+    var playingNow: Bool { backend == .aether ? playing : player.rate > 0 }
+
+    /// Plays on, on whichever engine.
+    func resume() {
+        if backend == .aether { aether?.play() } else { player.play() }
+    }
+
+    /// Picture in Picture started or stopped: the engine keeps its picture alive in the window and hands an item over
+    /// in place while it is up (it asks its host to say so).
+    func pictureInPicture(active: Bool) {
+        aether?.engine.pictureInPictureActive = active
+    }
+
     func togglePlay() {
         if backend == .aether, let aether {
             if playing { aether.pause(); report(paused: true) } else { if ended { seek(to: 0) }; aether.play() }
