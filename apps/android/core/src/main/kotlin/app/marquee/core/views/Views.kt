@@ -147,7 +147,15 @@ class TitleView(
      * The page shows or stops showing: the core asks TMDB and Trakt only while it shows
      * (plans/title-page-ratings-genres-similar.md), so send it on resume and on pause or leaving.
      */
-    fun setVisible(visible: Boolean) = post(command("titleVisible") { put("visible", visible) })
+    fun setVisible(visible: Boolean) {
+        this.visible = visible
+        post(command("titleVisible") { put("visible", visible) })
+    }
+
+    /** The last [setVisible], told again to a fresh subscription (Try again, a desync), which starts hidden. */
+    @Volatile private var visible: Boolean? = null
+
+    override fun replayed() = listOfNotNull(visible?.let { v -> command("titleVisible") { put("visible", v) } })
 
     fun selectSeason(season: Int) = post(command("selectSeason") { put("season", season) })
 

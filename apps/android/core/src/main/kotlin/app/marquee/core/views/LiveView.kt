@@ -98,6 +98,8 @@ abstract class LiveView<S, U>(
                         true
                     } else {
                         subscription = sub
+                        // A fresh subscription after the first (Try again, a desync) starts from nothing on the core.
+                        if (gen > 1) flush.addAll(replayed())
                         flush.addAll(queuedCommands)
                         queuedCommands.clear()
                         false
@@ -116,6 +118,9 @@ abstract class LiveView<S, U>(
             opened.completeExceptionally(e)
         }
     }
+
+    /** What a fresh subscription must hear again: the view's own state the core keeps per subscription. */
+    protected open fun replayed(): List<JsonObject> = emptyList()
 
     /** Sends a command to this view, or holds it until the subscription is open. */
     protected fun post(command: JsonObject) {

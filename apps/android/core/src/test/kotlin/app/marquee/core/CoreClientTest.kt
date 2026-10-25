@@ -193,6 +193,39 @@ class CoreClientTest {
         }
 
     @Test
+    fun `a title view tells a fresh subscription it shows again after Try again`() =
+        runBlocking {
+            val sent = CopyOnWriteArrayList<String>()
+            var subs = 0
+            client.attach { text ->
+                sent += text
+                if (opOf(text) == "subscribe") {
+                    subs++
+                    val page =
+                        """{"header":{"state":{"state":"loading"},"inLibrary":false,"watched":false},"episodes":[]}"""
+                    client.onMessage("""{"id":${idOf(text)},"ok":true,"result":{"sub":$subs,"snapshot":$page}}""")
+                } else if (opOf(text) != "command") {
+                    client.onMessage("""{"id":${idOf(text)},"ok":true,"result":{}}""")
+                }
+            }
+            val view = TitleView(client, scope, "movie", "tt0111161").also { it.open() }
+            view.opened.await()
+            view.setVisible(true)
+            val visible = { sub: Int ->
+                sent.count {
+                    val m = requestOf(it)
+                    opOf(it) == "command" && m["sub"]?.jsonPrimitive?.long == sub.toLong() &&
+                        it.contains("\"titleVisible\"")
+                }
+            }
+            until("visible told to the first subscription") { visible(1) == 1 }
+            view.retry()
+            // The core starts a new subscription hidden: without this, TMDB and Trakt stay pending.
+            until("visible told to the fresh subscription") { visible(2) == 1 }
+            view.close()
+        }
+
+    @Test
     fun `commands sent before the subscription is open wait and go out in order`() =
         runBlocking {
             val sent = CopyOnWriteArrayList<String>()
