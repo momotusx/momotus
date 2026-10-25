@@ -195,6 +195,8 @@ func seasonName(_ season: Int) -> String { season == 0 ? "Specials" : "Season \(
 /// The cast as grey monogram circles with their names (no roles: the core sends names only, C39).
 struct CastShelf: View {
     let cast: [String]
+    /// A person: Search for them.
+    var open: ((String) -> Void)? = nil
     @Environment(\.metrics) private var metrics
 
     var body: some View {
@@ -207,26 +209,33 @@ struct CastShelf: View {
             ScrollView(.horizontal) {
                 HStack(alignment: .top, spacing: 20) {
                     ForEach(cast, id: \.self) { name in
-                        VStack(spacing: 8) {
-                            Text(initials(name))
-                                .display(metrics.wide ? 32 : 34)
-                                .foregroundStyle(Theme.Palette.text)
-                                .frame(width: side, height: side)
-                                .background(Circle().fill(Theme.Palette.raised))
-                                .accessibilityHidden(true)
-                            Text(name)
-                                .textFont(12, relativeTo: .caption)
-                                .foregroundStyle(Theme.Palette.text)
-                                .multilineTextAlignment(.center)
-                                .lineLimit(2)
-                                .frame(width: side)
-                        }
-                        .accessibilityElement(children: .combine)
+                        Button { open?(name) } label: { person(name, side: side) }
+                            .buttonStyle(FocusPlainStyle(shape: RoundedRectangle(cornerRadius: 12, style: .continuous), scale: 1))
+                            .disabled(open == nil)
+                            .accessibilityHint("Searches for their titles")
                     }
                 }
             }
             .scrollIndicators(.hidden)
         }
+    }
+
+    private func person(_ name: String, side: CGFloat) -> some View {
+        VStack(spacing: 8) {
+            Text(initials(name))
+                .display(metrics.wide ? 32 : 34)
+                .foregroundStyle(Theme.Palette.text)
+                .frame(width: side, height: side)
+                .background(Circle().fill(Theme.Palette.raised))
+                .accessibilityHidden(true)
+            Text(name)
+                .textFont(12, relativeTo: .caption)
+                .foregroundStyle(Theme.Palette.text)
+                .multilineTextAlignment(.center)
+                .lineLimit(2)
+                .frame(width: side)
+        }
+        .accessibilityElement(children: .combine)
     }
 
     private func initials(_ name: String) -> String {
@@ -286,17 +295,22 @@ struct InfoBand: View {
 struct InfoList: View {
     let genres: [String]
     let directors: [String]
+    var writers: [String] = []
     let rows: [(key: String, value: String)]
+    /// False on a kids profile: the genres are words, not links.
+    var linksGenres = true
     let open: (TitleLink) -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        let genreLink: ((String) -> TitleLink)? = linksGenres ? { .genre($0) } : nil
+        return VStack(alignment: .leading, spacing: 12) {
             Text("Information")
                 .textFont(22, weight: .bold, relativeTo: .title2)
                 .foregroundStyle(Theme.Palette.text)
                 .accessibilityAddTraits(.isHeader)
-            chipRow("Genres", genres, TitleLink.genre)
-            chipRow("Directors", directors, TitleLink.director)
+            chipRow("Genres", genres, genreLink)
+            chipRow("Directors", directors, TitleLink.person)
+            chipRow("Writers", writers, TitleLink.person)
             ForEach(rows.filter { $0.key != "Genres" }, id: \.key) { row in
                 VStack(alignment: .leading, spacing: 2) {
                     Text(row.key).textFont(12, relativeTo: .caption).foregroundStyle(Theme.Palette.text)
@@ -309,23 +323,25 @@ struct InfoList: View {
     }
 
     /// Chips on the page (not over art): 32 tall in a 44 target, 15/500, on the inner surface fill.
-    @ViewBuilder private func chipRow(_ label: String, _ names: [String], _ link: @escaping (String) -> TitleLink) -> some View {
+    @ViewBuilder private func chipRow(_ label: String, _ names: [String], _ link: ((String) -> TitleLink)?) -> some View {
         if !names.isEmpty {
             VStack(alignment: .leading, spacing: 6) {
                 Text(label).textFont(12, relativeTo: .caption).foregroundStyle(Theme.Palette.text)
                 FlowRow(spacing: 8) {
                     ForEach(names, id: \.self) { name in
-                        Button { open(link(name)) } label: {
-                            Text(name)
-                                .textFont(15, weight: .medium, relativeTo: .subheadline)
-                                .foregroundStyle(Theme.Palette.text)
-                                .padding(.horizontal, 12)
-                                .frame(height: 32)
-                                .background(Theme.Palette.raised, in: Capsule())
-                                .padding(.vertical, 6)
-                                .contentShape(Rectangle())
+                        let chip = Text(name)
+                            .textFont(15, weight: .medium, relativeTo: .subheadline)
+                            .foregroundStyle(Theme.Palette.text)
+                            .padding(.horizontal, 12)
+                            .frame(height: 32)
+                            .background(Theme.Palette.raised, in: Capsule())
+                            .padding(.vertical, 6)
+                        if let link {
+                            Button { open(link(name)) } label: { chip.contentShape(Rectangle()) }
+                                .buttonStyle(FocusPlainStyle(shape: Capsule(), scale: 1))
+                        } else {
+                            chip
                         }
-                        .buttonStyle(FocusPlainStyle(shape: Capsule(), scale: 1))
                     }
                 }
             }

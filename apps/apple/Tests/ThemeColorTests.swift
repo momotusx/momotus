@@ -139,7 +139,8 @@ enum TitleSpots {
     static let upperRow: CGFloat = 75 + 40 + 12 + 10.5
     static let synopsis: CGFloat = 246
     static let chips: CGFloat = 324
-    static let meta: CGFloat = 356
+    /// 356 with the 13 pt line; the ratings row's 24 pt height (its marks) lifts it 8.
+    static let meta: CGFloat = 364
     /// The hero at 720 grown by `heroFrame` to hold the column, logo at the top (445 measured).
     static let grown: CGFloat = 445
     static var end: Double { 40 + Double(BackdropStops.heroSynopsisWidth) }

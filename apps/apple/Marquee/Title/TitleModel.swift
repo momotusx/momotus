@@ -8,6 +8,8 @@ final class TitleModel {
     let route: TitleRoute
     private(set) var header: TitleHeader?
     private(set) var episodes: [Episode] = []
+    /// "More like this" (Trakt's related titles), empty until it lands.
+    private(set) var similar: [Tile] = []
     /// A failed open or command, in words.
     private(set) var failure: String?
 
@@ -15,6 +17,8 @@ final class TitleModel {
     @ObservationIgnored private var sub: UInt64?
     @ObservationIgnored private var task: Task<Void, Never>?
     @ObservationIgnored private var generation = -1
+    /// Whether the page shows, told to the core once the view is open (`titleVisible`).
+    @ObservationIgnored private var visible = false
 
     init(route: TitleRoute, core: CoreClient) {
         self.route = route
@@ -49,6 +53,7 @@ final class TitleModel {
                 let view = try await core.open("title", params: ["kind": kind, "id": id], as: (TitleSnapshot.self, TitleUpdate.self))
                 self?.sub = view.sub
                 self?.failure = nil
+                if self?.visible == true { self?.send(["type": "titleVisible", "visible": true]) }
                 var timed = false
                 for await event in view.events {
                     guard let self else { return }
@@ -70,6 +75,13 @@ final class TitleModel {
             }
             self?.sub = nil
         }
+    }
+
+    /// The page shows or stops showing: the core asks TMDB and Trakt only after a second of showing.
+    func setVisible(_ value: Bool) {
+        guard value != visible else { return }
+        visible = value
+        send(["type": "titleVisible", "visible": value])
     }
 
     func selectSeason(_ season: Int) {
@@ -95,6 +107,7 @@ final class TitleModel {
         case .snapshot(let snapshot):
             header = snapshot.header
             episodes = snapshot.episodes
+            similar = snapshot.similar
         case .updates(let updates):
             var nextHeader = header
             var nextEpisodes = episodes
@@ -102,6 +115,8 @@ final class TitleModel {
                 switch update {
                 case .header(let value): nextHeader = value
                 case .episodes(let diffs): nextEpisodes = applyDiffs(nextEpisodes, diffs)
+                case .similar(let tiles): if tiles != similar { similar = tiles }
+                case .other: break
                 }
             }
             if nextHeader != header { header = nextHeader }

@@ -38,6 +38,14 @@ enum WideLayout {
         window >= max(starringFrom, 40 + row + 40 + 360 + 40)
     }
     static let starringFrom: CGFloat = 1240
+    /// The rated cover card at the hero's right (plans/title-page-ratings-genres-similar.md): a fixed 2:3 poster.
+    static let coverWidth: CGFloat = 240
+    /// The card shows where it clears the hero's words (held to 480 from the 40 margin) with 40 on every side,
+    /// and where the hero is tall enough for it above the action row's height and the foot.
+    static func coverFits(window: CGFloat, hero: CGFloat) -> Bool {
+        window >= 40 + BackdropStops.heroSynopsisWidth + 40 + coverWidth + 40
+            && hero >= coverWidth * 1.5 + 16 + 40 + HeroLayout.foot + 24
+    }
 }
 
 /// Play's wait for the pick, when it opened the player at once: it ends when the core's view is done,

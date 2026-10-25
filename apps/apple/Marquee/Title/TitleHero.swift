@@ -82,12 +82,17 @@ struct TitleHeroFacts {
     let directors: [String]
     /// The years, then the runtime.
     let meta: [String]
-    let ratings: [String]
+    /// The ratings row at the meta line's end: IMDb, TMDB and Trakt after their marks.
+    let scores: [ScoreItem]
     let imdbLink: URL?
+    /// RPDB's cover with the ratings band, for the cover card.
+    let ratedPoster: String?
+    /// False on a kids profile, which has no Discover: the genres are words, not links.
+    let linksGenres: Bool
     let synopsis: String?
     let cast: [String]
 
-    init(_ details: TitleDetails) {
+    init(_ details: TitleDetails, linksGenres: Bool = true) {
         name = details.name
         logo = details.logo
         let kind = [kindWord(details.kind)].compactMap { $0 }
@@ -95,21 +100,23 @@ struct TitleHeroFacts {
         genres = Array(details.genres.prefix(3))
         directors = Array(details.directors.prefix(3))
         meta = [details.releaseInfo, details.runtime].compactMap { $0 }
-        ratings = ratingParts(details.ratings)
+        scores = scoreItems(imdb: details.ratings?.imdb, scores: details.scores, imdbUrl: details.imdbUrl)
+        ratedPoster = details.ratedPoster
+        self.linksGenres = linksGenres
         imdbLink = details.ratings?.imdb == nil ? nil : details.imdbUrl.flatMap(URL.init(string:))
         synopsis = details.description
         cast = details.cast
     }
 }
 
-/// Where a linked chip goes: a genre to Discover, a director to Search.
+/// Where a linked chip goes: a genre to Discover, a person (cast, director, writer) to Search.
 enum TitleLink: Equatable {
     case genre(String)
-    case director(String)
+    case person(String)
 }
 
 /// A part of the hero a test measures (TitleHeroTests); nothing reads it in the app.
-enum HeroPart: Hashable { case meta, chips, synopsis, actions, kindLine, box, chip(String) }
+enum HeroPart: Hashable { case meta, chips, synopsis, actions, kindLine, box, chip(String), link(String) }
 
 /// Where a test hears a hero part's frame; a class, so the environment compares it by identity.
 final class HeroProbeSink {
@@ -154,13 +161,13 @@ struct TitleHeroWide<Actions: View>: View {
     var body: some View {
         VStack(alignment: .leading, spacing: HeroLayout.gap) {
             TitleLogo(logo: facts.logo, name: facts.name, maxWidth: HeroLayout.logoWidth, height: HeroLayout.logoHeight, nameSize: Theme.type.hero + 12)
-            MetaLine(ratings: facts.ratings, parts: facts.meta, size: HeroLayout.meta, imdbLink: facts.imdbLink)
+            MetaLine(ratings: [], parts: facts.meta, size: HeroLayout.meta, imdbLink: facts.imdbLink, marks: facts.scores)
                 .foregroundStyle(Theme.Palette.dim)
                 .frame(maxWidth: min(cap, columnWidth), alignment: .leading)
                 .padding(.top, 7)
                 .heroProbe(.meta)
             if !facts.genres.isEmpty || !facts.directors.isEmpty {
-                ChipGroups(genres: facts.genres, directors: facts.directors, open: open)
+                ChipGroups(genres: facts.genres, directors: facts.directors, linksGenres: facts.linksGenres, open: open)
                     .frame(maxWidth: min(cap, columnWidth), alignment: .leading)
                     .padding(.top, 5)
                     .heroProbe(.chips)
@@ -213,17 +220,22 @@ struct TitleHeroPhone<Buttons: View, Secondaries: View>: View {
 struct ChipGroups: View {
     let genres: [String]
     let directors: [String]
+    var writers: [String] = []
+    /// False on a kids profile: the genres are words on the chip fill, with nothing to press.
+    var linksGenres = true
     let open: (TitleLink) -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            group("Genres", genres, TitleLink.genre, hint: "Opens Discover")
-            group("Directors", directors, TitleLink.director, hint: "Searches for their titles")
+        let genreLink: ((String) -> TitleLink)? = linksGenres ? { .genre($0) } : nil
+        return VStack(alignment: .leading, spacing: 10) {
+            group("Genres", genres, genreLink, hint: "Opens Discover")
+            group("Directors", directors, TitleLink.person, hint: "Searches for their titles")
+            group("Writers", writers, TitleLink.person, hint: "Searches for their titles")
         }
     }
 
     /// One line a group, as the glass check's spots read them: the most names that fit (review P2-2).
-    @ViewBuilder private func group(_ label: String, _ names: [String], _ link: @escaping (String) -> TitleLink, hint: String) -> some View {
+    @ViewBuilder private func group(_ label: String, _ names: [String], _ link: ((String) -> TitleLink)?, hint: String) -> some View {
         if !names.isEmpty {
             ViewThatFits(in: .horizontal) {
                 ForEach((1...names.count).reversed(), id: \.self) { count in
@@ -233,7 +245,7 @@ struct ChipGroups: View {
         }
     }
 
-    private func line(_ label: String, _ names: [String], _ link: @escaping (String) -> TitleLink, hint: String) -> some View {
+    private func line(_ label: String, _ names: [String], _ link: ((String) -> TitleLink)?, hint: String) -> some View {
         HStack(spacing: 8) {
             Text(label)
                 .textFont(13, weight: .semibold, relativeTo: .footnote)
@@ -242,18 +254,22 @@ struct ChipGroups: View {
                 .padding(.trailing, 4)
                 .accessibilityAddTraits(.isHeader)
             ForEach(names, id: \.self) { name in
-                Button { open(link(name)) } label: {
-                    Text(name)
-                        .textFont(13, weight: .medium, relativeTo: .footnote)
-                        .foregroundStyle(.white)
-                        .lineLimit(1)
-                        .padding(.horizontal, 12)
-                        .frame(height: 28)
-                        .background(SecondaryFill(shape: Capsule()))
-                        .heroProbe(.chip(name))
+                let chip = Text(name)
+                    .textFont(13, weight: .medium, relativeTo: .footnote)
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
+                    .padding(.horizontal, 12)
+                    .frame(height: 28)
+                    .background(SecondaryFill(shape: Capsule()))
+                    .heroProbe(.chip(name))
+                if let link {
+                    Button { open(link(name)) } label: { chip }
+                        .buttonStyle(FocusPlainStyle(shape: Capsule(), scale: 1))
+                        .accessibilityHint(hint)
+                        .heroProbe(.link(name))
+                } else {
+                    chip
                 }
-                .buttonStyle(FocusPlainStyle(shape: Capsule(), scale: 1))
-                .accessibilityHint(hint)
             }
         }
     }

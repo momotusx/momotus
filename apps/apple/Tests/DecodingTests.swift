@@ -78,6 +78,21 @@ private func fixture<T: Decodable>(_ name: String, as type: T.Type) throws -> T 
     #expect(try #require(reply.result).snapshot.rows.isEmpty)
 }
 
+@Test func titleScoresSimilarAndUnknownUpdatesDecode() throws {
+    // The shapes mq-runtime's title view sends (views/title.rs `Slot`, `TitleUpdate::Similar`).
+    let slots = try JSONDecoder().decode([Slot].self, from: Data(#"[{"state": "pending"}, {"state": "shown", "text": "87%", "url": "https://www.themoviedb.org/movie/278"}, {"state": "shown", "text": "92%"}, {"state": "none"}]"#.utf8))
+    #expect(slots == [.pending, .shown("87%", url: "https://www.themoviedb.org/movie/278"), .shown("92%", url: nil), .none])
+    let similar = try JSONDecoder().decode(TitleUpdate.self, from: Data(#"""
+    {"kind": "similar", "tiles": [{"id": "tt0061512", "kind": "movie", "name": "Cool Hand Luke", "poster": null, "background": null,
+     "logo": null, "posterShape": "poster", "releaseInfo": null, "progress": null, "videoId": null, "rating": null, "ratings": {"imdb": null}}]}
+    """#.utf8))
+    guard case .similar(let tiles) = similar else { Issue.record("not similar"); return }
+    #expect(tiles.map(\.name) == ["Cool Hand Luke"])
+    // A kind a newer core sends is ignored, never a decode error.
+    let other = try JSONDecoder().decode(TitleUpdate.self, from: Data(#"{"kind": "somethingNew"}"#.utf8))
+    guard case .other = other else { Issue.record("not ignored"); return }
+}
+
 @Test func titleFollowsSeasonWatchedAndLibraryCommands() throws {
     let reply = try fixture("title-reply.json", as: Reply<Opened<TitleSnapshot>>.self)
     let opened = try #require(reply.result)
@@ -90,6 +105,7 @@ private func fixture<T: Decodable>(_ name: String, as type: T.Type) throws -> T 
             switch update {
             case .header(let value): header = value
             case .episodes(let diffs): episodes = applyDiffs(episodes, diffs)
+            case .similar, .other: break
             }
         }
     }

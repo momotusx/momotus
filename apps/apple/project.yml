@@ -63,6 +63,9 @@ targetTemplates:
         buildPhase: resources
       - path: Marquee/Resources/LICENSE-circle-flags.txt
         buildPhase: resources
+      # The title page's service marks, from design/marks (README there).
+      - path: Marquee/Resources/Marks.xcassets
+        buildPhase: resources
       # Stream choice words, shared with the web and Android.
       - path: ../shared/stream-choice-words.json
         buildPhase: resources
@@ -250,6 +253,7 @@ targets:
       - path: Marquee/Home/HeroText.swift
       - path: Marquee/Theme/Glyph.swift
       - path: Marquee/Title/TitleHero.swift
+      - path: Marquee/Title/TitleScores.swift
       - path: Marquee/Title/TitleActions.swift
       - path: Marquee/Theme/Components.swift
       - path: Marquee/Player/CaptionStyle.swift

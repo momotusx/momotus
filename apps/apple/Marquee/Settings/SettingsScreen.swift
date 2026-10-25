@@ -142,6 +142,15 @@ struct SettingsScreen: View {
                     .textFont(Theme.type.callout, relativeTo: .callout)
                     .foregroundStyle(Theme.Palette.muted)
                     .fixedSize(horizontal: false, vertical: true)
+                // TMDB's terms: its logo and this line wherever its data shows.
+                HStack(spacing: Theme.Space.xs) {
+                    Image(ScoreMark.tmdb.asset).resizable().aspectRatio(contentMode: .fit).frame(height: 16)
+                        .accessibilityLabel("TMDB")
+                    Text("This product uses the TMDB API but is not endorsed or certified by TMDB.")
+                        .textFont(Theme.type.callout, relativeTo: .callout)
+                        .foregroundStyle(Theme.Palette.muted)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
                 Text("Icons: Lucide 1.58.0, ISC licence. Fonts: Inter and IBM Plex Mono, SIL Open Font License 1.1.")
                     .textFont(Theme.type.callout, relativeTo: .callout)
                     .foregroundStyle(Theme.Palette.muted)

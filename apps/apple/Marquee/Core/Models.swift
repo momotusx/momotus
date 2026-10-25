@@ -235,14 +235,44 @@ struct TitleDetails: Decodable, Hashable, Sendable {
     let genres: [String]
     let cast: [String]
     let directors: [String]
+    /// From the meta's Writers links; an older core sends none.
+    let writers: [String]?
     let rating: String?
     /// As on tiles; optional only so older recordings decode.
     let ratings: Ratings?
     /// The title's IMDb page, where its IMDb score links (not on TV).
     let imdbUrl: String?
+    /// TMDB's and Trakt's numbers; nil from an older core, which sends none.
+    let scores: TitleScores?
     let source: String
     /// Trailers the metadata names (YouTube), first is the main one.
     let trailers: [Trailer]
+}
+
+/// One source's number on the title page: `pending` while an answer can still come (keep the slot's width),
+/// `shown` with the number as written ("87%"), `none` when there is none (draw nothing, take no space).
+enum Slot: Decodable, Hashable, Sendable {
+    case pending
+    /// The number as written, and the title's page on the service (from checked ids; nil on a kids profile).
+    case shown(String, url: String?)
+    case none
+
+    private enum Key: String, CodingKey { case state, text, url }
+
+    init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: Key.self)
+        switch try c.decode(String.self, forKey: .state) {
+        case "pending": self = .pending
+        case "shown": self = .shown(try c.decode(String.self, forKey: .text), url: try c.decodeIfPresent(String.self, forKey: .url))
+        default: self = .none
+        }
+    }
+}
+
+/// TMDB's user score and Trakt's community score, as percentages, beside the addon's IMDb score.
+struct TitleScores: Decodable, Hashable, Sendable {
+    let tmdb: Slot
+    let trakt: Slot
 }
 
 struct Trailer: Decodable, Hashable, Sendable {
@@ -278,9 +308,14 @@ struct TitleHeader: Decodable, Hashable, Sendable {
     /// False on a kids profile, whose Library is the owner's list (`setInLibrary` is refused there); an older
     /// core sends nothing, which counts as true.
     let librarySettable: Bool?
+    /// False on a kids profile, which has no Discover: genres show as plain text. An older core sends
+    /// nothing, which counts as true.
+    let genresLinked: Bool?
 
     /// Whether the title offers Add to Library.
     var canSetLibrary: Bool { librarySettable ?? true }
+    /// Whether a genre opens Discover.
+    var linksGenres: Bool { genresLinked ?? true }
 }
 
 struct Episode: Decodable, Hashable, Sendable {
@@ -299,21 +334,36 @@ struct Episode: Decodable, Hashable, Sendable {
 struct TitleSnapshot: Decodable, Sendable {
     let header: TitleHeader
     let episodes: [Episode]
+    /// "More like this"; empty from an older core.
+    let similar: [Tile]
+
+    private enum Key: String, CodingKey { case header, episodes, similar }
+
+    init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: Key.self)
+        header = try c.decode(TitleHeader.self, forKey: .header)
+        episodes = try c.decode([Episode].self, forKey: .episodes)
+        similar = try c.decodeIfPresent([Tile].self, forKey: .similar) ?? []
+    }
 }
 
 enum TitleUpdate: Decodable, Sendable {
     case header(TitleHeader)
     case episodes([ListDiff<Episode>])
+    /// "More like this", whole.
+    case similar([Tile])
+    /// A kind a newer core sends: ignored, so the page keeps working.
+    case other
 
-    private enum Key: String, CodingKey { case kind, header, diffs }
+    private enum Key: String, CodingKey { case kind, header, diffs, tiles }
 
     init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: Key.self)
         switch try c.decode(String.self, forKey: .kind) {
         case "header": self = .header(try c.decode(TitleHeader.self, forKey: .header))
         case "episodes": self = .episodes(try c.decode([ListDiff<Episode>].self, forKey: .diffs))
-        case let kind:
-            throw DecodingError.dataCorruptedError(forKey: .kind, in: c, debugDescription: "unknown title update \(kind)")
+        case "similar": self = .similar(try c.decode([Tile].self, forKey: .tiles))
+        default: self = .other
         }
     }
 }

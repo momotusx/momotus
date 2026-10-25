@@ -41,6 +41,9 @@ struct TitleScreen: View {
     /// A Calendar link opens the episodes once.
     @State private var openedFromLink = false
     @Environment(\.linkRequests) private var links
+    @Environment(\.scenePhase) private var scenePhase
+    /// The page is in its navigation stack's front (nothing pushed over it).
+    @State private var inFront = false
     @Environment(\.openTab) private var openTab
     @Environment(SearchInput.self) private var searchInput: SearchInput?
 
@@ -72,6 +75,11 @@ struct TitleScreen: View {
         #endif
         .fullBleedTop()
         .onChange(of: shown, initial: true) { _, now in placeShown = now }
+        // TMDB and Trakt are asked only while the page shows (`titleVisible`): not under the player or
+        // Versions, not in another tab, not with the app in the background.
+        .onAppear { inFront = true }
+        .onDisappear { inFront = false }
+        .onChange(of: pageVisible, initial: true) { _, now in model.setVisible(now) }
         // At rest too: on a short or wide window the words can start under the bar before any scroll.
         .topScrim(underBar, atRest: true)
         .defaultFocus($primaryFocused, true)
@@ -177,7 +185,7 @@ struct TitleScreen: View {
 
     @ViewBuilder private var v3Hero: some View {
         if let details {
-            let facts = TitleHeroFacts(details)
+            let facts = TitleHeroFacts(details, linksGenres: model.header?.linksGenres ?? true)
             Group {
                 if metrics.wide {
                     TitleHeroWide(facts: facts, columnWidth: panelOpen && !panelCovers ? WideLayout.panelColumnWidth(window: width) : 900,
@@ -188,10 +196,21 @@ struct TitleScreen: View {
             }
             .heroFrame(height: v3HeroHeight, alignment: metrics.wide ? .bottomLeading : .bottom) { EmptyView() }
             .overlay(alignment: .bottomTrailing) {
-                if metrics.wide, !panelOpen, WideLayout.starringFits(window: width, row: actionsWidth), !facts.cast.isEmpty {
-                    HeroStarring(cast: facts.cast)
-                        .padding(.trailing, metrics.gutter)
-                        .padding(.bottom, HeroLayout.foot)
+                if metrics.wide, !panelOpen {
+                    let starring = WideLayout.starringFits(window: width, row: actionsWidth) && !facts.cast.isEmpty
+                    VStack(alignment: .trailing, spacing: 16) {
+                        // The rated cover above Starring, or above the action row's height (never over it).
+                        if let cover = facts.ratedPoster, WideLayout.coverFits(window: width, hero: v3HeroHeight) {
+                            RatedCover(url: cover, width: WideLayout.coverWidth)
+                        }
+                        if starring {
+                            HeroStarring(cast: facts.cast)
+                        } else {
+                            Color.clear.frame(width: 1, height: 40)
+                        }
+                    }
+                    .padding(.trailing, metrics.gutter)
+                    .padding(.bottom, HeroLayout.foot)
                 }
             }
             .background {
@@ -227,15 +246,27 @@ struct TitleScreen: View {
                         .padding(.leading, metrics.wide ? metrics.gutter : 20)
                     // The open panel shows it itself, where the episode was pressed.
                 }
+                // After the episodes and before Cast; it lands late, under what it follows.
+                SimilarRow(tiles: model.similar)
                 if !details.cast.isEmpty {
-                    CastShelf(cast: details.cast).padding(.horizontal, metrics.wide ? metrics.gutter : 20)
+                    CastShelf(cast: details.cast, open: { openLink(.person($0)) }).padding(.horizontal, metrics.wide ? metrics.gutter : 20)
+                }
+                // The writers link as the directors do; on the phone Information lists them.
+                if metrics.wide, let writers = details.writers, !writers.isEmpty {
+                    ChipGroups(genres: [], directors: [], writers: Array(writers.prefix(3)), open: openLink)
+                        .padding(.horizontal, metrics.gutter)
                 }
                 let rows = informationRows(genres: details.genres, directors: metrics.wide ? details.directors : [], runtime: details.runtime, seasons: seasons,
                                            selectedSeason: model.header?.selectedSeason, episodes: model.episodes.count)
                 if metrics.wide {
                     InfoBand(synopsis: details.description, genres: details.genres, rows: rows)
                 } else {
-                    InfoList(genres: Array(details.genres.prefix(3)), directors: details.directors, rows: rows, open: openLink)
+                    // The phone's rated cover sits in the body above Information, wide enough for the band's digits.
+                    if let cover = details.ratedPoster {
+                        RatedCover(url: cover, width: 200).frame(maxWidth: .infinity)
+                    }
+                    InfoList(genres: Array(details.genres.prefix(3)), directors: details.directors, writers: details.writers ?? [], rows: rows,
+                             linksGenres: model.header?.linksGenres ?? true, open: openLink)
                         .padding(.horizontal, 20)
                 }
             }
@@ -371,7 +402,7 @@ struct TitleScreen: View {
         let facts = TitleHeroFacts(details)
         return VStack(alignment: .leading, spacing: 8) {
             if let synopsis = facts.synopsis { HeroSynopsis(text: synopsis, lines: 2, more: { reading = true }) }
-            MetaLine(ratings: facts.ratings, parts: facts.meta, size: 13, imdbLink: facts.imdbLink)
+            MetaLine(ratings: [], parts: facts.meta, size: 13, imdbLink: facts.imdbLink, marks: facts.scores)
                 .foregroundStyle(Theme.Palette.muted)
         }
     }
@@ -397,7 +428,7 @@ struct TitleScreen: View {
         case .genre(let genre):
             links?.discover = DiscoverRequest(kind: details?.kind ?? "movie", genre: genre)
             openTab(.discover, link: true)
-        case .director(let name):
+        case .person(let name):
             searchInput?.link(name)
             openTab(.search, link: true)
         }
@@ -405,6 +436,11 @@ struct TitleScreen: View {
     #endif
 
     private var details: TitleDetails? { model.header?.details }
+
+    private var pageVisible: Bool {
+        titlePageShows(inFront: inFront, placed: placeShown, active: scenePhase == .active,
+                       covered: playing != nil || showVersions || showEpisodeVersions)
+    }
 
     private var playTarget: PlayTargetInfo? {
         guard let details, let target = model.header?.playTarget else { return nil }
