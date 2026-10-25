@@ -273,8 +273,13 @@ struct PlayerScreen: View {
             do { try await Task.sleep(for: .milliseconds(700)) } catch { return }
             seekForward = nil
         }
-        // The system brightness goes back when the app does; Control Center (inactive) changes nothing.
-        .onChange(of: scenePhase) { _, phase in if phase == .background { keeper.restore() } }
+        // The system brightness goes back when the app does, and a return that did not take is tried again when it
+        // comes back; Control Center (inactive) changes nothing.
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .background || (phase == .active && keeper.pending) { keeper.restore() }
+        }
+        // The volume swipe turned off under the finger: its indicator goes at once.
+        .onChange(of: volume.off) { _, off in if off, levels.side == .volume { levels.hideNow() } }
         .onReceive(NotificationCenter.default.publisher(for: UIAccessibility.voiceOverStatusDidChangeNotification)) { _ in
             assistive = assistiveTechRunning
         }
@@ -335,7 +340,7 @@ struct PlayerScreen: View {
                 if !(UIAccessibility.isVoiceOverRunning || UIAccessibility.isSwitchControlRunning) { levels.show(.volume, at: Double(value)) }
             }
             #if DEBUG
-            WalkLevels.begin(volume: volume.level)
+            WalkLevels.begin(volume)
             #endif
             #endif
         }
@@ -345,6 +350,7 @@ struct PlayerScreen: View {
             if let across = PlayerOrientation.leave() { model.lastAcross = across }
             keeper.restore()
             #if DEBUG
+            // close() put it back while the volume view was in the window; this is the fallback.
             WalkLevels.end(volume)
             #endif
             #endif
@@ -435,18 +441,32 @@ struct PlayerScreen: View {
                     case .brightness: keeper.start()
                     case .volume: volume.off ? nil : Double(volume.level)
                     }
+                #if DEBUG
+                if side == .volume, let start { WalkLevels.found(Float(start)) }
+                #endif
                 if let start { levels.begin(side, at: start) }
                 return start
             },
             onLevel: { side, level in
                 switch side {
-                case .brightness: keeper.apply(level)
-                case .volume: volume.set(Float(level))
+                case .brightness:
+                    keeper.apply(level)
+                case .volume:
+                    volume.set(Float(level))
+                    // A set that did not take turned the swipe off: no level the device does not have.
+                    if volume.off {
+                        levels.hideNow()
+                        return
+                    }
                 }
                 levels.move(to: level)
                 lastTouch = .now
             },
-            onEnd: { levels.end() })
+            onEnd: {
+                levels.end()
+                keeper.ended()
+                volume.swipeEnded()
+            })
     }
 
     /// A double tap steps 10 s back on the left half, forward on the right, while the picture shows.

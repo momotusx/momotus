@@ -281,10 +281,19 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: app.marquee.dev.tests
         GENERATE_INFOPLIST_FILE: YES
   # The iPhone walk of plans/player-gestures.md 7.2: real touches on the player, which only XCUITest gives a phone.
-  # Its own scheme; in no app's scheme, and no app target depends on it. Run with MARQUEE_APP_ID=app.marquee.walk.
+  # Its own scheme; in no app's scheme, and no app target depends on it. Run only through scripts/walk-ui.sh.
   MarqueeWalkUITests:
     type: bundle.ui-testing
     platform: iOS
+    # The host app is built under the walk's own bundle id or not at all: xcodebuild installs it before any test runs.
+    preBuildScripts:
+      - name: Refuse any app id but the walk's
+        basedOnDependencyAnalysis: false
+        script: |
+          if [ "$MARQUEE_APP_ID" != app.marquee.walk ]; then
+            echo "error: MarqueeWalkUITests builds the app as app.marquee.walk only (scripts/walk-ui.sh), not $MARQUEE_APP_ID."
+            exit 1
+          fi
     sources:
       - path: WalkUITests
     dependencies:

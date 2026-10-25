@@ -94,7 +94,19 @@ private let bands = SwipeRules.Bands(left: 24, top: 32, right: 24, bottom: 32)
     #expect(try body(of: "private var levelSwipe: LevelSwipe", in: screen).contains("enabled: swipesOn"))
     // The system brightness goes back when the player leaves and when the app goes to the background.
     #expect(try body(of: ".onDisappear", in: screen).contains("keeper.restore()"))
-    #expect(view.contains("if phase == .background { keeper.restore() }"))
+    #expect(view.contains("if phase == .background || (phase == .active && keeper.pending) { keeper.restore() }"))
+    // The return uses the screen the swipe held, and a return with no screen keeps its record.
+    let keeper = try body(of: "@MainActor final class BrightnessKeeper", in: swipe)
+    #expect(try body(of: "private var screen: UIScreen?", in: keeper).contains("if let held { return held }"))
+    #expect(try body(of: "func start() -> Double?", in: keeper).contains("held = screen"))
+    let restore = try body(of: "func restore()", in: keeper)
+    #expect(restore.contains("SwipeRules.brightnessReturn("))
+    #expect(restore.contains("SwipeRules.took(brightness:"))
+    #expect(!restore.contains("defer"))
+    // The volume swipe that turned off hides its indicator.
+    #expect(try body(of: "private var levelSwipe: LevelSwipe", in: screen).contains("if volume.off {\n                        levels.hideNow()"))
+    #expect(view.contains("if off, levels.side == .volume { levels.hideNow() }"))
+    #expect(try body(of: "func set(_ value: Float)", in: swipe).contains("SwipeRules.checksVolume(before: before, set: value)"))
     // Under VoiceOver or Switch Control no volume view, so the system's HUD stays.
     #expect(view.contains("if !assistive {\n                    VolumeControl(volume: volume)"))
     // Direct touches only, and a second touch keeps the pan from beginning.
@@ -102,4 +114,24 @@ private let bands = SwipeRules.Bands(left: 24, top: 32, right: 24, bottom: 32)
     let begin = try body(of: "func gestureRecognizerShouldBegin(", in: swipe)
     #expect(begin.contains("pan.numberOfTouches == 1"))
     #expect(begin.contains("SwipeRules.commits("))
+}
+
+@Test func aBrightnessReturnWithNoScreenKeepsItsRecord() {
+    // Home pressed after a swipe: by the background phase no scene is active. With the swipe's screen held the put
+    // goes through; with none at all the record stays for the next try, never cleared with nothing written.
+    #expect(SwipeRules.brightnessReturn(found: 0.50, set: 0.90, current: nil) == .keep)
+    #expect(SwipeRules.brightnessReturn(found: 0.50, set: 0.90, current: 0.90) == .put(0.50))
+    #expect(SwipeRules.brightnessReturn(found: 0.50, set: 0.90, current: 0.30) == .forget)
+    #expect(SwipeRules.brightnessReturn(found: nil, set: nil, current: 0.70) == .forget)
+    // The record goes only once the screen shows the put: a write the system ignored from the background reads back
+    // as the old value and is tried again.
+    #expect(SwipeRules.took(brightness: 0.50, put: 0.50))
+    #expect(!SwipeRules.took(brightness: 0.90, put: 0.50))
+}
+
+@Test func aSmallFirstVolumeSetIsNotTheReadBack() {
+    // A first set a few thousandths from the start can round to the start; it must not turn the swipe off.
+    #expect(!SwipeRules.checksVolume(before: 0.5, set: 0.503))
+    #expect(SwipeRules.checksVolume(before: 0.5, set: 0.5 + 1.0 / 16))
+    #expect(SwipeRules.checksVolume(before: 0.5, set: 0.4))
 }

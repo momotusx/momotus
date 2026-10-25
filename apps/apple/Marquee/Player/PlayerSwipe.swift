@@ -93,21 +93,25 @@ struct LevelSwipe: UIGestureRecognizerRepresentable {
     @ObservationIgnored fileprivate weak var view: MPVolumeView?
     @ObservationIgnored private var lastSet: Float?
     @ObservationIgnored private var checked = false
+    /// The volume before the play's first set: the read-back compares against it.
+    @ObservationIgnored private var before: Float?
     @ObservationIgnored private var observation: NSKeyValueObservation?
     /// No volume swipe for this play: no slider, or a route that keeps its own volume.
     private(set) var off = false
 
+    /// Read at a swipe's commit, which needs the picture up, so the player's audio session is active and it is current.
     var level: Float { AVAudioSession.sharedInstance().outputVolume }
 
     func set(_ value: Float) {
         guard !off else { return }
-        let before = level
+        let before = self.before ?? level
+        self.before = before
         lastSet = value
         guard put(value) else {
             off = true
             return
         }
-        guard !checked else { return }
+        guard !checked, SwipeRules.checksVolume(before: before, set: value) else { return }
         checked = true
         Task { @MainActor [weak self] in
             try? await Task.sleep(for: .milliseconds(300))
@@ -122,6 +126,15 @@ struct LevelSwipe: UIGestureRecognizerRepresentable {
         slider.setValue(value, animated: false)
         slider.sendActions(for: .valueChanged)
         return true
+    }
+
+    /// A swipe ended: 500 ms on, a button press that lands near its last level is the viewer's again, not an echo.
+    func swipeEnded() {
+        let mark = lastSet
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .milliseconds(500))
+            if let self, self.lastSet == mark { self.lastSet = nil }
+        }
     }
 
     /// The hardware buttons' changes, past the echo of the swipe's own sets; the first delivery is skipped.
@@ -154,20 +167,30 @@ struct VolumeControl: UIViewRepresentable {
 
 /// The system brightness a swipe changed, and putting it back (3.5). iOS has no per-app brightness, so the player puts
 /// back what it found when it leaves or goes to the background, but only if the screen still shows what it set: a
-/// change the viewer made in Control Center since then is theirs. A record in `UserDefaults` repairs a crash.
+/// change the viewer made in Control Center since then is theirs. A record in `UserDefaults` repairs a crash, and stays
+/// until a put is read back on the screen: a return that did not take is tried again when the scene is active.
 @MainActor final class BrightnessKeeper {
     private var found: CGFloat?
     private var set: CGFloat?
+    /// The swipe under way has written the record once (it is written again at the swipe's end).
+    private var recorded = false
+    /// A return that did not take (no screen, or a write the system ignored from the background).
+    private(set) var pending = false
+    /// The screen the swipe used, held so a return from a scene already in the background still reaches it.
+    private weak var held: UIScreen?
 
-    /// The window scene's screen, never `UIScreen.main` (deprecated, and not the scene's).
+    /// The screen the swipe used, else the active window scene's, else any window scene's: by the time the scene
+    /// phase says background, the scene is no longer active. Never `UIScreen.main` (deprecated, and not the scene's).
     private var screen: UIScreen? {
-        UIApplication.shared.connectedScenes.lazy.compactMap { $0 as? UIWindowScene }
-            .first { $0.activationState == .foregroundActive }?.screen
+        if let held { return held }
+        let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+        return (scenes.first { $0.activationState == .foregroundActive } ?? scenes.first)?.screen
     }
 
     /// A swipe begins: the level now, and what to put back later.
     func start() -> Double? {
         guard let screen else { return nil }
+        held = screen
         let now = screen.brightness
         found = SwipeRules.found(current: now, set: set, found: found)
         return Double(now)
@@ -177,25 +200,51 @@ struct VolumeControl: UIViewRepresentable {
         guard let screen else { return }
         screen.brightness = CGFloat(level)
         set = CGFloat(level)
-        if let found { Self.save(found: found, set: CGFloat(level)) }
+        if !recorded { ended() }
     }
 
+    /// A swipe ended (and its first move): the record holds what to put back and what the player set.
+    func ended() {
+        guard let found, let set else { return }
+        recorded = true
+        Self.save(found: found, set: set)
+    }
+
+    /// Puts the brightness found back by the rule of 3.5; a play with no swipe of its own repairs a record a crash left.
     func restore() {
-        defer {
-            found = nil
-            set = nil
-            Self.clear()
+        recorded = false
+        if found == nil, let record = Self.record {
+            (found, set) = (record.found, record.set)
         }
-        guard let found, let set, let screen, SwipeRules.shouldRestore(current: screen.brightness, set: set) else { return }
-        screen.brightness = found
+        let screen = screen
+        switch SwipeRules.brightnessReturn(found: found, set: set, current: screen?.brightness) {
+        case .forget:
+            forget()
+        case .keep:
+            pending = true
+        case .put(let value):
+            screen?.brightness = value
+            if let screen, SwipeRules.took(brightness: screen.brightness, put: value) { forget() } else { pending = true }
+        }
+    }
+
+    private func forget() {
+        found = nil
+        set = nil
+        pending = false
+        Self.clear()
     }
 
     /// At launch: a record a crash left behind is put back by the same rule.
     static func repair(_ screen: UIScreen?) {
-        defer { clear() }
-        guard let screen, let record = UserDefaults.standard.array(forKey: key) as? [Double], record.count == 2,
-              SwipeRules.shouldRestore(current: screen.brightness, set: CGFloat(record[1])) else { return }
-        screen.brightness = CGFloat(record[0])
+        let keeper = BrightnessKeeper()
+        keeper.held = screen
+        keeper.restore()
+    }
+
+    private static var record: (found: CGFloat, set: CGFloat)? {
+        guard let values = UserDefaults.standard.array(forKey: key) as? [Double], values.count == 2 else { return nil }
+        return (CGFloat(values[0]), CGFloat(values[1]))
     }
 
     private static func save(found: CGFloat, set: CGFloat) {
@@ -241,6 +290,13 @@ struct VolumeControl: UIViewRepresentable {
         }
     }
 
+    /// The volume swipe turned off under the finger (3.3): the indicator goes at once, so it never shows a level the
+    /// device does not have.
+    func hideNow() {
+        hide?.cancel()
+        shown = false
+    }
+
     /// A volume button's change, shown as a swipe that ends at once.
     func show(_ side: SwipeRules.Side, at value: Double) {
         guard !swiping else { return }
@@ -250,16 +306,29 @@ struct VolumeControl: UIViewRepresentable {
 }
 
 #if DEBUG
-/// Walk builds (`-MQMute YES`): the device volume a walk found goes back when the player closes, so a walk never
-/// leaves the owner's phone louder or quieter. The record outlives a crash: the next walk keeps it and puts it back.
+/// Walk builds (`-MQMute YES`): the device volume a walk found before its first volume swipe goes back when the player
+/// closes, so a walk never leaves the owner's phone louder or quieter. The record outlives a crash: the next player to
+/// open, once its volume view is in the window, puts it back.
 @MainActor enum WalkLevels {
-    static func begin(volume: Float) {
+    /// The player opened: a record a crashed run left is put back once the volume view is in the window.
+    static func begin(_ volume: SystemVolume) {
         guard DebugHooks.mute else { return }
-        if UserDefaults.standard.object(forKey: key) == nil { UserDefaults.standard.set(volume, forKey: key) }
-        let found = UserDefaults.standard.float(forKey: key)
-        coreLog.notice("debug: walk found volume \(found, privacy: .public) brightness \(Self.brightness, privacy: .public)")
+        coreLog.notice("debug: walk opened, brightness \(Self.brightness, privacy: .public)")
+        guard UserDefaults.standard.object(forKey: key) != nil else { return }
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(1))
+            end(volume)
+        }
     }
 
+    /// A volume swipe commits: the volume it starts from, read with the audio session active, is the one to put back.
+    static func found(_ level: Float) {
+        guard DebugHooks.mute, UserDefaults.standard.object(forKey: key) == nil else { return }
+        UserDefaults.standard.set(level, forKey: key)
+        coreLog.notice("debug: walk found volume \(level, privacy: .public)")
+    }
+
+    /// Puts the found volume back while the volume view is still in the window; the record stays when it cannot.
     static func end(_ volume: SystemVolume) {
         guard DebugHooks.mute, UserDefaults.standard.object(forKey: key) != nil else { return }
         let found = UserDefaults.standard.float(forKey: key)

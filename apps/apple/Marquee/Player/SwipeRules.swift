@@ -81,6 +81,28 @@ enum SwipeRules {
         return found
     }
 
+    /// What a brightness return does (3.5): put `found` back while the screen still shows what the player set; forget it
+    /// once the viewer changed the screen or nothing was swiped; keep it, record included, while no screen can be read.
+    enum BrightnessReturn: Equatable { case forget, put(CGFloat), keep }
+
+    static func brightnessReturn(found: CGFloat?, set: CGFloat?, current: CGFloat?) -> BrightnessReturn {
+        guard let found, let set else { return .forget }
+        guard let current else { return .keep }
+        return shouldRestore(current: current, set: set) ? .put(found) : .forget
+    }
+
+    /// The screen read back after a put shows it: only then is the record cleared (a write from a scene in the
+    /// background can be ignored, and the record then repairs it later).
+    static func took(brightness readBack: CGFloat, put: CGFloat) -> Bool {
+        shouldRestore(current: readBack, set: put)
+    }
+
+    /// The volume read-back runs on a set at least one hardware step (1/16) from where the play's sets began: a first
+    /// set a few thousandths away can round to the same value and would look as if it did not take.
+    static func checksVolume(before: Float, set: Float) -> Bool {
+        abs(set - before) >= 1.0 / 16
+    }
+
     /// The share of the height a swipe travels for the whole range (VLC's factor 1.25).
     private static let sweep: CGFloat = 0.8
 }
