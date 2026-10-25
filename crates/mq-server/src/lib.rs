@@ -363,7 +363,7 @@ impl StreamServer {
     pub fn register(&self, upstream: Upstream, filename: &str) -> Lease {
         self.lease(
             new_token(),
-            self.playback(upstream),
+            self.playback(upstream, filename),
             &file_name(filename),
             None,
         )
@@ -397,7 +397,7 @@ impl StreamServer {
         deadline: Duration,
         plays: &[Format],
     ) -> Result<Lease, String> {
-        let playback = self.playback(upstream);
+        let playback = self.playback(upstream, filename);
         // The token goes in the map only at the end, but a playlist's dry run
         // writes it into the children's URLs, so the size limit sees them.
         let token = new_token();
@@ -558,7 +558,7 @@ impl StreamServer {
         Ok(Some(hls))
     }
 
-    fn playback(&self, upstream: Upstream) -> Arc<Playback> {
+    fn playback(&self, upstream: Upstream, filename: &str) -> Arc<Playback> {
         let body = match upstream {
             Upstream::Http {
                 url,
@@ -572,9 +572,12 @@ impl StreamServer {
             }
             #[cfg(feature = "torrent")]
             Upstream::Torrent { claim, file } => Content::Torrent { claim, file },
-            Upstream::File { path, len, held } => {
-                Content::File(Arc::new(file::LocalFile { path, len, held }))
-            }
+            Upstream::File { path, len, held } => Content::File(Arc::new(file::LocalFile {
+                path,
+                name: file_name(filename),
+                len,
+                held,
+            })),
         };
         Arc::new(Playback {
             body,

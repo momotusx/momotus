@@ -12,6 +12,9 @@ pub(crate) const PARTIAL_WAIT: Duration = Duration::from_secs(20);
 
 pub(crate) struct LocalFile {
     pub(crate) path: std::path::PathBuf,
+    /// The lease's name, which gives the type: a partial is `video.mp4.part`
+    /// and a poster `poster` on disk (code review r1 P2-8).
+    pub(crate) name: String,
     /// The whole video's length, as the player is told.
     pub(crate) len: u64,
     /// Bytes on disk from the start, while its download writes; `None` for
@@ -28,10 +31,9 @@ pub(crate) async fn serve(
 ) -> Response {
     let mut out = HeaderMap::new();
     out.insert(header::ACCEPT_RANGES, HeaderValue::from_static("bytes"));
-    let name = local.path.to_string_lossy().into_owned();
     out.insert(
         header::CONTENT_TYPE,
-        HeaderValue::from_static(content_type(&name)),
+        HeaderValue::from_static(content_type(&local.name)),
     );
     let Some((status, start, end)) = range_headers(range, local.len, &mut out) else {
         return (StatusCode::RANGE_NOT_SATISFIABLE, out).into_response();
@@ -39,7 +41,7 @@ pub(crate) async fn serve(
     if head_only {
         return (status, out).into_response();
     }
-    let mut file = match tokio::fs::File::open(&local.path).await {
+    let mut file = match open(&local.path).await {
         Ok(file) => file,
         Err(e) => {
             tracing::warn!("download file unavailable: {e}");
@@ -56,6 +58,21 @@ pub(crate) async fn serve(
     }
     .flatten_stream();
     (status, out, pumped(chunks, released)).into_response()
+}
+
+/// Opens the file a lease names. A partial download (`video.mp4.part`) that
+/// finished since the lease was made has its final name now: the next range
+/// of the same play opens that (code review r1 P1-1).
+async fn open(path: &std::path::Path) -> std::io::Result<tokio::fs::File> {
+    match tokio::fs::File::open(path).await {
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            match path.to_str().and_then(|p| p.strip_suffix(".part")) {
+                Some(done) => tokio::fs::File::open(done).await,
+                None => Err(e),
+            }
+        }
+        other => other,
+    }
 }
 
 /// `[start, end)` of `file` in 256 KiB reads, each waiting until `held`
@@ -208,5 +225,40 @@ mod tests {
         assert!(answer.is_err() || answer.unwrap().body.is_empty());
         assert!(started.elapsed() < PARTIAL_WAIT);
         drop(tx);
+    }
+
+    /// A partial download leased as `video.mp4.part` finishes and takes its
+    /// final name mid-play: the next range of the same lease still answers,
+    /// and the type comes from the lease's name, not the `.part` on disk.
+    #[tokio::test]
+    async fn a_partial_that_finishes_mid_play_keeps_answering() {
+        let body: Vec<u8> = (0..=255u8).cycle().take(100_000).collect();
+        let dir = tempfile::tempdir().unwrap();
+        let part = dir.path().join("video.mp4.part");
+        std::fs::write(&part, &body).unwrap();
+        let (tx, rx) = watch::channel(body.len() as u64);
+        let server = StreamServer::start(http()).await.unwrap();
+        let upstream = Upstream::File {
+            path: part.clone(),
+            len: body.len() as u64,
+            held: Some(rx),
+        };
+        let lease = server
+            .open(upstream, "video.mp4", Duration::from_secs(5))
+            .await
+            .unwrap();
+        let resp = http()
+            .get_range(&lease.url, 0, 1000, &local())
+            .await
+            .unwrap();
+        assert_eq!(resp.header("content-type"), Some("video/mp4"));
+        std::fs::rename(&part, dir.path().join("video.mp4")).unwrap();
+        drop(tx);
+        let resp = http()
+            .get_range(&lease.url, 50_000, 1000, &local())
+            .await
+            .unwrap();
+        assert_eq!(resp.status, 206);
+        assert_eq!(resp.body[..], body[50_000..51_000]);
     }
 }
