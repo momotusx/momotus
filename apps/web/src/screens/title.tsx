@@ -450,7 +450,7 @@ function RatedCover(props: { src: string | null }) {
 /** "More like this": the core's related titles as a Home row of 2:3 covers, no source named; absent
  * while empty (until it lands, for a kids profile, and when nothing came). */
 function Similar(props: { view: TitleView; root?: () => Element | null }) {
-  const row = (): HomeRow => ({ rowId: "similar", title: "More like this", source: "", state: { state: "ready" }, tiles: props.view.state.similar });
+  const row = (): HomeRow => ({ rowId: "similar", title: "More like this", source: "", state: { state: "ready" }, tiles: props.view.state.similar, ranked: false });
   return (
     <Show when={props.view.state.similar.length > 0}>
       <Row row={row()} root={props.root ?? (() => null)} scope="title" />
