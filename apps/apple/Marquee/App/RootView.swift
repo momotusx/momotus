@@ -137,6 +137,8 @@ struct MainShell: View {
     @State private var covered: Set<AppTab> = []
     /// The pill's height with its gap, which TV Search keeps clear.
     @State private var navHeight: CGFloat = 0
+    /// The top bar's link with focus (nil: focus is elsewhere). Menu in a place's content puts it on that place.
+    @FocusState private var navFocus: AppTab?
     #endif
     /// Places opened so far, kept alive so each keeps its place (a query, a
     /// catalog and its scroll, a filter, an open title) as a tab bar does.
@@ -291,7 +293,7 @@ struct MainShell: View {
             // Top-level places only, as on Android: a pushed page has no pill to wander into.
             if !immersion.active && !pageOver {
                 let away = TVTopBar.hidden(atHome: tab == .home, scrolledDown: homeScrolled)
-                TopNav(selection: tab, select: { select($0) }, profiles: { showProfiles = true }).padding(.bottom, Theme.Space.m)
+                TopNav(selection: tab, select: { select($0) }, profiles: { showProfiles = true }, focused: $navFocus).padding(.bottom, Theme.Space.m)
                     .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { navHeight = $0 }
                     // Kept in the layout, so the page under it never jumps.
                     .offset(y: away ? -navHeight : 0)
@@ -315,11 +317,12 @@ struct MainShell: View {
     /// there before Home's root appeared never marked it covered.
     private var pageOver: Bool { covered.contains(tab) || (tab == .home && !homePath.isEmpty) }
 
-    /// Menu on a place's root page: another place goes Home, Home scrolled down
+    /// Menu on a place's root page: another place's content puts focus on its link, its link goes Home, Home scrolled down
     /// goes to its top row, else nothing here and the app exits.
     private var back: (() -> Void)? {
         guard !pageOver else { return nil }
-        switch TVBack.step(atHome: tab == .home, scrolledDown: homeScrolled) {
+        switch TVBack.step(atHome: tab == .home, scrolledDown: homeScrolled, inBar: navFocus != nil) {
+        case .toBar: return { navFocus = tab }
         case .goHome: return { select(.home) }
         case .toTop: return { homeTop += 1 }
         case .exit: return nil
@@ -698,8 +701,11 @@ private struct TopNav: View {
     let select: (AppTab) -> Void
     /// The active profile's avatar at the end, opening the picker.
     var profiles: (() -> Void)?
-    /// Which link has focus: Up from a page enters on the current place, not the nearest link.
-    @FocusState private var focused: AppTab?
+    /// Which link has focus: Up from a page enters on the current place, not the nearest link. A link that
+    /// keeps it for the settle shows its place, as the tvOS tab bar does; focus stays on it.
+    var focused: FocusState<AppTab?>.Binding
+    /// The place this bar showed last, so a change from elsewhere (Menu on the bar goes Home) moves focus.
+    @State private var asked: AppTab?
 
     var body: some View {
         HStack(spacing: 2) {
@@ -716,7 +722,18 @@ private struct TopNav: View {
         .glass(Capsule(), shadow: true)
         #if os(tvOS)
         .focusSection()
-        .defaultFocus($focused, selection, priority: .userInitiated)
+        .defaultFocus(focused, selection, priority: .userInitiated)
+        // 250 ms, the androidx.tv TabRow's debounce: a sweep across the bar opens no place on the way.
+        .task(id: focused.wrappedValue) {
+            guard let item = focused.wrappedValue, item != selection else { return }
+            try? await Task.sleep(for: .milliseconds(250))
+            guard !Task.isCancelled else { return }
+            asked = item
+            select(item)
+        }
+        .onChange(of: selection) { _, now in
+            if let item = focused.wrappedValue, item != now, now != asked { focused.wrappedValue = now }
+        }
         #endif
     }
 
@@ -725,7 +742,7 @@ private struct TopNav: View {
             if item.isTool { Label(item.title, glyph: item.symbol) } else { Text(item.title) }
         }
         .buttonStyle(NavLinkStyle(on: item == selection))
-        .focused($focused, equals: item)
+        .focused(focused, equals: item)
         .accessibilityAddTraits(item == selection ? .isSelected : [])
     }
 

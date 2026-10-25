@@ -82,12 +82,14 @@ import Testing
 }
 
 @Test func tvBackGoesHomeThenToTheTopThenExits() {
-    // Another place, wherever it is scrolled: Home first.
-    #expect(TVBack.step(atHome: false, scrolledDown: true) == .goHome)
-    #expect(TVBack.step(atHome: false, scrolledDown: false) == .goHome)
+    // Another place's content, wherever it is scrolled: its tab on the bar first, then Home.
+    #expect(TVBack.step(atHome: false, scrolledDown: true, inBar: false) == .toBar)
+    #expect(TVBack.step(atHome: false, scrolledDown: false, inBar: false) == .toBar)
+    #expect(TVBack.step(atHome: false, scrolledDown: false, inBar: true) == .goHome)
     // Home down the rows: its top row; only Home at the top lets the app exit.
-    #expect(TVBack.step(atHome: true, scrolledDown: true) == .toTop)
-    #expect(TVBack.step(atHome: true, scrolledDown: false) == .exit)
+    #expect(TVBack.step(atHome: true, scrolledDown: true, inBar: false) == .toTop)
+    #expect(TVBack.step(atHome: true, scrolledDown: false, inBar: false) == .exit)
+    #expect(TVBack.step(atHome: true, scrolledDown: false, inBar: true) == .exit)
 }
 
 @Test func theTVTopBarStepsAwayOnceHomeIsInItsRows() {

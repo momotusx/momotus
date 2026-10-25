@@ -384,15 +384,17 @@ struct DefaultAddonInfo: Decodable, Hashable, Sendable, Identifiable {
 }
 
 /// Menu (Back) at the top of a TV place, as on Android: a place other than
-/// Home goes to Home, Home scrolled down goes back to its top row, and only
+/// Home puts focus on the bar, then goes to Home, Home scrolled down goes back to its top row, and only
 /// then does the app exit. A pushed page pops first; that is the stack's.
 enum TVBack: Equatable {
+    case toBar
     case goHome
     case toTop
     case exit
 
-    static func step(atHome: Bool, scrolledDown: Bool) -> TVBack {
-        guard atHome else { return .goHome }
+    /// `inBar`: focus is on the top bar. In another place's content, Menu first puts it there, as on Apple TV.
+    static func step(atHome: Bool, scrolledDown: Bool, inBar: Bool) -> TVBack {
+        guard atHome else { return inBar ? .goHome : .toBar }
         return scrolledDown ? .toTop : .exit
     }
 }
