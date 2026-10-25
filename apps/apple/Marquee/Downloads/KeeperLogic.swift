@@ -12,7 +12,7 @@ enum KeeperPlatform: Sendable {
 
 /// What the keeper reads from a `downloads` snapshot.
 struct KeeperFacts: Equatable, Sendable {
-    /// Running and queued.
+    /// Running, queued and waiting: a download waiting for Wi-Fi is still left to do.
     var left: Int
     var bytesDone: Int64
     var bytesTotal: Int64
@@ -22,7 +22,7 @@ struct KeeperFacts: Equatable, Sendable {
 
     static func of(_ snapshot: DownloadsSnapshot) -> KeeperFacts {
         KeeperFacts(
-            left: snapshot.active.running + snapshot.active.queued, bytesDone: snapshot.active.bytesDone,
+            left: snapshot.active.running + snapshot.active.queued + (snapshot.active.waiting ?? 0), bytesDone: snapshot.active.bytesDone,
             bytesTotal: snapshot.active.bytesTotal, title: snapshot.active.title,
             done: Set(snapshot.titles.flatMap(\.rows).filter { $0.state == .done }.map(\.id)))
     }

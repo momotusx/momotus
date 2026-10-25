@@ -101,7 +101,12 @@ struct DownloadActivity: Decodable, Hashable, Sendable {
     let queued: Int
     let bytesDone: Int64
     let bytesTotal: Int64
-    /// The title the first running download belongs to.
+    /// Waiting for Wi-Fi, a connection, room or the app: still left to do, so the keeper holds on for them
+    /// (nil from an older core).
+    var waiting: Int? = nil
+    /// One left to do was let onto mobile data.
+    var mobileData: Bool? = nil
+    /// The title the first running download belongs to; none on a locked session.
     let title: String?
 }
 

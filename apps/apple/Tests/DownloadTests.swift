@@ -360,6 +360,20 @@ private func submits(_ effects: [KeeperEffect]) -> Int {
     #expect(keeper.on(.minute) == [])
 }
 
+// A download waiting for Wi-Fi, a connection, room or the app is still left to do: the keeper holds on for it,
+// and a locked session's `active` (no rows) counts the same (the core's 0ba7e2f63).
+@Test func waitingDownloadsAreLeftToDo() throws {
+    let json = #"""
+    {"storage": {"downloadsBytes": 0, "freeBytes": null, "neededBytes": null}, "settings": {"wifiOnly": true, "smart": true},
+     "active": {"running": 1, "queued": 2, "waiting": 3, "mobileData": true, "bytesDone": 5, "bytesTotal": 10, "title": null},
+     "downloading": [], "titles": []}
+    """#
+    let snapshot = try JSONDecoder().decode(DownloadsSnapshot.self, from: Data(json.utf8))
+    #expect(snapshot.active.waiting == 3 && snapshot.active.mobileData == true)
+    #expect(KeeperFacts.of(snapshot).left == 6)
+    #expect(KeeperLogic.asksBeforeQuit(KeeperFacts.of(snapshot)))
+}
+
 // A core opened again knows neither the platform's hold nor the network: the next event says the hold again
 // (review r1 M1).
 @Test func aViewOpenedAgainHearsDownloadsAllowedAgain() {
