@@ -74,7 +74,31 @@ enum EngineChoice {
         #endif
     }
 
-    static var enabledHere: Bool { enabled(on: platform) }
+    static var enabledHere: Bool { enabled(on: platform) && admitsThisDevice }
+
+    /// The phone's switch covers what its gate measured: 6 GB iPhones (iphone-a), not iPads and not smaller phones
+    /// (plans/iphone-mkv.md). A 6 GB iPhone reports about 5.7e9 bytes, a 4 GB one about 3.8e9.
+    static func admits(memoryBytes: UInt64, model: String) -> Bool {
+        !model.hasPrefix("iPad") && memoryBytes >= 5_000_000_000
+    }
+
+    /// This device, on the iPhone build; every Mac.
+    private static var admitsThisDevice: Bool {
+        #if os(iOS)
+        admits(memoryBytes: ProcessInfo.processInfo.physicalMemory, model: machine)
+        #else
+        true
+        #endif
+    }
+
+    #if os(iOS)
+    /// The hardware model (`iPhone14,2`, `iPad13,4`), read without the main actor.
+    private static var machine: String {
+        var info = utsname()
+        uname(&info)
+        return withUnsafeBytes(of: info.machine) { String(decoding: $0.prefix { $0 != 0 }, as: UTF8.self) }
+    }
+    #endif
 
     /// What AVPlayer opens: its files, and HLS playlists.
     static let avPlayerContainers = ["mp4", "m4v", "mov", "m3u8"]

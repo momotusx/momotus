@@ -141,3 +141,11 @@ import Testing
     let screen = try String(contentsOf: dir.appending(path: "PlayerScreen.swift"), encoding: .utf8)
     #expect(screen.contains(".onChange(of: model.enginePictures) { attachEngine() }"))
 }
+
+/// The lead's call on plan r2: the 6 GB and no-iPad claim is a gate in code. A 6 GB iPhone is admitted, an iPad or a
+/// 4 GB phone is not.
+@Test func thePhoneSwitchCoversTheDevicesItsGateMeasured() {
+    #expect(EngineChoice.admits(memoryBytes: 5_700_000_000, model: "iPhone14,2"))
+    #expect(!EngineChoice.admits(memoryBytes: 3_800_000_000, model: "iPhone14,7"))
+    #expect(!EngineChoice.admits(memoryBytes: 8_000_000_000, model: "iPad13,4"))
+}
