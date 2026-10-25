@@ -231,3 +231,37 @@
 [data-form="phone"] .syn-card { padding: 20px; gap: 12px; border-radius: 14px; }
 [data-form="phone"] .syn-head h2 { font-size: 20px; }
 [data-form="phone"] .syn-text { font-size: 15px; }
+
+/* The ratings row (plans/title-page-ratings-genres-similar.md): at the end of the meta line, each
+   number after its service's own mark. Its height is held from the first draw (24 px, TV 36) and a
+   pending slot keeps its width, so nothing moves when TMDB and Trakt land. */
+.scores { display: inline-flex; align-items: center; gap: 22px; height: 24px; margin-left: 22px; vertical-align: middle; }
+/* Each item is the row's full height, so a link's target grows by its padding alone. The score in white, as before. */
+.score { box-sizing: content-box; height: 100%; display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; color: #fff; text-decoration: none; }
+.score .mark { display: block; height: 18px; width: auto; }
+.score.pending { visibility: hidden; }
+/* A link's target: 44 tall around the 24 row, and half the 22 gap each side, so neighbours split it and the row never grows. */
+a.score { padding: 10px 11px; margin: -10px -11px; }
+[data-form="tv"] .scores { height: 36px; gap: 30px; margin-left: 30px; }
+[data-form="tv"] .score { gap: 12px; }
+[data-form="tv"] .score .mark { height: 28px; }
+/* Desktop draws the canvas scaled: the row keeps its CSS sizes (24 high, 18 marks). */
+[data-form="desktop"] .scores { height: calc(24 * var(--px)); gap: calc(22 * var(--px)); margin-left: calc(22 * var(--px)); }
+[data-form="desktop"] .score { gap: calc(8 * var(--px)); }
+[data-form="desktop"] .score .mark { height: calc(18 * var(--px)); }
+[data-form="desktop"] a.score { padding: calc(10 * var(--px)) calc(11 * var(--px)); margin: calc(-10 * var(--px)) calc(-11 * var(--px)); }
+
+/* RPDB's rated cover, a fixed 2:3 poster (TV 300x450, desktop 240x360): at the hero's right over the art for a
+   movie, clear of the facts in the left column; a series' episodes panel holds that place, so it is not drawn
+   there. On the phone, in the body above the facts, 200 wide so the band's digits stay legible. */
+.rated-cover { position: absolute; right: var(--safe-side); top: var(--safe-top); width: 300px; height: 450px; border-radius: var(--radius-card);
+  overflow: hidden; background: var(--surface); box-shadow: 0 0 0 1px var(--edge); pointer-events: none; }
+.rated-cover img { width: 100%; height: 100%; object-fit: cover; }
+[data-form="desktop"] .rated-cover { width: calc(240 * var(--px)); height: calc(360 * var(--px)); }
+[data-form="phone"] .rated-cover { position: relative; right: auto; top: auto; flex: none; width: 200px; height: 300px; margin-top: 24px; align-self: center; border-radius: 12px; }
+
+/* More like this, under the hero on TV and desktop: the page scrolls to it, and nothing above moves when it lands. */
+.title-more { position: absolute; left: 0; right: 0; top: 100%; padding-bottom: var(--safe-bottom); }
+.title-more .row { margin-top: 0; }
+[data-form="phone"] .info > .row { align-self: stretch; margin: 28px -16px 0; text-align: left; }
+:is([data-form="tv"], [data-form="desktop"]) .title-scr { overflow-x: hidden; overflow-y: auto; }

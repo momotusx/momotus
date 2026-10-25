@@ -20,11 +20,12 @@ import type { Prefs } from "../core/generated/Prefs";
 import type { SubtitleSize } from "../core/generated/SubtitleSize";
 import { chooseForm, type Form, pinned } from "../form";
 import { defaultsWords } from "../lib/defaults";
-import { choiceSummary, choiceWords, findAddons, languageName, syncSummary, syncWords, turkceAltyaziCredit } from "../lib/words";
+import { choiceSummary, choiceWords, findAddons, languageName, syncSummary, syncWords, tmdbCredit, turkceAltyaziCredit } from "../lib/words";
 import * as sync from "../core/sync";
 import { traktLink, traktLockedHere, traktStatus, traktStorage } from "../core/trakt";
 import { rowLine, traktWords } from "../lib/trakt";
 import "./browse.css";
+import { markSrc } from "../components/marks";
 import "./settings.css";
 import UserPen from "lucide-solid/icons/user-pen";
 import Users from "lucide-solid/icons/users";
@@ -394,6 +395,10 @@ export default function SettingsScreen() {
       <section class="set">
         <h2>About</h2>
         <p class="note">{turkceAltyaziCredit}</p>
+        <p class="note credit">
+          <img class="credit-mark" src={markSrc("tmdb")} alt="TMDB" />
+          {tmdbCredit}
+        </p>
       </section>
     </main>
   );

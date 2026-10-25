@@ -10,24 +10,26 @@ import Layers from "lucide-solid/icons/layers";
 import Play from "lucide-solid/icons/play";
 import RefreshCw from "lucide-solid/icons/refresh-cw";
 import RotateCcw from "lucide-solid/icons/rotate-ccw";
-import { createEffect, createMemo, createSignal, For, type JSX, Match, Show, Switch } from "solid-js";
+import { createEffect, createMemo, createSignal, For, type JSX, Match, onCleanup, Show, Switch } from "solid-js";
 import { Backdrop, Logo } from "../components/art";
 import { SynopsisDialog } from "../components/synopsis";
-import { Ratings } from "../components/ratings";
+import { TitleScores } from "../components/title-scores";
 import { KeyedPage } from "../components/keyed-page";
 import { Why } from "../components/why";
-import { askOnce, CONTINUE_ROW, removeFromContinue } from "../components/row";
+import { askOnce, CONTINUE_ROW, removeFromContinue, Row } from "../components/row";
 import { separators } from "../components/separators";
 import { TrailerOverlay } from "../components/trailer";
 import { homeView, type LiveView, type TitleView, titleView, versionsView } from "../core/client";
 import type { EmptyKind } from "../core/generated/EmptyKind";
+import type { HomeRow } from "../core/generated/HomeRow";
 import type { Episode } from "../core/generated/Episode";
 import type { VersionsSnapshot } from "../core/generated/VersionsSnapshot";
 import { focusEl, remember } from "../focus/dom";
 import { form } from "../form";
-import { airDate, clock, decoded, episodeLabel, offersLibrary, parseVideo, pct, playPath, playState, ratingParts, runtimeMinutes, seasonName, versionsPath } from "../lib/format";
+import { airDate, clock, decoded, episodeLabel, offersLibrary, parseVideo, pct, playPath, playState, runtimeMinutes, seasonName, versionsPath } from "../lib/format";
 import { blockedWords, choiceWords, problemWords } from "../lib/words";
 import { firstFocus } from "./title-focus";
+import "./home.css";
 import "./title.css";
 
 export default function Title() {
@@ -79,6 +81,20 @@ function TitlePage(props: { kind: string; id: string; retry: () => void }) {
     });
   };
   const [artMissing, setArtMissing] = createSignal(false);
+  // TV and desktop scroll the page below the hero for More like this; the phone scrolls the document.
+  let page: HTMLDivElement | undefined;
+  const toTop = () => {
+    if (page && page.scrollTop > 0) page.scrollTo({ top: 0, behavior: "smooth" });
+  };
+  // The core asks TMDB and Trakt only while the page shows (`titleVisible`): a tab in the
+  // background asks nothing, and leaving the page closes the view.
+  const [shown, setShown] = createSignal(!document.hidden);
+  const onVisibility = () => setShown(!document.hidden);
+  document.addEventListener("visibilitychange", onVisibility);
+  onCleanup(() => document.removeEventListener("visibilitychange", onVisibility));
+  createEffect(() => {
+    if (view.state.status.state === "open") void view.command({ type: "titleVisible", visible: shown() });
+  });
   // Closing returns focus to the button that opened it.
   const closeTrailer = () => {
     setTrailerOpen(false);
@@ -145,7 +161,7 @@ function TitlePage(props: { kind: string; id: string; retry: () => void }) {
   };
 
   return (
-    <div class="title-scr" classList={{ movie: !series(), noart: artMissing() }}>
+    <div class="title-scr" classList={{ movie: !series(), noart: artMissing() }} ref={page} data-vscroll={form() === "phone" ? undefined : ""}>
       {/* No backdrop (none named, or it does not load): the poster's upper part,
           faint, keeps the page from opening on a blank half. */}
       <Backdrop
@@ -184,18 +200,11 @@ function TitlePage(props: { kind: string; id: string; retry: () => void }) {
         <Match when={d()}>
           {(x) => (
             <>
-              <section class="info" aria-label={x().name}>
+              <section class="info" aria-label={x().name} data-reveal-top>
                 <Logo src={x().logo} name={x().name} class="title-logo" />
                 <p class="meta" ref={separators}>
-                  {/* The ratings lead, side by side as on Home; IMDb's links to its page, except on TV. */}
-                  <Ratings
-                    ratings={x().ratings}
-                    sep={() => <b aria-hidden="true"> · </b>}
-                    imdb={form() !== "tv" && x().imdbUrl ? { href: x().imdbUrl as string, f: "title:imdb" } : null}
-                  />
-                  <Show when={ratingParts(x().ratings).length && metaLine().length}>
-                    <b aria-hidden="true"> · </b>
-                  </Show>
+                  {/* DECISION's order: the year first, then the rest of the line, then the ratings row at
+                      its end, each number after its service's mark; IMDb's links to its page, except on TV. */}
                   <For each={metaLine()}>
                     {(part, i) => (
                       <>
@@ -206,6 +215,7 @@ function TitlePage(props: { kind: string; id: string; retry: () => void }) {
                       </>
                     )}
                   </For>
+                  <TitleScores imdb={x().ratings?.imdb} scores={x().scores} imdbUrl={x().imdbUrl} links={form() !== "tv"} />
                 </p>
                 <Show when={x().description}>
                   {/* The full text opens on its own card (components/synopsis.tsx), never in place. */}
@@ -325,6 +335,10 @@ function TitlePage(props: { kind: string; id: string; retry: () => void }) {
                 <Show when={series() && form() === "phone"}>
                   <Episodes view={view} kind={props.kind} id={props.id} runtime={runtimeMinutes(x().runtime)} art={x().background ?? x().poster} />
                 </Show>
+                <Show when={form() === "phone"}>
+                  <Similar view={view} />
+                  <RatedCover src={x().ratedPoster} />
+                </Show>
                 <dl class="facts">
                   <Fact label="Starring" value={x().cast.slice(0, 3).join(", ")} />
                   <Fact label="Directed by" value={x().directors.slice(0, 2).join(", ")} />
@@ -332,7 +346,20 @@ function TitlePage(props: { kind: string; id: string; retry: () => void }) {
                 </dl>
               </section>
               <Show when={series() && form() !== "phone"}>
-                <Episodes view={view} kind={props.kind} id={props.id} runtime={runtimeMinutes(x().runtime)} art={x().background ?? x().poster} />
+                {/* Focus back in the episodes brings the hero back from More like this below it. */}
+                <div onFocusIn={toTop}>
+                  <Episodes view={view} kind={props.kind} id={props.id} runtime={runtimeMinutes(x().runtime)} art={x().background ?? x().poster} />
+                </div>
+              </Show>
+              {/* TV and desktop: the rated cover at the hero's right, for a movie (a series' episodes panel
+                  holds that place); More like this under the hero, where the page scrolls. */}
+              <Show when={form() !== "phone"}>
+                <Show when={!series()}>
+                  <RatedCover src={x().ratedPoster} />
+                </Show>
+                <div class="title-more">
+                  <Similar view={view} root={() => page ?? null} />
+                </div>
               </Show>
             </>
           )}
@@ -349,6 +376,33 @@ function TitlePage(props: { kind: string; id: string; retry: () => void }) {
       </Switch>
       </div>
     </div>
+  );
+}
+
+/** RPDB's cover with the IMDb, Metacritic and Rotten Tomatoes band drawn in (plans/title-page-ratings-genres-similar.md):
+ * the page's only Rotten Tomatoes, drawn only when the title has one, decoration only (never focusable), and
+ * gone, not replaced, when the image fails. */
+function RatedCover(props: { src: string | null }) {
+  const [failed, setFailed] = createSignal(false);
+  return (
+    <Show when={!failed() && props.src}>
+      {(src) => (
+        <figure class="rated-cover">
+          <img src={src()} alt="Cover with ratings" decoding="async" class="fade" onLoad={(e) => e.currentTarget.classList.add("in")} onError={() => setFailed(true)} />
+        </figure>
+      )}
+    </Show>
+  );
+}
+
+/** "More like this": the core's related titles as a Home row of 2:3 covers, no source named; absent
+ * while empty (until it lands, for a kids profile, and when nothing came). */
+function Similar(props: { view: TitleView; root?: () => Element | null }) {
+  const row = (): HomeRow => ({ rowId: "similar", title: "More like this", source: "", state: { state: "ready" }, tiles: props.view.state.similar });
+  return (
+    <Show when={props.view.state.similar.length > 0}>
+      <Row row={row()} root={props.root ?? (() => null)} scope="title" />
+    </Show>
   );
 }
 

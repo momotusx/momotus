@@ -16,6 +16,7 @@ import type { HomeUpdate } from "./generated/HomeUpdate";
 import type { LibrarySnapshot } from "./generated/LibrarySnapshot";
 import type { Prefs } from "./generated/Prefs";
 import { commandQueue } from "./command-queue";
+import type { Tile } from "./generated/Tile";
 import type { TitleHeader } from "./generated/TitleHeader";
 import type { TitleSnapshot } from "./generated/TitleSnapshot";
 import type { TitleUpdate } from "./generated/TitleUpdate";
@@ -203,6 +204,8 @@ export interface TitleState {
   status: ViewStatus;
   header: TitleHeader | null;
   episodes: Episode[];
+  /** "More like this": empty until it lands, and for a kids profile. */
+  similar: Tile[];
 }
 
 export interface TitleView {
@@ -212,22 +215,28 @@ export interface TitleView {
 
 /** A title view for the lifetime of the calling component. */
 export function titleView(kind: string, id: string): TitleView {
-  const [state, setState] = createStore<TitleState>({ status: { state: "opening" }, header: null, episodes: [] });
-  let command: (c: object) => Promise<void> = async () => undefined;
+  const [state, setState] = createStore<TitleState>({ status: { state: "opening" }, header: null, episodes: [], similar: [] });
+  // A command sent in the moment between the snapshot and the subscription's answer (`titleVisible` as the
+  // page first shows) waits for it, in order, as liveView's do; once closed, commands are dropped.
+  const commands = commandQueue<object>();
   let close: (() => Promise<void>) | undefined;
   let disposed = false;
   onCleanup(() => {
     disposed = true;
+    commands.drop();
     void close?.();
   });
   bridge
     .subscribe<TitleSnapshot, TitleUpdate>("title", { kind, id }, {
-      snapshot: (snapshot) => setState({ status: { state: "open" }, header: snapshot.header, episodes: snapshot.episodes }),
+      snapshot: (snapshot) =>
+        setState({ status: { state: "open" }, header: snapshot.header, episodes: snapshot.episodes, similar: snapshot.similar ?? [] }),
       updates: (updates) =>
         batch(() => {
           for (const u of updates) {
             if (u.kind === "header") setState("header", reconcile(u.header));
-            else setState("episodes", reconcile(applyDiffs(state.episodes, u.diffs), { key: "videoId" }));
+            else if (u.kind === "episodes") setState("episodes", reconcile(applyDiffs(state.episodes, u.diffs), { key: "videoId" }));
+            else if (u.kind === "similar") setState("similar", reconcile(u.tiles, { key: "id" }));
+            // A kind a newer core sends is left alone: the page keeps working.
           }
         }),
     })
@@ -235,10 +244,13 @@ export function titleView(kind: string, id: string): TitleView {
       setLink("open");
       if (disposed) return void sub.close();
       close = sub.close;
-      command = sub.command;
+      commands.open((c) => sub.command(c));
     })
-    .catch((e) => setState("status", { state: "failed", reason: reasonOf(e) }));
-  return { state, command: (c) => command(c) };
+    .catch((e) => {
+      setState("status", { state: "failed", reason: reasonOf(e) });
+      commands.drop();
+    });
+  return { state, command: commands.send };
 }
 
 export interface DeviceCaps {

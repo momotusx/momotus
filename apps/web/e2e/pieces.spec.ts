@@ -118,13 +118,14 @@ for (const form of Object.keys(FORMS) as Form[]) {
     await context.close();
   });
 
-  test(`${form}: the ratings row names its source at 70 percent and its score in white`, async ({ browser }) => {
+  test(`${form}: the ratings row shows each score in white after its service's mark`, async ({ browser }) => {
     const { context, page } = await open(browser, form, `/title/series/${GOT.id}`);
-    const rate = page.locator(".info .meta .rate").first();
-    await expect(rate).toBeVisible({ timeout: 30_000 });
-    expect(await rate.evaluate((el) => getComputedStyle(el).color)).toBe("rgb(255, 255, 255)");
-    expect(await rate.locator(".rate-src").evaluate((el) => getComputedStyle(el).color)).toBe("rgba(255, 255, 255, 0.7)");
-    await expect(rate.locator("[aria-hidden]").first()).toHaveText(/^(IMDb|RT) \S+$/);
+    const score = page.locator(".info .meta .scores .score").first();
+    await expect(score).toBeVisible({ timeout: 30_000 });
+    expect(await score.evaluate((el) => getComputedStyle(el).color)).toBe("rgb(255, 255, 255)");
+    // The service is named by its own mark (an image with no text of its own), never by a word.
+    await expect(score.locator("img.mark")).toHaveAttribute("alt", "");
+    await expect(score.locator(".num")).toHaveText(/^\d+(\.\d)?\/10$/);
     await context.close();
   });
 }

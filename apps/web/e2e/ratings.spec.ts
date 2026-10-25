@@ -193,20 +193,20 @@ for (const form of Object.keys(FORMS) as Form[]) {
     measure(form, "hero", hero.map((h) => h.width));
     await page.screenshot({ path: `${SHOTS}/ratings-home-${form}.jpg`, type: "jpeg", quality: 80 });
 
-    // The title page: the IMDb score, linked off TV; no Rotten Tomatoes text.
+    // The title page: the IMDb score after its mark, linked off TV; no Rotten Tomatoes text.
     await page.goto(`/title/movie/${MAX.id}?form=${form}`);
-    await expect(page.locator(".info .meta .rate > [aria-hidden]")).toHaveText(["IMDb 10.0"], { timeout: 30_000 });
-    const title = await scores(page, ".info .meta .rate > [aria-hidden]", ".info");
+    await expect(page.locator(".info .meta .scores .score .num")).toHaveText(["10.0/10"], { timeout: 30_000 });
+    const title = await scores(page, ".info .meta .scores .score .num", ".info");
     for (const t of title) expect(t, JSON.stringify(t)).toMatchObject({ lines: 1, cut: false, inside: true });
     await expect(page.locator(".info .meta")).not.toContainText(/RT |Rotten Tomatoes|Fresh/);
     const link = page.locator('.info .meta a[data-f="title:imdb"]');
     if (form === "tv") await expect(link).toHaveCount(0);
     else {
       await expect(link).toHaveAttribute("href", `https://www.imdb.com/title/${MAX.id}/`);
-      await expect(link).toHaveAttribute("aria-label", "IMDb 10.0, on IMDb");
+      await expect(link).toHaveAttribute("aria-label", "IMDb 10.0 out of 10, on IMDb");
       if (form === "phone") expect((await link.boundingBox())!.height).toBeGreaterThanOrEqual(44);
     }
-    await expect(page.locator(".info .meta span.rate .sr")).toHaveText(form === "tv" ? ["IMDb 10.0"] : []);
+    await expect(page.locator('.info .meta span.score[aria-label="IMDb 10.0 out of 10"]')).toHaveCount(form === "tv" ? 1 : 0);
     // Where the scores came from is not said on the title page: no addon name outside the Addons pages.
     await expect(page.locator(".facts div", { hasText: "Ratings from" })).toHaveCount(0);
     measure(form, "title page", title.map((t) => t.width));

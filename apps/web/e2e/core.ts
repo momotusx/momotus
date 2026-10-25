@@ -43,6 +43,8 @@ export const LOADING_PORT = 17824 + shift;
 export const NAMES_PORT = 17825 + shift;
 /** The start subtitle spec's own: a core whose one addon names English files that cannot be read. */
 export const SUB_AUTO_PORT = 17826 + shift;
+/** The title scores spec's own: a core whose meta addon, TMDB and Trakt are one local fake. */
+export const TITLE_SCORES_PORT = 17827 + shift;
 /** Every browser a run launches takes these: each name but this machine's resolves to the browser's
  * recorder, whose certificate it does not check, so pages load images and frames from the
  * recording and a run needs the network only to record (none with MQ_E2E_OFFLINE=1). A spec that
