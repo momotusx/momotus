@@ -255,6 +255,9 @@ struct State {
     /// TMDB's and Trakt's answers, once each landed.
     tmdb: Option<Slot>,
     trakt: Option<Slot>,
+    /// RPDB's cover for the title, read when the meta lands and again when
+    /// the addons change (the key comes from one), not on every render.
+    rated_poster: Option<String>,
 }
 
 /// A live title page. Dropping it cancels its work.
@@ -321,6 +324,7 @@ impl TitleView {
                 captions: None,
                 tmdb: None,
                 trakt: None,
+                rated_poster: None,
             })),
             similar: SharedObservable::new(Vec::new()),
             lookup: Mutex::new(JoinSet::new()),
@@ -526,9 +530,8 @@ fn asked(kind: &str) -> Option<Asked> {
     }
 }
 
-/// A source's number as the page writes it: a percentage of its 0 to 10
-/// score, only with enough votes.
-/// A 0 to 10 score as a whole percentage (8.74 is "87%", 8.75 "88%"); the
+/// A source's number as the page writes it, only with enough votes: a 0 to
+/// 10 score as a whole percentage (8.74 is "87%", 8.75 "88%"); the
 /// apps show the text as written and never round.
 fn percent(score: Option<(f64, u64)>, url: Option<String>) -> Slot {
     match score {
@@ -571,7 +574,7 @@ async fn look_up(ctx: Ctx) {
     if lock(&ctx.state).meta.is_none() {
         return;
     }
-    let (Some(asked), Some(imdb)) = (asked(&ctx.kind), ctx.core.imdb_id_of(&ctx.id)) else {
+    let (Some(asked), Some(imdb)) = (asked(&ctx.kind), ctx.imdb()) else {
         return;
     };
     let kind = match asked {
@@ -582,7 +585,7 @@ async fn look_up(ctx: Ctx) {
         wait.await;
     }
     let tmdb = async {
-        let found = ctx.core.tmdb_find(&imdb).await;
+        let found = ctx.core.tmdb_find(&imdb, kind).await;
         let url = found.as_ref().map(tmdb_url);
         ctx.put(|s| s.tmdb = Some(percent(found.map(|f| (f.score, f.votes)), url)));
         found
@@ -602,6 +605,7 @@ async fn load_meta(ctx: Ctx) {
     match ctx.core.fetch_meta(&ctx.kind, &ctx.id).await {
         Ok((meta, source)) => {
             lock(&ctx.state).meta = Some(meta);
+            ctx.reread_cover();
             ctx.render_with_source(&source);
         }
         Err(reason) => {
@@ -702,10 +706,15 @@ async fn watch_library(ctx: Ctx) {
     // Catch writes made between open and this subscription.
     ctx.render();
     while let Some(tables) = crate::views::next_change(&mut changes).await {
-        if tables
-            .iter()
-            .any(|t| matches!(t, Table::Progress | Table::Watched | Table::LibraryItems))
-        {
+        if tables.contains(&Table::Addons) {
+            ctx.reread_cover();
+        }
+        if tables.iter().any(|t| {
+            matches!(
+                t,
+                Table::Progress | Table::Watched | Table::LibraryItems | Table::Addons
+            )
+        }) {
             ctx.render();
         }
     }
@@ -720,7 +729,7 @@ impl Ctx {
             (state.tmdb.clone(), state.trakt.clone())
         };
         let asked = asked(&self.kind);
-        let imdb = asked.is_some() && !self.kids && self.core.imdb_id_of(&self.id).is_some();
+        let imdb = asked.is_some() && !self.kids && self.imdb().is_some();
         let tmdb_asked = imdb && self.core.tmdb_ready();
         let trakt_asked = imdb
             && self.core.trakt_lookup_ready()
@@ -730,6 +739,23 @@ impl Ctx {
             tmdb: tmdb.unwrap_or_else(|| planned(tmdb_asked)),
             trakt: trakt.unwrap_or_else(|| planned(trakt_asked)),
         }
+    }
+
+    /// The title's IMDb id, one for every badge and lookup: its own, the one
+    /// an addon gave for it (Kitsu's), or the one its meta answered with (a
+    /// title opened by another id).
+    fn imdb(&self) -> Option<String> {
+        self.core.imdb_id_of(&self.id).or_else(|| {
+            let state = lock(&self.state);
+            let id = &state.meta.as_ref()?.preview.id;
+            crate::segments::is_imdb(id).then(|| id.clone())
+        })
+    }
+
+    /// RPDB's cover for the title with the key the addons give now.
+    fn reread_cover(&self) {
+        let url = self.core.covers([self.id.as_str()]).url(&self.id);
+        lock(&self.state).rated_poster = url;
     }
 
     /// Puts an answer in and renders the page with it.
@@ -877,8 +903,9 @@ impl Ctx {
 
         let now = mq_library::hlc::now_ms() as i64;
         let (play_target, next_airs) = play_target(&meta, &self.kind, resume, &watched, now);
-        let rated_poster = self.core.covers([self.id.as_str()]).url(&self.id);
-        let mut details = details(&meta, source, rated_poster, self.scores());
+        let rated_poster = lock(&self.state).rated_poster.clone();
+        let imdb = self.imdb();
+        let mut details = details(&meta, source, rated_poster, imdb.as_deref(), self.scores());
         if self.kids {
             // A trailer is a YouTube hand-off and IMDb's page the open web:
             // both leave the app.
@@ -1057,6 +1084,7 @@ fn details(
     meta: &MetaItem,
     source: &str,
     rated_poster: Option<String>,
+    imdb: Option<&str>,
     scores: TitleScores,
 ) -> TitleDetails {
     let p = &meta.preview;
@@ -1084,8 +1112,9 @@ fn details(
         writers: links("Writers"),
         rating: links("imdb").into_iter().next(),
         ratings: Ratings::of(links("imdb").first().map(String::as_str)),
-        imdb_url: crate::segments::is_imdb(&p.id)
-            .then(|| format!("https://www.imdb.com/title/{}/", p.id)),
+        imdb_url: imdb
+            .filter(|id| crate::segments::is_imdb(id))
+            .map(|id| format!("https://www.imdb.com/title/{id}/")),
         scores,
         source: source.to_owned(),
         trailers: p

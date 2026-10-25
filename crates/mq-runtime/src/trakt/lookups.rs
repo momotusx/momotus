@@ -113,7 +113,7 @@ impl<T: Clone> Kept<T> {
 pub(crate) struct Memory {
     tmdb_host: TmdbHost,
     tmdb_quiet: Option<Instant>,
-    tmdb: Kept<Option<tmdb::Found>>,
+    tmdb: Kept<tmdb::Finds>,
     scores: Kept<Option<(f64, u64)>>,
     related: Kept<Vec<Found>>,
 }
@@ -157,13 +157,14 @@ impl Core {
     /// Points TMDB at another host and token (tests), or turns it off.
     #[doc(hidden)]
     pub fn set_tmdb_host(&self, host: TmdbHost) {
+        self.set_no_tmdb(false);
         lock(&self.trakt().lookups).tmdb_host = host;
     }
 
     /// Whether a TMDB lookup can be made: a token is set and the profile is
     /// not a kids profile.
     pub(crate) fn tmdb_ready(&self) -> bool {
-        !kids(self) && lock(&self.trakt().lookups).tmdb_host.token.is_some()
+        !kids(self) && !self.no_tmdb() && lock(&self.trakt().lookups).tmdb_host.token.is_some()
     }
 
     /// Whether a Trakt lookup can be made, as for Search.
@@ -181,9 +182,11 @@ impl Core {
         let tmdb = memory.tmdb.held(imdb, now);
         let kind = match (kind, &tmdb) {
             (Some(kind), _) => kind,
-            (None, Held::Answer(Some(found))) => found.kind,
-            // An anime TMDB does not know asks Trakt nothing.
-            (None, Held::Answer(None)) => return true,
+            (None, Held::Answer(finds)) => match finds.of(None) {
+                Some(found) => found.kind,
+                // An anime TMDB does not know asks Trakt nothing.
+                None => return true,
+            },
             (None, _) => return false,
         };
         let key = key(kind, imdb);
@@ -193,11 +196,12 @@ impl Core {
                     && matches!(memory.related.held(&key, now), Held::Answer(_)))
     }
 
-    /// TMDB's answer for an IMDb id: its kind, score and votes. `None` when
-    /// TMDB does not know the id, cannot be asked (no token, kids, quiet,
-    /// resting) or failed.
-    pub(crate) async fn tmdb_find(&self, imdb: &str) -> Option<tmdb::Found> {
-        if kids(self) || !crate::segments::is_imdb(imdb) {
+    /// TMDB's answer for an IMDb id as `kind` (`movie` or `series`; `None`
+    /// takes the movie, else the show): its kind, score and votes. `None`
+    /// when TMDB does not know the id as that kind, cannot be asked (no
+    /// token, kids, quiet, resting) or failed.
+    pub(crate) async fn tmdb_find(&self, imdb: &str, kind: Option<&str>) -> Option<tmdb::Found> {
+        if kids(self) || self.no_tmdb() || !crate::segments::is_imdb(imdb) {
             return None;
         }
         let trakt = self.trakt();
@@ -205,7 +209,7 @@ impl Core {
             let memory = lock(&trakt.lookups);
             let now = Instant::now();
             match memory.tmdb.held(imdb, now) {
-                Held::Answer(found) => return found,
+                Held::Answer(finds) => return finds.of(kind),
                 Held::Resting => return None,
                 Held::Nothing => {}
             }
@@ -226,9 +230,21 @@ impl Core {
         if answer.throttled() {
             memory.tmdb_quiet = Some(now + super::search::quiet_for(retry_after(&answer)));
         }
-        let got = kept(&answer, tmdb::found, None)?;
+        // A token TMDB refuses (revoked) is refused for every title: TMDB
+        // quiets as long as a 429 may, so it costs a call per quarter hour,
+        // not one per title opened.
+        if matches!(
+            answer,
+            Answer::Refused {
+                status: 401 | 403,
+                ..
+            }
+        ) {
+            memory.tmdb_quiet = Some(now + super::search::quiet_for(Some(Duration::MAX)));
+        }
+        let got = kept(&answer, tmdb::finds, tmdb::Finds::default())?;
         let found = match &got {
-            Got::Answer(found) => *found,
+            Got::Answer(finds) => finds.of(kind),
             Got::Rest => None,
         };
         memory.tmdb.put(imdb.to_owned(), got, now);
@@ -238,6 +254,11 @@ impl Core {
     /// Trakt's score (rating 0 to 10, votes) for a title of `kind` (`movie`
     /// or `series`). `None` as for `tmdb_find`.
     pub(crate) async fn trakt_score(&self, kind: &'static str, imdb: &str) -> Option<(f64, u64)> {
+        // Before the memory, which is the device's: a kids profile never
+        // gets an answer another profile's page kept.
+        if kids(self) {
+            return None;
+        }
         let key = key(kind, imdb);
         match lock(&self.trakt().lookups)
             .scores
@@ -262,6 +283,10 @@ impl Core {
     /// The titles Trakt relates to this one, with IMDb ids, in its order;
     /// empty as for `tmdb_find`.
     pub(crate) async fn trakt_related(&self, kind: &'static str, imdb: &str) -> Vec<Found> {
+        // Before the memory, as `trakt_score`.
+        if kids(self) {
+            return Vec::new();
+        }
         let key = key(kind, imdb);
         match lock(&self.trakt().lookups)
             .related
@@ -335,6 +360,57 @@ async fn send(api: &Api, read: Read, kind: &str, imdb: &str, token: Option<&str>
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A throwaway core (tests, e2e) asks TMDB nothing until a test points
+    /// it at its fake, whatever token the build baked in.
+    #[test]
+    fn a_throwaway_core_asks_tmdb_nothing_until_pointed_at_a_fake() {
+        let core = Core::temporary("p").unwrap();
+        assert!(core.no_tmdb());
+        assert!(!core.tmdb_ready());
+        core.set_tmdb_host(TmdbHost {
+            url: "http://127.0.0.1:9".into(),
+            token: Some("test".into()),
+            local: true,
+        });
+        assert!(core.tmdb_ready());
+    }
+
+    /// The memory is the device's: an answer the owner's page kept is never
+    /// a kids profile's, which is refused before the memory is read.
+    #[tokio::test]
+    async fn a_kids_profile_never_reads_the_kept_answers() {
+        let owner = Core::temporary(mq_library::OWNER).unwrap();
+        owner
+            .set_pin(mq_library::OWNER, Some("1357"), None)
+            .await
+            .unwrap();
+        let kid = owner.for_profile(&owner.create_kids_profile("Kid", "fox").unwrap());
+        {
+            let trakt = owner.trakt();
+            let mut memory = lock(&trakt.lookups);
+            let now = Instant::now();
+            let key = key("movie", "tt0111161");
+            memory
+                .scores
+                .put(key.clone(), Got::Answer(Some((9.0, 500))), now);
+            memory.related.put(
+                key,
+                Got::Answer(vec![Found {
+                    kind: "movie",
+                    imdb_id: "tt0061512".into(),
+                    title: "Cool Hand Luke".into(),
+                }]),
+                now,
+            );
+        }
+        assert_eq!(
+            owner.trakt_score("movie", "tt0111161").await,
+            Some((9.0, 500))
+        );
+        assert_eq!(kid.trakt_score("movie", "tt0111161").await, None);
+        assert!(kid.trakt_related("movie", "tt0111161").await.is_empty());
+    }
 
     /// Only a 404 is kept as "none" for a day; another refusal rests a
     /// minute; a 429 keeps nothing (it quiets), and quiets 1 to 15 minutes.

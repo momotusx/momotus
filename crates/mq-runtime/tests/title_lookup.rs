@@ -132,7 +132,7 @@ fn addon(base: &str) -> AddonRow {
         manifest_json: serde_json::json!({
             "id": "meta", "version": "1.0.0", "name": "Meta",
             "types": ["movie", "series", "anime"], "resources": ["meta"],
-            "idPrefixes": ["tt", "kitsu"], "catalogs": []
+            "idPrefixes": ["tt", "kitsu", "tmdb"], "catalogs": []
         })
         .to_string(),
         position: 0,
@@ -553,4 +553,116 @@ async fn a_kids_profile_asks_nothing() {
     tokio::time::sleep(Duration::from_millis(1600)).await;
     assert_eq!(lookups(&fake), 0);
     assert!(view.snapshot().similar.is_empty());
+}
+
+/// A token TMDB refuses (revoked) is refused for every title: after one
+/// 401 the next title page asks TMDB nothing, and Trakt still answers.
+#[tokio::test]
+async fn a_refused_tmdb_token_quiets_tmdb_for_every_title() {
+    let fake = fake().await;
+    fake.route("/3/find/", 401, r#"{"status_code":7}"#);
+    let core = core(&fake, Some("revoked"));
+    let movie = TitleView::open(&core, "movie", "tt0111161");
+    until(&movie, "the meta", ready).await;
+    movie.set_visible(true);
+    until(&movie, "the scores", |s| {
+        scores(s) == (Slot::Empty, shown("92%"))
+    })
+    .await;
+    let series = TitleView::open(&core, "series", "tt0903747");
+    until(&series, "the meta", ready).await;
+    series.set_visible(true);
+    until(&series, "TMDB none", |s| scores(s).0 == Slot::Empty).await;
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    assert_eq!(fake.asked("/3/find/"), 1, "one call for the revoked token");
+}
+
+/// TMDB's badge follows the page's kind: a series whose IMDb id TMDB also
+/// lists as a movie takes the show's score and page.
+#[tokio::test]
+async fn tmdb_answers_for_the_pages_kind() {
+    let fake = fake().await;
+    fake.route(
+        "/3/find/tt0903747",
+        200,
+        r#"{"movie_results":[{"id":1,"vote_average":5.0,"vote_count":900}],"tv_results":[{"id":1396,"vote_average":8.9,"vote_count":18925}]}"#,
+    );
+    let core = core(&fake, Some("test-token"));
+    let view = TitleView::open(&core, "series", "tt0903747");
+    until(&view, "the meta", ready).await;
+    view.set_visible(true);
+    let snap = until(&view, "TMDB", |s| scores(s).0 == shown("89%")).await;
+    assert_eq!(
+        links(&snap)[1].as_deref(),
+        Some("https://www.themoviedb.org/tv/1396")
+    );
+}
+
+/// A title opened by another id whose meta answers with an IMDb id: every
+/// badge and lookup use that one id, so IMDb, TMDB and Trakt all show.
+#[tokio::test]
+async fn a_title_opened_by_another_id_uses_its_metas_imdb_id() {
+    let fake = fake().await;
+    fake.route("/meta/movie/tmdb:278", 200, MOVIE);
+    let core = core(&fake, Some("test-token"));
+    let view = TitleView::open(&core, "movie", "tmdb:278");
+    let snap = until(&view, "the meta", ready).await;
+    assert_eq!(scores(&snap), (Slot::Pending, Slot::Pending));
+    view.set_visible(true);
+    let snap = until(&view, "the scores", |s| {
+        scores(s) == (shown("87%"), shown("92%"))
+    })
+    .await;
+    assert_eq!(
+        links(&snap),
+        [
+            Some("https://www.imdb.com/title/tt0111161/".into()),
+            Some("https://www.themoviedb.org/movie/278".into()),
+            Some("https://trakt.tv/movies/tt0111161".into()),
+        ]
+    );
+}
+
+/// Collects what the log writes, for `the_tmdb_token_never_reaches_a_log_line`.
+#[derive(Clone)]
+struct Sink(Arc<Mutex<Vec<u8>>>);
+
+impl std::io::Write for Sink {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        self.0.lock().unwrap().extend_from_slice(buf);
+        Ok(buf.len())
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
+/// The TMDB token never reaches a log line, whatever TMDB answers (a
+/// failure, a refusal), with every level logged.
+#[tokio::test]
+async fn the_tmdb_token_never_reaches_a_log_line() {
+    let lines = Sink(Arc::new(Mutex::new(Vec::new())));
+    let writer = lines.clone();
+    let subscriber = tracing_subscriber::fmt()
+        .with_max_level(tracing::Level::TRACE)
+        .with_ansi(false)
+        .with_writer(move || writer.clone())
+        .finish();
+    let _log = tracing::subscriber::set_default(subscriber);
+    let token = "secret-tmdb-token-4f2a";
+    let fake = fake().await;
+    fake.route("/3/find/tt0111161", 500, "{}");
+    fake.route("/3/find/tt0903747", 401, r#"{"status_code":7}"#);
+    let core = core(&fake, Some(token));
+    for (kind, id) in [("movie", "tt0111161"), ("series", "tt0903747")] {
+        let view = TitleView::open(&core, kind, id);
+        until(&view, "the meta", ready).await;
+        view.set_visible(true);
+        until(&view, "TMDB none", |s| scores(s).0 == Slot::Empty).await;
+    }
+    assert_eq!(fake.asked("/3/find/"), 2);
+    let log = String::from_utf8(lines.0.lock().unwrap().clone()).unwrap();
+    assert!(!log.is_empty(), "nothing was logged");
+    assert!(!log.contains(token), "the token is in the log");
 }

@@ -166,6 +166,11 @@ struct Device {
     pins: std::sync::Mutex<crate::profiles::Throttle>,
     /// Trakt connections, sessions and rounds, started on first use.
     trakt: std::sync::OnceLock<Arc<crate::trakt::Trakt>>,
+    /// A throwaway core's TMDB is off until a test points it at its fake
+    /// (`set_tmdb_host`): a build with the token baked in never asks the
+    /// real service. Kept here, not in Trakt's state, so pinning it does not
+    /// start Trakt.
+    no_tmdb: std::sync::atomic::AtomicBool,
 }
 
 /// Devices open in this process, by canonical data directory.
@@ -201,6 +206,7 @@ impl Device {
             sync_gate: Arc::default(),
             pins: std::sync::Mutex::new(crate::profiles::Throttle::new(std::time::Instant::now())),
             trakt: std::sync::OnceLock::new(),
+            no_tmdb: std::sync::atomic::AtomicBool::new(false),
         }))
     }
 
@@ -251,6 +257,9 @@ impl Core {
         // A throwaway core never asks real trackers: no swarm has a live
         // count unless a test gives one.
         core.set_live_seeders(HashMap::new());
+        // Nor TMDB: a build with the token baked in would otherwise ask the
+        // real service; a test that wants TMDB points it at its fake.
+        core.set_no_tmdb(true);
         core.library()
             .ensure_profile(profile, profile, &core.zero_hlc())?;
         core.library().set_active_profile(profile)?;
@@ -360,6 +369,21 @@ impl Core {
 
     pub(crate) fn pins(&self) -> &std::sync::Mutex<crate::profiles::Throttle> {
         &self.inner.device.pins
+    }
+
+    /// Whether TMDB is off for this throwaway core (`temporary`).
+    pub(crate) fn no_tmdb(&self) -> bool {
+        self.inner
+            .device
+            .no_tmdb
+            .load(std::sync::atomic::Ordering::Relaxed)
+    }
+
+    pub(crate) fn set_no_tmdb(&self, off: bool) {
+        self.inner
+            .device
+            .no_tmdb
+            .store(off, std::sync::atomic::Ordering::Relaxed);
     }
 
     pub(crate) fn trakt_service(&self) -> &Arc<crate::trakt::Trakt> {

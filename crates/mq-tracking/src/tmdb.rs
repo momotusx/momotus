@@ -82,21 +82,49 @@ pub struct Found {
     pub votes: u64,
 }
 
+/// What `find` lists for an IMDb id: its first movie and its first show.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub struct Finds {
+    pub movie: Option<Found>,
+    pub show: Option<Found>,
+}
+
+impl Finds {
+    /// The answer for a page of `kind` (`movie` or `series`): only that
+    /// kind's, so TMDB's badge never describes another title than Trakt's;
+    /// with no kind (an anime, whose kind TMDB tells), the movie, else the
+    /// show.
+    pub fn of(&self, kind: Option<&str>) -> Option<Found> {
+        match kind {
+            Some("movie") => self.movie,
+            Some("series") => self.show,
+            _ => self.movie.or(self.show),
+        }
+    }
+}
+
+/// Both kinds of a `find` answer.
+pub fn finds(body: &Value) -> Finds {
+    let item = |list: &str, kind: &'static str| -> Option<Found> {
+        let item = body[list].get(0)?;
+        Some(Found {
+            kind,
+            id: item["id"].as_u64()?,
+            score: item["vote_average"]
+                .as_f64()
+                .filter(|s| (0.0..=10.0).contains(s))?,
+            votes: item["vote_count"].as_u64()?,
+        })
+    };
+    Finds {
+        movie: item("movie_results", "movie"),
+        show: item("tv_results", "series"),
+    }
+}
+
 /// The first movie, else the first show, of a `find` answer.
 pub fn found(body: &Value) -> Option<Found> {
-    let (kind, item) = match (body["movie_results"].get(0), body["tv_results"].get(0)) {
-        (Some(movie), _) => ("movie", movie),
-        (None, Some(show)) => ("series", show),
-        _ => return None,
-    };
-    Some(Found {
-        kind,
-        id: item["id"].as_u64()?,
-        score: item["vote_average"]
-            .as_f64()
-            .filter(|s| (0.0..=10.0).contains(s))?,
-        votes: item["vote_count"].as_u64()?,
-    })
+    finds(body).of(None)
 }
 
 #[cfg(test)]

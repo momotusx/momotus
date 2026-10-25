@@ -1737,3 +1737,50 @@ async fn addons_follow_the_account_both_ways_through_a_relay() {
     assert_eq!(shown(&core_a), shown(&core_b));
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// A title page's `titleVisible` reaches its view; without `visible` it is
+/// refused, and a view that is not a title page has no such command.
+#[tokio::test]
+async fn title_visible_reaches_the_title_view() {
+    let core = Core::temporary("p").unwrap();
+    let (tx, mut rx) = Output::channel();
+    let mut session = Session::new(core, tx);
+    session
+        .handle_text(
+            &json!({"id": 1, "op": "subscribe", "view": "title", "params": {"kind": "movie", "id": "tt0111161"}})
+                .to_string(),
+        )
+        .await;
+    let reply = reply_to(&mut rx, 1).await;
+    assert_eq!(reply["ok"], true, "{reply}");
+    let sub = reply["result"]["sub"].as_u64().unwrap();
+    let command = |id: u64, command: Value| {
+        json!({"id": id, "op": "command", "sub": sub, "command": command}).to_string()
+    };
+    session
+        .handle_text(&command(
+            2,
+            json!({"type": "titleVisible", "visible": true}),
+        ))
+        .await;
+    assert_eq!(reply_to(&mut rx, 2).await["ok"], true);
+    session
+        .handle_text(&command(3, json!({"type": "titleVisible"})))
+        .await;
+    let reply = reply_to(&mut rx, 3).await;
+    assert_eq!(reply["ok"], false);
+    assert_eq!(reply["error"], "visible missing");
+    session
+        .handle_text(&json!({"id": 4, "op": "subscribe", "view": "home"}).to_string())
+        .await;
+    let home = reply_to(&mut rx, 4).await["result"]["sub"]
+        .as_u64()
+        .unwrap();
+    session
+        .handle_text(
+            &json!({"id": 5, "op": "command", "sub": home, "command": {"type": "titleVisible", "visible": true}})
+                .to_string(),
+        )
+        .await;
+    assert_eq!(reply_to(&mut rx, 5).await["ok"], false);
+}

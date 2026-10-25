@@ -96,7 +96,10 @@ impl Core {
 
     /// Keeps the IMDb ids an addon's answer (a catalog's `metas` or a
     /// `meta`) gives for titles it names by another id, writing only those
-    /// that are new or changed.
+    /// that are new or changed. The table is keyed by the id alone, with no
+    /// addon scope: one addon can overwrite another's mapping. That is fine
+    /// for a cover and for the title page's lookups, which send only a
+    /// checked `tt` id; anything stronger must scope it first.
     pub(crate) fn learn_imdb_ids(&self, body: &[u8]) {
         let library = self.library();
         let removals = library.removals();
