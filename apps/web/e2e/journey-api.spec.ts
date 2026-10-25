@@ -1551,21 +1551,33 @@ test("TV: a cue its file placed stays there with its styling, and no line draws 
     await expect(p.locator(".cue-at", { hasText: /Ninety/ })).toHaveCount(0);
     const deep = p.locator(".cue-at", { hasText: "DEEP" });
     await expect(deep).toBeVisible();
-    // Its foot at the foot block's floor, within 1% of the height either way (too low is cut or under a control;
-    // too high is not the floor): the 5% line with the controls hidden, 8 px over the scrubber with them up.
+    // Its foot at the foot block's floor (the 5% line with the controls hidden, 8 px over the scrubber with them
+    // up), and since the foot block's lines hang there too, 8 px over their top: never over them, within 1% of the
+    // height either way (too low meets the lines or a control; too high is not the floor).
     const deepFoot = () =>
       deep.evaluate((el) => {
-        const box = (document.querySelector("video") as HTMLVideoElement).getBoundingClientRect();
+        const v = document.querySelector("video") as HTMLVideoElement;
+        const box = v.getBoundingClientRect();
+        const k = box.height / v.offsetHeight;
         const scrub = (document.querySelector(".player-scr .scrub") as HTMLElement).getBoundingClientRect();
-        const k = box.height / (document.querySelector("video") as HTMLVideoElement).offsetHeight;
+        const lines = (document.querySelector(".cues") as HTMLElement).getBoundingClientRect();
         const foot = el.getBoundingClientRect().bottom;
-        return { safe: (box.bottom - box.height * 0.05 - foot) / box.height, scrub: (scrub.top - 8 * k - foot) / box.height };
+        return {
+          safe: (box.bottom - box.height * 0.05 - foot) / box.height,
+          scrub: (scrub.top - 8 * k - foot) / box.height,
+          lines: (lines.top - 8 * k - foot) / box.height,
+          over: foot <= lines.top,
+        };
       });
     await expect(p.locator(".player-scr")).toHaveClass(/idle/, { timeout: 10_000 });
-    await expect.poll(async () => Math.abs((await deepFoot()).safe)).toBeLessThanOrEqual(0.01);
+    await expect.poll(async () => Math.abs((await deepFoot()).lines)).toBeLessThanOrEqual(0.01);
+    expect(await deepFoot()).toMatchObject({ over: true });
+    expect((await deepFoot()).safe).toBeGreaterThanOrEqual(0);
     await p.keyboard.press("ArrowUp");
     await expect(p.locator(".player-scr")).not.toHaveClass(/idle/);
-    await expect.poll(async () => Math.abs((await deepFoot()).scrub)).toBeLessThanOrEqual(0.01);
+    await expect.poll(async () => Math.abs((await deepFoot()).lines)).toBeLessThanOrEqual(0.01);
+    expect(await deepFoot()).toMatchObject({ over: true });
+    expect((await deepFoot()).scrub).toBeGreaterThanOrEqual(0);
     // The controls' fade done, for the shot.
     await p.waitForTimeout(400);
     await p.screenshot({ path: `${SHOTS}/tv-player-placed-cue.png` });

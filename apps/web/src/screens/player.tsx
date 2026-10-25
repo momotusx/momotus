@@ -413,28 +413,34 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
     const bar = rect(".osd");
     const scrubber = rect(".scrub");
     const up = osd() && !ended() && !!bar;
+    if (cuesEl?.isConnected) {
+      const place = cuePlace({
+        box: local(screen),
+        video: { width: video.videoWidth, height: video.videoHeight },
+        bar,
+        scrubber,
+        transport: rect(".transport"),
+        up,
+        // The lines' height at full size (drawn now at 85% when shrunk).
+        lines: cuesEl.getBoundingClientRect().height / k / (shrink() ? 0.85 : 1),
+      });
+      setShrink(place.shrink);
+      setCueAt(place.at);
+    }
     // A cue the file placed keeps the foot block's floor: over the title-safe line, and 8 px over the scrubber
-    // while the controls show; one placed low, or many lines down, comes up to it.
+    // while the controls show; one placed low, or many lines down, comes up to it, and over the foot block's
+    // lines (8 px clear) when it would meet them. The block's whole width counts: a narrow cue at one side also
+    // clears lines it would not touch.
     const safe = local(screen).bottom - local(screen).height * SAFE_LINE;
     const floor = up && scrubber ? Math.min(safe, scrubber.top - 8) : safe;
+    const block = cuesEl?.isConnected ? local(cuesEl.getBoundingClientRect()) : null;
     for (const el of document.querySelectorAll<HTMLElement>(".player-scr .cue-at")) {
       el.style.transform = "";
-      const over = local(el.getBoundingClientRect()).bottom - floor;
-      if (over > 0) el.style.transform = `translateY(${-over}px)`;
+      const r = local(el.getBoundingClientRect());
+      let foot = Math.min(r.bottom, floor);
+      if (block && foot > block.top && foot - r.height < block.bottom) foot = block.top - 8;
+      if (foot < r.bottom) el.style.transform = `translateY(${foot - r.bottom}px)`;
     }
-    if (!cuesEl?.isConnected) return;
-    const place = cuePlace({
-      box: local(screen),
-      video: { width: video.videoWidth, height: video.videoHeight },
-      bar,
-      scrubber,
-      transport: rect(".transport"),
-      up,
-      // The lines' height at full size (drawn now at 85% when shrunk).
-      lines: cuesEl.getBoundingClientRect().height / k / (shrink() ? 0.85 : 1),
-    });
-    setShrink(place.shrink);
-    setCueAt(place.at);
   };
   createEffect(on([lines, placed, cuesShown, osd, ended, panel, () => prefs.state.data?.subtitleSize], () => requestAnimationFrame(placeCues)));
   onMount(() => {
