@@ -1,5 +1,6 @@
 package app.marquee.android
 
+import androidx.activity.compose.LocalActivity
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -40,7 +41,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.focusRestorer
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -485,7 +485,7 @@ fun DiscoverScreen(
     val view = holder.view
     val snapshot = view.snapshot
     // One select of the kind and the genre, after the first snapshot: the core picks the catalog (C40).
-    val activity = LocalContext.current as? android.app.Activity
+    val activity = LocalActivity.current
     GenreAskEffect(
         request,
         ready = snapshot != null,
