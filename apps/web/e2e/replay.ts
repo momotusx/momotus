@@ -47,6 +47,23 @@ export const keeps = (status: number) => status < 500 && status !== 429;
 /** A name under a top-level domain reserved never to resolve (RFC 2606): a test's made-up host. */
 export const madeUp = (host: string) => /(^|\.)(example|invalid|test)$/i.test(host.replace(/:\d+$/, ""));
 
+/** The made-up Premiumize key the specs type (MQDUMMYE2EKEY1, and the same with a letter added). */
+const DUMMY_KEY = /^MQDUMMYE2EKEY/;
+
+/** What Premiumize answers for the specs' made-up key: an account that works and has nothing
+ * cached. The live service refuses the key ("Not logged in"), and that refusal, once recorded,
+ * would turn every later run's account to Sign in again, so the key never leaves this machine.
+ * Any other call with it is not answered (a 504, a passing failure to the core). */
+export function standIn(url: string, sent: Buffer | undefined): Kept | null {
+  const asked = new URL(url);
+  if (!/(^|\.)premiumize\.me$/.test(asked.hostname)) return null;
+  const form = new URLSearchParams(sent?.toString() ?? "");
+  if (!DUMMY_KEY.test(asked.searchParams.get("apikey") ?? form.get("apikey") ?? "")) return null;
+  if (asked.pathname !== "/api/cache/check") return { url, status: 504, headers: {}, body: "" };
+  const answer = { status: "success", response: asked.searchParams.getAll("items[]").map(() => false) };
+  return { url, status: 200, headers: { "content-type": "application/json" }, body: Buffer.from(JSON.stringify(answer)).toString("base64") };
+}
+
 /** What an unrecorded answer becomes offline: a grey image when an image was asked for. */
 export const placeholder = (accept: string | undefined): Buffer | null => (accept?.includes("image/") ? GREY : null);
 
@@ -92,7 +109,7 @@ export async function replay(req: IncomingMessage, res: ServerResponse, rest: st
   const sent = await body(req);
   const key = createHash("sha256").update(`${req.method} ${url} ${req.headers.range ?? ""} `).update(sent ?? Buffer.alloc(0)).digest("hex").slice(0, 40);
   const file = join(DIR, host, `${key}.json`);
-  let kept: Kept | null = !RECORD && existsSync(file) ? (JSON.parse(readFileSync(file, "utf8")) as Kept) : null;
+  let kept: Kept | null = standIn(url, sent) ?? (!RECORD && existsSync(file) ? (JSON.parse(readFileSync(file, "utf8")) as Kept) : null);
   if (!kept && !OFFLINE) {
     replayed.asked++;
     kept = await ask(url, req, sent);
