@@ -143,7 +143,7 @@ final class AetherSession {
                         from.flatMap { from in to.map { "\(Int(($0 - from) / .milliseconds(1)))" } } ?? "n/a"
                     }
                     let (probed, session) = (passed[.streamsProbed], passed[.sessionConstructed])
-                    coreLog.notice("metric engine_start probe_ms=\(ms(loaded, probed), privacy: .public) session_ms=\(ms(probed, session), privacy: .public) frame_ms=\(ms(session, .now), privacy: .public) probe_mib=\(probeMiB, privacy: .public) path=\(Self.path(native: host.nativePlayerLayer != nil, software: host.softwarePiPSource != nil), privacy: .public) rerouted=\(rerouted == nil ? 0 : 1, privacy: .public)")
+                    coreLog.notice("metric engine_start probe_ms=\(ms(loaded, probed), privacy: .public) session_ms=\(ms(probed, session), privacy: .public) frame_ms=\(ms(session, .now), privacy: .public) probe_mib=\(probeMiB, privacy: .public) probe_kib_s=\(Self.kibPerS(mib: probeMiB, from: loaded, to: probed), privacy: .public) path=\(Self.path(native: host.nativePlayerLayer != nil, software: host.softwarePiPSource != nil), privacy: .public) rerouted=\(rerouted == nil ? 0 : 1, privacy: .public)")
                 }
             }
             .store(in: &bag)
@@ -195,6 +195,13 @@ final class AetherSession {
     static func recording<P: Publisher>(_ escalations: P, _ record: @escaping (PlaybackErrorInfo) -> Void) -> AnyCancellable
     where P.Output == SoftwarePathEscalationEvent, P.Failure == Never {
         escalations.sink { record($0.absorbedFailure) }
+    }
+
+    /// What the probe window read, KiB per second: the probe's size over its time (an upper bound when the probe
+    /// ended before reading all of it), n/a without a probe.
+    static func kibPerS(mib: Int64, from: ContinuousClock.Instant, to: ContinuousClock.Instant?) -> String {
+        guard let to, to > from else { return "n/a" }
+        return "\(Int(Double(mib * 1024) / ((to - from) / .seconds(1))))"
     }
 
     /// The engine's path for the start log: native (remuxed for AVPlayer), software (its own decoders), or other.

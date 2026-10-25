@@ -201,3 +201,12 @@ extension AetherSession.Events {
     #expect(failures.count == 1, "played, and no frame within the bound")
     session.stop()
 }
+
+/// The bar's swarm column (the lead, 2026-10-26): the probe window's rate is its size over its time, so a miss shows
+/// what the swarm delivered (AS42: 8 MiB in 28 s).
+@MainActor @Test func theProbeWindowRateIsItsSizeOverItsTime() {
+    let t = ContinuousClock.now
+    #expect(AetherSession.kibPerS(mib: 8, from: t, to: t + .seconds(28)) == "292")
+    #expect(AetherSession.kibPerS(mib: 2, from: t, to: t + .milliseconds(500)) == "4096")
+    #expect(AetherSession.kibPerS(mib: 2, from: t, to: nil) == "n/a")
+}
