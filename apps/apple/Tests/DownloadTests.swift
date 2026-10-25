@@ -50,7 +50,7 @@ private let hint = "Shows download options"
         (.lowData, .wifiOff, "Waiting: Low Data Mode is on", [.mobileData, .cancel]),
         (.network, .wifiOff, "Waiting for a connection", [.cancel]),
         (.playing, .clock, "Paused while you watch", [.cancel]),
-        (.app, .clock, "Opens again when you return to Marquee", [.cancel]),
+        (.app, .clock, "Opens again when you return to Momotus", [.cancel]),
     ]
     for (reason, glyph, label, items) in cases {
         let control = DownloadCopy.control(badge(.waiting, reason, progress: 0.2))
@@ -158,6 +158,10 @@ private let hint = "Shows download options"
     #expect(DownloadCopy.deleteSeries(4, "Severance") == "Delete 4 downloaded episodes of Severance?")
     #expect(DownloadCopy.deleteSeries(1, "Severance") == "Delete 1 downloaded episode of Severance?")
     #expect(DownloadCopy.deleteAll(12 * gb) == "Delete all downloads on this device? 12 GB")
+    // The subtitles kept with it, by English names, once each.
+    #expect(DownloadCopy.subtitlesLine(["en", "tr", "en", "pt-BR"]) == "Subtitles: English, Turkish, Portuguese (Brazil)")
+    #expect(DownloadCopy.subtitlesLine([]) == nil)
+    #expect(DownloadCopy.subtitlesLine(nil) == nil)
     // An episode card's spoken value gains the state.
     #expect(DownloadCopy.spokenState(badge(.done)) == "Downloaded")
     #expect(DownloadCopy.spokenState(badge(.running, progress: 0.45)) == "Downloading, 45 percent")

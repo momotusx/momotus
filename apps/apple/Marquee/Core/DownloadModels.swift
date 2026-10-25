@@ -66,6 +66,8 @@ struct DownloadRow: Decodable, Hashable, Sendable, Identifiable {
     let etaSecs: Int64?
     /// "1080p", from the version kept.
     let quality: String?
+    /// The languages of the subtitles kept with it, as tags (nil from an older core).
+    var subtitles: [String]? = nil
 }
 
 struct DownloadTitle: Decodable, Hashable, Sendable, Identifiable {

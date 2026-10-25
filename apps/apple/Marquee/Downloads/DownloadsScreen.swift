@@ -275,6 +275,13 @@ private struct DownloadRowView: View {
                     .foregroundStyle(Theme.Palette.muted)
                     .monospacedDigit()
                     .lineLimit(2)
+                // The subtitles kept with it, quietly (plans/offline-downloads.md 4.10).
+                if let subtitles = DownloadCopy.subtitlesLine(row.subtitles) {
+                    Text(subtitles)
+                        .textFont(Theme.type.caption, relativeTo: .caption)
+                        .foregroundStyle(Theme.Palette.dim)
+                        .lineLimit(2)
+                }
                 if let progress {
                     ProgressLine(value: progress).frame(maxWidth: 220).padding(.top, 4).accessibilityHidden(true)
                 }

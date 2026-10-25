@@ -179,7 +179,7 @@ enum DownloadCopy {
         case .lowData: "Waiting: Low Data Mode is on"
         case .network: "Waiting for a connection"
         case .playing: "Paused while you watch"
-        case .app: "Opens again when you return to Marquee"
+        case .app: "Opens again when you return to Momotus"
         default: "Waiting"
         }
     }
@@ -302,6 +302,17 @@ enum DownloadCopy {
         DownloadBadge(
             id: row.id, state: row.state, reason: row.reason, mobileData: row.mobileData,
             progress: row.bytesTotal.flatMap { $0 > 0 ? Double(row.bytesDone) / Double($0) : nil }, bytesTotal: row.bytesTotal)
+    }
+
+    /// The subtitles kept with a download, by their English names in the core's order: "Subtitles:
+    /// English, Turkish"; nil with none.
+    static func subtitlesLine(_ tags: [String]?) -> String? {
+        var names: [String] = []
+        for tag in tags ?? [] {
+            let name = Locale(identifier: "en").localizedString(forIdentifier: tag) ?? tag
+            if !names.contains(name) { names.append(name) }
+        }
+        return names.isEmpty ? nil : "Subtitles: \(names.joined(separator: ", "))"
     }
 
     /// An episode card's accessibility value gains the state: "Downloaded", "Downloading, 45 percent".
