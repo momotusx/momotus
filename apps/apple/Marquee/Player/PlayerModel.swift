@@ -206,6 +206,9 @@ final class PlayerModel {
         coreLog.notice("debug: player muted \(self.player.isMuted, privacy: .public)")
         if WalkLog.on { walkLog = WalkLog(player: player) }
         #endif
+        #if MARQUEE_WALK
+        soak()
+        #endif
         observePlayer()
         outbox = DelayOutbox { [weak self] command in
             // At once, not in a Task: it reaches the core before the view's unsubscribe.
@@ -557,6 +560,26 @@ final class PlayerModel {
     }
 
     /// Plays another version of the same video from where this one is.
+    #if MARQUEE_WALK
+    /// `-MQSoak N` (walk builds only, plans/iphone-mkv.md phase 3): N version moves in this process, one every 45 s,
+    /// to the next listed row after the one playing, so the sampler's footprint shows whether sessions leak.
+    private func soak() {
+        let moves = UserDefaults.standard.integer(forKey: "MQSoak")
+        guard moves > 0 else { return }
+        Task { [weak self] in
+            for step in 1...moves {
+                try? await Task.sleep(for: .seconds(45))
+                guard let self, let rows = self.versions?.snapshot?.rows, rows.count > 1 else { return }
+                let playing = self.playback?.key ?? self.route.key
+                let at = rows.firstIndex { $0.key == playing } ?? -1
+                let next = rows[(at + 1) % rows.count]
+                coreLog.notice("metric soak step=\(step, privacy: .public) of=\(moves, privacy: .public) to=\(next.key, privacy: .public)")
+                self.switchVersion(next.key)
+            }
+        }
+    }
+    #endif
+
     func switchVersion(_ key: String) {
         // The old track's URL goes with the old view: the new version starts
         // with its own start subtitle.
@@ -829,6 +852,7 @@ final class PlayerModel {
 
     private func apply(_ snapshot: PlaybackSnapshot) {
         let wasPending = playback?.subtitlesPending == true
+        let wasFailed = playback?.phase == "failed"
         if let trouble = PlayerLayout.subtitleTrouble(
             picked: subtitle, old: playback?.notes ?? [], new: snapshot.notes, tracks: snapshot.subtitles
         ) {
@@ -886,6 +910,10 @@ final class PlayerModel {
         case "failed":
             player.pause()
             notice = nil
+            // Once per failure, the core's own words for the last source (a walk reads why without the screen).
+            if !wasFailed {
+                coreLog.notice("metric playback_failed_ms=\(self.sinceTap, privacy: .public) swarm_kib_s=\(self.swarmRate / 1024, privacy: .public) why=\(snapshot.attempts.last?.error ?? "none", privacy: .public)")
+            }
         default:
             break
         }
