@@ -231,7 +231,21 @@ function initial(): HTMLElement | null {
   );
 }
 
+// A move the viewer makes (an arrow, or Back to the bar) is under way; `railByViewer`: the rail has the focus because
+// such a move put it there, not a first focus or a stopgap that fell back on the lit tab.
+let viewerMove = false;
+let railByViewer = false;
+
 export function move(dir: Direction): boolean {
+  viewerMove = true;
+  try {
+    return step(dir);
+  } finally {
+    viewerMove = false;
+  }
+}
+
+function step(dir: Direction): boolean {
   cancelRestore();
   const els = candidates();
   const active = document.activeElement;
@@ -267,6 +281,12 @@ export function move(dir: Direction): boolean {
   // the hero's Play, scrolled away under the floating navigation); the navigation is the top.
   if (dir === "up" && here.group !== "rail") target = pick(here, list.filter((c) => c === here || c.group !== "rail"), dir, memory);
   target ??= pick(here, list, dir, memory);
+  // TV: Up out of the content enters the bar on the lit tab, as Android and tvOS do; the nearest tab would show its
+  // own place once the focus rested there.
+  if (target !== null && dir === "up" && here.group !== "rail" && document.documentElement.dataset.form === "tv") {
+    const lit = els.find((el) => groupOf(el) === "rail" && el.classList.contains("on"));
+    if (lit && list.find((c) => c.key === target)?.group === "rail") target = lit.dataset.f as string;
+  }
   const el = target === null ? null : els[list.findIndex((c) => c.key === target)];
   if (!el) return false;
   focusEl(el);
@@ -275,13 +295,18 @@ export function move(dir: Direction): boolean {
 
 const railOf = (el: Element | null) => el?.closest<HTMLElement>('[data-fgroup="rail"]') ?? null;
 
+/** True while the bar (the rail) has the focus. */
+export const railHasFocus = () => !!railOf(document.activeElement);
+
 /** Puts the focus on the bar's tab of the place shown; false when the bar has it already or is not there. */
 export function focusRail(): boolean {
   if (railOf(document.activeElement)) return false;
   const tab = document.querySelector<HTMLElement>('[data-fgroup="rail"] [data-f].on');
   if (!tab || tab.closest("[inert]")) return false;
   cancelRestore();
+  viewerMove = true;
   focusEl(tab);
+  viewerMove = false;
   return true;
 }
 
@@ -317,11 +342,13 @@ export function restore(back: boolean, asked = inputs) {
   cancelRestore();
   if (!mayAutoFocus() || inputs !== asked) return;
   // TV: a place shown from the bar (focus rested on its tab, or Back on the bar went Home) leaves the focus on the
-  // bar, on that place's tab: Down goes in.
+  // bar, on that place's tab: Down goes in. A first focus or a stopgap that fell back on the lit tab is not that.
   const rail = railOf(document.activeElement);
-  if (rail && document.documentElement.dataset.form === "tv") {
+  if (rail && railByViewer && document.documentElement.dataset.form === "tv") {
     const tab = rail.querySelector<HTMLElement>("[data-f].on");
+    viewerMove = true;
     if (tab && tab !== document.activeElement) focusEl(tab);
+    viewerMove = false;
     return;
   }
   const want = back ? screens.get(path()) : undefined;
@@ -462,6 +489,7 @@ export function installFocus(onBack: () => void) {
     const group = groupOf(el);
     const r = el.getBoundingClientRect();
     last = { path: path(), key, group, x: r.left + r.width / 2, y: r.top + r.height / 2 };
+    railByViewer = group === "rail" && viewerMove;
     if (recovering) return;
     if (group) memory.set(group, key);
     screens.set(path(), key);

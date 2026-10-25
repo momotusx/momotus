@@ -15,9 +15,9 @@ import "./core/trakt";
 // A sign-out with removal that a reload cut short goes on (D13).
 import "./core/wipe";
 import { gateOpen, profiles, profilesFailed } from "./core/profiles";
-import { focusRail, installFocus, move, restoreSoon } from "./focus/dom";
+import { focusRail, installFocus, move, railHasFocus, restoreSoon } from "./focus/dom";
 import { form } from "./form";
-import { entryOwner, historyBase, historyDepth, markBack, resetHistoryBase, stampEntriesWith, takeAfterBack, takeBack } from "./history";
+import { backThenReplace, entryOwner, historyBase, historyDepth, markBack, resetHistoryBase, stampEntriesWith, takeAfterBack, takeBack } from "./history";
 import Addons from "./screens/addons";
 import FindAddons from "./screens/find-addons";
 import CalendarScreen from "./screens/calendar";
@@ -101,14 +101,15 @@ function TopNav() {
     settle = setTimeout(() => navigate(path, { replace: true }), TAB_SETTLE_MS);
   };
   onCleanup(() => clearTimeout(settle));
-  // TV: Select on the place shown goes into it, as on Apple TV.
+  // TV, a remote's Select (a click with no pointer, `detail` 0): on the place shown it goes into it, as on Apple TV;
+  // on another place it shows that one at once, the same replace as the settle, which it ends. A pointer's click
+  // stays the link it was.
   const select = (path: string) => (e: MouseEvent) => {
-    if (tv() && section(location.pathname) === path) {
-      e.preventDefault();
-      move("down");
-      return;
-    }
-    paletteClick(path)(e);
+    clearTimeout(settle);
+    if (!tv() || e.detail !== 0 || path === "/search") return paletteClick(path)(e);
+    e.preventDefault();
+    if (section(location.pathname) === path) move("down");
+    else navigate(path, { replace: true });
   };
   const link = (d: Destination) => (
     <A
@@ -178,6 +179,15 @@ function Shell(props: RouteSectionProps) {
     // Home keeps its own (the platform's exit).
     const place = location.pathname !== "/" && destinations.some((d) => d.path === location.pathname);
     if (form() === "tv" && place && focusRail()) return;
+    // TV: Back on the bar of a place other than Home goes Home, past whatever was pushed under it (a Settings page),
+    // as the Android stack does: back to the app's first entry, which becomes Home.
+    if (form() === "tv" && location.pathname !== "/" && railHasFocus()) {
+      const up = historyDepth() - historyBase();
+      if (up > 0) return backThenReplace("/", up);
+      markBack();
+      navigate("/", { replace: true });
+      return;
+    }
     if (historyDepth() > historyBase()) {
       markBack();
       history.back();
@@ -245,7 +255,7 @@ function Shell(props: RouteSectionProps) {
       () => location.pathname,
       () => {
         const then = takeAfterBack();
-        if (then) return navigate(then, { replace: true });
+        if (then && then !== location.pathname) return navigate(then, { replace: true });
         setScrolled(false);
         // The tab and history name the screen; a title, Versions and the
         // player name their title themselves once it is known.

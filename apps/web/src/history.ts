@@ -18,12 +18,12 @@ export const markBack = () => {
 export const cameBack = () => wentBack;
 // A page Back lands on gives way to this one (`backThenReplace`).
 let afterBack: string | null = null;
-/** Back one entry, and the page there gives way to `to`: one entry where
- * two would stack (the player's Versions after autoplay moved on). */
-export function backThenReplace(to: string) {
+/** Back `steps` entries (one by default), and the page there gives way to `to`: one entry where two would stack
+ * (the player's Versions after autoplay moved on). */
+export function backThenReplace(to: string, steps = 1) {
   afterBack = to;
   markBack();
-  history.back();
+  history.go(-steps);
 }
 /** The shell, as Back lands: the page to put in its place, once. */
 export function takeAfterBack(): string | null {
