@@ -23,6 +23,7 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.test.requestFocus
@@ -327,5 +328,65 @@ class TvTitleScoresTest {
             compose.waitForIdle()
             Thread.sleep(10)
         }
+    }
+
+    private fun press(key: Key): String {
+        compose.onNode(isFocused()).performKeyInput { pressKey(key) }
+        compose.waitForIdle()
+        return focused()
+    }
+
+    @Test
+    fun `a genre opens Discover, a name opens Search, and the names are a list the D-pad walks in order`() {
+        val genres = mutableListOf<Pair<String, String>>()
+        val people = mutableListOf<String>()
+        show(page(cover = null)) { view ->
+            TvTitle(view, null, FocusMemory(), { _, _ -> }, {}, {}, {}, onGenre = {
+                k,
+                g,
+                ->
+                genres += k to g
+            }, onPerson = {
+                people +=
+                    it
+            })
+        }
+        compose.onNode(hasText("Drama") and hasClickAction()).performClick()
+        compose.onNode(hasText("Actor Number 1") and hasClickAction()).performClick()
+        assertEquals(listOf("movie" to "Drama"), genres)
+        assertEquals(listOf("Actor Number 1"), people)
+        val names =
+            (1..4).map { "Actor Number $it" } +
+                listOf("Frank Darabont", "Second Director", "Stephen King", "Second Writer")
+        compose.onNode(hasText("Actor Number 1") and hasClickAction()).requestFocus()
+        compose.waitForIdle()
+        // Nothing above the first name: Up stays on it.
+        assertEquals("Actor Number 1", press(Key.DirectionUp))
+        // Down walks the names in reading order, then leaves the column (no trap).
+        val walked = mutableListOf("Actor Number 1")
+        var next = press(Key.DirectionDown)
+        while (next in names && next != walked.last()) {
+            walked += next
+            next = press(Key.DirectionDown)
+        }
+        assertTrue(next !in names, "Down got stuck on ${walked.last()}")
+        assertTrue(walked.size >= 4, "Down reached only $walked")
+        assertEquals(
+            walked.map { names.indexOf(it) }.sorted(),
+            walked.map { names.indexOf(it) },
+            "out of order: $walked",
+        )
+        // Left from a name goes back to the page's left column.
+        compose.onNode(hasText("Actor Number 1") and hasClickAction()).requestFocus()
+        compose.waitForIdle()
+        assertTrue(press(Key.DirectionLeft) !in names, "Left stays in the names")
+    }
+
+    @Test
+    fun `on a kids profile the genres and the names are words`() {
+        val shown = page(cover = null)
+        show(shown.copy(header = shown.header.copy(genresLinked = false)))
+        compose.onAllNodes(hasText("Actor Number 1", substring = true) and hasClickAction()).assertCountEquals(0)
+        compose.onAllNodes(hasText("Drama", substring = true) and hasClickAction()).assertCountEquals(0)
     }
 }

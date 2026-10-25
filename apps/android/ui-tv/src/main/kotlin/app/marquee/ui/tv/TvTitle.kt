@@ -231,7 +231,8 @@ fun TvTitle(
                                     Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.m)) {
                                         FactsTable(TitleCopy.facts(details, TitleCopy.seasonCount(header.seasons)))
                                         // Each name opens Search for that person, a few of each.
-                                        People(TitleCopy.people(details), onPerson)
+                                        // A kids profile's Search finds only its list: the names are words there.
+                                        People(TitleCopy.people(details), onPerson, linked = header.genresLinked)
                                     }
                                 }
                             }
@@ -346,6 +347,7 @@ private fun Genres(
                 label = genre,
                 selected = false,
                 onClick = { onGenre(details.kind, genre) },
+                clickLabel = "Opens Discover",
                 focusRequester = if (i == 0) first else null,
             )
         }
@@ -372,7 +374,8 @@ private fun MoreLikeThis(
             contentPadding = PaddingValues(horizontal = side, vertical = metrics.pad),
             horizontalArrangement = Arrangement.spacedBy(metrics.gap),
         ) {
-            items(tiles, key = { it.id }) { tile ->
+            // Keys must be unique: a title Trakt lists twice shows once.
+            items(tiles.distinctBy { it.id }, key = { it.id }) { tile ->
                 val key = "similar:${tile.id}"
                 PosterTile(
                     title = tile.name,

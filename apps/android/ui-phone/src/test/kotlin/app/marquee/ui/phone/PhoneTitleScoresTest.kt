@@ -2,7 +2,10 @@ package app.marquee.ui.phone
 
 import android.os.Handler
 import android.os.Looper
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.snapshots.Snapshot
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertHasClickAction
 import androidx.compose.ui.test.assertHasNoClickAction
@@ -13,6 +16,10 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.dp
 import app.marquee.core.client.CoreClient
 import app.marquee.core.client.CoreJson
 import app.marquee.core.model.PlayTarget
@@ -43,9 +50,12 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import org.robolectric.annotation.GraphicsMode
 import java.util.concurrent.Executors
 import kotlin.coroutines.CoroutineContext
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 /**
  * The phone title page's ratings row, genre chips and More like this (plans/title-page-ratings-genres-similar.md):
@@ -194,6 +204,15 @@ class PhoneTitleScoresTest {
         for (name in listOf("IMDb 9.3 out of 10, on IMDb", "TMDB 87 percent, on TMDB", "Trakt 92 percent, on Trakt")) {
             compose.onNodeWithContentDescription(name).assertHasClickAction()
         }
+        // A badge opens the title's page on its service, in the browser.
+        compose.onNodeWithContentDescription("TMDB 87 percent, on TMDB").performClick()
+        val opened =
+            org.robolectric.Shadows
+                .shadowOf(
+                    org.robolectric.RuntimeEnvironment.getApplication(),
+                ).nextStartedActivity
+        assertEquals(android.content.Intent.ACTION_VIEW, opened?.action)
+        assertEquals("https://www.themoviedb.org/movie/278", opened?.dataString)
         assertEquals(year, compose.onAllNodesWithText("1994", substring = true)[0].getUnclippedBoundsInRoot())
         assertEquals(
             imdb,
@@ -233,6 +252,8 @@ class PhoneTitleScoresTest {
         compose.onAllNodes(hasContentDescription("percent", substring = true)).assertCountEquals(0)
         // No way out to the open web: IMDb's score is plain (the core sends no URL on a kids profile).
         compose.onNodeWithContentDescription("IMDb 9.3 out of 10").assertHasNoClickAction()
+        // A kids profile's Search finds only its list: the names are words, not links to it.
+        compose.onNodeWithText("Tim Robbins", substring = true).assertHasNoClickAction()
     }
 
     @Test
@@ -248,5 +269,48 @@ class PhoneTitleScoresTest {
         waitFor("More like this")
         compose.onNodeWithContentDescription("Cool Hand Luke", substring = true).performClick()
         assertEquals(listOf("tt0061512"), opened)
+    }
+
+    // Measured, with real text layout: a series' meta at a 1.3 text size on a 360 dp phone keeps the year whole and
+    // puts the ratings under it, inside the screen.
+    @Test
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    @Config(qualifiers = "w360dp-h800dp")
+    fun `on a narrow phone at a large text size the ratings wrap under the facts, which keep the year`() {
+        val landed =
+            TitleScores(
+                Slot.Shown("87%", "https://www.themoviedb.org/tv/1396"),
+                Slot.Shown("92%", "https://trakt.tv/shows/tt0903747"),
+            )
+        val base = header(landed)
+        val series =
+            base.copy(
+                details = base.details!!.copy(kind = "series", releaseInfo = "2011–2019", runtime = null),
+                seasons = (1..8).toList(),
+            )
+        val view = open(TitleSnapshot(series))
+        compose.setContent {
+            val density = LocalDensity.current.density
+            CompositionLocalProvider(LocalDensity provides Density(density, fontScale = 1.3f)) {
+                MarqueeTheme(Form.Phone) { PhoneTitle(view, null, { _, _ -> }, {}, {}, {}) }
+            }
+        }
+        compose.waitForIdle()
+        view.open()
+        waitFor("Play")
+        val facts = compose.onAllNodesWithText("2011–2019", substring = true)[0]
+        val layout = mutableListOf<TextLayoutResult>()
+        facts.performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layout) }
+        val text = layout.single()
+        assertFalse(text.isLineEllipsized(0), "the meta line was cut: ${text.layoutInput.text}")
+        assertTrue(
+            text.layoutInput.text.text
+                .startsWith("2011–2019"),
+            "the year first: ${text.layoutInput.text}",
+        )
+        val line = facts.getUnclippedBoundsInRoot()
+        val trakt = compose.onNodeWithContentDescription("Trakt 92 percent, on Trakt").getUnclippedBoundsInRoot()
+        assertTrue(trakt.top >= line.bottom, "the ratings ($trakt) wrap under the facts ($line)")
+        assertTrue(trakt.right <= 360.dp, "the ratings end at ${trakt.right}, past the screen")
     }
 }

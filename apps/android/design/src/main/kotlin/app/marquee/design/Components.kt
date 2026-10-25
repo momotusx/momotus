@@ -64,6 +64,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.SpanStyle
@@ -283,6 +284,8 @@ fun Chip(
     /** A quieter word after the label: the addon a catalog comes from, as on the web and Apple TV. */
     detail: String? = null,
     inTrack: Boolean = false,
+    /** What pressing it does, for a screen reader ("Opens Discover"). */
+    clickLabel: String? = null,
 ) {
     val tv = Marquee.form == Form.Tv
     var focused by remember { mutableStateOf(false) }
@@ -310,6 +313,17 @@ fun Chip(
                         )
                     } else {
                         Modifier.focusSelectable(selected, onClick)
+                    },
+                ).then(
+                    if (clickLabel != null) {
+                        Modifier.semantics {
+                            onClick(label = clickLabel) {
+                                onClick()
+                                true
+                            }
+                        }
+                    } else {
+                        Modifier
                     },
                 ).padding(vertical = (target - pill) / 2),
         contentAlignment = Alignment.Center,

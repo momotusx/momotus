@@ -30,6 +30,8 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -55,8 +57,10 @@ data class Score(
  * with no number takes no space. Each item is one element with one spoken name; the marks say nothing themselves.
  * [onOpen] makes each score with a URL a link to the title's page there (the phone; never TV). Its target grows to
  * 48 dp in hit testing only (Compose's minimum touch target), so the row keeps its height and neighbours split the
- * gap between them.
+ * gap between them. When the facts and the row do not fit on one line (a narrow phone, a large text size), the
+ * row wraps under the facts, which are never cut to make room: the year comes first.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun TitleRatingLine(
     facts: String,
@@ -67,15 +71,15 @@ fun TitleRatingLine(
     factsColor: Color = Marquee.colors.muted,
 ) {
     val tv = Marquee.form == Form.Tv
-    Row(
+    FlowRow(
         modifier,
         horizontalArrangement = Arrangement.spacedBy(if (tv) 30.dp else 16.dp),
-        verticalAlignment = Alignment.CenterVertically,
+        verticalArrangement = Arrangement.spacedBy(if (tv) 8.dp else 4.dp),
+        itemVerticalAlignment = Alignment.CenterVertically,
     ) {
         if (facts.isNotEmpty()) {
             MqText(
                 facts,
-                Modifier.weight(1f, fill = false),
                 role = role,
                 color = factsColor,
                 weight = FontWeight.SemiBold,
@@ -131,8 +135,9 @@ private fun ScoreItem(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Image(score.mark, contentDescription = null, modifier = Modifier.height(if (tv) 28.dp else 18.dp))
+        // Tabular digits, and a pending slot as wide as a two-digit percentage: nothing shifts when it lands.
         MqText(
-            score.text ?: "00%",
+            AnnotatedString(score.text ?: "88%", SpanStyle(fontFeatureSettings = "tnum")),
             role = role,
             color = Marquee.colors.text,
             weight = FontWeight.SemiBold,
@@ -182,7 +187,8 @@ fun RatedCover(
 
 /**
  * The people on the title page (plans/title-page-ratings-genres-similar.md, 4): a label, then each name a chip that
- * opens Search for that person. On TV each row is a focus group, Left and Right walking its names.
+ * opens Search for that person. On TV each row is a focus group, Left and Right walking its names. Not [linked]
+ * (a kids profile, whose Search only finds its own list): plain words.
  */
 @OptIn(ExperimentalLayoutApi::class, ExperimentalComposeUiApi::class)
 @Composable
@@ -190,13 +196,14 @@ fun People(
     rows: List<Pair<String, List<String>>>,
     onPerson: (String) -> Unit,
     modifier: Modifier = Modifier,
+    linked: Boolean = true,
 ) {
     if (rows.isEmpty()) return
     val tv = Marquee.form == Form.Tv
     // Entering the names from the side lands on the first one, wherever the rated cover put the column.
     val first = remember { FocusRequester() }
     Column(
-        modifier.focusProperties { enter = { first } }.focusGroup(),
+        if (linked) modifier.focusProperties { enter = { first } }.focusGroup() else modifier,
         verticalArrangement = Arrangement.spacedBy(if (tv) 14.dp else 10.dp),
     ) {
         rows.forEachIndexed { row, (label, names) ->
@@ -208,6 +215,10 @@ fun People(
                     weight = FontWeight.SemiBold,
                     maxLines = 1,
                 )
+                if (!linked) {
+                    MqText(names.joinToString(", "), role = TextRole.Callout, color = Marquee.colors.muted)
+                    return@Column
+                }
                 FlowRow(
                     Modifier.focusGroup(),
                     horizontalArrangement = Arrangement.spacedBy(Marquee.space.xs),
@@ -219,6 +230,7 @@ fun People(
                             selected = false,
                             onClick = { onPerson(name) },
                             focusRequester = if (row == 0 && i == 0) first else null,
+                            clickLabel = "Searches for their titles",
                         )
                     }
                 }

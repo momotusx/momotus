@@ -246,7 +246,10 @@ fun PhoneTitle(
                     }
                     val people = TitleCopy.people(details)
                     if (people.isNotEmpty()) {
-                        item(key = "people") { People(people, onPerson, Modifier.padding(horizontal = side)) }
+                        item(key = "people") {
+                            // A kids profile's Search finds only its list: the names are words there.
+                            People(people, onPerson, Modifier.padding(horizontal = side), linked = header.genresLinked)
+                        }
                     }
                     val facts = TitleCopy.facts(details, TitleCopy.seasonCount(header.seasons))
                     if (facts.isNotEmpty()) {
@@ -311,7 +314,14 @@ internal fun Genres(
         horizontalArrangement = Arrangement.spacedBy(Marquee.space.xs),
         verticalArrangement = Arrangement.spacedBy(Marquee.space.xs),
     ) {
-        genres.forEach { genre -> Chip(label = genre, selected = false, onClick = { onGenre(details.kind, genre) }) }
+        genres.forEach { genre ->
+            Chip(
+                label = genre,
+                selected = false,
+                onClick = { onGenre(details.kind, genre) },
+                clickLabel = "Opens Discover",
+            )
+        }
     }
 }
 
@@ -329,7 +339,8 @@ private fun MoreLikeThis(
             contentPadding = PaddingValues(horizontal = side),
             horizontalArrangement = Arrangement.spacedBy(metrics.gap),
         ) {
-            items(tiles, key = { it.id }) { tile ->
+            // Keys must be unique: a title Trakt lists twice shows once.
+            items(tiles.distinctBy { it.id }, key = { it.id }) { tile ->
                 PosterTile(
                     title = tile.name,
                     imageUrl = tile.poster,

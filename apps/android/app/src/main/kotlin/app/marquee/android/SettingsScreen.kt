@@ -946,7 +946,7 @@ private fun About() {
                 horizontalArrangement = Arrangement.spacedBy(Marquee.space.xs),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Image(Marks.Tmdb, contentDescription = "TMDB", modifier = Modifier.height(16.dp))
+                Image(Marks.Tmdb, contentDescription = null, modifier = Modifier.height(16.dp))
                 MqText(TMDB_CREDIT, role = TextRole.Caption, color = Marquee.colors.muted)
             }
             if (CoreBuild.missing) MqText(CoreBuild.ABOUT_LINE, role = TextRole.Caption, color = Marquee.colors.muted)
