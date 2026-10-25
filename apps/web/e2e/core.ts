@@ -117,9 +117,9 @@ export function startBridge(port = PORTS.bridge, env: Record<string, string> = {
   const data = mkdtempSync(join(tmpdir(), "mq-e2e-"));
   const local = `http://127.0.0.1:${PORTS.source}`;
   const offline = process.env.MQ_E2E_OFFLINE === "1" ? NO_NETWORK : {};
-  // TMDB at a dead port unless a spec gives its fake (title-scores): a build with the token baked in never asks the
-  // real service, so a run does not depend on whether this machine has the token.
-  const hooks = { MQ_DEV_SEGMENTS: `${local}/segments`, MQ_DEV_REPLAY: `${local}/replay`, MQ_DEV_TMDB: "http://127.0.0.1:9", ...offline };
+  // TMDB off unless a spec gives its fake (title-scores): a build with the token baked in never asks the real service,
+  // and no title page holds a TMDB slot it will never fill, whether or not this machine has the token.
+  const hooks = { MQ_DEV_SEGMENTS: `${local}/segments`, MQ_DEV_REPLAY: `${local}/replay`, MQ_DEV_TMDB: "off", ...offline };
   const proc = spawn(bridgeBinary(), [], {
     env: { ...process.env, ...hooks, ...env, MQ_DATA: data, MQ_BRIDGE_PORT: String(port) },
     stdio: ["ignore", "pipe", "inherit"],

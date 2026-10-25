@@ -196,6 +196,9 @@ for (const form of Object.keys(FORMS) as Form[]) {
     // The title page: the IMDb score after its mark, linked off TV; no Rotten Tomatoes text.
     await page.goto(`/title/movie/${MAX.id}?form=${form}`);
     await expect(page.locator(".info .meta .scores .score .num")).toHaveText(["10.0/10"], { timeout: 30_000 });
+    // TMDB is off on this core (the e2e default) and it has no Trakt app: no slot is held for a number that will never
+    // come, from the first draw.
+    await expect(page.locator(".info .meta .scores .score.pending")).toHaveCount(0, { timeout: 100 });
     const title = await scores(page, ".info .meta .scores .score .num", ".info");
     for (const t of title) expect(t, JSON.stringify(t)).toMatchObject({ lines: 1, cut: false, inside: true });
     await expect(page.locator(".info .meta")).not.toContainText(/RT |Rotten Tomatoes|Fresh/);

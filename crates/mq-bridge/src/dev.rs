@@ -34,12 +34,21 @@ pub fn dev_trakt(_: &Core) {}
 
 /// Development builds only, on the same rule: `MQ_DEV_TMDB=<loopback url>`
 /// points TMDB at a local fake with a test token, so the web e2e shows the
-/// title page's TMDB score without the owner's token.
+/// title page's TMDB score without the owner's token; `MQ_DEV_TMDB=off`
+/// turns TMDB off whatever token the build has (the e2e default: no title
+/// page holds a TMDB slot it will never fill).
 #[cfg(debug_assertions)]
 pub fn dev_tmdb(core: &Core) {
     let Ok(url) = std::env::var("MQ_DEV_TMDB") else {
         return;
     };
+    if url == "off" {
+        core.set_tmdb_host(mq_runtime::TmdbHost {
+            token: None,
+            ..mq_runtime::TmdbHost::default()
+        });
+        return;
+    }
     if !loopback_url(&url) {
         tracing::warn!("MQ_DEV_TMDB ignored: only an http URL on this machine is taken");
         eprintln!("MQ_DEV_TMDB ignored: only an http URL on this machine is taken");
