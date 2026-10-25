@@ -1382,3 +1382,61 @@ async fn the_band_follows_an_enabled_addons_rpdb_key() {
         assert_eq!(tile.poster.as_deref(), Some(cover.as_str()), "{label}");
     }
 }
+
+/// Waits until the first row's first tile, and the hero when there is one,
+/// show `poster`.
+async fn until_cover(view: &HomeView, poster: &str, what: &str) {
+    for _ in 0..300 {
+        let snap = view.snapshot();
+        let tile = snap.rows.first().and_then(|r| r.tiles.first());
+        let hero = snap.header.hero.as_ref().map(|h| h.tile.poster.clone());
+        if tile.is_some_and(|t| t.poster.as_deref() == Some(poster))
+            && hero.is_none_or(|h| h.as_deref() == Some(poster))
+        {
+            return;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    panic!(
+        "{what}: {:?}",
+        view.snapshot()
+            .rows
+            .first()
+            .map(|r| r.tiles.first().cloned())
+    );
+}
+
+/// Home stays open while the addons change: removing the addon that gives
+/// the RPDB key takes the band off every tile already drawn, the hero's too,
+/// and adding it back draws the band again, on the same live view.
+#[tokio::test]
+async fn a_live_home_follows_the_rpdb_key_as_the_addon_comes_and_goes() {
+    let core = Core::temporary("p").unwrap();
+    let catalog = catalog_addon("fast", Duration::ZERO, 200, METAS).await;
+    let own = "https://images.metahub.space/poster/medium/tt0111161/img";
+    let band = "https://api.ratingposterdb.com/t0-free-rpdb/imdb/poster-default/tt0111161.jpg?fallback=true";
+    let set = |with_key: bool| {
+        let addons: Vec<AddonRow> = std::iter::once(catalog.clone())
+            .chain(with_key.then(rt_addon))
+            .collect();
+        core.library()
+            .set_addons("p", &addons, &core.hlc())
+            .unwrap();
+    };
+    set(true);
+    let view = HomeView::open(&core);
+    until_cover(&view, band, "the band with the key").await;
+    set(false);
+    until_cover(&view, own, "the addon's poster once the key is gone").await;
+    assert_eq!(
+        view.snapshot().rows[0].tiles[0].poster_fallback,
+        None,
+        "no fallback left behind"
+    );
+    set(true);
+    until_cover(&view, band, "the band again with the key back").await;
+    assert_eq!(
+        view.snapshot().rows[0].tiles[0].poster_fallback.as_deref(),
+        Some(own)
+    );
+}

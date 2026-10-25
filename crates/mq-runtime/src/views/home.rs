@@ -97,6 +97,17 @@ impl Tile {
         self.poster = self.poster.filter(|p| !p.starts_with(RPDB));
         self.rated_cover(covers)
     }
+
+    /// The tile's cover drawn again after the RPDB key changed (`old` and
+    /// `new` hold the keys): a cover `old` drew goes back to the addon's
+    /// poster, then `new` draws its band, if it has a key. Nothing else on
+    /// the tile changes.
+    pub(crate) fn recovered(mut self, old: &Covers, new: &Covers) -> Self {
+        if self.poster.is_some() && old.url(&self.id) == self.poster {
+            self.poster = self.poster_fallback.take();
+        }
+        self.rated_cover(new)
+    }
 }
 
 /// A catalog item's synopsis, genres and runtime, for when it becomes the hero.
@@ -558,8 +569,16 @@ async fn watch_addons(
     header: SharedObservable<HomeHeader>,
 ) {
     let mut loads = JoinSet::new();
+    let mut key = core.rpdb_key();
     while home_changed(&mut changes).await {
         while loads.try_join_next().is_some() {}
+        // The RPDB key comes from an addon: added, removed or switched, every
+        // tile already drawn takes the band as it is now.
+        let now = core.rpdb_key();
+        if now != key {
+            recover_home(&core, key.take(), now.clone(), &rows, &header);
+            key = now;
+        }
         let slots = board(&core);
         let next: Vec<String> = slots.iter().map(|s| s.row_id.clone()).collect();
         if next == ids {
@@ -595,6 +614,41 @@ async fn watch_addons(
                 header.clone(),
             ));
         }
+    }
+}
+
+/// Every tile of Home and the hero drawn again with the key `new` in place
+/// of `old` (`Tile::recovered`), as one batch of row diffs.
+fn recover_home(
+    core: &Core,
+    old: Option<String>,
+    new: Option<String>,
+    rows: &Arc<Mutex<ObservableVector<HomeRow>>>,
+    header: &SharedObservable<HomeHeader>,
+) {
+    let mut rows = lock(rows);
+    let hero = header.get();
+    let ids: Vec<String> = rows
+        .iter()
+        .flat_map(|r| r.tiles.iter().map(|t| t.id.clone()))
+        .chain(hero.hero.iter().map(|h| h.tile.id.clone()))
+        .collect();
+    let old = core.covers_with(old, ids.iter().map(String::as_str));
+    let new = core.covers_with(new, ids.iter().map(String::as_str));
+    for i in 0..rows.len() {
+        let mut row = rows[i].clone();
+        row.tiles = row
+            .tiles
+            .into_iter()
+            .map(|t| t.recovered(&old, &new))
+            .collect();
+        if row != rows[i] {
+            rows.set(i, row);
+        }
+    }
+    if let Some(mut hero) = hero.hero {
+        hero.tile = hero.tile.recovered(&old, &new);
+        header.set(HomeHeader { hero: Some(hero) });
     }
 }
 
