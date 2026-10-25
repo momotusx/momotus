@@ -321,6 +321,19 @@ private func submits(_ effects: [KeeperEffect]) -> Int {
     #expect(keeper.contains("logic.resend()"))
 }
 
+// Only iOS sends its free space; the Mac's purgeable space would admit what the disk cannot hold (review r1 M3).
+@MainActor @Test func onlyIOSSendsFreeBytes() throws {
+    #expect(!KeeperLogic.reportsFreeBytes(.mac))
+    #expect(KeeperLogic.reportsFreeBytes(.continued))
+    #expect(KeeperLogic.reportsFreeBytes(.foreground))
+    // This build is a Mac: its keeper never puts the field in.
+    #expect(!KeeperLogic.reportsFreeBytes(DownloadKeeper.platform))
+    let app = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appending(path: "../Marquee")
+    let keeper = try String(contentsOf: app.appending(path: "Downloads/DownloadKeeper.swift"), encoding: .utf8)
+    #expect(keeper.components(separatedBy: "fields[\"freeBytes\"]").count - 1 == 1)
+    #expect(keeper.contains("if KeeperLogic.reportsFreeBytes(Self.platform), let free = freeBytes() { fields[\"freeBytes\"] = free }"))
+}
+
 @Test func theKeeperOnlyPerformsTheReducersEffects() throws {
     // Read from the sources: the iOS keeper submits, ends and sends only what `KeeperLogic` decides.
     let app = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appending(path: "../Marquee")

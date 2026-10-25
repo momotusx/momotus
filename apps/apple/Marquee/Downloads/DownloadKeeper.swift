@@ -154,7 +154,7 @@ final class DownloadKeeper {
         case .allowed(let allowed, let reason):
             var fields: [String: any Sendable] = ["allowed": allowed]
             if let reason { fields["reason"] = reason }
-            if let free = freeBytes() { fields["freeBytes"] = free }
+            if KeeperLogic.reportsFreeBytes(Self.platform), let free = freeBytes() { fields["freeBytes"] = free }
             core.sendNow("downloadsAllowed", fields) { _ in }
         case .submit(let progress): submit(progress)
         case .progress(let progress): show(progress)

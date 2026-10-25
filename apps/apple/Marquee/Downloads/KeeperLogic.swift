@@ -86,6 +86,12 @@ struct KeeperLogic {
         self.platform = platform
     }
 
+    /// Whether `downloadsAllowed` carries `freeBytes`: only iOS, where `volumeAvailableCapacityForImportantUsage`
+    /// counts what the system purges for the app. A Mac never sends it: purgeable space there (local snapshots,
+    /// caches) is not purged in time, and the core plans with the disk's own figure (plans/offline-downloads.md 4.9,
+    /// review r1 M3).
+    static func reportsFreeBytes(_ platform: KeeperPlatform) -> Bool { platform != .mac }
+
     /// Whether quitting asks first (macOS): "Downloads are in progress."
     static func asksBeforeQuit(_ facts: KeeperFacts?) -> Bool { (facts?.left ?? 0) > 0 }
 
