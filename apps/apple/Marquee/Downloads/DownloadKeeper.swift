@@ -316,14 +316,27 @@ final class DownloadKeeper {
 /// Quit while downloads run asks first: "Keep downloading" is the key, Quit holds the downloads until the
 /// next launch (plans/offline-downloads.md 3.8).
 final class MacAppDelegate: NSObject, NSApplicationDelegate {
+    /// A logout, restart or shutdown never waits on the question (it would interrupt them): the downloads
+    /// are held and the app goes. Cmd-Q, the menu and the Dock ask (review r1 m4).
+    static func asks(quitReason: OSType?) -> Bool {
+        let system: Set<OSType> = [
+            OSType(kAELogOut), OSType(kAEReallyLogOut), OSType(kAEShowRestartDialog), OSType(kAERestart),
+            OSType(kAEShowShutdownDialog), OSType(kAEShutDown),
+        ]
+        return quitReason.map { !system.contains($0) } ?? true
+    }
+
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         MainActor.assumeIsolated {
             guard let keeper = DownloadKeeper.current, keeper.asksBeforeQuit else { return .terminateNow }
-            let alert = NSAlert()
-            alert.messageText = "Downloads are in progress."
-            alert.addButton(withTitle: "Keep downloading")
-            alert.addButton(withTitle: "Quit")
-            guard alert.runModal() == .alertSecondButtonReturn else { return .terminateCancel }
+            let reason = NSAppleEventManager.shared().currentAppleEvent?.attributeDescriptor(forKeyword: kAEQuitReason)?.enumCodeValue
+            if Self.asks(quitReason: reason) {
+                let alert = NSAlert()
+                alert.messageText = "Downloads are in progress."
+                alert.addButton(withTitle: "Keep downloading")
+                alert.addButton(withTitle: "Quit")
+                guard alert.runModal() == .alertSecondButtonReturn else { return .terminateCancel }
+            }
             // The app goes once the core has checkpointed and held the downloads.
             keeper.holdForQuit { sender.reply(toApplicationShouldTerminate: true) }
             return .terminateLater

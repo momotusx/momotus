@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import Testing
 
@@ -396,6 +397,15 @@ private func submits(_ effects: [KeeperEffect]) -> Int {
     keeper.begin(open: false)
     #expect(keeper.view == nil)
     #expect(!keeper.asksBeforeQuit)
+}
+
+// Logout, restart and shutdown hold the downloads without asking; a user's Quit asks (review r1 m4).
+@Test func aSystemQuitDoesNotAsk() {
+    for reason in [kAELogOut, kAEReallyLogOut, kAEShowRestartDialog, kAERestart, kAEShowShutdownDialog, kAEShutDown] {
+        #expect(!MacAppDelegate.asks(quitReason: OSType(reason)), "\(reason)")
+    }
+    #expect(MacAppDelegate.asks(quitReason: nil))
+    #expect(MacAppDelegate.asks(quitReason: OSType(kAEQuitApplication)))
 }
 
 // A download keeps App Nap off, not the Mac awake (review r1 m3).
