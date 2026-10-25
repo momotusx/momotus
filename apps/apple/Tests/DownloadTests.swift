@@ -281,6 +281,18 @@ private func submits(_ effects: [KeeperEffect]) -> Int {
     #expect(keeper.on(.foreground).contains(.allowed(true, reason: nil)))
 }
 
+// An expiry with the app in front (the user cancels the system's progress item): the task ends and the
+// downloads go on while the app is open; leaving the app holds them (review r1 m2).
+@Test func anExpiryInTheForegroundEndsTheTaskAndDownloadsGoOn() {
+    var keeper = KeeperLogic(platform: .continued)
+    _ = keeper.on(.facts(facts(left: 2)))
+    _ = keeper.on(.userAction)
+    let expired = keeper.on(.expired)
+    #expect(expired.contains(.end(success: false)))
+    #expect(!expired.contains(.allowed(false, reason: "app")))
+    #expect(keeper.on(.background).contains(.allowed(false, reason: "app")))
+}
+
 @Test func belowIOS26TheBackgroundHoldsDownloads() {
     var keeper = KeeperLogic(platform: .foreground)
     _ = keeper.on(.facts(facts(left: 1)))

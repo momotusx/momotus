@@ -136,6 +136,9 @@ struct KeeperLogic {
                 out.append(.submit(progress()))
             }
         case .expired:
+            // The decision for an expiry in the foreground (the user cancelling the system's progress item while
+            // the app is open, review r1 m2): the task ends, and the downloads go on while the app is open, as
+            // they do below iOS 26; leaving the app then holds them (`app`). In the background it holds them now.
             if task {
                 task = false
                 out.append(.end(success: false))
