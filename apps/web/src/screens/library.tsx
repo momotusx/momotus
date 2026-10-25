@@ -1,9 +1,11 @@
 import { A } from "@solidjs/router";
+import ArrowDownToLine from "lucide-solid/icons/arrow-down-to-line";
 import CalendarDays from "lucide-solid/icons/calendar-days";
 import ChevronRight from "lucide-solid/icons/chevron-right";
 import Compass from "lucide-solid/icons/compass";
 import RefreshCw from "lucide-solid/icons/refresh-cw";
 import { createSignal, Match, Show, Switch } from "solid-js";
+import { downloadsHere } from "../components/download";
 import { Chips, Grid, SkeletonGrid } from "../components/grid";
 import { Why } from "../components/why";
 import { libraryView } from "../core/client";
@@ -57,6 +59,17 @@ function LibraryPage(props: { retry: () => void }) {
           <CalendarDays aria-hidden />
           <span>Calendar</span>
           <ChevronRight aria-hidden class="chev" />
+        </A>
+      </Show>
+      {/* This device's downloads (plans/offline-downloads.md 3.4): a row on the phone, as Calendar, a
+          pill on desktop; never on TV. */}
+      <Show when={downloadsHere()}>
+        <A class={form() === "phone" ? "cal-row" : "btn lib-downloads"} href="/library/downloads" data-f="library:downloads">
+          <ArrowDownToLine aria-hidden />
+          <span>Downloads</span>
+          <Show when={form() === "phone"}>
+            <ChevronRight aria-hidden class="chev" />
+          </Show>
         </A>
       </Show>
       <Switch fallback={<SkeletonGrid />}>

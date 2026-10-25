@@ -275,7 +275,8 @@ export const focusStop = (page: Page, form: Form) =>
     }
     // An input shows focus on the field that holds it (.lang-search, the palette field).
     const holders = (el: HTMLElement) => (el.tagName === "INPUT" ? [el.parentElement, el.parentElement?.parentElement].filter((n): n is HTMLElement => !!n) : []);
-    const parts = (el: HTMLElement) => [el, ...el.querySelectorAll<HTMLElement>(".pic, .ring, .avatar, .cal-art, svg"), ...holders(el)];
+    // The download control draws its ring on its mark (components/download.css), the circle it sits in.
+    const parts = (el: HTMLElement) => [el, ...el.querySelectorAll<HTMLElement>(".pic, .ring, .avatar, .cal-art, .dl-mark, svg"), ...holders(el)];
     const look = (el: HTMLElement) => parts(el).map((n) => `${getComputedStyle(n).transform} ${getComputedStyle(n).backgroundColor}`);
     const out: { key: string; ok: boolean; why: string }[] = [];
     const prev = w.__stop;

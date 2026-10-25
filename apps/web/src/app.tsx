@@ -30,6 +30,7 @@ import Home from "./screens/home";
 import HomeRows from "./screens/home-rows";
 import StreamChoice from "./screens/stream-choice";
 import Import from "./screens/import";
+import Downloads, { DownloadedSeries } from "./screens/downloads";
 import Library from "./screens/library";
 import Onboarding, { RecommendedAddons } from "./screens/onboarding";
 import Pairing from "./screens/pairing";
@@ -56,7 +57,8 @@ const destinations: Destination[] = [
 // Settings sub-pages keep the rail and light up Settings.
 const settingsPages = ["/settings", "/addons", "/recommended-addons", "/find-addons", "/import", "/pair", "/home-rows", "/stream-choice", "/debrid", "/sync", "/trakt"];
 const isSettingsPage = (path: string) => settingsPages.includes(path) || path.startsWith("/profiles/") || path.startsWith("/sync/");
-const section = (path: string) => (isSettingsPage(path) ? "/settings" : path);
+// Downloads live under Library and keep it lit (plans/offline-downloads.md 3.4).
+const section = (path: string) => (isSettingsPage(path) ? "/settings" : path.startsWith("/library/") ? "/library" : path);
 const hasNav = (path: string) => destinations.some((d) => d.path === section(path));
 // Settings is a place without a bar item: the profile's menu at the bar's far right opens it (plans/nav-profile.md).
 const barPlaces = destinations.filter((d) => d.path !== "/settings");
@@ -73,6 +75,8 @@ export function parentOf(path: string): string | null {
   if (path.startsWith("/sync/") || path === "/pair" || path === "/sign-in") return "/sync";
   if (path.startsWith("/sign-in/")) return "/sign-in";
   if (isSettingsPage(path) && path !== "/settings") return "/settings";
+  if (path.startsWith("/library/downloads/")) return "/library/downloads";
+  if (path.startsWith("/library/")) return "/library";
   return path === "/" ? null : "/";
 }
 
@@ -403,6 +407,8 @@ export function App() {
       <Route path="/search" component={Search} />
       <Route path="/discover" component={Discover} />
       <Route path="/library" component={Library} />
+      <Route path="/library/downloads" component={Downloads} />
+      <Route path="/library/downloads/:itemId" component={DownloadedSeries} />
       <Route path="/calendar" component={CalendarScreen} />
       <Route path="/addons" component={Addons} />
       <Route path="/recommended-addons" component={RecommendedAddons} />

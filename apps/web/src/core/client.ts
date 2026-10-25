@@ -10,6 +10,7 @@ import { isPrivateLink } from "../lib/sync";
 import type { DiscoverSnapshot } from "./generated/DiscoverSnapshot";
 import type { Episode } from "./generated/Episode";
 import type { Hero } from "./generated/Hero";
+import type { HomeOffline } from "./generated/HomeOffline";
 import type { HomeRow } from "./generated/HomeRow";
 import type { HomeSnapshot } from "./generated/HomeSnapshot";
 import type { HomeUpdate } from "./generated/HomeUpdate";
@@ -68,8 +69,15 @@ const foreground = () =>
 document.addEventListener("visibilitychange", () => (document.hidden ? lifecycle("background") : foreground()));
 // Leaving the page: the core pauses what it scrobbles (Trakt) before the tab goes.
 window.addEventListener("pagehide", () => lifecycle("background"));
-window.addEventListener("online", () => lifecycle("networkChanged", { network: networkType() }));
-connection?.addEventListener("change", () => lifecycle("networkChanged", { network: networkType() }));
+// The network as downloads read it (plans/offline-downloads.md 4.13): `none` while the browser is
+// offline, so downloads wait and Home says the downloads still play. A browser has no cost flag:
+// `metered` and `lowData` are always false (Download on Wi-Fi only is not offered here).
+const networkChanged = () => lifecycle("networkChanged", { network: navigator.onLine ? networkType() : "none", metered: false, lowData: false });
+window.addEventListener("online", networkChanged);
+window.addEventListener("offline", networkChanged);
+connection?.addEventListener("change", networkChanged);
+// Opened with no connection: the core hears it at once.
+if (!navigator.onLine) networkChanged();
 
 export type ViewStatus ={ state: "opening" } | { state: "open" } | { state: "failed"; reason: string };
 
@@ -163,6 +171,8 @@ export interface HomeState {
   status: ViewStatus;
   /** The hero carousel's pages, in the core's order. */
   heroes: Hero[];
+  /** No network and downloads that play (plans/offline-downloads.md 3.5): Home's banner. */
+  offline: HomeOffline | null;
   rows: HomeRow[];
 }
 
@@ -173,15 +183,18 @@ let homeOpening: Promise<Subscription | null> | undefined;
  * rows, scroll offsets and focus without a reload. */
 export function homeView(): HomeState {
   if (home) return home;
-  const [state, setState] = createStore<HomeState>({ status: { state: "opening" }, heroes: [], rows: [] });
+  const [state, setState] = createStore<HomeState>({ status: { state: "opening" }, heroes: [], offline: null, rows: [] });
   home = state;
   homeOpening = bridge
     .subscribe<HomeSnapshot, HomeUpdate>("home", {}, {
-      snapshot: (snapshot) => setState({ status: { state: "open" }, heroes: snapshot.header.heroes, rows: snapshot.rows }),
+      snapshot: (snapshot) => setState({ status: { state: "open" }, heroes: snapshot.header.heroes, offline: snapshot.header.offline, rows: snapshot.rows }),
       updates: (updates) =>
         batch(() => {
           for (const u of updates) {
-            if (u.kind === "header") setState("heroes", reconcile(u.header.heroes));
+            if (u.kind === "header") {
+              setState("heroes", reconcile(u.header.heroes));
+              setState("offline", u.header.offline);
+            }
             else setState("rows", reconcile(applyDiffs(state.rows, u.diffs), { key: "rowId" }));
           }
         }),
@@ -359,6 +372,9 @@ export interface VersionsParams {
   releaseInfo?: string;
   released?: string;
   episodesInSeason?: number;
+  /** `download`: the versions to keep on this device (plans/offline-downloads.md 4.5), with `itemId`. */
+  purpose?: "download";
+  itemId?: string;
 }
 
 let versions: { key: string; view: LiveView<VersionsSnapshot> } | null = null;
@@ -367,7 +383,7 @@ let versions: { key: string; view: LiveView<VersionsSnapshot> } | null = null;
  * playback takes rows by key from the same open view, so it outlives both
  * screens until a different video asks for versions. */
 export function versionsView(p: VersionsParams): LiveView<VersionsSnapshot> {
-  const key = `${p.kind}|${p.videoId}|${p.bingeGroup ?? ""}`;
+  const key = `${p.kind}|${p.videoId}|${p.bingeGroup ?? ""}|${p.purpose ?? ""}`;
   if (versions?.key === key && versions.view.state.status.state !== "failed") return versions.view;
   versions?.view.close();
   // Rows merge by their `key`, so a row keeps its element (and the focus) when

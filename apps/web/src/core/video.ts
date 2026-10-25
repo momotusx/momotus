@@ -5,7 +5,8 @@ import { createEffect, createMemo } from "solid-js";
 import { episodeLabel, parseVideo } from "../lib/format";
 import { titleView, versionsView } from "./client";
 
-export function videoContext(kind: string, id: string, videoId: string, bingeGroup?: string) {
+/** `purpose` "download": the versions to keep on this device (plans/offline-downloads.md 3.2). */
+export function videoContext(kind: string, id: string, videoId: string, bingeGroup?: string, purpose?: "download") {
   const title = titleView(kind, id);
   const ref = parseVideo(id, videoId);
   // Keep the title view on this video's season so its episode name is known.
@@ -35,6 +36,7 @@ export function videoContext(kind: string, id: string, videoId: string, bingeGro
       releaseInfo: d.releaseInfo ?? undefined,
       released: episode()?.released ?? undefined,
       episodesInSeason: season || undefined,
+      ...(purpose ? { purpose, itemId: id } : {}),
     });
   });
   const label = () => (ref ? `${episodeLabel(ref.season, ref.episode)}${episode()?.title ? ` ${episode()?.title}` : ""}` : null);

@@ -1,4 +1,4 @@
-import { A, useParams, useSearchParams } from "@solidjs/router";
+import { A, useNavigate, useParams, useSearchParams } from "@solidjs/router";
 import BookmarkCheck from "lucide-solid/icons/bookmark-check";
 import BookmarkPlus from "lucide-solid/icons/bookmark-plus";
 import CalendarClock from "lucide-solid/icons/calendar-clock";
@@ -12,8 +12,10 @@ import RefreshCw from "lucide-solid/icons/refresh-cw";
 import RotateCcw from "lucide-solid/icons/rotate-ccw";
 import Volume2 from "lucide-solid/icons/volume-2";
 import VolumeX from "lucide-solid/icons/volume-x";
+import WifiOff from "lucide-solid/icons/wifi-off";
 import { createEffect, createMemo, createSignal, For, type JSX, Match, on, onCleanup, onMount, Show, Switch } from "solid-js";
 import { Backdrop, Logo } from "../components/art";
+import { controlAria, downloadAct, downloadAdd, DownloadMark, DownloadMenu, downloadsHere, ITEM_ICON, itemEntries, kidsProfile, type MenuAsk } from "../components/download";
 import { SynopsisDialog } from "../components/synopsis";
 import { TitleScores } from "../components/title-scores";
 import { KeyedPage } from "../components/keyed-page";
@@ -23,6 +25,7 @@ import { separators } from "../components/separators";
 import { TrailerOverlay } from "../components/trailer";
 import { muted, playTrailer, setMuted, type TrailerControl, trailerPlaying } from "../components/yt-player";
 import { type LiveView, type TitleView, titleView, versionsView } from "../core/client";
+import type { DownloadBadge } from "../core/generated/DownloadBadge";
 import type { EmptyKind } from "../core/generated/EmptyKind";
 import type { HomeRow } from "../core/generated/HomeRow";
 import type { Episode } from "../core/generated/Episode";
@@ -32,6 +35,7 @@ import { form, viewport } from "../form";
 import { airDate, clock, decoded, episodeLabel, offersLibrary, parseVideo, pct, playPath, playState, runtimeMinutes, seasonName, versionsPath } from "../lib/format";
 import { capableNow, coverSize, headerOnTvNow, meteredNow, previewsOn, REVEAL_MS, trailerAllowed, walkNow } from "../lib/trailers";
 import { blockedWords, choiceWords, problemWords } from "../lib/words";
+import { type DownloadItem, downloadControl, downloadWords, seriesControl, seriesMenu } from "../lib/download";
 import { firstFocus } from "./title-focus";
 import "./home.css";
 import "./title.css";
@@ -127,10 +131,52 @@ function TitlePage(props: { kind: string; id: string; retry: () => void }) {
   createEffect(() => {
     if (view.state.status.state === "open") view.command({ type: "titleVisible", visible: shown() }).catch(() => undefined);
   });
+  // Offline, the page shows what the downloads kept (plans/offline-downloads.md 4.18): no Versions, no Trailer.
+  const offline = () => header()?.offline ?? false;
+  // The download menu over the page (components/download.tsx); downloads show off TV, never on a kids profile.
+  const [menu, setMenu] = createSignal<MenuAsk | null>(null);
+  const downloads = () => downloadsHere() && !kidsProfile();
+  const navigate = useNavigate();
+  const keep = (videoId: string) => (item: DownloadItem) => {
+    if (item === "start" || item === "again") downloadAdd(props.kind, props.id, "video", { videoId });
+    else if (item === "choose" || item === "another") navigate(`${versionsPath(props.kind, props.id, videoId)}?purpose=download`);
+    else if (item === "play") navigate(playPath(props.kind, props.id, videoId));
+  };
+  /** A video's control pressed: Download starts it, any other state opens its menu. A secondary press
+   * (a right click, a long press, the menu key) on Download offers the version too. */
+  const pressDownload = (from: string, title: string, videoId: string, badge: DownloadBadge | null, more = false) => {
+    const c = downloadControl(badge);
+    if (!c.items.length && !more) return keep(videoId)("start");
+    const items: DownloadItem[] = c.items.length ? c.items : ["start", "choose"];
+    setMenu({ title, detail: c.detail, entries: itemEntries(items, badge, keep(videoId)), from });
+  };
+  const openSeriesMenu = () => {
+    const h = header();
+    if (!h) return;
+    const season = h.selectedSeason;
+    const ids = view.state.episodes.filter((e) => e.season === season).flatMap((e) => (e.download ? [e.download.id] : []));
+    const run = (act: string | null) => {
+      if (act === "season" && season !== null) return () => downloadAdd(props.kind, props.id, "season", { season });
+      if (act === "series") return () => downloadAdd(props.kind, props.id, "series");
+      if (act === "deleteSeason") return () => downloadAct("downloadRemove", { ids });
+      return null;
+    };
+    setMenu({
+      title: d()?.name ?? "",
+      entries: seriesMenu(season, h.seasonDownload, h.seriesDownload).map((m, i) => ({
+        key: `${m.act ?? "line"}:${i}`,
+        label: m.label,
+        icon: m.act === "deleteSeason" ? ITEM_ICON.delete : m.act ? ITEM_ICON.start : undefined,
+        run: run(m.act),
+      })),
+      from: "title:download",
+    });
+  };
   // The header's muted trailer under the art, as the hero's (plans/trailer-inline.md 3, 4): the same player, signals
   // and sound switch; the art fades once YouTube's start controls have gone.
   const [headerShown, setHeaderShown] = createSignal(false);
-  const headerId = createMemo(() => d()?.trailers[0]?.youtubeId ?? null);
+  // Offline the page plays no trailer (plans/offline-downloads.md 4.18).
+  const headerId = createMemo(() => (offline() ? null : (d()?.trailers[0]?.youtubeId ?? null)));
   let headerHost!: HTMLDivElement;
   let headerVisible = true;
   let headerPlay: TrailerControl | null = null;
@@ -264,9 +310,9 @@ function TitlePage(props: { kind: string; id: string; retry: () => void }) {
     firstFocus({
       ready: header()?.state.state === "ready",
       play: !!target() && !playInert(),
-      versions: !!target(),
+      versions: !!target() && !offline(),
       library: offersLibrary(header()),
-      trailer: (d()?.trailers.length ?? 0) > 0,
+      trailer: (d()?.trailers.length ?? 0) > 0 && !offline(),
       synopsis: !!d()?.description,
     });
 
@@ -319,7 +365,8 @@ function TitlePage(props: { kind: string; id: string; retry: () => void }) {
       <Show when={synText()}>
         {(text) => <SynopsisDialog name={d()?.name ?? ""} text={text()} onClose={closeSynopsis} />}
       </Show>
-      <div class="title-main" inert={trailerShown() || !!synText() || undefined}>
+      <Show when={menu()}>{(m) => <DownloadMenu ask={m()} onClose={() => setMenu(null)} />}</Show>
+      <div class="title-main" inert={trailerShown() || !!synText() || !!menu() || undefined}>
       <Switch>
         <Match when={view.state.status.state === "failed" || header()?.state.state === "failed"}>
           <section class="info">
@@ -369,6 +416,12 @@ function TitlePage(props: { kind: string; id: string; retry: () => void }) {
                   </For>
                   <TitleScores imdb={x().ratings?.imdb} scores={x().scores} imdbUrl={x().imdbUrl} links={form() !== "tv"} />
                 </p>
+                <Show when={offline()}>
+                  <p class="dl-offline" role="status">
+                    <WifiOff aria-hidden />
+                    {downloadWords.titleOffline}
+                  </p>
+                </Show>
                 <Show when={x().description}>
                   {/* The full text opens on its own card (components/synopsis.tsx), never in place. */}
                   <button class="syn" data-f="title:synopsis" data-autofocus={first() === "title:synopsis" ? "" : undefined} aria-label="Synopsis, open the full text" aria-haspopup="dialog" onClick={() => openSynopsis("title:synopsis")}>
@@ -424,7 +477,7 @@ function TitlePage(props: { kind: string; id: string; retry: () => void }) {
                   </div>
                 </div>
                 <div class="acts">
-                  <Show when={target()}>
+                  <Show when={!offline() && target()}>
                     {(t) => (
                       <A class="btn" href={versionsPath(props.kind, props.id, t().videoId)} data-f="title:versions" data-autofocus={first() === "title:versions" ? "" : undefined}>
                         <Layers aria-hidden />
@@ -445,7 +498,7 @@ function TitlePage(props: { kind: string; id: string; retry: () => void }) {
                       </A>
                     )}
                   </Show>
-                  <Show when={x().trailers.length > 0}>
+                  <Show when={x().trailers.length > 0 && !offline()}>
                     <button class="btn" data-f="title:trailer" data-autofocus={first() === "title:trailer" ? "" : undefined} onClick={openTrailer}>
                       <Film aria-hidden />
                       Trailer
@@ -478,6 +531,42 @@ function TitlePage(props: { kind: string; id: string; retry: () => void }) {
                       Watched
                     </button>
                   </Show>
+                  {/* Download last, on the phone and desktop forms (design/DECISION.md, the title's action order):
+                      a film's own control, a series' menu of seasons. A kids profile only sees "Downloaded". */}
+                  <Show when={downloads() && props.kind === "movie"}>
+                    {(_) => {
+                      const videoId = () => target()?.videoId ?? props.id;
+                      const c = () => downloadControl(header()?.download);
+                      const press = (more: boolean) => pressDownload("title:download", x().name, videoId(), header()?.download ?? null, more);
+                      return (
+                        <button
+                          class="btn dl"
+                          data-f="title:download"
+                          {...controlAria(c())}
+                          onClick={() => press(false)}
+                          onContextMenu={(e) => {
+                            e.preventDefault();
+                            press(true);
+                          }}
+                        >
+                          <DownloadMark control={c()} />
+                          <span class="num">{c().label}</span>
+                        </button>
+                      );
+                    }}
+                  </Show>
+                  <Show when={downloads() && series() && (header()?.seriesDownload || header()?.seasonDownload)}>
+                    <button class="btn dl" data-f="title:download" {...controlAria(seriesControl(header()?.seriesDownload ?? null))} onClick={openSeriesMenu}>
+                      <DownloadMark control={seriesControl(header()?.seriesDownload ?? null)} />
+                      {seriesControl(header()?.seriesDownload ?? null).label}
+                    </button>
+                  </Show>
+                  <Show when={downloadsHere() && kidsProfile() && header()?.download?.state === "done"}>
+                    <span class="btn dl" role="status">
+                      <DownloadMark control={downloadControl(header()?.download)} />
+                      Downloaded
+                    </span>
+                  </Show>
                   {/* TV has no remove button on its tiles: the title page carries it
                       while the title is in Continue Watching (or Next Up), as the title header says from its first
                       render, so the row never grows after it is drawn. */}
@@ -502,7 +591,7 @@ function TitlePage(props: { kind: string; id: string; retry: () => void }) {
                 <VersionNote target={!!target()} noVideo={playInert() && !target()} view={versions()} />
                 {/* Phone reads top to bottom: episodes before the details. */}
                 <Show when={series() && form() === "phone"}>
-                  <Episodes view={view} kind={props.kind} id={props.id} runtime={runtimeMinutes(x().runtime)} art={x().background ?? x().poster} />
+                  <Episodes view={view} kind={props.kind} id={props.id} runtime={runtimeMinutes(x().runtime)} art={x().background ?? x().poster} downloads={downloads()} offline={offline()} onDownload={pressDownload} />
                 </Show>
                 <Show when={form() === "phone"}>
                   <Similar view={view} />
@@ -517,7 +606,7 @@ function TitlePage(props: { kind: string; id: string; retry: () => void }) {
               <Show when={series() && form() !== "phone"}>
                 {/* Focus back in the episodes brings the hero back from More like this below it. */}
                 <div onFocusIn={toTop}>
-                  <Episodes view={view} kind={props.kind} id={props.id} runtime={runtimeMinutes(x().runtime)} art={x().background ?? x().poster} />
+                  <Episodes view={view} kind={props.kind} id={props.id} runtime={runtimeMinutes(x().runtime)} art={x().background ?? x().poster} downloads={downloads()} offline={offline()} onDownload={pressDownload} />
                 </div>
               </Show>
               {/* TV and desktop: the rated cover at the hero's right for a movie; a series' episodes panel holds
@@ -658,7 +747,16 @@ function InertPlay(props: { label: string }) {
 
 /** `art` is the series' backdrop, else its poster: an episode without a
  * still (none named, or it fails to load) shows it, never a dark box. */
-function Episodes(props: { view: TitleView; kind: string; id: string; runtime: number | null; art: string | null }) {
+function Episodes(props: {
+  view: TitleView;
+  kind: string;
+  id: string;
+  runtime: number | null;
+  art: string | null;
+  downloads: boolean;
+  offline: boolean;
+  onDownload: (from: string, title: string, videoId: string, badge: DownloadBadge | null, more?: boolean) => void;
+}) {
   const header = () => props.view.state.header;
   const seasons = () => {
     const all = header()?.seasons ?? [];
@@ -794,11 +892,13 @@ function Episodes(props: { view: TitleView; kind: string; id: string; runtime: n
                 {/* The row plays this episode; choosing its version or marking
                     it watched are the secondary actions beside it. */}
                 <div class="ep-acts" data-fentry data-fowner={`ep:${e.videoId}`}>
-                  <A class="ep-act" href={versionsPath(props.kind, props.id, e.videoId)} data-f={`epv:${e.videoId}`} aria-label={`Choose a version of ${episodeLabel(e.season, e.episode)}`} title="Choose a version">
-                    <Layers aria-hidden />
-                    {/* A phone shows the icon in a circle; the word stays for screen readers. */}
-                    <span classList={{ sr: form() === "phone" }}>Choose a version</span>
-                  </A>
+                  <Show when={!props.offline}>
+                    <A class="ep-act" href={versionsPath(props.kind, props.id, e.videoId)} data-f={`epv:${e.videoId}`} aria-label={`Choose a version of ${episodeLabel(e.season, e.episode)}`} title="Choose a version">
+                      <Layers aria-hidden />
+                      {/* A phone shows the icon in a circle; the word stays for screen readers. */}
+                      <span classList={{ sr: form() === "phone" }}>Choose a version</span>
+                    </A>
+                  </Show>
                   <button
                     class="ep-act"
                     data-f={`mark:${e.videoId}`}
@@ -809,6 +909,32 @@ function Episodes(props: { view: TitleView; kind: string; id: string; runtime: n
                     <Check aria-hidden />
                     <span classList={{ sr: form() === "phone" }}>{e.watched ? "Watched" : "Mark as watched"}</span>
                   </button>
+                  {/* The download control, third (plans/offline-downloads.md 3.2). */}
+                  <Show when={props.downloads}>
+                    {(_) => {
+                      const c = () => downloadControl(e.download);
+                      const name = () => `${episodeLabel(e.season, e.episode)}${e.title ? ` ${e.title}` : ""}`;
+                      const press = (more: boolean) => props.onDownload(`dl:${e.videoId}`, name(), e.videoId, e.download, more);
+                      return (
+                        <button
+                          class="ep-act dl"
+                          data-f={`dl:${e.videoId}`}
+                          {...controlAria(c())}
+                          title={c().label}
+                          onClick={() => press(false)}
+                          onContextMenu={(ev) => {
+                            ev.preventDefault();
+                            press(true);
+                          }}
+                        >
+                          <DownloadMark control={c()} />
+                          <span class="num" classList={{ sr: form() === "phone" }}>
+                            {c().label}
+                          </span>
+                        </button>
+                      );
+                    }}
+                  </Show>
                 </div>
               </Show>
             </li>

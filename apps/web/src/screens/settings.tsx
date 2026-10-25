@@ -11,6 +11,8 @@ import SearchIcon from "lucide-solid/icons/search";
 import Rows3 from "lucide-solid/icons/rows-3";
 import SlidersHorizontal from "lucide-solid/icons/sliders-horizontal";
 import Sparkles from "lucide-solid/icons/sparkles";
+import Trash from "lucide-solid/icons/trash";
+import ArrowDownToLine from "lucide-solid/icons/arrow-down-to-line";
 import CirclePlay from "lucide-solid/icons/circle-play";
 import Info from "lucide-solid/icons/info";
 import Monitor from "lucide-solid/icons/monitor";
@@ -22,6 +24,10 @@ import { Backdrop, useTrimmedLogo } from "../components/art";
 import { CONTINUE_ROW } from "../components/row";
 import { focusEl, reducedMotion } from "../focus/dom";
 import type { AddonsSnapshot } from "../core/generated/AddonsSnapshot";
+import type { DownloadsSnapshot } from "../core/generated/DownloadsSnapshot";
+import { downloadAct, downloadsHere } from "../components/download";
+import { deleteAll, downloadWords } from "../lib/download";
+import { focusOn, StorageLine } from "./downloads";
 import type { LanguageChoice } from "../core/generated/LanguageChoice";
 import type { Prefs } from "../core/generated/Prefs";
 import type { SubtitleSize } from "../core/generated/SubtitleSize";
@@ -35,6 +41,7 @@ import { rowLine, traktWords } from "../lib/trakt";
 import "./browse.css";
 import { markSrc } from "../components/marks";
 import "./settings.css";
+import "./onboarding.css";
 import UserPen from "lucide-solid/icons/user-pen";
 import Users from "lucide-solid/icons/users";
 import { AvatarArt } from "../components/avatar";
@@ -256,6 +263,7 @@ const SECTIONS: { id: string; label: string; tone: Tone; icon: () => JSX.Element
   { id: "account", label: "Account", tone: "sky", icon: () => <MonitorSmartphone /> },
   { id: "home", label: "Home", tone: "mint", icon: () => <Rows3 /> },
   { id: "playback", label: "Playback", tone: "teal", icon: () => <CirclePlay /> },
+  { id: "downloads", label: "Downloads", tone: "blue", icon: () => <ArrowDownToLine /> },
   { id: "device", label: "This device", tone: "sea", icon: () => <Monitor /> },
   { id: "about", label: "About", tone: "grey", icon: () => <Info /> },
 ];
@@ -389,7 +397,7 @@ export default function SettingsScreen() {
             <span class="set-menu-title" aria-hidden="true">
               Settings
             </span>
-            <For each={SECTIONS}>
+            <For each={SECTIONS.filter((s) => s.id !== "downloads" || downloadsHere())}>
               {(s) => (
                 <a class="snav" href={`#set-${s.id}`} data-f={`settings-nav:${s.id}`} aria-current={active() === s.id ? "true" : undefined} onClick={(e) => jump(e, s.id)}>
                   <Tile tone={s.tone}>{s.icon()}</Tile>
@@ -557,6 +565,10 @@ export default function SettingsScreen() {
             </Show>
           </section>
 
+          <Show when={downloadsHere()}>
+            <DownloadsSection />
+          </Show>
+
           <section class="set-sec" id="set-device" aria-labelledby="set-h-device">
             <h2 id="set-h-device" tabindex="-1">
               This device
@@ -593,5 +605,103 @@ export default function SettingsScreen() {
         </div>
       </div>
     </main>
+  );
+}
+
+/** Settings > Downloads (plans/offline-downloads.md 3.7): Smart downloads, the storage line and Delete
+ * all downloads with its inline confirmation. "Download on Wi-Fi only" is not offered: a browser sends
+ * no cost flag, so its network is never metered. */
+function DownloadsSection() {
+  const view = liveView<DownloadsSnapshot>("downloads");
+  const [confirm, setConfirm] = createSignal(false);
+  const [error, setError] = createSignal<string | null>(null);
+  return (
+    <Show when={view.state.data}>
+      {(s) => (
+        <section class="set-sec dl-settings" id="set-downloads" aria-labelledby="set-h-downloads">
+          <h2 id="set-h-downloads" tabindex="-1">
+            Downloads
+          </h2>
+          <div class="sgroup">
+            <button
+              class="drow"
+              role="switch"
+              aria-checked={s().settings.smart}
+              data-f="settings:smart-downloads"
+              onClick={() => {
+                setError(null);
+                op("setDownloadSettings", { smart: !s().settings.smart }).catch((e) => setError(reasonOf(e)));
+              }}
+            >
+              <span class="dlogo" aria-hidden="true">
+                <Sparkles />
+              </span>
+              <span class="dtext">
+                <b>{downloadWords.smart}</b>
+                <small>{downloadWords.smartLine}</small>
+              </span>
+              <span class="switch" aria-hidden="true">
+                <i />
+              </span>
+              <span class="dword" aria-hidden="true">
+                {s().settings.smart ? "On" : "Off"}
+              </span>
+            </button>
+          </div>
+          <Show when={error()}>
+            {(e) => (
+              <p class="st bad" role="status">
+                <i class="dot" />
+                {e()}
+              </p>
+            )}
+          </Show>
+          <StorageLine storage={s().storage} />
+          <Show when={s().storage.downloadsBytes > 0}>
+            <div class="dl-confirm" role="group" aria-label={confirm() ? deleteAll(s().storage.downloadsBytes) : undefined}>
+              <Show
+                when={confirm()}
+                fallback={
+                  <button
+                    class="btn"
+                    data-f="settings:delete-downloads"
+                    onClick={() => {
+                      setConfirm(true);
+                      focusOn("settings:delete-downloads-cancel");
+                    }}
+                  >
+                    <Trash aria-hidden />
+                    Delete all downloads
+                  </button>
+                }
+              >
+                {/* DECISION's Confirmation pattern, inline: no destructive red; the focus waits on Cancel. */}
+                <p>{deleteAll(s().storage.downloadsBytes)}</p>
+                <button
+                  class="btn"
+                  data-f="settings:delete-downloads-confirm"
+                  onClick={() => {
+                    setConfirm(false);
+                    downloadAct("downloadRemove", { all: true });
+                  }}
+                >
+                  Delete
+                </button>
+                <button
+                  class="btn"
+                  data-f="settings:delete-downloads-cancel"
+                  onClick={() => {
+                    setConfirm(false);
+                    focusOn("settings:delete-downloads");
+                  }}
+                >
+                  Cancel
+                </button>
+              </Show>
+            </div>
+          </Show>
+        </section>
+      )}
+    </Show>
   );
 }

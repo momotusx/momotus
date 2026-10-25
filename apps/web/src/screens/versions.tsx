@@ -1,4 +1,5 @@
-import { useLocation, useNavigate, useParams } from "@solidjs/router";
+import { useLocation, useNavigate, useParams, useSearchParams } from "@solidjs/router";
+import ArrowDownToLine from "lucide-solid/icons/arrow-down-to-line";
 import ArrowLeft from "lucide-solid/icons/arrow-left";
 import Ban from "lucide-solid/icons/ban";
 import ChevronDown from "lucide-solid/icons/chevron-down";
@@ -13,6 +14,7 @@ import Undo2 from "lucide-solid/icons/undo-2";
 import { createEffect, createMemo, createSignal, For, Match, on, onCleanup, onMount, Show, Switch } from "solid-js";
 import { Dynamic } from "solid-js/web";
 import { Backdrop } from "../components/art";
+import { downloadAdd } from "../components/download";
 import { EmptyActs } from "../components/empty-acts";
 import { KeyedPage } from "../components/keyed-page";
 import { Why } from "../components/why";
@@ -24,6 +26,7 @@ import { videoContext } from "../core/video";
 import { focusEl, goBack } from "../focus/dom";
 import { form } from "../form";
 import { bytes, decoded, playPath, playState, releaseParts, titlePath } from "../lib/format";
+import { downloadWords } from "../lib/download";
 import { entryFrom, ownState } from "../history";
 import { onProfileReset } from "../core/profiles";
 import {
@@ -55,12 +58,15 @@ onProfileReset(() => expandedFor.clear());
 
 export default function Versions() {
   const params = useParams();
+  // `?purpose=download`: the versions to keep on this device, each row downloads (plans/offline-downloads.md 3.2).
+  const [query] = useSearchParams();
+  const purpose = () => (query.purpose === "download" ? ("download" as const) : undefined);
   // Try again on a title or a list that could not be loaded: the page anew.
   const [attempt, setAttempt] = createSignal(0);
   return (
     <KeyedPage
-      address={`${params.kind}/${params.id}/${params.videoId}/${attempt()}`}
-      read={() => ({ kind: decoded(params.kind), id: decoded(params.id), videoId: decoded(params.videoId), retry: () => setAttempt((n) => n + 1) })}
+      address={`${params.kind}/${params.id}/${params.videoId}/${purpose() ?? ""}/${attempt()}`}
+      read={() => ({ kind: decoded(params.kind), id: decoded(params.id), videoId: decoded(params.videoId), purpose: purpose(), retry: () => setAttempt((n) => n + 1) })}
       page={VersionsPage}
     />
   );
@@ -135,10 +141,15 @@ const subLine = (r: VersionRow) => [languages(r) || null, r.failoverCount > 0 ? 
 
 /** The player's layer: `onPlay` takes the choice (it replaces the play under it), `onBack` closes it, `hold`
  * keeps the order the rows had when it opened. Else a choice opens a new play and Back leaves. */
-export function VersionsPage(props: { kind: string; id: string; videoId: string; retry: () => void; binge?: string; onPlay?: (key: string) => void; onBack?: () => void; hold?: boolean }) {
+export function VersionsPage(props: { kind: string; id: string; videoId: string; retry: () => void; binge?: string; onPlay?: (key: string) => void; onBack?: () => void; hold?: boolean; purpose?: "download" }) {
   const navigate = useNavigate();
   // The player's layer shares the play's versions view (its binge group), never a second one.
-  const ctx = videoContext(props.kind, props.id, props.videoId, props.binge);
+  const ctx = videoContext(props.kind, props.id, props.videoId, props.binge, props.purpose);
+  // To download: the top line, each action and a pick say so, and a pick keeps that version, then goes back.
+  const keeping = props.purpose === "download";
+  const best = () => (keeping ? downloadWords.pick : bestFor(form()));
+  const actWord = keeping ? downloadWords.pickAction : "Play this version";
+  const ActIcon = () => (keeping ? <ArrowDownToLine aria-hidden /> : <Play aria-hidden class="fill" />);
   createEffect(() => {
     const name = ctx.label() ?? ctx.details()?.name;
     if (name) document.title = `Versions · ${name} · Momotus`;
@@ -190,8 +201,15 @@ export function VersionsPage(props: { kind: string; id: string; videoId: string;
   const [focusedRow, setFocusedRow] = createSignal<string | null>(null);
   // A play opened here knows whether Versions came from the title page, so
   // its Episodes goes back to that one title entry (player.tsx).
-  const play = (key: string) =>
-    props.onPlay ? props.onPlay(key) : navigate(playPath(props.kind, props.id, props.videoId), { state: { ...playState(key), viaTitle: entryFrom() === titlePath(props.kind, props.id) } });
+  const play = (key: string) => {
+    if (keeping) {
+      const sub = ctx.versions()?.sub();
+      if (sub == null) return;
+      downloadAdd(props.kind, props.id, "video", { videoId: props.videoId, pick: { versionsSub: sub, key } });
+      return (props.onBack ?? goBack)();
+    }
+    return props.onPlay ? props.onPlay(key) : navigate(playPath(props.kind, props.id, props.videoId), { state: { ...playState(key), viaTitle: entryFrom() === titlePath(props.kind, props.id) } });
+  };
 
   // The pick under the cursor never changes once the user starts moving.
   const freeze = () => {
@@ -393,7 +411,7 @@ export function VersionsPage(props: { kind: string; id: string; videoId: string;
                     when={empty()}
                     fallback={
                       <div class="pick-wait" aria-busy="true">
-                        <p class="best">{bestFor(form())}</p>
+                        <p class="best">{best()}</p>
                         <div class="skel" />
                         <div class="skel" />
                         <div class="skel" />
@@ -418,7 +436,7 @@ export function VersionsPage(props: { kind: string; id: string; videoId: string;
               >
                 {(p) => (
                   <>
-                    <p class="best">{bestFor(form())}</p>
+                    <p class="best">{best()}</p>
                     <h2>{qualityText(p().quality)}</h2>
                     <Show when={p().features.length}>
                       <p class="badges">
@@ -433,12 +451,12 @@ export function VersionsPage(props: { kind: string; id: string; videoId: string;
                       class="btn primary"
                       data-f="versions:play"
                       data-autofocus
-                      aria-label={`Play ${rowName(p())}`}
+                      aria-label={`${keeping ? "Download" : "Play"} ${rowName(p())}`}
                       aria-describedby="vwhy"
                       onClick={() => play(p().key)}
                     >
-                      <Play aria-hidden class="fill" />
-                      Play this version
+                      <ActIcon />
+                      {actWord}
                     </button>
                     {/* The core's shortcuts, each only when it is not the pick (it stays in its section too). */}
                     <For each={["smaller", "sharper"] as const}>
@@ -628,8 +646,8 @@ export function VersionsPage(props: { kind: string; id: string; videoId: string;
               <div class="acts">
                 <Show when={!dimmed() || startable()}>
                   <button class="btn primary" data-f="vsheet:play" onClick={() => closeSheet(r().key)}>
-                    <Play aria-hidden class="fill" />
-                    Play this version
+                    <ActIcon />
+                    {actWord}
                   </button>
                 </Show>
                 <button class="btn" data-f="vsheet:done" onClick={() => closeSheet()}>

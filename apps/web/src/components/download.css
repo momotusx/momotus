@@ -1,0 +1,139 @@
+/* Downloads (plans/offline-downloads.md 3): the control's mark and menu, the title page's offline
+ * line, the Downloads screen's rows and storage bar, the Settings section. Sizes are TV points on the
+ * canvas (desktop scales it); the phone overrides under [data-form="phone"]. TV shows none of it. */
+
+/* The control's mark: the glyph alone, or inside a determinate ring (white on the 10 percent track,
+ * a conic fill masked to its stroke) while a download is under way. `--p` is the ring's value. */
+/* The glyph's size is `--dl-g` (the component sets it on the svg inline, over every context's own
+ * icon rules): the whole mark, or under half of it inside the ring. */
+.dl-mark { --dl: 44px; --dl-stroke: 4px; --dl-pad: 0px; --dl-g: 100%; position: relative; display: inline-grid; place-items: center; flex: none; width: var(--dl); height: var(--dl); }
+.dl-mark.ring::before { content: ""; position: absolute; inset: var(--dl-pad); border-radius: 50%; background: conic-gradient(#fff var(--p), rgba(255, 255, 255, .1) 0);
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - var(--dl-stroke)), #000 calc(100% - var(--dl-stroke) + .5px));
+  mask: radial-gradient(farthest-side, transparent calc(100% - var(--dl-stroke)), #000 calc(100% - var(--dl-stroke) + .5px)); }
+.dl-mark.ring { --dl-g: 45%; }
+/* Stop and Pause read as solid shapes inside the ring, as a media control draws them. */
+.dl-mark svg.fill { fill: currentColor; }
+[data-form="phone"] .dl-mark { --dl: 28px; --dl-stroke: 2.5px; }
+
+/* The title's action row: the mark is the round action's circle, as its neighbours' glyphs are. */
+.info .acts .btn .dl-mark { box-sizing: content-box; width: 28px; height: 28px; padding: 22px; border-radius: 50%; color: #fff; background: var(--fill);
+  transition: transform var(--motion-focus) var(--ease), background-color var(--motion-focus) var(--ease); }
+.info .acts .btn .dl-mark.ring { width: 44px; height: 44px; padding: 14px; --dl-pad: 14px; }
+.info .acts .btn.dl:focus-visible .dl-mark { outline: var(--focus-ring) solid var(--key); outline-offset: var(--focus-ring); box-shadow: var(--focus-shadow); }
+.info .acts .btn.dl:focus-visible .dl-mark svg { outline: none; box-shadow: none; }
+.info .acts span.btn.dl { cursor: default; }
+@media (hover: hover) {
+  [data-form="desktop"] .info .acts .btn.dl:hover .dl-mark { background: rgba(255, 255, 255, .24); }
+  [data-form="desktop"] .info .acts .btn.dl:hover .dl-mark svg { background: none; }
+}
+[data-form="phone"] .info .acts .btn .dl-mark { width: 20px; height: 20px; padding: 13px; }
+[data-form="phone"] .info .acts .btn .dl-mark.ring { width: 28px; height: 28px; padding: 9px; --dl-pad: 9px; }
+
+/* An episode's third action: the mark in the pill's glyph place; a ring a step larger than the glyph. */
+.ep-act .dl-mark { --dl: 22px; }
+.ep-act .dl-mark.ring { --dl: 34px; --dl-stroke: 3.5px; margin: 0 -6px; }
+[data-form="phone"] .ep-act .dl-mark { --dl: 18px; }
+[data-form="phone"] .ep-act .dl-mark.ring { --dl: 28px; --dl-stroke: 2.5px; margin: 0; }
+
+/* The title page offline (4.18): one quiet line under the meta. */
+.dl-offline { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; font: 600 var(--type-callout) / 1.3 var(--font-text); color: var(--muted); }
+.dl-offline svg { width: 26px; height: 26px; }
+[data-form="phone"] .dl-offline { gap: 6px; margin-bottom: 8px; font-size: 14px; }
+[data-form="phone"] .dl-offline svg { width: 16px; height: 16px; }
+
+/* A download's menu: a solid card over the scrim, as the synopsis card; a sheet at the bottom on the phone. */
+.dl-layer { position: absolute; inset: 0; z-index: 30; display: grid; place-items: center; padding: var(--safe-top) var(--safe-side) var(--safe-bottom); }
+.dl-scrim { position: absolute; inset: 0; background: var(--scrim); }
+.dl-card { position: relative; width: 640px; max-width: 100%; max-height: 100%; overflow-y: auto; display: grid; gap: 8px; padding: 28px 16px 16px; border-radius: var(--radius-l);
+  background: var(--surface); box-shadow: 0 30px 60px rgba(0, 0, 0, .45); }
+.dl-card h2 { padding: 0 20px; font: 700 var(--type-headline) / 1.2 var(--font-text); letter-spacing: var(--tracking-label); }
+.dl-detail { padding: 0 20px 6px; font: 400 var(--type-callout) / 1.35 var(--font-text); color: var(--muted); }
+.dl-items { display: grid; gap: 2px; margin-top: 8px; }
+.dl-item { display: flex; align-items: center; gap: 18px; width: 100%; min-height: 72px; padding: 0 20px; border-radius: var(--radius-m);
+  font: 600 var(--type-body) / 1.2 var(--font-text); color: var(--text); }
+.dl-item svg { width: 28px; height: 28px; color: var(--muted); }
+.dl-item.still { color: var(--muted); font-weight: 500; }
+@media (hover: hover) { [data-form="desktop"] button.dl-item:hover { background: rgba(255, 255, 255, .08); } }
+[data-form="desktop"] .dl-layer { padding: calc(76 * var(--px)) calc(40 * var(--px)) calc(24 * var(--px)); }
+[data-form="desktop"] .dl-card { width: calc(400 * var(--px)); gap: calc(4 * var(--px)); padding: calc(18 * var(--px)) calc(8 * var(--px)) calc(8 * var(--px)); border-radius: calc(14 * var(--px)); }
+[data-form="desktop"] .dl-card h2 { padding: 0 calc(12 * var(--px)); font-size: calc(17 * var(--px)); }
+[data-form="desktop"] .dl-detail { padding: 0 calc(12 * var(--px)) calc(4 * var(--px)); font-size: calc(14 * var(--px)); }
+[data-form="desktop"] .dl-items { margin-top: calc(6 * var(--px)); }
+[data-form="desktop"] .dl-item { min-height: calc(40 * var(--px)); gap: calc(12 * var(--px)); padding: 0 calc(12 * var(--px)); border-radius: calc(8 * var(--px)); font-size: calc(15 * var(--px)); }
+[data-form="desktop"] .dl-item svg { width: calc(18 * var(--px)); height: calc(18 * var(--px)); }
+[data-form="phone"] .dl-layer { position: fixed; place-items: end stretch; padding: 16px 8px calc(8px + env(safe-area-inset-bottom)); }
+[data-form="phone"] .dl-scrim { touch-action: none; }
+[data-form="phone"] .dl-card { width: auto; gap: 4px; padding: 16px 8px 8px; border-radius: 14px; overscroll-behavior: contain; }
+[data-form="phone"] .dl-card h2 { padding: 0 12px; font-size: 17px; }
+[data-form="phone"] .dl-detail { padding: 0 12px 4px; font-size: 14px; }
+[data-form="phone"] .dl-item { min-height: 50px; gap: 12px; padding: 0 12px; border-radius: 10px; font-size: 17px; }
+[data-form="phone"] .dl-item svg { width: 20px; height: 20px; }
+
+/* Library's way in on desktop (the phone has its grouped row). */
+.btn.lib-downloads { margin: -10px 0 34px; }
+
+/* The storage line over its bar: downloads white, free space the track. */
+.dl-storage { display: grid; gap: 14px; max-width: 1400px; margin-bottom: 48px; }
+.dl-storage-line { font: 500 var(--type-callout) / 1.3 var(--font-text); color: var(--muted); }
+.dl-bar { display: block; height: 6px; border-radius: 3px; overflow: hidden; background: rgba(255, 255, 255, .1); }
+.dl-bar i { display: block; height: 100%; background: #fff; }
+.dl-settings .dl-storage { margin: 28px 0 20px; }
+[data-form="phone"] .dl-storage { gap: 8px; margin-bottom: 24px; }
+[data-form="phone"] .dl-storage-line { font-size: 14px; }
+[data-form="phone"] .dl-bar { height: 4px; border-radius: 2px; }
+[data-form="phone"] .dl-settings .dl-storage { margin: 16px 0 12px; }
+
+/* A section: its heading, and Pause all at its end. */
+.dl-sec-head { display: flex; align-items: center; justify-content: space-between; gap: 24px; margin-bottom: 24px; }
+.dl-sec-head h2 { font: 800 var(--type-title3) / 1.1 var(--font-display); }
+.dl-sec-head .btn { height: 56px; padding: 0 24px; font-size: var(--type-callout); }
+[data-form="phone"] .dl-sec-head { margin-bottom: 12px; }
+[data-form="phone"] .dl-sec-head h2 { font-size: 20px; }
+[data-form="phone"] .dl-sec-head .btn { height: 36px; padding: 0 14px; font-size: 14px; }
+.dl-empty { margin-top: 20px; }
+.dl-empty .problem-icon { width: 48px; height: 48px; color: var(--muted); }
+[data-form="phone"] .dl-empty .problem-icon { width: 28px; height: 28px; }
+
+/* A row: the Settings list row (V2 rollout section 8). Its art and words play it (or open the series);
+ * the control and the trash button trail it on the same card. */
+.dlrow { display: flex; align-items: center; gap: 8px; padding-right: 16px; border-radius: var(--radius-l); background: var(--glass); box-shadow: inset 0 0 0 1px var(--edge);
+  transition: background-color var(--motion-focus) var(--ease); }
+.dlrow-main { flex: 1; min-width: 0; display: flex; align-items: center; gap: 26px; padding: 16px 20px; border-radius: var(--radius-l); }
+.dlrow-art { position: relative; flex: none; width: 64px; height: 96px; border-radius: var(--radius-s, 8px); overflow: hidden; background: var(--surface); }
+.dlrow-art.wide { width: 160px; height: 90px; }
+.dlrow-art img { width: 100%; height: 100%; object-fit: cover; }
+.dlrow-text { min-width: 0; display: grid; gap: 6px; }
+.dlrow-text b { font: 600 var(--type-body) / 1.2 var(--font-text); overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; }
+.dlrow-text small { font: 400 var(--type-callout) / 1.35 var(--font-text); color: var(--muted); }
+.dlrow-acts { display: flex; align-items: center; gap: 4px; flex: none; }
+.dlrow-acts .chev { width: 30px; height: 30px; margin-right: 8px; color: var(--muted); }
+.dl-btn { display: grid; place-items: center; width: 72px; height: 72px; border-radius: 50%; color: #fff; }
+.dl-btn > svg { width: 30px; height: 30px; }
+@media (hover: hover) {
+  [data-form="desktop"] .dlrow:has(.dlrow-main:hover) { background: var(--raised); }
+  [data-form="desktop"] .dl-btn:hover { background: var(--fill); }
+}
+.dl-btn:active, .dlrow-main:active { opacity: .8; }
+[data-form="phone"] .dlrow { gap: 2px; padding-right: 6px; border-radius: 14px; }
+[data-form="phone"] .dlrow-main { gap: 12px; padding: 12px; border-radius: 14px; }
+[data-form="phone"] .dlrow-art { width: 48px; height: 72px; border-radius: 6px; }
+[data-form="phone"] .dlrow-art.wide { width: 96px; height: 54px; }
+[data-form="phone"] .dlrow-text { gap: 2px; }
+[data-form="phone"] .dlrow-text b { font-size: 16px; }
+[data-form="phone"] .dlrow-text small { font-size: 13px; }
+[data-form="phone"] .dlrow-acts .chev { width: 18px; height: 18px; margin-right: 10px; color: rgba(255, 255, 255, .4); }
+[data-form="phone"] .dl-btn { width: 44px; height: 44px; }
+[data-form="phone"] .dl-btn > svg { width: 20px; height: 20px; }
+
+/* An inline confirmation (DECISION's Confirmation pattern): the question, Delete, Cancel; no red. */
+.dl-confirm { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 16px; margin-bottom: 40px; }
+.dl-confirm p { flex-basis: 100%; font: 500 var(--type-body) / 1.35 var(--font-text); }
+[data-form="phone"] .dl-confirm { gap: 10px; margin-bottom: 20px; }
+[data-form="phone"] .dl-confirm p { font-size: 15px; }
+
+/* Settings: Smart downloads' switch row carries a glyph in the mark's place. */
+.dl-settings .dlogo svg { width: 28px; height: 28px; color: var(--muted); }
+[data-form="phone"] .dl-settings .dlogo svg { width: 20px; height: 20px; }
+
+/* A phone's round actions share the row with Download as the fifth: they spread to its edges. */
+[data-form="phone"] .info .acts:has(.dl) { gap: 6px; justify-content: space-between; }

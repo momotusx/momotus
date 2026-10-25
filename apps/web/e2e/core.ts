@@ -49,6 +49,8 @@ export const TITLE_SCORES_PORT = 17827 + shift;
 export const DISCOVER_PORT = 17828 + shift;
 /** The lists-from-addons spec's own: a core with stremio-addons.net's directory installed. */
 export const ADDON_LISTS_PORT = 17829 + shift;
+/** The downloads spec's own: a core whose one film comes from a local origin the test holds and lets go. */
+export const DOWNLOADS_PORT = 17830 + shift;
 /** Every browser a run launches takes these: each name but this machine's resolves to the browser's
  * recorder, whose certificate it does not check, so pages load images and frames from the
  * recording and a run needs the network only to record (none with MQ_E2E_OFFLINE=1). A spec that
