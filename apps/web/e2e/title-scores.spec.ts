@@ -264,3 +264,26 @@ test("desktop: a hidden tab asks nothing until it shows", async ({ browser }) =>
   expect(asked.some((p) => p.startsWith(`/3/find/${HIDDEN_ID}`))).toBe(true);
   await page.context().close();
 });
+
+// TV: a series' cover alone under the hero (no More like this, nothing there takes focus) is still seen. Down with
+// nowhere to go scrolls the page to it, and Up from the hero brings the page back to the top; the card never takes focus.
+test("tv: Down reveals a series' lone rated cover, and Up returns", async ({ browser }) => {
+  const page = await open(browser, "tv");
+  await page.goto("/title/series/tt0903747?form=tv");
+  await expect(page.locator(".title-more .rated-cover img")).toHaveCount(1, { timeout: 30_000 });
+  await expect(page.locator('.row[aria-label="More like this"]')).toHaveCount(0);
+  const scrolled = () => page.locator(".title-scr").evaluate((el) => el.scrollTop);
+  expect(await scrolled()).toBe(0);
+  for (let i = 0; i < 10 && (await scrolled()) === 0; i++) {
+    await page.keyboard.press("ArrowDown");
+    await page.waitForTimeout(250);
+  }
+  await expect.poll(async () => {
+    const r = await page.locator(".title-more .rated-cover").evaluate((el) => el.getBoundingClientRect().toJSON() as DOMRect);
+    return r.top >= 0 && r.bottom <= 1080;
+  }, { timeout: 5_000 }).toBe(true);
+  expect(await page.evaluate(() => !!document.activeElement?.closest(".rated-cover"))).toBe(false);
+  await page.keyboard.press("ArrowUp");
+  await expect.poll(scrolled, { timeout: 5_000 }).toBe(0);
+  await page.context().close();
+});

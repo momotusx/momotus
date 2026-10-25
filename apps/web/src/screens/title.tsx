@@ -92,6 +92,28 @@ function TitlePage(props: { kind: string; id: string; retry: () => void }) {
   const onVisibility = () => setShown(!document.hidden);
   document.addEventListener("visibilitychange", onVisibility);
   onCleanup(() => document.removeEventListener("visibilitychange", onVisibility));
+  // TV: a series' rated cover may sit alone under the hero (no More like this to focus there), and it is never a focus
+  // stop. Down with nowhere to go scrolls the page to it; Up from the hero brings the page back to the top.
+  let before: Element | null = null;
+  const tvKeyFirst = (e: KeyboardEvent) => {
+    before = document.activeElement;
+    if (form() !== "tv" || !page || e.key !== "ArrowUp" || page.scrollTop === 0) return;
+    if (document.activeElement?.closest(".title-more")) return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    toTop();
+  };
+  const tvKeyAfter = (e: KeyboardEvent) => {
+    if (form() !== "tv" || !page || e.key !== "ArrowDown" || document.activeElement !== before) return;
+    const cover = page.querySelector<HTMLElement>(".title-more .rated-cover");
+    if (cover) cover.scrollIntoView({ block: "end", behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+  };
+  window.addEventListener("keydown", tvKeyFirst, { capture: true });
+  window.addEventListener("keydown", tvKeyAfter);
+  onCleanup(() => {
+    window.removeEventListener("keydown", tvKeyFirst, { capture: true });
+    window.removeEventListener("keydown", tvKeyAfter);
+  });
   createEffect(() => {
     if (view.state.status.state === "open") view.command({ type: "titleVisible", visible: shown() }).catch(() => undefined);
   });
