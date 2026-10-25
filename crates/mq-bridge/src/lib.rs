@@ -10,7 +10,7 @@
 //! "createSyncAccount" | "syncNow" | "approvePairing" | "createRecoveryKit" | "recover" |
 //! "syncDevices" | "lostPreview" | "removeDevice" | "reportLost" | "signOut" | "deleteAccount" |
 //! "cancelPairing" |
-//! "forkPreview" | "useServerRoster" | "createProfile" | "updateProfile" | "deleteProfile" |
+//! "forkPreview" | "useServerRoster" | "createProfile" | "allowTitle" | "updateProfile" | "deleteProfile" |
 //! "setPin" | "switchProfile" | "unlockProfile" | "lockSession" | "removeFromContinue" |
 //! "languages",
 //! ...}`.
@@ -566,6 +566,19 @@ enum Request {
         name: String,
         #[serde(default)]
         avatar: String,
+        /// A kids profile (plans/m11-kids.md): its titles come from
+        /// `allowTitle`.
+        #[serde(default)]
+        kids: bool,
+    },
+    /// The owner allows `kind` `itemId` for kids profile `profile`.
+    /// Replies `ProfilesSnapshot`.
+    AllowTitle {
+        id: u64,
+        profile: String,
+        kind: String,
+        #[serde(rename = "itemId")]
+        item_id: String,
     },
     /// Renames, re-avatars or moves `profile` (itself, or any as the owner).
     UpdateProfile {
@@ -1795,8 +1808,26 @@ impl Session {
                     }
                 }
             }
-            Request::CreateProfile { id, name, avatar } => {
-                let result = core.create_profile(&name, &avatar).map(drop);
+            Request::CreateProfile {
+                id,
+                name,
+                avatar,
+                kids,
+            } => {
+                let result = if kids {
+                    core.create_kids_profile(&name, &avatar)
+                } else {
+                    core.create_profile(&name, &avatar)
+                };
+                self.reply_profiles(id, result.map(drop));
+            }
+            Request::AllowTitle {
+                id,
+                profile,
+                kind,
+                item_id,
+            } => {
+                let result = core.allow_title(&profile, &kind, &item_id).await;
                 self.reply_profiles(id, result);
             }
             Request::UpdateProfile {

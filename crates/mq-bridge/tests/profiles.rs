@@ -1106,3 +1106,41 @@ async fn a_device_that_made_its_account_and_left_before_the_defaults_step_keeps_
     let _ = std::fs::remove_dir_all(&data);
     let _ = std::fs::remove_dir_all(&relay_dir);
 }
+
+/// A kids profile made over the protocol (`createProfile` with `kids`)
+/// changes no download: every download op is refused for it, while the
+/// platform's say on downloads (the device's) is answered; `allowTitle` is
+/// an owner op the core answers (plans/offline-downloads.md 4.16, code
+/// review r1 m10).
+#[tokio::test]
+async fn a_kids_profile_made_here_changes_no_download() {
+    let mut c = Client::new(Core::temporary("default").unwrap());
+    // Kids profiles need the owner's PIN.
+    assert_eq!(c.set_pin("default", Some("1357"), None).await, "ok");
+    let snapshot = c
+        .ok(json!({"op": "createProfile", "name": "Kid", "avatar": "fox:amber", "kids": true}))
+        .await;
+    let kid = id_of(&snapshot, "Kid");
+    assert_eq!(profile(&snapshot, &kid)["kids"], true, "{snapshot}");
+    // No meta addon: the title has no details, and the core says so.
+    let reply = c
+        .call(json!({"op": "allowTitle", "profile": kid, "kind": "movie", "itemId": "tt1"}))
+        .await;
+    assert_eq!(reply["ok"], false, "{reply}");
+    let error = reply["error"].as_str().unwrap_or_default();
+    assert!(!error.starts_with("bad request"), "{reply}");
+    c.switch(&kid, None).await;
+    for op in [
+        json!({"op": "downloadAdd", "kind": "movie", "itemId": "tt1", "scope": "video", "videoId": "tt1"}),
+        json!({"op": "downloadPause", "all": true}),
+        json!({"op": "downloadResume", "all": true}),
+        json!({"op": "downloadRemove", "all": true}),
+        json!({"op": "downloadRetry", "all": true, "mobileData": true}),
+        json!({"op": "setDownloadSettings", "smart": false}),
+    ] {
+        let reply = c.call(op.clone()).await;
+        assert_eq!(reply["ok"], false, "{op} -> {reply}");
+    }
+    c.ok(json!({"op": "downloadsAllowed", "allowed": true}))
+        .await;
+}
