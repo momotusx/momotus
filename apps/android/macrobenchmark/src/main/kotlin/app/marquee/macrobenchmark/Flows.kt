@@ -156,3 +156,12 @@ fun MacrobenchmarkScope.sweepTvTabs() {
     }
     device.waitForIdle()
 }
+
+/** The phone's tab bar: each place opened once by its tab (its first open in this process), then Home again. Search is left
+ * out: its field takes the keyboard, which covers the bar. */
+fun MacrobenchmarkScope.visitPhoneTabs() {
+    for (place in listOf("Discover", "Library", "Settings", "Home")) {
+        device.wait(Until.findObject(By.desc(place)), 5_000)?.click() ?: error("no $place tab")
+        Thread.sleep(TAB_MS)
+    }
+}
