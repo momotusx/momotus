@@ -761,6 +761,10 @@ private func route(_ key: String, sub: UInt64 = 3) -> PlayRoute {
     let tv = PlayerLayout.subtitleFoot(screenHeight: 1080, pictureHeight: picture, safeBottom: 60, controlsShown: false, controlsHeight: 200)
     #expect(tv <= (1080 + picture) / 2, "inside the picture, not on its bar")
     #expect(tv <= 1080 * 0.95, "over the title-safe line")
+    // A 1080 pt screen with no safe area and a picture whose foot (1033) sits between the old 40 pt floor (1040)
+    // and the 5% line (1026): the foot comes up to the line.
+    let edge = PlayerLayout.subtitleFoot(screenHeight: 1080, pictureHeight: 1018, safeBottom: 0, controlsShown: false, controlsHeight: 200)
+    #expect(edge == 1026, "over the title-safe line: \(edge)")
     // A Mac screen 1117 pt tall whose picture fills it: 40 pt was under the 5% line (55.85 pt).
     let mac = PlayerLayout.subtitleFoot(screenHeight: 1117, pictureHeight: 1117, safeBottom: 0, controlsShown: false, controlsHeight: 200)
     #expect(1117 - mac >= 55.8, "over the title-safe line: \(mac)")
