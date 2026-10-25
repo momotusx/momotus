@@ -8,7 +8,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusDirection
+import androidx.compose.ui.focus.FocusManager
 import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -47,8 +50,11 @@ class TvTabsTest {
     private val opened = mutableListOf<Route>()
     private val nav = TvNavFocus()
 
-    private fun show() {
+    private var focusManager: FocusManager? = null
+
+    private fun show(onHome: Boolean = true) {
         compose.setContent {
+            focusManager = LocalFocusManager.current
             MarqueeTheme(Form.Tv) {
                 TvShell(
                     selected = selected,
@@ -68,6 +74,7 @@ class TvTabsTest {
             }
         }
         compose.mainClock.autoAdvance = false
+        if (!onHome) return
         tab("Home").performSemanticsAction(SemanticsActions.RequestFocus)
         compose.waitForIdle()
         tab("Home").assertIsFocused()
@@ -185,5 +192,18 @@ class TvTabsTest {
         compose.mainClock.advanceTimeBy(TAB_SETTLE_MS * 2)
         page(Route.Discover).assertExists()
         assertEquals(listOf<Route>(Route.Discover), opened)
+    }
+
+    @Test
+    fun `a focus the system puts in the bar lands on the place shown and opens nothing`() {
+        selected = Route.Discover
+        show(onHome = false)
+        // No key: the system enters the window (a start, or a page back from over the bar).
+        compose.runOnIdle { focusManager?.moveFocus(FocusDirection.Next) }
+        compose.mainClock.advanceTimeByFrame()
+        tab("Discover").assertIsFocused()
+        compose.mainClock.advanceTimeBy(TAB_SETTLE_MS * 2)
+        page(Route.Discover).assertExists()
+        assertEquals(emptyList(), opened)
     }
 }
