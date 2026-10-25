@@ -23,6 +23,10 @@ const BACKOFF: [Duration; 3] = [
     Duration::from_secs(8),
     Duration::from_secs(30),
 ];
+/// Tests: the waits between tries in milliseconds, not seconds.
+#[cfg(feature = "test-hooks")]
+pub(super) static SHORT_BACKOFF: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
 /// A body that sends nothing for this long has failed.
 const IDLE: Duration = Duration::from_secs(60);
 
@@ -202,6 +206,12 @@ pub(super) async fn fetch(
 /// The next wait, or `None` once the tries are spent.
 async fn backoff(tries: &mut usize) -> Option<()> {
     let wait = *BACKOFF.get(*tries)?;
+    #[cfg(feature = "test-hooks")]
+    let wait = if SHORT_BACKOFF.load(std::sync::atomic::Ordering::Relaxed) {
+        wait / 1000
+    } else {
+        wait
+    };
     *tries += 1;
     tokio::time::sleep(wait).await;
     Some(())

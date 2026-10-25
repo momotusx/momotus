@@ -1164,6 +1164,19 @@ impl PlaybackView {
     ) {
         let error = mq_server::failure_words(kind, status, error);
         let error = error.as_str();
+        // A download's own file that fails goes on to the same version
+        // online, also when the addons answered only after it was picked
+        // (plans/offline-downloads.md 4.12.3). Read outside the playback's
+        // lock, as the pick's view is.
+        let online = {
+            let s = lock(&self.state);
+            match (s.local_open, s.snapshot.key.clone(), s.pick.clone()) {
+                (true, Some(key), Some(pick)) => Some((key, pick)),
+                _ => None,
+            }
+        }
+        .map(|(key, pick)| pick.online(&key))
+        .unwrap_or_default();
         let (failed, pick, kept, local) = {
             let mut s = lock(&self.state);
             let other = failed.is_some_and(|failed| failed != s.snapshot.attempt);
@@ -1176,6 +1189,9 @@ impl PlaybackView {
             s.run += 1;
             let local = s.local_open;
             release_all(&mut s);
+            if local && s.next >= s.candidates.len() {
+                s.candidates.extend(online);
+            }
             let failed = s
                 .next
                 .checked_sub(1)

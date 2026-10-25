@@ -40,6 +40,8 @@ struct How {
     /// Every answer after the first serves this file instead: a link
     /// resolved again that names another file.
     then: Option<Arc<Vec<u8>>>,
+    /// Every answer is this status with no body.
+    status: Option<u16>,
 }
 
 #[derive(Clone, Default)]
@@ -84,6 +86,13 @@ async fn origin(data: Arc<Vec<u8>>, how: How) -> (String, Seen) {
                     .lock()
                     .unwrap()
                     .push(range.clone().unwrap_or_default());
+                if let Some(code) = how.status {
+                    let resp = format!(
+                        "HTTP/1.1 {code} No\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+                    );
+                    let _ = socket.write_all(resp.as_bytes()).await;
+                    return;
+                }
                 let start: usize = range
                     .as_deref()
                     .and_then(|r| r.split('-').next())
@@ -1898,6 +1907,83 @@ async fn a_download_that_does_not_play_fails_and_the_play_goes_online() {
         tokio::time::sleep(Duration::from_millis(20)).await;
     }
     // The next source reads from the origin, not the kept file.
+    let (http, opts) = loopback();
+    let got = http
+        .get_range(&playback.snapshot().url.unwrap(), 0, 4096, &opts)
+        .await
+        .unwrap();
+    assert_eq!(got.body[..], data[..4096]);
+    assert!(seen.answers.load(Ordering::SeqCst) > asked);
+}
+
+/// A source that keeps failing (a 503) is tried three more times, the
+/// waits shortened by the test hook; with no other source in the pick the
+/// job then fails with the source's reason. A dead link (404) is not tried
+/// again (plans/offline-downloads.md 4.7.4, code review r1 m10).
+#[cfg(feature = "test-hooks")]
+#[tokio::test]
+async fn a_failing_source_is_tried_three_more_times_and_a_dead_link_once() {
+    mq_runtime::downloads::short_backoff_for_tests();
+    for (status, tries) in [(503, 4), (404, 1)] {
+        let (url, seen) = origin(
+            video(1 << 20),
+            How {
+                status: Some(status),
+                ..How::default()
+            },
+        )
+        .await;
+        let core = core_with(addon(&url, Duration::ZERO).await).await;
+        let ids = mq_runtime::downloads::add(&core, movie()).await.unwrap();
+        until(&core, &ids[0], "failed", |r| {
+            r.state == DownloadState::Failed && r.reason == Some(DownloadReason::Source)
+        })
+        .await;
+        assert_eq!(seen.answers.load(Ordering::SeqCst), tries, "{status}");
+    }
+}
+
+/// Picked before the addons answered, a download's chain is its own file
+/// alone; when they answer later and the file fails, the play still goes
+/// on to the same version online (plans/offline-downloads.md 4.12.3).
+#[tokio::test]
+async fn a_download_picked_before_the_addons_still_fails_over_online() {
+    let data = video(4 << 20);
+    let (url, seen) = origin(data.clone(), How::default()).await;
+    let core = core_with(addon(&url, Duration::ZERO).await).await;
+    let ids = mq_runtime::downloads::add(&core, movie()).await.unwrap();
+    until(&core, &ids[0], "done", |r| r.state == DownloadState::Done).await;
+    // The addon now answers a second late: the download is picked first.
+    let slow = addon(&url, Duration::from_secs(1)).await;
+    core.library()
+        .set_addons(core.profile(), std::slice::from_ref(&slow), &core.hlc())
+        .unwrap();
+    let view = VersionsView::open(&core, params());
+    let pick = view.snapshot().recommended.expect("the download at once");
+    assert_eq!(pick.on_device.as_deref(), Some("Downloaded"));
+    assert!(!view.snapshot().done);
+    let playback = PlaybackView::open_picked(&core, view.pick(&pick.key), target(), &view.plays());
+    let deadline = std::time::Instant::now() + Duration::from_secs(20);
+    while playback.snapshot().phase != PlaybackPhase::Ready || !view.snapshot().done {
+        assert!(
+            std::time::Instant::now() < deadline,
+            "{:?}",
+            playback.snapshot()
+        );
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    let asked = seen.answers.load(Ordering::SeqCst);
+    let first = playback.snapshot().attempt;
+    playback.fail_over(None, Some("unreadable"), None, "no moov");
+    while playback.snapshot().phase != PlaybackPhase::Ready || playback.snapshot().attempt == first
+    {
+        assert!(
+            std::time::Instant::now() < deadline,
+            "{:?}",
+            playback.snapshot()
+        );
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
     let (http, opts) = loopback();
     let got = http
         .get_range(&playback.snapshot().url.unwrap(), 0, 4096, &opts)

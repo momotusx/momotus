@@ -2260,6 +2260,14 @@ async fn pick_version(core: &Core, row: &DownloadRecord) -> Option<Vec<ParsedStr
     (!chain.is_empty()).then_some(chain)
 }
 
+/// Tests: an HTTP source's waits between tries in milliseconds (2, 8 and
+/// 30 ms), so a test sees the tries and the move without waiting 40 s.
+#[cfg(feature = "test-hooks")]
+#[doc(hidden)]
+pub fn short_backoff_for_tests() {
+    http::SHORT_BACKOFF.store(true, std::sync::atomic::Ordering::Relaxed);
+}
+
 /// The downloads, for an op that changes them: a kids profile changes
 /// nothing (plans/offline-downloads.md 4.16).
 pub fn owner(core: &Core) -> Result<Arc<Downloads>, CoreError> {

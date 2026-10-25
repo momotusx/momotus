@@ -488,6 +488,19 @@ pub struct PickHandle {
 }
 
 impl PickHandle {
+    /// The sources of version `key` the addons list now, failover chain and
+    /// all: a download picked before they answered goes on to them when its
+    /// own file fails (plans/offline-downloads.md 4.12.3).
+    pub fn online(&self, key: &str) -> Vec<ParsedStream> {
+        let Some(state) = self.state.upgrade() else {
+            return Vec::new();
+        };
+        let s = lock(&state);
+        holding(&s.ranked.rows, |st| st.key == key)
+            .map(|r| std::iter::once(r.stream).chain(r.failover).collect())
+            .unwrap_or_default()
+    }
+
     /// The source `key` of the pick failed. No later pick in this view
     /// teaches (3.9), and the view learns what the device recorded of the
     /// failure: its rows rank again, and a frozen pick that failed is let
