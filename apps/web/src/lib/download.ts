@@ -8,7 +8,9 @@ import type { DownloadRow } from "../core/generated/DownloadRow";
 import type { DownloadStorage } from "../core/generated/DownloadStorage";
 import type { DownloadTitle } from "../core/generated/DownloadTitle";
 import type { GroupDownload } from "../core/generated/GroupDownload";
+import type { ProfilesSnapshot } from "../core/generated/ProfilesSnapshot";
 import { bytes } from "./format";
+import { languageName } from "./words";
 
 /** The control's Lucide glyph: `download` is arrow-down-to-line, `stop` the square in the ring. */
 export type DownloadGlyph = "download" | "stop" | "pause" | "wifiOff" | "clock" | "check" | "alert";
@@ -75,7 +77,7 @@ export function waiting(reason: DownloadReason | null): string {
     case "playing":
       return "Paused while you watch";
     case "app":
-      return "Opens again when you return to Marquee";
+      return "Opens again when you return to Momotus";
     default:
       return "Waiting";
   }
@@ -187,11 +189,29 @@ export function seriesMenu(season: number | null, group: GroupDownload | null, s
   return out;
 }
 
-/** The series' action-row control: Download, or where its downloads stand; a press always opens its menu. */
+/** The series' action-row control: Downloading while any is on its way, Downloaded once every aired
+ * episode is kept, else Download; a press always opens its menu. */
 export function seriesControl(series: GroupDownload | null): DownloadControl {
-  const c = !series || series.downloaded === 0 ? NONE : series.active > 0 ? control("clock", "Downloading", "Downloading", null, null, null, []) : control("check", "Downloaded", "Downloaded", null, null, null, []);
+  const c = series && series.active > 0 ? control("clock", "Downloading", "Downloading", null, null, null, []) : series && series.episodes > 0 && series.downloaded >= series.episodes ? control("check", "Downloaded", "Downloaded", null, null, null, []) : NONE;
   return { ...c, hint: MENU_HINT };
 }
+
+/** A control's accessible name: what it shows first (voice control says that), then the state's word,
+ * the ring's value and what it downloads, each once: "45%, Downloading, S1:E2", "Paused, 30 percent,
+ * Big Buck Bunny". A percent already shown is not said twice. */
+export function controlName(c: DownloadControl, subject: string): string {
+  const parts = [c.label, c.spoken, c.label.endsWith("%") ? null : c.value, subject];
+  return parts.filter((p, i): p is string => !!p && parts.indexOf(p) === i).join(", ");
+}
+
+/** Downloads are offered only to a profile known not to be a kids one: before the profiles answer, or
+ * with the active profile not among them, it is treated as a kids profile (Play only). */
+export function kidsOf(s: ProfilesSnapshot | null | undefined): boolean {
+  return s?.profiles.find((p) => p.id === s.active)?.kids !== false;
+}
+
+/** The subtitles kept with a download, by the app's language names: "Subtitles: English, Turkish". */
+export const subtitlesLine = (tags: readonly string[]) => (tags.length ? `Subtitles: ${tags.map(languageName).join(", ")}` : null);
 
 /** "Downloads use 12.4 GB · 48 GB free on this device". */
 export const storageLine = (s: DownloadStorage) => [`Downloads use ${bytes(s.downloadsBytes)}`, s.freeBytes === null ? null : `${bytes(s.freeBytes)} free on this device`].filter(Boolean).join(" · ");

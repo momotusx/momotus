@@ -15,7 +15,7 @@ import VolumeX from "lucide-solid/icons/volume-x";
 import WifiOff from "lucide-solid/icons/wifi-off";
 import { createEffect, createMemo, createSignal, For, type JSX, Match, on, onCleanup, onMount, Show, Switch } from "solid-js";
 import { Backdrop, Logo } from "../components/art";
-import { controlAria, downloadAct, downloadAdd, DownloadMark, DownloadMenu, downloadsHere, ITEM_ICON, itemEntries, kidsProfile, type MenuAsk } from "../components/download";
+import { controlAria, downloadAct, downloadAdd, DownloadMark, DownloadMenu, downloadsHere, ITEM_ICON, itemEntries, kidsProfile, knownKids, type MenuAsk, touchFirst } from "../components/download";
 import { SynopsisDialog } from "../components/synopsis";
 import { TitleScores } from "../components/title-scores";
 import { KeyedPage } from "../components/keyed-page";
@@ -35,7 +35,7 @@ import { form, viewport } from "../form";
 import { airDate, clock, decoded, episodeLabel, offersLibrary, parseVideo, pct, playPath, playState, runtimeMinutes, seasonName, versionsPath } from "../lib/format";
 import { capableNow, coverSize, headerOnTvNow, meteredNow, previewsOn, REVEAL_MS, trailerAllowed, walkNow } from "../lib/trailers";
 import { blockedWords, choiceWords, problemWords } from "../lib/words";
-import { type DownloadItem, downloadControl, downloadWords, seriesControl, seriesMenu } from "../lib/download";
+import { deleteSeries, type DownloadItem, downloadControl, downloadWords, seriesControl, seriesMenu } from "../lib/download";
 import { firstFocus } from "./title-focus";
 import "./home.css";
 import "./title.css";
@@ -146,7 +146,8 @@ function TitlePage(props: { kind: string; id: string; retry: () => void }) {
    * (a right click, a long press, the menu key) on Download offers the version too. */
   const pressDownload = (from: string, title: string, videoId: string, badge: DownloadBadge | null, more = false) => {
     const c = downloadControl(badge);
-    if (!c.items.length && !more) return keep(videoId)("start");
+    // A tap starts it, except on touch, where no secondary press reaches the version: there it opens the menu.
+    if (!c.items.length && !more && !touchFirst()) return keep(videoId)("start");
     const items: DownloadItem[] = c.items.length ? c.items : ["start", "choose"];
     setMenu({ title, detail: c.detail, entries: itemEntries(items, badge, keep(videoId)), from });
   };
@@ -158,7 +159,18 @@ function TitlePage(props: { kind: string; id: string; retry: () => void }) {
     const run = (act: string | null) => {
       if (act === "season" && season !== null) return () => downloadAdd(props.kind, props.id, "season", { season });
       if (act === "series") return () => downloadAdd(props.kind, props.id, "series");
-      if (act === "deleteSeason") return () => downloadAct("downloadRemove", { ids });
+      // A season's downloads go only once asked (DECISION's Confirmation pattern, in the menu itself).
+      if (act === "deleteSeason")
+        return () =>
+          setMenu({
+            title: deleteSeries(ids.length, d()?.name ?? ""),
+            entries: [
+              { key: "delete", label: "Delete", icon: ITEM_ICON.delete, run: () => downloadAct("downloadRemove", { ids }) },
+              { key: "cancel", label: "Cancel", run: () => undefined },
+            ],
+            from: "title:download",
+            focus: "cancel",
+          });
       return null;
     };
     setMenu({
@@ -542,7 +554,7 @@ function TitlePage(props: { kind: string; id: string; retry: () => void }) {
                         <button
                           class="btn dl"
                           data-f="title:download"
-                          {...controlAria(c())}
+                          {...controlAria(c(), x().name)}
                           onClick={() => press(false)}
                           onContextMenu={(e) => {
                             e.preventDefault();
@@ -556,12 +568,12 @@ function TitlePage(props: { kind: string; id: string; retry: () => void }) {
                     }}
                   </Show>
                   <Show when={downloads() && series() && (header()?.seriesDownload || header()?.seasonDownload)}>
-                    <button class="btn dl" data-f="title:download" {...controlAria(seriesControl(header()?.seriesDownload ?? null))} onClick={openSeriesMenu}>
+                    <button class="btn dl" data-f="title:download" {...controlAria(seriesControl(header()?.seriesDownload ?? null), x().name)} onClick={openSeriesMenu}>
                       <DownloadMark control={seriesControl(header()?.seriesDownload ?? null)} />
                       {seriesControl(header()?.seriesDownload ?? null).label}
                     </button>
                   </Show>
-                  <Show when={downloadsHere() && kidsProfile() && header()?.download?.state === "done"}>
+                  <Show when={downloadsHere() && knownKids() && header()?.download?.state === "done"}>
                     <span class="btn dl" role="status">
                       <DownloadMark control={downloadControl(header()?.download)} />
                       Downloaded
@@ -919,7 +931,7 @@ function Episodes(props: {
                         <button
                           class="ep-act dl"
                           data-f={`dl:${e.videoId}`}
-                          {...controlAria(c())}
+                          {...controlAria(c(), name())}
                           title={c().label}
                           onClick={() => press(false)}
                           onContextMenu={(ev) => {

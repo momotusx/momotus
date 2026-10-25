@@ -11,6 +11,7 @@ import Settings from "lucide-solid/icons/settings";
 import { type Component, createEffect, createMemo, createSignal, For, on, onCleanup, Show, untrack } from "solid-js";
 import { ProfileMenu } from "./components/avatar";
 import Brand from "./components/brand";
+import { DownloadStatus } from "./components/download";
 import { bridgeUrl, link } from "./core/client";
 // The debrid accounts follow the core from the start, whatever screen is open.
 import "./core/debrid";
@@ -373,6 +374,8 @@ function Shell(props: RouteSectionProps) {
             <Show when={searchOpen()}>
               <SearchOverlay />
             </Show>
+            {/* A refused download op says so here, whatever page sent it. */}
+            <DownloadStatus />
             </Show>
           </Show>
         </Show>

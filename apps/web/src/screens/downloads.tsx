@@ -8,14 +8,14 @@ import ArrowDownToLine from "lucide-solid/icons/arrow-down-to-line";
 import ChevronRight from "lucide-solid/icons/chevron-right";
 import Trash from "lucide-solid/icons/trash";
 import { createEffect, createSignal, For, type JSX, Match, Show, Switch } from "solid-js";
-import { controlAria, downloadAct, DownloadMark, DownloadMenu, itemEntries, kidsProfile, type MenuAsk } from "../components/download";
+import { awayFromTv, controlAria, downloadAct, DownloadMark, DownloadMenu, itemEntries, kidsProfile, type MenuAsk } from "../components/download";
 import { Why } from "../components/why";
 import { liveView } from "../core/client";
 import type { DownloadRow } from "../core/generated/DownloadRow";
 import type { DownloadsSnapshot } from "../core/generated/DownloadsSnapshot";
 import type { DownloadStorage } from "../core/generated/DownloadStorage";
 import { decoded, episodeLabel, playPath, seasonName, versionsPath } from "../lib/format";
-import { badgeOf, deleteSeries, downloadControl, type DownloadItem, downloadWords, episodeLine, episodeName, progressLine, storageLine, titleLine } from "../lib/download";
+import { badgeOf, deleteSeries, downloadControl, type DownloadItem, downloadWords, episodeLine, episodeName, progressLine, storageLine, subtitlesLine, titleLine } from "../lib/download";
 import "./browse.css";
 import "./settings.css";
 
@@ -64,7 +64,7 @@ function useRowMenu() {
 
 /** A Settings list row (V2 rollout section 8): the art and two lines play it (or open the series), the
  * control and the trash button trail it. */
-function DlRow(props: { fkey: string; href: string; art: string | null; wide?: boolean; title: string; line: string; end?: JSX.Element; label?: string }) {
+function DlRow(props: { fkey: string; href: string; art: string | null; wide?: boolean; title: string; line: string; extra?: string | null; end?: JSX.Element; label?: string }) {
   const [broken, setBroken] = createSignal(false);
   return (
     <div class="dlrow" data-row>
@@ -75,6 +75,7 @@ function DlRow(props: { fkey: string; href: string; art: string | null; wide?: b
         <span class="dlrow-text">
           <b>{props.title}</b>
           <small class="num">{props.line}</small>
+          <Show when={props.extra}>{(x) => <small class="dlrow-subs">{x()}</small>}</Show>
         </span>
       </A>
       <Show when={props.end}>
@@ -88,7 +89,7 @@ function RowControl(props: { row: DownloadRow; onOpen: (r: DownloadRow, from: st
   const c = () => downloadControl(badgeOf(props.row));
   const key = `dlc:${props.row.id}`;
   return (
-    <button class="dl-btn" data-f={key} {...controlAria(c())} onClick={() => props.onOpen(props.row, key)}>
+    <button class="dl-btn" data-f={key} {...controlAria(c(), rowName(props.row))} onClick={() => props.onOpen(props.row, key)}>
       <DownloadMark control={c()} />
     </button>
   );
@@ -108,6 +109,7 @@ export default function Downloads() {
   const view = liveView<DownloadsSnapshot>("downloads");
   const s = () => view.state.data;
   const kids = kidsProfile;
+  awayFromTv();
   const { menu, setMenu, open } = useRowMenu();
   const empty = () => !!s() && s()?.downloading.length === 0 && s()?.titles.length === 0;
   const allPaused = () => s()?.downloading.every((r) => r.state === "paused") ?? false;
@@ -193,6 +195,7 @@ export default function Downloads() {
                                 title={t.name}
                                 label={`Play ${t.name}`}
                                 line={titleLine(t)}
+                                extra={subtitlesLine(r().subtitles)}
                                 end={
                                   kids() ? undefined : (
                                     <>
@@ -225,6 +228,7 @@ export function DownloadedSeries() {
   const view = liveView<DownloadsSnapshot>("downloads");
   const navigate = useNavigate();
   const kids = kidsProfile;
+  awayFromTv();
   const { menu, setMenu, open } = useRowMenu();
   const [confirm, setConfirm] = createSignal(false);
   const title = () => view.state.data?.titles.find((t) => t.itemId === itemId()) ?? null;
@@ -310,6 +314,7 @@ export function DownloadedSeries() {
                       title={episodeName(r)}
                       label={`Play ${episodeName(r)}`}
                       line={r.state === "done" ? episodeLine(r) : progressLine(r)}
+                      extra={subtitlesLine(r.subtitles)}
                       end={
                         kids() ? undefined : (
                           <>

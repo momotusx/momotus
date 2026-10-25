@@ -9,15 +9,18 @@ import {
   downloadControl,
   type DownloadControl,
   type DownloadItem,
+  controlName,
   episodeLine,
   episodeName,
   itemOp,
+  kidsOf,
   left,
   ofTotal,
   progressLine,
   seriesControl,
   seriesMenu,
   storageLine,
+  subtitlesLine,
   titleLine,
 } from "./download";
 
@@ -52,6 +55,7 @@ test("a waiting download says its reason; only Wi-Fi and Low Data offer mobile d
     ["space", ["clock", "Waiting", ["cancel"], null]],
     ["network", ["wifiOff", "Waiting for a connection", ["cancel"], "It goes on by itself when the connection comes back."]],
     ["playing", ["clock", "Paused while you watch", ["cancel"], "It goes on by itself when playback ends."]],
+    ["app", ["clock", "Opens again when you return to Momotus", ["cancel"], null]],
   ];
   for (const [reason, want] of cases) {
     const c = downloadControl(badge("waiting", reason, 0.2));
@@ -98,7 +102,9 @@ test("the series menu counts aired episodes and says where the season stands", (
   expect(seriesMenu(1, { seasons: 1, episodes: 8, downloaded: 0, active: 0 }, { seasons: 1, episodes: 8, downloaded: 0, active: 0 })).toEqual([{ label: "Download Season 1 (8 episodes)", act: "season" }]);
   expect(shown(seriesControl(null))).toEqual(["download", "Download", "Download", null, null, [], hint]);
   expect(seriesControl({ ...series, downloaded: 3, active: 1 }).label).toBe("Downloading");
-  expect(seriesControl({ ...series, downloaded: 3 }).label).toBe("Downloaded");
+  // One episode of 28 kept is not the series downloaded: it still reads Download, its arrow.
+  expect(shown(seriesControl({ ...series, downloaded: 1 }))).toEqual(["download", "Download", "Download", null, null, [], hint]);
+  expect(shown(seriesControl({ ...series, downloaded: 28 }))).toEqual(["check", "Downloaded", "Downloaded", null, null, [], hint]);
 });
 
 test("the Downloads screen's lines", () => {
@@ -131,6 +137,7 @@ test("the Downloads screen's lines", () => {
     speedBps: null,
     etaSecs: 330,
     quality: "1080p",
+    subtitles: [],
   };
   expect(progressLine(row)).toBe("1.2 of 2.1 GB · 6 min left");
   expect(progressLine({ ...row, state: "waiting", reason: "wifi" })).toBe("1.2 of 2.1 GB · Waiting for Wi-Fi");
@@ -143,4 +150,27 @@ test("the Downloads screen's lines", () => {
   expect(deleteSeries(4, "Severance")).toBe("Delete 4 downloaded episodes of Severance?");
   expect(deleteSeries(1, "Severance")).toBe("Delete 1 downloaded episode of Severance?");
   expect(deleteAll(12 * gb)).toBe("Delete all downloads on this device? 12 GB");
+});
+
+test("a control's name starts with what it shows, then its state, its value and what it downloads", () => {
+  expect(controlName(downloadControl(null), "Big Buck Bunny")).toBe("Download, Big Buck Bunny");
+  expect(controlName(downloadControl(badge("running", null, 0.45)), "S1:E2")).toBe("45%, Downloading, S1:E2");
+  expect(controlName(downloadControl(badge("running")), "S1:E2")).toBe("Downloading, S1:E2");
+  expect(controlName(downloadControl(badge("paused", null, 0.3)), "Big Buck Bunny")).toBe("Paused, 30 percent, Big Buck Bunny");
+  expect(controlName(downloadControl(badge("waiting", "wifi", 0.2)), "S2:E1 Pilot")).toBe("Waiting for Wi-Fi, 20 percent, S2:E1 Pilot");
+  expect(controlName(downloadControl(badge("done", null, 1)), "Big Buck Bunny")).toBe("Downloaded, Big Buck Bunny");
+});
+
+test("a profile not yet known, or not found, gets no download controls, as a kids one", () => {
+  const p = (kids: boolean, active = "a") => ({ profiles: [{ id: "a", name: "A", avatar: "letter:sky", position: 0, hasPin: false, isOwner: true, syncing: false, kids }], active, locked: false, max: 6, kids, wipePending: null });
+  expect(kidsOf(null)).toBe(true);
+  expect(kidsOf(undefined)).toBe(true);
+  expect(kidsOf(p(false, "gone"))).toBe(true);
+  expect(kidsOf(p(true))).toBe(true);
+  expect(kidsOf(p(false))).toBe(false);
+});
+
+test("the subtitles kept with a download, by language name", () => {
+  expect(subtitlesLine(["en", "tr"])).toBe("Subtitles: English, Turkish");
+  expect(subtitlesLine([])).toBeNull();
 });

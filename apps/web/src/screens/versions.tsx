@@ -61,6 +61,11 @@ export default function Versions() {
   // `?purpose=download`: the versions to keep on this device, each row downloads (plans/offline-downloads.md 3.2).
   const [query] = useSearchParams();
   const purpose = () => (query.purpose === "download" ? ("download" as const) : undefined);
+  // Choosing a version to download is not for TV, even by address: Home instead.
+  const navigate = useNavigate();
+  createEffect(() => {
+    if (purpose() && form() === "tv") navigate("/", { replace: true });
+  });
   // Try again on a title or a list that could not be loaded: the page anew.
   const [attempt, setAttempt] = createSignal(0);
   return (

@@ -15,7 +15,8 @@ import Square from "lucide-solid/icons/square";
 import Trash2 from "lucide-solid/icons/trash";
 import WifiOff from "lucide-solid/icons/wifi-off";
 import X from "lucide-solid/icons/x";
-import { type Component, For, type JSX, onCleanup, onMount, Show } from "solid-js";
+import { useNavigate } from "@solidjs/router";
+import { type Component, createEffect, For, type JSX, onCleanup, onMount, Show } from "solid-js";
 import { Dynamic } from "solid-js/web";
 import { displayCaps, op } from "../core/client";
 import type { DownloadBadge } from "../core/generated/DownloadBadge";
@@ -23,7 +24,8 @@ import { profiles } from "../core/profiles";
 import { pushBack } from "../focus/back";
 import { focusEl } from "../focus/dom";
 import { form } from "../form";
-import { type DownloadControl, type DownloadGlyph, type DownloadItem, ITEM_LABEL, itemOp } from "../lib/download";
+import { controlName, type DownloadControl, type DownloadGlyph, type DownloadItem, ITEM_LABEL, itemOp, kidsOf } from "../lib/download";
+import { downloadProblem, downloadWordsFailed, reported } from "../lib/download-status";
 import "./download.css";
 
 type Icon = Component<{ "aria-hidden"?: boolean; class?: string; style?: JSX.CSSProperties }>;
@@ -55,7 +57,21 @@ export const ITEM_ICON: Record<DownloadItem, Icon> = {
 
 /** Downloads show on the phone and desktop forms, never on TV, and a kids profile gets only Play. */
 export const downloadsHere = () => form() !== "tv";
-export const kidsProfile = () => profiles()?.profiles.find((p) => p.id === profiles()?.active)?.kids ?? false;
+/** Downloads' own pages are not for TV, even by address: they give way to Home. */
+export function awayFromTv() {
+  const navigate = useNavigate();
+  createEffect(() => {
+    if (form() === "tv") navigate("/", { replace: true });
+  });
+}
+
+/** Unknown means kids: no download control until the active profile is known not to be one. */
+export const kidsProfile = () => kidsOf(profiles());
+/** Known to be a kids profile: its kept titles read "Downloaded". */
+export const knownKids = () => profiles()?.profiles.find((p) => p.id === profiles()?.active)?.kids === true;
+/** A touch screen has no secondary press everywhere (iOS Safari fires no contextmenu): a tap on Download
+ * opens its menu there, with Choose a version to download beside Download. */
+export const touchFirst = () => typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches;
 
 /** The glyph, in a conic ring at its value while a download is under way (white on the 10 percent track). */
 export function DownloadMark(props: { control: DownloadControl }) {
@@ -71,27 +87,37 @@ export function DownloadMark(props: { control: DownloadControl }) {
   );
 }
 
-/** The accessible side of a control: its state's word as its name, the ring's value, and that a press
- * opens a menu. */
-export const controlAria = (c: DownloadControl) => ({
-  "aria-label": c.spoken,
-  "aria-valuetext": c.value ?? undefined,
+/** The accessible side of a control: a name that starts with what it shows, then its state, value and
+ * subject (lib/download.ts controlName), and that a press opens a menu. */
+export const controlAria = (c: DownloadControl, subject: string) => ({
+  "aria-label": controlName(c, subject),
   "aria-haspopup": c.hint ? ("menu" as const) : undefined,
 });
 
-// Ops (plans/core-protocol.md, Ops): each answers at once and the views follow.
-const quietly = (p: Promise<unknown>) => void p.catch((e: unknown) => console.warn("download op failed", e));
+/** The one line a refused op leaves (lib/download-status.ts), over whatever page is open. */
+export function DownloadStatus() {
+  return (
+    <Show when={downloadProblem()}>
+      {(words) => (
+        <p class="dl-status st bad" role="status">
+          <i class="dot" />
+          {words()}
+        </p>
+      )}
+    </Show>
+  );
+}
 
 /** Downloads a video, a season's aired episodes or every regular season's; `pick` is a row of an open
  * download-purpose Versions view. */
 export function downloadAdd(kind: string, itemId: string, scope: "video" | "season" | "series", extra: { videoId?: string; season?: number; pick?: { versionsSub: number; key: string } } = {}) {
-  quietly(op("downloadAdd", { kind, itemId, scope, params: displayCaps(), ...extra }));
+  void reported(op("downloadAdd", { kind, itemId, scope, params: displayCaps(), ...extra }), downloadWordsFailed.add);
 }
 
 export type Which = { ids: string[] } | { itemId: string } | { all: true };
 
 export function downloadAct(name: string, which: Which, mobileData = false) {
-  quietly(op(name, { ...which, ...(mobileData ? { mobileData } : {}) }));
+  void reported(op(name, { ...which, ...(mobileData ? { mobileData } : {}) }), downloadWordsFailed.change);
 }
 
 /** An item of an existing download's menu that is an op: sent, true. The rest go somewhere and are the caller's. */
@@ -117,6 +143,8 @@ export interface MenuAsk {
   detail?: string | null;
   entries: MenuEntry[];
   from: string;
+  /** The entry the focus starts on (a confirmation's Cancel), else the first. */
+  focus?: string;
 }
 
 /** A download's items as menu entries; `go` runs the ones that lead somewhere (Download, a version, Play). */
@@ -138,7 +166,8 @@ export function DownloadMenu(props: { ask: MenuAsk; onClose: () => void }) {
   onMount(() => {
     onCleanup(pushBack(close));
     queueMicrotask(() => {
-      const first = list.querySelector<HTMLElement>("[data-f]");
+      const want = props.ask.focus;
+      const first = (want && list.querySelector<HTMLElement>(`[data-f="dlmenu:${CSS.escape(want)}"]`)) || list.querySelector<HTMLElement>("[data-f]");
       if (first) focusEl(first);
     });
   });

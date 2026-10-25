@@ -137,3 +137,11 @@
 
 /* A phone's round actions share the row with Download as the fifth: they spread to its edges. */
 [data-form="phone"] .info .acts:has(.dl) { gap: 6px; justify-content: space-between; }
+
+/* A refused op's one line (lib/download-status.ts), at the foot of the page over everything. */
+.dl-status { position: absolute; left: 50%; bottom: var(--safe-bottom); translate: -50% 0; z-index: 60; padding: 18px 28px; border-radius: 16px;
+  background: var(--raised); box-shadow: 0 10px 30px rgba(0, 0, 0, .35); font: 500 var(--type-callout) / 1.3 var(--font-text); white-space: nowrap; }
+[data-form="phone"] .dl-status { position: fixed; bottom: calc(96px + env(safe-area-inset-bottom)); max-width: calc(100% - 32px); padding: 12px 14px; font-size: 14px; white-space: normal; }
+/* The subtitles kept with a download, a quiet third line. */
+.dlrow-text .dlrow-subs { color: var(--dim); font-size: var(--type-caption); }
+[data-form="phone"] .dlrow-text .dlrow-subs { font-size: 12px; }
