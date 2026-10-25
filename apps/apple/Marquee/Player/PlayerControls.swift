@@ -330,6 +330,9 @@ struct PlayerControls: View {
                 value: Binding(get: { scrub ?? model.position }, set: { scrub = $0 }),
                 in: 0...max(model.duration, 1)
             ) { editing in
+                // A drag on the bar holds the controls up, and their hide timer starts again from its end, as on
+                // Android: before, the 3 s from the tap that showed them ran out under the finger (bench PGW10).
+                hold(editing)
                 if !editing, let value = scrub {
                     model.seek(to: value)
                     scrub = nil

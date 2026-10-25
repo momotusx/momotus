@@ -142,3 +142,16 @@ private let bands = SwipeRules.Bands(left: 24, top: 32, right: 24, bottom: 32)
     #expect(SwipeRules.checksVolume(before: 0.5, set: 0.5 + 1.0 / 16))
     #expect(SwipeRules.checksVolume(before: 0.5, set: 0.4))
 }
+
+@Test func aDragOnThePositionBarHoldsTheControlsAndRestartsTheirTimer() throws {
+    // The slider told no one it was dragged, so the 3 s from the tap that showed the controls ran out under the finger
+    // (bench PGW10). It now holds them as an open menu does: up while it drags, the timer from its end.
+    let dir = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appending(path: "../Marquee/Player")
+    let controls = try String(contentsOf: dir.appending(path: "PlayerControls.swift"), encoding: .utf8)
+    #expect(try body(of: "private func scrubRow(", in: controls).contains("hold(editing)"))
+    let screen = try String(contentsOf: dir.appending(path: "PlayerScreen.swift"), encoding: .utf8)
+    // The hold: the controls stay while it is on, and the touch time restarts when it ends.
+    #expect(screen.contains("hold: { open in\n                        menuOpenedAt = open ? .now : nil\n                        lastTouch = .now"))
+    #expect(try body(of: "private func autoHide()", in: screen).contains("!menuOpen"))
+    #expect(PlayerLayout.menuHolds(openedAt: .now, now: .now))
+}
