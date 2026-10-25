@@ -65,6 +65,11 @@ pub struct Tile {
     #[serde(skip)]
     #[cfg_attr(feature = "ts", ts(skip))]
     pub(crate) blurb: Option<Blurb>,
+    /// The shape the addon gave, kept while `rated_cover` shows RPDB's 2:3
+    /// cover in its place, so a tile the key no longer covers gets it back.
+    #[serde(skip)]
+    #[cfg_attr(feature = "ts", ts(skip))]
+    pub(crate) own_shape: Option<String>,
 }
 
 impl Tile {
@@ -82,7 +87,9 @@ impl Tile {
     /// Watching's 16:9 art). Every tile builder ends here.
     pub(crate) fn rated_cover(mut self, covers: &Covers) -> Self {
         if let Some(cover) = covers.url(&self.id) {
-            "poster".clone_into(&mut self.poster_shape);
+            if self.own_shape.is_none() {
+                self.own_shape = Some(std::mem::replace(&mut self.poster_shape, "poster".into()));
+            }
             self.poster_fallback = self.poster.take().filter(|p| !p.starts_with(RPDB));
             self.poster = Some(cover);
         }
@@ -100,11 +107,16 @@ impl Tile {
 
     /// The tile's cover drawn again after the RPDB key changed (`old` and
     /// `new` hold the keys): a cover `old` drew goes back to the addon's
-    /// poster, then `new` draws its band, if it has a key. Nothing else on
-    /// the tile changes.
+    /// poster and shape, then `new` draws its band, if it has a key. Nothing
+    /// else on the tile changes. ponytail: a catalog load in flight when the
+    /// key changes lands with the key it read at its start; the next key
+    /// change or reload fixes it.
     pub(crate) fn recovered(mut self, old: &Covers, new: &Covers) -> Self {
         if self.poster.is_some() && old.url(&self.id) == self.poster {
             self.poster = self.poster_fallback.take();
+            if let Some(shape) = self.own_shape.take() {
+                self.poster_shape = shape;
+            }
         }
         self.rated_cover(new)
     }
@@ -617,8 +629,25 @@ async fn watch_addons(
     }
 }
 
+/// Draws these tiles again after the RPDB key changed from `old` to `new`
+/// (`Tile::recovered`): Home's rows and hero, Discover's items.
+pub(crate) fn recover_tiles<'a>(
+    core: &Core,
+    old: Option<String>,
+    new: Option<String>,
+    tiles: impl IntoIterator<Item = &'a mut Tile>,
+) {
+    let tiles: Vec<&mut Tile> = tiles.into_iter().collect();
+    let ids: Vec<String> = tiles.iter().map(|t| t.id.clone()).collect();
+    let old = core.covers_with(old, ids.iter().map(String::as_str));
+    let new = core.covers_with(new, ids.iter().map(String::as_str));
+    for tile in tiles {
+        *tile = tile.clone().recovered(&old, &new);
+    }
+}
+
 /// Every tile of Home and the hero drawn again with the key `new` in place
-/// of `old` (`Tile::recovered`), as one batch of row diffs.
+/// of `old`, as one batch of row diffs.
 fn recover_home(
     core: &Core,
     old: Option<String>,
@@ -627,28 +656,23 @@ fn recover_home(
     header: &SharedObservable<HomeHeader>,
 ) {
     let mut rows = lock(rows);
-    let hero = header.get();
-    let ids: Vec<String> = rows
-        .iter()
-        .flat_map(|r| r.tiles.iter().map(|t| t.id.clone()))
-        .chain(hero.hero.iter().map(|h| h.tile.id.clone()))
-        .collect();
-    let old = core.covers_with(old, ids.iter().map(String::as_str));
-    let new = core.covers_with(new, ids.iter().map(String::as_str));
-    for i in 0..rows.len() {
-        let mut row = rows[i].clone();
-        row.tiles = row
-            .tiles
-            .into_iter()
-            .map(|t| t.recovered(&old, &new))
-            .collect();
+    let mut next: Vec<HomeRow> = rows.iter().cloned().collect();
+    let mut hero = header.get().hero;
+    recover_tiles(
+        core,
+        old,
+        new,
+        next.iter_mut()
+            .flat_map(|r| r.tiles.iter_mut())
+            .chain(hero.iter_mut().map(|h| &mut h.tile)),
+    );
+    for (i, row) in next.into_iter().enumerate() {
         if row != rows[i] {
             rows.set(i, row);
         }
     }
-    if let Some(mut hero) = hero.hero {
-        hero.tile = hero.tile.recovered(&old, &new);
-        header.set(HomeHeader { hero: Some(hero) });
+    if hero != header.get().hero {
+        header.set(HomeHeader { hero });
     }
 }
 
@@ -930,6 +954,7 @@ pub(crate) fn tile_from_preview(m: mq_protocol::MetaItemPreview, covers: &Covers
         ratings: Ratings::of(rating.as_deref()),
         rating,
         blurb: Some(blurb),
+        own_shape: None,
         poster_fallback: None,
     }
     .rated_cover(covers)
@@ -1081,6 +1106,7 @@ pub(crate) fn kids_tile(row: &AllowedRow, covers: &Covers) -> Tile {
         rating: None,
         ratings: Ratings::default(),
         blurb: None,
+        own_shape: None,
         poster_fallback: None,
     }
     .rated_stored_cover(covers)
@@ -1271,6 +1297,7 @@ fn tile_for_next(meta: &mq_protocol::MetaItem, next: NextEpisode, covers: &Cover
         rating: imdb_rating(p),
         ratings: Ratings::of(imdb_rating(p).as_deref()),
         blurb: None,
+        own_shape: None,
         poster_fallback: None,
     }
     .rated_cover(covers)
@@ -1334,6 +1361,7 @@ fn tile_from_continue(
         ratings: Ratings::of(preview.and_then(imdb_rating).as_deref()),
         rating: preview.and_then(imdb_rating),
         blurb: None,
+        own_shape: None,
         poster_fallback: None,
     }
     .rated_cover(covers)
@@ -1452,6 +1480,7 @@ mod tests {
             rating: None,
             ratings: Default::default(),
             blurb: None,
+            own_shape: None,
         };
         let covers =
             |rpdb: Option<&str>| super::Covers::with(rpdb, &[("kitsu:50016", "tt12590266")]);

@@ -156,7 +156,13 @@ async fn watch(
     while let Some(tables) = crate::views::next_change(&mut changes).await {
         if tables
             .iter()
-            .any(|t| matches!(t, Table::LibraryItems | Table::Progress | Table::Access))
+            // Addons too: the RPDB key for the covers comes from one.
+            .any(|t| {
+                matches!(
+                    t,
+                    Table::LibraryItems | Table::Progress | Table::Access | Table::Addons
+                )
+            })
         {
             again(&snapshot);
         }
@@ -235,6 +241,7 @@ fn tile(e: &LibraryEntry, covers: &crate::covers::Covers) -> Tile {
         rating: None,
         ratings: crate::ratings::Ratings::default(),
         blurb: None,
+        own_shape: None,
         poster_fallback: None,
     }
     .rated_stored_cover(covers)

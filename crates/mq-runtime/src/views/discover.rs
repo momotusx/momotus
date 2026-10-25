@@ -296,7 +296,22 @@ async fn watch_library(inner: Arc<Inner>, mut changes: Receiver<Vec<Table>>) {
 /// the catalog on screen stays when it is still there (no reload);
 /// otherwise Discover starts again on the first.
 async fn watch_addons(inner: Arc<Inner>, mut changes: Receiver<Vec<Table>>) {
+    let mut key = inner.core.rpdb_key();
     while home_changed(&mut changes).await {
+        // The RPDB key comes from an addon: the items already listed take the
+        // band as it is now, as Home's do.
+        let now = inner.core.rpdb_key();
+        if now != key {
+            let mut s = lock(&inner.state);
+            crate::views::home::recover_tiles(
+                &inner.core,
+                key.take(),
+                now.clone(),
+                s.snapshot.items.iter_mut(),
+            );
+            inner.snapshot.set(s.snapshot.clone());
+            key = now;
+        }
         let catalogs = browsable(
             &inner.core.installed_addons().unwrap_or_default(),
             &inner.core.prefs().home_rows,

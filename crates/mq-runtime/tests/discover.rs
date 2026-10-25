@@ -1015,3 +1015,59 @@ async fn the_preview_sets_the_library_with_no_title_view() {
         "not listed: nothing"
     );
 }
+
+/// An addon whose link carries RPDB's free key, as the Rotten Tomatoes
+/// default does; no catalogs.
+fn keyed() -> AddonRow {
+    AddonRow {
+        transport_url: "https://7a82163c306e-rottentomatoes.baby-beamup.club/%7B%22rpdb_key%22%3A%22t0-free-rpdb%22%7D/manifest.json".into(),
+        manifest_json: serde_json::json!({
+            "id": "pw.ers.rottentomatoes", "version": "1.0.9", "name": "Rotten Tomatoes",
+            "types": ["movie"], "resources": ["catalog"], "catalogs": []
+        })
+        .to_string(),
+        position: 1,
+        enabled: true,
+        allow_private: false,
+    }
+}
+
+/// Discover stays open while the addons change: the items already listed
+/// lose the band when the addon with the key goes, and get it back when it
+/// comes back, with no catalog asked again.
+#[tokio::test]
+async fn a_live_discover_follows_the_rpdb_key() {
+    let core = Core::temporary("p").unwrap();
+    let (row, asked) = addon().await;
+    let set = |with_key: bool| {
+        let rows: Vec<AddonRow> = std::iter::once(row.clone())
+            .chain(with_key.then(keyed))
+            .collect();
+        core.library().set_addons("p", &rows, &core.hlc()).unwrap();
+    };
+    set(true);
+    let view = DiscoverView::open(&core);
+    settle(&view).await;
+    let band =
+        "https://api.ratingposterdb.com/t0-free-rpdb/imdb/poster-default/tt0.jpg?fallback=true";
+    let first = |view: &DiscoverView| view.snapshot().items[0].poster.clone();
+    assert_eq!(first(&view).as_deref(), Some(band));
+    let pages = asked.lock().unwrap().len();
+    let until = |want: Option<&'static str>| {
+        let view = &view;
+        async move {
+            for _ in 0..300 {
+                if first(view).as_deref() == want {
+                    return;
+                }
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+            panic!("wanted {want:?}, got {:?}", first(view));
+        }
+    };
+    set(false);
+    until(None).await;
+    set(true);
+    until(Some(band)).await;
+    assert_eq!(asked.lock().unwrap().len(), pages, "no catalog asked again");
+}

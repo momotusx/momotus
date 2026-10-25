@@ -824,6 +824,7 @@ impl Ctx {
                     rating: None,
                     ratings: Ratings::default(),
                     blurb: None,
+                    own_shape: None,
                 }
                 .rated_cover(&covers)
             })

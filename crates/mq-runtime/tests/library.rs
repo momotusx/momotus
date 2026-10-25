@@ -213,3 +213,44 @@ async fn library_covers_carry_the_ratings_band() {
         "{covers:?}"
     );
 }
+
+/// Library stays open while the addons change: its covers follow the RPDB
+/// key the addon with it gives, gone with the addon and back with it.
+#[tokio::test]
+async fn a_live_library_follows_the_rpdb_key() {
+    let core = Core::temporary("p").unwrap();
+    add(&core, "tt0111161", "The Shawshank Redemption", "movie", 1);
+    let keyed = AddonRow {
+        transport_url: "https://7a82163c306e-rottentomatoes.baby-beamup.club/%7B%22rpdb_key%22%3A%22t0-free-rpdb%22%7D/manifest.json".into(),
+        manifest_json: serde_json::json!({
+            "id": "pw.ers.rottentomatoes", "version": "1.0.9", "name": "Rotten Tomatoes",
+            "types": ["movie"], "resources": ["catalog"], "catalogs": []
+        })
+        .to_string(),
+        position: 0,
+        enabled: true,
+        allow_private: false,
+    };
+    let set = |rows: &[AddonRow]| core.library().set_addons("p", rows, &core.hlc()).unwrap();
+    set(std::slice::from_ref(&keyed));
+    let view = LibraryView::open(&core);
+    let band = "https://api.ratingposterdb.com/t0-free-rpdb/imdb/poster-default/tt0111161.jpg?fallback=true";
+    let poster = |view: &LibraryView| view.snapshot().items[0].poster.clone();
+    let until = |want: Option<&'static str>| {
+        let view = &view;
+        async move {
+            for _ in 0..300 {
+                if poster(view).as_deref() == want {
+                    return;
+                }
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+            panic!("wanted {want:?}, got {:?}", poster(view));
+        }
+    };
+    until(Some(band)).await;
+    set(&[]);
+    until(None).await;
+    set(std::slice::from_ref(&keyed));
+    until(Some(band)).await;
+}

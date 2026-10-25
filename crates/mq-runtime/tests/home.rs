@@ -1408,11 +1408,16 @@ async fn until_cover(view: &HomeView, poster: &str, what: &str) {
 
 /// Home stays open while the addons change: removing the addon that gives
 /// the RPDB key takes the band off every tile already drawn, the hero's too,
-/// and adding it back draws the band again, on the same live view.
+/// and adding it back draws the band again, on the same live view. A wide
+/// tile gets its own shape back with its own picture.
 #[tokio::test]
 async fn a_live_home_follows_the_rpdb_key_as_the_addon_comes_and_goes() {
+    const WIDE: &str = r#"{"metas":[
+  {"id":"tt0111161","type":"movie","name":"The Shawshank Redemption","posterShape":"landscape",
+   "poster":"https://images.metahub.space/poster/medium/tt0111161/img"}
+]}"#;
     let core = Core::temporary("p").unwrap();
-    let catalog = catalog_addon("fast", Duration::ZERO, 200, METAS).await;
+    let catalog = catalog_addon("fast", Duration::ZERO, 200, WIDE).await;
     let own = "https://images.metahub.space/poster/medium/tt0111161/img";
     let band = "https://api.ratingposterdb.com/t0-free-rpdb/imdb/poster-default/tt0111161.jpg?fallback=true";
     let set = |with_key: bool| {
@@ -1428,15 +1433,12 @@ async fn a_live_home_follows_the_rpdb_key_as_the_addon_comes_and_goes() {
     until_cover(&view, band, "the band with the key").await;
     set(false);
     until_cover(&view, own, "the addon's poster once the key is gone").await;
-    assert_eq!(
-        view.snapshot().rows[0].tiles[0].poster_fallback,
-        None,
-        "no fallback left behind"
-    );
+    let plain = view.snapshot().rows[0].tiles[0].clone();
+    assert_eq!(plain.poster_fallback, None, "no fallback left behind");
+    assert_eq!(plain.poster_shape, "landscape", "its own shape back");
     set(true);
     until_cover(&view, band, "the band again with the key back").await;
-    assert_eq!(
-        view.snapshot().rows[0].tiles[0].poster_fallback.as_deref(),
-        Some(own)
-    );
+    let banded = view.snapshot().rows[0].tiles[0].clone();
+    assert_eq!(banded.poster_fallback.as_deref(), Some(own));
+    assert_eq!(banded.poster_shape, "poster");
 }
