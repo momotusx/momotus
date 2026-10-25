@@ -235,23 +235,20 @@ class PhonePlayerSwipeTest {
         playing()
         if (!controlsShown()) compose.onRoot().performTouchInput { click(center) }
         compose.waitUntil(3_000) { controlsShown() }
-        // The drag starts above the foot's band, so it is the bar that takes it, not the band that refuses it.
+        // The drag starts clear of every band, so it is the bar that takes it, not a band that refuses it.
         val bar = compose.onNodeWithContentDescription("Position").fetchSemanticsNode().boundsInRoot
-        val band = with(compose.density) { 32.dp.toPx() }
-        val rootHeight =
-            compose
-                .onRoot()
-                .fetchSemanticsNode()
-                .size.height
-        assertTrue(
-            bar.center.y < rootHeight - band,
-            "the bar's middle ${bar.center.y} sits above the band at ${rootHeight - band}",
-        )
-        compose.onNodeWithContentDescription("Position").performTouchInput {
-            val from = Offset(width * 0.75f, centerY)
-            swipe(from, from + Offset(0f, -120f), 300)
-        }
+        val root = compose.onRoot().fetchSemanticsNode().size
+        val (side, end) = with(compose.density) { 24.dp.toPx() to 32.dp.toPx() }
+        val from = Offset(bar.left + bar.width * 0.75f, bar.center.y)
+        assertTrue(from.x > side && from.x < root.width - side, "x ${from.x} clear of the side bands")
+        assertTrue(from.y > end && from.y < root.height - end, "y ${from.y} clear of the end bands")
+        compose.onRoot().performTouchInput { swipe(from, from + Offset(0f, -120f), 300) }
         assertEquals(7, volume())
+        // The same drag with the controls hidden is a swipe: the point is the picture's once the bar is gone.
+        compose.mainClock.advanceTimeBy(5_000)
+        compose.waitUntil(3_000) { !controlsShown() }
+        compose.onRoot().performTouchInput { swipe(from, from + Offset(0f, -120f), 300) }
+        assertTrue(volume() > 7, "with no bar there the same drag sets the volume, now ${volume()}")
     }
 
     @Test
