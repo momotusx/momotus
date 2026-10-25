@@ -8,11 +8,17 @@ use std::net::IpAddr;
 /// the dev bridge, emulator walks through the FFI) with a test app id. A
 /// shipped build talks to Trakt only as its build was configured, and a URL
 /// off this machine is refused: no Trakt call goes elsewhere.
+/// `MQ_DEV_TRAKT=off` turns Trakt off whatever app the build has (the e2e
+/// default: no title page holds a Trakt slot it will never fill).
 #[cfg(debug_assertions)]
 pub fn dev_trakt(core: &Core) {
     let Ok(url) = std::env::var("MQ_DEV_TRAKT") else {
         return;
     };
+    if url == "off" {
+        core.set_trakt_config(None);
+        return;
+    }
     if !loopback_url(&url) {
         tracing::warn!("MQ_DEV_TRAKT ignored: only an http URL on this machine is taken");
         eprintln!("MQ_DEV_TRAKT ignored: only an http URL on this machine is taken");
