@@ -123,7 +123,7 @@ class TvTitleScoresTest {
                     // The longest cast: the column shows four of it.
                     cast = (1..12).map { "Actor Number $it" },
                     directors = listOf("Frank Darabont", "Second Director", "Third Director"),
-                    writers = listOf("Stephen King", "Frank Darabont", "Third Writer"),
+                    writers = listOf("Stephen King", "Second Writer", "Third Writer"),
                     ratings = Ratings(imdb = "9.3"),
                     imdbUrl = "https://www.imdb.com/title/tt0111161/",
                     scores =
@@ -262,11 +262,26 @@ class TvTitleScoresTest {
         assertTrue(card.right <= facts.left, "card $card over the facts $facts")
         // 300 by 450 on the 1920 canvas, where one dp is one canvas point (TvCanvas).
         assertEquals(300.dp, card.right - card.left)
+        // The facts keep their full width beside the cover: each value is drawn, not squeezed to nothing.
+        // "1994" is the meta line's too: the facts table's is the one at the right.
+        val years = compose.onAllNodes(hasText("1994"), useUnmergedTree = true)
+        val value =
+            years
+                .fetchSemanticsNodes()
+                .indices
+                .map { years[it].getUnclippedBoundsInRoot() }
+                .maxBy { it.left }
+        assertTrue(value.right - value.left > 0.dp, "the Released value is ${value.right - value.left} wide")
+        assertTrue(value.left >= card.right, "the value $value sits over the card $card")
+        // Four of the cast, two directors and two writers, every name its own: the lowest one ends inside the safe area.
+        val names =
+            (1..4).map { "Actor Number $it" } +
+                listOf("Frank Darabont", "Second Director", "Stephen King", "Second Writer")
         compose.onAllNodesWithText("Actor Number", substring = true).assertCountEquals(4)
-        // Two writers at most: the second is also a director, so the first one's row is the column's foot.
+        compose.onAllNodesWithText("Third Director").assertCountEquals(0)
         compose.onAllNodesWithText("Third Writer").assertCountEquals(0)
-        val last = compose.onNodeWithText("Stephen King").getUnclippedBoundsInRoot()
-        assertTrue(last.bottom <= 1080.dp - 60.dp, "the people end at ${last.bottom}, past the safe bottom")
+        val foot = names.maxOf { compose.onNodeWithText(it).getUnclippedBoundsInRoot().bottom }
+        assertTrue(foot <= 1080.dp - 60.dp, "the people end at $foot, past the safe bottom")
     }
 
     @Test

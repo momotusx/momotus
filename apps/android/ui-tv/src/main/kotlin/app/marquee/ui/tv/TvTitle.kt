@@ -214,8 +214,13 @@ fun TvTitle(
                                     onGenre,
                                 )
                             }
+                            // The cover sits beside the facts and the people, which keep their full 560: the
+                            // column grows by the cover's width (Info is weighted and capped at 760).
+                            val cover = details.ratedPoster != null
                             Column(
-                                Modifier.width(560.dp).padding(top = Marquee.space.xl),
+                                Modifier
+                                    .width(if (cover) 560.dp + COVER_WIDTH + Marquee.space.m else 560.dp)
+                                    .padding(top = Marquee.space.xl),
                                 verticalArrangement = Arrangement.spacedBy(Marquee.space.m),
                             ) {
                                 // Rotten Tomatoes shows on the page through the rated cover, at the right over
