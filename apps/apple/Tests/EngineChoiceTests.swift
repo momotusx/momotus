@@ -108,3 +108,32 @@ import Testing
     #expect(try body(of: "func stopped(_ model: PlayerModel)", in: pip).contains("model.resume()"))
     #expect(!pip.contains("model.player."))
 }
+
+/// plans/iphone-mkv.md, review r1 finding 2: the iPhone's switch counts in own builds only; a store build keeps MKV
+/// hidden whatever the switch says.
+@Test func theIPhoneSwitchCountsInOwnBuildsOnly() {
+    #expect(EngineChoice.phone(switchOn: true, build: "own"))
+    #expect(!EngineChoice.phone(switchOn: true, build: "store"))
+    #expect(!EngineChoice.phone(switchOn: false, build: "own"))
+    #expect(EngineChoice.enabled(on: .phone) == EngineChoice.phone(switchOn: EngineChoice.phoneSwitch, build: CoreBuild.field))
+}
+
+/// Review r1 finding 1: software video only where admitted, with the path named in the start log; finding 5: a
+/// loading engine session runs no picture clock; the AirPlay button goes when the engine opens.
+@MainActor @Test func theEngineKeepsToWhatThePlatformAdmits() throws {
+    #expect(EngineChoice.allowsSoftwareVideo(on: .mac))
+    #expect(!EngineChoice.allowsSoftwareVideo(on: .phone))
+    #expect(!EngineChoice.allowsSoftwareVideo(on: .tv))
+    #expect(AetherSession.path(native: true, software: false) == "native")
+    #expect(AetherSession.path(native: false, software: true) == "software")
+    #expect(AetherSession.path(native: false, software: false) == "other")
+    let dir = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appending(path: "../Marquee/Player")
+    let session = try String(contentsOf: dir.appending(path: "AetherSession.swift"), encoding: .utf8)
+    #expect(session.contains("guard mine(), source != nil, !EngineChoice.allowsSoftwareVideo(on: EngineChoice.platform) else { return }"))
+    #expect(session.contains("path=\\(Self.path(native: host.nativePlayerLayer != nil, software: host.softwarePiPSource != nil)"))
+    // The segment 0 wait reports loading: not playing, so the watchdog's clock does not run.
+    #expect(!AetherSession.playState(.loading, buffering: false).playing)
+    let model = try String(contentsOf: dir.appending(path: "PlayerModel.swift"), encoding: .utf8)
+    #expect(try body(of: "private func engineState(", in: model).contains("playingSince = playing ? playingSince ?? .now : nil"))
+    #expect(try body(of: "private func openOnEngine(", in: model).contains("airPlayable = false"))
+}

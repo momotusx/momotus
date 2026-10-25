@@ -124,6 +124,7 @@ final class AetherSession {
                 }
             }
             .store(in: &bag)
+        let host = engine
         engine.$hasFirstFrameReadyForDisplay
             .receive(on: DispatchQueue.main)
             .sink { shown in
@@ -136,7 +137,19 @@ final class AetherSession {
                         from.flatMap { from in to.map { "\(Int(($0 - from) / .milliseconds(1)))" } } ?? "n/a"
                     }
                     let (probed, session) = (passed[.streamsProbed], passed[.sessionConstructed])
-                    coreLog.notice("metric engine_start probe_ms=\(ms(loaded, probed), privacy: .public) session_ms=\(ms(probed, session), privacy: .public) frame_ms=\(ms(session, .now), privacy: .public) probe_mib=\(probeMiB, privacy: .public)")
+                    coreLog.notice("metric engine_start probe_ms=\(ms(loaded, probed), privacy: .public) session_ms=\(ms(probed, session), privacy: .public) frame_ms=\(ms(session, .now), privacy: .public) probe_mib=\(probeMiB, privacy: .public) path=\(Self.path(native: host.nativePlayerLayer != nil, software: host.softwarePiPSource != nil), privacy: .public)")
+                }
+            }
+            .store(in: &bag)
+        // Software video only where the platform admits it (plans/iphone-mkv.md): a session the engine sent to its
+        // software host fails here, and the core moves to the next version.
+        engine.$softwarePiPSource
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] source in
+                MainActor.assumeIsolated {
+                    guard mine(), source != nil, !EngineChoice.allowsSoftwareVideo(on: EngineChoice.platform) else { return }
+                    self?.stop()
+                    events.failed("this device does not decode this picture in software")
                 }
             }
             .store(in: &bag)
@@ -162,6 +175,11 @@ final class AetherSession {
             }
         }
         if autoplay { armBound(openWithin, failed: events.failed) } else { heldBound = (openWithin, events.failed) }
+    }
+
+    /// The engine's path for the start log: native (remuxed for AVPlayer), software (its own decoders), or other.
+    static func path(native: Bool, software: Bool) -> String {
+        native ? "native" : software ? "software" : "other"
     }
 
     /// Past `within` with no first frame, the source counts as failed.

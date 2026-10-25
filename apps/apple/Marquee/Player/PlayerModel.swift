@@ -1023,6 +1023,8 @@ final class PlayerModel {
         if start > 1 { position = start }
         backend = .aether
         self.fellBack = fellBack
+        // The engine's players refuse external playback (patch 2): no AirPlay button left from AVPlayer's source.
+        airPlayable = false
         guard let session = aether ?? AetherSession() else {
             fail(PlayerFailure(kind: "other", error: "the second player could not start on this device"), notice: "This source failed. Trying the next one.")
             return

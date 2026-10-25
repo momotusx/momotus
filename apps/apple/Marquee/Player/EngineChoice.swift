@@ -20,9 +20,26 @@ enum EngineChoice {
     static func enabled(on platform: Platform) -> Bool {
         switch platform {
         case .mac: true
-        case .phone: false
+        case .phone: phone(switchOn: phoneSwitch, build: CoreBuild.field)
         case .tv: false
         }
+    }
+
+    /// The iPhone's switch (plans/iphone-mkv.md): on in the last commit of that plan.
+    static let phoneSwitch = false
+
+    /// The iPhone plays MKV on the engine in own builds only: a store build keeps it hidden, as the engine decodes
+    /// HEVC, DTS and TrueHD in-process under copyright licences only (plans/apple-second-engine.md 6).
+    static func phone(switchOn: Bool, build: String) -> Bool {
+        switchOn && build == "own"
+    }
+
+    /// Whether the engine may decode video in software here. The caps hide software codecs by their names, but the
+    /// engine picks its software host from the stream too (interlaced or 4:2:2 H.264, MVC, anything the hardware
+    /// refuses): where this is false such a session fails and the core moves to the next version. The Mac admits it
+    /// (walked, bench AS31, AS38); the iPhone admits none in v1 (plans/iphone-mkv.md).
+    static func allowsSoftwareVideo(on platform: Platform) -> Bool {
+        platform == .mac
     }
 
     static var platform: Platform {
