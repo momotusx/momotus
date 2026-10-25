@@ -17,6 +17,7 @@ use crate::core::WeakCore;
 use crate::{Core, CoreError};
 use eyeball::SharedObservable;
 use mq_library::DownloadRecord;
+use mq_protocol::MetaItem;
 use mq_streams::ParsedStream;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -39,6 +40,10 @@ const PUBLISH_EVERY: Duration = Duration::from_millis(500);
 const REPORT_FRESH: Duration = Duration::from_secs(120);
 /// Moves to the next source of a pick before a job fails (4.3).
 const MAX_MOVES: i64 = 2;
+/// A smart step whose meta could not be read looks again after this.
+const SMART_WAIT: Duration = Duration::from_secs(10 * 60);
+/// A space wait looks again no sooner than this after its space error.
+const SPACE_LOOK: Duration = Duration::from_secs(60);
 /// The first wait before a subtitle step no source answered asks again.
 const SUBTITLE_WAIT: Duration = Duration::from_secs(10 * 60);
 const SUBTITLE_WAIT_MAX: Duration = Duration::from_secs(6 * 60 * 60);
@@ -156,13 +161,22 @@ pub(crate) struct StoredStream {
 }
 
 impl StoredStream {
+    /// `stream` as a download keeps it on the device: never a secret. Of
+    /// its addon's link only the origin stays (what the download's client
+    /// is scoped to; the path and query carry the addon's configuration and
+    /// keys), and no header that authenticates (code review r1 m3).
     pub(crate) fn of(stream: &ParsedStream) -> Self {
         Self {
             stream: stream.clone(),
             size_is_file: stream.size_is_file,
-            headers: stream.headers.clone(),
+            headers: stream
+                .headers
+                .iter()
+                .filter(|(name, _)| !secret_header(name))
+                .cloned()
+                .collect(),
             subtitles: stream.subtitles.clone(),
-            addon_url: stream.addon_url.clone(),
+            addon_url: stream.addon_url.as_ref().and_then(origin_of),
         }
     }
 
@@ -394,6 +408,10 @@ pub struct Downloads {
     board: SharedObservable<Board>,
     running: Mutex<HashMap<String, Running>>,
     link: Mutex<Link>,
+    /// The app told the network once: until then nothing runs, so a launch
+    /// on mobile data with Wi-Fi only on never starts a job before the app
+    /// says so (code review r1 m8).
+    reported: std::sync::atomic::AtomicBool,
     allowed: Mutex<Allowed>,
     /// Network playbacks right now (the playing rule, 4.4), each with the
     /// torrent it plays, if one.
@@ -418,6 +436,16 @@ pub struct Downloads {
     /// The loopback URLs of downloads' posters and stills (4.11), by file,
     /// with the server port they were made on.
     images: Mutex<HashMap<PathBuf, (u16, String, mq_server::Lease)>>,
+    /// Downloads a playback reads now, by id, with how many read them.
+    in_use: Mutex<HashMap<String, usize>>,
+    /// Removed downloads whose files go when their last playback ends, with
+    /// the torrent file each kept.
+    pending: Mutex<HashMap<String, Option<TorrentRef>>>,
+    /// Smart steps whose meta could not be read: when each looks again.
+    smart_waits: Mutex<HashMap<String, std::time::Instant>>,
+    /// Each row's version as last parsed, with the text it came from: the
+    /// queue reads every row twice a second (code review r1 m9).
+    versions: Mutex<HashMap<String, (String, Arc<Version>)>>,
 }
 
 /// A smart download's step, kept on the episode it finished (4.14).
@@ -448,6 +476,37 @@ impl Drop for Streaming {
     }
 }
 
+/// Held by a playback of a download's own version: a delete of it (the
+/// user's, or a smart download's) takes the row at once and its files only
+/// when the last such playback ends (code review r1 M1).
+pub struct InUse {
+    id: String,
+    downloads: std::sync::Weak<Downloads>,
+}
+
+impl Drop for InUse {
+    fn drop(&mut self) {
+        let Some(d) = self.downloads.upgrade() else {
+            return;
+        };
+        let last = {
+            let mut in_use = lock(&d.in_use);
+            let left = in_use.get_mut(&self.id).map(|n| {
+                *n -= 1;
+                *n
+            });
+            if left == Some(0) {
+                in_use.remove(&self.id);
+            }
+            left == Some(0)
+        };
+        let pending = last.then(|| lock(&d.pending).remove(&self.id)).flatten();
+        if let (Some(torrent), Some(core)) = (pending, d.core()) {
+            d.drop_files(&core, &self.id, torrent);
+        }
+    }
+}
+
 fn lock<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
     m.lock().unwrap_or_else(|p| p.into_inner())
 }
@@ -460,6 +519,7 @@ impl Downloads {
             board: SharedObservable::new(Board::default()),
             running: Mutex::default(),
             link: Mutex::default(),
+            reported: std::sync::atomic::AtomicBool::new(false),
             allowed: Mutex::new(Allowed {
                 allowed: true,
                 free: None,
@@ -474,6 +534,10 @@ impl Downloads {
             subtitle_waits: Mutex::default(),
             smart_looking: Mutex::default(),
             images: Mutex::default(),
+            in_use: Mutex::default(),
+            pending: Mutex::default(),
+            smart_waits: Mutex::default(),
+            versions: Mutex::default(),
         })
     }
 
@@ -533,6 +597,8 @@ impl Downloads {
     }
 
     pub fn set_link(&self, link: Link) {
+        self.reported
+            .store(true, std::sync::atomic::Ordering::Relaxed);
         let was = std::mem::replace(&mut *lock(&self.link), link);
         // Back online: a subtitle step that found no source asks at once.
         if was.offline && !link.offline {
@@ -553,6 +619,8 @@ impl Downloads {
             a.free = Some((free, std::time::Instant::now()));
         }
         drop(a);
+        // Room may have come: space waits look again now.
+        lock(&self.space_since).clear();
         self.changed();
     }
 
@@ -577,6 +645,37 @@ impl Downloads {
         self.publish();
     }
 
+    /// The one way a row changes: `change` gets the row as stored now and
+    /// sets only its own fields (code review r1 M5). The row as written.
+    fn update(
+        &self,
+        core: &Core,
+        id: &str,
+        change: impl FnOnce(&mut DownloadRecord) -> bool,
+    ) -> Option<DownloadRecord> {
+        core.library().update_download(id, change).ok().flatten()
+    }
+
+    /// Moves row `id` from `from` to `to` with `reason`; nothing when it is
+    /// no longer `from` (a pause or a remove came first).
+    fn shift(
+        &self,
+        core: &Core,
+        id: &str,
+        from: DownloadState,
+        to: DownloadState,
+        reason: Option<DownloadReason>,
+    ) -> Option<DownloadRecord> {
+        self.update(core, id, |r| {
+            if DownloadState::read(&r.state) != from {
+                return false;
+            }
+            r.state = to.word().into();
+            r.reason = reason.map(DownloadReason::word);
+            true
+        })
+    }
+
     /// A launch: jobs a kill or a reboot left running go back in the queue,
     /// a done file that is gone turns `missing` (4.8), and folders no row
     /// names (a wipe, a crash between a delete and its files) go.
@@ -596,24 +695,35 @@ impl Downloads {
         let Ok(rows) = core.library().downloads() else {
             return;
         };
-        for mut row in rows.iter().cloned() {
+        for row in &rows {
             let state = DownloadState::read(&row.state);
             let fix = match state {
                 DownloadState::Running => Some(DownloadState::Queued),
                 // A torrent whose folder is there goes on from what it
                 // holds; anything else is gone.
-                DownloadState::Done if !self.complete(&row) => Some(if self.folder_there(&row) {
+                DownloadState::Done if !self.complete(row) => Some(if self.folder_there(row) {
                     DownloadState::Queued
                 } else {
                     DownloadState::Missing
                 }),
                 _ => None,
             };
-            if let Some(fix) = fix {
-                row.state = fix.word().to_owned();
-                row.reason = None;
-                let _ = core.library().save_download(&row);
+            let clean = row.version.as_deref().and_then(without_secrets);
+            if fix.is_none() && clean.is_none() {
+                continue;
             }
+            self.update(&core, &row.id, |r| {
+                if let Some(fix) = fix
+                    && r.state == state.word()
+                {
+                    r.state = fix.word().to_owned();
+                    r.reason = None;
+                }
+                if let Some(clean) = clean {
+                    r.version = Some(clean);
+                }
+                true
+            });
         }
         for (name, path) in folders {
             if !rows.iter().any(|r| r.id == name) {
@@ -642,9 +752,21 @@ impl Downloads {
 
     /// The torrent file a download keeps, once chosen.
     fn torrent_ref(&self, row: &DownloadRecord) -> Option<TorrentRef> {
-        serde_json::from_str::<Version>(row.version.as_deref()?)
-            .ok()?
-            .torrent
+        self.version_of(row)?.torrent.clone()
+    }
+
+    /// `row`'s version, parsed once for each text it holds.
+    fn version_of(&self, row: &DownloadRecord) -> Option<Arc<Version>> {
+        let text = row.version.as_deref()?;
+        let mut memo = lock(&self.versions);
+        if let Some((seen, parsed)) = memo.get(&row.id)
+            && seen == text
+        {
+            return Some(parsed.clone());
+        }
+        let parsed: Arc<Version> = Arc::new(serde_json::from_str(text).ok()?);
+        memo.insert(row.id.clone(), (text.to_owned(), parsed.clone()));
+        Some(parsed)
     }
 
     /// A torrent download's folder is there (its data may only lag its
@@ -680,8 +802,8 @@ impl Downloads {
         if let (Some(t), Some(core)) = (self.torrent_ref(row), self.core()) {
             return Some(core.torrent_dir().join(&t.hash).join(&t.name));
         }
-        let version: Version = serde_json::from_str(row.version.as_deref()?).ok()?;
-        let ext = version.ext.unwrap_or_else(|| "mkv".into());
+        let version = self.version_of(row)?;
+        let ext = version.ext.clone().unwrap_or_else(|| "mkv".into());
         let name = if DownloadState::read(&row.state) == DownloadState::Done {
             format!("video.{ext}")
         } else {
@@ -702,7 +824,7 @@ impl Downloads {
         let shown: Vec<DownloadRow> = rows
             .iter()
             .map(|r| {
-                let mut row = row_of(r, running.get(&r.id));
+                let mut row = row_of(r, self.version_of(r).as_deref(), running.get(&r.id));
                 // The kept copy, which plays with no network.
                 let dir = self.job_dir(&r.id);
                 for (slot, name) in [(&mut row.poster, "poster"), (&mut row.still, "still")] {
@@ -750,6 +872,7 @@ impl Downloads {
             return Ok(Vec::new());
         };
         let mut ids = Vec::new();
+        let mut images = Vec::new();
         for video in videos {
             let version = pick.as_ref().and_then(|chain| {
                 let first = chain.first()?;
@@ -788,23 +911,37 @@ impl Downloads {
                 done_ms: None,
                 smart: None,
             };
-            let mut stored = core.library().add_download(&record)?;
+            let stored = core.library().add_download(&record)?;
             let state = DownloadState::read(&stored.state);
             if matches!(state, DownloadState::Failed | DownloadState::Missing) {
+                // A new pick replaces the old one: its torrent file, if
+                // another, is no longer kept (code review r1 m1, m6).
+                if record.version.is_some() {
+                    self.release_torrent(&core, &stored);
+                }
                 self.forget_files(&stored.id);
-                stored = DownloadRecord {
-                    state: DownloadState::Queued.word().into(),
-                    reason: None,
-                    bytes_done: 0,
-                    moves: 0,
-                    version: record.version.clone().or(stored.version),
-                    ..stored
-                };
-                core.library().save_download(&stored)?;
+                self.update(&core, &stored.id, |r| {
+                    if !matches!(
+                        DownloadState::read(&r.state),
+                        DownloadState::Failed | DownloadState::Missing
+                    ) {
+                        return false;
+                    }
+                    r.state = DownloadState::Queued.word().into();
+                    r.reason = None;
+                    r.bytes_done = 0;
+                    r.moves = 0;
+                    if record.version.is_some() {
+                        r.version = record.version.clone();
+                        r.hand_picked = true;
+                    }
+                    true
+                });
             }
-            self.fetch_images(&core, &stored.id, &video.facts);
+            images.push((stored.id.clone(), video.facts));
             ids.push(stored.id);
         }
+        self.fetch_images(&core, &images);
         self.changed();
         Ok(ids)
     }
@@ -815,78 +952,171 @@ impl Downloads {
             return Ok(());
         };
         for id in ids {
-            let Some(mut row) = core
-                .library()
-                .downloads()?
-                .into_iter()
-                .find(|r| &r.id == id)
-            else {
-                continue;
-            };
-            let state = DownloadState::read(&row.state);
             match action {
                 Action::Remove => {
                     self.stop(id);
+                    let Some(row) = core
+                        .library()
+                        .downloads()?
+                        .into_iter()
+                        .find(|r| &r.id == id)
+                    else {
+                        continue;
+                    };
                     let torrent = self.torrent_ref(&row);
                     core.library().delete_download(id)?;
-                    self.forget_files(id);
-                    #[cfg(feature = "torrent")]
-                    if let Some(t) = torrent {
-                        let core = core.clone();
-                        tokio::spawn(async move {
-                            match core.torrent_engine().await {
-                                Ok(engine) => {
-                                    if let Err(e) = engine.delete_file(&t.hash, t.file).await {
-                                        tracing::warn!("download delete: {e}");
-                                    }
-                                }
-                                Err(e) => tracing::warn!("download delete: {e}"),
-                            }
-                        });
+                    lock(&self.versions).remove(id);
+                    lock(&self.space_since).clear();
+                    // Played now: the row goes at once, its files when the
+                    // play ends (code review r1 M1).
+                    if lock(&self.in_use).contains_key(id) {
+                        lock(&self.pending).insert(id.clone(), torrent);
+                    } else {
+                        self.drop_files(&core, id, torrent);
                     }
-                    #[cfg(not(feature = "torrent"))]
-                    let _ = torrent;
-                    continue;
                 }
                 Action::Pause => {
-                    if matches!(
-                        state,
-                        DownloadState::Queued | DownloadState::Running | DownloadState::Waiting
-                    ) {
-                        self.stop(id);
-                        row.state = DownloadState::Paused.word().into();
-                        row.reason = None;
-                    }
+                    self.stop(id);
+                    self.update(&core, id, |r| {
+                        if !matches!(
+                            DownloadState::read(&r.state),
+                            DownloadState::Queued | DownloadState::Running | DownloadState::Waiting
+                        ) {
+                            return false;
+                        }
+                        r.state = DownloadState::Paused.word().into();
+                        r.reason = None;
+                        true
+                    });
                 }
                 Action::Resume => {
-                    if state == DownloadState::Paused {
-                        row.state = DownloadState::Queued.word().into();
-                    }
+                    self.shift(
+                        &core,
+                        id,
+                        DownloadState::Paused,
+                        DownloadState::Queued,
+                        None,
+                    );
                 }
                 Action::Retry { mobile_data } => {
-                    if matches!(state, DownloadState::Failed | DownloadState::Missing) {
+                    let again = core
+                        .library()
+                        .downloads()?
+                        .into_iter()
+                        .find(|r| &r.id == id)
+                        .filter(|r| {
+                            matches!(
+                                DownloadState::read(&r.state),
+                                DownloadState::Failed | DownloadState::Missing
+                            )
+                        });
+                    if let Some(row) = &again {
                         self.forget_files(id);
-                        row.state = DownloadState::Queued.word().into();
-                        row.reason = None;
-                        row.bytes_done = 0;
-                        row.moves = 0;
+                        // A new pick may take another torrent file: this one
+                        // is no longer kept (code review r1 m1).
                         if !row.hand_picked {
-                            row.version = None;
+                            self.release_torrent(&core, row);
                         }
                     }
-                    if mobile_data {
-                        row.mobile_data = true;
-                        if state == DownloadState::Waiting {
-                            row.state = DownloadState::Queued.word().into();
-                            row.reason = None;
+                    self.update(&core, id, |r| {
+                        let state = DownloadState::read(&r.state);
+                        let mut changed = false;
+                        if matches!(state, DownloadState::Failed | DownloadState::Missing) {
+                            r.state = DownloadState::Queued.word().into();
+                            r.reason = None;
+                            r.bytes_done = 0;
+                            r.moves = 0;
+                            if !r.hand_picked {
+                                r.version = None;
+                                r.bytes_total = None;
+                            }
+                            changed = true;
                         }
-                    }
+                        if mobile_data {
+                            r.mobile_data = true;
+                            if state == DownloadState::Waiting {
+                                r.state = DownloadState::Queued.word().into();
+                                r.reason = None;
+                            }
+                            changed = true;
+                        }
+                        changed
+                    });
                 }
             }
-            core.library().save_download(&row)?;
         }
         self.changed();
         Ok(())
+    }
+
+    /// A removed download's files: its folder, and its torrent file unless
+    /// another download keeps the same one (code review r1 m6).
+    fn drop_files(&self, core: &Core, id: &str, torrent: Option<TorrentRef>) {
+        self.forget_files(id);
+        #[cfg(feature = "torrent")]
+        if let Some(t) = torrent {
+            self.delete_torrent_file(core, id, t);
+        }
+        #[cfg(not(feature = "torrent"))]
+        let _ = (core, torrent);
+    }
+
+    /// Lets the engine forget `row`'s torrent file, unless another download
+    /// keeps it too.
+    fn release_torrent(&self, core: &Core, row: &DownloadRecord) {
+        #[cfg(feature = "torrent")]
+        if let Some(t) = self.torrent_ref(row) {
+            self.delete_torrent_file(core, &row.id, t);
+        }
+        #[cfg(not(feature = "torrent"))]
+        let _ = (core, row);
+    }
+
+    #[cfg(feature = "torrent")]
+    fn delete_torrent_file(&self, core: &Core, id: &str, t: TorrentRef) {
+        let (core, id) = (core.clone(), id.to_owned());
+        tokio::spawn(async move { forget_torrent(&core, &id, t).await });
+    }
+
+    /// The kept file of `video_id` of `item_id` could not be played (its
+    /// container or its video): a done download reads "Couldn't download"
+    /// with "Try again" (4.8).
+    pub(crate) fn bad_file(&self, item_id: &str, video_id: &str) {
+        let Some(core) = self.core() else { return };
+        let Ok(Some(row)) = core.library().download_of(item_id, video_id) else {
+            return;
+        };
+        let failed = self.shift(
+            &core,
+            &row.id,
+            DownloadState::Done,
+            DownloadState::Failed,
+            Some(DownloadReason::Source),
+        );
+        if failed.is_some() {
+            self.changed();
+        }
+    }
+
+    /// A playback of `key` for `video_id` of `item_id` starts: when that is
+    /// a download's own version, its files stay until the guard drops.
+    pub(crate) fn playing(
+        self: &Arc<Self>,
+        item_id: &str,
+        video_id: &str,
+        key: &str,
+    ) -> Option<InUse> {
+        let core = self.core()?;
+        let row = core.library().download_of(item_id, video_id).ok()??;
+        let version: Version = serde_json::from_str(row.version.as_deref()?).ok()?;
+        if version.key != key {
+            return None;
+        }
+        *lock(&self.in_use).entry(row.id.clone()).or_default() += 1;
+        Some(InUse {
+            id: row.id,
+            downloads: Arc::downgrade(self),
+        })
     }
 
     /// Every download id, for "all".
@@ -901,6 +1131,47 @@ impl Downloads {
             .filter(|r| r.item_id == item_id)
             .map(|r| r.id)
             .collect()
+    }
+
+    /// The title as its downloads describe it (plans/offline-downloads.md
+    /// 4.18): its name, poster and runtime, and the downloaded episodes as
+    /// its videos, for the title page and the player's next episode with no
+    /// meta (4.12.5). `None` without a download that holds bytes.
+    pub(crate) fn downloaded_meta(&self, kind: &str, item_id: &str) -> Option<MetaItem> {
+        let rows: Vec<_> = self
+            .board
+            .get()
+            .rows
+            .into_iter()
+            .filter(|r| r.item_id == item_id && r.bytes_done > 0)
+            .collect();
+        let first = rows.first()?;
+        let videos: Vec<serde_json::Value> = rows
+            .iter()
+            .filter(|r| r.season.is_some())
+            .map(|r| {
+                serde_json::json!({
+                    "id": r.video_id,
+                    "title": r.episode_title.clone().unwrap_or_default(),
+                    "season": r.season,
+                    "episode": r.episode,
+                    "thumbnail": r.still,
+                    "released": r.released.as_deref().map(|d| format!("{d}T00:00:00.000Z")),
+                })
+            })
+            .collect();
+        let body = serde_json::json!({ "meta": {
+            "id": item_id,
+            "type": kind,
+            "name": first.name,
+            "poster": first.poster,
+            "runtime": first.runtime,
+            "videos": videos,
+        }});
+        match mq_protocol::decode_meta(body.to_string().as_bytes()).ok()? {
+            mq_protocol::ResourceResponse::Meta { meta } => Some(meta),
+            _ => None,
+        }
     }
 
     /// Leases the posters and stills downloads keep on the stream server,
@@ -950,14 +1221,26 @@ impl Downloads {
         }
     }
 
-    /// Fetches the poster and the still a download shows offline, once.
-    fn fetch_images(&self, core: &Core, id: &str, facts: &Facts) {
-        let dir = self.job_dir(id);
-        let wanted: Vec<(PathBuf, String)> = [("poster", &facts.poster), ("still", &facts.still)]
-            .into_iter()
-            .filter_map(|(name, url)| Some((dir.join(name), url.clone()?)))
-            .filter(|(path, _)| !path.exists())
-            .collect();
+    /// Fetches the posters and stills downloads show offline, each picture
+    /// once however many downloads show it (a season's poster), into the
+    /// folders of downloads still there (code review r1 m12).
+    fn fetch_images(&self, core: &Core, jobs: &[(String, Facts)]) {
+        let mut wanted: Vec<(String, Vec<(String, PathBuf)>)> = Vec::new();
+        for (id, facts) in jobs {
+            let dir = self.job_dir(id);
+            for (name, url) in [("poster", &facts.poster), ("still", &facts.still)] {
+                let (Some(url), path) = (url.clone(), dir.join(name)) else {
+                    continue;
+                };
+                if path.exists() {
+                    continue;
+                }
+                match wanted.iter_mut().find(|(u, _)| *u == url) {
+                    Some((_, paths)) => paths.push((id.clone(), path)),
+                    None => wanted.push((url, vec![(id.clone(), path)])),
+                }
+            }
+        }
         if wanted.is_empty() {
             return;
         }
@@ -968,17 +1251,30 @@ impl Downloads {
                 max_bytes: 8 << 20,
                 ..Default::default()
             };
-            for (path, url) in wanted {
+            for (url, paths) in wanted {
                 let Ok(answer) = core.http().get(&url, &opts).await else {
                     continue;
                 };
                 if answer.status != 200 || answer.body.is_empty() {
                     continue;
                 }
-                if let Some(dir) = path.parent() {
-                    let _ = tokio::fs::create_dir_all(dir).await;
+                let ids: Vec<String> = core
+                    .library()
+                    .downloads()
+                    .unwrap_or_default()
+                    .into_iter()
+                    .map(|r| r.id)
+                    .collect();
+                for (id, path) in paths {
+                    // Removed meanwhile: no folder is made for it again.
+                    if !ids.contains(&id) {
+                        continue;
+                    }
+                    if let Some(dir) = path.parent() {
+                        let _ = tokio::fs::create_dir_all(dir).await;
+                    }
+                    let _ = tokio::fs::write(&path, &answer.body).await;
                 }
-                let _ = tokio::fs::write(&path, &answer.body).await;
             }
             wake.notify_one();
         });
@@ -1095,7 +1391,7 @@ impl Downloads {
             .min(version.chain.len().checked_sub(1)?);
         let mut stream = version.chain.get(at)?.stream();
         stream.key = version.key.clone();
-        let shown = row_of(&row, lock(&self.running).get(&row.id));
+        let shown = row_of(&row, Some(&version), lock(&self.running).get(&row.id));
         Some((stream, shown))
     }
 
@@ -1146,6 +1442,23 @@ impl Downloads {
             .sum()
     }
 
+    /// Bytes running HTTP jobs will still write (a torrent job's the engine
+    /// counts itself).
+    #[cfg(feature = "torrent")]
+    fn http_committed(&self, core: &Core) -> u64 {
+        let rows = core.library().downloads().unwrap_or_default();
+        lock(&self.running)
+            .iter()
+            .filter(|(id, _)| {
+                rows.iter()
+                    .find(|r| &r.id == *id)
+                    .and_then(|r| self.version_of(r))
+                    .is_some_and(|v| v.torrent.is_none())
+            })
+            .map(|(_, run)| run.total.unwrap_or(0).saturating_sub(*run.held.borrow()))
+            .sum()
+    }
+
     /// Whether `remaining` more bytes fit for job `id` (4.9).
     fn fits(&self, core: &Core, id: &str, remaining: u64) -> bool {
         let Some(free) = self.base_free(core, id) else {
@@ -1163,24 +1476,49 @@ impl Downloads {
 
     /// Whether `remaining` more bytes fit for job `id`, the idle stream
     /// cache deleted first when that is what makes them fit (4.9).
-    async fn fits_making_room(&self, core: &Core, id: &str, remaining: u64) -> bool {
-        if self.fits(core, id, remaining) {
+    async fn fits_making_room(&self, core: &Core, id: &str, total: u64, held: u64) -> bool {
+        if self.claim(core, id, total, held) {
             return true;
         }
         #[cfg(feature = "torrent")]
         if let Some(engine) = core.running_engine() {
-            let need = remaining + RESERVE + self.committed(id);
+            let need = total.saturating_sub(held) + RESERVE + self.committed(id);
             engine.make_room(need).await;
-            return self.fits(core, id, remaining);
+            return self.claim(core, id, total, held);
         }
         false
+    }
+
+    /// Job `id`'s room, taken in one step with the check: under the runs'
+    /// lock its size counts as committed only when it fits, so two jobs
+    /// starting together never both take the same room (code review r1 M7).
+    fn claim(&self, core: &Core, id: &str, total: u64, held: u64) -> bool {
+        let free = self.base_free(core, id);
+        let mut running = lock(&self.running);
+        let committed: u64 = running
+            .iter()
+            .filter(|(other, _)| other.as_str() != id)
+            .map(|(_, run)| run.total.unwrap_or(0).saturating_sub(*run.held.borrow()))
+            .sum();
+        let fits = free.is_none_or(|free| {
+            free.saturating_sub(committed).saturating_sub(RESERVE) >= total.saturating_sub(held)
+        });
+        if fits && let Some(run) = running.get_mut(id) {
+            run.held.send_replace(held);
+            run.total = Some(total);
+        }
+        drop(running);
+        if fits {
+            lock(&self.strict).remove(id);
+        }
+        fits
     }
 
     /// Why nothing may run now for a job of `torrent` (its info hash, for
     /// a torrent), if anything holds it.
     fn held_by(&self, mobile_data: bool, torrent: Option<&str>) -> Option<DownloadReason> {
         let link = self.link();
-        if link.offline {
+        if link.offline || !self.reported.load(std::sync::atomic::Ordering::Relaxed) {
             return Some(DownloadReason::Network);
         }
         if !lock(&self.allowed).allowed {
@@ -1224,47 +1562,70 @@ impl Downloads {
         for id in gone {
             self.stop(&id);
         }
-        for mut row in rows {
+        // Each arm changes a row only from the state it read, so a pause or
+        // a remove since this read wins (code review r1 M5).
+        for row in rows {
             let state = DownloadState::read(&row.state);
-            let hold = self.held_by(row.mobile_data, torrent_of(&row).as_deref());
+            let torrent = self.version_of(&row).as_deref().and_then(torrent_of);
+            let hold = self.held_by(row.mobile_data, torrent.as_deref());
             match (state, hold) {
                 (DownloadState::Running, Some(reason)) => {
                     self.stop(&row.id);
-                    row.state = DownloadState::Waiting.word().into();
-                    row.reason = Some(reason.word());
-                    let _ = core.library().save_download(&row);
+                    self.shift(
+                        &core,
+                        &row.id,
+                        DownloadState::Running,
+                        DownloadState::Waiting,
+                        Some(reason),
+                    );
                 }
+                (DownloadState::Running, None) => self.repair(&core, &row.id),
                 (DownloadState::Queued, Some(reason)) => {
-                    row.state = DownloadState::Waiting.word().into();
-                    row.reason = Some(reason.word());
-                    let _ = core.library().save_download(&row);
+                    self.shift(
+                        &core,
+                        &row.id,
+                        DownloadState::Queued,
+                        DownloadState::Waiting,
+                        Some(reason),
+                    );
                 }
                 (DownloadState::Waiting, hold) => {
                     let now = hold.map(DownloadReason::word);
-                    // A space wait goes on until what it still needs fits, or
-                    // with its size unknown for a minute.
+                    // A space wait goes on until what it still needs fits,
+                    // and looks again no sooner than a minute after the
+                    // space error that began it (code review r1 M6).
                     let short = row.reason.as_deref() == Some("space")
-                        && match row.bytes_total {
-                            Some(total) => {
+                        && (lock(&self.space_since)
+                            .get(&row.id)
+                            .is_some_and(|at| at.elapsed() < SPACE_LOOK)
+                            || row.bytes_total.is_some_and(|total| {
                                 let remaining = total.saturating_sub(row.bytes_done).max(0) as u64;
                                 !self.fits(&core, &row.id, remaining)
-                            }
-                            None => lock(&self.space_since)
-                                .get(&row.id)
-                                .is_some_and(|at| at.elapsed() < Duration::from_secs(60)),
-                        };
+                            }));
                     if now.is_none() && short {
                         continue;
                     }
                     if now.is_none() {
                         // Released (a space wait looks again at its start).
-                        row.state = DownloadState::Queued.word().into();
-                        row.reason = None;
-                        let _ = core.library().save_download(&row);
-                        self.try_start(&core, row);
+                        if let Some(row) = self.shift(
+                            &core,
+                            &row.id,
+                            DownloadState::Waiting,
+                            DownloadState::Queued,
+                            None,
+                        ) {
+                            self.try_start(&core, row);
+                        }
                     } else if row.reason != now && row.reason.as_deref() != Some("space") {
-                        row.reason = now;
-                        let _ = core.library().save_download(&row);
+                        self.update(&core, &row.id, |r| {
+                            if DownloadState::read(&r.state) != DownloadState::Waiting
+                                || r.reason.as_deref() == Some("space")
+                            {
+                                return false;
+                            }
+                            r.reason = now;
+                            true
+                        });
                     }
                 }
                 (DownloadState::Queued, None) => self.try_start(&core, row),
@@ -1275,6 +1636,30 @@ impl Downloads {
             }
         }
         self.publish();
+    }
+
+    /// A row left `running` with no run behind it (a stale write, a run
+    /// that ended without its word) goes back in the queue (code review r1
+    /// M5). Under the runs' lock: a run starting or ending meanwhile writes
+    /// its own state first.
+    fn repair(&self, core: &Core, id: &str) {
+        let running = lock(&self.running);
+        if running.contains_key(id) {
+            return;
+        }
+        let repaired = self
+            .shift(
+                core,
+                id,
+                DownloadState::Running,
+                DownloadState::Queued,
+                None,
+            )
+            .is_some();
+        drop(running);
+        if repaired {
+            self.wake.notify_one();
+        }
     }
 
     /// Fetches a done download's subtitles once (4.10), and again while no
@@ -1302,16 +1687,11 @@ impl Downloads {
                 return;
             };
             lock(&d.subtitle_waits).remove(&row.id);
-            let Ok(Some(mut row)) = core
-                .library()
-                .downloads()
-                .map(|rows| rows.into_iter().find(|r| r.id == row.id))
-            else {
-                return;
-            };
-            row.subtitles_state = if kept.is_empty() { "none" } else { "done" }.into();
-            row.subtitles = serde_json::to_string(&kept).unwrap_or_else(|_| "[]".into());
-            let _ = core.library().save_download(&row);
+            d.update(&core, &row.id, |r| {
+                r.subtitles_state = if kept.is_empty() { "none" } else { "done" }.into();
+                r.subtitles = serde_json::to_string(&kept).unwrap_or_else(|_| "[]".into());
+                true
+            });
             d.changed();
         });
     }
@@ -1328,29 +1708,39 @@ impl Downloads {
         if !self.settings().smart || core.policy().kids() {
             return;
         }
-        let Ok(Some(mut row)) = core.library().download_of(item_id, video_id) else {
+        let Ok(Some(row)) = core.library().download_of(item_id, video_id) else {
             return;
         };
-        // Each save past the end calls again: once is enough.
-        if DownloadState::read(&row.state) != DownloadState::Done
-            || row.season.is_none()
-            || row.smart.is_some()
-        {
-            return;
-        }
-        let step = SmartStep {
+        let step = serde_json::to_string(&SmartStep {
             by: core.profile().to_owned(),
             next: None,
-        };
-        row.smart = serde_json::to_string(&step).ok();
-        let _ = core.library().save_download(&row);
-        self.changed();
+        })
+        .ok();
+        // Each save past the end calls again: once is enough.
+        let set = self.update(core, &row.id, |r| {
+            if DownloadState::read(&r.state) != DownloadState::Done
+                || r.season.is_none()
+                || r.smart.is_some()
+            {
+                return false;
+            }
+            r.smart = step;
+            true
+        });
+        if set.is_some() {
+            self.changed();
+        }
     }
 
     /// Looks up the next episode of a smart step whose next is not known
-    /// yet, once at a time, and keeps what it found on the row.
+    /// yet, once at a time, and keeps what it found on the row. A meta that
+    /// cannot be read is looked up again after [`SMART_WAIT`], not at every
+    /// look of the queue (code review r1 M6).
     fn smart_lookup(self: &Arc<Self>, core: &Core, row: DownloadRecord) {
-        if self.link().offline || !lock(&self.smart_looking).insert(row.id.clone()) {
+        let waiting = lock(&self.smart_waits)
+            .get(&row.id)
+            .is_some_and(|at| std::time::Instant::now() < *at);
+        if waiting || self.link().offline || !lock(&self.smart_looking).insert(row.id.clone()) {
             return;
         }
         let me = Arc::downgrade(self);
@@ -1375,16 +1765,26 @@ impl Downloads {
                     .and_then(|ids| ids.into_iter().next())
                 }
             };
-            if let Some(next) = next
-                && let Ok(Some(mut row)) = core.library().download_of(&row.item_id, &row.video_id)
-                && let Some(mut step) = row
-                    .smart
-                    .as_deref()
-                    .and_then(|s| serde_json::from_str::<SmartStep>(s).ok())
-            {
-                step.next = Some(next);
-                row.smart = serde_json::to_string(&step).ok();
-                let _ = core.library().save_download(&row);
+            match next {
+                Some(next) => {
+                    lock(&d.smart_waits).remove(&row.id);
+                    d.update(&core, &row.id, |r| {
+                        let Some(mut step) = r
+                            .smart
+                            .as_deref()
+                            .and_then(|s| serde_json::from_str::<SmartStep>(s).ok())
+                        else {
+                            return false;
+                        };
+                        step.next = Some(next);
+                        r.smart = serde_json::to_string(&step).ok();
+                        true
+                    });
+                }
+                None => {
+                    lock(&d.smart_waits)
+                        .insert(row.id.clone(), std::time::Instant::now() + SMART_WAIT);
+                }
             }
             lock(&d.smart_looking).remove(&row.id);
             d.changed();
@@ -1455,11 +1855,22 @@ impl Downloads {
             .collect()
     }
 
-    fn try_start(self: &Arc<Self>, core: &Core, mut row: DownloadRecord) {
+    fn try_start(self: &Arc<Self>, core: &Core, row: DownloadRecord) {
         let mut running = lock(&self.running);
         if running.len() >= RUNNING || running.contains_key(&row.id) {
             return;
         }
+        // Only a row still queued starts: a pause since the queue's read
+        // stays a pause (code review r1 M5).
+        let Some(row) = self.shift(
+            core,
+            &row.id,
+            DownloadState::Queued,
+            DownloadState::Running,
+            None,
+        ) else {
+            return;
+        };
         let cancel = CancellationToken::new();
         let (held, _) = watch::channel(row.bytes_done.max(0) as u64);
         running.insert(
@@ -1467,15 +1878,13 @@ impl Downloads {
             Running {
                 cancel: cancel.clone(),
                 held,
-                total: row.bytes_total.map(|t| t as u64),
+                // Committed only once its room is claimed (`claim`).
+                total: None,
                 speed: Speed::default(),
                 peers: 0,
             },
         );
         drop(running);
-        row.state = DownloadState::Running.word().into();
-        row.reason = None;
-        let _ = core.library().save_download(&row);
         let me = Arc::downgrade(self);
         let core = core.clone();
         tokio::spawn(async move {
@@ -1493,32 +1902,37 @@ impl Downloads {
         });
     }
 
-    /// Writes how a run ended.
+    /// Writes how a run ended, from `running` only: a pause or a remove
+    /// that came first stays. A whole file is done whatever came first.
     fn finish(&self, core: &Core, id: &str, outcome: Outcome) {
-        lock(&self.running).remove(id);
-        let Ok(Some(mut row)) = core
-            .library()
-            .downloads()
-            .map(|rows| rows.into_iter().find(|r| r.id == id))
-        else {
-            return;
-        };
+        let mut running = lock(&self.running);
+        running.remove(id);
         let (state, reason) = match outcome {
             Outcome::Done => (DownloadState::Done, None),
             Outcome::Wait(reason) => (DownloadState::Waiting, Some(reason)),
             Outcome::Fail(reason) => (DownloadState::Failed, Some(reason)),
         };
-        if state == DownloadState::Done {
-            row.done_ms = Some(mq_library::hlc::now_ms() as i64);
-        }
         if reason == Some(DownloadReason::Space) {
             lock(&self.space_since).insert(id.to_owned(), std::time::Instant::now());
+        } else if state == DownloadState::Done {
+            // Its room is free again: space waits look again now.
+            lock(&self.space_since).clear();
         } else {
             lock(&self.space_since).remove(id);
         }
-        row.state = state.word().into();
-        row.reason = reason.map(DownloadReason::word);
-        let _ = core.library().save_download(&row);
+        self.update(core, id, |r| {
+            let was = DownloadState::read(&r.state);
+            if was != DownloadState::Running && state != DownloadState::Done {
+                return false;
+            }
+            if state == DownloadState::Done {
+                r.done_ms = Some(mq_library::hlc::now_ms() as i64);
+            }
+            r.state = state.word().into();
+            r.reason = reason.map(DownloadReason::word);
+            true
+        });
+        drop(running);
     }
 
     /// A torrent job's connected peers now.
@@ -1573,13 +1987,9 @@ pub struct AddVideo {
     pub facts: Facts,
 }
 
-fn row_of(r: &DownloadRecord, live: Option<&Running>) -> DownloadRow {
+fn row_of(r: &DownloadRecord, version: Option<&Version>, live: Option<&Running>) -> DownloadRow {
     let facts: Facts = serde_json::from_str(&r.facts).unwrap_or_default();
-    let version: Option<Version> = r
-        .version
-        .as_deref()
-        .and_then(|v| serde_json::from_str(v).ok());
-    let quality = version.as_ref().and_then(|v| v.chain.first()).map(|s| {
+    let quality = version.and_then(|v| v.chain.first()).map(|s| {
         let release = &s.stream.release;
         crate::views::versions::quality_word(release.resolution.height(), release.quality)
     });
@@ -1637,6 +2047,12 @@ async fn run_queue(me: std::sync::Weak<Downloads>) {
         d.tick();
         if let Some(core) = d.core() {
             d.lease_images(&core).await;
+            // What HTTP jobs will still write is part of every window's
+            // room (4.9, code review r1 m10).
+            #[cfg(feature = "torrent")]
+            if let Some(engine) = core.running_engine() {
+                engine.set_committed_outside(d.http_committed(&core));
+            }
         }
         let busy = !lock(&d.running).is_empty();
         let wait = if busy {
@@ -1668,7 +2084,7 @@ async fn run_job(me: std::sync::Weak<Downloads>, core: Core, mut row: DownloadRe
                     validator: None,
                 })
                 .ok();
-                let _ = core.library().save_download(&row);
+                save_run(&core, &row);
             }
             None => return Outcome::Fail(DownloadReason::NoVersion),
         }
@@ -1720,34 +2136,67 @@ async fn run_job(me: std::sync::Weak<Downloads>, core: Core, mut row: DownloadRe
                 row.moves += 1;
                 row.bytes_done = 0;
                 row.bytes_total = None;
-                if let Some(mut moved) = row
-                    .version
-                    .as_deref()
-                    .and_then(|v| serde_json::from_str::<Version>(v).ok())
-                {
-                    moved.ext = None;
-                    moved.validator = None;
-                    // A torrent left for another source is no longer kept.
-                    #[cfg(feature = "torrent")]
-                    if let Some(t) = moved.torrent.take() {
-                        let core = core.clone();
-                        tokio::spawn(async move {
-                            if let Ok(engine) = core.torrent_engine().await
-                                && let Err(e) = engine.delete_file(&t.hash, t.file).await
-                            {
-                                tracing::warn!("download move: {e}");
-                            }
-                        });
-                    }
-                    moved.torrent = None;
-                    row.version = serde_json::to_string(&moved).ok();
+                let mut moved = version.clone();
+                moved.ext = None;
+                moved.validator = None;
+                // A torrent left for another source is no longer kept, and
+                // is let go before the next source starts: one of the same
+                // hash never meets the delete (code review r1 m1).
+                #[cfg(feature = "torrent")]
+                if let Some(t) = moved.torrent.take() {
+                    forget_torrent(&core, &row.id, t).await;
                 }
+                moved.torrent = None;
+                row.version = serde_json::to_string(&moved).ok();
                 if let Some(d) = me.upgrade() {
                     d.forget_files(&row.id);
                 }
-                let _ = core.library().save_download(&row);
+                save_run(&core, &row);
             }
         }
+    }
+}
+
+/// What a run owns of its row (the version, its bytes and moves), written
+/// over the stored row's alone: a state set meanwhile stays (code review r1
+/// M5).
+pub(super) fn save_run(core: &Core, row: &DownloadRecord) {
+    let _ = core.library().update_download(&row.id, |r| {
+        r.version = row.version.clone();
+        r.bytes_done = row.bytes_done;
+        r.bytes_total = row.bytes_total;
+        r.moves = row.moves;
+        true
+    });
+}
+
+/// Lets the engine forget torrent file `t` of download `id`, unless another
+/// download keeps the same file (code review r1 m6).
+#[cfg(feature = "torrent")]
+async fn forget_torrent(core: &Core, id: &str, t: TorrentRef) {
+    let shared = core
+        .library()
+        .downloads()
+        .unwrap_or_default()
+        .iter()
+        .any(|r| {
+            r.id != id
+                && r.version
+                    .as_deref()
+                    .and_then(|v| serde_json::from_str::<Version>(v).ok())
+                    .and_then(|v| v.torrent)
+                    .is_some_and(|o| o.hash == t.hash && o.file == t.file)
+        });
+    if shared {
+        return;
+    }
+    match core.torrent_engine().await {
+        Ok(engine) => {
+            if let Err(e) = engine.delete_file(&t.hash, t.file).await {
+                tracing::warn!("download delete: {e}");
+            }
+        }
+        Err(e) => tracing::warn!("download delete: {e}"),
     }
 }
 
@@ -1904,7 +2353,9 @@ fn expand(meta: &mq_protocol::MetaItem, req: &AddRequest, now_ms: i64) -> Vec<Ad
         .iter()
         .filter(|v| match scope {
             Scope::Video => Some(v.id.as_str()) == video_id,
-            Scope::Season => v.series_info.as_ref().map(|i| i.season) == season,
+            // A season add names its season: one without adds nothing (code
+            // review r1 m7).
+            Scope::Season => season.is_some() && v.series_info.as_ref().map(|i| i.season) == season,
             Scope::Series => v.series_info.as_ref().is_some_and(|i| i.season > 0),
         })
         .filter(|v| scope == Scope::Video || crate::views::playback::aired(v, now_ms))
@@ -1924,6 +2375,41 @@ fn expand(meta: &mq_protocol::MetaItem, req: &AddRequest, now_ms: i64) -> Vec<Ad
             }
         })
         .collect()
+}
+
+/// A header that authenticates: never kept with a download.
+fn secret_header(name: &str) -> bool {
+    let name = name.to_ascii_lowercase();
+    matches!(
+        name.as_str(),
+        "authorization" | "proxy-authorization" | "cookie"
+    ) || ["token", "auth", "key", "secret", "session"]
+        .iter()
+        .any(|word| name.contains(word))
+}
+
+/// A link's origin alone (`https://host:port/`).
+fn origin_of(url: &url::Url) -> Option<url::Url> {
+    url.origin()
+        .is_tuple()
+        .then(|| url::Url::parse(&url.origin().ascii_serialization()).ok())?
+}
+
+/// A stored version with its secrets taken out, when it had any: rows kept
+/// before downloads stopped storing them are cleaned at a launch.
+fn without_secrets(version: &str) -> Option<String> {
+    let mut parsed: Version = serde_json::from_str(version).ok()?;
+    let mut changed = false;
+    for s in &mut parsed.chain {
+        let clean = s.addon_url.as_ref().and_then(origin_of);
+        let before = s.headers.len();
+        s.headers.retain(|(name, _)| !secret_header(name));
+        if clean != s.addon_url || s.headers.len() != before {
+            s.addon_url = clean;
+            changed = true;
+        }
+    }
+    changed.then(|| serde_json::to_string(&parsed).ok())?
 }
 
 fn new_id() -> String {
@@ -1997,10 +2483,9 @@ fn part_way_elsewhere(core: &Core, row: &DownloadRecord, by: &str) -> bool {
 }
 
 /// The info hash of a job's torrent, chosen or listed.
-fn torrent_of(row: &DownloadRecord) -> Option<String> {
-    let version: Version = serde_json::from_str(row.version.as_deref()?).ok()?;
-    if let Some(t) = version.torrent {
-        return Some(t.hash);
+fn torrent_of(version: &Version) -> Option<String> {
+    if let Some(t) = &version.torrent {
+        return Some(t.hash.clone());
     }
     match &version.chain.first()?.stream().source {
         mq_protocol::Source::Torrent { info_hash, .. } => Some(info_hash.to_ascii_lowercase()),
@@ -2034,5 +2519,86 @@ mod tests {
         assert_eq!(d.held_by(false, Some(&mine)), Some(DownloadReason::Playing));
         drop(http);
         assert_eq!(d.held_by(false, None), None);
+    }
+
+    /// A season add names its season: one without adds nothing, even for
+    /// videos with no season of their own (code review r1 m7).
+    #[test]
+    fn a_season_add_without_a_season_adds_nothing() {
+        let body = serde_json::json!({ "meta": {
+            "id": "tt9", "type": "series", "name": "Show",
+            "videos": [
+                { "id": "tt9:extra", "title": "Extra", "released": "2020-01-01T00:00:00.000Z" },
+                { "id": "tt9:1:1", "title": "One", "season": 1, "episode": 1,
+                  "released": "2020-01-01T00:00:00.000Z" },
+            ],
+        }});
+        let mq_protocol::ResourceResponse::Meta { meta } =
+            mq_protocol::decode_meta(body.to_string().as_bytes()).unwrap()
+        else {
+            panic!("a meta");
+        };
+        let req = |season| AddRequest {
+            kind: "series".into(),
+            item_id: "tt9".into(),
+            scope: Scope::Season,
+            video_id: None,
+            season,
+            params: serde_json::Value::Null,
+            pick: None,
+        };
+        let now = mq_library::hlc::now_ms() as i64;
+        assert!(expand(&meta, &req(None), now).is_empty());
+        let one: Vec<_> = expand(&meta, &req(Some(1)), now)
+            .into_iter()
+            .map(|v| v.video_id)
+            .collect();
+        assert_eq!(one, ["tt9:1:1"]);
+    }
+
+    /// A download keeps no secret: of its addon's link only the origin, and
+    /// no header that authenticates; rows kept before are cleaned (code
+    /// review r1 m3).
+    #[test]
+    fn a_kept_version_holds_no_secret() {
+        let wire = serde_json::json!({ "streams": [{
+            "name": "Direct", "title": "Sintel.2010.1080p.WEB-DL.mp4",
+            "url": "https://cdn.example/sintel.mp4",
+            "behaviorHints": { "proxyHeaders": { "request": {
+                "Authorization": "Bearer abc", "X-Api-Key": "k", "User-Agent": "Momotus"
+            } } }
+        }]});
+        let decoded = mq_protocol::decode_streams(wire.to_string().as_bytes()).unwrap();
+        let mut stream = mq_streams::normalize(&decoded.streams[0], "local", "Local", 0, 0);
+        stream.addon_url = Some(
+            url::Url::parse("https://addon.example/eyJrZXkiOiJzZWNyZXQifQ/manifest.json?token=t")
+                .unwrap(),
+        );
+        let kept = StoredStream::of(&stream);
+        assert_eq!(
+            kept.addon_url.as_ref().map(url::Url::as_str),
+            Some("https://addon.example/")
+        );
+        let names: Vec<&str> = kept.headers.iter().map(|(n, _)| n.as_str()).collect();
+        assert_eq!(names, ["User-Agent"], "{:?}", stream.headers);
+        // A row from before: cleaned at a launch.
+        let mut old = StoredStream::of(&stream);
+        old.addon_url = stream.addon_url.clone();
+        old.headers = stream.headers.clone();
+        let version = serde_json::to_string(&Version {
+            key: "k".into(),
+            chain: vec![old],
+            ext: None,
+            torrent: None,
+            validator: None,
+        })
+        .unwrap();
+        let clean: Version = serde_json::from_str(&without_secrets(&version).unwrap()).unwrap();
+        // As kept on disk (the stream itself never writes its headers).
+        assert_eq!(
+            serde_json::to_value(&clean.chain[0]).unwrap(),
+            serde_json::to_value(&kept).unwrap()
+        );
+        assert!(without_secrets(&serde_json::to_string(&clean).unwrap()).is_none());
     }
 }

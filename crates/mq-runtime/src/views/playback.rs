@@ -662,6 +662,14 @@ struct State {
     /// The playing source streams from the network (with its torrent's
     /// hash, if a torrent): what `streaming` is taken again for.
     network: Option<Option<String>>,
+    /// Held while the playing source is a download's own version: its
+    /// files stay until the play ends, whatever deletes it meanwhile.
+    in_use: Option<crate::downloads::InUse>,
+    /// The download's own file was opened in this run (once: the same
+    /// version's next sources are its online ones), and whether the source
+    /// playing now is it (code review r1 m4).
+    local_tried: bool,
+    local_open: bool,
     /// Bumped under this lock by every new resolve and every failover; a
     /// resolve task adopts a lease, and publishes tracks, only while its own
     /// number is the newest.
@@ -832,6 +840,9 @@ impl State {
             lease: None,
             streaming: None,
             network: None,
+            in_use: None,
+            local_tried: false,
+            local_open: false,
             run: 0,
             closed: false,
             pick: None,
@@ -1005,6 +1016,7 @@ impl PlaybackView {
             // review 2026-10-20 P1-1), each torrent with the full deadline.
             s.candidates = s.first.clone();
             s.tried = s.first.iter().map(|c| c.key.clone()).collect();
+            s.local_tried = false;
             s.retry_until = Some(tokio::time::Instant::now() + RETRY_BUDGET);
             s.start_at = None;
             s.tries = 0;
@@ -1152,7 +1164,7 @@ impl PlaybackView {
     ) {
         let error = mq_server::failure_words(kind, status, error);
         let error = error.as_str();
-        let (failed, pick, kept) = {
+        let (failed, pick, kept, local) = {
             let mut s = lock(&self.state);
             let other = failed.is_some_and(|failed| failed != s.snapshot.attempt);
             // A stopped view opens no other source (a debrid one would
@@ -1162,6 +1174,7 @@ impl PlaybackView {
             }
             // The running task's work for this source ends here.
             s.run += 1;
+            let local = s.local_open;
             release_all(&mut s);
             let failed = s
                 .next
@@ -1229,8 +1242,16 @@ impl PlaybackView {
                 Some(stream) if decode => vec![stream.key.clone()],
                 _ => Vec::new(),
             };
-            (failed, s.pick.clone(), kept)
+            (failed, s.pick.clone(), kept, local)
         };
+        // The download's own file did not play: it reads "Try again", and
+        // the player goes on to the same version online (plans/offline-
+        // downloads.md 4.8, code review r1 m4).
+        if local && matches!(kind, Some("unreadable" | "decode")) {
+            self.core
+                .downloads()
+                .bad_file(&self.target.item_id, &self.target.video_id);
+        }
         // Written and reported outside the playback's lock.
         if let Some(stream) = &failed {
             let now = mq_library::hlc::now_ms();
@@ -1943,6 +1964,8 @@ fn release_all(s: &mut State) {
     s.lease = None;
     s.streaming = None;
     s.network = None;
+    s.in_use = None;
+    s.local_open = false;
 }
 
 /// The container of the file a source opened (plans/apple-second-engine.md
@@ -2422,6 +2445,9 @@ async fn resolve_next(
                         return;
                     }
                     s.network = streams_from_network(&core, &stream, &target, &upstream);
+                    s.in_use =
+                        core.downloads()
+                            .playing(&target.item_id, &target.video_id, &stream.key);
                     s.streaming = s
                         .network
                         .as_ref()
@@ -2777,7 +2803,16 @@ async fn open_source(
     run: InRun<'_>,
 ) -> Result<Opened, String> {
     let state = run.0;
-    if let Some(local) = downloaded_file(core, stream, target) {
+    // The download's own file, once a run: a file that fails to play goes
+    // on to the same version online, never back to itself (code review
+    // r1 m4).
+    lock(state).local_open = false;
+    if !lock(state).local_tried
+        && let Some(local) = downloaded_file(core, stream, target)
+    {
+        let mut s = lock(state);
+        s.local_tried = true;
+        s.local_open = true;
         return Ok(local);
     }
     // A torrent download of this version plays from the engine's folder,
@@ -5154,7 +5189,14 @@ fn reorder(s: &mut State, preferred: &[String]) {
 /// specials (season 0) unless a special is playing and episodes not out yet.
 async fn next_episode(core: &Core, target: &PlayTarget) -> Option<NextEpisode> {
     target.season?;
-    let (meta, _) = core.fetch_meta(&target.kind, &target.item_id).await.ok()?;
+    // With no meta (offline, past the addon cache), the next downloaded
+    // episode (plans/offline-downloads.md 4.12.5, code review r1 M3).
+    let meta = match core.fetch_meta(&target.kind, &target.item_id).await {
+        Ok((meta, _)) => meta,
+        Err(_) => core
+            .downloads()
+            .downloaded_meta(&target.kind, &target.item_id)?,
+    };
     next_after(&meta, &target.video_id)
 }
 

@@ -19,7 +19,7 @@ const PER_LANGUAGE: usize = 5;
 /// Tracks kept in all.
 const MAX_TRACKS: usize = 40;
 /// A subtitle file larger than this is no subtitle.
-const MAX_BYTES: usize = 16 << 20;
+const MAX_BYTES: usize = 2 << 20;
 
 /// One kept track: the source's own listing, which source listed it and
 /// where in its answer, and its WebVTT file in the job's folder.
@@ -69,9 +69,13 @@ pub(super) async fn keep(d: &Downloads, core: &Core, row: &DownloadRecord) -> Ke
             !crate::turkcealtyazi::is_builtin(a.transport_url.as_str(), Some(&a.manifest.id))
         })
         .collect();
-    let Some(video) = d.file_of(row).filter(|p| p.is_file()) else {
-        return Kept::Done(Vec::new());
+    let Some(video) = d.file_of(row) else {
+        return Kept::Later;
     };
+    // A video kept as piece files (a volume that cannot punch holes) has
+    // no hash to give: its sources are asked by its name alone (code review
+    // r1 m11).
+    let plain = video.is_file();
     let version: Option<Version> = row
         .version
         .as_deref()
@@ -82,7 +86,8 @@ pub(super) async fn keep(d: &Downloads, core: &Core, row: &DownloadRecord) -> Ke
         .and_then(|s| s.stream().filename)
         .or_else(|| video.file_name().map(|n| n.to_string_lossy().into_owned()));
     let reader = mq_media::FileRangeReader::new(&video);
-    let extra = crate::views::playback::video_extra(Some(&reader), name.as_deref()).await;
+    let extra =
+        crate::views::playback::video_extra(plain.then_some(&reader), name.as_deref()).await;
     let path = ResourcePath {
         resource: "subtitles".into(),
         r#type: row.kind.clone(),

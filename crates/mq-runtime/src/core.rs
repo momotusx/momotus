@@ -547,8 +547,10 @@ impl Core {
         cfg!(feature = "torrent")
     }
 
-    /// Free space where the engine keeps torrents (the nearest folder that
-    /// exists); `None` without the engine or where it cannot be read.
+    /// Free space where torrents and downloads are kept (the nearest folder
+    /// that exists), read from the volume in every build, the store's
+    /// without the engine too (code review r1 M4); `None` where it cannot
+    /// be read.
     pub fn free_bytes(&self) -> Option<u64> {
         if let Some(bytes) = *self
             .inner
@@ -558,16 +560,11 @@ impl Core {
         {
             return Some(bytes);
         }
-        #[cfg(all(unix, feature = "torrent"))]
-        {
-            let mut dir = self.inner.torrent_dir.as_path();
-            while !dir.exists() {
-                dir = dir.parent()?;
-            }
-            mq_engine::free_space(dir)
+        let mut dir = self.inner.torrent_dir.as_path();
+        while !dir.exists() {
+            dir = dir.parent()?;
         }
-        #[cfg(not(all(unix, feature = "torrent")))]
-        None
+        free_space(dir)
     }
 
     /// The measured speed of `kind` on the current network, or its prior.
@@ -1700,10 +1697,43 @@ impl Walk {
     }
 }
 
+/// The volume's free space under `dir`, as `statvfs` gives it.
+#[cfg(unix)]
+fn free_space(dir: &std::path::Path) -> Option<u64> {
+    use std::os::unix::ffi::OsStrExt;
+    let path = std::ffi::CString::new(dir.as_os_str().as_bytes()).ok()?;
+    let mut stat = std::mem::MaybeUninit::<libc::statvfs>::uninit();
+    // SAFETY: `path` is NUL terminated and `stat` is a buffer statvfs
+    // fills when it returns 0.
+    if unsafe { libc::statvfs(path.as_ptr(), stat.as_mut_ptr()) } != 0 {
+        return None;
+    }
+    // SAFETY: statvfs returned 0, so it wrote `stat`.
+    let stat = unsafe { stat.assume_init() };
+    #[allow(clippy::unnecessary_cast)]
+    Some(stat.f_bavail as u64 * stat.f_frsize as u64)
+}
+
+#[cfg(not(unix))]
+fn free_space(_dir: &std::path::Path) -> Option<u64> {
+    None
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use mq_http::HttpError;
+
+    /// The volume's free space is read in every build, the store's without
+    /// the engine too, so a download's space rule always has a figure (code
+    /// review r1 M4).
+    #[tokio::test]
+    #[cfg(unix)]
+    async fn free_space_is_read_in_every_build() {
+        assert!(free_space(&std::env::temp_dir()).is_some_and(|b| b > 0));
+        let core = Core::temporary("default").unwrap();
+        assert!(core.free_bytes().is_some());
+    }
 
     /// The walk-only setting: a window and an optional line; no window is
     /// 0; anything else is no setting.

@@ -665,7 +665,7 @@ async fn load_meta(ctx: Ctx) {
         }
         Err(reason) => {
             // No meta, no network: what the downloads kept (4.18).
-            if let Some(meta) = downloaded_meta(&ctx) {
+            if let Some(meta) = ctx.core.downloads().downloaded_meta(&ctx.kind, &ctx.id) {
                 {
                     let mut state = lock(&ctx.state);
                     state.meta = Some(meta);
@@ -678,48 +678,6 @@ async fn load_meta(ctx: Ctx) {
             header.state = TitleState::Failed { reason };
             ctx.header.set(header);
         }
-    }
-}
-
-/// The title as its downloads describe it (plans/offline-downloads.md
-/// 4.18): its name, poster and runtime, and the downloaded episodes as its
-/// videos. `None` without a download that holds bytes.
-fn downloaded_meta(ctx: &Ctx) -> Option<MetaItem> {
-    let rows: Vec<_> = ctx
-        .core
-        .downloads()
-        .board()
-        .get()
-        .rows
-        .into_iter()
-        .filter(|r| r.item_id == ctx.id && r.bytes_done > 0)
-        .collect();
-    let first = rows.first()?;
-    let videos: Vec<serde_json::Value> = rows
-        .iter()
-        .filter(|r| r.season.is_some())
-        .map(|r| {
-            serde_json::json!({
-                "id": r.video_id,
-                "title": r.episode_title.clone().unwrap_or_default(),
-                "season": r.season,
-                "episode": r.episode,
-                "thumbnail": r.still,
-                "released": r.released.as_deref().map(|d| format!("{d}T00:00:00.000Z")),
-            })
-        })
-        .collect();
-    let body = serde_json::json!({ "meta": {
-        "id": ctx.id,
-        "type": ctx.kind,
-        "name": first.name,
-        "poster": first.poster,
-        "runtime": first.runtime,
-        "videos": videos,
-    }});
-    match mq_protocol::decode_meta(body.to_string().as_bytes()).ok()? {
-        mq_protocol::ResourceResponse::Meta { meta } => Some(meta),
-        _ => None,
     }
 }
 

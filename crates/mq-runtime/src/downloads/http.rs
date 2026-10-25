@@ -2,7 +2,7 @@
 //! direct one, fetched with one ranged request into `video.<ext>.part`,
 //! checkpointed every 8 MiB so a kill or a reboot loses at most that much.
 
-use super::{DownloadReason, Downloads, FLOOR, Version};
+use super::{DownloadReason, Downloads, FLOOR, Version, save_run};
 use crate::Core;
 use crate::views::playback::debrid_request;
 use mq_http::{Priority, RequestOptions};
@@ -149,6 +149,8 @@ pub(super) async fn fetch(
     let dir = d.job_dir(&row.id);
     if let Err(e) = tokio::fs::create_dir_all(&dir).await {
         tracing::warn!("download folder not made: {e}");
+        // Waited for as space, a minute at least (code review r1 M6).
+        d.ran_out(&row.id);
         return Ended::Wait(DownloadReason::Space);
     }
     let mut tries = 0usize;
@@ -236,15 +238,28 @@ async fn one_request(
     // already, and a request for nothing would answer 416 (code review r1,
     // engine P2-7).
     if let (Some(ext), Some(total)) = (version.ext.clone(), known)
-        && from == total
         && total > 0
     {
         let part = dir.join(format!("video.{ext}.part"));
-        if tokio::fs::metadata(&part)
-            .await
-            .is_ok_and(|m| m.len() == total)
-        {
-            return finish(&part, &dir.join(format!("video.{ext}"))).await;
+        let whole = dir.join(format!("video.{ext}"));
+        let len = |path: &Path| {
+            let path = path.to_owned();
+            async move { tokio::fs::metadata(path).await.map(|m| m.len()).ok() }
+        };
+        // Renamed already, the row never told (a kill right after the
+        // rename): done, never fetched again (code review r1 m2).
+        if len(&whole).await == Some(total) {
+            return Request::Done;
+        }
+        if from == total && len(&part).await == Some(total) {
+            return finish(&part, &whole).await;
+        }
+        // A `.part` shorter than its checkpoint (the folder was restored):
+        // what follows would land after a hole, so it starts again.
+        if from > 0 && len(&part).await.is_none_or(|l| l < from) {
+            row.bytes_done = 0;
+            save_run(core, row);
+            return Request::Restart;
         }
     }
     let scope = link
@@ -278,6 +293,13 @@ async fn one_request(
     };
     match answer.status {
         403 | 404 | 410 => return Request::Refused,
+        // A range past the end: the file it resumes is not this one, or is
+        // whole already (taken care of above); never a dead source.
+        416 => {
+            row.bytes_done = 0;
+            save_run(core, row);
+            return Request::Restart;
+        }
         200 | 206 => {}
         status if status == 429 || status >= 500 => return Request::Failed { progressed: false },
         _ => return Request::Refused,
@@ -296,7 +318,7 @@ async fn one_request(
         && (start != Some(from) || known.is_some_and(|k| k != total))
     {
         row.bytes_done = 0;
-        let _ = core.library().save_download(row);
+        save_run(core, row);
         return Request::Restart;
     }
     // An origin that ignores ranges, or a changed file under `If-Range`,
@@ -327,11 +349,8 @@ async fn one_request(
     // with what it needs (`Downloads::tick`).
     row.bytes_total = Some(total as i64);
     row.bytes_done = from as i64;
-    let _ = core.library().save_download(row);
-    if !d
-        .fits_making_room(core, &row.id, total.saturating_sub(from))
-        .await
-    {
+    save_run(core, row);
+    if !d.fits_making_room(core, &row.id, total, from).await {
         return Request::Ended(Ended::Wait(DownloadReason::Space));
     }
     let part = dir.join(format!("video.{ext}.part"));
@@ -339,6 +358,7 @@ async fn one_request(
         Ok(file) => file,
         Err(e) => {
             tracing::warn!("download file not opened: {e}");
+            d.ran_out(&row.id);
             return Request::Ended(Ended::Wait(DownloadReason::Space));
         }
     };
@@ -346,7 +366,6 @@ async fn one_request(
     let mut since_checkpoint = 0u64;
     let mut head = Vec::new();
     let mut progressed = false;
-    d.progress(&row.id, done, Some(total), 0);
     while done < total {
         let chunk = match answer.next_chunk().await {
             Some(Ok(chunk)) => chunk,
@@ -439,8 +458,11 @@ async fn open_at(path: &Path, from: u64) -> std::io::Result<tokio::fs::File> {
     Ok(file)
 }
 
+/// Writes `bytes` and waits until the file has them: `held` never names
+/// bytes a reader of the file could not read yet (code review r1 m5).
 async fn write(file: &mut tokio::fs::File, bytes: &[u8]) -> std::io::Result<()> {
-    file.write_all(bytes).await
+    file.write_all(bytes).await?;
+    file.flush().await
 }
 
 /// Flushes the file to the disk, then records `done`: a checkpoint never
@@ -450,7 +472,7 @@ async fn checkpoint(core: &Core, row: &mut DownloadRecord, file: &mut tokio::fs:
         return;
     }
     row.bytes_done = done as i64;
-    let _ = core.library().save_download(row);
+    save_run(core, row);
 }
 
 /// The whole file reads as a video: a Matroska or MP4 container whose

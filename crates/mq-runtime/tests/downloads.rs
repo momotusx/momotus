@@ -1158,16 +1158,13 @@ async fn a_torrent_download_plays_offline() {
     // Online, a paused partial whose head is on disk but whose swarm is not
     // answering now is no pick: it would stall at its first missing piece
     // ahead of a ready version (code review r1 P2-5).
-    let mut stored = core
-        .library()
-        .downloads()
-        .unwrap()
-        .into_iter()
-        .find(|r| r.id == ids[0])
+    core.library()
+        .update_download(&ids[0], |r| {
+            r.state = "paused".into();
+            r.bytes_done = (s.movie.len() / 2) as i64;
+            true
+        })
         .unwrap();
-    stored.state = "paused".into();
-    stored.bytes_done = (s.movie.len() / 2) as i64;
-    core.library().save_download(&stored).unwrap();
     // The device's torrent folder is the leecher's, so its start reads as
     // on disk.
     let _ = std::fs::remove_dir(core.torrent_dir());
@@ -1477,4 +1474,435 @@ async fn a_smart_step_waits_offline_and_outlives_a_relaunch() {
     core.downloads().relaunch();
     core.downloads().set_link(Link::default());
     e1_goes_after_e2(&core).await;
+}
+
+/// Opens a play of `video_id` of `item_id` through Versions and waits until
+/// it is ready.
+async fn play(core: &Core, item_id: &str, video_id: &str) -> PlaybackView {
+    play_when(core, item_id, video_id, false).await
+}
+
+/// [`play`], with every addon answered first when `settled`: the pick then
+/// carries the version's online sources after the kept file.
+async fn play_when(core: &Core, item_id: &str, video_id: &str, settled: bool) -> PlaybackView {
+    let episode: Option<u32> = video_id.rsplit(':').next().and_then(|e| e.parse().ok());
+    let series = item_id != ITEM;
+    let target = PlayTarget {
+        kind: if series { "series" } else { "movie" }.into(),
+        item_id: item_id.into(),
+        video_id: video_id.into(),
+        name: None,
+        poster: None,
+        season: series.then_some(2),
+        episode: episode.filter(|_| series),
+    };
+    let view = VersionsView::open(
+        core,
+        VersionsParams {
+            kind: target.kind.clone(),
+            video_id: video_id.into(),
+            target: Target {
+                title: if series { "Show" } else { "Sintel" }.into(),
+                year: (!series).then_some(2010),
+                season: target.season,
+                episode: target.episode,
+            },
+            ..params()
+        },
+    );
+    let deadline = std::time::Instant::now() + Duration::from_secs(20);
+    let pick = loop {
+        let snapshot = view.snapshot();
+        if let Some(pick) = snapshot.recommended.filter(|_| !settled || snapshot.done) {
+            break pick;
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "{:?}",
+            view.snapshot()
+        );
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    };
+    let playback = PlaybackView::open_picked(core, view.pick(&pick.key), target, &view.plays());
+    while playback.snapshot().phase != PlaybackPhase::Ready {
+        assert!(
+            std::time::Instant::now() < deadline,
+            "{:?}",
+            playback.snapshot()
+        );
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    playback
+}
+
+fn loopback() -> (mq_http::HttpClient, mq_http::RequestOptions) {
+    let http = mq_http::HttpClient::new(Default::default()).unwrap();
+    let opts = mq_http::RequestOptions {
+        allow_private: true,
+        max_bytes: 64 << 20,
+        ..Default::default()
+    };
+    (http, opts)
+}
+
+/// A download deleted while it plays leaves the list at once, but its file
+/// stays until the play ends: the next range still answers (code review r1
+/// M1).
+#[tokio::test]
+async fn a_download_deleted_while_it_plays_keeps_its_file_until_the_play_ends() {
+    let data = video(8 << 20);
+    let (url, _) = origin(data.clone(), How::default()).await;
+    let core = core_with(addon(&url, Duration::ZERO).await).await;
+    let ids = mq_runtime::downloads::add(&core, movie()).await.unwrap();
+    until(&core, &ids[0], "done", |r| r.state == DownloadState::Done).await;
+    core.downloads().set_link(Link {
+        offline: true,
+        ..Link::default()
+    });
+    let playback = play(&core, ITEM, ITEM).await;
+    core.downloads()
+        .act(&ids, mq_runtime::downloads::Action::Remove)
+        .unwrap();
+    assert!(row_of(&core, &ids[0]).is_none(), "the row goes at once");
+    let folder = core.downloads().job_folder(&ids[0]);
+    let (http, opts) = loopback();
+    let got = http
+        .get_range(&playback.snapshot().url.unwrap(), 4 << 20, 4096, &opts)
+        .await
+        .unwrap();
+    assert_eq!(got.status, 206);
+    assert_eq!(got.body[..], data[4 << 20..(4 << 20) + 4096]);
+    assert!(folder.exists());
+    drop(playback);
+    let deadline = std::time::Instant::now() + Duration::from_secs(10);
+    while folder.exists() {
+        assert!(std::time::Instant::now() < deadline, "the file stayed");
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+}
+
+/// A version too large for the free space now is still the pick: the job
+/// waits for room, never fails, and goes on when room comes (code review
+/// r1 M2).
+#[tokio::test]
+async fn a_download_too_large_for_now_waits_for_room() {
+    let data = video(4 << 20);
+    let (url, _) = origin(data.clone(), How::default()).await;
+    let stream = serde_json::json!({
+        "name": "Direct\n1080p", "title": "Sintel.2010.1080p.WEB-DL.mp4", "url": url,
+        "behaviorHints": { "filename": "Sintel.2010.1080p.WEB-DL.mp4", "videoSize": data.len() }
+    });
+    let core = core_with(addon_listing(stream, Duration::ZERO).await).await;
+    core.set_free_bytes(512 << 20);
+    let ids = mq_runtime::downloads::add(&core, movie()).await.unwrap();
+    until(&core, &ids[0], "waits for space", |r| {
+        r.reason == Some(DownloadReason::Space)
+    })
+    .await;
+    assert_ne!(row_of(&core, &ids[0]).unwrap().state, DownloadState::Failed);
+    core.set_free_bytes(100 << 30);
+    core.downloads().set_allowed(true, None);
+    until(&core, &ids[0], "done", |r| r.state == DownloadState::Done).await;
+}
+
+/// Offline with no meta, the player's next episode is the next downloaded
+/// one, and none after the last downloaded (plans/offline-downloads.md
+/// 4.12.5, code review r1 M3).
+#[tokio::test]
+async fn offline_the_next_episode_is_the_next_downloaded_one() {
+    let core = bare();
+    let data = video(1 << 20);
+    for (id, video) in [("e1", "tt9:2:1"), ("e2", "tt9:2:2")] {
+        let mut row = record(
+            id,
+            "tt9",
+            video,
+            "done",
+            kept_version(
+                "http://127.0.0.1:1/v.mp4",
+                "http://127.0.0.1:9/manifest.json",
+            ),
+        );
+        row.bytes_done = data.len() as i64;
+        row.bytes_total = Some(data.len() as i64);
+        core.library().add_download(&row).unwrap();
+        put(&core, id, "video.mp4", &data);
+    }
+    core.downloads().relaunch();
+    core.downloads().set_link(Link {
+        offline: true,
+        ..Link::default()
+    });
+    let first = play(&core, "tt9", "tt9:2:1").await;
+    let deadline = std::time::Instant::now() + Duration::from_secs(20);
+    while first.snapshot().next.is_none() {
+        assert!(std::time::Instant::now() < deadline, "no next episode");
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+    assert_eq!(first.snapshot().next.unwrap().video_id, "tt9:2:2");
+    drop(first);
+    let last = play(&core, "tt9", "tt9:2:2").await;
+    tokio::time::sleep(Duration::from_millis(800)).await;
+    assert!(last.snapshot().next.is_none());
+}
+
+/// Two jobs starting together never take the same room: with space for
+/// one, the second waits until the first is done (code review r1 M7).
+#[tokio::test]
+async fn two_jobs_never_take_the_same_room() {
+    let (url, _) = origin(
+        video(8 << 20),
+        How {
+            slow: true,
+            ..How::default()
+        },
+    )
+    .await;
+    let stream = serde_json::json!({ "name": "Direct\n1080p", "title": "Show.S02.1080p.WEB-DL.mp4", "url": url });
+    let core = core_with(addon_listing(stream, Duration::ZERO).await).await;
+    // Room for one 8 MiB file over the 1 GiB a download leaves.
+    core.set_free_bytes((1 << 30) + (12 << 20));
+    let season = AddRequest {
+        kind: "series".into(),
+        item_id: "tt9".into(),
+        scope: Scope::Season,
+        video_id: None,
+        season: Some(2),
+        params: serde_json::json!({}),
+        pick: None,
+    };
+    let ids = mq_runtime::downloads::add(&core, season).await.unwrap();
+    assert_eq!(ids.len(), 2);
+    let deadline = std::time::Instant::now() + Duration::from_secs(60);
+    let mut waited = false;
+    loop {
+        let rows: Vec<_> = ids.iter().filter_map(|id| row_of(&core, id)).collect();
+        // Writing: a job that only checks its room writes nothing.
+        let writing = rows
+            .iter()
+            .filter(|r| {
+                r.state == DownloadState::Running
+                    && r.bytes_done > 0
+                    && r.bytes_total.is_some_and(|t| r.bytes_done < t)
+            })
+            .count();
+        assert!(writing <= 1, "both write on one room: {rows:?}");
+        waited |= rows.iter().any(|r| r.reason == Some(DownloadReason::Space));
+        if rows.iter().all(|r| r.state == DownloadState::Done) {
+            break;
+        }
+        assert!(std::time::Instant::now() < deadline, "{rows:?}");
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    assert!(waited);
+}
+
+/// A `.part` the folder lost bytes of (restored from a backup) starts
+/// again from 0 instead of growing after a hole, and a file renamed whole
+/// before a kill is done with no request (code review r1 m2).
+#[tokio::test]
+async fn a_short_part_starts_again_and_a_renamed_file_is_done() {
+    let data = video(4 << 20);
+    let (url, seen) = origin(data.clone(), How::default()).await;
+    let core = bare();
+    let mut short = record(
+        "s1",
+        ITEM,
+        ITEM,
+        "running",
+        kept_version(&url, "http://127.0.0.1:9/manifest.json"),
+    );
+    short.bytes_done = 2 << 20;
+    short.bytes_total = Some(data.len() as i64);
+    core.library().add_download(&short).unwrap();
+    put(&core, "s1", "video.mp4.part", &data[..1 << 20]);
+    core.downloads().relaunch();
+    core.downloads().set_link(Link::default());
+    until(&core, "s1", "done", |r| r.state == DownloadState::Done).await;
+    assert_eq!(file_of(&core, "s1"), *data);
+    assert_eq!(
+        seen.ranges.lock().unwrap().last().map(String::as_str),
+        Some("0-")
+    );
+
+    let asked = seen.answers.load(Ordering::SeqCst);
+    let mut renamed = record(
+        "r1",
+        "tt9",
+        "tt9:2:1",
+        "running",
+        kept_version(&url, "http://127.0.0.1:9/manifest.json"),
+    );
+    renamed.bytes_done = data.len() as i64;
+    renamed.bytes_total = Some(data.len() as i64);
+    core.library().add_download(&renamed).unwrap();
+    put(&core, "r1", "video.mp4", &data);
+    core.downloads().relaunch();
+    until(&core, "r1", "done", |r| r.state == DownloadState::Done).await;
+    assert_eq!(seen.answers.load(Ordering::SeqCst), asked);
+}
+
+/// A folder whose file cannot be opened waits for space a minute at least,
+/// never asking its source again and again (code review r1 M6).
+#[tokio::test]
+async fn an_unopenable_file_waits_without_a_loop() {
+    let (url, seen) = origin(video(1 << 20), How::default()).await;
+    let core = core_with(addon(&url, Duration::ZERO).await).await;
+    core.downloads().set_link(Link {
+        offline: true,
+        ..Link::default()
+    });
+    let ids = mq_runtime::downloads::add(&core, movie()).await.unwrap();
+    // A folder where the file goes: it cannot be opened for writing.
+    std::fs::create_dir_all(core.downloads().job_folder(&ids[0]).join("video.mp4.part")).unwrap();
+    core.downloads().set_link(Link::default());
+    until(&core, &ids[0], "waits for space", |r| {
+        r.reason == Some(DownloadReason::Space)
+    })
+    .await;
+    let asked = seen.answers.load(Ordering::SeqCst);
+    tokio::time::sleep(Duration::from_secs(2)).await;
+    assert_eq!(seen.answers.load(Ordering::SeqCst), asked, "asked again");
+    assert_eq!(
+        row_of(&core, &ids[0]).unwrap().reason,
+        Some(DownloadReason::Space)
+    );
+}
+
+/// A row left `running` with nothing running (a stale write) goes back in
+/// the queue and finishes; a pause written then stays (code review r1 M5).
+#[tokio::test]
+async fn a_running_row_with_no_run_is_repaired_and_a_pause_stays() {
+    let data = video(4 << 20);
+    let (url, _) = origin(data.clone(), How::default()).await;
+    let core = bare();
+    let row = record(
+        "x1",
+        ITEM,
+        ITEM,
+        "queued",
+        kept_version(&url, "http://127.0.0.1:9/manifest.json"),
+    );
+    core.library().add_download(&row).unwrap();
+    core.downloads()
+        .act(&["x1".to_owned()], mq_runtime::downloads::Action::Pause)
+        .unwrap();
+    core.downloads().relaunch();
+    core.downloads().set_link(Link::default());
+    tokio::time::sleep(Duration::from_millis(500)).await;
+    assert_eq!(row_of(&core, "x1").unwrap().state, DownloadState::Paused);
+    // Running in the table, with no run behind it.
+    core.library()
+        .update_download("x1", |r| {
+            r.state = "running".into();
+            true
+        })
+        .unwrap();
+    core.downloads().set_allowed(true, None);
+    until(&core, "x1", "done", |r| r.state == DownloadState::Done).await;
+    assert_eq!(file_of(&core, "x1"), *data);
+}
+
+/// The ops: pause holds a job, resume and retry queue it again, remove
+/// takes it and its files; a kids profile may do none of them (code review
+/// r1 m10).
+#[tokio::test]
+async fn every_op_does_its_part_and_none_is_a_kids_one() {
+    use mq_runtime::downloads::Action;
+    let data = video(4 << 20);
+    let (url, _) = origin(data.clone(), How::default()).await;
+    let core = core_with(addon(&url, Duration::ZERO).await).await;
+    core.downloads().set_link(Link {
+        offline: true,
+        ..Link::default()
+    });
+    let ids = mq_runtime::downloads::add(&core, movie()).await.unwrap();
+    let d = core.downloads();
+    d.act(&ids, Action::Pause).unwrap();
+    d.set_link(Link::default());
+    tokio::time::sleep(Duration::from_millis(500)).await;
+    assert_eq!(row_of(&core, &ids[0]).unwrap().state, DownloadState::Paused);
+    d.act(&ids, Action::Resume).unwrap();
+    until(&core, &ids[0], "done", |r| r.state == DownloadState::Done).await;
+    // Missing (its file gone), then Try again.
+    std::fs::remove_dir_all(d.job_folder(&ids[0])).unwrap();
+    d.relaunch();
+    until(&core, &ids[0], "missing", |r| {
+        r.state == DownloadState::Missing
+    })
+    .await;
+    d.act(&ids, Action::Retry { mobile_data: false }).unwrap();
+    until(&core, &ids[0], "done again", |r| {
+        r.state == DownloadState::Done
+    })
+    .await;
+    // A kids profile changes nothing.
+    core.set_pin("default", Some("1357"), None).await.unwrap();
+    let kid = core.for_profile(&core.create_kids_profile("Kid", "fox:amber").unwrap());
+    assert!(mq_runtime::downloads::owner(&kid).is_err());
+    assert!(mq_runtime::downloads::add(&kid, movie()).await.is_err());
+    d.act(&ids, Action::Remove).unwrap();
+    assert!(row_of(&core, &ids[0]).is_none());
+    assert!(!d.job_folder(&ids[0]).exists());
+}
+
+/// Until the app has told the network once, no job runs: a launch on
+/// mobile data with Wi-Fi only on never starts one first (code review r1
+/// m8).
+#[tokio::test]
+async fn nothing_runs_before_the_app_tells_the_network() {
+    let (url, seen) = origin(video(1 << 20), How::default()).await;
+    let core = bare();
+    let row = record(
+        "n1",
+        ITEM,
+        ITEM,
+        "queued",
+        kept_version(&url, "http://127.0.0.1:9/manifest.json"),
+    );
+    core.library().add_download(&row).unwrap();
+    core.downloads().relaunch();
+    tokio::time::sleep(Duration::from_millis(800)).await;
+    assert_eq!(seen.answers.load(Ordering::SeqCst), 0);
+    assert_ne!(row_of(&core, "n1").unwrap().state, DownloadState::Running);
+    core.downloads().set_link(Link::default());
+    until(&core, "n1", "done", |r| r.state == DownloadState::Done).await;
+}
+
+/// A downloaded file the player cannot read turns the download to "Try
+/// again", and the play goes on with the same version online (plans/
+/// offline-downloads.md 4.8, code review r1 m4).
+#[tokio::test]
+async fn a_download_that_does_not_play_fails_and_the_play_goes_online() {
+    let data = video(4 << 20);
+    let (url, seen) = origin(data.clone(), How::default()).await;
+    let core = core_with(addon(&url, Duration::ZERO).await).await;
+    let ids = mq_runtime::downloads::add(&core, movie()).await.unwrap();
+    until(&core, &ids[0], "done", |r| r.state == DownloadState::Done).await;
+    let playback = play_when(&core, ITEM, ITEM, true).await;
+    let asked = seen.answers.load(Ordering::SeqCst);
+    let first = playback.snapshot().attempt;
+    playback.fail_over(None, Some("unreadable"), None, "no moov");
+    until(&core, &ids[0], "failed", |r| {
+        r.state == DownloadState::Failed && r.reason == Some(DownloadReason::Source)
+    })
+    .await;
+    let deadline = std::time::Instant::now() + Duration::from_secs(20);
+    while playback.snapshot().phase != PlaybackPhase::Ready || playback.snapshot().attempt == first
+    {
+        assert!(
+            std::time::Instant::now() < deadline,
+            "{:?}",
+            playback.snapshot()
+        );
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    // The next source reads from the origin, not the kept file.
+    let (http, opts) = loopback();
+    let got = http
+        .get_range(&playback.snapshot().url.unwrap(), 0, 4096, &opts)
+        .await
+        .unwrap();
+    assert_eq!(got.body[..], data[..4096]);
+    assert!(seen.answers.load(Ordering::SeqCst) > asked);
 }

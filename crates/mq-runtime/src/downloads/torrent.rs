@@ -3,7 +3,7 @@
 //! job follows its progress and ends it.
 
 use super::http::Ended;
-use super::{DownloadReason, Downloads, TorrentRef, Version};
+use super::{DownloadReason, Downloads, TorrentRef, Version, save_run};
 use crate::Core;
 use mq_engine::FileHint;
 use mq_library::DownloadRecord;
@@ -98,12 +98,9 @@ pub(super) async fn fetch(
         row.version = serde_json::to_string(&version).ok();
     }
     row.bytes_total = Some(len as i64);
-    let _ = core.library().save_download(row);
+    save_run(core, row);
     let held = row.bytes_done.max(0) as u64;
-    if !d
-        .fits_making_room(core, &row.id, len.saturating_sub(held))
-        .await
-    {
+    if !d.fits_making_room(core, &row.id, len, held).await {
         return Ended::Wait(DownloadReason::Space);
     }
     let handle = match engine.download(t, file).await {
@@ -124,7 +121,7 @@ pub(super) async fn fetch(
         }
         if saved.elapsed() >= SAVE_EVERY || p.have >= len {
             row.bytes_done = p.have as i64;
-            let _ = core.library().save_download(row);
+            save_run(core, row);
             saved = Instant::now();
         }
         if p.have >= len {

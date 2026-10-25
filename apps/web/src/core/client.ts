@@ -76,8 +76,8 @@ const networkChanged = () => lifecycle("networkChanged", { network: navigator.on
 window.addEventListener("online", networkChanged);
 window.addEventListener("offline", networkChanged);
 connection?.addEventListener("change", networkChanged);
-// Opened with no connection: the core hears it at once.
-if (!navigator.onLine) networkChanged();
+// Told at load, online or not: the core runs no download before it hears the network.
+networkChanged();
 
 export type ViewStatus ={ state: "opening" } | { state: "open" } | { state: "failed"; reason: string };
 

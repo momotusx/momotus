@@ -532,6 +532,8 @@ data class DownloadRow(
     val etaSecs: Long? = null,
     /** "1080p", from the version kept. */
     val quality: String? = null,
+    /** The languages of the subtitles kept with it, as tags. */
+    val subtitles: List<String> = emptyList(),
 )
 
 /** The device's downloads settings (3.7), kept in `device_state`. */

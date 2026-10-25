@@ -17,4 +17,8 @@ mobileData: boolean, bytesDone: number, bytesTotal: number | null, speedBps: num
 /**
  * "1080p", from the version kept.
  */
-quality: string | null, };
+quality: string | null, 
+/**
+ * The languages of the subtitles kept with it, as tags.
+ */
+subtitles: Array<string>, };
