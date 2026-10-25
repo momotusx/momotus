@@ -160,7 +160,7 @@ html[data-engine="mpv"] .player-scr.started .player-bd { opacity: 0; }
 .end-body .acts { display: flex; flex-wrap: wrap; justify-content: center; gap: 20px; margin-top: 18px; }
 .endcard .btn { transform-origin: center; }
 
-.toast { position: absolute; left: 50%; top: var(--safe-top); transform: translateX(-50%); display: flex; align-items: center; gap: 12px;
+.toast { position: absolute; z-index: 2; left: 50%; top: var(--safe-top); transform: translateX(-50%); display: flex; align-items: center; gap: 12px;
   padding: 14px 22px; border-radius: var(--radius-card); font: 500 var(--type-callout) var(--font-text); }
 .toast svg { width: 28px; height: 28px; color: var(--bad); }
 /* A quiet line (no subtitle could be read): no alarm color. */
@@ -220,22 +220,30 @@ html[data-engine="mpv"] .player-scr.started .player-bd { opacity: 0; }
  * profile's size (Prefs.subtitleSize: 0.8, 1, 1.25 and 1.5 times); 85% while
  * they would meet the transport. A side panel or the Up next card draws over them. */
 .cues { position: absolute; left: 12px; right: 12px; z-index: 1; display: flex; flex-direction: column; align-items: center; pointer-events: none; }
-.cues span { padding: 0 6px; font: 500 44px / 1.3 var(--font-text); color: var(--text); background: var(--scrim); text-align: center; }
-[data-subsize="small"] .cues span { font-size: 35px; }
-[data-subsize="large"] .cues span { font-size: 55px; }
-[data-subsize="extraLarge"] .cues span { font-size: 66px; }
-.cues.small span { font-size: 37.4px; }
-[data-subsize="small"] .cues.small span { font-size: 29.75px; }
-[data-subsize="large"] .cues.small span { font-size: 46.75px; }
-[data-subsize="extraLarge"] .cues.small span { font-size: 56.1px; }
-[data-form="phone"] .cues span { font-size: 16px; }
-[data-form="phone"] [data-subsize="small"] .cues span { font-size: 13px; }
-[data-form="phone"] [data-subsize="large"] .cues span { font-size: 20px; }
-[data-form="phone"] [data-subsize="extraLarge"] .cues span { font-size: 24px; }
-[data-form="phone"] .cues.small span { font-size: 13.6px; }
-[data-form="phone"] [data-subsize="small"] .cues.small span { font-size: 11px; }
-[data-form="phone"] [data-subsize="large"] .cues.small span { font-size: 17px; }
-[data-form="phone"] [data-subsize="extraLarge"] .cues.small span { font-size: 20.4px; }
+.cue { padding: 0 6px; font: 500 44px / 1.3 var(--font-text); color: var(--text); background: var(--scrim); text-align: center; }
+[data-subsize="small"] .cue { font-size: 35px; }
+[data-subsize="large"] .cue { font-size: 55px; }
+[data-subsize="extraLarge"] .cue { font-size: 66px; }
+.cues.small .cue { font-size: 37.4px; }
+[data-subsize="small"] .cues.small .cue { font-size: 29.75px; }
+[data-subsize="large"] .cues.small .cue { font-size: 46.75px; }
+[data-subsize="extraLarge"] .cues.small .cue { font-size: 56.1px; }
+[data-form="phone"] .cue { font-size: 16px; }
+[data-form="phone"] [data-subsize="small"] .cue { font-size: 13px; }
+[data-form="phone"] [data-subsize="large"] .cue { font-size: 20px; }
+[data-form="phone"] [data-subsize="extraLarge"] .cue { font-size: 24px; }
+[data-form="phone"] .cues.small .cue { font-size: 13.6px; }
+[data-form="phone"] [data-subsize="small"] .cues.small .cue { font-size: 11px; }
+[data-form="phone"] [data-subsize="large"] .cues.small .cue { font-size: 17px; }
+[data-form="phone"] [data-subsize="extraLarge"] .cues.small .cue { font-size: 20.4px; }
+/* TV and desktop keep the lines inside the title-safe sides; a phone's are 12 px from its edges. */
+[data-form="tv"] .cues, [data-form="desktop"] .cues { left: var(--safe-side); right: var(--safe-side); }
+/* A cue its file placed (lib/cues.ts cueSpot): over the element, where the browser drew it. */
+.cues-at { position: absolute; inset: 0; z-index: 1; pointer-events: none; }
+.cue-at { position: absolute; display: flex; flex-direction: column; }
+/* WebVTT's colour classes (<c.yellow>, <c.bg_blue>), as the browser drew them. */
+.cue .white { color: #fff; } .cue .lime { color: #0f0; } .cue .cyan { color: #0ff; } .cue .red { color: #f00; } .cue .yellow { color: #ff0; } .cue .magenta { color: #f0f; } .cue .blue { color: #00f; } .cue .black { color: #000; }
+.cue .bg_white { background: #fff; } .cue .bg_lime { background: #0f0; } .cue .bg_cyan { background: #0ff; } .cue .bg_red { background: #f00; } .cue .bg_yellow { background: #ff0; } .cue .bg_magenta { background: #f0f; } .cue .bg_blue { background: #00f; } .cue .bg_black { background: #000; }
 
 /* The loading layer (plans/player-polish.md 1.2, player/loading.tsx): the
  * title's backdrop at 30% with a light blur over the page color until the

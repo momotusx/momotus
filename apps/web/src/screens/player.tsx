@@ -42,7 +42,7 @@ import { createVideoEngine } from "../player/video-engine";
 import { loadedSource, type Retry, sourceStart, TRYING_AGAIN_MS, tryingAgain } from "../lib/failover";
 import { bytes, clock, decoded, startsText, episodeLabel, groupFailures, playPath, playState, seasonName, titlePath, versionsPath } from "../lib/format";
 import { DELAY_SETTLE_MS } from "../lib/delay";
-import { cuePlace } from "../lib/cues";
+import { cuePlace, cueSpot } from "../lib/cues";
 import { bufferShare, loadingLines, STALL_AHEAD_S, startFill } from "../lib/loading";
 import { fileChoice, offSummary, pickerLanguages, startOption } from "../lib/subtitles";
 import { choiceWords, emptyWords, languageName, nextVersion, qualityCell, qualityText, restartLine, subtitleNote } from "../lib/words";
@@ -65,6 +65,32 @@ const SIZES: { size: SubtitleSize; text: string }[] = [
   { size: "extraLarge", text: "150%" },
 ];
 const SKIP: Record<SegmentKind, string> = { intro: "Skip intro", recap: "Skip recap", credits: "Skip credits", preview: "Skip preview" };
+
+/** A cue's markup (VTTCue.getCueAsHTML) cut at its line breaks, each line keeping the tags around it (<i>, <c.yellow>). */
+function cueLines(cue: VTTCue): Node[][] {
+  // Each line's own nodes, not a fragment: a fragment empties as it is drawn, and the lines draw again after a wait.
+  return cut(cue.getCueAsHTML()).map((line) => Array.from(line.childNodes));
+}
+
+function cut(node: Node): Node[] {
+  if (node.nodeType === Node.TEXT_NODE) return (node.textContent ?? "").split("\n").map((t) => document.createTextNode(t));
+  const out: Node[] = [];
+  let line = node.cloneNode(false);
+  for (const child of Array.from(node.childNodes)) {
+    const [first, ...rest] = cut(child);
+    if (first) line.appendChild(first);
+    for (const r of rest) {
+      out.push(line);
+      line = node.cloneNode(false);
+      line.appendChild(r);
+    }
+  }
+  out.push(line);
+  return out;
+}
+
+/** A cue its file placed, and its lines. */
+type Placed = { spot: NonNullable<ReturnType<typeof cueSpot>>; lines: Node[][] };
 
 // The viewer's sound for this app run: one episode's level and mute are the next one's.
 const sound = { volume: 100, muted: false };
@@ -347,15 +373,27 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
   // The page draws the lines itself on every form, as Stremio does, so they
   // are placed exactly (lib/cues.ts): the browser's own cues end under the
   // title-safe line and never clear the controls.
-  const [lines, setLines] = createSignal<string[]>([]);
+  // The foot block's lines, and the cues the file placed itself (lib/cues.ts cueSpot), each line with its
+  // own markup (<i>, <b>, <c.yellow>).
+  const [lines, setLines] = createSignal<Node[][]>([]);
+  const [placed, setPlaced] = createSignal<Placed[]>([]);
   const [shrink, setShrink] = createSignal(false);
   // Until placed, at the foot (never a frame at the top).
   const [cueAt, setCueAt] = createSignal<{ top?: number; bottom?: number }>({ bottom: 16 });
   let cuesEl: HTMLDivElement | undefined;
+  const cuesShown = () => !(panel() && form() === "phone") && !ended() && !wait();
   const readCues = () => {
     const video = engine.view as HTMLVideoElement;
-    const active = track() ? video.textTracks[0]?.activeCues : null;
-    setLines(active ? Array.from(active).flatMap((c) => ((c as VTTCue).getCueAsHTML().textContent ?? "").split("\n")) : []);
+    const active = track() ? Array.from(video.textTracks[0]?.activeCues ?? []) : [];
+    const foot: Node[][] = [];
+    const at: Placed[] = [];
+    for (const c of active as VTTCue[]) {
+      const spot = cueSpot(c);
+      if (spot) at.push({ spot, lines: cueLines(c) });
+      else foot.push(...cueLines(c));
+    }
+    setLines(foot);
+    setPlaced(at);
   };
   const placeCues = () => {
     const video = engine.view as HTMLVideoElement;
@@ -565,7 +603,10 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
     const sub = t ? { url: t.url, lang: t.lang } : null;
     setTrack(sub);
     engine.setSubtitle(sub);
-    if (!sub) setLines([]);
+    if (!sub) {
+      setLines([]);
+      setPlaced([]);
+    }
   };
   const pickSubtitle = (t: SubtitleTrack | null) => {
     setPanel(null);
@@ -955,8 +996,9 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
     >
       <Backdrop src={ctx.details()?.background} class="player-bd" dim />
       {engine.view}
-      {/* Not under a phone's panel (its sheet covers the foot) nor a card; a TV's or a desktop's side panel draws over them. */}
-      <Show when={lines().length > 0 && !(panel() && form() === "phone") && !ended()}>
+      {/* Not under a phone's panel (its sheet covers the foot) nor a card, nor over the loading layer (a start, a
+          re-buffer, a move to another version); a TV's or a desktop's side panel draws over them. */}
+      <Show when={lines().length > 0 && cuesShown()}>
         <div
           class="cues"
           classList={{ small: shrink() }}
@@ -964,7 +1006,25 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
           aria-live="off"
           style={{ top: cueAt().top !== undefined ? `${cueAt().top}px` : undefined, bottom: cueAt().bottom !== undefined ? `${cueAt().bottom}px` : undefined }}
         >
-          <For each={lines()}>{(l) => <span>{l}</span>}</For>
+          <For each={lines()}>{(l) => <span class="cue">{l}</span>}</For>
+        </div>
+      </Show>
+      <Show when={placed().length > 0 && cuesShown()}>
+        <div class="cues-at" aria-live="off">
+          <For each={placed()}>
+            {(c) => (
+              <div class="cue-at" style={{ top: c.spot.top, left: c.spot.left, width: c.spot.width, "align-items": c.spot.align }}>
+                {/* A line counted from the top: that many of its own lines down (1.3, its line height). */}
+                <For each={c.lines}>
+                  {(l, i) => (
+                    <span class="cue" style={{ "margin-top": i() === 0 && c.spot.down ? `${c.spot.down * 1.3}em` : undefined }}>
+                      {l}
+                    </span>
+                  )}
+                </For>
+              </div>
+            )}
+          </For>
         </div>
       </Show>
       {/* Paused, the picture steps back and the title says what it is, as

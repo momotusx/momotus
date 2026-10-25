@@ -1489,3 +1489,66 @@ test("TV and desktop player: the page draws the lines, over the 5% line, clear o
     await set(before);
   }
 });
+
+test("TV: a cue its file placed stays there with its styling, and no line draws over the loading layer", async ({ browser }) => {
+  // What Chromium's own cues did (plans/reviews/subs-letterbox-code-r1.md W1, W3): a sign at line:10% at the top,
+  // <i> and <c.yellow> kept; a re-buffer's layer over the lines, never under them.
+  const before = (await prefs()).subtitleLanguages;
+  const set = async (subtitleLanguages: string[]) => {
+    const c = new Client(`ws://127.0.0.1:${JOURNEY_PORT}/ws`);
+    await c.req("setPrefs", { patch: { subtitleLanguages } }).finally(() => c.close());
+  };
+  await set(["eng"]);
+  try {
+    const { context, page: p } = await page(browser, { width: 960, height: 540 });
+    await p.goto("/play/movie/mqjm/mqjm?form=tv");
+    await expect(p.locator('[data-f="player:toggle"]')).toBeAttached({ timeout: 30_000 });
+    await startIfPaused(p);
+    await p.evaluate(() => {
+      const v = document.querySelector("video");
+      if (v) v.currentTime = 2;
+    });
+    await expect.poll(() => p.evaluate(() => document.querySelector("video")?.textTracks[0]?.activeCues?.length ?? 0), { timeout: 30_000 }).toBeGreaterThan(0);
+    // Two more cues on the file's track, on screen now: a styled line at the foot and a sign the file placed.
+    await p.evaluate(() => {
+      const v = document.querySelector("video") as HTMLVideoElement;
+      const t = v.textTracks[0] as TextTrack;
+      t.addCue(new VTTCue(v.currentTime, v.currentTime + 120, "<i>Sung</i> <c.yellow>words</c>"));
+      const sign = new VTTCue(v.currentTime, v.currentTime + 120, "A SIGN");
+      sign.snapToLines = false;
+      sign.line = 10;
+      t.addCue(sign);
+    });
+    const sign = p.locator(".cue-at", { hasText: "A SIGN" });
+    await expect(sign).toBeVisible({ timeout: 10_000 });
+    await expect(p.locator(".cues")).not.toContainText("A SIGN");
+    const at = await p.evaluate(() => {
+      const box = (document.querySelector("video") as HTMLVideoElement).getBoundingClientRect();
+      const r = (document.querySelector(".cue-at") as HTMLElement).getBoundingClientRect();
+      return (r.top - box.top) / box.height;
+    });
+    expect(at).toBeCloseTo(0.1, 2);
+    const italic = p.locator(".cues i", { hasText: "Sung" });
+    await expect(italic).toHaveCSS("font-style", "italic");
+    await expect(p.locator(".cues .yellow", { hasText: "words" })).toHaveCSS("color", "rgb(255, 255, 0)");
+    await p.screenshot({ path: `${SHOTS}/tv-player-placed-cue.png` });
+
+    // A re-buffer (the element waits for data past the stall time): the loading layer comes up and the lines go.
+    const spot = await italic.evaluate((el) => {
+      const r = el.getBoundingClientRect();
+      return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+    });
+    await p.evaluate(() => document.querySelector("video")?.dispatchEvent(new Event("waiting")));
+    await expect(p.locator(".ld.on.stall")).toBeAttached({ timeout: 5_000 });
+    await expect(p.locator(".cues, .cues-at")).toHaveCount(0);
+    expect(await p.evaluate(({ x, y }) => !!document.elementFromPoint(x, y)?.closest(".cues, .cues-at"), spot)).toBe(false);
+    // Playing again: the lines come back.
+    await p.evaluate(() => document.querySelector("video")?.dispatchEvent(new Event("playing")));
+    await expect(p.locator(".ld.on")).toHaveCount(0);
+    await expect(p.locator(".cues i", { hasText: "Sung" })).toBeVisible();
+    await expect(sign).toBeVisible();
+    await context.close();
+  } finally {
+    await set(before);
+  }
+});
