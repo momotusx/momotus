@@ -61,6 +61,7 @@ import app.marquee.core.TitleCopy
 import app.marquee.core.VersionLine
 import app.marquee.core.VersionsCopy
 import app.marquee.core.model.DownloadBadge
+import app.marquee.core.model.DownloadState
 import app.marquee.core.model.Episode
 import app.marquee.core.model.Tile
 import app.marquee.core.model.TitleDetails
@@ -715,7 +716,9 @@ private fun Info(
         } else {
             VersionStatus(VersionsCopy.line(versions, versionsFailed))
         }
+        downloads?.problem?.let { StatusNote(it, tone = Status.Warn) }
         var seriesMenu by remember { mutableStateOf(false) }
+        var deleteSeason by remember { mutableStateOf<List<String>?>(null) }
         if (seriesMenu && downloads != null) {
             val ids = title.episodes.mapNotNull { it.download?.id }
             ActionMenu(
@@ -728,9 +731,29 @@ private fun Info(
                                 GroupAct.None -> null
                                 else -> Icons.ArrowDownToLine
                             }
-                        MenuAction(it.label, icon) { downloads.group(it.act, header.selectedSeason, ids) }
+                        MenuAction(it.label, icon) {
+                            // A whole season's delete asks first (code review r1).
+                            if (it.act == GroupAct.DeleteSeason) {
+                                deleteSeason = ids
+                            } else {
+                                downloads.group(it.act, header.selectedSeason, ids)
+                            }
+                        }
                     },
                 onDismiss = { seriesMenu = false },
+            )
+        }
+        deleteSeason?.takeIf { downloads != null }?.let { ids ->
+            ActionMenu(
+                title = DownloadCopy.deleteSeries(ids.size, details.name),
+                actions =
+                    listOf(
+                        MenuAction("Delete", Icons.Trash) {
+                            downloads?.group(GroupAct.DeleteSeason, header.selectedSeason, ids)
+                        },
+                        MenuAction("Cancel", null) {},
+                    ),
+                onDismiss = { deleteSeason = null },
             )
         }
         val labels =
@@ -822,10 +845,33 @@ private fun Info(
                         )
                     }
                 }
+            } else if (header.download?.state == DownloadState.Done) {
+                // A kids profile: a plain badge, no control (plans/offline-downloads.md 3.2).
+                DownloadedBadge(Modifier.weight(1f))
             }
         }
         Genres(header, details, onGenre)
         details.description?.let { Synopsis(it) }
+    }
+}
+
+/** "Downloaded" with its check, nothing to press: what a kids profile sees of a download. */
+@Composable
+private fun DownloadedBadge(modifier: Modifier) {
+    Column(
+        modifier.semantics(mergeDescendants = true) {},
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Box(Modifier.size(48.dp), contentAlignment = Alignment.Center) {
+            MqIcon(Icons.CircleCheck, tint = Marquee.colors.text)
+        }
+        MqText(
+            "Downloaded",
+            role = TextRole.Caption,
+            color = Marquee.colors.muted,
+            weight = FontWeight.SemiBold,
+        )
     }
 }
 
@@ -953,6 +999,8 @@ private fun EpisodeRow(
                 DownloadCopy.control(episode.download),
                 it,
                 Modifier.align(Alignment.CenterVertically),
+                // Ten rows, ten different names: the episode follows the state (code review r1 M3).
+                subject = Format.episodeLabel(episode.season, episode.episode),
             )
         }
     }

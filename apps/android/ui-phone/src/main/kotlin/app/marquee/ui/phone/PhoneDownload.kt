@@ -18,6 +18,10 @@ import app.marquee.design.RoundButton
  * TV) shows no control and no menu items.
  */
 interface TitleDownloads {
+    /** Why the last add or op did not go through, shown on the page; null when it did. */
+    val problem: String?
+        get() = null
+
     /** [item] for the video [videoId], whose download is [badge] (null: none yet). */
     fun item(
         item: DownloadItem,
@@ -69,6 +73,8 @@ fun DownloadButton(
     modifier: Modifier = Modifier,
     showLabel: Boolean = false,
     onLongClick: (() -> Unit)? = null,
+    /** What the control is for, said after its state ("Downloaded, S1:E3"). */
+    subject: String? = null,
 ) {
     RoundButton(
         control.glyph.icon,
@@ -76,7 +82,7 @@ fun DownloadButton(
         onClick,
         modifier,
         showLabel = showLabel,
-        spoken = control.spoken,
+        spoken = listOfNotNull(control.spoken, subject).joinToString(", "),
         ring = control.ring,
         value = control.value,
         clickLabel = control.hint,

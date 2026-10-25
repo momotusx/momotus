@@ -45,6 +45,7 @@ import app.marquee.core.session.CoreSession
 import app.marquee.core.session.DownloadAction
 import app.marquee.core.session.DownloadTarget
 import app.marquee.core.views.DownloadsView
+import app.marquee.core.views.ViewStatus
 import app.marquee.design.Chip
 import app.marquee.design.Icons
 import app.marquee.design.Marquee
@@ -52,7 +53,10 @@ import app.marquee.design.MqIcon
 import app.marquee.design.MqText
 import app.marquee.design.RemoteImage
 import app.marquee.design.SecondaryButton
+import app.marquee.design.Spinner
 import app.marquee.design.StateMessage
+import app.marquee.design.Status
+import app.marquee.design.StatusNote
 import app.marquee.design.TextRole
 import app.marquee.design.focusClickable
 import app.marquee.ui.phone.DownloadButton
@@ -69,7 +73,7 @@ class DownloadsHolder(
 }
 
 @Composable
-private fun downloadsView(session: CoreSession): DownloadsView =
+internal fun downloadsView(session: CoreSession): DownloadsView =
     viewModel<DownloadsHolder>(
         key = "downloads",
         factory = viewModelFactory { initializer { DownloadsHolder(session) } },
@@ -93,7 +97,8 @@ fun DownloadsScreen(
     nav: DownloadsNav,
     kids: Boolean,
 ) {
-    val snapshot = downloadsView(session).snapshot
+    val view = downloadsView(session)
+    val snapshot = view.snapshot
     var menu by remember { mutableStateOf<DownloadRow?>(null) }
     menu?.let { row -> RowMenu(row, actions, nav) { menu = null } }
     val onControl: ((DownloadRow) -> Unit)? = if (kids) null else ({ menu = it })
@@ -103,8 +108,13 @@ fun DownloadsScreen(
         verticalArrangement = Arrangement.spacedBy(Marquee.space.s),
     ) {
         item(key = "head") { BrowseHeader("Downloads") }
-        if (snapshot == null) return@LazyColumn
+        if (snapshot == null) {
+            // Never a blank page: opening, or why it did not (code review r1 minor 5).
+            item(key = "state") { ViewState(view.status) }
+            return@LazyColumn
+        }
         if (!kids) item(key = "storage") { Storage(snapshot.storage) }
+        actions.problem?.let { problem -> item(key = "problem") { StatusNote(problem, tone = Status.Warn) } }
         if (snapshot.downloading.isEmpty() && snapshot.titles.isEmpty()) {
             item(key = "empty") {
                 StateMessage(
@@ -166,6 +176,7 @@ fun DownloadsScreen(
                 wide = false,
                 title = title.name,
                 line = DownloadCopy.titleLine(title),
+                extra = row?.takeIf { film }?.let(DownloadCopy::subtitlesLine),
                 onClick = { if (film && row != null) nav.onPlay(row) else nav.onSeries(title.itemId) },
                 control =
                     when {
@@ -243,6 +254,7 @@ fun DownloadedSeriesScreen(
                     row.still ?: row.poster,
                     wide = row.still != null,
                     title = DownloadCopy.episodeName(row),
+                    extra = DownloadCopy.subtitlesLine(row),
                     line =
                         if (row.state ==
                             DownloadState.Done
@@ -301,6 +313,7 @@ private fun ListRow(
     line: String,
     onClick: () -> Unit,
     control: (@Composable () -> Unit)?,
+    extra: String? = null,
 ) {
     val colors = Marquee.colors
     val shape = RoundedCornerShape(Marquee.radius.l)
@@ -325,6 +338,7 @@ private fun ListRow(
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             MqText(title, role = TextRole.Headline, weight = FontWeight.Bold, maxLines = 2)
             MqText(line, role = TextRole.Caption, color = colors.muted, maxLines = 2)
+            extra?.let { MqText(it, role = TextRole.Caption, color = colors.muted, maxLines = 2) }
         }
         control?.invoke()
     }
@@ -436,5 +450,20 @@ internal fun OfflineBanner(onDownloads: () -> Unit) {
             }
             SecondaryButton(DownloadCopy.OFFLINE_ACTION, onDownloads, icon = Icons.ArrowDownToLine)
         }
+    }
+}
+
+/** A Downloads page before its view answers: a spinner, or why it did not open (code review r1 minor 5). */
+@Composable
+private fun ViewState(status: ViewStatus) {
+    if (status is ViewStatus.Failed) {
+        StateMessage(
+            "Downloads could not open",
+            "Try again in a moment.",
+            Modifier.padding(horizontal = Marquee.safe.side),
+            icon = Icons.ArrowDownToLine,
+        )
+    } else {
+        Box(Modifier.fillMaxWidth().padding(Marquee.space.l), contentAlignment = Alignment.Center) { Spinner() }
     }
 }

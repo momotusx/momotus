@@ -198,7 +198,7 @@ object DownloadCopy {
             DownloadReason.Space -> "Waiting"
             DownloadReason.Network -> "Waiting for a connection"
             DownloadReason.Playing -> "Paused while you watch"
-            DownloadReason.App -> "Opens again when you return to Marquee"
+            DownloadReason.App -> "Opens again when you return to Momotus"
             else -> "Waiting"
         }
 
@@ -258,7 +258,8 @@ object DownloadCopy {
     /** The series' action-row control: Download, or where its downloads stand; a tap always opens its menu. */
     fun seriesControl(series: GroupDownload?): DownloadControl =
         when {
-            series == null || series.downloaded == 0 -> {
+            // "Downloaded" only once every episode is (code review r1 minor 3).
+            series == null || (series.downloaded < series.episodes && series.active == 0) -> {
                 NONE
             }
 
@@ -319,6 +320,12 @@ object DownloadCopy {
             "${episodes(title.count)} · ${Format.bytes(title.bytes)}"
         }
 
+    /** The subtitles kept with a download, "Subtitles: English, Turkish"; null with none (they play offline too). */
+    fun subtitlesLine(row: DownloadRow): String? =
+        row.subtitles
+            .takeIf { it.isNotEmpty() }
+            ?.joinToString(", ", prefix = "Subtitles: ", transform = VersionsCopy::languageName)
+
     /** An episode of a series page: "E3 Name". */
     fun episodeName(row: DownloadRow): String =
         listOfNotNull(row.episode?.let { "E$it" }, row.episodeTitle?.takeIf { it.isNotBlank() })
@@ -353,7 +360,9 @@ object DownloadCopy {
     const val OFFLINE = "You're offline. Your downloads still play."
     const val OFFLINE_ACTION = "Go to Downloads"
     const val TITLE_OFFLINE = "Showing what's downloaded"
-    const val NOTIFICATION_ASK = "Marquee shows download progress in a notification."
+    const val ADD_FAILED = "The download could not start. Try again."
+    const val ACT_FAILED = "That did not go through. Try again."
+    const val NOTIFICATION_ASK = "Momotus shows download progress in a notification."
     const val SMART_LINE =
         "When you finish a downloaded episode, the next one downloads and the one you watched is deleted."
 }

@@ -224,6 +224,7 @@ fun SettingsScreen(
     val holder = settingsHolder(session)
     val runner = rememberRunner()
     val tv = Marquee.form == Form.Tv
+    val downloads = !tv && downloadsView(session).snapshot != null
     val context = LocalContext.current
     val snapshot = gate.snapshot
     val me = snapshot?.profiles?.firstOrNull { it.id == snapshot.active }
@@ -308,8 +309,9 @@ fun SettingsScreen(
                     }
                 },
             )
-            // Downloads are the phone's (plans/offline-downloads.md 3.7).
-            if (!tv) add(SettingsPart(SettingsSection.Downloads) { DownloadsSettings(session) })
+            // Downloads are the phone's (plans/offline-downloads.md 3.7); the section comes with its content, so
+            // nothing shows before the view answers.
+            if (downloads) add(SettingsPart(SettingsSection.Downloads) { DownloadsSettings(session) })
             // This device only, never synced (plans/appletv-polish.md decision 13): on a TV where its title pages may
             // play the header trailer (plans/trailer-inline.md 4a).
             if (!tv || TrailerPreviews.headerOnTv(context)) add(SettingsPart(SettingsSection.Device) { DevicePrefs() })

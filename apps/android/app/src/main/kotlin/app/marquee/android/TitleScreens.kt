@@ -249,10 +249,11 @@ fun VersionsScreen(
     val chosen: (String) -> Unit =
         if (route.download) {
             { picked ->
+                // With no subscription yet the pick cannot be named: the page stays for another tap.
                 view?.currentSubscription?.sub?.let { sub ->
                     app.downloads.add(route.kind, route.id, DownloadScope.Video, route.videoId, pick = sub to picked)
+                    onBack()
                 }
-                onBack()
             }
         } else {
             onPlay

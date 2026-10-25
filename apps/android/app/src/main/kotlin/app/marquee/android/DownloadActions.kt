@@ -43,6 +43,10 @@ class DownloadActions(
     var starts by mutableIntStateOf(0)
         private set
 
+    /** Why the last add or op did not go through, one line the pages show; never silence (code review r1). */
+    var problem by mutableStateOf<String?>(null)
+        private set
+
     fun add(
         kind: String,
         itemId: String,
@@ -55,10 +59,12 @@ class DownloadActions(
         scope.launch {
             try {
                 session.ops.downloadAdd(kind, itemId, what, caps(), videoId, season, pick)
+                problem = null
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
                 CoreLog.w("download could not start: ${CoreLog.describe(e)}")
+                problem = DownloadCopy.ADD_FAILED
             }
         }
     }
@@ -72,10 +78,12 @@ class DownloadActions(
         scope.launch {
             try {
                 session.ops.downloadAct(action, which, mobileData)
+                problem = null
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
                 CoreLog.w("download ${action.op} failed: ${CoreLog.describe(e)}")
+                problem = DownloadCopy.ACT_FAILED
             }
         }
     }
@@ -98,6 +106,9 @@ class DownloadActions(
         onPlay: (videoId: String) -> Unit,
     ): TitleDownloads =
         object : TitleDownloads {
+            override val problem: String?
+                get() = this@DownloadActions.problem
+
             override fun item(
                 item: DownloadItem,
                 videoId: String,

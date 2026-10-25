@@ -249,4 +249,33 @@ class DownloadCopyTest {
         assertEquals("Delete 4 downloaded episodes of Severance?", DownloadCopy.deleteSeries(4, "Severance"))
         assertEquals("Delete all downloads on this device? 12 GB", DownloadCopy.deleteAll(12 * gb))
     }
+
+    /** A series reads "Downloaded" only once every episode is; a part of it reads "Download" (code review r1). */
+    @Test
+    fun `the series control says Downloaded only for the whole series`() {
+        assertEquals("Download", DownloadCopy.seriesControl(GroupDownload(2, 20, 1, 0)).label)
+        assertEquals("Downloading", DownloadCopy.seriesControl(GroupDownload(2, 20, 1, 3)).label)
+        assertEquals("Downloaded", DownloadCopy.seriesControl(GroupDownload(2, 20, 20, 0)).label)
+        assertEquals("Download", DownloadCopy.seriesControl(null).label)
+    }
+
+    /** The subtitles a download keeps are named, and the wait for the app says the app's name. */
+    @Test
+    fun `a row names its kept subtitles, and the app wait names Momotus`() {
+        val row =
+            DownloadRow(
+                id = "d1",
+                kind = "movie",
+                itemId = "tt1",
+                videoId = "tt1",
+                name = "Sintel",
+                state = DownloadState.Done,
+                mobileData = false,
+                bytesDone = 1,
+                subtitles = listOf("en", "tr"),
+            )
+        assertEquals("Subtitles: English, Turkish", DownloadCopy.subtitlesLine(row))
+        assertNull(DownloadCopy.subtitlesLine(row.copy(subtitles = emptyList())))
+        assertEquals("Opens again when you return to Momotus", DownloadCopy.waiting(DownloadReason.App))
+    }
 }

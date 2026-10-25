@@ -19,6 +19,7 @@ import app.marquee.core.client.CoreClient
 import app.marquee.core.client.CoreJson
 import app.marquee.core.model.DownloadBadge
 import app.marquee.core.model.DownloadState
+import app.marquee.core.model.Episode
 import app.marquee.core.model.GroupDownload
 import app.marquee.core.model.PlayTarget
 import app.marquee.core.model.TitleDetails
@@ -111,8 +112,9 @@ class PhoneDownloadTest {
     private fun show(
         header: TitleHeader,
         actions: TitleDownloads? = downloads,
+        episodes: List<Episode> = emptyList(),
     ) {
-        val snapshot = CoreJson.encodeToString(TitleSnapshot.serializer(), TitleSnapshot(header))
+        val snapshot = CoreJson.encodeToString(TitleSnapshot.serializer(), TitleSnapshot(header, episodes))
         client.attach { text ->
             val msg = CoreJson.parseToJsonElement(text).jsonObject
             val id = msg["id"]?.jsonPrimitive?.longOrNull ?: return@attach
@@ -164,6 +166,14 @@ class PhoneDownloadTest {
         compose.onAllNodes(hasContentDescription("Download")).assertCountEquals(0)
     }
 
+    /** A kids profile sees a download as a plain "Downloaded", with nothing to press (3.2). */
+    @Test
+    fun `a kids page shows a download as a plain badge`() {
+        show(film(DownloadBadge("d1", DownloadState.Done, mobileData = false, progress = 1f)), actions = null)
+        compose.onAllNodesWithText("Downloaded", useUnmergedTree = true).assertCountEquals(1)
+        compose.onAllNodes(hasContentDescription("Downloaded") and hasClick).assertCountEquals(0)
+    }
+
     @Test
     fun `a running download says its percent, and a tap opens its menu`() {
         show(film(DownloadBadge("d1", DownloadState.Running, mobileData = false, progress = 0.45f)))
@@ -203,5 +213,63 @@ class PhoneDownloadTest {
         compose.onNodeWithText("Download every season (2 seasons, 16 episodes)").assertExists()
         compose.onNodeWithText("Download Season 1 (8 episodes)").performClick()
         assertEquals(listOf("DownloadSeason 1 []"), calls)
+    }
+
+    /** Deleting a whole season's downloads asks first, in the deleteSeries words; Cancel deletes nothing. */
+    @Test
+    fun `a season's delete asks first`() {
+        show(
+            TitleHeader(
+                state = TitleState.Ready,
+                details = TitleDetails(id = "tt1", kind = "series", name = "Sintel", source = "local"),
+                inLibrary = false,
+                watched = false,
+                seasons = listOf(1),
+                selectedSeason = 1,
+                seasonDownload = GroupDownload(1, 8, 8, 0),
+                seriesDownload = GroupDownload(1, 8, 8, 0),
+            ),
+        )
+        control("Downloaded").performClick()
+        compose.onNodeWithText("Delete Season 1 downloads").performClick()
+        assertEquals(emptyList<String>(), calls)
+        compose.onNodeWithText("Delete 0 downloaded episodes of Sintel?").assertExists()
+        compose.onNodeWithText("Cancel").performClick()
+        assertEquals(emptyList<String>(), calls)
+        control("Downloaded").performClick()
+        compose.onNodeWithText("Delete Season 1 downloads").performClick()
+        compose.onNodeWithText("Delete").performClick()
+        assertEquals(listOf("DeleteSeason 1 []"), calls)
+    }
+
+    /** Each episode's control names its episode after its state: a season reads as many names as rows (M3). */
+    @Test
+    fun `each episode's control names its episode`() {
+        val episodes =
+            (1..2).map {
+                Episode(
+                    videoId = "tt1:1:$it",
+                    season = 1,
+                    episode = it,
+                    title = "Ep $it",
+                    watched = false,
+                    download = if (it == 2) DownloadBadge("d$it", DownloadState.Done, mobileData = false) else null,
+                )
+            }
+        show(
+            TitleHeader(
+                state = TitleState.Ready,
+                details = TitleDetails(id = "tt1", kind = "series", name = "Sintel", source = "local"),
+                inLibrary = false,
+                watched = false,
+                seasons = listOf(1),
+                selectedSeason = 1,
+                seasonDownload = GroupDownload(1, 2, 1, 0),
+                seriesDownload = GroupDownload(1, 2, 1, 0),
+            ),
+            episodes = episodes,
+        )
+        control("Download, S1:E1").assertExists()
+        control("Downloaded, S1:E2").assertExists()
     }
 }
