@@ -268,3 +268,44 @@ for (const form of Object.keys(FORMS) as Form[]) {
     }
   });
 }
+
+// TV's action row is drawn whole from the first frame: Remove from Continue Watching comes with the title's own
+// header, so a late Home (its subscription held back here) grows nothing after the page shows.
+test("tv: the action row keeps its box from the first frame, however late Home answers", async ({ browser }) => {
+  const [width, height] = FORMS.tv;
+  const context = await browser.newContext({ viewport: { width, height }, reducedMotion: "reduce" });
+  await context.routeWebSocket(/\/ws$/, (ws) => {
+    const server = ws.connectToServer();
+    ws.onMessage((message) => {
+      const text = String(message);
+      let home = false;
+      try {
+        const m = JSON.parse(text) as { op?: string; view?: string };
+        home = m.op === "subscribe" && m.view === "home";
+      } catch {
+        // Not JSON: passed on as it is.
+      }
+      if (home) setTimeout(() => server.send(text), 3000);
+      else server.send(text);
+    });
+  });
+  const page = await context.newPage();
+  await page.goto(`/title/movie/${BBB_ID}?form=tv`);
+  await expect(page.locator('[data-f="title:play"]')).toBeVisible({ timeout: 30_000 });
+  const boxes = () =>
+    page.evaluate(() =>
+      [".info .acts", ".info .vnote", ".info .facts"].map((s) => {
+        const r = document.querySelector(s)?.getBoundingClientRect();
+        return r ? [s, Math.round(r.x), Math.round(r.y), Math.round(r.width), Math.round(r.height)] : [s];
+      }),
+    );
+  const remove = page.locator('[data-f="title:uncontinue"]');
+  // Big Buck Bunny is in Continue Watching (the run's seed): its Remove is there with the first frame.
+  await expect(remove).toHaveCount(1);
+  const first = await boxes();
+  // Home answers after 3 s; by 4.5 s everything that comes has come.
+  await page.waitForTimeout(4500);
+  expect(await boxes()).toEqual(first);
+  await expect(remove).toHaveCount(1);
+  await context.close();
+});

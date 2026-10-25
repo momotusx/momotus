@@ -16,10 +16,10 @@ import { SynopsisDialog } from "../components/synopsis";
 import { TitleScores } from "../components/title-scores";
 import { KeyedPage } from "../components/keyed-page";
 import { Why } from "../components/why";
-import { askOnce, CONTINUE_ROW, removeFromContinue, Row } from "../components/row";
+import { askOnce, removeFromContinue, Row } from "../components/row";
 import { separators } from "../components/separators";
 import { TrailerOverlay } from "../components/trailer";
-import { homeView, type LiveView, type TitleView, titleView, versionsView } from "../core/client";
+import { type LiveView, type TitleView, titleView, versionsView } from "../core/client";
 import type { EmptyKind } from "../core/generated/EmptyKind";
 import type { HomeRow } from "../core/generated/HomeRow";
 import type { Episode } from "../core/generated/Episode";
@@ -342,8 +342,9 @@ function TitlePage(props: { kind: string; id: string; retry: () => void }) {
                     </button>
                   </Show>
                   {/* TV has no remove button on its tiles: the title page carries it
-                      while the title is in Continue Watching (or Next Up). */}
-                  <Show when={form() === "tv" && inContinue(props.id)}>
+                      while the title is in Continue Watching (or Next Up), as the title header says from its first
+                      render, so the row never grows after it is drawn. */}
+                  <Show when={form() === "tv" && header()?.continuing}>
                     <button class="btn" classList={{ danger: uncontinue.ask() !== "idle" }} data-f="title:uncontinue" onClick={uncontinue.press}>
                       <CircleX aria-hidden />
                       <span class="long">
@@ -450,7 +451,6 @@ function Fact(props: { label: string; value: string }): JSX.Element {
   );
 }
 
-const inContinue = (id: string) => homeView().rows.find((r) => r.rowId === CONTINUE_ROW)?.tiles.some((t) => t.id === id) ?? false;
 
 /** "36 min left" from what the file has left (Continue Watching's figure), else from the runtime,
  * else the position. */
