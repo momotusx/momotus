@@ -68,6 +68,10 @@ test("a cue with no line, or a line counted from the foot, joins the foot block"
   expect(cueSpot(cue)).toBeNull();
   expect(cueSpot({ ...cue, line: -1 })).toBeNull();
   expect(cueSpot({ ...cue, line: -2 })).toBeNull();
+  // A line at 90% or lower is a foot line (some converters write line:90% for dialogue): the foot rule places it.
+  expect(cueSpot({ ...cue, line: 90, snapToLines: false })).toBeNull();
+  expect(cueSpot({ ...cue, line: 95, snapToLines: false })).toBeNull();
+  expect(cueSpot({ ...cue, line: 89, snapToLines: false })?.top).toBe("89%");
   // A position or an align of its own does not take it out of the foot block.
   expect(cueSpot({ ...cue, position: 20, align: "start" })).toBeNull();
 });

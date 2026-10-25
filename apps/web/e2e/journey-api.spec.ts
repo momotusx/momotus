@@ -1518,6 +1518,18 @@ test("TV: a cue its file placed stays there with its styling, and no line draws 
       sign.snapToLines = false;
       sign.line = 10;
       t.addCue(sign);
+      // Class names from the file: a colour stays, the page's own (.vlayer, .toast) never reach the line.
+      t.addCue(new VTTCue(v.currentTime, v.currentTime + 120, "<c.vlayer>Layer</c> <c.toast.yellow>Toast</c>"));
+      // Lines at 90% and 95% are foot lines; a snap line 40 lines down comes up over the title-safe line.
+      for (const [text, line] of [["Ninety", 90], ["Ninety-five", 95]] as const) {
+        const low = new VTTCue(v.currentTime, v.currentTime + 120, text);
+        low.snapToLines = false;
+        low.line = line;
+        t.addCue(low);
+      }
+      const deep = new VTTCue(v.currentTime, v.currentTime + 120, "DEEP");
+      deep.line = 40;
+      t.addCue(deep);
     });
     const sign = p.locator(".cue-at", { hasText: "A SIGN" });
     await expect(sign).toBeVisible({ timeout: 10_000 });
@@ -1531,6 +1543,22 @@ test("TV: a cue its file placed stays there with its styling, and no line draws 
     const italic = p.locator(".cues i", { hasText: "Sung" });
     await expect(italic).toHaveCSS("font-style", "italic");
     await expect(p.locator(".cues .yellow", { hasText: "words" })).toHaveCSS("color", "rgb(255, 255, 0)");
+    await expect(p.locator(".cues .yellow", { hasText: "Toast" })).toHaveCSS("color", "rgb(255, 255, 0)");
+    await expect(p.locator(".cues", { hasText: "Layer" })).toBeVisible();
+    await expect(p.locator(":is(.cues, .cues-at) :is(.vlayer, .toast)")).toHaveCount(0);
+    await expect(p.locator(".cues", { hasText: "Ninety-five" })).toBeVisible();
+    await expect(p.locator(".cues .cue", { hasText: /^Ninety$/ })).toBeVisible();
+    await expect(p.locator(".cue-at", { hasText: /Ninety/ })).toHaveCount(0);
+    const deep = p.locator(".cue-at", { hasText: "DEEP" });
+    await expect(deep).toBeVisible();
+    await expect
+      .poll(() =>
+        deep.evaluate((el) => {
+          const box = (document.querySelector("video") as HTMLVideoElement).getBoundingClientRect();
+          return (box.bottom - el.getBoundingClientRect().bottom) / box.height;
+        }),
+      )
+      .toBeGreaterThanOrEqual(0.05 - 0.002);
     await p.screenshot({ path: `${SHOTS}/tv-player-placed-cue.png` });
 
     // A re-buffer (the element waits for data past the stall time): the loading layer comes up and the lines go.

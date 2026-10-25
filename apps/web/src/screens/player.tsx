@@ -42,7 +42,7 @@ import { createVideoEngine } from "../player/video-engine";
 import { loadedSource, type Retry, sourceStart, TRYING_AGAIN_MS, tryingAgain } from "../lib/failover";
 import { bytes, clock, decoded, startsText, episodeLabel, groupFailures, playPath, playState, seasonName, titlePath, versionsPath } from "../lib/format";
 import { DELAY_SETTLE_MS } from "../lib/delay";
-import { cuePlace, cueSpot } from "../lib/cues";
+import { cuePlace, cueSpot, SAFE_LINE } from "../lib/cues";
 import { bufferShare, loadingLines, STALL_AHEAD_S, startFill } from "../lib/loading";
 import { fileChoice, offSummary, pickerLanguages, startOption } from "../lib/subtitles";
 import { choiceWords, emptyWords, languageName, nextVersion, qualityCell, qualityText, restartLine, subtitleNote } from "../lib/words";
@@ -68,9 +68,14 @@ const SKIP: Record<SegmentKind, string> = { intro: "Skip intro", recap: "Skip re
 
 /** A cue's markup (VTTCue.getCueAsHTML) cut at its line breaks, each line keeping the tags around it (<i>, <c.yellow>). */
 function cueLines(cue: VTTCue): Node[][] {
+  const html = cue.getCueAsHTML();
+  // A <c.NAME> is a class the addon's file names: only WebVTT's colours stay, never one of the page's own (.vlayer, .toast).
+  for (const el of html.querySelectorAll("[class]")) el.className = [...el.classList].filter((c) => CUE_COLOURS.has(c)).join(" ");
   // Each line's own nodes, not a fragment: a fragment empties as it is drawn, and the lines draw again after a wait.
-  return cut(cue.getCueAsHTML()).map((line) => Array.from(line.childNodes));
+  return cut(html).map((line) => Array.from(line.childNodes));
 }
+
+const CUE_COLOURS = new Set(["white", "lime", "cyan", "red", "yellow", "magenta", "blue", "black"].flatMap((c) => [c, `bg_${c}`]));
 
 function cut(node: Node): Node[] {
   if (node.nodeType === Node.TEXT_NODE) return (node.textContent ?? "").split("\n").map((t) => document.createTextNode(t));
@@ -397,11 +402,18 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
   };
   const placeCues = () => {
     const video = engine.view as HTMLVideoElement;
-    if (!cuesEl) return;
     // The canvas is scaled on TV and desktop (.app, --k): rects in the page's own px, as the lines are placed.
     const screen = video.getBoundingClientRect();
     const k = video.offsetHeight ? screen.height / video.offsetHeight : 1;
     const local = (r: DOMRect) => ({ top: r.top / k, bottom: r.bottom / k, width: r.width / k, height: r.height / k });
+    // A cue the file placed keeps its foot over the title-safe line: one placed low, or many lines down, comes up.
+    const safe = local(screen).bottom - local(screen).height * SAFE_LINE;
+    for (const el of document.querySelectorAll<HTMLElement>(".player-scr .cue-at")) {
+      el.style.transform = "";
+      const over = local(el.getBoundingClientRect()).bottom - safe;
+      if (over > 0) el.style.transform = `translateY(${-over}px)`;
+    }
+    if (!cuesEl?.isConnected) return;
     const rect = (sel: string) => {
       const r = document.querySelector<HTMLElement>(`.player-scr ${sel}`)?.getBoundingClientRect();
       return r && local(r);
@@ -420,7 +432,7 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
     setShrink(place.shrink);
     setCueAt(place.at);
   };
-  createEffect(on([lines, osd, ended, panel, () => prefs.state.data?.subtitleSize], () => requestAnimationFrame(placeCues)));
+  createEffect(on([lines, placed, cuesShown, osd, ended, panel, () => prefs.state.data?.subtitleSize], () => requestAnimationFrame(placeCues)));
   onMount(() => {
     const video = engine.view as HTMLVideoElement;
     window.addEventListener("resize", placeCues);

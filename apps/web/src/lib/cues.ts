@@ -45,11 +45,11 @@ export function cuePlace({ box, video, bar, scrubber, transport, up, lines }: Cu
 export type CueSettings = { line: number | "auto"; snapToLines: boolean; position: number | "auto"; align: string; size: number };
 
 /** Where a cue its file placed draws, over the element, as the browser drew it; null for a cue that joins the
- * foot block (no line, or a line counted from the foot). Rule 1 of plans/subtitles-letterbox.md: a sign at
+ * foot block (no line, a line counted from the foot, or one at 90% or lower, as Android's SSA_FOOT). Rule 1 of plans/subtitles-letterbox.md: a sign at
  * line:10% stays at the top. Its top: a share of the element (line:10%), or `down` lines of the cue's own
  * height under the element's top (line:2). Across: its box `size` wide, at `position` (else from its align). */
 export function cueSpot({ line, snapToLines, position, align, size }: CueSettings): { top: string; down: number; left: string; width: string; align: "flex-start" | "center" | "flex-end" } | null {
-  if (line === "auto" || (snapToLines && line < 0)) return null;
+  if (line === "auto" || (snapToLines ? line < 0 : line >= 90)) return null;
   const side = align === "left" || align === "start" ? "start" : align === "right" || align === "end" ? "end" : "center";
   const at = position === "auto" ? { start: 0, center: 50, end: 100 }[side] : position;
   const left = Math.min(Math.max(at - { start: 0, center: size / 2, end: size }[side], 0), 100 - size);
