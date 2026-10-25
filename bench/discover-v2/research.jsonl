@@ -1,9 +1,14 @@
-{"date":"2026-10-25","check":"streaming catalogs configured with 10 services","services":"nfx,dnp,amp,atp,hbm,pmp,pcp,hlu,cru,mbi","catalogs":19,"mubi_series_items":0,"country_changes_lists":false}
-{"date":"2026-10-25","check":"10 service lists in parallel, wall seconds","movie":1.67,"series":0.81,"gzip_kb_per_list":46,"cache_control":"max-age=86400"}
-{"date":"2026-10-25","check":"union of 10 service lists","movies":857,"movies_with_imdb":783,"series":696,"series_with_imdb":624}
-{"date":"2026-10-25","check":"certified fresh intersect service lists (movie/series)","nfx":[3,7],"hbm":[1,3],"dnp":[3,10],"amp":[8,12],"atp":[2,8],"pmp":[3,6],"pcp":[6,1],"hlu":[9,8],"cru":[0,0],"rt_list":[60,60]}
-{"date":"2026-10-25","check":"cinemeta featured order","first_five_imdb":["7.7",null,null,null,"6.9"],"sorted_by_rating":false}
-{"date":"2026-10-25","check":"cinemeta series top genre Drama, 4 pages in parallel, seconds","cold":[0.24,8.92,16.65,16.65],"warm":[0.11,0.11,0.21,6.15]}
-{"date":"2026-10-25","check":"kitsu most popular skip","skip_1_19_20_21_repeat_page_one":true,"skip_40_60_100_new_pages":true}
-{"date":"2026-10-25","check":"kitsu imdb link","attack_on_titan_kitsu_link":"8.4 (kitsu.io url)","attack_on_titan_imdb_via_cinemeta":"9.1"}
-{"date":"2026-10-25","check":"rotten tomatoes genre Anime","movie":35,"series":0,"skip_ignored":true}
+{"date": "2026-10-25", "check": "streaming catalogs configured with 10 services", "services": "nfx,dnp,amp,atp,hbm,pmp,pcp,hlu,cru,mbi", "catalogs": 19, "mubi_series_items": 0, "country_changes_lists": false}
+{"date": "2026-10-25", "check": "10 service lists in parallel, wall seconds", "movie": 1.67, "series": 0.81, "gzip_kb_per_list": 46, "cache_control": "max-age=86400"}
+{"date": "2026-10-25", "check": "union of 10 service lists", "movies": 857, "movies_with_imdb": 783, "series": 696, "series_with_imdb": 624}
+{"date": "2026-10-25", "check": "certified fresh intersect service lists (movie/series)", "nfx": [3, 7], "hbm": [1, 3], "dnp": [3, 10], "amp": [8, 12], "atp": [2, 8], "pmp": [3, 6], "pcp": [6, 1], "hlu": [9, 8], "cru": [0, 0], "rt_list": [60, 60]}
+{"date": "2026-10-25", "check": "cinemeta featured order", "first_five_imdb": ["7.7", null, null, null, "6.9"], "sorted_by_rating": false}
+{"date": "2026-10-25", "check": "kitsu most popular skip", "skip_1_19_20_21_repeat_page_one": true, "skip_40_60_100_new_pages": true}
+{"date": "2026-10-25", "check": "kitsu imdb link", "attack_on_titan_kitsu_link": "8.4 (kitsu.io url)", "attack_on_titan_imdb_via_cinemeta": "9.1"}
+{"date": "2026-10-25", "check": "rotten tomatoes genre Anime", "movie": 35, "series": 0, "skip_ignored": true}
+{"date": "2026-10-26", "check": "cinemeta top genre+skip joined with &, pages one after another, cold, seconds", "series_drama": [7.44, 1.68, 0.64, 1.87, 1.03, 1.58], "series_crime": [0.64, 1.1, 1.93, 0.98, 6.03, 2.58], "note": "replaces the 2026-10-25 parallel row, whose paths joined extras with / and got 404"}
+{"date": "2026-10-26", "check": "cinemeta top genre=Thriller&skip, 4 cold pages in parallel", "wall_s": 2.57, "each_s": [0.74, 0.66, 2.53, 0.91]}
+{"date": "2026-10-26", "check": "cinemeta year list", "year_1995": {"items": 50, "release_years": ["1995", "1996"]}, "year_2010": {"items": 50, "release_years": ["2009", "2010", "2011", "2012", "2014"]}, "sorted_by_rating": false}
+{"date": "2026-10-26", "check": "kitsu most popular ids per skip", "skip_20_repeats_skip_0": true, "skips_40_to_200_step_20_new_and_disjoint": true}
+{"date": "2026-10-26", "check": "union IMDb top 10", "movie": ["The Godfather 9.2", "The Dark Knight 9.1", "The Fellowship of the Ring 8.9", "Forrest Gump 8.8", "Fight Club 8.8", "Inception 8.8", "The Two Towers 8.8", "Pulp Fiction 8.8", "The Matrix 8.7", "Interstellar 8.7"], "series": ["Breaking Bad 9.5", "Band of Brothers 9.4", "Avatar: The Last Airbender 9.3", "The Wire 9.3", "Chernobyl 9.3", "Game of Thrones 9.2", "The Sopranos 9.2", "Bluey 9.2", "Attack on Titan 9.1", "Fullmetal Alchemist: Brotherhood 9.1"], "vote_counts_in_items": false}
+{"date": "2026-10-26", "check": "union titles dated after 2026-10-25", "movie": 0, "series": 0}
