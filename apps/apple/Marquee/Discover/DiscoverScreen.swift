@@ -21,10 +21,13 @@ struct DiscoverScreen: View {
     /// What the grid shows (plans/discover-v2.md 6.1): the core's items, except that a late list that reorders the
     /// grid waits on TV while focus is in it, and a list loading after a change keeps the one before, dimmed.
     @State private var shown: [Tile] = []
-    @State private var previous: [Tile] = []
+    /// The last snapshot with titles: the dimmed grid draws its tiles with its own sort's corner.
+    @State private var previous: DiscoverSnapshot?
     @State private var held = false
     #if os(tvOS)
     @FocusState private var tvTile: String?
+    /// Where Clear hands focus before it goes away (6.5).
+    @FocusState private var tvFilter: DiscoverWords.ClearTarget?
     #endif
 
     init(core: CoreClient) {
@@ -49,7 +52,8 @@ struct DiscoverScreen: View {
             #endif
             // A new kind, catalog or genre selects its first poster; more of the same keeps the selection.
             .onChange(of: discover.snapshot, initial: true) { _, s in
-                guard let s else { return }
+                // Not while a change loads: the dimmed grid stays, and so does its preview.
+                guard let s, !(s.items.isEmpty && s.state == .loading) else { return }
                 selection.update(scope: s.list, keys: s.items.keyed.map(\.key))
             }
             // The previewed item's details come from the core's catalog answer (C44a): asked again for each
@@ -158,11 +162,11 @@ struct DiscoverScreen: View {
                 Button("More titles arrived. Show") { release() }
             }
             if s.items.isEmpty, s.state == .loading {
-                if previous.isEmpty {
-                    skeleton
-                } else {
+                if let previous {
                     // The list before, dimmed and out of focus's reach, until the new one lands.
-                    grid(s, previous).opacity(0.45).disabled(true).accessibilityHidden(true)
+                    grid(previous, previous.items).opacity(0.45).disabled(true).accessibilityHidden(true)
+                } else {
+                    skeleton
                 }
             } else {
                 grid(s, shown)
@@ -217,7 +221,7 @@ struct DiscoverScreen: View {
         } else {
             held = true
         }
-        if !items.isEmpty { previous = items }
+        if !items.isEmpty { previous = discover.snapshot }
     }
 
     private func release() {
@@ -239,6 +243,7 @@ struct DiscoverScreen: View {
                 isSelected: { $0 == s.kind }, select: { select(["kind": $0]) })
             let services = DiscoverWords.services(s)
             if !services.isEmpty {
+                ScrollViewReader { proxy in
                 ScrollView(.horizontal) {
                     HStack(spacing: 28) {
                         ForEach(services, id: \.title) { item in
@@ -261,21 +266,29 @@ struct DiscoverScreen: View {
                             .buttonStyle(.card)
                             .accessibilityLabel(item.title)
                             .accessibilityAddTraits(on ? .isSelected : [])
+                            .focused($tvFilter, equals: item.id == nil ? .all : nil)
+                            .id(item.title)
                         }
                     }
                     .padding(.vertical, 20)
                 }
                 .scrollClipDisabled()
                 .focusSection()
+                // A remembered service far along the rail starts in view.
+                .onChange(of: s.platform, initial: true) { _, chosen in
+                    if let title = services.first(where: { $0.id == chosen })?.title { proxy.scrollTo(title) }
+                }
+                }
             }
             HStack(spacing: 20) {
-                if !DiscoverWords.genreChoices(s).isEmpty, !(s.genreChoices ?? []).isEmpty || !s.genres.isEmpty {
+                if DiscoverWords.clearTarget(s) == .genre {
                     Menu(DiscoverWords.genreTitle(s)) {
                         ForEach(DiscoverWords.genreChoices(s), id: \.title) { item in
                             Button(item.title) { select(["genre": item.id ?? NSNull()]) }
                         }
                     }
                     .accessibilityLabel("\(s.genreLabel ?? "Genre"), \(DiscoverWords.genreTitle(s))")
+                    .focused($tvFilter, equals: .genre)
                 }
                 if !DiscoverWords.decades(s).isEmpty {
                     Menu(DiscoverWords.decadeTitle(s)) {
@@ -284,16 +297,28 @@ struct DiscoverScreen: View {
                         }
                     }
                     .accessibilityLabel("Year, \(DiscoverWords.decadeTitle(s))")
+                    .focused($tvFilter, equals: .year)
                 }
                 if DiscoverWords.filtered(s) {
-                    Button("Clear") { select(["platform": NSNull(), "genre": NSNull(), "decade": NSNull()]) }
-                        .accessibilityLabel("Clear filters")
+                    Button("Clear") {
+                        tvFilter = DiscoverWords.clearTarget(s)
+                        select(["platform": NSNull(), "genre": NSNull(), "decade": NSNull()])
+                    }
+                    .accessibilityLabel("Clear filters")
                 }
                 Spacer(minLength: 0)
                 if !DiscoverWords.sorts(s).isEmpty {
                     Menu(DiscoverWords.sort(s)) {
-                        ForEach(DiscoverWords.sorts(s), id: \.id) { item in
+                        ForEach(DiscoverWords.orders(s), id: \.id) { item in
                             Button(item.title) { select(["sort": item.id]) }
+                        }
+                        let lists = DiscoverWords.lists(s)
+                        if !lists.isEmpty {
+                            Section(DiscoverWords.moreLists) {
+                                ForEach(lists, id: \.id) { item in
+                                    Button(item.title) { select(["sort": item.id]) }
+                                }
+                            }
                         }
                     }
                     .accessibilityLabel("Sort, \(DiscoverWords.sort(s))")

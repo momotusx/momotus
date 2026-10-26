@@ -26,8 +26,8 @@ enum DiscoverLayout {
     }
 }
 
-/// How Discover offers the core's kinds (DECISION Grids): a segmented control for two to four, a
-/// pull-down for more, nothing for one.
+/// How a screen offers the core's kinds (DECISION Grids). Search: a segmented control for two to four, a
+/// pull-down for more, nothing for one (`for(count:)`). Discover: `DiscoverWords.kindControl`.
 enum KindControl: Equatable {
     case none, segmented, pullDown
 

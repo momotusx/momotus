@@ -3,16 +3,19 @@ import SwiftUI
 #if !os(tvOS)
 /// Discover's controls on the Mac, iPad and iPhone (plans/discover-v2.md 6.1, the owner's pick): Movies,
 /// Series and Anime as a segmented control with any other kind in a More pull-down, the services as
-/// name tiles with All first, then Genre and Year, Clear when a filter is set, and Sort at the end.
+/// logo tiles with All first, then Genre and Year, Clear when a filter is set, and Sort at the end.
 /// Every word comes from `DiscoverWords`.
 struct DiscoverFilters: View {
     let snapshot: DiscoverSnapshot
     let select: ([String: any Sendable]) -> Void
     @Environment(\.metrics) private var metrics
+    @Environment(\.dynamicTypeSize) private var typeSize
+    /// Where Clear hands focus before it goes away (6.5).
+    @FocusState private var focus: DiscoverWords.ClearTarget?
 
     var body: some View {
         VStack(alignment: .leading, spacing: metrics.wide ? 18 : 12) {
-            HStack(spacing: 12) { kinds; more }
+            kinds
             rail
             filters
             missing
@@ -20,8 +23,28 @@ struct DiscoverFilters: View {
     }
 
     @ViewBuilder private var kinds: some View {
+        let s = snapshot
+        switch DiscoverWords.kindControl(s, accessibilitySize: typeSize.isAccessibilitySize) {
+        case .segmented:
+            // On a narrow phone More goes to a second line rather than squeezing the segments.
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 12) { segments; more }
+                VStack(alignment: .leading, spacing: 12) { segments; more }
+            }
+        case .pullDown:
+            pull(DiscoverWords.kindTitle(s), field: "Kind") {
+                ForEach(DiscoverWords.kinds(s), id: \.id) { item in
+                    choice(item.title, on: item.id == s.kind) { select(["kind": item.id]) }
+                }
+            }
+        case .none:
+            EmptyView()
+        }
+    }
+
+    @ViewBuilder private var segments: some View {
         let segments = DiscoverWords.segments(snapshot)
-        if segments.count > 1 || !DiscoverWords.more(snapshot).isEmpty {
+        if !segments.isEmpty {
             KindSegment(items: segments, selected: snapshot.kind) { select(["kind": $0]) }
         }
     }
@@ -58,6 +81,7 @@ struct DiscoverFilters: View {
                             .buttonStyle(ServiceTileStyle(on: on, wide: metrics.wide, logo: item.logo != nil))
                             .accessibilityLabel(item.title)
                             .accessibilityAddTraits(on ? .isSelected : [])
+                            .focused($focus, equals: item.id == nil ? .all : nil)
                             .id(item.title)
                         }
                     }
@@ -75,35 +99,65 @@ struct DiscoverFilters: View {
         }
     }
 
+    /// Genre, Year and Clear, then Sort: on one line with Sort at its end where they fit, else wrapping with Sort last.
     @ViewBuilder private var filters: some View {
+        let gap: CGFloat = metrics.wide ? 12 : 18
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: gap) {
+                menus
+                Spacer(minLength: 0)
+                sort
+            }
+            FlowRow(spacing: gap) {
+                menus
+                sort
+            }
+        }
+    }
+
+    @ViewBuilder private var menus: some View {
         let s = snapshot
-        HStack(spacing: metrics.wide ? 12 : 18) {
-            if !DiscoverWords.genreChoices(s).isEmpty, !(s.genreChoices ?? []).isEmpty || !s.genres.isEmpty {
-                pull(DiscoverWords.genreTitle(s), field: s.genreLabel ?? "Genre") {
-                    ForEach(DiscoverWords.genreChoices(s), id: \.title) { item in
-                        choice(item.title, on: item.id == s.genre) { select(["genre": item.id ?? NSNull()]) }
-                    }
+        if DiscoverWords.clearTarget(s) == .genre {
+            pull(DiscoverWords.genreTitle(s), field: s.genreLabel ?? "Genre") {
+                ForEach(DiscoverWords.genreChoices(s), id: \.title) { item in
+                    choice(item.title, on: item.id == s.genre) { select(["genre": item.id ?? NSNull()]) }
                 }
             }
-            if !DiscoverWords.decades(s).isEmpty {
-                pull(DiscoverWords.decadeTitle(s), field: "Year") {
-                    ForEach(DiscoverWords.decades(s), id: \.title) { item in
-                        choice(item.title, on: item.id == s.decade) { select(["decade": item.id ?? NSNull()]) }
-                    }
+            .focused($focus, equals: .genre)
+        }
+        if !DiscoverWords.decades(s).isEmpty {
+            pull(DiscoverWords.decadeTitle(s), field: "Year") {
+                ForEach(DiscoverWords.decades(s), id: \.title) { item in
+                    choice(item.title, on: item.id == s.decade) { select(["decade": item.id ?? NSNull()]) }
                 }
             }
-            if DiscoverWords.filtered(s) {
-                Button("Clear") { select(["platform": NSNull(), "genre": NSNull(), "decade": NSNull()]) }
-                    .buttonStyle(.plain)
-                    .textFont(metrics.wide ? 13 : 17, weight: .semibold, relativeTo: .body)
-                    .foregroundStyle(Theme.Palette.key)
-                    .accessibilityLabel("Clear filters")
+            .focused($focus, equals: .year)
+        }
+        if DiscoverWords.filtered(s) {
+            Button("Clear") {
+                focus = DiscoverWords.clearTarget(s)
+                select(["platform": NSNull(), "genre": NSNull(), "decade": NSNull()])
             }
-            Spacer(minLength: 0)
-            if !DiscoverWords.sorts(s).isEmpty {
-                pull(DiscoverWords.sort(s), field: "Sort") {
-                    ForEach(DiscoverWords.sorts(s), id: \.id) { item in
-                        choice(item.title, on: item.id == s.sort) { select(["sort": item.id]) }
+            .buttonStyle(.plain)
+            .textFont(metrics.wide ? 13 : 17, weight: .semibold, relativeTo: .body)
+            .foregroundStyle(Theme.Palette.key)
+            .accessibilityLabel("Clear filters")
+        }
+    }
+
+    @ViewBuilder private var sort: some View {
+        let s = snapshot
+        if !DiscoverWords.sorts(s).isEmpty {
+            pull(DiscoverWords.sort(s), field: "Sort") {
+                ForEach(DiscoverWords.orders(s), id: \.id) { item in
+                    choice(item.title, on: item.id == s.sort) { select(["sort": item.id]) }
+                }
+                let lists = DiscoverWords.lists(s)
+                if !lists.isEmpty {
+                    Section(DiscoverWords.moreLists) {
+                        ForEach(lists, id: \.id) { item in
+                            choice(item.title, on: item.id == s.sort) { select(["sort": item.id]) }
+                        }
                     }
                 }
             }

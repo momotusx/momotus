@@ -217,15 +217,18 @@ private func snapshot(
 
 /// Discover v2 (plans/discover-v2.md 6.1): the words from a snapshot with the new fields; an older
 /// snapshot without them still decodes.
-private func v2(platform: String? = nil, genre: String? = nil, decade: String? = nil, kinds: [(String, String)]) throws -> DiscoverSnapshot {
+private func v2(
+    platform: String? = nil, genre: String? = nil, decade: String? = nil, kinds: [(String, String)],
+    genres: [String] = ["Drama"], decades: [String] = ["2020s", "1990s"]
+) throws -> DiscoverSnapshot {
     let json: [String: Any] = [
         "kinds": kinds.map { [$0.0, $0.1] }, "kind": kinds.first?.0 ?? NSNull(), "catalogs": [], "catalog": NSNull(),
-        "genres": ["Drama"], "genre": genre ?? NSNull(), "genreRequired": false, "items": [], "state": ["state": "end"],
+        "genres": genres, "genre": genre ?? NSNull(), "genreRequired": false, "items": [], "state": ["state": "end"],
         "missingGenre": NSNull(),
         "platforms": [["id": "netflix", "name": "Netflix"], ["id": "prime", "name": "Prime Video"]], "platform": platform ?? NSNull(),
         "sorts": [["id": "imdb", "label": "IMDb rating", "mark": "imdb"], ["id": "newest", "label": "Newest", "mark": NSNull()]],
         "sort": "imdb", "lists": [["id": "x|movie|top", "name": "Top seeded", "source": "Torrent Catalogs"]],
-        "genreChoices": [["name": "Drama", "count": 4]], "genreLabel": "Genre", "decades": ["2020s", "1990s"], "decade": decade ?? NSNull(),
+        "genreChoices": genres.map { ["name": $0, "count": 4] }, "genreLabel": "Genre", "decades": decades, "decade": decade ?? NSNull(),
         "scope": ["titles": 857, "services": 10, "failed": 1, "pending": 0, "looked": NSNull(), "note": "on your services"],
         "missingSort": NSNull(),
     ]
@@ -264,4 +267,46 @@ private func v2(platform: String? = nil, genre: String? = nil, decade: String? =
     // No IMDb score from the addon: no corner, never a placeholder.
     #expect(DiscoverWords.corner("imdb", tile) == nil)
     #expect(DiscoverWords.corner("popular", tile) == nil)
+}
+
+/// Code review r1 (native) M1: Movies, Series and Anime segmented with More beside; a pull-down of every kind at an
+/// accessibility text size or when only More's kinds are left, so no empty control draws.
+@Test func kindsAreSegmentedWithMoreAndAPullDownAtAccessibilitySizes() throws {
+    let s = try v2(kinds: [("movie", "Movies"), ("series", "Series"), ("anime", "Anime"), ("tv", "Live TV")])
+    #expect(DiscoverWords.kindControl(s, accessibilitySize: false) == .segmented)
+    #expect(DiscoverWords.kindControl(s, accessibilitySize: true) == .pullDown)
+    #expect(DiscoverWords.kindControl(try v2(kinds: [("tv", "Live TV"), ("channel", "Channels")]), accessibilitySize: false) == .pullDown)
+    #expect(DiscoverWords.kindControl(try v2(kinds: [("movie", "Movies")]), accessibilitySize: false) == .none)
+    #expect(DiscoverWords.kindTitle(s) == "Movies")
+    let parts = try source("Discover/DiscoverParts.swift")
+    #expect(parts.contains("DiscoverWords.kindControl(s, accessibilitySize: typeSize.isAccessibilitySize)"))
+    // Genre, Year and Clear on one line with Sort at its end where they fit, else wrapping with Sort last.
+    let filters = try body(of: "@ViewBuilder private var filters: some View", in: parts)
+    #expect(filters.contains("ViewThatFits(in: .horizontal)") && filters.contains("FlowRow(spacing: gap)"))
+}
+
+/// M5: Clear hands focus to the genre menu, else the year menu, else the rail's All, before it goes away.
+@Test func clearHandsFocusToTheMenuThatStays() throws {
+    let kinds = [("movie", "Movies")]
+    #expect(DiscoverWords.clearTarget(try v2(genre: "Drama", kinds: kinds)) == .genre)
+    #expect(DiscoverWords.clearTarget(try v2(kinds: kinds, genres: [])) == .year)
+    #expect(DiscoverWords.clearTarget(try v2(kinds: kinds, genres: [], decades: [])) == .all)
+    let parts = try source("Discover/DiscoverParts.swift")
+    let screen = try source("Discover/DiscoverScreen.swift")
+    #expect(parts.contains("focus = DiscoverWords.clearTarget(s)"))
+    #expect(screen.contains("tvFilter = DiscoverWords.clearTarget(s)"))
+    for text in [parts, screen] {
+        #expect(text.contains("equals: .genre)") && text.contains("equals: .year)") && text.contains("item.id == nil ? .all : nil"))
+    }
+}
+
+/// Minor 2 and 5: the Sort menu heads the other catalogs, and the dimmed grid keeps the corners of its own sort.
+@Test func theSortMenuHeadsTheOtherListsAndTheDimmedGridKeepsItsSort() throws {
+    let s = try v2(kinds: [("movie", "Movies")])
+    #expect(DiscoverWords.orders(s).map(\.title) == ["IMDb rating", "Newest"])
+    #expect(DiscoverWords.lists(s).map(\.title) == ["Top seeded"])
+    #expect(try source("Discover/DiscoverParts.swift").contains("Section(DiscoverWords.moreLists)"))
+    let screen = try source("Discover/DiscoverScreen.swift")
+    #expect(screen.contains("Section(DiscoverWords.moreLists)"))
+    #expect(screen.contains("grid(previous, previous.items)") && screen.contains("previous = discover.snapshot"))
 }

@@ -201,6 +201,23 @@ enum DiscoverWords {
         more(s).first { $0.id == s.kind }?.title ?? "More"
     }
 
+    /// How the kinds are offered: Movies, Series and Anime segmented with More beside (plans/discover-v2.md 6.1), a
+    /// pull-down of every kind at an accessibility text size (6.4), nothing for a single kind.
+    static func kindControl(_ s: DiscoverSnapshot, accessibilitySize: Bool) -> KindControl {
+        let segments = segments(s), more = more(s)
+        if segments.count + more.count < 2 { return .none }
+        return accessibilitySize || segments.isEmpty ? .pullDown : .segmented
+    }
+    static func kindTitle(_ s: DiscoverSnapshot) -> String { kinds(s).first { $0.id == s.kind }?.title ?? "Kind" }
+
+    /// Where Clear hands focus (6.5): the genre menu, else the year menu, else the rail's All, so focus is not left
+    /// on a button that goes away.
+    enum ClearTarget: Equatable { case genre, year, all }
+    static func clearTarget(_ s: DiscoverSnapshot) -> ClearTarget {
+        if !genreChoices(s).isEmpty, !(s.genreChoices ?? []).isEmpty || !s.genres.isEmpty { return .genre }
+        return decades(s).isEmpty ? .all : .year
+    }
+
     /// The rail: All (nil) first, then the services, each with its logo when there is one.
     static func services(_ s: DiscoverSnapshot) -> [(id: String?, title: String, logo: String?)] {
         let all = s.platforms ?? []
@@ -212,6 +229,11 @@ enum DiscoverWords {
         (s.sorts ?? []).map { ($0.id, $0.label) } + (s.lists ?? []).map { ("list:\($0.id)", $0.name) }
     }
     static func sort(_ s: DiscoverSnapshot) -> String { sorts(s).first { $0.id == s.sort }?.title ?? "Sort" }
+    /// The menu in two parts: the orders, then the other catalogs under "More lists", so a catalog called "Top" does
+    /// not read as an order.
+    static func orders(_ s: DiscoverSnapshot) -> [(id: String, title: String)] { sorts(s).filter { !$0.id.hasPrefix("list:") } }
+    static func lists(_ s: DiscoverSnapshot) -> [(id: String, title: String)] { sorts(s).filter { $0.id.hasPrefix("list:") } }
+    static let moreLists = "More lists"
 
     /// The genre menu's choices: "Any genre" first (nil) unless the list needs one.
     static func genreChoices(_ s: DiscoverSnapshot) -> [(id: String?, title: String)] {

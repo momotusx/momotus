@@ -219,8 +219,10 @@ struct CornerLabel: View {
                 .foregroundStyle(Theme.Palette.text)
                 .padding(.horizontal, 5)
                 .padding(.vertical, 2)
-                .background(.black.opacity(0.78), in: RoundedRectangle(cornerRadius: 5, style: .continuous))
+                .background(Theme.Palette.glassStrong, in: RoundedRectangle(cornerRadius: 5, style: .continuous))
                 .padding(.trailing, 5)
+                // ponytail: an RPDB cover that fails shows the addon's poster, and the label then sits a tenth above
+                // its foot; knowing which loaded means passing the image's state up here.
                 .padding(.bottom, (banded ? g.size.height * 0.105 : 0) + 5)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
         }
