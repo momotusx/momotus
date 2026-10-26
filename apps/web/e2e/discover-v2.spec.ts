@@ -21,6 +21,8 @@ const ADDON_NAMES = ["Cinemeta", "Kitsu", "Trakt", "Streaming Catalogs", "Torren
 let core: { proc: ChildProcess; data: string } | null = null;
 let client: Client;
 let tmdb: Server;
+/** How long the core's answers with titles wait on their way to the page: a slow list, for the dimmed one before it. */
+let lag = 0;
 
 /** TMDB's watch providers as /3/watch/providers/movie listed them on 2026-10-27, served by a local fake (the e2e core
  * never holds the owner's token); the logos themselves load from TMDB's image host through the recorder. */
@@ -66,7 +68,12 @@ async function device(browser: Browser, form: Form): Promise<Page> {
     upstream.addEventListener("open", () => {
       for (const m of early.splice(0)) upstream.send(m);
     });
-    upstream.addEventListener("message", (e) => ws.send(String(e.data)));
+    upstream.addEventListener("message", (e) => {
+      const data = String(e.data);
+      // Only what carries titles waits: the loading answer comes at once.
+      if (lag > 0 && data.includes('"items":[{')) setTimeout(() => ws.send(data), lag);
+      else ws.send(data);
+    });
     upstream.addEventListener("close", () => ws.close());
     ws.onMessage((m) => (upstream.readyState === WebSocket.OPEN ? upstream.send(String(m)) : early.push(String(m))));
   });
@@ -145,6 +152,22 @@ test("the picked design: kinds, services, menus and Clear on desktop", async ({ 
   await expect(again.locator(".dv-rail .svc-tile", { hasText: /^Hulu$/ })).toHaveAttribute("aria-checked", "true");
   await again.locator(".dv-rail .svc-tile").first().click();
   await again.context().close();
+});
+
+test("a change keeps the list before, dimmed, until the next one comes", async ({ browser }) => {
+  const page = await device(browser, "desktop");
+  await shot(page, "discover-v2-desktop-before-change");
+  lag = 1500;
+  try {
+    await page.locator('[data-fgroup="kinds"] .chip', { hasText: "Series" }).click();
+    await expect(page.locator(".dv-dim .grid .tile").first()).toBeVisible({ timeout: 5_000 });
+    await expect(page.locator(".dv-dim")).toHaveAttribute("inert", "");
+  } finally {
+    lag = 0;
+  }
+  await expect(page.locator(".dv-dim")).toHaveCount(0, { timeout: 30_000 });
+  await page.locator('[data-fgroup="kinds"] .chip', { hasText: "Movies" }).click();
+  await page.context().close();
 });
 
 test("the phone shows the same controls in one column", async ({ browser }) => {

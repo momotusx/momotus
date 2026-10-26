@@ -12,6 +12,7 @@ import type { Tile } from "../core/generated/Tile";
 import { onProfileReset } from "../core/profiles";
 import { form } from "../form";
 import { defaultsWords } from "../lib/defaults";
+import { extends_ } from "../lib/discover-hold";
 import { problemWords } from "../lib/words";
 import "./browse.css";
 
@@ -91,7 +92,16 @@ function ServiceTile(props: { id: string; name: string; logo: string | null; on:
       onClick={() => props.pick()}
     >
       <Show when={art()}>
-        <img src={props.logo ?? ""} alt="" onLoad={() => setLoaded(true)} onError={() => setFailed(true)} />
+        <img
+          src={props.logo ?? ""}
+          alt=""
+          width="84"
+          height="84"
+          decoding="async"
+          referrerpolicy="no-referrer"
+          onLoad={() => setLoaded(true)}
+          onError={() => setFailed(true)}
+        />
       </Show>
       <span class="svc-name">{props.name}</span>
     </button>
@@ -138,7 +148,8 @@ function DiscoverPage(props: { retry: () => void }) {
   const [previous, setPrevious] = createSignal<Tile[]>([]);
   createEffect(() => {
     const s = d();
-    if (s && s.items.length > 0) setPrevious(s.items);
+    // A copy: the store's array is reconciled in place, and emptied when the next list starts.
+    if (s && s.items.length > 0) setPrevious([...s.items]);
   });
   // A late list that reorders the grid waits on TV while focus is in it, so nothing moves under the
   // viewer's focus: "More titles arrived. Show" applies it, and so does focus leaving the grid (6.1).
@@ -147,16 +158,16 @@ function DiscoverPage(props: { retry: () => void }) {
   const [held, setHeld] = createSignal(false);
   const focusInGrid = () => form() === "tv" && !!gridWrap?.contains(document.activeElement);
   createEffect(() => {
-    const items = d()?.items ?? [];
+    // Copies: the store's array is reconciled in place, so comparing it with itself would always pass.
+    const items = [...(d()?.items ?? [])];
     const old = untrack(shown);
-    const grows = items.length >= old.length && old.every((t, i) => items[i]?.id === t.id);
-    if (grows || items.length === 0 || !focusInGrid()) {
+    if (extends_(old, items) || items.length === 0 || !focusInGrid()) {
       setShown(items);
       setHeld(false);
     } else setHeld(true);
   });
   const release = () => {
-    setShown(d()?.items ?? []);
+    setShown([...(d()?.items ?? [])]);
     setHeld(false);
   };
   const filtered = () => !!(d()?.genre || d()?.decade || d()?.platform);
