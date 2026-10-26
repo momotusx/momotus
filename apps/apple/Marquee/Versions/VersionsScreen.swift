@@ -27,6 +27,9 @@ struct VersionsScreen: View {
     @FocusState private var pickFocused: Bool
     /// The page's width, for the layouts below.
     @State private var width: CGFloat = 0
+    /// The kind chosen in the kind chips (plans/plugins-and-marketplace.md 4.2): nil is All, the core's page.
+    /// It holds while the page is open; a kind with no chip now is All.
+    @State private var kind: String?
 
     var body: some View {
         ScrollView(.vertical) {
@@ -68,6 +71,9 @@ struct VersionsScreen: View {
     }
 
     private var snapshot: VersionsSnapshot? { model.snapshot }
+
+    /// The page under the chosen kind: its first row in the card, the rest in the sections, no shortcuts.
+    private var shown: VersionsSnapshot? { VersionWords.ofKind(snapshot, kind) }
 
     /// Plays `key`: back in the player under the page, else a new player.
     private func play(_ key: String) {
@@ -133,7 +139,46 @@ struct VersionsScreen: View {
             }
             .textFont(Theme.type.callout, relativeTo: .callout)
             .foregroundStyle(Theme.Palette.text)
+            kindRow
         }
+    }
+
+    /// The kind chips, only with two kinds or more: one choice at a time, each with its count. Their line is
+    /// held from the first frame by an unseen chip, so nothing below moves when a second kind arrives.
+    /// Choosing one pins the pick.
+    private var kindRow: some View {
+        let chips = VersionWords.kindChips(snapshot)
+        let on = chips.contains { $0.kind == kind } ? kind : nil
+        return ZStack(alignment: .leading) {
+            Button {} label: { Text(StreamChoice.words.kind.all) }
+                .buttonStyle(ChipStyle(selected: false))
+                .disabled(true)
+                .hidden()
+                .accessibilityHidden(true)
+            if !chips.isEmpty {
+                ScrollView(.horizontal) {
+                    HStack(spacing: 8) {
+                        ForEach(chips, id: \.self) { chip in
+                            Button {
+                                model.freeze()
+                                kind = chip.kind
+                            } label: {
+                                HStack(spacing: 6) {
+                                    Text(chip.label)
+                                    Text(chip.count).fontWeight(.regular)
+                                }
+                            }
+                            .buttonStyle(ChipStyle(selected: chip.kind == on))
+                            .accessibilityLabel(chip.spoken)
+                            .accessibilityAddTraits(chip.kind == on ? .isSelected : [])
+                        }
+                    }
+                }
+                .scrollIndicators(.hidden)
+                .scrollClipDisabled()
+            }
+        }
+        .padding(.top, 6)
     }
 
     /// The card's place: why nothing can play with its actions, else the pick and its shortcuts, else
@@ -141,10 +186,10 @@ struct VersionsScreen: View {
     @ViewBuilder private var lead: some View {
         if let empty = snapshot?.empty {
             EmptyCard(empty: empty, act: act, focus: $pickFocused)
-        } else if let best = snapshot?.recommended {
+        } else if let best = shown?.recommended {
             VStack(alignment: .leading, spacing: 10) {
-                PickCard(row: best, play: { play(best.key) }, focus: $pickFocused)
-                ForEach(VersionWords.shortcuts(snapshot), id: \.row.key) { shortcut in
+                PickCard(row: best, kicker: VersionWords.kindKicker(snapshot, kind), play: { play(best.key) }, focus: $pickFocused)
+                ForEach(VersionWords.shortcuts(shown), id: \.row.key) { shortcut in
                     Button { play(shortcut.row.key) } label: {
                         Label(shortcut.label, glyph: shortcut.row.key == snapshot?.smaller?.key ? "gauge" : "gem")
                     }
@@ -181,7 +226,7 @@ struct VersionsScreen: View {
             if let note = snapshot?.note, !undone, let text = StreamChoice.learnedNote(note, device: StreamChoice.device) {
                 LearnedNoteBar(text: text) { undo(note) }
             }
-            let sections = VersionWords.sections(snapshot, held: choose == nil ? nil : held)
+            let sections = VersionWords.sections(shown, held: choose == nil ? nil : held)
             ForEach(sections, id: \.quality) { section in
                 VStack(alignment: .leading, spacing: 0) {
                     if let title = section.title {
@@ -290,21 +335,23 @@ private struct EmptyCard: View {
 /// The recommended version: the kicker, its badges, one why line, Play.
 private struct PickCard: View {
     let row: VersionRow
+    /// "Best for this phone", or under a kind "Best torrent".
+    var kicker = VersionWords.kicker
     let play: () -> Void
     /// TV: the page enters on Play.
     var focus: FocusState<Bool>.Binding
 
     @Environment(\.versionAct) private var act
 
-    static func kicker(_ act: VersionAct = .play) -> some View {
-        Text(act == .keep ? DownloadCopy.pick : VersionWords.kicker)
+    static func kicker(_ act: VersionAct = .play, _ text: String = VersionWords.kicker) -> some View {
+        Text(act == .keep ? DownloadCopy.pick : text)
             .textFont(Theme.type.caption, weight: .semibold, relativeTo: .caption)
             .foregroundStyle(Theme.Palette.dim)
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Self.kicker(act)
+            Self.kicker(act, kicker)
             BadgeRow(badges: VersionWords.badges(row), big: true)
             // One line; the whole sentence is read out.
             Text(VersionWords.why(row))
@@ -320,7 +367,7 @@ private struct PickCard: View {
         }
         .flatCard()
         .accessibilityElement(children: .contain)
-        .accessibilityLabel(VersionWords.cardSpoken(row))
+        .accessibilityLabel(VersionWords.cardSpoken(row, kicker: kicker))
     }
 }
 

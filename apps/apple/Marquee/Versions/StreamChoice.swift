@@ -52,6 +52,19 @@ struct StreamChoiceWords: Decodable, Sendable {
         let sections: [String: String]
     }
 
+    /// The Versions page's kind chips (plans/plugins-and-marketplace.md 4.2).
+    struct Kind: Decodable, Sendable {
+        let label: String
+        let all: String
+        let torrent: String
+        let direct: String
+        let debrid: String
+        /// A chip's spoken label: "{kind}, {versions}".
+        let a11y: String
+        /// The card's kicker under a kind: "torrent", "direct", "debrid", and "service" ("Best on {service}").
+        let best: [String: String]
+    }
+
     struct Player: Decodable, Sendable {
         let finding: String
         let findingChosen: String
@@ -170,6 +183,7 @@ struct StreamChoiceWords: Decodable, Sendable {
     /// By the core's state ("noSource", ... "notStarted").
     let empty: [String: Empty]
     let page: Page
+    let kind: Kind
     let player: Player
     let learned: Learned
     let question: Question
@@ -232,7 +246,8 @@ enum StreamChoice {
         return forms[n == 1 ? 0 : 1].replacingOccurrences(of: "{n}", with: grouped(n))
     }
 
-    private static func grouped(_ n: Int) -> String {
+    /// "1,204".
+    static func grouped(_ n: Int) -> String {
         let formatter = NumberFormatter()
         formatter.locale = Locale(identifier: "en_US")
         formatter.numberStyle = .decimal

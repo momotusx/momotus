@@ -7,8 +7,8 @@ import AVFoundation
 import Foundation
 
 struct VersionsSnapshot: Decodable, Hashable, Sendable {
-    let recommended: VersionRow?
-    let rows: [VersionRow]
+    var recommended: VersionRow?
+    var rows: [VersionRow]
     let pendingAddons: [String]
     let slowAddons: [String]
     let failedAddons: [String]
@@ -31,6 +31,9 @@ struct VersionsSnapshot: Decodable, Hashable, Sendable {
     /// "From plugins" (plans/plugins-and-marketplace.md 4.4, 7.8): the Nuvio providers' rows, a pass of their
     /// own after the addons', never the pick (optional for older cores).
     var plugins: SourceRows?
+    /// The one streaming service every debrid row names ("Real-Debrid"), for the debrid kind chip; nil when
+    /// they name several or none (the chip says "Debrid"), or from an older core.
+    var debridService: String?
 }
 
 /// The rows of a source ranked in a pass of its own, and whether it is still working.
@@ -158,6 +161,9 @@ struct VersionRow: Decodable, Hashable, Sendable, Identifiable {
     let line: ReasonLine?
     /// "ready", "unknown", "swarm" or "fetch".
     let sourceClass: String?
+    /// How it plays, as the kind chips group it (plans/plugins-and-marketplace.md 4.2): "torrent", "debrid"
+    /// or "direct"; nil from an older core.
+    var kind: String?
     let bitrateMbps: Double?
     /// "On this device": the version last played here starts from what this
     /// device keeps, with no peer (optional for older cores).
