@@ -559,10 +559,10 @@ final class PlayerModel {
         }
     }
 
-    /// Plays another version of the same video from where this one is.
     #if MARQUEE_WALK
     /// `-MQSoak N` (walk builds only, plans/iphone-mkv.md phase 3): N version moves in this process, one every 45 s,
-    /// to the next listed row after the one playing, so the sampler's footprint shows whether sessions leak.
+    /// to the next listed row after the one playing, so the sampler's footprint shows whether sessions leak. A step
+    /// that finds fewer than two rows is logged as skipped; it is not tried again.
     private func soak() {
         let moves = UserDefaults.standard.integer(forKey: "MQSoak")
         guard moves > 0 else { return }
@@ -586,6 +586,7 @@ final class PlayerModel {
     }
     #endif
 
+    /// Plays another version of the same video from where this one is.
     func switchVersion(_ key: String) {
         // The old track's URL goes with the old view: the new version starts
         // with its own start subtitle.
@@ -729,7 +730,9 @@ final class PlayerModel {
     @ObservationIgnored private var walkSeekTarget: Double?
 
     /// Walk builds read back what a row cannot see in its shots (plans/iphone-mkv.md phase 4): 1 s after the first
-    /// frame, where a seek landed against its target; 5 s after it, the tracks the player lists and the ones it plays.
+    /// frame, where a `-MQSeekTo` start landed against its target; 5 s after it, the tracks the player lists and the
+    /// ones it plays; with `-MQSeekWhilePlaying YES`, at 60 s two seeks while playing, to 50 and 90 percent, each read
+    /// back once the position moves on from the target (code r8).
     private func readBack() {
         let target = walkSeekTarget
         walkSeekTarget = nil
@@ -741,6 +744,25 @@ final class PlayerModel {
             try? await Task.sleep(for: .seconds(4))
             guard let self else { return }
             coreLog.notice("metric \(WalkReadBack.tracks(text: self.textTracks, activeText: self.textTrack, audio: self.audioTracks, activeAudio: self.audioTrack), privacy: .public)")
+            guard UserDefaults.standard.bool(forKey: "MQSeekWhilePlaying") else { return }
+            try? await Task.sleep(for: .seconds(55))
+            for fraction in [0.5, 0.9] {
+                guard self.duration > 0 else { return }
+                let target = self.duration * fraction
+                let asked = ContinuousClock.now
+                self.seek(to: target)
+                // Played on from the target: two reads 0.5 s apart inside the window, the second further on.
+                var resumed = false
+                while !resumed, ContinuousClock.now - asked < .seconds(30) {
+                    let before = self.position
+                    try? await Task.sleep(for: .milliseconds(500))
+                    resumed = WalkReadBack.playsOn(target: target, before: before, after: self.position)
+                }
+                let ms = resumed ? "\(Int((ContinuousClock.now - asked) / .milliseconds(1)))" : "n/a"
+                try? await Task.sleep(for: .seconds(1))
+                coreLog.notice("metric \(WalkReadBack.seek(target: target, position: self.position), privacy: .public) while_playing=1 seek_ms=\(ms, privacy: .public)")
+                try? await Task.sleep(for: .seconds(20))
+            }
         }
     }
     #endif
@@ -897,7 +919,7 @@ final class PlayerModel {
         playback = snapshot
         if PlayerLayout.retryRose(old: lastRetries, new: snapshot.retries) { showTryingAgain() }
         lastRetries = snapshot.retries ?? lastRetries
-        if let start = snapshot.start { startWindow.saw(start.haveBytes, at: .now) }
+        if let start = snapshot.start { startWindow.saw(start.haveBytes, at: .now, from: "\(snapshot.key ?? "")#\(start.source)") }
         tryingAgain = PlayerLayout.keepsTryingAgain(showing: tryingAgain, phase: snapshot.phase)
         // The core's start subtitle, once, as if picked, sending nothing.
         // A move on to another source: the old start subtitle and its cues go.

@@ -755,8 +755,12 @@ struct StallWatch {
 struct StartWindow {
     private var first: (at: ContinuousClock.Instant, bytes: Int64)?
     private var last: (at: ContinuousClock.Instant, bytes: Int64)?
+    private var source = ""
 
-    mutating func saw(_ bytes: Int64, at: ContinuousClock.Instant) {
+    /// `source` names what the start is for (the version's key and the core's source number): another one, as after a
+    /// version move, starts the window over even when its count is not lower.
+    mutating func saw(_ bytes: Int64, at: ContinuousClock.Instant, from source: String = "") {
+        if source != self.source { (first, last, self.source) = (nil, nil, source) }
         guard bytes > 0 else { return }
         if let last, bytes < last.bytes { first = nil }
         if first == nil { first = (at, bytes) }
@@ -764,7 +768,8 @@ struct StartWindow {
     }
 
     var kibPerS: String {
-        guard let first, let last, last.at > first.at else { return "n/a" }
+        // No bytes gained in the window (the start was whole by the first snapshot) measures nothing: n/a, never 0.
+        guard let first, let last, last.at > first.at, last.bytes > first.bytes else { return "n/a" }
         return "\(Int(Double(last.bytes - first.bytes) / 1024 / ((last.at - first.at) / .seconds(1))))"
     }
 
@@ -778,13 +783,21 @@ struct StartWindow {
 
 /// The walk's read-backs (code r8 asks, plans/iphone-mkv.md phase 4), as the lines a walk build logs; pure, so tested.
 enum WalkReadBack {
-    /// How far from its target a seek may land and still count: a seek snaps to a keyframe (4 s segments on the engine)
-    /// and the read comes 1 s into playback. ponytail: a fixed window; read the engine's keyframe spacing if rows need it.
-    static let seekWindow = 5.0
+    /// Where a seek may land and still count (code r8): up to 6 s before its target (a seek snaps back to a keyframe;
+    /// 4 s segments on the engine) and 2 s after it (the read comes 1 s into playback). Further on means the player
+    /// skipped past the target. ponytail: fixed bounds; read the engine's keyframe spacing if rows need it.
+    static let landsFrom = -6.0
+    static let landsTo = 2.0
 
     static func seek(target: Double, position: Double) -> String {
         let off = position - target
-        return "seek_landed target_s=\(String(format: "%.1f", target)) position_s=\(String(format: "%.1f", position)) off_s=\(String(format: "%.1f", off)) landed=\(abs(off) <= seekWindow ? "yes" : "no")"
+        return "seek_landed target_s=\(String(format: "%.1f", target)) position_s=\(String(format: "%.1f", position)) off_s=\(String(format: "%.1f", off)) landed=\(off >= landsFrom && off <= landsTo ? "yes" : "no")"
+    }
+
+    /// A seek while playing has played on from its target: both reads inside the landing window, the second further on.
+    static func playsOn(target: Double, before: Double, after: Double) -> Bool {
+        let inside = { (p: Double) in p - target >= landsFrom && p - target <= landsTo + 1 }
+        return inside(before) && inside(after) && after > before
     }
 
     /// Track names joined by " | " (a name can hold a comma), and the playing index or none.

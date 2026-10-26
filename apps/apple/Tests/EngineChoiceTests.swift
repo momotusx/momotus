@@ -246,6 +246,14 @@ import Testing
     // Code r6: the raw ends ride along, milliseconds from the tap.
     #expect(window.ends(from: t) == "start_bytes_first=524288 start_ms_first=4000 start_bytes_last=1048576 start_ms_last=6000")
     #expect(StartWindow().ends(from: t) == "start_bytes_first=n/a start_ms_first=n/a start_bytes_last=n/a start_ms_last=n/a")
+    // The iphone-a soak (2026-10-26): a start already whole at its first snapshot gained nothing, so it reads n/a, not 0.
+    var whole = StartWindow()
+    whole.saw(8 << 20, at: t + .seconds(4), from: "bt:a#1")
+    whole.saw(8 << 20, at: t + .seconds(5), from: "bt:a#1")
+    #expect(whole.kibPerS == "n/a")
+    // A version move starts the window over even when the new count is not lower: no ends from the last version.
+    whole.saw(8 << 20, at: t + .seconds(50), from: "bt:b#1")
+    #expect(whole.ends(from: t + .seconds(49)) == "start_bytes_first=8388608 start_ms_first=1000 start_bytes_last=8388608 start_ms_last=1000")
 }
 
 /// Code r5: the walk's screen hold is compiled into walk builds only: `isIdleTimerDisabled` appears in the app only in
@@ -265,6 +273,14 @@ import Testing
     #expect(WalkReadBack.seek(target: 90, position: 91.2) == "seek_landed target_s=90.0 position_s=91.2 off_s=1.2 landed=yes")
     #expect(WalkReadBack.seek(target: 162, position: 0.8).hasSuffix("landed=no"), "a seek that started from the top did not land")
     #expect(WalkReadBack.seek(target: 90, position: 86).hasSuffix("landed=yes"), "a keyframe before the target")
+    // Code r8: the window is -6 s to +2 s; 4 s past the target skipped it.
+    #expect(WalkReadBack.seek(target: 90, position: 94).hasSuffix("landed=no"))
+    #expect(WalkReadBack.seek(target: 90, position: 83.5).hasSuffix("landed=no"))
+    #expect(WalkReadBack.seek(target: 90, position: 92).hasSuffix("landed=yes"))
+    // A seek while playing plays on once two reads inside the window move forward.
+    #expect(WalkReadBack.playsOn(target: 90, before: 88.1, after: 88.6))
+    #expect(!WalkReadBack.playsOn(target: 90, before: 88.6, after: 88.6), "a frozen position has not played on")
+    #expect(!WalkReadBack.playsOn(target: 90, before: 30.0, after: 30.5), "still before the seek")
     #expect(WalkReadBack.tracks(text: ["English", "German"], activeText: 1, audio: ["English, 5.1"], activeAudio: 0)
         == "tracks text=[English | German] text_on=1 audio=[English, 5.1] audio_on=0")
     #expect(WalkReadBack.tracks(text: [], activeText: nil, audio: [], activeAudio: nil) == "tracks text=[] text_on=none audio=[] audio_on=none")
