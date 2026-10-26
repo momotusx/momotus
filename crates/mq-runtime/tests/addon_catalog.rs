@@ -92,6 +92,13 @@ impl Source {
         format!("http://{}/manifest.json", self.addr)
     }
 
+    /// The manifest link at `name`, a name standing for a public host that
+    /// leads here (an installed addon on a private host publishes no list).
+    fn public_url(&self, name: &str) -> String {
+        mq_http::test_dns::set_public(name, &[IpAddr::V4(Ipv4Addr::LOCALHOST)]);
+        format!("http://{name}:{}/manifest.json", self.addr.port())
+    }
+
     /// Lets one held answer go.
     fn release(&self) {
         self.held.add_permits(1);
@@ -444,8 +451,10 @@ fn a_crafted_entry_never_outgrows_a_push() {
     let list = |id: &str| AddonList {
         id: id.into(),
         name: id.into(),
+        host: None,
         state: ListState::Ready,
         entries: shown.clone(),
+        more: false,
     };
     let snapshot = AddonCatalogSnapshot {
         lists: vec![list("official"), list("community")],
@@ -1408,4 +1417,253 @@ fn links_that_carry_a_sign_in_are_never_listed() {
     };
     assert_eq!(listed("https://a.example/manifest.json"), 1);
     assert_eq!(listed(&format!("https://a.example/{b64}/manifest.json")), 0);
+}
+
+// Lists from the addons the user installed (plans/plugins-and-marketplace.md
+// 7.1).
+
+/// An installed addon publishing `addonCatalogs`, at `url`.
+fn directory_row(url: &str, id: &str, catalogs: Value) -> AddonRow {
+    AddonRow {
+        transport_url: url.into(),
+        manifest_json: json!({
+            "id": id, "version": "1.0.0", "name": "Directory addon",
+            "resources": ["addon_catalog"], "types": [], "catalogs": [],
+            "addonCatalogs": catalogs,
+        })
+        .to_string(),
+        position: 0,
+        enabled: true,
+        allow_private: false,
+    }
+}
+
+fn list_body(entries: &[Value]) -> String {
+    json!({ "addons": entries }).to_string()
+}
+
+fn install(core: &Core, rows: &[AddonRow]) {
+    core.library().set_addons("p", rows, &core.hlc()).unwrap();
+}
+
+#[tokio::test]
+async fn an_installed_addons_lists_follow_cinemetas_with_their_host() {
+    let cinemeta = Source::start(OFFICIAL, COMMUNITY).await;
+    let dir = Source::start("{}", "{}").await;
+    dir.set(
+        "dir",
+        200,
+        &list_body(&[
+            raw("https://a.example/manifest.json", "a", json!({})),
+            raw(
+                "https://b.example/manifest.json",
+                "b",
+                json!({"adult": true}),
+            ),
+            raw("https://c.example/manifest.json", "c", json!({})),
+        ]),
+    );
+    dir.set(
+        "official",
+        200,
+        &list_body(&[raw("https://d.example/manifest.json", "d", json!({}))]),
+    );
+    let dir_url = dir.public_url("dir.b7.test");
+    let private = Source::start("{}", "{}").await;
+    let core = Core::temporary("p").unwrap();
+    install(
+        &core,
+        &[
+            // One list per id: the `all` type is read, the `movie` one is the
+            // same list; one that needs an extra is left out; a publisher may
+            // call its list "Official", and it stays its own list.
+            directory_row(
+                &dir_url,
+                "dir",
+                json!([
+                    {"type": "movie", "id": "dir", "name": "Directory"},
+                    {"type": "all", "id": "dir", "name": "Directory"},
+                    {"type": "all", "id": "needs", "name": "Needs", "extra": [{"name": "search", "isRequired": true}]},
+                    {"type": "all", "id": "official", "name": "Official"},
+                ]),
+            ),
+            // Cinemeta installed (under another name too), and an addon on a
+            // private host: no lists.
+            directory_row(
+                &cinemeta.public_url("cinemeta.b7.test"),
+                "com.linvo.cinemeta",
+                json!([{"type": "all", "id": "community"}]),
+            ),
+            directory_row(
+                &private.url(),
+                "private",
+                json!([{"type": "all", "id": "dir", "name": "Private"}]),
+            ),
+        ],
+    );
+    let view = AddonCatalogView::open_from(&core, &cinemeta.url(), false);
+    let snapshot = settled(&view).await;
+    let heads: Vec<(&str, &str, Option<&str>)> = snapshot
+        .lists
+        .iter()
+        .map(|l| {
+            (
+                l.name.as_str(),
+                &l.id[..l.id.find(':').unwrap_or(l.id.len())],
+                l.host.as_deref(),
+            )
+        })
+        .collect();
+    let addon = heads[2].1;
+    assert!(addon.starts_with("addon-"), "{heads:?}");
+    assert_eq!(
+        heads,
+        [
+            ("Official", "official", None),
+            ("Community", "community", None),
+            ("Directory", addon, Some("dir.b7.test")),
+            ("Official", addon, Some("dir.b7.test")),
+        ]
+    );
+    let ids: Vec<&str> = snapshot.lists[2]
+        .entries
+        .iter()
+        .map(|e| e.id.as_str())
+        .collect();
+    assert_eq!(ids, ["a", "c"], "the adult entry is never listed");
+    assert_eq!(snapshot.lists[3].entries[0].id, "d");
+    assert!(snapshot.lists.iter().all(|l| !l.more));
+    // An entry of a publisher's list installs like any other.
+    let entry = view
+        .listed_entry("https://c.example/manifest.json")
+        .unwrap();
+    assert_eq!(entry.id, "c");
+    assert_eq!(private.hits.load(Ordering::SeqCst), 0);
+}
+
+#[tokio::test]
+async fn a_publishers_list_that_fails_names_its_host() {
+    let cinemeta = Source::start(OFFICIAL, COMMUNITY).await;
+    let dir = Source::start("{}", "{}").await;
+    dir.set("dir", 500, "");
+    let core = Core::temporary("p").unwrap();
+    let url = dir.public_url("fails.b7.test");
+    install(
+        &core,
+        &[directory_row(
+            &url,
+            "dir",
+            json!([{"type": "all", "id": "dir", "name": "D"}]),
+        )],
+    );
+    let snapshot = settled(&AddonCatalogView::open_from(&core, &cinemeta.url(), false)).await;
+    assert_eq!(snapshot.lists[0].state, ListState::Ready);
+    assert_eq!(
+        snapshot.lists[2].state,
+        ListState::Failed {
+            words: "fails.b7.test answered with an error (500)".into()
+        }
+    );
+}
+
+#[tokio::test]
+async fn lists_come_and_go_with_the_installed_addons() {
+    let cinemeta = Source::start(OFFICIAL, COMMUNITY).await;
+    let dir = Source::start("{}", "{}").await;
+    dir.set(
+        "dir",
+        200,
+        &list_body(&[raw("https://a.example/manifest.json", "a", json!({}))]),
+    );
+    let url = dir.public_url("live.b7.test");
+    let core = Core::temporary("p").unwrap();
+    let view = AddonCatalogView::open_from(&core, &cinemeta.url(), false);
+    assert_eq!(settled(&view).await.lists.len(), 2);
+    let row = directory_row(
+        &url,
+        "dir",
+        json!([{"type": "all", "id": "dir", "name": "D"}]),
+    );
+    install(&core, std::slice::from_ref(&row));
+    let shown = until(&view, |s| {
+        s.lists.len() == 3 && s.lists[2].state == ListState::Ready
+    })
+    .await;
+    assert_eq!(shown.lists[2].entries[0].id, "a");
+    // Turned off: its list goes; Cinemeta's stay as they were, not fetched again.
+    let hits = cinemeta.hits.load(Ordering::SeqCst);
+    install(
+        &core,
+        &[AddonRow {
+            enabled: false,
+            ..row
+        }],
+    );
+    until(&view, |s| s.lists.len() == 2).await;
+    assert_eq!(cinemeta.hits.load(Ordering::SeqCst), hits);
+}
+
+#[tokio::test]
+async fn a_long_list_shows_its_first_2000_and_every_push_fits() {
+    let cinemeta = Source::start(OFFICIAL, COMMUNITY).await;
+    let small: Vec<Value> = (0..2001)
+        .map(|i| {
+            raw(
+                &format!("https://s{i}.example/manifest.json"),
+                &format!("s{i}"),
+                json!({}),
+            )
+        })
+        .collect();
+    // The largest entries a list may hold, about 3.9 MiB of body each.
+    let big = |list: usize, i: usize| {
+        let url = format!("https://l{list}x{i}.example/manifest.json");
+        let mut entry = raw(&url, &format!("{list}{i:0>126}"), json!({}));
+        entry["manifest"]["name"] = json!("\u{10348}".repeat(80));
+        entry["manifest"]["description"] = json!("\u{10348}".repeat(300));
+        entry["manifest"]["types"] = json!(vec!["w".repeat(32); 16]);
+        entry["manifest"]["resources"] = json!(vec!["w".repeat(32); 16]);
+        entry
+    };
+    let core = Core::temporary("p").unwrap();
+    let mut rows = Vec::new();
+    for (n, name) in [
+        "long.b7.test",
+        "big1.b7.test",
+        "big2.b7.test",
+        "big3.b7.test",
+    ]
+    .iter()
+    .enumerate()
+    {
+        let dir = Source::start("{}", "{}").await;
+        let body = if n == 0 {
+            list_body(&small)
+        } else {
+            let one = serde_json::to_vec(&big(n, 0)).unwrap().len() + 1;
+            let entries: Vec<Value> = (0..3_900_000 / one).map(|i| big(n, i)).collect();
+            list_body(&entries)
+        };
+        assert!(body.len() < 4 * 1024 * 1024, "{name}: {}", body.len());
+        dir.set("dir", 200, &body);
+        rows.push(directory_row(
+            &dir.public_url(name),
+            name,
+            json!([{"type": "all", "id": "dir", "name": name}]),
+        ));
+    }
+    install(&core, &rows);
+    let snapshot = settled(&AddonCatalogView::open_from(&core, &cinemeta.url(), false)).await;
+    assert!(
+        snapshot.lists.iter().all(|l| l.state == ListState::Ready),
+        "{:?}",
+        snapshot.lists.iter().map(|l| &l.state).collect::<Vec<_>>()
+    );
+    assert_eq!(snapshot.lists[2].entries.len(), 2000);
+    assert!(snapshot.lists[2].more, "a cap that cut the list says so");
+    // The big lists fill what room is left, in order; the push fits.
+    assert!(!snapshot.lists[3].entries.is_empty());
+    assert!(snapshot.lists[5].more);
+    let size = fits_a_push(&snapshot);
+    assert!(size > 3 * 1024 * 1024, "the room is used: {size}");
 }

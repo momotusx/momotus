@@ -2,6 +2,9 @@
 //! safely and installed in one press (plans/m12-addon-discovery.md 3.1 to
 //! 3.3). The lists come from Cinemeta's fixed address, whatever the user has
 //! installed: "Official" is that address, never a field a publisher controls.
+//! After them come the lists of the addons the user installed that publish
+//! `addonCatalogs` (plans/plugins-and-marketplace.md 7.1), each named with the
+//! host it comes from and never in Cinemeta's slots.
 
 use crate::core::{canonical, find_row, put_addon};
 use crate::{Core, CoreError};
@@ -13,12 +16,13 @@ use mq_library::{AddonRow, Table};
 use mq_protocol::{Manifest, ResourcePath};
 use serde::Serialize;
 use serde_json::Value;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::future::Future;
-use std::pin::{Pin, pin};
+use std::hash::{Hash, Hasher};
+use std::pin::Pin;
 use std::time::Duration;
-use stremio_core::types::addon::ManifestResource;
-use tokio::task::JoinHandle;
+use stremio_core::types::addon::{ManifestCatalog, ManifestResource};
+use tokio::task::{AbortHandle, JoinHandle, JoinSet};
 
 /// Cinemeta, the source of both lists (the address the onboardings use).
 pub const CINEMETA: &str = "https://v3-cinemeta.strem.io/manifest.json";
@@ -55,11 +59,19 @@ const ENTRY_MAX: usize = 4 * 1024;
 const COPY_KEY_MAX: usize = 1024;
 /// A list's body (Community was 122 KiB on 2026-10-18).
 const LIST_MAX_BYTES: usize = 1024 * 1024;
+/// Entries a list from an installed addon may show, and its body
+/// (stremio-addons.net's 728 entries were 1.2 MiB on 2026-10-26).
+const ADDON_LIST_MAX_ENTRIES: usize = 2000;
+const ADDON_LIST_MAX_BYTES: usize = 4 * 1024 * 1024;
+/// Every list's entries together, each counted with room for its copy key:
+/// one push stays under the bridge's 4 MiB message however many lists the
+/// installed addons publish. Lists fill in order; one cut short says so
+/// (`more`).
+const SNAPSHOT_ENTRIES_MAX: usize = 3 * 1024 * 1024 + 512 * 1024;
 /// A listed addon's manifest.
 const MANIFEST_MAX_BYTES: usize = 256 * 1024;
 const NAME_MAX: usize = 80;
 const DESCRIPTION_MAX: usize = 300;
-const UNREADABLE: &str = "Cinemeta sent a list Momotus cannot read";
 
 /// The lists, in order: Official, then Community.
 const LISTS: [(&str, &str); 2] = [("official", "Official"), ("community", "Community")];
@@ -83,11 +95,17 @@ pub struct AddonCatalogSnapshot {
 )]
 #[serde(rename_all = "camelCase")]
 pub struct AddonList {
-    /// "official" or "community".
+    /// "official" or "community" for Cinemeta's lists; `addon-<hash>:<id>`
+    /// for a list an installed addon publishes.
     pub id: String,
     pub name: String,
+    /// The host of the installed addon a list comes from, shown as "From
+    /// {host}" and linking to it; none for Cinemeta's two.
+    pub host: Option<String>,
     pub state: ListState,
     pub entries: Vec<ListedAddon>,
+    /// The list holds more than it shows: its own cap, or the snapshot's room.
+    pub more: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -240,24 +258,10 @@ impl AddonCatalogView {
     pub fn open_from(core: &Core, source: &str, fresh: bool) -> Self {
         // Subscribe before the first read so no change slips in between.
         let changes = core.library().subscribe();
-        let snapshot = SharedObservable::new(AddonCatalogSnapshot {
-            lists: LISTS
-                .iter()
-                .map(|(id, name)| AddonList {
-                    id: (*id).into(),
-                    name: (*name).into(),
-                    state: ListState::Loading,
-                    entries: Vec::new(),
-                })
-                .collect(),
-        });
-        let task = tokio::spawn(run(
-            core.clone(),
-            source.to_owned(),
-            fresh,
-            changes,
-            snapshot.clone(),
-        ));
+        let mut lists = Lists::new(source);
+        lists.follow_addons(core);
+        let snapshot = SharedObservable::new(lists.render(core));
+        let task = tokio::spawn(run(core.clone(), fresh, lists, changes, snapshot.clone()));
         Self { snapshot, task }
     }
 
@@ -543,111 +547,326 @@ pub(crate) fn configure_page(url: &Url, manifest: &Manifest) -> Option<String> {
     configure_url(url).ok()
 }
 
+/// Where one list comes from.
+#[derive(Clone)]
+struct ListSource {
+    id: String,
+    name: String,
+    host: Option<String>,
+    addon: InstalledAddon,
+    catalog: (String, String),
+}
+
+impl ListSource {
+    /// The same list from the same link: a held list stays as it is.
+    fn same(&self, other: &ListSource) -> bool {
+        (
+            &self.id,
+            &self.name,
+            &self.catalog,
+            &self.addon.transport_url,
+        ) == (
+            &other.id,
+            &other.name,
+            &other.catalog,
+            &other.addon.transport_url,
+        )
+    }
+}
+
+/// One list as the view holds it: every entry it read, before the
+/// snapshot's room is shared out.
+struct Held {
+    source: ListSource,
+    state: ListState,
+    entries: Vec<ListedAddon>,
+    more: bool,
+}
+
+/// The lists in order (Cinemeta's two, then the installed addons' in addon
+/// order) and the fetches still running.
+struct Lists {
+    cinemeta: Url,
+    held: Vec<Held>,
+}
+
+impl Lists {
+    fn new(source: &str) -> Self {
+        let cinemeta = Url::parse(source).unwrap_or_else(|_| Url::parse(CINEMETA).expect("a URL"));
+        let addon = InstalledAddon {
+            transport_url: cinemeta.clone(),
+            manifest: source_manifest(),
+        };
+        let held = LISTS
+            .iter()
+            .map(|(id, name)| Held {
+                source: ListSource {
+                    id: (*id).into(),
+                    name: (*name).into(),
+                    host: None,
+                    addon: addon.clone(),
+                    catalog: ("all".into(), (*id).into()),
+                },
+                state: ListState::Loading,
+                entries: Vec::new(),
+                more: false,
+            })
+            .collect();
+        Self { cinemeta, held }
+    }
+
+    /// Brings the installed addons' lists in line with the profile's
+    /// addons, keeping lists that stay; returns the ones to fetch.
+    fn follow_addons(&mut self, core: &Core) -> Vec<ListSource> {
+        let wanted = addon_lists(core, &self.cinemeta);
+        let mut kept: HashMap<String, Held> = self
+            .held
+            .drain(LISTS.len()..)
+            .map(|held| (held.source.id.clone(), held))
+            .collect();
+        let mut fetch = Vec::new();
+        for source in wanted {
+            match kept.remove(&source.id) {
+                Some(held) if held.source.same(&source) => self.held.push(held),
+                _ => {
+                    fetch.push(source.clone());
+                    self.held.push(Held {
+                        source,
+                        state: ListState::Loading,
+                        entries: Vec::new(),
+                        more: false,
+                    });
+                }
+            }
+        }
+        fetch
+    }
+
+    fn set(&mut self, id: &str, result: Fetched) {
+        let Some(held) = self.held.iter_mut().find(|h| h.source.id == id) else {
+            return;
+        };
+        match result {
+            Ok((entries, more)) => {
+                held.state = ListState::Ready;
+                held.entries = entries;
+                held.more = more;
+            }
+            Err(words) => held.state = ListState::Failed { words },
+        }
+    }
+
+    /// The snapshot: lists in order with their installed states, each given
+    /// entries while the room lasts (measured with their copy keys, so it is
+    /// measured again whenever the addons change).
+    fn render(&self, core: &Core) -> AddonCatalogSnapshot {
+        let lists = self
+            .held
+            .iter()
+            .map(|held| AddonList {
+                id: held.source.id.clone(),
+                name: held.source.name.clone(),
+                host: held.source.host.clone(),
+                state: held.state.clone(),
+                entries: held.entries.clone(),
+                more: held.more,
+            })
+            .collect();
+        let mut snapshot = AddonCatalogSnapshot { lists };
+        mark_installed(core, &mut snapshot);
+        let mut room = SNAPSHOT_ENTRIES_MAX;
+        for list in &mut snapshot.lists {
+            let fits = list
+                .entries
+                .iter()
+                .take_while(|entry| {
+                    let size = serde_json::to_vec(entry).map_or(ENTRY_MAX, |b| b.len());
+                    room.checked_sub(size).map(|left| room = left).is_some()
+                })
+                .count();
+            if fits < list.entries.len() {
+                list.entries.truncate(fits);
+                list.more = true;
+                // Nothing after a cut list: the room is spent in list order.
+                room = 0;
+            }
+        }
+        snapshot
+    }
+}
+
+/// The lists the installed, enabled addons publish, in addon order: one per
+/// `addonCatalogs` id (its `all` type when it has one) that needs no extra.
+/// Cinemeta, whose two lists come first anyway, and addons on a private
+/// host are left out.
+fn addon_lists(core: &Core, cinemeta: &Url) -> Vec<ListSource> {
+    let addons = core.installed_addons().unwrap_or_default();
+    let mut lists = Vec::new();
+    for addon in addons {
+        let url = &addon.transport_url;
+        let Some(host) = url.host_str().map(str::to_owned) else {
+            continue;
+        };
+        if url == cinemeta
+            || addon.manifest.id == "com.linvo.cinemeta"
+            || mq_http::is_private_host(&host)
+        {
+            continue;
+        }
+        let mut seen = HashSet::new();
+        for catalog in catalogs(&addon.manifest.addon_catalogs) {
+            if !seen.insert(catalog.id.clone()) {
+                continue;
+            }
+            let name = cut(
+                &collapse(catalog.name.as_deref().unwrap_or(&addon.manifest.name)),
+                NAME_MAX,
+            );
+            lists.push(ListSource {
+                id: format!("addon-{:016x}:{}", link_hash(url), cut(&catalog.id, ID_MAX)),
+                name: if name.is_empty() { host.clone() } else { name },
+                host: Some(host.clone()),
+                addon: addon.clone(),
+                catalog: (catalog.r#type.clone(), catalog.id.clone()),
+            });
+        }
+    }
+    lists
+}
+
+/// An addon's catalogs that need no extra, each id's `all` type first.
+fn catalogs(all: &[ManifestCatalog]) -> Vec<&ManifestCatalog> {
+    let mut usable: Vec<&ManifestCatalog> = all
+        .iter()
+        .filter(|c| c.is_extra_supported(&[]) && c.id.len() <= ID_MAX && c.r#type.len() <= WORD_MAX)
+        .collect();
+    usable.sort_by_key(|c| c.r#type != "all");
+    let order: Vec<&str> = all.iter().map(|c| c.id.as_str()).collect();
+    usable.sort_by_key(|c| order.iter().position(|id| *id == c.id));
+    usable
+}
+
+/// A stable name for an addon's link within this build, never the link
+/// itself (it may hold keys).
+// ponytail: the std hasher, fixed keys; lists only need ids that hold
+// while the page is open.
+fn link_hash(url: &Url) -> u64 {
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    canonical(url.as_str()).hash(&mut hasher);
+    hasher.finish()
+}
+
+/// A list's entries and whether it held more, or the words of its failure.
+type Fetched = Result<(Vec<ListedAddon>, bool), String>;
+
 async fn run(
     core: Core,
-    source: String,
     fresh: bool,
+    mut lists: Lists,
     mut changes: tokio::sync::broadcast::Receiver<Vec<Table>>,
     snapshot: SharedObservable<AddonCatalogSnapshot>,
 ) {
-    let mut official = pin!(fetch_list(&core, &source, LISTS[0].0, fresh));
-    let mut community = pin!(fetch_list(&core, &source, LISTS[1].0, fresh));
-    let (mut official_done, mut community_done) = (false, false);
+    let mut fetches: JoinSet<(String, Fetched)> = JoinSet::new();
+    let mut running: HashMap<String, AbortHandle> = HashMap::new();
+    let mut start = |fetches: &mut JoinSet<_>, list: ListSource| {
+        let core = core.clone();
+        let id = list.id.clone();
+        let handle = fetches.spawn(async move {
+            let result = fetch_list(&core, &list, fresh).await;
+            (list.id, result)
+        });
+        if let Some(old) = running.insert(id, handle) {
+            old.abort();
+        }
+    };
+    let first: Vec<ListSource> = lists.held.iter().map(|h| h.source.clone()).collect();
+    for list in first {
+        start(&mut fetches, list);
+    }
+    let publish = |lists: &Lists| {
+        let next = lists.render(&core);
+        if next != snapshot.get() {
+            snapshot.set(next);
+        }
+    };
     loop {
         tokio::select! {
-            result = &mut official, if !official_done => {
-                official_done = true;
-                set_list(&core, &snapshot, 0, result);
-            }
-            result = &mut community, if !community_done => {
-                community_done = true;
-                set_list(&core, &snapshot, 1, result);
+            Some(Ok((id, result))) = fetches.join_next(), if !fetches.is_empty() => {
+                lists.set(&id, result);
+                publish(&lists);
             }
             change = crate::views::next_change(&mut changes) => {
                 let Some(tables) = change else { return };
                 if tables.contains(&Table::Addons) {
-                    let mut next = snapshot.get();
-                    mark_installed(&core, &mut next);
-                    if next != snapshot.get() {
-                        snapshot.set(next);
+                    for list in lists.follow_addons(&core) {
+                        start(&mut fetches, list);
                     }
+                    publish(&lists);
                 }
             }
         }
     }
 }
 
-fn set_list(
-    core: &Core,
-    snapshot: &SharedObservable<AddonCatalogSnapshot>,
-    at: usize,
-    result: Result<Vec<ListedAddon>, String>,
-) {
-    let mut next = snapshot.get();
-    let list = &mut next.lists[at];
-    match result {
-        Ok(entries) => {
-            list.state = ListState::Ready;
-            list.entries = entries;
-        }
-        Err(words) => list.state = ListState::Failed { words },
-    }
-    mark_installed(core, &mut next);
-    snapshot.set(next);
-}
-
-/// One list from the source, its entries checked and capped.
-async fn fetch_list(
-    core: &Core,
-    source: &str,
-    id: &str,
-    fresh: bool,
-) -> Result<Vec<ListedAddon>, String> {
-    let url = Url::parse(source).map_err(|_| "Cinemeta could not be reached".to_owned())?;
-    let source = InstalledAddon {
-        transport_url: url,
-        manifest: source_manifest(),
+/// One list from its source, its entries checked and capped; whether the
+/// source held more than the cap.
+async fn fetch_list(core: &Core, list: &ListSource, fresh: bool) -> Fetched {
+    let who = list.host.as_deref().unwrap_or("Cinemeta");
+    let (max_entries, max_bytes) = if list.host.is_some() {
+        (ADDON_LIST_MAX_ENTRIES, ADDON_LIST_MAX_BYTES)
+    } else {
+        (MAX_ENTRIES, LIST_MAX_BYTES)
     };
     let path = ResourcePath {
         resource: "addon_catalog".into(),
-        r#type: "all".into(),
-        id: id.into(),
+        r#type: list.catalog.0.clone(),
+        id: list.catalog.1.clone(),
         extra: vec![],
     };
     // A larger list is refused while it is read, never kept in the cache.
-    let client = core.addons().with_max_bytes(LIST_MAX_BYTES);
+    let client = core.addons().with_max_bytes(max_bytes);
     let fetched = async {
         if fresh {
-            client.fetch_fresh(&source, &path, FETCH_TIMEOUT).await
+            client.fetch_fresh(&list.addon, &path, FETCH_TIMEOUT).await
         } else {
-            client.fetch(&source, &path, FETCH_TIMEOUT).await
+            client.fetch(&list.addon, &path, FETCH_TIMEOUT).await
         }
     };
     // The deadline covers the wait for a host slot too.
     let body = tokio::time::timeout(TIMEOUT, fetched)
         .await
-        .map_err(|_| list_failure(&AddonError::TimedOut))?
-        .map_err(|e| list_failure(&e))?
+        .map_err(|_| list_failure(&AddonError::TimedOut, who))?
+        .map_err(|e| list_failure(&e, who))?
         .body;
+    let unreadable = || format!("{who} sent a list Momotus cannot read");
     // A list cached before the limit.
-    if body.len() > LIST_MAX_BYTES {
-        return Err(UNREADABLE.into());
+    if body.len() > max_bytes {
+        return Err(unreadable());
     }
-    let answer: Value = serde_json::from_slice(&body).map_err(|_| UNREADABLE.to_owned())?;
-    let raw = answer["addons"].as_array().ok_or(UNREADABLE)?;
-    Ok(entries(raw))
+    let answer: Value = serde_json::from_slice(&body).map_err(|_| unreadable())?;
+    let raw = answer["addons"].as_array().ok_or_else(unreadable)?;
+    Ok(entries_up_to(raw, max_entries))
 }
 
 /// The entries the list may show, in the served order: each checked
 /// (`listable`, not adult, within the caps), the malformed ones skipped,
 /// duplicates of a canonical link dropped, at most `MAX_ENTRIES`.
 pub fn entries(raw: &[Value]) -> Vec<ListedAddon> {
+    entries_up_to(raw, MAX_ENTRIES).0
+}
+
+/// `entries` with another cap; also whether the list held more.
+fn entries_up_to(raw: &[Value], max: usize) -> (Vec<ListedAddon>, bool) {
     let mut seen = HashSet::new();
-    raw.iter()
+    let mut shown: Vec<ListedAddon> = raw
+        .iter()
         .filter_map(entry)
         .filter(|entry| seen.insert(entry.key.clone()))
-        .take(MAX_ENTRIES)
-        .collect()
+        .take(max + 1)
+        .collect();
+    let more = shown.len() > max;
+    shown.truncate(max);
+    (shown, more)
 }
 
 fn entry(raw: &Value) -> Option<ListedAddon> {
@@ -869,17 +1088,19 @@ fn copy_key(stored: &str) -> Option<String> {
     (json.len() <= COPY_KEY_MAX).then(|| stored.to_owned())
 }
 
-/// The words of a list that could not be read.
-fn list_failure(error: &AddonError) -> String {
+/// The words of a list that could not be read, naming its source.
+fn list_failure(error: &AddonError, who: &str) -> String {
     match error {
         AddonError::TimedOut | AddonError::Http(HttpError::Timeout(_)) => {
-            "Cinemeta did not answer in time".into()
+            format!("{who} did not answer in time")
         }
         AddonError::Http(HttpError::Status { status, .. }) => {
-            format!("Cinemeta answered with an error ({status})")
+            format!("{who} answered with an error ({status})")
         }
-        AddonError::Http(HttpError::TooLarge { .. } | HttpError::Decode(_)) => UNREADABLE.into(),
-        _ => "Cinemeta did not answer".into(),
+        AddonError::Http(HttpError::TooLarge { .. } | HttpError::Decode(_)) => {
+            format!("{who} sent a list Momotus cannot read")
+        }
+        _ => format!("{who} did not answer"),
     }
 }
 

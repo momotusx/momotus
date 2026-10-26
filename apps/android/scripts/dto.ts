@@ -67,6 +67,8 @@ const DEFAULTED = new Map([
   ["HomeRow.ranked", "false"],
   ["AddonsSnapshot.fresh", "false"],
   ["AddonInfo.builtIn", "false"],
+  // Lists from installed addons (plans/plugins-and-marketplace.md 7.1): an older core cuts none.
+  ["AddonList.more", "false"],
   ["SubtitleTrack.language", "\"\""],
   ["SubtitleTrack.languageName", "\"\""],
   ["SubtitleTrack.name", "\"\""],

@@ -4,6 +4,16 @@ import type { ListedAddon } from "./ListedAddon";
 
 export type AddonList = { 
 /**
- * "official" or "community".
+ * "official" or "community" for Cinemeta's lists; `addon-<hash>:<id>`
+ * for a list an installed addon publishes.
  */
-id: string, name: string, state: ListState, entries: Array<ListedAddon>, };
+id: string, name: string, 
+/**
+ * The host of the installed addon a list comes from, shown as "From
+ * {host}" and linking to it; none for Cinemeta's two.
+ */
+host: string | null, state: ListState, entries: Array<ListedAddon>, 
+/**
+ * The list holds more than it shows: its own cap, or the snapshot's room.
+ */
+more: boolean, };

@@ -50,11 +50,15 @@ data class AddonInfo(
 
 @Serializable
 data class AddonList(
-    /** "official" or "community". */
+    /** "official" or "community" for Cinemeta's lists; `addon-<hash>:<id>` for a list an installed addon publishes. */
     val id: String,
     val name: String,
+    /** The host of the installed addon a list comes from, shown as "From {host}" and linking to it; none for Cinemeta's two. */
+    val host: String? = null,
     val state: ListState,
     val entries: List<ListedAddon> = emptyList(),
+    /** The list holds more than it shows: its own cap, or the snapshot's room. */
+    val more: Boolean = false,
 )
 
 @Serializable
