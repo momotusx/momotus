@@ -15,6 +15,14 @@ async function home(context: BrowserContext, form: "phone" | "desktop" | "tv") {
   await page.goto(`/?form=${form}`);
   await expect(page.locator(".hero-page.on .reason")).toBeVisible({ timeout: 30_000 });
   await expect.poll(() => page.locator(".hero-page").count(), { timeout: 30_000 }).toBeGreaterThan(2);
+  // The pages grow again once every row has answered: the count holds for a second first, so no test counts a
+  // list that is still growing.
+  for (let n = -1, k = 0; k < 30; k++) {
+    const count = await page.locator(".hero-page").count();
+    if (count === n) break;
+    n = count;
+    await page.waitForTimeout(1000);
+  }
   // From here time moves only when the test says; a pointer move starts the dwell over.
   await page.clock.pauseAt(await page.evaluate(() => Date.now() + 50));
   await page.mouse.move(1, (page.viewportSize()?.height ?? 900) - 1);
@@ -206,12 +214,100 @@ test("phone: the trailer plays muted, after the read-back, full bleed under the 
   expect(await frame.evaluate((el) => (el as HTMLIFrameElement).inert)).toBe(true);
   await page.keyboard.press("Tab");
   expect(await page.evaluate(() => document.activeElement?.tagName)).not.toBe("IFRAME");
-  // The sound switch is never drawn in a walk or a test run.
-  expect(await page.locator(".trailer-mute").count()).toBe(0);
-  // A page by hand stops it at once and the art comes back.
+  // The sound switch (the owner, 2026-10-26): at the hero's bottom right, its middle level with the dots', muted
+  // until a press. A run that asked for trailers draws it; the fake player is all it reaches.
+  const mute = page.locator(".trailer-mute");
+  await expect(mute).toHaveAttribute("aria-label", "Trailer sound");
+  await expect(mute).toHaveAttribute("aria-pressed", "false");
+  expect(await switchPlace(page)).toEqual({ right: 20, level: 0 });
+  await mute.click();
+  await expect(mute).toHaveAttribute("aria-pressed", "true");
+  expect(await ytLog(page)).toContain("unMute");
+  // A page by hand stops it at once, the art comes back and the switch goes with the trailer.
   await page.locator(".hero-dots .dot").nth(1).click();
   await expect(page.locator(".hero.trailer-on")).toHaveCount(0);
-  expect(await page.evaluate(() => (window as unknown as { ytLog: string[] }).ytLog.at(-1))).toBe("destroy");
+  expect((await ytLog(page)).at(-1)).toBe("destroy");
+  await expect(mute).toHaveCount(0);
+  // The next page's trailer keeps the session's choice: sound on as soon as it plays, the switch pressed.
+  const before = (await ytLog(page)).length;
+  for (let i = 2; i < (await page.locator(".hero-dots .dot").count()) && !(await ytLog(page)).slice(before).some((l) => l.startsWith("new")); i++) {
+    await page.locator(".hero-dots .dot").nth(i).click();
+    await page.clock.runFor(1500);
+  }
+  await expect.poll(async () => (await ytLog(page)).slice(before).filter((l) => l.startsWith("new") || l === "unMute"), { timeout: 10_000 }).toEqual([expect.stringMatching(/^new /), "unMute"]);
+  await expect(mute).toHaveAttribute("aria-pressed", "true");
+  await context.close();
+});
+
+const ytLog = (page: Page) => page.evaluate(() => (window as unknown as { ytLog: string[] }).ytLog);
+
+/** The switch's gap to the hero's right edge, and its middle's offset from the dots' middle, in whole px. */
+const switchPlace = (page: Page) =>
+  page.evaluate(() => {
+    const f = document.querySelector(".hero")!.getBoundingClientRect();
+    const m = document.querySelector(".trailer-mute")!.getBoundingClientRect();
+    const d = document.querySelector(".hero-dots")!.getBoundingClientRect();
+    // + 0: a round half a pixel under is -0.
+    return { right: Math.round(f.right - m.right) + 0, level: Math.round((m.top + m.bottom) / 2 - (d.top + d.bottom) / 2) + 0 };
+  });
+
+test("desktop: the sound switch sits at the hero's bottom right, as tall as the dots' platter and level with it", async ({ browser }) => {
+  const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  await context.route("https://www.youtube.com/iframe_api", (r) => r.fulfill({ contentType: "text/javascript", body: FAKE_API }));
+  await context.addInitScript(() => localStorage.setItem("mq.trailerPreviews", "e2e"));
+  const page = await home(context, "desktop");
+  await page.clock.runFor(1500);
+  const mute = page.locator(".trailer-mute");
+  await expect(mute).toBeVisible({ timeout: 10_000 });
+  const px = await page.evaluate(() => Number.parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--px")) || 1);
+  const place = await switchPlace(page);
+  expect(place.level).toBe(0);
+  expect(place.right).toBe(Math.round(40 * px));
+  const tall = await page.evaluate(() => [".trailer-mute", ".hero-dots"].map((s) => Math.round(document.querySelector(s)!.getBoundingClientRect().height)));
+  expect(tall[0]).toBe(tall[1]);
+  // Off the hero there is none: the top bar no longer carries it.
+  expect(await page.locator(".topnav .trailer-mute").count()).toBe(0);
+  await context.close();
+});
+
+/** The first series page: its index, its title id and its Play. */
+async function seriesPage(page: Page) {
+  const pages = page.locator(".hero-page");
+  const n = await pages.count();
+  for (let i = 0; i < n; i++) {
+    const p = pages.nth(i);
+    if (!(await p.locator(".genre").innerText()).startsWith("Series")) continue;
+    const details = (await p.locator(".acts a").last().getAttribute("href")) ?? "";
+    return { i, id: decodeURIComponent(details.split("/").at(-1) ?? ""), play: p.locator(".acts a.btn.primary") };
+  }
+  throw new Error("no series page in the hero");
+}
+
+test("desktop: a series page plays the core's episode, its label as the title page's", async ({ browser }) => {
+  const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  const page = await home(context, "desktop");
+  const { i, id, play } = await seriesPage(page);
+  // "Play S1:E1" never watched, "Resume S2:E3" part way, "Play again from S1:E1" at the end.
+  await expect(play).toHaveText(/^(Play|Resume|Play again from) S\d+:E\d+$/, { timeout: 10_000 });
+  const href = (await play.getAttribute("href")) ?? "";
+  expect(href).toMatch(new RegExp(`^/play/series/${id}/${id}:\\d+:\\d+$`));
+  await page.locator(".hero-dots .dot").nth(i).click();
+  await expect.poll(() => activePage(page)).toBe(i);
+  await page.locator(".hero-page.on .acts a.btn.primary").click();
+  await expect.poll(() => new URL(page.url()).pathname).toBe(href);
+  await context.close();
+});
+
+test("TV: a series page the timer brings lands the focus on its Play", async ({ browser }) => {
+  const context = await browser.newContext({ viewport: { width: 1920, height: 1080 } });
+  const page = await home(context, "tv");
+  const { i, play } = await seriesPage(page);
+  await expect(play).toHaveText(/ S\d+:E\d+$/, { timeout: 10_000 });
+  const focused = () => page.evaluate(() => (document.activeElement as HTMLElement | null)?.dataset.f ?? "");
+  await expect.poll(focused).toBe("hero:play");
+  for (let k = 0; k < 10 && (await activePage(page)) !== i; k++) await page.clock.runFor(9000);
+  expect(await activePage(page)).toBe(i);
+  await expect.poll(focused).toBe("hero:play");
   await context.close();
 });
 

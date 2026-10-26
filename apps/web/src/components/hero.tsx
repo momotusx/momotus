@@ -14,7 +14,7 @@ import { form } from "../form";
 import { reducedMotion } from "../focus/dom";
 import { bezier, frameStep, HeroPager } from "../lib/hero-pager";
 import { capableNow, coverSize, meteredNow, previewsOn, REVEAL_MS, TRAILER_LAYOUT, type TrailerLayout, trailerAllowed } from "../lib/trailers";
-import { ratingParts, titlePath } from "../lib/format";
+import { playPath, ratingParts, titlePath } from "../lib/format";
 import { kindLabel } from "../lib/words";
 import { Backdrop, Logo } from "./art";
 import { ProfileButton } from "./avatar";
@@ -48,11 +48,12 @@ const walk = () => {
   }
 };
 
-/** Sound on or off for the hero's trailer: drawn only while one plays, and never in a walk. */
-export function TrailerMute() {
+/** The trailer's sound switch at the hero's bottom right, level with the dots (the owner, 2026-10-26): drawn only
+ * while one plays, and in a walk only when the run asked for trailers. Its state is the session's (`muted`). */
+function TrailerMute() {
   return (
-    <Show when={trailerPlaying() && !navigator.webdriver}>
-      <button class="trailer-mute" aria-label={muted() ? "Sound off" : "Sound on"} onClick={() => setMuted(!muted())}>
+    <Show when={trailerPlaying() && !walk()}>
+      <button class="trailer-mute" aria-label="Trailer sound" aria-pressed={!muted()} onClick={() => setMuted(!muted())}>
         <Show when={muted()} fallback={<Volume2 aria-hidden />}>
           <VolumeX aria-hidden />
         </Show>
@@ -61,10 +62,7 @@ export function TrailerMute() {
   );
 }
 
-/** Where a hero's Play goes: a known video, or the movie itself. */
-export type PlayHref = (h: Hero) => string | null;
-
-export function HeroCarousel(props: { heroes: Hero[]; waiting: boolean; playHref: PlayHref }) {
+export function HeroCarousel(props: { heroes: Hero[]; waiting: boolean }) {
   // The list shown changes only between slides (decision 1), and an active page that left the core's
   // list stays until the next advance.
   const [list, setList] = createSignal<Hero[]>([]);
@@ -158,6 +156,17 @@ export function HeroCarousel(props: { heroes: Hero[]; waiting: boolean; playHref
 
   // The clock: one progress value for the pill and the advance (decision 7), only while nothing holds it.
   let keyAt = -Infinity;
+  // The core gives a page its Play a moment after the page (a series reads its episodes first): a first focus that
+  // settled on Details for want of it moves on to Play, unless a key has moved the focus since.
+  createEffect(
+    on(
+      () => !!list()[index()]?.play,
+      (has) => {
+        const el = document.activeElement as HTMLElement | null;
+        if (has && keyAt < 0 && el?.dataset.f === "hero:details" && el.closest(".hero-page.on")) refocus("hero:play");
+      },
+    ),
+  );
   onMount(() => {
     let last = performance.now();
     let written = -1;
@@ -340,7 +349,7 @@ export function HeroCarousel(props: { heroes: Hero[]; waiting: boolean; playHref
                 aria-label={`${i() + 1} of ${list().length}, ${h.tile.name}`}
               >
                 <Backdrop src={near() ? h.tile.background : null} class="hero-bd" ramp={form() === "phone" ? "heroPhone" : "hero"} />
-                <HeroWords hero={h} active={on()} playHref={props.playHref} />
+                <HeroWords hero={h} active={on()} />
               </div>
             );
           }}
@@ -354,17 +363,14 @@ export function HeroCarousel(props: { heroes: Hero[]; waiting: boolean; playHref
       <div class="hero-trailer" aria-hidden="true">
         <div ref={box} class="hero-player" />
       </div>
-      {/* The phone's large title and the profile button over the art, as the iPhone TV app; the sound
-          switch beside them while a trailer plays. They never slide. */}
+      {/* The phone's large title and the profile button over the art, as the iPhone TV app. They never slide. */}
       <Show when={form() === "phone"}>
         <header class="ph-top">
           <h1 class="ph-title">Home</h1>
-          <span class="ph-end">
-            <TrailerMute />
-            <ProfileButton />
-          </span>
+          <ProfileButton />
         </header>
       </Show>
+      <TrailerMute />
       <Show when={many()}>
         <div class="hero-dots" classList={{ platter: form() === "desktop" }}>
           <For each={list()}>
@@ -401,7 +407,7 @@ export function HeroCarousel(props: { heroes: Hero[]; waiting: boolean; playHref
 
 /** One page's words: logo, genre line, meta with ratings, synopsis, the reason, Play and Details. Only
  * the active page carries focus keys. */
-function HeroWords(props: { hero: Hero; active: boolean; playHref: PlayHref }) {
+function HeroWords(props: { hero: Hero; active: boolean }) {
   const h = () => props.hero;
   const key = (k: string) => (props.active ? k : undefined);
   return (
@@ -429,11 +435,19 @@ function HeroWords(props: { hero: Hero; active: boolean; playHref: PlayHref }) {
       <p class="reason">{h().reason}</p>
       {/* One stack: Up from the first row lands on its first button, Play (`data-fentry`). */}
       <div class="acts" data-fgroup={key("hero")} data-fentry={props.active ? "" : undefined}>
-        <Show when={props.playHref(h())}>
-          {(href) => (
-            <A class="btn primary" href={href()} data-f={key("hero:play")} aria-label={`Play ${h().tile.name}`} data-autofocus={props.active ? "" : undefined}>
+        {/* The core's target, as the title page's Play: "Play S1:E1" for a series, "Resume" part way in. The
+            player resumes from the core's stored position. */}
+        <Show when={h().play}>
+          {(play) => (
+            <A
+              class="btn primary"
+              href={playPath(h().tile.kind, h().tile.id, play().videoId)}
+              data-f={key("hero:play")}
+              aria-label={`${play().label}, ${h().tile.name}`}
+              data-autofocus={props.active ? "" : undefined}
+            >
               <Play aria-hidden class="fill" />
-              Play
+              {play().label}
             </A>
           )}
         </Show>
@@ -446,7 +460,7 @@ function HeroWords(props: { hero: Hero; active: boolean; playHref: PlayHref }) {
               href={titlePath(h().tile.kind, h().tile.id)}
               data-f={key("hero:details")}
               aria-label={`Details for ${h().tile.name}`}
-              data-autofocus={props.active && !props.playHref(h()) ? "" : undefined}
+              data-autofocus={props.active && !h().play ? "" : undefined}
             >
               <span class="ring">
                 <Info aria-hidden />
@@ -460,7 +474,7 @@ function HeroWords(props: { hero: Hero; active: boolean; playHref: PlayHref }) {
             href={titlePath(h().tile.kind, h().tile.id)}
             data-f={key("hero:details")}
             aria-label={`Details for ${h().tile.name}`}
-            data-autofocus={props.active && !props.playHref(h()) ? "" : undefined}
+            data-autofocus={props.active && !h().play ? "" : undefined}
           >
             <Info aria-hidden />
             Details

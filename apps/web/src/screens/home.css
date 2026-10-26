@@ -281,7 +281,11 @@
  * that page is in view. */
 .hero-page .hero-bd { left: -7.5%; right: -7.5%; will-change: transform; }
 .hero.trailer-on .hero-page.on .hero-bd img { opacity: 0; }
-.trailer-mute { display: grid; place-items: center; padding: 0; border: 0; border-radius: 50%; color: #fff; background: rgba(255, 255, 255, .16); cursor: pointer; }
+/* The trailer's sound switch at the hero's bottom right, its middle level with the dots' (the owner, 2026-10-26). The
+ * hero's secondaries' fill stands in for glass, as the dots' platter: no live blur over a playing trailer. */
+.trailer-mute { position: absolute; z-index: 2; display: grid; place-items: center; padding: 0; border: 0; border-radius: 50%; color: #fff;
+  background: var(--fill); box-shadow: inset 0 0 0 1px var(--edge); cursor: pointer; }
+.trailer-mute[aria-pressed="true"] { background: rgba(255, 255, 255, .28); }
 @media (prefers-reduced-motion: reduce) { .hero-dots .dot, .hero-page .hero-bd img { transition: none; } }
 
 [data-form="tv"] .hero-dots { bottom: 262px; gap: 16px; }
@@ -293,12 +297,13 @@
 [data-form="desktop"] .hero-dots.platter { padding: calc(6 * var(--px)) calc(12 * var(--px)); border-radius: calc(20 * var(--px)); background: rgba(0, 0, 0, .45); }
 [data-form="desktop"] .dots-pause { width: calc(20 * var(--px)); height: calc(20 * var(--px)); margin-left: calc(4 * var(--px)); }
 [data-form="desktop"] .dots-pause svg { width: calc(12 * var(--px)); height: calc(12 * var(--px)); }
-.topnav-end .trailer-mute { width: calc(28 * var(--px)); height: calc(28 * var(--px)); }
-.topnav-end .trailer-mute svg { width: calc(16 * var(--px)); height: calc(16 * var(--px)); }
+/* The platter is 32 tall from 36 up: the switch matches it. */
+[data-form="desktop"] .trailer-mute { right: calc(40 * var(--px)); bottom: calc(36 * var(--px)); width: calc(32 * var(--px)); height: calc(32 * var(--px)); }
+[data-form="desktop"] .trailer-mute svg { width: calc(16 * var(--px)); height: calc(16 * var(--px)); }
 [data-form="phone"] .hero-dots { bottom: 22px; }
-[data-form="phone"] .ph-end { display: flex; align-items: center; gap: 10px; }
-[data-form="phone"] .ph-top .trailer-mute { width: 36px; height: 36px; }
-[data-form="phone"] .ph-top .trailer-mute svg { width: 18px; height: 18px; }
+/* The dots' middle is 25.5 up (22 plus half of 7): a 36 switch sits 7.5 up, at the words' 20 side margin. */
+[data-form="phone"] .trailer-mute { right: 20px; bottom: 7.5px; width: 36px; height: 36px; }
+[data-form="phone"] .trailer-mute svg { width: 18px; height: 18px; }
 
 /* Top 10 rows (plans/appletv-polish.md 4.3, the group C pick open: C2 until the owner picks): the place
  * at the art's top left over a soft corner shade, the genre under the art. */

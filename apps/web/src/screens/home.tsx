@@ -21,8 +21,6 @@ import { cardOffer, defaultsWords, namesLine } from "../lib/defaults";
 import { allFailed } from "../lib/rows";
 import { autoFocusSoon, inputCount } from "../focus/dom";
 import { form } from "../form";
-import type { Tile } from "../core/generated/Tile";
-import { playPath } from "../lib/format";
 import { syncWords } from "../lib/words";
 import "./home.css";
 
@@ -31,13 +29,6 @@ const pageScroll = { top: 0 };
 onProfileReset(() => {
   pageScroll.top = 0;
 });
-
-/** Where a hero or tile's Play goes: a known video, or the movie itself. */
-export function playHref(t: Tile): string | null {
-  if (t.videoId) return playPath(t.kind, t.id, t.videoId);
-  if (t.kind === "movie") return playPath(t.kind, t.id, t.id);
-  return null;
-}
 
 /** Once per list version, for a profile that misses some recommended
  * addons: Review opens the step for those, Not now only closes it. Both
@@ -284,7 +275,7 @@ export default function Home() {
   return (
     <div class="home">
       <main class="page" data-vscroll ref={attach} onScroll={(e) => (pageScroll.top = e.currentTarget.scrollTop)}>
-        <HeroCarousel heroes={home.heroes} waiting={waiting()} playHref={(h) => playHref(h.tile)} />
+        <HeroCarousel heroes={home.heroes} waiting={waiting()} />
 
         {/* With no row to follow, the account's notices sit under the hero. */}
         <Show when={home.rows.length === 0}>
