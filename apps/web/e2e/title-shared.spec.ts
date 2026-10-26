@@ -285,7 +285,10 @@ const LOGOS = {
 for (const form of Object.keys(FORMS) as Form[]) {
   for (const [kind, logo] of Object.entries(LOGOS)) {
     test(`${form}: the page keeps its boxes from the first frame, however late Home answers and the logo (${kind}) lands`, async ({ browser }) => {
-      const [width, height, scale] = FORMS[form];
+      // A tall phone shows a metahub cover with no logo (it prints the title); a shorter one, where the cover does
+      // not fit, has the backdrop band and the logo's slot.
+      const [width, tall, scale] = FORMS[form];
+      const height = form === "phone" ? 600 : tall;
       const context = await browser.newContext({ viewport: { width, height }, deviceScaleFactor: scale, isMobile: form === "phone", hasTouch: form === "phone", reducedMotion: "reduce" });
       await context.routeWebSocket(/\/ws$/, (ws) => {
         const server = ws.connectToServer();
@@ -360,7 +363,9 @@ for (const form of Object.keys(FORMS) as Form[]) {
 // keeps its height (`flex: none`: it never shrinks to make room in the column).
 for (const form of ["tv", "phone"] as const) {
   test(`${form}: a long name takes two lines in the logo's slot, its descenders whole, the slot its full height`, async ({ browser }) => {
-    const [width, height, scale] = FORMS[form];
+    // On a phone short enough that the cover does not fit, so the logo's slot is there (a cover prints the title).
+    const [width, tall, scale] = FORMS[form];
+    const height = form === "phone" ? 600 : tall;
     const context = await browser.newContext({ viewport: { width, height }, deviceScaleFactor: scale, isMobile: form === "phone", hasTouch: form === "phone", reducedMotion: "reduce" });
     await context.route(/\/logo\//, (route) => route.fulfill({ status: 404 }));
     const page = await context.newPage();
