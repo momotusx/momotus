@@ -1147,14 +1147,17 @@ async fn watch_hero_play(core: Core, header: SharedObservable<HomeHeader>) {
     let mut changes = core.library().subscribe();
     let mut metas: HashMap<String, MetaItem> = HashMap::new();
     // Asked and not answered (yet, or at all), by tile id: when it was asked.
-    let mut asked: HashMap<String, std::time::Instant> = HashMap::new();
+    let mut asked: HashMap<String, tokio::time::Instant> = HashMap::new();
     let mut waiting: HashSet<String> = HashSet::new();
     let mut fetches = futures_util::stream::FuturesUnordered::new();
     let mut dirty = true;
+    // Progress written while something plays: Play is read again once the writes pause.
+    let mut settle: Option<tokio::time::Instant> = None;
     loop {
         if dirty {
             dirty = false;
             let heroes = header.get().heroes;
+            asked.retain(|id, _| waiting.contains(id) || heroes.iter().any(|h| h.tile.id == *id));
             for hero in &heroes {
                 let tile = &hero.tile;
                 if metas.contains_key(&tile.id) {
@@ -1175,7 +1178,7 @@ async fn watch_hero_play(core: Core, header: SharedObservable<HomeHeader>) {
                 {
                     continue;
                 }
-                asked.insert(tile.id.clone(), std::time::Instant::now());
+                asked.insert(tile.id.clone(), tokio::time::Instant::now());
                 waiting.insert(tile.id.clone());
                 let (core, kind, id) = (core.clone(), tile.kind.clone(), tile.id.clone());
                 fetches.push(async move {
@@ -1185,6 +1188,12 @@ async fn watch_hero_play(core: Core, header: SharedObservable<HomeHeader>) {
             }
             publish_hero_play(&core, &header, &heroes, &metas, &waiting);
         }
+        // A page whose meta did not answer is asked again on its own, not only when something else happens.
+        let retry = asked
+            .iter()
+            .filter(|(id, _)| !waiting.contains(*id))
+            .map(|(_, at)| *at + HERO_META_RETRY)
+            .min();
         tokio::select! {
             Some((id, meta)) = fetches.next() => {
                 waiting.remove(&id);
@@ -1200,17 +1209,18 @@ async fn watch_hero_play(core: Core, header: SharedObservable<HomeHeader>) {
             },
             tables = crate::views::next_change(&mut changes) => match tables {
                 Some(t) if t.iter().any(|t| matches!(t, Table::Progress | Table::Watched)) => {
-                    tokio::time::sleep(HERO_PLAY_SETTLE).await;
-                    while !matches!(
-                        changes.try_recv(),
-                        Err(tokio::sync::broadcast::error::TryRecvError::Empty
-                            | tokio::sync::broadcast::error::TryRecvError::Closed)
-                    ) {}
-                    dirty = true;
+                    settle = Some(tokio::time::Instant::now() + HERO_PLAY_SETTLE);
                 }
                 Some(_) => {}
                 None => return,
             },
+            () = tokio::time::sleep_until(settle.unwrap_or_else(tokio::time::Instant::now)), if settle.is_some() => {
+                settle = None;
+                dirty = true;
+            }
+            () = tokio::time::sleep_until(retry.unwrap_or_else(tokio::time::Instant::now)), if retry.is_some() => {
+                dirty = true;
+            }
         }
     }
 }
@@ -1227,7 +1237,7 @@ fn publish_hero_play(
     let found: HashMap<&str, Option<PlayTarget>> = heroes
         .iter()
         .filter_map(|h| Some((h, metas.get(&h.tile.id)?)))
-        .map(|(h, meta)| (h.tile.id.as_str(), hero_play(core, &h.tile.kind, meta)))
+        .map(|(h, meta)| (h.tile.id.as_str(), hero_play(core, &h.tile, meta)))
         .collect();
     header.update_if(|current| {
         let mut changed = false;
@@ -1254,8 +1264,10 @@ fn publish_hero_play(
 /// The title page's primary button for one hero page, on this profile, from
 /// its meta. A series watched to its end says "Play again", the episode it
 /// starts from being on its own page.
-fn hero_play(core: &Core, kind: &str, meta: &MetaItem) -> Option<PlayTarget> {
-    let id = &meta.preview.id;
+fn hero_play(core: &Core, tile: &Tile, meta: &MetaItem) -> Option<PlayTarget> {
+    // Progress is kept under the id the page asked for, as the title page reads it; an addon may write its
+    // meta's id another way.
+    let (id, kind) = (&tile.id, &tile.kind);
     let profile = core.profile();
     let library = core.library();
     let resume = library.latest_progress(profile, id).unwrap_or(None);

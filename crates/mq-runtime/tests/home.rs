@@ -1802,6 +1802,24 @@ const SHOW_META: &str = r#"{"meta":{"id":"tt9","type":"series","name":"Show","vi
   {"id":"tt9:1:1","title":"Pilot","season":1,"episode":1,"released":"2020-01-01T00:00:00Z"},
   {"id":"tt9:1:2","title":"Second","season":1,"episode":2,"released":"2020-01-08T00:00:00Z"}]}}"#;
 
+/// `SHOW_META` as an addon may write it: the meta's own id spelled
+/// otherwise than the id it was asked for.
+const SHOW_META_OTHER_ID: &str = r#"{"meta":{"id":"tt0000009","type":"series","name":"Show","videos":[
+  {"id":"tt9:1:1","title":"Pilot","season":1,"episode":1,"released":"2020-01-01T00:00:00Z"},
+  {"id":"tt9:1:2","title":"Second","season":1,"episode":2,"released":"2020-01-08T00:00:00Z"}]}}"#;
+
+/// Play reads progress under the id the page asked for, as the title page
+/// does, whatever id the addon writes in its meta (review r5, R5-2).
+#[tokio::test]
+async fn a_hero_reads_progress_under_its_own_id() {
+    let (core, view, _) = hero_home(200, SHOW_META_OTHER_ID, Duration::ZERO).await;
+    progress(&core, "tt9:1:2", "tt9", 400);
+    view_until(&view, "the episode in progress", |v| {
+        hero_play(v, "tt9") == Some(("tt9:1:2".to_owned(), "Resume S1:E2".to_owned(), Some(400)))
+    })
+    .await;
+}
+
 /// S1:E1 out, S1:E2 out only in 2099.
 const UNAIRED_META: &str = r#"{"meta":{"id":"tt9","type":"series","name":"Show","videos":[
   {"id":"tt9:1:1","title":"Pilot","season":1,"episode":1,"released":"2020-01-01T00:00:00Z"},
@@ -1962,5 +1980,22 @@ async fn a_hero_series_without_episodes_offers_what_its_meta_allows() {
             before,
             "meta asked again ({status})"
         );
+        if status == 404 {
+            // And asked again on its own once the minute has passed (review r5, R5-1), with nothing else
+            // happening on Home.
+            tokio::time::pause();
+            tokio::time::advance(Duration::from_secs(61)).await;
+            tokio::time::resume();
+            for _ in 0..500 {
+                if asked.load(Ordering::SeqCst) > before {
+                    break;
+                }
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+            assert!(
+                asked.load(Ordering::SeqCst) > before,
+                "a failed meta asked again after a minute"
+            );
+        }
     }
 }
