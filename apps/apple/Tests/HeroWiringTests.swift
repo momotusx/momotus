@@ -55,3 +55,43 @@ private func source(_ path: String) throws -> String {
     #expect(!FocusRule.shown(focused: true, keyboardNavigation: false))
     #expect(FocusRule.shown(focused: true, keyboardNavigation: true))
 }
+
+@Test func theHerosPlayIsTheCoresInItsWords() throws {
+    // plans/appletv-polish.md 18: a page draws Play only with the core's target, labelled as the title page's.
+    let view = try source("Home/HeroView.swift")
+    let button = try body(of: "@ViewBuilder private func playButton(_ hero: Hero) -> some View", in: view)
+    #expect(button.contains("if let target = hero.play {"))
+    #expect(button.contains("Label(target.label, glyph: \"play-fill\", size: HeroLayout.icon)"))
+    #expect(view.contains(".modifier(StartFocus(scope: hero.play == nil ? startScope : nil))"))
+    // Home plays the target's video from where it stopped.
+    let play = try body(of: "private func playHero(_ hero: Hero)", in: try source("Home/HomeScreen.swift"))
+    #expect(play.contains("guard let play = hero.play else { return }"))
+    #expect(play.contains("videoId: play.videoId"))
+    #expect(play.contains("resumeMs: play.resumeMs"))
+}
+
+@Test func theSoundSwitchSitsAtTheHerosFootAndKeepsTheSessionsChoice() throws {
+    let home = try source("Home/HomeScreen.swift")
+    // One switch, at the bottom trailing corner on every screen that plays trailers, none beside the profile.
+    #expect(home.components(separatedBy: "TrailerMute()").count == 2)
+    let corner = try #require(home.range(of: ".overlay(alignment: .bottomTrailing) {"))
+    let after = home[corner.upperBound...]
+    #expect(after.hasPrefix("\n                            if TrailerState.shared.shown && !walkMuted {\n                                TrailerMute()"))
+    #expect(home.contains(".padding(.bottom, HeroFoot.soundSwitch(wide: metrics.wide))"))
+    // Its middle level with the dots'.
+    #expect(try source("Home/HeroCarousel.swift").contains(".padding(.bottom, HeroFoot.dots(wide: metrics.wide))"))
+    for wide in [false, true] {
+        let middle = HeroFoot.soundSwitch(wide: wide) + HeroFoot.switchSize / 2
+        #expect(middle == HeroFoot.dots(wide: wide) + HeroFoot.dotsHeight / 2)
+    }
+    // A fixed name with a selected state; the choice is the session's, so no switch keeps its own.
+    let mute = try body(of: "struct TrailerMute: View", in: try source("Home/HeroCarousel.swift"))
+    #expect(mute.contains(".accessibilityLabel(\"Trailer sound\")"))
+    #expect(mute.contains(".accessibilityAddTraits(state.sound ? .isSelected : [])"))
+    #expect(!mute.contains("@State"))
+    let trailer = try source("Home/HeroTrailer.swift")
+    #expect(trailer.contains("if TrailerState.shared.sound { sound(true) }"))
+    // Muted at launch; only a press turns it on.
+    #expect(trailer.contains("    var sound = false\n"))
+    #expect(trailer.components(separatedBy: "sound = true").count == 1)
+}

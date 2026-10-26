@@ -7,7 +7,7 @@ import SwiftUI
 struct HeroCarousel: View {
     let heroes: [Hero]
     let height: CGFloat
-    var play: (Tile) -> Void = { _ in }
+    var play: (Hero) -> Void = { _ in }
     @Environment(\.metrics) private var metrics
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.scenePhase) private var scenePhase
@@ -185,7 +185,7 @@ struct HeroCarousel: View {
                 withAnimation(handSlide) { page = heroes[to].tile.id }
                 announce(to)
             }
-            .padding(.bottom, metrics.wide ? 28 : 20)
+            .padding(.bottom, HeroFoot.dots(wide: metrics.wide))
         }
     }
 
@@ -242,22 +242,24 @@ private struct TrailerKey: Equatable {
     let active: Bool
 }
 
-/// The sound switch, shown only while a trailer is on screen, never in a walk.
+/// The sound switch, shown only while a trailer is on screen, never in a walk. Its choice is the session's
+/// (`TrailerState.sound`), so a redrawn switch or the next trailer keeps it.
 struct TrailerMute: View {
-    @State private var sound = false
+    private var state: TrailerState { .shared }
 
     var body: some View {
         Button {
-            sound.toggle()
-            TrailerPlayer.shared.sound(sound)
+            state.sound.toggle()
+            TrailerPlayer.shared.sound(state.sound)
         } label: {
-            Glyph(sound ? "volume-2" : "volume-x", size: 18)
+            Glyph(state.sound ? "volume-2" : "volume-x", size: 18)
                 .foregroundStyle(.white)
-                .frame(width: 36, height: 36)
+                .frame(width: HeroFoot.switchSize, height: HeroFoot.switchSize)
                 .background(SecondaryFill(shape: Circle()))
         }
         .buttonStyle(FocusPlainStyle(shape: Circle(), scale: Theme.Focus.scaleCard))
-        .accessibilityLabel(sound ? "Sound on" : "Sound off")
+        .accessibilityLabel("Trailer sound")
+        .accessibilityAddTraits(state.sound ? .isSelected : [])
     }
 }
 #endif

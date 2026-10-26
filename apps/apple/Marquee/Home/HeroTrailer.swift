@@ -108,6 +108,8 @@ final class TrailerState {
     var playing = false
     var shown = false
     var fraction: Double = 0
+    /// The sound switch's choice for the session: off at launch, on only by a press, kept by every later trailer.
+    var sound = false
 }
 
 #if !os(tvOS)
@@ -128,7 +130,6 @@ final class TrailerPlayer: NSObject {
     private var state: TrailerState?
     private var onEnd: ((String) -> Void)?
     private var reveal: Task<Void, Never>?
-    private var soundOn = false
     /// The player's page has loaded: until then a call waits (the last one wins), since a call that reached the page
     /// before its script would run nothing, or worse, the browser's own `stop()`, which cancels the page's load.
     private var loaded = false
@@ -203,7 +204,6 @@ final class TrailerPlayer: NSObject {
         #if DEBUG
         if DebugHooks.mute { return }
         #endif
-        soundOn = on
         run(on ? "sound(true)" : "sound(false)")
     }
 
@@ -222,7 +222,7 @@ final class TrailerPlayer: NSObject {
                 try? await Task.sleep(for: HeroTrailers.revealDelay)
                 if !Task.isCancelled { state?.shown = true }
             }
-            if soundOn { sound(true) }
+            if TrailerState.shared.sound { sound(true) }
         case "time":
             state.fraction = message["fraction"] as? Double ?? 0
         case "end":

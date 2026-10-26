@@ -40,22 +40,21 @@ struct HomeScreen: View {
                 if !model.needsSetup && !model.allFailed {
                     hero
                         // Phone and tablet: the profile button, with Sign in another device
-                        // in its menu (4.2), sits at the header's top right; the trailer's sound switch beside it.
+                        // in its menu (4.2), sits at the header's top right.
                         .overlay(alignment: .topTrailing) {
-                            HStack(spacing: 10) {
-                                #if os(iOS)
-                                if TrailerState.shared.shown && !walkMuted { TrailerMute() }
-                                #endif
-                                if showsProfileButton { ProfileButton(signInAnother: signInAnother) { showProfiles = true } }
+                            if showsProfileButton {
+                                ProfileButton(signInAnother: signInAnother) { showProfiles = true }
+                                    .padding(.trailing, 14).padding(.top, 5)
                             }
-                            .padding(.trailing, 14).padding(.top, 5)
                         }
-                        #if os(macOS)
-                        // The Mac's top right is the window toolbar's Search and profile: the sound switch sits at
-                        // the hero's foot, level with the dots (review r1, W1).
+                        #if !os(tvOS)
+                        // The trailer's sound switch at the hero's bottom trailing corner, level with the dots, on
+                        // every screen that plays trailers (the owner, 2026-10-26; plans/appletv-polish.md 18).
                         .overlay(alignment: .bottomTrailing) {
                             if TrailerState.shared.shown && !walkMuted {
-                                TrailerMute().padding(.trailing, metrics.gutter).padding(.bottom, 22)
+                                TrailerMute()
+                                    .padding(.trailing, metrics.gutter)
+                                    .padding(.bottom, HeroFoot.soundSwitch(wide: metrics.wide))
                             }
                         }
                         #endif
@@ -180,9 +179,10 @@ struct HomeScreen: View {
 
     /// The hero's Play, as the title page's: the player opens at once and starts the pick, or
     /// Versions holds why nothing plays.
-    private func playHero(_ tile: Tile) {
-        guard let videoId = tile.playVideoId else { return }
-        let target = PlayTargetInfo(kind: tile.kind, itemId: tile.id, videoId: videoId, title: tile.name, poster: tile.plainPoster, resumeMs: nil)
+    private func playHero(_ hero: Hero) {
+        guard let play = hero.play else { return }
+        let tile = hero.tile
+        let target = PlayTargetInfo(kind: tile.kind, itemId: tile.id, videoId: play.videoId, title: tile.name, poster: tile.plainPoster, resumeMs: play.resumeMs)
         let versions = heroVersions?.target == target ? heroVersions! : VersionsModel(target: target, core: core)
         versions.start()
         heroVersions = versions

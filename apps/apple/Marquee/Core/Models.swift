@@ -32,11 +32,6 @@ struct Tile: Decodable, Hashable, Sendable {
     /// The addon's own poster: what goes anywhere but a cover (a backdrop stand-in, the player, the core's
     /// play target), as a ratings band belongs on a cover only.
     var plainPoster: String? { posterFallback ?? poster }
-
-    /// What Play on this tile plays, as the web and Android have it: the
-    /// video it names (an episode in progress), else a movie itself. A series
-    /// with no video named has nothing to play from here: its page decides.
-    var playVideoId: String? { videoId ?? (kind == "movie" ? id : nil) }
 }
 
 /// A title's IMDb score, written as shown ("8.8"), from the addon's own rating; null when it gave none.
@@ -86,6 +81,9 @@ struct Hero: Decodable, Hashable, Sendable {
     let runtime: String?
     /// A YouTube video id to play muted in the hero.
     let trailer: String?
+    /// What Play plays, as the title page's primary button ("Play S1:E1", "Resume S2:E3"); nil gives Details alone.
+    /// Optional here so replies recorded before the field existed still decode.
+    let play: PlayTarget?
 }
 
 struct HomeHeader: Decodable, Hashable, Sendable {

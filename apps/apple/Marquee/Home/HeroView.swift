@@ -13,7 +13,7 @@ struct HeroView: View {
     /// TV: the scope whose default focus is Play (Back on Home returns there).
     var startScope: Namespace.ID?
     /// Plays the hero's video, as the title page's Play does.
-    var play: (Tile) -> Void = { _ in }
+    var play: (Hero) -> Void = { _ in }
     /// The carousel draws the large title once over its pages: each page keeps the room it takes (HeroFrameTests).
     var showsTitle = true
     /// The art's own opacity: it fades over the trailer, the ramps staying (plans/appletv-polish.md 4.2).
@@ -81,10 +81,10 @@ struct HeroView: View {
             }
             reason(hero)
             HStack(spacing: 12) {
-                playButton(tile)
+                playButton(hero)
                 NavigationLink(value: TitleRoute(tile)) { Label("Details", glyph: "info", size: HeroLayout.icon) }
                     .buttonStyle(PillButtonStyle())
-                    .modifier(StartFocus(scope: tile.playVideoId == nil ? startScope : nil))
+                    .modifier(StartFocus(scope: hero.play == nil ? startScope : nil))
             }
             .padding(.top, 16 - HeroLayout.gap)
         }
@@ -108,7 +108,7 @@ struct HeroView: View {
             .padding(.top, 12)
             reason(hero).padding(.top, 6)
             HStack(spacing: 12) {
-                playButton(tile).frame(width: 178)
+                playButton(hero).frame(width: 178)
                 NavigationLink(value: TitleRoute(tile)) {
                     Glyph("info", size: 22)
                         // The glyph scales with the text, held so it stays inside its 48 pt circle.
@@ -137,11 +137,11 @@ struct HeroView: View {
         }
     }
 
-    @ViewBuilder private func playButton(_ tile: Tile) -> some View {
-        // Play plays, as on the web and Android; a series with no video named has none.
-        if tile.playVideoId != nil {
-            Button { play(tile) } label: {
-                Label("Play", glyph: "play-fill", size: HeroLayout.icon)
+    @ViewBuilder private func playButton(_ hero: Hero) -> some View {
+        // The core's Play, in the title page's words ("Resume S2:E3"); without one the page offers Details alone.
+        if let target = hero.play {
+            Button { play(hero) } label: {
+                Label(target.label, glyph: "play-fill", size: HeroLayout.icon)
                 .frame(maxWidth: metrics.wide ? nil : .infinity)
                 // The iPhone's pill is 178 wide: a large text size shrinks the word rather than cut it.
                 .lineLimit(1)

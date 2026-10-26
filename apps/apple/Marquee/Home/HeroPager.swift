@@ -72,3 +72,13 @@ enum TrailerMessages {
         (message["gen"] as? Int) == generation
     }
 }
+
+/// Where the hero's foot controls sit: the page dots, and the trailer's sound switch level with them.
+enum HeroFoot {
+    /// A dot's button: 7 pt tall with 7 pt above and under it.
+    static let dotsHeight: CGFloat = 21
+    static let switchSize: CGFloat = 36
+    static func dots(wide: Bool) -> CGFloat { wide ? 28 : 20 }
+    /// The sound switch's foot, so its middle sits level with the dots'.
+    static func soundSwitch(wide: Bool) -> CGFloat { dots(wide: wide) + dotsHeight / 2 - switchSize / 2 }
+}

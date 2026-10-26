@@ -13,16 +13,16 @@ private func row(_ state: RowState, _ tiles: String...) -> HomeRow {
         })
 }
 
-@Test func heroPlayPlaysAVideoOrAMovieAndNothingElse() {
-    func tile(_ kind: String, videoId: String?) -> Tile {
-        Tile(
-            id: "tt1", kind: kind, name: "A", poster: nil, posterFallback: nil, background: nil, logo: nil, posterShape: "poster",
-            releaseInfo: nil, progress: nil, videoId: videoId, rating: nil, ratings: nil)
+@Test func heroPlayIsTheCoresTargetAndAPageWithoutOneHasNone() throws {
+    func hero(_ play: String) throws -> Hero {
+        try JSONDecoder().decode(Hero.self, from: Data(#"{"tile":{"id":"tt9","kind":"series","name":"Carrie","posterShape":"poster"},"reason":"Popular Series"\#(play)}"#.utf8))
     }
-    #expect(tile("movie", videoId: nil).playVideoId == "tt1")
-    #expect(tile("series", videoId: "tt1:2:3").playVideoId == "tt1:2:3")
-    // A series with no video named: its page decides what plays.
-    #expect(tile("series", videoId: nil).playVideoId == nil)
+    // A series plays the episode the core picked, in the title page's words (the owner: Carrie had Details alone).
+    let series = try hero(#","play":{"videoId":"tt9:2:3","label":"Resume S2:E3","resumeMs":1200,"leftMs":null}"#)
+    #expect(series.play == PlayTarget(videoId: "tt9:2:3", label: "Resume S2:E3", resumeMs: 1200, leftMs: nil))
+    // No meta answer yet, or a reply from before the field: Details alone.
+    #expect(try hero(#","play":null"#).play == nil)
+    #expect(try hero("").play == nil)
 }
 
 @Test func tilesKeepTheirIdentityWhenTheyMove() {
