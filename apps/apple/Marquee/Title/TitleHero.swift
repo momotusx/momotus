@@ -49,18 +49,37 @@ func coverWantsLogo(_ details: TitleDetails) -> Bool {
     details.coverTitled != true
 }
 
+/// The cover's sources in order: the large cover, then the addon's own poster (the same 2:3). When neither loads
+/// the page takes the backdrop band with the logo, as on Android.
+func coverArtSources(_ details: TitleDetails) -> [String] {
+    [details.cover, details.poster].compactMap { $0 }.reduce(into: []) { if !$0.contains($1) { $0.append($1) } }
+}
+
+/// The window's full height (status bar and home indicator in): the cover runs from the screen's top, so its frame
+/// and the fit rule measure against the whole window, not the page's safe-area-reduced size.
+func fullWindowHeight(viewHeight: CGFloat, safeTop: CGFloat, safeBottom: CGFloat) -> CGFloat {
+    viewHeight + safeTop + safeBottom
+}
+
+/// The words under a cover show once the page's top inset is known, whatever it is: 0 in a window with no status bar.
+func coverWordsShown(insetTop: CGFloat?) -> Bool {
+    insetTop != nil
+}
+
 /// The iPhone's cover: whole at its 2:3 across the screen (`coverHeroHeight`), kept by its top, with the status
 /// bar's wash at its top and only its bottom edge fading into the page (`BackdropStops.coverFoot`); no words go
 /// over it. It is the title's heading for VoiceOver, since the cover prints the title.
 struct CoverArt: View {
-    let url: String
-    /// The addon's own poster when the large cover does not load; the name when neither does.
-    var fallbackURL: String? = nil
+    /// `coverArtSources`: the large cover, then the addon's poster.
+    let sources: [String]
     let name: String
     let height: CGFloat
+    /// Neither source loads: the page goes back to the backdrop band with the logo (no name drawn in an empty frame).
+    var onMissing: () -> Void = {}
 
     var body: some View {
-        ArtImage(url: url, fallbackURL: fallbackURL, maxPixels: ArtSize.backdrop, fallback: name, alignment: .top, under: fallbackURL)
+        ArtImage(url: sources.first, fallbackURL: sources.dropFirst().first, maxPixels: ArtSize.backdrop, alignment: .top,
+                 under: sources.last, onMissing: onMissing)
             .frame(height: height)
             .frame(maxWidth: .infinity)
             .clipped()

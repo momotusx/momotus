@@ -14,6 +14,8 @@ struct ArtImage: View {
     /// Drawn until the picture lands (an image already in the cache: a large cover's small poster), so the box
     /// never shows blank.
     var under: String? = nil
+    /// Told when neither `url` nor `fallbackURL` loads (a page that has another layout for it).
+    var onMissing: (() -> Void)? = nil
     @State private var art: DecodedArt?
     @State private var underArt: DecodedArt?
     @State private var missing = false
@@ -57,6 +59,7 @@ struct ArtImage: View {
                     art = loaded
                     missing = loaded == nil
                 }
+                if loaded == nil, !Task.isCancelled { onMissing?() }
             }
     }
 }

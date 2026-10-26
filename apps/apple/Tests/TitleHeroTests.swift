@@ -256,6 +256,40 @@ private func spot(_ part: CGRect, in box: CGRect) -> (top: CGFloat, end: CGFloat
     }
 }
 
+// The page feeds the rule the whole window (the cover runs from the screen's top): its own size plus the safe
+// area it does not ignore. An iPhone SE (a 647 pt page under a 20 pt status bar) and a 320 pt phone show the cover.
+@Test func theFitRuleMeasuresTheWholeWindow() {
+    #expect(fullWindowHeight(viewHeight: 647, safeTop: 20, safeBottom: 0) == 667)
+    #expect(coverFits(width: 375, height: fullWindowHeight(viewHeight: 647, safeTop: 20, safeBottom: 0)))
+    #expect(coverFits(width: 320, height: fullWindowHeight(viewHeight: 548, safeTop: 20, safeBottom: 0)))
+    // The page's own height alone would have sent the SE to the band.
+    #expect(!coverFits(width: 375, height: 647))
+}
+
+// The words under a cover show once the inset is known, 0 included (a window with no status bar).
+@Test func theWordsUnderACoverShowOnceTheInsetIsKnown() {
+    #expect(!coverWordsShown(insetTop: nil))
+    #expect(coverWordsShown(insetTop: 0))
+    #expect(coverWordsShown(insetTop: 59))
+}
+
+// A cover that does not load gives way to the addon's poster (the same 2:3), then to the band with the logo: the
+// sources in order, and the loader takes the first that loads.
+@Test func theCoverFallsBackToThePosterThenTheBand() async throws {
+    let large = "https://images.metahub.space/poster/large/tt1/img"
+    let small = "https://images.metahub.space/poster/small/tt1/img"
+    #expect(coverArtSources(try details(["cover": large, "poster": small])) == [large, small])
+    #expect(coverArtSources(try details(["cover": small, "poster": small])) == [small])
+    #expect(coverArtSources(try details(["cover": large])) == [large])
+    #expect(coverArtSources(try details(["poster": small])) == [small])
+    let fromPoster = await ArtLoader.firstLoaded([large, small]) { url in url == small ? "poster" : nil }
+    #expect(fromPoster == "poster")
+    let first = await ArtLoader.firstLoaded([large, small]) { url in "art of \(url)" }
+    #expect(first == "art of \(large)")
+    let none: String? = await ArtLoader.firstLoaded([large, small]) { _ in nil }
+    #expect(none == nil)
+}
+
 // The logo goes with a cover the core does not know to print its title (an anime's Kitsu poster, an addon's art),
 // and with an older core's, which says nothing; only a metahub cover goes without.
 @Test func onlyACoverKnownToPrintItsTitleGoesWithoutTheLogo() throws {
@@ -288,7 +322,7 @@ private func spot(_ part: CGRect, in box: CGRect) -> (top: CGFloat, end: CGFloat
     #expect(try kindTop(logo: false) <= 13)
     #expect(try kindTop(logo: true) >= 86)
     // The cover's foot, with no picture under it yet: its bottom row is the page's color.
-    let host = NSHostingView(rootView: CoverArt(url: "", name: "Big Buck Bunny", height: 300).frame(width: 200, height: 300))
+    let host = NSHostingView(rootView: CoverArt(sources: [], name: "Big Buck Bunny", height: 300).frame(width: 200, height: 300))
     host.frame = CGRect(x: 0, y: 0, width: 200, height: 300)
     host.layoutSubtreeIfNeeded()
     let rep = try #require(host.bitmapImageRepForCachingDisplay(in: host.bounds))
