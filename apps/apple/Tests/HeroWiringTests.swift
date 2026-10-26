@@ -76,7 +76,8 @@ private func source(_ path: String) throws -> String {
     #expect(home.components(separatedBy: "TrailerMute()").count == 2)
     let corner = try #require(home.range(of: ".overlay(alignment: .bottomTrailing) {"))
     let after = home[corner.upperBound...]
-    #expect(after.hasPrefix("\n                            if TrailerState.shared.shown && !walkMuted {\n                                TrailerMute()"))
+    // Drawn from the moment the trailer plays, when a kept sound is heard (review r4, W2).
+    #expect(after.hasPrefix("\n                            if TrailerState.shared.playing && !walkMuted {\n                                TrailerMute()"))
     #expect(home.contains(".padding(.bottom, HeroFoot.soundSwitch(wide: metrics.wide))"))
     // Its middle level with the dots'.
     #expect(try source("Home/HeroCarousel.swift").contains(".padding(.bottom, HeroFoot.dots(wide: metrics.wide))"))
@@ -84,14 +85,36 @@ private func source(_ path: String) throws -> String {
         let middle = HeroFoot.soundSwitch(wide: wide) + HeroFoot.switchSize / 2
         #expect(middle == HeroFoot.dots(wide: wide) + HeroFoot.dotsHeight / 2)
     }
-    // A fixed name with a selected state; the choice is the session's, so no switch keeps its own.
+    // A toggle under a fixed name, on or off; the choice is the session's, so no switch keeps its own.
     let mute = try body(of: "struct TrailerMute: View", in: try source("Home/HeroCarousel.swift"))
     #expect(mute.contains(".accessibilityLabel(\"Trailer sound\")"))
-    #expect(mute.contains(".accessibilityAddTraits(state.sound ? .isSelected : [])"))
+    #expect(mute.contains(".accessibilityAddTraits(.isToggle)"))
+    #expect(mute.contains(".accessibilityValue(state.sound ? \"On\" : \"Off\")"))
+    #expect(!mute.contains(".isSelected"))
     #expect(!mute.contains("@State"))
     let trailer = try source("Home/HeroTrailer.swift")
     #expect(trailer.contains("if TrailerState.shared.sound { sound(true) }"))
     // Muted at launch; only a press turns it on.
     #expect(trailer.contains("    var sound = false\n"))
     #expect(trailer.components(separatedBy: "sound = true").count == 1)
+}
+
+@Test func aLatePlayKeepsItsPlaceAndTakesTheTVFocusOnlyIfTheViewerHasNotMoved() throws {
+    // Review r4: while the core reads a page's episodes, Play's place is held, hidden and out of reach, so Details
+    // never moves when Play lands.
+    let button = try body(of: "@ViewBuilder private func playButton(_ hero: Hero) -> some View", in: try source("Home/HeroView.swift"))
+    let held = try #require(button.range(of: "} else if hero.holdsPlaySlot {"))
+    let slot = button[held.upperBound...]
+    #expect(slot.contains(".buttonStyle(PillButtonStyle(prominent: true))"))
+    #expect(slot.contains(".disabled(true)"))
+    #expect(slot.contains(".hidden()"))
+    #expect(slot.contains(".accessibilityHidden(true)"))
+    // TV: the start focus moves to a Play that lands late, never after the viewer moved.
+    #expect(LatePlay.takesFocus(had: false, has: true, moved: false))
+    #expect(!LatePlay.takesFocus(had: false, has: true, moved: true))
+    #expect(!LatePlay.takesFocus(had: true, has: true, moved: false))
+    #expect(!LatePlay.takesFocus(had: true, has: false, moved: false))
+    let home = try source("Home/HomeScreen.swift")
+    #expect(home.contains(".onMoveCommand { _ in moved = true }"))
+    #expect(home.contains("if start == .hero && LatePlay.takesFocus(had: had, has: has, moved: moved) { resetFocus(in: startScope) }"))
 }

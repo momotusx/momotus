@@ -82,3 +82,8 @@ enum HeroFoot {
     /// The sound switch's foot, so its middle sits level with the dots'.
     static func soundSwitch(wide: Bool) -> CGFloat { dots(wide: wide) + dotsHeight / 2 - switchSize / 2 }
 }
+
+/// TV: a hero Play that lands after the start focus took Details takes the focus, unless the viewer moved meanwhile.
+enum LatePlay {
+    static func takesFocus(had: Bool, has: Bool, moved: Bool) -> Bool { !had && has && !moved }
+}

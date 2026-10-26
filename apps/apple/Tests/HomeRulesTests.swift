@@ -23,6 +23,11 @@ private func row(_ state: RowState, _ tiles: String...) -> HomeRow {
     // No meta answer yet, or a reply from before the field: Details alone.
     #expect(try hero(#","play":null"#).play == nil)
     #expect(try hero("").play == nil)
+    // Play's place is held only while the core says it may still come.
+    #expect(try hero(#","play":null,"playPending":true"#).holdsPlaySlot)
+    #expect(try !hero(#","play":null,"playPending":false"#).holdsPlaySlot)
+    #expect(!series.holdsPlaySlot)
+    #expect(try !hero("").holdsPlaySlot)
 }
 
 @Test func tilesKeepTheirIdentityWhenTheyMove() {

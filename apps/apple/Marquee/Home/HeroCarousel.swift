@@ -258,8 +258,10 @@ struct TrailerMute: View {
                 .background(SecondaryFill(shape: Circle()))
         }
         .buttonStyle(FocusPlainStyle(shape: Circle(), scale: Theme.Focus.scaleCard))
+        // A toggle under one name, on or off (review r4).
         .accessibilityLabel("Trailer sound")
-        .accessibilityAddTraits(state.sound ? .isSelected : [])
+        .accessibilityAddTraits(.isToggle)
+        .accessibilityValue(state.sound ? "On" : "Off")
     }
 }
 #endif

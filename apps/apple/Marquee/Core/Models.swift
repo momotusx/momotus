@@ -84,6 +84,11 @@ struct Hero: Decodable, Hashable, Sendable {
     /// What Play plays, as the title page's primary button ("Play S1:E1", "Resume S2:E3"); nil gives Details alone.
     /// Optional here so replies recorded before the field existed still decode.
     let play: PlayTarget?
+    /// The page's meta is still being read, so Play may come: its place is kept meanwhile. Optional for older replies.
+    let playPending: Bool?
+
+    /// Play's place is held, hidden, so a Play landing late never pushes Details.
+    var holdsPlaySlot: Bool { play == nil && playPending == true }
 }
 
 struct HomeHeader: Decodable, Hashable, Sendable {

@@ -149,6 +149,16 @@ struct HeroView: View {
             }
             .buttonStyle(PillButtonStyle(prominent: true))
             .modifier(StartFocus(scope: startScope))
+        } else if hero.holdsPlaySlot {
+            // Play's place while the core reads the page's episodes: drawn by no one, reached by nothing.
+            Button {} label: {
+                Label("Play", glyph: "play-fill", size: HeroLayout.icon)
+                    .frame(maxWidth: metrics.wide ? nil : .infinity)
+            }
+            .buttonStyle(PillButtonStyle(prominent: true))
+            .disabled(true)
+            .hidden()
+            .accessibilityHidden(true)
         }
     }
 

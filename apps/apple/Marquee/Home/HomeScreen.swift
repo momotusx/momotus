@@ -31,6 +31,10 @@ struct HomeScreen: View {
     /// The hero's Play is where focus goes back to.
     @Namespace private var startScope
     @Environment(\.resetFocus) private var resetFocus
+    #if os(tvOS)
+    /// The viewer moved the focus since Home opened: a late Play no longer takes it.
+    @State private var moved = false
+    #endif
     #endif
 
     var body: some View {
@@ -49,9 +53,11 @@ struct HomeScreen: View {
                         }
                         #if !os(tvOS)
                         // The trailer's sound switch at the hero's bottom trailing corner, level with the dots, on
-                        // every screen that plays trailers (the owner, 2026-10-26; plans/appletv-polish.md 18).
+                        // every screen that plays trailers (the owner, 2026-10-26; plans/appletv-polish.md 18). From
+                        // the moment the trailer plays, so a sound kept from earlier is never heard without its
+                        // switch (review r4, W2).
                         .overlay(alignment: .bottomTrailing) {
-                            if TrailerState.shared.shown && !walkMuted {
+                            if TrailerState.shared.playing && !walkMuted {
                                 TrailerMute()
                                     .padding(.trailing, metrics.gutter)
                                     .padding(.bottom, HeroFoot.soundSwitch(wide: metrics.wide))
@@ -93,6 +99,12 @@ struct HomeScreen: View {
         .onChange(of: topRequest) {
             withAnimation(Theme.Motion.panel) { position.scrollTo(edge: .top) }
             resetFocus(in: startScope)
+        }
+        // The hero's Play comes from the core a moment after its page: the start focus, on Details meanwhile, goes
+        // to it when it lands, unless the viewer has moved (review r4; web and Android do the same).
+        .onMoveCommand { _ in moved = true }
+        .onChange(of: model.header.hero?.play != nil) { had, has in
+            if start == .hero && LatePlay.takesFocus(had: had, has: has, moved: moved) { resetFocus(in: startScope) }
         }
         .focusScope(startScope)
         #endif
