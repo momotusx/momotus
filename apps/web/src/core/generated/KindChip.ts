@@ -3,7 +3,7 @@ import type { SourceKind } from "./SourceKind";
 
 /**
  * A kind chip: the kind, the rows holding a source of it, and for debrid
- * the service its sources that name one agree on ("Real-Debrid"; null when
- * they name several or none, and the chip says "Debrid").
+ * the one service every such source resolves on ("Real-Debrid": the one it
+ * names, or the only account; null otherwise, and the chip says "Debrid").
  */
 export type KindChip = { kind: SourceKind, service: string | null, count: number, };

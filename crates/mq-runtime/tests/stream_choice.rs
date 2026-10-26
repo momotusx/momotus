@@ -2579,7 +2579,8 @@ async fn a_row_of_two_kinds_lists_under_both_chips_and_plays_its_own_source() {
     // Chips count rows holding a source of a kind: the mixed row under both.
     let counts: Vec<_> = all.kinds.iter().map(|k| (k.kind, k.count)).collect();
     assert_eq!(counts, [(SourceKind::Direct, 1), (SourceKind::Debrid, 2)]);
-    assert_eq!(all.kinds[1].service, None, "the torrents name no service");
+    // The torrents name no service, and the one account resolves them: the chip names it.
+    assert_eq!(all.kinds[1].service.as_deref(), Some("Real-Debrid"));
     let torrent_a = format!("bt:{HASH_A}:0");
 
     view.set_kind(Some(SourceKind::Direct));

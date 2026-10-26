@@ -197,8 +197,8 @@ pub struct VersionsSnapshot {
 }
 
 /// A kind chip: the kind, the rows holding a source of it, and for debrid
-/// the service its sources that name one agree on ("Real-Debrid"; null when
-/// they name several or none, and the chip says "Debrid").
+/// the one service every such source resolves on ("Real-Debrid": the one it
+/// names, or the only account; null otherwise, and the chip says "Debrid").
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[cfg_attr(
     feature = "ts",
@@ -465,6 +465,9 @@ struct State {
     kind: Option<SourceKind>,
     kind_ranked: Ranked,
     kind_pick: Option<RankedRow>,
+    /// The streaming accounts' stores: with exactly one, a debrid source
+    /// that names no service resolves on it, which names the debrid chip.
+    stores: Vec<mq_debrid::StoreId>,
 }
 
 pub struct VersionsView {
@@ -1159,6 +1162,7 @@ impl VersionsView {
             kind: None,
             kind_ranked: Ranked::default(),
             kind_pick: None,
+            stores: core.debrid().map(|r| r.stores()).unwrap_or_default(),
         }));
         let snapshot = SharedObservable::new(render(&lock(&state)));
         let mut tasks = JoinSet::new();
@@ -1272,6 +1276,7 @@ impl VersionsView {
             kind: None,
             kind_ranked: Ranked::default(),
             kind_pick: None,
+            stores: Vec::new(),
         };
         Self {
             core: core.clone(),
@@ -1704,6 +1709,7 @@ fn rank_plugins(s: &mut State, ranking: &Ranking) {
 /// (`restart`).
 fn accounts_moved(core: &Core, s: &mut State) {
     let account = core.debrid().is_some();
+    s.stores = core.debrid().map(|r| r.stores()).unwrap_or_default();
     s.rank.debrid = account;
     s.conditions.account = account;
     s.cache.clear();
@@ -2750,7 +2756,7 @@ fn kinds(s: &State) -> Vec<KindChip> {
                 .filter(|v: &Vec<_>| !v.is_empty())
                 .collect();
             let service = (k == SourceKind::Debrid)
-                .then(|| one_service(held.iter().flatten().copied()))
+                .then(|| one_service(held.iter().flatten().copied(), &s.stores))
                 .flatten();
             (!held.is_empty()).then_some(KindChip {
                 kind: k,
@@ -2761,13 +2767,28 @@ fn kinds(s: &State) -> Vec<KindChip> {
         .collect()
 }
 
-/// The service the sources that name one agree on ("Real-Debrid"), else
-/// none: a source with no service hint resolves on the account and says
-/// nothing against it.
-fn one_service<'a>(sources: impl Iterator<Item = &'a ParsedStream>) -> Option<String> {
-    let mut names = sources.filter_map(|st| st.service.as_deref().map(service_name));
-    let first = names.next()?;
-    names.all(|n| n == first).then_some(first)
+/// The one service every debrid source resolves on ("Real-Debrid"), else
+/// none: a source names its service, or with exactly one account it
+/// resolves on that account; with several accounts a source that names
+/// none could resolve on any of them.
+fn one_service<'a>(
+    sources: impl Iterator<Item = &'a ParsedStream>,
+    stores: &[mq_debrid::StoreId],
+) -> Option<String> {
+    let account = match stores {
+        [only] => Some(service_name(only.name())),
+        _ => None,
+    };
+    let mut names = sources.map(|st| {
+        st.service
+            .as_deref()
+            .map(service_name)
+            .or_else(|| account.clone())
+    });
+    let first = names.next()??;
+    names
+        .all(|n| n.as_deref() == Some(first.as_str()))
+        .then_some(first)
 }
 
 /// Why nothing can play, once the view is done and nothing is listed
@@ -3234,20 +3255,34 @@ mod tests {
         assert_eq!(s.kind, None);
     }
 
-    /// The debrid chip names the service its sources that name one agree on;
-    /// a source with no hint says nothing against it.
+    /// The debrid chip names the one service every debrid source resolves on:
+    /// the one it names, or with exactly one account that account.
     #[test]
-    fn the_debrid_chip_names_the_service_the_naming_sources_agree_on() {
+    fn the_debrid_chip_names_the_one_service_its_sources_resolve_on() {
         let named = |service: Option<&str>| {
             let mut st = wire(r#"{"title":"Movie.2020.1080p","url":"https://a.example/m.mkv"}"#);
             st.service = service.map(str::to_owned);
             st
         };
-        let rd = [named(Some("realdebrid")), named(None), named(Some("rd"))];
-        assert_eq!(one_service(rd.iter()).as_deref(), Some("Real-Debrid"));
+        use mq_debrid::StoreId::{RealDebrid, TorBox};
+        let rd = [named(Some("realdebrid")), named(Some("rd"))];
+        assert_eq!(one_service(rd.iter(), &[]).as_deref(), Some("Real-Debrid"));
         let two = [named(Some("realdebrid")), named(Some("torbox"))];
-        assert_eq!(one_service(two.iter()), None);
-        assert_eq!(one_service([named(None)].iter()), None);
+        assert_eq!(one_service(two.iter(), &[RealDebrid]), None);
+        // One account resolves a source that names nothing: its name.
+        let unnamed = [named(Some("realdebrid")), named(None)];
+        assert_eq!(
+            one_service(unnamed.iter(), &[RealDebrid]).as_deref(),
+            Some("Real-Debrid")
+        );
+        assert_eq!(
+            one_service(unnamed.iter(), &[TorBox]),
+            None,
+            "the account is not the service named"
+        );
+        // With two accounts, or none, a source that names nothing could be any service.
+        assert_eq!(one_service(unnamed.iter(), &[RealDebrid, TorBox]), None);
+        assert_eq!(one_service([named(None)].iter(), &[]), None);
     }
 
     /// Code review 2026-10-20 r3 P3-8, r4 P3-8: nobodySharing reads every
