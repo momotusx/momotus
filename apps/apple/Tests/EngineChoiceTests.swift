@@ -290,3 +290,21 @@ import Testing
     #expect(model.contains("#if MARQUEE_WALK\n                walkSeekTarget = at\n                #endif"))
 }
 
+/// Heat on the iPhone (IM-W3): at serious, an engine play above 1080p moves to the best listed version at 1080p or under;
+/// with none it pauses; anything else keeps playing.
+@Test func aHotPhoneMovesA4KEnginePlayToItsScreenOrPauses() throws {
+    let rows = [(key: "a", quality: "4K"), (key: "b", quality: "4K"), (key: "c", quality: "1080p"), (key: "d", quality: "720p")]
+    #expect(EngineChoice.heatStep(hot: true, on: .phone, engine: true, playing: "a", rows: rows) == .move("c"))
+    #expect(EngineChoice.heatStep(hot: true, on: .phone, engine: true, playing: "a", rows: Array(rows.prefix(2))) == .pause)
+    #expect(EngineChoice.heatStep(hot: false, on: .phone, engine: true, playing: "a", rows: rows) == .keep)
+    #expect(EngineChoice.heatStep(hot: true, on: .mac, engine: true, playing: "a", rows: rows) == .keep)
+    #expect(EngineChoice.heatStep(hot: true, on: .phone, engine: false, playing: "a", rows: rows) == .keep, "AVPlayer decodes out of process")
+    #expect(EngineChoice.heatStep(hot: true, on: .phone, engine: true, playing: "c", rows: rows) == .keep, "1080p is the screen's class")
+    #expect(EngineChoice.heatStep(hot: true, on: .phone, engine: true, playing: "x", rows: rows) == .keep, "an unlisted play")
+    #expect(EngineChoice.heatStep(hot: true, on: .phone, engine: true, playing: "a", rows: [(key: "a", quality: "4K"), (key: "w", quality: "WEB-DL")]) == .pause, "a version of unknown height is not cooler")
+    // Its wiring: the thermal notification drives it once per play (a source check).
+    let model = try playerModel()
+    #expect(model.contains("for await _ in NotificationCenter.default.notifications(named: ProcessInfo.thermalStateDidChangeNotification)"))
+    #expect(model.contains("let step = EngineChoice.heatStep("))
+}
+

@@ -44,8 +44,8 @@ final class PlayerModel {
     private(set) var firstFrameMs: Int?
     /// A local player error the core has not answered yet.
     private(set) var notice: String?
-    /// Why the picked subtitle file did not load, shown for a few seconds over the video.
-    private(set) var subtitleStatus: String?
+    /// A few seconds of words over the video: why the picked subtitle file did not load, or why the play moved or paused.
+    private(set) var statusLine: String?
     /// The picture's size, for placing subtitles on it rather than on the screen.
     private(set) var videoSize: CGSize = .zero
     private(set) var subtitle: SubtitleTrack?
@@ -151,6 +151,8 @@ final class PlayerModel {
     @ObservationIgnored private var lastRetries: Int?
     /// The start window's bytes as the core counted them, for the ready and failed metrics (the bar's swarm figure).
     @ObservationIgnored private var startWindow = StartWindow()
+    /// The heat step was taken this play (once: a move's new version keeps playing however warm the phone stays).
+    @ObservationIgnored private var heatHandled = false
     @ObservationIgnored private var tryingAgainShown = 0
     /// The loaded source has shown a frame (`rendered` counts the first of the playback).
     @ObservationIgnored private var pictureShown = false
@@ -210,6 +212,9 @@ final class PlayerModel {
         soak()
         #endif
         observePlayer()
+        #if os(iOS)
+        watchHeat()
+        #endif
         outbox = DelayOutbox { [weak self] command in
             // At once, not in a Task: it reaches the core before the view's unsubscribe.
             guard let self, let sub = self.sub else { return false }
@@ -889,11 +894,11 @@ final class PlayerModel {
             addon: WebVTT.text(at: PlayerLayout.cueTime(position: position, delay: subtitleDelay), in: cues))
     }
 
-    private func showSubtitleStatus(_ words: String) {
-        subtitleStatus = words
+    private func showStatus(_ words: String) {
+        statusLine = words
         Task {
             try? await Task.sleep(for: .seconds(5))
-            if subtitleStatus == words { subtitleStatus = nil }
+            if statusLine == words { statusLine = nil }
         }
     }
 
@@ -908,13 +913,13 @@ final class PlayerModel {
         if let trouble = PlayerLayout.subtitleTrouble(
             picked: subtitle, old: playback?.notes ?? [], new: snapshot.notes, tracks: snapshot.subtitles
         ) {
-            showSubtitleStatus(trouble.say)
+            showStatus(trouble.say)
             // Its file played as an empty one: the position stays, and no other version is tried.
             if trouble.off { selectSubtitle(nil) }
         }
         // Every start subtitle the core tried could not be read: said once, naming no source.
         if let words = PlayerLayout.startSubtitleFailedWords(snapshot), PlayerLayout.startSubtitleFailedWords(playback) == nil {
-            showSubtitleStatus(words)
+            showStatus(words)
         }
         playback = snapshot
         if PlayerLayout.retryRose(old: lastRetries, new: snapshot.retries) { showTryingAgain() }
@@ -1266,6 +1271,38 @@ final class PlayerModel {
     }
 
     /// For the model's lifetime: the player goes with it, so nothing removes these.
+    #if os(iOS)
+    /// Once per play, at thermal serious or worse: an engine play above 1080p moves to a cooler listed version, or
+    /// pauses when none is listed (`EngineChoice.heatStep`), and says why on the status line.
+    private func watchHeat() {
+        Task { [weak self] in
+            for await _ in NotificationCenter.default.notifications(named: ProcessInfo.thermalStateDidChangeNotification) {
+                guard let self else { return }
+                guard !self.heatHandled else { continue }
+                let rows = self.versions?.snapshot.map { [$0.recommended].compactMap { $0 } + $0.rows } ?? []
+                let step = EngineChoice.heatStep(
+                    hot: ProcessInfo.processInfo.thermalState.rawValue >= ProcessInfo.ThermalState.serious.rawValue,
+                    on: EngineChoice.platform, engine: self.backend == .aether, playing: self.playback?.key ?? self.route.key,
+                    rows: rows.map { ($0.key, $0.quality) })
+                switch step {
+                case .keep: continue
+                case .move(let key):
+                    self.heatHandled = true
+                    let quality = rows.first { $0.key == key }?.quality ?? "a lighter version"
+                    coreLog.notice("metric heat_step move to=\(key, privacy: .public)")
+                    self.switchVersion(key)
+                    self.showStatus("Moved to \(quality) to keep the phone cool.")
+                case .pause:
+                    self.heatHandled = true
+                    coreLog.notice("metric heat_step pause")
+                    if self.playing { self.togglePlay() }
+                    self.showStatus("Paused: the phone is running hot.")
+                }
+            }
+        }
+    }
+    #endif
+
     private func observePlayer() {
         timeObserver = player.addPeriodicTimeObserver(forInterval: CMTime(value: 1, timescale: 4), queue: .main) { [weak self] time in
             MainActor.assumeIsolated { self?.tick(time) }

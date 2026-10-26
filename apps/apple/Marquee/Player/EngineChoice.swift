@@ -84,6 +84,24 @@ enum EngineChoice {
         #endif
     }
 
+    /// What a play does when the phone runs hot (plans/iphone-mkv.md phase 3; IM-W3: a 4K Dolby Vision remux on the
+    /// engine reached thermal serious at 13.7 min on iphone-a, while 1080p HEVC 10-bit held nominal for 30 min).
+    enum HeatStep: Equatable {
+        case keep
+        case move(String)
+        case pause
+    }
+
+    /// At thermal serious or worse on the iPhone, an engine play above 1080p (the phone's screen class) moves to the best
+    /// listed version at 1080p or under, in the list's order; with none listed, it pauses. Anything else keeps playing.
+    static func heatStep(hot: Bool, on platform: Platform, engine: Bool, playing: String?, rows: [(key: String, quality: String)]) -> HeatStep {
+        let height = { (quality: String?) in ["4K": 2160, "1080p": 1080, "720p": 720, "SD": 480][quality ?? ""] }
+        guard hot, platform == .phone, engine, let playing,
+              let now = height(rows.first { $0.key == playing }?.quality), now > 1080 else { return .keep }
+        let cooler = rows.first { $0.key != playing && (height($0.quality) ?? .max) <= 1080 }
+        return cooler.map { .move($0.key) } ?? .pause
+    }
+
     static var enabledHere: Bool { enabled(on: platform) && admitsThisDevice }
 
     /// The phone's switch covers iPhones with 6 GB or more (iphone-a's class; 8 GB phones too), not iPads and not smaller

@@ -207,8 +207,8 @@ struct PlayerScreen: View {
                     .allowsHitTesting(false)
                     .animation(Theme.Motion.panel, value: controls)
                 }
-                if let status = model.subtitleStatus, model.playback?.phase != "failed" {
-                    // Why the picked subtitles did not load, for a few seconds, clear of Skip at the other corner.
+                if let status = model.statusLine, model.playback?.phase != "failed" {
+                    // The status line (a subtitle trouble, a move or pause for heat) for a few seconds, clear of Skip at the other corner.
                     Text(status)
                         .textFont(Theme.type.callout, relativeTo: .callout)
                         .foregroundStyle(.white)
@@ -294,9 +294,9 @@ struct PlayerScreen: View {
         .animation(Theme.Motion.panel, value: model.showNext)
         .animation(Theme.Motion.panel, value: model.showEndCard)
         .animation(Theme.Motion.panel, value: model.segment)
-        .animation(Theme.Motion.panel, value: model.subtitleStatus)
+        .animation(Theme.Motion.panel, value: model.statusLine)
         // Said once, as it shows.
-        .onChange(of: model.subtitleStatus) { _, now in if let now { announce(now) } }
+        .onChange(of: model.statusLine) { _, now in if let now { announce(now) } }
         // A Trakt warning is said once, when it arrives.
         .onChange(of: model.playback?.trakt) { _, now in
             if let mark = TraktRules.playbackMark(now), mark.warn { announce(mark.label) }
