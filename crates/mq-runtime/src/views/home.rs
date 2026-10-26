@@ -1513,6 +1513,70 @@ fn is_imdb_host(url: &url::Url) -> bool {
 mod tests {
     use super::{catalog_title, without_source, year_line};
 
+    /// Review r2: a kept hero page takes its row's reason afresh, so a title
+    /// that moved from #3 to #5 in a ranked catalog says #5, as its Top 10
+    /// row does, and stays the same page.
+    #[test]
+    fn a_kept_page_takes_its_rows_reason_afresh() {
+        use super::{HomeHeader, HomeRow, RowState, Tile, maybe_pick_hero};
+        use eyeball::SharedObservable;
+        use eyeball_im::ObservableVector;
+        use std::sync::Mutex;
+        let tile = |id: &str, backdrop: bool| Tile {
+            id: id.into(),
+            kind: "movie".into(),
+            name: id.into(),
+            poster: None,
+            poster_fallback: None,
+            rank: None,
+            genre: None,
+            background: backdrop.then(|| "https://example.org/backdrop.jpg".to_owned()),
+            logo: None,
+            poster_shape: "poster".into(),
+            release_info: None,
+            progress: None,
+            video_id: None,
+            rating: None,
+            ratings: Default::default(),
+            blurb: None,
+            own_shape: None,
+        };
+        let row = |tiles: Vec<Tile>| HomeRow {
+            row_id: "top".into(),
+            title: "Top 10 Movies".into(),
+            source: String::new(),
+            state: RowState::Ready,
+            tiles,
+            ranked: true,
+            list: Some("Popular Movies".into()),
+        };
+        let rows = Mutex::new(ObservableVector::new());
+        rows.lock().unwrap().push_back(row(vec![
+            tile("a", false),
+            tile("b", false),
+            tile("c", true),
+        ]));
+        let header = SharedObservable::new(HomeHeader::default());
+        maybe_pick_hero(&rows, &header);
+        assert_eq!(header.get().heroes[0].reason, "#3 in Popular Movies");
+        rows.lock().unwrap().set(
+            0,
+            row(vec![
+                tile("a", false),
+                tile("b", false),
+                tile("d", false),
+                tile("e", false),
+                tile("c", true),
+            ]),
+        );
+        maybe_pick_hero(&rows, &header);
+        let heroes = header.get().heroes;
+        assert_eq!(
+            (heroes[0].tile.id.as_str(), heroes[0].reason.as_str()),
+            ("c", "#5 in Popular Movies")
+        );
+    }
+
     /// Core backlog C37: the year line never carries a dash.
     #[test]
     fn the_year_line_has_no_dash() {
