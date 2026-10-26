@@ -120,7 +120,8 @@ export function startBridge(port = PORTS.bridge, env: Record<string, string> = {
   // TMDB and Trakt off unless a spec gives its fake (title-scores, search-top, trakt): a build with a token or an app id
   // baked in never asks the real services, and no title page holds a slot it will never fill, whether or not this
   // machine has them.
-  const hooks = { MQ_DEV_SEGMENTS: `${local}/segments`, MQ_DEV_REPLAY: `${local}/replay`, MQ_DEV_TMDB: "off", MQ_DEV_TRAKT: "off", ...offline };
+  // The suite's dev server is the one page origin the core lets open its socket (crates/mq-bridge/src/main.rs).
+  const hooks = { MQ_BRIDGE_ORIGINS: `http://127.0.0.1:${PORTS.vite}`, MQ_DEV_SEGMENTS: `${local}/segments`, MQ_DEV_REPLAY: `${local}/replay`, MQ_DEV_TMDB: "off", MQ_DEV_TRAKT: "off", ...offline };
   const proc = spawn(bridgeBinary(), [], {
     env: { ...process.env, ...hooks, ...env, MQ_DATA: data, MQ_BRIDGE_PORT: String(port) },
     stdio: ["ignore", "pipe", "inherit"],
