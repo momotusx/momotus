@@ -233,3 +233,33 @@ private func spot(_ part: CGRect, in box: CGRect) -> (top: CGFloat, end: CGFloat
     #expect(line.height < 12 + 15 * 1.6, "kind line \(line)")
     #expect(line.width <= 320 - 40 + 1)
 }
+
+// The iPhone's title art (the owner, 2026-10-26: covers are vertical): the cover shows whole, at its own 2:3,
+// held to 75 percent of the window; the core's large cover decodes, and an older core's page has none.
+@Test func theIPhoneShowsTheCoverWholeAtTwoByThree() throws {
+    #expect(coverHeroHeight(width: 390, height: 844) == 585)
+    // A short window holds it to 75 percent of its height.
+    #expect(coverHeroHeight(width: 375, height: 667) == 500.25)
+    let large = "https://images.metahub.space/poster/large/tt22084616/img"
+    #expect(try details(["cover": large]).cover == large)
+    #expect(try details().cover == nil)
+    // The page draws the cover first, on the iPhone only, and sizes the frame by it.
+    let screen = try String(contentsOf: URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+        .appending(path: "../Marquee/Title/TitleScreen.swift"), encoding: .utf8)
+    #expect(screen.contains("let cover = metrics.wide ? nil : details.cover\n"))
+    #expect(screen.contains("ArtImage(url: cover ?? details.background ?? details.poster"))
+    #expect(screen.contains("if details?.cover != nil { return coverHeroHeight(width: width, height: height) }"))
+}
+
+// The owner's standing rule: Watched is a small control, never a big button. On the iPhone it is a 48 pt
+// round toggle beside Library, and no pill on the page carries it.
+@MainActor @Test func theIPhoneWatchedIsASmallRoundToggle() throws {
+    for on in [false, true] {
+        let host = NSHostingView(rootView: WatchedControl(on: on) {})
+        #expect(host.fittingSize == CGSize(width: 48, height: 48), "\(host.fittingSize)")
+    }
+    let screen = try String(contentsOf: URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+        .appending(path: "../Marquee/Title/TitleScreen.swift"), encoding: .utf8)
+    #expect(screen.contains("WatchedControl(on: watched) { toggle(.watched(on: watched), details) }"))
+    #expect(!screen.contains("glyph: watched ? \"eye-off\" : \"eye\""))
+}

@@ -31,6 +31,34 @@ struct MarkCapsule: View {
     }
 }
 
+/// The iPhone's cover frame (covers are vertical): the cover across the window at its own 2:3, held to 75
+/// percent of the window's height.
+func coverHeroHeight(width: CGFloat, height: CGFloat) -> CGFloat {
+    min(width * 1.5, height * 0.75)
+}
+
+/// Watched on the iPhone, a movie's: a 48 pt round toggle beside Library, its check lit once marked. Small,
+/// never a big button (the owner's rule).
+struct WatchedControl: View {
+    let on: Bool
+    let toggle: () -> Void
+
+    var body: some View {
+        Button(action: toggle) {
+            Glyph("circle-check", size: 22)
+                .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
+                .foregroundStyle(.white)
+                .frame(width: 48, height: 48)
+                .background(SecondaryFill(shape: Circle(), on: on))
+        }
+        .buttonStyle(FocusPlainStyle(shape: Circle(), scale: Theme.Focus.scaleCard))
+        // A state, spoken as one: "Watched, toggle, on".
+        .accessibilityLabel("Watched")
+        .accessibilityAddTraits(.isToggle)
+        .accessibilityValue(on ? "On" : "Off")
+    }
+}
+
 /// Apple's Library control on the iPhone: a 48 pt round button whose plus turns into a check once the
 /// title is in the library; its label says the state and the action.
 struct LibraryControl: View {

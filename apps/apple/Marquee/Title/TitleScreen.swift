@@ -179,6 +179,9 @@ struct TitleScreen: View {
     private var v3HeroHeight: CGFloat {
         if metrics.wide { return WideLayout.titleHeroHeight(width: width, height: height, note: noteHeight) }
         guard width > 0, height > 0 else { return 633 }
+        // A cover at its own 2:3, whole, held to 75 percent of the window (covers are vertical, and a
+        // backdrop is often a crop of the same art).
+        if details?.cover != nil { return coverHeroHeight(width: width, height: height) }
         // The iPhone's 390x680 hero, its status bar under the art's top, held to most of a short window.
         return min(width * 633 / 390, max(height * 0.85, 280))
     }
@@ -216,7 +219,10 @@ struct TitleScreen: View {
             .background {
                 // The phone's art runs up under the status bar; the Mac's starts under the black header.
                 ZStack {
-                    ArtImage(url: details.background ?? details.poster, maxPixels: ArtSize.backdrop, alignment: details.background == nil ? .top : .center)
+                    // The iPhone shows the cover first; a cover held under its 2:3 keeps its top, where the faces are.
+                    let cover = metrics.wide ? nil : details.cover
+                    ArtImage(url: cover ?? details.background ?? details.poster, maxPixels: ArtSize.backdrop,
+                             alignment: cover != nil || details.background == nil ? .top : .center)
                         .accessibilityHidden(true)
                     HeroScrims(wide: metrics.wide, page: Theme.Palette.bg, wash: BackdropStops.titleWash)
                 }
@@ -372,11 +378,15 @@ struct TitleScreen: View {
                     sync.schedule()
                 }
             }
+            if let details, details.kind == "movie" {
+                let watched = model.header?.watched ?? false
+                WatchedControl(on: watched) { toggle(.watched(on: watched), details) }
+            }
         }
     }
 
-    /// Trailer, Versions and, for a movie, Mark as watched: secondaries with their words, wrapping to a
-    /// second centered line when they do not fit.
+    /// Trailer and Versions: secondaries with their words, wrapping to a second centered line when they do
+    /// not fit. Watched sits beside Library, a small round toggle.
     private func phoneSecondaries(_ details: TitleDetails) -> some View {
         FlowRow(spacing: 8, centered: true) {
             if let trailer = details.trailers.first, let url = URL(string: trailer.url) {
@@ -386,16 +396,6 @@ struct TitleScreen: View {
             Button { showVersions = true } label: { Label("Versions", glyph: "layers") }
                 .buttonStyle(PillButtonStyle())
                 .disabled(versions == nil)
-            if details.kind == "movie" {
-                let watched = model.header?.watched ?? false
-                Button { toggle(.watched(on: watched), details) } label: {
-                    Label(watched ? "Watched" : "Mark as watched", glyph: watched ? "eye-off" : "eye")
-                }
-                .buttonStyle(PillButtonStyle())
-                .accessibilityLabel("Watched")
-                .accessibilityAddTraits(.isToggle)
-                .accessibilityValue(watched ? "On" : "Off")
-            }
         }
     }
 

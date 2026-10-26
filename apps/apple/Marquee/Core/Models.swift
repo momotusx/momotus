@@ -228,6 +228,8 @@ struct TitleDetails: Decodable, Hashable, Sendable {
     /// RPDB's cover with the IMDb, Metacritic and Rotten Tomatoes band drawn in, as the title's tiles show it;
     /// nil with no RPDB key or no IMDb id (then `poster`, and `poster` too when this one fails to load).
     let ratedPoster: String?
+    /// The poster at the size the iPhone's title page draws it (metahub's large); nil from an older core.
+    let cover: String?
     let background: String?
     let logo: String?
     let releaseInfo: String?
