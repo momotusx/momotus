@@ -8,7 +8,6 @@ import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
@@ -25,14 +24,15 @@ import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.unit.dp
 import app.marquee.core.route.Route
 import app.marquee.core.session.CoreHealth
 import app.marquee.core.session.CoreSession
+import app.marquee.design.BrandLoading
 import app.marquee.design.Form
 import app.marquee.design.Icons
 import app.marquee.design.Marquee
 import app.marquee.design.MqText
-import app.marquee.design.Spinner
 import app.marquee.design.StateMessage
 import app.marquee.design.TextRole
 import app.marquee.design.focusSoon
@@ -62,7 +62,8 @@ private const val AUTO_FOCUS_FRAMES = 60
 
 /**
  * What shows while the core opens and the profiles answer: nothing for half a second (a quick start
- * never flashes it), then the name and that it is starting, so a slow stick never shows a blank screen.
+ * never flashes it), then the bird and the name filling from faint to solid and that it is starting, so a
+ * slow stick never shows a blank screen.
  */
 @Composable
 fun StartingScreen() {
@@ -77,14 +78,8 @@ fun StartingScreen() {
         verticalArrangement = Arrangement.spacedBy(Marquee.space.s, Alignment.CenterVertically),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        MqText("Momotus", role = TextRole.Title1)
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(Marquee.space.xs),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Spinner()
-            MqText(STARTING, role = TextRole.Callout, color = Marquee.colors.muted)
-        }
+        BrandLoading(if (Marquee.form == Form.Tv) 120.dp else 72.dp)
+        MqText(STARTING, role = TextRole.Callout, color = Marquee.colors.muted)
     }
 }
 

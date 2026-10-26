@@ -2,7 +2,7 @@
 // stay inside each mask's safe circle, and the Apple asset catalog compiles clean for iOS, macOS and tvOS.
 // Run with `bun test design/logo/build.test.ts` (after `bun design/logo/build.ts`).
 import { expect, test } from "bun:test";
-import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ANDROID_K, ART, KEEP, MASKABLE_K } from "./build";
@@ -94,7 +94,7 @@ test("Android: the adaptive icon, its legacy icons and the TV banner at every de
   expect(manifest).toContain('android:icon="@mipmap/ic_launcher"');
   expect(manifest).toContain('android:banner="@drawable/banner"');
   const adaptive = readFileSync(at(res, "mipmap-anydpi-v26/ic_launcher.xml"), "utf8");
-  for (const ref of ["@color/ic_launcher_background", "@mipmap/ic_launcher_foreground", "@drawable/ic_launcher_monochrome"]) {
+  for (const ref of ["@color/ic_launcher_background", "@mipmap/ic_launcher_foreground", "@mipmap/ic_launcher_monochrome"]) {
     expect(adaptive).toContain(ref);
   }
   for (const [d, m] of Object.entries({ mdpi: 1, hdpi: 1.5, xhdpi: 2, xxhdpi: 3, xxxhdpi: 4 })) {
@@ -103,8 +103,8 @@ test("Android: the adaptive icon, its legacy icons and the TV banner at every de
     expect(size(at(res, `drawable-${d}/banner.png`))).toEqual([160 * m, 90 * m]);
   }
   // No placeholder left beside the generated images.
-  expect(readdirSync(at(res, "drawable"))).not.toContain("banner.xml");
-  expect(readdirSync(at(res, "drawable"))).not.toContain("ic_launcher.xml");
+  expect(existsSync(at(res, "drawable/banner.xml"))).toBe(false);
+  expect(existsSync(at(res, "drawable/ic_launcher.xml"))).toBe(false);
 });
 
 test("web: the manifest's icons and the page's links exist at their sizes", () => {

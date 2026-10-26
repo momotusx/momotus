@@ -23,7 +23,7 @@
         android:fullBackupContent="false"
         tools:ignore="PictureInPictureIssue"
         android:banner="@drawable/banner"
-        android:icon="@drawable/ic_launcher"
+        android:icon="@mipmap/ic_launcher"
         android:label="Momotus"
         android:networkSecurityConfig="@xml/network_security_config"
         android:supportsRtl="true"

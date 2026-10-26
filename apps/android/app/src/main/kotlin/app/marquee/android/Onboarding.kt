@@ -64,6 +64,7 @@ import app.marquee.core.model.DefaultInstalled
 import app.marquee.core.model.Prefs
 import app.marquee.core.route.DefaultsMode
 import app.marquee.core.session.CoreSession
+import app.marquee.design.BrandLockup
 import app.marquee.design.FocusInk
 import app.marquee.design.Form
 import app.marquee.design.Icons
@@ -115,7 +116,7 @@ fun OnboardingScreen(
         verticalArrangement = Arrangement.spacedBy(Marquee.space.l),
     ) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            MqText("Momotus", role = TextRole.Title2, modifier = Modifier.weight(1f))
+            Box(Modifier.weight(1f)) { BrandLockup(if (Marquee.form == Form.Tv) 44.dp else 32.dp) }
             SkipLink("Browse first", onDefaults)
         }
         // Scrolls when it does not fit (a small phone at a large font scale); centered when it does.
@@ -214,7 +215,7 @@ fun StreamQuestionScreen(
         verticalArrangement = Arrangement.spacedBy(Marquee.space.l),
     ) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            MqText("Momotus", role = TextRole.Title2, modifier = Modifier.weight(1f))
+            Box(Modifier.weight(1f)) { BrandLockup(if (Marquee.form == Form.Tv) 44.dp else 32.dp) }
             SkipLink(StreamChoiceCopy.SKIP, onDone)
         }
         // In the middle of the screen when it fits, as the first step; it scrolls when it does not.
@@ -325,7 +326,7 @@ internal fun SubtitleStepPage(
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            MqText("Momotus", role = TextRole.Title2, modifier = Modifier.weight(1f))
+            Box(Modifier.weight(1f)) { BrandLockup(if (Marquee.form == Form.Tv) 44.dp else 32.dp) }
             // Not while Continue saves: the step leaves once.
             SkipLink(SubtitleStep.SKIP, { if (!step.busy) onDone() })
         }

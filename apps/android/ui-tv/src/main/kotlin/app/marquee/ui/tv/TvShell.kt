@@ -41,19 +41,18 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import app.marquee.core.route.Route
 import app.marquee.core.route.TOP_LEVEL
+import app.marquee.design.BrandMark
 import app.marquee.design.Icons
 import app.marquee.design.KeyPresses
 import app.marquee.design.Marquee
 import app.marquee.design.MqIcon
 import app.marquee.design.MqText
-import app.marquee.design.TextRole
 import app.marquee.design.Tokens
 import app.marquee.design.focusPalette
 import app.marquee.design.focusSelectable
@@ -254,13 +253,8 @@ private fun TvTopNav(
         if (route == selected) focusManager.moveFocus(FocusDirection.Down) else show(route)
     }
     Box(modifier) {
-        // The wordmark: the name alone, with no dot; not focusable.
-        MqText(
-            "Momotus",
-            Modifier.align(Alignment.CenterStart).padding(start = Marquee.safe.side).clearAndSetSemantics { },
-            role = TextRole.Title3,
-            maxLines = 1,
-        )
+        // The mark: the bird alone where the bar is tight (C); not focusable, not spoken.
+        BrandMark(NAV_HEIGHT, Modifier.align(Alignment.CenterStart).padding(start = Marquee.safe.side))
         Row(
             Modifier
                 .align(Alignment.Center)

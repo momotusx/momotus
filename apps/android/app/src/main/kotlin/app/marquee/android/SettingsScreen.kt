@@ -73,6 +73,7 @@ import app.marquee.core.session.CoreSession
 import app.marquee.core.views.AddonsView
 import app.marquee.core.views.SettingsView
 import app.marquee.core.views.ViewStatus
+import app.marquee.design.BrandLockup
 import app.marquee.design.Chip
 import app.marquee.design.FocusInk
 import app.marquee.design.Form
@@ -933,10 +934,12 @@ private fun About() {
         }
     Section {
         Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.xs)) {
+            BrandLockup(if (Marquee.form == Form.Tv) 48.dp else 36.dp, Modifier.padding(bottom = Marquee.space.xs))
             MqText("Momotus ${version.orEmpty()}", role = TextRole.Headline, weight = FontWeight.Bold)
             MqText("Free software under the GPL 3.", role = TextRole.Caption, color = Marquee.colors.muted)
             MqText(
-                "Type: Inter (SIL Open Font License). Icons: Lucide (ISC). Flags: circle-flags (MIT).",
+                "Type: Inter and Unbounded (SIL Open Font License). " +
+                    "Icons: Lucide (ISC). Flags: circle-flags (MIT).",
                 role = TextRole.Caption,
                 color = Marquee.colors.muted,
             )
