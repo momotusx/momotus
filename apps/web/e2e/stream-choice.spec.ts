@@ -905,7 +905,7 @@ test.describe("Versions: kind chips", () => {
     await expect(page.locator(".vrow .line").first()).toBeVisible({ timeout: 60_000 });
     await expect(page.locator(".vstatus")).toHaveText("", { timeout: 60_000 });
     const group = page.getByRole("radiogroup", { name: "Sources" });
-    await expect(group.getByRole("radio")).toHaveText([/^All$/, /^Direct links\s*\d+$/, /^Debrid\s*\d+$/]);
+    await expect(group.getByRole("radio")).toHaveText([/^All$/, /^Direct links\s*\d+$/, /^Real-Debrid\s*\d+$/]);
     await expect(group.getByRole("radio").first()).toHaveAttribute("aria-checked", "true");
     return { page, group };
   }
@@ -932,10 +932,16 @@ test.describe("Versions: kind chips", () => {
     await expect(page).toHaveURL(/\/play\//);
     await page.waitForTimeout(300);
     expect(setKinds()).toEqual(["direct"]);
+    // From the player to the title page (its Episodes): every kind is listed again, so the title's Play plays the pick.
+    await page.evaluate((p) => {
+      history.pushState(null, "", p);
+      dispatchEvent(new PopStateEvent("popstate"));
+    }, `/title/series/${GOT.id}?form=tv`);
+    await expect.poll(setKinds).toEqual(["direct", null]);
     await page.context().close();
   });
 
-  for (const form of ["tv", "phone"] as const) {
+  for (const form of ["tv", "desktop", "phone"] as const) {
     test(`${form}: chips that arrive late never move Play, and the chip that is on asks nothing`, async ({ browser }) => {
       // The core's kinds held back until the pick is frozen, so the chips arrive after the card.
       const late = (s: VersionsSnapshot): VersionsSnapshot => (s.frozen ? s : { ...s, kinds: [] });
@@ -951,6 +957,12 @@ test.describe("Versions: kind chips", () => {
       await page.evaluate(() => dispatchEvent(new PointerEvent("pointerdown")));
       await expect(page.locator(".vkinds .chip")).toHaveCount(3);
       expect(await play.boundingBox()).toEqual(before);
+      // TV and desktop: the chips sit in the header's room, above the card.
+      if (form !== "phone") {
+        const chips = await page.locator(".vkinds").boundingBox();
+        const card = await page.locator(".pick").boundingBox();
+        expect((chips?.y ?? 0) + (chips?.height ?? 0)).toBeLessThanOrEqual(card?.y ?? 0);
+      }
       if (form === "tv") expect(await focused(page)).toBe("versions:play");
       // All is on: pressing it again sends nothing.
       await page.getByRole("radiogroup", { name: "Sources" }).getByRole("radio").first().dispatchEvent("click");
@@ -960,20 +972,32 @@ test.describe("Versions: kind chips", () => {
     });
   }
 
+  test("a press the core answers with no change puts the chips back as the core lists them", async ({ browser }) => {
+    // The core's answers say no kind is chosen, as when the kind emptied meanwhile.
+    const page = await device(browser, "desktop", KINDS_PORT, { versions: (s) => ({ ...s, selectedKind: null }) });
+    await page.goto(path("desktop"));
+    await expect(page.locator(".vstatus")).toHaveText("", { timeout: 60_000 });
+    const group = page.getByRole("radiogroup", { name: "Sources" });
+    await group.getByRole("radio", { name: /^Real-Debrid, / }).click();
+    expect(setKinds()).toEqual(["debrid"]);
+    await expect(group.getByRole("radio").first()).toHaveAttribute("aria-checked", "true");
+    await page.context().close();
+  });
+
   for (const form of ["desktop", "phone"] as const) {
     test(`${form}: a kind chip lists that kind from the core, All lists every one, and leaving lists every kind again`, async ({ browser }) => {
       const { page, group } = await opened(browser, form);
       const all = await page.locator(".vrow").count();
-      const debrid = group.getByRole("radio", { name: /^Debrid, \d+ versions?$/ });
+      const debrid = group.getByRole("radio", { name: /^Real-Debrid, \d+ versions?$/ });
       await debrid.click();
       expect(setKinds()).toEqual(["debrid"]);
       await expect(debrid).toHaveAttribute("aria-checked", "true");
-      await expect(page.locator(".pick .best")).toHaveText("Best debrid link");
+      await expect(page.locator(".pick .best")).toHaveText("Best on Real-Debrid");
       await expect(page.locator('[data-f^="vshort:"]')).toHaveCount(0);
       await shot(page, "versions-kinds-debrid", form);
       await group.getByRole("radio").first().click();
       expect(setKinds()).toEqual(["debrid", null]);
-      await expect(page.locator(".pick .best")).not.toHaveText("Best debrid link");
+      await expect(page.locator(".pick .best")).not.toHaveText("Best on Real-Debrid");
       await expect(page.locator(".vrow")).toHaveCount(all);
       // A kind left chosen is let go when the page goes.
       await debrid.click();

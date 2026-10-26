@@ -17,6 +17,7 @@ import type { HomeUpdate } from "./generated/HomeUpdate";
 import type { LibrarySnapshot } from "./generated/LibrarySnapshot";
 import type { Prefs } from "./generated/Prefs";
 import { commandQueue } from "./command-queue";
+import type { SourceKind } from "./generated/SourceKind";
 import type { Tile } from "./generated/Tile";
 import type { TitleHeader } from "./generated/TitleHeader";
 import type { TitleSnapshot } from "./generated/TitleSnapshot";
@@ -394,8 +395,25 @@ export function versionsView(p: VersionsParams): LiveView<VersionsSnapshot> {
   // Rows merge by their `key`, so a row keeps its element (and the focus) when
   // a late addon or a re-rank moves it.
   const view = liveView<VersionsSnapshot>("versions", { ...p, ...displayCaps(), network: networkType() }, true, "key");
+  kindAsked = false;
   versions = { key, view };
   return view;
+}
+
+// A kind was asked of the kept view since every kind was last listed: its answer may not be in yet.
+let kindAsked = false;
+
+/** Asks the kept Versions view for one kind of version, or every one (null): `setKind`, answered with the kind's own
+ * card, rows and sections (plans/plugins-and-marketplace.md 4.2). */
+export function askKind(kind: SourceKind | null): Promise<void> | undefined {
+  kindAsked = kind !== null;
+  return versions?.view.command({ type: "setKind", kind });
+}
+
+/** A kind holds while the video's Versions page or player is open; any other page lists every kind again, so the
+ * title's Play plays the core's pick. */
+export function listEveryKind() {
+  if (kindAsked || versions?.view.state.data?.selectedKind) void askKind(null);
 }
 
 let prefs: LiveView<Prefs> | undefined;

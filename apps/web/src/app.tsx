@@ -12,7 +12,7 @@ import { type Component, createEffect, createMemo, createSignal, For, on, onClea
 import { ProfileMenu } from "./components/avatar";
 import Brand from "./components/brand";
 import { DownloadStatus, OfflineBanner } from "./components/download";
-import { bridgeUrl, link } from "./core/client";
+import { bridgeUrl, link, listEveryKind } from "./core/client";
 // The debrid accounts follow the core from the start, whatever screen is open.
 import "./core/debrid";
 import "./core/trakt";
@@ -201,6 +201,8 @@ let focusInstalled = false;
 
 function Shell(props: RouteSectionProps) {
   const location = useLocation();
+  // Off a video's Versions page and its player, every kind is listed again (plans/plugins-and-marketplace.md 4.2).
+  createEffect(on(() => location.pathname, (path) => !/\/versions\/|^\/play\//.test(path) && listEveryKind()));
   const navigate = useNavigate();
   const back = () => {
     // TV: Back in a place's content puts the focus on its tab first, as Menu does on Apple TV; Back on the bar goes on.

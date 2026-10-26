@@ -19,7 +19,7 @@ import { Chips } from "../components/grid";
 import { EmptyActs } from "../components/empty-acts";
 import { KeyedPage } from "../components/keyed-page";
 import { Why } from "../components/why";
-import { op } from "../core/client";
+import { askKind, op } from "../core/client";
 import type { SectionQuality } from "../core/generated/SectionQuality";
 import type { SourceKind } from "../core/generated/SourceKind";
 import type { VersionRow } from "../core/generated/VersionRow";
@@ -205,31 +205,22 @@ export function VersionsPage(props: { kind: string; id: string; videoId: string;
   // The kind chips (plans/plugins-and-marketplace.md 4.2): the core counts the kinds and, under one
   // (`setKind`, which freezes the pick), sends that kind's own card, rows and sections and no
   // shortcuts. The chips show from two kinds on and then stay while the page is open.
-  // A chip shows as on from the press until the core's kind changes (its answer).
+  // A chip shows as on from the press until the core lists that kind, or soon after the core answered: an answer that
+  // changes nothing (the kind emptied meanwhile) puts the chips back as the core lists them.
   const [pressed, setPressed] = createSignal<KindChoice | null>(null);
-  let pressedFrom: KindChoice = "all";
-  createEffect(() => (snap()?.selectedKind ?? "all") !== pressedFrom && setPressed(null));
+  createEffect(() => pressed() === (snap()?.selectedKind ?? "all") && setPressed(null));
   const shownKind = (): KindChoice => pressed() ?? snap()?.selectedKind ?? "all";
   const [chipsShown, setChipsShown] = createSignal(false);
   createEffect(() => (snap()?.kinds.length ?? 0) >= 2 && !dimmed() && setChipsShown(true));
   const chips = () => (chipsShown() ? kindChips(snap()?.kinds ?? []) : []);
-  // The last kind asked for, which the core may not have answered yet; and whether the page leaves for the
-  // player, which keeps the kind (it plays, and moves on, within it).
-  let asked: KindChoice = "all";
-  let playing = false;
-  const ask = (k: KindChoice) => {
-    asked = k;
-    void ctx.versions()?.command({ type: "setKind", kind: k === "all" ? null : k });
-  };
-  // The chip that is on again asks nothing.
+  // The chip that is on again asks nothing. The kind holds while this video's Versions page or player is open;
+  // any other page lists every kind again (app.tsx).
   const chooseKind = (k: KindChoice) => {
     if (k === shownKind()) return;
-    pressedFrom = snap()?.selectedKind ?? "all";
     setPressed(k);
-    ask(k);
+    // ponytail: a fixed wait for the snapshot after the answer; key it on a snapshot sequence if one ever shows late.
+    void askKind(k === "all" ? null : k)?.finally(() => setTimeout(() => pressed() === k && setPressed(null), 300));
   };
-  // The page owns the choice: leaving it lists every kind again for the title and the player.
-  onCleanup(() => !playing && (asked !== "all" || (snap()?.selectedKind ?? null) !== null) && ask("all"));
   // The chips, from two kinds on (no line kept for them before): over the card on TV and desktop, in the
   // header's room, where Down goes back to Play as Up from Play comes to the chip that is on; under the card
   // on the phone, so a row that arrives late never moves Play under a finger.
@@ -269,7 +260,6 @@ export function VersionsPage(props: { kind: string; id: string; videoId: string;
       downloadAdd(props.kind, props.id, "video", { videoId: props.videoId, pick: { versionsSub: sub, key } });
       return (props.onBack ?? goBack)();
     }
-    playing = true;
     return props.onPlay ? props.onPlay(key) : navigate(playPath(props.kind, props.id, props.videoId), { state: { ...playState(key), viaTitle: entryFrom() === titlePath(props.kind, props.id) } });
   };
 
