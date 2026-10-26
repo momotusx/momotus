@@ -261,7 +261,7 @@
 .hero-page .hero-bd { transition: opacity 600ms var(--ease); }
 /* The dots: the active one a pill whose white fill grows over the page's time (one value, --fill). */
 .hero-dots { position: absolute; left: 50%; transform: translateX(-50%); z-index: 2; display: flex; align-items: center; gap: 9px; transition: opacity 400ms var(--ease); }
-.hero-dots .dot { position: relative; flex: none; width: 7px; height: 7px; padding: 0; border: 0; border-radius: 999px; background: rgba(255, 255, 255, .6);
+.hero-dots .dot { position: relative; flex: none; width: 7px; height: 7px; padding: 0; border: 0; border-radius: 999px; background: rgba(255, 255, 255, .6); box-shadow: none;
   transition: width 350ms var(--ease), background-color 350ms var(--ease); }
 .hero-dots button.dot { box-sizing: content-box; padding: 7px 3px; margin: -7px -3px; background-clip: content-box; cursor: pointer; }
 .hero-dots .dot.on { width: 24px; background-color: rgba(255, 255, 255, .35); }

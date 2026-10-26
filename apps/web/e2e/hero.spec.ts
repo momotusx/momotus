@@ -36,6 +36,8 @@ for (const form of ["phone", "desktop", "tv"] as const) {
     const page = await home(context, form);
     const pages = await page.locator(".hero-page").count();
     expect(await page.locator(".hero-dots .dot").count()).toBe(pages);
+    // Filled dots, never the status dots' ring (app.css .dot).
+    expect(await page.locator(".hero-dots .dot").evaluateAll((els) => els.map((el) => getComputedStyle(el).boxShadow))).toEqual(Array(pages).fill("none"));
     const base = await activePage(page);
     // Half the dwell: the pill is half full and nothing moved.
     await page.clock.runFor(4000);
