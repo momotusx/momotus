@@ -2682,9 +2682,30 @@ async fn an_account_change_lists_every_kind_again() {
     until("done", || view.snapshot().done).await;
     let s = view.snapshot();
     assert_eq!(s.selected_kind, None);
-    // No account and no engine: the torrents are hidden, the link alone is listed.
-    assert_eq!(
-        s.kinds.iter().map(|k| k.kind).collect::<Vec<_>>(),
-        [SourceKind::Direct]
-    );
+    // No account: an engine build fetches the torrents itself, a store build hides them.
+    let listed: Vec<_> = s.kinds.iter().map(|k| k.kind).collect();
+    if cfg!(feature = "torrent") {
+        assert_eq!(listed, [SourceKind::Torrent, SourceKind::Direct]);
+    } else {
+        assert_eq!(listed, [SourceKind::Direct]);
+    }
+}
+
+#[tokio::test]
+async fn an_addon_change_lists_every_kind_again() {
+    let (core, server, view) = mixed_view().await;
+    view.set_kind(Some(SourceKind::Direct));
+    assert_eq!(view.snapshot().selected_kind, Some(SourceKind::Direct));
+    // The addon is turned off: the old kind pass goes with what it ranked.
+    let off = AddonRow {
+        enabled: false,
+        ..addon(&server)
+    };
+    core.library().set_addons("p", &[off], &core.hlc()).unwrap();
+    until("every kind listed", || {
+        view.snapshot().selected_kind.is_none()
+    })
+    .await;
+    let s = view.snapshot();
+    assert!(s.recommended.is_none() && s.rows.is_empty(), "{s:?}");
 }

@@ -197,8 +197,8 @@ pub struct VersionsSnapshot {
 }
 
 /// A kind chip: the kind, the rows holding a source of it, and for debrid
-/// the one service every such source names ("Real-Debrid"; null when they
-/// name several or none, and the chip says "Debrid").
+/// the service its sources that name one agree on ("Real-Debrid"; null when
+/// they name several or none, and the chip says "Debrid").
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[cfg_attr(
     feature = "ts",
@@ -2761,15 +2761,13 @@ fn kinds(s: &State) -> Vec<KindChip> {
         .collect()
 }
 
-/// The one service every source names ("Real-Debrid"), else none.
-// ponytail: a source with no service hint counts as unnamed, though the
-// account's only store resolves it; pass the stores when the chip should
-// name it.
-fn one_service<'a>(mut sources: impl Iterator<Item = &'a ParsedStream>) -> Option<String> {
-    let first = sources.next()?.service.as_deref().map(service_name)?;
-    sources
-        .all(|st| st.service.as_deref().map(service_name).as_deref() == Some(first.as_str()))
-        .then_some(first)
+/// The service the sources that name one agree on ("Real-Debrid"), else
+/// none: a source with no service hint resolves on the account and says
+/// nothing against it.
+fn one_service<'a>(sources: impl Iterator<Item = &'a ParsedStream>) -> Option<String> {
+    let mut names = sources.filter_map(|st| st.service.as_deref().map(service_name));
+    let first = names.next()?;
+    names.all(|n| n == first).then_some(first)
 }
 
 /// Why nothing can play, once the view is done and nothing is listed
@@ -3161,6 +3159,95 @@ mod tests {
         let body = format!(r#"{{"streams":[{json}]}}"#);
         let wire = mq_protocol::decode_streams(body.as_bytes()).unwrap();
         normalize(&wire.streams[0], "t", "T", 0, 0)
+    }
+
+    /// A torrent's kind follows its cache answer (plans/plugins-and-marketplace.md
+    /// 4.1): under an account with the engine, uncached is the engine's. A
+    /// selected kind follows: the counts move, the card falls to the kind's
+    /// next row, and a kind with none left lists every kind again.
+    #[tokio::test]
+    async fn a_cache_answer_moves_a_torrent_between_kinds_while_one_is_selected() {
+        let core = Core::temporary("p").unwrap();
+        let view = VersionsView::open(&core, film_params());
+        let torrent = |hash: char, seeds: u32, release: &str| {
+            let hash = hash.to_string().repeat(40);
+            wire(&format!(
+                r#"{{"title":"{release}\n👤 {seeds} 💾 2.0 GB","infoHash":"{hash}"}}"#
+            ))
+        };
+        let link =
+            wire(r#"{"title":"Movie.2020.720p.WEB-DL.x264-L","url":"https://a.example/m.mkv"}"#);
+        let ranking = Arc::new(Ranking {
+            params: film_params(),
+            kids: None,
+            item_id: "tt1".into(),
+            remembered: None,
+        });
+        let mut s = lock(&view.state);
+        s.rank.debrid = true;
+        s.rank.engine = true;
+        s.rank.free_bytes = Some(1 << 40);
+        s.streams = vec![
+            torrent('a', 900, "Movie.2020.1080p.BluRay.x264-ALPHA"),
+            torrent('b', 300, "Movie.2020.720p.WEBRip.x265-BETA"),
+            link,
+        ];
+        s.ranking = Some(ranking.clone());
+        s.kind = Some(SourceKind::Debrid);
+        rerank(&mut s, &ranking);
+        let counts = |s: &State| {
+            kinds(s)
+                .iter()
+                .map(|k| (k.kind, k.count))
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(
+            counts(&s),
+            [(SourceKind::Direct, 1), (SourceKind::Debrid, 2)]
+        );
+        let card = s.kind_pick.clone().unwrap().stream.key;
+        // The card's torrent is not cached: the engine plays it, a torrent now.
+        for st in s.streams.iter_mut().filter(|st| st.key == card) {
+            st.cached = Some(false);
+        }
+        rerank(&mut s, &ranking);
+        assert_eq!(
+            counts(&s),
+            [
+                (SourceKind::Torrent, 1),
+                (SourceKind::Direct, 1),
+                (SourceKind::Debrid, 1)
+            ]
+        );
+        assert_eq!(s.kind, Some(SourceKind::Debrid));
+        let next = s.kind_pick.clone().unwrap();
+        assert_ne!(
+            next.stream.key, card,
+            "the card falls to the kind's next row"
+        );
+        assert_eq!(kind_of(&s, &next.stream), SourceKind::Debrid);
+        // The last debrid torrent goes the same way: no row of the kind is left.
+        for st in &mut s.streams {
+            st.cached = Some(false);
+        }
+        rerank(&mut s, &ranking);
+        assert_eq!(s.kind, None);
+    }
+
+    /// The debrid chip names the service its sources that name one agree on;
+    /// a source with no hint says nothing against it.
+    #[test]
+    fn the_debrid_chip_names_the_service_the_naming_sources_agree_on() {
+        let named = |service: Option<&str>| {
+            let mut st = wire(r#"{"title":"Movie.2020.1080p","url":"https://a.example/m.mkv"}"#);
+            st.service = service.map(str::to_owned);
+            st
+        };
+        let rd = [named(Some("realdebrid")), named(None), named(Some("rd"))];
+        assert_eq!(one_service(rd.iter()).as_deref(), Some("Real-Debrid"));
+        let two = [named(Some("realdebrid")), named(Some("torbox"))];
+        assert_eq!(one_service(two.iter()), None);
+        assert_eq!(one_service([named(None)].iter()), None);
     }
 
     /// Code review 2026-10-20 r3 P3-8, r4 P3-8: nobodySharing reads every
