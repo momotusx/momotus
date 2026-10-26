@@ -6,6 +6,8 @@
 
 import { type Browser, expect, type Page, test } from "@playwright/test";
 import type { ChildProcess } from "node:child_process";
+import { createServer, type Server } from "node:http";
+import type { AddressInfo } from "node:net";
 import { Client, cleanup, DISCOVER_PORT, PORTS, SHOTS, startBridge } from "./core";
 
 type Form = "tv" | "desktop" | "phone";
@@ -18,9 +20,30 @@ const ADDON_NAMES = ["Cinemeta", "Kitsu", "Trakt", "Streaming Catalogs", "Torren
 
 let core: { proc: ChildProcess; data: string } | null = null;
 let client: Client;
+let tmdb: Server;
+
+/** TMDB's watch providers as /3/watch/providers/movie listed them on 2026-10-27, served by a local fake (the e2e core
+ * never holds the owner's token); the logos themselves load from TMDB's image host through the recorder. */
+const PROVIDERS = [
+  { provider_id: 8, provider_name: "Netflix", logo_path: "/rK1KljqmbvO9HQa1PBFLILWah72.png" },
+  { provider_id: 9, provider_name: "Amazon Prime Video", logo_path: "/gMZdpavHmxFNnLpMHwVxfqeux2g.png" },
+  { provider_id: 11, provider_name: "MUBI", logo_path: "/k7iSlvgWzZuO4zU5PcBjhABMuia.png" },
+  { provider_id: 15, provider_name: "Hulu", logo_path: "/44uAnmSqvA4yBOdbPWN8YgQHjWm.png" },
+  { provider_id: 283, provider_name: "Crunchyroll", logo_path: "/uFL3c4Cq8M6WoLymlC5Y8bmGytV.png" },
+  { provider_id: 337, provider_name: "Disney Plus", logo_path: "/5eZ872CghnHFLB1j8grszbrx0dx.png" },
+  { provider_id: 350, provider_name: "Apple TV", logo_path: "/9icYBfYFcwgCbky5VdGUIKJ4C5i.png" },
+  { provider_id: 386, provider_name: "Peacock Premium", logo_path: "/a1UIdq5BrkcAxnxcUhFsNbXnxeu.png" },
+  { provider_id: 531, provider_name: "Paramount Plus", logo_path: "/pkx3klJlwW5JdtaulvDx6hDNtch.png" },
+  { provider_id: 1899, provider_name: "HBO Max", logo_path: "/skypuy7SXuugIQeYg0IglmzoKaS.png" },
+];
 
 test.beforeAll(async () => {
-  core = await startBridge(DISCOVER_PORT);
+  tmdb = createServer((req, res) => {
+    const body = req.url?.startsWith("/3/watch/providers/movie") ? JSON.stringify({ results: PROVIDERS }) : "{}";
+    res.writeHead(req.url?.startsWith("/3/watch/providers/movie") ? 200 : 404, { "content-type": "application/json" }).end(body);
+  });
+  await new Promise<void>((ok) => tmdb.listen(0, "127.0.0.1", ok));
+  core = await startBridge(DISCOVER_PORT, { MQ_DEV_TMDB: `http://127.0.0.1:${(tmdb.address() as AddressInfo).port}` });
   client = new Client(`ws://127.0.0.1:${DISCOVER_PORT}/ws`);
   await client.req("installDefaults", {
     choices: ["cinemeta", "trakt", "rottentomatoes", "torrentcatalogs", "kitsu", "streamingcatalogs"].map((key) => ({ key, on: true })),
@@ -30,6 +53,7 @@ test.beforeAll(async () => {
 
 test.afterAll(async () => {
   client.close();
+  tmdb.close();
   if (core) cleanup(core.proc, core.data);
   core = null;
 });
@@ -56,6 +80,7 @@ async function device(browser: Browser, form: Form): Promise<Page> {
 async function shot(page: Page, name: string) {
   await expect(page.locator(".grid-foot")).toBeVisible({ timeout: 60_000 });
   await expect(page.locator(".grid .tile img.in").first()).toBeVisible({ timeout: 60_000 });
+  if (await page.locator(".dv-rail").count()) await expect(page.locator(".dv-rail .svc-tile.logo").first()).toBeVisible({ timeout: 30_000 });
   await page.waitForTimeout(600);
   await page.screenshot({ path: `${SHOTS}/${name}.png` });
 }
@@ -80,6 +105,10 @@ test("the picked design: kinds, services, menus and Clear on desktop", async ({ 
   for (const service of ["Netflix", "Prime Video", "Disney+", "Apple TV+", "HBO Max", "Paramount+", "Hulu"]) {
     await expect(rail.filter({ hasText: new RegExp(`^${service.replace("+", "\\+")}$`) })).toHaveCount(1);
   }
+  // The services show TMDB's logos, each named for a screen reader.
+  await expect(rail.filter({ hasText: /^Netflix$/ }).locator("img")).toHaveAttribute("src", "https://image.tmdb.org/t/p/w154/rK1KljqmbvO9HQa1PBFLILWah72.png");
+  await expect(rail.filter({ hasText: /^Netflix$/ })).toHaveAttribute("aria-label", "Netflix");
+  await expect(page.locator(".dv-rail .svc-tile.logo").first()).toBeVisible({ timeout: 30_000 });
   await shot(page, "discover-v2-desktop-all");
   await noAddonNames(page);
 
@@ -136,9 +165,8 @@ test("a TV walks it row by row with keys only", async ({ browser }) => {
   await expect.poll(focused).toMatch(/^kinds:/);
   await page.keyboard.press("ArrowDown");
   await expect.poll(focused).toMatch(/^discover:rail:/);
-  // Left at the rail's start stays on it.
-  await page.keyboard.press("ArrowLeft");
-  await page.keyboard.press("ArrowLeft");
+  // Entering the rail lands on the chosen service; Left walks to its start and stays there.
+  for (let i = 0; i < 12; i++) await page.keyboard.press("ArrowLeft");
   await expect.poll(focused).toBe("discover:rail:all");
   await page.keyboard.press("ArrowRight");
   await page.keyboard.press("Enter");
