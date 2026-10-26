@@ -927,8 +927,38 @@ test.describe("Versions: kind chips", () => {
     await shot(page, "versions-kinds-direct", "tv");
     await page.keyboard.press("ArrowDown");
     await expect.poll(() => focused(page)).toBe("versions:play");
+    // Play leaves for the player, which plays within the kind: the page asks for no other.
+    await page.keyboard.press("Enter");
+    await expect(page).toHaveURL(/\/play\//);
+    await page.waitForTimeout(300);
+    expect(setKinds()).toEqual(["direct"]);
     await page.context().close();
   });
+
+  for (const form of ["tv", "phone"] as const) {
+    test(`${form}: chips that arrive late never move Play, and the chip that is on asks nothing`, async ({ browser }) => {
+      // The core's kinds held back until the pick is frozen, so the chips arrive after the card.
+      const late = (s: VersionsSnapshot): VersionsSnapshot => (s.frozen ? s : { ...s, kinds: [] });
+      const page = await device(browser, form, KINDS_PORT, { versions: late });
+      await page.goto(path(form));
+      await expect(page.locator(".vrow .line").first()).toBeVisible({ timeout: 60_000 });
+      await expect(page.locator(".vstatus")).toHaveText("", { timeout: 60_000 });
+      await expect(page.locator(".vkinds .chip")).toHaveCount(0);
+      const play = page.locator('[data-f="versions:play"]');
+      if (form === "tv") await expect.poll(() => focused(page)).toBe("versions:play");
+      const before = await play.boundingBox();
+      // A press anywhere freezes the pick; the core's next snapshot brings the kinds.
+      await page.evaluate(() => dispatchEvent(new PointerEvent("pointerdown")));
+      await expect(page.locator(".vkinds .chip")).toHaveCount(3);
+      expect(await play.boundingBox()).toEqual(before);
+      if (form === "tv") expect(await focused(page)).toBe("versions:play");
+      // All is on: pressing it again sends nothing.
+      await page.getByRole("radiogroup", { name: "Sources" }).getByRole("radio").first().dispatchEvent("click");
+      await page.waitForTimeout(300);
+      expect(setKinds()).toEqual([]);
+      await page.context().close();
+    });
+  }
 
   for (const form of ["desktop", "phone"] as const) {
     test(`${form}: a kind chip lists that kind from the core, All lists every one, and leaving lists every kind again`, async ({ browser }) => {

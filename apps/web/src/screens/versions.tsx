@@ -205,19 +205,52 @@ export function VersionsPage(props: { kind: string; id: string; videoId: string;
   // The kind chips (plans/plugins-and-marketplace.md 4.2): the core counts the kinds and, under one
   // (`setKind`, which freezes the pick), sends that kind's own card, rows and sections and no
   // shortcuts. The chips show from two kinds on and then stay while the page is open.
-  const shownKind = (): KindChoice => snap()?.selectedKind ?? "all";
+  // A chip shows as on from the press until the core's kind changes (its answer).
+  const [pressed, setPressed] = createSignal<KindChoice | null>(null);
+  let pressedFrom: KindChoice = "all";
+  createEffect(() => (snap()?.selectedKind ?? "all") !== pressedFrom && setPressed(null));
+  const shownKind = (): KindChoice => pressed() ?? snap()?.selectedKind ?? "all";
   const [chipsShown, setChipsShown] = createSignal(false);
   createEffect(() => (snap()?.kinds.length ?? 0) >= 2 && !dimmed() && setChipsShown(true));
   const chips = () => (chipsShown() ? kindChips(snap()?.kinds ?? []) : []);
-  // The last kind asked for, which the core may not have answered yet.
+  // The last kind asked for, which the core may not have answered yet; and whether the page leaves for the
+  // player, which keeps the kind (it plays, and moves on, within it).
   let asked: KindChoice = "all";
-  const chooseKind = (k: KindChoice) => {
+  let playing = false;
+  const ask = (k: KindChoice) => {
     asked = k;
     void ctx.versions()?.command({ type: "setKind", kind: k === "all" ? null : k });
   };
+  // The chip that is on again asks nothing.
+  const chooseKind = (k: KindChoice) => {
+    if (k === shownKind()) return;
+    pressedFrom = snap()?.selectedKind ?? "all";
+    setPressed(k);
+    ask(k);
+  };
   // The page owns the choice: leaving it lists every kind again for the title and the player.
-  onCleanup(() => (asked !== "all" || shownKind() !== "all") && chooseKind("all"));
-  const pick = () => holdRow(`pick:${shownKind()}`, snap()?.recommended);
+  onCleanup(() => !playing && (asked !== "all" || (snap()?.selectedKind ?? null) !== null) && ask("all"));
+  // The chips, from two kinds on (no line kept for them before): over the card on TV and desktop, in the
+  // header's room, where Down goes back to Play as Up from Play comes to the chip that is on; under the card
+  // on the phone, so a row that arrives late never moves Play under a finger.
+  const kindRow = () => (
+    <div
+      class="vkinds"
+      onKeyDown={(e) => {
+        const p = e.key === "ArrowDown" ? at("versions:play") : null;
+        if (!p) return;
+        e.preventDefault();
+        focusEl(p);
+      }}
+    >
+      <Show when={chips().length}>
+        <Chips label={choiceWords.kind.label} group="vkinds" items={chips()} selected={shownKind()} onSelect={chooseKind} />
+      </Show>
+    </div>
+  );
+  // The page lists the kind the core answered with (`selectedKind`); only the chips show a press early.
+  const listedKind = (): KindChoice => snap()?.selectedKind ?? "all";
+  const pick = () => holdRow(`pick:${listedKind()}`, snap()?.recommended);
   const shortcut = (id: "smaller" | "sharper") => {
     const r = holdRow(id, snap()?.[id]);
     return r && r.key !== pick()?.key ? r : null;
@@ -236,6 +269,7 @@ export function VersionsPage(props: { kind: string; id: string; videoId: string;
       downloadAdd(props.kind, props.id, "video", { videoId: props.videoId, pick: { versionsSub: sub, key } });
       return (props.onBack ?? goBack)();
     }
+    playing = true;
     return props.onPlay ? props.onPlay(key) : navigate(playPath(props.kind, props.id, props.videoId), { state: { ...playState(key), viaTitle: entryFrom() === titlePath(props.kind, props.id) } });
   };
 
@@ -406,21 +440,7 @@ export function VersionsPage(props: { kind: string; id: string; videoId: string;
           </div>
           {/* Reserved from the first paint, so nothing below moves when it fills or empties. */}
           <p class="vstatus">{statusLine()}</p>
-          {/* The kind chips, from two kinds on (no line kept for them before). Down from a chip goes back
-              to Play, as Up from Play comes to the chip that is on. */}
-          <div
-            class="vkinds"
-            onKeyDown={(e) => {
-              const p = e.key === "ArrowDown" ? at("versions:play") : null;
-              if (!p) return;
-              e.preventDefault();
-              focusEl(p);
-            }}
-          >
-            <Show when={chips().length}>
-              <Chips label={choiceWords.kind.label} group="vkinds" items={chips()} selected={shownKind()} onSelect={chooseKind} />
-            </Show>
-          </div>
+          <Show when={form() !== "phone"}>{kindRow()}</Show>
           {/* Said once when the list is done (3.6): the count, or why nothing can play; never each row. */}
           <p class="sr" role="status">
             {doneWords()}
@@ -484,7 +504,7 @@ export function VersionsPage(props: { kind: string; id: string; videoId: string;
               >
                 {(p) => (
                   <>
-                    <p class="best">{keeping || shownKind() === "all" ? best() : kindBest(shownKind() as SourceKind, snap()?.kinds ?? [])}</p>
+                    <p class="best">{keeping || listedKind() === "all" ? best() : kindBest(listedKind() as SourceKind, snap()?.kinds ?? [])}</p>
                     <h2>{qualityText(p().quality)}</h2>
                     <Show when={p().features.length}>
                       <p class="badges">
@@ -533,6 +553,7 @@ export function VersionsPage(props: { kind: string; id: string; videoId: string;
               </Show>
             </section>
 
+            <Show when={form() === "phone"}>{kindRow()}</Show>
             <section class="alts" aria-label="All versions">
               <div
                 class="alist"
