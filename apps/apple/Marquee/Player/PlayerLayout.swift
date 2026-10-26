@@ -755,12 +755,8 @@ struct StallWatch {
 struct StartWindow {
     private var first: (at: ContinuousClock.Instant, bytes: Int64)?
     private var last: (at: ContinuousClock.Instant, bytes: Int64)?
-    private var source = ""
 
-    /// `source` names what the start is for (the version's key and the core's source number): another one, as after a
-    /// version move, starts the window over even when its count is not lower.
-    mutating func saw(_ bytes: Int64, at: ContinuousClock.Instant, from source: String = "") {
-        if source != self.source { (first, last, self.source) = (nil, nil, source) }
+    mutating func saw(_ bytes: Int64, at: ContinuousClock.Instant) {
         guard bytes > 0 else { return }
         if let last, bytes < last.bytes { first = nil }
         if first == nil { first = (at, bytes) }
@@ -771,6 +767,14 @@ struct StartWindow {
         // No bytes gained in the window (the start was whole by the first snapshot) measures nothing: n/a, never 0.
         guard let first, let last, last.at > first.at, last.bytes > first.bytes else { return "n/a" }
         return "\(Int(Double(last.bytes - first.bytes) / 1024 / ((last.at - first.at) / .seconds(1))))"
+    }
+
+    /// The ready or failed line's part, `start_kib_s` and its raw ends, and the window starts over: the next start (a
+    /// failover, a version move) measures only itself. The core sends no key during a start (it sets it at ready), so the
+    /// line, not a key, is where one start ends (code r9).
+    mutating func line(from tap: ContinuousClock.Instant) -> String {
+        defer { self = StartWindow() }
+        return "start_kib_s=\(kibPerS) \(ends(from: tap))"
     }
 
     /// The figure's raw ends, milliseconds from `tap` (code r6), so a bench row carries its inputs, not only the quotient.

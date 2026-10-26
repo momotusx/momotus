@@ -230,7 +230,7 @@ import Testing
 
 /// Code r5: the bar's one swarm figure is the start window's bytes as the core counted them over the time between its
 /// first and last start snapshots with bytes; a new source starts it over; one snapshot says nothing.
-@Test func theStartWindowRateIsTheCoresBytesOverTheirTime() {
+@Test func theStartWindowRateIsTheCoresBytesOverTheirTime() throws {
     let t = ContinuousClock.now
     var window = StartWindow()
     window.saw(0, at: t)
@@ -248,12 +248,21 @@ import Testing
     #expect(StartWindow().ends(from: t) == "start_bytes_first=n/a start_ms_first=n/a start_bytes_last=n/a start_ms_last=n/a")
     // The iphone-a soak (2026-10-26): a start already whole at its first snapshot gained nothing, so it reads n/a, not 0.
     var whole = StartWindow()
-    whole.saw(8 << 20, at: t + .seconds(4), from: "bt:a#1")
-    whole.saw(8 << 20, at: t + .seconds(5), from: "bt:a#1")
+    whole.saw(8 << 20, at: t + .seconds(4))
+    whole.saw(8 << 20, at: t + .seconds(5))
     #expect(whole.kibPerS == "n/a")
-    // A version move starts the window over even when the new count is not lower: no ends from the last version.
-    whole.saw(8 << 20, at: t + .seconds(50), from: "bt:b#1")
-    #expect(whole.ends(from: t + .seconds(49)) == "start_bytes_first=8388608 start_ms_first=1000 start_bytes_last=8388608 start_ms_last=1000")
+    // Code r9, the soak's real sequence: the core sends no key during a start, so the ready line ends the window. The
+    // first play's line reads its own ends; a version move's start, at the same count, reads only itself.
+    var soak = StartWindow()
+    soak.saw(2 << 20, at: t + .seconds(1))
+    soak.saw(8 << 20, at: t + .seconds(4))
+    #expect(soak.line(from: t) == "start_kib_s=2048 start_bytes_first=2097152 start_ms_first=1000 start_bytes_last=8388608 start_ms_last=4000")
+    soak.saw(8 << 20, at: t + .seconds(50))
+    #expect(soak.line(from: t + .seconds(49)) == "start_kib_s=n/a start_bytes_first=8388608 start_ms_first=1000 start_bytes_last=8388608 start_ms_last=1000")
+    // Its call sites: every ready ends the window before the first-play check, and the failed line ends it too.
+    let model = try playerModel()
+    #expect(model.contains("let startLine = startWindow.line(from: route.tapped)\n            if loadedURL == nil, !rendered {"))
+    #expect(model.contains("let startLine = startWindow.line(from: route.tapped)\n                coreLog.notice(\"metric playback_failed_ms="))
 }
 
 /// Code r5: the walk's screen hold is compiled into walk builds only: `isIdleTimerDisabled` appears in the app only in
