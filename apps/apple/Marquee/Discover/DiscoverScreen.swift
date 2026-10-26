@@ -115,7 +115,7 @@ struct DiscoverScreen: View {
         return nil
         #else
         guard metrics.wide, DiscoverLayout.previewFits(width: width), let key = selection.key else { return nil }
-        return discover.snapshot?.items.keyed.first { $0.key == key }?.tile
+        return DiscoverSelection.tiles(discover.snapshot, previous: previous).keyed.first { $0.key == key }?.tile
         #endif
     }
 

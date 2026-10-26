@@ -43,6 +43,14 @@ enum KindControl: Equatable {
 /// The selected poster on the Mac and iPad, where the preview shows it: a first activation selects,
 /// the selected one opens.
 struct DiscoverSelection: Equatable {
+    /// The tiles the preview finds its selection in: the grid's. While a change loads, the grid is the list before
+    /// (dimmed), so the preview stays on what is on screen instead of closing and opening again.
+    static func tiles(_ s: DiscoverSnapshot?, previous: DiscoverSnapshot?) -> [Tile] {
+        guard let s else { return [] }
+        if s.items.isEmpty, s.state == .loading, let previous { return previous.items }
+        return s.items
+    }
+
     private(set) var key: String?
     /// The kind, catalog and genre the selection belongs to.
     private var scope: String?

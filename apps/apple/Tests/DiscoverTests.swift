@@ -310,3 +310,13 @@ private func v2(
     #expect(screen.contains("Section(DiscoverWords.moreLists)"))
     #expect(screen.contains("grid(previous, previous.items)") && screen.contains("previous = discover.snapshot"))
 }
+
+/// Code review r2 (native) A2: while a change loads, the preview reads the grid's list before, so it stays open.
+@Test func thePreviewKeepsTheListBeforeWhileAChangeLoads() throws {
+    let before = try snapshot(items: 3)
+    let loading = try snapshot(state: ["state": "loading"])
+    #expect(DiscoverSelection.tiles(loading, previous: before).map(\.id) == ["tt0", "tt1", "tt2"])
+    #expect(DiscoverSelection.tiles(try snapshot(state: ["state": "end"]), previous: before).isEmpty, "an empty answer is empty")
+    #expect(DiscoverSelection.tiles(before, previous: nil).count == 3)
+    #expect(try source("Discover/DiscoverScreen.swift").contains("DiscoverSelection.tiles(discover.snapshot, previous: previous)"))
+}
