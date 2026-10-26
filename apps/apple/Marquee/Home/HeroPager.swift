@@ -41,8 +41,18 @@ final class HeroPagerModel {
     /// Whether the dwell may run (decision 7): never while a trailer plays, so the 8 s dwell cannot cut it; that
     /// page moves on by the trailer's end rule instead (the lead, 2026-10-24). `held`: the pointer rests on the
     /// hero, which pauses the clock where it is.
-    nonisolated static func runs(visible: Bool, active: Bool, reduceMotion: Bool, trailerPlaying: Bool, held: Bool = false, pages: Int) -> Bool {
-        visible && active && !reduceMotion && !trailerPlaying && !held && pages > 1
+    nonisolated static func runs(
+        visible: Bool, active: Bool, reduceMotion: Bool, trailerPlaying: Bool, held: Bool = false, assistive: Bool = false,
+        pages: Int
+    ) -> Bool {
+        // `assistive`: VoiceOver or Switch Control is on; a page that slides away under its cursor is lost to it.
+        visible && active && !reduceMotion && !trailerPlaying && !held && !assistive && pages > 1
+    }
+
+    /// The hero is the thing on screen: half of it in view, its place the tab shown, and nothing over it (a pushed
+    /// page, the player). Home stays alive behind other tabs, so without this it would page and play there.
+    nonisolated static func live(visible: Bool, tabShown: Bool, covered: Bool) -> Bool {
+        visible && tabShown && !covered
     }
 
     /// The next page, wrapping, for the timer.
@@ -52,5 +62,13 @@ final class HeroPagerModel {
     func step(from page: Int, by delta: Int) -> Int? {
         let to = page + delta
         return (0..<count).contains(to) ? to : nil
+    }
+}
+
+/// Which of the player page's messages belong to the trailer asked for last (review r1, W6): each `play` has a new
+/// generation, the page echoes it, and an `end` of the one before, landing after the new `play`, is dropped.
+enum TrailerMessages {
+    static func accepts(_ message: [String: Any], generation: Int) -> Bool {
+        (message["gen"] as? Int) == generation
     }
 }

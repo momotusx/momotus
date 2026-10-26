@@ -11,6 +11,12 @@ struct HeroCarousel: View {
     @Environment(\.metrics) private var metrics
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.scenePhase) private var scenePhase
+    /// Home is the place on screen, with nothing over it (another tab, a pushed page, the player): else the pages
+    /// hold and the trailer goes (review r1, C1).
+    @Environment(\.tabShown) private var tabShown
+    @Environment(\.heroCovered) private var covered
+    @Environment(\.accessibilityVoiceOverEnabled) private var voiceOver
+    @Environment(\.accessibilitySwitchControlEnabled) private var switchControl
     @State private var pager = HeroPagerModel(count: 0)
     @State private var page: String?
     private var trailer: TrailerState { .shared }
@@ -33,9 +39,14 @@ struct HeroCarousel: View {
     /// The window is on screen: a Mac window behind another app's still pages, as a TV left on does.
     private var shown: Bool { scenePhase != .background }
     private var index: Int { heroes.firstIndex { $0.tile.id == page } ?? 0 }
+    private var live: Bool { HeroPagerModel.live(visible: visible, tabShown: tabShown, covered: covered) }
     private var running: Bool {
-        HeroPagerModel.runs(visible: visible, active: shown, reduceMotion: reduceMotion, trailerPlaying: trailer.playing, held: (hovering && inUse) || sliding, pages: heroes.count)
+        HeroPagerModel.runs(
+            visible: live, active: shown, reduceMotion: reduceMotion, trailerPlaying: trailer.playing,
+            held: (hovering && inUse) || sliding, assistive: voiceOver || switchControl, pages: heroes.count)
     }
+    /// A slide by hand: the design's 650 ms, or none under Reduce Motion.
+    private var handSlide: Animation? { reduceMotion ? nil : Theme.Motion.heroSlide }
 
     var body: some View {
         ScrollView(.horizontal) {
@@ -45,8 +56,9 @@ struct HeroCarousel: View {
                     HeroView(
                         hero: hero, height: height, play: play, showsTitle: false,
                         artOpacity: on && trailer.shown ? 0 : 1,
-                        under: on ? AnyView(TrailerSurface()) : nil,
-                        parallax: true)
+                        // Mounted only while a trailer is due, so a device that never plays one makes no player.
+                        under: on && trailer.loading ? AnyView(TrailerSurface()) : nil,
+                        parallax: !reduceMotion)
                         .containerRelativeFrame(.horizontal)
                         // B2's hard edge: each page's art, scaled for its lag, stays inside its own page.
                         .clipped()
@@ -86,34 +98,39 @@ struct HeroCarousel: View {
             _ = TrailerNetwork.shared
         }
         .onChange(of: heroes.map(\.tile.id)) { _, ids in pager.count = ids.count }
-        // The clock: one value for the pill and the advance (decision 7).
-        .task {
+        // The clock: one value for the pill and the advance (decision 7), awake only while it may run; 10 steps a
+        // second move the 24 pt pill as smoothly as more would.
+        .task(id: running) {
+            guard running else { return }
             // The time that really passed: a sleep can run long (a busy main thread, App Nap behind other windows),
             // and the dwell must still be 8 s.
             let clock = ContinuousClock()
             var last = clock.now
             while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(1.0 / 30))
+                try? await Task.sleep(for: .milliseconds(100))
                 let now = clock.now
                 let dt = (now - last) / .seconds(1)
                 last = now
-                if pager.tick(dt, running: running) { advance() }
+                if pager.tick(dt, running: true) { advance() }
             }
         }
+        // Home off screen, under a page or the player: no trailer, and its player let go.
+        .onChange(of: live) { _, now in if !now { TrailerPlayer.shared.release() } }
         // The pages either side are drawn only once they slide in: their art is fetched ahead, so a slide never
         // brings a blank page in.
         .task(id: index) { await prefetch(around: index) }
         .onChange(of: trailer.fraction) { _, f in if trailer.playing { pager.trailer(f) } }
         // The page shown plays its trailer once it is due and every condition holds (decision 5).
-        .task(id: TrailerKey(page: page ?? heroes.first?.tile.id, visible: visible, active: shown)) { await startTrailer() }
-        .onDisappear { TrailerPlayer.shared.stop() }
+        .task(id: TrailerKey(page: page ?? heroes.first?.tile.id, visible: live, active: shown)) { await startTrailer() }
+        .onDisappear { TrailerPlayer.shared.release() }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Featured")
         #if os(macOS)
         // The Mac has no swipe without a trackpad: arrows at the edges under the pointer, and Left and Right
         // once the hero has focus (a click on it gives it).
         .overlay { if hovering && heroes.count > 1 { arrows.transition(.opacity) } }
         .animation(Theme.Motion.panel, value: hovering)
-        .focusable(interactions: .edit)
-        .focusEffectDisabled()
+        .focusable(interactions: .activate)
         .onKeyPress(.leftArrow) { key(-1) }
         .onKeyPress(.rightArrow) { key(1) }
         #endif
@@ -148,9 +165,10 @@ struct HeroCarousel: View {
 
     @ViewBuilder private var dots: some View {
         if heroes.count > 1 {
-            HeroDots(count: heroes.count, active: index, progress: pager.progress, names: heroes.map(\.tile.name)) { to in
+            HeroDots(count: heroes.count, active: index, pager: pager, names: heroes.map(\.tile.name)) { to in
                 pager.manual()
-                withAnimation(Theme.Motion.heroSlide) { page = heroes[to].tile.id }
+                withAnimation(handSlide) { page = heroes[to].tile.id }
+                announce(to)
             }
             .padding(.bottom, metrics.wide ? 28 : 20)
         }
@@ -171,23 +189,29 @@ struct HeroCarousel: View {
 
     private func advance() {
         let to = pager.next(after: index)
-        if reduceMotion { page = heroes[to].tile.id } else { withAnimation(Theme.Motion.heroSlide) { page = heroes[to].tile.id } }
+        withAnimation(Theme.Motion.heroSlide) { page = heroes[to].tile.id }
     }
 
     private func key(_ delta: Int) -> KeyPress.Result {
         guard let to = pager.step(from: index, by: delta) else { return .ignored }
         pager.manual()
-        withAnimation(Theme.Motion.heroSlide) { page = heroes[to].tile.id }
+        withAnimation(handSlide) { page = heroes[to].tile.id }
+        announce(to)
         return .handled
+    }
+
+    /// A page the viewer chose is said; the timer's never are (it does not run under VoiceOver).
+    private func announce(_ to: Int) {
+        AccessibilityNotification.Announcement("Page \(to + 1) of \(heroes.count), \(heroes[to].tile.name)").post()
     }
 
     private func startTrailer() async {
         TrailerPlayer.shared.stop()
         guard let hero = heroes.first(where: { $0.tile.id == (page ?? heroes.first?.tile.id) }),
-              let id = HeroTrailers.checkedId(hero.trailer), visible, shown else { return }
+              let id = HeroTrailers.checkedId(hero.trailer), live, shown else { return }
         try? await Task.sleep(for: .milliseconds(700))
         guard !Task.isCancelled else { return }
-        let signals = TrailerSignals.now(visible: visible, reducedMotion: reduceMotion, hasTrailer: !spent.contains(hero.tile.id))
+        let signals = TrailerSignals.now(visible: live, reducedMotion: reduceMotion, hasTrailer: !spent.contains(hero.tile.id))
         guard signals.allowed else { return }
         TrailerPlayer.shared.play(id, into: trailer) { why in
             if why != "stopped" { spent.insert(hero.tile.id) }
@@ -228,7 +252,8 @@ struct TrailerMute: View {
 struct HeroDots: View {
     let count: Int
     let active: Int
-    let progress: Double
+    /// Read here, so a tick of the clock redraws the dots alone.
+    let pager: HeroPagerModel
     let names: [String]
     var pick: (Int) -> Void = { _ in }
     @Environment(\.metrics) private var metrics
@@ -243,7 +268,7 @@ struct HeroDots: View {
                         .overlay(alignment: .leading) {
                             if on {
                                 GeometryReader { geo in
-                                    Capsule().fill(.white).frame(width: geo.size.width * progress)
+                                    Capsule().fill(.white).frame(width: geo.size.width * pager.progress)
                                 }
                             }
                         }

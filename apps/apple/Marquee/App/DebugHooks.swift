@@ -21,6 +21,9 @@ enum DebugHooks {
     /// scrolled state with no pointer or key sent to the window.
     static var homeScrollY: Double { UserDefaults.standard.double(forKey: "MQHomeScrollY") }
 
+    /// `-MQShowSoundSwitch YES`: a muted walk still draws the trailer's sound switch, for its shot; it stays silent.
+    static var showSoundSwitch: Bool { UserDefaults.standard.bool(forKey: "MQShowSoundSwitch") }
+
     /// `-MQTab discover` starts on that tab.
     static var tab: AppTab? { UserDefaults.standard.string(forKey: "MQTab").flatMap(AppTab.init(rawValue:)) }
 

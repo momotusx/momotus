@@ -19,6 +19,9 @@ struct SettingsScreen: View {
     @State private var prefs: LiveRecord<Prefs>
     @State private var addons: LiveRecord<AddonsSnapshot>
     @Environment(\.metrics) private var metrics
+    #if !os(tvOS)
+    @AppStorage(HeroTrailers.previewsKey) private var previewsOn = true
+    #endif
     @Environment(SyncModel.self) private var sync
     @Environment(ProfileSession.self) private var profiles
     @Environment(DebridSession.self) private var debrid
@@ -219,6 +222,9 @@ struct SettingsScreen: View {
             .buttonStyle(.textLink)
             subtitleSize(p)
             upNext(p)
+            #if !os(tvOS)
+            trailerPreviews
+            #endif
             Text("Languages are listed in the order you turn them on; the first one wins. A subtitle you pick while watching moves its language first.")
                 .textFont(Theme.type.callout, relativeTo: .callout)
                 .foregroundStyle(Theme.Palette.muted)
@@ -250,6 +256,14 @@ struct SettingsScreen: View {
             set(["autoplayNext": value])
         }
     }
+
+    #if !os(tvOS)
+    /// This device's own switch, never synced, as the web and Android have it (review r1, W4).
+    private var trailerPreviews: some View {
+        ChipRow(label: "Trailer previews on Home", chips: [Chip(id: true, title: "On"), Chip(id: false, title: "Off")],
+                isSelected: { $0 == previewsOn }) { previewsOn = $0 }
+    }
+    #endif
 
     private func set(_ patch: [String: any Sendable]) {
         prefs.performNow("setPrefs", ["patch": patch])

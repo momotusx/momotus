@@ -89,10 +89,19 @@ struct Hero: Decodable, Hashable, Sendable {
 }
 
 struct HomeHeader: Decodable, Hashable, Sendable {
-    /// The hero carousel's pages, in order.
+    /// The hero carousel's pages, in order; none in a reply recorded before they existed (review r1, S10).
     let heroes: [Hero]
     /// The first page, which Home shows until the carousel lands.
     var hero: Hero? { heroes.first }
+
+    init(heroes: [Hero]) { self.heroes = heroes }
+
+    init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        heroes = try c.decodeIfPresent([Hero].self, forKey: .heroes) ?? []
+    }
+
+    private enum CodingKeys: String, CodingKey { case heroes }
 }
 
 enum RowState: Decodable, Hashable, Sendable {

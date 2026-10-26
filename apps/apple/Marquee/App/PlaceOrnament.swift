@@ -32,6 +32,9 @@ struct PlaceOrnament: View {
         .padding(OrnamentLayout.inset)
         .fixedSize()
         .modifier(OrnamentGlass(shape: Capsule(), strong: strong))
+        // A named group: VoiceOver reads "Places", then "Home, selected, button".
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Places")
         .animation(Theme.Motion.panel, value: strong)
     }
 }

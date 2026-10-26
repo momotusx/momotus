@@ -31,6 +31,8 @@ extension EnvironmentValues {
     /// The tab this view is in is the one on screen. On a phone every opened
     /// tab stays alive behind the shown one, so its pages never disappear.
     @Entry var tabShown = true
+    /// Something is over Home's first page (a pushed page, the player): its hero holds its pages and its trailer.
+    @Entry var heroCovered = false
 }
 
 /// The navigation: the floating glass capsule at the bottom on iPhone and iPad,
@@ -396,6 +398,7 @@ struct MainShell: View {
         case .home:
             NavigationStack(path: $homePath) {
                 HomeScreen(model: home, topRequest: homeTop, scrolled: $homeScrolled)
+                    .environment(\.heroCovered, immersion.active || !homePath.isEmpty)
                     .root(of: .home, covered: coveredBinding)
                     .withTitleRoutes(core: core)
                     #if os(iOS)

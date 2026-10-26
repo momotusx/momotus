@@ -41,13 +41,22 @@ struct HomeScreen: View {
                         // in its menu (4.2), sits at the header's top right; the trailer's sound switch beside it.
                         .overlay(alignment: .topTrailing) {
                             HStack(spacing: 10) {
-                                #if !os(tvOS)
+                                #if os(iOS)
                                 if TrailerState.shared.shown && !walkMuted { TrailerMute() }
                                 #endif
                                 if showsProfileButton { ProfileButton(signInAnother: signInAnother) { showProfiles = true } }
                             }
                             .padding(.trailing, 14).padding(.top, 5)
                         }
+                        #if os(macOS)
+                        // The Mac's top right is the window toolbar's Search and profile: the sound switch sits at
+                        // the hero's foot, level with the dots (review r1, W1).
+                        .overlay(alignment: .bottomTrailing) {
+                            if TrailerState.shared.shown && !walkMuted {
+                                TrailerMute().padding(.trailing, metrics.gutter).padding(.bottom, 22)
+                            }
+                        }
+                        #endif
                         // The first shelf follows the hero's foot as the frames have it: 12 pt on a wide
                         // screen, none on the phone, where the ramp has reached the black page.
                         .padding(.bottom, (metrics.wide ? 12 : 0) - metrics.rowSpacing)
@@ -197,10 +206,11 @@ struct HomeScreen: View {
         #endif
     }
 
-    /// A walk build never draws the sound switch (`-MQMute YES`).
+    /// A walk build never draws the sound switch (`-MQMute YES`), unless `-MQShowSoundSwitch YES` asks to see it; the
+    /// player stays silent either way (`TrailerPlayer.sound`).
     private var walkMuted: Bool {
         #if DEBUG
-        DebugHooks.mute
+        DebugHooks.mute && !DebugHooks.showSoundSwitch
         #else
         false
         #endif

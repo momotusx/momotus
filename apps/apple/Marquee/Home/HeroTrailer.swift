@@ -103,6 +103,8 @@ final class TrailerState {
     /// The one trailer on screen: the carousel writes it, the header's sound switch reads it.
     static let shared = TrailerState()
 
+    /// A trailer is due on the page shown: its player is mounted under the art until it ends.
+    var loading = false
     var playing = false
     var shown = false
     var fraction: Double = 0
@@ -114,7 +116,15 @@ final class TrailerState {
 final class TrailerPlayer: NSObject {
     static let shared = TrailerPlayer()
 
-    private(set) lazy var web: WKWebView = makeWeb()
+    /// The web view lives only while a trailer may play: made on the first `play`, released with `release()`.
+    private var webView: WKWebView?
+    var web: WKWebView {
+        if let webView { return webView }
+        let made = makeWeb()
+        webView = made
+        return made
+    }
+    private var generation = 0
     private var state: TrailerState?
     private var onEnd: ((String) -> Void)?
     private var reveal: Task<Void, Never>?
@@ -125,7 +135,8 @@ final class TrailerPlayer: NSObject {
     private var waiting: String?
 
     private func run(_ js: String) {
-        if loaded { web.evaluateJavaScript(js) } else { waiting = js }
+        guard let webView else { return }
+        if loaded { webView.evaluateJavaScript(js) } else { waiting = js }
     }
 
     private func makeWeb() -> WKWebView {
@@ -154,9 +165,12 @@ final class TrailerPlayer: NSObject {
     func play(_ id: String, into state: TrailerState, onEnd: @escaping (String) -> Void) {
         stop()
         guard let id = HeroTrailers.checkedId(id) else { return onEnd("error") }
+        generation += 1
         self.state = state
         self.onEnd = onEnd
-        run("play('\(id)', \(HeroTrailers.capSeconds))")
+        state.loading = true
+        _ = web
+        run("play('\(id)', \(HeroTrailers.capSeconds), \(generation))")
     }
 
     func stop() {
@@ -165,10 +179,23 @@ final class TrailerPlayer: NSObject {
         if let state {
             state.shown = false
             state.playing = false
+            state.loading = false
         }
         state = nil
         onEnd = nil
         run("halt()")
+    }
+
+    /// Stops and lets the web view and its content process go: Home off screen, under the player or another
+    /// page, or gone. The next `play` makes a fresh one.
+    func release() {
+        stop()
+        guard let webView else { return }
+        webView.configuration.userContentController.removeScriptMessageHandler(forName: "trailer")
+        webView.removeFromSuperview()
+        self.webView = nil
+        loaded = false
+        waiting = nil
     }
 
     /// Sound for this session only; never in a walk (`-MQMute YES`).
@@ -183,6 +210,7 @@ final class TrailerPlayer: NSObject {
     fileprivate func receive(_ body: Any) {
         guard let text = body as? String, let data = text.data(using: .utf8),
               let message = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              TrailerMessages.accepts(message, generation: generation),
               let state else { return }
         let event = message["event"] as? String
         // The walk's evidence that a trailer played (plans/appletv-polish.md 9): its state, never its id.
@@ -202,6 +230,7 @@ final class TrailerPlayer: NSObject {
             reveal?.cancel()
             state.shown = false
             state.playing = false
+            state.loading = false
             self.state = nil
             onEnd = nil
             done?(message["why"] as? String ?? "error")
@@ -217,8 +246,8 @@ final class TrailerPlayer: NSObject {
     #p{position:fixed;inset:0;pointer-events:none}
     #p iframe{width:100%;height:100%;border:0;display:block;pointer-events:none}</style></head>
     <body><div id="p"></div><script>
-    let player=null, timers=[], ended=true, playing=false, poll=null, api=null;
-    const say=(o)=>window.webkit.messageHandlers.trailer.postMessage(JSON.stringify(o));
+    let player=null, timers=[], ended=true, playing=false, poll=null, api=null, gen=0;
+    const say=(o)=>window.webkit.messageHandlers.trailer.postMessage(JSON.stringify(Object.assign({gen},o)));
     function load(){ if(api) return api; api=new Promise((ok)=>{ window.onYouTubeIframeAPIReady=()=>ok(window.YT);
       const s=document.createElement("script"); s.src="https://www.youtube.com/iframe_api"; document.head.append(s); }); return api; }
     function finish(why){ if(ended) return; ended=true; timers.forEach(clearTimeout); clearInterval(poll); timers=[];
@@ -227,8 +256,8 @@ final class TrailerPlayer: NSObject {
     function captionsOff(){ try{ const t=player&&player.getOption("captions","track"); if(t&&Object.keys(t).length) player.setOption("captions","track",{}); player&&player.unloadModule("captions"); }catch(e){} }
     function halt(){ finish("stopped"); }
     function sound(on){ if(!player) return; if(on){player.unMute();player.setVolume(100);} else {player.mute();player.setVolume(0);} }
-    async function play(id, cap){
-      finish("stopped"); ended=false; playing=false;
+    async function play(id, cap, g){
+      finish("stopped"); gen=g; ended=false; playing=false;
       const box=document.createElement("div"); document.getElementById("p").replaceChildren(box);
       const YT=await load(); if(ended) return;
       timers.push(setTimeout(()=>{ if(!playing) finish("timeout"); }, 9000));
@@ -243,7 +272,7 @@ final class TrailerPlayer: NSObject {
           onStateChange:(e)=>{ if(ended) return;
             if(e.data===1&&!playing){ playing=true; say({event:"playing"}); captionsOff();
               poll=setInterval(()=>{ if(!player) return; const t=player.getCurrentTime(); say({event:"time",fraction:Math.min(1,t/cap)});
-                captionsOff(); if(t>=cap-1) finish("cap"); },1000); }
+                captionsOff(); if(t>=cap-1) finish("cap"); },250); }
             if(e.data===0) finish("cap"); },
           onError:()=>finish("error") } }); }
     </script></body></html>
@@ -255,7 +284,7 @@ extension TrailerPlayer: WKNavigationDelegate {
         loaded = true
         if let js = waiting {
             waiting = nil
-            web.evaluateJavaScript(js)
+            webView.evaluateJavaScript(js)
         }
     }
 
