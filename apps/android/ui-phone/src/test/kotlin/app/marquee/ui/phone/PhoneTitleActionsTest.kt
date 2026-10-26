@@ -25,6 +25,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.unit.dp
 import app.marquee.core.client.CoreClient
 import app.marquee.core.client.CoreJson
 import app.marquee.core.model.EmptyAction
@@ -42,7 +43,9 @@ import app.marquee.core.model.VersionsConditions
 import app.marquee.core.model.VersionsSnapshot
 import app.marquee.core.views.TitleView
 import app.marquee.design.Form
+import app.marquee.design.Marquee
 import app.marquee.design.MarqueeTheme
+import app.marquee.design.roundLabelsFit
 import coil3.ImageLoader
 import coil3.SingletonImageLoader
 import coil3.Uri
@@ -548,4 +551,33 @@ class PhoneTitleActionsTest {
             Thread.sleep(50)
         }
     }
+
+    /** Whether the circles' words fit a 360 dp phone's row (its side margins off) at [scale] times the text size. */
+    private fun wordsFit(scale: Float): Boolean {
+        RuntimeEnvironment.setFontScale(scale)
+        var fit: Boolean? = null
+        compose.setContent {
+            MarqueeTheme(Form.Phone) {
+                fit =
+                    roundLabelsFit(
+                        listOf("Versions", "Trailer", "Add to Library", "Watched"),
+                        360.dp - Marquee.safe.side * 2,
+                    )
+            }
+        }
+        compose.waitForIdle()
+        return checkNotNull(fit)
+    }
+
+    @Test
+    @Config(qualifiers = "w360dp-h740dp")
+    // Real text measure: Robolectric's stand-in fonts are a few pixels a word.
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun `the circles keep their words at 1 3 times the text size on a 360 dp phone`() = assertTrue(wordsFit(1.3f))
+
+    @Test
+    @Config(qualifiers = "w360dp-h740dp")
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun `at twice the text size the circles go without words, which would break mid word`() =
+        assertTrue(!wordsFit(2.0f))
 }

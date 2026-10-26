@@ -73,10 +73,13 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
@@ -824,6 +827,36 @@ fun RoundButton(
                 textAlign = TextAlign.Center,
             )
         }
+    }
+}
+
+/**
+ * Whether a row of [RoundButton]s with their words (`showLabel`) can keep those words, each circle taking an equal
+ * share of [width] at the reader's text size: every word on two lines at most and no word broken across lines. When
+ * they cannot (a large font on a narrow phone) the row goes without words; each circle keeps its name for TalkBack.
+ */
+@Composable
+fun roundLabelsFit(
+    labels: List<String>,
+    width: Dp,
+): Boolean {
+    if (labels.isEmpty()) return true
+    val measurer = rememberTextMeasurer()
+    val role = TextRole.Caption
+    val size = Marquee.type.size(role)
+    val style =
+        TextStyle(
+            fontSize = size,
+            fontFamily = MarqueeFonts.text,
+            fontWeight = FontWeight.SemiBold,
+            letterSpacing = role.tracking?.em ?: TextUnit.Unspecified,
+            lineHeight = size * 1.4f,
+        )
+    val column = with(LocalDensity.current) { (width / labels.size).roundToPx() }
+    return labels.all { label ->
+        val whole = measurer.measure(label, style, maxLines = 2, constraints = Constraints(maxWidth = column))
+        val words = label.split(" ").map { measurer.measure(it, style, maxLines = 1, softWrap = false).size.width }
+        !whole.hasVisualOverflow && words.all { it <= column }
     }
 }
 

@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
@@ -94,6 +95,7 @@ import app.marquee.design.Tokens
 import app.marquee.design.focusClickable
 import app.marquee.design.liftRoom
 import app.marquee.design.openLink
+import app.marquee.design.roundLabelsFit
 import app.marquee.design.windowDp
 
 /** How many lines of the synopsis show before "More". */
@@ -549,47 +551,59 @@ private fun Info(
         } else {
             VersionStatus(VersionsCopy.line(versions, versionsFailed))
         }
-        Row(Modifier.fillMaxWidth().padding(top = Marquee.space.xs)) {
-            if (target != null) {
-                RoundButton(
-                    Icons.Layers,
-                    "Versions",
-                    { onVersions(target.videoId) },
-                    Modifier.weight(1f),
-                    showLabel = true,
-                )
-            }
-            details.trailers.firstOrNull()?.let { trailer ->
-                RoundButton(
-                    Icons.Film,
-                    "Trailer",
-                    { openLink(context, trailer.url) },
-                    Modifier.weight(1f),
-                    showLabel = true,
-                )
-            }
-            // A kids profile's Library is the owner's list: the core says so, and no dead button shows.
-            if (header.librarySettable) {
-                RoundButton(
-                    icon = if (header.inLibrary) Icons.BookmarkCheck else Icons.BookmarkPlus,
-                    label = if (header.inLibrary) "In Library" else "Add to Library",
-                    onClick = { title.setInLibrary(!header.inLibrary) },
-                    modifier = Modifier.weight(1f),
-                    selected = header.inLibrary,
-                    showLabel = true,
-                )
-            }
-            // Movies only: an episode carries its own mark.
-            if (details.kind == "movie") {
-                RoundButton(
-                    icon = Icons.CircleCheck,
-                    label = "Watched",
-                    onClick = { title.setWatched(details.id, !header.watched) },
-                    modifier = Modifier.weight(1f),
-                    selected = header.watched,
-                    showLabel = true,
-                    toggle = true,
-                )
+        val labels =
+            listOfNotNull(
+                "Versions".takeIf { target != null },
+                "Trailer".takeIf { details.trailers.isNotEmpty() },
+                (if (header.inLibrary) "In Library" else "Add to Library").takeIf { header.librarySettable },
+                "Watched".takeIf { details.kind == "movie" },
+            )
+        BoxWithConstraints(Modifier.fillMaxWidth().padding(top = Marquee.space.xs)) {
+            // The words under the circles only where they fit whole (two lines, no word broken); a large font on a narrow
+            // phone gets the circles alone, each still named for TalkBack.
+            val words = roundLabelsFit(labels, maxWidth)
+            Row(Modifier.fillMaxWidth()) {
+                if (target != null) {
+                    RoundButton(
+                        Icons.Layers,
+                        "Versions",
+                        { onVersions(target.videoId) },
+                        Modifier.weight(1f),
+                        showLabel = words,
+                    )
+                }
+                details.trailers.firstOrNull()?.let { trailer ->
+                    RoundButton(
+                        Icons.Film,
+                        "Trailer",
+                        { openLink(context, trailer.url) },
+                        Modifier.weight(1f),
+                        showLabel = words,
+                    )
+                }
+                // A kids profile's Library is the owner's list: the core says so, and no dead button shows.
+                if (header.librarySettable) {
+                    RoundButton(
+                        icon = if (header.inLibrary) Icons.BookmarkCheck else Icons.BookmarkPlus,
+                        label = if (header.inLibrary) "In Library" else "Add to Library",
+                        onClick = { title.setInLibrary(!header.inLibrary) },
+                        modifier = Modifier.weight(1f),
+                        selected = header.inLibrary,
+                        showLabel = words,
+                    )
+                }
+                // Movies only: an episode carries its own mark.
+                if (details.kind == "movie") {
+                    RoundButton(
+                        icon = Icons.CircleCheck,
+                        label = "Watched",
+                        onClick = { title.setWatched(details.id, !header.watched) },
+                        modifier = Modifier.weight(1f),
+                        selected = header.watched,
+                        showLabel = words,
+                        toggle = true,
+                    )
+                }
             }
         }
         Genres(header, details, onGenre)

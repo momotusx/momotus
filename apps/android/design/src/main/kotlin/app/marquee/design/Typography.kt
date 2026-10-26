@@ -49,7 +49,7 @@ enum class TextRole(
     internal val display: Boolean get() = tracking != null
 }
 
-private fun TypeScale.size(role: TextRole): TextUnit =
+internal fun TypeScale.size(role: TextRole): TextUnit =
     when (role) {
         TextRole.Hero -> hero
         TextRole.Title1 -> title1
