@@ -2459,6 +2459,13 @@ impl Session {
                     .map_err(|e| e.to_string())?;
             }
             (View::Versions(versions), "freeze") => versions.freeze(),
+            // An absent or null kind lists every kind again.
+            (View::Versions(versions), "setKind") => {
+                let kind = command.get("kind").cloned().unwrap_or(Value::Null);
+                let kind = serde_json::from_value::<Option<mq_streams::SourceKind>>(kind)
+                    .map_err(|_| "kind is torrent, debrid, direct or null")?;
+                versions.set_kind(kind);
+            }
             (View::Discover(discover), "select") => {
                 let text = |key: &str| command.get(key).and_then(Value::as_str).map(str::to_owned);
                 // Absent keeps the current value; null clears it.

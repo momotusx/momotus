@@ -342,12 +342,19 @@ fn class(s: &ParsedStream, c: &Conditions) -> Option<SourceClass> {
     (c.engine && hash && !resolve).then_some(SourceClass::Swarm)
 }
 
-/// The kind a row is grouped under (plans/plugins-and-marketplace.md 4.1),
-/// from how it will play: a torrent the engine fetches is a torrent, one
-/// the user's service resolves is debrid.
-pub fn kind(s: &ParsedStream, class: SourceClass) -> SourceKind {
+/// The engine plays this stream itself: a torrent with no streaming
+/// account, or one the account's service has not cached when this build
+/// has the engine. Playback routes by it and [`kind`] groups by it.
+pub fn by_engine(s: &ParsedStream, account: bool, engine: bool) -> bool {
+    matches!(s.source, Source::Torrent { .. }) && (!account || (engine && s.cached == Some(false)))
+}
+
+/// The kind a source is grouped under (plans/plugins-and-marketplace.md
+/// 4.1), from how it will play: a torrent the engine fetches is a torrent,
+/// one the user's service resolves is debrid.
+pub fn kind(s: &ParsedStream, account: bool, engine: bool) -> SourceKind {
     match &s.source {
-        Source::Torrent { .. } if class == SourceClass::Swarm => SourceKind::Torrent,
+        Source::Torrent { .. } if by_engine(s, account, engine) => SourceKind::Torrent,
         Source::Torrent { .. } | Source::ClientResolve(_) => SourceKind::Debrid,
         Source::Http { .. } if s.service.is_some() => SourceKind::Debrid,
         _ => SourceKind::Direct,

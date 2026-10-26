@@ -187,10 +187,29 @@ pub struct VersionsSnapshot {
     /// "From plugins" (plans/plugins-and-marketplace.md 4.4, 7.8): the
     /// Nuvio providers' rows, a pass of their own like the Archive's.
     pub plugins: SourceRows,
-    /// The one streaming service every debrid row names ("Real-Debrid"), for
-    /// the debrid kind chip; none when they name several, or a row names
-    /// none, and the chip says "Debrid".
-    pub debrid_service: Option<String>,
+    /// The kind chips (plans/plugins-and-marketplace.md 4.2): each kind the
+    /// listed rows hold, with how many rows hold a source of it. The apps
+    /// show them from two kinds on.
+    pub kinds: Vec<KindChip>,
+    /// The kind `setKind` chose: `recommended`, `rows` and `sections` are
+    /// then that kind's own pass, and `smaller` and `sharper` are null.
+    pub selected_kind: Option<SourceKind>,
+}
+
+/// A kind chip: the kind, the rows holding a source of it, and for debrid
+/// the one service every such source names ("Real-Debrid"; null when they
+/// name several or none, and the chip says "Debrid").
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[cfg_attr(
+    feature = "ts",
+    derive(ts_rs::TS),
+    ts(export, export_to = "../../../apps/web/src/core/generated/")
+)]
+#[serde(rename_all = "camelCase")]
+pub struct KindChip {
+    pub kind: SourceKind,
+    pub service: Option<String>,
+    pub count: u32,
 }
 
 /// What the ranking read for this view, for the header "This TV: 4K HDR,
@@ -440,6 +459,12 @@ struct State {
     plugins: Vec<ParsedStream>,
     plugins_ranked: Ranked,
     plugins_pending: bool,
+    /// The kind chip the viewer chose (`setKind`), its own pass over that
+    /// kind's streams, and the card of that pass, which follows its source
+    /// as the pick does (plans/plugins-and-marketplace.md 4.2).
+    kind: Option<SourceKind>,
+    kind_ranked: Ranked,
+    kind_pick: Option<RankedRow>,
 }
 
 pub struct VersionsView {
@@ -1131,6 +1156,9 @@ impl VersionsView {
                 && core.plugins_wanted(),
             plugins: Vec::new(),
             plugins_ranked: Ranked::default(),
+            kind: None,
+            kind_ranked: Ranked::default(),
+            kind_pick: None,
         }));
         let snapshot = SharedObservable::new(render(&lock(&state)));
         let mut tasks = JoinSet::new();
@@ -1241,6 +1269,9 @@ impl VersionsView {
             plugins: Vec::new(),
             plugins_ranked: Ranked::default(),
             plugins_pending: false,
+            kind: None,
+            kind_ranked: Ranked::default(),
+            kind_pick: None,
         };
         Self {
             core: core.clone(),
@@ -1301,6 +1332,25 @@ impl VersionsView {
         self.snapshot.set(render(&state));
     }
 
+    /// Lists one kind of version only (`setKind`, plans/plugins-and-marketplace.md
+    /// 4.2), or every one again (`None`): the pick freezes, and that kind's
+    /// streams rank in a pass of their own, which gives the card, the rows
+    /// and the sections. A kind with no rows lists everything.
+    pub fn set_kind(&self, kind: Option<SourceKind>) {
+        let mut state = lock(&self.state);
+        if state.recommended.is_some() {
+            state.frozen = true;
+            maybe_prefetch(&self.core, &mut state, self.episode);
+        }
+        state.kind = kind;
+        state.kind_pick = None;
+        match state.ranking.clone() {
+            Some(ranking) => rank_kind(&mut state, &ranking),
+            None => state.kind = None,
+        }
+        self.snapshot.set(render(&state));
+    }
+
     /// Live seeder counts are still on the way: the rows may rank again
     /// when they land.
     pub fn counting(&self) -> bool {
@@ -1345,13 +1395,18 @@ impl VersionsView {
                 )
                 .collect();
         }
+        // Under a kind chip a row plays its sources of that kind, from that
+        // kind's pass (plans/plugins-and-marketplace.md 4.2).
+        let of_kind = s.kind.is_some().then(|| {
+            (s.kind_pick.clone().filter(|r| r.stream.key == key))
+                .or_else(|| holding(&s.kind_ranked.rows, |st| st.key == key))
+        });
         // The frozen pick plays its own source first, wherever a later
         // answer folded it (code review 2026-10-20 P2-3).
-        let row = s
-            .recommended
-            .clone()
-            .filter(|r| r.stream.key == key)
-            .or_else(|| holding(&s.ranked.rows, |st| st.key == key));
+        let row = of_kind.flatten().or_else(|| {
+            (s.recommended.clone().filter(|r| r.stream.key == key))
+                .or_else(|| holding(&s.ranked.rows, |st| st.key == key))
+        });
         row.map(|r| {
             std::iter::once(&r.stream)
                 .chain(&r.failover)
@@ -1397,8 +1452,11 @@ impl VersionsView {
             s.recommendation_starting = true;
         }
         let l = &self.learning;
+        // A pick under a kind chip was made among one kind only: it teaches
+        // nothing.
         let counts = l.on
             && s.frozen
+            && s.kind.is_none()
             && !recommended
             && !s.recommendation_failed
             && !s.recommendation_starting
@@ -2281,7 +2339,7 @@ fn blocked(s: &State, ranking: &Ranking, order: [BlockedReason; 2]) -> Option<Bl
     let rows = rank(streams, &input)
         .rows
         .iter()
-        .map(|r| row_dto(r, None, false))
+        .map(|r| row_dto(r, None, &c))
         .collect();
     Some(BlockedVersions {
         reason,
@@ -2392,17 +2450,21 @@ fn section(r: &RankedRow) -> SectionQuality {
     }
 }
 
-fn rerank(s: &mut State, ranking: &Ranking) {
+fn input<'a>(ranking: &'a Ranking, conditions: &'a Conditions) -> RankInput<'a> {
     let params = &ranking.params;
-    let input = RankInput {
+    RankInput {
         caps: &params.caps,
         prefs: &params.prefs,
         target: &params.target,
         last_binge_group: params.last_binge_group.as_deref(),
         kids: ranking.kids.as_deref(),
-        conditions: &s.rank,
-    };
-    s.ranked = rank(s.streams.clone(), &input);
+        conditions,
+    }
+}
+
+fn rerank(s: &mut State, ranking: &Ranking) {
+    let params = &ranking.params;
+    s.ranked = rank(s.streams.clone(), &input(ranking, &s.rank));
     if let Some(download) = &s.download {
         // The kept file stays the pick, whatever the addons list.
         s.recommended = Some(download.clone());
@@ -2412,20 +2474,17 @@ fn rerank(s: &mut State, ranking: &Ranking) {
         let pick = s.recommended.as_ref();
         s.smaller = pick.and_then(|p| smaller(&s.ranked.rows, p));
         s.sharper = pick.and_then(|p| sharper(&s.ranked.rows, p, screen));
-    } else if let Some(pick) = &s.recommended {
-        // Frozen: the pick stays, its facts (live seeders, line) follow,
-        // as long as its row still leads with the same source.
-        let same = |r: &&RankedRow| same_source(&r.stream, &pick.stream);
-        if let Some(row) = s.ranked.rows.iter().find(same) {
-            s.recommended = Some(row.clone());
-        } else if let Some(row) = holding(&s.ranked.rows, |st| same_source(st, &pick.stream)) {
-            // A later answer folded the pick into another row: it follows
-            // that row, still led by its own source.
-            s.recommended = Some(row);
-        }
+    } else if let Some(row) = s
+        .recommended
+        .as_ref()
+        .and_then(|p| follow(&s.ranked.rows, p))
+    {
+        // Frozen: the pick stays, its facts (live seeders, line) follow.
+        s.recommended = Some(row);
     }
     rank_archive(s, ranking);
     rank_plugins(s, ranking);
+    rank_kind(s, ranking);
     reblock(s, ranking);
 }
 
@@ -2470,6 +2529,45 @@ fn torrent_start_on_disk(core: &Core, item_id: &str, video_id: &str) -> bool {
     }
     let _ = (core, item_id, video_id);
     false
+}
+
+/// The row `pick` is now: its own row while it still leads with the same
+/// source, else the row a later answer folded it into, still led by its
+/// own source.
+fn follow(rows: &[RankedRow], pick: &RankedRow) -> Option<RankedRow> {
+    let same = |st: &ParsedStream| same_source(st, &pick.stream);
+    rows.iter()
+        .find(|r| same(&r.stream))
+        .cloned()
+        .or_else(|| holding(rows, same))
+}
+
+/// How a source plays, as the kind chips group it.
+fn kind_of(s: &State, st: &ParsedStream) -> SourceKind {
+    kind(st, s.rank.debrid, s.rank.engine)
+}
+
+/// The chosen kind's own pass (plans/plugins-and-marketplace.md 4.2): its
+/// streams ranked alone, so rows fold only among sources of that kind and
+/// each row's class and line are its own, never a re-led row's. Its card
+/// follows its source once shown; a kind with no rows left clears itself.
+fn rank_kind(s: &mut State, ranking: &Ranking) {
+    let Some(k) = s.kind else { return };
+    let streams = (s.streams.iter())
+        .filter(|st| kind_of(s, st) == k)
+        .cloned()
+        .collect();
+    s.kind_ranked = rank(streams, &input(ranking, &s.rank));
+    if s.kind_ranked.rows.is_empty() {
+        s.kind = None;
+        s.kind_pick = None;
+        return;
+    }
+    let card = s
+        .kind_pick
+        .as_ref()
+        .and_then(|p| follow(&s.kind_ranked.rows, p));
+    s.kind_pick = card.or_else(|| s.kind_ranked.best().cloned());
 }
 
 /// The same source: one key from one install and one service.
@@ -2541,7 +2639,14 @@ fn names(installs: &[(Url, String)]) -> Vec<String> {
 
 fn render(s: &State) -> VersionsSnapshot {
     let kept = s.on_device.as_deref();
-    let recommended_key = s.recommended.as_ref().map(|r| r.stream.key.clone());
+    // Under a kind chip the card, rows and sections are that kind's pass
+    // (plans/plugins-and-marketplace.md 4.2), with no shortcuts: they are
+    // relative to the core's pick.
+    let (pick, ranked) = match s.kind {
+        Some(_) => (s.kind_pick.as_ref(), &s.kind_ranked.rows),
+        None => (s.recommended.as_ref(), &s.ranked.rows),
+    };
+    let recommended_key = pick.map(|r| r.stream.key.clone());
     // A row whose chain holds the pick is the pick's own row, folded or
     // not: shown once, as the pick (code review 2026-10-20 r2 P3-2).
     let holds_pick = |r: &&RankedRow| {
@@ -2549,11 +2654,8 @@ fn render(s: &State) -> VersionsSnapshot {
             .chain(&r.failover)
             .any(|st| Some(&st.key) == recommended_key.as_ref())
     };
-    let listed: Vec<&RankedRow> = s.ranked.rows.iter().filter(|r| !holds_pick(r)).collect();
-    let rows = listed
-        .iter()
-        .map(|r| row_dto(r, kept, s.rank.debrid))
-        .collect();
+    let listed: Vec<&RankedRow> = ranked.iter().filter(|r| !holds_pick(r)).collect();
+    let rows = listed.iter().map(|r| row_dto(r, kept, &s.rank)).collect();
     let sections = [
         SectionQuality::Uhd,
         SectionQuality::Fhd,
@@ -2573,8 +2675,8 @@ fn render(s: &State) -> VersionsSnapshot {
     // A shortcut follows its row's facts, led by its own source, while its
     // key is listed.
     let shortcut_row = |key: &Option<String>| {
-        let key = key.as_ref()?;
-        holding(&s.ranked.rows, |st| &st.key == key).map(|r| row_dto(&r, kept, s.rank.debrid))
+        let key = key.as_ref().filter(|_| s.kind.is_none())?;
+        holding(&s.ranked.rows, |st| &st.key == key).map(|r| row_dto(&r, kept, &s.rank))
     };
     let mut by_reason: Vec<(HideReason, u32)> = Vec::new();
     for h in &s.ranked.hidden {
@@ -2588,9 +2690,9 @@ fn render(s: &State) -> VersionsSnapshot {
         blocked: s.blocked.clone(),
         empty: empty(s),
         note: s.note.clone(),
-        recommended: s.recommended.as_ref().map(|r| {
-            let mut row = row_dto(r, kept, s.rank.debrid);
-            if s.download.is_some() {
+        recommended: pick.map(|r| {
+            let mut row = row_dto(r, kept, &s.rank);
+            if s.kind.is_none() && s.download.is_some() {
                 row.on_device = Some(crate::views::playback::DOWNLOADED.to_owned());
             }
             row
@@ -2611,31 +2713,55 @@ fn render(s: &State) -> VersionsSnapshot {
         nobody_sharing: nobody_sharing(s),
         archive: SourceRows {
             rows: (s.archive_ranked.rows.iter())
-                .map(|r| row_dto(r, kept, s.rank.debrid))
+                .map(|r| row_dto(r, kept, &s.rank))
                 .collect(),
             pending: s.archive_pending,
         },
         plugins: SourceRows {
             rows: (s.plugins_ranked.rows.iter())
-                .map(|r| row_dto(r, kept, s.rank.debrid))
+                .map(|r| row_dto(r, kept, &s.rank))
                 .collect(),
             pending: s.plugins_pending,
         },
-        debrid_service: debrid_service(s.recommended.iter().chain(listed.iter().copied())),
+        kinds: kinds(s),
+        selected_kind: s.kind,
     }
 }
 
-/// The one service every listed debrid row names (`debrid_service`).
-// ponytail: a row with no service hint counts as unnamed, though the
+/// Each kind the listed rows hold, in the chips' order (torrents, direct
+/// links, debrid), with the rows holding a source of it, from the pass of
+/// every kind: a row of a torrent and a direct link counts under both.
+fn kinds(s: &State) -> Vec<KindChip> {
+    [SourceKind::Torrent, SourceKind::Direct, SourceKind::Debrid]
+        .into_iter()
+        .filter_map(|k| {
+            let held: Vec<Vec<&ParsedStream>> = (s.ranked.rows.iter())
+                .map(|r| {
+                    let all = std::iter::once(&r.stream).chain(&r.failover);
+                    all.filter(|st| kind_of(s, st) == k).collect()
+                })
+                .filter(|v: &Vec<_>| !v.is_empty())
+                .collect();
+            let service = (k == SourceKind::Debrid)
+                .then(|| one_service(held.iter().flatten().copied()))
+                .flatten();
+            (!held.is_empty()).then_some(KindChip {
+                kind: k,
+                service,
+                count: held.len() as u32,
+            })
+        })
+        .collect()
+}
+
+/// The one service every source names ("Real-Debrid"), else none.
+// ponytail: a source with no service hint counts as unnamed, though the
 // account's only store resolves it; pass the stores when the chip should
 // name it.
-fn debrid_service<'a>(rows: impl Iterator<Item = &'a RankedRow>) -> Option<String> {
-    let mut names = rows
-        .filter(|r| kind(&r.stream, r.class) == SourceKind::Debrid)
-        .map(|r| r.stream.service.as_deref().map(service_name));
-    let first = names.next()??;
-    names
-        .all(|n| n.as_deref() == Some(first.as_str()))
+fn one_service<'a>(mut sources: impl Iterator<Item = &'a ParsedStream>) -> Option<String> {
+    let first = sources.next()?.service.as_deref().map(service_name)?;
+    sources
+        .all(|st| st.service.as_deref().map(service_name).as_deref() == Some(first.as_str()))
         .then_some(first)
 }
 
@@ -2733,12 +2859,13 @@ fn nobody_sharing(s: &State) -> bool {
 
 /// The row for `r`; `kept` is the key of the version that starts from what
 /// this device keeps, the row's own or one in its chain, said only while it
-/// would play on the engine (`account`: a streaming service may take it
-/// instead, review P3-9).
-fn row_dto(r: &RankedRow, kept: Option<&str>, account: bool) -> VersionRow {
+/// would play on the engine (with an account a streaming service may take
+/// it instead, review P3-9); `c` says whether there is an account and an
+/// engine.
+fn row_dto(r: &RankedRow, kept: Option<&str>, c: &Conditions) -> VersionRow {
     let s = &r.stream;
     let on_device = std::iter::once(s).chain(&r.failover).any(|st| {
-        Some(st.key.as_str()) == kept && crate::views::playback::by_engine(st, account, true)
+        Some(st.key.as_str()) == kept && crate::views::playback::by_engine(st, c.debrid, true)
     });
     let rel = &s.release;
     let archive = s.key.starts_with(crate::archive::KEY_PREFIX);
@@ -2764,7 +2891,7 @@ fn row_dto(r: &RankedRow, kept: Option<&str>, account: bool) -> VersionRow {
         failover_count: r.failover.len() as u16,
         line: r.line.clone(),
         source_class: r.class,
-        kind: kind(s, r.class),
+        kind: kind(s, c.debrid, c.engine),
         bitrate_mbps: r.bitrate_mbps,
         score: r.key,
         on_device: on_device.then(|| crate::views::playback::ON_DEVICE.to_owned()),
@@ -3063,10 +3190,14 @@ mod tests {
         ));
         let key = torrent.key.clone();
         let row = &rank_for_tests(vec![torrent])[0];
-        let said = |account| row_dto(row, Some(&key), account).on_device;
+        let with = |debrid| Conditions {
+            debrid,
+            ..Conditions::default()
+        };
+        let said = |account| row_dto(row, Some(&key), &with(account)).on_device;
         assert_eq!(said(false).as_deref(), Some("On this device"));
         assert_eq!(said(true), None, "a service may take it");
-        assert_eq!(row_dto(row, Some("another"), false).on_device, None);
+        assert_eq!(row_dto(row, Some("another"), &with(false)).on_device, None);
     }
 
     /// A preferred ready file at its best on every field before the start

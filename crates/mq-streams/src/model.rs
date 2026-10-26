@@ -286,7 +286,7 @@ pub enum SourceClass {
     derive(ts_rs::TS),
     ts(export, export_to = "../../../apps/web/src/core/generated/")
 )]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum SourceKind {
     Torrent,

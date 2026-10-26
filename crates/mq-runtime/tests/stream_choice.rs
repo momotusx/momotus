@@ -13,7 +13,7 @@ use mq_runtime::{
     BlockedReason, Core, EmptyAction, EmptyKind, SectionQuality, StoreId, TitleFacts,
     VersionsParams, VersionsView,
 };
-use mq_streams::{DeviceCaps, HideReason, SourceClass, StreamPrefs, Target};
+use mq_streams::{DeviceCaps, HideReason, SourceClass, SourceKind, StreamPrefs, Target};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
@@ -2539,4 +2539,107 @@ async fn versions_counted_empty_end_at_20s() {
     );
     assert_eq!(s.empty, Some(EmptyKind::NotStarted), "{:?}", s.attempts);
     golden::golden_torrent("playback-empty-notStarted", &s);
+}
+
+// The kind chips (plans/plugins-and-marketplace.md 4.2, 4.3).
+
+const LINK: &str = "https://cdn.example/Show.S01E01.1080p.WEB-DL.x264-AAA.mkv";
+
+/// One release as a torrent and as a plain link (one row of two kinds), and
+/// another torrent: with an account, the torrents are debrid.
+fn mixed() -> String {
+    serde_json::json!({ "streams": [
+        { "name": "Torrentio\n1080p", "title": "Show.S01E01.1080p.WEB-DL.x264-AAA\n👤 900 💾 2.0 GB",
+          "infoHash": HASH_A, "fileIdx": 0 },
+        { "name": "Direct", "title": "Show.S01E01.1080p.WEB-DL.x264-AAA\n💾 2.0 GB", "url": LINK },
+        { "name": "Torrentio\n1080p", "title": "Show.S01E01.1080p.WEB-DL.x264-BBB\n👤 100 💾 1.5 GB",
+          "infoHash": HASH_B, "fileIdx": 1 },
+    ]})
+    .to_string()
+}
+
+async fn mixed_view() -> (Core, Server, VersionsView) {
+    let server = Server::start(vec![
+        route("GET", "/stream/series/tt1%3A1%3A1.json", 200, &mixed()),
+        route("GET", "/meta/series/tt1.json", 200, &meta()),
+    ])
+    .await;
+    let core = core_with(&server);
+    core.set_debrid_keys(&[(StoreId::RealDebrid, "rd".into())]);
+    let view = settled_view(&core).await;
+    (core, server, view)
+}
+
+#[tokio::test]
+async fn a_row_of_two_kinds_lists_under_both_chips_and_plays_its_own_source() {
+    let (_core, _server, view) = mixed_view().await;
+    let all = view.snapshot();
+    // The release folds into one row in the pass of every kind.
+    assert_eq!(all.rows.len() + 1, 2, "{:?}", all.rows);
+    // Chips count rows holding a source of a kind: the mixed row under both.
+    let counts: Vec<_> = all.kinds.iter().map(|k| (k.kind, k.count)).collect();
+    assert_eq!(counts, [(SourceKind::Direct, 1), (SourceKind::Debrid, 2)]);
+    assert_eq!(all.kinds[1].service, None, "the torrents name no service");
+    let torrent_a = format!("bt:{HASH_A}:0");
+
+    view.set_kind(Some(SourceKind::Direct));
+    let direct = view.snapshot();
+    assert_eq!(direct.selected_kind, Some(SourceKind::Direct));
+    let card = direct.recommended.clone().unwrap();
+    assert_eq!(card.kind, SourceKind::Direct);
+    // Its own pass's class, never the torrent head's it was folded with.
+    assert_eq!(card.source_class, SourceClass::Ready);
+    assert!(direct.rows.is_empty() && direct.smaller.is_none() && direct.sharper.is_none());
+    let chain = view.candidates(&card.key);
+    assert_eq!(
+        chain.iter().map(|s| s.key.as_str()).collect::<Vec<_>>(),
+        [card.key.as_str()]
+    );
+    assert!(card.key.starts_with("url:"), "{}", card.key);
+
+    view.set_kind(Some(SourceKind::Debrid));
+    let debrid = view.snapshot();
+    let card = debrid.recommended.clone().unwrap();
+    assert_eq!(card.key, torrent_a, "the same release, led by its torrent");
+    assert_eq!(card.source_class, SourceClass::Unknown);
+    assert_eq!(debrid.rows.len(), 1);
+    let chain = view.candidates(&torrent_a);
+    assert!(chain.iter().all(|s| s.key.starts_with("bt:")), "{chain:?}");
+    // The counts stay those of every kind.
+    assert_eq!(debrid.kinds, all.kinds);
+
+    view.set_kind(None);
+    let back = view.snapshot();
+    assert_eq!(back.selected_kind, None);
+    assert_eq!(back.rows.len() + 1, 2);
+}
+
+#[tokio::test]
+async fn a_kind_with_no_rows_lists_every_kind() {
+    let (_core, _server, view) = learning_core_view().await;
+    view.set_kind(Some(SourceKind::Direct));
+    assert_eq!(view.snapshot().selected_kind, None);
+    assert!(view.snapshot().recommended.is_some());
+}
+
+async fn learning_core_view() -> (Core, Server, VersionsView) {
+    let (core, server) = learning_core().await;
+    let view = settled_view(&core).await;
+    (core, server, view)
+}
+
+#[tokio::test]
+async fn choosing_a_kind_freezes_the_pick_and_a_pick_under_it_teaches_nothing() {
+    let (core, _server, view) = learning_core_view().await;
+    assert!(!view.snapshot().frozen);
+    view.set_kind(Some(SourceKind::Debrid));
+    assert!(view.snapshot().frozen);
+    assert_eq!(view.snapshot().selected_kind, Some(SourceKind::Debrid));
+    assert!(view.pick(LARGE).note.is_none());
+    assert_eq!(core.prefs().learned.fhd.size, 0, "a pick among one kind");
+    // The same pick with every kind listed counts.
+    let view = settled_view(&core).await;
+    view.freeze();
+    view.pick(LARGE);
+    assert_eq!(core.prefs().learned.fhd.size, 1);
 }

@@ -4259,14 +4259,11 @@ fn first_sample(info_hash: &str, network: crate::speed::Network) -> bool {
     true
 }
 
-/// A torrent row plays through the engine when there is no account, or
-/// when our cache check found the service does not have it: the ranking
-/// scored it by torrent speed (3.2), and asking the service would add it
-/// to the account (code review r1 P2-2).
-pub(crate) fn by_engine(stream: &ParsedStream, account: bool, engine: bool) -> bool {
-    matches!(stream.source, Source::Torrent { .. })
-        && (!account || (engine && stream.cached == Some(false)))
-}
+// A torrent row plays through the engine when there is no account, or
+// when our cache check found the service does not have it: the ranking
+// scored it by torrent speed (3.2), and asking the service would add it
+// to the account (code review r1 P2-2). One predicate with the kind chips.
+pub(crate) use mq_streams::by_engine;
 
 /// Verified torrent bytes for the subtitle hash.
 #[cfg(feature = "torrent")]

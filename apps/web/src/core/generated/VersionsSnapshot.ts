@@ -2,7 +2,9 @@
 import type { BlockedVersions } from "./BlockedVersions";
 import type { EmptyVersions } from "./EmptyVersions";
 import type { HiddenSummary } from "./HiddenSummary";
+import type { KindChip } from "./KindChip";
 import type { LearnedNote } from "./LearnedNote";
+import type { SourceKind } from "./SourceKind";
 import type { SourceRows } from "./SourceRows";
 import type { VersionRow } from "./VersionRow";
 import type { VersionSection } from "./VersionSection";
@@ -65,9 +67,15 @@ archive: SourceRows,
  * "From plugins" (plans/plugins-and-marketplace.md 4.4, 7.8): the
  * Nuvio providers' rows, a pass of their own like the Archive's.
  */
-plugins: SourceRows, };
- * The one streaming service every debrid row names ("Real-Debrid"), for
- * the debrid kind chip; none when they name several, or a row names
- * none, and the chip says "Debrid".
+plugins: SourceRows, 
+/**
+ * The kind chips (plans/plugins-and-marketplace.md 4.2): each kind the
+ * listed rows hold, with how many rows hold a source of it. The apps
+ * show them from two kinds on.
  */
-debridService: string | null, };
+kinds: Array<KindChip>, 
+/**
+ * The kind `setKind` chose: `recommended`, `rows` and `sections` are
+ * then that kind's own pass, and `smaller` and `sharper` are null.
+ */
+selectedKind: SourceKind | null, };

@@ -2601,7 +2601,7 @@ fn kind_under(c: &Conditions, body: serde_json::Value) -> (SourceClass, SourceKi
                 .collect::<Vec<_>>()
         )
     });
-    (row.class, mq_streams::kind(&row.stream, row.class))
+    (row.class, mq_streams::kind(&row.stream, c.debrid, c.engine))
 }
 
 #[test]
@@ -2658,6 +2658,6 @@ fn each_source_groups_by_how_it_plays() {
         json!({ "title": name, "externalUrl": "https://example.com/watch" }),
     ] {
         let s = &streams("a", 0, json!({ "streams": [body] }))[0];
-        assert_eq!(mq_streams::kind(s, SourceClass::Ready), SourceKind::Direct);
+        assert_eq!(mq_streams::kind(s, true, true), SourceKind::Direct);
     }
 }

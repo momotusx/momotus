@@ -23,7 +23,6 @@
     "screenClass": 1080,
     "sizeLimitBytes": 5368709120
   },
-  "debridService": null,
   "done": true,
   "empty": {
     "action": "tryAgain",
@@ -40,6 +39,7 @@
     "byReason": [],
     "count": 0
   },
+  "kinds": [],
   "nobodySharing": false,
   "note": null,
   "pendingAddons": [],
@@ -50,6 +50,7 @@
   "recommended": null,
   "rows": [],
   "sections": [],
+  "selectedKind": null,
   "sharper": null,
   "slowAddons": [],
   "smaller": null
