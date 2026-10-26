@@ -1740,7 +1740,8 @@ fn compose(
         .iter()
         .map(|g| g.name.clone())
         .collect();
-    // A kept genre the whole set does not give: dropped and named, never a ghost choice over an empty grid.
+    // A kept genre the whole set does not give (a list refreshed without it): quietly back to any genre, never a
+    // ghost choice over an empty grid, and no line about it (the owner, 2026-10-27).
     if pending == 0
         && let Some(g) = s.snapshot.genre.clone()
         && !s
@@ -1750,7 +1751,6 @@ fn compose(
             .any(|c| c.name.eq_ignore_ascii_case(&g))
     {
         s.snapshot.genre = None;
-        s.snapshot.missing_genre = Some(g);
     }
     let set: Vec<Tile> = arrange(
         pool,

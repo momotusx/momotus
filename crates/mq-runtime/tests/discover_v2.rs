@@ -845,3 +845,24 @@ async fn flicking_through_services_keeps_two_loads() {
     );
     assert_eq!(asked("hlu") - before.0, 2, "the first load was aborted");
 }
+
+/// Code review r2 R5 and the lead: a genre the set no longer gives falls back
+/// to any genre quietly, with the whole list and no line about it.
+#[tokio::test]
+async fn a_genre_the_set_no_longer_gives_falls_back_quietly() {
+    let w = world(hulu_list(5)).await;
+    let (_core, view) = open(&w.rows).await;
+    until(&view, |s| !s.items.is_empty()).await;
+    choose(&view, |c| {
+        c.platform = Some(Some("hulu".into()));
+        c.sort = Some("imdb".into());
+        c.genre = Some(Some("Comedy".into()));
+    });
+    let s = until(&view, |s| {
+        s.platform.as_deref() == Some("hulu") && !s.items.is_empty()
+    })
+    .await;
+    assert_eq!(s.genre, None);
+    assert_eq!(s.missing_genre, None);
+    assert_eq!(s.items.len(), 5);
+}
