@@ -143,7 +143,7 @@ final class AetherSession {
                         from.flatMap { from in to.map { "\(Int(($0 - from) / .milliseconds(1)))" } } ?? "n/a"
                     }
                     let (probed, session) = (passed[.streamsProbed], passed[.sessionConstructed])
-                    coreLog.notice("metric engine_start probe_ms=\(ms(loaded, probed), privacy: .public) session_ms=\(ms(probed, session), privacy: .public) frame_ms=\(ms(session, .now), privacy: .public) probe_mib=\(probeMiB, privacy: .public) probe_kib_s=\(Self.kibPerS(mib: probeMiB, from: loaded, to: probed), privacy: .public) path=\(Self.path(native: host.nativePlayerLayer != nil, software: host.softwarePiPSource != nil), privacy: .public) rerouted=\(rerouted == nil ? 0 : 1, privacy: .public)")
+                    coreLog.notice("metric engine_start probe_ms=\(ms(loaded, probed), privacy: .public) session_ms=\(ms(probed, session), privacy: .public) frame_ms=\(ms(session, .now), privacy: .public) probe_mib=\(probeMiB, privacy: .public) probe_kib_s=\(Self.kibPerS(bytes: probeMiB << 20, from: loaded, to: probed), privacy: .public) seg0_kib_s=\(Self.kibPerS(bytes: host.segmentCacheDiskBytes, from: session, to: .now), privacy: .public) path=\(Self.path(native: host.nativePlayerLayer != nil, software: host.softwarePiPSource != nil), privacy: .public) rerouted=\(rerouted == nil ? 0 : 1, privacy: .public) reroute=\(Self.reroute(rerouted), privacy: .public)")
                 }
             }
             .store(in: &bag)
@@ -197,11 +197,18 @@ final class AetherSession {
         escalations.sink { record($0.absorbedFailure) }
     }
 
-    /// What the probe window read, KiB per second: the probe's size over its time (an upper bound when the probe
-    /// ended before reading all of it), n/a without a probe.
-    static func kibPerS(mib: Int64, from: ContinuousClock.Instant, to: ContinuousClock.Instant?) -> String {
-        guard let to, to > from else { return "n/a" }
-        return "\(Int(Double(mib * 1024) / ((to - from) / .seconds(1))))"
+    /// A start window's rate, KiB per second: its bytes over its time, n/a without either. The probe window reads the
+    /// probe's size (an upper bound when the probe ended early, and no swarm figure when its bytes were already
+    /// fetched); the first-segment window reads the segment cache on disk at the first frame (native path only).
+    static func kibPerS(bytes: Int64?, from: ContinuousClock.Instant?, to: ContinuousClock.Instant?) -> String {
+        guard let bytes, let from, let to, to > from else { return "n/a" }
+        return "\(Int(Double(bytes) / 1024 / ((to - from) / .seconds(1))))"
+    }
+
+    /// The reroute's cause for the start log: the absorbed failure's domain and code, or none.
+    static func reroute(_ failure: PlaybackErrorInfo?) -> String {
+        guard let failure else { return "none" }
+        return "\(failure.underlyingDomain ?? "nil")/\(failure.underlyingCode.map(String.init) ?? "nil")"
     }
 
     /// The engine's path for the start log: native (remuxed for AVPlayer), software (its own decoders), or other.

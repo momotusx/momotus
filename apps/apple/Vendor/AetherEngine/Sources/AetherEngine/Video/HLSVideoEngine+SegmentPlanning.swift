@@ -216,7 +216,8 @@ extension HLSVideoEngine {
         videoTimeBase: AVRational,
         sourceDurationSeconds: Double,
         startPts0: Int64 = 0,
-        strideSeconds: Double = HLSVideoEngine.targetSegmentDuration
+        strideSeconds: Double = HLSVideoEngine.targetSegmentDuration,
+        firstSegmentSeconds: Double? = nil
     ) -> [Segment] {
         guard sourceDurationSeconds > 0, sourceDurationSeconds.isFinite else { return [] }
         var stride = strideSeconds.isFinite && strideSeconds > 0 ? strideSeconds : Self.targetSegmentDuration
@@ -244,7 +245,25 @@ extension HLSVideoEngine {
                 durationSeconds: max(0.001, endSeconds - startSeconds)
             ))
         }
+        // Marquee patch 5 (VENDOR.md): segment 0 ends at `firstSegmentSeconds` when that is shorter, and the rest of
+        // the first stride becomes segment 1, so the later cuts keep their grid.
+        if let first = firstSegmentSeconds, first.isFinite, let head = plan.first,
+           first >= minSegmentDurationSeconds, head.durationSeconds - first >= minSegmentDurationSeconds,
+           let cut = planPts(startPts0, plusSeconds: first, timeBase: tb) {
+            plan.replaceSubrange(0...0, with: [
+                Segment(startPts: head.startPts, endPts: cut, startSeconds: 0, durationSeconds: first),
+                Segment(startPts: cut, endPts: head.endPts, startSeconds: first, durationSeconds: head.durationSeconds - first),
+            ])
+        }
         return plan
+    }
+
+    /// Marquee patch 5: where segment 0 of a uniform plan ends. With the IRAP spacing measured, at that spacing
+    /// (at least `firstSegmentTargetSeconds`), so the first frame waits for one GOP's bytes, not a 4 s stride's;
+    /// otherwise at the stride (nil), since a cut finer than an unknown GOP would advertise a segment no keyframe opens.
+    static func uniformFirstSegmentSeconds(spacing: KeyframeSpacing) -> Double? {
+        guard case .measured(let seconds) = spacing, seconds.isFinite, seconds > 0 else { return nil }
+        return Swift.max(firstSegmentTargetSeconds, seconds)
     }
 
     /// Backoff applied to every boundary of a plan built from a source's DECLARED segment starts.

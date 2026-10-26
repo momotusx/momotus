@@ -33,6 +33,11 @@ Patches (each marked "Marquee patch N" in the source):
    the first keyframe at or after 1 s (`firstSegmentTargetSeconds`), not 4 s; later segments keep the absolute 4 s
    thresholds. AVPlayer shows nothing until segment 0 is whole, so the first frame waits for the first GOP's bytes
    only, not 4 s of them (bench AS24, AS25). Tested in `apps/apple/Tests/EnginePatchTests.swift`.
+5. The same file, `buildUniformSegmentPlan` (with `uniformFirstSegmentSeconds`, called from
+   `Video/HLSVideoEngine.swift`): the uniform-stride fallback (an index with no usable keyframes, such as a Blu-ray
+   ISO) ends segment 0 at the measured IRAP spacing (at least 1 s) instead of the 4 s stride; the rest of the first
+   stride is segment 1 and the later cuts keep the grid. Unmeasured spacing keeps the stride. On a 153 KiB/s swarm
+   the ISO's 4 s segment 0 took 7.1 s (bench IM-B1). Tested in `apps/apple/Tests/EnginePatchTests.swift`.
 
 To move to a newer tag: copy its `Sources/AetherEngine` and `LICENSE`, take the pins from its
 `Package.resolved`, apply the patches above again, and walk the player before it lands.

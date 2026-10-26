@@ -147,6 +147,27 @@ extension AetherSession.Events {
     #expect(!AetherSession.resolved(video: size, audio: [stereo, noChannels], active: 2), "the playing track has no channels")
 }
 
+/// Patch 5: a uniform plan (an index with no usable keyframes, such as a Blu-ray ISO) ends segment 0 at the measured
+/// IRAP spacing, at least 1 s; the rest of the first stride is segment 1 and the later cuts keep the 4 s grid. An
+/// unmeasured spacing keeps the 4 s stride (bench IM-B1: the ISO's 4 s segment 0 took 7.1 s at 153 KiB/s).
+@Test func aUniformPlanStartsWithOneGOP() {
+    let tb = AVRational(num: 1, den: 90000)
+    let first = HLSVideoEngine.uniformFirstSegmentSeconds(spacing: .measured(1.001))
+    #expect(first == 1.001)
+    let plan = HLSVideoEngine.buildUniformSegmentPlan(
+        videoTimeBase: tb, sourceDurationSeconds: 12, startPts0: 900, strideSeconds: 4, firstSegmentSeconds: first)
+    #expect(plan.map { ($0.startSeconds * 1000).rounded() } == [0, 1001, 4000, 8000])
+    #expect(plan.map { ($0.durationSeconds * 1000).rounded() } == [1001, 2999, 4000, 4000])
+    #expect(plan[0].startPts == 900 && plan[0].endPts == plan[1].startPts && plan[1].endPts == plan[2].startPts)
+    #expect(HLSVideoEngine.uniformFirstSegmentSeconds(spacing: .measured(0.5)) == 1.0)
+    #expect(HLSVideoEngine.uniformFirstSegmentSeconds(spacing: .unknown) == nil)
+    #expect(HLSVideoEngine.uniformFirstSegmentSeconds(spacing: .exceedsBudget(30)) == nil)
+    let unmeasured = HLSVideoEngine.buildUniformSegmentPlan(videoTimeBase: tb, sourceDurationSeconds: 12, strideSeconds: 4)
+    #expect(unmeasured.map { ($0.startSeconds * 1000).rounded() } == [0, 4000, 8000])
+    // A spacing at the stride splits nothing.
+    #expect(HLSVideoEngine.buildUniformSegmentPlan(videoTimeBase: tb, sourceDurationSeconds: 12, strideSeconds: 4, firstSegmentSeconds: 4).count == 3)
+}
+
 /// Patch 4: segment 0 ends at the first keyframe at or after 1 s; the later segments keep the absolute 4 s cuts.
 @Test func segmentZeroEndsAtTheFirstKeyframeAfterOneSecond() {
     let tb = AVRational(num: 1, den: 1000)
@@ -206,7 +227,12 @@ extension AetherSession.Events {
 /// what the swarm delivered (AS42: 8 MiB in 28 s).
 @MainActor @Test func theProbeWindowRateIsItsSizeOverItsTime() {
     let t = ContinuousClock.now
-    #expect(AetherSession.kibPerS(mib: 8, from: t, to: t + .seconds(28)) == "292")
-    #expect(AetherSession.kibPerS(mib: 2, from: t, to: t + .milliseconds(500)) == "4096")
-    #expect(AetherSession.kibPerS(mib: 2, from: t, to: nil) == "n/a")
+    #expect(AetherSession.kibPerS(bytes: 8 << 20, from: t, to: t + .seconds(28)) == "292")
+    #expect(AetherSession.kibPerS(bytes: 2 << 20, from: t, to: t + .milliseconds(500)) == "4096")
+    #expect(AetherSession.kibPerS(bytes: 2 << 20, from: t, to: nil) == "n/a")
+    #expect(AetherSession.kibPerS(bytes: nil, from: t, to: t + .seconds(1)) == "n/a", "no segment cache: the software path")
+    // Code r4: the reroute's cause rides in the start log.
+    #expect(AetherSession.reroute(nil) == "none")
+    #expect(AetherSession.reroute(PlaybackErrorInfo(kind: .nativeItemFailed, message: "", underlyingDomain: "CoreMediaErrorDomain", underlyingCode: -12889)) == "CoreMediaErrorDomain/-12889")
+    #expect(AetherSession.reroute(PlaybackErrorInfo(kind: .nativeItemFailed, message: "", underlyingDomain: "CoreMediaErrorDomain")) == "CoreMediaErrorDomain/nil")
 }

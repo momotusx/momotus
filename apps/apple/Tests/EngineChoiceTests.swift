@@ -191,6 +191,7 @@ import Testing
     #expect(load.contains("let waited = rerouted.map { EngineChoice.waited(domain: $0.underlyingDomain, code: $0.underlyingCode) } ?? false"))
     #expect(load.contains("decode this picture in software\", waited)"))
     #expect(load.contains("rerouted=\\(rerouted == nil ? 0 : 1"))
+    #expect(load.contains("reroute=\\(Self.reroute(rerouted)"))
 }
 
 /// Code r3: the reroute is classified on the failure the engine absorbed, so AVPlayer waiting on bytes is told apart

@@ -1436,7 +1436,8 @@ public final class HLSVideoEngine: @unchecked Sendable {
                     videoTimeBase: videoTimeBase,
                     sourceDurationSeconds: durationSeconds,
                     startPts0: anchorPts,
-                    strideSeconds: stride
+                    strideSeconds: stride,
+                    firstSegmentSeconds: Self.uniformFirstSegmentSeconds(spacing: spacing)
                 )
                 self.firstKeyframePts = anchorPts
                 self.firstKeyframeSeconds = Double(anchorPts) * Double(videoTimeBase.num) / Double(videoTimeBase.den)
