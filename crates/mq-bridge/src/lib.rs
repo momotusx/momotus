@@ -768,31 +768,84 @@ struct Shared {
     native: HashMap<String, (std::time::Instant, mq_sync::identity::NativeFlow)>,
     /// Email sign-in flows, the same way.
     email: HashMap<String, (std::time::Instant, mq_sync::identity::EmailFlow)>,
+    /// Where pushes go, and this session itself: the downloads views are
+    /// opened again under the lock with a fence of their own.
+    out: Output,
+    me: Weak<Mutex<Shared>>,
 }
 
 /// A native flow lives this long at the relay; then the core drops it too.
 const NATIVE_FLOW_LIFE: std::time::Duration = std::time::Duration::from_secs(10 * 60);
 
 impl Shared {
-    /// A switch or a lock: every view but the picker and the device's debrid
-    /// accounts leaves the session and older work is fenced off. The views it returns close (playback saves
-    /// its position) when the caller drops them, after the session lock.
+    /// A switch or a lock: every view but the picker, the device's debrid
+    /// accounts and the downloads keeper's view leaves the session and older
+    /// work is fenced off; the downloads view goes on for the new session
+    /// (`repoint_downloads`). The views it returns close (playback saves its
+    /// position) when the caller drops them, after the session lock.
     #[must_use = "drop the closed views after releasing the session lock"]
     fn transition(&mut self, core: Core, locked: bool) -> Vec<Subscription> {
         self.generation += 1;
         self.core = core;
-        let (picker, closed) = std::mem::take(&mut self.subs)
+        let (kept, closed) = std::mem::take(&mut self.subs)
             .into_iter()
-            .partition(|(_, s)| matches!(s.view, View::Profiles { .. } | View::Debrid { .. }));
-        self.subs = picker;
-        self.set_locked(locked);
-        closed.into_values().collect()
-    }
-
-    fn set_locked(&mut self, locked: bool) {
+            .partition(|(_, s)| {
+                matches!(
+                    s.view,
+                    View::Profiles { .. } | View::Debrid { .. } | View::Downloads { .. }
+                )
+            });
+        self.subs = kept;
         self.locked = locked;
         self.state
             .send_replace((self.core.profile().to_owned(), locked));
+        self.repoint_downloads();
+        closed.into_values().collect()
+    }
+
+    /// An unlock, or a lock with no switch.
+    fn set_locked(&mut self, locked: bool) {
+        let changed = self.locked != locked;
+        self.locked = locked;
+        self.state
+            .send_replace((self.core.profile().to_owned(), locked));
+        if changed {
+            self.repoint_downloads();
+        }
+    }
+
+    /// The downloads views go on across a switch, a lock and an unlock: the
+    /// platform keeper subscribes once for the life of the core (plans/
+    /// offline-downloads.md 5), and each sub is opened again for the session
+    /// as it is now (the new profile's rows, or the locked counts alone),
+    /// with a fresh snapshot pushed at once (code review r2, Apple C1 and
+    /// Android N1).
+    fn repoint_downloads(&mut self) {
+        let ids: Vec<u64> = self
+            .subs
+            .iter()
+            .filter(|(_, s)| matches!(s.view, View::Downloads { .. }))
+            .map(|(id, _)| *id)
+            .collect();
+        for sub in ids {
+            let downloads = if self.locked {
+                DownloadsView::open_locked(&self.core)
+            } else {
+                DownloadsView::open(&self.core)
+            };
+            let (snapshot, updates) = downloads.subscribe();
+            let updates = futures_util::stream::once(async move { vec![snapshot] }).chain(updates);
+            let fence = Some((self.me.clone(), self.generation));
+            let forward = tokio::spawn(forward(sub, Box::pin(updates), self.out.clone(), fence));
+            // The old view and its forward end as it is replaced.
+            self.subs.insert(
+                sub,
+                Subscription {
+                    view: View::Downloads { _view: downloads },
+                    forward,
+                },
+            );
+        }
     }
 }
 
@@ -871,15 +924,19 @@ impl Session {
             let _ = out.send(&json!({ "profile": "gone", "id": id }));
         }
         let (state, _) = watch::channel((core.profile().to_owned(), locked));
-        let shared = Arc::new(Mutex::new(Shared {
-            core: core.clone(),
-            locked,
-            generation: 0,
-            subs: HashMap::new(),
-            state,
-            native: HashMap::new(),
-            email: HashMap::new(),
-        }));
+        let shared = Arc::new_cyclic(|me| {
+            Mutex::new(Shared {
+                core: core.clone(),
+                locked,
+                generation: 0,
+                subs: HashMap::new(),
+                state,
+                native: HashMap::new(),
+                email: HashMap::new(),
+                out: out.clone(),
+                me: me.clone(),
+            })
+        });
         refresh_addons(&core);
         // A launch resumes the downloads a kill or a reboot left.
         let _ = core.downloads();
@@ -1899,9 +1956,10 @@ impl Session {
             .subs
             .values()
             .map(|s| s.view.name())
-            // The device's debrid accounts stay open across a switch, as
-            // `transition` keeps them.
-            .filter(|name| *name != "profiles" && *name != "debrid")
+            // The device's debrid accounts and the downloads keeper's view
+            // stay open across a switch, as `transition` keeps them (code
+            // review r2, Apple C1).
+            .filter(|name| !matches!(*name, "profiles" | "debrid" | "downloads"))
             .collect();
         if !open.is_empty() {
             return Err(Failure::coded("viewsOpen", "close the open views first")

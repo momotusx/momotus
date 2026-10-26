@@ -1204,3 +1204,41 @@ async fn a_locked_session_follows_the_downloads_counts_and_no_titles() {
     assert_eq!(open["snapshot"]["titles"][0]["name"], "Title tt2", "{open}");
     assert_eq!(open["snapshot"]["downloading"][0]["id"], "w1", "{open}");
 }
+
+/// The downloads view the platform keeper holds for the life of the core
+/// never blocks a switch, and goes on across a switch, a lock and an
+/// unlock: each pushes a fresh snapshot for the session as it is now, the
+/// locked one with counts alone (code review r2, Apple C1, Android N1).
+#[tokio::test]
+async fn the_downloads_view_goes_on_across_a_switch_a_lock_and_an_unlock() {
+    let core = Core::temporary("default").unwrap();
+    core.library()
+        .add_download(&download("d1", "tt2", "done"))
+        .unwrap();
+    let mut c = Client::new(core);
+    let other = c.create("Other").await;
+    let sub = c.subscribe("downloads").await;
+    let titles = |m: &Value| {
+        m["updates"]
+            .as_array()
+            .and_then(|u| u.last())
+            .map(|s| s["titles"].clone())
+    };
+    // The switch is not refused, and the view answers for the new profile.
+    c.switch(&other, None).await;
+    let pushed = c.push_where(|m| m["sub"] == sub).await;
+    assert_eq!(titles(&pushed).unwrap()[0]["name"], "Title tt2", "{pushed}");
+    // Locked: the same sub, counts alone.
+    assert_eq!(c.set_pin(&other, Some("1357"), None).await, "ok");
+    c.ok(json!({"op": "lockSession"})).await;
+    let pushed = c
+        .push_where(|m| m["sub"] == sub && titles(m) == Some(json!([])))
+        .await;
+    assert!(!pushed.to_string().contains("Title tt"), "{pushed}");
+    // Unlocked: the rows again, on the same sub.
+    c.ok(json!({"op": "unlockProfile", "pin": "1357"})).await;
+    let pushed = c
+        .push_where(|m| m["sub"] == sub && titles(m).is_some_and(|t| t != json!([])))
+        .await;
+    assert_eq!(titles(&pushed).unwrap()[0]["name"], "Title tt2", "{pushed}");
+}
