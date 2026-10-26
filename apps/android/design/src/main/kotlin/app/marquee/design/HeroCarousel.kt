@@ -6,6 +6,8 @@ import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.DragInteraction
+import androidx.compose.foundation.interaction.InteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
@@ -158,6 +160,11 @@ fun heroNearestPage(
     current: Int,
     index: Int,
 ): Int = if (n > 1) current - current % n + index else 0
+
+/** A drag by hand on [source] stops the timed pages for the visit: the phone's swipe (review r2, S3). */
+suspend fun HeroClock.stopOnDrag(source: InteractionSource) {
+    source.interactions.collect { if (it is DragInteraction.Start) manual() }
+}
 
 /**
  * Runs [clock] on the frame clock while [running] says so, and calls [onAdvance] when a page's time is up.

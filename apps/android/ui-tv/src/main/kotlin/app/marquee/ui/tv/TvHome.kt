@@ -907,7 +907,7 @@ internal suspend fun restoreFocus(
         val settled = rows.none { it.state == RowState.Loading || it.state == RowState.Slow }
         // A wanted tile that is gone for good (a finished Continue Watching item) gives way to
         // the first tile once the lanes have answered.
-        val gone = wanted != null && settled && !exists(rows, hasHero, wanted)
+        val gone = wanted != null && settled && !exists(rows, state.shownHero(home), wanted)
         val key =
             if (wanted == null ||
                 gone
@@ -933,11 +933,17 @@ internal suspend fun restoreFocus(
     }
 }
 
+/** Whether [key] is on Home now: a hero button only on the page shown, Play only where it has one (review r2, N2). */
 private fun exists(
     rows: List<HomeRow>,
-    hasHero: Boolean,
+    shown: Hero?,
     key: String,
-): Boolean = if (key.startsWith("hero:")) hasHero else rows.any { key in it.tileKeys() }
+): Boolean =
+    when {
+        key == HERO_PLAY -> shown?.tile?.playable() == true
+        key.startsWith("hero:") -> shown != null
+        else -> rows.any { key in it.tileKeys() }
+    }
 
 /** The note under Continue Watching after Remove: its words, and Undo while it can be taken back. */
 @Composable

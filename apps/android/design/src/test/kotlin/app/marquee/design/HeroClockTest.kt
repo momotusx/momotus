@@ -1,5 +1,11 @@
 package app.marquee.design
 
+import androidx.compose.foundation.interaction.DragInteraction
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.yield
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -120,6 +126,20 @@ class HeroClockTest {
         assertEquals(1, heroPagerCount(1))
         assertEquals(0, heroPagerPage(1, 0))
     }
+
+    @Test
+    fun aDragByHandStopsTheTimedPages() =
+        runBlocking {
+            // Review r2, S3: the phone's swipe, as the pager's interaction source reports it.
+            val clock = HeroClock(3, dwellMs = 8000)
+            val source = MutableInteractionSource()
+            val watching = launch(start = CoroutineStart.UNDISPATCHED) { clock.stopOnDrag(source) }
+            source.emit(DragInteraction.Start())
+            yield()
+            watching.cancel()
+            assertTrue(clock.stopped)
+            assertFalse(clock.tick(60_000, running = true))
+        }
 
     @Test
     fun aTrailerWritesTheSameValue() {

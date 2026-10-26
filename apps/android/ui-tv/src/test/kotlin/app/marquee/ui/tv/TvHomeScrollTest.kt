@@ -142,6 +142,8 @@ class TvHomeScrollTest {
     private fun show(
         hero: Boolean = false,
         start: String = "Watching 1",
+        /** Hero pages: two make a running carousel once focus leaves the hero. */
+        heroes: Int = 1,
     ) {
         val rows =
             listOf(
@@ -175,7 +177,8 @@ class TvHomeScrollTest {
             } else {
                 null
             }
-        val snapshot = HomeSnapshot(HomeHeader(listOfNotNull(top)), rows)
+        val pages = listOfNotNull(top) + (2..heroes).mapNotNull { n -> top?.copy(tile = tile("h$n", "Sintel $n")) }
+        val snapshot = HomeSnapshot(HomeHeader(pages), rows)
         client.attach { text ->
             val msg = CoreJson.parseToJsonElement(text).jsonObject
             val id = msg["id"]?.jsonPrimitive?.longOrNull ?: return@attach
@@ -191,6 +194,8 @@ class TvHomeScrollTest {
         // Compose turns the lists' prefetch off when it sees Robolectric's fingerprint; the device's prefetch
         // is part of what this measures.
         ShadowBuild.setFingerprint("marquee-test")
+        // A running carousel asks for every frame: the screen never idles on its own clock, so time moves by hand.
+        compose.mainClock.autoAdvance = heroes < 2
         compose.setContent {
             view = LocalView.current
             MarqueeTheme(Form.Tv) {
@@ -219,10 +224,15 @@ class TvHomeScrollTest {
         while (compose.onAllNodesWithText("Continue Watching").fetchSemanticsNodes().isEmpty()) {
             check(System.currentTimeMillis() < deadline) { "Home never drew its rows" }
             Snapshot.sendApplyNotifications()
+            if (!compose.mainClock.autoAdvance) compose.mainClock.advanceTimeBy(50)
             compose.waitForIdle()
             Thread.sleep(10)
         }
-        compose.onNodeWithContentDescription(start).performSemanticsAction(SemanticsActions.RequestFocus)
+        compose
+            .onNodeWithContentDescription(
+                start,
+                substring = true,
+            ).performSemanticsAction(SemanticsActions.RequestFocus)
         compose.mainClock.advanceTimeBy(2_000)
         compose.waitForIdle()
         Composer.setTracer(tracer)
@@ -285,6 +295,8 @@ class TvHomeScrollTest {
         times: Int = 1,
         gap: Int = FRAMES,
         list: LazyListState = state.page,
+        /** False while a carousel runs: its frame loop never lets the screen idle with the clock on its own. */
+        idle: Boolean = true,
     ): Move {
         tilesInFrame = 0
         tilesAhead = 0
@@ -301,8 +313,10 @@ class TvHomeScrollTest {
             frames += moved(last, now)
             last = now
         }
-        compose.mainClock.autoAdvance = true
-        compose.waitForIdle()
+        if (idle) {
+            compose.mainClock.autoAdvance = true
+            compose.waitForIdle()
+        }
         return Move(frames, tilesInFrame, tilesAhead, homeBodies)
     }
 
@@ -358,6 +372,19 @@ class TvHomeScrollTest {
 
     @Test
     fun `from the hero's Play on a low-memory TV, every Down finds its lane composed`() = heroLanesReady(low = true)
+
+    /**
+     * Review r2, S4: with two hero pages the carousel's clock runs once focus leaves the hero, and still a Down
+     * recomposes nothing of Home: the clock reads the page's place and the hero's focus in its own scope.
+     */
+    @Test
+    fun `with a running carousel, a Down recomposes nothing of Home`() {
+        state = TvHomeState()
+        // From Continue Watching: focus off the hero, so the clock runs through every move.
+        show(hero = true, heroes = 2)
+        val moves = (1..4).map { press(Key.DirectionDown, idle = false) }
+        moves.forEachIndexed { i, move -> assertEquals(0, move.homeBodies, "TvHome recomposed on step ${i + 1}") }
+    }
 
     /** From the hero's Play down five lanes: the lane each Down brings into view was composed before it. */
     private fun heroLanesReady(low: Boolean) {

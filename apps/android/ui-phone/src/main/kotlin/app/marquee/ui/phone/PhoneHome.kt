@@ -4,7 +4,6 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.DragInteraction
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
@@ -108,6 +107,7 @@ import app.marquee.design.heroPagerPage
 import app.marquee.design.laneHeight
 import app.marquee.design.rememberScreenReader
 import app.marquee.design.rememberTrailerHost
+import app.marquee.design.stopOnDrag
 import app.marquee.design.trailerAllowed
 import app.marquee.design.windowDp
 import kotlinx.coroutines.delay
@@ -292,7 +292,13 @@ private fun PhoneHeroCarousel(
     SideEffect { shownId = heroes.getOrNull(pager.currentPage % n.coerceAtLeast(1))?.tile?.id }
     LaunchedEffect(heroes.map { it.tile.id }) {
         val at = heroes.indexOfFirst { it.tile.id == shownId }.coerceAtLeast(0)
-        if (n > 0 && pager.currentPage % n != at) pager.scrollToPage(heroPagerPage(n, at))
+        // Also out of the first loop, where a list that began with one page started: a swipe back from the first
+        // page then reaches the last (review r2, N1).
+        if (n > 0 &&
+            (pager.currentPage % n != at || (n > 1 && pager.currentPage < n))
+        ) {
+            pager.scrollToPage(heroPagerPage(n, at))
+        }
     }
     val screenReader = rememberScreenReader()
     SideEffect { clock.count = heroes.size }
@@ -305,7 +311,7 @@ private fun PhoneHeroCarousel(
     val active = resumed.isAtLeast(Lifecycle.State.RESUMED)
     // A drag by hand: no more timed pages this session.
     LaunchedEffect(pager) {
-        pager.interactionSource.interactions.collect { if (it is DragInteraction.Start) clock.manual() }
+        clock.stopOnDrag(pager.interactionSource)
     }
     RunHeroClock(
         clock,
