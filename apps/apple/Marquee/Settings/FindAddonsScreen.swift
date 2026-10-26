@@ -14,13 +14,17 @@ enum FindFocus: Hashable {
 }
 
 /// Find addons (plans/m12-addon-discovery.md 3.4): Cinemeta's Official and
-/// Community lists, filtered on the device, each card installing in one
-/// press. Entry links may hold keys and are never shown.
+/// Community lists, then the lists of addons the user installed
+/// (plans/plugins-and-marketplace.md 7.1), filtered on the device, each card
+/// installing in one press. Entry links may hold keys and are never shown.
 struct FindAddonsScreen: View {
     let core: CoreClient
     @State private var page: FindAddonsPage
     @State private var list = "official"
     @State private var filter = FindFilter.all
+    /// The search over the open list (not on a TV); a new list starts with none.
+    @State private var query = ""
+    @FocusState private var searchFocused: Bool
     @FocusState private var focus: FindFocus?
     /// The card focus returns to when it comes back to the grid (TV).
     @State private var lastCard: String?
@@ -37,7 +41,9 @@ struct FindAddonsScreen: View {
                 header
                 paste
                 chips
-                if list == "community" { communityNote }
+                if let host = current?.host { from(host) }
+                if list != "official" { communityNote }
+                search
                 content
             }
             .frame(maxWidth: maxWidth, alignment: .leading)
@@ -92,10 +98,14 @@ struct FindAddonsScreen: View {
             HStack(alignment: .bottom, spacing: Theme.Space.s) {
                 ChipRow(
                     label: W.listLabel,
-                    chips: [Chip(id: FindFocus.list("official"), title: W.official, detail: count("official")),
-                            Chip(id: FindFocus.list("community"), title: W.communityList, detail: count("community"))],
+                    chips: listChips,
                     isSelected: { $0 == .list(list) },
-                    select: { if case .list(let id) = $0 { list = id } },
+                    select: {
+                        if case .list(let id) = $0 {
+                            list = id
+                            query = ""
+                        }
+                    },
                     focus: $focus)
                 tools
             }
@@ -107,6 +117,52 @@ struct FindAddonsScreen: View {
         }
         #if os(tvOS)
         .focusSection()
+        #endif
+    }
+
+    /// One chip per list; before the first answer, Cinemeta's two.
+    private var listChips: [Chip<FindFocus>] {
+        let lists = page.lists
+        guard !lists.isEmpty else {
+            return [Chip(id: FindFocus.list("official"), title: W.official),
+                    Chip(id: FindFocus.list("community"), title: W.communityList)]
+        }
+        return lists.map { Chip(id: FindFocus.list($0.id), title: $0.label(among: lists), detail: count($0.id)) }
+    }
+
+    /// Where a publisher's list comes from: a link to its site, plain text on a TV.
+    @ViewBuilder private func from(_ host: String) -> some View {
+        let words = W.with(W.fromList, host: host)
+        #if os(tvOS)
+        note(words)
+        #else
+        if let site = URL(string: "https://\(host)/") {
+            Link(destination: site) { Label(words, glyph: "external-link") }
+                .buttonStyle(PillButtonStyle())
+        } else {
+            note(words)
+        }
+        #endif
+    }
+
+    /// Phone and Mac: a search over the loaded list.
+    @ViewBuilder private var search: some View {
+        #if !os(tvOS)
+        if let current, current.state == .ready, !current.entries.isEmpty {
+            TextField(W.searchLabel, text: $query)
+                .textFieldStyle(.plain)
+                .textFont(Theme.type.body)
+                .autocorrectionDisabled()
+                #if os(iOS)
+                .textInputAutocapitalization(.never)
+                #endif
+                .focused($searchFocused)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
+                .fieldChrome(focused: searchFocused)
+                .frame(maxWidth: 660)
+                .accessibilityLabel(W.searchLabel)
+        }
         #endif
     }
 
@@ -141,7 +197,7 @@ struct FindAddonsScreen: View {
 
     private var visible: [ListedAddon] {
         guard let current, current.state == .ready else { return [] }
-        return current.entries.filter(filter.shows)
+        return current.entries.filter { filter.shows($0) && $0.matches(query) }
     }
 
     private var visibleKeys: [String] { visible.map(\.key) }
@@ -149,7 +205,7 @@ struct FindAddonsScreen: View {
     /// Asking Cinemeta while the list loads, Refresh once it is in.
     @ViewBuilder private var tools: some View {
         if failure == nil, current == nil || current?.state == .loading {
-            StatusDot(tone: .warn, text: W.loading)
+            StatusDot(tone: .warn, text: current?.host.map { W.with(W.loadingFrom, host: $0) } ?? W.loading)
                 .padding(.bottom, Theme.Space.xs)
         } else if current?.state == .ready {
             // On a phone the word would push the Community chip under the edge fade.
@@ -170,7 +226,9 @@ struct FindAddonsScreen: View {
             }
         } else if let current, current.state == .ready {
             if current.entries.isEmpty {
-                note(W.empty)
+                note(current.host.map { W.with(W.emptyFrom, host: $0) } ?? W.empty)
+            } else if visible.isEmpty, !query.trimmingCharacters(in: .whitespaces).isEmpty {
+                note(W.searchEmpty)
             } else if visible.isEmpty, let words = filter.emptyWords {
                 note(words)
             } else {
@@ -187,6 +245,7 @@ struct FindAddonsScreen: View {
                 // Coming back to the grid lands on the card it left.
                 .defaultFocus($focus, lastCard.map(FindFocus.card) ?? visibleKeys.first.map(FindFocus.card), priority: .userInitiated)
                 #endif
+                if current.more == true { note(W.with(W.more, n: current.entries.count)) }
             }
         }
     }

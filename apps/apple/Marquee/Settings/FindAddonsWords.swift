@@ -35,6 +35,12 @@ enum FindAddonsWords {
     static let configure = "Configure"
     static let turnOn = "Turn on"
     static let fromHost = "from {host}"
+    static let fromList = "From {host}"
+    static let loadingFrom = "Asking {host}"
+    static let emptyFrom = "Nothing to show from {host} here."
+    static let more = "Showing the first {n} of this list."
+    static let searchLabel = "Search this list"
+    static let searchEmpty = "Nothing in this list matches."
 
     /// Every word by its key in the shared file, for the parity test.
     static let table: [String: String] = [
@@ -46,6 +52,11 @@ enum FindAddonsWords {
         "filterEmpty": filterEmpty, "kindSources": kindSources, "kindSubtitles": kindSubtitles, "kindCatalogs": kindCatalogs,
         "installing": installing, "turningOn": turningOn, "installed": installed, "off": off,
         "setUp": setUp, "setUpOff": setUpOff, "install": install, "configure": configure,
-        "turnOn": turnOn, "fromHost": fromHost,
+        "turnOn": turnOn, "fromHost": fromHost, "fromList": fromList, "loadingFrom": loadingFrom,
+        "emptyFrom": emptyFrom, "more": more, "searchLabel": searchLabel, "searchEmpty": searchEmpty,
     ]
+
+    /// A word with its `{host}` or `{n}` filled in.
+    static func with(_ word: String, host: String) -> String { word.replacingOccurrences(of: "{host}", with: host) }
+    static func with(_ word: String, n: Int) -> String { word.replacingOccurrences(of: "{n}", with: String(n)) }
 }

@@ -454,17 +454,25 @@ struct AddonInfo: Decodable, Hashable, Sendable, Identifiable {
     var hostLine: String { builtIn == true ? "Built into Momotus, runs on this device" : host }
 }
 
-/// Find addons: Cinemeta's two lists, Official then Community (plans/core-protocol.md).
+/// Find addons: Cinemeta's two lists, Official then Community, then the lists
+/// of addons the user installed (plans/core-protocol.md,
+/// plans/plugins-and-marketplace.md 7.1).
 struct AddonCatalogSnapshot: Decodable, Hashable, Sendable {
     let lists: [AddonList]
 }
 
 struct AddonList: Decodable, Hashable, Sendable {
-    /// "official" or "community".
+    /// "official" or "community" for Cinemeta's lists; `addon-<hash>:<id>`
+    /// for a list an installed addon publishes.
     let id: String
     let name: String
+    /// The installed addon's host a list comes from ("From {host}"); nil for
+    /// Cinemeta's two.
+    var host: String?
     let state: ListState
     let entries: [ListedAddon]
+    /// The list holds more than it shows; nil from an older core.
+    var more: Bool?
 }
 
 enum ListState: Decodable, Hashable, Sendable {

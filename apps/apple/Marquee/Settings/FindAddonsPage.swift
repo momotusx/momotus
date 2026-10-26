@@ -17,6 +17,9 @@ final class FindAddonsPage {
 
     func list(_ id: String) -> AddonList? { catalog.snapshot?.lists.first { $0.id == id } }
 
+    /// Every list in the core's order: Cinemeta's two, then the installed addons'.
+    var lists: [AddonList] { catalog.snapshot?.lists ?? [] }
+
     func status(of id: String) -> FindStatus { FindStatus(failure: catalog.failure, list: list(id)) }
 
     /// The page appeared. The first time, results from an earlier visit go:
