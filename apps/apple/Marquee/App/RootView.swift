@@ -202,6 +202,9 @@ struct MainShell: View {
                         coreLog.notice("debug install from \(host, privacy: .public): \(error.localizedDescription, privacy: .public)")
                     }
                 }
+                if let patch = DebugHooks.prefsPatch {
+                    try? await core.perform("setPrefs", ["patch": patch])
+                }
                 if !DebugHooks.subtitleLanguages.isEmpty {
                     try? await core.perform("setPrefs", ["patch": ["subtitleLanguages": DebugHooks.subtitleLanguages]])
                 }

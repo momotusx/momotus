@@ -158,6 +158,13 @@ enum DebugHooks {
         return try? JSONDecoder().decode(T.self, from: data)
     }
 
+    /// `-MQPrefsPatch '{"defaultsSeen":1000}'` patches the profile's whole-number prefs at launch, as Android's
+    /// `prefs_patch` extra does: a fresh walk install that should open on Home, not the first-run flow.
+    static var prefsPatch: [String: Int]? {
+        guard let text = UserDefaults.standard.string(forKey: "MQPrefsPatch"), let data = text.data(using: .utf8) else { return nil }
+        return try? JSONDecoder().decode([String: Int].self, from: data)
+    }
+
     /// `-MQInstallAddons url1,url2` installs addons through the protocol at launch.
     static var installAddons: [String] {
         UserDefaults.standard.string(forKey: "MQInstallAddons")?.split(separator: ",").map(String.init) ?? []
