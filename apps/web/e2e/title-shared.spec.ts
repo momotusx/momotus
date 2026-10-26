@@ -269,60 +269,83 @@ for (const form of Object.keys(FORMS) as Form[]) {
   });
 }
 
-// The TV title page is drawn whole from its first frame: Remove from Continue Watching comes with the title's own
-// header, the Versions button holds the width of its widest count, and the logo's box has its shape before the page
-// shows. Here Home and Versions answer 3 s late and the logo (3:2, far from the 3.2:1 the box assumes without one)
-// 1 s late; every frame from the first that draws the page is measured, and none differs.
-test("tv: the action row keeps its box from the first frame, however late Home answers", async ({ browser }) => {
-  const [width, height] = FORMS.tv;
-  const context = await browser.newContext({ viewport: { width, height }, reducedMotion: "reduce" });
-  await context.routeWebSocket(/\/ws$/, (ws) => {
-    const server = ws.connectToServer();
-    ws.onMessage((message) => {
-      const text = String(message);
-      let home = false;
-      try {
-        const m = JSON.parse(text) as { op?: string; view?: string };
-        home = m.op === "subscribe" && (m.view === "home" || m.view === "versions");
-      } catch {
-        // Not JSON: passed on as it is.
-      }
-      if (home) setTimeout(() => server.send(text), 3000);
-      else server.send(text);
-    });
-  });
-  const logo = '<svg xmlns="http://www.w3.org/2000/svg" width="600" height="400"><rect width="600" height="400" rx="40" fill="#e9e2d2"/></svg>';
-  await context.route(/\/logo\//, (route) =>
-    setTimeout(() => void route.fulfill({ status: 200, contentType: "image/svg+xml", headers: { "access-control-allow-origin": "*" }, body: logo }), 1000),
-  );
-  // Each frame's boxes (and whether Remove is there), kept when they differ from the frame before.
-  await context.addInitScript(() => {
-    const parts = [".info .title-logo", ".info .meta", ".info .acts", ".info .vnote", ".info .facts"];
-    const frames: string[] = [];
-    (window as unknown as { frames_: string[] }).frames_ = frames;
-    const tick = () => {
-      if (document.querySelector('[data-f="title:play"]')) {
-        const boxes = parts.map((s) => {
-          const r = document.querySelector(s)?.getBoundingClientRect();
-          return r ? `${s} ${Math.round(r.x)},${Math.round(r.y)} ${Math.round(r.width)}x${Math.round(r.height)}` : `${s} none`;
+// The title page is drawn whole from its first frame, on every form: Remove from Continue Watching comes with the
+// title's own header (TV), the Versions button holds the width of its widest count, and the logo has a fixed slot,
+// the logo or the title's name at its foot. Here Home and Versions answer 3 s late and the logo 1 s late (or never),
+// every frame from the first that draws the page is measured, and none differs.
+const LOGOS = {
+  // A stacked logo, 3:2, far from the 3.2:1 a box assumes without one.
+  stacked: { svg: '<svg xmlns="http://www.w3.org/2000/svg" width="600" height="400"><rect width="600" height="400" rx="40" fill="#e9e2d2"/></svg>', r: "1.500" },
+  // Transparent margins around a 3:1 mark: the cut's ratio is the one the page takes, not the file's 3:2.
+  margins: { svg: '<svg xmlns="http://www.w3.org/2000/svg" width="600" height="400"><rect x="150" y="150" width="300" height="100" fill="#e9e2d2"/></svg>', r: "3.000" },
+  // No logo comes: the name takes the slot.
+  fails: { svg: null, r: null },
+} as const;
+
+for (const form of Object.keys(FORMS) as Form[]) {
+  for (const [kind, logo] of Object.entries(LOGOS)) {
+    test(`${form}: the page keeps its boxes from the first frame, however late Home answers and the logo (${kind}) lands`, async ({ browser }) => {
+      const [width, height, scale] = FORMS[form];
+      const context = await browser.newContext({ viewport: { width, height }, deviceScaleFactor: scale, isMobile: form === "phone", hasTouch: form === "phone", reducedMotion: "reduce" });
+      await context.routeWebSocket(/\/ws$/, (ws) => {
+        const server = ws.connectToServer();
+        ws.onMessage((message) => {
+          const text = String(message);
+          let late = false;
+          try {
+            const m = JSON.parse(text) as { op?: string; view?: string };
+            late = m.op === "subscribe" && (m.view === "home" || m.view === "versions");
+          } catch {
+            // Not JSON: passed on as it is.
+          }
+          if (late) setTimeout(() => server.send(text), 3000);
+          else server.send(text);
         });
-        const frame = [...boxes, `remove ${document.querySelectorAll('[data-f="title:uncontinue"]').length}`].join("; ");
-        if (frames.at(-1) !== frame) frames.push(frame);
+      });
+      await context.route(/\/logo\//, (route) =>
+        setTimeout(
+          () =>
+            void (logo.svg
+              ? route.fulfill({ status: 200, contentType: "image/svg+xml", headers: { "access-control-allow-origin": "*" }, body: logo.svg })
+              : route.fulfill({ status: 404 })),
+          1000,
+        ),
+      );
+      // Each frame's boxes (and whether Remove is there), kept when they differ from the frame before. The logo's
+      // own width is free (nothing sits beside it); its slot is what holds the page.
+      await context.addInitScript(() => {
+        const parts = [".info .logo-slot", ".info .meta", ".info .acts", ".info .vnote", ".info .facts"];
+        const frames: string[] = [];
+        (window as unknown as { frames_: string[] }).frames_ = frames;
+        const tick = () => {
+          if (document.querySelector('[data-f="title:play"]')) {
+            const boxes = parts.map((s) => {
+              const r = document.querySelector(s)?.getBoundingClientRect();
+              return r ? `${s} ${Math.round(r.x)},${Math.round(r.y)} ${Math.round(r.width)}x${Math.round(r.height)}` : `${s} none`;
+            });
+            const frame = [...boxes, `remove ${document.querySelectorAll('[data-f="title:uncontinue"]').length}`].join("; ");
+            if (frames.at(-1) !== frame) frames.push(frame);
+          }
+          requestAnimationFrame(tick);
+        };
+        requestAnimationFrame(tick);
+      });
+      const page = await context.newPage();
+      await page.goto(`/title/movie/${BBB_ID}?form=${form}`);
+      await expect(page.locator('[data-f="title:play"]')).toBeVisible({ timeout: 30_000 });
+      // Home answers after 3 s; by 4.5 s everything that comes has come.
+      await page.waitForTimeout(4500);
+      const frames = await page.evaluate(() => (window as unknown as { frames_: string[] }).frames_);
+      expect(frames, frames.join("\n")).toHaveLength(1);
+      expect(frames[0]).not.toContain(".logo-slot none");
+      // Big Buck Bunny is in Continue Watching (the run's seed): on TV its Remove is there with the first frame.
+      expect(frames[0]).toContain(form === "tv" ? "remove 1" : "remove 0");
+      if (logo.r) {
+        expect(await page.locator(".info .title-logo").evaluate((i) => getComputedStyle(i).getPropertyValue("--r"))).toBe(logo.r);
+      } else {
+        await expect(page.locator(".info .logo-slot .logo-text")).toHaveText("Big Buck Bunny");
       }
-      requestAnimationFrame(tick);
-    };
-    requestAnimationFrame(tick);
-  });
-  const page = await context.newPage();
-  await page.goto(`/title/movie/${BBB_ID}?form=tv`);
-  await expect(page.locator('[data-f="title:play"]')).toBeVisible({ timeout: 30_000 });
-  // Home answers after 3 s; by 4.5 s everything that comes has come.
-  await page.waitForTimeout(4500);
-  const frames = await page.evaluate(() => (window as unknown as { frames_: string[] }).frames_);
-  // Big Buck Bunny is in Continue Watching (the run's seed), so its Remove is there with the first frame, and the
-  // logo is drawn at its own shape: taller than the 3.2:1 default would make it.
-  expect(frames, frames.join("\n")).toHaveLength(1);
-  expect(frames[0]).toContain("remove 1");
-  expect(await page.locator(".info .title-logo").evaluate((i) => getComputedStyle(i).getPropertyValue("--r"))).toBe("1.500");
-  await context.close();
-});
+      await context.close();
+    });
+  }
+}

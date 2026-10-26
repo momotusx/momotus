@@ -10,8 +10,8 @@ import Layers from "lucide-solid/icons/layers";
 import Play from "lucide-solid/icons/play";
 import RefreshCw from "lucide-solid/icons/refresh-cw";
 import RotateCcw from "lucide-solid/icons/rotate-ccw";
-import { createEffect, createMemo, createSignal, For, type JSX, Match, on, onCleanup, Show, Switch } from "solid-js";
-import { Backdrop, Logo, useTrimmedLogo } from "../components/art";
+import { createEffect, createMemo, createSignal, For, type JSX, Match, onCleanup, Show, Switch } from "solid-js";
+import { Backdrop, Logo } from "../components/art";
 import { SynopsisDialog } from "../components/synopsis";
 import { TitleScores } from "../components/title-scores";
 import { KeyedPage } from "../components/keyed-page";
@@ -44,9 +44,6 @@ export default function Title() {
     />
   );
 }
-
-/** How long the title page waits for its logo's cut before it shows the name instead. */
-const LOGO_WAIT = 1500;
 
 // The core's empty states whose only action is Back (plans/play-every-version.md).
 const BACK_ONLY = new Set<EmptyKind>(["noRoom", "needsAccount", "kidsNothing", "noResults"]);
@@ -84,24 +81,6 @@ function TitlePage(props: { kind: string; id: string; retry: () => void }) {
     });
   };
   const [artMissing, setArtMissing] = createSignal(false);
-  // The logo's box is sized by its shape, known once its cut lands: on TV the page waits for it, so nothing under
-  // the logo (the focused row) moves after the first frame. A logo slower than LOGO_WAIT gives way to the name, for
-  // good on this page. Phone and desktop draw at once: a cold logo takes about 1.1 s (p50) to arrive, too long to
-  // hold the page for (bench/tv-title-row-shift/logo-wait.jsonl).
-  const logo = useTrimmedLogo(() => d()?.logo);
-  const [logoGivenUp, setLogoGivenUp] = createSignal(false);
-  createEffect(
-    on(
-      () => d()?.logo,
-      (url) => {
-        setLogoGivenUp(false);
-        if (!url || form() !== "tv") return;
-        const timer = setTimeout(() => logo() === undefined && setLogoGivenUp(true), LOGO_WAIT);
-        onCleanup(() => clearTimeout(timer));
-      },
-    ),
-  );
-  const logoSettled = () => form() !== "tv" || !d()?.logo || logo() !== undefined || logoGivenUp();
   // TV and desktop scroll the page below the hero for More like this; the phone scrolls the document.
   let page: HTMLDivElement | undefined;
   const toTop = () => {
@@ -240,11 +219,17 @@ function TitlePage(props: { kind: string; id: string; retry: () => void }) {
             </div>
           </section>
         </Match>
-        <Match when={logoSettled() && d()}>
+        <Match when={d()}>
           {(x) => (
             <>
               <section class="info" aria-label={x().name} data-reveal-top>
-                <Logo src={logoGivenUp() ? null : x().logo} name={x().name} class="title-logo" />
+                {/* A title with a logo keeps a fixed slot for it, the logo or its name at the slot's foot, so nothing
+                    under it moves whatever arrives, and whenever (a cold logo takes about a second). */}
+                <Show when={x().logo} fallback={<Logo src={null} name={x().name} class="title-logo" />}>
+                  <div class="logo-slot">
+                    <Logo src={x().logo} name={x().name} class="title-logo" />
+                  </div>
+                </Show>
                 <p class="meta" ref={separators}>
                   {/* DECISION's order: the year first, then the rest of the line, then the ratings row at
                       its end, each number after its service's mark; IMDb's links to its page, except on TV. */}
