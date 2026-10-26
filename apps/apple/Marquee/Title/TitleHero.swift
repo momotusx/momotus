@@ -37,6 +37,31 @@ func coverHeroHeight(width: CGFloat, height: CGFloat) -> CGFloat {
     min(width * 1.5, height * 0.75)
 }
 
+/// The iPhone's cover: whole at its 2:3 across the screen (`coverHeroHeight`), kept by its top, with the status
+/// bar's wash at its top and only its bottom edge fading into the page (`BackdropStops.coverFoot`); no words go
+/// over it. It is the title's heading for VoiceOver, since the cover prints the title.
+struct CoverArt: View {
+    let url: String
+    let name: String
+    let height: CGFloat
+
+    var body: some View {
+        ArtImage(url: url, maxPixels: ArtSize.backdrop, alignment: .top)
+            .frame(height: height)
+            .frame(maxWidth: .infinity)
+            .clipped()
+            .overlay {
+                ZStack {
+                    LinearGradient(stops: BackdropStops.gradient(BackdropStops.heroPhoneTop, Theme.Palette.bg), startPoint: .top, endPoint: .bottom)
+                    LinearGradient(stops: BackdropStops.gradient(BackdropStops.coverFoot, Theme.Palette.bg), startPoint: .bottom, endPoint: .top)
+                }
+            }
+            .accessibilityElement()
+            .accessibilityLabel(name)
+            .accessibilityAddTraits([.isHeader, .isImage])
+    }
+}
+
 /// Watched on the iPhone, a movie's: a 48 pt round toggle beside Library, its check lit once marked. Small,
 /// never a big button (the owner's rule).
 struct WatchedControl: View {
@@ -218,15 +243,19 @@ struct TitleHeroWide<Actions: View>: View {
 
 /// The iPhone's title hero, centered over the art: the logo, the kind and two genres, the primary
 /// with its Library control, then the secondaries. The synopsis and the meta row follow under the
-/// hero, on the page, so the words over art stay where the foot holds them (the glass check).
+/// hero, on the page, so the words over art stay where the foot holds them (the glass check). Under a
+/// cover (`logo` false) there is no logo: the cover prints its own title, and the kind line leads.
 struct TitleHeroPhone<Buttons: View, Secondaries: View>: View {
     let facts: TitleHeroFacts
+    var logo = true
     @ViewBuilder let buttons: Buttons
     @ViewBuilder let secondaries: Secondaries
 
     var body: some View {
         VStack(spacing: 0) {
-            TitleLogo(logo: facts.logo, name: facts.name, maxWidth: 300, height: 86, nameSize: Theme.type.title1, alignment: .bottom)
+            if logo {
+                TitleLogo(logo: facts.logo, name: facts.name, maxWidth: 300, height: 86, nameSize: Theme.type.title1, alignment: .bottom)
+            }
             // One line, where the glass check reads it: genres drop before the line wraps (review r2 P3-5).
             ViewThatFits(in: .horizontal) {
                 ForEach(facts.kindLines, id: \.self) { Text($0).lineLimit(1) }

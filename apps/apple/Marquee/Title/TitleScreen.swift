@@ -19,6 +19,7 @@ struct TitleScreen: View {
     @State private var actionsWidth = CGFloat.infinity
     /// Content has scrolled under the status bar and the back button.
     @State private var underBar = false
+    @State private var insetTop: CGFloat = 0
     /// TV: the page enters on its primary (Play, Resume or Add a source).
     @FocusState private var primaryFocused: Bool
     /// Versions for the play target: the line under Play, Play itself, and the Versions page.
@@ -160,6 +161,8 @@ struct TitleScreen: View {
         .inert(panelCovers)
         .background(Theme.Palette.bg)
         .onScrollGeometryChange(for: Bool.self) { $0.contentOffset.y + $0.contentInsets.top > 8 } action: { underBar = $1 }
+        // How far the page starts under the screen's top, where a cover's art starts.
+        .onScrollGeometryChange(for: CGFloat.self) { $0.contentInsets.top } action: { insetTop = $1 }
         #if DEBUG
         .defaultScrollAnchor(DebugHooks.scrollBottom ? .bottom : nil)
         #endif
@@ -193,6 +196,12 @@ struct TitleScreen: View {
                 if metrics.wide {
                     TitleHeroWide(facts: facts, columnWidth: panelOpen && !panelCovers ? WideLayout.panelColumnWidth(window: width) : 900,
                                   open: openLink, more: { reading = true }) { wideActions(details) }
+                } else if details.cover != nil {
+                    // The cover stands whole above the words (it prints its own title): they start at its foot.
+                    VStack(spacing: 0) {
+                        Color.clear.frame(height: max(0, coverHeroHeight(width: width, height: height) - insetTop))
+                        TitleHeroPhone(facts: facts, logo: false) { phoneButtons() } secondaries: { phoneSecondaries(details) }
+                    }
                 } else {
                     TitleHeroPhone(facts: facts) { phoneButtons() } secondaries: { phoneSecondaries(details) }
                 }
@@ -218,13 +227,17 @@ struct TitleScreen: View {
             }
             .background {
                 // The phone's art runs up under the status bar; the Mac's starts under the black header.
-                ZStack {
-                    // The iPhone shows the cover first; a cover held under its 2:3 keeps its top, where the faces are.
-                    let cover = metrics.wide ? nil : details.cover
-                    ArtImage(url: cover ?? details.background ?? details.poster, maxPixels: ArtSize.backdrop,
-                             alignment: cover != nil || details.background == nil ? .top : .center)
-                        .accessibilityHidden(true)
-                    HeroScrims(wide: metrics.wide, page: Theme.Palette.bg, wash: BackdropStops.titleWash)
+                ZStack(alignment: .top) {
+                    if !metrics.wide, let cover = details.cover {
+                        // The iPhone shows the cover first, whole at its 2:3 from the screen's top, with no words
+                        // over it: the status bar's wash at its top, and only its bottom edge fading into the page.
+                        CoverArt(url: cover, name: details.name, height: coverHeroHeight(width: width, height: height))
+                    } else {
+                        ArtImage(url: details.background ?? details.poster, maxPixels: ArtSize.backdrop,
+                                 alignment: details.background == nil ? .top : .center)
+                            .accessibilityHidden(true)
+                        HeroScrims(wide: metrics.wide, page: Theme.Palette.bg, wash: BackdropStops.titleWash)
+                    }
                 }
                 .ignoresSafeArea(edges: metrics.wide ? [] : .top)
             }

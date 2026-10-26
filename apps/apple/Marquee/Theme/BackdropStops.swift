@@ -58,6 +58,9 @@ enum BackdropStops {
     /// 222 above the foot, and Home's genre line stacked over its ratings beside a two-line reason.
     static let heroPhoneFoot = [Stop(at: 0, alpha: 1), Stop(at: 0.09, alpha: 0.92), Stop(at: 0.2, alpha: 0.76), Stop(at: 0.33, alpha: 0.58), Stop(at: 0.46, alpha: 0.24), Stop(at: 0.6, alpha: 0)]
     static let heroPhoneTop = [Stop(at: 0, alpha: 0.5), Stop(at: 0.11, alpha: 0.2), Stop(at: 0.2, alpha: 0)]
+    /// The iPhone's cover, from its foot up: only its bottom edge fades into the page, where the words start (no
+    /// words over it: the cover prints its own title).
+    static let coverFoot = [Stop(at: 0, alpha: 1), Stop(at: 0.08, alpha: 0.6), Stop(at: 0.18, alpha: 0)]
     /// The foot ramp's stops are shares of the 680 pt portrait hero and hold in points from the foot:
     /// a shorter hero (a landscape phone, down to 280) keeps the same darkness at the same height
     /// above the foot, so Details reads there as it does upright.

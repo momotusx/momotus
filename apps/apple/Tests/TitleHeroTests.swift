@@ -246,9 +246,48 @@ private func spot(_ part: CGRect, in box: CGRect) -> (top: CGFloat, end: CGFloat
     // The page draws the cover first, on the iPhone only, and sizes the frame by it.
     let screen = try String(contentsOf: URL(fileURLWithPath: #filePath).deletingLastPathComponent()
         .appending(path: "../Marquee/Title/TitleScreen.swift"), encoding: .utf8)
-    #expect(screen.contains("let cover = metrics.wide ? nil : details.cover\n"))
-    #expect(screen.contains("ArtImage(url: cover ?? details.background ?? details.poster"))
+    #expect(screen.contains("if !metrics.wide, let cover = details.cover {\n"))
+    #expect(screen.contains("CoverArt(url: cover, name: details.name, height: coverHeroHeight(width: width, height: height))"))
+    #expect(screen.contains("TitleHeroPhone(facts: facts, logo: false)"))
     #expect(screen.contains("if details?.cover != nil { return coverHeroHeight(width: width, height: height) }"))
+}
+
+// A cover prints its own title: the iPhone draws no logo over or under it (the kind line leads the words), and the
+// cover's last row of pixels is the page color, where the words start.
+@MainActor @Test func underACoverTheIPhoneDrawsNoSecondTitle() throws {
+    func kindTop(logo: Bool) throws -> CGFloat {
+        let parts = Parts()
+        let hero = TitleHeroPhone(facts: TitleHeroFacts(try details(["logo": "https://a.example/logo.png"])), logo: logo) {
+            EmptyView()
+        } secondaries: {
+            EmptyView()
+        }
+        .heroProbe(.box)
+        .environment(\.heroProbe, HeroProbeSink { part, frame in parts.frames[part] = frame })
+        let host = NSHostingView(rootView: hero.frame(width: 390))
+        host.frame = CGRect(x: 0, y: 0, width: 390, height: 600)
+        for _ in 0..<100 where parts.frames[.kindLine] == nil || parts.frames[.box] == nil {
+            host.layoutSubtreeIfNeeded()
+            RunLoop.main.run(until: Date().addingTimeInterval(0.01))
+        }
+        return try #require(parts.frames[.kindLine]).minY - (try #require(parts.frames[.box])).minY
+    }
+    // Only the 12 pt above the kind line, against the 86 pt logo over it.
+    #expect(try kindTop(logo: false) <= 13)
+    #expect(try kindTop(logo: true) >= 86)
+    // The cover's foot, with no picture under it yet: its bottom row is the page's color.
+    let host = NSHostingView(rootView: CoverArt(url: "", name: "Big Buck Bunny", height: 300).frame(width: 200, height: 300))
+    host.frame = CGRect(x: 0, y: 0, width: 200, height: 300)
+    host.layoutSubtreeIfNeeded()
+    let rep = try #require(host.bitmapImageRepForCachingDisplay(in: host.bounds))
+    host.cacheDisplay(in: host.bounds, to: rep)
+    let page = try #require(NSColor(Theme.Palette.bg).usingColorSpace(.sRGB))
+    for x in stride(from: 0, to: rep.pixelsWide, by: 20) {
+        let edge = try #require(rep.colorAt(x: x, y: rep.pixelsHigh - 1)?.usingColorSpace(.sRGB))
+        for (a, b) in [(edge.redComponent, page.redComponent), (edge.greenComponent, page.greenComponent), (edge.blueComponent, page.blueComponent)] {
+            #expect(abs(a - b) <= 3.0 / 255, "x \(x): \(edge) against the page's \(page)")
+        }
+    }
 }
 
 // The owner's standing rule: Watched is a small control, never a big button. On the iPhone it is a 48 pt
