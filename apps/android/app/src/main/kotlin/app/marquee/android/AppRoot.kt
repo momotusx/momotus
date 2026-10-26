@@ -74,6 +74,7 @@ import app.marquee.ui.tv.TvNavFocus
 import app.marquee.ui.tv.TvShell
 import app.marquee.ui.tv.firstTarget
 import app.marquee.ui.tv.focusFirstRow
+import app.marquee.ui.tv.shownHero
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
@@ -172,7 +173,7 @@ private fun HomeBackHandler(
     if (!active) return
     val scope = rememberCoroutineScope()
     val running = remember { arrayOfNulls<Job>(1) }
-    val reachable = firstTarget(app.home.rows.toList(), app.home.hero, patient = false) != null
+    val reachable = firstTarget(app.home.rows.toList(), app.tvHome.shownHero(app.home), patient = false) != null
     BackHandler(enabled = reachable && !app.tvHome.focus.onFirstRow.value) {
         // A held Back repeats: one move of focus at a time, then the next press leaves.
         if (running[0]?.isActive != true) running[0] = scope.launch { focusFirstRow(app.home, app.tvHome) }

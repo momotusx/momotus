@@ -102,7 +102,11 @@ import app.marquee.design.TrailerState
 import app.marquee.design.TrailerSurface
 import app.marquee.design.describe
 import app.marquee.design.heroClockRuns
+import app.marquee.design.heroNearestPage
+import app.marquee.design.heroPagerCount
+import app.marquee.design.heroPagerPage
 import app.marquee.design.laneHeight
+import app.marquee.design.rememberScreenReader
 import app.marquee.design.rememberTrailerHost
 import app.marquee.design.trailerAllowed
 import app.marquee.design.windowDp
@@ -278,8 +282,19 @@ private fun PhoneHeroCarousel(
     trailers: TrailerHost,
     visible: () -> Boolean,
 ) {
-    val pager = rememberPagerState { heroes.size }
+    val n = heroes.size
+    // Many loops of the pages: the timer always moves right, past the last page too (review r1, L3).
+    val pager = rememberPagerState(initialPage = heroPagerPage(n, 0)) { heroPagerCount(n) }
     val clock = remember { HeroClock(heroes.size) }
+    val shown = { page: Int -> heroes[page % n] }
+    // The list grows while catalogs arrive: the page shown stays the same title.
+    var shownId by remember { mutableStateOf<String?>(null) }
+    SideEffect { shownId = heroes.getOrNull(pager.currentPage % n.coerceAtLeast(1))?.tile?.id }
+    LaunchedEffect(heroes.map { it.tile.id }) {
+        val at = heroes.indexOfFirst { it.tile.id == shownId }.coerceAtLeast(0)
+        if (n > 0 && pager.currentPage % n != at) pager.scrollToPage(heroPagerPage(n, at))
+    }
+    val screenReader = rememberScreenReader()
     SideEffect { clock.count = heroes.size }
     val trailer = remember { TrailerState() }
     val context = LocalContext.current
@@ -294,21 +309,31 @@ private fun PhoneHeroCarousel(
     }
     RunHeroClock(
         clock,
-        running = heroClockRuns(active, visible(), reduced, pager.isScrollInProgress, trailer.playing, heroes.size),
+        running = {
+            heroClockRuns(
+                active,
+                visible(),
+                reduced,
+                pager.isScrollInProgress,
+                trailer.playing,
+                heroes.size,
+                screenReader = screenReader,
+            )
+        },
     ) {
         scope.launch {
             pager.animateScrollToPage(
-                (pager.currentPage + 1) % heroes.size,
+                pager.currentPage + 1,
                 animationSpec = tween(HeroClock.SLIDE_MS, easing = Tokens.ease),
             )
         }
     }
     LaunchedEffect(trailer) { snapshotFlow { trailer.fraction }.collect { if (trailer.playing) clock.trailer(it) } }
     // The settled page's trailer, once it is due and every condition holds (decision 5).
-    val shownId = heroes.getOrNull(pager.settledPage)?.tile?.id
-    LaunchedEffect(shownId, active, visible()) {
+    val settledId = heroes.getOrNull(pager.settledPage % n.coerceAtLeast(1))?.tile?.id
+    LaunchedEffect(settledId, active, visible()) {
         trailers.stop()
-        val page = heroes.getOrNull(pager.settledPage) ?: return@LaunchedEffect
+        val page = heroes.getOrNull(pager.settledPage % n.coerceAtLeast(1)) ?: return@LaunchedEffect
         val id = HeroTrailers.checkedId(page.trailer)
         if (!active || !visible() || id == null) return@LaunchedEffect
         delay(TRAILER_DELAY_MS)
@@ -343,10 +368,10 @@ private fun PhoneHeroCarousel(
             }
         },
     ) {
-        HorizontalPager(state = pager, beyondViewportPageCount = 1, key = { heroes[it].tile.id }) { page ->
+        HorizontalPager(state = pager, beyondViewportPageCount = 1) { page ->
             val on = page == pager.settledPage
             PhoneHero(
-                heroes[page],
+                shown(page),
                 onOpen,
                 onPlay,
                 artAlpha = { if (on) art else 1f },
@@ -373,15 +398,15 @@ private fun PhoneHeroCarousel(
         if (heroes.size > 1) {
             HeroDots(
                 heroes.size,
-                pager.currentPage,
+                pager.currentPage % n,
                 { clock.progress },
-                Modifier.align(Alignment.BottomCenter).padding(bottom = 18.dp),
+                Modifier.align(Alignment.BottomCenter).padding(bottom = 5.dp),
                 label = { "Page ${it + 1} of ${heroes.size}, ${heroes[it].tile.name}" },
                 onPick = { i ->
                     clock.manual()
                     scope.launch {
                         pager.animateScrollToPage(
-                            i,
+                            heroNearestPage(n, pager.currentPage, i),
                             animationSpec = tween(HeroClock.SLIDE_MS, easing = Tokens.ease),
                         )
                     }

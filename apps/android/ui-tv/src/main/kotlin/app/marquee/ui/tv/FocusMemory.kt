@@ -6,8 +6,10 @@ import androidx.compose.foundation.lazy.layout.LazyLayoutCacheWindow
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.focus.FocusRequester
 
@@ -166,6 +168,9 @@ class TvHomeState(
 
     /** Home shows a card between its lanes (the recommended addons card): the lanes under it sit one item lower. */
     var cardShown = false
+
+    /** The hero page shown, by its title: start focus and Back aim at its buttons (review r1, H1). */
+    var heroId by mutableStateOf<String?>(null)
 }
 
 /** How far ahead of the screen Home composes lanes, in screens: see [TvHomeState.page]. */

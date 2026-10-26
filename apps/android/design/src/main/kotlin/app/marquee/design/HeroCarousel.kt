@@ -1,5 +1,6 @@
 package app.marquee.design
 
+import android.view.accessibility.AccessibilityManager
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
@@ -9,15 +10,17 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
@@ -28,6 +31,7 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -104,7 +108,25 @@ fun heroClockRuns(
     sliding: Boolean,
     trailerPlaying: Boolean,
     pages: Int,
-): Boolean = pages > 1 && active && visible && !reducedMotion && !sliding && !trailerPlaying
+    /** TalkBack is on: a page that slides away under its focus is lost to it (WCAG 2.2.2; review r1, L4). */
+    screenReader: Boolean = false,
+    /** TV: a hero button has focus, so no page changes under it (review r1, H2). */
+    held: Boolean = false,
+): Boolean = pages > 1 && active && visible && !reducedMotion && !sliding && !trailerPlaying && !screenReader && !held
+
+/** Whether TalkBack (touch exploration) is on, following it as it changes. */
+@Composable
+fun rememberScreenReader(): Boolean {
+    val context = LocalContext.current
+    val manager = remember(context) { context.getSystemService(AccessibilityManager::class.java) }
+    var on by remember(manager) { mutableStateOf(manager?.isTouchExplorationEnabled == true) }
+    DisposableEffect(manager) {
+        val listener = AccessibilityManager.TouchExplorationStateChangeListener { on = it }
+        manager?.addTouchExplorationStateChangeListener(listener)
+        onDispose { manager?.removeTouchExplorationStateChangeListener(listener) }
+    }
+    return on
+}
 
 /**
  * Where a hero page sits during a slide, in page widths from its place at rest (B2: the two pages move together,
@@ -117,6 +139,26 @@ fun heroPageAt(
     t: Float,
 ): Float = if (incoming) dir * (1f - t) else -dir * t
 
+/** The phone pager lays the core's pages out [HERO_LOOPS] times over, so the timer's next page is always to the
+ * right, the last page's too (review r1, L3); a page's place in the core's list is `page % n`. */
+const val HERO_LOOPS = 1000
+
+/** The pager's page count for [n] pages. */
+fun heroPagerCount(n: Int): Int = if (n > 1) n * HERO_LOOPS else n
+
+/** The pager page that shows the core's page [index] in the middle loop. */
+fun heroPagerPage(
+    n: Int,
+    index: Int,
+): Int = if (n > 1) n * (HERO_LOOPS / 2) + index else 0
+
+/** The page nearest [current] that shows the core's page [index], for a tap on a dot. */
+fun heroNearestPage(
+    n: Int,
+    current: Int,
+    index: Int,
+): Int = if (n > 1) current - current % n + index else 0
+
 /**
  * Runs [clock] on the frame clock while [running] says so, and calls [onAdvance] when a page's time is up.
  * Compose's frame clock is the test clock in Robolectric, so the dwell is testable without real time.
@@ -124,13 +166,15 @@ fun heroPageAt(
 @Composable
 fun RunHeroClock(
     clock: HeroClock,
-    running: Boolean,
+    /** Read here, in this function's own scope: a change of focus or scroll recomposes it, not the caller. */
+    running: () -> Boolean,
     onAdvance: () -> Unit,
 ) {
     val advance by rememberUpdatedState(onAdvance)
+    val on = running()
     // Frames are asked for only while the clock runs: an idle hero asks for none (and a test can settle).
-    LaunchedEffect(clock, running) {
-        if (!running) return@LaunchedEffect
+    LaunchedEffect(clock, on) {
+        if (!on) return@LaunchedEffect
         var last = -1L
         while (true) {
             withFrameNanos { now ->
@@ -184,7 +228,8 @@ private fun Dot(
         } else {
             Modifier
                 .clickable(role = Role.Tab, onClick = onClick)
-                .padding(vertical = 7.dp)
+                // A 48 dp tall target for a 7 dp dot (review r1, L4).
+                .heightIn(min = 48.dp)
         }
     Box(
         tap.semantics { contentDescription = label },

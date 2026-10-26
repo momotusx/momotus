@@ -28,6 +28,9 @@ import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import org.json.JSONObject
 import kotlin.math.max
 import kotlin.math.roundToInt
@@ -354,7 +357,16 @@ class TrailerHost internal constructor(
 fun rememberTrailerHost(): TrailerHost {
     val context = LocalContext.current
     val host = remember(context) { TrailerHost(context) }
-    DisposableEffect(host) { onDispose { host.destroy() } }
+    // In the background the WebView's renderer goes too (review r1, L2); the next play makes a fresh one.
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    DisposableEffect(host, lifecycle) {
+        val stopped = LifecycleEventObserver { _, event -> if (event == Lifecycle.Event.ON_STOP) host.destroy() }
+        lifecycle.addObserver(stopped)
+        onDispose {
+            lifecycle.removeObserver(stopped)
+            host.destroy()
+        }
+    }
     return host
 }
 

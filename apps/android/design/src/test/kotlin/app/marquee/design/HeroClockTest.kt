@@ -89,6 +89,39 @@ class HeroClockTest {
     }
 
     @Test
+    fun talkBackOrAFocusedHeroButtonHoldsTheTimedPages() {
+        // Review r1, L4 and H2.
+        assertTrue(
+            heroClockRuns(
+                active = true,
+                visible = true,
+                reducedMotion = false,
+                sliding = false,
+                trailerPlaying = false,
+                pages = 3,
+            ),
+        )
+        assertFalse(
+            heroClockRuns(true, true, false, false, false, 3, screenReader = true),
+        )
+        assertFalse(heroClockRuns(true, true, false, false, false, 3, held = true))
+    }
+
+    @Test
+    fun thePhonesTimerAlwaysMovesRightThroughManyLoops() {
+        // Review r1, L3: page 8 of 8 goes on to a page on its right that shows the first one.
+        val n = 8
+        val last = heroPagerPage(n, 7)
+        assertEquals(0, (last + 1) % n)
+        assertTrue(last + 1 < heroPagerCount(n))
+        // A dot picks the nearest page that shows its title, in the loop shown.
+        assertEquals(heroPagerPage(n, 2), heroNearestPage(n, heroPagerPage(n, 5), 2))
+        // One page: one pager page.
+        assertEquals(1, heroPagerCount(1))
+        assertEquals(0, heroPagerPage(1, 0))
+    }
+
+    @Test
     fun aTrailerWritesTheSameValue() {
         val clock = HeroClock(3, dwellMs = 8000)
         clock.trailer(0.4f)
