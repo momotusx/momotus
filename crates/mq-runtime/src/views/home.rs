@@ -17,7 +17,7 @@ use eyeball_im::ObservableVector;
 use futures_util::{Stream, StreamExt};
 use mq_addons::InstalledAddon;
 use mq_library::{AllowedRow, ContinueItem, Policy, Table};
-use mq_protocol::{ResourcePath, ResourceResponse, decode_catalog};
+use mq_protocol::{MetaItem, ResourcePath, ResourceResponse, decode_catalog};
 use serde::Serialize;
 use std::collections::{HashMap, HashSet};
 use std::pin::Pin;
@@ -240,6 +240,9 @@ pub struct Hero {
     /// next episode is not out, and when no addon gives its meta: the hero
     /// then offers Details alone.
     pub play: Option<PlayTarget>,
+    /// The page's meta is still being read: Play may come. Apps keep Play's
+    /// place meanwhile, so it never pushes the buttons when it lands.
+    pub play_pending: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -1119,6 +1122,7 @@ fn maybe_pick_hero(rows: &Mutex<ObservableVector<HomeRow>>, header: &SharedObser
                     runtime: blurb.runtime,
                     trailer: blurb.trailer,
                     play: None,
+                    play_pending: true,
                 });
             }
         }
@@ -1128,74 +1132,144 @@ fn maybe_pick_hero(rows: &Mutex<ObservableVector<HomeRow>>, header: &SharedObser
     }
 }
 
-/// Gives each hero page its Play: when the pages change, and when progress
-/// or watched marks do. A series' meta comes from the addon cache after the
-/// first look; a movie needs none.
+/// A series meta that did not answer is asked again only this long after.
+const HERO_META_RETRY: Duration = Duration::from_secs(60);
+/// Progress is written every few seconds while something plays: the pages'
+/// Play is read again once the writes pause this long.
+const HERO_PLAY_SETTLE: Duration = Duration::from_secs(1);
+
+/// Gives each hero page its Play, each as soon as its own meta answers, so a
+/// slow addon holds back only its page. A series' meta is read once and kept
+/// for the view's life (a movie needs none); a change of progress or watched
+/// marks reads Play again from the kept metas, with no fetch.
 async fn watch_hero_play(core: Core, header: SharedObservable<HomeHeader>) {
     let mut pages = header.subscribe();
     let mut changes = core.library().subscribe();
+    let mut metas: HashMap<String, MetaItem> = HashMap::new();
+    // Asked and not answered (yet, or at all), by tile id: when it was asked.
+    let mut asked: HashMap<String, std::time::Instant> = HashMap::new();
+    let mut waiting: HashSet<String> = HashSet::new();
+    let mut fetches = futures_util::stream::FuturesUnordered::new();
+    let mut dirty = true;
     loop {
-        let heroes = header.get().heroes;
-        let targets =
-            futures_util::future::join_all(heroes.iter().map(|hero| hero_play(&core, &hero.tile)))
-                .await;
-        let found: HashMap<String, Option<PlayTarget>> = heroes
-            .iter()
-            .map(|h| h.tile.id.clone())
-            .zip(targets)
-            .collect();
-        // Merged into the pages as they are now: a page picked meanwhile
-        // waits for the next round, which its own change starts.
-        header.update_if(|current| {
-            let mut changed = false;
-            for hero in &mut current.heroes {
-                if let Some(play) = found.get(&hero.tile.id)
-                    && hero.play != *play
-                {
-                    hero.play = play.clone();
-                    changed = true;
+        if dirty {
+            dirty = false;
+            let heroes = header.get().heroes;
+            for hero in &heroes {
+                let tile = &hero.tile;
+                if metas.contains_key(&tile.id) {
+                    continue;
                 }
+                if tile.kind == "movie" {
+                    // A movie plays itself: its meta adds nothing to the target.
+                    if let Ok(meta) = serde_json::from_value(serde_json::json!(
+                        {"id": tile.id, "type": tile.kind, "name": tile.name}
+                    )) {
+                        metas.insert(tile.id.clone(), meta);
+                    }
+                    continue;
+                }
+                if asked
+                    .get(&tile.id)
+                    .is_some_and(|at| at.elapsed() < HERO_META_RETRY)
+                {
+                    continue;
+                }
+                asked.insert(tile.id.clone(), std::time::Instant::now());
+                waiting.insert(tile.id.clone());
+                let (core, kind, id) = (core.clone(), tile.kind.clone(), tile.id.clone());
+                fetches.push(async move {
+                    let meta = core.fetch_meta(&kind, &id).await.ok().map(|(m, _)| m);
+                    (id, meta)
+                });
             }
-            changed
-        });
-        // Waits for a change of pages, or of what Play reads.
-        loop {
-            tokio::select! {
-                page = pages.next() => match page {
-                    Some(_) => break,
-                    None => return,
-                },
-                tables = crate::views::next_change(&mut changes) => match tables {
-                    Some(t) if t.iter().any(|t| matches!(t, Table::Progress | Table::Watched)) => break,
-                    Some(_) => {}
-                    None => return,
-                },
+            publish_hero_play(&core, &header, &heroes, &metas, &waiting);
+        }
+        tokio::select! {
+            Some((id, meta)) = fetches.next() => {
+                waiting.remove(&id);
+                if let Some(meta) = meta {
+                    asked.remove(&id);
+                    metas.insert(id, meta);
+                }
+                dirty = true;
             }
+            page = pages.next() => match page {
+                Some(_) => dirty = true,
+                None => return,
+            },
+            tables = crate::views::next_change(&mut changes) => match tables {
+                Some(t) if t.iter().any(|t| matches!(t, Table::Progress | Table::Watched)) => {
+                    tokio::time::sleep(HERO_PLAY_SETTLE).await;
+                    while !matches!(
+                        changes.try_recv(),
+                        Err(tokio::sync::broadcast::error::TryRecvError::Empty
+                            | tokio::sync::broadcast::error::TryRecvError::Closed)
+                    ) {}
+                    dirty = true;
+                }
+                Some(_) => {}
+                None => return,
+            },
         }
     }
 }
 
-/// The title page's primary button for one hero page, on this profile.
-async fn hero_play(core: &Core, tile: &Tile) -> Option<PlayTarget> {
-    let meta = if tile.kind == "movie" {
-        // A movie plays itself: its meta adds nothing to the target.
-        serde_json::from_value(serde_json::json!(
-            {"id": tile.id, "type": tile.kind, "name": tile.name}
-        ))
-        .ok()?
-    } else {
-        core.fetch_meta(&tile.kind, &tile.id).await.ok()?.0
-    };
+/// Each page's Play from its kept meta, merged into the pages as they are
+/// now; a page whose meta is still on its way says so (`play_pending`).
+fn publish_hero_play(
+    core: &Core,
+    header: &SharedObservable<HomeHeader>,
+    heroes: &[Hero],
+    metas: &HashMap<String, MetaItem>,
+    waiting: &HashSet<String>,
+) {
+    let found: HashMap<&str, Option<PlayTarget>> = heroes
+        .iter()
+        .filter_map(|h| Some((h, metas.get(&h.tile.id)?)))
+        .map(|(h, meta)| (h.tile.id.as_str(), hero_play(core, &h.tile.kind, meta)))
+        .collect();
+    header.update_if(|current| {
+        let mut changed = false;
+        for hero in &mut current.heroes {
+            let id = hero.tile.id.as_str();
+            let (play, pending) = match found.get(id) {
+                Some(play) => (play.clone(), false),
+                None if waiting.contains(id) => (None, true),
+                // No meta came: Details alone, until a later ask answers.
+                None if heroes.iter().any(|h| h.tile.id == id) => (None, false),
+                // Picked meanwhile: the round its own change starts has it.
+                None => continue,
+            };
+            if hero.play != play || hero.play_pending != pending {
+                hero.play = play;
+                hero.play_pending = pending;
+                changed = true;
+            }
+        }
+        changed
+    });
+}
+
+/// The title page's primary button for one hero page, on this profile, from
+/// its meta. A series watched to its end says "Play again", the episode it
+/// starts from being on its own page.
+fn hero_play(core: &Core, kind: &str, meta: &MetaItem) -> Option<PlayTarget> {
+    let id = &meta.preview.id;
     let profile = core.profile();
     let library = core.library();
-    let resume = library.latest_progress(profile, &tile.id).unwrap_or(None);
+    let resume = library.latest_progress(profile, id).unwrap_or(None);
     let watched: HashSet<String> = library
-        .watched_videos(profile, &tile.id)
+        .watched_videos(profile, id)
         .unwrap_or_default()
         .into_iter()
         .collect();
     let now = mq_library::hlc::now_ms() as i64;
-    play_target(&meta, &tile.kind, resume, &watched, now).0
+    let mut target = play_target(meta, kind, resume, &watched, now).0?;
+    if target.label.starts_with("Play again") {
+        target.label = "Play again".into();
+    }
+    Some(target)
 }
 
 async fn watch_continue(

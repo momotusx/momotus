@@ -29,4 +29,9 @@ trailer: string | null,
  * next episode is not out, and when no addon gives its meta: the hero
  * then offers Details alone.
  */
-play: PlayTarget | null, };
+play: PlayTarget | null, 
+/**
+ * The page's meta is still being read: Play may come. Apps keep Play's
+ * place meanwhile, so it never pushes the buttons when it lands.
+ */
+playPending: boolean, };

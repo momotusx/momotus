@@ -1723,15 +1723,22 @@ async fn a_top_10_row_leaves_the_twins_as_they_were() {
 }
 
 /// One addon with a series and a movie catalog, each one title with a
-/// backdrop, and the series' meta (`meta`, answered with `status`): S1:E1,
-/// S1:E2 and S2:E1, all out.
-async fn hero_play_addon(status: u16, meta: &'static str) -> AddonRow {
+/// backdrop, and the series' meta (`meta`, answered with `status` after
+/// `delay`); the count of meta requests.
+async fn hero_play_addon(
+    status: u16,
+    meta: &'static str,
+    delay: Duration,
+) -> (AddonRow, Arc<AtomicUsize>) {
+    let asked = Arc::new(AtomicUsize::new(0));
+    let count = asked.clone();
     const SHOW: &str = r#"{"metas":[{"id":"tt9","type":"series","name":"Show","background":"https://images.example/tt9-bg.jpg"}]}"#;
     const FILM: &str = r#"{"metas":[{"id":"tt1","type":"movie","name":"Film","background":"https://images.example/tt1-bg.jpg"}]}"#;
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
     tokio::spawn(async move {
         while let Ok((mut socket, _)) = listener.accept().await {
+            let count = count.clone();
             tokio::spawn(async move {
                 let mut buf = [0u8; 2048];
                 let n = socket.read(&mut buf).await.unwrap_or(0);
@@ -1742,12 +1749,15 @@ async fn hero_play_addon(status: u16, meta: &'static str) -> AddonRow {
                 } else if path.starts_with("/catalog/movie/") {
                     (200, FILM)
                 } else if path.starts_with("/meta/series/tt9") {
+                    count.fetch_add(1, Ordering::SeqCst);
+                    tokio::time::sleep(delay).await;
                     (status, meta)
                 } else {
                     (404, "{}")
                 };
+                // The socket closes after one answer: the client must not reuse it.
                 let resp = format!(
-                    "HTTP/1.1 {code} X\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{body}",
+                    "HTTP/1.1 {code} X\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
                     body.len()
                 );
                 let _ = socket.write_all(resp.as_bytes()).await;
@@ -1762,19 +1772,40 @@ async fn hero_play_addon(status: u16, meta: &'static str) -> AddonRow {
             {"type": "movie", "id": "top", "name": "Popular"}
         ]
     });
-    AddonRow {
+    let addon = AddonRow {
         transport_url: format!("http://{addr}/manifest.json"),
         manifest_json: manifest.to_string(),
         position: 0,
         enabled: true,
         allow_private: true,
-    }
+    };
+    (addon, asked)
+}
+
+/// A hero test's Home on one `hero_play_addon`.
+async fn hero_home(
+    status: u16,
+    meta: &'static str,
+    delay: Duration,
+) -> (Core, HomeView, Arc<AtomicUsize>) {
+    let core = Core::temporary("p").unwrap();
+    let (addon, asked) = hero_play_addon(status, meta, delay).await;
+    core.library()
+        .set_addons("p", &[addon], &core.hlc())
+        .unwrap();
+    let view = HomeView::open(&core);
+    (core, view, asked)
 }
 
 const SHOW_META: &str = r#"{"meta":{"id":"tt9","type":"series","name":"Show","videos":[
   {"id":"tt9:2:1","title":"Return","season":2,"episode":1,"released":"2021-01-01T00:00:00Z"},
   {"id":"tt9:1:1","title":"Pilot","season":1,"episode":1,"released":"2020-01-01T00:00:00Z"},
   {"id":"tt9:1:2","title":"Second","season":1,"episode":2,"released":"2020-01-08T00:00:00Z"}]}}"#;
+
+/// S1:E1 out, S1:E2 out only in 2099.
+const UNAIRED_META: &str = r#"{"meta":{"id":"tt9","type":"series","name":"Show","videos":[
+  {"id":"tt9:1:1","title":"Pilot","season":1,"episode":1,"released":"2020-01-01T00:00:00Z"},
+  {"id":"tt9:1:2","title":"Later","season":1,"episode":2,"released":"2099-01-01T00:00:00Z"}]}}"#;
 
 /// A hero page's Play, by title id: (video, label, resume position).
 fn hero_play(view: &HomeView, id: &str) -> Option<(String, String, Option<i64>)> {
@@ -1810,11 +1841,7 @@ fn progress(core: &Core, video: &'static str, item: &'static str, position_ms: i
 /// resumes. It follows progress live, with Home open.
 #[tokio::test]
 async fn every_hero_page_plays_what_its_title_page_would() {
-    let core = Core::temporary("p").unwrap();
-    core.library()
-        .set_addons("p", &[hero_play_addon(200, SHOW_META).await], &core.hlc())
-        .unwrap();
-    let view = HomeView::open(&core);
+    let (core, view, asked) = hero_home(200, SHOW_META, Duration::ZERO).await;
     let want = |id: &'static str, play: (&'static str, &'static str, Option<i64>)| {
         move |v: &HomeView| hero_play(v, id) == Some((play.0.to_owned(), play.1.to_owned(), play.2))
     };
@@ -1849,6 +1876,53 @@ async fn every_hero_page_plays_what_its_title_page_would() {
         want("tt1", ("tt1", "Resume", Some(300))),
     )
     .await;
+
+    // Watched to its last episode: from the first again, in words that fit
+    // the hero's button.
+    progress(&core, "tt9:2:1", "tt9", 990);
+    view_until(
+        &view,
+        "a finished series",
+        want("tt9", ("tt9:1:1", "Play again", None)),
+    )
+    .await;
+    // The meta was read once; progress reads Play again from it.
+    assert_eq!(asked.load(Ordering::SeqCst), 1, "meta requests");
+}
+
+/// One slow series meta holds back its own page alone (review r4, W1): the
+/// movie's Play comes at once, the series' page says its Play may still come,
+/// then gets it.
+#[tokio::test]
+async fn a_slow_series_meta_holds_back_only_its_page() {
+    let (_core, view, _) = hero_home(200, SHOW_META, Duration::from_secs(3)).await;
+    view_until(&view, "the movie's Play", |v| hero_play(v, "tt1").is_some()).await;
+    let series = view
+        .snapshot()
+        .header
+        .heroes
+        .into_iter()
+        .find(|h| h.tile.id == "tt9")
+        .expect("the series page");
+    assert_eq!((series.play, series.play_pending), (None, true));
+    view_until(&view, "the series' Play", |v| hero_play(v, "tt9").is_some()).await;
+}
+
+/// A series whose next episode is not out offers Details alone, as its title
+/// page offers no Play (it says when the episode airs).
+#[tokio::test]
+async fn a_hero_series_waiting_for_its_next_episode_offers_details_alone() {
+    let (core, view, _) = hero_home(200, UNAIRED_META, Duration::ZERO).await;
+    view_until(&view, "S1:E1 first", |v| hero_play(v, "tt9").is_some()).await;
+    progress(&core, "tt9:1:1", "tt9", 990);
+    view_until(&view, "no Play", |v| {
+        v.snapshot()
+            .header
+            .heroes
+            .iter()
+            .any(|h| h.tile.id == "tt9" && h.play.is_none() && !h.play_pending)
+    })
+    .await;
 }
 
 /// A series whose episodes the hero does not know yet reads them from its
@@ -1865,13 +1939,28 @@ async fn a_hero_series_without_episodes_offers_what_its_meta_allows() {
             Some(("tt9".to_owned(), "Play".to_owned(), None)),
         ),
     ] {
-        let core = Core::temporary("p").unwrap();
-        core.library()
-            .set_addons("p", &[hero_play_addon(status, meta).await], &core.hlc())
-            .unwrap();
-        let view = HomeView::open(&core);
-        // The movie's page is resolved in the same round as the series'.
-        view_until(&view, "the movie's Play", |v| hero_play(v, "tt1").is_some()).await;
+        let (core, view, asked) = hero_home(status, meta, Duration::ZERO).await;
+        view_until(&view, "the series page settled", |v| {
+            v.snapshot()
+                .header
+                .heroes
+                .iter()
+                .any(|h| h.tile.id == "tt9" && !h.play_pending)
+        })
+        .await;
         assert_eq!(hero_play(&view, "tt9"), want, "meta answered {status}");
+        // A meta that did not answer is not asked again on every progress write.
+        let before = asked.load(Ordering::SeqCst);
+        progress(&core, "tt1", "tt1", 100);
+        progress(&core, "tt1", "tt1", 200);
+        view_until(&view, "the movie resumes", |v| {
+            hero_play(v, "tt1").is_some_and(|p| p.2 == Some(200))
+        })
+        .await;
+        assert_eq!(
+            asked.load(Ordering::SeqCst),
+            before,
+            "meta asked again ({status})"
+        );
     }
 }
