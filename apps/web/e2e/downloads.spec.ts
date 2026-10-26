@@ -485,3 +485,37 @@ test("a kids profile sees its downloaded title with Play only, and no control on
   expect(errors).toEqual([]);
   await context.close();
 });
+
+test("a downloads view open across a profile switch lets the switch through and lists the new profile's rows", async ({ browser }) => {
+  // Left by the kids run: the device's sessions open as the kid, the owner has a PIN.
+  const c = new Client(`ws://127.0.0.1:${DOWNLOADS_PORT}/ws`);
+  try {
+    type Profiles = { profiles: { id: string; kids: boolean }[] };
+    const kid = (await c.subscribe<Profiles>("profiles")).now().profiles.find((p) => p.kids)?.id as string;
+    // The owner keeps an episode the kid is not allowed, so the two lists differ.
+    await c.req("switchProfile", { profile: "default", pin: "4826" });
+    await c.req("downloadAdd", { kind: "series", itemId: SERIES, scope: "video", videoId: `${SERIES}:1:1`, params: { language: "en" } });
+    type Snap = { titles: { itemId: string }[]; downloading: unknown[] };
+    const view = await c.subscribe<Snap>("downloads");
+    const names = () => view.now().titles.map((t) => t.itemId).sort();
+    const end = Date.now() + 30_000;
+    while (names().length < 2 || view.now().downloading.length > 0) {
+      if (Date.now() > end) throw new Error(`the owner's downloads never settled: ${JSON.stringify(view.now())}`);
+      await new Promise((r) => setTimeout(r, 200));
+    }
+    expect(names()).toEqual([BBB_ID, SERIES].sort());
+    // With the view still open, the switch goes through, and the same view now lists the kid's rows.
+    await c.req("switchProfile", { profile: kid });
+    await expect.poll(names, { timeout: 15_000 }).toEqual([BBB_ID]);
+  } finally {
+    c.close();
+  }
+  // The web app, opened as the kid, lists the kid's rows only.
+  const { context, page, errors } = await openPage(browser, "/library/downloads?form=desktop");
+  await page.getByRole("button", { name: "Kid, current profile" }).click();
+  await page.goto("/library/downloads?form=desktop");
+  await expect(page.locator(".dlrow", { hasText: "Big Buck Bunny" })).toBeVisible({ timeout: 30_000 });
+  await expect(page.locator(".dlrow", { hasText: "Download Series" })).toHaveCount(0);
+  expect(errors).toEqual([]);
+  await context.close();
+});
