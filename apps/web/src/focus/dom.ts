@@ -220,8 +220,9 @@ export function reveal(el: HTMLElement) {
 //   moves real DOM focus (NVDA on a link or a field, VoiceOver with focus following its cursor). A reader's virtual
 //   cursor fires no focusin, so its position is not protected: this guards real DOM focus only.
 // - A screen's own `.focus()` (calendar's first card, versions' rows and sheet, profiles, the player's offer, the
-//   subtitle picker's search, stream choice, the delay stepper): each is that screen's chosen focus or a reaction to a
-//   key, and ending the wait stops `restore` from overriding it later.
+//   subtitle picker's search, stream choice, the delay stepper): each is that screen's own choice or a reaction to a
+//   key, and counting it ends the wait. Calendar re-places its focus on each update until a key is pressed, so
+//   `inputCount()` rises then too: it says something moved since a screen opened, not that a viewer did.
 // A focusin on the element the app placed last is no move (the window or tab regaining focus re-announces it, and a
 // focus placed while the document had none arrives late): it is not counted.
 let placing = 0;
@@ -230,12 +231,13 @@ let placed: Element | null = null;
 export function focusEl(el: HTMLElement) {
   // A depth, not a flag: a focus handler that places focus in turn keeps the outer move the app's own.
   placing++;
-  placed = el;
   try {
     el.focus({ preventScroll: true });
   } finally {
     placing--;
   }
+  // Only a focus that took effect is the app's (an inert or hidden element takes none; the viewer may reach it later).
+  if (document.activeElement === el) placed = el;
   reveal(el);
 }
 

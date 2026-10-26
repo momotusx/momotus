@@ -419,7 +419,9 @@ async function holdAddons(context: BrowserContext) {
 }
 
 // The window or tab regaining focus re-announces the focused element (as an overlay, a voice assistant or a resume
-// hands the TV back): no one moved, so a first focus still waiting for its list lands when the list does.
+// hands the TV back): no one moved, so a first focus still waiting for its list lands when the list does. The window's
+// blur and focus and the re-announced focusin are dispatched by the test: this pins the rule (a focusin on the element
+// the app placed is not counted), not Chromium's own re-announcement, which headless Chromium does not fire.
 test("TV: the window regaining focus is no move: the waiting first focus still lands", async ({ browser }) => {
   const context = await browser.newContext({ viewport: { width: 1920, height: 1080 }, reducedMotion: "reduce" });
   const hold = await holdAddons(context);
