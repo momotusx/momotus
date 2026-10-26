@@ -14,6 +14,8 @@ struct HeroView: View {
     var startScope: Namespace.ID?
     /// Plays the hero's video, as the title page's Play does.
     var play: (Hero) -> Void = { _ in }
+    /// Every page's Play label, so a wide Play is as wide on each page (`HeroPlayLabel.pages`).
+    var playLabels: [String] = []
     /// The carousel draws the large title once over its pages: each page keeps the room it takes (HeroFrameTests).
     var showsTitle = true
     /// The art's own opacity: it fades over the trailer, the ramps staying (plans/appletv-polish.md 4.2).
@@ -140,12 +142,12 @@ struct HeroView: View {
     @ViewBuilder private func playButton(_ hero: Hero) -> some View {
         // The core's Play, in the title page's words ("Resume S2:E3"); without one the page offers Details alone.
         if let target = hero.play {
-            Button { play(hero) } label: { HeroPlayLabel(text: target.label, wide: metrics.wide) }
+            Button { play(hero) } label: { HeroPlayLabel(text: target.label, wide: metrics.wide, pages: playLabels) }
             .buttonStyle(PillButtonStyle(prominent: true))
             .modifier(StartFocus(scope: startScope))
         } else if hero.holdsPlaySlot {
             // Play's place while the core reads the page's episodes: drawn by no one, reached by nothing.
-            Button {} label: { HeroPlayLabel(text: "Play", wide: metrics.wide) }
+            Button {} label: { HeroPlayLabel(text: "Play", wide: metrics.wide, pages: playLabels) }
             .buttonStyle(PillButtonStyle(prominent: true))
             .disabled(true)
             .hidden()

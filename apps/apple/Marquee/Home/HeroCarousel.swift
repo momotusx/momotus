@@ -59,7 +59,8 @@ struct HeroCarousel: View {
                 ForEach(heroes, id: \.tile.id) { hero in
                     let on = hero.tile.id == (page ?? heroes.first?.tile.id)
                     HeroView(
-                        hero: hero, height: height, play: play, showsTitle: false,
+                        hero: hero, height: height, play: play, playLabels: heroes.compactMap { $0.play?.label },
+                        showsTitle: false,
                         artOpacity: on && trailer.shown ? 0 : 1,
                         // Mounted only while a trailer is due, so a device that never plays one makes no player.
                         under: on && trailer.loading ? AnyView(TrailerSurface()) : nil,

@@ -122,4 +122,15 @@ import Testing
     for word in HeroPlayLabel.widest { #expect(width(word, wide: true) == widths[0], "\(word) is wider") }
     // The words are measured for real: unheld, a short label makes a narrower pill.
     #expect(width("Play", wide: false) < width("Resume S12:E10", wide: false))
+    // Review r5, R5-3: a page's label longer than the constants widens every page's Play to it.
+    let long = "Resume S1:E1122"
+    #expect(width(long, wide: true) > widths[0])
+    func held(_ text: String) -> CGFloat {
+        let pill = Button {} label: { HeroPlayLabel(text: text, wide: true, pages: [long, "Play S1:E1"]) }
+            .buttonStyle(PillButtonStyle(prominent: true))
+        let host = NSHostingView(rootView: pill.fixedSize())
+        host.layoutSubtreeIfNeeded()
+        return host.fittingSize.width
+    }
+    #expect(Set(["Play", "Play S1:E1", long].map(held)) == [width(long, wide: true)])
 }

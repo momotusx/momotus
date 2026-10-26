@@ -36,6 +36,8 @@ enum HeroLayout {
 struct HeroPlayLabel: View {
     let text: String
     let wide: Bool
+    /// The other pages' labels: a long one ("Resume S1:E1122") widens every page's Play, so none moves Details.
+    var pages: [String] = []
     /// The widest labels the hero's Play can show: a resume, a start, a series watched to its end.
     static let widest = ["Resume S12:E10", "Play S12:E10", "Play again"]
 
@@ -43,7 +45,7 @@ struct HeroPlayLabel: View {
         Group {
             if wide {
                 ZStack {
-                    ForEach(Self.widest, id: \.self) { word in
+                    ForEach(Array(Set(Self.widest + pages)).sorted(), id: \.self) { word in
                         Label(word, glyph: "play-fill", size: HeroLayout.icon).hidden().accessibilityHidden(true)
                     }
                     Label(text, glyph: "play-fill", size: HeroLayout.icon)

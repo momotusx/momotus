@@ -61,7 +61,8 @@ private func source(_ path: String) throws -> String {
     let view = try source("Home/HeroView.swift")
     let button = try body(of: "@ViewBuilder private func playButton(_ hero: Hero) -> some View", in: view)
     #expect(button.contains("if let target = hero.play {"))
-    #expect(button.contains("HeroPlayLabel(text: target.label, wide: metrics.wide)"))
+    #expect(button.contains("HeroPlayLabel(text: target.label, wide: metrics.wide, pages: playLabels)"))
+    #expect(try source("Home/HeroCarousel.swift").contains("playLabels: heroes.compactMap { $0.play?.label }"))
     #expect(view.contains(".modifier(StartFocus(scope: hero.play == nil ? startScope : nil))"))
     // Home plays the target's video from where it stopped.
     let play = try body(of: "private func playHero(_ hero: Hero)", in: try source("Home/HomeScreen.swift"))
