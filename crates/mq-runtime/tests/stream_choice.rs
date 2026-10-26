@@ -2643,3 +2643,48 @@ async fn choosing_a_kind_freezes_the_pick_and_a_pick_under_it_teaches_nothing() 
     view.pick(LARGE);
     assert_eq!(core.prefs().learned.fhd.size, 1);
 }
+
+#[tokio::test]
+async fn under_a_kind_the_next_version_is_of_that_kind() {
+    let (_core, _server, view) = mixed_view().await;
+    view.set_kind(Some(SourceKind::Direct));
+    let link = view.snapshot().recommended.unwrap().key;
+    // The only direct link tried: nothing of that kind is left, though a
+    // debrid torrent is.
+    let pick = view.pick(&link);
+    assert!(
+        pick.handle
+            .next_version(std::slice::from_ref(&link), None)
+            .is_none()
+    );
+    // With every kind listed, the torrent is next.
+    view.set_kind(None);
+    let pick = view.pick(&link);
+    let next = pick
+        .handle
+        .next_version(std::slice::from_ref(&link), None)
+        .unwrap();
+    assert!(next.key.starts_with("bt:"), "{}", next.key);
+}
+
+#[tokio::test]
+async fn an_account_change_lists_every_kind_again() {
+    let (core, _server, view) = mixed_view().await;
+    view.set_kind(Some(SourceKind::Direct));
+    assert_eq!(view.snapshot().selected_kind, Some(SourceKind::Direct));
+    // The account goes: the addons are asked again, and the old kind pass
+    // goes with what it ranked.
+    core.set_debrid_keys(&[]);
+    until("every kind listed", || {
+        view.snapshot().selected_kind.is_none()
+    })
+    .await;
+    until("done", || view.snapshot().done).await;
+    let s = view.snapshot();
+    assert_eq!(s.selected_kind, None);
+    // No account and no engine: the torrents are hidden, the link alone is listed.
+    assert_eq!(
+        s.kinds.iter().map(|k| k.kind).collect::<Vec<_>>(),
+        [SourceKind::Direct]
+    );
+}

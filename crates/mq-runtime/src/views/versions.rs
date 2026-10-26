@@ -605,12 +605,12 @@ impl PickHandle {
                 .chain(&r.failover)
                 .any(|st| tried.contains(&st.key))
         };
-        let mut open = s
-            .ranked
-            .rows
-            .iter()
-            .filter(|r| r.key.viable)
-            .filter(untried);
+        // Under a kind chip the next version is of that kind, from its own pass.
+        let rows = match s.kind {
+            Some(_) => &s.kind_ranked.rows,
+            None => &s.ranked.rows,
+        };
+        let mut open = rows.iter().filter(|r| r.key.viable).filter(untried);
         let first = open.next()?;
         let row = match unlike {
             None => first,
@@ -1342,8 +1342,11 @@ impl VersionsView {
             state.frozen = true;
             maybe_prefetch(&self.core, &mut state, self.episode);
         }
-        state.kind = kind;
-        state.kind_pick = None;
+        // The chip already on keeps its card.
+        if state.kind != kind {
+            state.kind = kind;
+            state.kind_pick = None;
+        }
         match state.ranking.clone() {
             Some(ranking) => rank_kind(&mut state, &ranking),
             None => state.kind = None,
@@ -1775,6 +1778,10 @@ fn restart(s: &mut State, addons: &[InstalledAddon]) {
     }
     s.streams.clear();
     s.ranked = Ranked::default();
+    // The kind pass ranked what is gone: every kind is listed again.
+    s.kind = None;
+    s.kind_ranked = Ranked::default();
+    s.kind_pick = None;
     s.pending = addons
         .iter()
         .map(|a| (a.transport_url.clone(), a.manifest.name.clone()))
