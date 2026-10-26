@@ -197,13 +197,18 @@ fun PhoneTitle(
                         key = "art",
                     ) {
                         // The cover first: covers are vertical, and a backdrop is often a crop of the same art.
+                        // Only where its 2:3 fits, and the backdrop band again if it does not load.
+                        var coverFailed by remember(details.cover) { mutableStateOf(false) }
+                        val cover = details.cover?.takeIf { coverFits() && !coverFailed }
                         Hero(
-                            details.cover ?: details.background ?: details.poster,
+                            cover ?: details.background ?: details.poster,
                             details.logo,
                             details.name,
                             hasArt,
                             side,
-                            details.cover != null,
+                            cover = cover != null,
+                            titled = details.coverTitled,
+                            onCoverError = { coverFailed = true },
                         )
                     }
                     item(
@@ -369,6 +374,16 @@ private fun MoreLikeThis(
 }
 
 /**
+ * A cover shows only where its 2:3 fits: a portrait phone (up to 600 dp wide), held to 75% of the window,
+ * losing at most an eighth at its foot. A landscape phone or a tablet keeps the backdrop band.
+ */
+@Composable
+internal fun coverFits(): Boolean {
+    val window = windowDp()
+    return window.width <= 600.dp && window.height * 0.75f >= window.width * 1.5f * 0.88f
+}
+
+/**
  * The artwork's height: a cover at its own 2:3, whole, held to 75% of the window; a backdrop at
  * [HERO_RATIO], held to 60% (landscape, tablets).
  */
@@ -398,6 +413,8 @@ private fun Hero(
     hasArt: Boolean,
     side: Dp,
     cover: Boolean,
+    titled: Boolean,
+    onCoverError: () -> Unit,
 ) {
     if (!hasArt) {
         Logo(
@@ -415,10 +432,11 @@ private fun Hero(
         return
     }
     val page = Marquee.colors.bg
-    // A cover prints its own title: no logo over it, only the heading for screen readers, and the meta line
-    // starts under it, on the page color.
+    // A cover known to print its title (the core says so: metahub's do) gets no logo, only the heading for
+    // screen readers, and the meta line starts under it, on the page color. Another cover keeps the logo,
+    // under it.
     val heading =
-        if (cover) {
+        if (cover && titled) {
             Modifier.clearAndSetSemantics {
                 contentDescription = name
                 heading()
@@ -426,42 +444,55 @@ private fun Hero(
         } else {
             Modifier
         }
-    Box(
-        Modifier
-            .fillMaxWidth()
-            .height(heroHeight(cover))
-            .testTag(TITLE_ART_TAG)
-            .then(heading),
-    ) {
-        // Dark under the light status bar icons and toward the light logo. A cover held under its 2:3
-        // keeps its top, where the faces are, and only its bottom edge fades into the page.
-        Backdrop(
-            art,
-            Modifier.matchParentSize(),
-            foot = if (cover) emptyList() else Scrims.phoneTitleFoot,
-            top = Scrims.phoneTitleTop,
-            alignment = if (cover) Alignment.TopCenter else Alignment.Center,
-        )
+    Column {
         Box(
             Modifier
-                .align(Alignment.BottomStart)
                 .fillMaxWidth()
-                .height(HERO_FADE)
-                .background(Brush.verticalGradient(0f to Color.Transparent, 1f to page)),
-        )
-        if (!cover) {
+                .height(heroHeight(cover))
+                .testTag(TITLE_ART_TAG)
+                .then(heading),
+        ) {
+            // Dark under the light status bar icons and toward the light logo. A cover held under its 2:3
+            // keeps its top, where the faces are, and only its bottom edge fades into the page.
+            Backdrop(
+                art,
+                Modifier.matchParentSize(),
+                foot = if (cover) emptyList() else Scrims.phoneTitleFoot,
+                top = Scrims.phoneTitleTop,
+                alignment = if (cover) Alignment.TopCenter else Alignment.Center,
+                onError = if (cover) onCoverError else null,
+            )
+            Box(
+                Modifier
+                    .align(Alignment.BottomStart)
+                    .fillMaxWidth()
+                    .height(HERO_FADE)
+                    .background(Brush.verticalGradient(0f to Color.Transparent, 1f to page)),
+            )
+            if (!cover) {
+                Logo(
+                    logo,
+                    name,
+                    height = 72.dp,
+                    maxWidth = 280.dp,
+                    role = TextRole.Title1,
+                    color = Tokens.dark.text,
+                    modifier =
+                        Modifier
+                            .align(
+                                Alignment.BottomStart,
+                            ).padding(start = side, bottom = HERO_FADE - Marquee.space.s),
+                )
+            }
+        }
+        if (cover && !titled) {
             Logo(
                 logo,
                 name,
                 height = 72.dp,
                 maxWidth = 280.dp,
                 role = TextRole.Title1,
-                color = Tokens.dark.text,
-                modifier =
-                    Modifier
-                        .align(
-                            Alignment.BottomStart,
-                        ).padding(start = side, bottom = HERO_FADE - Marquee.space.s),
+                modifier = Modifier.padding(start = side, end = side, top = Marquee.space.s),
             )
         }
     }
@@ -492,11 +523,10 @@ private fun Info(
             scores(details),
             onOpen = { url -> openLink(context, url) },
         )
-        Genres(header, details, onGenre)
-        details.description?.let { Synopsis(it) }
-        // As the web lays a phone title out: the primary across the page, then the other actions as
-        // equal circles in one row, their words on up to two lines. Watched is one of those small
-        // circles, never a big button (the owner's rule).
+        // Under the meta line the primary across the page, then the other actions as equal circles in one
+        // row, their words on up to two lines (Watched one of those small circles, never a big button: the
+        // owner's rule); the genres and the synopsis after them, so Play stays on the first screen under a
+        // tall cover, as on the iPhone.
         PrimaryButton(
             label = primary.label,
             icon = PlayFilled,
@@ -554,10 +584,12 @@ private fun Info(
                     modifier = Modifier.weight(1f),
                     selected = header.watched,
                     showLabel = true,
-                    spoken = if (header.watched) "Watched" else "Mark as watched",
+                    toggle = true,
                 )
             }
         }
+        Genres(header, details, onGenre)
+        details.description?.let { Synopsis(it) }
     }
 }
 

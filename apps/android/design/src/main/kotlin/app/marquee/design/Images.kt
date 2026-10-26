@@ -241,6 +241,8 @@ fun Backdrop(
     top: List<ScrimStop> = emptyList(),
     /** Where the crop keeps the picture: a poster standing in for a backdrop keeps its upper part. */
     alignment: Alignment = Alignment.Center,
+    /** The picture did not load (a cover the page gives up for its backdrop). */
+    onError: (() -> Unit)? = null,
 ) {
     val page = Marquee.colors.bg
     val scrims =
@@ -267,6 +269,7 @@ fun Backdrop(
                 contentScale = ContentScale.Crop,
                 alignment = alignment,
                 modifier = Modifier.matchParentSize(),
+                onError = { onError?.invoke() },
             )
         }
     }

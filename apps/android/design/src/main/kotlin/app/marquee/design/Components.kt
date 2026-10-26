@@ -67,6 +67,8 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.semantics.toggleableState
+import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -722,6 +724,8 @@ fun RoundButton(
     spoken: String = label,
     /** Waiting (a player filling its buffer): the spinner turns in the circle in place of the icon. */
     busy: Boolean = false,
+    /** A toggle (Watched): spoken as a switch under one name, on or off, not as a button whose name changes. */
+    toggle: Boolean = false,
 ) {
     val colors = Marquee.colors
     val tv = Marquee.form == Form.Tv
@@ -763,8 +767,18 @@ fun RoundButton(
                 .background(fill)
                 .semantics {
                     contentDescription = spoken
-                    if (selected) stateDescription = "On"
-                }.focusClickable(onClick, Role.Button, enabled, onLongClick, longClickLabel),
+                    if (toggle) {
+                        toggleableState = ToggleableState(selected)
+                    } else if (selected) {
+                        stateDescription = "On"
+                    }
+                }.focusClickable(
+                    onClick,
+                    if (toggle) Role.Switch else Role.Button,
+                    enabled,
+                    onLongClick,
+                    longClickLabel,
+                ),
             contentAlignment = Alignment.Center,
         ) {
             if (busy) {

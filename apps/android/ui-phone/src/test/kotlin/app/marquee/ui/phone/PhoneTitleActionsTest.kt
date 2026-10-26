@@ -1,5 +1,6 @@
 package app.marquee.ui.phone
 
+import android.graphics.Bitmap
 import android.os.Handler
 import android.os.Looper
 import androidx.compose.runtime.getValue
@@ -7,9 +8,15 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.graphics.toPixelMap
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.state.ToggleableState
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.captureToImage
+import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.isHeading
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -36,6 +43,15 @@ import app.marquee.core.model.VersionsSnapshot
 import app.marquee.core.views.TitleView
 import app.marquee.design.Form
 import app.marquee.design.MarqueeTheme
+import coil3.ImageLoader
+import coil3.SingletonImageLoader
+import coil3.Uri
+import coil3.asImage
+import coil3.decode.DataSource
+import coil3.fetch.FetchResult
+import coil3.fetch.Fetcher
+import coil3.fetch.ImageFetchResult
+import coil3.request.Options
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
@@ -45,15 +61,18 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.longOrNull
 import org.junit.After
+import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import java.util.concurrent.Executors
 import kotlin.coroutines.CoroutineContext
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 /**
  * The phone title page's button when nothing can play (plans/play-every-version.md, the shared table): each new
@@ -85,7 +104,26 @@ class PhoneTitleActionsTest {
         scope.cancel()
         client.close()
         executor.shutdownNow()
+        SingletonImageLoader.reset()
     }
+
+    /** Every picture answers (a small bitmap) but those in [missing], which fail as a 404 would. */
+    private fun serve(vararg missing: String) {
+        val picture = Bitmap.createBitmap(4, 6, Bitmap.Config.ARGB_8888).asImage()
+        val factory =
+            Fetcher.Factory<Uri> { data, _: Options, _: ImageLoader ->
+                Fetcher {
+                    if (data.toString() in missing) error("HTTP 404")
+                    ImageFetchResult(picture, isSampled = false, dataSource = DataSource.NETWORK) as FetchResult
+                }
+            }
+        SingletonImageLoader.setUnsafe(
+            ImageLoader.Builder(RuntimeEnvironment.getApplication()).components { add(factory) }.build(),
+        )
+    }
+
+    @Before
+    fun pictures() = serve()
 
     private val title =
         TitleSnapshot(
@@ -294,25 +332,144 @@ class PhoneTitleActionsTest {
         poster: String? = null,
         cover: String? = null,
         background: String? = null,
+        titled: Boolean = cover != null,
     ) = title.copy(
         header =
             title.header.copy(
-                details = title.header.details!!.copy(poster = poster, cover = cover, background = background),
+                details =
+                    title.header.details!!.copy(
+                        poster = poster,
+                        cover = cover,
+                        coverTitled = titled,
+                        background = background,
+                    ),
             ),
     )
 
+    private val cover =
+        withArt(
+            poster = "https://a.example/p.jpg",
+            cover = "https://a.example/c.jpg",
+            background = "https://a.example/b.jpg",
+        )
+
+    /** The backdrop band's height in this window (`heroHeight` without a cover). */
+    private fun band(
+        width: Float,
+        height: Float,
+    ) = minOf(width / 1.45f, height * 0.6f)
+
+    private fun dp(px: Float) = px / compose.density.density
+
     @Test
     fun `a cover shows whole in a 2 by 3 frame`() {
-        draw(
-            withArt(
-                poster = "https://a.example/p.jpg",
-                cover = "https://a.example/c.jpg",
-                background = "https://a.example/b.jpg",
-            ),
-        )
+        draw(cover)
         val art = bounds(TITLE_ART_TAG)
         // 411 dp wide: 616.5 dp high, far under 75 percent of the 2400 dp window.
         assertEquals(1.5f, art.height / art.width, 0.01f)
+    }
+
+    @Test
+    @Config(qualifiers = "w800dp-h360dp")
+    fun `a landscape phone keeps the backdrop band, not a strip of the cover`() {
+        draw(cover)
+        assertEquals(band(800f, 360f), dp(bounds(TITLE_ART_TAG).height), 1f)
+        compose.onAllNodesWithText("Sintel", useUnmergedTree = true).assertCountEquals(1)
+    }
+
+    @Test
+    @Config(qualifiers = "w800dp-h1280dp")
+    fun `a tablet keeps the backdrop band`() {
+        draw(cover)
+        assertEquals(band(800f, 1280f), dp(bounds(TITLE_ART_TAG).height), 1f)
+    }
+
+    @Test
+    @Config(qualifiers = "w1280dp-h800dp")
+    fun `a landscape tablet keeps the backdrop band`() {
+        draw(cover)
+        assertEquals(band(1280f, 800f), dp(bounds(TITLE_ART_TAG).height), 1f)
+    }
+
+    /** The cover with a full page of words: a long synopsis, three genres and a year and runtime. */
+    private val wordy =
+        cover.copy(
+            header =
+                cover.header.copy(
+                    details =
+                        cover.header.details!!.copy(
+                            description = "A long synopsis that runs on. ".repeat(20),
+                            genres = listOf("Animation", "Fantasy", "Adventure"),
+                            releaseInfo = "2010",
+                            runtime = "15 min",
+                        ),
+                ),
+        )
+
+    /** Play's bottom and the window's, in dp. */
+    private fun playAndWindow(): Pair<Float, Float> {
+        val play = compose.onNodeWithText("Play").fetchSemanticsNode().boundsInRoot
+        return dp(play.bottom) to
+            dp(
+                compose
+                    .onRoot()
+                    .fetchSemanticsNode()
+                    .boundsInRoot.bottom,
+            )
+    }
+
+    @Test
+    @Config(qualifiers = "w360dp-h740dp")
+    fun `on a narrow phone with large text Play is whole on the first screen under the cover`() {
+        RuntimeEnvironment.setFontScale(1.3f)
+        draw(wordy)
+        // The cover is shown (far taller than the band), and Play under it is whole in the window.
+        val art = dp(bounds(TITLE_ART_TAG).height)
+        assertTrue(art > band(360f, 740f) + 100f, "no cover: the art is $art dp")
+        val (play, window) = playAndWindow()
+        assertTrue(play <= window, "Play ends at $play dp of $window")
+        // Play comes before the synopsis and the genres, right under the meta line, as on the iPhone (where they
+        // sit, clipped or not).
+        val words =
+            listOf("A long synopsis", "Fantasy").flatMap { text ->
+                compose
+                    .onAllNodesWithText(text, substring = true, useUnmergedTree = true)
+                    .fetchSemanticsNodes()
+                    .map { dp(it.positionInRoot.y) }
+            }
+        assertTrue(words.size >= 2, "the synopsis and the genres: $words")
+        for (top in words) assertTrue(play <= top, "Play ends at $play dp, over words at $top")
+    }
+
+    @Test
+    @Config(qualifiers = "w360dp-h640dp")
+    fun `on a small phone with large text Play is whole on the first screen`() {
+        RuntimeEnvironment.setFontScale(1.3f)
+        draw(wordy)
+        val (play, window) = playAndWindow()
+        assertTrue(play <= window, "Play ends at $play dp of $window")
+    }
+
+    @Test
+    fun `a cover that does not load gives way to the backdrop band and the logo`() {
+        serve("https://a.example/c.jpg")
+        draw(cover)
+        val deadline = System.currentTimeMillis() + 30_000
+        while (dp(bounds(TITLE_ART_TAG).height) > band(411f, 2400f) + 1f) {
+            check(System.currentTimeMillis() < deadline) { "the cover never gave way" }
+            Snapshot.sendApplyNotifications()
+            compose.waitForIdle()
+            Thread.sleep(20)
+        }
+        compose.onAllNodesWithText("Sintel", useUnmergedTree = true).assertCountEquals(1)
+    }
+
+    @Test
+    fun `a cover not known to print its title keeps the name under it`() {
+        draw(withArt(poster = "https://a.example/p.jpg", cover = "https://a.example/c.jpg", titled = false))
+        val art = bounds(TITLE_ART_TAG)
+        val name = compose.onNodeWithText("Sintel", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        assertTrue(name.top >= art.bottom, "the name at ${name.top}, the cover's foot at ${art.bottom}")
     }
 
     @Test
@@ -345,10 +502,12 @@ class PhoneTitleActionsTest {
     fun `Watched is a small circle in the actions' row, never a big button`() {
         draw(title)
         compose.onAllNodesWithText("Mark as watched").assertCountEquals(0)
-        // Its spoken name says the state; its circle is Library's, level with it.
-        val circle = { name: String -> compose.onNode(hasContentDescription(name)).fetchSemanticsNode().boundsInRoot }
-        val watched = circle("Mark as watched")
-        val library = circle("Add to Library")
+        // One name, a switch's state (off here); its circle is Library's, level with it.
+        val node = compose.onNode(hasContentDescription("Watched") and hasClickAction())
+        node.assert(SemanticsMatcher.expectValue(SemanticsProperties.ToggleableState, ToggleableState.Off))
+        node.assert(SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Switch))
+        val watched = node.fetchSemanticsNode().boundsInRoot
+        val library = compose.onNode(hasContentDescription("Add to Library")).fetchSemanticsNode().boundsInRoot
         assertEquals(library.top, watched.top, 1f)
         assertEquals(library.width, watched.width, 1f)
         assertEquals(library.height, watched.height, 1f)
