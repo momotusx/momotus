@@ -1115,7 +1115,7 @@ pub(crate) fn kids_tile(row: &AllowedRow, covers: &Covers) -> Tile {
 /// Whether a Continue Watching tile may show: the title passes the policy,
 /// and for kids its video is one of the title's (a row that pairs an
 /// allowed id with another title's video does not).
-fn shows(policy: &Policy, kind: &str, id: &str, video: &str) -> bool {
+pub(crate) fn shows(policy: &Policy, kind: &str, id: &str, video: &str) -> bool {
     policy.allows(kind, id) && (!policy.kids() || Policy::belongs(id, video))
 }
 

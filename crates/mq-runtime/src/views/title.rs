@@ -915,12 +915,16 @@ impl Ctx {
         let now = mq_library::hlc::now_ms() as i64;
         let (play_target, next_airs) = play_target(&meta, &self.kind, resume, &watched, now);
         // As Home's Continue Watching row reads it: a video in progress, or
-        // a finished series with a next episode (Next Up).
+        // a finished series with a next episode (Next Up), through the same
+        // kids filter. Home shows the 20 newest of each; an older title still
+        // counts here, where Remove takes it off all the same.
+        let policy = self.core.policy();
         let entry = |finished| {
             library
                 .continue_entry(profile, &self.id, finished)
                 .ok()
                 .flatten()
+                .filter(|e| super::home::shows(&policy, &e.kind, &e.item_id, &e.video_id))
         };
         let continuing = entry(false).is_some()
             || entry(true).is_some_and(|done| {

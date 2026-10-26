@@ -836,24 +836,7 @@ impl Library {
             format!("{partial} AND (COALESCE(w.watched, 0) = 0 OR p.hlc > w.hlc)")
         };
         self.read(|c| {
-            let mut stmt = c.prepare(&format!(
-                "SELECT p.item_id, p.video_id, COALESCE(i.name, p.item_id), i.poster, COALESCE(i.kind, 'movie'),
-                        p.position_ms, p.duration_ms, p.updated_ms
-                 FROM progress p
-                 LEFT JOIN library_items i ON i.profile_id = p.profile_id AND i.item_id = p.item_id
-                 LEFT JOIN watched w ON w.profile_id = p.profile_id AND w.video_id = p.video_id
-                 WHERE p.profile_id = ?1
-                   AND (?4 IS NULL OR p.item_id = ?4)
-                   AND {condition}
-                   AND NOT EXISTS (SELECT 1 FROM dismissed d
-                                   WHERE d.profile_id = p.profile_id AND d.item_id = p.item_id
-                                     AND d.hlc > p.hlc)
-                   AND p.video_id = (SELECT q.video_id FROM progress q
-                                     WHERE q.profile_id = p.profile_id AND q.item_id = p.item_id
-                                     ORDER BY q.updated_ms DESC, q.video_id DESC LIMIT 1)
-                 ORDER BY p.updated_ms DESC
-                 LIMIT ?3",
-            ))?;
+            let mut stmt = c.prepare(&continue_sql(&condition, item.is_some()))?;
             stmt.query_map(params![profile, FINISHED_RATIO, limit as i64, item], |r| {
                 Ok(ContinueItem {
                     item_id: r.get(0)?,
@@ -867,6 +850,20 @@ impl Library {
                 })
             })?
             .collect()
+        })
+    }
+
+    /// The SQL plan of the query `continue_entry` runs, for the test that
+    /// pins its index.
+    #[cfg(test)]
+    fn continue_entry_plan(&self) -> Result<String, LibraryError> {
+        self.read(|c| {
+            let sql = format!("EXPLAIN QUERY PLAN {}", continue_sql("1", true));
+            let mut stmt = c.prepare(&sql)?;
+            let rows: Vec<String> = stmt
+                .query_map(params!["p", FINISHED_RATIO, 1i64, "tt1"], |r| r.get(3))?
+                .collect::<Result<_, _>>()?;
+            Ok(rows.join("\n"))
         })
     }
 
@@ -1535,4 +1532,52 @@ pub(crate) fn places(old: &[Option<i64>], urls: &[&str]) -> Vec<i64> {
         }
     }
     out
+}
+
+/// The Continue Watching query: the latest video of each title meeting
+/// `condition`, newest first. With `one_title` it reads one title (`?4`)
+/// through a plain equality, so SQLite finds its row by key instead of
+/// walking the profile's progress (as `?4 IS NULL OR ...` made it); without,
+/// `?4` is bound NULL and its predicate is constant.
+fn continue_sql(condition: &str, one_title: bool) -> String {
+    let item = if one_title {
+        "p.item_id = ?4"
+    } else {
+        "?4 IS NULL"
+    };
+    format!(
+        "SELECT p.item_id, p.video_id, COALESCE(i.name, p.item_id), i.poster, COALESCE(i.kind, 'movie'),
+                p.position_ms, p.duration_ms, p.updated_ms
+         FROM progress p
+         LEFT JOIN library_items i ON i.profile_id = p.profile_id AND i.item_id = p.item_id
+         LEFT JOIN watched w ON w.profile_id = p.profile_id AND w.video_id = p.video_id
+         WHERE p.profile_id = ?1
+           AND {item}
+           AND {condition}
+           AND NOT EXISTS (SELECT 1 FROM dismissed d
+                           WHERE d.profile_id = p.profile_id AND d.item_id = p.item_id
+                             AND d.hlc > p.hlc)
+           AND p.video_id = (SELECT q.video_id FROM progress q
+                             WHERE q.profile_id = p.profile_id AND q.item_id = p.item_id
+                             ORDER BY q.updated_ms DESC, q.video_id DESC LIMIT 1)
+         ORDER BY p.updated_ms DESC
+         LIMIT ?3"
+    )
+}
+
+#[cfg(test)]
+mod continue_tests {
+    use super::Library;
+
+    /// One title's Continue Watching entry finds its row by profile and
+    /// title (or video), never by walking the profile's whole progress.
+    #[test]
+    fn one_titles_entry_is_found_by_its_key() {
+        let plan = Library::temporary().unwrap().continue_entry_plan().unwrap();
+        let p = plan
+            .lines()
+            .find(|l| l.starts_with("SEARCH p "))
+            .unwrap_or_default();
+        assert!(p.contains("(profile_id=? AND "), "{plan}");
+    }
 }

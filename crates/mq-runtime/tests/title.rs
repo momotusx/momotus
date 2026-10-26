@@ -711,3 +711,58 @@ async fn the_header_says_whether_the_title_is_in_continue_watching() {
         .unwrap();
     assert!(!first(&core).await, "the series finished");
 }
+
+/// On a kids profile the header reads Continue Watching as Home does for
+/// it: an allowed title in progress counts; a progress row that pairs the
+/// allowed id with another title's video does not.
+#[tokio::test]
+async fn a_kids_profile_reads_continue_watching_as_home_does() {
+    let owner = Core::temporary(mq_library::OWNER).unwrap();
+    owner
+        .library()
+        .set_addons(mq_library::OWNER, &[meta_addon(MOVIE).await], &owner.hlc())
+        .unwrap();
+    owner
+        .set_pin(mq_library::OWNER, Some("1357"), None)
+        .await
+        .unwrap();
+    let kid = owner.for_profile(&owner.create_kids_profile("Kid", "fox").unwrap());
+    let row = mq_library::AllowedRow {
+        item_id: "tt1727587".into(),
+        kind: "movie".into(),
+        name: "Sintel".into(),
+        names: vec![],
+        poster: None,
+        allowed: true,
+        added_ms: 1,
+    };
+    kid.library()
+        .write_allowed(kid.profile(), &row, &kid.hlc())
+        .unwrap();
+    let continuing = |video_id: &'static str, updated_ms: i64| {
+        let kid = kid.clone();
+        async move {
+            let p = ProgressRow {
+                video_id,
+                item_id: "tt1727587",
+                position_ms: 1_000,
+                duration_ms: 888_000,
+                updated_ms,
+            };
+            kid.library()
+                .set_progress(kid.profile(), p, &kid.hlc())
+                .unwrap();
+            let view = TitleView::open(&kid, "movie", "tt1727587");
+            settle(&view).await.header.continuing
+        }
+    };
+    // Another title's video under the allowed id: Home hides it, so does the page.
+    assert!(
+        !continuing("tt9999999", 5).await,
+        "a video that is not the title's"
+    );
+    assert!(
+        continuing("tt1727587", 6).await,
+        "the allowed title in progress"
+    );
+}
