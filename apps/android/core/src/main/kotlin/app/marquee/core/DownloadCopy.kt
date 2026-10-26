@@ -258,8 +258,8 @@ object DownloadCopy {
     /** The series' action-row control: Download, or where its downloads stand; a tap always opens its menu. */
     fun seriesControl(series: GroupDownload?): DownloadControl =
         when {
-            // "Downloaded" only once every episode is (code review r1 minor 3).
-            series == null || (series.downloaded < series.episodes && series.active == 0) -> {
+            // "Downloaded" only once every episode is, and never with no episode (code review r1 minor 3, r2 n4).
+            series == null || series.episodes == 0 || (series.downloaded < series.episodes && series.active == 0) -> {
                 NONE
             }
 
@@ -348,10 +348,23 @@ object DownloadCopy {
             bytesTotal = row.bytesTotal,
         )
 
+    /**
+     * A delete question for a season or a series: it counts the episodes already downloaded, never the queued or
+     * running ones it also cancels (code review r2 n6); with none done yet, the downloads by name.
+     */
     fun deleteSeries(
-        count: Int,
+        states: List<DownloadState?>,
         name: String,
-    ): String = "Delete ${if (count == 1) "1 downloaded episode" else "$count downloaded episodes"} of $name?"
+        season: Int? = null,
+    ): String {
+        val done = states.count { it == DownloadState.Done }
+        return when {
+            done == 1 -> "Delete 1 downloaded episode of $name?"
+            done > 1 -> "Delete $done downloaded episodes of $name?"
+            season != null && season > 0 -> "Delete Season $season downloads of $name?"
+            else -> "Delete the downloads of $name?"
+        }
+    }
 
     fun deleteAll(bytes: Long): String = "Delete all downloads on this device? ${Format.bytes(bytes)}"
 

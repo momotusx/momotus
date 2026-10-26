@@ -151,18 +151,18 @@ fun DownloadsScreen(
                 ListRow(
                     row.still ?: row.poster,
                     wide = row.still != null,
-                    title =
-                        listOfNotNull(
-                            row.name,
-                            row.season?.let { s ->
-                                row.episode?.let { Format.episodeLabel(s, it) }
-                            },
-                        ).joinToString(" · "),
+                    title = rowName(row, " · "),
                     line = DownloadCopy.progressLine(row),
                     onClick = { nav.onPlay(row) },
                     control =
                         onControl?.let { open ->
-                            { DownloadButton(DownloadCopy.control(DownloadCopy.badgeOf(row)), { open(row) }) }
+                            {
+                                DownloadButton(
+                                    DownloadCopy.control(DownloadCopy.badgeOf(row)),
+                                    { open(row) },
+                                    subject = rowName(row),
+                                )
+                            }
                         },
                 )
             }
@@ -185,7 +185,13 @@ fun DownloadsScreen(
                         }
 
                         row != null && onControl != null -> {
-                            { DownloadButton(DownloadCopy.control(DownloadCopy.badgeOf(row)), { onControl(row) }) }
+                            {
+                                DownloadButton(
+                                    DownloadCopy.control(DownloadCopy.badgeOf(row)),
+                                    { onControl(row) },
+                                    subject = title.name,
+                                )
+                            }
                         }
 
                         else -> {
@@ -235,7 +241,7 @@ fun DownloadedSeriesScreen(
                         SecondaryButton("Delete all", { confirm = true }, icon = Icons.Trash)
                     } else {
                         // DECISION's Confirmation pattern, inline: no destructive red.
-                        MqText(DownloadCopy.deleteSeries(rows.size, name), role = TextRole.Callout)
+                        MqText(DownloadCopy.deleteSeries(rows.map { it.state }, name), role = TextRole.Callout)
                         Row(horizontalArrangement = Arrangement.spacedBy(Marquee.space.xs)) {
                             SecondaryButton("Delete", {
                                 confirm = false
@@ -268,13 +274,27 @@ fun DownloadedSeriesScreen(
                         if (kids) {
                             null
                         } else {
-                            { DownloadButton(DownloadCopy.control(DownloadCopy.badgeOf(row)), { menu = row }) }
+                            {
+                                DownloadButton(
+                                    DownloadCopy.control(DownloadCopy.badgeOf(row)),
+                                    { menu = row },
+                                    subject = DownloadCopy.episodeName(row),
+                                )
+                            }
                         },
                 )
             }
         }
     }
 }
+
+/** "Severance S1:E4": a row's name, its menu's title and what its control says after its state (code review r2 n2). */
+private fun rowName(
+    row: DownloadRow,
+    separator: String = " ",
+): String =
+    listOfNotNull(row.name, row.season?.let { s -> row.episode?.let { Format.episodeLabel(s, it) } })
+        .joinToString(separator)
 
 /** A row's menu: its state's items; Play and another version go where they lead. */
 @Composable
@@ -286,12 +306,7 @@ private fun RowMenu(
 ) {
     val badge = DownloadCopy.badgeOf(row)
     DownloadMenu(
-        listOfNotNull(
-            row.name,
-            row.season?.let { s ->
-                row.episode?.let { Format.episodeLabel(s, it) }
-            },
-        ).joinToString(" "),
+        rowName(row),
         DownloadCopy.control(badge),
         onItem = { item ->
             when (item) {

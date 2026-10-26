@@ -246,7 +246,6 @@ class DownloadCopyTest {
             DownloadTitle("tt2", "movie", "Sintel", null, 1, (2.1 * gb).toLong(), listOf(row.copy(kind = "movie")))
         assertEquals("1080p · 2.1 GB", DownloadCopy.titleLine(film))
         assertEquals("4 episodes · 2.1 GB", DownloadCopy.titleLine(film.copy(kind = "series", count = 4)))
-        assertEquals("Delete 4 downloaded episodes of Severance?", DownloadCopy.deleteSeries(4, "Severance"))
         assertEquals("Delete all downloads on this device? 12 GB", DownloadCopy.deleteAll(12 * gb))
     }
 
@@ -257,6 +256,29 @@ class DownloadCopyTest {
         assertEquals("Downloading", DownloadCopy.seriesControl(GroupDownload(2, 20, 1, 3)).label)
         assertEquals("Downloaded", DownloadCopy.seriesControl(GroupDownload(2, 20, 20, 0)).label)
         assertEquals("Download", DownloadCopy.seriesControl(null).label)
+        // No episode known yet: nothing is downloaded (code review r2 n4).
+        assertEquals("Download", DownloadCopy.seriesControl(GroupDownload(0, 0, 0, 0)).label)
+    }
+
+    /** A delete counts the episodes already downloaded, never the queued or running ones it cancels (r2 n6). */
+    @Test
+    fun `a season or series delete counts only what is downloaded`() {
+        val done = DownloadState.Done
+        val twelve = List(3) { done } + List(9) { DownloadState.Queued }
+        assertEquals("Delete 3 downloaded episodes of Severance?", DownloadCopy.deleteSeries(twelve, "Severance", 2))
+        assertEquals(
+            "Delete 1 downloaded episode of Severance?",
+            DownloadCopy.deleteSeries(listOf(done, DownloadState.Running, DownloadState.Failed), "Severance"),
+        )
+        // Nothing done yet: the downloads by name, with no count that is not true.
+        assertEquals(
+            "Delete Season 2 downloads of Severance?",
+            DownloadCopy.deleteSeries(listOf(DownloadState.Queued, null), "Severance", 2),
+        )
+        assertEquals(
+            "Delete the downloads of Severance?",
+            DownloadCopy.deleteSeries(listOf(DownloadState.Paused), "Severance"),
+        )
     }
 
     /** The subtitles a download keeps are named, and the wait for the app says the app's name. */

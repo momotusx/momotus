@@ -130,15 +130,18 @@ class DownloadKeeper(
                 ContextCompat.startForegroundService(app, serviceIntent())
             }
         } catch (e: RuntimeException) {
-            // Refused (the app left the front between the tap and here): downloads go on while the process lives.
+            // Refused (the app left the front between the tap and here): downloads go on while the process lives,
+            // and the next minute asks again.
             CoreLog.w("downloads cannot be kept running: ${e.message}")
+            session.scope.launch(Dispatchers.Main) { on(KeeperEvent.Refused) }
         }
     }
 
     /**
      * The user-initiated job, with Wi-Fi as its network when every download waits for it: the system starts it when
      * Wi-Fi comes, the app away (code review r1 C1). A refused schedule (the quota, the app not in front) lets go of
-     * the hold, so the next front or snapshot tries again (M2).
+     * the hold and is asked again a minute later, not at every snapshot (M2, r2 n3). The same id replaces a job
+     * whose network changed (r2 N2).
      */
     @RequiresApi(34)
     private fun schedule(
@@ -156,7 +159,7 @@ class DownloadKeeper(
         val scheduled = app.getSystemService(JobScheduler::class.java)?.schedule(info)
         if (scheduled != JobScheduler.RESULT_SUCCESS) {
             CoreLog.w("the downloads job was not scheduled: $scheduled")
-            session.scope.launch(Dispatchers.Main) { on(KeeperEvent.Stopped) }
+            session.scope.launch(Dispatchers.Main) { on(KeeperEvent.Refused) }
         }
     }
 
@@ -184,8 +187,10 @@ class DownloadKeeper(
         on(KeeperEvent.Started)
     }
 
-    fun jobStopped() {
-        job = null
+    fun jobStopped(params: JobParameters) {
+        if (job?.second === params) job = null
+        // The keeper's own replace (a new network) or release stopped it: the hold stands or is already let go.
+        if (Build.VERSION.SDK_INT >= 31 && params.stopReason == JobParameters.STOP_REASON_CANCELLED_BY_APP) return
         on(KeeperEvent.Stopped)
     }
 
@@ -295,7 +300,7 @@ class DownloadJob : JobService() {
 
     // The system stopped it (the network went, a quota): it may run it again; the keeper hears when.
     override fun onStopJob(params: JobParameters): Boolean {
-        keeper.jobStopped()
+        keeper.jobStopped(params)
         return true
     }
 }

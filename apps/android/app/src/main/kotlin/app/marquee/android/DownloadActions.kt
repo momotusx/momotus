@@ -29,6 +29,8 @@ import app.marquee.design.MenuAction
 import app.marquee.ui.phone.TitleDownloads
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
@@ -43,9 +45,28 @@ class DownloadActions(
     var starts by mutableIntStateOf(0)
         private set
 
-    /** Why the last add or op did not go through, one line the pages show; never silence (code review r1). */
+    /**
+     * Why the last add or op did not go through, one line the pages show; never silence (code review r1). It clears
+     * after [PROBLEM_MS], at the next op that goes through, or when the user moves to another page (r2 n3).
+     */
     var problem by mutableStateOf<String?>(null)
         private set
+    private var clearing: Job? = null
+
+    fun clearProblem() {
+        clearing?.cancel()
+        problem = null
+    }
+
+    private fun fail(line: String) {
+        clearing?.cancel()
+        problem = line
+        clearing =
+            scope.launch {
+                delay(PROBLEM_MS)
+                problem = null
+            }
+    }
 
     fun add(
         kind: String,
@@ -59,12 +80,12 @@ class DownloadActions(
         scope.launch {
             try {
                 session.ops.downloadAdd(kind, itemId, what, caps(), videoId, season, pick)
-                problem = null
+                clearProblem()
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
                 CoreLog.w("download could not start: ${CoreLog.describe(e)}")
-                problem = DownloadCopy.ADD_FAILED
+                fail(DownloadCopy.ADD_FAILED)
             }
         }
     }
@@ -78,12 +99,12 @@ class DownloadActions(
         scope.launch {
             try {
                 session.ops.downloadAct(action, which, mobileData)
-                problem = null
+                clearProblem()
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
                 CoreLog.w("download ${action.op} failed: ${CoreLog.describe(e)}")
-                problem = DownloadCopy.ACT_FAILED
+                fail(DownloadCopy.ACT_FAILED)
             }
         }
     }
@@ -167,7 +188,7 @@ fun NotificationAsk(actions: DownloadActions) {
     val granted =
         ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) ==
             PackageManager.PERMISSION_GRANTED
-    if (actions.starts == 0 || asked || granted) return
+    if (!asksForNotifications(Build.VERSION.SDK_INT, actions.starts, asked, granted)) return
     val done = {
         asked = true
         prefs.edit { putBoolean(ASKED, true) }
@@ -184,6 +205,17 @@ fun NotificationAsk(actions: DownloadActions) {
         onDismiss = done,
     )
 }
+
+/** Android 13 and later, after a download started, once, and never when notifications are allowed already. */
+internal fun asksForNotifications(
+    sdk: Int,
+    starts: Int,
+    asked: Boolean,
+    granted: Boolean,
+): Boolean = sdk >= Build.VERSION_CODES.TIRAMISU && starts > 0 && !asked && !granted
+
+/** As long as the web's status line stays. */
+internal const val PROBLEM_MS = 6_000L
 
 private const val PREFS = "downloads"
 private const val ASKED = "notificationsAsked"

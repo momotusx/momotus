@@ -215,9 +215,25 @@ class PhoneDownloadTest {
         assertEquals(listOf("DownloadSeason 1 []"), calls)
     }
 
-    /** Deleting a whole season's downloads asks first, in the deleteSeries words; Cancel deletes nothing. */
+    private fun episode(
+        n: Int,
+        state: DownloadState?,
+    ) = Episode(
+        videoId = "tt1:1:$n",
+        season = 1,
+        episode = n,
+        title = "Ep $n",
+        watched = false,
+        download = state?.let { DownloadBadge("d$n", it, mobileData = false) },
+    )
+
+    /**
+     * Deleting a whole season's downloads asks first; the question counts the episodes already downloaded, not the
+     * queued ones the delete also cancels (code review r2 n6). Cancel deletes nothing.
+     */
     @Test
     fun `a season's delete asks first`() {
+        val states = listOf(DownloadState.Done, DownloadState.Done, DownloadState.Done, DownloadState.Queued, null)
         show(
             TitleHeader(
                 state = TitleState.Ready,
@@ -226,20 +242,21 @@ class PhoneDownloadTest {
                 watched = false,
                 seasons = listOf(1),
                 selectedSeason = 1,
-                seasonDownload = GroupDownload(1, 8, 8, 0),
-                seriesDownload = GroupDownload(1, 8, 8, 0),
+                seasonDownload = GroupDownload(1, 5, 5, 0),
+                seriesDownload = GroupDownload(1, 5, 5, 0),
             ),
+            episodes = states.mapIndexed { i, state -> episode(i + 1, state) },
         )
         control("Downloaded").performClick()
         compose.onNodeWithText("Delete Season 1 downloads").performClick()
         assertEquals(emptyList<String>(), calls)
-        compose.onNodeWithText("Delete 0 downloaded episodes of Sintel?").assertExists()
+        compose.onNodeWithText("Delete 3 downloaded episodes of Sintel?").assertExists()
         compose.onNodeWithText("Cancel").performClick()
         assertEquals(emptyList<String>(), calls)
         control("Downloaded").performClick()
         compose.onNodeWithText("Delete Season 1 downloads").performClick()
         compose.onNodeWithText("Delete").performClick()
-        assertEquals(listOf("DeleteSeason 1 []"), calls)
+        assertEquals(listOf("DeleteSeason 1 [d1, d2, d3, d4]"), calls)
     }
 
     /** Each episode's control names its episode after its state: a season reads as many names as rows (M3). */

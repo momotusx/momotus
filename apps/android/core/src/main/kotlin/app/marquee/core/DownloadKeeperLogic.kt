@@ -22,10 +22,13 @@ sealed interface KeeperEvent {
     /** The system stopped the job or the service (a quota, the network constraint, the user in Task Manager). */
     data object Stopped : KeeperEvent
 
+    /** The system refused the job or the service: it is asked again at the next [Minute], not at every snapshot. */
+    data object Refused : KeeperEvent
+
     /** A while after the queue emptied: a queue that only blinked empty between two downloads keeps its job. */
     data object Settled : KeeperEvent
 
-    /** Once a minute while downloads run. */
+    /** Once a minute while downloads run; a refused job is asked for again. */
     data object Minute : KeeperEvent
 }
 
@@ -89,6 +92,8 @@ data class KeeperFacts(
     val neededBytes: Long?,
     /** Download on Wi-Fi only is on and no download was let onto mobile data. */
     val unmetered: Boolean = false,
+    /** A locked session's counts-only view: no names and nothing done or failed, so [done] and [failed] say nothing. */
+    val locked: Boolean = false,
 ) {
     companion object {
         fun of(snapshot: DownloadsSnapshot): KeeperFacts {
@@ -109,6 +114,7 @@ data class KeeperFacts(
                     },
                 neededBytes = snapshot.storage.neededBytes,
                 unmetered = snapshot.settings.wifiOnly && !snapshot.active.mobileData,
+                locked = snapshot.locked,
             )
         }
     }
@@ -123,13 +129,22 @@ class DownloadKeeperLogic {
 
     /** A job scheduled or running, or the service started. */
     private var held = false
+
+    /** The network the last [KeeperEffect.Keep] asked for. */
+    private var sent: Boolean? = null
+
+    /** The system refused the last [KeeperEffect.Keep]: the next [KeeperEvent.Minute] asks again. */
+    private var refused = false
     private var allowed: Boolean? = null
     private var facts: KeeperFacts? = null
 
-    /** The batch: whether one runs, and what was done when it began. */
+    /** The batch: whether one runs, and what was done when it began (null: it began locked, names unknown). */
     private var inBatch = false
-    private var doneBefore: Set<String> = emptySet()
+    private var doneBefore: Set<String>? = emptySet()
     private var failedSeen: Set<String>? = null
+
+    /** The last unlocked facts: a locked snapshot's names come from here (code review r2 N1). */
+    private var named: KeeperFacts? = null
     private var asked: Long? = null
 
     fun on(event: KeeperEvent): List<KeeperEffect> =
@@ -147,6 +162,11 @@ class DownloadKeeperLogic {
                     held = false
                 }
 
+                KeeperEvent.Refused -> {
+                    held = false
+                    refused = true
+                }
+
                 KeeperEvent.Started -> {
                     held = true
                     // Started again with nothing left: it settles and lets go (code review r1 M1).
@@ -158,23 +178,30 @@ class DownloadKeeperLogic {
                 }
 
                 KeeperEvent.Minute -> {
+                    refused = false
+                    keep()
                     if ((facts?.left ?: 0) > 0) add(KeeperEffect.Allowed(visible || held))
                 }
             }
             allowed()
         }
 
-    private fun MutableList<KeeperEffect>.facts(now: KeeperFacts) {
+    private fun MutableList<KeeperEffect>.facts(read: KeeperFacts) {
         val before = facts
+        // Locked, the core lists nothing: what was done and failed stays as the last unlocked view said, so an unlock
+        // raises no old failure and no batch counts everything ever done (code review r2 N1).
+        val now = if (read.locked) read.copy(done = named?.done.orEmpty(), failed = named?.failed.orEmpty()) else read
         facts = now
-        // Failures from before this process are not news.
-        val seen = failedSeen
-        if (seen !=
-            null
-        ) {
-            now.failed.filterKeys { it !in seen }.forEach { (id, name) -> add(KeeperEffect.Failed(id, name)) }
+        if (!read.locked) {
+            named = read
+            // Failures from before this process are not news.
+            failedSeen?.let { seen ->
+                now.failed.filterKeys { it !in seen }.forEach { (id, name) -> add(KeeperEffect.Failed(id, name)) }
+            }
+            failedSeen = now.failed.keys
+            // A batch begun locked before any name was known counts from the first names it sees.
+            if (doneBefore == null) doneBefore = now.done.keys
         }
-        failedSeen = now.failed.keys
         val needed = now.neededBytes
         if (needed != null && needed != asked) add(KeeperEffect.Allocate(needed))
         asked = needed
@@ -184,27 +211,30 @@ class DownloadKeeperLogic {
         }
         if (!inBatch) {
             inBatch = true
-            doneBefore = before?.done?.keys ?: now.done.keys
+            doneBefore = if (read.locked && named == null) null else before?.done?.keys ?: now.done.keys
         }
-        if (!held && visible) {
-            held = true
-            add(KeeperEffect.Keep(maxOf(0L, now.bytesTotal - now.bytesDone), now.unmetered))
-        }
+        keep()
         if (held) add(progress(now))
+    }
+
+    /**
+     * Holds the job while downloads are left and the app is in front (the system takes a job only then), and asks
+     * again when the network it needs changed: a download let onto mobile data needs any network, not Wi-Fi (code
+     * review r2 N2). The same job id replaces the job.
+     */
+    private fun MutableList<KeeperEffect>.keep() {
+        val now = facts ?: return
+        if (!visible || refused || now.left == 0 || (held && sent == now.unmetered)) return
+        held = true
+        sent = now.unmetered
+        add(KeeperEffect.Keep(maxOf(0L, now.bytesTotal - now.bytesDone), now.unmetered))
     }
 
     private fun MutableList<KeeperEffect>.visible(now: Boolean) {
         visible = now
-        val left = facts?.left ?: 0
-        if (now && left > 0 && !held) {
-            held = true
-            add(
-                KeeperEffect.Keep(
-                    facts?.let { maxOf(0L, it.bytesTotal - it.bytesDone) } ?: 0L,
-                    facts?.unmetered == true,
-                ),
-            )
-            facts?.let { add(progress(it)) }
+        if (now && !held && (facts?.left ?: 0) > 0) {
+            keep()
+            if (held) facts?.let { add(progress(it)) }
         }
         // The core hears it at every foreground.
         if (now) allowed = null
@@ -215,7 +245,8 @@ class DownloadKeeperLogic {
         if (now.left > 0 || !held) return
         held = false
         add(KeeperEffect.Release)
-        val finished = now.done.filterKeys { it !in doneBefore }
+        val before = doneBefore.orEmpty()
+        val finished = now.done.filterKeys { it !in before }
         if (finished.isNotEmpty()) add(finishedNotice(finished.values.toList()))
         inBatch = false
     }
@@ -231,7 +262,8 @@ class DownloadKeeperLogic {
     private fun progress(now: KeeperFacts): KeeperEffect.Progress {
         val fraction = if (now.bytesTotal > 0) (now.bytesDone.toFloat() / now.bytesTotal).coerceIn(0f, 1f) else null
         // Downloads done in this batch, then the one running: a cancelled one leaves the count.
-        val finished = now.done.keys.count { it !in doneBefore }
+        val before = doneBefore.orEmpty()
+        val finished = now.done.keys.count { it !in before }
         val total = finished + now.left
         val at = finished + 1
         val title = if (total > 1) "Downloading $at of $total" else "Downloading"

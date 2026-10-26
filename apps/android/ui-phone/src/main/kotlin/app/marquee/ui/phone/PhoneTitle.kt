@@ -718,9 +718,10 @@ private fun Info(
         }
         downloads?.problem?.let { StatusNote(it, tone = Status.Warn) }
         var seriesMenu by remember { mutableStateOf(false) }
-        var deleteSeason by remember { mutableStateOf<List<String>?>(null) }
+        var deleteSeason by remember { mutableStateOf<List<DownloadBadge>?>(null) }
         if (seriesMenu && downloads != null) {
-            val ids = title.episodes.mapNotNull { it.download?.id }
+            val kept = title.episodes.mapNotNull { it.download }
+            val ids = kept.map { it.id }
             ActionMenu(
                 title = details.name,
                 actions =
@@ -734,7 +735,7 @@ private fun Info(
                         MenuAction(it.label, icon) {
                             // A whole season's delete asks first (code review r1).
                             if (it.act == GroupAct.DeleteSeason) {
-                                deleteSeason = ids
+                                deleteSeason = kept
                             } else {
                                 downloads.group(it.act, header.selectedSeason, ids)
                             }
@@ -743,13 +744,14 @@ private fun Info(
                 onDismiss = { seriesMenu = false },
             )
         }
-        deleteSeason?.takeIf { downloads != null }?.let { ids ->
+        deleteSeason?.takeIf { downloads != null }?.let { kept ->
             ActionMenu(
-                title = DownloadCopy.deleteSeries(ids.size, details.name),
+                // The episodes already downloaded, never the queued ones the delete also cancels (code review r2 n6).
+                title = DownloadCopy.deleteSeries(kept.map { it.state }, details.name, header.selectedSeason),
                 actions =
                     listOf(
                         MenuAction("Delete", Icons.Trash) {
-                            downloads?.group(GroupAct.DeleteSeason, header.selectedSeason, ids)
+                            downloads?.group(GroupAct.DeleteSeason, header.selectedSeason, kept.map { it.id })
                         },
                         MenuAction("Cancel", null) {},
                     ),

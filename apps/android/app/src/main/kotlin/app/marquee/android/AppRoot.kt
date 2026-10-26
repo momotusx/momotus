@@ -312,6 +312,8 @@ private fun AppNav(
         )
     // The first download asks for notifications once (plans/offline-downloads.md 3.3).
     if (!tv) NotificationAsk(app.downloads)
+    // A download's "did not go through" belongs to the page it happened on (code review r2 n3).
+    LaunchedEffect(top) { app.downloads.clearProblem() }
 
     // An addon's Install button (stremio://): the page with the link field, filled in, waits for Add.
     LaunchedEffect(marquee.addonLink) {

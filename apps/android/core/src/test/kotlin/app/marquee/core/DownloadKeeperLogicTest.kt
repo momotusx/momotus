@@ -25,7 +25,17 @@ class DownloadKeeperLogicTest {
         bytesTotal: Long = 0,
         needed: Long? = null,
         unmetered: Boolean = false,
-    ) = KeeperEvent.Facts(KeeperFacts(left, bytesDone, bytesTotal, "Severance", done, failed, needed, unmetered))
+        locked: Boolean = false,
+    ) = KeeperEvent.Facts(
+        KeeperFacts(left, bytesDone, bytesTotal, "Severance", done, failed, needed, unmetered, locked = locked),
+    )
+
+    /** A locked session's view: counts and bytes, no names, nothing done or failed. */
+    private fun locked(
+        left: Int,
+        bytesDone: Long = 0,
+        bytesTotal: Long = 0,
+    ) = KeeperEvent.Facts(KeeperFacts(left, bytesDone, bytesTotal, null, emptyMap(), emptyMap(), null, locked = true))
 
     private fun KeeperEffect.isProgress() = this is Progress
 
@@ -137,6 +147,7 @@ class DownloadKeeperLogicTest {
             mobileData: Boolean = false,
             wifiOnly: Boolean = true,
         ) = DownloadsSnapshot(
+            locked = false,
             storage = DownloadStorage(0),
             settings = DownloadSettings(wifiOnly = wifiOnly, smart = true),
             active = DownloadActivity(1, 1, 0, 0, waiting = waiting, mobileData = mobileData),
@@ -145,5 +156,90 @@ class DownloadKeeperLogicTest {
         assertTrue(KeeperFacts.of(snapshot(waiting = 1)).unmetered)
         assertEquals(false, KeeperFacts.of(snapshot(waiting = 1, mobileData = true)).unmetered)
         assertEquals(false, KeeperFacts.of(snapshot(waiting = 0, wifiOnly = false)).unmetered)
+        // A locked session's view says so, and the keeper keeps its names (code review r2 N1).
+        assertTrue(KeeperFacts.of(snapshot(waiting = 1).copy(locked = true)).locked)
+    }
+
+    /**
+     * The core keeps the keeper's view across a lock (code review r2 N1): a locked snapshot lists nothing, so the
+     * failures it does not show are not gone, and they are not news when the unlock lists them again.
+     */
+    @Test
+    fun `a lock hides the failures without forgetting them, and the unlock raises nothing old`() {
+        val keeper = DownloadKeeperLogic()
+        keeper.on(KeeperEvent.Visible(true))
+        keeper.on(facts(0, failed = mapOf("old" to "Sintel")))
+        val both = mapOf("old" to "Sintel", "new" to "Severance S1:E4")
+        assertEquals(listOf<KeeperEffect>(Failed("new", "Severance S1:E4")), keeper.on(facts(0, failed = both)))
+        assertEquals(emptyList(), keeper.on(locked(0)))
+        assertEquals(emptyList(), keeper.on(facts(0, failed = both)))
+        // A failure that came while locked is news once its name is known.
+        assertEquals(
+            listOf<KeeperEffect>(Failed("later", "Sintel")),
+            keeper.on(facts(0, failed = mapOf("old" to "Sintel", "new" to "Severance S1:E4", "later" to "Sintel"))),
+        )
+    }
+
+    /** A batch begun while locked counts from what was done before it, not from nothing (code review r2 N1). */
+    @Test
+    fun `a batch begun while locked counts only its own downloads after the unlock`() {
+        val keeper = DownloadKeeperLogic()
+        keeper.on(KeeperEvent.Visible(true))
+        val before = mapOf("a" to "Sintel", "b" to "Sintel")
+        keeper.on(facts(0, done = before))
+        // Locked: the view lists nothing done, then the batch begins.
+        keeper.on(locked(0))
+        assertTrue(keeper.on(locked(2, bytesTotal = 2_000)).any { it is Keep })
+        // Unlocked with one of the two done: the second of two, and the finish names only this batch.
+        assertEquals(
+            Progress("Downloading 2 of 2", "Severance · 50%", 0.5f),
+            keeper.on(facts(1, done = before + ("c" to "Severance"), bytesDone = 1_000, bytesTotal = 2_000)).last(),
+        )
+        keeper.on(facts(0, done = before + ("c" to "Severance") + ("d" to "Severance")))
+        assertEquals(
+            listOf(Release, Finished("Downloads finished", "2 episodes of Severance")),
+            keeper.on(KeeperEvent.Settled),
+        )
+    }
+
+    /** Begun locked before any name was known: it counts from the first names it sees, never everything ever done. */
+    @Test
+    fun `a batch begun locked at the start counts from the first names`() {
+        val keeper = DownloadKeeperLogic()
+        keeper.on(KeeperEvent.Visible(true))
+        keeper.on(locked(1, bytesTotal = 1_000))
+        assertEquals(
+            Progress("Downloading", "Severance · 0%", 0f),
+            keeper.on(facts(1, done = mapOf("a" to "Sintel", "b" to "Sintel"), bytesTotal = 1_000)).last(),
+        )
+    }
+
+    /**
+     * Wi-Fi only, then "Download now on mobile data": the held job asks for any network, so the system keeps it with
+     * the app away (code review r2 N2).
+     */
+    @Test
+    fun `a held job asks again when its network changes`() {
+        val keeper = DownloadKeeperLogic()
+        keeper.on(KeeperEvent.Visible(true))
+        assertEquals(Keep(2_000, unmetered = true), keeper.on(facts(1, bytesTotal = 2_000, unmetered = true))[0])
+        assertEquals(Keep(2_000, unmetered = false), keeper.on(facts(1, bytesTotal = 2_000))[0])
+        assertTrue(keeper.on(facts(1, bytesTotal = 2_000)).none { it is Keep })
+        // Out of sight the system takes no job: the change waits for the front.
+        keeper.on(KeeperEvent.Visible(false))
+        assertTrue(keeper.on(facts(1, bytesTotal = 2_000, unmetered = true)).none { it is Keep })
+    }
+
+    /** A refused job is asked for again once a minute, not at every snapshot (code review r2 n3). */
+    @Test
+    fun `a refused job waits for the minute`() {
+        val keeper = DownloadKeeperLogic()
+        keeper.on(KeeperEvent.Visible(true))
+        assertTrue(keeper.on(facts(1)).any { it is Keep })
+        keeper.on(KeeperEvent.Refused)
+        assertTrue(keeper.on(facts(1)).none { it is Keep })
+        assertTrue(keeper.on(facts(1)).none { it is Keep })
+        assertTrue(keeper.on(KeeperEvent.Minute).any { it is Keep })
+        assertTrue(keeper.on(facts(1)).none { it is Keep })
     }
 }
