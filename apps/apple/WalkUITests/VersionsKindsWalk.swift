@@ -5,7 +5,7 @@ import XCTest
 /// `apps/apple/scripts/walk-ui.sh <UDID> -only-testing:MarqueeWalkUITests/VersionsKindsWalk`, which builds the app
 /// under its own bundle id. Muted (`-MQMute YES`); nothing plays.
 @MainActor final class VersionsKindsWalk: XCTestCase {
-    static let walkApp = "app.marquee.walk"
+    static let walkApp = "app.momotus.walk"
 
     private var app: XCUIApplication { XCUIApplication(bundleIdentifier: Self.walkApp) }
 

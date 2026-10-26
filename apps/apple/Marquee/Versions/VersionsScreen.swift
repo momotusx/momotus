@@ -154,25 +154,30 @@ struct VersionsScreen: View {
     @ViewBuilder private var kindRow: some View {
         let on = snapshot?.selectedKind
         if chipsShown {
-            ScrollView(.horizontal) {
-                HStack(spacing: 8) {
-                    ForEach(VersionWords.kindChips(snapshot), id: \.self) { chip in
-                        Button {
-                            // The chip that is on again asks nothing.
-                            guard chip.kind != on else { return }
-                            asked = chip.kind
-                            model.setKind(chip.kind)
-                        } label: {
-                            HStack(spacing: 6) {
-                                Text(chip.label)
-                                if let count = chip.count { Text(count).fontWeight(.regular) }
+            // The chip that is on stays in view on a narrow track or at a large font.
+            ScrollViewReader { proxy in
+                ScrollView(.horizontal) {
+                    HStack(spacing: 8) {
+                        ForEach(VersionWords.kindChips(snapshot), id: \.self) { chip in
+                            Button {
+                                // The chip that is on again asks nothing.
+                                guard chip.kind != on else { return }
+                                asked = chip.kind
+                                model.setKind(chip.kind)
+                            } label: {
+                                HStack(spacing: 6) {
+                                    Text(chip.label)
+                                    if let count = chip.count { Text(count).fontWeight(.regular) }
+                                }
                             }
+                            .buttonStyle(ChipStyle(selected: chip.kind == on))
+                            .accessibilityLabel(chip.spoken)
+                            .accessibilityAddTraits(chip.kind == on ? .isSelected : [])
+                            .id(chip.kind ?? "all")
                         }
-                        .buttonStyle(ChipStyle(selected: chip.kind == on))
-                        .accessibilityLabel(chip.spoken)
-                        .accessibilityAddTraits(chip.kind == on ? .isSelected : [])
                     }
                 }
+                .onChange(of: on, initial: true) { _, kind in proxy.scrollTo(kind ?? "all") }
             }
             .scrollIndicators(.hidden)
             .scrollClipDisabled()
