@@ -150,7 +150,7 @@ extension AetherSession.Events {
 /// Patch 5: a uniform plan (an index with no usable keyframes, such as a Blu-ray ISO) ends segment 0 at the measured
 /// IRAP spacing, at least 1 s; the rest of the first stride is segment 1 and the later cuts keep the 4 s grid. An
 /// unmeasured spacing keeps the 4 s stride (bench IM-B1: the ISO's 4 s segment 0 took 7.1 s at 153 KiB/s).
-@Test func aUniformPlanStartsWithOneGOP() {
+@Test func aUniformPlanStartsWithOneGOP() throws {
     let tb = AVRational(num: 1, den: 90000)
     let first = HLSVideoEngine.uniformFirstSegmentSeconds(spacing: .measured(1.001))
     #expect(first == 1.001)
@@ -166,6 +166,10 @@ extension AetherSession.Events {
     #expect(unmeasured.map { ($0.startSeconds * 1000).rounded() } == [0, 4000, 8000])
     // A spacing at the stride splits nothing.
     #expect(HLSVideoEngine.buildUniformSegmentPlan(videoTimeBase: tb, sourceDurationSeconds: 12, strideSeconds: 4, firstSegmentSeconds: 4).count == 3)
+    // The engine's one call site passes it (a source check: the plan is built inside a live open).
+    let engine = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+        .appending(path: "../Vendor/AetherEngine/Sources/AetherEngine/Video/HLSVideoEngine.swift")
+    #expect(try String(contentsOf: engine, encoding: .utf8).contains("firstSegmentSeconds: Self.uniformFirstSegmentSeconds(spacing: spacing)"))
 }
 
 /// Patch 4: segment 0 ends at the first keyframe at or after 1 s; the later segments keep the absolute 4 s cuts.
