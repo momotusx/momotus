@@ -3,6 +3,7 @@ package app.marquee.ui.tv
 import android.graphics.Bitmap
 import android.os.Handler
 import android.os.Looper
+import android.os.MessageQueue
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -100,6 +101,7 @@ import java.io.File
 import java.util.concurrent.CopyOnWriteArrayList
 import kotlin.coroutines.CoroutineContext
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /** The Versions screen on a TV with the core's stream choice (plans/m13-stream-choice.md 3.7, 3.11). */
@@ -127,9 +129,26 @@ class TvVersionsTest {
 
     @After
     fun stop() {
+        nothingWaitsOnTheStateThread()
         scope.cancel()
         client.close()
         executor.shutdownNow()
+    }
+
+    /**
+     * The state thread's Looper is never looped (stateThread): anything posted to it would never run. After a whole
+     * screen's life on it (snapshots, updates, commands, Compose's apply observers), nothing may wait there.
+     */
+    private fun nothingWaitsOnTheStateThread() {
+        val looper = executor.submit<Looper?> { Looper.myLooper() }.get()!!
+        // The queue's head message, due or delayed: Robolectric's looper shadow waits for a thread that loops.
+        val head =
+            MessageQueue::class.java
+                .getDeclaredField(
+                    "mMessages",
+                ).apply { isAccessible = true }
+                .get(looper.queue)
+        assertNull(head, "something posted to the state thread: $head")
     }
 
     private val gib = 1L shl 30
