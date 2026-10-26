@@ -44,6 +44,11 @@ pub struct TitleDetails {
     /// screen: metahub's large one (780x1170) when `poster` is metahub's
     /// small or medium, else `poster` as given.
     pub cover: Option<String>,
+    /// The cover is known to print the title (metahub's posters do): a
+    /// phone draws no logo with it. False for another host's cover (an
+    /// anime's Kitsu poster, an addon's own art), which keeps the logo or
+    /// the name with it.
+    pub cover_titled: bool,
     pub background: Option<String>,
     pub logo: Option<String>,
     pub release_info: Option<String>,
@@ -1112,9 +1117,10 @@ fn episode_label(meta: &MetaItem, video_id: &str) -> Option<String> {
     Some(format!("S{}:E{}", info.season, info.episode))
 }
 
+const METAHUB: &str = "https://images.metahub.space/poster/";
+
 /// metahub's large poster for its small or medium one; any other URL as given.
 fn large_poster(url: &str) -> String {
-    const METAHUB: &str = "https://images.metahub.space/poster/";
     let rest = url.strip_prefix(METAHUB);
     match rest.and_then(|r| {
         r.strip_prefix("small/")
@@ -1148,6 +1154,10 @@ fn details(
         poster: p.poster.as_ref().map(|u| u.to_string()),
         rated_poster,
         cover: p.poster.as_ref().map(|u| large_poster(u.as_str())),
+        cover_titled: p
+            .poster
+            .as_ref()
+            .is_some_and(|u| u.as_str().starts_with(METAHUB)),
         background: p.background.as_ref().map(|u| u.to_string()),
         logo: p.logo.as_ref().map(|u| u.to_string()),
         release_info: super::home::year_line(p.release_info.as_deref()),
@@ -1203,8 +1213,50 @@ mod tests {
             large_poster(&format!("{m}/large/tt1/img")),
             format!("{m}/large/tt1/img")
         );
-        let other = "https://m.media-amazon.com/images/M/x._V1_SX250.jpg";
-        assert_eq!(large_poster(other), other);
+        // Any other URL as given: another host, a lookalike host, plain
+        // http, another size's name, a query.
+        for other in [
+            "https://m.media-amazon.com/images/M/x._V1_SX250.jpg",
+            "https://images.metahub.space.evil.example/poster/small/tt1/img",
+            "http://images.metahub.space/poster/small/tt1/img",
+            "https://images.metahub.space/poster/smallx/tt1/img",
+            "https://images.metahub.space/background/small/tt1/img",
+        ] {
+            assert_eq!(large_poster(other), other);
+        }
+        assert_eq!(
+            large_poster(&format!("{m}/small/tt1/img?w=300")),
+            format!("{m}/large/tt1/img?w=300")
+        );
+    }
+
+    /// Only metahub's posters are known to print the title.
+    #[test]
+    fn only_a_metahub_cover_is_titled() {
+        let titled = |poster: &str| {
+            let meta: MetaItem = serde_json::from_value(serde_json::json!({
+                "id": "tt1", "type": "movie", "name": "Sintel", "poster": poster
+            }))
+            .unwrap();
+            details(
+                &meta,
+                "local",
+                None,
+                None,
+                TitleScores {
+                    tmdb: Slot::Empty,
+                    trakt: Slot::Empty,
+                },
+            )
+            .cover_titled
+        };
+        assert!(titled("https://images.metahub.space/poster/small/tt1/img"));
+        assert!(!titled(
+            "https://media.kitsu.app/anime/poster_images/1/large.jpg"
+        ));
+        assert!(!titled(
+            "https://images.metahub.space.evil.example/poster/small/tt1/img"
+        ));
     }
 
     /// The view's own kids check: a kids page starts no lookup at all, so

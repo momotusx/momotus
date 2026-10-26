@@ -98,6 +98,8 @@ const DEFAULTED = new Map([
   ["TitleDetails.scores", "TitleScores(Slot.None, Slot.None)"],
   ["TitleHeader.genresLinked", "true"],
   ["TitleHeader.continuing", "false"],
+  // The phone cover's printed title: an older core sends no cover, so nothing hangs on it.
+  ["TitleDetails.coverTitled", "false"],
   // The subtitle picker (plans/player-polish.md 2): an older core names no language of its own and no fit.
   ["SubtitleTrack.nativeName", "\"\""],
   // The device's language in the pickers: an older core marks none.

@@ -18,7 +18,14 @@ ratedPoster: string | null,
  * screen: metahub's large one (780x1170) when `poster` is metahub's
  * small or medium, else `poster` as given.
  */
-cover: string | null, background: string | null, logo: string | null, releaseInfo: string | null, runtime: string | null, genres: Array<string>, cast: Array<string>, directors: Array<string>, 
+cover: string | null, 
+/**
+ * The cover is known to print the title (metahub's posters do): a
+ * phone draws no logo with it. False for another host's cover (an
+ * anime's Kitsu poster, an addon's own art), which keeps the logo or
+ * the name with it.
+ */
+coverTitled: boolean, background: string | null, logo: string | null, releaseInfo: string | null, runtime: string | null, genres: Array<string>, cast: Array<string>, directors: Array<string>, 
 /**
  * From the meta's `Writers` links, as `cast` and `directors`.
  */
