@@ -97,6 +97,7 @@ const DEFAULTED = new Map([
   // The title page's TMDB and Trakt slots and the genre chips' flag: an older core sends neither, so no slot and linked genres.
   ["TitleDetails.scores", "TitleScores(Slot.None, Slot.None)"],
   ["TitleHeader.genresLinked", "true"],
+  ["TitleHeader.continuing", "false"],
   // The subtitle picker (plans/player-polish.md 2): an older core names no language of its own and no fit.
   ["SubtitleTrack.nativeName", "\"\""],
   // The device's language in the pickers: an older core marks none.
