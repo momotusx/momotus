@@ -1,7 +1,9 @@
 {
   "name": "Momotus",
   "short_name": "Momotus",
+  "id": "/",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
   "background_color": "#1C1C1E",
   "theme_color": "#1C1C1E",

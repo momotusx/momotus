@@ -394,6 +394,7 @@ export default function SettingsScreen() {
 
       <section class="set">
         <h2>About</h2>
+        <p class="note">The name is drawn from Unbounded, SIL Open Font License 1.1.</p>
         <p class="note">{turkceAltyaziCredit}</p>
         <p class="note credit">
           <img class="credit-mark" src={markSrc("tmdb")} alt="" />

@@ -168,10 +168,11 @@ h1, h2, h3 { font-family: var(--font-display); font-weight: var(--weight-heading
 .brand-fill .solid { position: absolute; inset: 0;
   -webkit-mask: linear-gradient(90deg, #000 calc(var(--brand-p) - 3%), transparent calc(var(--brand-p) + 3%));
   mask: linear-gradient(90deg, #000 calc(var(--brand-p) - 3%), transparent calc(var(--brand-p) + 3%)); animation: brand-fill 2.4s linear infinite; }
+/* A browser without @property (older TV browsers) cannot animate --brand-p: the mask is then invalid, the solid
+ * copy shows whole and the mark is simply still. */
 @property --brand-p { syntax: "<percentage>"; inherits: false; initial-value: 103%; }
 @keyframes brand-fill { from { --brand-p: -3%; } to { --brand-p: 103%; } }
 @media (prefers-reduced-motion: reduce) { .brand-fill .solid { animation: none; } }
-.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .topnav .brand { position: absolute; left: var(--safe-side); top: calc(var(--nav-top) + var(--nav-h) / 2); translate: 0 -50%; }
 /* Before the core has answered: the mark and the name, centered, filling. */
 .boot.brand { position: fixed; inset: 0; display: grid; place-items: center; margin: 0; font-size: 56px; }

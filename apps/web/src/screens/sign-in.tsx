@@ -217,8 +217,8 @@ export default function SignInScreen() {
       <main class="welcome page" data-vscroll>
         <header class="welcome-head">
           <div class="brand">
-          <Brand />
-        </div>
+            <Brand />
+          </div>
         </header>
         <SignInStart from={fromOf(q)} doors={() => <Navigate href="/sync" />} />
       </main>

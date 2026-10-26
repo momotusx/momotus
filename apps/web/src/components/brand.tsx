@@ -23,7 +23,8 @@ export default function Brand(props: { alone?: boolean; fill?: boolean }) {
           <span class="solid">{art()}</span>
         </span>
       </Show>
-      <Show when={!props.alone}>
+      {/* The boot's status already names the app. */}
+      <Show when={!props.alone && !props.fill}>
         <span class="sr">Momotus</span>
       </Show>
     </>

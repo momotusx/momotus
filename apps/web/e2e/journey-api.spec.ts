@@ -737,8 +737,9 @@ test("before the core answers, the wordmark shows, never a blank screen", async 
   const { context, page: p } = await page(browser, undefined, (m) => (m.op === "subscribe" && m.view === "profiles" ? null : undefined));
   await p.goto("/?form=desktop");
   const mark = p.locator(".boot.brand");
-  await expect(mark).toHaveText("Momotus");
+  await expect(mark.locator("img.wm").first()).toBeVisible();
   await expect(mark).toHaveAttribute("role", "status");
+  await expect(mark).toHaveAttribute("aria-label", "Momotus is starting");
   await context.close();
   // Once it has, the app replaces it.
   const { context: next, page: q } = await page(browser);
