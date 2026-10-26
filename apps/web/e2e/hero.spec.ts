@@ -38,6 +38,12 @@ for (const form of ["phone", "desktop", "tv"] as const) {
     expect(await page.locator(".hero-dots .dot").count()).toBe(pages);
     // Filled dots, never the status dots' ring (app.css .dot).
     expect(await page.locator(".hero-dots .dot").evaluateAll((els) => els.map((el) => getComputedStyle(el).boxShadow))).toEqual(Array(pages).fill("none"));
+    // A dot by hand is round inside its hit area, never its padded box's square corners.
+    expect(
+      await page.locator(".hero-dots button.dot").evaluateAll((els) =>
+        els.every((el) => getComputedStyle(el).backgroundColor === "rgba(0, 0, 0, 0)" && getComputedStyle(el, "::before").borderRadius === "999px"),
+      ),
+    ).toBe(true);
     const base = await activePage(page);
     // Half the dwell: the pill is half full and nothing moved.
     await page.clock.runFor(4000);
@@ -289,8 +295,8 @@ test("desktop: a series page plays the core's episode, its label as the title pa
   const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
   const page = await home(context, "desktop");
   const { i, id, play } = await seriesPage(page);
-  // "Play S1:E1" never watched, "Resume S2:E3" part way, "Play again from S1:E1" at the end.
-  await expect(play).toHaveText(/^(Play|Resume|Play again from) S\d+:E\d+$/, { timeout: 10_000 });
+  // "Play S1:E1" never watched, "Resume S2:E3" part way, "Play again" at the end.
+  await expect(play).toHaveText(/^((Play|Resume) S\d+:E\d+|Play again)$/, { timeout: 10_000 });
   const href = (await play.getAttribute("href")) ?? "";
   expect(href).toMatch(new RegExp(`^/play/series/${id}/${id}:\\d+:\\d+$`));
   await page.locator(".hero-dots .dot").nth(i).click();
@@ -299,6 +305,62 @@ test("desktop: a series page plays the core's episode, its label as the title pa
   await expect.poll(() => new URL(page.url()).pathname).toBe(href);
   await context.close();
 });
+
+/** Holds every series page's Play as the core sends it while its meta is read (`play` null, `playPending`), until
+ * `release` sends the core's own last header. */
+async function holdSeriesPlay(context: BrowserContext) {
+  const hold = { held: true, sub: -1, header: null as unknown, release: () => {} };
+  await context.routeWebSocket(/\/ws$/, (ws) => {
+    const server = ws.connectToServer();
+    ws.onMessage((m) => server.send(m));
+    server.onMessage((m) => {
+      const text = String(m);
+      if (!hold.held || !text.includes('"heroes"')) return ws.send(text);
+      type Header = { heroes: { tile: { kind: string }; play: unknown; playPending: boolean }[] };
+      const msg = JSON.parse(text);
+      const headers: Header[] = [];
+      const snap = msg.result?.snapshot;
+      if (snap?.header) {
+        hold.sub = msg.result.sub;
+        headers.push(snap.header);
+      }
+      for (const u of msg.updates ?? []) if (u.kind === "header") headers.push(u.header);
+      for (const header of headers) {
+        hold.header = structuredClone(header);
+        for (const h of header.heroes) if (h.tile.kind !== "movie") Object.assign(h, { play: null, playPending: true });
+      }
+      ws.send(JSON.stringify(msg));
+    });
+    hold.release = () => {
+      hold.held = false;
+      ws.send(JSON.stringify({ sub: hold.sub, updates: [{ kind: "header", header: hold.header }] }));
+    };
+  });
+  return hold;
+}
+
+for (const form of ["phone", "desktop"] as const) {
+  test(`${form}: a late Play lands in its kept place, Details never moving`, async ({ browser }) => {
+    const context = await browser.newContext({ viewport: form === "phone" ? { width: 390, height: 844 } : { width: 1440, height: 900 } });
+    const hold = await holdSeriesPlay(context);
+    const page = await home(context, form);
+    const { i } = await seriesPage(page);
+    await page.locator(".hero-dots .dot").nth(i).click();
+    await expect.poll(() => activePage(page)).toBe(i);
+    const on = page.locator(".hero-page.on");
+    // While the episodes are read: Play's place is kept, hidden, out of focus and of the accessibility tree.
+    const slot = on.locator(".acts .slot");
+    await expect(slot).toHaveCount(1);
+    expect(await slot.evaluate((el) => [getComputedStyle(el).visibility, el.getAttribute("aria-hidden"), el.tabIndex])).toEqual(["hidden", "true", -1]);
+    await expect(on.locator('[data-f="hero:play"]')).toHaveCount(0);
+    const before = await on.locator('[data-f="hero:details"]').boundingBox();
+    hold.release();
+    await expect(on.locator('[data-f="hero:play"]')).toHaveText(/^((Play|Resume) S\d+:E\d+|Play again)$/);
+    await expect(slot).toHaveCount(0);
+    expect(await on.locator('[data-f="hero:details"]').boundingBox()).toEqual(before);
+    await context.close();
+  });
+}
 
 test("TV: a series page the timer brings lands the focus on its Play", async ({ browser }) => {
   const context = await browser.newContext({ viewport: { width: 1920, height: 1080 } });

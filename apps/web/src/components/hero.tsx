@@ -437,7 +437,19 @@ function HeroWords(props: { hero: Hero; active: boolean }) {
       <div class="acts" data-fgroup={key("hero")} data-fentry={props.active ? "" : undefined}>
         {/* The core's target, as the title page's Play: "Play S1:E1" for a series, "Resume" part way in. The
             player resumes from the core's stored position. */}
-        <Show when={h().play}>
+        <Show
+          when={h().play}
+          fallback={
+            // Play's place while the core reads the page's episodes (`playPending`): Details never moves when it
+            // lands (review r4). Hidden, out of the focus order and of the accessibility tree.
+            <Show when={h().playPending}>
+              <span class="btn primary slot" aria-hidden="true">
+                <Play aria-hidden class="fill" />
+                {h().tile.kind === "movie" ? "Play" : "Play S1:E1"}
+              </span>
+            </Show>
+          }
+        >
           {(play) => (
             <A
               class="btn primary"
