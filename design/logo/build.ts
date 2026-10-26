@@ -67,10 +67,10 @@ function render(file: string, w: number, h: number, body: string, opaque = false
   const png = file.replace(/\.(jpg|webp)$/, ".tmp.png");
   run(["rsvg-convert", "-w", String(w), "-h", String(h), "-o", png], body);
   if (png !== file) {
-    run(["magick", png, ...(file.endsWith(".jpg") ? ["-quality", "90"] : ["-quality", "90", "-define", "webp:method=6"]), file]);
+    run(["magick", png, "-strip", ...(file.endsWith(".jpg") ? ["-quality", "90"] : ["-quality", "90", "-define", "webp:method=6"]), file]);
     rmSync(png);
   } else if (opaque) {
-    run(["magick", file, "-background", BG, "-alpha", "remove", "-alpha", "off", file]);
+    run(["magick", file, "-background", BG, "-alpha", "remove", "-alpha", "off", "-strip", file]);
   }
 }
 
