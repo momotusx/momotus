@@ -388,9 +388,10 @@ for (const form of ["tv", "phone"] as const) {
 }
 
 // The owner, 2026-10-26: covers are vertical, so a phone's title art is the cover, whole at its own 2:3 (held to
-// 75 percent of the screen), and the backdrop only when there is none. Watched is a small circle in the actions'
-// row beside Library, never a big button (the owner's standing rule).
-test("phone: the title's art is its cover, whole at 2:3; Watched is a small circle beside Library", async ({ browser }) => {
+// 75 percent of the screen), and the backdrop only when there is none. A cover prints its own title: no logo goes
+// over it, only its bottom edge fades into the page, and the meta line starts under it on the page color. Watched is
+// a small circle in the actions' row beside Library, never a big button (the owner's standing rule).
+test("phone: the title's art is its cover, whole at 2:3, no title over it; Watched is a small circle beside Library", async ({ browser }) => {
   const { context, page } = await open(browser, "phone", `/title/movie/${BBB_ID}`);
   await expect(page.locator('[data-f="title:play"]')).toBeVisible({ timeout: 30_000 });
   const art = page.locator(".title-scr.cover .title-bd");
@@ -403,9 +404,33 @@ test("phone: the title's art is its cover, whole at 2:3; Watched is a small circ
   const img = art.locator("img");
   await expect(img).toHaveAttribute("src", /\/poster\/large\//);
   await expect(img).toHaveCSS("object-position", "50% 0%");
-  // The words sit over the art's foot: the logo's top within its lower 200 px.
-  const logo = await page.locator(".info .title-logo").boundingBox();
-  expect(logo && logo.y > 585 - 200 && logo.y < 585).toBe(true);
+  await expect(img).toHaveJSProperty("complete", true);
+  // No second title: no logo or name on the page, the heading only for screen readers.
+  await expect(page.locator(".info .title-logo")).toHaveCount(0);
+  await expect(page.getByRole("heading", { level: 1, name: "Big Buck Bunny" })).toHaveClass(/\bsr\b/);
+  // The meta line starts under the cover, and the row of pixels at its top is the page color across the screen:
+  // nothing the poster prints shows behind it.
+  const meta = await page.locator(".info .meta").boundingBox();
+  expect(meta && box && meta.y >= box.y + box.height).toBe(true);
+  await page.waitForTimeout(500);
+  const strip = await page.screenshot({ clip: { x: 0, y: (meta?.y ?? 0) + 1, width: 390, height: 1 } });
+  const off = await page.evaluate(async (png) => {
+    const img = new Image();
+    img.src = `data:image/png;base64,${png}`;
+    await img.decode();
+    const c = document.createElement("canvas");
+    [c.width, c.height] = [img.naturalWidth, img.naturalHeight];
+    const x = c.getContext("2d");
+    if (!x) return -1;
+    x.drawImage(img, 0, 0);
+    const d = x.getImageData(0, 0, c.width, c.height).data;
+    const hex = getComputedStyle(document.documentElement).getPropertyValue("--bg").trim();
+    const bg = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+    let worst = 0;
+    for (let i = 0; i < d.length; i += 4) worst = Math.max(worst, ...[0, 1, 2].map((k) => Math.abs((d[i + k] ?? 0) - (bg[k] ?? 0))));
+    return worst;
+  }, strip.toString("base64"));
+  expect(off, "the strip under the meta line's top differs from the page color by").toBeLessThanOrEqual(4);
   // Watched: one of the row's circles, as small as Library and level with it.
   const watched = page.locator('[data-f="title:watched"]');
   const library = page.locator('[data-f="title:library"]');

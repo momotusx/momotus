@@ -184,9 +184,10 @@ function TitlePage(props: { kind: string; id: string; retry: () => void }) {
 
   // A phone shows the cover first: covers are vertical, and a backdrop is often a crop of the same art.
   const cover = () => (form() === "phone" ? d()?.cover : null) ?? null;
+  const coverShown = () => !!cover() && !artMissing();
 
   return (
-    <div class="title-scr" classList={{ movie: !series(), noart: artMissing(), cover: !!cover() && !artMissing() }} ref={page} data-vscroll={form() === "phone" ? undefined : ""}>
+    <div class="title-scr" classList={{ movie: !series(), noart: artMissing(), cover: coverShown() }} ref={page} data-vscroll={form() === "phone" ? undefined : ""}>
       {/* No backdrop (none named, or it does not load): the poster's upper part,
           faint, keeps the page from opening on a blank half. */}
       <Backdrop
@@ -226,12 +227,15 @@ function TitlePage(props: { kind: string; id: string; retry: () => void }) {
           {(x) => (
             <>
               <section class="info" aria-label={x().name} data-reveal-top>
-                {/* A title with a logo keeps a fixed slot for it, the logo or its name at the slot's foot, so nothing
-                    under it moves whatever arrives, and whenever (a cold logo takes about a second). */}
-                <Show when={x().logo} fallback={<Logo src={null} name={x().name} class="title-logo" />}>
-                  <div class="logo-slot">
-                    <Logo src={x().logo} name={x().name} class="title-logo" />
-                  </div>
+                {/* A cover prints its own title: no second one over or under it, only the heading for screen readers.
+                    Otherwise a title with a logo keeps a fixed slot for it, the logo or its name at the slot's foot,
+                    so nothing under it moves whatever arrives, and whenever (a cold logo takes about a second). */}
+                <Show when={!coverShown()} fallback={<h1 class="sr">{x().name}</h1>}>
+                  <Show when={x().logo} fallback={<Logo src={null} name={x().name} class="title-logo" />}>
+                    <div class="logo-slot">
+                      <Logo src={x().logo} name={x().name} class="title-logo" />
+                    </div>
+                  </Show>
                 </Show>
                 <p class="meta" ref={separators}>
                   {/* DECISION's order: the year first, then the rest of the line, then the ratings row at
