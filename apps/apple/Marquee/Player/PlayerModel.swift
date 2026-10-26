@@ -892,7 +892,7 @@ final class PlayerModel {
             if loadedURL == nil, !rendered {
                 let ms = Int((ContinuousClock.now - route.tapped) / .milliseconds(1))
                 let host = URL(string: url)?.host() ?? "?"
-                coreLog.notice("metric playback_ready_ms=\(ms, privacy: .public) host=\(host, privacy: .public) start_kib_s=\(self.startWindow.kibPerS, privacy: .public)")
+                coreLog.notice("metric playback_ready_ms=\(ms, privacy: .public) host=\(host, privacy: .public) start_kib_s=\(self.startWindow.kibPerS, privacy: .public) \(self.startWindow.ends(from: self.route.tapped), privacy: .public)")
             }
             // The first source starts at the saved position; a failover resumes where the last one stopped.
             var start = loadedURL == nil
@@ -912,7 +912,7 @@ final class PlayerModel {
             notice = nil
             // Once per failure, the core's own words for the last source (a walk reads why without the screen).
             if !wasFailed {
-                coreLog.notice("metric playback_failed_ms=\(self.sinceTap, privacy: .public) start_kib_s=\(self.startWindow.kibPerS, privacy: .public) why=\(snapshot.attempts.last?.error ?? "none", privacy: .public)")
+                coreLog.notice("metric playback_failed_ms=\(self.sinceTap, privacy: .public) start_kib_s=\(self.startWindow.kibPerS, privacy: .public) \(self.startWindow.ends(from: self.route.tapped), privacy: .public) why=\(snapshot.attempts.last?.error ?? "none", privacy: .public)")
             }
         default:
             break

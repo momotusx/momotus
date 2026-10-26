@@ -243,6 +243,9 @@ import Testing
     #expect(window.kibPerS == "n/a")
     window.saw(1 << 20, at: t + .seconds(6))
     #expect(window.kibPerS == "256")
+    // Code r6: the raw ends ride along, milliseconds from the tap.
+    #expect(window.ends(from: t) == "start_bytes_first=524288 start_ms_first=4000 start_bytes_last=1048576 start_ms_last=6000")
+    #expect(StartWindow().ends(from: t) == "start_bytes_first=n/a start_ms_first=n/a start_bytes_last=n/a start_ms_last=n/a")
 }
 
 /// Code r5: the walk's screen hold is compiled into walk builds only: `isIdleTimerDisabled` appears in the app only in

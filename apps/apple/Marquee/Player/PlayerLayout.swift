@@ -767,4 +767,11 @@ struct StartWindow {
         guard let first, let last, last.at > first.at else { return "n/a" }
         return "\(Int(Double(last.bytes - first.bytes) / 1024 / ((last.at - first.at) / .seconds(1))))"
     }
+
+    /// The figure's raw ends, milliseconds from `tap` (code r6), so a bench row carries its inputs, not only the quotient.
+    func ends(from tap: ContinuousClock.Instant) -> String {
+        let ms = { (at: ContinuousClock.Instant) in Int((at - tap) / .milliseconds(1)) }
+        guard let first, let last else { return "start_bytes_first=n/a start_ms_first=n/a start_bytes_last=n/a start_ms_last=n/a" }
+        return "start_bytes_first=\(first.bytes) start_ms_first=\(ms(first.at)) start_bytes_last=\(last.bytes) start_ms_last=\(ms(last.at))"
+    }
 }
