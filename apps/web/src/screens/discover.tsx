@@ -2,7 +2,7 @@ import { A, useSearchParams } from "@solidjs/router";
 import Puzzle from "lucide-solid/icons/puzzle";
 import RefreshCw from "lucide-solid/icons/refresh-cw";
 import Wrench from "lucide-solid/icons/wrench";
-import { createEffect, createSignal, For, Match, on, Show, Switch } from "solid-js";
+import { createEffect, createSignal, For, Match, on, Show, Switch, untrack } from "solid-js";
 import { Grid, PullDown, Segmented, SkeletonGrid } from "../components/grid";
 import { markSrc } from "../components/marks";
 import { Why } from "../components/why";
@@ -10,6 +10,7 @@ import { discoverView } from "../core/client";
 import type { DiscoverSnapshot } from "../core/generated/DiscoverSnapshot";
 import type { Tile } from "../core/generated/Tile";
 import { onProfileReset } from "../core/profiles";
+import { form } from "../form";
 import { defaultsWords } from "../lib/defaults";
 import { problemWords } from "../lib/words";
 import "./browse.css";
@@ -69,6 +70,30 @@ function corner(sort: string | null, t: Tile) {
   return null;
 }
 
+/** A service on the rail: its logo (TMDB's, from the core) on a rounded square, its name the label and
+ * the words while the logo loads, when there is none, or when it does not load (6.6). */
+function ServiceTile(props: { id: string; name: string; logo: string | null; on: boolean; pick: () => void }) {
+  const [failed, setFailed] = createSignal(false);
+  const [loaded, setLoaded] = createSignal(false);
+  const art = () => !!props.logo && !failed();
+  return (
+    <button
+      class="svc-tile"
+      classList={{ on: props.on, logo: art() && loaded() }}
+      role="radio"
+      aria-checked={props.on}
+      aria-label={props.name}
+      data-f={`discover:rail:${props.id}`}
+      onClick={() => props.pick()}
+    >
+      <Show when={art()}>
+        <img src={props.logo ?? ""} alt="" onLoad={() => setLoaded(true)} onError={() => setFailed(true)} />
+      </Show>
+      <span class="svc-name">{props.name}</span>
+    </button>
+  );
+}
+
 function DiscoverPage(props: { retry: () => void }) {
   const view = discoverView();
   const attach = (el: HTMLElement) => {
@@ -111,6 +136,25 @@ function DiscoverPage(props: { retry: () => void }) {
     const s = d();
     if (s && s.items.length > 0) setPrevious(s.items);
   });
+  // A late list that reorders the grid waits on TV while focus is in it, so nothing moves under the
+  // viewer's focus: "More titles arrived. Show" applies it, and so does focus leaving the grid (6.1).
+  let gridWrap: HTMLDivElement | undefined;
+  const [shown, setShown] = createSignal<Tile[]>([]);
+  const [held, setHeld] = createSignal(false);
+  const focusInGrid = () => form() === "tv" && !!gridWrap?.contains(document.activeElement);
+  createEffect(() => {
+    const items = d()?.items ?? [];
+    const old = untrack(shown);
+    const grows = items.length >= old.length && old.every((t, i) => items[i]?.id === t.id);
+    if (grows || items.length === 0 || !focusInGrid()) {
+      setShown(items);
+      setHeld(false);
+    } else setHeld(true);
+  });
+  const release = () => {
+    setShown(d()?.items ?? []);
+    setHeld(false);
+  };
   const filtered = () => !!(d()?.genre || d()?.decade || d()?.platform);
   // Clear moves focus to the first control that stays before it goes (6.5).
   let filters!: HTMLDivElement;
@@ -198,18 +242,7 @@ function DiscoverPage(props: { retry: () => void }) {
                       All
                     </button>
                     <For each={s().platforms}>
-                      {(p) => (
-                        <button
-                          class="svc-tile"
-                          role="radio"
-                          aria-checked={s().platform === p.id}
-                          classList={{ on: s().platform === p.id }}
-                          data-f={`discover:rail:${p.id}`}
-                          onClick={() => select({ platform: p.id })}
-                        >
-                          {p.name}
-                        </button>
-                      )}
+                      {(p) => <ServiceTile id={p.id} name={p.name} logo={p.logo} on={s().platform === p.id} pick={() => select({ platform: p.id })} />}
                     </For>
                   </div>
                 </div>
@@ -239,6 +272,11 @@ function DiscoverPage(props: { retry: () => void }) {
                 <Show when={filtered()}>
                   <button class="dv-clear" data-f="discover:clear" aria-label="Clear filters" onClick={clear}>
                     Clear
+                  </button>
+                </Show>
+                <Show when={held()}>
+                  <button class="dv-clear" data-f="discover:show-late" onClick={release}>
+                    More titles arrived. Show
                   </button>
                 </Show>
                 <span class="dv-gap" />
@@ -279,8 +317,14 @@ function DiscoverPage(props: { retry: () => void }) {
                   <p class="note">{emptyLine(s())}</p>
                 </Match>
                 <Match when={true}>
+                  <div
+                    ref={gridWrap}
+                    onFocusOut={(e) => {
+                      if (held() && !gridWrap?.contains(e.relatedTarget as Node | null)) release();
+                    }}
+                  >
                   <Grid
-                    items={s().items}
+                    items={shown()}
                     scope="discover"
                     onNearEnd={loadMore}
                     corner={(t) => corner(s().sort, t)}
@@ -297,6 +341,7 @@ function DiscoverPage(props: { retry: () => void }) {
                       </div>
                     }
                   />
+                  </div>
                 </Match>
               </Switch>
             </>
