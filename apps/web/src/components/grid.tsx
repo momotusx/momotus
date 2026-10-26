@@ -17,6 +17,8 @@ export function Grid(props: {
   onNearEnd?: () => void;
   onOpen?: () => void;
   footer?: JSX.Element;
+  /** A small label on the poster's corner: the value the list is ordered by (Discover). */
+  corner?: (t: Tile) => JSX.Element | null;
 }) {
   let sentinel!: HTMLDivElement;
   let grid!: HTMLDivElement;
@@ -71,6 +73,7 @@ export function Grid(props: {
               h={size()[1]}
               autofocus={props.autofocus && i() === 0}
               onOpen={props.onOpen}
+              corner={props.corner?.(t)}
             />
           )}
         </For>
@@ -113,7 +116,7 @@ export function Chips<T>(props: ChipsProps<T>) {
 
 /** The pill names the choice; its list opens under it on the chosen one. Up and Down move in
  * the list, Back or a press outside closes it, back on the pill. */
-function PullDown<T>(props: ChipsProps<T>) {
+export function PullDown<T>(props: ChipsProps<T>) {
   const [open, setOpen] = createSignal(false);
   let wrap!: HTMLDivElement;
   let pill!: HTMLButtonElement;
@@ -206,7 +209,7 @@ function PullDown<T>(props: ChipsProps<T>) {
   );
 }
 
-function Segmented<T>(props: ChipsProps<T>) {
+export function Segmented<T>(props: ChipsProps<T>) {
   // Entering the row lands on the chip that is on.
   createEffect(() => remember(props.group, `${props.group}:${String(props.selected)}`));
   // The row fades only toward a side with chips left to scroll to; the

@@ -90,3 +90,47 @@
 [data-form="phone"] .grid-foot { margin-top: 20px; font-size: 13px; }
 [data-form="phone"] .note { font-size: 15px; }
 
+
+/* Discover (plans/discover-v2.md 6.1): the kind control beside the title, the service rail of
+ * name tiles, then one row of menus with Sort at its end. */
+.discover .dv-head { display: flex; align-items: center; gap: 40px; margin: 14px 0 30px; }
+.discover .dv-head h1 { margin: 0; }
+.dv-kinds { display: flex; align-items: center; gap: 14px; min-width: 0; }
+.dv-kinds .kicker, .dv-filters .kicker { display: none; }
+.dv-kinds .chips-row, .dv-filters .chips-row { flex: none; }
+.dv-rail { margin: 0 0 26px; }
+.dv-rail-track { display: flex; gap: 14px; overflow-x: auto; scrollbar-width: none; padding: 8px 30px; margin: -8px -30px; }
+.dv-rail-track::-webkit-scrollbar { display: none; }
+/* A service is its name in our own type on a neutral tile, as wide as its name (6.6); the chosen
+ * one takes the selected fill and a white ring. */
+.svc-tile { flex: none; height: 64px; padding: 0 28px; border-radius: var(--radius-m); background: var(--surface); color: var(--dim);
+  font: 600 var(--type-callout) / 1 var(--font-text); white-space: nowrap; }
+.svc-tile.on { background: var(--selected-fill); color: #fff; box-shadow: 0 0 0 3px var(--bg), 0 0 0 6px #fff; }
+@media (hover: hover) { [data-form="desktop"] .svc-tile:not(.on):hover { color: var(--text); } }
+[data-form="tv"] .svc-tile { height: 84px; padding: 0 40px; }
+[data-form="tv"] .svc-tile:focus { color: var(--text); transform: scale(var(--focus-scale-card)) translateY(-8px); box-shadow: var(--lift-focus-edge); }
+[data-form="tv"] .svc-tile.on:focus { box-shadow: 0 0 0 3px var(--bg), 0 0 0 6px #fff, var(--lift-focus-edge); }
+[data-form="tv"] .dv-rail-track { padding: 30px 66px 60px; margin: -30px -66px -60px; }
+.dv-filters { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; margin: 0 0 40px; }
+.dv-gap { flex: 1; }
+.dv-clear { height: 56px; padding: 0 18px; border-radius: var(--radius-pill); font: 600 var(--type-callout) / 1 var(--font-text); color: var(--key); }
+[data-form="tv"] .dv-clear { color: var(--dim); background: var(--track); padding: 0 24px; }
+[data-form="tv"] .dv-clear:focus { color: var(--text); transform: scale(var(--focus-scale-card)); }
+/* The sort's list opens toward the page, not past its right edge. */
+.dv-filters > .chips-row:last-child .pull-list { left: auto; right: 0; }
+.dv-dim { opacity: .45; transition: opacity .2s; }
+@media (prefers-reduced-motion: reduce) { .dv-dim { transition: none; } }
+/* The value the list is ordered by, on the poster's top corner. */
+.tile .pic .corner { position: absolute; top: 10px; right: 10px; z-index: 2; display: inline-flex; align-items: center; gap: 6px; padding: 5px 9px;
+  border-radius: var(--radius-s); background: var(--glass-strong, rgba(30, 30, 32, .9)); color: var(--text); font: 600 var(--type-caption) / 1 var(--font-text); }
+.tile .pic .corner img { height: 14px; width: auto; }
+[data-form="tv"] .tile .pic .corner img { height: 20px; }
+
+[data-form="phone"] .discover .dv-head { flex-direction: column; align-items: stretch; gap: 12px; margin: 8px 0 16px; }
+[data-form="phone"] .dv-kinds .chips-track { padding: 0; margin: 0; }
+[data-form="phone"] .dv-rail { margin: 0 0 14px; }
+[data-form="phone"] .dv-rail-track { gap: 8px; padding: 6px 16px; margin: -6px -16px; }
+[data-form="phone"] .svc-tile { height: 40px; padding: 0 16px; font-size: 15px; }
+[data-form="phone"] .dv-filters { gap: 8px; margin: 0 0 18px; }
+[data-form="phone"] .dv-filters .chips-row { flex-direction: row; }
+[data-form="phone"] .dv-clear { height: 40px; padding: 0 8px; font-size: 15px; }

@@ -8,7 +8,7 @@ import LoaderCircle from "lucide-solid/icons/loader-circle";
 import RefreshCw from "lucide-solid/icons/refresh-cw";
 import Wrench from "lucide-solid/icons/wrench";
 import X from "lucide-solid/icons/x";
-import { createEffect, createMemo, createSignal, For, Match, on, onCleanup, onMount, Show, Switch } from "solid-js";
+import { createEffect, createMemo, createSignal, For, type JSX, Match, on, onCleanup, onMount, Show, Switch } from "solid-js";
 import tokens from "../../../../design/tokens.json";
 import { Poster } from "./art";
 import { Why } from "./why";
@@ -96,6 +96,8 @@ export function TileCard(props: {
   wide?: boolean;
   /** A remove button on the tile (Continue Watching off TV; TV removes from the title page). */
   onRemove?: () => Promise<unknown>;
+  /** A small label on the poster's top corner (Discover's sort value). */
+  corner?: JSX.Element | null;
 }) {
   // Two lines under the art: the name, then the core's caption (Continue
   // Watching, Library) or the year.
@@ -143,6 +145,9 @@ export function TileCard(props: {
               {n()}
             </span>
           )}
+        </Show>
+        <Show when={props.corner}>
+          <span class="corner">{props.corner}</span>
         </Show>
         {/* A track and a fill on a dark strip, so progress shows on white art. */}
         <Show when={props.tile.progress !== null}>
