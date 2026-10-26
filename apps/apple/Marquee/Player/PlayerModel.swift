@@ -719,7 +719,31 @@ final class PlayerModel {
         // The key's kind only ("url", "bt", "rel"): a "url:" key is the stream link, which can carry an addon's key.
         let kind = String(route.key.prefix { $0 != ":" })
         coreLog.notice("metric first_frame_ms=\(ms, privacy: .public) key=\(kind, privacy: .public) backend=\(self.backend.rawValue, privacy: .public)")
+        #if MARQUEE_WALK
+        readBack()
+        #endif
     }
+
+    #if MARQUEE_WALK
+    /// Where `-MQSeekTo` asked the first source to start, for the walk's read-back.
+    @ObservationIgnored private var walkSeekTarget: Double?
+
+    /// Walk builds read back what a row cannot see in its shots (plans/iphone-mkv.md phase 4): 1 s after the first
+    /// frame, where a seek landed against its target; 5 s after it, the tracks the player lists and the ones it plays.
+    private func readBack() {
+        let target = walkSeekTarget
+        walkSeekTarget = nil
+        Task { [weak self] in
+            try? await Task.sleep(for: .seconds(1))
+            if let self, let target {
+                coreLog.notice("metric \(WalkReadBack.seek(target: target, position: self.position), privacy: .public)")
+            }
+            try? await Task.sleep(for: .seconds(4))
+            guard let self else { return }
+            coreLog.notice("metric \(WalkReadBack.tracks(text: self.textTracks, activeText: self.textTrack, audio: self.audioTracks, activeAudio: self.audioTrack), privacy: .public)")
+        }
+    }
+    #endif
 
     /// The viewer's pick from the menu, or Off: it wins for the rest of the
     /// play, and the core remembers it for the title (`subtitleChosen`).
@@ -908,7 +932,12 @@ final class PlayerModel {
             // Start over holds for the first source only: a later reopen resumes.
             if route.fromStart { route.fromStart = false }
             #if DEBUG
-            if loadedURL == nil, let at = DebugHooks.takeSeek() { start = at }
+            if loadedURL == nil, let at = DebugHooks.takeSeek() {
+                start = at
+                #if MARQUEE_WALK
+                walkSeekTarget = at
+                #endif
+            }
             #endif
             // Another source: a stall on the last one ends with it.
             sendStall(stall.interrupted())

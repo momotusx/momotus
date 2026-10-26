@@ -775,3 +775,22 @@ struct StartWindow {
         return "start_bytes_first=\(first.bytes) start_ms_first=\(ms(first.at)) start_bytes_last=\(last.bytes) start_ms_last=\(ms(last.at))"
     }
 }
+
+/// The walk's read-backs (code r8 asks, plans/iphone-mkv.md phase 4), as the lines a walk build logs; pure, so tested.
+enum WalkReadBack {
+    /// How far from its target a seek may land and still count: a seek snaps to a keyframe (4 s segments on the engine)
+    /// and the read comes 1 s into playback. ponytail: a fixed window; read the engine's keyframe spacing if rows need it.
+    static let seekWindow = 5.0
+
+    static func seek(target: Double, position: Double) -> String {
+        let off = position - target
+        return "seek_landed target_s=\(String(format: "%.1f", target)) position_s=\(String(format: "%.1f", position)) off_s=\(String(format: "%.1f", off)) landed=\(abs(off) <= seekWindow ? "yes" : "no")"
+    }
+
+    /// Track names joined by " | " (a name can hold a comma), and the playing index or none.
+    static func tracks(text: [String], activeText: Int?, audio: [String], activeAudio: Int?) -> String {
+        let index = { (i: Int?) in i.map(String.init) ?? "none" }
+        return "tracks text=[\(text.joined(separator: " | "))] text_on=\(index(activeText)) audio=[\(audio.joined(separator: " | "))] audio_on=\(index(activeAudio))"
+    }
+}
+

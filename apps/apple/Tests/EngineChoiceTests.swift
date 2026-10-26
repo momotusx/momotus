@@ -260,3 +260,17 @@ import Testing
     #expect(sampler.hasPrefix("#if MARQUEE_WALK\n"))
 }
 
+/// The walk's read-backs: a seek's landing against its target, and the file's tracks with the one playing.
+@Test func theWalkReadsBackTheSeekAndTheTracks() throws {
+    #expect(WalkReadBack.seek(target: 90, position: 91.2) == "seek_landed target_s=90.0 position_s=91.2 off_s=1.2 landed=yes")
+    #expect(WalkReadBack.seek(target: 162, position: 0.8).hasSuffix("landed=no"), "a seek that started from the top did not land")
+    #expect(WalkReadBack.seek(target: 90, position: 86).hasSuffix("landed=yes"), "a keyframe before the target")
+    #expect(WalkReadBack.tracks(text: ["English", "German"], activeText: 0, audio: ["English, 5.1"], activeAudio: 0)
+        == "tracks text=[English | German] text_on=0 audio=[English, 5.1] audio_on=0")
+    #expect(WalkReadBack.tracks(text: [], activeText: nil, audio: [], activeAudio: nil) == "tracks text=[] text_on=none audio=[] audio_on=none")
+    // Its call site, walk builds only (a source check: the guard is the compilation condition).
+    let model = try playerModel()
+    #expect(model.contains("#if MARQUEE_WALK\n        readBack()\n        #endif"))
+    #expect(model.contains("#if MARQUEE_WALK\n                walkSeekTarget = at\n                #endif"))
+}
+
