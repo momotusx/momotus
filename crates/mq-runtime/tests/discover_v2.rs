@@ -87,8 +87,26 @@ struct World {
 }
 
 async fn world(hulu: impl Fn() -> Answer + Send + Sync + 'static) -> World {
+    world_with(hulu, 0).await
+}
+
+/// The world with every service list answering after `slow` ms at least.
+async fn world_with(hulu: impl Fn() -> Answer + Send + Sync + 'static, slow: u64) -> World {
     let hulu = Arc::new(hulu);
     let routes: Routes = Arc::new(move |path: &str| {
+        let (delay, status, body) = answer(&hulu, path);
+        let delay = if path.starts_with("/sc/") {
+            delay.max(slow)
+        } else {
+            delay
+        };
+        (delay, status, body)
+    });
+    world_of(routes).await
+}
+
+fn answer(hulu: &Arc<impl Fn() -> Answer + Send + Sync + 'static>, path: &str) -> Answer {
+    {
         let ok = |body: String| (0, 200, body);
         match path {
             p if p.starts_with("/cm/catalog/movie/top") => ok(metas(
@@ -140,7 +158,10 @@ async fn world(hulu: impl Fn() -> Answer + Send + Sync + 'static) -> World {
             }
             _ => (0, 404, "{}".into()),
         }
-    });
+    }
+}
+
+async fn world_of(routes: Routes) -> World {
     let (base, asked) = serve(routes).await;
     let cinemeta = serde_json::json!({
         "id": "com.linvo.cinemeta", "version": "1.0.0", "name": "Cinemeta", "types": ["movie"], "resources": ["catalog"],
@@ -720,4 +741,107 @@ async fn a_list_clears_the_service_and_its_period_stays_with_it() {
     })
     .await;
     assert_eq!(s.genre, None, "the period stays with its list");
+}
+
+/// An addon whose link carries an RPDB key, with no catalogs.
+fn keyed(key: &str) -> AddonRow {
+    AddonRow {
+        transport_url: format!("https://keyed.example/%7B%22rpdb_key%22%3A%22{key}%22%7D/manifest.json"),
+        manifest_json: serde_json::json!({
+            "id": "keyed", "version": "1.0.0", "name": "Keyed", "types": ["movie"], "resources": ["catalog"], "catalogs": []
+        })
+        .to_string(),
+        position: 9,
+        enabled: true,
+        allow_private: false,
+    }
+}
+
+/// Code review r2 N1: a key taken away reaches the set's titles not shown
+/// yet, not only the window on screen: none of them keeps its band.
+#[tokio::test]
+async fn a_key_taken_away_reaches_the_titles_not_shown_yet() {
+    let w = world(hulu_list(120)).await;
+    let mut keyed_rows = w.rows.clone();
+    keyed_rows.push(keyed("key-a"));
+    let (core, view) = open(&keyed_rows).await;
+    until(&view, |s| !s.items.is_empty()).await;
+    choose(&view, |c| {
+        c.platform = Some(Some("hulu".into()));
+        c.sort = Some("imdb".into());
+    });
+    let banded = |t: &mq_runtime::views::home::Tile| {
+        t.poster.as_deref().is_some_and(|p| p.contains("/key-a/"))
+    };
+    let s = until(&view, |s| {
+        s.platform.as_deref() == Some("hulu") && s.items.len() == 80
+    })
+    .await;
+    assert!(banded(&s.items[0]), "{:?}", s.items[0].poster);
+    core.library()
+        .set_addons("p", &w.rows, &core.hlc())
+        .unwrap();
+    until(&view, |s| s.items.first().is_some_and(|t| !banded(t))).await;
+    view.load_more();
+    let s = until(&view, |s| s.items.len() > 80).await;
+    let stale: Vec<_> = s.items[80..]
+        .iter()
+        .filter(|t| banded(t))
+        .map(|t| &t.id)
+        .collect();
+    assert!(stale.is_empty(), "{stale:?}");
+}
+
+/// Code review r1 m3: at most two loads run. Three loads in a row (two slow
+/// services, then Popular) abort the first, so its list is asked again when
+/// it is chosen again; the second finishes into the cache.
+#[tokio::test]
+async fn flicking_through_services_keeps_two_loads() {
+    let w = world_with(hulu_list(3), 1500).await;
+    let (_core, view) = open(&w.rows).await;
+    until(&view, |s| !s.items.is_empty()).await;
+    let asked = |list: &str| {
+        let path = format!("/sc/catalog/movie/{list}.json");
+        w.asked
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|p| **p == path)
+            .count()
+    };
+    let before = (asked("hlu"), asked("nfx"));
+    let service = |name: &'static str| {
+        move |c: &mut DiscoverChoice| {
+            c.platform = Some(Some(name.into()));
+            c.sort = Some("imdb".into());
+        }
+    };
+    choose(&view, service("hulu"));
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    choose(&view, service("netflix"));
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    // The third: Popular on all services, a paged list that answers at once.
+    choose(&view, |c| {
+        c.platform = Some(None);
+        c.sort = Some("popular".into());
+    });
+    until(&view, |s| {
+        s.platform.is_none() && s.sort.as_deref() == Some("popular") && !s.items.is_empty()
+    })
+    .await;
+    // Netflix's load, the one before the last, finishes into the cache.
+    tokio::time::sleep(Duration::from_millis(1800)).await;
+    for name in ["netflix", "hulu"] {
+        choose(&view, service(name));
+        until(&view, |s| {
+            s.platform.as_deref() == Some(name) && !s.items.is_empty()
+        })
+        .await;
+    }
+    assert_eq!(
+        asked("nfx") - before.1,
+        1,
+        "the one before the last was kept"
+    );
+    assert_eq!(asked("hlu") - before.0, 2, "the first load was aborted");
 }

@@ -598,14 +598,14 @@ async fn watch_addons(inner: Arc<Inner>, mut changes: Receiver<Vec<Table>>) {
         if now != key {
             // The covers carry the key's band: the lists are made again.
             let mut s = lock(&inner.state);
+            let old = key.take();
             crate::views::home::recover_tiles(
                 &inner.core,
-                key.take(),
+                old.clone(),
                 now.clone(),
                 s.snapshot.items.iter_mut(),
             );
-            let (old, new) = (key.clone(), now.clone());
-            crate::views::home::recover_tiles(&inner.core, old, new, s.set.iter_mut());
+            crate::views::home::recover_tiles(&inner.core, old, now.clone(), s.set.iter_mut());
             s.lists.clear();
             inner.snapshot.set(s.snapshot.clone());
             key = now;

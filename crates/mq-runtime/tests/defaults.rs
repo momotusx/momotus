@@ -479,10 +479,15 @@ impl Device {
     }
 
     fn start(&self) -> Core {
+        self.start_as(9)
+    }
+
+    /// Starts as device `device_id`: two devices of one sync account have their own.
+    fn start_as(&self, device_id: u64) -> Core {
         Core::open(mq_runtime::CoreConfig {
             data_dir: self.dir.clone(),
             profile_id: OWNER.into(),
-            device_id: 9,
+            device_id,
         })
         .unwrap()
     }
@@ -704,6 +709,16 @@ async fn a_profile_from_the_nine_gets_streaming_catalogs_once() {
     let rows = urls(&core);
     assert_eq!(rows.len(), 10);
     assert_eq!(rows[9], (url("streamingcatalogs"), true));
+    // Given this way, Home shows the five services it showed before and the new ones are off.
+    let mut shown = shown_titles(&core);
+    shown.sort();
+    let mut five: Vec<String> = FIVE.iter().map(|t| t.to_string()).collect();
+    five.sort();
+    assert_eq!(shown, five);
+    assert!(
+        service_rows(&core).len() > FIVE.len(),
+        "the new services are there, off Home"
+    );
     core.remove_addon(&url("streamingcatalogs")).unwrap();
     drop(core);
     let core = device.start();
@@ -1129,4 +1144,90 @@ async fn only_the_default_links_new_services_are_off_home() {
             .any(|c| c.title == "Hulu Series" && !c.hidden),
         "another addon's list stays"
     );
+}
+
+/// The Streaming Catalogs addon on its old link, at `position`, on or off.
+fn old_services(position: i64, enabled: bool) -> AddonRow {
+    AddonRow {
+        transport_url: OLD_SERVICES.into(),
+        manifest_json: old_services_manifest(),
+        position,
+        enabled,
+        allow_private: false,
+    }
+}
+
+/// Where the profile has `link`: Some(on) or None.
+fn has(core: &Core, link: &str) -> Option<bool> {
+    urls(core)
+        .into_iter()
+        .find(|(u, _)| u == link)
+        .map(|(_, on)| on)
+}
+
+/// plans/discover-v2.md section 5: the old link switched off moves off, and
+/// once removed it is never given back.
+#[tokio::test]
+async fn streaming_catalogs_switched_off_or_removed_is_left_as_chosen() {
+    let device = Device::new("services-off");
+    let core = device.start();
+    core.library()
+        .set_addons(OWNER, &[old_services(0, false)], &core.hlc())
+        .unwrap();
+    drop(core);
+    let core = device.start();
+    assert_eq!(
+        has(&core, &url("streamingcatalogs")),
+        Some(false),
+        "off stays off"
+    );
+    assert_eq!(has(&core, OLD_SERVICES), None);
+    core.remove_addon(&url("streamingcatalogs")).unwrap();
+    drop(core);
+    let core = device.start();
+    assert_eq!(
+        has(&core, &url("streamingcatalogs")),
+        None,
+        "removed stays removed"
+    );
+    assert_eq!(has(&core, OLD_SERVICES), None);
+}
+
+/// plans/discover-v2.md section 5: two devices of one account, the old
+/// build on one and the new on the other, end with one row per service.
+#[tokio::test]
+async fn two_devices_end_with_one_row_per_service() {
+    let (one, two) = (Device::new("services-one"), Device::new("services-two"));
+    let records = |core: &Core| {
+        core.library()
+            .outbox(1000)
+            .unwrap()
+            .records
+            .into_iter()
+            .map(|(_, r)| r)
+            .collect::<Vec<_>>()
+    };
+    // The old build on the first device: the old link, which the account carries to the second.
+    let a = one.start_as(1);
+    a.library()
+        .set_addons(OWNER, &[old_services(0, true)], &a.hlc())
+        .unwrap();
+    let b = two.start_as(2);
+    b.library().apply(&records(&a)).unwrap();
+    drop(b);
+    // The new build on the second device moves it; the first takes its records, then is updated too.
+    let b = two.start_as(2);
+    a.library().apply(&records(&b)).unwrap();
+    drop(a);
+    let a = one.start_as(1);
+    b.library().apply(&records(&a)).unwrap();
+    for core in [&a, &b] {
+        assert_eq!(has(core, OLD_SERVICES), None);
+        assert_eq!(has(core, &url("streamingcatalogs")), Some(true));
+        let mut titles: Vec<String> = service_rows(core).into_iter().map(|(t, _)| t).collect();
+        let all = titles.len();
+        titles.sort();
+        titles.dedup();
+        assert_eq!(titles.len(), all, "one row per service: {titles:?}");
+    }
 }
