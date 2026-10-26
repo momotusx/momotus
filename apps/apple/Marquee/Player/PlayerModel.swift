@@ -569,7 +569,13 @@ final class PlayerModel {
         Task { [weak self] in
             for step in 1...moves {
                 try? await Task.sleep(for: .seconds(45))
-                guard let self, let rows = self.versions?.snapshot?.rows, rows.count > 1 else { return }
+                guard let self else { return }
+                // The Versions menu's list: the recommendation, then the rows.
+                let rows = self.versions?.snapshot.map { [$0.recommended].compactMap { $0 } + $0.rows } ?? []
+                guard rows.count > 1 else {
+                    coreLog.notice("metric soak step=\(step, privacy: .public) of=\(moves, privacy: .public) skipped rows=\(rows.count, privacy: .public)")
+                    continue
+                }
                 let playing = self.playback?.key ?? self.route.key
                 let at = rows.firstIndex { $0.key == playing } ?? -1
                 let next = rows[(at + 1) % rows.count]
