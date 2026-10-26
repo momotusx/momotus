@@ -225,6 +225,8 @@
 .play-words::before, .play-words::after { visibility: hidden; }
 [data-form="desktop"] .hero .play-words::before, [data-form="tv"] .hero .play-words::before { content: "Resume S12:E10"; }
 [data-form="desktop"] .hero .play-words::after, [data-form="tv"] .hero .play-words::after { content: "Play S12:E10"; }
+.play-words .pw-other { visibility: hidden; }
+[data-form="desktop"] .hero .pw-other::before, [data-form="tv"] .hero .pw-other::before { content: attr(data-l); }
 [data-form="phone"] .hero .rbtn .ring { width: 48px; height: 48px; }
 [data-form="phone"] .hero .rbtn .ring svg { width: 22px; height: 22px; }
 [data-form="phone"] .hero .acts .rbtn .lbl { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }

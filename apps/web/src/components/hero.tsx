@@ -308,6 +308,8 @@ export function HeroCarousel(props: { heroes: Hero[]; waiting: boolean }) {
     });
 
   const many = () => list().length > 1;
+  // Every label Play says on these pages: its cell holds the widest of them too (an anime's "Resume S1:E1122").
+  const labels = () => [...new Set(list().flatMap((h) => (h.play ? [h.play.label] : [])))];
   return (
     <section
       ref={section}
@@ -349,7 +351,7 @@ export function HeroCarousel(props: { heroes: Hero[]; waiting: boolean }) {
                 aria-label={`${i() + 1} of ${list().length}, ${h.tile.name}`}
               >
                 <Backdrop src={near() ? h.tile.background : null} class="hero-bd" ramp={form() === "phone" ? "heroPhone" : "hero"} />
-                <HeroWords hero={h} active={on()} />
+                <HeroWords hero={h} active={on()} labels={labels()} />
               </div>
             );
           }}
@@ -407,7 +409,7 @@ export function HeroCarousel(props: { heroes: Hero[]; waiting: boolean }) {
 
 /** One page's words: logo, genre line, meta with ratings, synopsis, the reason, Play and Details. Only
  * the active page carries focus keys. */
-function HeroWords(props: { hero: Hero; active: boolean }) {
+function HeroWords(props: { hero: Hero; active: boolean; labels: string[] }) {
   const h = () => props.hero;
   const key = (k: string) => (props.active ? k : undefined);
   return (
@@ -445,7 +447,7 @@ function HeroWords(props: { hero: Hero; active: boolean }) {
             <Show when={h().playPending}>
               <span class="btn primary slot" aria-hidden="true">
                 <Play aria-hidden class="fill" />
-                <PlayWords label={h().tile.kind === "movie" ? "Play" : "Play S1:E1"} />
+                <PlayWords label={h().tile.kind === "movie" ? "Play" : "Play S1:E1"} labels={props.labels} />
               </span>
             </Show>
           }
@@ -459,7 +461,7 @@ function HeroWords(props: { hero: Hero; active: boolean }) {
               data-autofocus={props.active ? "" : undefined}
             >
               <Play aria-hidden class="fill" />
-              <PlayWords label={play().label} />
+              <PlayWords label={play().label} labels={props.labels} />
             </A>
           )}
         </Show>
@@ -497,12 +499,15 @@ function HeroWords(props: { hero: Hero; active: boolean }) {
   );
 }
 
-/** Play's words in a cell as wide as the longest it can say (home.css `.play-words`), so Details never moves
- * whatever lands (the lead, 2026-10-26); the phone's Play is a fixed width already. */
-function PlayWords(props: { label: string }) {
+/** Play's words in a cell as wide as the longest it can say (home.css `.play-words`): the widest labels the core
+ * gives and every label on the carousel's pages (review r5, R5-3), so Details never moves whatever lands (the lead,
+ * 2026-10-26); the phone's Play is a fixed width already. The other labels are drawn by CSS from `data-l`, so the
+ * button's text and name stay its own. */
+function PlayWords(props: { label: string; labels: string[] }) {
   return (
     <span class="play-words">
       <span>{props.label}</span>
+      <For each={props.labels}>{(l) => <span class="pw-other" data-l={l} aria-hidden="true" />}</For>
     </span>
   );
 }

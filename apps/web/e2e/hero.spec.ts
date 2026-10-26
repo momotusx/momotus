@@ -365,10 +365,10 @@ for (const form of ["phone", "desktop"] as const) {
   });
 }
 
-/** Sends the core's last header again with every page's Play saying `label`. */
+/** Sends the core's last header again with every page's Play (or page `only`'s) saying `label`. */
 async function relabel(context: BrowserContext) {
   type Header = { heroes: { play: { label: string } | null }[] };
-  const r = { sub: -1, header: null as Header | null, send: (_label: string) => {} };
+  const r = { sub: -1, header: null as Header | null, send: (_label: string, _only?: number) => {} };
   await context.routeWebSocket(/\/ws$/, (ws) => {
     const server = ws.connectToServer();
     ws.onMessage((m) => server.send(m));
@@ -384,9 +384,11 @@ async function relabel(context: BrowserContext) {
       }
       ws.send(text);
     });
-    r.send = (label) => {
+    r.send = (label, only) => {
       const header = structuredClone(r.header) as Header;
-      for (const h of header.heroes) if (h.play) h.play.label = label;
+      header.heroes.forEach((h, i) => {
+        if (h.play && (only === undefined || only === i)) h.play.label = label;
+      });
       ws.send(JSON.stringify({ sub: r.sub, updates: [{ kind: "header", header }] }));
     };
   });
@@ -407,6 +409,23 @@ for (const form of ["desktop", "tv"] as const) {
       boxes.push(await on.locator('[data-f="hero:details"]').boundingBox());
     }
     expect(boxes.every((b) => JSON.stringify(b) === JSON.stringify(boxes[0]))).toBe(true);
+    // An anime's long label on one page (review r5, R5-3): every page's Play takes its width, so Details sits at
+    // the same place on each, the long one included.
+    const long = "Resume S1:E1122";
+    r.send(long, 0);
+    await expect(page.locator('.hero-page[data-page="0"] [data-f="hero:play"]')).toHaveText(long);
+    const offsets = await page
+      .locator(".hero-page")
+      .evaluateAll((pages) =>
+        pages.flatMap((p) => {
+          // Pages with Play or its kept place, drawn: Details is the second of two.
+          const acts = p.querySelector(".acts");
+          const d = acts?.lastElementChild?.getBoundingClientRect();
+          return acts && acts.children.length === 2 && d && d.width > 0 ? [Math.round(d.left - p.getBoundingClientRect().left)] : [];
+        }),
+      );
+    expect(offsets.length).toBeGreaterThan(1);
+    expect(new Set(offsets).size, `Details' place on each page: ${offsets}`).toBe(1);
     await context.close();
   });
 }
