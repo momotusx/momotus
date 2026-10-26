@@ -601,6 +601,8 @@ final class PlayerModel {
             return
         }
         guard let next = choices.switchVersion(from: route, to: key) else { return }
+        // A move before the last start was ready: the new start measures only itself.
+        startWindow = StartWindow()
         sendStall(stall.interrupted())
         // Another file: its own tracks' timings start again (a server move keeps them: the same file).
         outbox.forget(prefix: PlayerLayout.fileTrackPrefix)
@@ -971,6 +973,10 @@ final class PlayerModel {
             // Another source: a stall on the last one ends with it.
             sendStall(stall.interrupted())
             load(url, key: snapshot.key, attempt: snapshot.attempt, at: start)
+            #if os(iOS)
+            // A play that starts on a hot phone takes its heat step now, not at the next thermal change.
+            heatCheck()
+            #endif
         case "failed":
             player.pause()
             notice = nil
@@ -1273,39 +1279,49 @@ final class PlayerModel {
         core.commandNow(sub, command)
     }
 
-    /// For the model's lifetime: the player goes with it, so nothing removes these.
     #if os(iOS)
-    /// Once per play, at thermal serious or worse: an engine play above 1080p moves to a cooler listed version, or
-    /// pauses when none is listed (`EngineChoice.heatStep`), and says why on the status line.
+    /// The heat step on every thermal change; `heatCheck` also runs at each ready, so a play that starts on a hot phone
+    /// is not left until the next change.
     private func watchHeat() {
         Task { [weak self] in
             for await _ in NotificationCenter.default.notifications(named: ProcessInfo.thermalStateDidChangeNotification) {
                 guard let self else { return }
-                guard !self.heatHandled else { continue }
-                let rows = self.versions?.snapshot.map { [$0.recommended].compactMap { $0 } + $0.rows } ?? []
-                let step = EngineChoice.heatStep(
-                    hot: ProcessInfo.processInfo.thermalState.rawValue >= ProcessInfo.ThermalState.serious.rawValue,
-                    on: EngineChoice.platform, engine: self.backend == .aether, playing: self.playback?.key ?? self.route.key,
-                    rows: rows.map { ($0.key, $0.quality) })
-                switch step {
-                case .keep: continue
-                case .move(let key):
-                    self.heatHandled = true
-                    let quality = rows.first { $0.key == key }?.quality ?? "a lighter version"
-                    coreLog.notice("metric heat_step move to=\(key, privacy: .public)")
-                    self.switchVersion(key)
-                    self.showStatus("Moved to \(quality) to keep the phone cool.")
-                case .pause:
-                    self.heatHandled = true
-                    coreLog.notice("metric heat_step pause")
-                    if self.playing { self.togglePlay() }
-                    self.showStatus("Paused: the phone is running hot.")
-                }
+                self.heatCheck()
             }
+        }
+    }
+
+    /// Once per play, at thermal serious or worse: an engine play above 1080p moves to a cooler listed version, or
+    /// pauses when none is listed (`EngineChoice.heatStep`), and says why on the status line. The first pick a failover
+    /// left behind is not a candidate (a move back to it would be refused), and a step that does nothing is not spent.
+    private func heatCheck() {
+        guard !heatHandled else { return }
+        let playingKey = playback?.key ?? route.key
+        let rows = (versions?.snapshot.map { [$0.recommended].compactMap { $0 } + $0.rows } ?? [])
+            .filter { $0.key == playingKey || $0.key != route.key }
+        let step = EngineChoice.heatStep(
+            hot: ProcessInfo.processInfo.thermalState.rawValue >= ProcessInfo.ThermalState.serious.rawValue,
+            on: EngineChoice.platform, engine: backend == .aether, playing: playingKey,
+            rows: rows.map { ($0.key, $0.quality) })
+        switch step {
+        case .keep: return
+        case .move(let key):
+            heatHandled = true
+            let quality = rows.first { $0.key == key }?.quality ?? "a lighter version"
+            coreLog.notice("metric heat_step move to=\(key, privacy: .public)")
+            switchVersion(key)
+            showStatus("Moved to \(quality) to keep the phone cool.")
+        case .pause:
+            guard playingNow else { return }
+            heatHandled = true
+            coreLog.notice("metric heat_step pause")
+            togglePlay()
+            showStatus("Paused: the phone is running hot.")
         }
     }
     #endif
 
+    /// For the model's lifetime: the player goes with it, so nothing removes these.
     private func observePlayer() {
         timeObserver = player.addPeriodicTimeObserver(forInterval: CMTime(value: 1, timescale: 4), queue: .main) { [weak self] time in
             MainActor.assumeIsolated { self?.tick(time) }

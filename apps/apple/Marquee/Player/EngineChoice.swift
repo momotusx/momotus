@@ -95,7 +95,8 @@ enum EngineChoice {
     /// At thermal serious or worse on the iPhone, an engine play above 1080p (the phone's screen class) moves to the best
     /// listed version at 1080p or under, in the list's order; with none listed, it pauses. Anything else keeps playing.
     static func heatStep(hot: Bool, on platform: Platform, engine: Bool, playing: String?, rows: [(key: String, quality: String)]) -> HeatStep {
-        let height = { (quality: String?) in ["4K": 2160, "1080p": 1080, "720p": 720, "SD": 480][quality ?? ""] }
+        // The core's quality words (versions.rs, `quality_word`).
+        let height = { (quality: String?) in ["4K": 2160, "1440p": 1440, "1080p": 1080, "720p": 720, "SD": 480][quality ?? ""] }
         guard hot, platform == .phone, engine, let playing,
               let now = height(rows.first { $0.key == playing }?.quality), now > 1080 else { return .keep }
         let cooler = rows.first { $0.key != playing && (height($0.quality) ?? .max) <= 1080 }
