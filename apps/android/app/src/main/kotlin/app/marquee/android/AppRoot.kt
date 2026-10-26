@@ -347,6 +347,8 @@ private fun AppNav(
     val tvNav = remember { TvNavFocus() }
     // Home stays composed under a title page while it fades: what focus does there must not change where Back returns to.
     SideEffect { app.tvHome.focus.paused = top != Route.Home }
+    // Discover too: a title page's own first focus must not overwrite the tile Back returns to.
+    SideEffect { app.discoverFocus.paused = top != Route.Discover }
 
     val content: @Composable () -> Unit = {
         val fade = screenFade(Marquee.panelMs)

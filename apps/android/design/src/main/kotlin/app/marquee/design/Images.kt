@@ -118,6 +118,8 @@ fun RemoteImage(
     fallbackUrl: String? = null,
     /** Where the crop keeps the picture: a poster in a 16:9 slot keeps its upper part (design/DECISION.md, Shelves). */
     alignment: Alignment = Alignment.Center,
+    /** Told once neither [url] nor [fallbackUrl] could load, for a caller that draws something else then. */
+    onFailed: (() -> Unit)? = null,
     overlay: @Composable BoxScope.() -> Unit = {},
 ) {
     val context = LocalContext.current
@@ -154,7 +156,10 @@ fun RemoteImage(
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 alignment = alignment,
-                onError = { tried++ },
+                onError = {
+                    tried++
+                    if (tried >= listOfNotNull(url, fallbackUrl).size) onFailed?.invoke()
+                },
                 modifier = Modifier.size(width, height),
             )
         }

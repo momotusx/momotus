@@ -16,6 +16,8 @@ import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasScrollToNodeAction
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.isHeading
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -40,6 +42,7 @@ import app.marquee.core.model.Tuple2
 import app.marquee.core.views.GenreChange
 import app.marquee.design.Form
 import app.marquee.design.MarqueeTheme
+import app.marquee.design.PullDown
 import app.marquee.ui.tv.FocusMemory
 import org.junit.Rule
 import org.junit.Test
@@ -58,6 +61,9 @@ internal abstract class DiscoverScreenRules {
     protected val picks = mutableListOf<DiscoverPick>()
     protected val focus = FocusMemory()
     protected var snapshot by mutableStateOf<DiscoverSnapshot?>(null)
+
+    /** False takes the page away, as opening a title does; true brings it back, as Back does. */
+    protected var visible by mutableStateOf(true)
 
     protected fun tile(id: String) =
         Tile(
@@ -108,17 +114,19 @@ internal abstract class DiscoverScreenRules {
             val base = LocalDensity.current
             CompositionLocalProvider(LocalDensity provides Density(base.density, fontScale)) {
                 MarqueeTheme(form) {
-                    DiscoverContent(
-                        snapshot,
-                        failed = false,
-                        pick = { picks += it },
-                        loadMore = {},
-                        retry = {},
-                        onOpen = {},
-                        onSetup = {},
-                        onAddons = {},
-                        focus = focus,
-                    )
+                    if (visible) {
+                        DiscoverContent(
+                            snapshot,
+                            failed = false,
+                            pick = { picks += it },
+                            loadMore = {},
+                            retry = {},
+                            onOpen = {},
+                            onSetup = {},
+                            onAddons = {},
+                            focus = focus,
+                        )
+                    }
                 }
             }
         }
@@ -130,6 +138,13 @@ internal abstract class DiscoverScreenRules {
     protected fun SemanticsNodeInteraction.right() =
         // Unclipped: a control scrolled out of a row is clipped away from its bounds in the root.
         fetchSemanticsNode().let { it.positionInRoot.x + it.size.width }
+
+    /** A service tile's width, by the name it is spoken as. */
+    protected fun tileWidth(name: String) =
+        compose
+            .onNodeWithContentDescription(name)
+            .fetchSemanticsNode()
+            .size.width
 
     protected fun SemanticsNodeInteraction.lines(): Int {
         val layouts = mutableListOf<TextLayoutResult>()
@@ -173,7 +188,7 @@ internal class DiscoverScreenTest : DiscoverScreenRules() {
         compose.onAllNodesWithText("More").assertCountEquals(1)
         compose.onNodeWithText("Live TV").performClick()
         compose.onNodeWithContentDescription("Sort, IMDb rating").performClick()
-        compose.onNodeWithText("More lists").assertExists()
+        compose.onNode(hasText("More lists") and isHeading()).assertExists()
         assertEquals(DiscoverPick(kind = "tv"), picks.single())
     }
 
@@ -242,6 +257,40 @@ internal class DiscoverScreenTest : DiscoverScreenRules() {
         compose.onNodeWithText("More titles arrived. Show").performClick()
         tileNode("x").assertExists()
     }
+
+    @Test
+    fun `a pull-down with no choices opens empty and does not crash`() {
+        compose.setContent { MarqueeTheme(Form.Tv) { PullDown("Sort", emptyList<Pair<String?, String>>(), null) {} } }
+        compose.onNodeWithContentDescription("Sort").performClick()
+        compose.onNodeWithText("Sort").assertExists()
+    }
+
+    @Test
+    @Config(qualifiers = "w960dp-h540dp")
+    fun `on TV Sort sits at the end of the filter line`() {
+        show(discover(), Form.Tv)
+        val width =
+            compose
+                .onRoot()
+                .fetchSemanticsNode()
+                .size.width
+        val sort = compose.onNodeWithContentDescription("Sort, IMDb rating").fetchSemanticsNode()
+        val genre = compose.onNodeWithContentDescription("Genre, Any genre").fetchSemanticsNode()
+        assertEquals(genre.positionInRoot.y, sort.positionInRoot.y, "one line")
+        assertTrue(sort.positionInRoot.x + sort.size.width > width * 0.85f, "${sort.positionInRoot.x} of $width")
+    }
+
+    @Test
+    @Config(qualifiers = "w960dp-h540dp")
+    fun `on TV Back from a title puts focus on the tile that opened it`() {
+        show(discover(), Form.Tv)
+        tileNode("t5").requestFocus()
+        visible = false
+        compose.waitForIdle()
+        visible = true
+        compose.waitForIdle()
+        tileNode("t5").assertIsFocused()
+    }
 }
 
 /** The layout on a 360 dp phone, with real fonts (native graphics), since widths and lines are what it is about. */
@@ -285,12 +334,14 @@ internal class DiscoverLayoutTest : DiscoverScreenRules() {
         compose.waitForIdle()
         assertEquals(1, compose.onNodeWithText("Paramount+", useUnmergedTree = true).lines())
         // As wide as its name, not a square that breaks it: wider than All's tile.
-        val width = { name: String ->
-            compose
-                .onNodeWithContentDescription(name)
-                .fetchSemanticsNode()
-                .size.width
-        }
-        assertTrue(width("Paramount+") > width("All"), "${width("Paramount+")} vs ${width("All")}")
+        assertTrue(tileWidth("Paramount+") > tileWidth("All"), "${tileWidth("Paramount+")} vs ${tileWidth("All")}")
+    }
+
+    @Test
+    fun `a logo that does not load gives way to the name on one line`() {
+        val missing = "file:///nonexistent/paramount.png"
+        show(discover(platforms = listOf(Platform("netflix", "Netflix"), Platform("paramount", "Paramount+", missing))))
+        compose.waitUntil(10_000) { tileWidth("Paramount+") > tileWidth("All") }
+        assertEquals(1, compose.onNodeWithText("Paramount+", useUnmergedTree = true).lines())
     }
 }

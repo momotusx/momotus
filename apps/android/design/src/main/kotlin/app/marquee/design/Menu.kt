@@ -29,6 +29,8 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
@@ -108,7 +110,7 @@ fun ActionMenu(
                     if (action.heading) {
                         MqText(
                             action.label,
-                            Modifier.padding(top = Marquee.space.xs),
+                            Modifier.padding(top = Marquee.space.xs).semantics { heading() },
                             role = TextRole.Callout,
                             color = Marquee.colors.muted,
                         )
@@ -210,8 +212,10 @@ fun <T> PullDown(
             title,
             rows,
             onDismiss = { open = false },
+            // No choices at all (a list with no sorts yet): no row to start on, and no crash.
             start =
-                start.takeIf { !rows[it].heading } ?: rows.indexOfFirst { !it.heading },
+                start.takeIf { rows.getOrNull(it)?.heading == false }
+                    ?: rows.indexOfFirst { !it.heading }.coerceAtLeast(0),
         )
     }
 }

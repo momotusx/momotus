@@ -13,8 +13,10 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -411,10 +413,11 @@ fun ServiceTile(
                 this.selected = selected
             }.focusClickable(onClick, Role.RadioButton),
     ) {
-        if (logoUrl != null) {
-            RemoteImage(logoUrl, side, side, fallbackText = name)
+        var failed by remember(logoUrl) { mutableStateOf(false) }
+        if (logoUrl != null && !failed) {
+            RemoteImage(logoUrl, side, side, fallbackText = name, onFailed = { failed = true })
         } else {
-            // No logo: the name on one line, the tile as wide as it (plans/discover-v2.md 6.6).
+            // No logo, or it did not load: the name on one line, the tile as wide as it (plans/discover-v2.md 6.6).
             Box(
                 Modifier
                     .height(side)

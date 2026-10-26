@@ -43,6 +43,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
@@ -86,6 +87,7 @@ import app.marquee.design.FocusInk
 import app.marquee.design.Form
 import app.marquee.design.Icons
 import app.marquee.design.KeepInView
+import app.marquee.design.KeyPresses
 import app.marquee.design.Marquee
 import app.marquee.design.MarqueeFonts
 import app.marquee.design.MqIcon
@@ -107,6 +109,7 @@ import app.marquee.design.liftRoom
 import app.marquee.design.marqueeFocus
 import app.marquee.ui.phone.LocalBarSpace
 import app.marquee.ui.tv.FocusMemory
+import app.marquee.ui.tv.LocalTvNav
 import app.marquee.ui.tv.requesterFor
 import app.marquee.ui.tv.tvContentTop
 import app.marquee.ui.tv.watch
@@ -586,6 +589,20 @@ internal fun DiscoverContent(
         }
     }
     val dimmed = items.isEmpty() && snapshot?.state is DiscoverState.Loading && shown.isNotEmpty()
+    // TV, Back from a title: focus returns to the tile that opened it (or wherever it was last), as on Home. The grid's
+    // scroll is saved with the page, so that tile is composed again. Not when the page was shown from the bar.
+    val nav = LocalTvNav.current
+    LaunchedEffect(focus) {
+        if (!tv || nav?.heldByKey == true) return@LaunchedEffect
+        val key = focus.focusedKey ?: return@LaunchedEffect
+        val asked = KeyPresses.count
+        repeat(RESTORE_FRAMES) {
+            withFrameNanos { }
+            if (KeyPresses.count != asked) return@LaunchedEffect
+            val requester = focus.requester(key) ?: return@repeat
+            if (runCatching { requester.requestFocus() }.getOrDefault(false)) return@LaunchedEffect
+        }
+    }
     // Ask for the next page as the end comes into view.
     val current by rememberUpdatedState(snapshot)
     val more by rememberUpdatedState(loadMore)
@@ -938,6 +955,9 @@ internal const val DISCOVER_KIND_ENTRY = "kinds:entry"
 
 /** Blank covers while a first page loads. */
 private const val SKELETONS = 6
+
+/** Frames a return to Discover tries to put focus back, while the grid composes its tiles. */
+private const val RESTORE_FRAMES = 60
 
 /** Room at the rail's ends for the chosen tile's ring. */
 private val RING_ROOM = 8.dp
