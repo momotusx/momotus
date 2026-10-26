@@ -20,6 +20,7 @@ use std::collections::{HashMap, HashSet};
 use std::future::Future;
 use std::hash::{Hash, Hasher};
 use std::pin::Pin;
+use std::sync::Arc;
 use std::time::Duration;
 use stremio_core::types::addon::{ManifestCatalog, ManifestResource};
 use tokio::task::{AbortHandle, JoinHandle, JoinSet};
@@ -68,6 +69,13 @@ const ADDON_LIST_MAX_BYTES: usize = 4 * 1024 * 1024;
 /// installed addons publish. Lists fill in order; one cut short says so
 /// (`more`).
 const SNAPSHOT_ENTRIES_MAX: usize = 3 * 1024 * 1024 + 512 * 1024;
+/// Lists one installed addon may add, and all installed addons together:
+/// with the room above, a push stays under the bridge's 4 MiB message
+/// however many `addonCatalogs` a manifest declares.
+const LISTS_PER_ADDON: usize = 8;
+const ADDON_LISTS_MAX: usize = 32;
+/// Installed addons' lists read at once (each body up to 4 MiB).
+const FETCHES_AT_ONCE: usize = 2;
 /// A listed addon's manifest.
 const MANIFEST_MAX_BYTES: usize = 256 * 1024;
 const NAME_MAX: usize = 80;
@@ -574,13 +582,29 @@ impl ListSource {
     }
 }
 
-/// One list as the view holds it: every entry it read, before the
-/// snapshot's room is shared out.
+/// One list as the view holds it: every entry it read with its size as
+/// JSON (measured once, as read), before the snapshot's room is shared out.
 struct Held {
     source: ListSource,
     state: ListState,
     entries: Vec<ListedAddon>,
+    sizes: Vec<usize>,
     more: bool,
+    /// The fetch whose answer this list takes: an older one's is ignored.
+    generation: u64,
+}
+
+impl Held {
+    fn loading(source: ListSource) -> Self {
+        Self {
+            source,
+            state: ListState::Loading,
+            entries: Vec::new(),
+            sizes: Vec::new(),
+            more: false,
+            generation: 0,
+        }
+    }
 }
 
 /// The lists in order (Cinemeta's two, then the installed addons' in addon
@@ -599,17 +623,14 @@ impl Lists {
         };
         let held = LISTS
             .iter()
-            .map(|(id, name)| Held {
-                source: ListSource {
+            .map(|(id, name)| {
+                Held::loading(ListSource {
                     id: (*id).into(),
                     name: (*name).into(),
                     host: None,
                     addon: addon.clone(),
                     catalog: ("all".into(), (*id).into()),
-                },
-                state: ListState::Loading,
-                entries: Vec::new(),
-                more: false,
+                })
             })
             .collect();
         Self { cinemeta, held }
@@ -630,25 +651,27 @@ impl Lists {
                 Some(held) if held.source.same(&source) => self.held.push(held),
                 _ => {
                     fetch.push(source.clone());
-                    self.held.push(Held {
-                        source,
-                        state: ListState::Loading,
-                        entries: Vec::new(),
-                        more: false,
-                    });
+                    self.held.push(Held::loading(source));
                 }
             }
         }
         fetch
     }
 
-    fn set(&mut self, id: &str, result: Fetched) {
-        let Some(held) = self.held.iter_mut().find(|h| h.source.id == id) else {
+    /// A fetch's answer, for the list it was started for: a list gone, or
+    /// started again since, takes none.
+    fn set(&mut self, id: &str, generation: u64, result: Fetched) {
+        let Some(held) = self
+            .held
+            .iter_mut()
+            .find(|h| h.source.id == id && h.generation == generation)
+        else {
             return;
         };
         match result {
             Ok((entries, more)) => {
                 held.state = ListState::Ready;
+                held.sizes = entries.iter().map(json_size).collect();
                 held.entries = entries;
                 held.more = more;
             }
@@ -656,9 +679,15 @@ impl Lists {
         }
     }
 
+    fn ids(&self) -> HashSet<&str> {
+        self.held.iter().map(|h| h.source.id.as_str()).collect()
+    }
+
     /// The snapshot: lists in order with their installed states, each given
-    /// entries while the room lasts (measured with their copy keys, so it is
-    /// measured again whenever the addons change).
+    /// entries while the room lasts. An entry's size is the one measured as
+    /// read, grown by what its installed state adds (`copyKey`, a longer
+    /// state word), so nothing is serialized again here. A list cut short
+    /// says `more`; a later list that fits is still shown whole.
     fn render(&self, core: &Core) -> AddonCatalogSnapshot {
         let lists = self
             .held
@@ -675,24 +704,40 @@ impl Lists {
         let mut snapshot = AddonCatalogSnapshot { lists };
         mark_installed(core, &mut snapshot);
         let mut room = SNAPSHOT_ENTRIES_MAX;
-        for list in &mut snapshot.lists {
+        for (list, held) in snapshot.lists.iter_mut().zip(&self.held) {
             let fits = list
                 .entries
                 .iter()
-                .take_while(|entry| {
-                    let size = serde_json::to_vec(entry).map_or(ENTRY_MAX, |b| b.len());
+                .zip(&held.sizes)
+                .take_while(|(entry, size)| {
+                    let size = *size + grown(entry);
                     room.checked_sub(size).map(|left| room = left).is_some()
                 })
                 .count();
             if fits < list.entries.len() {
                 list.entries.truncate(fits);
                 list.more = true;
-                // Nothing after a cut list: the room is spent in list order.
-                room = 0;
             }
         }
         snapshot
     }
+}
+
+/// An entry's size as JSON, as read (absent, no copy key).
+fn json_size(entry: &ListedAddon) -> usize {
+    serde_json::to_vec(entry).map_or(ENTRY_MAX, |b| b.len())
+}
+
+/// What an entry's installed state adds to its size as read: a copy key in
+/// place of `null`, and a state word longer than `absent`.
+fn grown(entry: &ListedAddon) -> usize {
+    let word = serde_json::to_vec(&entry.installed).map_or(0, |b| b.len());
+    let key = entry
+        .copy_key
+        .as_ref()
+        .and_then(|k| serde_json::to_vec(k).ok())
+        .map_or(0, |b| b.len());
+    word.saturating_sub("\"absent\"".len()) + key.saturating_sub("null".len())
 }
 
 /// The lists the installed, enabled addons publish, in addon order: one per
@@ -701,7 +746,7 @@ impl Lists {
 /// host are left out.
 fn addon_lists(core: &Core, cinemeta: &Url) -> Vec<ListSource> {
     let addons = core.installed_addons().unwrap_or_default();
-    let mut lists = Vec::new();
+    let mut lists: Vec<ListSource> = Vec::new();
     for addon in addons {
         let url = &addon.transport_url;
         let Some(host) = url.host_str().map(str::to_owned) else {
@@ -714,10 +759,11 @@ fn addon_lists(core: &Core, cinemeta: &Url) -> Vec<ListSource> {
             continue;
         }
         let mut seen = HashSet::new();
-        for catalog in catalogs(&addon.manifest.addon_catalogs) {
-            if !seen.insert(catalog.id.clone()) {
-                continue;
-            }
+        let own = catalogs(&addon.manifest.addon_catalogs)
+            .into_iter()
+            .filter(|catalog| seen.insert(catalog.id.clone()))
+            .take(LISTS_PER_ADDON);
+        for catalog in own {
             let name = cut(
                 &collapse(catalog.name.as_deref().unwrap_or(&addon.manifest.name)),
                 NAME_MAX,
@@ -731,7 +777,27 @@ fn addon_lists(core: &Core, cinemeta: &Url) -> Vec<ListSource> {
             });
         }
     }
+    lists.truncate(ADDON_LISTS_MAX);
+    name_apart(&mut lists);
     lists
+}
+
+/// A list whose name is Cinemeta's ("Official", "Community") or another
+/// list's, whatever the case, is named with its host too: no client can show
+/// two lists with one name, and none but Cinemeta's reads "Official".
+fn name_apart(lists: &mut [ListSource]) {
+    let key = |name: &str| name.to_lowercase();
+    let mut count: HashMap<String, usize> = LISTS.iter().map(|(_, name)| (key(name), 1)).collect();
+    for list in lists.iter() {
+        *count.entry(key(&list.name)).or_default() += 1;
+    }
+    for list in lists.iter_mut() {
+        if count[&key(&list.name)] > 1
+            && let Some(host) = &list.host
+        {
+            list.name = format!("{}, {host}", list.name);
+        }
+    }
 }
 
 /// An addon's catalogs that need no extra, each id's `all` type first.
@@ -759,6 +825,62 @@ fn link_hash(url: &Url) -> u64 {
 /// A list's entries and whether it held more, or the words of its failure.
 type Fetched = Result<(Vec<ListedAddon>, bool), String>;
 
+/// The fetches running, by list: each with the generation it was started
+/// as, and the task it runs in.
+struct Fetches {
+    tasks: JoinSet<(String, u64, Fetched)>,
+    running: HashMap<String, AbortHandle>,
+    by_task: HashMap<tokio::task::Id, (String, u64)>,
+    generation: u64,
+    /// Installed addons' lists only: Cinemeta's two never wait.
+    slots: Arc<tokio::sync::Semaphore>,
+}
+
+impl Fetches {
+    fn new() -> Self {
+        Self {
+            tasks: JoinSet::new(),
+            running: HashMap::new(),
+            by_task: HashMap::new(),
+            generation: 0,
+            slots: Arc::new(tokio::sync::Semaphore::new(FETCHES_AT_ONCE)),
+        }
+    }
+
+    /// Starts `list`'s fetch, ending one still running for the same id.
+    fn start(&mut self, core: &Core, lists: &mut Lists, list: ListSource, fresh: bool) {
+        self.generation += 1;
+        let generation = self.generation;
+        if let Some(held) = lists.held.iter_mut().find(|h| h.source.id == list.id) {
+            held.generation = generation;
+        }
+        let (core, slots, id) = (core.clone(), self.slots.clone(), list.id.clone());
+        let handle = self.tasks.spawn(async move {
+            let _slot = match list.host {
+                Some(_) => Some(slots.acquire_owned().await),
+                None => None,
+            };
+            let result = fetch_list(&core, &list, fresh).await;
+            (list.id, generation, result)
+        });
+        self.by_task.insert(handle.id(), (id.clone(), generation));
+        if let Some(old) = self.running.insert(id, handle) {
+            old.abort();
+        }
+    }
+
+    /// Ends the fetches of lists that are gone.
+    fn keep_only(&mut self, ids: &HashSet<&str>) {
+        self.running.retain(|id, handle| {
+            let kept = ids.contains(id.as_str());
+            if !kept {
+                handle.abort();
+            }
+            kept
+        });
+    }
+}
+
 async fn run(
     core: Core,
     fresh: bool,
@@ -766,22 +888,10 @@ async fn run(
     mut changes: tokio::sync::broadcast::Receiver<Vec<Table>>,
     snapshot: SharedObservable<AddonCatalogSnapshot>,
 ) {
-    let mut fetches: JoinSet<(String, Fetched)> = JoinSet::new();
-    let mut running: HashMap<String, AbortHandle> = HashMap::new();
-    let mut start = |fetches: &mut JoinSet<_>, list: ListSource| {
-        let core = core.clone();
-        let id = list.id.clone();
-        let handle = fetches.spawn(async move {
-            let result = fetch_list(&core, &list, fresh).await;
-            (list.id, result)
-        });
-        if let Some(old) = running.insert(id, handle) {
-            old.abort();
-        }
-    };
+    let mut fetches = Fetches::new();
     let first: Vec<ListSource> = lists.held.iter().map(|h| h.source.clone()).collect();
     for list in first {
-        start(&mut fetches, list);
+        fetches.start(&core, &mut lists, list, fresh);
     }
     let publish = |lists: &Lists| {
         let next = lists.render(&core);
@@ -791,16 +901,38 @@ async fn run(
     };
     loop {
         tokio::select! {
-            Some(Ok((id, result))) = fetches.join_next(), if !fetches.is_empty() => {
-                lists.set(&id, result);
+            // Taken whole: an aborted or failed task is handled here, so the
+            // arm is never left disabled for the others still running.
+            Some(joined) = fetches.tasks.join_next_with_id(), if !fetches.tasks.is_empty() => {
+                let (id, generation, result) = match joined {
+                    Ok((task, answer)) => {
+                        fetches.by_task.remove(&task);
+                        answer
+                    }
+                    Err(error) => {
+                        let Some((id, generation)) = fetches.by_task.remove(&error.id()) else {
+                            continue;
+                        };
+                        if !error.is_panic() {
+                            continue;
+                        }
+                        tracing::warn!("a Find addons list fetch failed: {error}");
+                        (id, generation, Err("Momotus could not read this list".into()))
+                    }
+                };
+                if fetches.running.get(&id).is_some_and(|h| !fetches.by_task.contains_key(&h.id())) {
+                    fetches.running.remove(&id);
+                }
+                lists.set(&id, generation, result);
                 publish(&lists);
             }
             change = crate::views::next_change(&mut changes) => {
                 let Some(tables) = change else { return };
                 if tables.contains(&Table::Addons) {
                     for list in lists.follow_addons(&core) {
-                        start(&mut fetches, list);
+                        fetches.start(&core, &mut lists, list, fresh);
                     }
+                    fetches.keep_only(&lists.ids());
                     publish(&lists);
                 }
             }
@@ -843,9 +975,36 @@ async fn fetch_list(core: &Core, list: &ListSource, fresh: bool) -> Fetched {
     if body.len() > max_bytes {
         return Err(unreadable());
     }
-    let answer: Value = serde_json::from_slice(&body).map_err(|_| unreadable())?;
-    let raw = answer["addons"].as_array().ok_or_else(unreadable)?;
-    Ok(entries_up_to(raw, max_entries))
+    read_list(&body, max_entries).ok_or_else(unreadable)
+}
+
+/// A list's body read one entry at a time: the `addons` array is held as
+/// raw slices of the body, each turned into a checked entry and dropped,
+/// never one tree of the whole list (4 MiB of JSON is tens of MiB as a
+/// tree). `None` when the body is not such a list.
+pub fn read_list(body: &[u8], max: usize) -> Option<(Vec<ListedAddon>, bool)> {
+    #[derive(serde::Deserialize)]
+    struct Answer<'a> {
+        #[serde(borrow)]
+        addons: Vec<&'a serde_json::value::RawValue>,
+    }
+    let answer: Answer = serde_json::from_slice(body).ok()?;
+    let mut seen = HashSet::new();
+    let mut shown = Vec::new();
+    for raw in answer.addons {
+        let Ok(value) = serde_json::from_str::<Value>(raw.get()) else {
+            continue;
+        };
+        let Some(entry) = entry(&value) else { continue };
+        if !seen.insert(entry.key.clone()) {
+            continue;
+        }
+        if shown.len() == max {
+            return Some((shown, true));
+        }
+        shown.push(entry);
+    }
+    Some((shown, false))
 }
 
 /// The entries the list may show, in the served order: each checked

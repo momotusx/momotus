@@ -5,7 +5,7 @@ use mq_addons::AddonError;
 use mq_library::AddonRow;
 use mq_protocol::Manifest;
 use mq_runtime::views::addon_catalog::{
-    check_listed_manifest, entries, install_listed_with, listable,
+    check_listed_manifest, entries, install_listed_with, listable, read_list,
 };
 use mq_runtime::{
     AddonCatalogSnapshot, AddonCatalogView, AddonList, AddonsView, Configuration, Core, CoreConfig,
@@ -19,6 +19,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;
+use tokio::sync::mpsc;
 use url::Url;
 
 const OFFICIAL: &str = include_str!("fixtures/addon_catalog/official.json");
@@ -1522,7 +1523,8 @@ async fn an_installed_addons_lists_follow_cinemetas_with_their_host() {
             ("Official", "official", None),
             ("Community", "community", None),
             ("Directory", addon, Some("dir.b7.test")),
-            ("Official", addon, Some("dir.b7.test")),
+            // Named apart in the core: no client shows two lists read "Official".
+            ("Official, dir.b7.test", addon, Some("dir.b7.test")),
         ]
     );
     let ids: Vec<&str> = snapshot.lists[2]
@@ -1632,6 +1634,7 @@ async fn a_long_list_shows_its_first_2000_and_every_push_fits() {
         "big1.b7.test",
         "big2.b7.test",
         "big3.b7.test",
+        "small.b7.test",
     ]
     .iter()
     .enumerate()
@@ -1639,6 +1642,8 @@ async fn a_long_list_shows_its_first_2000_and_every_push_fits() {
         let dir = Source::start("{}", "{}").await;
         let body = if n == 0 {
             list_body(&small)
+        } else if n == 4 {
+            list_body(&[raw("https://tiny.example/manifest.json", "tiny", json!({}))])
         } else {
             let one = serde_json::to_vec(&big(n, 0)).unwrap().len() + 1;
             let entries: Vec<Value> = (0..3_900_000 / one).map(|i| big(n, i)).collect();
@@ -1664,6 +1669,224 @@ async fn a_long_list_shows_its_first_2000_and_every_push_fits() {
     // The big lists fill what room is left, in order; the push fits.
     assert!(!snapshot.lists[3].entries.is_empty());
     assert!(snapshot.lists[5].more);
+    // A small list after the cut ones still shows whole.
+    let last = snapshot.lists.last().unwrap();
+    assert_eq!((last.entries.len(), last.more), (1, false), "{}", last.name);
     let size = fits_a_push(&snapshot);
     assert!(size > 3 * 1024 * 1024, "the room is used: {size}");
+}
+
+/// A server that never answers, telling when each connection opens and closes.
+async fn silent(
+    name: &str,
+) -> (
+    String,
+    mpsc::UnboundedReceiver<()>,
+    mpsc::UnboundedReceiver<()>,
+) {
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let (opened_tx, opened) = mpsc::unbounded_channel();
+    let (closed_tx, closed) = mpsc::unbounded_channel();
+    tokio::spawn(async move {
+        while let Ok((mut socket, _)) = listener.accept().await {
+            let _ = opened_tx.send(());
+            let closed = closed_tx.clone();
+            tokio::spawn(async move {
+                let mut buf = [0u8; 1024];
+                while let Ok(n) = socket.read(&mut buf).await {
+                    if n == 0 {
+                        break;
+                    }
+                }
+                let _ = closed.send(());
+            });
+        }
+    });
+    mq_http::test_dns::set_public(name, &[IpAddr::V4(Ipv4Addr::LOCALHOST)]);
+    (
+        format!("http://{name}:{port}/manifest.json"),
+        opened,
+        closed,
+    )
+}
+
+async fn within(rx: &mut mpsc::UnboundedReceiver<()>, what: &str) {
+    tokio::time::timeout(Duration::from_secs(5), rx.recv())
+        .await
+        .expect(what);
+}
+
+#[tokio::test]
+async fn a_list_restarted_while_another_loads_never_holds_the_other_back() {
+    let cinemeta = Source::start(OFFICIAL, COMMUNITY).await;
+    let (slow, mut slow_opened, _) = silent("slow.b7.test").await;
+    let fast = Source::start("{}", "{}").await;
+    fast.set(
+        "dir",
+        0,
+        &list_body(&[raw("https://a.example/manifest.json", "a", json!({}))]),
+    );
+    let fast_url = fast.public_url("fast.b7.test");
+    let core = Core::temporary("p").unwrap();
+    let catalog = |name: &str| json!([{"type": "all", "id": "dir", "name": name}]);
+    install(
+        &core,
+        &[
+            directory_row(&slow, "slow", catalog("A")),
+            directory_row(&fast_url, "fast", catalog("B")),
+        ],
+    );
+    let view = AddonCatalogView::open_from(&core, &cinemeta.url(), false);
+    within(&mut slow_opened, "the slow list is asked").await;
+    // The slow list's addon renames it: the same list id starts again and its
+    // first fetch is ended. Then the fast list's answer comes.
+    install(
+        &core,
+        &[
+            directory_row(&slow, "slow", catalog("A2")),
+            directory_row(&fast_url, "fast", catalog("B")),
+        ],
+    );
+    within(&mut slow_opened, "the renamed list is asked again").await;
+    fast.release();
+    let shown = until(&view, |s| {
+        s.lists
+            .iter()
+            .any(|l| l.name == "B" && l.state == ListState::Ready)
+    })
+    .await;
+    assert!(
+        shown
+            .lists
+            .iter()
+            .any(|l| l.name == "A2" && l.state == ListState::Loading)
+    );
+}
+
+#[tokio::test]
+async fn a_list_that_goes_ends_its_request() {
+    let cinemeta = Source::start(OFFICIAL, COMMUNITY).await;
+    let (url, mut opened, mut closed) = silent("gone.b7.test").await;
+    let core = Core::temporary("p").unwrap();
+    let row = directory_row(
+        &url,
+        "gone",
+        json!([{"type": "all", "id": "dir", "name": "Gone"}]),
+    );
+    install(&core, std::slice::from_ref(&row));
+    let view = AddonCatalogView::open_from(&core, &cinemeta.url(), false);
+    within(&mut opened, "the list is asked").await;
+    install(
+        &core,
+        &[AddonRow {
+            enabled: false,
+            ..row
+        }],
+    );
+    until(&view, |s| s.lists.len() == 2).await;
+    // Long before its 10 s deadline.
+    tokio::time::timeout(Duration::from_secs(2), closed.recv())
+        .await
+        .expect("the request ended with its list");
+}
+
+#[tokio::test]
+async fn lists_are_capped_per_addon_and_in_all() {
+    let cinemeta = Source::start(OFFICIAL, COMMUNITY).await;
+    let dir = Source::start("{}", "{}").await;
+    let core = Core::temporary("p").unwrap();
+    let many = |n: usize| {
+        json!(
+            (0..n)
+                .map(|i| json!({"type": "all", "id": format!("c{i}"), "name": format!("C{i}")}))
+                .collect::<Vec<_>>()
+        )
+    };
+    let rows: Vec<AddonRow> = (0..5)
+        .map(|a| {
+            directory_row(
+                &dir.public_url(&format!("cap{a}.b7.test")),
+                &format!("cap{a}"),
+                many(20),
+            )
+        })
+        .collect();
+    install(&core, &rows[..1]);
+    let one = settled(&AddonCatalogView::open_from(&core, &cinemeta.url(), false)).await;
+    assert_eq!(one.lists.len(), 2 + 8, "eight lists from one addon");
+    install(&core, &rows);
+    let all = settled(&AddonCatalogView::open_from(&core, &cinemeta.url(), false)).await;
+    assert_eq!(all.lists.len(), 2 + 32, "thirty-two lists from every addon");
+    fits_a_push(&all);
+}
+
+#[tokio::test]
+async fn lists_with_one_name_are_named_with_their_hosts() {
+    let cinemeta = Source::start(OFFICIAL, COMMUNITY).await;
+    let dir = Source::start("{}", "{}").await;
+    let core = Core::temporary("p").unwrap();
+    let catalog = |name: &str| json!([{"type": "all", "id": "dir", "name": name}]);
+    install(
+        &core,
+        &[
+            directory_row(&dir.public_url("one.b7.test"), "one", catalog("Directory")),
+            directory_row(&dir.public_url("two.b7.test"), "two", catalog("directory")),
+            directory_row(
+                &dir.public_url("three.b7.test"),
+                "three",
+                catalog("COMMUNITY"),
+            ),
+            directory_row(&dir.public_url("four.b7.test"), "four", catalog("Mine")),
+        ],
+    );
+    let names: Vec<String> = settled(&AddonCatalogView::open_from(&core, &cinemeta.url(), false))
+        .await
+        .lists
+        .into_iter()
+        .map(|l| l.name)
+        .collect();
+    assert_eq!(
+        names,
+        [
+            "Official",
+            "Community",
+            "Directory, one.b7.test",
+            "directory, two.b7.test",
+            "COMMUNITY, three.b7.test",
+            "Mine"
+        ]
+    );
+}
+
+#[test]
+fn a_list_is_read_one_entry_at_a_time_with_the_same_rules() {
+    let list: Vec<Value> = (0..5)
+        .map(|i| {
+            raw(
+                &format!("https://r{i}.example/manifest.json"),
+                &format!("r{i}"),
+                json!({}),
+            )
+        })
+        .chain([
+            raw("https://r0.example/manifest.json", "dup", json!({})),
+            json!("not an entry"),
+        ])
+        .collect();
+    let body = list_body(&list);
+    let (shown, more) = read_list(body.as_bytes(), 3).unwrap();
+    assert_eq!(
+        shown.iter().map(|e| e.id.as_str()).collect::<Vec<_>>(),
+        ["r0", "r1", "r2"]
+    );
+    assert!(more);
+    let (all, more) = read_list(body.as_bytes(), 10).unwrap();
+    assert_eq!(
+        all.len(),
+        5,
+        "the duplicate link and the malformed entry are skipped"
+    );
+    assert!(!more);
+    assert!(read_list(b"{\"metas\": []}", 10).is_none());
 }

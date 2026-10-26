@@ -46,7 +46,7 @@ tokio = { workspace = true }
 tokio-util = "0.7"
 url.workspace = true
 serde.workspace = true
-serde_json.workspace = true
+serde_json = { workspace = true, features = ["raw_value"] }
 thiserror.workspace = true
 tracing.workspace = true
 
@@ -58,6 +58,8 @@ mq-streams = { path = "../mq-streams" }
 rusqlite = "0.40"
 # The engine's loopback swarm (tests/kids_play.rs, feature torrent).
 tempfile = "3"
+# Peak memory in examples/list_rss.rs.
+libc = "0.2"
 tokio = { workspace = true, features = ["test-util"] }
 # Captures the log lines of a test (tests/title_lookup.rs: the TMDB token never reaches one).
 tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt"] }
