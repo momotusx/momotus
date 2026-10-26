@@ -4,7 +4,7 @@ The owner's own drawing of a motmot (the genus is Momotus), `drawing.jpeg`, is t
 
 | File | What |
 |---|---|
-| `motmot.svg` | The master: the drawing redrawn at any size. The outline, the silhouette and every region are vector paths traced from the drawing; the airbrush shading inside them is the drawing's own, as smooth layers clipped to those paths. The eye is recoloured to #E0381C (the owner's pick E2), the pupil, ring and lashes as drawn. |
+| `motmot.svg` | The master: vector paths plus one raster shading layer. The outline, the silhouette and every region are vector paths traced from the drawing, sharp at any size; the airbrush shading inside them is the drawing's own (embedded at the drawing's 779 px), clipped to those paths, and soft by nature, so it holds up when enlarged. The eye is recoloured to #E0381C (the owner's pick E2), the pupil, ring and lashes as drawn. |
 | `motmot-small.svg` | For 32 px and below: the same silhouette with heavier lines and the finest detail (eyelashes, the racket's split, the wing's tuft) left out. All vector. |
 | `motmot-mono.svg` | One colour with the inner lines and the eye cut through, for Android's themed icons. |
 | `wordmark.svg` | The name in Unbounded SemiBold at -40 thousandths of an em, outlined and kerned, in mint #B3E9C2. Unbounded is SIL Open Font License 1.1 (`OFL-Unbounded.txt`); no font file ships in the apps. |

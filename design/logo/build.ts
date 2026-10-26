@@ -19,6 +19,12 @@ export const ART = { scale: 1.28, x: -0.2, y: 0.08 };
 export const KEEP = [[330, 37], [353, 58], [403, 58], [353, 108], [403, 108], [470, 60], [652, 128], [420, 158],
   [655, 146], [694, 190], [621, 170], [632, 330]] as const;
 export const ANDROID_K = 0.95;
+/** The tvOS front layer's bird: its whole ink (0.978 of its square, from 0.0107 down) at 0.82 of the layer's
+ * height, in the middle, so the tilt never shows an edge cut. The square's side and top left in a w x h layer. */
+export function tvFront(w: number, h: number) {
+  const s = (0.82 * h) / 0.978;
+  return { s, x: w / 2 - 0.5 * s, y: (h - 0.978 * s) / 2 - 0.0107 * s };
+}
 export const MASKABLE_K = 0.83;
 
 const master = readFileSync(join(here, "motmot.svg"), "utf8");
@@ -70,7 +76,7 @@ function render(file: string, w: number, h: number, body: string, opaque = false
     run(["magick", png, "-strip", ...(file.endsWith(".jpg") ? ["-quality", "90"] : ["-quality", "90", "-define", "webp:method=6"]), file]);
     rmSync(png);
   } else if (opaque) {
-    run(["magick", file, "-background", BG, "-alpha", "remove", "-alpha", "off", "-strip", file]);
+    run(["magick", file, "-background", BG, "-alpha", "remove", "-alpha", "off", "-strip", `PNG24:${file}`]);
   }
 }
 
@@ -89,12 +95,13 @@ if (import.meta.main) {
   // iOS and iPadOS: one full-bleed, opaque 1024 square; the system masks it.
   const appicon = join(xc, "AppIcon.appiconset");
   render(join(appicon, "ios-1024.png"), 1024, 1024, svg(1024, 1024, rect(1024, 1024) + art(1024, 1024)), true);
-  // macOS: the macOS 11 grid (an 824 rounded square on a 1024 canvas, with its shadow), which macOS 26 keeps as is.
+  // macOS: the macOS 11 grid (an 824 rounded square on a 1024 canvas, with its shadow); 32 px and below draw
+  // the small cut, whose heavier lines survive there.
   const macIcon = (n: number) => {
     const u = n / 1024;
     const body = `<defs><filter id="s" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur in="SourceAlpha" stdDeviation="${12 * u}"/>`
       + `<feOffset dy="${10 * u}"/><feComponentTransfer><feFuncA type="linear" slope="0.35"/></feComponentTransfer><feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>`
-      + `<g filter="url(#s)"><g transform="translate(${100 * u} ${100 * u})">${clip("m", 824 * u, 824 * u, 185 * u, rect(824 * u, 824 * u) + art(824 * u, 824 * u))}</g></g>`;
+      + `<g filter="url(#s)"><g transform="translate(${100 * u} ${100 * u})">${clip("m", 824 * u, 824 * u, 185 * u, rect(824 * u, 824 * u) + art(824 * u, 824 * u, 1, n <= 32 ? small : master))}</g></g>`;
     return svg(n, n, body);
   };
   const macImages = [];
@@ -111,10 +118,12 @@ if (import.meta.main) {
     info,
   });
 
-  // tvOS: a two-layer image stack (the near-black back, the bird in front, cut by the bottom edge) and the top shelf.
+  // tvOS: a two-layer image stack, the near-black back and the whole bird in front, 0.82 of the height in the
+  // middle: the front layer moves more than the back when the icon tilts, so a bird cut by its edge would show the
+  // cut. Then the top shelf.
   const tvBird = (w: number, h: number) => {
-    const s = ART.scale * h;
-    return bird(w / 2 - 0.5 * s, 0.08 * h, s);
+    const { s, x, y } = tvFront(w, h);
+    return bird(x, y, s);
   };
   const brand = join(xc, "App Icon & Top Shelf Image.brandassets");
   function stack(name: string, w: number, h: number, scales: number[]) {
@@ -249,7 +258,6 @@ if (import.meta.main) {
   run(["magick", join(pub, "favicon-16.tmp.png"), join(pub, "favicon-32.tmp.png"), join(pub, "favicon.ico")]);
   rmSync(join(pub, "favicon-16.tmp.png"));
   rmSync(join(pub, "favicon-32.tmp.png"));
-  writeFileSync(join(pub, "icon.svg"), svg(64, 64, clip("t", 64, 64, 12, rect(64, 64) + art(64, 64, 1, small))).replace(' width="64" height="64"', "") + "\n");
   mkdirSync(join(pub, "brand"), { recursive: true });
   writeFileSync(join(pub, "brand", "wordmark.svg"), wordmark);
   {

@@ -56,13 +56,12 @@ struct RootView: View {
         Group {
             if profiles.open && debrid.ready {
                 MainShell(core: core).id(profiles.epoch)
-            } else if core.failure != nil || !debrid.ready {
-                // The core stopped (only its message and the way back show,
-                // in the overlay), or its debrid accounts are not back yet.
+            } else if core.failure != nil {
+                // The core stopped: only its message and the way back show, in the overlay.
                 Theme.Palette.bg.ignoresSafeArea()
-            } else if profiles.snapshot != nil {
+            } else if debrid.ready, profiles.snapshot != nil {
                 ProfilePicker(mode: .gate, core: core)
-            } else if let problem = profiles.loadProblem {
+            } else if debrid.ready, let problem = profiles.loadProblem {
                 // The profiles view is opened again every 2 seconds meanwhile.
                 VStack(spacing: Theme.Space.s) {
                     Text("Profiles did not load").display(Theme.type.title1).foregroundStyle(Theme.Palette.text)
@@ -73,6 +72,8 @@ struct RootView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(Theme.Palette.bg)
             } else {
+                // The core opening, its debrid accounts coming back, the profiles answering: one starting
+                // screen through all of them, so the launch screen's bird never leaves.
                 Starting()
             }
         }
@@ -476,6 +477,8 @@ extension View {
 /// in mint, where the name helps. `size` is the name's old point size: the bird is 1.45 of it.
 struct Wordmark: View {
     var size: CGFloat = Theme.type.title3
+    /// False where text beside it already says the name (About's version line).
+    var spoken = true
 
     var body: some View {
         let bird = size * 1.45, word = bird * 0.45
@@ -488,6 +491,7 @@ struct Wordmark: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Momotus")
         .accessibilityAddTraits(.isHeader)
+        .accessibilityHidden(!spoken)
     }
 }
 
@@ -533,20 +537,27 @@ struct BrandLoading: View {
     }
 }
 
-/// What shows while the core opens and the profiles answer: nothing for half a second (a quick start never
-/// flashes it), then the filling mark, so a slow start never shows a blank screen.
+/// What shows while the core opens and the profiles answer: the launch screen's bird (LaunchMark, 120 pt, in the
+/// middle of the whole screen) from the first frame, so the hand-over shows nothing move, then after half a second
+/// the bird and the name filling, so a slow start never looks stuck.
 private struct Starting: View {
     @Environment(\.metrics) private var metrics
-    @State private var shown = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var filling = false
 
     var body: some View {
         ZStack {
-            Theme.Palette.bg.ignoresSafeArea()
-            if shown { BrandLoading(size: metrics.wide ? 56 : 40) }
+            Theme.Palette.bg
+            if filling {
+                BrandLoading(size: metrics.wide ? 56 : 40).transition(.opacity)
+            } else {
+                BrandMark(size: 120).transition(.opacity)
+            }
         }
+        .ignoresSafeArea()
         .task {
             try? await Task.sleep(for: .milliseconds(500))
-            shown = true
+            withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.35)) { filling = true }
         }
     }
 }

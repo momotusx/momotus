@@ -5,17 +5,31 @@ import { expect, test } from "bun:test";
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { ANDROID_K, ART, KEEP, MASKABLE_K } from "./build";
+import { ANDROID_K, ART, KEEP, MASKABLE_K, tvFront } from "./build";
 
 const root = join(import.meta.dir, "../..");
 const at = (...p: string[]) => join(root, ...p);
 const json = (...p: string[]) => JSON.parse(readFileSync(at(...p), "utf8"));
 
-/** A PNG's width and height, from its header. */
+/** A PNG's or a JPEG's width and height, from its header. */
 function size(file: string): [number, number] {
   const b = readFileSync(file);
+  if (b[0] === 0xff && b[1] === 0xd8) {
+    // JPEG: walk the segments to the frame header (SOF0 to SOF2).
+    for (let i = 2; i < b.length; i += 2 + b.readUInt16BE(i + 2)) {
+      if (b[i + 1] >= 0xc0 && b[i + 1] <= 0xc2) return [b.readUInt16BE(i + 7), b.readUInt16BE(i + 5)];
+    }
+    throw new Error(`${file}: no JPEG frame header`);
+  }
   expect(b.subarray(1, 4).toString()).toBe("PNG");
   return [b.readUInt32BE(16), b.readUInt32BE(20)];
+}
+
+/** No alpha channel: a JPEG, or a PNG of colour type 0 (grey) or 2 (RGB, what build.ts writes for these). The stores refuse a transparent
+ * iOS icon, tvOS back layer or top shelf. */
+function opaque(file: string): boolean {
+  const b = readFileSync(file);
+  return (b[0] === 0xff && b[1] === 0xd8) || b[25] === 0 || b[25] === 2;
 }
 
 /** The kept points in tile units, the art shrunk by k about the middle. */
@@ -37,6 +51,14 @@ test("the head, eye, beak and racket stay whole in the tile, Android's 66 dp cir
   }
   expect(farthest(ANDROID_K)).toBeLessThanOrEqual(33 / 72);
   expect(farthest(MASKABLE_K)).toBeLessThanOrEqual(0.4);
+  // tvOS: the whole bird inside its front layer, 5 percent clear of every edge, for every stack size.
+  for (const [w, h] of [[400, 240], [1280, 768]]) {
+    const { s, x, y } = tvFront(w, h);
+    expect(x + 0.0945 * s).toBeGreaterThanOrEqual(0.05 * w);
+    expect(x + 0.9055 * s).toBeLessThanOrEqual(0.95 * w);
+    expect(y + 0.0107 * s).toBeGreaterThanOrEqual(0.05 * h);
+    expect(y + 0.989 * s).toBeLessThanOrEqual(0.95 * h);
+  }
 });
 
 test("Apple: every image the catalog names exists at its size", () => {
@@ -45,6 +67,7 @@ test("Apple: every image the catalog names exists at its size", () => {
   for (const i of icon.images) {
     const px = Number(i.size.split("x")[0]) * (i.scale ? Number(i.scale[0]) : 1);
     expect(size(at(xc, "AppIcon.appiconset", i.filename))).toEqual([px, px]);
+    if (i.platform === "ios") expect(opaque(at(xc, "AppIcon.appiconset", i.filename))).toBe(true);
   }
   const brand = `${xc}/App Icon & Top Shelf Image.brandassets`;
   for (const a of json(brand, "Contents.json").assets) {
@@ -56,8 +79,8 @@ test("Apple: every image the catalog names exists at its size", () => {
       for (const i of json(brand, set, "Contents.json").images) {
         const s = Number(i.scale[0]);
         const file = at(brand, set, i.filename);
-        if (file.endsWith(".png")) expect(size(file)).toEqual([w * s, h * s]);
-        else expect(existsSync(file)).toBe(true);
+        expect(size(file)).toEqual([w * s, h * s]);
+        if (!set.includes("Front")) expect(opaque(file)).toBe(true);
       }
     }
   }
@@ -101,6 +124,7 @@ test("Android: the adaptive icon, its legacy icons and the TV banner at every de
     expect(size(at(res, `mipmap-${d}/ic_launcher_foreground.png`))).toEqual([108 * m, 108 * m]);
     expect(size(at(res, `mipmap-${d}/ic_launcher.png`))).toEqual([48 * m, 48 * m]);
     expect(size(at(res, `drawable-${d}/banner.png`))).toEqual([160 * m, 90 * m]);
+    expect(opaque(at(res, `drawable-${d}/banner.png`))).toBe(true);
   }
   // No placeholder left beside the generated images.
   expect(existsSync(at(res, "drawable/banner.xml"))).toBe(false);
