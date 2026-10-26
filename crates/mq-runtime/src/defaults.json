@@ -1875,7 +1875,7 @@
  },
  {
   "key": "streamingcatalogs",
-  "url": "https://7a82163c306e-stremio-netflix-catalog-addon.baby-beamup.club/bmZ4LGRucCxhbXAsYXRwLGhibSxwbXAscGNwLGhsdSxjcnUsbWJpOjo6MTc2MTQzNjgwMDAwMDowOjA6/manifest.json",
+  "url": "https://7a82163c306e-stremio-netflix-catalog-addon.baby-beamup.club/bmZ4LGhibSxkbnAsYW1wLGF0cCxwbXAscGNwLGhsdSxjcnUsbWJpOjo6MTc2MTQzNjgwMDAwMDowOjA6/manifest.json",
   "name": "Streaming Catalogs",
   "line": "What is trending on Netflix, Prime Video, Disney+, Apple TV+ and more.",
   "group": "catalogs",
@@ -1897,6 +1897,16 @@
      "name": "Netflix"
     },
     {
+     "id": "hbm",
+     "type": "movie",
+     "name": "HBO Max"
+    },
+    {
+     "id": "hbm",
+     "type": "series",
+     "name": "HBO Max"
+    },
+    {
      "id": "dnp",
      "type": "movie",
      "name": "Disney+"
@@ -1925,16 +1935,6 @@
      "id": "atp",
      "type": "series",
      "name": "Apple TV+"
-    },
-    {
-     "id": "hbm",
-     "type": "movie",
-     "name": "HBO Max"
-    },
-    {
-     "id": "hbm",
-     "type": "series",
-     "name": "HBO Max"
     },
     {
      "id": "pmp",

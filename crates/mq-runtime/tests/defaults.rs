@@ -1040,6 +1040,20 @@ async fn streaming_catalogs_moves_to_ten_services_and_home_keeps_its_five() {
         .unwrap();
     core.set_home_row_hidden(&netflix_series.row_id, true)
         .unwrap();
+    // The user moved Apple TV+ Movies above Disney+ Movies.
+    let row = |title: &str| {
+        core.home_catalogs()
+            .into_iter()
+            .find(|c| c.title == title)
+            .unwrap()
+            .row_id
+    };
+    let ids: Vec<String> = core.home_catalogs().into_iter().map(|c| c.row_id).collect();
+    let at = |id: String| ids.iter().position(|x| *x == id).unwrap() as i64;
+    let (apple, disney) = (row("Apple TV+ Movies"), row("Disney+ Movies"));
+    core.move_home_row(&apple, at(disney) - at(apple.clone()))
+        .unwrap();
+    let before = shown_titles(&core);
     drop(core);
 
     let core = device.start();
@@ -1048,12 +1062,13 @@ async fn streaming_catalogs_moves_to_ten_services_and_home_keeps_its_five() {
         (url("streamingcatalogs"), true),
         "same place, same switch"
     );
-    let mut want: Vec<String> = FIVE.iter().map(|t| t.to_string()).collect();
-    want.retain(|t| t != "Netflix Series");
-    let mut shown = shown_titles(&core);
-    shown.sort();
-    want.sort();
-    assert_eq!(shown, want, "the five it showed, less the row it hid");
+    // The five it showed, less the row it hid, in the order Home had them: HBO Max second, the user's move kept.
+    assert_eq!(shown_titles(&core), before);
+    assert_eq!(&before[..2], ["Netflix Movies", "HBO Max Movies"]);
+    let pos = |t: &str| before.iter().position(|x| x == t);
+    assert!(pos("Apple TV+ Movies") < pos("Disney+ Movies"));
+    assert_eq!(pos("Netflix Series"), None);
+    assert_eq!(before.len(), FIVE.len() - 1);
     assert!(
         service_rows(&core)
             .iter()
