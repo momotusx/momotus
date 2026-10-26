@@ -1,5 +1,6 @@
 package app.marquee.design
 
+import android.view.View
 import androidx.collection.ScatterMap
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Row
@@ -13,9 +14,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.shadow.ShadowContext
 import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.platform.LocalGraphicsContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.test.captureToImage
+import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.requestFocus
 import androidx.compose.ui.unit.dp
 import org.junit.Rule
 import org.junit.Test
@@ -106,6 +111,38 @@ class FocusShadowTest {
         val after = cached(context)
         assertEquals(1, after.size, "shadow renderers cached after focus moved to the other poster and back")
         assertSame(first.single(), after.single(), "the poster's shadow was built again")
+    }
+
+    /**
+     * A chip is as wide as its words, so a shadow per chip would be a bitmap per name kept for the session: the
+     * people linked on every title page (perf review r2, Q1). Chips cast none, so the cache stays empty.
+     */
+    @Test
+    fun `chips of different widths add no shadow bitmap`() {
+        val names = listOf("Denis Villeneuve", "Jon Spaihts", "Eric Roth", "Christopher Nolan", "Zendaya")
+        var focused = 0
+        lateinit var context: ShadowContext
+        lateinit var view: View
+        compose.setContent {
+            MarqueeTheme(Form.Tv) {
+                context = LocalGraphicsContext.current.shadowContext
+                view = LocalView.current
+                Row(Modifier.background(Color.White).padding(PAD.dp)) {
+                    names.forEach { name ->
+                        Chip(name, selected = false, onClick = {}, onFocusChange = { if (it) focused++ })
+                    }
+                }
+            }
+        }
+        // Native graphics start the window in touch mode, where a clickable takes no focus; a TV has no touch mode.
+        compose.runOnUiThread { view.rootView.requestFocusFromTouch() }
+        names.forEach { name ->
+            compose.onNode(hasText(name) and hasClickAction()).requestFocus()
+            compose.waitForIdle()
+            compose.onRoot().captureToImage()
+        }
+        assertEquals(names.size, focused, "every chip took focus")
+        assertEquals(0, cached(context).size, "shadow renderers cached after focus walked five names")
     }
 
     private companion object {

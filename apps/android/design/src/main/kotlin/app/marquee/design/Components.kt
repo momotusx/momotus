@@ -343,7 +343,10 @@ fun Chip(
         modifier =
             modifier
                 .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
-                .marqueeFocus(target / 2, Tokens.FOCUS_SCALE_CARD)
+                // No rise, so no shadow: a chip is as wide as its words (a person's name, a catalog), and the
+                // window keeps one shadow bitmap per size for the session, so linked names grew the Fire TV's
+                // heap title after title (FocusShadowTest). The white invert is the chip's focus.
+                .marqueeFocus(target / 2, Tokens.FOCUS_SCALE_CARD, rise = false)
                 .onFocusChanged {
                     focused = it.isFocused
                     onFocusChange?.invoke(it.isFocused)
