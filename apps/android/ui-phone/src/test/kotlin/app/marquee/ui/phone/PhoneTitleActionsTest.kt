@@ -18,13 +18,17 @@ import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.hasScrollAction
 import androidx.compose.ui.test.isHeading
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.unit.dp
 import app.marquee.core.client.CoreClient
 import app.marquee.core.client.CoreJson
@@ -111,12 +115,16 @@ class PhoneTitleActionsTest {
         SingletonImageLoader.reset()
     }
 
+    /** Every picture asked for, in order. */
+    private val asked = java.util.concurrent.CopyOnWriteArrayList<String>()
+
     /** Every picture answers (a small bitmap) but those in [missing], which fail as a 404 would. */
     private fun serve(vararg missing: String) {
         val picture = Bitmap.createBitmap(4, 6, Bitmap.Config.ARGB_8888).asImage()
         val factory =
             Fetcher.Factory<Uri> { data, _: Options, _: ImageLoader ->
                 Fetcher {
+                    asked += data.toString()
                     if (data.toString() in missing) error("HTTP 404")
                     ImageFetchResult(picture, isSampled = false, dataSource = DataSource.NETWORK) as FetchResult
                 }
@@ -431,7 +439,8 @@ class PhoneTitleActionsTest {
         val art = dp(bounds(TITLE_ART_TAG).height)
         assertTrue(art > band(360f, 740f) + 100f, "no cover: the art is $art dp")
         val (play, window) = playAndWindow()
-        assertTrue(play <= window, "Play ends at $play dp of $window")
+        // Clear of a phone's navigation bar too (up to 48 dp, and the app's own bar over it): 56 dp kept free.
+        assertTrue(play <= window - 56f, "Play ends at $play dp of $window: ${window - play} dp from the window's foot")
         // Play comes before the synopsis and the genres, right under the meta line, as on the iPhone (where they
         // sit, clipped or not).
         val words =
@@ -451,21 +460,73 @@ class PhoneTitleActionsTest {
         RuntimeEnvironment.setFontScale(1.3f)
         draw(wordy)
         val (play, window) = playAndWindow()
-        assertTrue(play <= window, "Play ends at $play dp of $window")
+        // Clear of a phone's navigation bar too (up to 48 dp, and the app's own bar over it): 56 dp kept free.
+        assertTrue(play <= window - 56f, "Play ends at $play dp of $window: ${window - play} dp from the window's foot")
     }
 
-    @Test
-    fun `a cover that does not load gives way to the backdrop band and the logo`() {
-        serve("https://a.example/c.jpg")
-        draw(cover)
+    /** Waits until the art is [height] dp high. */
+    private fun artBecomes(height: Float) {
         val deadline = System.currentTimeMillis() + 30_000
-        while (dp(bounds(TITLE_ART_TAG).height) > band(411f, 2400f) + 1f) {
-            check(System.currentTimeMillis() < deadline) { "the cover never gave way" }
+        while (kotlin.math.abs(dp(bounds(TITLE_ART_TAG).height) - height) > 1f) {
+            check(
+                System.currentTimeMillis() < deadline,
+            ) { "the art is ${dp(bounds(TITLE_ART_TAG).height)} dp, not $height" }
             Snapshot.sendApplyNotifications()
             compose.waitForIdle()
             Thread.sleep(20)
         }
+    }
+
+    @Test
+    fun `a large cover that does not load gives way to the addon's poster, still whole at 2 by 3`() {
+        serve("https://a.example/c.jpg")
+        draw(cover)
+        compose.waitUntil(30_000) { "https://a.example/c.jpg" in asked }
+        // The poster as the cover: the same 2:3 frame, no logo over it (it prints the title).
+        artBecomes(411f * 1.5f)
+        val deadline = System.currentTimeMillis() + 30_000
+        while (asked.count { it == "https://a.example/p.jpg" } == 0) {
+            check(System.currentTimeMillis() < deadline) { "the poster was never asked: $asked" }
+            compose.waitForIdle()
+            Thread.sleep(20)
+        }
+        compose.onAllNodesWithText("Sintel", useUnmergedTree = true).assertCountEquals(0)
+    }
+
+    @Test
+    @Config(qualifiers = "w411dp-h740dp")
+    fun `when the poster fails too the backdrop band and the logo come, and stay through a scroll`() {
+        serve("https://a.example/c.jpg", "https://a.example/p.jpg")
+        // A long page (cast, crew and the facts under the words), so the art leaves the list when it scrolls.
+        val long =
+            wordy.copy(
+                header =
+                    wordy.header.copy(
+                        details =
+                            wordy.header.details!!.copy(
+                                cast = (1..8).map { "Actor Number $it" },
+                                directors = listOf("A Director"),
+                                writers = listOf("A Writer", "Another Writer"),
+                            ),
+                    ),
+            )
+        draw(long)
+        artBecomes(band(411f, 740f))
         compose.onAllNodesWithText("Sintel", useUnmergedTree = true).assertCountEquals(1)
+        // The art scrolled out of the list and back: the failed cover and poster are not asked again.
+        val asks = asked.size
+        val list = compose.onAllNodes(hasScrollAction()).onFirst()
+        val count = list.fetchSemanticsNode().config[SemanticsProperties.CollectionInfo].rowCount
+        list.performScrollToIndex(count - 1)
+        compose.waitForIdle()
+        assertTrue(
+            compose.onAllNodesWithTag(TITLE_ART_TAG).fetchSemanticsNodes().isEmpty(),
+            "the art never left the list",
+        )
+        list.performScrollToIndex(0)
+        compose.waitForIdle()
+        artBecomes(band(411f, 740f))
+        assertEquals(asks, asked.size, "asked again: ${asked.drop(asks)}")
     }
 
     @Test

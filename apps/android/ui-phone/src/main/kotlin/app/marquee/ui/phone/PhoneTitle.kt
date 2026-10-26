@@ -27,6 +27,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -188,6 +189,12 @@ fun PhoneTitle(
                     onDismiss = { menuFor = null },
                 )
             }
+            // The cover's sources in order: the large cover, then the addon's poster (the same 2:3); each that does not
+            // load gives way to the next, then to the backdrop band with the logo. Held with the title, outside the
+            // list, so scrolling the art away and back never asks a failed one again.
+            val covers =
+                remember(details.cover, details.poster) { listOfNotNull(details.cover, details.poster).distinct() }
+            var coversFailed by remember(details.id) { mutableIntStateOf(0) }
             Box(modifier.fillMaxSize()) {
                 LazyColumn(
                     state = list,
@@ -199,9 +206,9 @@ fun PhoneTitle(
                         key = "art",
                     ) {
                         // The cover first: covers are vertical, and a backdrop is often a crop of the same art.
-                        // Only where its 2:3 fits, and the backdrop band again if it does not load.
-                        var coverFailed by remember(details.cover) { mutableStateOf(false) }
-                        val cover = details.cover?.takeIf { coverFits() && !coverFailed }
+                        // Only where its 2:3 fits.
+                        val at = coversFailed
+                        val cover = covers.getOrNull(at)?.takeIf { coverFits() }
                         Hero(
                             cover ?: details.background ?: details.poster,
                             details.logo,
@@ -210,7 +217,7 @@ fun PhoneTitle(
                             side,
                             cover = cover != null,
                             titled = details.coverTitled,
-                            onCoverError = { coverFailed = true },
+                            onCoverError = { if (coversFailed == at) coversFailed = at + 1 },
                             under = if (cover != null) details.poster else null,
                         )
                     }
@@ -377,24 +384,34 @@ private fun MoreLikeThis(
 }
 
 /**
- * A cover shows only where its 2:3 fits: a portrait phone (up to 600 dp wide), held to 75% of the window,
- * losing at most an eighth at its foot. A landscape phone or a tablet keeps the backdrop band.
+ * The room a cover leaves under it in the window: the meta line and Play at large text (about 125 dp) and the
+ * system's navigation bar over the page's foot (up to 56 dp), so Play is always on the first screen.
  */
+private val UNDER_COVER = 180.dp
+
+/** The cover's height: its own 2:3 across the window, held to 75% of it and to what leaves [UNDER_COVER] free. */
 @Composable
-internal fun coverFits(): Boolean {
+private fun coverHeight(): Dp {
     val window = windowDp()
-    return window.width <= 600.dp && window.height * 0.75f >= window.width * 1.5f * 0.88f
+    return minOf(window.width * 1.5f, window.height * 0.75f, window.height - UNDER_COVER)
 }
 
 /**
- * The artwork's height: a cover at its own 2:3, whole, held to 75% of the window; a backdrop at
- * [HERO_RATIO], held to 60% (landscape, tablets).
+ * A cover shows only where its 2:3 fits: a portrait phone (up to 600 dp wide), losing at most an eighth at its
+ * foot. A landscape phone, a short one or a tablet keeps the backdrop band.
+ */
+@Composable
+internal fun coverFits(): Boolean = windowDp().width <= 600.dp && coverHeight() >= windowDp().width * 1.5f * 0.88f
+
+/**
+ * The artwork's height: a cover as [coverHeight]; a backdrop at [HERO_RATIO], held to 60% (landscape,
+ * tablets).
  */
 @Composable
 internal fun heroHeight(cover: Boolean = false): Dp {
     val window = windowDp()
     return if (cover) {
-        minOf(window.width * 1.5f, window.height * 0.75f)
+        coverHeight()
     } else {
         minOf(
             window.width / HERO_RATIO,
