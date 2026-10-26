@@ -150,7 +150,7 @@ private const val KEY_HOLD_MS = 5_000L
 private fun Hero?.focusKey(): String? =
     when {
         this == null -> null
-        tile.playable() -> HERO_PLAY
+        playable() -> HERO_PLAY
         else -> HERO_DETAILS
     }
 
@@ -202,7 +202,7 @@ fun TvHome(
         heroes.getOrNull(to)?.let { next ->
             // Focus goes with the page to the same button: Play to Play, Details where the new page has no Play,
             // before the old Play leaves (the owner, 2026-10-26: the TV hero slides while focus rests on it).
-            if (state.focus.focusedKey == HERO_PLAY && state.focus.hasFocus && !next.tile.playable()) {
+            if (state.focus.focusedKey == HERO_PLAY && state.focus.hasFocus && !next.playable()) {
                 state.focus.requester(HERO_DETAILS)?.requestFocus()
             }
             heroFrom = heroes.getOrNull(heroPage)
@@ -379,7 +379,7 @@ fun TvHome(
                             heroClock,
                             heroFrom,
                             at = { heroPageAt(it, heroDir, heroSlide.value) },
-                            hasPlay = { heroes.getOrNull(it)?.tile?.playable() == true },
+                            hasPlay = { heroes.getOrNull(it)?.playable() == true },
                         ) { to ->
                             heroClock.manual()
                             pageHero(to, if (to > heroPage) 1 else -1)
@@ -596,7 +596,8 @@ private fun TvHero(
                 key(tile.id) { TvHeroLines(hero, Modifier.graphicsLayer { translationX = at(true) * width }) }
             }
             // Coming up from the rows, focus lands on Play, the hero's primary, wherever it came from.
-            val playable = tile.playable()
+            val play = hero.play
+            val playable = play != null
             Row(
                 Modifier
                     .padding(top = Marquee.space.s)
@@ -623,12 +624,12 @@ private fun TvHero(
                 horizontalArrangement = Arrangement.spacedBy(TopShelf.BUTTON_GAP),
                 verticalAlignment = Alignment.Top,
             ) {
-                if (playable) {
+                if (play != null) {
                     PrimaryButton(
-                        label = "Play",
+                        label = play.label,
                         icon = PlayFilled,
-                        onClick = { onPlay(tile) },
-                        modifier = Modifier.describe("Play ${tile.name}"),
+                        onClick = { onPlay(tile.copy(videoId = play.videoId)) },
+                        modifier = Modifier.describe("${play.label} ${tile.name}"),
                         focusRequester = playRequester,
                         onFocusChange =
                             state.focus.watch(HERO_ROW, HERO_PLAY).let { watch ->
@@ -932,7 +933,13 @@ internal suspend fun restoreFocus(
             if (wanted == null ||
                 gone
             ) {
-                firstTarget(rows, state.shownHero(home), patient = elapsed < PATIENCE_MS)
+                // A first entry waits for the hero's Play; a remembered key that is gone falls back at once.
+                firstTarget(
+                    rows,
+                    state.shownHero(home),
+                    patient = elapsed < PATIENCE_MS,
+                    playPatient = wanted == null && elapsed < PATIENCE_MS,
+                )
             } else {
                 wanted
             }
@@ -960,7 +967,7 @@ private fun exists(
     key: String,
 ): Boolean =
     when {
-        key == HERO_PLAY -> shown?.tile?.playable() == true
+        key == HERO_PLAY -> shown?.playable() == true
         key.startsWith("hero:") -> shown != null
         else -> rows.any { key in it.tileKeys() }
     }
@@ -1026,13 +1033,16 @@ internal fun focusAfterRemove(
  * it as tvOS has it (the top shelf fills the first screen, so a focused card there would sit half off it),
  * else the first tile of the first lane. While the first lane is still loading and [patient], there is no target yet, so
  * focus never lands on a lower lane just because it answered first; lanes that came back empty or
- * failed are skipped.
+ * failed are skipped. The hero's Play comes from the core a moment after its page: while [playPatient], a page
+ * without one waits for it rather than settle on Details.
  */
 fun firstTarget(
     rows: List<HomeRow>,
     hero: Hero?,
     patient: Boolean,
+    playPatient: Boolean = patient,
 ): String? {
+    if (hero != null && !hero.playable() && playPatient) return null
     hero.focusKey()?.let { return it }
     for (row in rows) {
         row.tileKeys().firstOrNull()?.let { return it }

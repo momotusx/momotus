@@ -66,7 +66,7 @@ import app.marquee.core.model.RowNotice
 import app.marquee.core.model.Tile
 import app.marquee.core.model.allFailed
 import app.marquee.core.model.notice
-import app.marquee.core.model.playable
+import app.marquee.core.model.playTile
 import app.marquee.core.model.tileKeys
 import app.marquee.core.model.withoutRemoved
 import app.marquee.core.views.HomeView
@@ -393,13 +393,6 @@ private fun PhoneHeroCarousel(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             MqText("Home", Modifier.weight(1f).semantics { heading() }, role = TextRole.Hero, maxLines = 1)
-            if (trailer.shown && !HeroTrailers.walk) {
-                var sound by remember { mutableStateOf(false) }
-                RoundButton(if (sound) Icons.Volume2 else Icons.VolumeX, if (sound) "Sound on" else "Sound off", {
-                    sound = !sound
-                    trailers.sound(sound)
-                })
-            }
         }
         if (heroes.size > 1) {
             HeroDots(
@@ -418,6 +411,11 @@ private fun PhoneHeroCarousel(
                     }
                 },
             )
+        }
+        // The trailer's sound, at the hero's foot level with the dots, as the TV app's (plans/appletv-polish.md 18):
+        // drawn while a trailer plays, under one name, on or off.
+        if (trailer.shown && (!HeroTrailers.walk || HeroTrailers.walkSwitch)) {
+            TrailerSoundSwitch(trailers, Modifier.align(Alignment.BottomEnd).padding(end = 16.dp, bottom = 5.dp))
         }
     }
 }
@@ -455,9 +453,13 @@ private fun PhoneHero(
                 .semantics {
                     // The buttons on the hero are hidden from screen readers, so Play is an action of the hero, which
                     // itself opens the details.
-                    if (tile.playable()) {
+                    hero.playTile()?.let { start ->
                         customActions =
-                            listOf(CustomAccessibilityAction("Play ${tile.name}") { onPlay(tile).let { true } })
+                            listOf(
+                                CustomAccessibilityAction("${hero.play?.label} ${tile.name}") {
+                                    onPlay(start).let { true }
+                                },
+                            )
                     }
                 }.clickable(role = Role.Button, onClickLabel = "Details of ${tile.name}") { onOpen(tile) },
         ) {
@@ -516,12 +518,13 @@ private fun PhoneHero(
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    if (tile.playable()) {
+                    val play = hero.play
+                    if (play != null) {
                         PrimaryButton(
-                            label = "Play",
+                            label = play.label,
                             icon = PlayFilled,
-                            onClick = { onPlay(tile) },
-                            modifier = Modifier.width(178.dp).describe("Play ${tile.name}"),
+                            onClick = { onPlay(tile.copy(videoId = play.videoId)) },
+                            modifier = Modifier.width(178.dp).describe("${play.label} ${tile.name}"),
                         )
                     }
                     RoundButton(Icons.Info, "Details", { onOpen(tile) })
@@ -531,8 +534,29 @@ private fun PhoneHero(
     }
 }
 
+/** The trailer's sound switch: one name, on or off, showing the session's choice ([HeroTrailers.sound]). */
+@Composable
+internal fun TrailerSoundSwitch(
+    trailers: TrailerHost,
+    modifier: Modifier = Modifier,
+) {
+    val sound = HeroTrailers.sound
+    RoundButton(
+        if (sound) Icons.Volume2 else Icons.VolumeX,
+        SOUND_LABEL,
+        { trailers.sound(!sound) },
+        modifier.testTag(PHONE_HERO_SOUND),
+        selected = sound,
+        toggle = true,
+    )
+}
+
 /** The hero and its button row, for tests of where they sit. */
 internal const val PHONE_HERO_TAG = "home-hero"
+
+/** The trailer's sound switch, and its one name. */
+internal const val PHONE_HERO_SOUND = "home-hero-sound"
+internal const val SOUND_LABEL = "Trailer sound"
 internal const val PHONE_HERO_BUTTONS = "home-hero-buttons"
 
 /** The frame's 390 by 680. */

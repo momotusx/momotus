@@ -42,9 +42,19 @@ import kotlin.math.roundToInt
  * back before it plays, takes no touch or focus, and goes back to the art a second before its cap.
  */
 object HeroTrailers {
-    /** A walk build: the sound switch is never drawn (`WalkMute`, read by the app). */
+    /** A walk build (`WalkMute`, read by the app): no sound reaches the player, whatever the switch says. */
     @Volatile
     var walk = false
+
+    /** A walk that asked to see the sound switch (`--ez soundSwitch true`); it stays silent all the same. */
+    @Volatile
+    var walkSwitch = false
+
+    /**
+     * The viewer's sound for the hero's trailers, for this session: off at launch, and only a press of the switch
+     * turns it on. A new trailer, and a switch drawn again, keep it.
+     */
+    var sound by mutableStateOf(false)
 
     /** The art above the player fades this long after YouTube says it plays (Phase 0: its controls are gone by 4 s). */
     const val REVEAL_MS = 4500L
@@ -170,9 +180,6 @@ class TrailerHost internal constructor(
     private val main = android.os.Handler(android.os.Looper.getMainLooper())
     private val reveal = Runnable { state?.shown = true }
 
-    /** The viewer turned the sound on: it holds for this Home visit. */
-    private var soundOn = false
-
     /**
      * The player's page has loaded: until then a call waits (the last one wins), since a call that reached the page
      * before its script would run nothing, or worse, the browser's own `stop()`, which cancels the page's load.
@@ -256,10 +263,10 @@ class TrailerHost internal constructor(
         if (web != null) run("halt()")
     }
 
-    /** Sound for this session only; never in a walk. */
+    /** The switch was pressed: sound for this session ([HeroTrailers.sound]); never in a walk. */
     fun sound(on: Boolean) {
+        HeroTrailers.sound = on
         if (HeroTrailers.walk) return
-        soundOn = on
         if (web != null) run(if (on) "sound(true)" else "sound(false)")
     }
 
@@ -284,7 +291,7 @@ class TrailerHost internal constructor(
             "playing" -> {
                 s.playing = true
                 main.postDelayed(reveal, HeroTrailers.REVEAL_MS)
-                if (soundOn && !HeroTrailers.walk) web?.evaluateJavascript("sound(true)", null)
+                if (HeroTrailers.sound && !HeroTrailers.walk) web?.evaluateJavascript("sound(true)", null)
             }
 
             "time" -> {

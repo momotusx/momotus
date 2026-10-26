@@ -3,6 +3,7 @@ package app.marquee.ui.tv
 import app.marquee.core.TileCopy
 import app.marquee.core.model.Hero
 import app.marquee.core.model.HomeRow
+import app.marquee.core.model.PlayTarget
 import app.marquee.core.model.RowState
 import app.marquee.core.model.Tile
 import kotlin.test.Test
@@ -22,7 +23,13 @@ class FirstTargetTest {
         tiles = tiles.map { Tile(id = it, kind = "movie", name = it, posterShape = "poster") },
     )
 
-    private val movieHero = Hero(Tile(id = "h", kind = "movie", name = "H", posterShape = "poster"), "", "reason")
+    private val movieHero =
+        Hero(
+            Tile(id = "h", kind = "movie", name = "H", posterShape = "poster"),
+            "",
+            "reason",
+            play = PlayTarget("h", "Play"),
+        )
     private val seriesHero = Hero(Tile(id = "s", kind = "series", name = "S", posterShape = "poster"), "", "reason")
 
     @Test
@@ -82,8 +89,12 @@ class FirstTargetTest {
     }
 
     @Test
-    fun `a series hero has no single video to play, so its Details takes the focus`() {
-        assertEquals("hero:details", firstTarget(listOf(row("b", RowState.Ready, "z")), seriesHero, patient = true))
+    fun `a hero page waits a moment for the core's Play, then its Details takes the focus`() {
+        val rows = listOf(row("b", RowState.Ready, "z"))
+        assertNull(firstTarget(rows, seriesHero, patient = true), "Play may still come")
+        assertEquals("hero:details", firstTarget(rows, seriesHero, patient = false))
+        val withPlay = seriesHero.copy(play = PlayTarget("s:1:1", "Play S1:E1"))
+        assertEquals("hero:play", firstTarget(rows, withPlay, patient = true), "a series page with Play starts on it")
     }
 
     @Test

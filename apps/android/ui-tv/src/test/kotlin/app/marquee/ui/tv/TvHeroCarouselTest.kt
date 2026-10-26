@@ -19,6 +19,7 @@ import app.marquee.core.model.Hero
 import app.marquee.core.model.HomeHeader
 import app.marquee.core.model.HomeRow
 import app.marquee.core.model.HomeSnapshot
+import app.marquee.core.model.PlayTarget
 import app.marquee.core.model.RowState
 import app.marquee.core.model.Tile
 import app.marquee.core.views.HomeView
@@ -86,10 +87,12 @@ class TvHeroCarouselTest {
         id: String,
         name: String,
         kind: String,
+        play: PlayTarget? = if (kind == "movie") PlayTarget(id, "Play") else null,
     ) = Hero(
         Tile(id = id, kind = kind, name = name, posterShape = "poster"),
         rowId = "cinemeta:movie:top",
         reason = "#1 in Popular",
+        play = play,
     )
 
     private fun show(
@@ -100,6 +103,7 @@ class TvHeroCarouselTest {
                 hero("tt3", "Last Movie", "movie"),
             ),
         start: SemanticsMatcher = hasContentDescription("Play First Movie"),
+        onPlay: (Tile) -> Unit = {},
     ) {
         val snapshot =
             HomeSnapshot(
@@ -138,7 +142,7 @@ class TvHeroCarouselTest {
         compose.setContent {
             ui = rememberCoroutineScope()
             MarqueeTheme(Form.Tv) {
-                TvHome(home, state, onOpen = {}, onPlay = {}, onSetup = {}, onAddons = {})
+                TvHome(home, state, onOpen = {}, onPlay = onPlay, onSetup = {}, onAddons = {})
             }
         }
         home.open()
@@ -214,6 +218,26 @@ class TvHeroCarouselTest {
         frames(9_000)
         waitFor("the series page") { showing("The Series") && !showing("Second Movie") }
         waitFor("Details took the focus") { focused(hasText("Details")) }
+    }
+
+    @Test
+    fun `a series page with the core's Play takes the focus on Play, in its words, and plays its episode`() {
+        // The owner, 2026-10-26: Carrie showed Details alone. The core names the episode; the page says it.
+        var played: Tile? = null
+        show(
+            listOf(
+                hero("tt1", "First Movie", "movie"),
+                hero("tt2", "The Series", "series", PlayTarget("tt2:1:1", "Play S1:E1")),
+            ),
+            onPlay = { played = it },
+        )
+        frames(9_000)
+        waitFor("the series page") { showing("The Series") && !showing("First Movie") }
+        waitFor("its Play has the focus") { focused(hasContentDescription("Play S1:E1 The Series")) }
+        assertEquals(true, showing("Play S1:E1"), "the button reads the core's label")
+        compose.onNode(isFocused()).performKeyInput { pressKey(Key.DirectionCenter) }
+        waitFor("Play was chosen") { played != null }
+        assertEquals("tt2:1:1", played?.videoId, "Play opens the core's episode")
     }
 
     @Test

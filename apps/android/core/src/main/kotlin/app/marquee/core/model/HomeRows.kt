@@ -22,6 +22,12 @@ fun Tile.playable(): Boolean = videoId != null || kind == "movie"
 /** The video a Play on this tile starts. */
 fun Tile.playVideoId(): String = videoId ?: id
 
+/** A hero page's Play is the core's (`play`, the title page's target): none while a series' episodes are unread. */
+fun Hero.playable(): Boolean = play != null
+
+/** The tile a hero page's Play opens the player with: its title, at the core's video. */
+fun Hero.playTile(): Tile? = play?.let { tile.copy(videoId = it.videoId) }
+
 /**
  * Stable keys for a row's tiles, `tile:<rowId>:<tileId>`, with `#2`, `#3` for an id the row
  * repeats (a list rejects duplicate keys). Focus memory and lists both use them, never positions.

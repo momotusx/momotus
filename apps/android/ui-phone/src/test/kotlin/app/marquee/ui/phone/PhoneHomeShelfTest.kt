@@ -32,6 +32,7 @@ import app.marquee.core.model.Hero
 import app.marquee.core.model.HomeHeader
 import app.marquee.core.model.HomeRow
 import app.marquee.core.model.HomeSnapshot
+import app.marquee.core.model.PlayTarget
 import app.marquee.core.model.Ratings
 import app.marquee.core.model.RowState
 import app.marquee.core.model.Tile
@@ -135,6 +136,7 @@ class PhoneHomeShelfTest {
                 "A ragtag group barricade themselves in an old Pennsylvania farmhouse.",
                 listOf("Horror", "Thriller"),
                 "1 h 36 min",
+                play = PlayTarget("tt1", "Play"),
             )
         val snapshot =
             HomeSnapshot(

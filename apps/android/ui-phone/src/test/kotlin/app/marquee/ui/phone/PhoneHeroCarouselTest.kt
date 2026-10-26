@@ -2,12 +2,22 @@ package app.marquee.ui.phone
 
 import android.os.Handler
 import android.os.Looper
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.Snapshot
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.assertIsOff
+import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithContentDescription
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeLeft
 import androidx.compose.ui.test.swipeRight
@@ -18,11 +28,14 @@ import app.marquee.core.model.HomeHeader
 import app.marquee.core.model.HomeRow
 import app.marquee.core.model.HomeSnapshot
 import app.marquee.core.model.HomeUpdate
+import app.marquee.core.model.PlayTarget
 import app.marquee.core.model.RowState
 import app.marquee.core.model.Tile
 import app.marquee.core.views.HomeView
 import app.marquee.design.Form
+import app.marquee.design.HeroTrailers
 import app.marquee.design.MarqueeTheme
+import app.marquee.design.rememberTrailerHost
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
@@ -39,6 +52,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import java.util.concurrent.Executors
 import kotlin.coroutines.CoroutineContext
+import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
@@ -80,11 +94,15 @@ class PhoneHeroCarouselTest {
         Tile(id = id, kind = "movie", name = name, posterShape = "poster"),
         rowId = "row",
         reason = "Popular Movies",
+        play = PlayTarget(id, "Play"),
     )
 
     private val all = listOf(hero("tt1", "Page One"), hero("tt2", "Page Two"), hero("tt3", "Page Three"))
 
-    private fun show(pages: List<Hero> = all) {
+    private fun show(
+        pages: List<Hero> = all,
+        onPlay: (Tile) -> Unit = {},
+    ) {
         val snapshot =
             HomeSnapshot(
                 HomeHeader(pages),
@@ -119,7 +137,7 @@ class PhoneHeroCarouselTest {
         val home = HomeView(client, scope)
         compose.mainClock.autoAdvance = false
         compose.setContent {
-            MarqueeTheme(Form.Phone) { PhoneHome(home, onOpen = {}, onPlay = {}, onSetup = {}, onAddons = {}) }
+            MarqueeTheme(Form.Phone) { PhoneHome(home, onOpen = {}, onPlay = onPlay, onSetup = {}, onAddons = {}) }
         }
         home.open()
         waitFor("the first page") { settledOn("Page One") }
@@ -197,5 +215,58 @@ class PhoneHeroCarouselTest {
         waitFor("still on the first page") { settledOn("Page One") }
         compose.onNodeWithText("Page One").performTouchInput { swipeRight() }
         waitFor("the swipe back reached the last page") { settledOn("Page Three") }
+    }
+
+    @Test
+    fun `a series page plays the core's episode, in the core's words`() {
+        // The owner, 2026-10-26: Carrie showed Details alone.
+        var played: Tile? = null
+        val series =
+            Hero(
+                Tile(id = "tt7", kind = "series", name = "The Series", posterShape = "poster"),
+                rowId = "row",
+                reason = "Popular Series",
+                play = PlayTarget("tt7:2:3", "Resume S2:E3", resumeMs = 600_000),
+            )
+        show(listOf(series, all[0]), onPlay = { played = it })
+        waitFor("the series page") { settledOn("The Series") }
+        // The button says it; the hero carries it as its action (the buttons are for sighted touch).
+        compose.onNodeWithText("Resume S2:E3", useUnmergedTree = true).assertExists()
+        val play =
+            compose
+                .onAllNodesWithTag(PHONE_HERO_TAG)
+                .fetchSemanticsNodes()
+                .flatMap { it.config.getOrElse(SemanticsActions.CustomActions) { emptyList() } }
+                .single { it.label == "Resume S2:E3 The Series" }
+        compose.runOnIdle { play.action() }
+        assertEquals("tt7:2:3", played?.videoId, "Play opens the core's episode")
+    }
+
+    @Test
+    fun `the sound switch is one name, off at launch, and keeps the session's choice when drawn again`() {
+        HeroTrailers.sound = false
+        var drawn by mutableStateOf(true)
+        try {
+            compose.setContent {
+                MarqueeTheme(Form.Phone) {
+                    val trailers = rememberTrailerHost()
+                    if (drawn) TrailerSoundSwitch(trailers)
+                }
+            }
+            compose.onNodeWithTag(PHONE_HERO_SOUND).assertExists()
+            val switch = compose.onNodeWithContentDescription(SOUND_LABEL)
+            switch.assertIsOff()
+            switch.performClick()
+            compose.waitForIdle()
+            switch.assertIsOn()
+            assertTrue(HeroTrailers.sound, "the press is the session's sound")
+            drawn = false
+            compose.waitForIdle()
+            drawn = true
+            compose.waitForIdle()
+            compose.onNodeWithContentDescription(SOUND_LABEL).assertIsOn()
+        } finally {
+            HeroTrailers.sound = false
+        }
     }
 }
