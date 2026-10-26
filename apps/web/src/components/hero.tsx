@@ -445,7 +445,7 @@ function HeroWords(props: { hero: Hero; active: boolean }) {
             <Show when={h().playPending}>
               <span class="btn primary slot" aria-hidden="true">
                 <Play aria-hidden class="fill" />
-                {h().tile.kind === "movie" ? "Play" : "Play S1:E1"}
+                <PlayWords label={h().tile.kind === "movie" ? "Play" : "Play S1:E1"} />
               </span>
             </Show>
           }
@@ -459,7 +459,7 @@ function HeroWords(props: { hero: Hero; active: boolean }) {
               data-autofocus={props.active ? "" : undefined}
             >
               <Play aria-hidden class="fill" />
-              {play().label}
+              <PlayWords label={play().label} />
             </A>
           )}
         </Show>
@@ -494,5 +494,15 @@ function HeroWords(props: { hero: Hero; active: boolean }) {
         </Show>
       </div>
     </div>
+  );
+}
+
+/** Play's words in a cell as wide as the longest it can say (home.css `.play-words`), so Details never moves
+ * whatever lands (the lead, 2026-10-26); the phone's Play is a fixed width already. */
+function PlayWords(props: { label: string }) {
+  return (
+    <span class="play-words">
+      <span>{props.label}</span>
+    </span>
   );
 }

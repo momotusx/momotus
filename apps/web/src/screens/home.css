@@ -218,6 +218,13 @@
 [data-form="phone"] .hero .acts { justify-content: center; margin-top: 18px; }
 [data-form="phone"] .hero .acts .btn.primary { width: 178px; height: 48px; justify-content: center; }
 .hero .acts .slot { visibility: hidden; pointer-events: none; }
+/* Play's words over the longest it can say ("Resume S12:E10", "Play S12:E10"; "Play again" is shorter), stacked
+ * unseen in one cell: the pill is as wide on every page, and Details never moves. Off the phone, whose Play is 178. */
+.play-words { display: inline-grid; justify-items: center; }
+.play-words > *, .play-words::before, .play-words::after { grid-area: 1 / 1; white-space: nowrap; }
+.play-words::before, .play-words::after { visibility: hidden; }
+[data-form="desktop"] .hero .play-words::before, [data-form="tv"] .hero .play-words::before { content: "Resume S12:E10"; }
+[data-form="desktop"] .hero .play-words::after, [data-form="tv"] .hero .play-words::after { content: "Play S12:E10"; }
 [data-form="phone"] .hero .rbtn .ring { width: 48px; height: 48px; }
 [data-form="phone"] .hero .rbtn .ring svg { width: 22px; height: 22px; }
 [data-form="phone"] .hero .acts .rbtn .lbl { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }

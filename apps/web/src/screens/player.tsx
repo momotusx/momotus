@@ -36,6 +36,7 @@ import { videoContext } from "../core/video";
 import { autoFocusSoon, goBack, isBackKey, restoreSoon } from "../focus/dom";
 import { form } from "../form";
 import { backThenReplace, entryFrom, historyBase, historyDepth, markBack, ownState, takeBack } from "../history";
+import { setMuted as setTrailerMuted } from "../components/yt-player";
 import { Loading, type Wait } from "../player/loading";
 import { SubtitlePicker } from "../player/subtitle-picker";
 import { createVideoEngine } from "../player/video-engine";
@@ -134,6 +135,9 @@ export default function Player() {
 
 function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: string | null; startOver: boolean; viaTitle: boolean; binge?: string; retry: () => void }) {
   const navigate = useNavigate();
+  // Every play passes here: the hero's trailers are muted again, so Home after a film is never loud by surprise
+  // (the lead, 2026-10-26). A tab or a page change on Home keeps the viewer's choice.
+  setTrailerMuted(true);
   // The page this play was opened from, read when needed: the router renders
   // a route before it writes its history entry. Leaving the play for that
   // same page (Versions, or the title for Episodes) goes back to it; any

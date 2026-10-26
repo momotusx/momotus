@@ -362,6 +362,76 @@ for (const form of ["phone", "desktop"] as const) {
   });
 }
 
+/** Sends the core's last header again with every page's Play saying `label`. */
+async function relabel(context: BrowserContext) {
+  type Header = { heroes: { play: { label: string } | null }[] };
+  const r = { sub: -1, header: null as Header | null, send: (_label: string) => {} };
+  await context.routeWebSocket(/\/ws$/, (ws) => {
+    const server = ws.connectToServer();
+    ws.onMessage((m) => server.send(m));
+    server.onMessage((m) => {
+      const text = String(m);
+      if (text.includes('"heroes"')) {
+        const msg = JSON.parse(text);
+        if (msg.result?.snapshot?.header) {
+          r.sub = msg.result.sub;
+          r.header = msg.result.snapshot.header;
+        }
+        for (const u of msg.updates ?? []) if (u.kind === "header") r.header = u.header;
+      }
+      ws.send(text);
+    });
+    r.send = (label) => {
+      const header = structuredClone(r.header) as Header;
+      for (const h of header.heroes) if (h.play) h.play.label = label;
+      ws.send(JSON.stringify({ sub: r.sub, updates: [{ kind: "header", header }] }));
+    };
+  });
+  return r;
+}
+
+for (const form of ["desktop", "tv"] as const) {
+  test(`${form}: Play is as wide as its longest words, so Details never moves whatever it says`, async ({ browser }) => {
+    const context = await browser.newContext({ viewport: form === "tv" ? { width: 1920, height: 1080 } : { width: 1440, height: 900 } });
+    const r = await relabel(context);
+    const page = await home(context, form);
+    const on = page.locator(".hero-page.on");
+    await expect(on.locator('[data-f="hero:play"]')).toHaveCount(1, { timeout: 10_000 });
+    const boxes: ({ x: number; y: number; width: number; height: number } | null)[] = [];
+    for (const label of ["Play", "Play S1:E1", "Resume S12:E10", "Play again"]) {
+      r.send(label);
+      await expect(on.locator('[data-f="hero:play"]')).toHaveText(label);
+      boxes.push(await on.locator('[data-f="hero:details"]').boundingBox());
+    }
+    expect(boxes.every((b) => JSON.stringify(b) === JSON.stringify(boxes[0]))).toBe(true);
+    await context.close();
+  });
+}
+
+test("phone: a film played mutes the trailers again; Home after it is never loud", async ({ browser }) => {
+  const { context, page } = await (await trailerPage(false))({ browser });
+  await page.clock.runFor(1500);
+  await expect.poll(async () => (await ytLog(page)).some((l) => l.startsWith("playVideo")), { timeout: 10_000 }).toBe(true);
+  const mute = page.locator(".trailer-mute");
+  await mute.click();
+  await expect(mute).toHaveAttribute("aria-pressed", "true");
+  // A play opens, then Back to Home.
+  await page.locator(".hero-page.on .acts a.btn.primary").click();
+  await expect.poll(() => new URL(page.url()).pathname).toMatch(/^\/play\//);
+  await page.goBack();
+  await expect(page.locator(".hero-page.on .reason")).toBeVisible({ timeout: 30_000 });
+  // The next trailer plays muted, the switch unpressed.
+  const before = (await ytLog(page)).length;
+  for (let i = 0; i < (await page.locator(".hero-dots .dot").count()) && !(await ytLog(page)).slice(before).some((l) => l.startsWith("playVideo")); i++) {
+    await page.locator(".hero-dots .dot").nth(i).click();
+    await page.clock.runFor(1500);
+  }
+  await expect.poll(async () => (await ytLog(page)).slice(before).some((l) => l.startsWith("playVideo")), { timeout: 10_000 }).toBe(true);
+  expect((await ytLog(page)).slice(before)).not.toContain("unMute");
+  await expect(mute).toHaveAttribute("aria-pressed", "false");
+  await context.close();
+});
+
 test("TV: a series page the timer brings lands the focus on its Play", async ({ browser }) => {
   const context = await browser.newContext({ viewport: { width: 1920, height: 1080 } });
   const page = await home(context, "tv");
