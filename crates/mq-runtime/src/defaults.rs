@@ -178,8 +178,10 @@ const DEFAULTS_MOVED: &str = "defaultsMoved.";
 /// old deployment answers `{}` whenever its own call to Trakt fails, and its
 /// author points to the maintained one; the Rotten Tomatoes addon is the
 /// owner's own, configured with RPDB's free key, so its posters carry the
-/// ratings band (the owner, 2026-10-22).
-const MOVED: [(&str, &str); 2] = [
+/// ratings band (the owner, 2026-10-22). Streaming Catalogs moved to its
+/// configured link with ten services for Discover's service filter
+/// (plans/discover-v2.md section 5).
+const MOVED: [(&str, &str); 3] = [
     (
         "trakt",
         "https://2ecbbd610840-trakt.baby-beamup.club/manifest.json",
@@ -187,6 +189,10 @@ const MOVED: [(&str, &str); 2] = [
     (
         "rottentomatoes",
         "https://7a82163c306e-rottentomatoes.baby-beamup.club/manifest.json",
+    ),
+    (
+        "streamingcatalogs",
+        "https://7a82163c306e-stremio-netflix-catalog-addon.baby-beamup.club/manifest.json",
     ),
 ];
 

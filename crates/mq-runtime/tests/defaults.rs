@@ -951,3 +951,167 @@ async fn the_rotten_tomatoes_addon_moves_to_the_owners_configured_link() {
     );
     assert!(rows.iter().all(|(u, _)| u != PLAIN));
 }
+
+/// Streaming Catalogs before 2026-10-26: the unconfigured link with its
+/// five services.
+const OLD_SERVICES: &str =
+    "https://7a82163c306e-stremio-netflix-catalog-addon.baby-beamup.club/manifest.json";
+
+fn old_services_manifest() -> String {
+    let catalogs: Vec<serde_json::Value> = ["nfx", "hbm", "dnp", "amp", "atp"]
+        .iter()
+        .zip(["Netflix", "HBO Max", "Disney+", "Prime  Video", "Apple TV+"])
+        .flat_map(|(id, name)| {
+            ["movie", "series"].map(|t| serde_json::json!({"id": id, "type": t, "name": name}))
+        })
+        .collect();
+    serde_json::json!({
+        "id": "pw.ers.netflix-catalog", "version": "1.1.1", "name": "Streaming Catalogs",
+        "resources": ["catalog"], "types": ["movie", "series"], "idPrefixes": ["tt"], "catalogs": catalogs
+    })
+    .to_string()
+}
+
+/// The service rows on Home: (title, hidden), in Home's order.
+fn service_rows(core: &Core) -> Vec<(String, bool)> {
+    core.home_catalogs()
+        .into_iter()
+        .filter(|c| c.row_id.starts_with("pw.ers.netflix-catalog@"))
+        .map(|c| (c.title, c.hidden))
+        .collect()
+}
+
+fn shown_titles(core: &Core) -> Vec<String> {
+    service_rows(core)
+        .into_iter()
+        .filter(|(_, hidden)| !hidden)
+        .map(|(t, _)| t)
+        .collect()
+}
+
+const FIVE: [&str; 10] = [
+    "Netflix Movies",
+    "Netflix Series",
+    "Disney+ Movies",
+    "Disney+ Series",
+    "Prime Video Movies",
+    "Prime Video Series",
+    "Apple TV+ Movies",
+    "Apple TV+ Series",
+    "HBO Max Movies",
+    "HBO Max Series",
+];
+
+/// plans/discover-v2.md section 5: a profile on the old link moves to the
+/// ten-service one once; Home keeps the five services it showed and the
+/// row the user hid, and the five new services are off Home until turned on.
+#[tokio::test]
+async fn streaming_catalogs_moves_to_ten_services_and_home_keeps_its_five() {
+    assert!(url("streamingcatalogs").contains("/bmZ4"));
+    let device = Device::new("services-moved");
+    let core = device.start();
+    let cinemeta = defaults::list()
+        .iter()
+        .find(|d| d.key == "cinemeta")
+        .unwrap();
+    let rows = vec![
+        AddonRow {
+            transport_url: cinemeta.url.clone(),
+            manifest_json: serde_json::to_string(&cinemeta.manifest).unwrap(),
+            position: 0,
+            enabled: true,
+            allow_private: false,
+        },
+        AddonRow {
+            transport_url: OLD_SERVICES.into(),
+            manifest_json: old_services_manifest(),
+            position: 1,
+            enabled: true,
+            allow_private: false,
+        },
+    ];
+    core.library()
+        .set_addons(OWNER, &rows, &core.hlc())
+        .unwrap();
+    let netflix_series = core
+        .home_catalogs()
+        .into_iter()
+        .find(|c| c.title == "Netflix Series")
+        .unwrap();
+    core.set_home_row_hidden(&netflix_series.row_id, true)
+        .unwrap();
+    drop(core);
+
+    let core = device.start();
+    assert_eq!(
+        urls(&core)[1],
+        (url("streamingcatalogs"), true),
+        "same place, same switch"
+    );
+    let mut want: Vec<String> = FIVE.iter().map(|t| t.to_string()).collect();
+    want.retain(|t| t != "Netflix Series");
+    let mut shown = shown_titles(&core);
+    shown.sort();
+    want.sort();
+    assert_eq!(shown, want, "the five it showed, less the row it hid");
+    assert!(
+        service_rows(&core)
+            .iter()
+            .any(|(t, hidden)| t == "Hulu Movies" && *hidden),
+        "a new service is off Home"
+    );
+    // Turned on in Customize Home, a new service shows.
+    let hulu = core
+        .home_catalogs()
+        .into_iter()
+        .find(|c| c.title == "Hulu Movies")
+        .unwrap();
+    core.set_home_row_hidden(&hulu.row_id, false).unwrap();
+    assert!(shown_titles(&core).contains(&"Hulu Movies".to_string()));
+}
+
+/// A fresh profile's Home shows the five services; a user's own configured
+/// link and another addon's "Hulu" list keep every row.
+#[tokio::test]
+async fn only_the_default_links_new_services_are_off_home() {
+    let core = Core::temporary(OWNER).unwrap();
+    core.install_defaults(&switches(&[])).unwrap();
+    let mut shown = shown_titles(&core);
+    shown.sort();
+    let mut five: Vec<String> = FIVE.iter().map(|t| t.to_string()).collect();
+    five.sort();
+    assert_eq!(shown, five);
+
+    // The user's own configuration of the same addon: all its rows show.
+    let core = Core::temporary(OWNER).unwrap();
+    let d = defaults::list()
+        .iter()
+        .find(|d| d.key == "streamingcatalogs")
+        .unwrap();
+    let own = AddonRow {
+        transport_url: d.url.replace("/bmZ4", "/aGx1"),
+        manifest_json: serde_json::to_string(&d.manifest).unwrap(),
+        position: 0,
+        enabled: true,
+        allow_private: false,
+    };
+    let mut other = own.clone();
+    other.transport_url = "https://example.com/lists/manifest.json".into();
+    other.position = 1;
+    other.manifest_json = serde_json::json!({
+        "id": "example.lists", "version": "1.0.0", "name": "Lists", "resources": ["catalog"], "types": ["series"],
+        "catalogs": [{"id": "hulu", "type": "series", "name": "Hulu"}]
+    })
+    .to_string();
+    core.library()
+        .set_addons(OWNER, &[own, other], &core.hlc())
+        .unwrap();
+    let rows = service_rows(&core);
+    assert!(rows.iter().all(|(_, hidden)| !hidden), "{rows:?}");
+    assert!(
+        core.home_catalogs()
+            .iter()
+            .any(|c| c.title == "Hulu Series" && !c.hidden),
+        "another addon's list stays"
+    );
+}

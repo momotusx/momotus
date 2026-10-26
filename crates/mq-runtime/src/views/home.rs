@@ -455,11 +455,25 @@ fn arrange(slots: Vec<CatalogSlot>, prefs: &HomeRows) -> Vec<(CatalogSlot, bool)
     slots
         .into_iter()
         .map(|(i, s)| {
-            let hidden =
-                prefs.hidden.contains(&s.row_id) || (twins[i] && !prefs.shown.contains(&s.row_id));
+            let off_by_default = twins[i] || added_service(&s);
+            let hidden = prefs.hidden.contains(&s.row_id)
+                || (off_by_default && !prefs.shown.contains(&s.row_id));
             (s, hidden)
         })
         .collect()
+}
+
+/// A service list the default Streaming Catalogs link brought for
+/// Discover's service filter (plans/discover-v2.md section 5): off Home
+/// until the user turns it on, so Home keeps the five it showed. Only the
+/// default link itself: a link or an addon the user added keeps its rows.
+fn added_service(slot: &CatalogSlot) -> bool {
+    const HOME: [&str; 5] = ["nfx", "hbm", "dnp", "amp", "atp"];
+    slot.addon.id() == "pw.ers.netflix-catalog"
+        && !HOME.contains(&slot.path.id.as_str())
+        && crate::defaults::list()
+            .iter()
+            .any(|d| d.key == "streamingcatalogs" && d.url == slot.addon.transport_url.as_str())
 }
 
 fn shown(arranged: Vec<(CatalogSlot, bool)>) -> Vec<CatalogSlot> {
@@ -1851,14 +1865,23 @@ mod tests {
             [
                 "Netflix Movies",
                 "Netflix Series",
-                "HBO Max Movies",
-                "HBO Max Series",
                 "Disney+ Movies",
                 "Disney+ Series",
                 "Prime Video Movies",
                 "Prime Video Series",
                 "Apple TV+ Movies",
-                "Apple TV+ Series"
+                "Apple TV+ Series",
+                "HBO Max Movies",
+                "HBO Max Series",
+                "Paramount+ Movies",
+                "Paramount+ Series",
+                "Peacock Movies",
+                "Peacock Series",
+                "Hulu Movies",
+                "Hulu Series",
+                "Crunchyroll Movies",
+                "Crunchyroll Series",
+                "Mubi Movies"
             ]
         );
     }

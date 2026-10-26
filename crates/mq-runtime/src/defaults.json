@@ -1875,16 +1875,16 @@
  },
  {
   "key": "streamingcatalogs",
-  "url": "https://7a82163c306e-stremio-netflix-catalog-addon.baby-beamup.club/manifest.json",
+  "url": "https://7a82163c306e-stremio-netflix-catalog-addon.baby-beamup.club/bmZ4LGRucCxhbXAsYXRwLGhibSxwbXAscGNwLGhsdSxjcnUsbWJpOjo6MTc2MTQzNjgwMDAwMDowOjA6/manifest.json",
   "name": "Streaming Catalogs",
-  "line": "What is trending on Netflix, HBO Max, Disney+, Prime Video and Apple TV+.",
+  "line": "What is trending on Netflix, Prime Video, Disney+, Apple TV+ and more.",
   "group": "catalogs",
   "manifest": {
    "id": "pw.ers.netflix-catalog",
    "logo": "https://play-lh.googleusercontent.com/TBRwjS_qfJCSj1m7zZB93FnpJM5fSpMA_wUlFDLxWAb45T9RmwBvQd5cWR5viJJOhkI",
    "version": "1.1.1",
    "name": "Streaming Catalogs",
-   "description": "Trending movies and series on Netflix, HBO Max, Disney+, Apple TV+ and more. Configure to choose your favourite services.",
+   "description": "Your favourite streaming services!",
    "catalogs": [
     {
      "id": "nfx",
@@ -1895,16 +1895,6 @@
      "id": "nfx",
      "type": "series",
      "name": "Netflix"
-    },
-    {
-     "id": "hbm",
-     "type": "movie",
-     "name": "HBO Max"
-    },
-    {
-     "id": "hbm",
-     "type": "series",
-     "name": "HBO Max"
     },
     {
      "id": "dnp",
@@ -1919,7 +1909,7 @@
     {
      "id": "amp",
      "type": "movie",
-     "name": "Prime  Video"
+     "name": "Prime Video"
     },
     {
      "id": "amp",
@@ -1935,6 +1925,61 @@
      "id": "atp",
      "type": "series",
      "name": "Apple TV+"
+    },
+    {
+     "id": "hbm",
+     "type": "movie",
+     "name": "HBO Max"
+    },
+    {
+     "id": "hbm",
+     "type": "series",
+     "name": "HBO Max"
+    },
+    {
+     "id": "pmp",
+     "type": "movie",
+     "name": "Paramount+"
+    },
+    {
+     "id": "pmp",
+     "type": "series",
+     "name": "Paramount+"
+    },
+    {
+     "id": "pcp",
+     "type": "movie",
+     "name": "Peacock"
+    },
+    {
+     "id": "pcp",
+     "type": "series",
+     "name": "Peacock"
+    },
+    {
+     "id": "hlu",
+     "type": "movie",
+     "name": "Hulu"
+    },
+    {
+     "id": "hlu",
+     "type": "series",
+     "name": "Hulu"
+    },
+    {
+     "id": "cru",
+     "type": "movie",
+     "name": "Crunchyroll"
+    },
+    {
+     "id": "cru",
+     "type": "series",
+     "name": "Crunchyroll"
+    },
+    {
+     "id": "mbi",
+     "type": "movie",
+     "name": "Mubi"
     }
    ],
    "resources": [
