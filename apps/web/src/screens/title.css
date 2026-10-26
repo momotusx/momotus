@@ -14,7 +14,9 @@
 /* A fixed height: the box is there before the logo loads, so nothing moves. */
 .title-logo.logo { height: 150px; width: auto; max-width: 480px; margin-bottom: 22px; object-position: left center; }
 /* Sized by area, as on Home's hero. */
-.title-logo.logo { --logo-area: 56000; height: clamp(84px, calc(sqrt(var(--logo-area) / var(--r, 3.2)) * 1px), 210px); }
+.title-logo.logo { --logo-area: 56000; height: clamp(84px, calc(sqrt(var(--logo-area) / var(--r, 3.2)) * 1px), 210px);
+  /* Its width from its shape too, so the box is whole before the picture decodes. */
+  aspect-ratio: var(--r, 3.2); }
 .title-logo.logo-text { font-size: var(--type-title1); margin-bottom: 16px; }
 .info .meta { font: 600 var(--type-callout) / 1.3 var(--font-text); color: var(--muted); margin-bottom: 14px; }
 .info .meta b { padding: 0 8px; font-weight: 400; color: var(--dim); }

@@ -3,7 +3,7 @@
 
 import { createEffect, createSignal, on, Show } from "solid-js";
 import { form } from "../form";
-import { trimmedLogo } from "../lib/trim";
+import { type TrimmedLogo, trimmedLogo } from "../lib/trim";
 import { pageColor } from "../theme/page";
 import { type Ramp, rampCss, ramps } from "./ramps";
 
@@ -46,8 +46,8 @@ export function Backdrop(props: {
 /** A logo with its transparent margins cut away (lib/trim.ts): undefined
  * while that runs (the box is there, nothing jumps when the cut lands), null
  * when the logo does not load at all. */
-export function useTrimmedLogo(src: () => string | null | undefined): () => string | null | undefined {
-  const [out, setOut] = createSignal<string | null | undefined>(undefined);
+export function useTrimmedLogo(src: () => string | null | undefined): () => TrimmedLogo | null | undefined {
+  const [out, setOut] = createSignal<TrimmedLogo | null | undefined>(undefined);
   createEffect(
     on(src, (url) => {
       setOut(undefined);
@@ -60,6 +60,7 @@ export function useTrimmedLogo(src: () => string | null | undefined): () => stri
 export function Logo(props: { src: string | null | undefined; name: string; class?: string; level?: 1 | 2 }) {
   const [broken, setBroken] = createSignal(false);
   const trimmed = useTrimmedLogo(() => props.src);
+  const ratio = () => trimmed()?.ratio;
   return (
     <Show
       when={props.src && !broken() && trimmed() !== null}
@@ -72,19 +73,16 @@ export function Logo(props: { src: string | null | undefined; name: string; clas
       <img
         class={`logo ${props.class ?? ""}`}
         classList={{ pending: trimmed() === undefined }}
-        src={trimmed() ?? undefined}
+        src={trimmed()?.src}
         alt=""
         decoding="async"
-        // Its shape, so the CSS can size every logo to one area (a stacked
-        // logo as tall as it needs, a wide one as low).
-        onLoad={(e) => {
-          const img = e.currentTarget;
-          const r = img.naturalWidth / img.naturalHeight;
-          img.style.setProperty("--r", r.toFixed(3));
-          // Narrower than 3.6:1, Home's hero draws it taller than 100 px, so
-          // the synopsis under it gives a line back (home.css).
-          img.dataset.shape = r < 3.6 ? "tall" : "wide";
-        }}
+        // Its shape, known with its source, so the CSS sizes every logo to one
+        // area (a stacked logo as tall as it needs, a wide one as low) from the
+        // first frame it is drawn in.
+        style={{ "--r": ratio()?.toFixed(3) }}
+        // Narrower than 3.6:1, Home's hero draws it taller than 100 px, so
+        // the synopsis under it gives a line back (home.css).
+        data-shape={ratio() === undefined ? undefined : (ratio() ?? 0) < 3.6 ? "tall" : "wide"}
         onError={() => setBroken(true)}
       />
     </Show>

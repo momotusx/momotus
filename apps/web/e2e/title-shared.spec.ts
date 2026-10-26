@@ -271,7 +271,8 @@ for (const form of Object.keys(FORMS) as Form[]) {
 
 // The TV title page is drawn whole from its first frame: Remove from Continue Watching comes with the title's own
 // header, the Versions button holds the width of its widest count, and the logo's box has its shape before the page
-// shows. Here Home and Versions answer 3 s late and the logo 1 s late, and nothing moves after the first frame.
+// shows. Here Home and Versions answer 3 s late and the logo (3:2, far from the 3.2:1 the box assumes without one)
+// 1 s late; every frame from the first that draws the page is measured, and none differs.
 test("tv: the action row keeps its box from the first frame, however late Home answers", async ({ browser }) => {
   const [width, height] = FORMS.tv;
   const context = await browser.newContext({ viewport: { width, height }, reducedMotion: "reduce" });
@@ -290,25 +291,38 @@ test("tv: the action row keeps its box from the first frame, however late Home a
       else server.send(text);
     });
   });
-  await context.route(/\/logo\//, (route) => setTimeout(() => void route.continue(), 1000));
+  const logo = '<svg xmlns="http://www.w3.org/2000/svg" width="600" height="400"><rect width="600" height="400" rx="40" fill="#e9e2d2"/></svg>';
+  await context.route(/\/logo\//, (route) =>
+    setTimeout(() => void route.fulfill({ status: 200, contentType: "image/svg+xml", headers: { "access-control-allow-origin": "*" }, body: logo }), 1000),
+  );
+  // Each frame's boxes (and whether Remove is there), kept when they differ from the frame before.
+  await context.addInitScript(() => {
+    const parts = [".info .title-logo", ".info .meta", ".info .acts", ".info .vnote", ".info .facts"];
+    const frames: string[] = [];
+    (window as unknown as { frames_: string[] }).frames_ = frames;
+    const tick = () => {
+      if (document.querySelector('[data-f="title:play"]')) {
+        const boxes = parts.map((s) => {
+          const r = document.querySelector(s)?.getBoundingClientRect();
+          return r ? `${s} ${Math.round(r.x)},${Math.round(r.y)} ${Math.round(r.width)}x${Math.round(r.height)}` : `${s} none`;
+        });
+        const frame = [...boxes, `remove ${document.querySelectorAll('[data-f="title:uncontinue"]').length}`].join("; ");
+        if (frames.at(-1) !== frame) frames.push(frame);
+      }
+      requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  });
   const page = await context.newPage();
   await page.goto(`/title/movie/${BBB_ID}?form=tv`);
   await expect(page.locator('[data-f="title:play"]')).toBeVisible({ timeout: 30_000 });
-  const boxes = () =>
-    page.evaluate(() =>
-      [".info .title-logo", ".info .meta", ".info .acts", ".info .vnote", ".info .facts"].map((s) => {
-        const r = document.querySelector(s)?.getBoundingClientRect();
-        return r ? [s, Math.round(r.x), Math.round(r.y), Math.round(r.width), Math.round(r.height)] : [s];
-      }),
-    );
-  const remove = page.locator('[data-f="title:uncontinue"]');
-  // Measured at once, with no waiting: Big Buck Bunny is in Continue Watching (the run's seed), so its Remove is
-  // there with the first frame.
-  const first = await boxes();
-  expect(await remove.count()).toBe(1);
   // Home answers after 3 s; by 4.5 s everything that comes has come.
   await page.waitForTimeout(4500);
-  expect(await boxes()).toEqual(first);
-  await expect(remove).toHaveCount(1);
+  const frames = await page.evaluate(() => (window as unknown as { frames_: string[] }).frames_);
+  // Big Buck Bunny is in Continue Watching (the run's seed), so its Remove is there with the first frame, and the
+  // logo is drawn at its own shape: taller than the 3.2:1 default would make it.
+  expect(frames, frames.join("\n")).toHaveLength(1);
+  expect(frames[0]).toContain("remove 1");
+  expect(await page.locator(".info .title-logo").evaluate((i) => getComputedStyle(i).getPropertyValue("--r"))).toBe("1.500");
   await context.close();
 });

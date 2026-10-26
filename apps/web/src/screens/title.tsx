@@ -84,8 +84,10 @@ function TitlePage(props: { kind: string; id: string; retry: () => void }) {
     });
   };
   const [artMissing, setArtMissing] = createSignal(false);
-  // The logo's box is sized by its shape, known once its cut lands: the page waits for it, so nothing under the
-  // logo moves after the first frame. A logo slower than LOGO_WAIT gives way to the name, for good on this page.
+  // The logo's box is sized by its shape, known once its cut lands: on TV the page waits for it, so nothing under
+  // the logo (the focused row) moves after the first frame. A logo slower than LOGO_WAIT gives way to the name, for
+  // good on this page. Phone and desktop draw at once: a cold logo takes about 1.1 s (p50) to arrive, too long to
+  // hold the page for (bench/tv-title-row-shift/logo-wait.jsonl).
   const logo = useTrimmedLogo(() => d()?.logo);
   const [logoGivenUp, setLogoGivenUp] = createSignal(false);
   createEffect(
@@ -93,13 +95,13 @@ function TitlePage(props: { kind: string; id: string; retry: () => void }) {
       () => d()?.logo,
       (url) => {
         setLogoGivenUp(false);
-        if (!url) return;
+        if (!url || form() !== "tv") return;
         const timer = setTimeout(() => logo() === undefined && setLogoGivenUp(true), LOGO_WAIT);
         onCleanup(() => clearTimeout(timer));
       },
     ),
   );
-  const logoSettled = () => !d()?.logo || logo() !== undefined || logoGivenUp();
+  const logoSettled = () => form() !== "tv" || !d()?.logo || logo() !== undefined || logoGivenUp();
   // TV and desktop scroll the page below the hero for More like this; the phone scrolls the document.
   let page: HTMLDivElement | undefined;
   const toTop = () => {
@@ -476,7 +478,6 @@ function Fact(props: { label: string; value: string }): JSX.Element {
     </Show>
   );
 }
-
 
 /** "36 min left" from what the file has left (Continue Watching's figure), else from the runtime,
  * else the position. */

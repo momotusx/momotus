@@ -48,9 +48,10 @@ export function Loading(props: {
         <div class="ld-body">
           <Show when={wait().n} keyed>
             {(n) => (
-              <div class="ld-mark" data-wait={n} style={{ "--p": String(fill().at) }} aria-hidden="true">
+              // The logo's shape sizes it (a wide logo by the width, a stacked one by its height), known with its source.
+              <div class="ld-mark" data-wait={n} style={{ "--p": String(fill().at), "--r": logo()?.ratio.toFixed(3) }} aria-hidden="true">
                 <Show
-                  when={!asName() && logo()}
+                  when={!asName() && logo()?.src}
                   fallback={
                     <Show when={asName() && props.name}>
                       {(name) => (
@@ -71,8 +72,6 @@ export function Loading(props: {
                         src={src()}
                         alt=""
                         decoding="async"
-                        // Its shape sizes it: a wide logo by the width, a stacked one by its height.
-                        onLoad={(e) => (e.currentTarget.parentElement as HTMLElement).style.setProperty("--r", (e.currentTarget.naturalWidth / e.currentTarget.naturalHeight).toFixed(3))}
                       />
                       <img class="ld-logo ld-solid" src={src()} alt={props.name ?? ""} decoding="async" />
                     </>
