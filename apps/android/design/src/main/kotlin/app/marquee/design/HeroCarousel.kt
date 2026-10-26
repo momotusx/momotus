@@ -112,7 +112,7 @@ fun heroClockRuns(
     pages: Int,
     /** TalkBack is on: a page that slides away under its focus is lost to it (WCAG 2.2.2; review r1, L4). */
     screenReader: Boolean = false,
-    /** TV: a hero button has focus, so no page changes under it (review r1, H2). */
+    /** TV: a key went down in the last 5 s, so nothing slides while the viewer moves (the owner, 2026-10-26). */
     held: Boolean = false,
 ): Boolean = pages > 1 && active && visible && !reducedMotion && !sliding && !trailerPlaying && !screenReader && !held
 

@@ -92,16 +92,17 @@ class TvHeroCarouselTest {
         reason = "#1 in Popular",
     )
 
-    private fun show() {
+    private fun show(
+        pages: List<Hero> =
+            listOf(
+                hero("tt1", "First Movie", "movie"),
+                hero("tt2", "The Series", "series"),
+                hero("tt3", "Last Movie", "movie"),
+            ),
+    ) {
         val snapshot =
             HomeSnapshot(
-                HomeHeader(
-                    listOf(
-                        hero("tt1", "First Movie", "movie"),
-                        hero("tt2", "The Series", "series"),
-                        hero("tt3", "Last Movie", "movie"),
-                    ),
-                ),
+                HomeHeader(pages),
                 listOf(
                     HomeRow(
                         "cinemeta:movie:top",
@@ -196,16 +197,38 @@ class TvHeroCarouselTest {
     }
 
     @Test
-    fun `a hero button with the focus holds the timed pages, and they go on once it leaves`() {
-        show()
-        frames(20_000)
-        assertEquals(true, showing("First Movie"), "the page changed under the focused Play")
-        assertEquals(true, focused(hasContentDescription("Play First Movie")))
-        // Down into the row: the hero is free to page.
-        press(Key.DirectionDown)
-        waitFor("a row tile has the focus") { focused(hasContentDescription("Row title 1", substring = true)) }
+    fun `the timed pages run with the focus on Play, and the focus goes with the page to the same button`() {
+        // The owner, 2026-10-26: the TV hero slides while focus rests on it.
+        show(
+            listOf(
+                hero("tt1", "First Movie", "movie"),
+                hero("tt4", "Second Movie", "movie"),
+                hero("tt2", "The Series", "series"),
+            ),
+        )
         frames(9_000)
-        waitFor("the timer paged on") { showing("The Series") }
+        waitFor("the timer paged with the focus on Play") { showing("Second Movie") && !showing("First Movie") }
+        waitFor("the new page's Play has the focus") { focused(hasContentDescription("Play Second Movie")) }
+        // Onto a page with no Play: its Details takes the focus, never nothing.
+        frames(9_000)
+        waitFor("the series page") { showing("The Series") && !showing("Second Movie") }
+        waitFor("Details took the focus") { focused(hasText("Details")) }
+    }
+
+    @Test
+    fun `a key press holds the timed pages for 5 s, then they go on`() {
+        show()
+        compose.onNode(isFocused()).performKeyInput { pressKey(Key.DirectionRight) }
+        waitFor("Details has the focus") { focused(hasText("Details")) }
+        // Past a whole dwell: without the hold the page would have gone at 8 s; with it, not before 5 + 8.
+        frames(10_000)
+        assertEquals(
+            true,
+            showing("First Movie") && !showing("The Series"),
+            "the page changed within 5 s of a key plus its dwell",
+        )
+        frames(5_000)
+        waitFor("the timer went on after the hold") { showing("The Series") }
     }
 
     @Test

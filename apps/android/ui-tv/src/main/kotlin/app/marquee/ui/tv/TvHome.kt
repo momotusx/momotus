@@ -30,6 +30,7 @@ import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -41,7 +42,6 @@ import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
-import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
@@ -110,6 +110,7 @@ import app.marquee.design.heroPageAt
 import app.marquee.design.laneHeight
 import app.marquee.design.rememberScreenReader
 import app.marquee.design.windowDp
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
@@ -142,6 +143,9 @@ private object TopShelf {
 }
 
 private const val FOCUS_WAIT_MS = 15_000L
+
+/** How long after the last key the hero's timed pages wait. */
+private const val KEY_HOLD_MS = 5_000L
 
 private fun Hero?.focusKey(): String? =
     when {
@@ -196,6 +200,11 @@ fun TvHome(
     val slideScope = rememberCoroutineScope()
     val pageHero: (Int, Int) -> Unit = { to, dir ->
         heroes.getOrNull(to)?.let { next ->
+            // Focus goes with the page to the same button: Play to Play, Details where the new page has no Play,
+            // before the old Play leaves (the owner, 2026-10-26: the TV hero slides while focus rests on it).
+            if (state.focus.focusedKey == HERO_PLAY && state.focus.hasFocus && !next.tile.playable()) {
+                state.focus.requester(HERO_DETAILS)?.requestFocus()
+            }
             heroFrom = heroes.getOrNull(heroPage)
             heroDir = dir
             state.heroId = next.tile.id
@@ -208,8 +217,18 @@ fun TvHome(
     }
     // Read in a derived state: a row move recomposes nothing here (review r1, M3).
     val atTop by remember(state.page) { derivedStateOf { state.page.firstVisibleItemIndex == 0 } }
-    // A hero button with focus holds the pages, so none leaves from under it (review r1, H2).
-    var heroFocused by remember { mutableStateOf(false) }
+    // A key pressed holds the pages for 5 s after it, so nothing slides while the viewer moves; focus resting on a
+    // hero button does not hold them (the owner, 2026-10-26).
+    var keyAt by remember { mutableLongStateOf(0L) }
+    var keyHeld by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        snapshotFlow { keyAt }.collectLatest {
+            if (it == 0L) return@collectLatest
+            keyHeld = true
+            delay(KEY_HOLD_MS)
+            keyHeld = false
+        }
+    }
     val screenReader = rememberScreenReader()
     RunHeroClock(
         heroClock,
@@ -222,7 +241,7 @@ fun TvHome(
                 trailerPlaying = false,
                 pages = heroes.size,
                 screenReader = screenReader,
-                held = heroFocused,
+                held = keyHeld,
             )
         },
     ) { pageHero((heroPage + 1) % heroes.size, 1) }
@@ -320,7 +339,12 @@ fun TvHome(
     // A focused row rests under the pill with its header, never behind it: a focused tile comes to rest
     // its header's room lower than the content's top (the lanes scroll on their own, TileLane).
     var headerRoom by remember { mutableStateOf(0.dp) }
-    Box(modifier.fillMaxSize()) {
+    Box(
+        modifier.fillMaxSize().onPreviewKeyEvent { e ->
+            if (e.type == KeyEventType.KeyDown) keyAt = System.nanoTime()
+            false
+        },
+    ) {
         heroFrom?.let { gone ->
             key(gone.tile.id) { TopShelfArt(gone.tile, state.page) { heroPageAt(false, heroDir, heroSlide.value) } }
         }
@@ -356,7 +380,6 @@ fun TvHome(
                             heroFrom,
                             at = { heroPageAt(it, heroDir, heroSlide.value) },
                             hasPlay = { heroes.getOrNull(it)?.tile?.playable() == true },
-                            onFocus = { heroFocused = it },
                         ) { to ->
                             heroClock.manual()
                             pageHero(to, if (to > heroPage) 1 else -1)
@@ -542,8 +565,6 @@ private fun TvHero(
     at: (Boolean) -> Float,
     /** Whether page `n` has Play: paging from Play to a page without one first moves focus to Details. */
     hasPlay: (Int) -> Boolean,
-    /** A hero button has focus, or not. */
-    onFocus: (Boolean) -> Unit,
     onPage: (Int) -> Unit,
 ) {
     val tile = hero.tile
@@ -581,7 +602,6 @@ private fun TvHero(
                     .padding(top = Marquee.space.s)
                     .focusProperties { enter = { if (playable) playRequester else FocusRequester.Default } }
                     .focusGroup()
-                    .onFocusChanged { onFocus(it.hasFocus) }
                     // Right from the last button pages on, Left from the first comes back, the focus staying on the
                     // same button, or on Details when the new page has no Play; no wrap by key. Any other key starts
                     // the page's time over.

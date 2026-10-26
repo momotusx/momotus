@@ -95,8 +95,8 @@ class HeroClockTest {
     }
 
     @Test
-    fun talkBackOrAFocusedHeroButtonHoldsTheTimedPages() {
-        // Review r1, L4 and H2.
+    fun talkBackOrAKeyPressHoldsTheTimedPages() {
+        // Review r1, L4; on TV a key pressed holds the pages for 5 s (the owner, 2026-10-26).
         assertTrue(
             heroClockRuns(
                 active = true,
