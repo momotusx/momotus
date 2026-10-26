@@ -2,11 +2,13 @@ package app.marquee.core
 
 import app.marquee.core.VersionsCopy.Badge.Look
 import app.marquee.core.VersionsCopy.EmptyStep
+import app.marquee.core.client.CoreJson
 import app.marquee.core.model.EmptyAction
 import app.marquee.core.model.EmptyKind
 import app.marquee.core.model.EmptyVersions
 import app.marquee.core.model.Group
 import app.marquee.core.model.HiddenSummary
+import app.marquee.core.model.KindChip
 import app.marquee.core.model.Reason
 import app.marquee.core.model.ReasonLine
 import app.marquee.core.model.RowOrigin
@@ -583,25 +585,24 @@ class VersionsCopyTest {
         assertEquals("4K, HDR, 2 GB, ready now", VersionsCopy.rowSpoken(row(sizeBytes = gb).copy(line = quick)))
     }
 
-    /** A pick and listed rows of these kinds, keyed by place ("0" the pick), each in the core's 4K section. */
-    private fun kinds(vararg kinds: SourceKind): VersionsSnapshot {
-        val rows = kinds.mapIndexed { i, k -> row().copy(key = "$i", kind = k) }
-        return snapshot(rows.first(), done = true).copy(
-            rows = rows.drop(1),
-            sections = listOf(VersionSection(SectionQuality.Uhd, rows.drop(1).map { it.key })),
-            smaller = rows.last(),
-            sharper = rows.last(),
-        )
-    }
+    private fun kinds(
+        vararg kinds: KindChip,
+        selected: SourceKind? = null,
+    ) = snapshot(row(), done = true).copy(kinds = kinds.toList(), selectedKind = selected)
 
     @Test
-    fun `the kind chips show only with two kinds, each with its count, the pick counted`() {
-        assertEquals(emptyList(), VersionsCopy.kinds(kinds(SourceKind.Torrent, SourceKind.Torrent)))
-        assertEquals(emptyList(), VersionsCopy.kinds(null))
-        val chips =
-            VersionsCopy.kinds(
-                kinds(SourceKind.Debrid, SourceKind.Torrent, SourceKind.Torrent, SourceKind.Direct),
+    fun `the kind chips are All and the core's kinds, from two kinds on, each spoken with its count`() {
+        val one = kinds(KindChip(SourceKind.Torrent, null, 3))
+        assertFalse(VersionsCopy.showsKinds(one))
+        assertFalse(VersionsCopy.showsKinds(null))
+        val three =
+            kinds(
+                KindChip(SourceKind.Torrent, null, 37),
+                KindChip(SourceKind.Direct, null, 1),
+                KindChip(SourceKind.Debrid, null, 1204),
             )
+        assertTrue(VersionsCopy.showsKinds(three))
+        val chips = VersionsCopy.kindChips(three)
         assertEquals(
             listOf(
                 null to "All",
@@ -611,37 +612,39 @@ class VersionsCopyTest {
             ),
             chips.map { it.kind to it.label },
         )
-        assertEquals(listOf(4, 2, 1, 1), chips.map { it.count })
-        assertEquals("Torrents, 2 versions", chips[1].spoken)
+        assertEquals(listOf(null, "37", "1", "1,204"), chips.map { it.note })
+        assertEquals("Torrents, 37 versions", chips[1].spoken)
         assertEquals("Direct links, 1 version", chips[2].spoken)
-        // One service named by the core names the chip and the card.
-        val named = kinds(SourceKind.Debrid, SourceKind.Direct).copy(debridService = "Real-Debrid")
-        assertEquals("Real-Debrid", VersionsCopy.kinds(named).last().label)
-        assertEquals("Best on Real-Debrid", VersionsCopy.kicker(named, SourceKind.Debrid, "Best for this TV"))
+        // A kind from a newer core is left out.
         assertEquals(
-            "Best debrid link",
-            VersionsCopy.kicker(kinds(SourceKind.Debrid, SourceKind.Direct), SourceKind.Debrid, "x"),
+            2,
+            VersionsCopy
+                .kindChips(
+                    kinds(KindChip(SourceKind.Unknown, null, 2), KindChip(SourceKind.Direct, null, 1)),
+                ).size,
         )
-        assertEquals("Best for this TV", VersionsCopy.kicker(named, null, "Best for this TV"))
-        assertEquals("1,204", VersionsCopy.KindChip(null, "All", 1204, "").note)
     }
 
     @Test
-    fun `a kind's page is its first row in the card, the rest of it in the sections, and no shortcuts`() {
-        val all = kinds(SourceKind.Debrid, SourceKind.Torrent, SourceKind.Direct, SourceKind.Torrent)
-        assertEquals(all, VersionsCopy.ofKind(all, null))
-        val torrents = VersionsCopy.ofKind(all, SourceKind.Torrent)!!
-        assertEquals("1", torrents.recommended?.key)
-        assertEquals(listOf("3"), torrents.rows.map { it.key })
-        assertEquals(listOf(listOf("3")), torrents.sections.map { it.keys })
-        assertNull(torrents.smaller)
-        assertNull(torrents.sharper)
-        // The pick's own kind keeps it in the card.
-        assertEquals("0", VersionsCopy.ofKind(all, SourceKind.Debrid)?.recommended?.key)
-        assertEquals(emptyList(), VersionsCopy.ofKind(all, SourceKind.Debrid)?.sections)
-        // A kind that has no chip (one kind left) is All.
-        val one = kinds(SourceKind.Torrent, SourceKind.Torrent)
-        assertEquals(one, VersionsCopy.ofKind(one, SourceKind.Direct))
-        assertEquals("x", VersionsCopy.kicker(one, SourceKind.Torrent, "x"))
+    fun `the card's kicker follows the kind the core lists, with the debrid service it names`() {
+        val named = arrayOf(KindChip(SourceKind.Debrid, "Real-Debrid", 2), KindChip(SourceKind.Direct, null, 1))
+        assertEquals("Best for this TV", VersionsCopy.kicker(kinds(*named), "Best for this TV"))
+        assertEquals("Best on Real-Debrid", VersionsCopy.kicker(kinds(*named, selected = SourceKind.Debrid), "x"))
+        assertEquals("Real-Debrid", VersionsCopy.kindChips(kinds(*named))[1].label)
+        assertEquals("Best direct link", VersionsCopy.kicker(kinds(*named, selected = SourceKind.Direct), "x"))
+        assertEquals("Best torrent", VersionsCopy.kicker(kinds(selected = SourceKind.Torrent), "x"))
+        val unnamed = kinds(KindChip(SourceKind.Debrid, null, 2), selected = SourceKind.Debrid)
+        assertEquals("Best debrid link", VersionsCopy.kicker(unnamed, "x"))
+    }
+
+    @Test
+    fun `a row from a core that names no kind decodes as a direct link`() {
+        val row =
+            CoreJson.decodeFromString(
+                VersionRow.serializer(),
+                """{"key":"k","quality":"4K","features":[],"sizeBytes":null,"status":{"kind":"direct"},"via":"X",
+                    "releaseName":"A","languages":[],"reasons":[],"group":"best","failoverCount":0,${VersionsFixtures.ROW_JSON}}""",
+            )
+        assertEquals(SourceKind.Direct, row.kind)
     }
 }

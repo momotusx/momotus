@@ -34,6 +34,7 @@ import app.marquee.core.model.ProfilesSnapshot
 import app.marquee.core.model.RowState
 import app.marquee.core.model.SearchSnapshot
 import app.marquee.core.model.SignInSnapshot
+import app.marquee.core.model.SourceKind
 import app.marquee.core.model.Tile
 import app.marquee.core.model.TitleHeader
 import app.marquee.core.model.TitleSnapshot
@@ -466,6 +467,11 @@ class VersionsView(
     fun freeze() {
         CoreLog.d("versions: the pick is frozen")
         post(command("freeze"))
+    }
+
+    /** Lists one kind of version only, or every one ([kind] null); the core freezes the pick (`setKind`). */
+    fun setKind(kind: SourceKind?) {
+        post(command("setKind") { put("kind", kind?.wire?.let(::JsonPrimitive) ?: JsonNull) })
     }
 }
 

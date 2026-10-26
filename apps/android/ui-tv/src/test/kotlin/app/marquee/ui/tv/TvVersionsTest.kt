@@ -54,6 +54,7 @@ import app.marquee.core.model.EmptyKind
 import app.marquee.core.model.EmptyVersions
 import app.marquee.core.model.Group
 import app.marquee.core.model.HiddenSummary
+import app.marquee.core.model.KindChip
 import app.marquee.core.model.LearnedChoice
 import app.marquee.core.model.LearnedNote
 import app.marquee.core.model.Network
@@ -857,76 +858,84 @@ class TvVersionsTest {
         assertEquals(height("1080p, HDR, 1 GB"), height("5 GB"), "the badge line keeps its height with no badge")
     }
 
-    /**
-     * [coherent] with three kinds (plans/plugins-and-marketplace.md 4.3): the pick on TorBox, Sharper a direct link,
-     * the other two torrents, in the core's order other then small.
-     */
-    private fun kinds(): VersionsSnapshot {
-        val s = coherent()
-        val kind = mapOf("sharp" to SourceKind.Direct, "other" to SourceKind.Torrent, "small" to SourceKind.Torrent)
-        return s.copy(
-            recommended = s.recommended!!.copy(kind = SourceKind.Debrid),
-            rows = s.rows.map { it.copy(kind = kind.getValue(it.key)) },
-            debridService = "TorBox",
+    /** [coherent] as the core counts three kinds (plans/plugins-and-marketplace.md 4.2), every kind listed. */
+    private fun kinds(selected: SourceKind? = null) =
+        coherent().copy(
+            kinds =
+                listOf(
+                    KindChip(SourceKind.Torrent, null, 2),
+                    KindChip(SourceKind.Direct, null, 1),
+                    KindChip(SourceKind.Debrid, "TorBox", 1),
+                ),
+            selectedKind = selected,
+        )
+
+    private fun update(snapshot: VersionsSnapshot) {
+        client.onMessage(
+            """{"sub":7,"updates":[${CoreJson.encodeToString(VersionsSnapshot.serializer(), snapshot)}]}""",
         )
     }
 
     @Test
     fun `one kind of version draws no kind chips`() {
-        show(coherent())
-        compose.onAllNodesWithContentDescription("All, 4 versions").assertCountEquals(0)
+        show(coherent().copy(kinds = listOf(KindChip(SourceKind.Torrent, null, 4))))
         compose.onAllNodesWithText(StreamChoiceCopy.KIND_ALL).assertCountEquals(0)
     }
 
     @Test
-    fun `Up from Play reaches the kind chips, a kind fills the card and the list with its own rows, Down goes back`() {
+    fun `Up from Play reaches the kind chips, OK asks the core for a kind and keeps the focus, Down goes back`() {
         show(kinds())
-        compose.onNodeWithContentDescription("All, 4 versions").assertIsSelected()
+        compose.onNodeWithContentDescription("All").assertIsSelected()
         compose.onNodeWithContentDescription("Torrents, 2 versions").assertIsNotSelected()
         compose.onNodeWithContentDescription("Direct links, 1 version").assertExists()
-        // The debrid chip says the core's service.
+        // The debrid chip says the service the core names.
         compose.onNodeWithContentDescription("TorBox, 1 version").assertExists()
         compose.waitUntil(5_000) {
             compose.onAllNodes(isFocused() and hasText("Play this version")).fetchSemanticsNodes().isNotEmpty()
         }
         press(Key.DirectionUp)
-        compose.onNodeWithContentDescription("All, 4 versions").assertIsFocused()
+        compose.onNodeWithContentDescription("All").assertIsFocused()
         press(Key.DirectionRight)
         compose.onNodeWithContentDescription("Torrents, 2 versions").assertIsFocused()
         press(Key.DirectionCenter)
-        // OK chooses and keeps the focus on the chip; the pick was frozen.
-        compose.onNodeWithContentDescription("Torrents, 2 versions").assertIsFocused().assertIsSelected()
-        assertTrue(sent.any { "\"freeze\"" in it })
-        // The card is the kind's first row in the core's order, the list the rest of the kind; the shortcuts go.
-        val other = kinds().rows.first { it.key == "other" }
-        compose.onNodeWithContentDescription(VersionsCopy.cardSpoken("Best torrent", other)).assertExists()
-        compose.onAllNodesWithText("Smaller file", substring = true).assertCountEquals(0)
-        compose.onAllNodesWithText("Sharper", substring = true).assertCountEquals(0)
-        compose
-            .onNodeWithContentDescription(
-                VersionsCopy.rowSpoken(kinds().rows.first { it.key == "small" }),
-            ).assertExists()
-        compose.onAllNodesWithContentDescription(VersionsCopy.rowSpoken(other)).assertCountEquals(0)
-        compose
-            .onAllNodesWithContentDescription(
-                VersionsCopy.rowSpoken(
-                    kinds().rows.first {
-                        it.key == "sharp"
-                    },
-                ),
-            ).assertCountEquals(0)
+        compose.onNodeWithContentDescription("Torrents, 2 versions").assertIsFocused()
+        compose.waitUntil(5_000) { sent.any { "\"setKind\"" in it && "\"torrent\"" in it } }
         press(Key.DirectionDown)
         compose.onNode(hasText("Play this version")).assertIsFocused()
-        press(Key.DirectionCenter)
-        assertEquals(listOf("other"), played)
+    }
+
+    @Test
+    fun `under a kind the page is the core's pass for it, and the chips stay when one kind is left`() {
+        // The core's torrent pass: its card, its rows and sections, no shortcuts.
+        val pass = coherent()
+        val card = pass.rows.first { it.key == "other" }
+        show(
+            kinds(SourceKind.Torrent).copy(
+                recommended = card,
+                rows = pass.rows.filter { it.key == "small" },
+                smaller = null,
+                sharper = null,
+                sections = listOf(VersionSection(SectionQuality.Hd, listOf("small"))),
+            ),
+        )
+        compose.onNodeWithContentDescription("Torrents, 2 versions").assertIsSelected()
+        compose.onNodeWithContentDescription(VersionsCopy.cardSpoken("Best torrent", card)).assertExists()
+        compose.onAllNodesWithText("Smaller file", substring = true).assertCountEquals(0)
+        // Shown once, the chips stay while the page is open.
+        update(coherent().copy(kinds = listOf(KindChip(SourceKind.Torrent, null, 4))))
+        val all = VersionsCopy.cardSpoken("Best for this TV", coherent().recommended!!)
+        compose.waitUntil(10_000) {
+            Snapshot.sendApplyNotifications()
+            compose.onAllNodesWithContentDescription(all).fetchSemanticsNodes().isNotEmpty()
+        }
+        compose.onNodeWithContentDescription("All").assertExists()
     }
 
     @Test
     @GraphicsMode(GraphicsMode.Mode.NATIVE)
-    fun `shot - the kind chips with Torrents chosen`() {
+    fun `shot - the kind chips`() {
         assumeTrue("MARQUEE_SHOTS is not set", out != null)
         show(kinds())
-        compose.onNodeWithContentDescription("Torrents, 2 versions").performClick()
         compose.mainClock.advanceTimeBy(2_000)
         save("tv-versions-kinds")
     }

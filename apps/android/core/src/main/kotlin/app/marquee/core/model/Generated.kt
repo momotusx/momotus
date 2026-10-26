@@ -981,6 +981,14 @@ data class KidsTitlesSnapshot(
     val max: Int,
 )
 
+/** A kind chip: the kind, the rows holding a source of it, and for debrid the one service every such source names ("Real-Debrid"; null when they name several or none, and the chip says "Debrid"). */
+@Serializable
+data class KindChip(
+    val kind: SourceKind,
+    val service: String? = null,
+    val count: Int,
+)
+
 @Serializable
 data class KindCount(
     val kind: String,
@@ -2441,7 +2449,7 @@ data class VersionRow(
     /** How it starts (3.2). */
     val sourceClass: SourceClass,
     /** How it plays, as the viewer groups versions: the kind chips (plans/plugins-and-marketplace.md 4.2). */
-    val kind: SourceKind,
+    val kind: SourceKind = SourceKind.Direct,
     /** Size over runtime after the pack guard; null when either is unknown. */
     val bitrateMbps: Float? = null,
     /** The sort key, for a details panel and tests. */
@@ -2514,8 +2522,10 @@ data class VersionsSnapshot(
     val archive: SourceRows = SourceRows(pending = false),
     /** "From plugins" (plans/plugins-and-marketplace.md 4.4, 7.8): the Nuvio providers' rows, a pass of their own like the Archive's. */
     val plugins: SourceRows = SourceRows(pending = false),
-    /** The one streaming service every debrid row names ("Real-Debrid"), for the debrid kind chip; none when they name several, or a row names none, and the chip says "Debrid". */
-    val debridService: String? = null,
+    /** The kind chips (plans/plugins-and-marketplace.md 4.2): each kind the listed rows hold, with how many rows hold a source of it. The apps show them from two kinds on. */
+    val kinds: List<KindChip> = emptyList(),
+    /** The kind `setKind` chose: `recommended`, `rows` and `sections` are then that kind's own pass, and `smaller` and `sharper` are null. */
+    val selectedKind: SourceKind? = null,
 )
 
 @Serializable

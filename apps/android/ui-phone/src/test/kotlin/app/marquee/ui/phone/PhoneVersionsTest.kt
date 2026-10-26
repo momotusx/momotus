@@ -11,9 +11,9 @@ import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsFocused
+import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.hasAnyAncestor
-import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasScrollToIndexAction
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
@@ -44,6 +44,7 @@ import app.marquee.core.model.EmptyKind
 import app.marquee.core.model.EmptyVersions
 import app.marquee.core.model.Group
 import app.marquee.core.model.HiddenSummary
+import app.marquee.core.model.KindChip
 import app.marquee.core.model.LearnedChoice
 import app.marquee.core.model.LearnedNote
 import app.marquee.core.model.Network
@@ -503,33 +504,31 @@ class PhoneVersionsTest {
 
     @Test
     fun `one kind of version draws no kind chips`() {
-        show(snapshot(row("best", ReasonLine.Few(31)), listOf(row("a", ReasonLine.Few(31)))))
+        val one = listOf(KindChip(SourceKind.Torrent, null, 2))
+        show(snapshot(row("best", ReasonLine.Few(31)), listOf(row("a", ReasonLine.Few(31)))).copy(kinds = one))
         compose.onAllNodesWithText(StreamChoiceCopy.KIND_ALL).assertCountEquals(0)
     }
 
     @Test
-    fun `a kind chip fills the card and the list with its own rows, hides the shortcuts and pins the pick`() {
-        val best =
-            row(
-                "best",
-                ReasonLine.Ready("TorBox", gib),
-                SourceKind.Debrid,
-            ).copy(status = VersionStatus.Ready("TorBox"))
+    fun `a kind chip asks the core for that kind, and the card says the kind the core lists`() {
         val a = row("a", ReasonLine.Quick(1204, 2 * gib)).copy(quality = "4K")
-        val b = row("b", ReasonLine.Few(31)).copy(quality = "720p")
-        val c = row("c", ReasonLine.Ready(null, gib), SourceKind.Direct)
-        show(snapshot(best, listOf(a, b, c)).copy(smaller = b))
-        compose.onNodeWithText(VersionsCopy.shortcutLabel(StreamChoiceCopy.SMALLER, b)).assertExists()
-        // Several services or none named: the debrid chip says Debrid.
-        compose.onNodeWithContentDescription("Debrid, 1 version").assertExists()
-        compose.onNodeWithContentDescription("Direct links, 1 version").assertExists()
-        compose.onNodeWithContentDescription("Torrents, 2 versions").performClick()
-        compose.waitForIdle()
-        assertTrue(sent.any { "\"freeze\"" in it }, "choosing a kind pins the pick")
+        val kinds =
+            listOf(
+                KindChip(SourceKind.Torrent, null, 1),
+                KindChip(SourceKind.Direct, null, 1),
+                KindChip(SourceKind.Debrid, null, 1),
+            )
+        show(snapshot(a, emptyList()).copy(kinds = kinds, selectedKind = SourceKind.Torrent))
+        // The core's torrent pass is on: its chip is the one on, the card says so.
+        compose.onNodeWithContentDescription("Torrents, 1 version").assertIsSelected()
         compose.onNodeWithContentDescription(VersionsCopy.cardSpoken("Best torrent", a)).assertExists()
-        compose.onAllNodesWithText(VersionsCopy.shortcutLabel(StreamChoiceCopy.SMALLER, b)).assertCountEquals(0)
-        compose.onAllNodes(hasContentDescription(VersionsCopy.rowSpoken(c), substring = true)).assertCountEquals(0)
-        compose.onNode(hasContentDescription(VersionsCopy.rowSpoken(b), substring = true)).assertExists()
+        // Several services or none named: the debrid chip says Debrid.
+        compose.onNodeWithContentDescription("Debrid, 1 version").performClick()
+        compose.waitForIdle()
+        compose.waitUntil(5_000) { sent.any { "\"setKind\"" in it && "\"debrid\"" in it } }
+        compose.onNodeWithContentDescription("All").performClick()
+        compose.waitForIdle()
+        compose.waitUntil(5_000) { sent.any { "\"setKind\"" in it && "\"kind\":null" in it } }
     }
 
     @Test

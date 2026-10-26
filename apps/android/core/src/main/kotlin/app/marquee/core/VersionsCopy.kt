@@ -4,6 +4,7 @@ import app.marquee.core.model.EmptyAction
 import app.marquee.core.model.EmptyKind
 import app.marquee.core.model.EmptyVersions
 import app.marquee.core.model.Group
+import app.marquee.core.model.KindChip
 import app.marquee.core.model.Reason
 import app.marquee.core.model.RowOrigin
 import app.marquee.core.model.SectionQuality
@@ -439,80 +440,45 @@ object VersionsCopy {
     }
 
     /** A kind chip (plans/plugins-and-marketplace.md 4.2): its kind (null: All), its words, its count and its spoken label. */
-    data class KindChip(
+    data class KindLabel(
         val kind: SourceKind?,
         val label: String,
-        val count: Int,
+        val count: Int?,
         val spoken: String,
     ) {
-        /** The count as the chip shows it: "1,204". */
-        val note: String get() = String.format(Locale.US, "%,d", count)
+        /** The count as the chip shows it: "1,204"; none on All. */
+        val note: String? get() = count?.let { String.format(Locale.US, "%,d", it) }
     }
 
-    private val KINDS = listOf(SourceKind.Torrent, SourceKind.Direct, SourceKind.Debrid)
+    /** A kind's chip words: its name; the debrid chip names the service the core names ("Real-Debrid"), else "Debrid". */
+    private fun kindName(k: KindChip) =
+        (if (k.kind == SourceKind.Debrid) k.service else null) ?: StreamChoiceCopy.KIND_NAMES[k.kind] ?: k.kind.wire
 
-    /**
-     * The kind chips: All, then each kind listed (the pick counts), with their counts; none while fewer than two kinds
-     * are listed, or nothing plays.
-     */
-    fun kinds(snapshot: VersionsSnapshot?): List<KindChip> {
-        val rows = listOfNotNull(snapshot?.recommended) + snapshot?.rows.orEmpty()
-        val kinds = KINDS.filter { k -> rows.any { it.kind == k } }
-        if (kinds.size < 2) return emptyList()
-
-        fun chip(kind: SourceKind?): KindChip {
-            val label =
-                when (kind) {
-                    null -> StreamChoiceCopy.KIND_ALL
-                    SourceKind.Debrid -> snapshot?.debridService ?: StreamChoiceCopy.KIND_NAMES.getValue(kind)
-                    else -> StreamChoiceCopy.KIND_NAMES.getValue(kind)
-                }
-            val n = if (kind == null) rows.size else rows.count { it.kind == kind }
-            val versions = StreamChoiceCopy.counted("versions", n)
-            return KindChip(
-                kind,
-                label,
-                n,
-                StreamChoiceCopy.KIND_SPOKEN.replace("{kind}", label).replace("{versions}", versions),
-            )
-        }
-        return listOf(chip(null)) + kinds.map(::chip)
+    /** The kind chips from the core's `kinds`: All, then each kind the core counted (a newer kind left out). */
+    fun kindChips(snapshot: VersionsSnapshot?): List<KindLabel> {
+        val kinds = snapshot?.kinds.orEmpty().filter { it.kind != SourceKind.Unknown }
+        return listOf(KindLabel(null, StreamChoiceCopy.KIND_ALL, null, StreamChoiceCopy.KIND_ALL)) +
+            kinds.map { k ->
+                val versions = StreamChoiceCopy.counted("versions", k.count)
+                KindLabel(
+                    k.kind,
+                    kindName(k),
+                    k.count,
+                    StreamChoiceCopy.KIND_SPOKEN.replace("{kind}", kindName(k)).replace("{versions}", versions),
+                )
+            }
     }
 
-    /**
-     * [snapshot] under [kind] (null is All, the snapshot as the core sent it): the card is the kind's first row in the
-     * core's order, the rows and sections list the rest of the kind, and the shortcuts, relative to the core's pick, go.
-     * A kind that has no chip now is All.
-     */
-    fun ofKind(
-        snapshot: VersionsSnapshot?,
-        kind: SourceKind?,
-    ): VersionsSnapshot? {
-        if (snapshot == null || kinds(snapshot).none { it.kind != null && it.kind == kind }) return snapshot
-        val all = listOfNotNull(snapshot.recommended) + snapshot.rows
-        val card = all.first { it.kind == kind }
-        val rows = all.filter { it.kind == kind && it.key != card.key }
-        val keys = rows.mapTo(HashSet()) { it.key }
-        return snapshot.copy(
-            recommended = card,
-            rows = rows,
-            smaller = null,
-            sharper = null,
-            sections =
-                snapshot.sections
-                    .map { it.copy(keys = it.keys.filter(keys::contains)) }
-                    .filter { it.keys.isNotEmpty() },
-        )
-    }
+    /** The core's kinds call for chips: two kinds or more. Once shown, the page keeps them. */
+    fun showsKinds(snapshot: VersionsSnapshot?): Boolean = snapshot?.kinds.orEmpty().size >= 2
 
-    /** The card's kicker: [all] (by form) under All, else "Best torrent", "Best direct link", "Best on Real-Debrid". */
+    /** The card's kicker: [all] (by form) with every kind listed, else "Best torrent", "Best direct link", "Best on Real-Debrid". */
     fun kicker(
         snapshot: VersionsSnapshot?,
-        kind: SourceKind?,
         all: String,
     ): String {
-        if (kind == null || kinds(snapshot).none { it.kind == kind }) return all
-        val service = snapshot?.debridService
+        val kind = snapshot?.selectedKind?.takeIf { it != SourceKind.Unknown } ?: return all
+        val service = snapshot.kinds.firstOrNull { it.kind == kind }?.service
         return if (kind == SourceKind.Debrid && service != null) {
             StreamChoiceCopy.KIND_BEST_SERVICE.replace("{service}", service)
         } else {

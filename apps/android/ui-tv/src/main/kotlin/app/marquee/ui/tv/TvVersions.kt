@@ -25,6 +25,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
@@ -172,15 +173,20 @@ fun TvVersions(
         }
         onPauseOrDispose {}
     }
-    // The kind chips (plans/plugins-and-marketplace.md 4.2): All is the core's page; a kind shows its own first row in
-    // the card and its rows in the sections. The choice holds while the page is open; a kind with no chip now is All.
-    var kind by remember { mutableStateOf<SourceKind?>(null) }
-    val chips = VersionsCopy.kinds(snapshot)
-    val on = kind.takeIf { k -> chips.any { it.kind == k } }
-    val shown = VersionsCopy.ofKind(snapshot, on)
-    val chooseKind = { k: SourceKind? ->
-        if (snapshot?.recommended != null && !snapshot.frozen) versions?.freeze()
-        kind = k
+    // The kind chips (plans/plugins-and-marketplace.md 4.2): the core counts the kinds and, under one (`setKind`, which
+    // freezes the pick), sends that kind's own card, rows and sections. They show from two kinds on, then stay while the
+    // page is open; leaving the page lists every kind again.
+    var chipsShown by remember { mutableStateOf(false) }
+    val showsKinds = VersionsCopy.showsKinds(snapshot)
+    LaunchedEffect(showsKinds) { if (showsKinds) chipsShown = true }
+    val chips = if (chipsShown) VersionsCopy.kindChips(snapshot) else emptyList()
+    val asked = remember { mutableStateOf<SourceKind?>(null) }
+    val chooseKind: (SourceKind?) -> Unit = { k ->
+        asked.value = k
+        versions?.setKind(k)
+    }
+    DisposableEffect(versions) {
+        onDispose { if (asked.value != null || versions?.snapshot?.selectedKind != null) versions?.setKind(null) }
     }
     // The list, for Right from the empty state's actions.
     val list = remember { FocusRequester() }
@@ -235,22 +241,22 @@ fun TvVersions(
             }.padding(start = safe.side, end = safe.side, top = safe.top, bottom = safe.bottom),
         verticalArrangement = Arrangement.spacedBy(Marquee.space.l),
     ) {
-        Header(heading, snapshot) { KindChips(chips, on, focus, chooseKind) }
+        Header(heading, snapshot) { KindChips(chips, snapshot?.selectedKind, focus, chooseKind) }
         Row(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(Marquee.space.l)) {
             Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.s)) {
-                Pick(shown, VersionsCopy.kicker(snapshot, on, StreamChoiceCopy.BEST_TV), failure, {
+                Pick(snapshot, VersionsCopy.kicker(snapshot, StreamChoiceCopy.BEST_TV), failure, {
                     versions?.retry()
                 }, focus, onPlay) {
                     if (empty != null) Empty(empty, step, focus, list.takeIf { empty.rows.isNotEmpty() })
                 }
-                Shortcuts(shown, focus, list.takeIf { !shown?.rows.isNullOrEmpty() }, onPlay)
+                Shortcuts(snapshot, focus, list.takeIf { !snapshot?.rows.isNullOrEmpty() }, onPlay)
             }
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(Marquee.space.s)) {
                 // The rows found when none plays are simply listed, dimmed, as they would rank once the reason is
                 // fixed, each saying why it is dimmed.
                 Sources(
-                    shown,
-                    empty?.rows ?: shown?.rows.orEmpty(),
+                    snapshot,
+                    empty?.rows ?: snapshot?.rows.orEmpty(),
                     empty?.kind,
                     held,
                     listState,
@@ -438,7 +444,7 @@ private const val SHORT_SHARPER = "short:sharper"
  */
 @Composable
 private fun KindChips(
-    chips: List<VersionsCopy.KindChip>,
+    chips: List<VersionsCopy.KindLabel>,
     on: SourceKind?,
     focus: FocusMemory,
     onChoose: (SourceKind?) -> Unit,
