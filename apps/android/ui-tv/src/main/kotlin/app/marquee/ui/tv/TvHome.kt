@@ -627,35 +627,36 @@ private fun TvHero(
                 horizontalArrangement = Arrangement.spacedBy(TopShelf.BUTTON_GAP),
                 verticalAlignment = Alignment.Top,
             ) {
-                if (play != null) {
-                    PrimaryButton(
-                        label = play.label,
-                        icon = PlayFilled,
-                        onClick = { onPlay(tile.copy(videoId = play.videoId)) },
-                        modifier = Modifier.describe("${play.label} ${tile.name}"),
-                        focusRequester = playRequester,
-                        onFocusChange =
-                            state.focus.watch(HERO_ROW, HERO_PLAY).let { watch ->
-                                { f: Boolean ->
-                                    watch(f)
-                                    if (f) {
-                                        focused =
-                                            HERO_PLAY
-                                    }
-                                }
+                if (play != null || hero.playPending) {
+                    // Play's place is as wide as the widest words it can say, measured in the font drawn, so Details
+                    // never moves whichever label lands, or when a late Play does (review r4).
+                    Box(contentAlignment = Alignment.CenterStart) {
+                        Box(
+                            Modifier.alpha(0f).clearAndSetSemantics {
+                                if (play == null) testTag = TV_PLAY_SLOT
                             },
-                    )
-                }
-                if (play == null && hero.playPending) {
-                    // Play's place while the core reads the page's episodes, so Details never moves when it lands;
-                    // a series' usual words. ponytail: a longer label ("Resume S12:E10") still nudges Details.
-                    Box(Modifier.alpha(0f).clearAndSetSemantics { testTag = TV_PLAY_SLOT }) {
-                        PrimaryButton(
-                            if (tile.kind == "movie") "Play" else "Play S1:E1",
-                            {},
-                            icon = PlayFilled,
-                            enabled = false,
-                        )
+                        ) {
+                            PLAY_WIDEST.forEach { PrimaryButton(it, {}, icon = PlayFilled, enabled = false) }
+                        }
+                        if (play != null) {
+                            PrimaryButton(
+                                label = play.label,
+                                icon = PlayFilled,
+                                onClick = { onPlay(tile.copy(videoId = play.videoId)) },
+                                modifier = Modifier.describe("${play.label} ${tile.name}"),
+                                focusRequester = playRequester,
+                                onFocusChange =
+                                    state.focus.watch(HERO_ROW, HERO_PLAY).let { watch ->
+                                        { f: Boolean ->
+                                            watch(f)
+                                            if (f) {
+                                                focused =
+                                                    HERO_PLAY
+                                            }
+                                        }
+                                    },
+                            )
+                        }
                     }
                 }
                 SecondaryButton(
@@ -1083,6 +1084,9 @@ private const val PATIENCE_MS = 3_000L
 
 /** Play's invisible place on a hero page whose Play may still come. */
 internal const val TV_PLAY_SLOT = "hero-play-slot"
+
+/** The longest words the hero's Play can say ("Resume S12:E10"), measured together: its place is the widest. */
+private val PLAY_WIDEST = listOf("Resume S12:E10", "Play S12:E10", "Play again")
 
 /** Where Home's one-time card goes: under Continue Watching, else first. */
 internal fun cardSplit(rows: List<HomeRow>): Int = rows.indexOfFirst { it.rowId == TileCopy.CONTINUE_ROW } + 1

@@ -38,6 +38,7 @@ import app.marquee.core.model.SubtitleTrack
 import app.marquee.core.model.TraktPlayback
 import app.marquee.core.views.PlaybackView
 import app.marquee.core.views.ViewStatus
+import app.marquee.design.HeroTrailers
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -351,6 +352,9 @@ class PlaybackController(
         }
 
     init {
+        // A film starting puts the Home trailers' sound back to muted, so coming back from it is never loud by
+        // surprise (the lead, 2026-10-26); tab switches and page changes keep the viewer's choice.
+        HeroTrailers.sound = false
         player.addListener(listener)
         ticker = scope.launch { tickLoop() }
         // A start kept going in the background ([StartService]) is let go once it is over: Ready, a failure or the end.

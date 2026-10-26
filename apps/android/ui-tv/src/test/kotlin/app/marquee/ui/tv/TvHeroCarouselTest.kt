@@ -311,4 +311,27 @@ class TvHeroCarouselTest {
                 .boundsInRoot.left
         assertEquals(before, after, 1f, "Details moved when Play landed")
     }
+
+    @Test
+    fun `Play's place is as wide as its longest words, so Details stays put whichever label lands`() {
+        // The lead after review r4: "Resume S12:E10" must not push Details either.
+        val page = hero("tt1", "First Movie", "movie")
+        show(listOf(page))
+
+        fun details() =
+            compose
+                .onNodeWithText("Details")
+                .fetchSemanticsNode()
+                .boundsInRoot.left
+        val lefts =
+            listOf("Play", "Play S1:E1", "Resume S12:E10").map { label ->
+                val next = page.copy(play = PlayTarget("tt1", label))
+                val update =
+                    CoreJson.encodeToString(HomeUpdate.serializer(), HomeUpdate.Header(HomeHeader(listOf(next))))
+                client.onMessage("""{"sub":7,"updates":[$update]}""")
+                waitFor("the label $label") { compose.onAllNodesWithText(label).fetchSemanticsNodes().isNotEmpty() }
+                details()
+            }
+        assertEquals(1, lefts.distinct().size, "Details moved with Play's words: $lefts")
+    }
 }
