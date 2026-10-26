@@ -213,9 +213,6 @@ object Scrims {
     val phoneTitleTop = listOf(ScrimStop(0f, 0.5f), ScrimStop(0.25f, 0f))
     val phoneTitleFoot = listOf(ScrimStop(0f, 0.6f), ScrimStop(0.5f, 0f))
 
-    /** Over a cover: its foot, where a poster prints its own title, under the page color, so the logo reads alone. */
-    val phoneCoverFoot = listOf(ScrimStop(0f, 1f), ScrimStop(0.3f, 0.92f), ScrimStop(0.5f, 0.5f), ScrimStop(0.72f, 0f))
-
     /** How much page color covers the art at [t] along [stops], linear between them. */
     fun alpha(
         stops: List<ScrimStop>,

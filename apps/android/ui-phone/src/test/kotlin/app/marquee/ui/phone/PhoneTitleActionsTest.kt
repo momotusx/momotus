@@ -6,13 +6,17 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.Snapshot
+import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.isHeading
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import app.marquee.core.client.CoreClient
 import app.marquee.core.client.CoreJson
@@ -46,6 +50,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import org.robolectric.annotation.GraphicsMode
 import java.util.concurrent.Executors
 import kotlin.coroutines.CoroutineContext
 import kotlin.test.assertEquals
@@ -308,6 +313,25 @@ class PhoneTitleActionsTest {
         val art = bounds(TITLE_ART_TAG)
         // 411 dp wide: 616.5 dp high, far under 75 percent of the 2400 dp window.
         assertEquals(1.5f, art.height / art.width, 0.01f)
+    }
+
+    @Test
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun `a cover carries no second title and its bottom edge is the page color`() {
+        draw(withArt(poster = "https://a.example/p.jpg", cover = "https://a.example/c.jpg"))
+        // The cover prints its own title: no logo or name drawn over it, only the heading for screen readers.
+        compose.onAllNodesWithText("Sintel", useUnmergedTree = true).assertCountEquals(0)
+        compose.onNode(hasContentDescription("Sintel") and isHeading()).assertExists()
+        // The art's last row of pixels is the page's color, as just under it, where the meta line starts.
+        val art = bounds(TITLE_ART_TAG)
+        val shot = compose.onRoot().captureToImage().toPixelMap()
+        val under = shot[shot.width / 2, art.bottom.toInt() + 2]
+        for (x in 0 until shot.width step 16) {
+            val edge = shot[x, art.bottom.toInt() - 1]
+            for ((a, b) in listOf(edge.red to under.red, edge.green to under.green, edge.blue to under.blue)) {
+                assertEquals(b, a, 2f / 255, "x $x: $edge against the page's $under")
+            }
+        }
     }
 
     @Test

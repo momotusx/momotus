@@ -39,7 +39,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
@@ -413,13 +415,30 @@ private fun Hero(
         return
     }
     val page = Marquee.colors.bg
-    Box(Modifier.fillMaxWidth().height(heroHeight(cover)).testTag(TITLE_ART_TAG)) {
+    // A cover prints its own title: no logo over it, only the heading for screen readers, and the meta line
+    // starts under it, on the page color.
+    val heading =
+        if (cover) {
+            Modifier.clearAndSetSemantics {
+                contentDescription = name
+                heading()
+            }
+        } else {
+            Modifier
+        }
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .height(heroHeight(cover))
+            .testTag(TITLE_ART_TAG)
+            .then(heading),
+    ) {
         // Dark under the light status bar icons and toward the light logo. A cover held under its 2:3
-        // keeps its top, where the faces are.
+        // keeps its top, where the faces are, and only its bottom edge fades into the page.
         Backdrop(
             art,
             Modifier.matchParentSize(),
-            foot = if (cover) Scrims.phoneCoverFoot else Scrims.phoneTitleFoot,
+            foot = if (cover) emptyList() else Scrims.phoneTitleFoot,
             top = Scrims.phoneTitleTop,
             alignment = if (cover) Alignment.TopCenter else Alignment.Center,
         )
@@ -430,19 +449,21 @@ private fun Hero(
                 .height(HERO_FADE)
                 .background(Brush.verticalGradient(0f to Color.Transparent, 1f to page)),
         )
-        Logo(
-            logo,
-            name,
-            height = 72.dp,
-            maxWidth = 280.dp,
-            role = TextRole.Title1,
-            color = Tokens.dark.text,
-            modifier =
-                Modifier
-                    .align(
-                        Alignment.BottomStart,
-                    ).padding(start = side, bottom = HERO_FADE - Marquee.space.s),
-        )
+        if (!cover) {
+            Logo(
+                logo,
+                name,
+                height = 72.dp,
+                maxWidth = 280.dp,
+                role = TextRole.Title1,
+                color = Tokens.dark.text,
+                modifier =
+                    Modifier
+                        .align(
+                            Alignment.BottomStart,
+                        ).padding(start = side, bottom = HERO_FADE - Marquee.space.s),
+            )
+        }
     }
 }
 
