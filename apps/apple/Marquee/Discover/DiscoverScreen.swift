@@ -18,6 +18,14 @@ struct DiscoverScreen: View {
     /// The Mac's and iPad's selected poster, previewed beside the grid.
     @State private var selection = DiscoverSelection()
     @State private var width: CGFloat = 0
+    /// What the grid shows (plans/discover-v2.md 6.1): the core's items, except that a late list that reorders the
+    /// grid waits on TV while focus is in it, and a list loading after a change keeps the one before, dimmed.
+    @State private var shown: [Tile] = []
+    @State private var previous: [Tile] = []
+    @State private var held = false
+    #if os(tvOS)
+    @FocusState private var tvTile: String?
+    #endif
 
     init(core: CoreClient) {
         self.core = core
@@ -35,6 +43,10 @@ struct DiscoverScreen: View {
             // A title page's genre chip (DiscoverRequest): sent once, when Discover has its kinds and its subscription.
             .onChange(of: links?.discover, initial: true) { follow() }
             .onChange(of: discover.snapshot?.kinds.isEmpty == false && discover.sub != nil) { follow() }
+            .onChange(of: discover.snapshot?.items, initial: true) { _, items in take(items ?? []) }
+            #if os(tvOS)
+            .onChange(of: tvTile) { _, key in if key == nil, held { release() } }
+            #endif
             // A new kind, catalog or genre selects its first poster; more of the same keeps the selection.
             .onChange(of: discover.snapshot, initial: true) { _, s in
                 guard let s else { return }
@@ -58,18 +70,22 @@ struct DiscoverScreen: View {
 
     @ViewBuilder private var page: some View {
         #if os(tvOS)
-        scroll { tvFilters($0) } grid: { s in
-            PosterGrid(tiles: s.items, onEnd: { loadMore(s) })
+        scroll { tvFilters($0) } grid: { s, tiles in
+            PosterGrid(
+                tiles: tiles,
+                // The corner shows the year for the date sorts: the caption does not repeat it.
+                caption: { DiscoverWords.corner(s.sort, $0) == $0.releaseInfo ? nil : $0.releaseInfo },
+                onEnd: { loadMore(s) }, corner: { DiscoverWords.corner(s.sort, $0) }, focused: $tvTile)
         }
         #else
         if metrics.wide {
             HStack(alignment: .top, spacing: Theme.Preview.gap) {
-                scroll { DiscoverFilters(snapshot: $0, select: select) } grid: { s in
+                scroll { DiscoverFilters(snapshot: $0, select: select) } grid: { s, tiles in
                     // Not before the first width: the fixed columns would draw at a guess (a narrow iPad window).
                     if width > 0 {
                         DiscoverGrid(
-                            tiles: s.items, columns: DiscoverLayout.columns(width: width), selects: preview != nil,
-                            selection: $selection, onEnd: { loadMore(s) })
+                            tiles: tiles, columns: DiscoverLayout.columns(width: width), selects: preview != nil,
+                            selection: $selection, onEnd: { loadMore(s) }, corner: { DiscoverWords.corner(s.sort, $0) })
                     }
                 }
                 if let preview {
@@ -82,8 +98,8 @@ struct DiscoverScreen: View {
                 }
             }
         } else {
-            scroll { DiscoverFilters(snapshot: $0, select: select) } grid: { s in
-                PhoneDiscoverGrid(tiles: s.items, onEnd: { loadMore(s) })
+            scroll { DiscoverFilters(snapshot: $0, select: select) } grid: { s, tiles in
+                PhoneDiscoverGrid(tiles: tiles, onEnd: { loadMore(s) }, corner: { DiscoverWords.corner(s.sort, $0) })
             }
         }
         #endif
@@ -108,7 +124,7 @@ struct DiscoverScreen: View {
     /// The title, the filters and the grid with its states, scrolling.
     private func scroll<Filters: View, Grid: View>(
         @ViewBuilder filters: @escaping (DiscoverSnapshot) -> Filters,
-        @ViewBuilder grid: @escaping (DiscoverSnapshot) -> Grid
+        @ViewBuilder grid: @escaping (DiscoverSnapshot, [Tile]) -> Grid
     ) -> some View {
         ScrollView(.vertical) {
             VStack(alignment: .leading, spacing: metrics.wide ? 24 : Theme.Space.m) {
@@ -131,20 +147,33 @@ struct DiscoverScreen: View {
         .topScrim()
     }
 
-    @ViewBuilder private func content<Grid: View>(_ s: DiscoverSnapshot, grid: (DiscoverSnapshot) -> Grid) -> some View {
+    @ViewBuilder private func content<Grid: View>(_ s: DiscoverSnapshot, grid: (DiscoverSnapshot, [Tile]) -> Grid) -> some View {
         if s.kinds.isEmpty {
             CatalogSetup(
                 title: "Nothing to browse yet",
                 text: "Discover lists the catalogs of the addons you have on, and none of them has one. Set up Momotus offers the recommended addons.",
                 titleSize: Theme.type.title2, core: core, setUp: { onboarding = true })
         } else {
+            if held {
+                Button("More titles arrived. Show") { release() }
+            }
             if s.items.isEmpty, s.state == .loading {
-                skeleton
+                if previous.isEmpty {
+                    skeleton
+                } else {
+                    // The list before, dimmed and out of focus's reach, until the new one lands.
+                    grid(s, previous).opacity(0.45).disabled(true).accessibilityHidden(true)
+                }
             } else {
-                grid(s)
+                grid(s, shown)
             }
             if s.state == .loading, !s.items.isEmpty {
                 ProgressView().controlSize(.large).frame(maxWidth: .infinity).padding(Theme.Space.l)
+            }
+            if s.state != .loading, let scope = DiscoverWords.scope(s) {
+                Text(scope)
+                    .textFont(13, relativeTo: .footnote)
+                    .foregroundStyle(Theme.Palette.muted)
             }
             if let words = DiscoverWords.state(s) {
                 switch s.state {
@@ -174,28 +203,103 @@ struct DiscoverScreen: View {
         #endif
     }
 
+    /// Shows the core's items, unless they reorder the grid while TV focus is in it: then they wait.
+    private func take(_ items: [Tile]) {
+        let grows = items.count >= shown.count && zip(shown, items).allSatisfy { $0.id == $1.id }
+        #if os(tvOS)
+        let inGrid = tvTile != nil
+        #else
+        let inGrid = false
+        #endif
+        if grows || items.isEmpty || !inGrid {
+            shown = items
+            held = false
+        } else {
+            held = true
+        }
+        if !items.isEmpty { previous = items }
+    }
+
+    private func release() {
+        shown = discover.snapshot?.items ?? []
+        held = false
+    }
+
     private func loadMore(_ s: DiscoverSnapshot) {
         if s.state == .ready { discover.command(["type": "loadMore"]) }
     }
 
     #if os(tvOS)
+    /// TV (plans/discover-v2.md 6.5): the kinds, then the services as logos, then one row of menus (Genre, Year,
+    /// Clear, Sort), then the grid; each row a focus section, so the remote moves row by row.
     @ViewBuilder private func tvFilters(_ s: DiscoverSnapshot) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 28) {
             ChipRow(
                 label: "Type", chips: DiscoverWords.kinds(s).map { Chip(id: $0.id, title: $0.title) },
                 isSelected: { $0 == s.kind }, select: { select(["kind": $0]) })
-            if !s.catalogs.isEmpty {
-                ChipRow(
-                    label: "Catalog", chips: DiscoverWords.catalogs(s).map { Chip(id: $0.id, title: $0.title) },
-                    isSelected: { $0 == s.catalog }, select: { select(["catalog": $0]) })
+            let services = DiscoverWords.services(s)
+            if !services.isEmpty {
+                ScrollView(.horizontal) {
+                    HStack(spacing: 28) {
+                        ForEach(services, id: \.title) { item in
+                            let on = item.id == s.platform
+                            Button { select(["platform": item.id ?? NSNull()]) } label: {
+                                Group {
+                                    if let logo = item.logo {
+                                        ArtImage(url: logo, fallback: item.title)
+                                    } else {
+                                        Text(item.title).textFont(23, weight: .semibold, relativeTo: .body).padding(.horizontal, 20)
+                                    }
+                                }
+                                .frame(minWidth: 96, minHeight: 96)
+                                .fixedSize()
+                                .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                                .overlay {
+                                    if on { RoundedRectangle(cornerRadius: 22, style: .continuous).inset(by: -5).stroke(Color.white, lineWidth: 3) }
+                                }
+                            }
+                            .buttonStyle(.card)
+                            .accessibilityLabel(item.title)
+                            .accessibilityAddTraits(on ? .isSelected : [])
+                        }
+                    }
+                    .padding(.vertical, 20)
+                }
+                .scrollClipDisabled()
+                .focusSection()
             }
-            if !s.genres.isEmpty {
-                // "" stands for All, which a catalog that needs a genre does not offer.
-                ChipRow(
-                    label: "Genre", chips: DiscoverWords.genres(s).map { Chip(id: $0.id ?? "", title: $0.title) },
-                    isSelected: { $0 == (s.genre ?? "") },
-                    select: { select(["genre": $0.isEmpty ? NSNull() : $0]) })
+            HStack(spacing: 20) {
+                if !DiscoverWords.genreChoices(s).isEmpty, !(s.genreChoices ?? []).isEmpty || !s.genres.isEmpty {
+                    Menu(DiscoverWords.genreTitle(s)) {
+                        ForEach(DiscoverWords.genreChoices(s), id: \.title) { item in
+                            Button(item.title) { select(["genre": item.id ?? NSNull()]) }
+                        }
+                    }
+                    .accessibilityLabel("\(s.genreLabel ?? "Genre"), \(DiscoverWords.genreTitle(s))")
+                }
+                if !DiscoverWords.decades(s).isEmpty {
+                    Menu(DiscoverWords.decadeTitle(s)) {
+                        ForEach(DiscoverWords.decades(s), id: \.title) { item in
+                            Button(item.title) { select(["decade": item.id ?? NSNull()]) }
+                        }
+                    }
+                    .accessibilityLabel("Year, \(DiscoverWords.decadeTitle(s))")
+                }
+                if DiscoverWords.filtered(s) {
+                    Button("Clear") { select(["platform": NSNull(), "genre": NSNull(), "decade": NSNull()]) }
+                        .accessibilityLabel("Clear filters")
+                }
+                Spacer(minLength: 0)
+                if !DiscoverWords.sorts(s).isEmpty {
+                    Menu(DiscoverWords.sort(s)) {
+                        ForEach(DiscoverWords.sorts(s), id: \.id) { item in
+                            Button(item.title) { select(["sort": item.id]) }
+                        }
+                    }
+                    .accessibilityLabel("Sort, \(DiscoverWords.sort(s))")
+                }
             }
+            .focusSection()
             if let line = DiscoverWords.missingGenre(s.missingGenre) {
                 Text(line)
                     .textFont(13, relativeTo: .footnote)

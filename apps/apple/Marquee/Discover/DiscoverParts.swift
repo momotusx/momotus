@@ -1,58 +1,110 @@
 import SwiftUI
 
 #if !os(tvOS)
-/// Discover's filters on the Mac, iPad and iPhone (plans/design-v3-phase7-apple.md 4.1): the kinds as a
-/// segmented control (a pull-down past four), then the catalog and the genre as pull-downs, then the
-/// quiet line after a genre chip no catalog lists. Every word comes from `DiscoverWords`.
+/// Discover's controls on the Mac, iPad and iPhone (plans/discover-v2.md 6.1, the owner's pick): Movies,
+/// Series and Anime as a segmented control with any other kind in a More pull-down, the services as
+/// name tiles with All first, then Genre and Year, Clear when a filter is set, and Sort at the end.
+/// Every word comes from `DiscoverWords`.
 struct DiscoverFilters: View {
     let snapshot: DiscoverSnapshot
     let select: ([String: any Sendable]) -> Void
     @Environment(\.metrics) private var metrics
 
     var body: some View {
-        if metrics.wide {
-            HStack(spacing: 12) { kinds; catalogs; genres; missing }
-        } else {
-            VStack(alignment: .leading, spacing: 12) {
-                kinds
-                HStack(spacing: 22) { catalogs; genres }
-                missing
-            }
+        VStack(alignment: .leading, spacing: metrics.wide ? 18 : 12) {
+            HStack(spacing: 12) { kinds; more }
+            rail
+            filters
+            missing
         }
     }
 
     @ViewBuilder private var kinds: some View {
+        let segments = DiscoverWords.segments(snapshot)
+        if segments.count > 1 || !DiscoverWords.more(snapshot).isEmpty {
+            KindSegment(items: segments, selected: snapshot.kind) { select(["kind": $0]) }
+        }
+    }
+
+    @ViewBuilder private var more: some View {
         let s = snapshot
-        switch KindControl.for(count: s.kinds.count) {
-        case .none: EmptyView()
-        case .segmented:
-            KindSegment(items: DiscoverWords.kinds(s), selected: s.kind) { select(["kind": $0]) }
-        case .pullDown:
-            pull(DiscoverWords.kind(s)) {
-                ForEach(DiscoverWords.kinds(s), id: \.id) { item in
+        if !DiscoverWords.more(s).isEmpty {
+            pull(DiscoverWords.moreTitle(s)) {
+                ForEach(DiscoverWords.more(s), id: \.id) { item in
                     choice(item.title, on: item.id == s.kind) { select(["kind": item.id]) }
                 }
             }
         }
     }
 
-    @ViewBuilder private var catalogs: some View {
-        let s = snapshot
-        if !s.catalogs.isEmpty {
-            pull(DiscoverWords.catalog(s)) {
-                ForEach(DiscoverWords.catalogs(s), id: \.id) { item in
-                    choice(item.title, on: item.id == s.catalog) { select(["catalog": item.id]) }
+    /// The services as their logos (the name when there is none), All first; the chosen one ringed and kept in view,
+    /// with room at the ends for its ring.
+    @ViewBuilder private var rail: some View {
+        let services = DiscoverWords.services(snapshot)
+        if !services.isEmpty {
+            ScrollViewReader { proxy in
+                ScrollView(.horizontal) {
+                    HStack(spacing: metrics.wide ? 10 : 8) {
+                        ForEach(services, id: \.title) { item in
+                            let on = item.id == snapshot.platform
+                            Button { select(["platform": item.id ?? NSNull()]) } label: {
+                                if let logo = item.logo {
+                                    ArtImage(url: logo, fallback: item.title)
+                                        .frame(width: metrics.wide ? 44 : 46, height: metrics.wide ? 44 : 46)
+                                } else {
+                                    Text(item.title)
+                                }
+                            }
+                            .buttonStyle(ServiceTileStyle(on: on, wide: metrics.wide, logo: item.logo != nil))
+                            .accessibilityLabel(item.title)
+                            .accessibilityAddTraits(on ? .isSelected : [])
+                            .id(item.title)
+                        }
+                    }
+                    .padding(.vertical, 8)
+                    .padding(.horizontal, 8)
+                }
+                .scrollIndicators(.hidden)
+                .scrollClipDisabled()
+                .onChange(of: snapshot.platform, initial: true) { _, chosen in
+                    if let title = services.first(where: { $0.id == chosen })?.title { proxy.scrollTo(title) }
                 }
             }
+            .accessibilityElement(children: .contain)
+            .accessibilityLabel("Service")
         }
     }
 
-    @ViewBuilder private var genres: some View {
+    @ViewBuilder private var filters: some View {
         let s = snapshot
-        if !s.genres.isEmpty {
-            pull(DiscoverWords.genre(s)) {
-                ForEach(DiscoverWords.genres(s), id: \.title) { item in
-                    choice(item.title, on: item.id == s.genre) { select(["genre": item.id ?? NSNull()]) }
+        HStack(spacing: metrics.wide ? 12 : 18) {
+            if !DiscoverWords.genreChoices(s).isEmpty, !(s.genreChoices ?? []).isEmpty || !s.genres.isEmpty {
+                pull(DiscoverWords.genreTitle(s), field: s.genreLabel ?? "Genre") {
+                    ForEach(DiscoverWords.genreChoices(s), id: \.title) { item in
+                        choice(item.title, on: item.id == s.genre) { select(["genre": item.id ?? NSNull()]) }
+                    }
+                }
+            }
+            if !DiscoverWords.decades(s).isEmpty {
+                pull(DiscoverWords.decadeTitle(s), field: "Year") {
+                    ForEach(DiscoverWords.decades(s), id: \.title) { item in
+                        choice(item.title, on: item.id == s.decade) { select(["decade": item.id ?? NSNull()]) }
+                    }
+                }
+            }
+            if DiscoverWords.filtered(s) {
+                Button("Clear") { select(["platform": NSNull(), "genre": NSNull(), "decade": NSNull()]) }
+                    .buttonStyle(.plain)
+                    .textFont(metrics.wide ? 13 : 17, weight: .semibold, relativeTo: .body)
+                    .foregroundStyle(Theme.Palette.key)
+                    .accessibilityLabel("Clear filters")
+            }
+            Spacer(minLength: 0)
+            if !DiscoverWords.sorts(s).isEmpty {
+                pull(DiscoverWords.sort(s), field: "Sort") {
+                    ForEach(DiscoverWords.sorts(s), id: \.id) { item in
+                        choice(item.title, on: item.id == s.sort) { select(["sort": item.id]) }
+                    }
                 }
             }
         }
@@ -67,17 +119,59 @@ struct DiscoverFilters: View {
         }
     }
 
-    @ViewBuilder private func pull<Items: View>(_ title: String, @ViewBuilder items: @escaping () -> Items) -> some View {
-        if metrics.wide {
-            PullDownPill(title: title, size: 13, items: items)
-        } else {
-            PhonePull(title: title, items: items)
+    @ViewBuilder private func pull<Items: View>(_ title: String, field: String? = nil, @ViewBuilder items: @escaping () -> Items) -> some View {
+        Group {
+            if metrics.wide {
+                PullDownPill(title: title, size: 13, items: items)
+            } else {
+                PhonePull(title: title, items: items)
+            }
         }
+        // Spoken as the field and its value ("Genre, Drama").
+        .accessibilityLabel(field.map { "\($0), \(title)" } ?? title)
     }
 
     private func choice(_ title: String, on: Bool, _ action: @escaping () -> Void) -> some View {
         Button(action: action) {
             if on { Label(title, glyph: "check") } else { Text(title) }
+        }
+        .accessibilityAddTraits(on ? .isSelected : [])
+    }
+}
+
+/// A service on the rail (plans/discover-v2.md 6.6, the owner, 2026-10-26): its logo on a rounded square, or
+/// its name on a neutral tile as wide as the name when there is no logo; the chosen one has a white ring.
+private struct ServiceTileStyle: ButtonStyle {
+    let on: Bool
+    let wide: Bool
+    var logo = false
+
+    func makeBody(configuration: Configuration) -> some View {
+        Tile(configuration: configuration, on: on, wide: wide, logo: logo)
+    }
+
+    private struct Tile: View {
+        let configuration: ButtonStyleConfiguration
+        let on: Bool
+        let wide: Bool
+        let logo: Bool
+        @KeyboardFocused private var focused
+
+        var body: some View {
+            let shape = RoundedRectangle(cornerRadius: 10, style: .continuous)
+            configuration.label
+                .textFont(wide ? 14 : 15, weight: .semibold, relativeTo: .subheadline)
+                .foregroundStyle(on ? Color.white : Theme.Palette.muted)
+                .lineLimit(1)
+                .fixedSize()
+                .padding(.horizontal, logo ? 0 : (wide ? 18 : 14))
+                .frame(minHeight: wide ? 44 : 46)
+                .clipShape(shape)
+                .background(shape.fill(on ? Theme.Palette.selectedFill : Theme.Palette.surface))
+                .overlay { if on { shape.inset(by: -4).stroke(Color.white, lineWidth: 2) } }
+                .contentShape(shape)
+                .pressVeil(shape, pressed: configuration.isPressed)
+                .modifier(FocusRing(shape: shape, active: focused))
         }
     }
 }
@@ -169,6 +263,8 @@ struct DiscoverGrid: View {
     let selects: Bool
     @Binding var selection: DiscoverSelection
     var onEnd: (() -> Void)?
+    /// The sort value on a poster's corner.
+    var corner: (Tile) -> String? = { _ in nil }
     @Environment(\.openTitle) private var openTitle
     @FocusState private var focused: String?
     @AccessibilityFocusState private var voiceOver: String?
@@ -189,6 +285,7 @@ struct DiscoverGrid: View {
                 Button { activate(key, tile) } label: {
                     ArtImage(url: tile.poster, fallbackURL: tile.posterFallback, fallback: tile.name)
                         .frame(width: poster.width, height: poster.height)
+                        .overlay { if let value = corner(tile) { CornerLabel(text: value, banded: tile.posterFallback != nil) } }
                         .cardArt(radius: Theme.TileDesktop.radius)
                 }
                 .buttonStyle(CardButtonStyle(lifted: on))
@@ -298,6 +395,8 @@ struct DiscoverPreview: View {
 struct PhoneDiscoverGrid: View {
     let tiles: [Tile]
     var onEnd: (() -> Void)?
+    /// The sort value on a poster's corner.
+    var corner: (Tile) -> String? = { _ in nil }
     @State private var width: CGFloat = 0
 
     var body: some View {
@@ -320,13 +419,15 @@ struct PhoneDiscoverGrid: View {
                     VStack(alignment: .leading, spacing: 6) {
                         ArtImage(url: tile.poster, fallbackURL: tile.posterFallback, fallback: tile.name)
                             .frame(width: size.width, height: size.height)
+                            .overlay { if let value = corner(tile) { CornerLabel(text: value, banded: tile.posterFallback != nil) } }
                             .cardArt(radius: Theme.Tile.radius)
                         Text(tile.name)
                             .textFont(15, weight: .semibold, relativeTo: .subheadline)
                             .foregroundStyle(Theme.Palette.text)
                             .lineLimit(2)
                             .multilineTextAlignment(.leading)
-                        if let year = tile.releaseInfo, !year.isEmpty {
+                        // The corner shows the year for the date sorts: the line under the name does not repeat it.
+                        if corner(tile) != tile.releaseInfo, let year = tile.releaseInfo, !year.isEmpty {
                             Text(year)
                                 .textFont(13, relativeTo: .footnote)
                                 .foregroundStyle(Theme.Palette.dim)

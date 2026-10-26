@@ -93,7 +93,7 @@ private func snapshot(
     #expect(!words.joined().contains("Cinemeta"))
     // A failure's reason can carry a host or an addon: the shared line instead.
     let failed = try snapshot(state: ["state": "failed", "reason": "https://v3-cinemeta.strem.io answered 500 (Cinemeta)"])
-    #expect(DiscoverWords.state(failed) == "This catalog did not load.")
+    #expect(DiscoverWords.state(failed) == "This list did not load.")
     #expect(DiscoverWords.state(try snapshot(state: ["state": "end"])) == "Nothing here for this choice.")
     #expect(DiscoverWords.state(try snapshot(genreRequired: true)) == "This catalog lists titles by genre. Pick one above.")
     #expect(DiscoverWords.genres(try snapshot(genreRequired: true)).map(\.title) == ["Drama"])
@@ -213,4 +213,55 @@ private func snapshot(
     // (Slide Over at 320; review-apple-player P3 5).
     let screen = try source("Discover/DiscoverScreen.swift")
     #expect(screen.contains("if width > 0 {\n                        DiscoverGrid("))
+}
+
+/// Discover v2 (plans/discover-v2.md 6.1): the words from a snapshot with the new fields; an older
+/// snapshot without them still decodes.
+private func v2(platform: String? = nil, genre: String? = nil, decade: String? = nil, kinds: [(String, String)]) throws -> DiscoverSnapshot {
+    let json: [String: Any] = [
+        "kinds": kinds.map { [$0.0, $0.1] }, "kind": kinds.first?.0 ?? NSNull(), "catalogs": [], "catalog": NSNull(),
+        "genres": ["Drama"], "genre": genre ?? NSNull(), "genreRequired": false, "items": [], "state": ["state": "end"],
+        "missingGenre": NSNull(),
+        "platforms": [["id": "netflix", "name": "Netflix"], ["id": "prime", "name": "Prime Video"]], "platform": platform ?? NSNull(),
+        "sorts": [["id": "imdb", "label": "IMDb rating", "mark": "imdb"], ["id": "newest", "label": "Newest", "mark": NSNull()]],
+        "sort": "imdb", "lists": [["id": "x|movie|top", "name": "Top seeded", "source": "Torrent Catalogs"]],
+        "genreChoices": [["name": "Drama", "count": 4]], "genreLabel": "Genre", "decades": ["2020s", "1990s"], "decade": decade ?? NSNull(),
+        "scope": ["titles": 857, "services": 10, "failed": 1, "pending": 0, "looked": NSNull(), "note": "on your services"],
+        "missingSort": NSNull(),
+    ]
+    return try JSONDecoder().decode(DiscoverSnapshot.self, from: JSONSerialization.data(withJSONObject: json))
+}
+
+@Test func discoverV2WordsComeFromTheSnapshot() throws {
+    let s = try v2(platform: "netflix", genre: "Drama", kinds: [("movie", "Movies"), ("series", "Series"), ("anime", "Anime"), ("tv", "Live TV")])
+    #expect(DiscoverWords.segments(s).map(\.title) == ["Movies", "Series", "Anime"])
+    #expect(DiscoverWords.more(s).map(\.title) == ["Live TV"])
+    #expect(DiscoverWords.services(s).map(\.title) == ["All", "Netflix", "Prime Video"])
+    #expect(DiscoverWords.sorts(s).map(\.title) == ["IMDb rating", "Newest", "Top seeded"])
+    #expect(DiscoverWords.sort(s) == "IMDb rating")
+    #expect(DiscoverWords.genreChoices(s).map(\.title) == ["Any genre", "Drama"])
+    #expect(DiscoverWords.decades(s).map(\.title) == ["Any year", "2020s", "1990s"])
+    #expect(DiscoverWords.emptyLine(s) == "No Drama on Netflix right now.")
+    #expect(DiscoverWords.state(s) == "No Drama on Netflix right now.")
+    // Clear only with a filter; the sort alone is not one.
+    #expect(DiscoverWords.filtered(s))
+    #expect(!DiscoverWords.filtered(try v2(kinds: [("movie", "Movies")])))
+    // Three kinds never become a pull-down; no addon name reaches a word.
+    let words = (DiscoverWords.sorts(s) + DiscoverWords.segments(s)).map(\.title).joined(separator: " ")
+    #expect(!words.contains("Torrent") && !words.contains("Cinemeta"))
+}
+
+@Test func theFooterSaysTheScope() throws {
+    #expect(DiscoverWords.scope(try v2(kinds: [("movie", "Movies")])) == nil, "nothing listed, no footer")
+    // An older core's snapshot: the count of what is listed.
+    #expect(DiscoverWords.scope(try snapshot(items: 3)) == "3 titles")
+}
+
+@Test func theCornerShowsTheValueTheListIsOrderedBy() throws {
+    let tile = try #require(try snapshot(items: 1).items.first)
+    #expect(DiscoverWords.corner("newest", tile) == "2020")
+    #expect(DiscoverWords.corner("oldest", tile) == "2020")
+    // No IMDb score from the addon: no corner, never a placeholder.
+    #expect(DiscoverWords.corner("imdb", tile) == nil)
+    #expect(DiscoverWords.corner("popular", tile) == nil)
 }

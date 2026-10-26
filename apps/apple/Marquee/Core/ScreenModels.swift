@@ -77,8 +77,8 @@ enum SearchWords {
 }
 
 struct DiscoverSnapshot: Decodable, Hashable, Sendable {
-    /// The kind, catalog and genre shown: the list a selection and a preview belong to.
-    var list: String { "\(kind ?? "")|\(catalog ?? "")|\(genre ?? "")" }
+    /// The kind, service, sort, catalog, genre and decade shown: the list a selection and a preview belong to.
+    var list: String { "\(kind ?? "")|\(platform ?? "")|\(sort ?? "")|\(catalog ?? "")|\(genre ?? "")|\(decade ?? "")" }
 
     /// Types with at least one catalog: ("movie", "Movies").
     let kinds: [KindLabel]
@@ -97,6 +97,52 @@ struct DiscoverSnapshot: Decodable, Hashable, Sendable {
     let missingGenre: String?
     /// The item `preview {id}` named, with what its catalog said of it (C44a); nil until it is named and listed.
     let preview: ItemDetails?
+    // Discover v2 (plans/discover-v2.md section 4): optional, so recordings and an older core decode.
+    /// The services the rail offers for the kind; nil is All.
+    let platforms: [ServiceChoice]?
+    let platform: String?
+    /// The orders the sort menu offers, then every other catalog of the kind ("More lists").
+    let sorts: [SortChoice]?
+    let sort: String?
+    let lists: [CatalogChoice]?
+    let genreChoices: [GenreChoice]?
+    /// What the genre menu is called: "Genre", or "Year" or "Period".
+    let genreLabel: String?
+    let decades: [String]?
+    let decade: String?
+    let scope: DiscoverScope?
+    let missingSort: String?
+}
+
+/// A streaming service on Discover's rail: `id` is the stable key, `name` the name shown.
+struct ServiceChoice: Decodable, Hashable, Sendable {
+    let id: String
+    let name: String
+    /// TMDB's logo for it, nil until fetched or when there is none: the name is the tile's words then.
+    let logo: String?
+}
+
+/// An order the sort menu offers; `mark` names a rating mark ("imdb", "rt").
+struct SortChoice: Decodable, Hashable, Sendable {
+    let id: String
+    let label: String
+    let mark: String?
+}
+
+/// A genre the genre menu offers, with how many titles give it in a complete set.
+struct GenreChoice: Decodable, Hashable, Sendable {
+    let name: String
+    let count: Int?
+}
+
+/// What the list on screen covers, for the footer.
+struct DiscoverScope: Decodable, Hashable, Sendable {
+    let titles: Int?
+    let services: Int
+    let failed: Int
+    let pending: Int
+    let looked: Int?
+    let note: String?
 }
 
 /// A catalog item's synopsis, up to three genres and runtime, as its catalog gave them (C44a).
@@ -138,13 +184,81 @@ enum DiscoverWords {
     /// The quiet line beside the filters after a genre chip no catalog lists.
     static func missingGenre(_ genre: String?) -> String? { genre.map { "No \($0) here" } }
 
-    static let failed = "This catalog did not load."
+    static let failed = "This list did not load."
     static let empty = "Nothing here for this choice."
     static let needsGenre = "This catalog lists titles by genre. Pick one above."
     static let allGenres = "All genres"
 
     /// The kind control's choices: the core's labels ("Movies", "Series").
     static func kinds(_ s: DiscoverSnapshot) -> [(id: String, title: String)] { s.kinds.map { ($0.id, $0.label) } }
+
+    /// Movies, Series and Anime: the segmented control, whatever else is installed (plans/discover-v2.md 6.1).
+    static let mainKinds: Set<String> = ["movie", "series", "anime"]
+    static func segments(_ s: DiscoverSnapshot) -> [(id: String, title: String)] { kinds(s).filter { mainKinds.contains($0.id) } }
+    /// Every other kind (Channels, Live TV, Other): the trailing More pull-down.
+    static func more(_ s: DiscoverSnapshot) -> [(id: String, title: String)] { kinds(s).filter { !mainKinds.contains($0.id) } }
+    static func moreTitle(_ s: DiscoverSnapshot) -> String {
+        more(s).first { $0.id == s.kind }?.title ?? "More"
+    }
+
+    /// The rail: All (nil) first, then the services, each with its logo when there is one.
+    static func services(_ s: DiscoverSnapshot) -> [(id: String?, title: String, logo: String?)] {
+        let all = s.platforms ?? []
+        return all.isEmpty ? [] : [(nil, "All", nil)] + all.map { ($0.id, $0.name, $0.logo) }
+    }
+
+    /// The sort menu: the core's sorts, then the other lists by their own names.
+    static func sorts(_ s: DiscoverSnapshot) -> [(id: String, title: String)] {
+        (s.sorts ?? []).map { ($0.id, $0.label) } + (s.lists ?? []).map { ("list:\($0.id)", $0.name) }
+    }
+    static func sort(_ s: DiscoverSnapshot) -> String { sorts(s).first { $0.id == s.sort }?.title ?? "Sort" }
+
+    /// The genre menu's choices: "Any genre" first (nil) unless the list needs one.
+    static func genreChoices(_ s: DiscoverSnapshot) -> [(id: String?, title: String)] {
+        let label = (s.genreLabel ?? "Genre").lowercased()
+        let names = s.genreChoices.map { $0.map(\.name) } ?? s.genres
+        return (s.genreRequired ? [] : [(nil, "Any \(label)")]) + names.map { ($0, $0) }
+    }
+    static func genreTitle(_ s: DiscoverSnapshot) -> String { s.genre ?? genreChoices(s).first?.title ?? "Genre" }
+
+    static func decades(_ s: DiscoverSnapshot) -> [(id: String?, title: String)] {
+        let all = s.decades ?? []
+        return all.isEmpty ? [] : [(nil, "Any year")] + all.map { ($0, $0) }
+    }
+    static func decadeTitle(_ s: DiscoverSnapshot) -> String { s.decade ?? "Any year" }
+
+    /// Clear shows with a genre, a decade or a service set, never for the sort alone.
+    static func filtered(_ s: DiscoverSnapshot) -> Bool { s.genre != nil || s.decade != nil || s.platform != nil }
+
+    /// The footer, as the web words it: the size, the scope beside the sort, what did not answer.
+    static func scope(_ s: DiscoverSnapshot) -> String? {
+        guard !s.items.isEmpty else { return nil }
+        var parts: [String] = []
+        let titles = s.scope?.titles ?? s.items.count
+        parts.append("\(titles) \(titles == 1 ? "title" : "titles")")
+        if let note = s.scope?.note, let label = (s.sorts ?? []).first(where: { $0.id == s.sort })?.label { parts.append("\(label), \(note)") }
+        if let looked = s.scope?.looked { parts.append("Looked through the first \(looked)") }
+        if let n = s.scope?.pending, n > 0 { parts.append("\(n) \(n == 1 ? "service" : "services") still loading") }
+        if let n = s.scope?.failed, n > 0 { parts.append("\(n) \(n == 1 ? "service" : "services") did not answer") }
+        return parts.joined(separator: " · ")
+    }
+
+    /// On the poster's corner: the value the list is ordered by, the IMDb score for the IMDb sort (even with the
+    /// cover's band, which can be weeks old) and the year for the date sorts; nil for the others.
+    static func corner(_ sort: String?, _ tile: Tile) -> String? {
+        switch sort {
+        case "imdb": tile.ratings?.imdb.map { "IMDb \($0)" }
+        case "newest", "oldest": tile.releaseInfo
+        default: nil
+        }
+    }
+
+    /// The empty line: what was asked ("No Drama on Netflix right now.").
+    static func emptyLine(_ s: DiscoverSnapshot) -> String {
+        let service = (s.platforms ?? []).first { $0.id == s.platform }?.name
+        let decade = s.decade.map { " from the \($0)" } ?? ""
+        return "No \(s.genre ?? "titles")\(decade)\(service.map { " on \($0)" } ?? "") right now."
+    }
     static func kind(_ s: DiscoverSnapshot) -> String { s.kinds.first { $0.id == s.kind }?.label ?? "Kind" }
 
     static func catalogs(_ s: DiscoverSnapshot) -> [(id: String, title: String)] { s.catalogs.map { ($0.id, $0.name) } }
@@ -176,7 +290,7 @@ enum DiscoverWords {
     static func state(_ s: DiscoverSnapshot) -> String? {
         switch s.state {
         case .failed: failed
-        case .end where s.items.isEmpty: empty
+        case .end where s.items.isEmpty: s.sorts == nil ? empty : emptyLine(s)
         default: s.genreRequired && s.genre == nil ? needsGenre : nil
         }
     }

@@ -123,6 +123,10 @@ struct PosterGrid: View {
     var caption: (Tile) -> String? = \.releaseInfo
     /// Called when the last poster comes on screen, to load the next page.
     var onEnd: (() -> Void)?
+    /// A small label on a poster's top corner (Discover's sort value).
+    var corner: (Tile) -> String? = { _ in nil }
+    /// The focused poster's key, for a screen that must know focus is in the grid (Discover on TV).
+    var focused: FocusState<String?>.Binding?
     @Environment(\.metrics) private var metrics
 
     var body: some View {
@@ -141,12 +145,14 @@ struct PosterGrid: View {
                             .overlay(alignment: .bottom) {
                                 if let progress = tile.progress { EdgeProgress(value: progress) }
                             }
+                            .overlay { if let value = corner(tile) { CornerLabel(text: value, banded: tile.posterFallback != nil) } }
                             .cardArt()
                         CardCaption(name: tile.name, info: caption(tile))
                     }
                 }
                 .buttonStyle(CardButtonStyle())
-                .accessibilityLabel(posterLabel([tile.name, caption(tile)], tile.ratings))
+                .modifier(FocusedKey(binding: focused, key: key))
+                .accessibilityLabel(posterLabel([tile.name, corner(tile), caption(tile)], tile.ratings))
                 .onAppear { if key == keyed.last?.key { onEnd?() } }
             }
         }
@@ -186,5 +192,38 @@ struct ScreenTitle: View {
             .display(metrics.screenTitle(desktop: desktop))
             .foregroundStyle(Theme.Palette.text)
             .accessibilityAddTraits(.isHeader)
+    }
+}
+
+/// Binds a view's focus to `key` when a screen asks for it.
+private struct FocusedKey: ViewModifier {
+    let binding: FocusState<String?>.Binding?
+    let key: String
+
+    func body(content: Content) -> some View {
+        if let binding { content.focused(binding, equals: key) } else { content }
+    }
+}
+
+/// The value a Discover list is ordered by ("IMDb 8.4", "2024"), compact, at a poster's bottom right: just above
+/// RPDB's ratings band (about a tenth of the cover, `banded`) so the title art and the band's scores stay clear.
+struct CornerLabel: View {
+    let text: String
+    var banded = false
+    @Environment(\.metrics) private var metrics
+
+    var body: some View {
+        GeometryReader { g in
+            Text(text)
+                .textFont(metrics.wide ? 11 : 10, weight: .semibold, relativeTo: .caption2)
+                .foregroundStyle(Theme.Palette.text)
+                .padding(.horizontal, 5)
+                .padding(.vertical, 2)
+                .background(.black.opacity(0.78), in: RoundedRectangle(cornerRadius: 5, style: .continuous))
+                .padding(.trailing, 5)
+                .padding(.bottom, (banded ? g.size.height * 0.105 : 0) + 5)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
+        }
+        .accessibilityHidden(true)
     }
 }
