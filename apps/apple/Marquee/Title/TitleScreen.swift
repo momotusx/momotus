@@ -248,7 +248,7 @@ struct TitleScreen: View {
                 }
             }
             .background {
-                // The phone's art runs up under the status bar; the Mac's starts under the black header.
+                // The phone's art runs up under the status bar, the Mac's under the traffic lights.
                 ZStack(alignment: .top) {
                     if phoneCover != nil {
                         // The iPhone shows the cover first, whole at its 2:3 from the screen's top, with no words

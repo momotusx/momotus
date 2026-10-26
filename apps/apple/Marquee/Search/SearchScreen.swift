@@ -15,7 +15,6 @@ struct SearchScreen: View {
     @FocusState private var firstResult: Bool
     @Environment(\.metrics) private var metrics
     @Environment(\.tabShown) private var shown
-    @Environment(\.headerSearchField) private var headerField
     /// The query, shared with the Mac header's field (plans/design-v3-phase7-apple.md 2).
     @Environment(SearchInput.self) private var input
     @State private var width: CGFloat = 0
@@ -114,10 +113,7 @@ struct SearchScreen: View {
         tvContent
         #else
         if !metrics.wide { ScreenTitle(text: "Search").padding(.horizontal, margin) }
-        // The page draws its field only where the header has none.
-        if !headerField {
-            SearchField(input: input, prompt: Self.prompt, focused: $fieldFocused).padding(.horizontal, margin)
-        }
+        SearchField(input: input, prompt: Self.prompt, focused: $fieldFocused).padding(.horizontal, margin)
         if search.failure != nil {
             // The core's words can name a host or an addon: the shared line instead.
             StateLine(symbol: "triangle-alert", text: SearchWords.failed, action: ("Try again", search.retry))

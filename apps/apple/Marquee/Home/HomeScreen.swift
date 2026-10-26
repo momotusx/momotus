@@ -62,9 +62,24 @@ struct HomeScreen: View {
         .scrollIndicators(.hidden)
         .background(Theme.Palette.bg)
         .onScrollGeometryChange(for: Bool.self) { $0.contentOffset.y + $0.contentInsets.top > 0 } action: { underBar = $1 }
+        #if !os(iOS)
+        // TV Back takes a scrolled Home to its top; the Mac's ornament darkens once the art has left it.
+        .onScrollGeometryChange(for: Bool.self) { $0.contentOffset.y + $0.contentInsets.top > 8 } action: { scrolled.wrappedValue = $1 }
+        #endif
+        #if os(macOS)
+        // The hero's art runs to the window's top, under the traffic lights (variant 4: no strip).
+        .fullBleedTop()
+        #if DEBUG
+        .scrollPosition($position)
+        .task {
+            guard DebugHooks.homeScrollY > 0 else { return }
+            try? await Task.sleep(for: .seconds(6))
+            position.scrollTo(y: DebugHooks.homeScrollY)
+        }
+        #endif
+        #endif
         #if os(tvOS)
         .scrollPosition($position)
-        .onScrollGeometryChange(for: Bool.self) { $0.contentOffset.y + $0.contentInsets.top > 8 } action: { scrolled.wrappedValue = $1 }
         .onChange(of: topRequest) {
             withAnimation(Theme.Motion.panel) { position.scrollTo(edge: .top) }
             resetFocus(in: startScope)
@@ -262,7 +277,7 @@ struct HomeScreen: View {
         #else
         guard width > 0, height > 0 else { return metrics.wide ? 506 : 633 }
         if metrics.wide {
-            // tv.apple.com's 16:9 hero under the black header, held so the first shelf's title shows
+            // tv.apple.com's 16:9 hero from the window's top, held so the first shelf's title shows
             // on the first screen; never under 400, the glass check's floor.
             return max(min(width * 0.5625, height - 90), 400)
         }

@@ -31,13 +31,10 @@ extension EnvironmentValues {
     /// The tab this view is in is the one on screen. On a phone every opened
     /// tab stays alive behind the shown one, so its pages never disappear.
     @Entry var tabShown = true
-    /// The Mac header shows the search field, so Search's page draws none of its own.
-    @Entry var headerSearchField = false
 }
 
 /// The navigation: the floating glass capsule at the bottom on iPhone and iPad,
-/// tv.apple.com's black header in the window toolbar on the Mac, the pill at
-/// the top on TV.
+/// the glass ornament at the window's foot on the Mac, the pill at the top on TV.
 ///
 /// The profile gate: nothing of a profile shows before the core says which
 /// one runs and whether it is locked. While the gate is shut only the picker
@@ -128,10 +125,6 @@ struct MainShell: View {
     #if !os(iOS)
     /// The profile picker, from the avatar at the end of the pill.
     @State private var showProfiles = false
-    #endif
-    #if os(macOS)
-    /// The window's width: the header's search field folds to its glyph on a half-screen window.
-    @State private var windowWidth = CGFloat.infinity
     #endif
     #if os(tvOS)
     /// Places whose root page has another page over it: Back pops that first.
@@ -273,15 +266,13 @@ struct MainShell: View {
         places
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(Theme.Palette.bg)
-            .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { windowWidth = $0 }
-            .toolbar {
-                NavToolbar(selection: tab, select: { select($0) }, find: find, profiles: { showProfiles = true }, input: searchInput, narrow: windowWidth < NavToolbar.fieldWidthFrom)
-            }
-            // The field moves between the header and the page: the cursor follows it.
-            .onChange(of: windowWidth < NavToolbar.fieldWidthFrom) { if tab == .search { searchInput.focus += 1 } }
-            // tv.apple.com's black header.
-            .toolbarBackground(Theme.Palette.barDesktop, for: .windowToolbar)
-            .toolbarBackgroundVisibility(.visible, for: .windowToolbar)
+            // The owner's variant 4: the places in a glass ornament at the window's foot; pages end above it.
+            .placeOrnament(tab, strong: ornamentStrong, shown: !immersion.active) { select($0) }
+            // Content under the traffic lights and the top buttons gets a soft blurred edge once it scrolls there.
+            .overlay(alignment: .top) { ScrollTopEdge().opacity(ornamentStrong && !immersion.active ? 1 : 0).animation(Theme.Motion.panel, value: ornamentStrong) }
+            .toolbar { TopTools(find: find, profiles: { showProfiles = true }) }
+            // No strip: the window's toolbar draws nothing of its own, and Home's art runs under it.
+            .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
             .modifier(FullScreen(isPresented: $showProfiles) {
                 NavigationStack {
                     ProfilePicker(mode: .push, core: core)
@@ -345,8 +336,11 @@ struct MainShell: View {
     }
 
     #if os(macOS)
-    /// Cmd-F and the narrow header's glyph: Search's first page with the cursor in its field (a title
-    /// open over Search goes first).
+    /// The ornament's glass darkens once anything but Home's art at rest lies behind it.
+    private var ornamentStrong: Bool { tab != .home || homeScrolled || !homePath.isEmpty }
+
+    /// Cmd-F and the search button: Search's first page with the cursor in its field (a title open over
+    /// Search goes first).
     private func find() {
         popToRoot(.search)
         select(.search)
@@ -377,9 +371,6 @@ struct MainShell: View {
                     .environment(\.openTitle, OpenTitleAction { route in
                         if item == .home { homePath.append(route) } else { titlePaths[item, default: []].append(route) }
                     })
-                    #if os(macOS)
-                    .environment(\.headerSearchField, windowWidth >= NavToolbar.fieldWidthFrom)
-                    #endif
                     .opacity(item == tab ? 1 : 0)
                     .allowsHitTesting(item == tab)
                     .accessibilityHidden(item != tab)
@@ -632,148 +623,28 @@ private struct TabBar: View {
 #endif
 
 #if os(macOS)
-/// tv.apple.com's header in the window toolbar: the wordmark at the left, the places as centered
-/// text tabs (16/600, the current one at 92 percent, the others at 64), the search field and the
-/// profile at the right. No pill and no glass.
-private struct NavToolbar: ToolbarContent {
-    let selection: AppTab
-    let select: (AppTab) -> Void
-    /// The narrow header's glyph: Search's page with the cursor in the page's field.
+/// The window toolbar's only items, top right over the art: Search as a round glass button, then the profile.
+private struct TopTools: ToolbarContent {
     let find: () -> Void
     let profiles: () -> Void
-    let input: SearchInput
-    /// A window too narrow for the 172 pt field beside the tabs: the field is its glyph alone.
-    var narrow = false
-    /// The narrowest window that holds the wordmark, the centered tabs, the whole field and the
-    /// profile, with a pushed page's back button too (measured: at 940 that button cuts the tabs and
-    /// the field, at 1000 they only just fit).
-    static let fieldWidthFrom: CGFloat = 1060
 
     var body: some ToolbarContent {
+        // An empty centre: without one the toolbar packs its actions at the left, beside the traffic lights.
         if #available(macOS 26, *) {
-            ToolbarItem(placement: .navigation) { mark }.sharedBackgroundVisibility(.hidden)
-            // New items when the width class flips: the toolbar keeps an item's first size otherwise, and
-            // the grown field then cuts the tabs.
-            ToolbarItem(id: "tabs-\(narrow)", placement: .principal) { tabs }.sharedBackgroundVisibility(.hidden)
-            ToolbarItem(id: "tools-\(narrow)", placement: .primaryAction) { tools }.sharedBackgroundVisibility(.hidden)
+            ToolbarItem(placement: .principal) { Color.clear.frame(width: 1, height: 1) }.sharedBackgroundVisibility(.hidden)
+            ToolbarItem(placement: .primaryAction) { tools }.sharedBackgroundVisibility(.hidden)
         } else {
-            ToolbarItem(placement: .navigation) { mark }
-            ToolbarItem(id: "tabs-\(narrow)", placement: .principal) { tabs }
-            ToolbarItem(id: "tools-\(narrow)", placement: .primaryAction) { tools }
-        }
-    }
-
-    private var mark: some View { BrandMark(size: 26) }
-
-    private var tabs: some View {
-        // Closer on a narrow window, so a pushed page's back button fits beside them.
-        HStack(spacing: narrow ? 2 : 12) {
-            ForEach(AppTab.bar.filter { $0 != .search }, id: \.self) { item in
-                Button(item.title) { select(item) }
-                    .buttonStyle(DesktopTabStyle(on: item == selection))
-                    .accessibilityAddTraits(item == selection ? .isSelected : [])
-            }
+            ToolbarItem(placement: .principal) { Color.clear.frame(width: 1, height: 1) }
+            ToolbarItem(placement: .primaryAction) { tools }
         }
     }
 
     private var tools: some View {
-        HStack(spacing: 16) {
-            if narrow {
-                Button(action: find) { Label("Search", glyph: "search") }
-                    .buttonStyle(SearchGlyphStyle())
-                    // The glyph alone: the pointer still names it.
-                    .help("Search")
-                    .accessibilityAddTraits(selection == .search ? .isSelected : [])
-            } else {
-                HeaderSearchField(input: input)
-            }
-            ProfileButton(size: 28, action: profiles)
-        }
-    }
-}
-
-/// The header's search field (tv.apple.com: 172 by 28, a 1 pt white edge, 15/400): where Search is
-/// typed on the Mac. Typing shows Search (`SearchRules.bringsSearch`); Escape clears, then lets go.
-private struct HeaderSearchField: View {
-    @Bindable var input: SearchInput
-    @FocusState private var focused: Bool
-
-    var body: some View {
-        let shape = RoundedRectangle(cornerRadius: 4, style: .continuous)
-        HStack(spacing: 6) {
-            Glyph("search", size: 13).foregroundStyle(Theme.Palette.dim)
-            TextField("Search", text: $input.text, prompt: Text("Search").foregroundStyle(Theme.Palette.dim))
-                .textFieldStyle(.plain)
-                .foregroundStyle(Theme.Palette.text)
-                .autocorrectionDisabled()
-                .focused($focused)
-                // The core searches as you type: Return only moves to the first result.
-                .onSubmit { input.submit += 1 }
-                .onKeyPress(.escape) {
-                    switch SearchRules.escape(input.text) {
-                    case .clear: input.text = ""
-                    case .leave: focused = false
-                    }
-                    return .handled
-                }
-        }
-        .textFont(15, relativeTo: .callout)
-        .padding(.horizontal, 8)
-        .frame(width: 172, height: 28)
-        .overlay(shape.strokeBorder(Theme.Palette.text, lineWidth: 1))
-        .contentShape(shape)
-        .modifier(FocusRing(shape: shape, active: focused))
-        .onChange(of: input.focus) { focused = true }
-    }
-}
-
-/// A header tab: words only, brighter when current or under the pointer, the key ring for keyboard focus.
-private struct DesktopTabStyle: ButtonStyle {
-    let on: Bool
-
-    func makeBody(configuration: Configuration) -> some View {
-        Tab(configuration: configuration, on: on)
-    }
-
-    private struct Tab: View {
-        let configuration: ButtonStyleConfiguration
-        let on: Bool
-        @KeyboardFocused private var focused
-        @State private var hovered = false
-
-        var body: some View {
-            let shape = RoundedRectangle(cornerRadius: 6, style: .continuous)
-            configuration.label
-                .textFont(16, weight: .semibold, relativeTo: .callout)
-                .foregroundStyle(on || hovered ? Theme.Palette.text : Theme.Palette.dim)
-                .padding(.horizontal, 6)
-                .frame(height: 28)
-                .contentShape(shape)
-                .modifier(FocusRing(shape: shape, active: focused))
-                .onHover { hovered = $0 }
-        }
-    }
-}
-
-/// The narrow header's search: a 28 pt square with the glyph alone and the field's 1 pt edge.
-private struct SearchGlyphStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        Field(configuration: configuration)
-    }
-
-    private struct Field: View {
-        let configuration: ButtonStyleConfiguration
-        @KeyboardFocused private var focused
-
-        var body: some View {
-            let shape = RoundedRectangle(cornerRadius: 4, style: .continuous)
-            configuration.label.labelStyle(.iconOnly)
-                .textFont(15, relativeTo: .callout)
-                .foregroundStyle(Theme.Palette.dim)
-                .frame(width: 28, height: 28)
-                .overlay(shape.strokeBorder(Theme.Palette.text, lineWidth: 1))
-                .contentShape(shape)
-                .modifier(FocusRing(shape: shape, active: focused))
+        HStack(spacing: 10) {
+            Button(action: find) { Label("Search", glyph: "search", size: 17) }
+                .buttonStyle(GlassCircleStyle())
+                .help("Search")
+            ProfileButton(size: 32, action: profiles)
         }
     }
 }
@@ -923,12 +794,11 @@ extension View {
         #endif
     }
 
-    /// Lets art run under the status bar (iOS), as the title page's backdrop
-    /// needs; a scrim keeps the status bar readable once content scrolls under
-    /// it. The Mac's header is tv.apple.com's black bar on every page, so there
-    /// the art starts under it.
+    /// Lets art run under the status bar (iOS) and under the Mac's traffic lights,
+    /// as the title page's backdrop and Home's hero need; a scrim keeps the status
+    /// bar readable once content scrolls under it.
     func fullBleedTop() -> some View {
-        #if os(iOS)
+        #if os(iOS) || os(macOS)
         // No scrim of its own: each backdrop puts one between its art and its
         // words, and `topScrim` takes over once content scrolls under the bar.
         return self.ignoresSafeArea(edges: .top)

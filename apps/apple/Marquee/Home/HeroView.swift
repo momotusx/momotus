@@ -48,7 +48,7 @@ struct HeroView: View {
             }
         }
         .background {
-            // The phone's art runs up under the status bar; the Mac's starts under the black header.
+            // The phone's art runs up under the status bar, the Mac's under the traffic lights.
             ZStack {
                 if let under { under }
                 ArtImage(url: hero?.tile.background ?? hero?.tile.plainPoster, maxPixels: ArtSize.backdrop)

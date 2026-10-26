@@ -17,6 +17,10 @@ enum DebugHooks {
     /// `-MQScrollBottom YES`: the title page opens scrolled to its foot, for a walk's shot.
     static var scrollBottom: Bool { UserDefaults.standard.bool(forKey: "MQScrollBottom") }
 
+    /// `-MQHomeScrollY 640` scrolls Home that far once its rows have come: a walk's shot of the Mac's
+    /// scrolled state with no pointer or key sent to the window.
+    static var homeScrollY: Double { UserDefaults.standard.double(forKey: "MQHomeScrollY") }
+
     /// `-MQTab discover` starts on that tab.
     static var tab: AppTab? { UserDefaults.standard.string(forKey: "MQTab").flatMap(AppTab.init(rawValue:)) }
 

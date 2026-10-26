@@ -243,6 +243,8 @@ targets:
       - path: Marquee/Title/TitleWords.swift
       - path: Marquee/App/TabBarRule.swift
       - path: Marquee/App/Places.swift
+      # The Mac's ornament, laid out for real in Tests/PlaceOrnamentTests.swift.
+      - path: Marquee/App/PlaceOrnament.swift
       - path: Marquee/App/SearchInput.swift
       - path: Marquee/Discover/DiscoverRules.swift
       - path: Marquee/Common/ChipRule.swift
