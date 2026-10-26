@@ -129,6 +129,7 @@ struct SettingsScreen: View {
                     StateLine(symbol: "triangle-alert", text: failure, action: ("Try again", { prefs.retry(); addons.retry() }))
                 }
                 section("About").padding(.top, Theme.Space.s)
+                Wordmark(size: 20).padding(.bottom, Theme.Space.xs)
                 Text("Momotus \(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? ""), core \(core.version)")
                     .textFont(Theme.type.callout, relativeTo: .callout)
                     .foregroundStyle(Theme.Palette.muted)
@@ -151,7 +152,7 @@ struct SettingsScreen: View {
                         .foregroundStyle(Theme.Palette.muted)
                         .fixedSize(horizontal: false, vertical: true)
                 }
-                Text("Icons: Lucide 1.58.0, ISC licence. Fonts: Inter and IBM Plex Mono, SIL Open Font License 1.1.")
+                Text("Icons: Lucide 1.58.0, ISC licence. Fonts: Inter and IBM Plex Mono, SIL Open Font License 1.1; the name is drawn from Unbounded, same licence.")
                     .textFont(Theme.type.callout, relativeTo: .callout)
                     .foregroundStyle(Theme.Palette.muted)
                     .fixedSize(horizontal: false, vertical: true)

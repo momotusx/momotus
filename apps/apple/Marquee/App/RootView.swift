@@ -73,7 +73,7 @@ struct RootView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(Theme.Palette.bg)
             } else {
-                Theme.Palette.bg.ignoresSafeArea()
+                Starting()
             }
         }
         .preferredColorScheme(.dark)
@@ -472,16 +472,82 @@ extension View {
     }
 }
 
-/// "Marquee": the name in display type, with no dot.
+/// B (design/logo, plans/owner-picks.md): the owner's motmot before the name, Unbounded SemiBold outlined
+/// in mint, where the name helps. `size` is the name's old point size: the bird is 1.45 of it.
 struct Wordmark: View {
     var size: CGFloat = Theme.type.title3
 
     var body: some View {
-        Text("Momotus").display(size)
-        .foregroundStyle(Theme.Palette.text)
+        let bird = size * 1.45, word = bird * 0.45
+        HStack(spacing: bird * 0.2) {
+            BrandMark(size: bird)
+            Image(decorative: "Wordmark").resizable().aspectRatio(contentMode: .fit).frame(height: word)
+        }
+        // Its letters sit on the line of the text beside it.
+        .alignmentGuide(.firstTextBaseline) { $0[VerticalAlignment.center] + word / 2 }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Momotus")
         .accessibilityAddTraits(.isHeader)
+    }
+}
+
+/// C: the bird alone, where room is tight. Not spoken: the place around it says what it is.
+struct BrandMark: View {
+    var size: CGFloat
+
+    var body: some View {
+        Image(decorative: "Mark").resizable().interpolation(.high).frame(width: size, height: size)
+    }
+}
+
+/// B while the app starts: a faint copy with the solid one revealed from the left, its edge feathered, over and
+/// over, as the loading screen fills a title's logo (design/DECISION.md, Loading). Solid under Reduce Motion.
+struct BrandLoading: View {
+    var size: CGFloat
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var start = Date()
+
+    var body: some View {
+        Group {
+            if reduceMotion {
+                Wordmark(size: size)
+            } else {
+                TimelineView(.animation) { context in
+                    let feather = 0.03
+                    let t = context.date.timeIntervalSince(start).truncatingRemainder(dividingBy: 2.4) / 2.4
+                    let p = -feather + t * (1 + 2 * feather)
+                    ZStack {
+                        Wordmark(size: size).opacity(0.2)
+                        Wordmark(size: size).mask {
+                            LinearGradient(
+                                stops: [.init(color: .black, location: min(max(p - feather, 0), 1)),
+                                        .init(color: .clear, location: min(max(p + feather, 0), 1))],
+                                startPoint: .leading, endPoint: .trailing)
+                        }
+                    }
+                }
+            }
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Momotus is starting")
+    }
+}
+
+/// What shows while the core opens and the profiles answer: nothing for half a second (a quick start never
+/// flashes it), then the filling mark, so a slow start never shows a blank screen.
+private struct Starting: View {
+    @Environment(\.metrics) private var metrics
+    @State private var shown = false
+
+    var body: some View {
+        ZStack {
+            Theme.Palette.bg.ignoresSafeArea()
+            if shown { BrandLoading(size: metrics.wide ? 56 : 40) }
+        }
+        .task {
+            try? await Task.sleep(for: .milliseconds(500))
+            shown = true
+        }
     }
 }
 
@@ -586,7 +652,7 @@ private struct NavToolbar: ToolbarContent {
         }
     }
 
-    private var mark: some View { Wordmark(size: 17) }
+    private var mark: some View { BrandMark(size: 26) }
 
     private var tabs: some View {
         // Closer on a narrow window, so a pushed page's back button fits beside them.
@@ -721,7 +787,7 @@ private struct TopNav: View {
 
     var body: some View {
         HStack(spacing: 2) {
-            Wordmark(size: Self.mark)
+            BrandMark(size: Self.mark * 1.5)
                 .padding(.leading, Self.mark * 0.6)
                 .padding(.trailing, Self.mark * 0.4)
             ForEach(AppTab.allCases.filter { !$0.isTool }, id: \.self) { link($0) }
