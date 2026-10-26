@@ -342,10 +342,45 @@ for (const form of Object.keys(FORMS) as Form[]) {
       expect(frames[0]).toContain(form === "tv" ? "remove 1" : "remove 0");
       if (logo.r) {
         expect(await page.locator(".info .title-logo").evaluate((i) => getComputedStyle(i).getPropertyValue("--r"))).toBe(logo.r);
+        // The logo stands on the slot's foot and inside it.
+        const [slot, mark] = [await page.locator(".info .logo-slot").boundingBox(), await page.locator(".info .title-logo").boundingBox()];
+        expect(slot && mark && Math.abs(mark.y + mark.height - (slot.y + slot.height))).toBeLessThanOrEqual(0.5);
+        expect(slot && mark && mark.y >= slot.y - 0.5).toBe(true);
       } else {
         await expect(page.locator(".info .logo-slot .logo-text")).toHaveText("Big Buck Bunny");
       }
       await context.close();
     });
   }
+}
+
+// A long name in the slot (its logo never comes): two lines at most, the second's descenders whole, and the slot
+// keeps its height (`flex: none`: it never shrinks to make room in the column).
+for (const form of ["tv", "phone"] as const) {
+  test(`${form}: a long name takes two lines in the logo's slot, its descenders whole, the slot its full height`, async ({ browser }) => {
+    const [width, height, scale] = FORMS[form];
+    const context = await browser.newContext({ viewport: { width, height }, deviceScaleFactor: scale, isMobile: form === "phone", hasTouch: form === "phone", reducedMotion: "reduce" });
+    await context.route(/\/logo\//, (route) => route.fulfill({ status: 404 }));
+    const page = await context.newPage();
+    await page.goto(`/title/movie/tt0325980?form=${form}`);
+    const name = page.locator(".info .logo-slot .logo-text");
+    await expect(name).toHaveText("Pirates of the Caribbean: The Curse of the Black Pearl", { timeout: 30_000 });
+    const slot = await page.locator(".info .logo-slot").boundingBox();
+    expect(slot?.height).toBe(form === "tv" ? 192 : 96);
+    const lines = await name.evaluate((h) => {
+      const range = document.createRange();
+      range.selectNodeContents(h);
+      const rects = [...range.getClientRects()].filter((r) => r.width > 0);
+      const box = h.getBoundingClientRect();
+        // The lines the clamp shows (it hides the rest under the box's foot).
+      const shown = rects.filter((r) => (r.top + r.bottom) / 2 < box.bottom);
+      return { lines: new Set(shown.map((r) => Math.round(r.top))).size, all: new Set(rects.map((r) => Math.round(r.top))).size, overrun: Math.max(...shown.map((r) => r.bottom)) - box.bottom, slotFoot: box.bottom };
+    });
+    expect(lines.lines, JSON.stringify(lines)).toBe(2);
+    // Each shown line's glyph box (ascent to descent) ends inside the name's box: nothing below the baseline is cut.
+    expect(lines.overrun, JSON.stringify(lines)).toBeLessThanOrEqual(0.5);
+    // The name stands on the slot's foot.
+    expect(Math.abs(lines.slotFoot - ((slot?.y ?? 0) + (slot?.height ?? 0)))).toBeLessThanOrEqual(0.5);
+    await context.close();
+  });
 }

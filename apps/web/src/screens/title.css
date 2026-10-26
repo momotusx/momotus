@@ -14,9 +14,9 @@
 /* The logo's slot: one fixed height per form, there from the first frame. The logo sits contained at its foot (a
    wide one low, a stacked one as tall as the slot), or the title's name when it does not load, so the meta line
    never moves whatever arrives, and whenever. Desktop draws the TV canvas scaled, so its slot scales with it. */
-.logo-slot { align-self: stretch; height: 192px; display: flex; align-items: flex-end; margin-bottom: 22px; }
+.logo-slot { align-self: stretch; flex: none; height: 192px; display: flex; align-items: flex-end; margin-bottom: 22px; }
 .logo-slot .title-logo.logo { height: 100%; width: auto; max-width: 480px; aspect-ratio: var(--r, 3.2); margin: 0; object-fit: contain; object-position: left bottom; }
-.logo-slot .title-logo.logo-text { margin: 0; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+.logo-slot .title-logo.logo-text { margin: 0; line-height: 1.2; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
 .title-logo.logo-text { font-size: var(--type-title1); margin-bottom: 16px; }
 .info .meta { font: 600 var(--type-callout) / 1.3 var(--font-text); color: var(--muted); margin-bottom: 14px; }
 .info .meta b { padding: 0 8px; font-weight: 400; color: var(--dim); }
