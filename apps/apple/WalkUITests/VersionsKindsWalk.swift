@@ -37,7 +37,7 @@ import XCTest
         }
         versions.tap()
         // Every source answers, then the chips: All and each kind listed.
-        let all = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'All, '")).firstMatch
+        let all = app.buttons["All"]
         guard all.waitForExistence(timeout: 90) else {
             shot("no kind chips")
             XCTFail("no kind chips: fewer than two kinds listed")

@@ -27,9 +27,10 @@ struct VersionsScreen: View {
     @FocusState private var pickFocused: Bool
     /// The page's width, for the layouts below.
     @State private var width: CGFloat = 0
-    /// The kind chosen in the kind chips (plans/plugins-and-marketplace.md 4.2): nil is All, the core's page.
-    /// It holds while the page is open; a kind with no chip now is All.
-    @State private var kind: String?
+    /// The kind chips (plans/plugins-and-marketplace.md 4.2) showed: they stay while the page is open.
+    @State private var chipsShown = false
+    /// The last kind asked of the core, which may not have answered yet; leaving the page lists every kind again.
+    @State private var asked: String?
 
     var body: some View {
         ScrollView(.vertical) {
@@ -52,6 +53,8 @@ struct VersionsScreen: View {
         .background(Theme.Palette.bg)
         .topScrim()
         .onAppear(perform: model.freeze)
+        .onChange(of: VersionWords.showsKinds(snapshot), initial: true) { _, shows in if shows { chipsShown = true } }
+        .onDisappear { if asked != nil || snapshot?.selectedKind != nil { model.setKind(nil) } }
         .onChange(of: snapshot?.sections, initial: true) { _, sections in
             if choose != nil { held = VersionWords.hold(sections, shown: held) }
         }
@@ -72,8 +75,6 @@ struct VersionsScreen: View {
 
     private var snapshot: VersionsSnapshot? { model.snapshot }
 
-    /// The page under the chosen kind: its first row in the card, the rest in the sections, no shortcuts.
-    private var shown: VersionsSnapshot? { VersionWords.ofKind(snapshot, kind) }
 
     /// Plays `key`: back in the player under the page, else a new player.
     private func play(_ key: String) {
@@ -143,42 +144,33 @@ struct VersionsScreen: View {
         }
     }
 
-    /// The kind chips, only with two kinds or more: one choice at a time, each with its count. Their line is
-    /// held from the first frame by an unseen chip, so nothing below moves when a second kind arrives.
-    /// Choosing one pins the pick.
-    private var kindRow: some View {
-        let chips = VersionWords.kindChips(snapshot)
-        let on = chips.contains { $0.kind == kind } ? kind : nil
-        return ZStack(alignment: .leading) {
-            Button {} label: { Text(StreamChoice.words.kind.all) }
-                .buttonStyle(ChipStyle(selected: false))
-                .disabled(true)
-                .hidden()
-                .accessibilityHidden(true)
-            if !chips.isEmpty {
-                ScrollView(.horizontal) {
-                    HStack(spacing: 8) {
-                        ForEach(chips, id: \.self) { chip in
-                            Button {
-                                model.freeze()
-                                kind = chip.kind
-                            } label: {
-                                HStack(spacing: 6) {
-                                    Text(chip.label)
-                                    Text(chip.count).fontWeight(.regular)
-                                }
+    /// The kind chips from two kinds on, then kept while the page is open: one choice at a time, each kind with its
+    /// count of rows. A chip asks the core (`setKind`, which freezes the pick); no line is kept for them before.
+    @ViewBuilder private var kindRow: some View {
+        let on = snapshot?.selectedKind
+        if chipsShown {
+            ScrollView(.horizontal) {
+                HStack(spacing: 8) {
+                    ForEach(VersionWords.kindChips(snapshot), id: \.self) { chip in
+                        Button {
+                            asked = chip.kind
+                            model.setKind(chip.kind)
+                        } label: {
+                            HStack(spacing: 6) {
+                                Text(chip.label)
+                                if let count = chip.count { Text(count).fontWeight(.regular) }
                             }
-                            .buttonStyle(ChipStyle(selected: chip.kind == on))
-                            .accessibilityLabel(chip.spoken)
-                            .accessibilityAddTraits(chip.kind == on ? .isSelected : [])
                         }
+                        .buttonStyle(ChipStyle(selected: chip.kind == on))
+                        .accessibilityLabel(chip.spoken)
+                        .accessibilityAddTraits(chip.kind == on ? .isSelected : [])
                     }
                 }
-                .scrollIndicators(.hidden)
-                .scrollClipDisabled()
             }
+            .scrollIndicators(.hidden)
+            .scrollClipDisabled()
+            .padding(.top, 6)
         }
-        .padding(.top, 6)
     }
 
     /// The card's place: why nothing can play with its actions, else the pick and its shortcuts, else
@@ -186,10 +178,10 @@ struct VersionsScreen: View {
     @ViewBuilder private var lead: some View {
         if let empty = snapshot?.empty {
             EmptyCard(empty: empty, act: act, focus: $pickFocused)
-        } else if let best = shown?.recommended {
+        } else if let best = snapshot?.recommended {
             VStack(alignment: .leading, spacing: 10) {
-                PickCard(row: best, kicker: VersionWords.kindKicker(snapshot, kind), play: { play(best.key) }, focus: $pickFocused)
-                ForEach(VersionWords.shortcuts(shown), id: \.row.key) { shortcut in
+                PickCard(row: best, kicker: VersionWords.kindKicker(snapshot), play: { play(best.key) }, focus: $pickFocused)
+                ForEach(VersionWords.shortcuts(snapshot), id: \.row.key) { shortcut in
                     Button { play(shortcut.row.key) } label: {
                         Label(shortcut.label, glyph: shortcut.row.key == snapshot?.smaller?.key ? "gauge" : "gem")
                     }
@@ -226,7 +218,7 @@ struct VersionsScreen: View {
             if let note = snapshot?.note, !undone, let text = StreamChoice.learnedNote(note, device: StreamChoice.device) {
                 LearnedNoteBar(text: text) { undo(note) }
             }
-            let sections = VersionWords.sections(shown, held: choose == nil ? nil : held)
+            let sections = VersionWords.sections(snapshot, held: choose == nil ? nil : held)
             ForEach(sections, id: \.quality) { section in
                 VStack(alignment: .leading, spacing: 0) {
                     if let title = section.title {

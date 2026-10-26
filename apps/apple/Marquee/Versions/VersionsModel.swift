@@ -76,6 +76,12 @@ final class VersionsModel {
         record.command(["type": "freeze"])
     }
 
+    /// Lists one kind of version only ("torrent", "debrid", "direct"), or every one (nil, sent as no kind);
+    /// the core freezes the pick (`setKind`, plans/plugins-and-marketplace.md 4.2).
+    func setKind(_ kind: String?) {
+        if let kind { record.command(["type": "setKind", "kind": kind]) } else { record.command(["type": "setKind"]) }
+    }
+
     /// What the player needs to start `key` (the recommended pick by default).
     func play(_ key: String? = nil, tapped: ContinuousClock.Instant = .now) -> PlayRoute? {
         guard let sub, let key = key ?? snapshot?.recommended?.key else { return nil }

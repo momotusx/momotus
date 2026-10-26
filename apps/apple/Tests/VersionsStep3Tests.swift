@@ -624,54 +624,44 @@ private func golden<T: Decodable>(_ name: String, as type: T.Type) throws -> T {
     #expect(VersionWords.says("4 GB, shared by 89 people", "4 GB"))
 }
 
-/// A page whose pick and rows are of these kinds, keyed by place ("0" the pick), with both shortcuts.
-private func kinds(_ kinds: String..., service: String? = nil) throws -> VersionsSnapshot {
-    let rows = try kinds.enumerated().map { i, k in try row(#", "key": "\#(i)", "kind": "\#(k)""#) }
-    var s = snapshot(nil, pick: rows.first)
-    s.rows = Array(rows.dropFirst())
-    s.sections = [VersionSection(quality: "uhd", keys: s.rows.map(\.key))]
-    s.smaller = rows.last
-    s.sharper = rows.last
-    s.debridService = service
+/// A page as the core counts its kinds ("torrent:37"), with the kind it lists.
+private func kinds(_ kinds: [(String, Int)], service: String? = nil, selected: String? = nil) throws -> VersionsSnapshot {
+    var s = snapshot(nil, pick: try row(#", "key": "0""#))
+    s.kinds = kinds.map { KindChip(kind: $0.0, service: $0.0 == "debrid" ? service : nil, count: $0.1) }
+    s.selectedKind = selected
     return s
 }
 
-// The kind chips (plans/plugins-and-marketplace.md 4.2, 4.3).
-@Test func theKindChipsShowOnlyWithTwoKindsEachWithItsCount() throws {
-    #expect(VersionWords.kindChips(try kinds("torrent", "torrent")).isEmpty)
-    #expect(VersionWords.kindChips(nil).isEmpty)
-    let chips = VersionWords.kindChips(try kinds("debrid", "torrent", "torrent", "direct"))
+// The kind chips (plans/plugins-and-marketplace.md 4.2, 4.3): the apps render what the core counts and lists.
+@Test func theKindChipsAreAllAndTheCoresKindsFromTwoKindsOn() throws {
+    #expect(!VersionWords.showsKinds(try kinds([("torrent", 2)])))
+    #expect(!VersionWords.showsKinds(nil))
+    let three = try kinds([("torrent", 37), ("direct", 1), ("debrid", 1204)])
+    #expect(VersionWords.showsKinds(three))
+    let chips = VersionWords.kindChips(three)
     #expect(chips.map(\.label) == ["All", "Torrents", "Direct links", "Debrid"])
-    #expect(chips.map(\.count) == ["4", "2", "1", "1"])
-    #expect(chips[1].spoken == "Torrents, 2 versions")
+    #expect(chips.map(\.count) == [nil, "37", "1", "1,204"])
+    #expect(chips[1].spoken == "Torrents, 37 versions")
     #expect(chips[2].spoken == "Direct links, 1 version")
-    // One service the core names says the chip and the card's kicker.
-    let named = try kinds("debrid", "direct", service: "Real-Debrid")
-    #expect(VersionWords.kindChips(named).last?.label == "Real-Debrid")
-    #expect(VersionWords.kindKicker(named, "debrid") == "Best on Real-Debrid")
-    #expect(VersionWords.kindKicker(try kinds("debrid", "direct"), "debrid") == "Best debrid link")
-    #expect(VersionWords.kindKicker(named, "direct") == "Best direct link")
-    #expect(VersionWords.kindKicker(named, nil) == VersionWords.kicker)
+    // A kind from a newer core is left out.
+    #expect(VersionWords.kindChips(try kinds([("plugin", 2), ("direct", 1)])).count == 2)
 }
 
-@Test func aKindsPageIsItsFirstRowInTheCardTheRestInTheSectionsAndNoShortcuts() throws {
-    let all = try kinds("debrid", "torrent", "direct", "torrent")
-    #expect(VersionWords.ofKind(all, nil) == all)
-    let torrents = try #require(VersionWords.ofKind(all, "torrent"))
-    #expect(torrents.recommended?.key == "1")
-    #expect(VersionWords.sections(torrents).flatMap(\.rows).map(\.key) == ["3"])
-    #expect(torrents.smaller == nil && torrents.sharper == nil)
-    #expect(VersionWords.shortcuts(torrents).isEmpty)
-    // The pick's own kind keeps it in the card.
-    #expect(VersionWords.ofKind(all, "debrid")?.recommended?.key == "0")
-    // A kind with no chip now (one kind left) is All.
-    let one = try kinds("torrent", "torrent")
-    #expect(VersionWords.ofKind(one, "direct") == one)
-    #expect(VersionWords.kindKicker(one, "torrent") == VersionWords.kicker)
-    // The card under a kind says its kicker; choosing a kind pins the pick.
+@Test func theCardsKickerFollowsTheKindTheCoreLists() throws {
+    let named = try kinds([("debrid", 2), ("direct", 1)], service: "Real-Debrid", selected: "debrid")
+    #expect(VersionWords.kindChips(named)[1].label == "Real-Debrid")
+    #expect(VersionWords.kindKicker(named) == "Best on Real-Debrid")
+    #expect(VersionWords.kindKicker(try kinds([("debrid", 2), ("direct", 1)], selected: "debrid")) == "Best debrid link")
+    #expect(VersionWords.kindKicker(try kinds([("torrent", 2)], selected: "torrent")) == "Best torrent")
+    #expect(VersionWords.kindKicker(try kinds([("direct", 2)], selected: "direct")) == "Best direct link")
+    #expect(VersionWords.kindKicker(try kinds([("direct", 2)])) == VersionWords.kicker)
+    // A row from a core that names no kind reads as a direct link.
+    #expect(try row(", \"features\": []").playsAs == "direct")
+    #expect(try row(#", "kind": "torrent""#).playsAs == "torrent")
+    // A chip asks the core, and leaving the page lists every kind again.
     let page = try String(contentsOf: URL(fileURLWithPath: #filePath).deletingLastPathComponent()
         .appending(path: "../Marquee/Versions/VersionsScreen.swift"), encoding: .utf8)
-    let row = try body(of: "private var kindRow", in: page)
-    #expect(row.contains("model.freeze()"))
-    #expect(row.contains(".accessibilityLabel(chip.spoken)"))
+    let chipRow = try body(of: "private var kindRow", in: page)
+    #expect(chipRow.contains("model.setKind(chip.kind)") && chipRow.contains(".accessibilityLabel(chip.spoken)"))
+    #expect(page.contains(".onDisappear { if asked != nil || snapshot?.selectedKind != nil { model.setKind(nil) } }"))
 }

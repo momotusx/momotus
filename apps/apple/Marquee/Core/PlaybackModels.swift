@@ -31,9 +31,19 @@ struct VersionsSnapshot: Decodable, Hashable, Sendable {
     /// "From plugins" (plans/plugins-and-marketplace.md 4.4, 7.8): the Nuvio providers' rows, a pass of their
     /// own after the addons', never the pick (optional for older cores).
     var plugins: SourceRows?
-    /// The one streaming service every debrid row names ("Real-Debrid"), for the debrid kind chip; nil when
-    /// they name several or none (the chip says "Debrid"), or from an older core.
-    var debridService: String?
+    /// The kind chips (plans/plugins-and-marketplace.md 4.2): each kind the rows hold, with how many rows hold a
+    /// source of it; none from an older core.
+    var kinds: [KindChip]?
+    /// The kind `setKind` chose: the card, rows and sections are then that kind's own, with no shortcuts.
+    var selectedKind: String?
+}
+
+/// A kind chip: "torrent", "debrid" or "direct", the rows holding a source of it, and for debrid the one service
+/// every such source names ("Real-Debrid"), else nil and the chip says "Debrid".
+struct KindChip: Decodable, Hashable, Sendable {
+    let kind: String
+    var service: String?
+    let count: Int
 }
 
 /// The rows of a source ranked in a pass of its own, and whether it is still working.
@@ -161,9 +171,10 @@ struct VersionRow: Decodable, Hashable, Sendable, Identifiable {
     let line: ReasonLine?
     /// "ready", "unknown", "swarm" or "fetch".
     let sourceClass: String?
-    /// How it plays, as the kind chips group it (plans/plugins-and-marketplace.md 4.2): "torrent", "debrid"
-    /// or "direct"; nil from an older core.
+    /// How its head plays (plans/plugins-and-marketplace.md 4.1): "torrent", "debrid" or "direct"; nil from an
+    /// older core, which reads as "direct" (`playsAs`).
     var kind: String?
+    var playsAs: String { kind ?? "direct" }
     let bitrateMbps: Double?
     /// "On this device": the version last played here starts from what this
     /// device keeps, with no peer (optional for older cores).

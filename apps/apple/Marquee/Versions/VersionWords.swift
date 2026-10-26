@@ -375,60 +375,43 @@ enum VersionWords {
     /// "Show all 12" for a closed section.
     static func showAll(_ n: Int) -> String { words.page.showAll.replacingOccurrences(of: "{n}", with: String(n)) }
 
-    // The kind chips (plans/plugins-and-marketplace.md 4.2): All is the core's page; a kind shows its own
-    // first row in the card and its rows in the sections.
+    // The kind chips (plans/plugins-and-marketplace.md 4.2): the core counts the kinds and, under one (`setKind`),
+    // sends that kind's own card, rows and sections.
 
-    /// A kind chip: its kind (nil: All), its words, its count as shown ("1,204") and its spoken label.
-    struct KindChip: Hashable {
+    /// A kind chip's words: its kind (nil: All), its name, its count as shown ("1,204"; none on All) and what
+    /// VoiceOver says.
+    struct KindLabel: Hashable {
         let kind: String?
         let label: String
-        let count: String
+        let count: String?
         let spoken: String
     }
 
-    private static let kinds = ["torrent", "direct", "debrid"]
+    /// The core's kinds call for chips: two or more. Once shown, the page keeps them.
+    static func showsKinds(_ s: VersionsSnapshot?) -> Bool { (s?.kinds ?? []).count >= 2 }
 
-    /// All, then each kind listed (the pick counts), with their counts; none while fewer than two kinds
-    /// are listed, or nothing plays.
-    static func kindChips(_ s: VersionsSnapshot?) -> [KindChip] {
-        guard let s, s.empty == nil else { return [] }
-        let rows = [s.recommended].compactMap { $0 } + s.rows
-        let listed = kinds.filter { k in rows.contains { $0.kind == k } }
-        guard listed.count >= 2 else { return [] }
-        return ([nil] + listed).map { kind in
-            let label = switch kind {
-            case nil: words.kind.all
+    /// All, then each kind the core counted, in its order (a kind from a newer core left out).
+    static func kindChips(_ s: VersionsSnapshot?) -> [KindLabel] {
+        let kinds = (s?.kinds ?? []).filter { ["torrent", "direct", "debrid"].contains($0.kind) }
+        return [KindLabel(kind: nil, label: words.kind.all, count: nil, spoken: words.kind.all)] + kinds.map { k in
+            let label = switch k.kind {
             case "torrent": words.kind.torrent
             case "direct": words.kind.direct
-            default: s.debridService ?? words.kind.debrid
+            default: k.service ?? words.kind.debrid
             }
-            let n = kind.map { k in rows.filter { $0.kind == k }.count } ?? rows.count
             let spoken = words.kind.a11y.replacingOccurrences(of: "{kind}", with: label)
-                .replacingOccurrences(of: "{versions}", with: StreamChoice.counted("versions", n))
-            return KindChip(kind: kind, label: label, count: StreamChoice.grouped(n), spoken: spoken)
+                .replacingOccurrences(of: "{versions}", with: StreamChoice.counted("versions", k.count))
+            return KindLabel(kind: k.kind, label: label, count: StreamChoice.grouped(k.count), spoken: spoken)
         }
     }
 
-    /// `s` under `kind` (nil is All, the snapshot as the core sent it): the card is the kind's first row
-    /// in the core's order, the rows list the rest of the kind, and the shortcuts, relative to the core's
-    /// pick, go. A kind that has no chip now is All.
-    static func ofKind(_ s: VersionsSnapshot?, _ kind: String?) -> VersionsSnapshot? {
-        guard var s, let kind, kindChips(s).contains(where: { $0.kind == kind }) else { return s }
-        let all = [s.recommended].compactMap { $0 } + s.rows
-        let card = all.first { $0.kind == kind }
-        s.recommended = card
-        s.rows = all.filter { $0.kind == kind && $0.key != card?.key }
-        s.smaller = nil
-        s.sharper = nil
-        return s
-    }
-
-    /// The card's kicker: the form's under All, else "Best torrent", "Best direct link", "Best on Real-Debrid".
-    static func kindKicker(_ s: VersionsSnapshot?, _ kind: String?) -> String {
-        guard let kind, kindChips(s).contains(where: { $0.kind == kind }) else { return kicker }
-        if kind == "debrid", let service = s?.debridService {
-            return (words.kind.best["service"] ?? "").replacingOccurrences(of: "{service}", with: service)
+    /// The card's kicker: the form's with every kind listed, else "Best torrent", "Best direct link",
+    /// "Best on Real-Debrid".
+    static func kindKicker(_ s: VersionsSnapshot?) -> String {
+        guard let kind = s?.selectedKind, let best = words.kind.best[kind] else { return kicker }
+        if kind == "debrid", let service = s?.kinds?.first(where: { $0.kind == kind })?.service {
+            return (words.kind.best["service"] ?? best).replacingOccurrences(of: "{service}", with: service)
         }
-        return words.kind.best[kind] ?? kicker
+        return best
     }
 }
