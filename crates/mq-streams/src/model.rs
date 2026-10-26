@@ -278,6 +278,22 @@ pub enum SourceClass {
     Fetch,
 }
 
+/// How a version plays, as the viewer groups them: through the torrent
+/// engine, through a streaming service, or from a plain link
+/// (plans/plugins-and-marketplace.md 4.1).
+#[cfg_attr(
+    feature = "ts",
+    derive(ts_rs::TS),
+    ts(export, export_to = "../../../apps/web/src/core/generated/")
+)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum SourceKind {
+    Torrent,
+    Debrid,
+    Direct,
+}
+
 /// What the user wants to watch, for wrong-content detection.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct Target {

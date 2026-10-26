@@ -342,6 +342,18 @@ fn class(s: &ParsedStream, c: &Conditions) -> Option<SourceClass> {
     (c.engine && hash && !resolve).then_some(SourceClass::Swarm)
 }
 
+/// The kind a row is grouped under (plans/plugins-and-marketplace.md 4.1),
+/// from how it will play: a torrent the engine fetches is a torrent, one
+/// the user's service resolves is debrid.
+pub fn kind(s: &ParsedStream, class: SourceClass) -> SourceKind {
+    match &s.source {
+        Source::Torrent { .. } if class == SourceClass::Swarm => SourceKind::Torrent,
+        Source::Torrent { .. } | Source::ClientResolve(_) => SourceKind::Debrid,
+        Source::Http { .. } if s.service.is_some() => SourceKind::Debrid,
+        _ => SourceKind::Direct,
+    }
+}
+
 fn gate_reason(s: &ParsedStream, input: &RankInput<'_>) -> Option<HideReason> {
     if matches!(
         s.source,

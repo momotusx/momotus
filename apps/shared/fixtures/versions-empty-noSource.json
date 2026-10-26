@@ -23,6 +23,7 @@
     "screenClass": 1080,
     "sizeLimitBytes": 5368709120
   },
+  "debridService": null,
   "done": true,
   "empty": {
     "action": "settingsAddons",

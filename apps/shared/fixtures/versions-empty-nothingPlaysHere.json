@@ -14,6 +14,7 @@
         "group": "best",
         "host": null,
         "key": "url:http://127.0.0.1:1/v.mp4",
+        "kind": "direct",
         "languages": [],
         "line": {
           "kind": "ready",
@@ -74,6 +75,7 @@
     "screenClass": 1080,
     "sizeLimitBytes": 5368709120
   },
+  "debridService": null,
   "done": true,
   "empty": {
     "action": "chooseVersion",
@@ -88,6 +90,7 @@
         "group": "best",
         "host": null,
         "key": "url:http://127.0.0.1:1/v.mp4",
+        "kind": "direct",
         "languages": [],
         "line": {
           "kind": "ready",

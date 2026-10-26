@@ -5,6 +5,7 @@ import type { Reason } from "./Reason";
 import type { ReasonLine } from "./ReasonLine";
 import type { RowOrigin } from "./RowOrigin";
 import type { SourceClass } from "./SourceClass";
+import type { SourceKind } from "./SourceKind";
 import type { VersionStatus } from "./VersionStatus";
 
 export type VersionRow = { key: string, 
@@ -30,6 +31,11 @@ line: ReasonLine,
  * How it starts (3.2).
  */
 sourceClass: SourceClass, 
+/**
+ * How it plays, as the viewer groups versions: the kind chips
+ * (plans/plugins-and-marketplace.md 4.2).
+ */
+kind: SourceKind, 
 /**
  * Size over runtime after the pack guard; null when either is unknown.
  */

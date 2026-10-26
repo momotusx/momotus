@@ -17,8 +17,8 @@ use mq_library::{Policy, Table};
 use mq_protocol::{ResourcePath, decode_streams};
 use mq_streams::{
     Conditions, DeviceCaps, Group, HideReason, ParsedStream, Playability, RankInput, RankKey,
-    Ranked, RankedRow, Reason, ReasonLine, SourceClass, Speed, StreamPrefs, Target, normalize,
-    rank, screen_class,
+    Ranked, RankedRow, Reason, ReasonLine, SourceClass, SourceKind, Speed, StreamPrefs, Target,
+    kind, normalize, rank, screen_class,
 };
 use serde::Serialize;
 use serde_json::Value;
@@ -58,6 +58,9 @@ pub struct VersionRow {
     pub line: ReasonLine,
     /// How it starts (3.2).
     pub source_class: SourceClass,
+    /// How it plays, as the viewer groups versions: the kind chips
+    /// (plans/plugins-and-marketplace.md 4.2).
+    pub kind: SourceKind,
     /// Size over runtime after the pack guard; null when either is unknown.
     pub bitrate_mbps: Option<f32>,
     /// The sort key, for a details panel and tests.
@@ -184,6 +187,10 @@ pub struct VersionsSnapshot {
     /// "From plugins" (plans/plugins-and-marketplace.md 4.4, 7.8): the
     /// Nuvio providers' rows, a pass of their own like the Archive's.
     pub plugins: SourceRows,
+    /// The one streaming service every debrid row names ("Real-Debrid"), for
+    /// the debrid kind chip; none when they name several, or a row names
+    /// none, and the chip says "Debrid".
+    pub debrid_service: Option<String>,
 }
 
 /// What the ranking read for this view, for the header "This TV: 4K HDR,
@@ -2614,7 +2621,22 @@ fn render(s: &State) -> VersionsSnapshot {
                 .collect(),
             pending: s.plugins_pending,
         },
+        debrid_service: debrid_service(s.recommended.iter().chain(listed.iter().copied())),
     }
+}
+
+/// The one service every listed debrid row names (`debrid_service`).
+// ponytail: a row with no service hint counts as unnamed, though the
+// account's only store resolves it; pass the stores when the chip should
+// name it.
+fn debrid_service<'a>(rows: impl Iterator<Item = &'a RankedRow>) -> Option<String> {
+    let mut names = rows
+        .filter(|r| kind(&r.stream, r.class) == SourceKind::Debrid)
+        .map(|r| r.stream.service.as_deref().map(service_name));
+    let first = names.next()??;
+    names
+        .all(|n| n.as_deref() == Some(first.as_str()))
+        .then_some(first)
 }
 
 /// Why nothing can play, once the view is done and nothing is listed
@@ -2742,6 +2764,7 @@ fn row_dto(r: &RankedRow, kept: Option<&str>, account: bool) -> VersionRow {
         failover_count: r.failover.len() as u16,
         line: r.line.clone(),
         source_class: r.class,
+        kind: kind(s, r.class),
         bitrate_mbps: r.bitrate_mbps,
         score: r.key,
         on_device: on_device.then(|| crate::views::playback::ON_DEVICE.to_owned()),

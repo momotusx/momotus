@@ -2577,3 +2577,87 @@ fn a_download_ignores_speed_and_takes_the_smaller_file() {
     // The 7 GB file is over the 5 GB limit, ready as it is.
     assert!(ranked.rows[0].key.size_ok && !ranked.rows[2].key.size_ok);
 }
+
+/// One stream of `body` ranked under `c`, with the kind it groups under
+/// (plans/plugins-and-marketplace.md 4.1).
+fn kind_under(c: &Conditions, body: serde_json::Value) -> (SourceClass, SourceKind) {
+    let prefs = StreamPrefs::default();
+    let input = RankInput {
+        caps: &DeviceCaps::basic_1080p(),
+        prefs: &prefs,
+        target: &film(),
+        last_binge_group: None,
+        kids: None,
+        conditions: c,
+    };
+    let ranked = rank(streams("a", 0, json!({ "streams": [body] })), &input);
+    let row = ranked.best().unwrap_or_else(|| {
+        panic!(
+            "hidden: {:?}",
+            ranked
+                .hidden
+                .iter()
+                .map(|h| (&h.stream.source, h.reason))
+                .collect::<Vec<_>>()
+        )
+    });
+    (row.class, mq_streams::kind(&row.stream, row.class))
+}
+
+#[test]
+fn each_source_groups_by_how_it_plays() {
+    let name = "Movie.2024.1080p.WEB-DL.x264-GRP";
+    let hash = "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee";
+    let swarm = json!({ "title": name, "infoHash": hash, "fileIdx": 0 });
+    let uncached = json!({ "title": name, "infoHash": hash, "fileIdx": 0, "behaviorHints": { "cached": false } });
+    let no_engine_account = Conditions {
+        debrid: true,
+        ..Conditions::default()
+    };
+    // A torrent the engine fetches is a torrent; the same torrent behind an
+    // account with no cache answer, or uncached with no engine, resolves
+    // through the service.
+    assert_eq!(
+        kind_under(engine(), swarm.clone()),
+        (SourceClass::Swarm, SourceKind::Torrent)
+    );
+    assert_eq!(
+        kind_under(with_account(), swarm),
+        (SourceClass::Unknown, SourceKind::Debrid)
+    );
+    assert_eq!(
+        kind_under(with_account(), uncached.clone()),
+        (SourceClass::Swarm, SourceKind::Torrent)
+    );
+    assert_eq!(
+        kind_under(&no_engine_account, uncached),
+        (SourceClass::Fetch, SourceKind::Debrid)
+    );
+    let cached = json!({ "title": name, "infoHash": hash, "fileIdx": 0, "behaviorHints": { "cached": true } });
+    assert_eq!(kind_under(with_account(), cached).1, SourceKind::Debrid);
+    // Only a service resolves a clientResolve row.
+    let resolve = json!({ "title": name, "clientResolve": { "type": "debrid", "service": "realdebrid", "infoHash": hash, "fileIdx": 0 } });
+    assert_eq!(kind_under(with_account(), resolve).1, SourceKind::Debrid);
+    // A link a debrid addon made names its service; a plain link does not.
+    let rd =
+        json!({ "name": "[RD+] Torrentio", "title": name, "url": "https://rd.example/d/x.mkv" });
+    assert_eq!(kind_under(engine(), rd).1, SourceKind::Debrid);
+    let hinted = json!({ "title": name, "url": "https://tb.example/d/x.mkv", "behaviorHints": { "service": "torbox" } });
+    assert_eq!(kind_under(engine(), hinted).1, SourceKind::Debrid);
+    for url in [
+        "https://cdn.example/x.mp4",
+        "https://cdn.example/x.m3u8",
+        "http://cdn.example/x.mkv",
+    ] {
+        let plain = json!({ "title": name, "url": url });
+        assert_eq!(kind_under(engine(), plain).1, SourceKind::Direct, "{url}");
+    }
+    // Links that open elsewhere group with direct links wherever they list.
+    for body in [
+        json!({ "title": name, "ytId": "dQw4w9WgXcQ" }),
+        json!({ "title": name, "externalUrl": "https://example.com/watch" }),
+    ] {
+        let s = &streams("a", 0, json!({ "streams": [body] }))[0];
+        assert_eq!(mq_streams::kind(s, SourceClass::Ready), SourceKind::Direct);
+    }
+}

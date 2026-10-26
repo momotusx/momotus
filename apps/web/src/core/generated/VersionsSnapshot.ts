@@ -66,3 +66,8 @@ archive: SourceRows,
  * Nuvio providers' rows, a pass of their own like the Archive's.
  */
 plugins: SourceRows, };
+ * The one streaming service every debrid row names ("Real-Debrid"), for
+ * the debrid kind chip; none when they name several, or a row names
+ * none, and the chip says "Debrid".
+ */
+debridService: string | null, };
