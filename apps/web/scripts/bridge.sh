@@ -7,9 +7,11 @@
 # from .env.tmdb.local the same way; without it the title page has no TMDB score.
 # The torrent engine is built in, as in the apps' full builds; MQ_TORRENT=0
 # leaves it out. Arguments go to the bridge.
-# Only pages from the bridge's own origin and the dev server's
-# (http://127.0.0.1:5173 or http://localhost:5173) may open its socket; a dev
-# server on another port is named in MQ_BRIDGE_ORIGINS (comma-separated origins).
+# Only pages from the bridge's own origin and those MQ_BRIDGE_ORIGINS lists
+# (comma-separated; it replaces the list) may open its socket. Unset here, it
+# names this checkout's Vite dev server on $PORT (5173 unless set; Vite runs
+# with strictPort, so that port is the dev server's own). The bridge binary has
+# no such default: started any other way, it opens only for its own origin.
 set -euo pipefail
 
 root="$(cd "$(dirname "$0")/../../.." && pwd)"
@@ -21,6 +23,7 @@ for env in "$root/.env.trakt.local" "$root/.env.tmdb.local"; do
   fi
 done
 cd "$root"
+export MQ_BRIDGE_ORIGINS="${MQ_BRIDGE_ORIGINS:-http://127.0.0.1:${PORT:-5173},http://localhost:${PORT:-5173}}"
 if [[ "${MQ_TORRENT:-1}" == "0" ]]; then
   exec cargo run -p mq-bridge -- "$@"
 fi

@@ -34,14 +34,19 @@ async fn main() {
     mq_bridge::dev_tmdb(&core);
     mq_bridge::dev_segments(&core);
     mq_bridge::dev_replay();
-    let origins = allowed_origins(port, std::env::var("MQ_BRIDGE_ORIGINS").ok().as_deref());
-    let mut app = router(core, origins);
+    let named = std::env::var("MQ_BRIDGE_ORIGINS").unwrap_or_default();
+    let (origins, ignored) = allowed_origins(port, &named);
+    for entry in ignored {
+        eprintln!("MQ_BRIDGE_ORIGINS entry ignored: {entry} is not http(s)://host[:port]");
+    }
+    let mut app = router(core, origins.clone());
     if let Ok(dir) = std::env::var("MQ_STATIC") {
         app = app.fallback_service(tower_http::services::ServeDir::new(dir));
     }
     let addr = SocketAddr::from(([127, 0, 0, 1], port));
     let listener = tokio::net::TcpListener::bind(addr).await.expect("bind");
-    println!("{{\"event\":\"bridge_ready\",\"url\":\"ws://{addr}/ws\"}}");
+    let origins = serde_json::to_string(&origins).unwrap_or_default();
+    println!("{{\"event\":\"bridge_ready\",\"url\":\"ws://{addr}/ws\",\"origins\":{origins}}}");
     axum::serve(listener, app).await.expect("serve");
 }
 
@@ -65,7 +70,13 @@ async fn ws(
 ) -> axum::response::Response {
     let origin = headers.get(header::ORIGIN).and_then(|v| v.to_str().ok());
     if !origin_allowed(origin, &origins) {
-        // Another site's page in the user's browser: no session for it.
+        // Another program's page, or another site's: no session for it.
+        // Said here, since the page itself only sees a failed handshake.
+        eprintln!(
+            "socket refused for origin {}; allowed: {}",
+            origin.unwrap_or_default(),
+            origins.join(", ")
+        );
         return StatusCode::FORBIDDEN.into_response();
     }
     // The page reached this socket by a loopback name: the link stays on
@@ -90,20 +101,40 @@ fn loopback_authority(authority: &str) -> bool {
 
 /// The pages that may open the socket, as exact origins (scheme, name and
 /// port): this server's own on `port` (it serves the web build under
-/// `MQ_STATIC`) and the web UI's dev server. `extra`, from
-/// `MQ_BRIDGE_ORIGINS` (comma-separated), replaces the dev server's
-/// default `127.0.0.1:5173`, as the e2e suite's own port does. Any other
-/// loopback port is another program's page (a dev server, a notebook, a
-/// local tool's web UI): it gets no session.
-fn allowed_origins(port: u16, extra: Option<&str>) -> Vec<String> {
-    let own = ["127.0.0.1", "localhost", "[::1]"].map(|name| format!("http://{name}:{port}"));
-    let dev = extra.unwrap_or("http://127.0.0.1:5173,http://localhost:5173");
-    let dev = dev
-        .split(',')
-        .map(str::trim)
-        .filter(|origin| !origin.is_empty())
-        .map(str::to_ascii_lowercase);
-    own.into_iter().chain(dev).collect()
+/// `MQ_STATIC`), and those `named` lists (`MQ_BRIDGE_ORIGINS`,
+/// comma-separated, such as the web dev server's, which
+/// `apps/web/scripts/bridge.sh` names from its port). There is no other
+/// default: any other loopback port is another program's page (a dev
+/// server, a notebook, a local tool's web UI) and gets no session. Returns
+/// the list and the named entries that are not `http(s)://host[:port]`.
+fn allowed_origins(port: u16, named: &str) -> (Vec<String>, Vec<String>) {
+    let mut allowed = ["127.0.0.1", "localhost", "[::1]"]
+        .map(|name| format!("http://{name}:{port}"))
+        .to_vec();
+    let mut ignored = Vec::new();
+    for entry in named.split(',').map(str::trim).filter(|e| !e.is_empty()) {
+        match page_origin(entry) {
+            Some(origin) => allowed.push(origin),
+            None => ignored.push(entry.to_owned()),
+        }
+    }
+    (allowed, ignored)
+}
+
+/// `entry` as a browser sends it in `Origin`: lowercase, one trailing slash
+/// dropped; `None` unless it is `http(s)://` and a host with an optional
+/// port, with no path, query, fragment, credentials or space.
+fn page_origin(entry: &str) -> Option<String> {
+    let origin = entry
+        .strip_suffix('/')
+        .unwrap_or(entry)
+        .to_ascii_lowercase();
+    let authority = origin
+        .strip_prefix("http://")
+        .or_else(|| origin.strip_prefix("https://"))?;
+    let plain =
+        !authority.is_empty() && !authority.contains(['/', '?', '#', '@', '*', ' ', '\\', ',']);
+    plain.then_some(origin)
 }
 
 /// A browser page may open the socket only from one of `allowed`, matched
@@ -151,11 +182,12 @@ async fn serve_socket(socket: WebSocket, core: Core, private: bool) {
 mod tests {
     use super::{allowed_origins, origin_allowed, router};
     use futures_util::{SinkExt, StreamExt};
-    use mq_runtime::{Core, CoreConfig};
+    use mq_runtime::Core;
     use tokio_tungstenite::tungstenite::{self, Message, client::IntoClientRequest};
 
+    /// The list `apps/web/scripts/bridge.sh` gives a bridge on `port`.
     fn dev(port: u16) -> Vec<String> {
-        allowed_origins(port, None)
+        allowed_origins(port, "http://127.0.0.1:5173,http://localhost:5173").0
     }
 
     #[test]
@@ -199,12 +231,36 @@ mod tests {
     }
 
     #[test]
-    fn named_origins_replace_the_dev_servers() {
-        let allowed = allowed_origins(17801, Some(" http://127.0.0.1:15301 ,,"));
+    fn with_nothing_named_only_this_server_opens_the_socket() {
+        let (allowed, ignored) = allowed_origins(7777, "");
+        assert!(ignored.is_empty());
+        assert!(origin_allowed(Some("http://localhost:7777"), &allowed));
+        // The Vite default port is another program's page unless named.
+        for refused in ["http://127.0.0.1:5173", "http://localhost:5173", ""] {
+            assert!(!origin_allowed(Some(refused), &allowed), "{refused}");
+        }
+    }
+
+    #[test]
+    fn named_origins_are_read_as_a_browser_sends_them() {
+        let (allowed, ignored) = allowed_origins(
+            17801,
+            " HTTP://127.0.0.1:15301/ ,,http://localhost:5180,*,127.0.0.1:9000,http://a/b,http://u@h:1,https://",
+        );
         assert!(origin_allowed(Some("http://127.0.0.1:15301"), &allowed));
+        assert!(origin_allowed(Some("http://localhost:5180"), &allowed));
         assert!(origin_allowed(Some("http://127.0.0.1:17801"), &allowed));
         assert!(!origin_allowed(Some("http://127.0.0.1:5173"), &allowed));
-        assert!(!origin_allowed(Some(""), &allowed));
+        assert_eq!(
+            ignored,
+            [
+                "*",
+                "127.0.0.1:9000",
+                "http://a/b",
+                "http://u@h:1",
+                "https://"
+            ]
+        );
     }
 
     #[test]
@@ -222,16 +278,10 @@ mod tests {
     /// client with no `Origin` get one and are answered.
     #[tokio::test]
     async fn the_server_refuses_another_ports_page_before_any_op() {
-        let data = std::env::temp_dir().join(format!("mq-origin-{}", std::process::id()));
-        let core = Core::open(CoreConfig {
-            data_dir: data.clone(),
-            profile_id: "default".into(),
-            device_id: 0,
-        })
-        .unwrap();
+        let core = Core::temporary("default").unwrap();
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let port = listener.local_addr().unwrap().port();
-        let app = router(core, allowed_origins(port, None));
+        let app = router(core, dev(port));
         let server = tokio::spawn(async move { axum::serve(listener, app).await });
         let url = format!("ws://127.0.0.1:{port}/ws");
         let open = |origin: Option<&str>| {
@@ -269,7 +319,6 @@ mod tests {
             );
         }
         server.abort();
-        let _ = std::fs::remove_dir_all(data);
     }
 
     #[test]
