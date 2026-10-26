@@ -19,6 +19,10 @@ use tokio::task::JoinHandle;
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DownloadsSnapshot {
+    /// A locked session's view: the counts alone, with no row and no
+    /// title, so a keeper takes nothing here for done or failed (code review
+    /// r2, Android N1).
+    pub locked: bool,
     pub storage: DownloadStorage,
     pub settings: DownloadSettings,
     /// What the platform's keeper shows (a notification, the system's
@@ -223,6 +227,7 @@ fn render(core: &Core, board: &Board, locked: bool) -> DownloadsSnapshot {
         (d + r.bytes_done, t + r.bytes_total.unwrap_or(0))
     });
     DownloadsSnapshot {
+        locked,
         storage: DownloadStorage {
             downloads_bytes: rows.iter().map(|r| r.bytes_done).sum(),
             free_bytes: core.downloads().free(core),

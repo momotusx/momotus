@@ -1188,6 +1188,7 @@ impl PlaybackView {
             // The running task's work for this source ends here.
             s.run += 1;
             let local = s.local_open;
+            let progressed = s.progressed;
             release_all(&mut s);
             if local && s.next >= s.candidates.len() {
                 s.candidates.extend(online);
@@ -1221,7 +1222,9 @@ impl PlaybackView {
             });
             let audio = kind == Some("audio") && s.reported_ms.is_none() && passed;
             let mut follows = false;
-            if decode || audio {
+            // A download's own file: its online copy is tried next, never
+            // skipped as the version's (code review r2 N4).
+            if (decode || audio) && !local {
                 s.version_failed = Some(NOT_HERE);
                 s.failed_on = failed.as_ref().map(|st| {
                     let release = st.release.clone();
@@ -1252,17 +1255,21 @@ impl PlaybackView {
             // version (the same file). Another source that is tried and plays
             // must not read as one that did not.
             let kept: Vec<String> = match &failed {
+                // The download's own file failing is that file's fault, not
+                // the version's: nothing is learned (code review r2 N4).
+                _ if local => Vec::new(),
                 Some(_) if decode && follows => {
                     s.candidates.iter().map(|c| c.key.clone()).collect()
                 }
                 Some(stream) if decode => vec![stream.key.clone()],
                 _ => Vec::new(),
             };
-            (failed, s.pick.clone(), kept, local)
+            (failed, s.pick.clone(), kept, local && !progressed)
         };
-        // The download's own file did not play: it reads "Try again", and
-        // the player goes on to the same version online (plans/offline-
-        // downloads.md 4.8, code review r1 m4).
+        // The download's own file did not play at all: it reads "Try again",
+        // and the player goes on to the same version online (plans/offline-
+        // downloads.md 4.8, code review r1 m4). After good playback a
+        // hiccup leaves the file as it is (code review r2 N2).
         if local && matches!(kind, Some("unreadable" | "decode")) {
             self.core
                 .downloads()
@@ -2461,9 +2468,15 @@ async fn resolve_next(
                         return;
                     }
                     s.network = streams_from_network(&core, &stream, &target, &upstream);
-                    s.in_use =
-                        core.downloads()
-                            .playing(&target.item_id, &target.video_id, &stream.key);
+                    // A download's own file holds it from `open_source` on:
+                    // a delete since then must still wait (code review r2 R1).
+                    if s.in_use.is_none() {
+                        s.in_use = core.downloads().playing(
+                            &target.item_id,
+                            &target.video_id,
+                            &stream.key,
+                        );
+                    }
                     s.streaming = s
                         .network
                         .as_ref()
@@ -2829,6 +2842,11 @@ async fn open_source(
         let mut s = lock(state);
         s.local_tried = true;
         s.local_open = true;
+        // Held from the moment its path is chosen: a delete meanwhile
+        // waits for this play (code review r2 R1).
+        s.in_use = core
+            .downloads()
+            .playing(&target.item_id, &target.video_id, &stream.key);
         return Ok(local);
     }
     // A torrent download of this version plays from the engine's folder,
@@ -2840,11 +2858,21 @@ async fn open_source(
         trackers,
         ..
     } = &stream.source
+        && !lock(state).local_tried
         && core
             .downloads()
             .torrent_download(&target.item_id, &target.video_id)
             .is_some_and(|(key, _, _)| key == stream.key)
     {
+        // Once a run, as a file is (code review r2 N3); held from here.
+        {
+            let mut s = lock(state);
+            s.local_tried = true;
+            s.local_open = true;
+            s.in_use = core
+                .downloads()
+                .playing(&target.item_id, &target.video_id, &stream.key);
+        }
         return open_torrent(core, stream, target, run, info_hash, *file_idx, trackers).await;
     }
     let (url, headers, filename, size, addon_url) = match &stream.source {

@@ -42,6 +42,8 @@ struct How {
     then: Option<Arc<Vec<u8>>>,
     /// Every answer is this status with no body.
     status: Option<u16>,
+    /// A request without `Authorization` set to this is answered 401.
+    auth: Option<&'static str>,
 }
 
 #[derive(Clone, Default)]
@@ -86,6 +88,16 @@ async fn origin(data: Arc<Vec<u8>>, how: How) -> (String, Seen) {
                     .lock()
                     .unwrap()
                     .push(range.clone().unwrap_or_default());
+                if let Some(auth) = how.auth
+                    && !head.contains(&format!("authorization: {}", auth.to_ascii_lowercase()))
+                {
+                    let _ = socket
+                        .write_all(
+                            b"HTTP/1.1 401 No\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+                        )
+                        .await;
+                    return;
+                }
                 if let Some(code) = how.status {
                     let resp = format!(
                         "HTTP/1.1 {code} No\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
@@ -907,12 +919,15 @@ async fn a_launch_marks_a_damaged_download_missing() {
 #[tokio::test]
 async fn the_title_page_opens_offline_from_its_downloads() {
     let core = bare();
-    for (id, video) in [("e1", "tt9:2:1"), ("e2", "tt9:2:2")] {
+    for (id, video) in [("e1", "tt9:2:1"), ("e2", "tt9:2:2"), ("e3", "tt9:2:3")] {
+        // E3 failed half-way: the offline page lists what plays (code review
+        // r2 N5).
+        let state = if id == "e3" { "failed" } else { "done" };
         let mut row = record(
             id,
             "tt9",
             video,
-            "done",
+            state,
             kept_version(
                 "http://127.0.0.1:1/v.mp4",
                 "http://127.0.0.1:9/manifest.json",
@@ -1621,12 +1636,14 @@ async fn a_download_too_large_for_now_waits_for_room() {
 async fn offline_the_next_episode_is_the_next_downloaded_one() {
     let core = bare();
     let data = video(1 << 20);
-    for (id, video) in [("e1", "tt9:2:1"), ("e2", "tt9:2:2")] {
+    for (id, video) in [("e1", "tt9:2:1"), ("e2", "tt9:2:2"), ("e3", "tt9:2:3")] {
+        // E3 failed half-way: never offered as next (code review r2 N5).
+        let state = if id == "e3" { "failed" } else { "done" };
         let mut row = record(
             id,
             "tt9",
             video,
-            "done",
+            state,
             kept_version(
                 "http://127.0.0.1:1/v.mp4",
                 "http://127.0.0.1:9/manifest.json",
@@ -1770,7 +1787,12 @@ async fn an_unopenable_file_waits_without_a_loop() {
     })
     .await;
     let asked = seen.answers.load(Ordering::SeqCst);
-    tokio::time::sleep(Duration::from_secs(2)).await;
+    // The platform's minute report of room does not end an I/O wait
+    // (code review r2 R4).
+    for _ in 0..4 {
+        core.downloads().set_allowed(true, Some(64 << 30));
+        tokio::time::sleep(Duration::from_millis(500)).await;
+    }
     assert_eq!(seen.answers.load(Ordering::SeqCst), asked, "asked again");
     assert_eq!(
         row_of(&core, &ids[0]).unwrap().reason,
@@ -1916,6 +1938,40 @@ async fn a_download_that_does_not_play_fails_and_the_play_goes_online() {
     assert!(seen.answers.load(Ordering::SeqCst) > asked);
 }
 
+/// A download that played well and then hiccups stays downloaded, and a
+/// download's own file failing teaches the device nothing about its
+/// version, before playback or after (code review r2 N2, N4).
+#[tokio::test]
+async fn a_download_that_played_keeps_and_its_file_teaches_nothing() {
+    let data = video(4 << 20);
+    let (url, _) = origin(data.clone(), How::default()).await;
+    let core = core_with(addon(&url, Duration::ZERO).await).await;
+    let ids = mq_runtime::downloads::add(&core, movie()).await.unwrap();
+    until(&core, &ids[0], "done", |r| r.state == DownloadState::Done).await;
+    let now = || {
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_millis() as u64
+    };
+    let playback = play_when(&core, ITEM, ITEM, true).await;
+    for ms in (0..=32_000).step_by(1000) {
+        playback.report_progress(ms, 600_000, false);
+    }
+    playback.fail_over(None, Some("decode"), None, "a bad frame at 32 s");
+    tokio::time::sleep(Duration::from_millis(800)).await;
+    assert_eq!(row_of(&core, &ids[0]).unwrap().state, DownloadState::Done);
+    assert!(mq_runtime::speed::did_not_play(core.library(), now()).is_empty());
+    drop(playback);
+    let playback = play_when(&core, ITEM, ITEM, true).await;
+    playback.fail_over(None, Some("decode"), None, "no frame");
+    until(&core, &ids[0], "failed", |r| {
+        r.state == DownloadState::Failed
+    })
+    .await;
+    assert!(mq_runtime::speed::did_not_play(core.library(), now()).is_empty());
+}
+
 /// A source that keeps failing (a 503) is tried three more times, the
 /// waits shortened by the test hook; with no other source in the pick the
 /// job then fails with the source's reason. A dead link (404) is not tried
@@ -1991,4 +2047,76 @@ async fn a_download_picked_before_the_addons_still_fails_over_online() {
         .unwrap();
     assert_eq!(got.body[..], data[..4096]);
     assert!(seen.answers.load(Ordering::SeqCst) > asked);
+}
+
+/// A source that needs a header (an addon's proxy `Authorization`) still
+/// downloads: the header is never kept on the device, and the job asks the
+/// addon for it again as it starts (code review r2 N1).
+#[tokio::test]
+async fn a_source_that_needs_a_header_downloads_and_keeps_no_secret() {
+    let data = video(2 << 20);
+    let (url, seen) = origin(
+        data.clone(),
+        How {
+            auth: Some("Bearer t0ken"),
+            ..How::default()
+        },
+    )
+    .await;
+    let stream = serde_json::json!({
+        "name": "Direct\n1080p", "title": "Sintel.2010.1080p.WEB-DL.mp4", "url": url,
+        "behaviorHints": {
+            "filename": "Sintel.2010.1080p.WEB-DL.mp4",
+            "proxyHeaders": { "request": { "Authorization": "Bearer t0ken" } }
+        }
+    });
+    let core = core_with(addon_listing(stream, Duration::ZERO).await).await;
+    let ids = mq_runtime::downloads::add(&core, movie()).await.unwrap();
+    until(&core, &ids[0], "done", |r| r.state == DownloadState::Done).await;
+    assert_eq!(file_of(&core, &ids[0]), *data);
+    assert!(seen.answers.load(Ordering::SeqCst) >= 1);
+    let stored = core.library().download_of(ITEM, ITEM).unwrap().unwrap();
+    let version = stored.version.unwrap();
+    assert!(!version.contains("t0ken"), "{version}");
+    assert!(
+        !version.to_ascii_lowercase().contains("authorization"),
+        "{version}"
+    );
+}
+
+/// The header lives only with its addon: once the addon is removed, a job
+/// that has not run has nothing to send and never downloads (code review
+/// r2 N1).
+#[tokio::test]
+async fn a_removed_addon_takes_its_header_with_it() {
+    let (url, _) = origin(
+        video(2 << 20),
+        How {
+            auth: Some("Bearer t0ken"),
+            ..How::default()
+        },
+    )
+    .await;
+    let stream = serde_json::json!({
+        "name": "Direct\n1080p", "title": "Sintel.2010.1080p.WEB-DL.mp4", "url": url,
+        "behaviorHints": {
+            "filename": "Sintel.2010.1080p.WEB-DL.mp4",
+            "proxyHeaders": { "request": { "Authorization": "Bearer t0ken" } }
+        }
+    });
+    let core = core_with(addon_listing(stream, Duration::ZERO).await).await;
+    core.downloads().set_link(Link {
+        offline: true,
+        ..Link::default()
+    });
+    let ids = mq_runtime::downloads::add(&core, movie()).await.unwrap();
+    core.library()
+        .set_addons(core.profile(), &[], &core.hlc())
+        .unwrap();
+    core.downloads().set_link(Link::default());
+    until(&core, &ids[0], "fails", |r| {
+        r.state == DownloadState::Failed
+    })
+    .await;
+    assert!(core.downloads().file_path(&ids[0]).is_none());
 }

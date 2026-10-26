@@ -108,14 +108,24 @@ fn chunks(
                 want = want.min(have - pos);
             }
             let mut buf = vec![0u8; want as usize];
-            match file.read(&mut buf).await {
-                Ok(0) => Some((Err(not_downloaded()), None)),
-                Ok(n) => {
-                    buf.truncate(n);
-                    relabel_chunk(&mut buf, pos, &relabel);
-                    Some((Ok(Bytes::from(buf)), Some((file, held, pos + n as u64))))
+            let reading = std::time::Instant::now();
+            loop {
+                match file.read(&mut buf).await {
+                    // The download holds these bytes, the file shows them not
+                    // yet (its last write is on its way): read again while a
+                    // wait for the download lasts, never an early end (code
+                    // review r2 m5).
+                    Ok(0) if held.is_some() && reading.elapsed() < PARTIAL_WAIT => {
+                        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+                    }
+                    Ok(0) => return Some((Err(not_downloaded()), None)),
+                    Ok(n) => {
+                        buf.truncate(n);
+                        relabel_chunk(&mut buf, pos, &relabel);
+                        return Some((Ok(Bytes::from(buf)), Some((file, held, pos + n as u64))));
+                    }
+                    Err(e) => return Some((Err(e), None)),
                 }
-                Err(e) => Some((Err(e), None)),
             }
         }
     })
@@ -260,5 +270,46 @@ mod tests {
             .unwrap();
         assert_eq!(resp.status, 206);
         assert_eq!(resp.body[..], body[50_000..51_000]);
+    }
+
+    /// A player reading at the download's tip, where the download already
+    /// says it holds bytes the file shows not yet (its last write still on
+    /// its way): the read waits for them instead of ending the body early
+    /// (code review r2 m5).
+    #[tokio::test]
+    async fn a_read_at_the_tip_waits_for_bytes_still_on_their_way() {
+        let body: Vec<u8> = (0..=255u8).cycle().take(200_000).collect();
+        let dir = tempfile::tempdir().unwrap();
+        let part = dir.path().join("video.mp4.part");
+        std::fs::write(&part, &body[..100_000]).unwrap();
+        // The download says it holds all of it; the file has half.
+        let (tx, rx) = watch::channel(body.len() as u64);
+        let server = StreamServer::start(http()).await.unwrap();
+        let upstream = Upstream::File {
+            path: part.clone(),
+            len: body.len() as u64,
+            held: Some(rx),
+        };
+        let lease = server
+            .open(upstream, "video.mp4", Duration::from_secs(5))
+            .await
+            .unwrap();
+        let rest = body[100_000..].to_vec();
+        let writer = tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_millis(300)).await;
+            let mut file = std::fs::OpenOptions::new()
+                .append(true)
+                .open(&part)
+                .unwrap();
+            std::io::Write::write_all(&mut file, &rest).unwrap();
+        });
+        let resp = http()
+            .get_range(&lease.url, 90_000, 20_000, &local())
+            .await
+            .unwrap();
+        assert_eq!(resp.status, 206);
+        assert_eq!(resp.body[..], body[90_000..110_000]);
+        writer.await.unwrap();
+        drop(tx);
     }
 }

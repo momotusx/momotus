@@ -154,7 +154,7 @@ pub(super) async fn fetch(
     if let Err(e) = tokio::fs::create_dir_all(&dir).await {
         tracing::warn!("download folder not made: {e}");
         // Waited for as space, a minute at least (code review r1 M6).
-        d.ran_out(&row.id);
+        d.ran_out(&row.id, full(&e));
         return Ended::Wait(DownloadReason::Space);
     }
     let mut tries = 0usize;
@@ -368,7 +368,7 @@ async fn one_request(
         Ok(file) => file,
         Err(e) => {
             tracing::warn!("download file not opened: {e}");
-            d.ran_out(&row.id);
+            d.ran_out(&row.id, full(&e));
             return Request::Ended(Ended::Wait(DownloadReason::Space));
         }
     };
@@ -395,8 +395,8 @@ async fn one_request(
                 continue;
             }
             let bytes = std::mem::take(&mut head);
-            if write(&mut file, &bytes).await.is_err() {
-                d.ran_out(&row.id);
+            if let Err(e) = write(&mut file, &bytes).await {
+                d.ran_out(&row.id, full(&e));
                 return Request::Ended(Ended::Wait(DownloadReason::Space));
             }
             done += bytes.len() as u64;
@@ -405,9 +405,9 @@ async fn one_request(
             progressed = true;
             continue;
         }
-        if write(&mut file, &chunk).await.is_err() {
+        if let Err(e) = write(&mut file, &chunk).await {
             checkpoint(core, row, &mut file, done).await;
-            d.ran_out(&row.id);
+            d.ran_out(&row.id, full(&e));
             return Request::Ended(Ended::Wait(DownloadReason::Space));
         }
         done += chunk.len() as u64;
@@ -417,7 +417,7 @@ async fn one_request(
             since_checkpoint = 0;
             checkpoint(core, row, &mut file, done).await;
             if core.free_bytes().is_some_and(|free| free < FLOOR) {
-                d.ran_out(&row.id);
+                d.ran_out(&row.id, true);
                 return Request::Ended(Ended::Wait(DownloadReason::Space));
             }
         }
@@ -468,6 +468,15 @@ async fn open_at(path: &Path, from: u64) -> std::io::Result<tokio::fs::File> {
     Ok(file)
 }
 
+/// Whether `e` says the disk (or the user's quota) is full: any other I/O
+/// error waits too, but new room does not end its wait (code review r2 R4).
+fn full(e: &std::io::Error) -> bool {
+    matches!(
+        e.kind(),
+        std::io::ErrorKind::StorageFull | std::io::ErrorKind::QuotaExceeded
+    )
+}
+
 /// Writes `bytes` and waits until the file has them: `held` never names
 /// bytes a reader of the file could not read yet (code review r1 m5).
 async fn write(file: &mut tokio::fs::File, bytes: &[u8]) -> std::io::Result<()> {
@@ -509,6 +518,70 @@ async fn whole_video(path: &Path) -> bool {
     }
 }
 
+/// A source whose authenticating headers were not kept (a download keeps
+/// no secret on the device): its addon is asked again for the video's
+/// streams as the job starts, and the same version's headers come back
+/// with it, so a source that needs them never answers 401 (code review r2
+/// N1). The core keeps no secret store of its own (an app's keystore holds
+/// the debrid keys), so asking again is the one way that exists. The stored
+/// stream as it is when its addon is gone or lists it no more.
+pub(super) async fn with_fresh_headers(
+    core: &Core,
+    row: &DownloadRecord,
+    stream: ParsedStream,
+) -> ParsedStream {
+    let core = core.for_profile(&row.added_by);
+    let addons: Vec<_> = core
+        .installed_addons()
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|a| a.manifest.id == stream.addon_id)
+        .collect();
+    if addons.is_empty() {
+        return stream;
+    }
+    let path = mq_protocol::ResourcePath {
+        resource: "stream".into(),
+        r#type: row.kind.clone(),
+        id: row.video_id.clone(),
+        extra: vec![],
+    };
+    let mut fanout = core
+        .addons()
+        .fan_out(&addons, &path, mq_addons::Deadlines::default());
+    while let Some(event) = fanout.next().await {
+        let mq_addons::AddonEvent::Arrived {
+            addon_id,
+            transport_url,
+            body,
+            ..
+        } = event
+        else {
+            continue;
+        };
+        let listed = mq_protocol::decode_streams(&body)
+            .map(|r| r.streams)
+            .unwrap_or_default();
+        let fresh = listed.iter().enumerate().find_map(|(i, w)| {
+            let mut fresh = mq_streams::normalize(
+                w,
+                &addon_id,
+                &stream.addon_name,
+                stream.addon_rank,
+                i as u32,
+            );
+            fresh.addon_url = Some(transport_url.clone());
+            (fresh.key == stream.key).then_some(fresh)
+        });
+        if let Some(fresh) = fresh {
+            let mut stream = stream;
+            stream.headers = fresh.headers;
+            stream.addon_url = fresh.addon_url;
+            return stream;
+        }
+    }
+    stream
+}
 #[cfg(test)]
 mod tests {
     use super::*;

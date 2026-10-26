@@ -5,7 +5,13 @@ import type { DownloadSettings } from "./DownloadSettings";
 import type { DownloadStorage } from "./DownloadStorage";
 import type { DownloadTitle } from "./DownloadTitle";
 
-export type DownloadsSnapshot = { storage: DownloadStorage, settings: DownloadSettings, 
+export type DownloadsSnapshot = { 
+/**
+ * A locked session's view: the counts alone, with no row and no
+ * title, so a keeper takes nothing here for done or failed (code review
+ * r2, Android N1).
+ */
+locked: boolean, storage: DownloadStorage, settings: DownloadSettings, 
 /**
  * What the platform's keeper shows (a notification, the system's
  * progress) and whether it keeps the app running.

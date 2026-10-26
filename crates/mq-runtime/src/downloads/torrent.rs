@@ -132,7 +132,7 @@ pub(super) async fn fetch(
         }
         if p.out_of_space {
             handle.stop().await;
-            d.ran_out(&row.id);
+            d.ran_out(&row.id, true);
             return Ended::Wait(DownloadReason::Space);
         }
         // A full disk waits for space; any other stop is the source's, or
@@ -143,7 +143,7 @@ pub(super) async fn fetch(
             handle.stop().await;
             let ended = stopped(&why);
             if matches!(ended, Ended::Wait(_)) {
-                d.ran_out(&row.id);
+                d.ran_out(&row.id, true);
             }
             return ended;
         }

@@ -158,6 +158,10 @@ pub(crate) struct StoredStream {
     subtitles: Vec<mq_protocol::WireSubtitle>,
     #[serde(default)]
     addon_url: Option<url::Url>,
+    /// Headers that authenticate were left out: the job asks the addon
+    /// for them again as it starts (`http::with_fresh_headers`).
+    #[serde(default)]
+    withheld: bool,
 }
 
 impl StoredStream {
@@ -166,15 +170,17 @@ impl StoredStream {
     /// is scoped to; the path and query carry the addon's configuration and
     /// keys), and no header that authenticates (code review r1 m3).
     pub(crate) fn of(stream: &ParsedStream) -> Self {
+        let headers: Vec<(String, String)> = stream
+            .headers
+            .iter()
+            .filter(|(name, _)| !secret_header(name))
+            .cloned()
+            .collect();
         Self {
             stream: stream.clone(),
             size_is_file: stream.size_is_file,
-            headers: stream
-                .headers
-                .iter()
-                .filter(|(name, _)| !secret_header(name))
-                .cloned()
-                .collect(),
+            withheld: headers.len() != stream.headers.len(),
+            headers,
             subtitles: stream.subtitles.clone(),
             addon_url: stream.addon_url.as_ref().and_then(origin_of),
         }
@@ -426,6 +432,9 @@ pub struct Downloads {
     /// When each job began waiting for space: one whose size is unknown
     /// looks again after a minute, not at every wake.
     space_since: Mutex<HashMap<String, std::time::Instant>>,
+    /// Space waits that began with an I/O error on a disk that was not
+    /// full: new room does not end them (code review r2 R4).
+    io_waits: Mutex<std::collections::HashSet<String>>,
     /// Downloads whose subtitles are being fetched.
     subtitling: Mutex<std::collections::HashSet<String>>,
     /// Subtitle steps no source answered: when each asks again, and the
@@ -489,7 +498,9 @@ impl Drop for InUse {
         let Some(d) = self.downloads.upgrade() else {
             return;
         };
-        let last = {
+        // The count and the pending delete are read under one lock, as
+        // `act(Remove)` writes them (code review r2 R2).
+        let pending = {
             let mut in_use = lock(&d.in_use);
             let left = in_use.get_mut(&self.id).map(|n| {
                 *n -= 1;
@@ -497,12 +508,24 @@ impl Drop for InUse {
             });
             if left == Some(0) {
                 in_use.remove(&self.id);
+                lock(&d.pending).remove(&self.id)
+            } else {
+                None
             }
-            left == Some(0)
         };
-        let pending = last.then(|| lock(&d.pending).remove(&self.id)).flatten();
-        if let (Some(torrent), Some(core)) = (pending, d.core()) {
-            d.drop_files(&core, &self.id, torrent);
+        let (Some(torrent), Some(core)) = (pending, d.core()) else {
+            return;
+        };
+        // Off the playback's lock and never a panic on a thread with no
+        // runtime: the files go on the blocking pool; with no runtime the
+        // folder goes here and a torrent file waits for the next launch's
+        // sweep, its row being gone (code review r2 R3).
+        let id = self.id.clone();
+        match tokio::runtime::Handle::try_current() {
+            Ok(handle) => {
+                handle.spawn_blocking(move || d.drop_files(&core, &id, torrent));
+            }
+            Err(_) => d.forget_files(&id),
         }
     }
 }
@@ -530,6 +553,7 @@ impl Downloads {
             started: std::sync::Once::new(),
             strict: Mutex::default(),
             space_since: Mutex::default(),
+            io_waits: Mutex::default(),
             subtitling: Mutex::default(),
             subtitle_waits: Mutex::default(),
             smart_looking: Mutex::default(),
@@ -620,7 +644,7 @@ impl Downloads {
         }
         drop(a);
         // Room may have come: space waits look again now.
-        lock(&self.space_since).clear();
+        self.room_came();
         self.changed();
     }
 
@@ -966,12 +990,22 @@ impl Downloads {
                     let torrent = self.torrent_ref(&row);
                     core.library().delete_download(id)?;
                     lock(&self.versions).remove(id);
-                    lock(&self.space_since).clear();
+                    lock(&self.io_waits).remove(id);
+                    self.room_came();
                     // Played now: the row goes at once, its files when the
-                    // play ends (code review r1 M1).
-                    if lock(&self.in_use).contains_key(id) {
-                        lock(&self.pending).insert(id.clone(), torrent);
-                    } else {
+                    // play ends (code review r1 M1). The check and the
+                    // pending insert hold the users' lock, as `InUse::drop`
+                    // reads them (code review r2 R2).
+                    let now = {
+                        let in_use = lock(&self.in_use);
+                        if in_use.contains_key(id) {
+                            lock(&self.pending).insert(id.clone(), torrent);
+                            None
+                        } else {
+                            Some(torrent)
+                        }
+                    };
+                    if let Some(torrent) = now {
                         self.drop_files(&core, id, torrent);
                     }
                 }
@@ -1143,7 +1177,13 @@ impl Downloads {
             .get()
             .rows
             .into_iter()
-            .filter(|r| r.item_id == item_id && r.bytes_done > 0)
+            // What plays now: a failed or missing download is offered as no
+            // next episode (code review r2 N5).
+            .filter(|r| {
+                r.item_id == item_id
+                    && r.bytes_done > 0
+                    && !matches!(r.state, DownloadState::Failed | DownloadState::Missing)
+            })
             .collect();
         let first = rows.first()?;
         let videos: Vec<serde_json::Value> = rows
@@ -1395,9 +1435,21 @@ impl Downloads {
         Some((stream, shown))
     }
 
-    /// Job `id` met a space error.
-    fn ran_out(&self, id: &str) {
+    /// Job `id` met a space error; `full` when the disk itself was full.
+    fn ran_out(&self, id: &str, full: bool) {
         lock(&self.strict).insert(id.to_owned());
+        let mut io = lock(&self.io_waits);
+        if full {
+            io.remove(id);
+        } else {
+            io.insert(id.to_owned());
+        }
+    }
+
+    /// Room came: the space waits of a full disk look again now.
+    fn room_came(&self) {
+        let io = lock(&self.io_waits);
+        lock(&self.space_since).retain(|id, _| io.contains(id));
     }
 
     /// Tests: a free-space figure the platform reported `age` ago.
@@ -1915,9 +1967,11 @@ impl Downloads {
         if reason == Some(DownloadReason::Space) {
             lock(&self.space_since).insert(id.to_owned(), std::time::Instant::now());
         } else if state == DownloadState::Done {
+            lock(&self.io_waits).remove(id);
             // Its room is free again: space waits look again now.
-            lock(&self.space_since).clear();
+            self.room_came();
         } else {
+            lock(&self.io_waits).remove(id);
             lock(&self.space_since).remove(id);
         }
         self.update(core, id, |r| {
@@ -2106,7 +2160,13 @@ async fn run_job(me: std::sync::Weak<Downloads>, core: Core, mut row: DownloadRe
         let Some(d) = me.upgrade() else {
             return Outcome::Wait(DownloadReason::App);
         };
-        let stream = source.stream();
+        // Headers that were not kept come from the addon again (code review
+        // r2 N1).
+        let stream = if source.withheld {
+            http::with_fresh_headers(&core, &row, source.stream()).await
+        } else {
+            source.stream()
+        };
         #[cfg(feature = "torrent")]
         let ended = if crate::views::playback::by_engine(&stream, core.debrid().is_some(), true) {
             torrent::fetch(&d, &core, &mut row, &stream).await
@@ -2412,6 +2472,7 @@ fn without_secrets(version: &str) -> Option<String> {
         let clean = s.addon_url.as_ref().and_then(origin_of);
         let before = s.headers.len();
         s.headers.retain(|(name, _)| !secret_header(name));
+        s.withheld |= s.headers.len() != before;
         if clean != s.addon_url || s.headers.len() != before {
             s.addon_url = clean;
             changed = true;
@@ -2527,6 +2588,30 @@ mod tests {
         assert_eq!(d.held_by(false, Some(&mine)), Some(DownloadReason::Playing));
         drop(http);
         assert_eq!(d.held_by(false, None), None);
+    }
+
+    /// The last play of a removed download can end on a thread with no
+    /// runtime: its files go with no panic (code review r2 R3).
+    #[tokio::test]
+    async fn a_play_that_ends_off_the_runtime_still_drops_the_files() {
+        let core = Core::temporary("default").unwrap();
+        let d = core.downloads();
+        let folder = d.job_dir("x1");
+        std::fs::create_dir_all(&folder).unwrap();
+        *lock(&d.in_use).entry("x1".to_owned()).or_default() += 1;
+        let torrent = TorrentRef {
+            hash: "a".repeat(40),
+            file: 0,
+            name: "a.mkv".to_owned(),
+        };
+        lock(&d.pending).insert("x1".to_owned(), Some(torrent));
+        let in_use = InUse {
+            id: "x1".to_owned(),
+            downloads: Arc::downgrade(&d),
+        };
+        std::thread::spawn(move || drop(in_use)).join().unwrap();
+        assert!(!folder.exists());
+        assert!(lock(&d.in_use).is_empty() && lock(&d.pending).is_empty());
     }
 
     /// A season add names its season: one without adds nothing, even for
