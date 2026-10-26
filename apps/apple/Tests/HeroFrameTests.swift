@@ -108,3 +108,18 @@ import Testing
         }
     }
 }
+
+@MainActor @Test func theWideHerosPlayIsAsWideAsItsWidestLabelWhateverLands() {
+    // The lead, after review r4: on the Mac (and any wide hero) Details never moves when Play's words change.
+    func width(_ text: String, wide: Bool) -> CGFloat {
+        let pill = Button {} label: { HeroPlayLabel(text: text, wide: wide) }.buttonStyle(PillButtonStyle(prominent: true))
+        let host = NSHostingView(rootView: pill.fixedSize())
+        host.layoutSubtreeIfNeeded()
+        return host.fittingSize.width
+    }
+    let widths = ["Play", "Resume S2:E3", "Play again", "Play S1:E1"].map { width($0, wide: true) }
+    #expect(Set(widths).count == 1, "wide pills \(widths)")
+    for word in HeroPlayLabel.widest { #expect(width(word, wide: true) == widths[0], "\(word) is wider") }
+    // The words are measured for real: unheld, a short label makes a narrower pill.
+    #expect(width("Play", wide: false) < width("Resume S12:E10", wide: false))
+}

@@ -140,21 +140,12 @@ struct HeroView: View {
     @ViewBuilder private func playButton(_ hero: Hero) -> some View {
         // The core's Play, in the title page's words ("Resume S2:E3"); without one the page offers Details alone.
         if let target = hero.play {
-            Button { play(hero) } label: {
-                Label(target.label, glyph: "play-fill", size: HeroLayout.icon)
-                .frame(maxWidth: metrics.wide ? nil : .infinity)
-                // The iPhone's pill is 178 wide: a large text size shrinks the word rather than cut it.
-                .lineLimit(1)
-                .minimumScaleFactor(0.7)
-            }
+            Button { play(hero) } label: { HeroPlayLabel(text: target.label, wide: metrics.wide) }
             .buttonStyle(PillButtonStyle(prominent: true))
             .modifier(StartFocus(scope: startScope))
         } else if hero.holdsPlaySlot {
             // Play's place while the core reads the page's episodes: drawn by no one, reached by nothing.
-            Button {} label: {
-                Label("Play", glyph: "play-fill", size: HeroLayout.icon)
-                    .frame(maxWidth: metrics.wide ? nil : .infinity)
-            }
+            Button {} label: { HeroPlayLabel(text: "Play", wide: metrics.wide) }
             .buttonStyle(PillButtonStyle(prominent: true))
             .disabled(true)
             .hidden()

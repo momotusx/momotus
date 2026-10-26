@@ -108,8 +108,12 @@ final class TrailerState {
     var playing = false
     var shown = false
     var fraction: Double = 0
-    /// The sound switch's choice for the session: off at launch, on only by a press, kept by every later trailer.
+    /// The sound switch's choice for the session: off at launch, on only by a press, kept by every later trailer
+    /// and page; a film starting in the player turns it off, so coming back from it is never loud.
     var sound = false
+
+    /// A film starts in the player (`PlayerModel.load`, every source of every title).
+    func filmStarts() { sound = false }
 }
 
 #if !os(tvOS)

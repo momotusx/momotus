@@ -61,7 +61,7 @@ private func source(_ path: String) throws -> String {
     let view = try source("Home/HeroView.swift")
     let button = try body(of: "@ViewBuilder private func playButton(_ hero: Hero) -> some View", in: view)
     #expect(button.contains("if let target = hero.play {"))
-    #expect(button.contains("Label(target.label, glyph: \"play-fill\", size: HeroLayout.icon)"))
+    #expect(button.contains("HeroPlayLabel(text: target.label, wide: metrics.wide)"))
     #expect(view.contains(".modifier(StartFocus(scope: hero.play == nil ? startScope : nil))"))
     // Home plays the target's video from where it stopped.
     let play = try body(of: "private func playHero(_ hero: Hero)", in: try source("Home/HomeScreen.swift"))
@@ -117,4 +117,13 @@ private func source(_ path: String) throws -> String {
     let home = try source("Home/HomeScreen.swift")
     #expect(home.contains(".onMoveCommand { _ in moved = true }"))
     #expect(home.contains("if start == .hero && LatePlay.takesFocus(had: had, has: has, moved: moved) { resetFocus(in: startScope) }"))
+}
+
+@Test func aFilmStartingInThePlayerTurnsTheTrailerSoundOff() throws {
+    // The lead, after review r4: the sound stays through tabs and pages, but coming back from a film is never loud.
+    let trailer = try source("Home/HeroTrailer.swift")
+    #expect(try body(of: "final class TrailerState", in: trailer).contains("func filmStarts() { sound = false }"))
+    // Every source of every title passes through the player's one load.
+    let load = try body(of: "private func load(_ url: String, key: String?, attempt: Int64?, at start: Double)", in: try source("Player/PlayerModel.swift"))
+    #expect(load.contains("TrailerState.shared.filmStarts()"))
 }

@@ -1004,6 +1004,8 @@ final class PlayerModel {
     /// the picked version: an unknown one is not sent.
     private func load(_ url: String, key: String?, attempt: Int64?, at start: Double) {
         guard let address = URL(string: url) else { return }
+        // The hero's trailer sound ends with the film's start: back on Home, the next trailer is muted.
+        TrailerState.shared.filmStarts()
         let pick = EngineChoice.backend(
             container: playback?.container, audio: playback?.audio ?? [], engine: playback?.engine,
             enabled: EngineChoice.enabledHere)

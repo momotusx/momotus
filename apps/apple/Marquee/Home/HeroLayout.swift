@@ -30,3 +30,30 @@ enum HeroLayout {
     #endif
     #endif
 }
+
+/// The hero's Play words. Wide (the Mac, the iPad, TV) the pill is as wide as the widest label the core gives the
+/// hero, so Details never moves whatever label lands; the iPhone's pill is a fixed 178 and shrinks the words instead.
+struct HeroPlayLabel: View {
+    let text: String
+    let wide: Bool
+    /// The widest labels the hero's Play can show: a resume, a start, a series watched to its end.
+    static let widest = ["Resume S12:E10", "Play S12:E10", "Play again"]
+
+    var body: some View {
+        Group {
+            if wide {
+                ZStack {
+                    ForEach(Self.widest, id: \.self) { word in
+                        Label(word, glyph: "play-fill", size: HeroLayout.icon).hidden().accessibilityHidden(true)
+                    }
+                    Label(text, glyph: "play-fill", size: HeroLayout.icon)
+                }
+            } else {
+                Label(text, glyph: "play-fill", size: HeroLayout.icon).frame(maxWidth: .infinity)
+            }
+        }
+        // A large text size shrinks the words rather than cut them.
+        .lineLimit(1)
+        .minimumScaleFactor(0.7)
+    }
+}
