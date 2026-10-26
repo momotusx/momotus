@@ -23,6 +23,8 @@ let client: Client;
 let tmdb: Server;
 /** How long the core's answers with titles wait on their way to the page: a slow list, for the dimmed one before it. */
 let lag = 0;
+/** The last message from the core that carried titles, and the page it went to: replayed reordered on TV. */
+let lastTitles: { data: string; send: (data: string) => void } | null = null;
 
 /** TMDB's watch providers as /3/watch/providers/movie listed them on 2026-10-27, served by a local fake (the e2e core
  * never holds the owner's token); the logos themselves load from TMDB's image host through the recorder. */
@@ -70,6 +72,7 @@ async function device(browser: Browser, form: Form): Promise<Page> {
     });
     upstream.addEventListener("message", (e) => {
       const data = String(e.data);
+      if (data.includes('"items":[{')) lastTitles = { data, send: (d) => ws.send(d) };
       // Only what carries titles waits: the loading answer comes at once.
       if (lag > 0 && data.includes('"items":[{')) setTimeout(() => ws.send(data), lag);
       else ws.send(data);
@@ -167,6 +170,42 @@ test("a change keeps the list before, dimmed, until the next one comes", async (
   }
   await expect(page.locator(".dv-dim")).toHaveCount(0, { timeout: 30_000 });
   await page.locator('[data-fgroup="kinds"] .chip', { hasText: "Movies" }).click();
+  await page.context().close();
+});
+
+/** The first `items` list with two titles or more in a message, its first two swapped: a late list that reorders. */
+function reorder(value: unknown): boolean {
+  if (Array.isArray(value)) return value.some(reorder);
+  if (!value || typeof value !== "object") return false;
+  const o = value as Record<string, unknown>;
+  if (Array.isArray(o.items) && o.items.length > 1 && typeof o.items[0] === "object") {
+    [o.items[0], o.items[1]] = [o.items[1], o.items[0]];
+    return true;
+  }
+  return Object.values(o).some(reorder);
+}
+
+test("on a TV a late list that reorders the grid waits while focus is in it", async ({ browser }) => {
+  const page = await device(browser, "tv");
+  const focused = () => page.evaluate(() => (document.activeElement as HTMLElement | null)?.dataset.f ?? "");
+  await expect.poll(focused).toMatch(/^kinds:/);
+  await page.keyboard.press("ArrowDown");
+  await page.keyboard.press("ArrowDown");
+  await page.keyboard.press("ArrowDown");
+  await expect.poll(focused).toMatch(/^g:discover:/);
+  const tiles = page.locator(".grid .tile");
+  const [first, second] = [await tiles.nth(0).getAttribute("data-f"), await tiles.nth(1).getAttribute("data-f")];
+  // The same list with its first two titles swapped, as a late merge would send it.
+  const last = lastTitles;
+  expect(last).not.toBeNull();
+  const message = JSON.parse(last!.data);
+  expect(reorder(message)).toBe(true);
+  last!.send(JSON.stringify(message));
+  await expect(page.locator('[data-f="discover:show-late"]')).toBeVisible({ timeout: 5_000 });
+  await expect(tiles.nth(0)).toHaveAttribute("data-f", first!);
+  await page.locator('[data-f="discover:show-late"]').click();
+  await expect(tiles.nth(0)).toHaveAttribute("data-f", second!);
+  await expect(page.locator('[data-f="discover:show-late"]')).toHaveCount(0);
   await page.context().close();
 });
 
