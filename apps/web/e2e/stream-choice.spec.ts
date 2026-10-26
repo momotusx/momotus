@@ -690,6 +690,78 @@ test.describe("Versions", () => {
     await page.context().close();
   });
 
+  test("one kind of version draws no kind chips, and their line is reserved", async ({ browser }) => {
+    const page = await device(browser, "desktop", PORTS.bridge);
+    await page.goto(path("desktop"));
+    await firstRow(page);
+    await expect(page.locator(".vkinds .chip")).toHaveCount(0);
+    expect(await page.locator(".vkinds").evaluate((e) => e.getBoundingClientRect().height)).toBeGreaterThan(0);
+    await page.context().close();
+  });
+
+  // Two torrent copies of the core's first row join its direct links (plans/plugins-and-marketplace.md 4.3).
+  const twoKinds = (s: VersionsSnapshot): VersionsSnapshot => {
+    const a = s.rows[0] ?? s.recommended;
+    if (!s.done || !a) return s;
+    const torrents = [1, 2].map((n) => ({ ...a, key: `${a.key}#t${n}`, kind: "torrent" as const, quality: n === 1 ? "4K" : "720p" }));
+    const rows = [...s.rows, ...torrents];
+    // Each in its quality's section, as the core lists every row.
+    const add = (quality: "uhd" | "hd", key: string) => (sections.some((x) => x.quality === quality) ? sections.map((x) => (x.quality === quality ? { ...x, keys: [...x.keys, key] } : x)) : [...sections, { quality, keys: [key] }]);
+    let sections = s.sections;
+    sections = add("uhd", torrents[0]?.key ?? "");
+    sections = add("hd", torrents[1]?.key ?? "");
+    return { ...s, rows, sections };
+  };
+
+  for (const form of ["tv", "desktop", "phone"] as const) {
+    test(`${form}: two kinds draw the kind chips; a kind fills the card and the sections with its own rows`, async ({ browser }) => {
+      const page = await device(browser, form, PORTS.bridge, { versions: twoKinds });
+      await page.goto(path(form));
+      await firstRow(page);
+      const group = page.getByRole("radiogroup", { name: "Sources" });
+      await expect(group.getByRole("radio")).toHaveText([/^All\s*\d+$/, /^Torrents\s*2$/, /^Direct links\s*\d+$/]);
+      await expect(group.getByRole("radio", { name: "Torrents, 2 versions" })).toHaveAttribute("aria-checked", "false");
+      await expect(group.getByRole("radio").first()).toHaveAttribute("aria-checked", "true");
+      await expect(page.locator(".pick .best")).not.toHaveText("Best torrent");
+      if (form === "tv") {
+        // Up from Play comes to the chip that is on, Right moves along, OK keeps focus on it.
+        await expect.poll(() => focused(page)).toBe("versions:play");
+        await page.keyboard.press("ArrowUp");
+        await expect.poll(() => focused(page)).toBe("vkinds:all");
+        await page.keyboard.press("ArrowRight");
+        await page.keyboard.press("Enter");
+        await expect.poll(() => focused(page)).toBe("vkinds:torrent");
+      } else {
+        // A click with no pointer before it (a screen reader's), so the chip alone freezes the pick.
+        sent.length = 0;
+        await group.getByRole("radio", { name: "Torrents, 2 versions" }).dispatchEvent("click");
+      }
+      await expect(group.getByRole("radio", { name: "Torrents, 2 versions" })).toHaveAttribute("aria-checked", "true");
+      // Choosing a kind freezes the pick.
+      expect(sent.some((m) => m.op === "command" && (m.command as { type?: string } | undefined)?.type === "freeze")).toBe(true);
+      // The card is the kind's first row; the sections list the rest of the kind, never the card's again.
+      await expect(page.locator(".pick .best")).toHaveText("Best torrent");
+      await expect(page.locator(".pick h2")).toHaveText("4K");
+      await expect(page.locator(".vrow")).toHaveCount(1);
+      await expect(page.locator('[data-f^="vshort:"]')).toHaveCount(0);
+      await shot(page, "versions-kinds-torrent", form);
+      if (form === "tv") {
+        // Down from a chip goes back to Play, which plays the kind's first row.
+        await page.keyboard.press("ArrowDown");
+        await expect.poll(() => focused(page)).toBe("versions:play");
+        await page.keyboard.press("Enter");
+        await expect(page).toHaveURL(/\/play\//);
+        expect(await page.evaluate(() => (history.state as { key?: string } | null)?.key)).toMatch(/#t1$/);
+      } else {
+        // All is today's page again.
+        await group.getByRole("radio").first().click();
+        await expect(page.locator(".pick .best")).not.toHaveText("Best torrent");
+        await expect(page.locator(".vrow")).not.toHaveCount(1);
+      }
+      await page.context().close();
+    });
+  }
+
   test("a version whose quality is not stated has no quality badge, and its row is one height with the rest", async ({ browser }) => {
     // Two copies of the first row in one section, the first with no stated quality.
     const unstated = (s: VersionsSnapshot): VersionsSnapshot => {

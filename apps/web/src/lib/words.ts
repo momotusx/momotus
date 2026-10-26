@@ -15,6 +15,7 @@ import type { LearnedChoice } from "../core/generated/LearnedChoice";
 import type { Network } from "../core/generated/Network";
 import type { Prefs } from "../core/generated/Prefs";
 import type { ReasonLine } from "../core/generated/ReasonLine";
+import type { SourceKind } from "../core/generated/SourceKind";
 import type { Speed } from "../core/generated/Speed";
 import type { StreamPrefs } from "../core/generated/StreamPrefs";
 import type { Form } from "../form";
@@ -888,3 +889,27 @@ export function problemWords(reason: string): { text: string; raw: string | null
   if (/^addon returned no catalog items/i.test(r)) return said("It sent an empty list.");
   return { text: r, raw: null };
 }
+
+/** A kind chip's choice: every version, or one kind. */
+export type KindChoice = "all" | SourceKind;
+const KINDS: SourceKind[] = ["torrent", "direct", "debrid"];
+
+/** The Versions page's kind chips (plans/plugins-and-marketplace.md 4.2): All, then each kind listed, with
+ * their counts; none while fewer than two kinds are listed. `rows` is the pick and the listed rows;
+ * `service` is the snapshot's `debridService`. */
+export function kindChips(rows: VersionRow[], service: string | null) {
+  const count = (k: KindChoice) => (k === "all" ? rows.length : rows.filter((r) => r.kind === k).length);
+  const kinds = KINDS.filter((k) => count(k) > 0);
+  if (kinds.length < 2) return [];
+  const label = (k: KindChoice) => (k === "debrid" ? (service ?? choice.kind.debrid) : choice.kind[k]);
+  return (["all", ...kinds] as KindChoice[]).map((value) => ({
+    value,
+    label: label(value),
+    note: count(value).toLocaleString("en-US"),
+    a11y: choice.kind.a11y.replace("{kind}", label(value)).replace("{versions}", counted("versions", count(value))),
+  }));
+}
+
+/** The card's kicker under a kind: "Best torrent", "Best on Real-Debrid". */
+export const kindBest = (k: SourceKind, service: string | null) =>
+  k === "debrid" && service ? choice.kind.best.service.replace("{service}", service) : choice.kind.best[k];

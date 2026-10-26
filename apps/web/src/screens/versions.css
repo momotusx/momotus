@@ -12,6 +12,11 @@
 /* The header's one status line: its height reserved from the first paint, empty when there is nothing to say. */
 .vstatus { min-height: calc(var(--type-callout) * 1.3); margin-top: 10px; font: 400 var(--type-callout) / 1.3 var(--font-text); color: var(--muted);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* The kind chips (plans/plugins-and-marketplace.md 4.2): their line reserved from the first paint, under the status
+ * line and over the card, so Up from Play comes to them; compact, to sit in the header's room above the card. */
+.vkinds { min-height: 40px; }
+.vkinds .chips-row > .kicker { display: none; }
+.vkinds .chip { height: 40px; padding: 0 20px; font-size: var(--type-caption); }
 .dot.live, .live .dot { animation: pulse 2.4s ease-in-out infinite; }
 @keyframes pulse { 50% { opacity: .35; } }
 @media (prefers-reduced-motion: reduce) { .dot.live, .live .dot { animation: none; } }
@@ -116,6 +121,8 @@
 [data-form="phone"] .vhead h1 span { display: block; margin: 4px 0 0; font-size: 15px; }
 [data-form="phone"] .vstate { gap: 14px; flex-wrap: wrap; }
 [data-form="phone"] .vstatus { font-size: 14px; margin-top: 6px; }
+[data-form="phone"] .vkinds { min-height: 36px; margin-top: 10px; }
+[data-form="phone"] .vkinds .chip { height: 36px; padding: 0 14px; font-size: 14px; }
 [data-form="phone"] .pick { margin-top: 16px; padding: 18px; border-radius: 16px; }
 [data-form="phone"] .pick h2 { margin: 8px 0 10px; }
 [data-form="phone"] .vshort { grid-template-columns: auto auto minmax(0, 1fr) auto; padding: 8px 10px; font-size: 14px; }

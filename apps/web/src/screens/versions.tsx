@@ -15,6 +15,7 @@ import { createEffect, createMemo, createSignal, For, Match, on, onCleanup, onMo
 import { Dynamic } from "solid-js/web";
 import { Backdrop } from "../components/art";
 import { downloadAdd } from "../components/download";
+import { Chips } from "../components/grid";
 import { EmptyActs } from "../components/empty-acts";
 import { KeyedPage } from "../components/keyed-page";
 import { Why } from "../components/why";
@@ -36,6 +37,9 @@ import {
   emptyWords,
   choiceWords,
   counted,
+  kindBest,
+  kindChips,
+  type KindChoice,
   languageName,
   learnedNote,
   lineWords,
@@ -47,6 +51,7 @@ import {
   sheetDetails,
   versionsWords,
 } from "../lib/words";
+import "./browse.css";
 import "./versions.css";
 
 const SHOWN = 3;
@@ -196,9 +201,27 @@ export function VersionsPage(props: { kind: string; id: string; videoId: string;
     heldKeys.set(place, now.key);
     return now;
   };
-  const pick = () => holdRow("pick", snap()?.recommended);
+  // The kind chips (plans/plugins-and-marketplace.md 4.2): All is today's page; a kind shows its own
+  // first row in the card and its rows in the sections. The choice holds while the page is open.
+  const [kind, setKind] = createSignal<KindChoice>("all");
+  const chips = createMemo(() => {
+    const s = snap();
+    return s && !dimmed() ? kindChips([...(s.recommended ? [s.recommended] : []), ...s.rows], s.debridService) : [];
+  });
+  const shownKind = () => (chips().some((c) => c.value === kind()) ? kind() : "all");
+  const chooseKind = (k: KindChoice) => {
+    freeze();
+    setKind(k);
+  };
+  const pick = () => {
+    const k = shownKind();
+    const s = snap();
+    if (k === "all") return holdRow("pick", s?.recommended);
+    return holdRow(`pick:${k}`, [s?.recommended, ...(s?.rows ?? [])].find((r) => r?.kind === k));
+  };
+  // The shortcuts are relative to the core's pick: under a kind they hide.
   const shortcut = (id: "smaller" | "sharper") => {
-    const r = holdRow(id, snap()?.[id]);
+    const r = shownKind() === "all" ? holdRow(id, snap()?.[id]) : null;
     return r && r.key !== pick()?.key ? r : null;
   };
   const video = `${props.kind}/${props.id}/${props.videoId}`;
@@ -251,9 +274,12 @@ export function VersionsPage(props: { kind: string; id: string; videoId: string;
   };
   const rowsOf = (g: Sec): VersionRow[] => {
     const rows = dimmed() ? new Map(listed().map((r) => [r.key, r])) : byKey();
+    const k = shownKind();
+    // Under a kind the card shows its first row, so its section does not list it again.
+    const card = k === "all" ? null : pick()?.key;
     return keysOf(g)
-      .map((k) => rows.get(k))
-      .filter((r): r is VersionRow => !!r);
+      .map((key) => rows.get(key))
+      .filter((r): r is VersionRow => !!r && (k === "all" || (r.kind === k && r.key !== card)));
   };
   const label = (g: Sec) => (g === "found" ? null : versionsWords.sections[g]);
   const toggle = (g: Sec) => {
@@ -385,6 +411,21 @@ export function VersionsPage(props: { kind: string; id: string; videoId: string;
           </div>
           {/* Reserved from the first paint, so nothing below moves when it fills or empties. */}
           <p class="vstatus">{statusLine()}</p>
+          {/* The kind chips, only with two kinds or more; their line is reserved from the first paint too.
+              Down from a chip goes back to Play, as Up from Play comes to the chip that is on. */}
+          <div
+            class="vkinds"
+            onKeyDown={(e) => {
+              const p = e.key === "ArrowDown" ? at("versions:play") : null;
+              if (!p) return;
+              e.preventDefault();
+              focusEl(p);
+            }}
+          >
+            <Show when={chips().length}>
+              <Chips label={choiceWords.kind.label} group="vkinds" items={chips()} selected={shownKind()} onSelect={chooseKind} />
+            </Show>
+          </div>
           {/* Said once when the list is done (3.6): the count, or why nothing can play; never each row. */}
           <p class="sr" role="status">
             {doneWords()}
@@ -448,7 +489,7 @@ export function VersionsPage(props: { kind: string; id: string; videoId: string;
               >
                 {(p) => (
                   <>
-                    <p class="best">{best()}</p>
+                    <p class="best">{keeping || shownKind() === "all" ? best() : kindBest(p().kind, snap()?.debridService ?? null)}</p>
                     <h2>{qualityText(p().quality)}</h2>
                     <Show when={p().features.length}>
                       <p class="badges">

@@ -101,7 +101,7 @@ export function SkeletonGrid(props: { count?: number }) {
 type ChipsProps<T> = {
   label: string;
   group: string;
-  items: { value: T; label: string; note?: string }[];
+  items: { value: T; label: string; note?: string; a11y?: string }[];
   selected: T;
   onSelect: (v: T) => void;
   autofocus?: boolean;
@@ -252,6 +252,7 @@ export function Segmented<T>(props: ChipsProps<T>) {
               class="chip"
               role="radio"
               aria-checked={item.value === props.selected}
+              aria-label={item.a11y}
               classList={{ on: item.value === props.selected }}
               data-f={`${props.group}:${String(item.value)}`}
               data-autofocus={props.autofocus && i() === 0 ? "" : undefined}
