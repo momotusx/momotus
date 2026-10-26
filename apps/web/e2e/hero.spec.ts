@@ -91,6 +91,9 @@ test("TV: Right from the last button pages on with the focus on the same button,
   await expect.poll(() => activePage(page)).toBe(1);
   await expect.poll(() => page.evaluate(() => (document.activeElement as HTMLElement | null)?.dataset.f)).toBe("hero:details");
   expect(await page.evaluate(() => !!document.activeElement?.closest(".hero-page.on"))).toBe(true);
+  // Which button is first waits on the core's Play: a Play landing between the focus and the key would make
+  // Left a plain move to it.
+  await expect(page.locator(".hero-page.on .acts .slot")).toHaveCount(0);
   const first = page.locator(".hero-page.on .acts [data-f]").first();
   await first.focus();
   await page.keyboard.press("ArrowLeft");
