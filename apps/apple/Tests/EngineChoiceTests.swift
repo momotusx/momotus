@@ -227,3 +227,33 @@ import Testing
     #expect(lines.count >= 8)
     #expect(lines.allSatisfy { $0.contains("Self.fresh(") }, "\(lines.filter { !$0.contains("Self.fresh(") })")
 }
+
+/// Code r5: the bar's one swarm figure is the start window's bytes as the core counted them over the time between its
+/// first and last start snapshots with bytes; a new source starts it over; one snapshot says nothing.
+@Test func theStartWindowRateIsTheCoresBytesOverTheirTime() {
+    let t = ContinuousClock.now
+    var window = StartWindow()
+    window.saw(0, at: t)
+    window.saw(1 << 20, at: t + .seconds(1))
+    #expect(window.kibPerS == "n/a")
+    window.saw(3 << 20, at: t + .seconds(3))
+    #expect(window.kibPerS == "1024")
+    // The next source: its count starts lower, so the window starts over.
+    window.saw(1 << 19, at: t + .seconds(4))
+    #expect(window.kibPerS == "n/a")
+    window.saw(1 << 20, at: t + .seconds(6))
+    #expect(window.kibPerS == "256")
+}
+
+/// Code r5: the walk's screen hold is compiled into walk builds only: `isIdleTimerDisabled` appears in the app only in
+/// WalkSampler.swift, whose first line is `#if MARQUEE_WALK`. A source check: the guard is the compilation condition.
+@Test func theScreenHoldIsInWalkBuildsOnly() throws {
+    let app = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appending(path: "../Marquee")
+    let files = try #require(FileManager.default.enumerator(at: app, includingPropertiesForKeys: nil))
+        .compactMap { $0 as? URL }.filter { $0.pathExtension == "swift" }
+    let holding = try files.filter { try String(contentsOf: $0, encoding: .utf8).contains("isIdleTimerDisabled") }
+    #expect(holding.map(\.lastPathComponent) == ["WalkSampler.swift"])
+    let sampler = try String(contentsOf: app.appending(path: "App/WalkSampler.swift"), encoding: .utf8)
+    #expect(sampler.hasPrefix("#if MARQUEE_WALK\n"))
+}
+

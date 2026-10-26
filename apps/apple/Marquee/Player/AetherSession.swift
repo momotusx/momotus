@@ -143,7 +143,7 @@ final class AetherSession {
                         from.flatMap { from in to.map { "\(Int(($0 - from) / .milliseconds(1)))" } } ?? "n/a"
                     }
                     let (probed, session) = (passed[.streamsProbed], passed[.sessionConstructed])
-                    coreLog.notice("metric engine_start probe_ms=\(ms(loaded, probed), privacy: .public) session_ms=\(ms(probed, session), privacy: .public) frame_ms=\(ms(session, .now), privacy: .public) probe_mib=\(probeMiB, privacy: .public) probe_kib_s=\(Self.kibPerS(bytes: probeMiB << 20, from: loaded, to: probed), privacy: .public) seg0_kib_s=\(Self.kibPerS(bytes: host.segmentCacheDiskBytes, from: session, to: .now), privacy: .public) path=\(Self.path(native: host.nativePlayerLayer != nil, software: host.softwarePiPSource != nil), privacy: .public) rerouted=\(rerouted == nil ? 0 : 1, privacy: .public) reroute=\(Self.reroute(rerouted), privacy: .public)")
+                    coreLog.notice("metric engine_start probe_ms=\(ms(loaded, probed), privacy: .public) session_ms=\(ms(probed, session), privacy: .public) frame_ms=\(ms(session, .now), privacy: .public) probe_mib=\(probeMiB, privacy: .public) probe_kib_s=\(Self.kibPerS(bytes: probeMiB << 20, from: loaded, to: probed), privacy: .public) cache_kib_s=\(Self.kibPerS(bytes: host.segmentCacheDiskBytes, from: session, to: .now), privacy: .public) path=\(Self.path(native: host.nativePlayerLayer != nil, software: host.softwarePiPSource != nil), privacy: .public) rerouted=\(rerouted == nil ? 0 : 1, privacy: .public) reroute=\(Self.reroute(rerouted), privacy: .public)")
                 }
             }
             .store(in: &bag)
@@ -197,9 +197,10 @@ final class AetherSession {
         escalations.sink { record($0.absorbedFailure) }
     }
 
-    /// A start window's rate, KiB per second: its bytes over its time, n/a without either. The probe window reads the
-    /// probe's size (an upper bound when the probe ended early, and no swarm figure when its bytes were already
-    /// fetched); the first-segment window reads the segment cache on disk at the first frame (native path only).
+    /// A diagnostic rate, KiB per second: bytes over time, n/a without either. `probe_kib_s` is the probe's size over
+    /// its time (an upper bound when the probe ended early, a local read when its bytes were already fetched);
+    /// `cache_kib_s` is the whole segment cache on disk at the first frame over the session-to-frame time (native
+    /// path only, remuxed output with audio). Neither is the swarm: `start_kib_s` on the ready line is (code r5).
     static func kibPerS(bytes: Int64?, from: ContinuousClock.Instant?, to: ContinuousClock.Instant?) -> String {
         guard let bytes, let from, let to, to > from else { return "n/a" }
         return "\(Int(Double(bytes) / 1024 / ((to - from) / .seconds(1))))"

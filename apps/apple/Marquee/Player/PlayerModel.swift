@@ -149,8 +149,8 @@ final class PlayerModel {
     /// when the play fails again at once and the snapshot reads as before.
     private(set) var tryingAgain = false
     @ObservationIgnored private var lastRetries: Int?
-    /// The swarm's rate in the last start snapshot before `ready`, for the ready metric (the bar's swarm column).
-    @ObservationIgnored private var swarmRate: Int64 = 0
+    /// The start window's bytes as the core counted them, for the ready and failed metrics (the bar's swarm figure).
+    @ObservationIgnored private var startWindow = StartWindow()
     @ObservationIgnored private var tryingAgainShown = 0
     /// The loaded source has shown a frame (`rendered` counts the first of the playback).
     @ObservationIgnored private var pictureShown = false
@@ -867,7 +867,7 @@ final class PlayerModel {
         playback = snapshot
         if PlayerLayout.retryRose(old: lastRetries, new: snapshot.retries) { showTryingAgain() }
         lastRetries = snapshot.retries ?? lastRetries
-        if let start = snapshot.start { swarmRate = start.bytesPerS }
+        if let start = snapshot.start { startWindow.saw(start.haveBytes, at: .now) }
         tryingAgain = PlayerLayout.keepsTryingAgain(showing: tryingAgain, phase: snapshot.phase)
         // The core's start subtitle, once, as if picked, sending nothing.
         // A move on to another source: the old start subtitle and its cues go.
@@ -892,7 +892,7 @@ final class PlayerModel {
             if loadedURL == nil, !rendered {
                 let ms = Int((ContinuousClock.now - route.tapped) / .milliseconds(1))
                 let host = URL(string: url)?.host() ?? "?"
-                coreLog.notice("metric playback_ready_ms=\(ms, privacy: .public) host=\(host, privacy: .public) swarm_kib_s=\(self.swarmRate / 1024, privacy: .public)")
+                coreLog.notice("metric playback_ready_ms=\(ms, privacy: .public) host=\(host, privacy: .public) start_kib_s=\(self.startWindow.kibPerS, privacy: .public)")
             }
             // The first source starts at the saved position; a failover resumes where the last one stopped.
             var start = loadedURL == nil
@@ -912,7 +912,7 @@ final class PlayerModel {
             notice = nil
             // Once per failure, the core's own words for the last source (a walk reads why without the screen).
             if !wasFailed {
-                coreLog.notice("metric playback_failed_ms=\(self.sinceTap, privacy: .public) swarm_kib_s=\(self.swarmRate / 1024, privacy: .public) why=\(snapshot.attempts.last?.error ?? "none", privacy: .public)")
+                coreLog.notice("metric playback_failed_ms=\(self.sinceTap, privacy: .public) start_kib_s=\(self.startWindow.kibPerS, privacy: .public) why=\(snapshot.attempts.last?.error ?? "none", privacy: .public)")
             }
         default:
             break

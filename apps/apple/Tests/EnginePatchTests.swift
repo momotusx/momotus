@@ -166,6 +166,17 @@ extension AetherSession.Events {
     #expect(unmeasured.map { ($0.startSeconds * 1000).rounded() } == [0, 4000, 8000])
     // A spacing at the stride splits nothing.
     #expect(HLSVideoEngine.buildUniformSegmentPlan(videoTimeBase: tb, sourceDurationSeconds: 12, strideSeconds: 4, firstSegmentSeconds: 4).count == 3)
+    // Code r5 edges: a sub-1 s gap is clamped to a 1 s segment 0; 3.5 s would leave 0.5 s, so no split; a long GOP
+    // (stride 6 from a 6 s spacing) is left alone; a source shorter than the first cut stays one segment.
+    let clamped = HLSVideoEngine.uniformFirstSegmentSeconds(spacing: .measured(0.5))
+    let short = HLSVideoEngine.buildUniformSegmentPlan(videoTimeBase: tb, sourceDurationSeconds: 12, strideSeconds: 4, firstSegmentSeconds: clamped)
+    #expect(short.prefix(2).map { ($0.durationSeconds * 1000).rounded() } == [1000, 3000])
+    let late = HLSVideoEngine.uniformFirstSegmentSeconds(spacing: .measured(3.5))
+    #expect(HLSVideoEngine.buildUniformSegmentPlan(videoTimeBase: tb, sourceDurationSeconds: 12, strideSeconds: 4, firstSegmentSeconds: late).map { ($0.startSeconds * 1000).rounded() } == [0, 4000, 8000])
+    let longGOP = HLSVideoEngine.uniformStrideSeconds(spacing: .measured(6))
+    #expect(longGOP == 6)
+    #expect(HLSVideoEngine.buildUniformSegmentPlan(videoTimeBase: tb, sourceDurationSeconds: 24, strideSeconds: longGOP, firstSegmentSeconds: HLSVideoEngine.uniformFirstSegmentSeconds(spacing: .measured(6))).map { ($0.startSeconds * 1000).rounded() } == [0, 6000, 12000, 18000])
+    #expect(HLSVideoEngine.buildUniformSegmentPlan(videoTimeBase: tb, sourceDurationSeconds: 1.5, strideSeconds: 4, firstSegmentSeconds: 1.001).count == 1)
     // The engine's one call site passes it (a source check: the plan is built inside a live open).
     let engine = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
         .appending(path: "../Vendor/AetherEngine/Sources/AetherEngine/Video/HLSVideoEngine.swift")

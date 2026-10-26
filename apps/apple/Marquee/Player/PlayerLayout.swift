@@ -748,3 +748,23 @@ struct StallWatch {
         ["type": "stalled", "stalled": stalled, "positionMs": Int64((max(0, position) * 1000).rounded())]
     }
 }
+
+/// The swarm's rate over the start window, from the core's own counts: the bar's one swarm figure for every play on
+/// either player (code r5). The start bytes the core had at its last start snapshot less those at its first one with
+/// bytes, over the time between; a new source (fewer bytes than before) starts it over; n/a with fewer than two.
+struct StartWindow {
+    private var first: (at: ContinuousClock.Instant, bytes: Int64)?
+    private var last: (at: ContinuousClock.Instant, bytes: Int64)?
+
+    mutating func saw(_ bytes: Int64, at: ContinuousClock.Instant) {
+        guard bytes > 0 else { return }
+        if let last, bytes < last.bytes { first = nil }
+        if first == nil { first = (at, bytes) }
+        last = (at, bytes)
+    }
+
+    var kibPerS: String {
+        guard let first, let last, last.at > first.at else { return "n/a" }
+        return "\(Int(Double(last.bytes - first.bytes) / 1024 / ((last.at - first.at) / .seconds(1))))"
+    }
+}
