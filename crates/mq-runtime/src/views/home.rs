@@ -931,7 +931,7 @@ pub(crate) fn tile_from_preview(m: mq_protocol::MetaItemPreview, covers: &Covers
             .map(|l| l.name.clone())
             .collect()
     };
-    let rating = links("imdb").into_iter().next();
+    let rating = imdb_rating(&m);
     let blurb = Blurb {
         description: m.description.clone(),
         genres: links("Genres").into_iter().take(3).collect(),
@@ -1367,10 +1367,18 @@ fn tile_from_continue(
     .rated_cover(covers)
 }
 
-fn imdb_rating(p: &mq_protocol::MetaItemPreview) -> Option<String> {
+/// The IMDb rating an item's links give: a link of category `imdb` that
+/// points at imdb.com. Anime Kitsu files Kitsu's own score under `imdb`
+/// with a kitsu.io link, which is not IMDb's and never shows as it.
+pub(crate) fn imdb_rating(p: &mq_protocol::MetaItemPreview) -> Option<String> {
     p.links
         .iter()
-        .find(|l| l.category.eq_ignore_ascii_case("imdb"))
+        .find(|l| {
+            l.category.eq_ignore_ascii_case("imdb")
+                && l.url
+                    .host_str()
+                    .is_some_and(|h| h == "imdb.com" || h.ends_with(".imdb.com"))
+        })
         .map(|l| l.name.clone())
 }
 
@@ -1409,6 +1417,34 @@ mod tests {
         let tile =
             super::tile_from_preview(metas.into_iter().next().unwrap(), &super::Covers::default());
         assert_eq!(tile.release_info.as_deref(), Some("Since 2023"));
+    }
+
+    /// Anime Kitsu writes Kitsu's own score as an `imdb` link to kitsu.io
+    /// (Attack on Titan "8.4", where IMDb says 9.1): no tile shows it as
+    /// IMDb's. Cinemeta's link to imdb.com still counts.
+    #[test]
+    fn only_a_link_to_imdb_com_is_an_imdb_score() {
+        let body = br#"{"metas":[
+            {"id":"kitsu:7442","type":"series","name":"Attack on Titan","imdbRating":"8.4",
+             "links":[{"name":"8.4","category":"imdb","url":"https://kitsu.io/anime/attack-on-titan"}]},
+            {"id":"tt2560140","type":"series","name":"Attack on Titan",
+             "links":[{"name":"9.1","category":"imdb","url":"https://imdb.com/title/tt2560140"}]},
+            {"id":"tt0903747","type":"series","name":"Breaking Bad",
+             "links":[{"name":"9.5","category":"imdb","url":"https://www.imdb.com/title/tt0903747/"}]}
+        ]}"#;
+        let mq_protocol::ResourceResponse::Metas { metas } =
+            mq_protocol::decode_catalog(body).unwrap()
+        else {
+            panic!("metas");
+        };
+        let tiles: Vec<_> = metas
+            .into_iter()
+            .map(|m| super::tile_from_preview(m, &super::Covers::default()))
+            .collect();
+        assert_eq!(tiles[0].rating, None);
+        assert_eq!(tiles[0].ratings.imdb, None);
+        assert_eq!(tiles[1].ratings.imdb.as_deref(), Some("9.1"));
+        assert_eq!(tiles[2].ratings.imdb.as_deref(), Some("9.5"));
     }
 
     #[test]

@@ -1166,8 +1166,8 @@ fn details(
         cast: links("Cast"),
         directors: links("Directors"),
         writers: links("Writers"),
-        rating: links("imdb").into_iter().next(),
-        ratings: Ratings::of(links("imdb").first().map(String::as_str)),
+        rating: super::home::imdb_rating(p),
+        ratings: Ratings::of(super::home::imdb_rating(p).as_deref()),
         imdb_url: imdb
             .filter(|id| crate::segments::is_imdb(id))
             .map(|id| format!("https://www.imdb.com/title/{id}/")),

@@ -1071,3 +1071,84 @@ async fn a_live_discover_follows_the_rpdb_key() {
     until(Some(band)).await;
     assert_eq!(asked.lock().unwrap().len(), pages, "no catalog asked again");
 }
+
+/// Anime Kitsu's paging, as measured on 2026-10-25: pages of 20, a skip of
+/// 1 to 39 answers page one again, a skip of 40 or more is honoured. The
+/// list ends at 100. Records the skips it was asked.
+async fn kitsu_like() -> (AddonRow, Arc<Mutex<Vec<usize>>>) {
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    let asked = Arc::new(Mutex::new(Vec::new()));
+    let log = asked.clone();
+    tokio::spawn(async move {
+        while let Ok((mut socket, _)) = listener.accept().await {
+            let mut buf = [0u8; 2048];
+            let n = socket.read(&mut buf).await.unwrap_or(0);
+            let head = String::from_utf8_lossy(&buf[..n]).into_owned();
+            let skip: usize = head
+                .split_whitespace()
+                .nth(1)
+                .and_then(|p| p.split("skip=").nth(1))
+                .and_then(|s| s.trim_end_matches(".json").parse().ok())
+                .unwrap_or(0);
+            log.lock().unwrap().push(skip);
+            let ids = match skip {
+                0..40 => 0..20,
+                40..100 => skip..skip + 20,
+                _ => 0..0,
+            };
+            let metas: Vec<_> = ids
+                .map(|i| serde_json::json!({"id": format!("kitsu:{i}"), "type": "anime", "name": format!("A{i}")}))
+                .collect();
+            let body = serde_json::json!({ "metas": metas }).to_string();
+            let reply = format!(
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                body.len()
+            );
+            let _ = socket.write_all(reply.as_bytes()).await;
+        }
+    });
+    let manifest = serde_json::json!({
+        "id": "kitsu", "version": "1.0.0", "name": "Kitsu", "types": ["anime"], "resources": ["catalog"],
+        "catalogs": [{"type": "anime", "id": "popular", "name": "Most Popular", "extra": [{"name": "skip"}]}]
+    });
+    let row = AddonRow {
+        transport_url: format!("http://{addr}/manifest.json"),
+        manifest_json: manifest.to_string(),
+        position: 0,
+        enabled: true,
+        allow_private: true,
+    };
+    (row, asked)
+}
+
+/// A page that brings nothing new is asked once more past itself before the
+/// list ends, and later pages start past the page the addon repeated: a
+/// Kitsu list goes on after its first 20 instead of ending there.
+#[tokio::test]
+async fn a_repeated_page_is_asked_once_more_past_itself() {
+    let core = Core::temporary("p").unwrap();
+    let (row, asked) = kitsu_like().await;
+    core.library()
+        .set_addons(core.profile(), &[row], &core.hlc())
+        .unwrap();
+    let view = DiscoverView::open(&core);
+    until(&view, |s| s.state == DiscoverState::Ready).await;
+    assert_eq!(ids(&view).len(), 20);
+    for listed in [40, 60, 80] {
+        view.load_more();
+        until(&view, |s| s.state != DiscoverState::Loading).await;
+        assert_eq!(view.snapshot().state, DiscoverState::Ready);
+        assert_eq!(ids(&view).len(), listed);
+    }
+    view.load_more();
+    until(&view, |s| s.state == DiscoverState::End).await;
+    let want: Vec<String> = (0..20)
+        .chain(40..100)
+        .map(|i| format!("kitsu:{i}"))
+        .collect();
+    assert_eq!(ids(&view), want);
+    // One extra ask for the repeated page, then no page twice; an empty
+    // page ends the list with no second try.
+    assert_eq!(*asked.lock().unwrap(), [0, 20, 40, 60, 80, 100]);
+}

@@ -136,6 +136,9 @@ struct State {
     catalogs: Vec<Catalog>,
     snapshot: DiscoverSnapshot,
     seen: HashSet<String>,
+    /// Added to the next page's `skip`: the items an addon skipped past
+    /// when a page repeated an earlier one (`load_page`).
+    skip_ahead: usize,
     /// The id `preview` named: kept until a select or a `None`, so an item
     /// named before its page came is filled in when it does.
     preview: Option<String>,
@@ -198,6 +201,7 @@ impl DiscoverView {
                 catalogs,
                 snapshot: snapshot.clone(),
                 seen: HashSet::new(),
+                skip_ahead: 0,
                 preview: None,
             })),
             snapshot: SharedObservable::new(snapshot),
@@ -363,6 +367,7 @@ impl Inner {
                 let mut s = lock(&self.state);
                 s.snapshot = empty_snapshot(&s.catalogs);
                 s.seen.clear();
+                s.skip_ahead = 0;
                 self.snapshot.set(s.snapshot.clone());
             }
         }
@@ -450,6 +455,7 @@ impl Inner {
             s.snapshot.preview = None;
             s.preview = None;
             s.seen.clear();
+            s.skip_ahead = 0;
             s.snapshot.state = DiscoverState::Loading;
             self.snapshot.set(s.snapshot.clone());
         }
@@ -576,7 +582,7 @@ async fn load_page(
     state: Arc<Mutex<State>>,
     snapshot: SharedObservable<DiscoverSnapshot>,
 ) {
-    let (catalog, genre, skip) = {
+    let (catalog, genre, listed) = {
         let s = lock(&state);
         let Some(catalog) = s
             .catalogs
@@ -586,13 +592,71 @@ async fn load_page(
         else {
             return;
         };
-        (catalog, s.snapshot.genre.clone(), s.snapshot.items.len())
+        (
+            catalog,
+            s.snapshot.genre.clone(),
+            s.snapshot.items.len() + s.skip_ahead,
+        )
     };
+    let mut skip = listed;
+    // A page that brings nothing new is asked once more past itself before
+    // the list ends: Anime Kitsu answers page one again for a skip of 1 to
+    // 39 (its own code calls Kitsu's offset paging unreliable), so without
+    // this its lists end after 20.
+    let mut retried = false;
+    loop {
+        let parsed = fetch_page(&core, &catalog, genre.as_deref(), skip).await;
+        let mut s = lock(&state);
+        s.snapshot.state = match parsed {
+            Ok(ResourceResponse::Metas { metas }) => {
+                let (before, len) = (s.snapshot.items.len(), metas.len());
+                let covers = core.covers(metas.iter().map(|m| m.id.as_str()));
+                for meta in metas {
+                    if s.seen.insert(meta.id.clone()) {
+                        s.snapshot.items.push(tile_from_preview(meta, &covers));
+                    }
+                }
+                let new = s.snapshot.items.len() > before;
+                if catalog.pages && !new && len > 0 && !retried {
+                    retried = true;
+                    skip += len;
+                    continue;
+                }
+                if new {
+                    // Later pages start past the page the addon repeated.
+                    s.skip_ahead += skip - listed;
+                }
+                // No new titles, or no paging: the catalog is done.
+                if catalog.pages && new {
+                    DiscoverState::Ready
+                } else {
+                    DiscoverState::End
+                }
+            }
+            Ok(_) => DiscoverState::Failed {
+                reason: "addon returned no catalog items".into(),
+            },
+            Err(reason) => DiscoverState::Failed { reason },
+        };
+        // A preview named before its item came.
+        fill_preview(&core, &mut s);
+        snapshot.set(s.snapshot.clone());
+        return;
+    }
+}
+
+/// One page of the catalog, `skip` items in.
+async fn fetch_page(
+    core: &Core,
+    catalog: &Catalog,
+    genre: Option<&str>,
+    skip: usize,
+) -> Result<ResourceResponse, String> {
     let mut extra = Vec::new();
     if let Some(genre) = genre {
         extra.push(ExtraValue {
             name: "genre".into(),
-            value: genre,
+            value: genre.to_owned(),
         });
     }
     if skip > 0 {
@@ -608,37 +672,10 @@ async fn load_page(
         extra,
     };
     let result = core.addons().fetch(&catalog.addon, &path, TIMEOUT).await;
-    let parsed = result.map_err(|e| e.to_string()).and_then(|f| {
+    result.map_err(|e| e.to_string()).and_then(|f| {
         core.learn_imdb_ids(&f.body);
         decode_catalog(&f.body).map_err(|e| format!("unreadable catalog: {e}"))
-    });
-    {
-        let mut s = lock(&state);
-        s.snapshot.state = match parsed {
-            Ok(ResourceResponse::Metas { metas }) => {
-                let before = s.snapshot.items.len();
-                let covers = core.covers(metas.iter().map(|m| m.id.as_str()));
-                for meta in metas {
-                    if s.seen.insert(meta.id.clone()) {
-                        s.snapshot.items.push(tile_from_preview(meta, &covers));
-                    }
-                }
-                // No new titles, or no paging: the catalog is done.
-                if catalog.pages && s.snapshot.items.len() > before {
-                    DiscoverState::Ready
-                } else {
-                    DiscoverState::End
-                }
-            }
-            Ok(_) => DiscoverState::Failed {
-                reason: "addon returned no catalog items".into(),
-            },
-            Err(reason) => DiscoverState::Failed { reason },
-        };
-        // A preview named before its item came.
-        fill_preview(&core, &mut s);
-        snapshot.set(s.snapshot.clone());
-    }
+    })
 }
 
 /// The named item's details, when it is listed; true when they changed.
