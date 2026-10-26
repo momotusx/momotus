@@ -1,51 +1,64 @@
-import json, re, sys
+"""The Archive index rules of plans/plugins-and-marketplace.md 5.2, measured on
+one `services/search/v1/scrape` answer (fields identifier,title,year,licenseurl,
+downloads). Usage: uv run python -I archive-index-rules.py <answer.json>"""
+
+import json
+import re
+import sys
 from collections import Counter
 
-items = json.load(open(sys.argv[1]))["items"]
-first = lambda v: v[0] if isinstance(v, list) and v else v
-for it in items:
-    for k in ("title", "year", "licenseurl"):
-        it[k] = first(it.get(k))
-    it["title"] = it["title"] or ""
-print("items", len(items))
+NOISE = r"\b(full movie|full hd|hd|restored|english|dubbed|subtitled|colorized)\b"
 
-def year_of(it):
-    m = re.search(r"\((\d{4})\)|\b(18[89]\d|19\d\d|20[0-2]\d)\b", it.get("title", ""))
+
+def first(value):
+    return value[0] if isinstance(value, list) and value else value
+
+
+def year_of(item: dict) -> int | None:
+    """The title's "(YYYY)" first, else the field; never a bare number in a title."""
+    m = re.search(r"\(\s*(\d{4})\s*\)", item["title"])
     if m:
-        return int(m.group(1) or m.group(2))
-    y = it.get("year")
+        return int(m.group(1))
     try:
-        return int(str(y)[:4]) if y else None
+        return int(str(item.get("year"))[:4]) if item.get("year") else None
     except ValueError:
         return None
 
-def norm(title):
-    t = re.sub(r"\([^)]*\)|\[[^\]]*\]", " ", title.lower())
-    t = re.sub(r"\b(full movie|full hd|hd|restored|english|dubbed|subtitled|colorized|trailer)\b", " ", t)
-    t = re.sub(r"[^a-z0-9]+", " ", t)
-    t = re.sub(r"^the ", "", t.strip())
-    return " ".join(t.split())
 
-pd_mark = lambda u: "publicdomain" in (u or "")
-cc_lic = lambda u: "/licenses/" in (u or "")
-noyear = [i for i in items if year_of(i) is None]
-print("no year", len(noyear))
-kept = [i for i in items if year_of(i) is not None]
-late_pd = [i for i in kept if year_of(i) > 1963 and not cc_lic(i.get("licenseurl"))]
-late_cc = [i for i in kept if year_of(i) > 1963 and cc_lic(i.get("licenseurl"))]
-print("after 1963, PD mark only (dropped)", len(late_pd), "after 1963 with a CC licence (kept)", len(late_cc))
-kept = [i for i in kept if year_of(i) <= 1963 or cc_lic(i.get("licenseurl"))]
-trail = [i for i in kept if "trailer" in i.get("title", "").lower() or "trailer" in i["identifier"].lower()]
-print("trailers among kept", len(trail))
-kept = [i for i in kept if i not in trail]
-groups = Counter((norm(i["title"]), year_of(i)) for i in kept)
-print("after no-year, late-PD and trailer drops", len(kept))
-print("distinct (title, year) films", len(groups), "of which with duplicates", sum(1 for c in groups.values() if c > 1))
-print("by decade", sorted(Counter((year_of(i)//10)*10 for i in kept).items()))
-cut = [i for i in kept if year_of(i) <= 1929]
-print("films at or before 1929 (US PD by term today)", len({(norm(i['title']), year_of(i)) for i in cut}))
-for t in ["night of living dead", "nosferatu", "charade", "his girl friday", "plan 9 from outer space", "white zombie", "metropolis"]:
-    print(t, sorted({year_of(i) for i in kept if norm(i["title"]) == t}))
-for t in ["night of the living dead", "charade"]:
-    print(t, sorted({year_of(i) for i in kept if norm(i["title"]) == t}), [ (i["title"], i.get("year"), i.get("licenseurl")) for i in items if norm(i["title"]).startswith(t)][:4])
-print("kept with a CC licence", sum(1 for i in kept if cc_lic(i.get("licenseurl"))), "kept with a PD mark", sum(1 for i in kept if pd_mark(i.get("licenseurl"))))
+def norm(title: str) -> str:
+    t = re.sub(r"\([^)]*\)|\[[^\]]*\]", " ", title.lower())
+    t = re.sub(NOISE, " ", t)
+    t = re.sub(r"[^a-z0-9]+", " ", t).strip()
+    return " ".join(re.sub(r"^the ", "", t).split())
+
+
+def plain(item: dict) -> bool:
+    """No dub or edition words in the raw title: preferred among duplicates."""
+    return not re.search(NOISE, item["title"].lower())
+
+
+items = json.load(open(sys.argv[1]))["items"]
+for it in items:
+    for key in ("title", "year", "licenseurl"):
+        it[key] = first(it.get(key))
+    it["title"] = it["title"] or ""
+print("query", len(items))
+dated = [i for i in items if year_of(i) is not None]
+print("dropped, no year", len(items) - len(dated))
+early = [i for i in dated if year_of(i) <= 1963]
+print("dropped, effective year after 1963", len(dated) - len(early))
+films_items = [i for i in early if "trailer" not in (i["title"] + i["identifier"]).lower()]
+print("dropped, trailers", len(early) - len(films_items))
+print("kept items", len(films_items))
+best: dict = {}
+for it in films_items:
+    key = (norm(it["title"]), year_of(it))
+    rank = (plain(it), it.get("downloads") or 0)
+    if key not in best or rank > best[key][0]:
+        best[key] = (rank, it)
+dupes = Counter((norm(i["title"]), year_of(i)) for i in films_items)
+print("films", len(best), "with duplicates", sum(1 for c in dupes.values() if c > 1))
+print("by decade", sorted(Counter((y // 10) * 10 for _, y in best).items()))
+print("1929 or before", sum(1 for _, y in best if y <= 1929))
+for t in ["night of the living dead", "nosferatu", "metropolis", "his girl friday", "plan 9 from outer space", "white zombie", "charade"]:
+    print(t, sorted(y for n, y in best if n == t))
