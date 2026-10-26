@@ -97,25 +97,6 @@ extension TrailerSignals {
     }
 }
 
-/// What the hero draws from the trailer: the clock follows `fraction` while `playing`; the art fades when `shown`.
-@MainActor @Observable
-final class TrailerState {
-    /// The one trailer on screen: the carousel writes it, the header's sound switch reads it.
-    static let shared = TrailerState()
-
-    /// A trailer is due on the page shown: its player is mounted under the art until it ends.
-    var loading = false
-    var playing = false
-    var shown = false
-    var fraction: Double = 0
-    /// The sound switch's choice for the session: off at launch, on only by a press, kept by every later trailer
-    /// and page; a film starting in the player turns it off, so coming back from it is never loud.
-    var sound = false
-
-    /// A film starts in the player (`PlayerModel.load`, every source of every title).
-    func filmStarts() { sound = false }
-}
-
 #if !os(tvOS)
 /// The one player of the app (decision 6 and the one-player rule): `play` stops whatever played first.
 @MainActor

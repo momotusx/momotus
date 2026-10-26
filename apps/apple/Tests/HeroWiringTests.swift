@@ -70,7 +70,7 @@ private func source(_ path: String) throws -> String {
     #expect(play.contains("resumeMs: play.resumeMs"))
 }
 
-@Test func theSoundSwitchSitsAtTheHerosFootAndKeepsTheSessionsChoice() throws {
+@MainActor @Test func theSoundSwitchSitsAtTheHerosFootAndKeepsTheSessionsChoice() throws {
     let home = try source("Home/HomeScreen.swift")
     // One switch, at the bottom trailing corner on every screen that plays trailers, none beside the profile.
     #expect(home.components(separatedBy: "TrailerMute()").count == 2)
@@ -95,8 +95,9 @@ private func source(_ path: String) throws -> String {
     let trailer = try source("Home/HeroTrailer.swift")
     #expect(trailer.contains("if TrailerState.shared.sound { sound(true) }"))
     // Muted at launch; only a press turns it on.
-    #expect(trailer.contains("    var sound = false\n"))
+    #expect(!TrailerState().sound)
     #expect(trailer.components(separatedBy: "sound = true").count == 1)
+    #expect(try source("Home/HeroPager.swift").components(separatedBy: "sound = true").count == 1)
 }
 
 @Test func aLatePlayKeepsItsPlaceAndTakesTheTVFocusOnlyIfTheViewerHasNotMoved() throws {
@@ -119,10 +120,14 @@ private func source(_ path: String) throws -> String {
     #expect(home.contains("if start == .hero && LatePlay.takesFocus(had: had, has: has, moved: moved) { resetFocus(in: startScope) }"))
 }
 
-@Test func aFilmStartingInThePlayerTurnsTheTrailerSoundOff() throws {
+@MainActor @Test func aFilmStartingInThePlayerTurnsTheTrailerSoundOff() throws {
     // The lead, after review r4: the sound stays through tabs and pages, but coming back from a film is never loud.
-    let trailer = try source("Home/HeroTrailer.swift")
-    #expect(try body(of: "final class TrailerState", in: trailer).contains("func filmStarts() { sound = false }"))
+    let state = TrailerState()
+    state.sound = true
+    state.loading = true
+    state.filmStarts()
+    #expect(!state.sound, "a film's start mutes the next trailer")
+    #expect(state.loading, "and leaves the rest of the trailer's state alone")
     // Every source of every title passes through the player's one load.
     let load = try body(of: "private func load(_ url: String, key: String?, attempt: Int64?, at start: Double)", in: try source("Player/PlayerModel.swift"))
     #expect(load.contains("TrailerState.shared.filmStarts()"))
