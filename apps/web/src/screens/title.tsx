@@ -197,6 +197,7 @@ function TitlePage(props: { kind: string; id: string; retry: () => void }) {
         src={cover() ?? d()?.background}
         fallback={d()?.poster}
         class="title-bd"
+        under={coverShown() ? d()?.poster : null}
         ramp={form() === "phone" ? (cover() ? "titleCover" : "titlePhone") : series() ? "title" : "titleMovie"}
         onMissing={() => d() && setArtMissing(true)}
       />

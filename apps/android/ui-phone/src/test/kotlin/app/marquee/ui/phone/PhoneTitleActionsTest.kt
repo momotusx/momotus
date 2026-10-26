@@ -56,6 +56,7 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.asCoroutineDispatcher
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.cancel
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -511,5 +512,40 @@ class PhoneTitleActionsTest {
         assertEquals(library.top, watched.top, 1f)
         assertEquals(library.width, watched.width, 1f)
         assertEquals(library.height, watched.height, 1f)
+    }
+
+    @Test
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun `the small poster stands under the large cover until it lands`() {
+        // The small poster is plain red; the large cover never answers.
+        val red =
+            Bitmap
+                .createBitmap(
+                    4,
+                    6,
+                    Bitmap.Config.ARGB_8888,
+                ).apply { eraseColor(android.graphics.Color.RED) }
+                .asImage()
+        val factory =
+            Fetcher.Factory<Uri> { data, _: Options, _: ImageLoader ->
+                Fetcher {
+                    if (data.toString() == "https://a.example/c.jpg") awaitCancellation()
+                    ImageFetchResult(red, isSampled = false, dataSource = DataSource.NETWORK) as FetchResult
+                }
+            }
+        SingletonImageLoader.setUnsafe(
+            ImageLoader.Builder(RuntimeEnvironment.getApplication()).components { add(factory) }.build(),
+        )
+        draw(cover)
+        val art = bounds(TITLE_ART_TAG)
+        val deadline = System.currentTimeMillis() + 20_000
+        while (true) {
+            val middle = compose.onRoot().captureToImage().toPixelMap()[art.center.x.toInt(), art.center.y.toInt()]
+            if (middle.red > 0.8f && middle.green < 0.2f) break
+            check(System.currentTimeMillis() < deadline) { "the cover's box shows $middle, not the small poster" }
+            Snapshot.sendApplyNotifications()
+            compose.waitForIdle()
+            Thread.sleep(50)
+        }
     }
 }

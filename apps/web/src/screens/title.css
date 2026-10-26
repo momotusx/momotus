@@ -164,6 +164,8 @@
 [data-form="phone"] .title-scr.cover { --art-h: min(150vw, 75vh); }
 [data-form="phone"] .title-scr.cover .title-bd { height: var(--art-h); }
 [data-form="phone"] .title-scr.cover .title-bd img { object-position: center top; }
+/* The small poster from the lists, already in the cache, under the large cover until it lands: never a blank box. */
+[data-form="phone"] .title-scr.cover .title-bd { background-size: cover; background-position: center top; }
 [data-form="phone"] .title-scr.cover .info { padding-top: calc(var(--art-h) + 8px); }
 [data-form="phone"] .play { margin: 16px 0 14px; gap: 10px; width: 100%; align-items: stretch; }
 [data-form="phone"] .play-row { width: 100%; gap: 10px; }

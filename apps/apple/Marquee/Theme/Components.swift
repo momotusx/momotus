@@ -11,7 +11,11 @@ struct ArtImage: View {
     var fallback: String?
     /// The part of filled art that stays in the frame: `.top` keeps a poster's upper part in a 16:9 card.
     var alignment: Alignment = .center
+    /// Drawn until the picture lands (an image already in the cache: a large cover's small poster), so the box
+    /// never shows blank.
+    var under: String? = nil
     @State private var art: DecodedArt?
+    @State private var underArt: DecodedArt?
     @State private var missing = false
 
     var body: some View {
@@ -25,6 +29,10 @@ struct ArtImage: View {
                         .resizable()
                         .aspectRatio(contentMode: mode)
                         .transition(.opacity)
+                } else if let underArt {
+                    Image(decorative: underArt.image, scale: 1)
+                        .resizable()
+                        .aspectRatio(contentMode: mode)
                 } else if missing, let fallback {
                     Text(fallback)
                         .display(Theme.type.headline)
@@ -36,6 +44,10 @@ struct ArtImage: View {
                 }
             }
             .clipped()
+            .task(id: under) {
+                let maxPixels = maxPixels
+                underArt = await ArtLoader.shared.image(under, maxPixels: maxPixels)
+            }
             .task(id: [url, fallbackURL]) {
                 missing = false
                 let start = ContinuousClock.now

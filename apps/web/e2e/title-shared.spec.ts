@@ -483,3 +483,38 @@ for (const [w, h] of [
     await context.close();
   });
 }
+
+// The large cover takes a while on a slow network: the small poster from the lists (already in the cache) stands
+// under it the whole time, in the same box, so the top of the page is never blank, and nothing moves when the large
+// one lands. Here the small poster is plain red and the large one comes 3 s late.
+test("phone: the small poster stands under the large cover until it lands", async ({ browser }) => {
+  const [width, height, scale] = FORMS.phone;
+  const context = await browser.newContext({ viewport: { width, height }, deviceScaleFactor: scale, isMobile: true, hasTouch: true, reducedMotion: "reduce" });
+  const red = '<svg xmlns="http://www.w3.org/2000/svg" width="300" height="450"><rect width="300" height="450" fill="#ff0000"/></svg>';
+  await context.route(/images\.metahub\.space\/poster\/(small|medium)\//, (r) => r.fulfill({ status: 200, contentType: "image/svg+xml", body: red }));
+  await context.route(/images\.metahub\.space\/poster\/large\//, (r) => setTimeout(() => void r.continue(), 3000));
+  const page = await context.newPage();
+  await page.goto(`/title/movie/${BBB_ID}?form=phone`);
+  await expect(page.locator('[data-f="title:play"]')).toBeVisible({ timeout: 30_000 });
+  const art = page.locator(".title-scr.cover .title-bd");
+  const before = await art.boundingBox();
+  // The middle of the cover while the large one is on its way: the small poster's red.
+  await page.waitForTimeout(500);
+  const shot = await page.screenshot({ clip: { x: 195, y: 150, width: 1, height: 1 } });
+  const [r, g, b] = await page.evaluate(async (png) => {
+    const img = new Image();
+    img.src = `data:image/png;base64,${png}`;
+    await img.decode();
+    const c = document.createElement("canvas");
+    [c.width, c.height] = [img.naturalWidth, img.naturalHeight];
+    const x = c.getContext("2d");
+    x?.drawImage(img, 0, 0);
+    return [...(x?.getImageData(0, 0, 1, 1).data ?? [])].slice(0, 3);
+  }, shot.toString("base64"));
+  expect(r, `rgb ${r} ${g} ${b}`).toBeGreaterThan(200);
+  expect(g ?? 255).toBeLessThan(60);
+  // The large one lands in the same box.
+  await expect(art.locator("img.in")).toBeVisible({ timeout: 10_000 });
+  expect(await art.boundingBox()).toEqual(before);
+  await context.close();
+});

@@ -209,6 +209,7 @@ fun PhoneTitle(
                             cover = cover != null,
                             titled = details.coverTitled,
                             onCoverError = { coverFailed = true },
+                            under = if (cover != null) details.poster else null,
                         )
                     }
                     item(
@@ -415,6 +416,8 @@ private fun Hero(
     cover: Boolean,
     titled: Boolean,
     onCoverError: () -> Unit,
+    // The small poster from the lists, in the cache, under a large cover until it lands.
+    under: String?,
 ) {
     if (!hasArt) {
         Logo(
@@ -461,6 +464,7 @@ private fun Hero(
                 top = Scrims.phoneTitleTop,
                 alignment = if (cover) Alignment.TopCenter else Alignment.Center,
                 onError = if (cover) onCoverError else null,
+                under = under,
             )
             Box(
                 Modifier

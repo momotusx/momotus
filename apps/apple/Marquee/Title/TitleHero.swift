@@ -60,7 +60,7 @@ struct CoverArt: View {
     let height: CGFloat
 
     var body: some View {
-        ArtImage(url: url, fallbackURL: fallbackURL, maxPixels: ArtSize.backdrop, fallback: name, alignment: .top)
+        ArtImage(url: url, fallbackURL: fallbackURL, maxPixels: ArtSize.backdrop, fallback: name, alignment: .top, under: fallbackURL)
             .frame(height: height)
             .frame(maxWidth: .infinity)
             .clipped()

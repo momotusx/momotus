@@ -15,6 +15,9 @@ export function Backdrop(props: {
   dim?: boolean;
   ramp?: Ramp;
   fallback?: string | null;
+  /** Drawn under the picture until it lands (an image already in the cache: a large cover's small poster), so the
+   * box never shows blank. */
+  under?: string | null;
   onMissing?: () => void;
 }) {
   const [failed, setFailed] = createSignal(false);
@@ -25,7 +28,7 @@ export function Backdrop(props: {
     if (!props.src || failed()) props.onMissing?.();
   });
   return (
-    <div class={`bd ${props.class ?? ""}`} classList={{ dim: props.dim, blur: standIn() }} aria-hidden="true">
+    <div class={`bd ${props.class ?? ""}`} classList={{ dim: props.dim, blur: standIn() }} aria-hidden="true" style={props.under ? { "background-image": `url("${props.under}")` } : undefined}>
       <Show when={shown()} keyed>
         {(src) => (
           <img

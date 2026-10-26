@@ -243,6 +243,9 @@ fun Backdrop(
     alignment: Alignment = Alignment.Center,
     /** The picture did not load (a cover the page gives up for its backdrop). */
     onError: (() -> Unit)? = null,
+    /** Drawn under the picture until it lands (an image already in the cache: a large cover's small poster), so
+     * the box never shows blank. */
+    under: String? = null,
 ) {
     val page = Marquee.colors.bg
     val scrims =
@@ -262,6 +265,15 @@ fun Backdrop(
             }
         }
     Box(modifier.background(Marquee.colors.surface).then(scrims)) {
+        if (under != null) {
+            AsyncImage(
+                model = under,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                alignment = alignment,
+                modifier = Modifier.matchParentSize(),
+            )
+        }
         if (url != null) {
             AsyncImage(
                 model = url,
