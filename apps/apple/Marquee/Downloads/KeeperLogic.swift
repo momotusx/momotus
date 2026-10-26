@@ -12,19 +12,42 @@ enum KeeperPlatform: Sendable {
 
 /// What the keeper reads from a `downloads` snapshot.
 struct KeeperFacts: Equatable, Sendable {
-    /// Running, queued and waiting: a download waiting for Wi-Fi is still left to do.
+    /// Running, queued and waiting: a download waiting for Wi-Fi is still left to do, so the keeper holds on.
     var left: Int
     var bytesDone: Int64
     var bytesTotal: Int64
     var title: String?
     /// Every done download's id: the batch counts those done since it began.
     var done: Set<String>
+    /// Running and queued alone: what moves. The Dock bar, the Quit question and the system item's
+    /// "Downloading" follow it, so a download waiting for Wi-Fi or room never reads as in progress (review r2).
+    var running = 0
+    /// A locked session's counts-only snapshot: it lists nothing done, so its `done` says nothing.
+    var locked = false
+    /// The titles the done set was read from, so an unchanged list is not read again.
+    var titleCount = 0
 
-    static func of(_ snapshot: DownloadsSnapshot) -> KeeperFacts {
-        KeeperFacts(
-            left: snapshot.active.running + snapshot.active.queued + (snapshot.active.waiting ?? 0), bytesDone: snapshot.active.bytesDone,
-            bytesTotal: snapshot.active.bytesTotal, title: snapshot.active.title,
-            done: Set(snapshot.titles.flatMap(\.rows).filter { $0.state == .done }.map(\.id)))
+    init(left: Int, bytesDone: Int64, bytesTotal: Int64, title: String?, done: Set<String>, running: Int? = nil, locked: Bool = false, titleCount: Int = 0) {
+        (self.left, self.bytesDone, self.bytesTotal, self.title, self.done) = (left, bytesDone, bytesTotal, title, done)
+        self.running = running ?? left
+        self.locked = locked
+        self.titleCount = titleCount
+    }
+
+    /// `previous`: the facts read last, whose done set is kept when the titles and their done count did not
+    /// change (review r2 m-r2-4).
+    static func of(_ snapshot: DownloadsSnapshot, previous: KeeperFacts? = nil) -> KeeperFacts {
+        let active = snapshot.active
+        let doneCount = snapshot.titles.reduce(0) { $0 + $1.rows.reduce(0) { $0 + ($1.state == .done ? 1 : 0) } }
+        let done = if let previous, previous.titleCount == snapshot.titles.count, previous.done.count == doneCount {
+            previous.done
+        } else {
+            Set(snapshot.titles.flatMap(\.rows).filter { $0.state == .done }.map(\.id))
+        }
+        return KeeperFacts(
+            left: active.running + active.queued + (active.waiting ?? 0), bytesDone: active.bytesDone, bytesTotal: active.bytesTotal,
+            title: active.title, done: done, running: active.running + active.queued, locked: snapshot.locked == true,
+            titleCount: snapshot.titles.count)
     }
 
     /// The running downloads' share done, nil with no size yet.
@@ -104,7 +127,8 @@ struct KeeperLogic {
     static func taskIdentifier(bundle: String) -> String { "\(bundle).downloads.queue" }
 
     /// Whether quitting asks first (macOS): "Downloads are in progress."
-    static func asksBeforeQuit(_ facts: KeeperFacts?) -> Bool { (facts?.left ?? 0) > 0 }
+    /// Only while something moves: a download waiting for Wi-Fi or room loses nothing on Quit (review r2).
+    static func asksBeforeQuit(_ facts: KeeperFacts?) -> Bool { (facts?.running ?? 0) > 0 }
 
     var current: KeeperFacts? { facts }
 
@@ -118,8 +142,11 @@ struct KeeperLogic {
         var out: [KeeperEffect] = []
         var force = false
         switch event {
-        case .facts(let now):
+        case .facts(var now):
             let before = facts
+            // A locked session's snapshot lists nothing done: the last unlocked set stays, so the batch's
+            // count never jumps and nothing reads as newly finished after an unlock (review r2).
+            if now.locked, let before { now.done = before.done }
             facts = now
             // A snapshot already on its way when the user tapped still says nothing runs: the tap stays
             // counted, and the task stays, until the core counts it (or `settle`) (review r1 m1).
@@ -189,17 +216,19 @@ struct KeeperLogic {
 
     private mutating func mac(_ out: inout [KeeperEffect]) {
         guard platform == .mac, let facts else { return }
-        if facts.left > 0 {
-            if !activity { activity = true; out.append(.beginActivity) }
+        // The activity follows what is left to do; the Dock bar what moves (review r2 m-r2-2).
+        if facts.left > 0, !activity { activity = true; out.append(.beginActivity) }
+        if facts.left == 0, activity { activity = false; out.append(.endActivity) }
+        if facts.running > 0 {
             // The tile redraws for a move of 1 percent or more, not for every snapshot (review r1 m9).
             let fraction = facts.fraction ?? 0
             if dockShown.map({ abs($0 - fraction) >= 0.01 }) ?? true {
                 dockShown = fraction
                 out.append(.dock(fraction))
             }
-        } else {
-            if activity { activity = false; out.append(.endActivity) }
-            if dockShown != nil { dockShown = nil; out.append(.dock(nil)) }
+        } else if dockShown != nil {
+            dockShown = nil
+            out.append(.dock(nil))
         }
     }
 
@@ -214,8 +243,10 @@ struct KeeperLogic {
         let subtitle = [total > 1 ? "\(min(finished + 1, total)) of \(total)" : nil, fraction.map { "\(Int(($0 * 100).rounded()))%" }]
             .compactMap { $0 }.joined(separator: " \u{B7} ")
         let running = Int64(((fraction ?? 0) * Double(max(now.left, 0)) * 100).rounded())
+        // Nothing moves (all waiting for Wi-Fi, a connection, room) and no tap is on its way: never "Downloading".
+        let title = now.running == 0 && taps == 0 ? "Waiting" : now.title.map { "Downloading \($0)" } ?? "Downloading"
         return KeeperProgress(
-            title: now.title.map { "Downloading \($0)" } ?? "Downloading", subtitle: subtitle,
+            title: title, subtitle: subtitle,
             completed: Int64(finished) * 100 + running, total: Int64(total) * 100)
     }
 }

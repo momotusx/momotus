@@ -118,6 +118,8 @@ struct DownloadsSnapshot: Decodable, Hashable, Sendable {
     let downloading: [DownloadRow]
     /// Done, failed and missing, by title, newest first.
     let titles: [DownloadTitle]
+    /// A locked session's counts-only view: no titles, nothing done or failed to read (nil from an older core).
+    var locked: Bool? = nil
 }
 
 /// Home with no network and downloads to play (3.5).

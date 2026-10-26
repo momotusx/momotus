@@ -360,6 +360,67 @@ private func submits(_ effects: [KeeperEffect]) -> Int {
     #expect(keeper.on(.minute) == [])
 }
 
+// A locked session's snapshot lists nothing done: the last unlocked done set stays, so the batch never rebases on
+// an empty set and nothing reads as newly finished after the unlock (review r2).
+@Test func aLockedSnapshotKeepsTheLastDoneSet() {
+    var keeper = KeeperLogic(platform: .continued)
+    _ = keeper.on(.facts(facts(left: 2, done: ["a"])))
+    _ = keeper.on(.userAction)
+    var locked = facts(left: 2, done: [], title: nil)
+    locked.locked = true
+    let during = keeper.on(.facts(locked))
+    #expect(keeper.current?.done == ["a"])
+    #expect(during.contains { if case .progress(let p) = $0 { p.subtitle.hasPrefix("1 of 2") } else { false } })
+    // Unlocked again: the one done since the tap counts once.
+    let after = keeper.on(.facts(facts(left: 1, done: ["a", "b"])))
+    #expect(after.contains { if case .progress(let p) = $0 { p.subtitle.hasPrefix("2 of 2") } else { false } })
+}
+
+// What waits (Wi-Fi, a connection, room) keeps the keeper and the Mac's activity, but the Dock bar, the Quit
+// question and the system item's "Downloading" follow only what moves (review r2 m-r2-2).
+@Test func waitingDownloadsNeverReadAsInProgress() {
+    var mac = KeeperLogic(platform: .mac)
+    let waiting = KeeperFacts(left: 1, bytesDone: 0, bytesTotal: 100, title: "Severance", done: [], running: 0)
+    let effects = mac.on(.facts(waiting))
+    #expect(effects.contains(.beginActivity))
+    #expect(!effects.contains { if case .dock = $0 { true } else { false } })
+    #expect(!KeeperLogic.asksBeforeQuit(waiting))
+    // It starts moving: the bar and the question come.
+    let moving = KeeperFacts(left: 1, bytesDone: 10, bytesTotal: 100, title: "Severance", done: [], running: 1)
+    #expect(mac.on(.facts(moving)).contains(.dock(0.1)))
+    #expect(KeeperLogic.asksBeforeQuit(moving))
+    // Back to waiting: the bar goes, the activity stays.
+    let back = mac.on(.facts(waiting))
+    #expect(back.contains(.dock(nil)) && !back.contains(.endActivity))
+    // iOS 26: the system item never says Downloading while nothing moves.
+    var phone = KeeperLogic(platform: .continued)
+    _ = phone.on(.facts(waiting))
+    _ = phone.on(.userAction)
+    let held = phone.on(.facts(waiting)).compactMap { if case .progress(let p) = $0 { p } else { nil } }.first
+    #expect(held?.title == "Waiting")
+    let going = phone.on(.facts(moving)).compactMap { if case .progress(let p) = $0 { p } else { nil } }.first
+    #expect(going?.title == "Downloading Severance")
+}
+
+// The done set is read again only when the titles or their done count changed (review r2 m-r2-4).
+@Test func theDoneSetIsReadOnlyWhenItCanHaveChanged() throws {
+    let json = #"""
+    {"storage": {"downloadsBytes": 0, "freeBytes": null, "neededBytes": null}, "settings": {"wifiOnly": true, "smart": true},
+     "active": {"running": 1, "queued": 0, "waiting": 0, "mobileData": false, "bytesDone": 0, "bytesTotal": 0, "title": null},
+     "downloading": [], "locked": false,
+     "titles": [{"itemId": "tt1", "kind": "movie", "name": "Sintel", "poster": null, "count": 1, "bytes": 1, "rows": [
+       {"id": "d1", "kind": "movie", "itemId": "tt1", "videoId": "tt1", "season": null, "episode": null, "name": "Sintel",
+        "episodeTitle": null, "poster": null, "still": null, "runtime": null, "released": null, "state": "done", "reason": null,
+        "mobileData": false, "bytesDone": 1, "bytesTotal": 1, "speedBps": null, "etaSecs": null, "quality": null, "subtitles": []}]}]}
+    """#
+    let snapshot = try JSONDecoder().decode(DownloadsSnapshot.self, from: Data(json.utf8))
+    #expect(KeeperFacts.of(snapshot).done == ["d1"])
+    let same = KeeperFacts(left: 1, bytesDone: 0, bytesTotal: 0, title: nil, done: ["kept"], titleCount: 1)
+    #expect(KeeperFacts.of(snapshot, previous: same).done == ["kept"])
+    let fewer = KeeperFacts(left: 1, bytesDone: 0, bytesTotal: 0, title: nil, done: ["kept"], titleCount: 0)
+    #expect(KeeperFacts.of(snapshot, previous: fewer).done == ["d1"])
+}
+
 // A download waiting for Wi-Fi, a connection, room or the app is still left to do: the keeper holds on for it,
 // and a locked session's `active` (no rows) counts the same (the core's 0ba7e2f63).
 @Test func waitingDownloadsAreLeftToDo() throws {
@@ -451,13 +512,41 @@ private func submits(_ effects: [KeeperEffect]) -> Int {
     #expect(await eventually { keeper.snapshot != nil })
     #expect(keeper.view?.failure == nil)
     #expect(keeper.snapshot?.downloading.isEmpty == true && keeper.snapshot?.active.title == nil)
-    // The app opens it with no profile gate, again on every core, switch, lock and unlock.
+    #expect(keeper.snapshot?.locked == true)
+    // The app opens it once per core, with no profile gate (review r2 C1).
     let app = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appending(path: "../Marquee")
     let shell = try String(contentsOf: app.appending(path: "App/MarqueeApp.swift"), encoding: .utf8)
     #expect(shell.contains(".task(id: downloadsKey) { downloads.begin() }"))
-    let key = try #require(shell.range(of: "private var downloadsKey: String {")).upperBound
-    let body = shell[key...].prefix { $0 != "}" }
-    #expect(!body.contains("profiles.open") && body.contains("core.generation") && body.contains("locked") && body.contains("epoch"))
+    #expect(shell.contains("private var downloadsKey: Int { core.generation }"))
+}
+
+// A profile switch goes with the keeper's view open; the same subscription follows the new session and hears its
+// snapshot, through a lock and an unlock too (review r2 C1).
+@MainActor @Test func aSwitchGoesWithTheKeepersViewOpen() async throws {
+    let core = RealCore()
+    #expect(await core.ready())
+    let made = try await core.client.call("createProfile", ["name": "Ada", "avatar": ""], as: ProfilesSnapshot.self)
+    let other = try #require(made.profiles.first { $0.id != made.active }?.id)
+    let keeper = DownloadKeeper(core: core.client)
+    keeper.begin()
+    #expect(await eventually { keeper.snapshot != nil })
+    let sub = keeper.view?.sub
+    let landed = keeper.view?.landed ?? 0
+    let switched = try await core.client.call("switchProfile", ["profile": other], as: ProfilesSnapshot.self)
+    #expect(switched.active == other)
+    // The same view, told of the new session.
+    #expect(await eventually { (keeper.view?.landed ?? 0) > landed })
+    #expect(keeper.view?.sub == sub)
+    #expect(keeper.snapshot != nil && keeper.view?.failure == nil)
+    #expect(keeper.snapshot?.locked != true)
+    // Back to the owner, and a lock and an unlock, with the view still open.
+    _ = try await core.client.call("switchProfile", ["profile": made.active], as: ProfilesSnapshot.self)
+    try await core.client.perform("setPin", ["profile": made.active, "pin": "4829"])
+    try await core.client.perform("lockSession")
+    #expect(await eventually { keeper.snapshot?.locked == true })
+    try await core.client.perform("unlockProfile", ["pin": "4829"])
+    #expect(await eventually { keeper.snapshot?.locked == false })
+    #expect(keeper.view?.sub == sub && keeper.view?.failure == nil)
 }
 
 // Logout, restart and shutdown hold the downloads without asking; a user's Quit asks (review r1 m4).

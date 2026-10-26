@@ -65,14 +65,17 @@ final class DownloadKeeper {
         #endif
     }
 
-    /// Opens the view for the life of the core: at core open and again after every profile switch, lock or
-    /// unlock, since the core closes a session's views then. A locked session (a cold start on a PIN profile,
-    /// the picker) gets the device's `active` and `settings` alone, so the Dock bar, the Mac's activity, the
-    /// Quit question and the continued task stay right before anyone unlocks (review r1 M2).
+    /// Opens the view once per core, for its life: the core keeps the same subscription across a profile
+    /// switch, a lock and an unlock and pushes that session's snapshot. A locked session (a cold start on a
+    /// PIN profile, the picker) gets the device's `active` and `settings` alone, so the Dock bar, the Mac's
+    /// activity, the Quit question and the continued task stay right before anyone unlocks (review r1 M2, r2 C1).
     func begin() {
         logic.resend()
         let record = LiveRecord<DownloadsSnapshot>("downloads", core: core)
-        record.onSnapshot = { [weak self] snapshot in self?.handle(.facts(KeeperFacts.of(snapshot))) }
+        record.onSnapshot = { [weak self] snapshot in
+            guard let self else { return }
+            handle(.facts(KeeperFacts.of(snapshot, previous: logic.current)))
+        }
         record.start()
         view = record
     }
@@ -102,8 +105,9 @@ final class DownloadKeeper {
     /// Quitting the Mac asks first while downloads run.
     var asksBeforeQuit: Bool { KeeperLogic.asksBeforeQuit(logic.current) }
 
-    /// Quit: the core checkpoints and holds the downloads until the next launch; `done` runs once it has
-    /// answered, or after `limit` at most, so the app exits after the checkpoint, never before it (review r1 M4).
+    /// Quit: the core is told to hold the downloads until the next launch; `done` runs once it has answered,
+    /// or after `limit` at most. The jobs stop and checkpoint after that answer, so a quit loses at most the
+    /// last 8 MiB a job holds since its checkpoint (review r1 M4, r2).
     func holdForQuit(within limit: Duration = .seconds(2), done: @escaping @MainActor () -> Void) {
         let once = Once(done)
         core.sendNow("downloadsAllowed", ["allowed": false, "reason": "app"]) { _ in once() }

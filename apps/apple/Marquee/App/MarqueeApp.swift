@@ -74,11 +74,10 @@ struct MarqueeApp: App {
         return "\(core.generation)/\(profiles.snapshot?.active ?? "")"
     }
 
-    /// The downloads view follows the core for its life, locked or not: it opens again for each core and
-    /// after every switch, lock or unlock, which close a session's views.
-    private var downloadsKey: String {
-        "\(core.generation)/\(profiles.epoch)/\(profiles.snapshot?.active ?? "")/\(profiles.snapshot?.locked ?? false)"
-    }
+    /// The downloads view is opened once per core and kept for its life: the core moves the same
+    /// subscription across a switch, a lock and an unlock, pushing that session's snapshot (the new
+    /// profile's rows, or a locked session's counts alone), and lets a switch go with it open (review r2 C1).
+    private var downloadsKey: Int { core.generation }
 
     /// Which profile's Trakt runs: none while the picker shows, a new one for every
     /// core and after the wipe (the same owner id, its view closed by the core).
