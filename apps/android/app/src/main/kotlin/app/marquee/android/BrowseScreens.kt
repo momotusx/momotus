@@ -3,11 +3,13 @@ package app.marquee.android
 import androidx.activity.compose.LocalActivity
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
@@ -22,12 +24,12 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyGridScope
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -35,12 +37,14 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
@@ -62,6 +66,7 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import app.marquee.core.DiscoverCopy
 import app.marquee.core.SearchCopy
 import app.marquee.core.TileCopy
+import app.marquee.core.model.DiscoverSnapshot
 import app.marquee.core.model.DiscoverState
 import app.marquee.core.model.HomeRow
 import app.marquee.core.model.LibrarySort
@@ -228,7 +233,7 @@ internal fun <T> ChipRow(
             }
 
             Marquee.form == Form.Tv -> {
-                PullDown(label, choices, selected, Modifier.padding(horizontal = side), detail, onSelect)
+                PullDown(label, choices, selected, Modifier.padding(horizontal = side), detail, onSelect = onSelect)
             }
 
             else -> {
@@ -508,16 +513,58 @@ fun DiscoverScreen(
             factory = viewModelFactory { initializer { DiscoverHolder(session) } },
         )
     val view = holder.view
-    val snapshot = view.snapshot
     // One select of the kind and the genre, after the first snapshot: the core reads it as a link (C40).
     val activity = LocalActivity.current
     GenreAskEffect(
         request,
-        ready = snapshot != null,
+        ready = view.snapshot != null,
         select = { view.select(kind = it.kind, genre = GenreChange.To(it.genre)) },
         onSent = onRequestSent,
         changingConfigurations = { activity?.isChangingConfigurations == true },
     )
+    DiscoverContent(
+        view.snapshot,
+        failed = view.status is ViewStatus.Failed,
+        pick = {
+            view.select(
+                kind = it.kind,
+                genre = it.genre,
+                platform = it.platform,
+                sort = it.sort,
+                decade = it.decade,
+            )
+        },
+        loadMore = view::loadMore,
+        retry = view::retry,
+        onOpen = onOpen,
+        onSetup = onSetup,
+        onAddons = onAddons,
+        focus = focus,
+    )
+}
+
+/** One `select` of Discover (plans/discover-v2.md section 4): only the keys that change. */
+internal data class DiscoverPick(
+    val kind: String? = null,
+    val genre: GenreChange = GenreChange.Keep,
+    val platform: GenreChange = GenreChange.Keep,
+    val sort: String? = null,
+    val decade: GenreChange = GenreChange.Keep,
+)
+
+/** Discover's page for a snapshot, apart from its view, so its rules are tested with snapshots made by hand. */
+@Composable
+internal fun DiscoverContent(
+    snapshot: DiscoverSnapshot?,
+    failed: Boolean,
+    pick: (DiscoverPick) -> Unit,
+    loadMore: () -> Unit,
+    retry: () -> Unit,
+    onOpen: (Tile) -> Unit,
+    onSetup: () -> Unit,
+    onAddons: () -> Unit,
+    focus: FocusMemory,
+) {
     val metrics = Marquee.tiles
     val side = Marquee.safe.side
     val tv = Marquee.form == Form.Tv
@@ -527,7 +574,8 @@ fun DiscoverScreen(
     var shown by remember { mutableStateOf<List<Tile>>(emptyList()) }
     var held by remember { mutableStateOf(false) }
     var inGrid by remember { mutableStateOf(false) }
-    val items = snapshot?.items.orEmpty()
+    // One tile per id: the grid is keyed by id, so a late list keeps the tiles under the thumb in place (6.1).
+    val items = remember(snapshot?.items) { snapshot?.items.orEmpty().distinctBy { it.id } }
     LaunchedEffect(items, inGrid) {
         val grows = items.size >= shown.size && items.take(shown.size).map { it.id } == shown.map { it.id }
         if (!tv || !inGrid || grows || items.isEmpty()) {
@@ -539,14 +587,15 @@ fun DiscoverScreen(
     }
     val dimmed = items.isEmpty() && snapshot?.state is DiscoverState.Loading && shown.isNotEmpty()
     // Ask for the next page as the end comes into view.
-    LaunchedEffect(grid, view) {
+    val current by rememberUpdatedState(snapshot)
+    val more by rememberUpdatedState(loadMore)
+    LaunchedEffect(grid) {
         snapshotFlow {
             grid.layoutInfo.visibleItemsInfo
                 .lastOrNull()
                 ?.index to grid.layoutInfo.totalItemsCount
         }.collect { (last, total) ->
-            val ready = view.snapshot?.state is DiscoverState.Ready
-            if (last != null && ready && last >= total - LOAD_AHEAD) view.loadMore()
+            if (last != null && current?.state is DiscoverState.Ready && last >= total - LOAD_AHEAD) more()
         }
     }
     LazyVerticalGrid(
@@ -567,11 +616,9 @@ fun DiscoverScreen(
     ) {
         full("head") { BrowseHeader("Discover", side = 0.dp) }
         when {
-            view.status is ViewStatus.Failed -> {
-                val reason = (view.status as ViewStatus.Failed).reason
-                full(
-                    "failed",
-                ) { Note("Discover could not open: $reason", failed = true, side = 0.dp, onRetry = view::retry) }
+            failed -> {
+                // The core's reason can name a host or an addon: the shared line instead.
+                full("failed") { Note(DiscoverCopy.OPEN_FAILED, failed = true, side = 0.dp, onRetry = retry) }
             }
 
             snapshot == null -> {
@@ -596,163 +643,12 @@ fun DiscoverScreen(
             }
 
             else -> {
-                // Up from a row lands where the row above was last focused (6.5); the kinds go up to the tab bar.
-                val upToRail = focus.rowEntry(ROW_RAIL)
-                val upToKinds = focus.rowEntry(ROW_KINDS)
-                val upToFilters = focus.rowEntry(ROW_FILTERS)
-                full(ROW_KINDS) {
-                    // Movies, Series and Anime are the segmented control; any other kind is in a More pull-down,
-                    // so the control keeps its shape (plans/discover-v2.md 6.1).
-                    val main = snapshot.kinds.filter { it.first in MAIN_KINDS }
-                    val more = snapshot.kinds.filter { it.first !in MAIN_KINDS }
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(Marquee.space.xs),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        SegmentTrack(Modifier.focusRestorer()) {
-                            for ((value, name) in main) {
-                                val key = "kind:$value"
-                                Chip(
-                                    name,
-                                    value == snapshot.kind,
-                                    { view.select(kind = value) },
-                                    inTrack = true,
-                                    focusRequester = focus.requesterFor(key),
-                                    onFocusChange = focus.watch(ROW_KINDS, key),
-                                )
-                            }
-                        }
-                        if (more.isNotEmpty()) {
-                            val chosen = snapshot.kind?.takeIf { it !in MAIN_KINDS }
-                            PullDown(
-                                "More",
-                                listOf<Pair<String?, String>>(null to "More") + more.map { it.first to it.second },
-                                chosen,
-                            ) {
-                                if (it != null) view.select(kind = it)
-                            }
-                        }
-                    }
-                }
-                if (snapshot.platforms.isNotEmpty()) {
-                    full(ROW_RAIL) {
-                        // The services as their logos, All first (6.6); the chosen one is ringed and kept in view, with
-                        // room at the ends for its ring.
-                        val rail = rememberLazyListState()
-                        KeepInView(rail, snapshot.platforms.indexOfFirst { it.id == snapshot.platform } + 1)
-                        LazyRow(
-                            state = rail,
-                            modifier =
-                                Modifier
-                                    .liftRoom(Marquee.tiles.pad)
-                                    .focusRestorer()
-                                    .focusProperties { if (upToKinds != null) up = upToKinds },
-                            contentPadding = PaddingValues(horizontal = RING_ROOM, vertical = Marquee.tiles.pad),
-                            horizontalArrangement = Arrangement.spacedBy(Marquee.space.xs),
-                        ) {
-                            item(key = "all") {
-                                ServiceTile(
-                                    "All",
-                                    null,
-                                    snapshot.platform == null,
-                                    { view.select(platform = GenreChange.Clear) },
-                                    focusRequester = focus.requesterFor("rail:all"),
-                                    onFocusChange = focus.watch(ROW_RAIL, "rail:all"),
-                                )
-                            }
-                            items(snapshot.platforms, key = { it.id }) { p ->
-                                val key = "rail:${p.id}"
-                                ServiceTile(
-                                    p.name,
-                                    p.logo,
-                                    snapshot.platform == p.id,
-                                    { view.select(platform = GenreChange.To(p.id)) },
-                                    focusRequester = focus.requesterFor(key),
-                                    onFocusChange = focus.watch(ROW_RAIL, key),
-                                )
-                            }
-                        }
-                    }
-                }
+                full(ROW_KINDS) { DiscoverKinds(snapshot, pick, focus) }
+                if (snapshot.platforms.isNotEmpty()) full(ROW_RAIL) { DiscoverRail(snapshot, pick, focus) }
                 full(ROW_FILTERS) {
-                    val genreKey = "filters:genre"
-                    val yearKey = "filters:year"
-                    val filtered = snapshot.genre != null || snapshot.decade != null || snapshot.platform != null
-                    // Clear hands focus to the first menu that stays, else the rail's All (6.5).
-                    val handOff =
-                        when {
-                            snapshot.genreChoices.isNotEmpty() -> focus.requester(genreKey)
-                            snapshot.decades.isNotEmpty() -> focus.requester(yearKey)
-                            else -> focus.requester("rail:all")
-                        }
-                    val up = upToRail ?: upToKinds
-                    Row(
-                        Modifier
-                            .fillMaxWidth()
-                            .horizontalScroll(rememberScrollState())
-                            .focusProperties { if (up != null) this.up = up },
-                        horizontalArrangement = Arrangement.spacedBy(Marquee.space.xs),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        if (snapshot.genreChoices.isNotEmpty()) {
-                            val any: List<Pair<String?, String>> =
-                                if (snapshot.genreRequired) {
-                                    emptyList()
-                                } else {
-                                    listOf(null to "Any ${snapshot.genreLabel.lowercase()}")
-                                }
-                            PullDown(
-                                snapshot.genreLabel,
-                                any + snapshot.genreChoices.map { it.name to it.name },
-                                snapshot.genre,
-                                Modifier
-                                    .focusRequester(focus.requesterFor(genreKey))
-                                    .onFocusChanged { focus.watch(ROW_FILTERS, genreKey)(it.isFocused) },
-                            ) { view.select(genre = if (it == null) GenreChange.Clear else GenreChange.To(it)) }
-                        }
-                        if (snapshot.decades.isNotEmpty()) {
-                            PullDown(
-                                "Year",
-                                listOf<Pair<String?, String>>(null to "Any year") + snapshot.decades.map { it to it },
-                                snapshot.decade,
-                                Modifier
-                                    .focusRequester(focus.requesterFor(yearKey))
-                                    .onFocusChanged { focus.watch(ROW_FILTERS, yearKey)(it.isFocused) },
-                            ) { view.select(decade = if (it == null) GenreChange.Clear else GenreChange.To(it)) }
-                        }
-                        if (filtered) {
-                            SecondaryButton(
-                                "Clear",
-                                {
-                                    runCatching { handOff?.requestFocus() }
-                                    view.select(
-                                        genre = GenreChange.Clear,
-                                        platform = GenreChange.Clear,
-                                        decade = GenreChange.Clear,
-                                    )
-                                },
-                                Modifier.onFocusChanged { focus.watch(ROW_FILTERS, "filters:clear")(it.isFocused) },
-                                spoken = "Clear filters",
-                            )
-                        }
-                        val sorts: List<Pair<String?, String>> =
-                            snapshot.sorts.map { it.id to it.label } + snapshot.lists.map { "list:${it.id}" to it.name }
-                        if (sorts.isNotEmpty()) {
-                            PullDown(
-                                "Sort",
-                                sorts,
-                                snapshot.sort,
-                                Modifier
-                                    .focusRequester(focus.requesterFor("filters:sort"))
-                                    .onFocusChanged { focus.watch(ROW_FILTERS, "filters:sort")(it.isFocused) },
-                            ) { if (it != null) view.select(sort = it) }
-                        }
-                        if (held) {
-                            SecondaryButton("More titles arrived. Show", {
-                                shown = items
-                                held = false
-                            })
-                        }
+                    DiscoverFilters(snapshot, pick, focus, held) {
+                        shown = items
+                        held = false
                     }
                 }
                 val state = snapshot.state
@@ -768,24 +664,24 @@ fun DiscoverScreen(
 
                     dimmed -> {
                         // The list before, dimmed and out of focus's reach, until the new one lands.
-                        itemsIndexed(shown, key = { index, tile -> "prev:${tile.id}#$index" }) { _, tile ->
+                        items(shown, key = { "prev:${it.id}" }) { tile ->
                             Poster(tile, onOpen, modifier = Modifier.alpha(DIMMED), enabled = false)
                         }
                     }
 
                     shown.isEmpty() && state is DiscoverState.Loading -> {
-                        full("skeleton") {
-                            Row(
-                                Modifier.padding(top = metrics.pad),
-                                horizontalArrangement = Arrangement.spacedBy(metrics.gap),
-                            ) { repeat(6) { Skeleton(Modifier.size(metrics.poster.width, metrics.poster.height)) } }
+                        // Blank covers in the grid's own cells, so they are the size and count the tiles will be.
+                        items(SKELETONS, key = { "skeleton:$it" }) {
+                            Skeleton(
+                                Modifier.padding(top = metrics.pad).size(metrics.poster.width, metrics.poster.height),
+                            )
                         }
                     }
 
                     items.isEmpty() && state is DiscoverState.Failed -> {
-                        full("failed-items") {
-                            Note("This list did not load: ${state.reason}", failed = true, side = 0.dp)
-                        }
+                        full(
+                            "failed-items",
+                        ) { Note(DiscoverCopy.FAILED, failed = true, side = 0.dp, onRetry = loadMore) }
                     }
 
                     items.isEmpty() -> {
@@ -793,29 +689,15 @@ fun DiscoverScreen(
                     }
 
                     else -> {
-                        val columns = grid.layoutInfo.maxSpan.coerceAtLeast(1)
-                        itemsIndexed(shown, key = { index, tile -> "${tile.id}#$index" }) { index, tile ->
+                        items(shown, key = { it.id }) { tile ->
                             val key = "tile:${tile.id}"
+                            // A tile taken out while it has focus never says it lost it.
+                            DisposableEffect(key) { onDispose { if (focus.focusedKey == key) inGrid = false } }
                             Poster(
                                 tile,
                                 onOpen,
                                 corner = DiscoverCopy.corner(snapshot.sort, tile),
-                                // The corner shows the year for the date sorts: the caption does not repeat it.
-                                caption =
-                                    if (snapshot.sort == "newest" ||
-                                        snapshot.sort == "oldest"
-                                    ) {
-                                        null
-                                    } else {
-                                        tile.releaseInfo
-                                    },
-                                // The grid's first line goes up to the filter row's last focused control (6.5).
-                                modifier =
-                                    if (index < columns && upToFilters != null) {
-                                        Modifier.focusProperties { up = upToFilters }
-                                    } else {
-                                        Modifier
-                                    },
+                                caption = DiscoverCopy.caption(snapshot.sort, tile),
                                 focusRequester = focus.requesterFor(key),
                                 onFocusChange = { gained ->
                                     focus.watch(ROW_GRID, key)(gained)
@@ -824,18 +706,26 @@ fun DiscoverScreen(
                             )
                         }
                         full("foot") {
-                            val foot =
-                                when (state) {
-                                    is DiscoverState.Loading -> "Loading more"
-                                    is DiscoverState.Failed -> "Could not load more: ${state.reason}"
-                                    else -> DiscoverCopy.scope(snapshot)
+                            when (state) {
+                                is DiscoverState.Failed -> {
+                                    Note(DiscoverCopy.MORE_FAILED, failed = true, side = 0.dp, onRetry = loadMore)
                                 }
-                            MqText(
-                                foot,
-                                modifier = Modifier.padding(vertical = Marquee.space.s),
-                                role = TextRole.Callout,
-                                color = Marquee.colors.muted,
-                            )
+
+                                else -> {
+                                    MqText(
+                                        if (state is DiscoverState.Loading) {
+                                            "Loading more"
+                                        } else {
+                                            DiscoverCopy.scope(
+                                                snapshot,
+                                            )
+                                        },
+                                        modifier = Modifier.padding(vertical = Marquee.space.s),
+                                        role = TextRole.Callout,
+                                        color = Marquee.colors.muted,
+                                    )
+                                }
+                            }
                         }
                     }
                 }
@@ -843,6 +733,211 @@ fun DiscoverScreen(
         }
     }
 }
+
+/**
+ * Movies, Series and Anime as the segmented control; any other kind is in a More pull-down, so the control keeps its
+ * shape (plans/discover-v2.md 6.1). On a narrow phone More goes to a second line rather than off the screen.
+ */
+@Composable
+private fun DiscoverKinds(
+    s: DiscoverSnapshot,
+    pick: (DiscoverPick) -> Unit,
+    focus: FocusMemory,
+) {
+    val main = s.kinds.filter { it.first in MAIN_KINDS }
+    val more = s.kinds.filter { it.first !in MAIN_KINDS }
+    FlowRow(
+        Modifier.rowEntry(focus, ROW_KINDS, DISCOVER_KIND_ENTRY),
+        horizontalArrangement = Arrangement.spacedBy(Marquee.space.xs),
+        verticalArrangement = Arrangement.spacedBy(Marquee.space.xs),
+    ) {
+        if (main.isNotEmpty()) {
+            SegmentTrack {
+                for ((value, name) in main) {
+                    val key = "kind:$value"
+                    val requester = focus.requesterFor(key)
+                    if (value == s.kind) focus.EntryAlias(DISCOVER_KIND_ENTRY, requester)
+                    Chip(
+                        name,
+                        value == s.kind,
+                        { pick(DiscoverPick(kind = value)) },
+                        inTrack = true,
+                        focusRequester = requester,
+                        onFocusChange = focus.watch(ROW_KINDS, key),
+                    )
+                }
+            }
+        }
+        if (more.isNotEmpty()) {
+            val key = "kind:more"
+            val chosen = s.kind?.takeIf { it !in MAIN_KINDS }
+            val requester = focus.requesterFor(key)
+            if (chosen != null || main.isEmpty()) focus.EntryAlias(DISCOVER_KIND_ENTRY, requester)
+            PullDown(
+                "More",
+                more.map { it.first to it.second },
+                chosen,
+                Modifier
+                    .focusRequester(requester)
+                    .onFocusChanged { focus.watch(ROW_KINDS, key)(it.isFocused) },
+            ) { kind -> kind?.let { pick(DiscoverPick(kind = it)) } }
+        }
+    }
+}
+
+/** The services as their logos, All first (6.6); the chosen one is ringed and kept in view, with room for its ring. */
+@Composable
+private fun DiscoverRail(
+    s: DiscoverSnapshot,
+    pick: (DiscoverPick) -> Unit,
+    focus: FocusMemory,
+) {
+    val rail = rememberLazyListState()
+    // Again when the logos come: a name tile and a logo are not one width, so the chosen one may have moved.
+    key(s.platforms.map { it.logo }) { KeepInView(rail, s.platforms.indexOfFirst { it.id == s.platform } + 1) }
+    LazyRow(
+        state = rail,
+        modifier = Modifier.liftRoom(Marquee.tiles.pad).rowEntry(focus, ROW_RAIL),
+        contentPadding = PaddingValues(horizontal = RING_ROOM, vertical = Marquee.tiles.pad),
+        horizontalArrangement = Arrangement.spacedBy(Marquee.space.xs),
+    ) {
+        item(key = "all") {
+            ServiceTile(
+                "All",
+                null,
+                s.platform == null,
+                { pick(DiscoverPick(platform = GenreChange.Clear)) },
+                focusRequester = focus.requesterFor("rail:all"),
+                onFocusChange = focus.watch(ROW_RAIL, "rail:all"),
+            )
+        }
+        items(s.platforms, key = { it.id }) { p ->
+            val key = "rail:${p.id}"
+            ServiceTile(
+                p.name,
+                p.logo,
+                s.platform == p.id,
+                { pick(DiscoverPick(platform = GenreChange.To(p.id))) },
+                focusRequester = focus.requesterFor(key),
+                onFocusChange = focus.watch(ROW_RAIL, key),
+            )
+        }
+    }
+}
+
+/**
+ * Genre, Year, Clear and Sort (6.1): one line where it fits with Sort at its end, wrapping on a narrow phone or at a
+ * large font, Sort last.
+ */
+@Composable
+private fun DiscoverFilters(
+    s: DiscoverSnapshot,
+    pick: (DiscoverPick) -> Unit,
+    focus: FocusMemory,
+    held: Boolean,
+    onShow: () -> Unit,
+) {
+    val genreKey = "filters:genre"
+    val yearKey = "filters:year"
+    val filtered = s.genre != null || s.decade != null || s.platform != null
+    // Clear hands focus to the first menu that stays, else the rail's All (6.5); its requester is looked up at the
+    // press, as it is registered only after the first composition.
+    val handOff =
+        when {
+            s.genreChoices.isNotEmpty() -> genreKey
+            s.decades.isNotEmpty() -> yearKey
+            else -> "rail:all"
+        }
+    FlowRow(
+        Modifier.fillMaxWidth().rowEntry(focus, ROW_FILTERS),
+        horizontalArrangement = Arrangement.spacedBy(Marquee.space.xs),
+        verticalArrangement = Arrangement.spacedBy(Marquee.space.xs),
+    ) {
+        if (s.genreChoices.isNotEmpty()) {
+            val any: List<Pair<String?, String>> =
+                if (s.genreRequired) emptyList() else listOf(null to "Any ${s.genreLabel.lowercase()}")
+            PullDown(
+                s.genreLabel,
+                any + s.genreChoices.map { it.name to it.name },
+                s.genre,
+                Modifier
+                    .focusRequester(focus.requesterFor(genreKey))
+                    .onFocusChanged { focus.watch(ROW_FILTERS, genreKey)(it.isFocused) },
+            ) { pick(DiscoverPick(genre = if (it == null) GenreChange.Clear else GenreChange.To(it))) }
+        }
+        if (s.decades.isNotEmpty()) {
+            PullDown(
+                "Year",
+                listOf<Pair<String?, String>>(null to "Any year") + s.decades.map { it to it },
+                s.decade,
+                Modifier
+                    .focusRequester(focus.requesterFor(yearKey))
+                    .onFocusChanged { focus.watch(ROW_FILTERS, yearKey)(it.isFocused) },
+            ) { pick(DiscoverPick(decade = if (it == null) GenreChange.Clear else GenreChange.To(it))) }
+        }
+        if (filtered) {
+            SecondaryButton(
+                "Clear",
+                {
+                    runCatching { focus.requester(handOff)?.requestFocus() }
+                    pick(
+                        DiscoverPick(
+                            genre = GenreChange.Clear,
+                            platform = GenreChange.Clear,
+                            decade = GenreChange.Clear,
+                        ),
+                    )
+                },
+                Modifier.onFocusChanged { focus.watch(ROW_FILTERS, "filters:clear")(it.isFocused) },
+                spoken = "Clear filters",
+            )
+        }
+        if (held) SecondaryButton("More titles arrived. Show", onShow)
+        val sorts: List<Pair<String?, String>> =
+            s.sorts.map { it.id to it.label } + s.lists.map { "list:${it.id}" to it.name }
+        if (sorts.isNotEmpty()) {
+            Spacer(Modifier.weight(1f))
+            PullDown(
+                "Sort",
+                sorts,
+                s.sort,
+                Modifier
+                    .focusRequester(focus.requesterFor("filters:sort"))
+                    .onFocusChanged { focus.watch(ROW_FILTERS, "filters:sort")(it.isFocused) },
+                heading = { if (it?.startsWith("list:") == true) DiscoverCopy.MORE_LISTS else null },
+            ) { sort -> sort?.let { pick(DiscoverPick(sort = it)) } }
+        }
+    }
+}
+
+/** Vertical entry into a control row lands where the row last had focus (6.5), else on [fallback], as Home's lanes do. */
+@OptIn(ExperimentalComposeUiApi::class)
+private fun Modifier.rowEntry(
+    focus: FocusMemory,
+    row: String,
+    fallback: String? = null,
+): Modifier =
+    focusProperties {
+        enter = { focus.rowEntry(row) ?: fallback?.let(focus::requester) ?: FocusRequester.Default }
+    }.focusGroup()
+
+/** [requester] registered under [key] as well while composed: the selected kind is where Discover is entered first. */
+@Composable
+private fun FocusMemory.EntryAlias(
+    key: String,
+    requester: FocusRequester,
+) {
+    DisposableEffect(key, requester) {
+        attach(key, requester)
+        onDispose { detach(key, requester) }
+    }
+}
+
+/** Where the tab bar's Down lands on a first open: the selected kind (6.5), never the grid by geometry. */
+internal const val DISCOVER_KIND_ENTRY = "kinds:entry"
+
+/** Blank covers while a first page loads. */
+private const val SKELETONS = 6
 
 /** Room at the rail's ends for the chosen tile's ring. */
 private val RING_ROOM = 8.dp

@@ -33,10 +33,14 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 
-/** One row of an [ActionMenu]; a choice of a [PullDown] has no icon unless it is the chosen one. */
+/**
+ * One row of an [ActionMenu]; a choice of a [PullDown] has no icon unless it is the chosen one. A [heading] row is
+ * words over the rows after it, not a choice: it takes no focus and does nothing.
+ */
 data class MenuAction(
     val label: String,
     val icon: ImageVector?,
+    val heading: Boolean = false,
     val onClick: () -> Unit,
 )
 
@@ -101,6 +105,15 @@ fun ActionMenu(
             ) {
                 MqText(title, role = TextRole.Title3, maxLines = 2)
                 actions.forEachIndexed { index, action ->
+                    if (action.heading) {
+                        MqText(
+                            action.label,
+                            Modifier.padding(top = Marquee.space.xs),
+                            role = TextRole.Callout,
+                            color = Marquee.colors.muted,
+                        )
+                        return@forEachIndexed
+                    }
                     SecondaryButton(
                         label = action.label,
                         icon = action.icon,
@@ -162,17 +175,27 @@ fun <T> PullDown(
     modifier: Modifier = Modifier,
     /** A quieter word after a choice's name (a catalog's addon). */
     detail: (T) -> String? = { null },
+    /** A heading over the choices from this one on ("More lists"); null keeps the one above. */
+    heading: (T) -> String? = { null },
     onSelect: (T) -> Unit,
 ) {
     var open by remember { mutableStateOf(false) }
-    val chosen = choices.firstOrNull { it.first == selected }?.second ?: title
-    SecondaryButton(chosen, {
+    val chosen = choices.firstOrNull { it.first == selected }?.second
+    // With nothing chosen the button shows its title, and says it once.
+    SecondaryButton(chosen ?: title, {
         open = true
-    }, modifier, icon = Icons.ChevronDown, iconAfter = true, spoken = "$title, $chosen")
+    }, modifier, icon = Icons.ChevronDown, iconAfter = true, spoken = chosen?.let { "$title, $it" } ?: title)
     if (open) {
-        ActionMenu(
-            title,
-            choices.map { (value, name) ->
+        val rows = mutableListOf<MenuAction>()
+        var start = 0
+        var shownHeading: String? = null
+        for ((value, name) in choices) {
+            heading(value)?.takeIf { it != shownHeading }?.let {
+                rows += MenuAction(it, null, heading = true) {}
+                shownHeading = it
+            }
+            if (value == selected) start = rows.size
+            rows +=
                 MenuAction(
                     listOfNotNull(name, detail(value)).joinToString(" · "),
                     Icons.Check.takeIf {
@@ -182,9 +205,13 @@ fun <T> PullDown(
                 ) {
                     onSelect(value)
                 }
-            },
+        }
+        ActionMenu(
+            title,
+            rows,
             onDismiss = { open = false },
-            start = choices.indexOfFirst { it.first == selected }.coerceAtLeast(0),
+            start =
+                start.takeIf { !rows[it].heading } ?: rows.indexOfFirst { !it.heading },
         )
     }
 }

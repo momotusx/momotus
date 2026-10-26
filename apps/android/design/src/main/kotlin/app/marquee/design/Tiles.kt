@@ -6,9 +6,11 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableStateOf
@@ -154,7 +156,8 @@ fun PosterTile(
                 ).clip(RoundedCornerShape(corner))
                 .keyline(RoundedCornerShape(corner))
                 .semantics {
-                    contentDescription = title
+                    // The corner's value is said with the title ("Dune: Part Two, IMDb 8.4").
+                    contentDescription = listOfNotNull(title, cornerLabel).joinToString(", ")
                     if (state != null) stateDescription = state
                 }.focusClickable(
                     onClick,
@@ -175,6 +178,8 @@ fun PosterTile(
                 if (rank != null) RankNumeral(rank, Modifier.align(Alignment.TopStart))
                 if (watched) WatchedChip(Modifier.align(Alignment.TopStart))
                 // Bottom right, just above RPDB's ratings band (about a tenth of the cover) when the cover has one.
+                // ponytail: an RPDB cover that fails shows the addon's poster, and the label then sits a tenth above
+                // its foot; knowing which loaded means threading the image state up here.
                 if (cornerLabel != null) {
                     val band = if (fallbackImageUrl != null) size.height * BAND_SHARE else 0.dp
                     CornerLabel(cornerLabel, Modifier.align(Alignment.BottomEnd).padding(bottom = band))
@@ -319,9 +324,11 @@ private fun CornerLabel(
     MqText(
         text,
         modifier
+            // Said with the title by the tile, not a second time.
+            .clearAndSetSemantics { }
             .padding(if (tv) 8.dp else 4.dp)
             .clip(RoundedCornerShape(if (tv) 8.dp else 6.dp))
-            .background(Color.Black.copy(alpha = 0.78f))
+            .background(Marquee.colors.glassStrong)
             .padding(horizontal = if (tv) 8.dp else 5.dp, vertical = if (tv) 2.dp else 1.dp),
         role = TextRole.Caption,
         weight = FontWeight.SemiBold,
@@ -404,6 +411,18 @@ fun ServiceTile(
                 this.selected = selected
             }.focusClickable(onClick, Role.RadioButton),
     ) {
-        RemoteImage(logoUrl, side, side, fallbackText = name)
+        if (logoUrl != null) {
+            RemoteImage(logoUrl, side, side, fallbackText = name)
+        } else {
+            // No logo: the name on one line, the tile as wide as it (plans/discover-v2.md 6.6).
+            Box(
+                Modifier
+                    .height(side)
+                    .widthIn(min = side)
+                    .background(Marquee.colors.surface)
+                    .padding(horizontal = Marquee.space.s),
+                contentAlignment = Alignment.Center,
+            ) { MqText(name, role = TextRole.Callout, weight = FontWeight.SemiBold, maxLines = 1, softWrap = false) }
+        }
     }
 }

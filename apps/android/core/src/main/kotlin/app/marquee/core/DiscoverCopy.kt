@@ -39,5 +39,19 @@ object DiscoverCopy {
             else -> null
         }
 
+    /** The line under a poster: its year, unless the corner already shows it. */
+    fun caption(
+        sort: String?,
+        tile: Tile,
+    ): String? = tile.releaseInfo?.takeIf { corner(sort, tile) != it }
+
+    /** In place of the core's reasons, which can name a host or an addon (the no-addon-names rule). */
+    const val OPEN_FAILED = "Discover could not open."
+    const val FAILED = "This list did not load."
+    const val MORE_FAILED = "More titles did not load."
+
+    /** The heading over the other catalogs in the Sort menu, so a catalog called "Top" does not read as a sort. */
+    const val MORE_LISTS = "More lists"
+
     private fun services(n: Int) = if (n == 1) "service" else "services"
 }

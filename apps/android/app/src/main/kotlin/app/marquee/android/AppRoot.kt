@@ -792,12 +792,20 @@ private fun AppNav(
             onSelect = ::choose,
             contentEntry = {
                 when (top) {
-                    Route.Home -> app.tvHome.focus.lastEntry()
+                    Route.Home -> {
+                        app.tvHome.focus.lastEntry()
+                    }
 
                     // Discover: where focus last was, else the selected kind (6.5), never the grid by geometry.
-                    Route.Discover -> app.discoverFocus.lastEntry() ?: app.discoverFocus.rowEntry("kinds")
+                    Route.Discover -> {
+                        app.discoverFocus.lastEntry()
+                            ?: app.discoverFocus.rowEntry("kinds")
+                            ?: app.discoverFocus.requester(DISCOVER_KIND_ENTRY)
+                    }
 
-                    else -> null
+                    else -> {
+                        null
+                    }
                 }
             },
             onNavFocus = { app.tvHome.focus.leftContent() },

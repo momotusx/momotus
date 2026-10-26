@@ -61,5 +61,8 @@ class DiscoverCopyTest {
         assertEquals("IMDb 8.4", DiscoverCopy.corner("imdb", tile))
         assertEquals("2021", DiscoverCopy.corner("newest", tile))
         assertEquals(null, DiscoverCopy.corner("popular", tile))
+        // The caption does not repeat the year the corner shows.
+        assertEquals(null, DiscoverCopy.caption("newest", tile))
+        assertEquals("2021", DiscoverCopy.caption("imdb", tile))
     }
 }
