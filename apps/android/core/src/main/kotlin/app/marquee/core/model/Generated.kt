@@ -1891,6 +1891,22 @@ enum class SourceClass(
     object Serializer : FallbackEnumSerializer<SourceClass>("SourceClass", SourceClass.entries, SourceClass::wire, Unknown)
 }
 
+/** How a version plays, as the viewer groups them: through the torrent engine, through a streaming service, or from a plain link (plans/plugins-and-marketplace.md 4.1). */
+@Serializable(with = SourceKind.Serializer::class)
+enum class SourceKind(
+    val wire: String,
+) {
+    Torrent("torrent"),
+    Debrid("debrid"),
+    Direct("direct"),
+
+    /** A value from a newer core that this app does not know yet. */
+    Unknown(""),
+    ;
+
+    object Serializer : FallbackEnumSerializer<SourceKind>("SourceKind", SourceKind.entries, SourceKind::wire, Unknown)
+}
+
 /** The rows of a source that ranks in a pass of its own, in that pass's order, and whether it is still working (an item being read). */
 @Serializable
 data class SourceRows(
@@ -2424,6 +2440,8 @@ data class VersionRow(
     val line: ReasonLine,
     /** How it starts (3.2). */
     val sourceClass: SourceClass,
+    /** How it plays, as the viewer groups versions: the kind chips (plans/plugins-and-marketplace.md 4.2). */
+    val kind: SourceKind,
     /** Size over runtime after the pack guard; null when either is unknown. */
     val bitrateMbps: Float? = null,
     /** The sort key, for a details panel and tests. */
@@ -2496,6 +2514,8 @@ data class VersionsSnapshot(
     val archive: SourceRows = SourceRows(pending = false),
     /** "From plugins" (plans/plugins-and-marketplace.md 4.4, 7.8): the Nuvio providers' rows, a pass of their own like the Archive's. */
     val plugins: SourceRows = SourceRows(pending = false),
+    /** The one streaming service every debrid row names ("Real-Debrid"), for the debrid kind chip; none when they name several, or a row names none, and the chip says "Debrid". */
+    val debridService: String? = null,
 )
 
 @Serializable

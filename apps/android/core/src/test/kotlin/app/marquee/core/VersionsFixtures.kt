@@ -6,6 +6,7 @@ import app.marquee.core.model.Playability
 import app.marquee.core.model.RankKey
 import app.marquee.core.model.ReasonLine
 import app.marquee.core.model.SourceClass
+import app.marquee.core.model.SourceKind
 import app.marquee.core.model.Speed
 import app.marquee.core.model.VersionRow
 import app.marquee.core.model.VersionStatus
@@ -15,7 +16,8 @@ import app.marquee.core.model.VersionsConditions
 internal object VersionsFixtures {
     /** The same fields as JSON, for hand-written rows and snapshots. */
     const val ROW_JSON =
-        """"line":{"kind":"quick","seeders":null,"sizeBytes":null},"sourceClass":"ready","bitrateMbps":null,""" +
+        """"line":{"kind":"quick","seeders":null,"sizeBytes":null},"sourceClass":"ready","kind":"direct",""" +
+            """"bitrateMbps":null,""" +
             """"score":{"language":true,"legit":true,"viable":true,"yearOk":true,"original":true,"sustains":true,""" +
             """"playability":"native",""" +
             """"sizeOk":true,"start":3,"binge":false,"effectiveHeight":1080,"within":0}"""
@@ -28,6 +30,8 @@ internal object VersionsFixtures {
     val line: ReasonLine = ReasonLine.Quick()
 
     val sourceClass = SourceClass.Ready
+
+    val kind = SourceKind.Direct
 
     val score =
         RankKey(
@@ -69,6 +73,7 @@ internal object VersionsFixtures {
             failoverCount = 0,
             line = line,
             sourceClass = sourceClass,
+            kind = kind,
             score = score,
         )
 }

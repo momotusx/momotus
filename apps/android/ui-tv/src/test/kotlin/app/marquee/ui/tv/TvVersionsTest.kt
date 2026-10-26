@@ -19,6 +19,8 @@ import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertContentDescriptionEquals
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsFocused
+import androidx.compose.ui.test.assertIsNotSelected
+import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasScrollToKeyAction
@@ -62,6 +64,7 @@ import app.marquee.core.model.ReasonLine
 import app.marquee.core.model.RowOrigin
 import app.marquee.core.model.SectionQuality
 import app.marquee.core.model.SourceClass
+import app.marquee.core.model.SourceKind
 import app.marquee.core.model.SourceRows
 import app.marquee.core.model.Speed
 import app.marquee.core.model.StreamPrefs
@@ -132,6 +135,7 @@ class TvVersionsTest {
     private fun row(
         key: String,
         line: ReasonLine,
+        kind: SourceKind = SourceKind.Torrent,
     ) = VersionRow(
         key = key,
         quality = "1080p",
@@ -144,6 +148,7 @@ class TvVersionsTest {
         failoverCount = 0,
         line = line,
         sourceClass = SourceClass.Swarm,
+        kind = kind,
         score = RankKey(true, true, true, true, true, true, 3, 0, Playability.Native, true, 2, false, 1080, 3, 0),
     )
 
@@ -222,12 +227,16 @@ class TvVersionsTest {
 
     private val undone = mutableListOf<LearnedNote>()
 
+    /** What the screen sent the core, in order. */
+    private val sent = mutableListOf<String>()
+
     /** The screen on a view whose core answers the subscribe with [snapshot]. */
     private fun show(
         snapshot: VersionsSnapshot,
         held: Boolean = false,
     ) {
         client.attach { text ->
+            sent += text
             val msg = CoreJson.parseToJsonElement(text).jsonObject
             val id = msg["id"]?.jsonPrimitive?.longOrNull ?: return@attach
             val result =
@@ -846,6 +855,80 @@ class TvVersionsTest {
                 .size.height
         }
         assertEquals(height("1080p, HDR, 1 GB"), height("5 GB"), "the badge line keeps its height with no badge")
+    }
+
+    /**
+     * [coherent] with three kinds (plans/plugins-and-marketplace.md 4.3): the pick on TorBox, Sharper a direct link,
+     * the other two torrents, in the core's order other then small.
+     */
+    private fun kinds(): VersionsSnapshot {
+        val s = coherent()
+        val kind = mapOf("sharp" to SourceKind.Direct, "other" to SourceKind.Torrent, "small" to SourceKind.Torrent)
+        return s.copy(
+            recommended = s.recommended!!.copy(kind = SourceKind.Debrid),
+            rows = s.rows.map { it.copy(kind = kind.getValue(it.key)) },
+            debridService = "TorBox",
+        )
+    }
+
+    @Test
+    fun `one kind of version draws no kind chips`() {
+        show(coherent())
+        compose.onAllNodesWithContentDescription("All, 4 versions").assertCountEquals(0)
+        compose.onAllNodesWithText(StreamChoiceCopy.KIND_ALL).assertCountEquals(0)
+    }
+
+    @Test
+    fun `Up from Play reaches the kind chips, a kind fills the card and the list with its own rows, Down goes back`() {
+        show(kinds())
+        compose.onNodeWithContentDescription("All, 4 versions").assertIsSelected()
+        compose.onNodeWithContentDescription("Torrents, 2 versions").assertIsNotSelected()
+        compose.onNodeWithContentDescription("Direct links, 1 version").assertExists()
+        // The debrid chip says the core's service.
+        compose.onNodeWithContentDescription("TorBox, 1 version").assertExists()
+        compose.waitUntil(5_000) {
+            compose.onAllNodes(isFocused() and hasText("Play this version")).fetchSemanticsNodes().isNotEmpty()
+        }
+        press(Key.DirectionUp)
+        compose.onNodeWithContentDescription("All, 4 versions").assertIsFocused()
+        press(Key.DirectionRight)
+        compose.onNodeWithContentDescription("Torrents, 2 versions").assertIsFocused()
+        press(Key.DirectionCenter)
+        // OK chooses and keeps the focus on the chip; the pick was frozen.
+        compose.onNodeWithContentDescription("Torrents, 2 versions").assertIsFocused().assertIsSelected()
+        assertTrue(sent.any { "\"freeze\"" in it })
+        // The card is the kind's first row in the core's order, the list the rest of the kind; the shortcuts go.
+        val other = kinds().rows.first { it.key == "other" }
+        compose.onNodeWithContentDescription(VersionsCopy.cardSpoken("Best torrent", other)).assertExists()
+        compose.onAllNodesWithText("Smaller file", substring = true).assertCountEquals(0)
+        compose.onAllNodesWithText("Sharper", substring = true).assertCountEquals(0)
+        compose
+            .onNodeWithContentDescription(
+                VersionsCopy.rowSpoken(kinds().rows.first { it.key == "small" }),
+            ).assertExists()
+        compose.onAllNodesWithContentDescription(VersionsCopy.rowSpoken(other)).assertCountEquals(0)
+        compose
+            .onAllNodesWithContentDescription(
+                VersionsCopy.rowSpoken(
+                    kinds().rows.first {
+                        it.key == "sharp"
+                    },
+                ),
+            ).assertCountEquals(0)
+        press(Key.DirectionDown)
+        compose.onNode(hasText("Play this version")).assertIsFocused()
+        press(Key.DirectionCenter)
+        assertEquals(listOf("other"), played)
+    }
+
+    @Test
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun `shot - the kind chips with Torrents chosen`() {
+        assumeTrue("MARQUEE_SHOTS is not set", out != null)
+        show(kinds())
+        compose.onNodeWithContentDescription("Torrents, 2 versions").performClick()
+        compose.mainClock.advanceTimeBy(2_000)
+        save("tv-versions-kinds")
     }
 
     @Test

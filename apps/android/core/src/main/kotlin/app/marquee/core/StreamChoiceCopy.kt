@@ -7,6 +7,7 @@ import app.marquee.core.model.Network
 import app.marquee.core.model.Prefs
 import app.marquee.core.model.ReasonLine
 import app.marquee.core.model.SectionQuality
+import app.marquee.core.model.SourceKind
 import app.marquee.core.model.Speed
 import app.marquee.core.model.StreamPrefs
 import app.marquee.core.model.SubtitleLayout
@@ -214,6 +215,25 @@ object StreamChoiceCopy {
     /** The shortcuts under the card (plans/play-every-version.md 2f), in the core's order. */
     const val SMALLER = "Smaller file"
     const val SHARPER = "Sharper"
+
+    /** The kind chips (plans/plugins-and-marketplace.md 4.2, "kind"): the group's name, each kind's chip, a chip's spoken
+     * label, and the card's kicker under a kind; the debrid chip says the core's `debridService` when it names one. */
+    const val KIND_LABEL = "Sources"
+    const val KIND_ALL = "All"
+    val KIND_NAMES =
+        mapOf(
+            SourceKind.Torrent to "Torrents",
+            SourceKind.Direct to "Direct links",
+            SourceKind.Debrid to "Debrid",
+        )
+    const val KIND_SPOKEN = "{kind}, {versions}"
+    val KIND_BEST =
+        mapOf(
+            SourceKind.Torrent to "Best torrent",
+            SourceKind.Direct to "Best direct link",
+            SourceKind.Debrid to "Best debrid link",
+        )
+    const val KIND_BEST_SERVICE = "Best on {service}"
 
     /** The quality sections' titles, by the core's section. */
     val SECTIONS =

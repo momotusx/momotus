@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -66,6 +67,7 @@ import app.marquee.core.VersionsCopy.EmptyStep
 import app.marquee.core.model.EmptyKind
 import app.marquee.core.model.EmptyVersions
 import app.marquee.core.model.LearnedNote
+import app.marquee.core.model.SourceKind
 import app.marquee.core.model.VersionRow
 import app.marquee.core.model.VersionsSnapshot
 import app.marquee.core.views.VersionsView
@@ -73,6 +75,7 @@ import app.marquee.core.views.ViewStatus
 import app.marquee.design.BadgeLook
 import app.marquee.design.BadgeRow
 import app.marquee.design.CapsLabel
+import app.marquee.design.Chip
 import app.marquee.design.FocusInk
 import app.marquee.design.GlassBar
 import app.marquee.design.Icons
@@ -86,6 +89,7 @@ import app.marquee.design.PlayFilled
 import app.marquee.design.PrimaryButton
 import app.marquee.design.RoundButton
 import app.marquee.design.SecondaryButton
+import app.marquee.design.SegmentTrack
 import app.marquee.design.Skeleton
 import app.marquee.design.StateMessage
 import app.marquee.design.Status
@@ -175,6 +179,17 @@ fun PhoneVersions(
     }
     // A press pins the pick, so the version under the finger at the press is the one its release plays.
     val press = { if (snapshot?.recommended != null && snapshot.frozen != true) versions?.freeze() }
+    // The kind chips (plans/plugins-and-marketplace.md 4.2): All is the core's page; a kind shows its own first row in
+    // the card and its rows in the sections. The choice holds while the page is open; a kind with no chip now is All.
+    // Choosing one pins the pick, as a press does.
+    var kind by remember { mutableStateOf<SourceKind?>(null) }
+    val chips = VersionsCopy.kinds(snapshot)
+    val on = kind.takeIf { k -> chips.any { it.kind == k } }
+    val shown = VersionsCopy.ofKind(snapshot, on)
+    val chooseKind = { k: SourceKind? ->
+        press()
+        kind = k
+    }
     val failure = (versions?.status as? ViewStatus.Failed)?.reason
     val listState = rememberLazyListState()
     // The first scroll pins the recommendation, once there is one: a pin before that would keep the
@@ -189,7 +204,7 @@ fun PhoneVersions(
     // The core's quality sections, or today's groups for rows they do not cover.
     val seen = remember { mutableStateMapOf<String, Int>() }
     val sections =
-        VersionsCopy.sections(snapshot, empty?.rows ?: snapshot?.rows.orEmpty()).let {
+        VersionsCopy.sections(shown, empty?.rows ?: shown?.rows.orEmpty()).let {
             if (held) VersionsCopy.held(it, seen) else it
         }
     // The order the rows showed in, recorded after they show: held reads it, and composition changes nothing.
@@ -201,7 +216,7 @@ fun PhoneVersions(
     var anchor by remember { mutableStateOf<Pair<String, Int>?>(null) }
     LaunchedEffect(anchor) {
         val (group, offset) = anchor ?: return@LaunchedEffect
-        var index = 2 + VersionsCopy.shortcuts(snapshot).size
+        var index = 2 + VersionsCopy.shortcuts(shown).size
         for (section in sections) {
             index += 1 + if (open[section.id] == true) section.rows.size else minOf(section.rows.size, SHOWN)
             if (section.id == group) break
@@ -236,11 +251,14 @@ fun PhoneVersions(
                     VersionsCopy.progress(snapshot)?.let { (text, tone) ->
                         StatusWord(text, tone(tone), Modifier.padding(top = 4.dp))
                     }
+                    // Reserved from the first paint, so nothing below moves when a second kind arrives.
+                    Box(Modifier.heightIn(min = KIND_ROW)) { KindChips(chips, on, chooseKind) }
                 }
             }
             item(key = "best") {
                 Pick(
-                    snapshot,
+                    shown,
+                    VersionsCopy.kicker(snapshot, on, StreamChoiceCopy.BEST_PHONE),
                     failure,
                     { versions?.retry() },
                     onPlay,
@@ -252,7 +270,7 @@ fun PhoneVersions(
             }
             // The shortcuts under the card, each one tap to play; keyed apart from the section rows they may repeat.
             // The shortcuts play: a download's pick is the card or a row.
-            for ((label, row) in if (download) emptyList() else VersionsCopy.shortcuts(snapshot)) {
+            for ((label, row) in if (download) emptyList() else VersionsCopy.shortcuts(shown)) {
                 val key = if (label == StreamChoiceCopy.SMALLER) "short:smaller" else "short:sharper"
                 item(key = key) {
                     SecondaryButton(
@@ -326,6 +344,34 @@ fun PhoneVersions(
     }
 }
 
+/** The kind chips' line: a chip's 48 dp touch target on its track. */
+private val KIND_ROW = 56.dp
+
+/**
+ * The kind chips (plans/plugins-and-marketplace.md 4.2), only with two kinds or more: one choice at a time, each with
+ * its count.
+ */
+@Composable
+private fun KindChips(
+    chips: List<VersionsCopy.KindChip>,
+    on: SourceKind?,
+    onChoose: (SourceKind?) -> Unit,
+) {
+    if (chips.isEmpty()) return
+    SegmentTrack(Modifier.selectableGroup()) {
+        for (chip in chips) {
+            Chip(
+                chip.label,
+                chip.kind == on,
+                { onChoose(chip.kind) },
+                detail = chip.note,
+                inTrack = true,
+                spoken = chip.spoken,
+            )
+        }
+    }
+}
+
 private fun tone(tone: VersionsCopy.Tone) =
     when (tone) {
         VersionsCopy.Tone.Idle -> Status.Idle
@@ -339,6 +385,7 @@ private fun statusTone(row: VersionRow) = if (VersionsCopy.good(row.status)) Sta
 @Composable
 private fun Pick(
     snapshot: VersionsSnapshot?,
+    kicker: String,
     failure: String?,
     onRetry: () -> Unit,
     onPlay: (String) -> Unit,
@@ -376,10 +423,10 @@ private fun Pick(
 
             best != null -> {
                 CardParts(
-                    StreamChoiceCopy.BEST_PHONE,
+                    kicker,
                     VersionsCopy.badges(best),
                     VersionsCopy.why(best),
-                    VersionsCopy.cardSpoken(StreamChoiceCopy.BEST_PHONE, best),
+                    VersionsCopy.cardSpoken(kicker, best),
                 ) {
                     PrimaryButton(
                         label = action.label,

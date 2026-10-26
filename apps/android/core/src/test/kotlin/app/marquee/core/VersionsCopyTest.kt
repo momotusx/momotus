@@ -11,6 +11,7 @@ import app.marquee.core.model.Reason
 import app.marquee.core.model.ReasonLine
 import app.marquee.core.model.RowOrigin
 import app.marquee.core.model.SectionQuality
+import app.marquee.core.model.SourceKind
 import app.marquee.core.model.SourceRows
 import app.marquee.core.model.VersionRow
 import app.marquee.core.model.VersionSection
@@ -41,6 +42,7 @@ class VersionsCopyTest {
         failoverCount = 0,
         line = VersionsFixtures.line,
         sourceClass = VersionsFixtures.sourceClass,
+        kind = VersionsFixtures.kind,
         score = VersionsFixtures.score,
     )
 
@@ -579,5 +581,67 @@ class VersionsCopyTest {
         assertNull(VersionsCopy.quiet(row(sizeBytes = gb).copy(line = ReasonLine.Few(31))))
         // Said as its badges, then the quiet line.
         assertEquals("4K, HDR, 2 GB, ready now", VersionsCopy.rowSpoken(row(sizeBytes = gb).copy(line = quick)))
+    }
+
+    /** A pick and listed rows of these kinds, keyed by place ("0" the pick), each in the core's 4K section. */
+    private fun kinds(vararg kinds: SourceKind): VersionsSnapshot {
+        val rows = kinds.mapIndexed { i, k -> row().copy(key = "$i", kind = k) }
+        return snapshot(rows.first(), done = true).copy(
+            rows = rows.drop(1),
+            sections = listOf(VersionSection(SectionQuality.Uhd, rows.drop(1).map { it.key })),
+            smaller = rows.last(),
+            sharper = rows.last(),
+        )
+    }
+
+    @Test
+    fun `the kind chips show only with two kinds, each with its count, the pick counted`() {
+        assertEquals(emptyList(), VersionsCopy.kinds(kinds(SourceKind.Torrent, SourceKind.Torrent)))
+        assertEquals(emptyList(), VersionsCopy.kinds(null))
+        val chips =
+            VersionsCopy.kinds(
+                kinds(SourceKind.Debrid, SourceKind.Torrent, SourceKind.Torrent, SourceKind.Direct),
+            )
+        assertEquals(
+            listOf(
+                null to "All",
+                SourceKind.Torrent to "Torrents",
+                SourceKind.Direct to "Direct links",
+                SourceKind.Debrid to "Debrid",
+            ),
+            chips.map { it.kind to it.label },
+        )
+        assertEquals(listOf(4, 2, 1, 1), chips.map { it.count })
+        assertEquals("Torrents, 2 versions", chips[1].spoken)
+        assertEquals("Direct links, 1 version", chips[2].spoken)
+        // One service named by the core names the chip and the card.
+        val named = kinds(SourceKind.Debrid, SourceKind.Direct).copy(debridService = "Real-Debrid")
+        assertEquals("Real-Debrid", VersionsCopy.kinds(named).last().label)
+        assertEquals("Best on Real-Debrid", VersionsCopy.kicker(named, SourceKind.Debrid, "Best for this TV"))
+        assertEquals(
+            "Best debrid link",
+            VersionsCopy.kicker(kinds(SourceKind.Debrid, SourceKind.Direct), SourceKind.Debrid, "x"),
+        )
+        assertEquals("Best for this TV", VersionsCopy.kicker(named, null, "Best for this TV"))
+        assertEquals("1,204", VersionsCopy.KindChip(null, "All", 1204, "").note)
+    }
+
+    @Test
+    fun `a kind's page is its first row in the card, the rest of it in the sections, and no shortcuts`() {
+        val all = kinds(SourceKind.Debrid, SourceKind.Torrent, SourceKind.Direct, SourceKind.Torrent)
+        assertEquals(all, VersionsCopy.ofKind(all, null))
+        val torrents = VersionsCopy.ofKind(all, SourceKind.Torrent)!!
+        assertEquals("1", torrents.recommended?.key)
+        assertEquals(listOf("3"), torrents.rows.map { it.key })
+        assertEquals(listOf(listOf("3")), torrents.sections.map { it.keys })
+        assertNull(torrents.smaller)
+        assertNull(torrents.sharper)
+        // The pick's own kind keeps it in the card.
+        assertEquals("0", VersionsCopy.ofKind(all, SourceKind.Debrid)?.recommended?.key)
+        assertEquals(emptyList(), VersionsCopy.ofKind(all, SourceKind.Debrid)?.sections)
+        // A kind that has no chip (one kind left) is All.
+        val one = kinds(SourceKind.Torrent, SourceKind.Torrent)
+        assertEquals(one, VersionsCopy.ofKind(one, SourceKind.Direct))
+        assertEquals("x", VersionsCopy.kicker(one, SourceKind.Torrent, "x"))
     }
 }

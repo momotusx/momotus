@@ -326,6 +326,8 @@ fun Chip(
     inTrack: Boolean = false,
     /** What pressing it does, for a screen reader ("Opens Discover"). */
     clickLabel: String? = null,
+    /** What a screen reader says for it in place of its words ("Torrents, 37 versions"). */
+    spoken: String? = null,
 ) {
     val tv = Marquee.form == Form.Tv
     var focused by remember { mutableStateOf(false) }
@@ -365,7 +367,8 @@ fun Chip(
                     } else {
                         Modifier
                     },
-                ).padding(vertical = (target - pill) / 2),
+                ).then(if (spoken != null) Modifier.semantics { contentDescription = spoken } else Modifier)
+                .padding(vertical = (target - pill) / 2),
         contentAlignment = Alignment.Center,
     ) {
         Box(
@@ -385,6 +388,8 @@ fun Chip(
             Row(
                 horizontalArrangement = Arrangement.spacedBy(if (tv) 10.dp else 6.dp),
                 verticalAlignment = Alignment.CenterVertically,
+                // With [spoken] the chip says that alone, not its words after it.
+                modifier = if (spoken != null) Modifier.clearAndSetSemantics { } else Modifier,
             ) {
                 MqText(
                     label,

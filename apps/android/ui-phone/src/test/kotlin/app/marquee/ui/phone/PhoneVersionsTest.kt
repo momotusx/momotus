@@ -13,6 +13,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasScrollToIndexAction
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
@@ -35,6 +36,7 @@ import androidx.lifecycle.LifecycleRegistry
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import app.marquee.core.PluginCopy
 import app.marquee.core.StreamChoiceCopy
+import app.marquee.core.VersionsCopy
 import app.marquee.core.client.CoreClient
 import app.marquee.core.client.CoreJson
 import app.marquee.core.model.EmptyAction
@@ -51,6 +53,7 @@ import app.marquee.core.model.RankKey
 import app.marquee.core.model.ReasonLine
 import app.marquee.core.model.RowOrigin
 import app.marquee.core.model.SourceClass
+import app.marquee.core.model.SourceKind
 import app.marquee.core.model.SourceRows
 import app.marquee.core.model.Speed
 import app.marquee.core.model.StreamPrefs
@@ -116,6 +119,7 @@ class PhoneVersionsTest {
     private fun row(
         key: String,
         line: ReasonLine,
+        kind: SourceKind = SourceKind.Torrent,
     ) = VersionRow(
         key = key,
         quality = "1080p",
@@ -128,6 +132,7 @@ class PhoneVersionsTest {
         failoverCount = 0,
         line = line,
         sourceClass = SourceClass.Swarm,
+        kind = kind,
         score = RankKey(true, true, true, true, true, true, 3, 0, Playability.Native, true, 2, false, 1080, 3, 0),
     )
 
@@ -175,9 +180,13 @@ class PhoneVersionsTest {
     private var backs = 0
     private val undone = mutableListOf<LearnedNote>()
 
+    /** What the screen sent the core, in order. */
+    private val sent = mutableListOf<String>()
+
     /** The screen on a view whose core answers the subscribe with [snapshot]. */
     private fun show(snapshot: VersionsSnapshot) {
         client.attach { text ->
+            sent += text
             val msg = CoreJson.parseToJsonElement(text).jsonObject
             val id = msg["id"]?.jsonPrimitive?.longOrNull ?: return@attach
             val result =
@@ -490,6 +499,37 @@ class PhoneVersionsTest {
         compose.onNodeWithText("Sharper: 4K, 12 GB").performClick()
         compose.onNodeWithText("Smaller file: 720p, 1.5 GB").performClick()
         assertEquals(listOf("sharp", "small"), played)
+    }
+
+    @Test
+    fun `one kind of version draws no kind chips`() {
+        show(snapshot(row("best", ReasonLine.Few(31)), listOf(row("a", ReasonLine.Few(31)))))
+        compose.onAllNodesWithText(StreamChoiceCopy.KIND_ALL).assertCountEquals(0)
+    }
+
+    @Test
+    fun `a kind chip fills the card and the list with its own rows, hides the shortcuts and pins the pick`() {
+        val best =
+            row(
+                "best",
+                ReasonLine.Ready("TorBox", gib),
+                SourceKind.Debrid,
+            ).copy(status = VersionStatus.Ready("TorBox"))
+        val a = row("a", ReasonLine.Quick(1204, 2 * gib)).copy(quality = "4K")
+        val b = row("b", ReasonLine.Few(31)).copy(quality = "720p")
+        val c = row("c", ReasonLine.Ready(null, gib), SourceKind.Direct)
+        show(snapshot(best, listOf(a, b, c)).copy(smaller = b))
+        compose.onNodeWithText(VersionsCopy.shortcutLabel(StreamChoiceCopy.SMALLER, b)).assertExists()
+        // Several services or none named: the debrid chip says Debrid.
+        compose.onNodeWithContentDescription("Debrid, 1 version").assertExists()
+        compose.onNodeWithContentDescription("Direct links, 1 version").assertExists()
+        compose.onNodeWithContentDescription("Torrents, 2 versions").performClick()
+        compose.waitForIdle()
+        assertTrue(sent.any { "\"freeze\"" in it }, "choosing a kind pins the pick")
+        compose.onNodeWithContentDescription(VersionsCopy.cardSpoken("Best torrent", a)).assertExists()
+        compose.onAllNodesWithText(VersionsCopy.shortcutLabel(StreamChoiceCopy.SMALLER, b)).assertCountEquals(0)
+        compose.onAllNodes(hasContentDescription(VersionsCopy.rowSpoken(c), substring = true)).assertCountEquals(0)
+        compose.onNode(hasContentDescription(VersionsCopy.rowSpoken(b), substring = true)).assertExists()
     }
 
     @Test

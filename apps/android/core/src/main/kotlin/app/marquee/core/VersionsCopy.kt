@@ -7,6 +7,7 @@ import app.marquee.core.model.Group
 import app.marquee.core.model.Reason
 import app.marquee.core.model.RowOrigin
 import app.marquee.core.model.SectionQuality
+import app.marquee.core.model.SourceKind
 import app.marquee.core.model.VersionRow
 import app.marquee.core.model.VersionStatus
 import app.marquee.core.model.VersionsSnapshot
@@ -435,6 +436,88 @@ object VersionsCopy {
             snapshot?.smaller?.takeIf { it.key != best }?.let { StreamChoiceCopy.SMALLER to it },
             snapshot?.sharper?.takeIf { it.key != best }?.let { StreamChoiceCopy.SHARPER to it },
         )
+    }
+
+    /** A kind chip (plans/plugins-and-marketplace.md 4.2): its kind (null: All), its words, its count and its spoken label. */
+    data class KindChip(
+        val kind: SourceKind?,
+        val label: String,
+        val count: Int,
+        val spoken: String,
+    ) {
+        /** The count as the chip shows it: "1,204". */
+        val note: String get() = String.format(Locale.US, "%,d", count)
+    }
+
+    private val KINDS = listOf(SourceKind.Torrent, SourceKind.Direct, SourceKind.Debrid)
+
+    /**
+     * The kind chips: All, then each kind listed (the pick counts), with their counts; none while fewer than two kinds
+     * are listed, or nothing plays.
+     */
+    fun kinds(snapshot: VersionsSnapshot?): List<KindChip> {
+        val rows = listOfNotNull(snapshot?.recommended) + snapshot?.rows.orEmpty()
+        val kinds = KINDS.filter { k -> rows.any { it.kind == k } }
+        if (kinds.size < 2) return emptyList()
+
+        fun chip(kind: SourceKind?): KindChip {
+            val label =
+                when (kind) {
+                    null -> StreamChoiceCopy.KIND_ALL
+                    SourceKind.Debrid -> snapshot?.debridService ?: StreamChoiceCopy.KIND_NAMES.getValue(kind)
+                    else -> StreamChoiceCopy.KIND_NAMES.getValue(kind)
+                }
+            val n = if (kind == null) rows.size else rows.count { it.kind == kind }
+            val versions = StreamChoiceCopy.counted("versions", n)
+            return KindChip(
+                kind,
+                label,
+                n,
+                StreamChoiceCopy.KIND_SPOKEN.replace("{kind}", label).replace("{versions}", versions),
+            )
+        }
+        return listOf(chip(null)) + kinds.map(::chip)
+    }
+
+    /**
+     * [snapshot] under [kind] (null is All, the snapshot as the core sent it): the card is the kind's first row in the
+     * core's order, the rows and sections list the rest of the kind, and the shortcuts, relative to the core's pick, go.
+     * A kind that has no chip now is All.
+     */
+    fun ofKind(
+        snapshot: VersionsSnapshot?,
+        kind: SourceKind?,
+    ): VersionsSnapshot? {
+        if (snapshot == null || kinds(snapshot).none { it.kind != null && it.kind == kind }) return snapshot
+        val all = listOfNotNull(snapshot.recommended) + snapshot.rows
+        val card = all.first { it.kind == kind }
+        val rows = all.filter { it.kind == kind && it.key != card.key }
+        val keys = rows.mapTo(HashSet()) { it.key }
+        return snapshot.copy(
+            recommended = card,
+            rows = rows,
+            smaller = null,
+            sharper = null,
+            sections =
+                snapshot.sections
+                    .map { it.copy(keys = it.keys.filter(keys::contains)) }
+                    .filter { it.keys.isNotEmpty() },
+        )
+    }
+
+    /** The card's kicker: [all] (by form) under All, else "Best torrent", "Best direct link", "Best on Real-Debrid". */
+    fun kicker(
+        snapshot: VersionsSnapshot?,
+        kind: SourceKind?,
+        all: String,
+    ): String {
+        if (kind == null || kinds(snapshot).none { it.kind == kind }) return all
+        val service = snapshot?.debridService
+        return if (kind == SourceKind.Debrid && service != null) {
+            StreamChoiceCopy.KIND_BEST_SERVICE.replace("{service}", service)
+        } else {
+            StreamChoiceCopy.KIND_BEST.getValue(kind)
+        }
     }
 
     /** What a zero-playable state offers on the Versions page. */

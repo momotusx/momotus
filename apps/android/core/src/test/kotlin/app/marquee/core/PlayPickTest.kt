@@ -29,6 +29,7 @@ class PlayPickTest {
             failoverCount = 0,
             line = VersionsFixtures.line,
             sourceClass = VersionsFixtures.sourceClass,
+            kind = VersionsFixtures.kind,
             score = VersionsFixtures.score,
         )
 

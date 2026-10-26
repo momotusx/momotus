@@ -185,6 +185,22 @@ class StreamChoiceCopyTest {
                     },
                 )
                 put(
+                    "kind",
+                    buildJsonObject {
+                        put("label", KIND_LABEL)
+                        put("all", KIND_ALL)
+                        for ((k, w) in KIND_NAMES) put(k.wire, w)
+                        put("a11y", KIND_SPOKEN)
+                        put(
+                            "best",
+                            buildJsonObject {
+                                for ((k, w) in KIND_BEST) put(k.wire, w)
+                                put("service", KIND_BEST_SERVICE)
+                            },
+                        )
+                    },
+                )
+                put(
                     "player",
                     buildJsonObject {
                         put("finding", FINDING_BEST)

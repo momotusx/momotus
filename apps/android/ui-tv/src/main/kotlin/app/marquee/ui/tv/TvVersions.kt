@@ -22,6 +22,7 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -66,6 +67,7 @@ import app.marquee.core.VersionsCopy.EmptyStep
 import app.marquee.core.model.EmptyKind
 import app.marquee.core.model.EmptyVersions
 import app.marquee.core.model.LearnedNote
+import app.marquee.core.model.SourceKind
 import app.marquee.core.model.VersionRow
 import app.marquee.core.model.VersionsSnapshot
 import app.marquee.core.views.VersionsView
@@ -73,6 +75,7 @@ import app.marquee.core.views.ViewStatus
 import app.marquee.design.BadgeLook
 import app.marquee.design.BadgeRow
 import app.marquee.design.CapsLabel
+import app.marquee.design.Chip
 import app.marquee.design.FocusInk
 import app.marquee.design.GlassBar
 import app.marquee.design.Icons
@@ -86,6 +89,7 @@ import app.marquee.design.ON_ARRIVAL_MS
 import app.marquee.design.PlayFilled
 import app.marquee.design.PrimaryButton
 import app.marquee.design.SecondaryButton
+import app.marquee.design.SegmentTrack
 import app.marquee.design.Skeleton
 import app.marquee.design.StateMessage
 import app.marquee.design.Status
@@ -168,6 +172,16 @@ fun TvVersions(
         }
         onPauseOrDispose {}
     }
+    // The kind chips (plans/plugins-and-marketplace.md 4.2): All is the core's page; a kind shows its own first row in
+    // the card and its rows in the sections. The choice holds while the page is open; a kind with no chip now is All.
+    var kind by remember { mutableStateOf<SourceKind?>(null) }
+    val chips = VersionsCopy.kinds(snapshot)
+    val on = kind.takeIf { k -> chips.any { it.kind == k } }
+    val shown = VersionsCopy.ofKind(snapshot, on)
+    val chooseKind = { k: SourceKind? ->
+        if (snapshot?.recommended != null && !snapshot.frozen) versions?.freeze()
+        kind = k
+    }
     // The list, for Right from the empty state's actions.
     val list = remember { FocusRequester() }
     val listState = rememberLazyListState()
@@ -221,20 +235,22 @@ fun TvVersions(
             }.padding(start = safe.side, end = safe.side, top = safe.top, bottom = safe.bottom),
         verticalArrangement = Arrangement.spacedBy(Marquee.space.l),
     ) {
-        Header(heading, snapshot)
+        Header(heading, snapshot) { KindChips(chips, on, focus, chooseKind) }
         Row(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(Marquee.space.l)) {
             Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.s)) {
-                Pick(snapshot, failure, { versions?.retry() }, focus, onPlay) {
+                Pick(shown, VersionsCopy.kicker(snapshot, on, StreamChoiceCopy.BEST_TV), failure, {
+                    versions?.retry()
+                }, focus, onPlay) {
                     if (empty != null) Empty(empty, step, focus, list.takeIf { empty.rows.isNotEmpty() })
                 }
-                Shortcuts(snapshot, focus, list.takeIf { !snapshot?.rows.isNullOrEmpty() }, onPlay)
+                Shortcuts(shown, focus, list.takeIf { !shown?.rows.isNullOrEmpty() }, onPlay)
             }
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(Marquee.space.s)) {
                 // The rows found when none plays are simply listed, dimmed, as they would rank once the reason is
                 // fixed, each saying why it is dimmed.
                 Sources(
-                    snapshot,
-                    empty?.rows ?: snapshot?.rows.orEmpty(),
+                    shown,
+                    empty?.rows ?: shown?.rows.orEmpty(),
                     empty?.kind,
                     held,
                     listState,
@@ -274,18 +290,23 @@ private fun tone(tone: VersionsCopy.Tone) =
 
 private fun statusTone(row: VersionRow) = if (VersionsCopy.good(row.status)) Status.Ok else Status.Warn
 
-/** The heading in a plain line over "Versions", and at the right how the search goes. */
+/**
+ * The heading in a plain line over "Versions", and at the right how the search goes. Between them [chips], the kind
+ * chips, in the room the heading already takes, so nothing moves when they come.
+ */
 @Composable
 private fun Header(
     heading: String,
     snapshot: VersionsSnapshot?,
+    chips: @Composable () -> Unit,
 ) {
     val colors = Marquee.colors
-    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
+    Row(Modifier.fillMaxWidth(), Arrangement.spacedBy(Marquee.space.m), Alignment.Bottom) {
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(Marquee.space.xs)) {
             MqText(heading, role = TextRole.Callout, color = colors.dim, weight = FontWeight.SemiBold, maxLines = 1)
             MqText("Versions", Modifier.semantics { heading() }, role = TextRole.Title1, maxLines = 1)
         }
+        chips()
         Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(Marquee.space.xs)) {
             VersionsCopy.progress(snapshot)?.let { (text, state) -> StatusWord(text, tone(state)) }
         }
@@ -296,6 +317,7 @@ private fun Header(
 @Composable
 private fun Pick(
     snapshot: VersionsSnapshot?,
+    kicker: String,
     failure: String?,
     onRetry: () -> Unit,
     focus: FocusMemory,
@@ -337,10 +359,10 @@ private fun Pick(
 
             best != null -> {
                 CardParts(
-                    StreamChoiceCopy.BEST_TV,
+                    kicker,
                     VersionsCopy.badges(best),
                     VersionsCopy.why(best),
-                    VersionsCopy.cardSpoken(StreamChoiceCopy.BEST_TV, best),
+                    VersionsCopy.cardSpoken(kicker, best),
                 ) {
                     PrimaryButton(
                         label = "Play this version",
@@ -408,6 +430,44 @@ private fun Shortcuts(
 
 private const val SHORT_SMALLER = "short:smaller"
 private const val SHORT_SHARPER = "short:sharper"
+
+/**
+ * The kind chips (plans/plugins-and-marketplace.md 4.2), only with two kinds or more: one choice at a time, each with
+ * its count. Up from Play enters on the chip that is on, Left and Right move along, OK chooses and keeps the focus,
+ * and Down goes back to Play.
+ */
+@Composable
+private fun KindChips(
+    chips: List<VersionsCopy.KindChip>,
+    on: SourceKind?,
+    focus: FocusMemory,
+    onChoose: (SourceKind?) -> Unit,
+) {
+    if (chips.isEmpty()) return
+    SegmentTrack(
+        Modifier
+            .focusProperties { enter = { focus.requester(kindKey(on)) ?: FocusRequester.Default } }
+            .focusGroup()
+            .selectableGroup(),
+    ) {
+        for (chip in chips) {
+            val key = kindKey(chip.kind)
+            Chip(
+                chip.label,
+                chip.kind == on,
+                { onChoose(chip.kind) },
+                Modifier.focusProperties { down = focus.requester(PLAY) ?: FocusRequester.Default },
+                focusRequester = focus.requesterFor(key),
+                onFocusChange = focus.watch(null, key),
+                detail = chip.note,
+                inTrack = true,
+                spoken = chip.spoken,
+            )
+        }
+    }
+}
+
+private fun kindKey(kind: SourceKind?) = "kind:${kind?.wire ?: "all"}"
 
 /** A release name in monospace, broken at its dots so it wraps whole. */
 @Composable
