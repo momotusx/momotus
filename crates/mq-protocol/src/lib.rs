@@ -61,12 +61,22 @@ pub fn decode_meta(body: &[u8]) -> Result<ResourceResponse, serde_json::Error> {
 /// from: stremio-core turns the field into a link only when the item has
 /// no `links`, so an item with links of its own (genres) would lose it. An
 /// item with an IMDb link already, or with no rating from 0 to 10, is left
-/// as it is.
+/// as it is. Only an IMDb id's rating is IMDb's: under another id (Anime
+/// Kitsu's `kitsu:` items carry Kitsu's own score there) the field is
+/// dropped, so neither this nor stremio-core's own conversion makes it an
+/// IMDb link.
 fn imdb_rating_link(item: &mut serde_json::Value) {
     use serde_json::{Value, json};
     let Some(item) = item.as_object_mut() else {
         return;
     };
+    let Some(id) = item.get("id").and_then(Value::as_str).map(str::to_owned) else {
+        return;
+    };
+    if !id.starts_with("tt") {
+        item.remove("imdbRating");
+        return;
+    }
     let rating = match item.get("imdbRating") {
         Some(Value::String(s)) => s.trim().to_owned(),
         Some(Value::Number(n)) => n.as_f64().map_or_else(String::new, |f| format!("{f:.1}")),
@@ -83,10 +93,7 @@ fn imdb_rating_link(item: &mut serde_json::Value) {
             .and_then(Value::as_str)
             .is_some_and(|c| c.eq_ignore_ascii_case("imdb"))
     };
-    let url = match item.get("id").and_then(Value::as_str) {
-        Some(id) if id.starts_with("tt") => format!("https://www.imdb.com/title/{id}/"),
-        _ => "https://www.imdb.com/".to_owned(),
-    };
+    let url = format!("https://www.imdb.com/title/{id}/");
     let link = json!({"name": rating, "category": "imdb", "url": url});
     match item.get_mut("links") {
         Some(Value::Array(links)) if links.iter().any(is_imdb) => {}

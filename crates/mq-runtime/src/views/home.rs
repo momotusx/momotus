@@ -1373,13 +1373,14 @@ fn tile_from_continue(
 pub(crate) fn imdb_rating(p: &mq_protocol::MetaItemPreview) -> Option<String> {
     p.links
         .iter()
-        .find(|l| {
-            l.category.eq_ignore_ascii_case("imdb")
-                && l.url
-                    .host_str()
-                    .is_some_and(|h| h == "imdb.com" || h.ends_with(".imdb.com"))
-        })
+        .find(|l| l.category.eq_ignore_ascii_case("imdb") && is_imdb_host(&l.url))
         .map(|l| l.name.clone())
+}
+
+/// A link to imdb.com or one of its hosts (www, m).
+fn is_imdb_host(url: &url::Url) -> bool {
+    url.host_str()
+        .is_some_and(|h| h == "imdb.com" || h.ends_with(".imdb.com"))
 }
 
 #[cfg(test)]
@@ -1445,6 +1446,28 @@ mod tests {
         assert_eq!(tiles[0].ratings.imdb, None);
         assert_eq!(tiles[1].ratings.imdb.as_deref(), Some("9.1"));
         assert_eq!(tiles[2].ratings.imdb.as_deref(), Some("9.5"));
+    }
+
+    #[test]
+    fn imdb_hosts_and_their_lookalikes() {
+        let host = |u: &str| super::is_imdb_host(&url::Url::parse(u).unwrap());
+        for ok in [
+            "https://imdb.com/title/tt1",
+            "https://www.imdb.com/title/tt1/",
+            "http://m.imdb.com/title/tt1",
+        ] {
+            assert!(host(ok), "{ok}");
+        }
+        for not in [
+            "https://imdb.com.evil.net/title/tt1",
+            "https://evilimdb.com/title/tt1",
+            "https://imdb.com@evil.net/title/tt1",
+            "https://kitsu.io/anime/x",
+            "stremio:///detail/movie/tt1",
+            "data:text/plain,imdb.com",
+        ] {
+            assert!(!host(not), "{not}");
+        }
     }
 
     #[test]

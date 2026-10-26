@@ -1146,6 +1146,7 @@ fn details(
             .map(|l| l.name.clone())
             .collect()
     };
+    let rating = super::home::imdb_rating(p);
     TitleDetails {
         id: p.id.clone(),
         kind: p.r#type.clone(),
@@ -1166,8 +1167,8 @@ fn details(
         cast: links("Cast"),
         directors: links("Directors"),
         writers: links("Writers"),
-        rating: super::home::imdb_rating(p),
-        ratings: Ratings::of(super::home::imdb_rating(p).as_deref()),
+        ratings: Ratings::of(rating.as_deref()),
+        rating,
         imdb_url: imdb
             .filter(|id| crate::segments::is_imdb(id))
             .map(|id| format!("https://www.imdb.com/title/{id}/")),

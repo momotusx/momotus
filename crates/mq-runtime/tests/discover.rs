@@ -1152,3 +1152,136 @@ async fn a_repeated_page_is_asked_once_more_past_itself() {
     // page ends the list with no second try.
     assert_eq!(*asked.lock().unwrap(), [0, 20, 40, 60, 80, 100]);
 }
+
+/// A paged movie catalog whose answer to each `skip` comes from `page`
+/// (the ids, or `None` for a 503), recording the skips asked.
+async fn paged(
+    page: impl Fn(usize, usize) -> Option<Vec<usize>> + Send + Sync + 'static,
+) -> (AddonRow, Arc<Mutex<Vec<usize>>>) {
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    let asked = Arc::new(Mutex::new(Vec::new()));
+    let (log, page) = (asked.clone(), Arc::new(page));
+    tokio::spawn(async move {
+        while let Ok((mut socket, _)) = listener.accept().await {
+            let (log, page) = (log.clone(), page.clone());
+            tokio::spawn(async move {
+                let mut buf = [0u8; 2048];
+                let n = socket.read(&mut buf).await.unwrap_or(0);
+                let head = String::from_utf8_lossy(&buf[..n]).into_owned();
+                let skip: usize = head
+                    .split_whitespace()
+                    .nth(1)
+                    .and_then(|p| p.split("skip=").nth(1))
+                    .and_then(|s| s.trim_end_matches(".json").parse().ok())
+                    .unwrap_or(0);
+                let times = {
+                    let mut log = log.lock().unwrap();
+                    log.push(skip);
+                    log.iter().filter(|s| **s == skip).count()
+                };
+                let (status, body) = match page(skip, times) {
+                    Some(ids) => {
+                        let metas: Vec<_> = ids
+                            .into_iter()
+                            .map(|i| serde_json::json!({"id": format!("tt{i}"), "type": "movie", "name": format!("M{i}")}))
+                            .collect();
+                        ("200 OK", serde_json::json!({ "metas": metas }).to_string())
+                    }
+                    None => ("503 Service Unavailable", "{}".to_owned()),
+                };
+                let reply = format!(
+                    "HTTP/1.1 {status}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                    body.len()
+                );
+                let _ = socket.write_all(reply.as_bytes()).await;
+            });
+        }
+    });
+    let manifest = serde_json::json!({
+        "id": "paged", "version": "1.0.0", "name": "Paged", "types": ["movie"], "resources": ["catalog"],
+        "catalogs": [{"type": "movie", "id": "top", "name": "Popular", "extra": [{"name": "skip"}]}]
+    });
+    let row = AddonRow {
+        transport_url: format!("http://{addr}/manifest.json"),
+        manifest_json: manifest.to_string(),
+        position: 0,
+        enabled: true,
+        allow_private: true,
+    };
+    (row, asked)
+}
+
+async fn paged_view(row: AddonRow) -> (Core, DiscoverView) {
+    let core = Core::temporary("p").unwrap();
+    core.library()
+        .set_addons(core.profile(), &[row], &core.hlc())
+        .unwrap();
+    let view = DiscoverView::open(&core);
+    (core, view)
+}
+
+/// A normal paged addon (pages of 50, an empty page at the end) is asked
+/// each page once: the repeat rule asks nothing more.
+#[tokio::test]
+async fn a_normal_paged_list_asks_each_page_once() {
+    let (row, asked) = paged(|skip, _| {
+        Some(if skip >= 100 {
+            vec![]
+        } else {
+            (skip..skip + 50).collect()
+        })
+    })
+    .await;
+    let (_core, view) = paged_view(row).await;
+    until(&view, |s| s.state == DiscoverState::Ready).await;
+    view.load_more();
+    until(&view, |s| s.items.len() == 100).await;
+    view.load_more();
+    until(&view, |s| s.state == DiscoverState::End).await;
+    assert_eq!(*asked.lock().unwrap(), [0, 50, 100]);
+}
+
+/// The ask past a repeated page fails: the list keeps what it has, and the
+/// next load asks the same page again.
+#[tokio::test]
+async fn a_failed_ask_past_a_repeat_is_asked_again() {
+    let (row, asked) = paged(|skip, times| match skip {
+        0..40 => Some((0..20).collect()),
+        40 if times == 1 => None,
+        40..60 => Some((40..60).collect()),
+        _ => Some(vec![]),
+    })
+    .await;
+    let (_core, view) = paged_view(row).await;
+    until(&view, |s| s.state == DiscoverState::Ready).await;
+    view.load_more();
+    until(&view, |s| matches!(s.state, DiscoverState::Failed { .. })).await;
+    assert_eq!(ids(&view).len(), 20, "what it had is kept");
+    view.load_more();
+    until(&view, |s| s.items.len() == 40).await;
+    assert_eq!(*asked.lock().unwrap(), [0, 20, 40, 20, 40]);
+}
+
+/// Pages that overlap the one before by a few titles: each title once, in
+/// order, and the list goes on to its end.
+#[tokio::test]
+async fn overlapping_pages_list_each_title_once() {
+    let (row, _) = paged(|skip, _| {
+        Some(if skip >= 30 {
+            vec![]
+        } else {
+            (skip.saturating_sub(2)..(skip + 8).min(30)).collect()
+        })
+    })
+    .await;
+    let (_core, view) = paged_view(row).await;
+    until(&view, |s| s.state == DiscoverState::Ready).await;
+    while view.snapshot().state == DiscoverState::Ready {
+        view.load_more();
+        until(&view, |s| s.state != DiscoverState::Loading).await;
+    }
+    let want: Vec<String> = (0..30).map(|i| format!("tt{i}")).collect();
+    assert_eq!(ids(&view), want);
+    assert_eq!(view.snapshot().state, DiscoverState::End);
+}
