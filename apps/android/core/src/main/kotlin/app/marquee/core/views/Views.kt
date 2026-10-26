@@ -228,18 +228,29 @@ class DiscoverView(
     client: CoreClient,
     scope: CoroutineScope,
 ) : RecordView<DiscoverSnapshot>(client, scope, "discover", NO_PARAMS, DiscoverSnapshot.serializer()) {
+    /**
+     * Changes the kind, service, sort, genre or decade (plans/discover-v2.md section 4); a kind and a genre
+     * with nothing else, or a catalog, is a link the core starts from a clean slate. The service and the
+     * decade take a [GenreChange] too: keep, clear (All, Any year) or set.
+     */
     fun select(
         kind: String? = null,
         catalog: String? = null,
         genre: GenreChange = GenreChange.Keep,
+        platform: GenreChange = GenreChange.Keep,
+        sort: String? = null,
+        decade: GenreChange = GenreChange.Keep,
     ) = post(
         command("select") {
             kind?.let { put("kind", it) }
             catalog?.let { put("catalog", it) }
-            when (genre) {
-                GenreChange.Keep -> Unit
-                GenreChange.Clear -> put("genre", JsonNull)
-                is GenreChange.To -> put("genre", genre.genre)
+            sort?.let { put("sort", it) }
+            for ((key, change) in listOf("genre" to genre, "platform" to platform, "decade" to decade)) {
+                when (change) {
+                    GenreChange.Keep -> Unit
+                    GenreChange.Clear -> put(key, JsonNull)
+                    is GenreChange.To -> put(key, change.genre)
+                }
             }
         },
     )

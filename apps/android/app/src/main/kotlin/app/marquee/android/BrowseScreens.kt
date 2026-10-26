@@ -3,6 +3,7 @@ package app.marquee.android
 import androidx.activity.compose.LocalActivity
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -25,6 +26,7 @@ import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -40,6 +42,8 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.TextStyle
@@ -51,6 +55,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import app.marquee.core.DiscoverCopy
 import app.marquee.core.SearchCopy
 import app.marquee.core.TileCopy
 import app.marquee.core.model.DiscoverState
@@ -555,36 +560,108 @@ fun DiscoverScreen(
 
             else -> {
                 full("kinds") {
-                    ChipRow("Type", snapshot.kinds.map { it.first to it.second }, snapshot.kind, 0.dp) { kind ->
-                        if (kind != null) view.select(kind = kind)
-                    }
-                }
-                full("catalogs") {
-                    // A catalog by its name alone, never its addon's (design/DECISION.md, Shelves).
-                    ChipRow(
-                        "Catalog",
-                        snapshot.catalogs.map { it.id to it.name },
-                        snapshot.catalog,
-                        0.dp,
-                    ) { catalog -> if (catalog != null) view.select(catalog = catalog) }
-                }
-                if (snapshot.genres.isNotEmpty()) {
-                    full("genres") {
-                        val all: List<Pair<String?, String>> =
-                            if (snapshot.genreRequired) emptyList() else listOf(null to "All")
-                        ChipRow("Genre", all + snapshot.genres.map { it to it }, snapshot.genre, 0.dp) { genre ->
-                            view.select(genre = if (genre == null) GenreChange.Clear else GenreChange.To(genre))
+                    // Movies, Series and Anime are the segmented control; any other kind is in a More pull-down,
+                    // so the control keeps its shape (plans/discover-v2.md 6.1).
+                    val main = snapshot.kinds.filter { it.first in MAIN_KINDS }
+                    val more = snapshot.kinds.filter { it.first !in MAIN_KINDS }
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(Marquee.space.xs),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        SegmentTrack(Modifier.focusRestorer()) {
+                            for ((value, name) in main) {
+                                Chip(name, value == snapshot.kind, { view.select(kind = value) }, inTrack = true)
+                            }
+                        }
+                        if (more.isNotEmpty()) {
+                            val chosen = snapshot.kind?.takeIf { it !in MAIN_KINDS }
+                            PullDown(
+                                "More",
+                                listOf<Pair<String?, String>>(null to "More") + more.map { it.first to it.second },
+                                chosen,
+                            ) {
+                                if (it != null) view.select(kind = it)
+                            }
                         }
                     }
                 }
-                // The catalog by its name, in its failed and empty states too.
-                val chosen = snapshot.catalogs.firstOrNull { it.id == snapshot.catalog }
-                val catalogName = chosen?.name ?: "this catalog"
+                if (snapshot.platforms.isNotEmpty()) {
+                    full("rail") {
+                        // The services by name in our own type, All first (6.6); the chosen one takes the selected fill.
+                        LazyRow(
+                            Modifier.liftRoom(Marquee.tiles.pad).focusRestorer(),
+                            contentPadding = PaddingValues(vertical = Marquee.tiles.pad),
+                            horizontalArrangement = Arrangement.spacedBy(Marquee.space.xs),
+                        ) {
+                            item(key = "all") {
+                                Chip("All", snapshot.platform == null, { view.select(platform = GenreChange.Clear) })
+                            }
+                            items(snapshot.platforms, key = { it.id }) { p ->
+                                Chip(
+                                    p.name,
+                                    snapshot.platform == p.id,
+                                    { view.select(platform = GenreChange.To(p.id)) },
+                                )
+                            }
+                        }
+                    }
+                }
+                full("filters") {
+                    val first = remember { FocusRequester() }
+                    val filtered = snapshot.genre != null || snapshot.decade != null || snapshot.platform != null
+                    Row(
+                        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(Marquee.space.xs),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        if (snapshot.genreChoices.isNotEmpty()) {
+                            val any: List<Pair<String?, String>> =
+                                if (snapshot.genreRequired) {
+                                    emptyList()
+                                } else {
+                                    listOf(null to "Any ${snapshot.genreLabel.lowercase()}")
+                                }
+                            PullDown(
+                                snapshot.genreLabel,
+                                any + snapshot.genreChoices.map { it.name to it.name },
+                                snapshot.genre,
+                                Modifier.focusRequester(first),
+                            ) { view.select(genre = if (it == null) GenreChange.Clear else GenreChange.To(it)) }
+                        }
+                        if (snapshot.decades.isNotEmpty()) {
+                            PullDown(
+                                "Year",
+                                listOf<Pair<String?, String>>(null to "Any year") + snapshot.decades.map { it to it },
+                                snapshot.decade,
+                                if (snapshot.genreChoices.isEmpty()) Modifier.focusRequester(first) else Modifier,
+                            ) { view.select(decade = if (it == null) GenreChange.Clear else GenreChange.To(it)) }
+                        }
+                        if (filtered) {
+                            // Focus moves to the first menu before Clear leaves the row (6.5).
+                            SecondaryButton("Clear", {
+                                runCatching { first.requestFocus() }
+                                view.select(
+                                    genre = GenreChange.Clear,
+                                    platform = GenreChange.Clear,
+                                    decade = GenreChange.Clear,
+                                )
+                            }, spoken = "Clear filters")
+                        }
+                        val sorts: List<Pair<String?, String>> =
+                            snapshot.sorts.map { it.id to it.label } + snapshot.lists.map { "list:${it.id}" to it.name }
+                        if (sorts.isNotEmpty()) {
+                            PullDown("Sort", sorts, snapshot.sort) { if (it != null) view.select(sort = it) }
+                        }
+                    }
+                }
                 val state = snapshot.state
                 when {
                     snapshot.genreRequired && snapshot.genre == null -> {
                         full("pick") {
-                            Note("$catalogName only answers for one genre at a time. Pick a genre above.", side = 0.dp)
+                            Note(
+                                "This list only answers for one ${snapshot.genreLabel.lowercase()} at a time. Pick one above.",
+                                side = 0.dp,
+                            )
                         }
                     }
 
@@ -599,25 +676,24 @@ fun DiscoverScreen(
 
                     snapshot.items.isEmpty() && state is DiscoverState.Failed -> {
                         full("failed-items") {
-                            Note("$catalogName did not load: ${state.reason}", failed = true, side = 0.dp)
+                            Note("This list did not load: ${state.reason}", failed = true, side = 0.dp)
                         }
                     }
 
                     snapshot.items.isEmpty() -> {
-                        full("nothing") { Note("Nothing in $catalogName for this choice.", side = 0.dp) }
+                        full("nothing") { Note(DiscoverCopy.empty(snapshot), side = 0.dp) }
                     }
 
                     else -> {
-                        itemsIndexed(snapshot.items, key = { index, tile -> "${tile.id}#$index" }) { index, tile ->
-                            Poster(tile, onOpen)
+                        itemsIndexed(snapshot.items, key = { index, tile -> "${tile.id}#$index" }) { _, tile ->
+                            Poster(tile, onOpen, caption = DiscoverCopy.caption(snapshot.sort, tile))
                         }
                         full("foot") {
                             val foot =
                                 when (state) {
                                     is DiscoverState.Loading -> "Loading more"
-                                    is DiscoverState.End -> "All ${snapshot.items.size} titles in $catalogName"
                                     is DiscoverState.Failed -> "Could not load more: ${state.reason}"
-                                    else -> "${snapshot.items.size} titles"
+                                    else -> DiscoverCopy.scope(snapshot)
                                 }
                             MqText(
                                 foot,
@@ -632,6 +708,9 @@ fun DiscoverScreen(
         }
     }
 }
+
+/** Movies, Series and Anime: the segmented control (plans/discover-v2.md 6.1). */
+private val MAIN_KINDS = setOf("movie", "series", "anime")
 
 /** A grid item across the whole width. */
 internal fun LazyGridScope.full(
