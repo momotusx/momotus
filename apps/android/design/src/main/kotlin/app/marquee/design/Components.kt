@@ -79,7 +79,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
@@ -819,9 +818,9 @@ fun RoundButton(
                                 Modifier
                             },
                         ),
-                role = TextRole.Caption,
+                role = ROUND_LABEL_ROLE,
                 color = if (tv && focused) colors.text else colors.muted,
-                weight = FontWeight.SemiBold,
+                weight = ROUND_LABEL_WEIGHT,
                 // A narrow slot (equal widths in a row, a large font) wraps the word under its ring.
                 maxLines = 2,
                 textAlign = TextAlign.Center,
@@ -829,6 +828,10 @@ fun RoundButton(
         }
     }
 }
+
+/** The words under a [RoundButton]'s circle: drawn by it, measured by [roundLabelsFit]. */
+private val ROUND_LABEL_ROLE = TextRole.Caption
+private val ROUND_LABEL_WEIGHT = FontWeight.SemiBold
 
 /**
  * Whether a row of [RoundButton]s with their words (`showLabel`) can keep those words, each circle taking an equal
@@ -842,16 +845,8 @@ fun roundLabelsFit(
 ): Boolean {
     if (labels.isEmpty()) return true
     val measurer = rememberTextMeasurer()
-    val role = TextRole.Caption
-    val size = Marquee.type.size(role)
-    val style =
-        TextStyle(
-            fontSize = size,
-            fontFamily = MarqueeFonts.text,
-            fontWeight = FontWeight.SemiBold,
-            letterSpacing = role.tracking?.em ?: TextUnit.Unspecified,
-            lineHeight = size * 1.4f,
-        )
+    // The very style the circles draw their words in.
+    val style = mqTextStyle(ROUND_LABEL_ROLE, weight = ROUND_LABEL_WEIGHT)
     val column = with(LocalDensity.current) { (width / labels.size).roundToPx() }
     return labels.all { label ->
         val whole = measurer.measure(label, style, maxLines = 2, constraints = Constraints(maxWidth = column))

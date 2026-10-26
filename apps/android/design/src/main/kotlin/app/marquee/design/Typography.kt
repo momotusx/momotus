@@ -49,7 +49,7 @@ enum class TextRole(
     internal val display: Boolean get() = tracking != null
 }
 
-internal fun TypeScale.size(role: TextRole): TextUnit =
+private fun TypeScale.size(role: TextRole): TextUnit =
     when (role) {
         TextRole.Hero -> hero
         TextRole.Title1 -> title1
@@ -122,32 +122,45 @@ fun MqText(
     textDirection: TextDirection = TextDirection.Unspecified,
     softWrap: Boolean = true,
 ) {
-    val size = Marquee.type.size(role)
     BasicText(
         text = text,
         modifier = modifier,
         onTextLayout = onTextLayout,
-        style =
-            TextStyle(
-                color = color,
-                fontSize = size,
-                fontFamily = fontFamily ?: if (role.display) MarqueeFonts.display else MarqueeFonts.text,
-                fontWeight = weight ?: if (role.display) FontWeight(Tokens.weight.display) else FontWeight.Normal,
-                letterSpacing =
-                    if (letterSpacing !=
-                        TextUnit.Unspecified
-                    ) {
-                        letterSpacing
-                    } else {
-                        role.tracking?.em ?: TextUnit.Unspecified
-                    },
-                lineHeight = size * (if (role.display) 1.1f else 1.4f),
-                textAlign = textAlign ?: TextAlign.Unspecified,
-                textDirection = textDirection,
-            ),
+        style = mqTextStyle(role, color, weight, letterSpacing, fontFamily, textAlign, textDirection),
         maxLines = maxLines,
         minLines = minLines,
         overflow = overflow,
         softWrap = softWrap,
+    )
+}
+
+/** The style [MqText] draws a [role] in, for text measured before it is drawn (a row deciding whether its words fit). */
+@Composable
+internal fun mqTextStyle(
+    role: TextRole,
+    color: Color = Color.Unspecified,
+    weight: FontWeight? = null,
+    letterSpacing: TextUnit = TextUnit.Unspecified,
+    fontFamily: FontFamily? = null,
+    textAlign: TextAlign? = null,
+    textDirection: TextDirection = TextDirection.Unspecified,
+): TextStyle {
+    val size = Marquee.type.size(role)
+    return TextStyle(
+        color = color,
+        fontSize = size,
+        fontFamily = fontFamily ?: if (role.display) MarqueeFonts.display else MarqueeFonts.text,
+        fontWeight = weight ?: if (role.display) FontWeight(Tokens.weight.display) else FontWeight.Normal,
+        letterSpacing =
+            if (letterSpacing !=
+                TextUnit.Unspecified
+            ) {
+                letterSpacing
+            } else {
+                role.tracking?.em ?: TextUnit.Unspecified
+            },
+        lineHeight = size * (if (role.display) 1.1f else 1.4f),
+        textAlign = textAlign ?: TextAlign.Unspecified,
+        textDirection = textDirection,
     )
 }

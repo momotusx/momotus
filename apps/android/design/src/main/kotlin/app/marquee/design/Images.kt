@@ -27,6 +27,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.unit.Dp
 import coil3.ImageLoader
+import coil3.SingletonImageLoader
 import coil3.compose.AsyncImage
 import coil3.disk.DiskCache
 import coil3.intercept.Interceptor
@@ -266,8 +267,18 @@ fun Backdrop(
         }
     Box(modifier.background(Marquee.colors.surface).then(scrims)) {
         if (under != null) {
+            // Painted at once from the memory cache when a tile drew it (at the tile's size), while its own load runs.
+            val context = LocalContext.current
+            val request =
+                remember(under) {
+                    ImageRequest
+                        .Builder(context)
+                        .data(under)
+                        .placeholderMemoryCacheKey(drawnKey(SingletonImageLoader.get(context), under))
+                        .build()
+                }
             AsyncImage(
-                model = under,
+                model = request,
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 alignment = alignment,
@@ -327,3 +338,18 @@ fun imageKey(
     widthPx: Int,
     heightPx: Int,
 ): String = "$url@${widthPx}x$heightPx"
+
+/** The memory cache's key for [url] as a tile drew it ([imageKey], the largest size kept), or null. */
+internal fun drawnKey(
+    loader: ImageLoader,
+    url: String,
+): MemoryCache.Key? =
+    loader.memoryCache
+        ?.keys
+        ?.filter { it.key.startsWith("$url@") }
+        ?.maxByOrNull { key ->
+            key.key.substringAfterLast('@').split('x').mapNotNull { it.toIntOrNull() }.fold(1) { a, b ->
+                a *
+                    b
+            }
+        }

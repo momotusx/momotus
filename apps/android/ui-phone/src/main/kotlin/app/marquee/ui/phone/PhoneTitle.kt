@@ -393,7 +393,9 @@ private val UNDER_COVER = 180.dp
 @Composable
 private fun coverHeight(): Dp {
     val window = windowDp()
-    return minOf(window.width * 1.5f, window.height * 0.75f, window.height - UNDER_COVER)
+    // The words under it grow with the reader's text size, and so does their room.
+    val room = UNDER_COVER * maxOf(1f, LocalDensity.current.fontScale)
+    return minOf(window.width * 1.5f, window.height * 0.75f, window.height - room)
 }
 
 /**

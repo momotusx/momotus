@@ -3,6 +3,7 @@ package app.marquee.ui.phone
 import android.graphics.Bitmap
 import android.os.Handler
 import android.os.Looper
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -49,6 +50,7 @@ import app.marquee.core.views.TitleView
 import app.marquee.design.Form
 import app.marquee.design.Marquee
 import app.marquee.design.MarqueeTheme
+import app.marquee.design.RemoteImage
 import app.marquee.design.roundLabelsFit
 import coil3.ImageLoader
 import coil3.SingletonImageLoader
@@ -301,8 +303,15 @@ class PhoneTitleActionsTest {
         compose.onAllNodes(hasContentDescription("In Library")).assertCountEquals(0)
     }
 
-    /** Draws [snapshot]'s page and waits for its Play. */
-    private fun draw(snapshot: TitleSnapshot) {
+    /**
+     * Draws [snapshot]'s page and waits for its Play; [before], if given, is drawn first until [beforeDone] says it is
+     * done (a list's tile, as on the way to a title).
+     */
+    private fun draw(
+        snapshot: TitleSnapshot,
+        before: (@Composable () -> Unit)? = null,
+        beforeDone: () -> Boolean = { true },
+    ) {
         client.attach { text ->
             val msg = CoreJson.parseToJsonElement(text).jsonObject
             val id = msg["id"]?.jsonPrimitive?.longOrNull ?: return@attach
@@ -315,19 +324,29 @@ class PhoneTitleActionsTest {
             client.onMessage("""{"id":$id,"ok":true,"result":$result}""")
         }
         val view = TitleView(client, scope, "movie", "tt1")
+        var page by mutableStateOf(before == null)
         compose.setContent {
             MarqueeTheme(Form.Phone) {
-                PhoneTitle(
-                    view,
-                    versions(EmptyKind.Unreachable, EmptyAction.TryAgain).copy(empty = null, done = false),
-                    onPlay = { _, _ -> },
-                    onVersions = {},
-                    onEpisode = {},
-                    onEpisodeVersions = {},
-                )
+                if (page) {
+                    PhoneTitle(
+                        view,
+                        versions(EmptyKind.Unreachable, EmptyAction.TryAgain).copy(empty = null, done = false),
+                        onPlay = { _, _ -> },
+                        onVersions = {},
+                        onEpisode = {},
+                        onEpisodeVersions = {},
+                    )
+                } else {
+                    before?.invoke()
+                }
             }
         }
         compose.waitForIdle()
+        if (!page) {
+            compose.waitUntil(30_000) { beforeDone() }
+            page = true
+            compose.waitForIdle()
+        }
         view.open()
         val deadline = System.currentTimeMillis() + 120_000
         while (compose.onAllNodesWithText("Play").fetchSemanticsNodes().isEmpty()) {
@@ -412,8 +431,11 @@ class PhoneTitleActionsTest {
                         cover.header.details!!.copy(
                             description = "A long synopsis that runs on. ".repeat(20),
                             genres = listOf("Animation", "Fantasy", "Adventure"),
-                            releaseInfo = "2010",
-                            runtime = "15 min",
+                            releaseInfo = "2001–2003",
+                            runtime = "178 min",
+                            ratings =
+                                app.marquee.core.model
+                                    .Ratings(imdb = "8.8"),
                         ),
                 ),
         )
@@ -641,4 +663,67 @@ class PhoneTitleActionsTest {
     @GraphicsMode(GraphicsMode.Mode.NATIVE)
     fun `at twice the text size the circles go without words, which would break mid word`() =
         assertTrue(!wordsFit(2.0f))
+
+    @Test
+    @Config(qualifiers = "w360dp-h700dp")
+    fun `at twice the text size Play is whole on the first screen too`() {
+        RuntimeEnvironment.setFontScale(2.0f)
+        draw(wordy)
+        val (play, window) = playAndWindow()
+        // Clear of a phone's navigation bar too (up to 48 dp, and the app's own bar over it): 56 dp kept free.
+        assertTrue(play <= window - 56f, "Play ends at $play dp of $window: ${window - play} dp from the window's foot")
+    }
+
+    @Test
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun `the small poster paints from the list's memory under the large cover before its own fetch answers`() {
+        // The poster is plain red the first time (the list's tile); after that, and the large cover, never answer.
+        val red =
+            Bitmap
+                .createBitmap(
+                    4,
+                    6,
+                    Bitmap.Config.ARGB_8888,
+                ).apply { eraseColor(android.graphics.Color.RED) }
+                .asImage()
+        val posterAsks =
+            java.util.concurrent.atomic
+                .AtomicInteger()
+        val factory =
+            Fetcher.Factory<Uri> { data, _: Options, _: ImageLoader ->
+                Fetcher {
+                    when (data.toString()) {
+                        "https://a.example/c.jpg" -> awaitCancellation()
+                        "https://a.example/p.jpg" -> if (posterAsks.getAndIncrement() > 0) awaitCancellation()
+                    }
+                    ImageFetchResult(red, isSampled = false, dataSource = DataSource.NETWORK) as FetchResult
+                }
+            }
+        val app = RuntimeEnvironment.getApplication()
+        SingletonImageLoader.setUnsafe(ImageLoader.Builder(app).components { add(factory) }.build())
+        val inMemory = {
+            SingletonImageLoader
+                .get(app)
+                .memoryCache
+                ?.keys
+                ?.any { it.key.startsWith("https://a.example/p.jpg@") } ==
+                true
+        }
+        draw(
+            cover,
+            before = { RemoteImage("https://a.example/p.jpg", 100.dp, 150.dp, "Sintel") },
+            beforeDone = inMemory,
+        )
+        val art = bounds(TITLE_ART_TAG)
+        val deadline = System.currentTimeMillis() + 20_000
+        while (true) {
+            val middle = compose.onRoot().captureToImage().toPixelMap()[art.center.x.toInt(), art.center.y.toInt()]
+            if (middle.red > 0.8f && middle.green < 0.2f) break
+            check(System.currentTimeMillis() < deadline) { "the cover's box shows $middle, not the poster from memory" }
+            Snapshot.sendApplyNotifications()
+            compose.waitForIdle()
+            Thread.sleep(50)
+        }
+        assertTrue(posterAsks.get() >= 2, "the poster's own fetch was asked: ${posterAsks.get()}")
+    }
 }
