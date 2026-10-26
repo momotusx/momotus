@@ -7,6 +7,7 @@ import android.graphics.Color
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
@@ -39,6 +40,9 @@ class MainActivity : ComponentActivity() {
         if (intent.walkLandscape(debuggable) || (BuildConfig.BENCHMARK && asked == "tv")) {
             requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
         }
+        // A debug walk build (its own package: never the owner's app, never a release) holds the screen on while
+        // it is in front, so the phone does not lock between a walk's steps; the device's settings are untouched.
+        if (BuildConfig.WALK) window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         applyBars()
         // The first frame shows the form's page color.
         window.setBackgroundDrawable(

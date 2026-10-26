@@ -151,6 +151,8 @@ androidComponents {
         // never installs over the owner's app (plans/accounts-social-sync.md H14). Empty for every other build.
         val walkSuffix = property("marquee.applicationIdSuffix").toString()
         if (!benchmark && walkSuffix.isNotEmpty()) variant.applicationId.set("app.marquee.android$walkSuffix")
+        val walk = variant.buildType == "debug" && walkSuffix.isNotEmpty()
+        variant.buildConfigFields?.put("WALK", BuildConfigField("boolean", "$walk", "a debug walk build"))
         // One versionCode per ABI APK, so two APKs of one release never share one (arm64 above armeabi-v7a,
         // so a device that runs both takes arm64).
         variant.outputs.forEach { output ->
