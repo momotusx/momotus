@@ -38,6 +38,8 @@ for (const form of ["phone", "desktop", "tv"] as const) {
     await page.clock.runFor(5000);
     await expect.poll(() => activePage(page)).toBe((base + 1) % pages);
     expect(await activeDot(page)).toBe((base + 1) % pages);
+    // The timer's page is not said: the status line stays empty (review r2, R2-3).
+    await expect(page.locator(".hero-said")).toHaveText("");
     // Only the active page carries Play's key.
     expect(await page.locator('[data-f="hero:play"], [data-f="hero:details"]').evaluateAll((els) => els.every((el) => el.closest(".hero-page.on")))).toBe(true);
     if (form !== "tv") {
@@ -45,6 +47,9 @@ for (const form of ["phone", "desktop", "tv"] as const) {
       const target = ((await activePage(page)) + 2) % pages;
       await page.locator(".hero-dots .dot").nth(target).click();
       await expect.poll(() => activePage(page)).toBe(target);
+      // A page chosen by hand is said, as the slide's own label reads.
+      const label = await page.locator(".hero-page").nth(target).getAttribute("aria-label");
+      await expect(page.locator('.hero [role="status"]')).toHaveText(label ?? "");
       await page.mouse.move(1, size.height - 1);
       await page.clock.runFor(30_000);
       expect(await activePage(page)).toBe(target);

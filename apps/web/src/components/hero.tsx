@@ -135,10 +135,14 @@ export function HeroCarousel(props: { heroes: Hero[]; waiting: boolean; playHref
     };
     requestAnimationFrame(step);
   };
+  // A page the viewer chose is said, in the status line under the carousel; the timer's never are (review r2, R2-3).
+  const [said, setSaid] = createSignal("");
+  const say = (i: number) => setSaid(`${i + 1} of ${list().length}, ${list()[i]?.tile.name ?? ""}`);
   const page = (i: number) => {
     if (i < 0 || i >= list().length || i === index()) return;
     pager.go(i, "manual");
     slideTo(i);
+    say(i);
   };
 
   createEffect(() => {
@@ -182,7 +186,10 @@ export function HeroCarousel(props: { heroes: Hero[]; waiting: boolean; playHref
           if (e.intersectionRatio < 0.6 || sliding) continue;
           const i = Number((e.target as HTMLElement).dataset.page);
           if (i === index()) continue;
-          if (manual) pager.go(i, "manual");
+          if (manual) {
+            pager.go(i, "manual");
+            say(i);
+          }
           stopTrailer();
           setIndex(i);
           manual = false;
@@ -301,8 +308,6 @@ export function HeroCarousel(props: { heroes: Hero[]; waiting: boolean; playHref
       <div
         ref={track}
         class="hero-track"
-        // A screen reader hears a page the viewer chose, never the timer's (review r1, S8).
-        aria-live={paused() ? "polite" : "off"}
         data-hscroll="0"
         onScroll={depth}
         onPointerDown={() => (manual = true)}
@@ -374,6 +379,9 @@ export function HeroCarousel(props: { heroes: Hero[]; waiting: boolean; playHref
           </Show>
         </div>
       </Show>
+      <p class="sr hero-said" role="status">
+        {said()}
+      </p>
     </section>
   );
 }
