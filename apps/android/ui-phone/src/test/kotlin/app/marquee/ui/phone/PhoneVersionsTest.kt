@@ -539,6 +539,26 @@ class PhoneVersionsTest {
     }
 
     @Test
+    fun `chips that arrive after the page opened leave Play where it was`() {
+        val a = row("a", ReasonLine.Quick(1204, 2 * gib)).copy(quality = "4K")
+        val first = snapshot(a, listOf(row("b", ReasonLine.Few(31))))
+        show(first.copy(kinds = listOf(KindChip(SourceKind.Torrent, null, 2))))
+        val play = compose.onNodeWithText("Play this version").fetchSemanticsNode().boundsInRoot
+        val kinds = listOf(KindChip(SourceKind.Torrent, null, 1), KindChip(SourceKind.Direct, null, 1))
+        client.onMessage(
+            """{"sub":7,"updates":[${CoreJson.encodeToString(
+                VersionsSnapshot.serializer(),
+                first.copy(kinds = kinds),
+            )}]}""",
+        )
+        compose.waitUntil(10_000) {
+            Snapshot.sendApplyNotifications()
+            compose.onAllNodesWithContentDescription("All").fetchSemanticsNodes().isNotEmpty()
+        }
+        assertEquals(play, compose.onNodeWithText("Play this version").fetchSemanticsNode().boundsInRoot)
+    }
+
+    @Test
     fun `the chips sit under the card, so a late row never moves Play, and leaving lists every kind again`() {
         val a = row("a", ReasonLine.Quick(1204, 2 * gib)).copy(quality = "4K")
         val kinds = listOf(KindChip(SourceKind.Torrent, null, 37), KindChip(SourceKind.Direct, null, 1))

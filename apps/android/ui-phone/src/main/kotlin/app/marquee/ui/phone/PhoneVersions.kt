@@ -25,6 +25,8 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
@@ -379,6 +381,9 @@ private fun KindChips(
     onChoose: (SourceKind?) -> Unit,
 ) {
     if (chips.isEmpty()) return
+    // The chip that is on stays in view on a narrow track or at a large font.
+    val selected = remember { BringIntoViewRequester() }
+    LaunchedEffect(on, chips.size) { selected.bringIntoView() }
     // Named as a group: "Sources".
     SegmentTrack(Modifier.selectableGroup().semantics { contentDescription = StreamChoiceCopy.KIND_LABEL }) {
         for (chip in chips) {
@@ -386,6 +391,7 @@ private fun KindChips(
                 chip.label,
                 chip.kind == on,
                 { onChoose(chip.kind) },
+                if (chip.kind == on) Modifier.bringIntoViewRequester(selected) else Modifier,
                 detail = chip.note,
                 inTrack = true,
                 spoken = chip.spoken,

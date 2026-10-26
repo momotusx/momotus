@@ -23,6 +23,8 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
@@ -469,6 +471,9 @@ private fun KindChips(
     onChoose: (SourceKind?) -> Unit,
 ) {
     if (chips.isEmpty()) return
+    // The chip that is on stays in view on a narrow track or at a large font.
+    val selected = remember { BringIntoViewRequester() }
+    LaunchedEffect(on, chips.size) { selected.bringIntoView() }
     SegmentTrack(
         Modifier
             .focusProperties { enter = { focus.requester(kindKey(on)) ?: FocusRequester.Default } }
@@ -483,7 +488,9 @@ private fun KindChips(
                 chip.label,
                 chip.kind == on,
                 { onChoose(chip.kind) },
-                Modifier.focusProperties { down = focus.requester(PLAY) ?: FocusRequester.Default },
+                Modifier
+                    .focusProperties { down = focus.requester(PLAY) ?: FocusRequester.Default }
+                    .then(if (chip.kind == on) Modifier.bringIntoViewRequester(selected) else Modifier),
                 focusRequester = focus.requesterFor(key),
                 onFocusChange = focus.watch(null, key),
                 detail = chip.note,
