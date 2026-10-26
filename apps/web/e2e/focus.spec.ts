@@ -371,3 +371,43 @@ test("TV: a focused field is white with its lift and no edge, and its row's prim
   expect(await page.locator('[data-f="pair:start"]').evaluate((el) => getComputedStyle(el).backgroundColor)).toBe("rgba(255, 255, 255, 0.16)");
   await context.close();
 });
+
+// A focus the app did not place (a screen reader's, Tab's, a script's) is the viewer's: a screen's first focus that is
+// still waiting for its list never takes it back. Here the Addons list is held until the focus has moved to the bar
+// with no key pressed, then let go: the focus stays on the bar.
+test("TV: a focus moved without a key stays where it went when the screen's list lands after", async ({ browser }) => {
+  const context = await browser.newContext({ viewport: { width: 1920, height: 1080 }, reducedMotion: "reduce" });
+  let release: (() => void) | null = null;
+  let asked = 0;
+  await context.routeWebSocket(/\/ws$/, (ws) => {
+    const server = ws.connectToServer();
+    ws.onMessage((message) => {
+      const text = String(message);
+      let held = false;
+      try {
+        const m = JSON.parse(text) as { op?: string; view?: string };
+        held = m.op === "subscribe" && m.view === "addons" && ++asked > 1;
+      } catch {
+        // Not JSON: passed on as it is.
+      }
+      if (held) release = () => server.send(text);
+      else server.send(text);
+    });
+  });
+  const page = await context.newPage();
+  const focused = () => page.evaluate(() => (document.activeElement as HTMLElement | null)?.dataset.f ?? null);
+  await page.goto("/settings?form=tv");
+  const addons = page.locator('[data-f="settings:addons"]');
+  await expect(addons).toBeVisible({ timeout: 30_000 });
+  await addons.focus();
+  await page.keyboard.press("Enter");
+  await expect(page).toHaveURL(/\/addons/);
+  await expect.poll(() => release !== null).toBe(true);
+  // No key: the focus moves as a screen reader or a script would move it.
+  await page.locator('[data-f="nav:/settings"]').focus();
+  release?.();
+  await expect(page.locator('[data-f="addon:0:enabled"]')).toBeVisible();
+  await page.waitForTimeout(800);
+  expect(await focused()).toBe("nav:/settings");
+  await context.close();
+});

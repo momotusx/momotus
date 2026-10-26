@@ -213,8 +213,17 @@ export function reveal(el: HTMLElement) {
   glide(page, { top: page.scrollTop + (alignTop ? b.top - p.top - above : b.bottom - p.bottom + below) / k });
 }
 
+// The app is placing the focus (`focusEl`). Any other focus move, one a screen reader, Tab, a script or a screen's own
+// `.focus()` makes, counts as the viewer's input: a first focus still waiting for its list never takes it back.
+let placing = false;
+
 export function focusEl(el: HTMLElement) {
-  el.focus({ preventScroll: true });
+  placing = true;
+  try {
+    el.focus({ preventScroll: true });
+  } finally {
+    placing = false;
+  }
   reveal(el);
 }
 
@@ -486,6 +495,7 @@ export function installFocus(onBack: () => void) {
   }).observe(document.body, { childList: true, subtree: true });
   document.addEventListener("focusin", (e) => {
     const el = e.target as HTMLElement;
+    if (!placing) inputs++;
     const key = el.dataset?.f;
     if (!key) return;
     const group = groupOf(el);
