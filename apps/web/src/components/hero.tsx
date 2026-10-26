@@ -12,7 +12,7 @@ import tokens from "../../../../design/tokens.json";
 import type { Hero } from "../core/generated/Hero";
 import { form } from "../form";
 import { reducedMotion } from "../focus/dom";
-import { bezier, HeroPager } from "../lib/hero-pager";
+import { bezier, frameStep, HeroPager } from "../lib/hero-pager";
 import { capableNow, coverSize, meteredNow, previewsOn, REVEAL_MS, TRAILER_LAYOUT, type TrailerLayout, trailerAllowed } from "../lib/trailers";
 import { ratingParts, titlePath } from "../lib/format";
 import { kindLabel } from "../lib/words";
@@ -150,7 +150,7 @@ export function HeroCarousel(props: { heroes: Hero[]; waiting: boolean; playHref
     let last = performance.now();
     let written = -1;
     let frame = requestAnimationFrame(function loop(now) {
-      const dt = now - last;
+      const dt = frameStep(now, last);
       last = now;
       const running =
         visible && !document.hidden && !hovered && !pressing && !sliding && !paused() && !trailerOn() && !reducedMotion() && untrack(list).length > 1;
@@ -301,6 +301,8 @@ export function HeroCarousel(props: { heroes: Hero[]; waiting: boolean; playHref
       <div
         ref={track}
         class="hero-track"
+        // A screen reader hears a page the viewer chose, never the timer's (review r1, S8).
+        aria-live={paused() ? "polite" : "off"}
         data-hscroll="0"
         onScroll={depth}
         onPointerDown={() => (manual = true)}

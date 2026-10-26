@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { bezier, HeroPager } from "./hero-pager";
+import { bezier, frameStep, HeroPager } from "./hero-pager";
 
 test("the dwell advances to the next page and wraps to the first", () => {
   const p = new HeroPager(3, 8000);
@@ -56,4 +56,14 @@ test("the design's ease starts fast and lands softly", () => {
   expect(ease(0.75)).toBeGreaterThan(0.97);
   const linear = bezier(0, 0, 1, 1);
   expect(linear(0.3)).toBeCloseTo(0.3, 3);
+});
+
+test("a tab coming back from hiding spends a quarter second at most on the dwell (review r1, W7)", () => {
+  expect(frameStep(1016, 1000)).toBe(16);
+  // Ten minutes hidden: the first frame back is one step, so the page does not change at once.
+  expect(frameStep(600_000, 0)).toBe(250);
+  const p = new HeroPager(3, 8000);
+  p.tick(7000, true);
+  expect(p.tick(frameStep(600_000, 0), true)).toBeNull();
+  expect(frameStep(5, 10)).toBe(0);
 });

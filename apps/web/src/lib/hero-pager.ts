@@ -47,6 +47,12 @@ export class HeroPager {
   }
 }
 
+/** The clock's step for one frame, at most a quarter second: a hidden tab runs no frames, and the first one
+ * back must not spend the whole time away on the dwell and page at once (review r1, W7). */
+export function frameStep(now: number, last: number): number {
+  return Math.max(0, Math.min(now - last, 250));
+}
+
 /** CSS's cubic-bezier as a function of time, for the slides the timer drives (the design's ease). */
 export function bezier(x1: number, y1: number, x2: number, y2: number): (t: number) => number {
   const at = (a: number, b: number, t: number) => 3 * a * t * (1 - t) ** 2 + 3 * b * t * t * (1 - t) + t ** 3;
