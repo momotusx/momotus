@@ -12,7 +12,13 @@ export type TitleDetails = { id: string, kind: string, name: string, description
  * IMDb id: show `poster` then, and `poster` too when this one fails to
  * load.
  */
-ratedPoster: string | null, background: string | null, logo: string | null, releaseInfo: string | null, runtime: string | null, genres: Array<string>, cast: Array<string>, directors: Array<string>, 
+ratedPoster: string | null, 
+/**
+ * The poster at the size a phone's title page draws it, across the
+ * screen: metahub's large one (780x1170) when `poster` is metahub's
+ * small or medium, else `poster` as given.
+ */
+cover: string | null, background: string | null, logo: string | null, releaseInfo: string | null, runtime: string | null, genres: Array<string>, cast: Array<string>, directors: Array<string>, 
 /**
  * From the meta's `Writers` links, as `cast` and `directors`.
  */

@@ -40,6 +40,10 @@ pub struct TitleDetails {
     /// IMDb id: show `poster` then, and `poster` too when this one fails to
     /// load.
     pub rated_poster: Option<String>,
+    /// The poster at the size a phone's title page draws it, across the
+    /// screen: metahub's large one (780x1170) when `poster` is metahub's
+    /// small or medium, else `poster` as given.
+    pub cover: Option<String>,
     pub background: Option<String>,
     pub logo: Option<String>,
     pub release_info: Option<String>,
@@ -1108,6 +1112,19 @@ fn episode_label(meta: &MetaItem, video_id: &str) -> Option<String> {
     Some(format!("S{}:E{}", info.season, info.episode))
 }
 
+/// metahub's large poster for its small or medium one; any other URL as given.
+fn large_poster(url: &str) -> String {
+    const METAHUB: &str = "https://images.metahub.space/poster/";
+    let rest = url.strip_prefix(METAHUB);
+    match rest.and_then(|r| {
+        r.strip_prefix("small/")
+            .or_else(|| r.strip_prefix("medium/"))
+    }) {
+        Some(id) => format!("{METAHUB}large/{id}"),
+        None => url.to_owned(),
+    }
+}
+
 fn details(
     meta: &MetaItem,
     source: &str,
@@ -1130,6 +1147,7 @@ fn details(
         description: p.description.clone(),
         poster: p.poster.as_ref().map(|u| u.to_string()),
         rated_poster,
+        cover: p.poster.as_ref().map(|u| large_poster(u.as_str())),
         background: p.background.as_ref().map(|u| u.to_string()),
         logo: p.logo.as_ref().map(|u| u.to_string()),
         release_info: super::home::year_line(p.release_info.as_deref()),
@@ -1167,6 +1185,27 @@ fn details(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The phone's cover: metahub's small or medium poster at its large
+    /// size; another URL, or one already large, as given.
+    #[test]
+    fn the_cover_is_metahubs_large_poster() {
+        let m = "https://images.metahub.space/poster";
+        assert_eq!(
+            large_poster(&format!("{m}/small/tt1/img")),
+            format!("{m}/large/tt1/img")
+        );
+        assert_eq!(
+            large_poster(&format!("{m}/medium/tt1/img")),
+            format!("{m}/large/tt1/img")
+        );
+        assert_eq!(
+            large_poster(&format!("{m}/large/tt1/img")),
+            format!("{m}/large/tt1/img")
+        );
+        let other = "https://m.media-amazon.com/images/M/x._V1_SX250.jpg";
+        assert_eq!(large_poster(other), other);
+    }
 
     /// The view's own kids check: a kids page starts no lookup at all, so
     /// it never waits, renders or reaches the core's refusals. The page is
