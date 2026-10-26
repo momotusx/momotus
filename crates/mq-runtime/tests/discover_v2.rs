@@ -574,3 +574,61 @@ async fn a_decade_looks_through_a_paged_list() {
     assert_eq!(s.scope.looked, Some(100));
     assert_eq!(s.state, DiscoverState::End);
 }
+
+/// The rail's logos are TMDB's watch provider logos, asked once (the owner,
+/// 2026-10-26); a service TMDB has none for keeps its name only, and with no
+/// TMDB token nothing is asked and no logo shows.
+#[tokio::test]
+async fn the_rail_carries_tmdbs_logos() {
+    let w = world(hulu_list(2)).await;
+    let routes: Routes = Arc::new(|path: &str| match path {
+        "/3/watch/providers/movie" => (
+            0,
+            200,
+            serde_json::json!({"results": [
+                {"provider_id": 8, "provider_name": "Netflix", "logo_path": "/netflix.png"},
+                {"provider_id": 99, "provider_name": "Other", "logo_path": "/other.png"}
+            ]})
+            .to_string(),
+        ),
+        _ => (0, 404, "{}".into()),
+    });
+    let (tmdb, asked) = serve(routes).await;
+    let core = Core::temporary("p").unwrap();
+    core.set_tmdb_host(mq_runtime::TmdbHost {
+        url: tmdb,
+        token: Some("test-token".into()),
+        local: true,
+    });
+    core.library()
+        .set_addons("p", &w.rows, &core.hlc())
+        .unwrap();
+    let view = DiscoverView::open(&core);
+    let s = until(&view, |s| s.platforms.iter().any(|p| p.logo.is_some())).await;
+    let logo = |id: &str| {
+        s.platforms
+            .iter()
+            .find(|p| p.id == id)
+            .and_then(|p| p.logo.clone())
+    };
+    assert_eq!(
+        logo("netflix").as_deref(),
+        Some("https://image.tmdb.org/t/p/w154/netflix.png")
+    );
+    assert_eq!(logo("hulu"), None, "TMDB gave none: the name only");
+    drop(view);
+    let again = DiscoverView::open(&core);
+    until(&again, |s| s.platforms.iter().any(|p| p.logo.is_some())).await;
+    assert_eq!(asked.lock().unwrap().len(), 1, "kept, not asked again");
+
+    // No token: nothing is asked, no logo.
+    let plain = Core::temporary("p").unwrap();
+    plain
+        .library()
+        .set_addons("p", &w.rows, &plain.hlc())
+        .unwrap();
+    let view = DiscoverView::open(&plain);
+    let s = until(&view, |s| !s.items.is_empty()).await;
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    assert!(s.platforms.iter().all(|p| p.logo.is_none()));
+}

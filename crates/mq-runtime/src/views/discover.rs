@@ -75,6 +75,10 @@ pub struct CatalogChoice {
 pub struct Platform {
     pub id: String,
     pub name: String,
+    /// The service's logo, TMDB's (plans/discover-v2.md 6.6, the owner,
+    /// 2026-10-26): null until it is fetched, with no TMDB key, or when TMDB
+    /// has none; the name is the tile's words then, and always its label.
+    pub logo: Option<String>,
 }
 
 /// An order the sort menu offers. `id` is what `select {sort}` takes:
@@ -363,6 +367,8 @@ struct State {
     lists: HashMap<String, Arc<Vec<Item>>>,
     /// Services whose Certified Fresh titles are none (kind|service).
     fresh_empty: HashSet<String>,
+    /// Each service's logo link, by service id, once TMDB has answered.
+    logos: HashMap<String, String>,
     /// The id `preview` named: kept until a select or a `None`, so an item
     /// named before its page came is filled in when it does.
     preview: Option<String>,
@@ -449,6 +455,7 @@ impl DiscoverView {
                 shown: 0,
                 lists: HashMap::new(),
                 fresh_empty: HashSet::new(),
+                logos: HashMap::new(),
                 preview: None,
                 remember: 0,
             })),
@@ -467,6 +474,7 @@ impl DiscoverView {
             },
             false,
         );
+        tokio::spawn(fetch_logos(inner.clone()));
         let (watched, library_watch) = (inner.clone(), inner.clone());
         let library = core.library().subscribe();
         let watch = tokio::spawn(async move {
@@ -607,6 +615,29 @@ async fn watch_addons(inner: Arc<Inner>, mut changes: Receiver<Vec<Table>>) {
     }
 }
 
+/// The services' logos from TMDB (kept a day by the core), put on the rail
+/// when they come.
+async fn fetch_logos(inner: Arc<Inner>) {
+    let Some(paths) = inner.core.tmdb_provider_logos().await else {
+        return;
+    };
+    let mut s = lock(&inner.state);
+    s.logos = services::SERVICES
+        .iter()
+        .filter_map(|svc| {
+            let path = paths.get(&svc.tmdb)?;
+            Some((
+                svc.id.to_owned(),
+                format!("{}/w154{path}", mq_tracking::tmdb::IMAGES),
+            ))
+        })
+        .collect();
+    if let Some(kind) = s.snapshot.kind.clone() {
+        s.snapshot.platforms = platforms(&s.catalogs, &kind, &s.logos);
+        inner.snapshot.set(s.snapshot.clone());
+    }
+}
+
 /// The sorts a kind and service offer, in menu order.
 fn sorts(
     catalogs: &[Catalog],
@@ -708,7 +739,7 @@ fn service_lists<'a>(
 }
 
 /// The services the rail offers for a kind, in addon order.
-fn platforms(catalogs: &[Catalog], kind: &str) -> Vec<Platform> {
+fn platforms(catalogs: &[Catalog], kind: &str, logos: &HashMap<String, String>) -> Vec<Platform> {
     let mut out: Vec<Platform> = Vec::new();
     for s in service_lists(catalogs, kind, None)
         .into_iter()
@@ -718,6 +749,7 @@ fn platforms(catalogs: &[Catalog], kind: &str) -> Vec<Platform> {
             out.push(Platform {
                 id: s.id.to_owned(),
                 name: s.name.to_owned(),
+                logo: logos.get(s.id).cloned(),
             });
         }
     }
@@ -938,7 +970,11 @@ impl Inner {
                     Some(p) => p,
                     None => current.1.clone(),
                 }
-                .filter(|p| platforms(&s.catalogs, &kind).iter().any(|x| x.id == *p));
+                .filter(|p| {
+                    platforms(&s.catalogs, &kind, &s.logos)
+                        .iter()
+                        .any(|x| x.id == *p)
+                });
                 genre = match choice.genre.clone() {
                     Some(g) => g,
                     None => current.3.clone(),
@@ -1085,7 +1121,7 @@ impl Inner {
             .filter(|c| c.shelf == kind)
             .map(|c| c.choice.clone())
             .collect();
-        snap.platforms = platforms(&s.catalogs, kind);
+        snap.platforms = platforms(&s.catalogs, kind, &s.logos);
         snap.sorts = sorts(
             &s.catalogs,
             kind,

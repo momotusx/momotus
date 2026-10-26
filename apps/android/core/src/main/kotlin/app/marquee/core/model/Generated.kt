@@ -1057,6 +1057,8 @@ sealed interface PairingSnapshot {
 data class Platform(
     val id: String,
     val name: String,
+    /** The service's logo, TMDB's (plans/discover-v2.md 6.6, the owner, 2026-10-26): null until it is fetched, with no TMDB key, or when TMDB has none; the name is the tile's words then, and always its label. */
+    val logo: String? = null,
 )
 
 @Serializable(with = Playability.Serializer::class)

@@ -4,4 +4,10 @@
  * A streaming service the rail offers: `id` is the stable key apps map to
  * their tile, `name` the name shown.
  */
-export type Platform = { id: string, name: string, };
+export type Platform = { id: string, name: string, 
+/**
+ * The service's logo, TMDB's (plans/discover-v2.md 6.6, the owner,
+ * 2026-10-26): null until it is fetched, with no TMDB key, or when TMDB
+ * has none; the name is the tile's words then, and always its label.
+ */
+logo: string | null, };

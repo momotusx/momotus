@@ -116,6 +116,8 @@ pub(crate) struct Memory {
     tmdb: Kept<tmdb::Finds>,
     scores: Kept<Option<(f64, u64)>>,
     related: Kept<Vec<Found>>,
+    /// TMDB's watch provider logos by provider id (Discover's rail), kept a day.
+    logos: Kept<HashMap<u64, String>>,
 }
 
 #[derive(Clone, Copy)]
@@ -249,6 +251,50 @@ impl Core {
         };
         memory.tmdb.put(imdb.to_owned(), got, now);
         found
+    }
+
+    /// TMDB's watch provider logos, as paths by provider id: asked once a
+    /// day (a failure rests a minute, a 429 quiets TMDB), `None` with no
+    /// token or on a kids profile. Discover's rail turns them into image
+    /// links (plans/discover-v2.md 6.6, the owner, 2026-10-26).
+    pub(crate) async fn tmdb_provider_logos(&self) -> Option<HashMap<u64, String>> {
+        const KEY: &str = "movie";
+        if kids(self) || self.no_tmdb() {
+            return None;
+        }
+        let trakt = self.trakt();
+        let client = {
+            let memory = lock(&trakt.lookups);
+            let now = Instant::now();
+            match memory.logos.held(KEY, now) {
+                Held::Answer(logos) => return Some(logos),
+                Held::Resting => return None,
+                Held::Nothing => {}
+            }
+            if memory.tmdb_quiet.is_some_and(|until| now < until) {
+                return None;
+            }
+            let host = &memory.tmdb_host;
+            Tmdb::new(
+                trakt.http.clone(),
+                &host.url,
+                host.token.as_deref()?,
+                host.local,
+            )
+        };
+        let answer = client.watch_providers().await;
+        let mut memory = lock(&trakt.lookups);
+        let now = Instant::now();
+        if answer.throttled() {
+            memory.tmdb_quiet = Some(now + super::search::quiet_for(retry_after(&answer)));
+        }
+        let got = kept(&answer, tmdb::provider_logos, HashMap::new())?;
+        let logos = match &got {
+            Got::Answer(logos) => Some(logos.clone()),
+            Got::Rest => None,
+        };
+        memory.logos.put(KEY.to_owned(), got, now);
+        logos
     }
 
     /// Trakt's score (rating 0 to 10, votes) for a title of `kind` (`movie`

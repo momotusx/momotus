@@ -52,7 +52,18 @@ impl Tmdb {
     /// TMDB's `find` for an IMDb id (`tt` and digits only: it goes into the
     /// path).
     pub async fn find(&self, imdb: &str) -> Answer {
-        let url = format!("{}/3/find/{imdb}?external_source=imdb_id", self.host);
+        self.get(&format!("/3/find/{imdb}?external_source=imdb_id"))
+            .await
+    }
+
+    /// TMDB's list of watch providers, with their logos (Discover's service
+    /// rail, plans/discover-v2.md 6.6).
+    pub async fn watch_providers(&self) -> Answer {
+        self.get("/3/watch/providers/movie").await
+    }
+
+    async fn get(&self, path: &str) -> Answer {
+        let url = format!("{}{path}", self.host);
         let opts = RequestOptions {
             timeout: TIMEOUT,
             allow_private: self.local,
@@ -68,6 +79,24 @@ impl Tmdb {
                 .await,
         )
     }
+}
+
+/// Where TMDB serves a logo of `size` ("w154") at `path` ("/abc.png").
+pub const IMAGES: &str = "https://image.tmdb.org/t/p";
+
+/// The logo path of each provider `watch_providers` lists, by provider id.
+pub fn provider_logos(body: &Value) -> std::collections::HashMap<u64, String> {
+    body["results"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|p| {
+            let path = p["logo_path"]
+                .as_str()
+                .filter(|l| l.starts_with('/') && !l.contains(".."))?;
+            Some((p["provider_id"].as_u64()?, path.to_owned()))
+        })
+        .collect()
 }
 
 /// What `find` says of an IMDb id.

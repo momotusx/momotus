@@ -3,43 +3,58 @@
 //! Netflix list, and no addon is ever named.
 
 /// A service: its stable key, the name shown, the names a catalog may go by,
-/// and whether its lists belong on the Anime tab whatever their type.
+/// TMDB's watch provider id (for its logo), and whether its lists belong on
+/// the Anime tab whatever their type.
 pub(crate) struct Service {
     pub(crate) id: &'static str,
     pub(crate) name: &'static str,
     names: &'static [&'static str],
+    pub(crate) tmdb: u64,
     pub(crate) anime: bool,
 }
 
-const fn service(id: &'static str, name: &'static str, names: &'static [&'static str]) -> Service {
+const fn service(
+    id: &'static str,
+    name: &'static str,
+    names: &'static [&'static str],
+    tmdb: u64,
+) -> Service {
     Service {
         id,
         name,
         names,
+        tmdb,
         anime: false,
     }
 }
 
+/// TMDB provider ids as `/3/watch/providers/movie` listed them on 2026-10-27.
 pub(crate) const SERVICES: [Service; 10] = [
-    service("netflix", "Netflix", &["netflix"]),
+    service("netflix", "Netflix", &["netflix"], 8),
     service(
         "prime",
         "Prime Video",
         &["prime video", "amazon prime video"],
+        9,
     ),
-    service("disney", "Disney+", &["disney+", "disney plus"]),
-    service("apple", "Apple TV+", &["apple tv+", "apple tv plus"]),
-    service("hbo", "HBO Max", &["hbo max", "max"]),
-    service("paramount", "Paramount+", &["paramount+", "paramount plus"]),
-    service("peacock", "Peacock", &["peacock", "peacock premium"]),
-    service("hulu", "Hulu", &["hulu"]),
+    service("disney", "Disney+", &["disney+", "disney plus"], 337),
+    service("apple", "Apple TV+", &["apple tv+", "apple tv plus"], 350),
+    service("hbo", "HBO Max", &["hbo max", "max"], 1899),
+    service(
+        "paramount",
+        "Paramount+",
+        &["paramount+", "paramount plus"],
+        531,
+    ),
+    service("peacock", "Peacock", &["peacock", "peacock premium"], 386),
+    service("hulu", "Hulu", &["hulu"], 15),
     // Its lists are typed movie and series but hold anime (86 of 91 series,
     // 2026-10-25): they show on the Anime tab only.
     Service {
         anime: true,
-        ..service("crunchyroll", "Crunchyroll", &["crunchyroll"])
+        ..service("crunchyroll", "Crunchyroll", &["crunchyroll"], 283)
     },
-    service("mubi", "Mubi", &["mubi"]),
+    service("mubi", "Mubi", &["mubi"], 11),
 ];
 
 /// The service a catalog's name names: the whole name, case-folded with its
