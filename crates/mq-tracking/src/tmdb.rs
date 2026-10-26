@@ -91,9 +91,15 @@ pub fn provider_logos(body: &Value) -> std::collections::HashMap<u64, String> {
         .into_iter()
         .flatten()
         .filter_map(|p| {
-            let path = p["logo_path"]
-                .as_str()
-                .filter(|l| l.starts_with('/') && !l.contains(".."))?;
+            // A plain file name only: nothing an answer could turn into a query or another host.
+            let path = p["logo_path"].as_str().filter(|l| {
+                l.strip_prefix('/').is_some_and(|f| {
+                    !f.is_empty()
+                        && !f.contains("..")
+                        && f.chars()
+                            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-'))
+                })
+            })?;
             Some((p["provider_id"].as_u64()?, path.to_owned()))
         })
         .collect()
@@ -191,5 +197,24 @@ mod tests {
             true,
         );
         assert!(!format!("{tmdb:?}").contains("secret-token"));
+    }
+}
+
+#[cfg(test)]
+mod logo_tests {
+    use super::provider_logos;
+
+    #[test]
+    fn a_logo_path_is_a_plain_file_name() {
+        let body = serde_json::json!({"results": [
+            {"provider_id": 8, "logo_path": "/abc_D-1.png"},
+            {"provider_id": 9, "logo_path": "//evil.host/x.png"},
+            {"provider_id": 10, "logo_path": "/x.png?y=1"},
+            {"provider_id": 11, "logo_path": "/../x.png"},
+            {"provider_id": 12, "logo_path": "x.png"}
+        ]});
+        let logos = provider_logos(&body);
+        assert_eq!(logos.len(), 1);
+        assert_eq!(logos[&8], "/abc_D-1.png");
     }
 }

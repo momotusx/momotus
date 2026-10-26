@@ -289,7 +289,7 @@ async fn imdb_on_all_services_is_the_union_with_its_scope() {
         s.sort.as_deref() == Some("imdb") && !s.items.is_empty()
     })
     .await;
-    // Netflix answered, Hulu failed twice (tried again once).
+    // Netflix answered, Hulu failed (a set's list is asked once: one 12 s budget).
     assert_eq!(ids(&s), ["tt2", "tt1", "tt3"], "by score, unscored last");
     assert_eq!(s.scope.titles, Some(3));
     assert_eq!(s.scope.failed, 1);
@@ -306,7 +306,7 @@ async fn imdb_on_all_services_is_the_union_with_its_scope() {
         .iter()
         .filter(|p| p.contains("hlu"))
         .count();
-    assert_eq!(hulu, 2, "one more try, no more");
+    assert_eq!(hulu, 1, "a set's list is not asked again");
 }
 
 #[tokio::test]
@@ -631,4 +631,93 @@ async fn the_rail_carries_tmdbs_logos() {
     let s = until(&view, |s| !s.items.is_empty()).await;
     tokio::time::sleep(Duration::from_millis(200)).await;
     assert!(s.platforms.iter().all(|p| p.logo.is_none()));
+}
+
+/// Code review r1 M2: a service's Certified Fresh is judged on every list
+/// answered, never on a partial one at the soft deadline.
+#[tokio::test]
+async fn certified_fresh_is_judged_only_when_every_list_answered() {
+    let w = world(|| {
+        (
+            4500,
+            200,
+            metas(vec![meta(
+                "tt70",
+                "movie",
+                Some(7.0),
+                "2010-01-01",
+                &["Drama"],
+            )]),
+        )
+    })
+    .await;
+    let (_core, view) = open(&w.rows).await;
+    until(&view, |s| !s.items.is_empty()).await;
+    choose(&view, |c| {
+        c.platform = Some(Some("hulu".into()));
+        c.sort = Some("imdb".into());
+    });
+    // Past the soft deadline, before Hulu answers: nothing is judged yet.
+    tokio::time::sleep(Duration::from_millis(4000)).await;
+    let early = view.snapshot();
+    assert_eq!(early.scope.pending, 1, "{:?}", early.scope);
+    assert!(
+        sort_ids(&early).contains(&"fresh"),
+        "judged on a partial answer: {:?}",
+        sort_ids(&early)
+    );
+    let late = until(&view, |s| {
+        s.platform.as_deref() == Some("hulu") && s.scope.pending == 0 && !s.items.is_empty()
+    })
+    .await;
+    assert!(sort_ids(&late).contains(&"fresh"), "{:?}", sort_ids(&late));
+}
+
+/// A catalog of "More lists" with a Period extra, beside the world.
+fn picks(base: &str) -> AddonRow {
+    row(
+        base,
+        "picks",
+        serde_json::json!({
+            "id": "picks", "version": "1.0.0", "name": "Picks", "types": ["movie"], "resources": ["catalog"],
+            "catalogs": [{"type": "movie", "id": "top", "name": "Seeded",
+                "extra": [{"name": "genre", "options": ["This Week", "All Time"]}]}]
+        }),
+        3,
+    )
+}
+
+/// Code review r1 M4 and m9: a list is not on a service (choosing one
+/// clears the service), and a Period carried to a complete set is dropped
+/// and named.
+#[tokio::test]
+async fn a_list_clears_the_service_and_its_period_stays_with_it() {
+    let w = world(hulu_list(2)).await;
+    let base = w.rows[0]
+        .transport_url
+        .trim_end_matches("/cm/manifest.json")
+        .to_owned();
+    let mut rows = w.rows.clone();
+    rows.push(picks(&base));
+    let (_core, view) = open(&rows).await;
+    until(&view, |s| !s.items.is_empty()).await;
+    choose(&view, |c| c.platform = Some(Some("netflix".into())));
+    until(&view, |s| s.platform.as_deref() == Some("netflix")).await;
+    let list = view.snapshot().lists[0].id.clone();
+    choose(&view, |c| {
+        c.sort = Some(format!("list:{list}"));
+        c.genre = Some(Some("This Week".into()));
+    });
+    let s = until(&view, |s| {
+        s.sort.as_deref().is_some_and(|x| x.starts_with("list:"))
+    })
+    .await;
+    assert_eq!(s.platform, None, "a list is not on a service");
+    assert_eq!(s.genre_label, "Period");
+    choose(&view, |c| c.sort = Some("imdb".into()));
+    let s = until(&view, |s| {
+        s.sort.as_deref() == Some("imdb") && !s.items.is_empty()
+    })
+    .await;
+    assert_eq!(s.genre, None, "the period stays with its list");
 }

@@ -39,12 +39,17 @@ const SOFT_DEADLINE: Duration = Duration::from_millis(3500);
 const DECADE_BUDGET: Duration = Duration::from_secs(8);
 /// Pages of a paged list asked at once while a decade looks through it.
 const IN_FLIGHT: usize = 3;
+/// Loads running at once: the current one and the one before it.
+const LOADS: usize = 2;
 /// Matches a decade's look-through stops at, per load.
 const DECADE_FILL: usize = 24;
 /// Tiles of a complete set published at a time.
 const WINDOW: usize = 80;
 /// The remembered choice is written this long after the last change.
 const REMEMBER_AFTER: Duration = Duration::from_millis(500);
+/// A decoded list is asked again after this long (the service lists change
+/// every 6 h; the response cache still answers within its own age).
+const LIST_FRESH: Duration = Duration::from_secs(3600);
 /// Kitsu's Most Popular, as listed: ranks 1 to 20, then 41 to 120 (the
 /// addon answers page one again for a skip of 1 to 39).
 const KITSU_SKIPS: [usize; 5] = [0, 40, 60, 80, 100];
@@ -365,6 +370,8 @@ struct State {
     /// Decoded lists of complete sets, kept while the view lives, so another
     /// order, genre or decade asks nothing.
     lists: HashMap<String, Arc<Vec<Item>>>,
+    /// When each decoded list came.
+    lists_at: HashMap<String, Instant>,
     /// Services whose Certified Fresh titles are none (kind|service).
     fresh_empty: HashSet<String>,
     /// Each service's logo link, by service id, once TMDB has answered.
@@ -386,7 +393,9 @@ struct Inner {
     core: Core,
     state: Arc<Mutex<State>>,
     snapshot: SharedObservable<DiscoverSnapshot>,
-    task: Mutex<Option<JoinHandle<()>>>,
+    /// Every load still running: the latest writes the screen, older ones
+    /// only fill the cache; all stop with the view.
+    task: Mutex<Vec<JoinHandle<()>>>,
 }
 
 /// The kinds the catalogs are filed under, Movies, Series and Anime first,
@@ -454,13 +463,14 @@ impl DiscoverView {
                 set: Vec::new(),
                 shown: 0,
                 lists: HashMap::new(),
+                lists_at: HashMap::new(),
                 fresh_empty: HashSet::new(),
                 logos: HashMap::new(),
                 preview: None,
                 remember: 0,
             })),
             snapshot: SharedObservable::new(snapshot),
-            task: Mutex::new(None),
+            task: Mutex::new(Vec::new()),
         });
         let last = core.prefs().discover;
         inner.choose(
@@ -594,6 +604,8 @@ async fn watch_addons(inner: Arc<Inner>, mut changes: Receiver<Vec<Table>>) {
                 now.clone(),
                 s.snapshot.items.iter_mut(),
             );
+            let (old, new) = (key.clone(), now.clone());
+            crate::views::home::recover_tiles(&inner.core, old, new, s.set.iter_mut());
             s.lists.clear();
             inner.snapshot.set(s.snapshot.clone());
             key = now;
@@ -921,7 +933,7 @@ impl Inner {
             let mut missing_genre = None;
             let mut missing_sort = None;
             let kind;
-            let platform;
+            let mut platform;
             let sort;
             let mut genre;
             let decade;
@@ -1005,6 +1017,10 @@ impl Inner {
                             .unwrap_or_default()
                     }
                 };
+                // A list is not on a service: choosing one clears the service.
+                if sort.starts_with("list:") {
+                    platform = None;
+                }
                 decade = match choice.decade.clone() {
                     Some(d) => d,
                     None => current.4.clone(),
@@ -1039,6 +1055,13 @@ impl Inner {
                                 .flatten()
                         })
                 };
+            }
+            // A Period or Year "genre" belongs to its list only.
+            if s.snapshot.genre_label != "Genre"
+                && s.source.as_ref().map(Source::key) != Some(source.key())
+                && !link
+            {
+                genre = genre.filter(|_| matches!(&source, Source::Paged { .. }));
             }
             let decade = decade.filter(|_| sort != "fresh");
             let key = source.key();
@@ -1088,7 +1111,7 @@ impl Inner {
 
     /// No addon gives anything to browse.
     fn empty(&self, s: &mut State) {
-        if let Some(task) = lock(&self.task).take() {
+        for task in lock(&self.task).drain(..) {
             task.abort();
         }
         s.snapshot = empty_snapshot(&s.catalogs);
@@ -1225,7 +1248,8 @@ impl Inner {
         let (core, state, snapshot) =
             (self.core.clone(), self.state.clone(), self.snapshot.clone());
         // An older load is not aborted: it finishes its lists into the
-        // cache, and its generation keeps it from writing the screen.
+        // cache, and its generation keeps it from writing the screen. Past
+        // `LOADS` the oldest is, so flicking through sorts cannot stack ten.
         let task = tokio::spawn(async move {
             match source {
                 Source::Paged {
@@ -1241,7 +1265,12 @@ impl Inner {
                 } => load_set(core, state, snapshot, generation, lists, order, keep, also).await,
             }
         });
-        *lock(&self.task) = Some(task);
+        let mut tasks = lock(&self.task);
+        tasks.retain(|t| !t.is_finished());
+        tasks.push(task);
+        while tasks.len() > LOADS {
+            tasks.remove(0).abort();
+        }
     }
 
     /// Writes the choice for the profile once it has settled.
@@ -1287,7 +1316,7 @@ fn remember(core: &Core, snap: &DiscoverSnapshot) {
 impl Drop for DiscoverView {
     fn drop(&mut self) {
         self.watch.abort();
-        if let Some(task) = lock(&self.inner.task).take() {
+        for task in lock(&self.inner.task).drain(..) {
             task.abort();
         }
         // A choice made just before leaving is not lost to the debounce.
@@ -1436,6 +1465,10 @@ async fn load_page(
         let mut answered = 0;
         let mut failed = None;
         for (skip, page) in skips.iter().zip(pages) {
+            // A failed page ends the batch there: the next load asks it again, no hole is left.
+            if failed.is_some() {
+                break;
+            }
             match page {
                 Ok(ResourceResponse::Metas { metas }) => {
                     answered += metas.len();
@@ -1468,7 +1501,7 @@ async fn load_page(
         let end = new == 0 || !catalog.pages;
         let done = end || found >= DECADE_FILL || started.elapsed() >= DECADE_BUDGET;
         s.snapshot.state = match failed {
-            Some(reason) if new == 0 => DiscoverState::Failed { reason },
+            Some(reason) => DiscoverState::Failed { reason },
             _ if end => DiscoverState::End,
             _ if done => DiscoverState::Ready,
             _ => DiscoverState::Loading,
@@ -1566,7 +1599,13 @@ async fn load_set(
         let s = lock(&state);
         wanted
             .iter()
-            .filter(|f| !s.lists.contains_key(&f.key()))
+            .filter(|f| {
+                let key = f.key();
+                !s.lists.contains_key(&key)
+                    || s.lists_at
+                        .get(&key)
+                        .is_none_or(|at| at.elapsed() > LIST_FRESH)
+            })
             .cloned()
             .collect()
     };
@@ -1575,7 +1614,7 @@ async fn load_set(
         .map(|f| {
             let core = core.clone();
             async move {
-                let page = fetch_page(&core, &f.catalog, f.genre.as_deref(), f.skip).await;
+                let page = fetch(&core, &f.catalog, f.genre.as_deref(), f.skip, 1).await;
                 (f, page)
             }
         })
@@ -1599,7 +1638,9 @@ async fn load_set(
                             continue;
                         }
                     };
-                    lock(&state).lists.insert(f.key(), Arc::new(items));
+                    let mut s = lock(&state);
+                    s.lists_at.insert(f.key(), Instant::now());
+                    s.lists.insert(f.key(), Arc::new(items));
                 }
                 None => break,
             },
@@ -1663,9 +1704,15 @@ fn compose(
         });
         if let Some(rt) = fresh.and_then(|f| s.lists.get(&f.key()).cloned()) {
             let ids: HashSet<&str> = rt.iter().map(Item::id).collect();
-            if !union.iter().any(|i| ids.contains(i.id()))
-                && s.fresh_empty.insert(format!("{kind}|{platform}"))
-            {
+            let key = format!("{kind}|{platform}");
+            let overlap = union.iter().any(|i| ids.contains(i.id()));
+            // Learned only from every list answered: a slow or failed one says nothing.
+            let changed = if overlap {
+                s.fresh_empty.remove(&key)
+            } else {
+                pending == 0 && failed == 0 && s.fresh_empty.insert(key)
+            };
+            if changed {
                 s.snapshot.sorts = sorts(
                     &s.catalogs,
                     &kind,
@@ -1693,6 +1740,18 @@ fn compose(
         .iter()
         .map(|g| g.name.clone())
         .collect();
+    // A kept genre the whole set does not give: dropped and named, never a ghost choice over an empty grid.
+    if pending == 0
+        && let Some(g) = s.snapshot.genre.clone()
+        && !s
+            .snapshot
+            .genre_choices
+            .iter()
+            .any(|c| c.name.eq_ignore_ascii_case(&g))
+    {
+        s.snapshot.genre = None;
+        s.snapshot.missing_genre = Some(g);
+    }
     let set: Vec<Tile> = arrange(
         pool,
         order,
@@ -1735,6 +1794,18 @@ async fn fetch_page(
     genre: Option<&str>,
     skip: usize,
 ) -> Result<ResourceResponse, String> {
+    fetch(core, catalog, genre, skip, 2).await
+}
+
+/// A catalog page in at most `tries` asks (a complete set's lists take one:
+/// its hard timeout is one `TIMEOUT`).
+async fn fetch(
+    core: &Core,
+    catalog: &Catalog,
+    genre: Option<&str>,
+    skip: usize,
+    tries: usize,
+) -> Result<ResourceResponse, String> {
     let mut extra = Vec::new();
     if let Some(genre) = genre {
         extra.push(ExtraValue {
@@ -1755,7 +1826,7 @@ async fn fetch_page(
         extra,
     };
     let mut last = String::new();
-    for _ in 0..2 {
+    for _ in 0..tries {
         match core.addons().fetch(&catalog.addon, &path, TIMEOUT).await {
             Ok(f) => {
                 core.learn_imdb_ids(&f.body);

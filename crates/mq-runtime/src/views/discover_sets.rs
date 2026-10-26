@@ -21,7 +21,10 @@ pub(crate) struct Item {
 
 impl Item {
     pub(crate) fn of(m: mq_protocol::MetaItemPreview, covers: &Covers) -> Self {
-        let imdb = imdb_rating(&m).and_then(|r| r.trim().parse::<f32>().ok());
+        // An addon's own text: "NaN" or "inf" would break the sort's order.
+        let imdb = imdb_rating(&m)
+            .and_then(|r| r.trim().parse::<f32>().ok())
+            .filter(|v| v.is_finite() && (0.0..=10.0).contains(v));
         let date = m.released.map(|d| d.date_naive()).or_else(|| {
             let year: i32 = m.release_info.as_deref()?.get(..4)?.parse().ok()?;
             NaiveDate::from_ymd_opt(year, 7, 1)
@@ -142,9 +145,14 @@ pub(crate) fn genres_of<'a>(items: impl IntoIterator<Item = &'a Item>) -> Vec<(S
 
 /// A name as A to Z compares it: Unicode lowercase, Latin letters with
 /// accents as their base letter (no collation crate in the workspace),
-/// leading articles kept.
+/// leading punctuation skipped ("(500) Days of Summer" under 5, "'Salem's
+/// Lot" under S), leading articles kept.
 pub(crate) fn fold(name: &str) -> String {
     name.to_lowercase()
+        .trim_start_matches(|c: char| !c.is_alphanumeric())
+        .replace('ß', "ss")
+        .replace('æ', "ae")
+        .replace('œ', "oe")
         .chars()
         .map(|c| match c {
             'à'..='å' => 'a',
@@ -290,6 +298,29 @@ mod tests {
             ids(arrange(&s, Order::Oldest, None, None, TODAY())),
             ["tt1", "tt2", "tt3", "tt4", "tt5"]
         );
+    }
+
+    #[test]
+    fn an_imdb_score_that_is_not_a_number_counts_as_none() {
+        let metas = [
+            meta("tt1", "A", Some("NaN"), None, &[]),
+            meta("tt2", "B", Some("inf"), None, &[]),
+            meta("tt3", "C", Some("7.1"), None, &[]),
+            meta("tt4", "D", Some("11"), None, &[]),
+        ];
+        let s = items(&format!(r#"{{"metas":[{}]}}"#, metas.join(",")));
+        assert_eq!(
+            ids(arrange(&s, Order::Imdb, None, None, TODAY())),
+            ["tt3", "tt1", "tt2", "tt4"]
+        );
+    }
+
+    #[test]
+    fn a_to_z_skips_leading_punctuation_and_folds_ligatures() {
+        assert_eq!(fold("'Salem's Lot"), "salem's lot");
+        assert_eq!(fold("(500) Days of Summer"), "500) days of summer");
+        assert_eq!(fold("Straße"), "strasse");
+        assert!(fold("Æon Flux") < fold("Alien"));
     }
 
     #[test]
