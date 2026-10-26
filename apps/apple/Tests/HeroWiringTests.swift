@@ -43,3 +43,15 @@ private func source(_ path: String) throws -> String {
     #expect(settings.contains("@AppStorage(HeroTrailers.previewsKey) private var previewsOn = true"))
     #expect(trailer.contains("defaults.object(forKey: HeroTrailers.previewsKey) as? Bool ?? true"))
 }
+
+@Test func theMacHeroTakesAClickAndDrawsOnlyTheDesignsRingForTheKeyboard() throws {
+    // Review r2, R2-1: owed a 30 s foreground check (a click, Right, Tab); these pin what can be read without one.
+    let carousel = try source("Home/HeroCarousel.swift")
+    #expect(carousel.contains(".focusable(interactions: .edit)"))
+    #expect(carousel.contains(".focusEffectDisabled()"))
+    #expect(carousel.contains(".modifier(FocusRing(shape: RoundedRectangle(cornerRadius: 14, style: .continuous), active: heroFocus))"))
+    #expect(carousel.contains(".onKeyPress(.rightArrow) { key(1) }"))
+    // The ring shows for keyboard navigation only, never for a click.
+    #expect(!FocusRule.shown(focused: true, keyboardNavigation: false))
+    #expect(FocusRule.shown(focused: true, keyboardNavigation: true))
+}
