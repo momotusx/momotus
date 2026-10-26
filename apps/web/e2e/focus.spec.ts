@@ -1,4 +1,4 @@
-import { type Browser, expect, type Page, test } from "@playwright/test";
+import { type Browser, type BrowserContext, expect, type Page, test } from "@playwright/test";
 import { GOT } from "./core";
 import { type Form, FORMS, focusStop, SCREENS, type Screen, visible } from "./screens";
 
@@ -377,7 +377,28 @@ test("TV: a focused field is white with its lift and no edge, and its row's prim
 // with no key pressed, then let go: the focus stays on the bar.
 test("TV: a focus moved without a key stays where it went when the screen's list lands after", async ({ browser }) => {
   const context = await browser.newContext({ viewport: { width: 1920, height: 1080 }, reducedMotion: "reduce" });
-  let release: (() => void) | null = null;
+  const hold = await holdAddons(context);
+  const page = await context.newPage();
+  const focused = () => page.evaluate(() => (document.activeElement as HTMLElement | null)?.dataset.f ?? null);
+  await page.goto("/settings?form=tv");
+  const addons = page.locator('[data-f="settings:addons"]');
+  await expect(addons).toBeVisible({ timeout: 30_000 });
+  await addons.focus();
+  await page.keyboard.press("Enter");
+  await expect(page).toHaveURL(/\/addons/);
+  await expect.poll(() => hold.release !== null).toBe(true);
+  // No key: the focus moves as a screen reader or a script would move it.
+  await page.locator('[data-f="nav:/settings"]').focus();
+  hold.release?.();
+  await expect(page.locator('[data-f="addon:0:enabled"]')).toBeVisible();
+  await page.waitForTimeout(800);
+  expect(await focused()).toBe("nav:/settings");
+  await context.close();
+});
+
+/** Holds the Addons list (its second subscription: the Settings page asks first) until `release`. */
+async function holdAddons(context: BrowserContext) {
+  const hold = { release: null as (() => void) | null };
   let asked = 0;
   await context.routeWebSocket(/\/ws$/, (ws) => {
     const server = ws.connectToServer();
@@ -390,10 +411,18 @@ test("TV: a focus moved without a key stays where it went when the screen's list
       } catch {
         // Not JSON: passed on as it is.
       }
-      if (held) release = () => server.send(text);
+      if (held) hold.release = () => server.send(text);
       else server.send(text);
     });
   });
+  return hold;
+}
+
+// The window or tab regaining focus re-announces the focused element (as an overlay, a voice assistant or a resume
+// hands the TV back): no one moved, so a first focus still waiting for its list lands when the list does.
+test("TV: the window regaining focus is no move: the waiting first focus still lands", async ({ browser }) => {
+  const context = await browser.newContext({ viewport: { width: 1920, height: 1080 }, reducedMotion: "reduce" });
+  const hold = await holdAddons(context);
   const page = await context.newPage();
   const focused = () => page.evaluate(() => (document.activeElement as HTMLElement | null)?.dataset.f ?? null);
   await page.goto("/settings?form=tv");
@@ -402,12 +431,37 @@ test("TV: a focus moved without a key stays where it went when the screen's list
   await addons.focus();
   await page.keyboard.press("Enter");
   await expect(page).toHaveURL(/\/addons/);
-  await expect.poll(() => release !== null).toBe(true);
-  // No key: the focus moves as a screen reader or a script would move it.
-  await page.locator('[data-f="nav:/settings"]').focus();
-  release?.();
-  await expect(page.locator('[data-f="addon:0:enabled"]')).toBeVisible();
-  await page.waitForTimeout(800);
-  expect(await focused()).toBe("nav:/settings");
+  await expect.poll(() => hold.release !== null).toBe(true);
+  // The app has placed a focus on the page while its list is on the way.
+  await expect.poll(focused).toMatch(/^addons:/);
+  await page.evaluate(() => {
+    window.dispatchEvent(new FocusEvent("blur"));
+    window.dispatchEvent(new FocusEvent("focus"));
+    document.activeElement?.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+  });
+  hold.release?.();
+  await expect.poll(focused).toBe("addon:0:enabled");
+  await context.close();
+});
+
+// A screen's own `.focus()` (Calendar's first card of the first day from today) ends the first-focus wait: nothing
+// takes it away later, past the wait's 4 s fallback.
+test("TV: Calendar's own first focus stays where it put it", async ({ browser }) => {
+  const context = await browser.newContext({ viewport: { width: 1920, height: 1080 }, reducedMotion: "reduce" });
+  const page = await context.newPage();
+  await page.goto("/calendar?form=tv");
+  await expect(page.locator(".cal-card").first()).toBeVisible({ timeout: 60_000 });
+  const today = await page.evaluate(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  });
+  const days = await page.locator(".cal-day").evaluateAll((els) => els.map((e) => e.getAttribute("data-day") ?? ""));
+  const first = days.find((d) => d >= today);
+  const at = () => page.evaluate(() => document.activeElement?.closest(".cal-day")?.getAttribute("data-day") ?? null);
+  await expect.poll(at).toBe(first);
+  const key = await page.evaluate(() => (document.activeElement as HTMLElement | null)?.dataset.f ?? null);
+  await page.waitForTimeout(4500);
+  expect(await at()).toBe(first);
+  expect(await page.evaluate(() => (document.activeElement as HTMLElement | null)?.dataset.f ?? null)).toBe(key);
   await context.close();
 });
