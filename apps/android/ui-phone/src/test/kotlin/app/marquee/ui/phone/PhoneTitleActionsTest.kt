@@ -38,6 +38,7 @@ import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.unit.dp
 import app.marquee.core.client.CoreClient
 import app.marquee.core.client.CoreJson
+import app.marquee.core.client.stateThread
 import app.marquee.core.model.CastMember
 import app.marquee.core.model.EmptyAction
 import app.marquee.core.model.EmptyKind
@@ -89,7 +90,6 @@ import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
-import java.util.concurrent.Executors
 import kotlin.coroutines.CoroutineContext
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -105,7 +105,7 @@ class PhoneTitleActionsTest {
     @get:Rule
     val compose = createComposeRule()
 
-    private val executor = Executors.newSingleThreadExecutor { Thread(it, "test-state") }
+    private val executor = stateThread("test-state")
     private val client = CoreClient(executor.asCoroutineDispatcher())
     private val main =
         object : CoroutineDispatcher() {

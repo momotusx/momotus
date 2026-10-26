@@ -23,6 +23,7 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import app.marquee.core.client.CoreClient
 import app.marquee.core.client.CoreJson
+import app.marquee.core.client.stateThread
 import app.marquee.core.model.CastMember
 import app.marquee.core.model.PlayTarget
 import app.marquee.core.model.Ratings
@@ -53,7 +54,6 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
-import java.util.concurrent.Executors
 import kotlin.coroutines.CoroutineContext
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -71,7 +71,7 @@ class PhoneTitleScoresTest {
     @get:Rule
     val compose = createComposeRule()
 
-    private val executor = Executors.newSingleThreadExecutor { Thread(it, "test-state") }
+    private val executor = stateThread("test-state")
     private val client = CoreClient(executor.asCoroutineDispatcher())
     private val main =
         object : CoroutineDispatcher() {

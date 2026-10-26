@@ -1,5 +1,6 @@
 package app.marquee.core.client
 
+import android.os.Looper
 import androidx.compose.runtime.snapshots.Snapshot
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
@@ -26,6 +27,8 @@ import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.longOrNull
 import kotlinx.serialization.json.put
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.ExecutorService
+import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.time.Duration
 
@@ -101,6 +104,22 @@ private class PushGroup<U>(
 ) {
     val updates = ArrayList<U>()
 }
+
+/**
+ * A [CoreClient]'s state thread: one thread with a Looper of its own, never looped. The client applies its
+ * batches there, so the Compose apply observers run there too, and Compose runs a view's layout command at once
+ * when the calling thread's Looper is the view's handler's. A view that is detaching has no handler, so on a
+ * thread with no Looper (null is null) that command touched views off the main thread: a
+ * CalledFromWrongThreadException that failed the whole batch, and in tests the test. With a Looper the command
+ * goes to the view's handler, or nowhere once it is gone.
+ */
+fun stateThread(name: String): ExecutorService =
+    Executors.newSingleThreadExecutor { task ->
+        Thread({
+            Looper.prepare()
+            task.run()
+        }, name)
+    }
 
 /**
  * Client for the core protocol (plans/core-protocol.md), the Kotlin twin of `bridge.ts`.

@@ -34,6 +34,7 @@ import app.marquee.core.SubtitleStep
 import app.marquee.core.client.CoreClient
 import app.marquee.core.client.CoreJson
 import app.marquee.core.client.CoreTransport
+import app.marquee.core.client.stateThread
 import app.marquee.core.model.LanguageChoice
 import app.marquee.core.session.CoreOps
 import app.marquee.design.Form
@@ -56,7 +57,6 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import java.io.File
 import java.util.concurrent.CopyOnWriteArrayList
-import java.util.concurrent.Executors
 import kotlin.coroutines.CoroutineContext
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -72,7 +72,7 @@ class SubtitleStepScreenTest {
     @get:Rule
     val compose = createComposeRule()
 
-    private val executor = Executors.newSingleThreadExecutor { Thread(it, "test-state") }
+    private val executor = stateThread("test-state")
     private val client = CoreClient(executor.asCoroutineDispatcher())
 
     // The step runs on the main looper, as on viewModelScope: SubtitleStep is main-thread only, and its state

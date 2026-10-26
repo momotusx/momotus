@@ -638,6 +638,15 @@ class VersionsCopyTest {
     }
 
     @Test
+    fun `leaving the page lists every kind again only when a kind was asked or listed, never for the player`() {
+        assertTrue(VersionsCopy.resetsKind(SourceKind.Torrent, null, playing = false, changing = false))
+        assertTrue(VersionsCopy.resetsKind(null, SourceKind.Debrid, playing = false, changing = false))
+        assertFalse(VersionsCopy.resetsKind(null, null, playing = false, changing = false))
+        assertFalse(VersionsCopy.resetsKind(SourceKind.Torrent, SourceKind.Torrent, playing = true, changing = false))
+        assertFalse(VersionsCopy.resetsKind(SourceKind.Torrent, SourceKind.Torrent, playing = false, changing = true))
+    }
+
+    @Test
     fun `a row from a core that names no kind decodes as a direct link`() {
         val row =
             CoreJson.decodeFromString(

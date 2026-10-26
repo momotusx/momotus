@@ -6,6 +6,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.junit4.createComposeRule
 import app.marquee.core.client.CoreClient
 import app.marquee.core.client.CoreJson
+import app.marquee.core.client.stateThread
 import app.marquee.core.views.TitleView
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -22,7 +23,6 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import java.util.Collections
-import java.util.concurrent.Executors
 import kotlin.test.assertEquals
 
 /**
@@ -36,7 +36,7 @@ class TitleVisibilityTest {
     @get:Rule
     val compose = createComposeRule()
 
-    private val executor = Executors.newSingleThreadExecutor { Thread(it, "test-state") }
+    private val executor = stateThread("test-state")
     private val client = CoreClient(executor.asCoroutineDispatcher())
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
 

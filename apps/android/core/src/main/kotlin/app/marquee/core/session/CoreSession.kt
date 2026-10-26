@@ -57,7 +57,6 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import java.io.File
-import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.concurrent.thread
 
@@ -87,7 +86,9 @@ class CoreSession(
     private val context: Context,
 ) {
     val metrics = BridgeMetrics()
-    private val stateThread = Executors.newSingleThreadExecutor { Thread(it, "marquee-state") }
+    private val stateThread =
+        app.marquee.core.client
+            .stateThread("marquee-state")
     val client = CoreClient(stateThread.asCoroutineDispatcher(), CoreJson, metrics)
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     val ops = CoreOps(client)

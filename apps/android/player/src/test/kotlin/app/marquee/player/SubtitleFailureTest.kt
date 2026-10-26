@@ -22,6 +22,7 @@ import app.marquee.core.StreamChoiceCopy
 import app.marquee.core.client.CoreClient
 import app.marquee.core.client.CoreJson
 import app.marquee.core.client.CoreLog
+import app.marquee.core.client.stateThread
 import app.marquee.core.model.OtherVersion
 import app.marquee.core.views.PlaybackView
 import com.google.common.util.concurrent.Futures
@@ -47,7 +48,6 @@ import org.robolectric.annotation.Config
 import java.io.IOException
 import java.time.Duration
 import java.util.concurrent.CopyOnWriteArrayList
-import java.util.concurrent.Executors
 import kotlin.coroutines.CoroutineContext
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -65,7 +65,7 @@ class SubtitleFailureTest {
     private val video = "http://127.0.0.1:7780/video.mp4"
     private val subtitle = "http://127.0.0.1:7781/subsense/tur.srt"
 
-    private val executor = Executors.newSingleThreadExecutor { Thread(it, "test-state") }
+    private val executor = stateThread("test-state")
     private val client = CoreClient(executor.asCoroutineDispatcher())
     private val sent = CopyOnWriteArrayList<JsonObject>()
 

@@ -28,6 +28,7 @@ import androidx.compose.ui.test.performScrollToNode
 import app.marquee.core.TileCopy
 import app.marquee.core.client.CoreClient
 import app.marquee.core.client.CoreJson
+import app.marquee.core.client.stateThread
 import app.marquee.core.model.Hero
 import app.marquee.core.model.HomeHeader
 import app.marquee.core.model.HomeRow
@@ -58,7 +59,6 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import java.io.File
-import java.util.concurrent.Executors
 import kotlin.coroutines.CoroutineContext
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -77,7 +77,7 @@ class PhoneHomeShelfTest {
     val compose = createAndroidComposeRule<ComponentActivity>()
 
     private val out = System.getenv("MARQUEE_SHOTS")?.let(::File)
-    private val executor = Executors.newSingleThreadExecutor { Thread(it, "test-state") }
+    private val executor = stateThread("test-state")
     private val client = CoreClient(executor.asCoroutineDispatcher())
     private val main =
         object : CoroutineDispatcher() {

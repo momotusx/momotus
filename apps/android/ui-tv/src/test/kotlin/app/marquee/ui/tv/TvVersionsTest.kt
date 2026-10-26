@@ -49,6 +49,7 @@ import app.marquee.core.StreamChoiceCopy
 import app.marquee.core.VersionsCopy
 import app.marquee.core.client.CoreClient
 import app.marquee.core.client.CoreJson
+import app.marquee.core.client.stateThread
 import app.marquee.core.model.EmptyAction
 import app.marquee.core.model.EmptyKind
 import app.marquee.core.model.EmptyVersions
@@ -96,7 +97,7 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import java.io.File
-import java.util.concurrent.Executors
+import java.util.concurrent.CopyOnWriteArrayList
 import kotlin.coroutines.CoroutineContext
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -109,7 +110,7 @@ class TvVersionsTest {
     @get:Rule
     val compose = createComposeRule()
 
-    private val executor = Executors.newSingleThreadExecutor { Thread(it, "test-state") }
+    private val executor = stateThread("test-state")
     private val client = CoreClient(executor.asCoroutineDispatcher())
     private val main =
         object : CoroutineDispatcher() {
@@ -228,8 +229,11 @@ class TvVersionsTest {
 
     private val undone = mutableListOf<LearnedNote>()
 
-    /** What the screen sent the core, in order. */
-    private val sent = mutableListOf<String>()
+    /** What the screen sent the core, in order: written on the state thread, read on the test thread. */
+    private val sent = CopyOnWriteArrayList<String>()
+
+    /** The screen is composed; false removes it, as leaving the page does. */
+    private val shown = mutableStateOf(true)
 
     /** The screen on a view whose core answers the subscribe with [snapshot]. */
     private fun show(
@@ -251,16 +255,18 @@ class TvVersionsTest {
         val view = VersionsView(client, scope, JsonObject(emptyMap()))
         compose.setContent {
             MarqueeTheme(Form.Tv) {
-                TvVersions(
-                    "Sintel",
-                    view,
-                    FocusMemory(),
-                    onPlay = { played += it },
-                    onAddSource = { sources++ },
-                    onBack = { backs++ },
-                    onUndo = { undone += it },
-                    held = held,
-                )
+                if (shown.value) {
+                    TvVersions(
+                        "Sintel",
+                        view,
+                        FocusMemory(),
+                        onPlay = { played += it },
+                        onAddSource = { sources++ },
+                        onBack = { backs++ },
+                        onUndo = { undone += it },
+                        held = held,
+                    )
+                }
             }
         }
         // The view opens once the screen composed and its recomposer runs: a snapshot the core's state thread
@@ -929,6 +935,69 @@ class TvVersionsTest {
             compose.onAllNodesWithContentDescription(all).fetchSemanticsNodes().isNotEmpty()
         }
         compose.onNodeWithContentDescription("All").assertExists()
+    }
+
+    private fun bounds(text: String) =
+        compose
+            .onNode(hasText(text))
+            .fetchSemanticsNode()
+            .boundsInRoot
+
+    @Test
+    fun `chips that arrive late move neither Play nor the card`() {
+        show(coherent())
+        val play = bounds("Play this version")
+        update(kinds())
+        compose.waitUntil(10_000) {
+            Snapshot.sendApplyNotifications()
+            compose.onAllNodesWithContentDescription("All").fetchSemanticsNodes().isNotEmpty()
+        }
+        assertEquals(play, bounds("Play this version"))
+    }
+
+    private fun hide() {
+        shown.value = false
+        compose.waitForIdle()
+    }
+
+    @Test
+    fun `leaving the page lists every kind again, but not for the player or when nothing was asked`() {
+        show(kinds())
+        compose.waitUntil(5_000) {
+            compose.onAllNodes(isFocused() and hasText("Play this version")).fetchSemanticsNodes().isNotEmpty()
+        }
+        press(Key.DirectionUp)
+        press(Key.DirectionRight)
+        press(Key.DirectionCenter)
+        compose.waitUntil(5_000) { sent.any { "\"setKind\"" in it && "\"torrent\"" in it } }
+        hide()
+        compose.waitUntil(5_000) { sent.any { "\"setKind\"" in it && "\"kind\":null" in it } }
+    }
+
+    @Test
+    fun `leaving for the player keeps the kind the player plays within`() {
+        show(kinds())
+        compose.waitUntil(5_000) {
+            compose.onAllNodes(isFocused() and hasText("Play this version")).fetchSemanticsNodes().isNotEmpty()
+        }
+        press(Key.DirectionUp)
+        press(Key.DirectionRight)
+        press(Key.DirectionCenter)
+        compose.waitUntil(5_000) { sent.any { "\"setKind\"" in it } }
+        press(Key.DirectionDown)
+        press(Key.DirectionCenter)
+        assertEquals(listOf("pick"), played)
+        hide()
+        Thread.sleep(300)
+        assertTrue(sent.none { "\"kind\":null" in it }, "$sent")
+    }
+
+    @Test
+    fun `leaving with no kind asked sends nothing`() {
+        show(kinds())
+        hide()
+        Thread.sleep(300)
+        assertTrue(sent.none { "\"setKind\"" in it }, "$sent")
     }
 
     @Test
