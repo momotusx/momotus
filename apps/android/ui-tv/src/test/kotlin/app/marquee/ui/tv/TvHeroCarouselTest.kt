@@ -334,4 +334,26 @@ class TvHeroCarouselTest {
             }
         assertEquals(1, lefts.distinct().size, "Details moved with Play's words: $lefts")
     }
+
+    @Test
+    fun `a long anime label on one page never moves Details on any page`() {
+        // Review r5, R5-3: "Resume S1:E1122" is wider than the usual widest words.
+        show(
+            listOf(
+                hero("tt1", "First Movie", "movie"),
+                hero("tt2", "The Anime", "series", PlayTarget("tt2:1:1122", "Resume S1:E1122")),
+            ),
+        )
+
+        fun details() =
+            compose
+                .onNodeWithText("Details")
+                .fetchSemanticsNode()
+                .boundsInRoot.left
+        val first = details()
+        press(Key.DirectionRight)
+        press(Key.DirectionRight)
+        waitFor("the anime page") { showing("The Anime") && !showing("First Movie") }
+        assertEquals(first, details(), "Details moved for the anime's long Play")
+    }
 }

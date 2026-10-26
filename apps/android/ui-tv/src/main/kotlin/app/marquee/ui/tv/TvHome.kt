@@ -383,6 +383,7 @@ fun TvHome(
                             heroFrom,
                             at = { heroPageAt(it, heroDir, heroSlide.value) },
                             hasPlay = { heroes.getOrNull(it)?.playable() == true },
+                            playWords = PLAY_WIDEST + heroes.mapNotNull { it.play?.label }.distinct(),
                         ) { to ->
                             heroClock.manual()
                             pageHero(to, if (to > heroPage) 1 else -1)
@@ -568,6 +569,8 @@ private fun TvHero(
     at: (Boolean) -> Float,
     /** Whether page `n` has Play: paging from Play to a page without one first moves focus to Details. */
     hasPlay: (Int) -> Boolean,
+    /** Every label Play can say on these pages, the long ones the core may give included: its place fits them all. */
+    playWords: List<String>,
     onPage: (Int) -> Unit,
 ) {
     val tile = hero.tile
@@ -636,7 +639,7 @@ private fun TvHero(
                                 if (play == null) testTag = TV_PLAY_SLOT
                             },
                         ) {
-                            PLAY_WIDEST.forEach { PrimaryButton(it, {}, icon = PlayFilled, enabled = false) }
+                            playWords.forEach { PrimaryButton(it, {}, icon = PlayFilled, enabled = false) }
                         }
                         if (play != null) {
                             PrimaryButton(
@@ -1085,7 +1088,10 @@ private const val PATIENCE_MS = 3_000L
 /** Play's invisible place on a hero page whose Play may still come. */
 internal const val TV_PLAY_SLOT = "hero-play-slot"
 
-/** The longest words the hero's Play can say ("Resume S12:E10"), measured together: its place is the widest. */
+/**
+ * The longest words the hero's Play usually says ("Resume S12:E10"), measured with the pages' own labels (a long
+ * anime's "Resume S1:E1122"): its place is the widest of them.
+ */
 private val PLAY_WIDEST = listOf("Resume S12:E10", "Play S12:E10", "Play again")
 
 /** Where Home's one-time card goes: under Continue Watching, else first. */
