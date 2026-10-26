@@ -47,6 +47,8 @@ export const SUB_AUTO_PORT = 17826 + shift;
 export const TITLE_SCORES_PORT = 17827 + shift;
 /** The Discover v2 spec's own: a core with the default addons, the real catalogs behind them. */
 export const DISCOVER_PORT = 17828 + shift;
+/** The lists-from-addons spec's own: a core with stremio-addons.net's directory installed. */
+export const ADDON_LISTS_PORT = 17829 + shift;
 /** Every browser a run launches takes these: each name but this machine's resolves to the browser's
  * recorder, whose certificate it does not check, so pages load images and frames from the
  * recording and a run needs the network only to record (none with MQ_E2E_OFFLINE=1). A spec that

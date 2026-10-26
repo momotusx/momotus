@@ -1,7 +1,8 @@
 import { expect, test } from "bun:test";
 import shared from "../../../shared/find-addons-words.json";
 import type { ListedAddon } from "../core/generated/ListedAddon";
-import { action, cardAction, filterEmpty, initial, providesLine, repeatedNames, shows, spoken } from "./find-addons";
+import type { AddonList } from "../core/generated/AddonList";
+import { action, cardAction, filterEmpty, initial, listLabel, matches, providesLine, repeatedNames, shows, spoken } from "./find-addons";
 import { findAddons } from "./words";
 
 const entry = (over: Partial<ListedAddon>): ListedAddon => ({
@@ -82,4 +83,25 @@ test("what a card provides reads as a sentence", () => {
 test("only names shown twice in a list are marked", () => {
   const names = repeatedNames([entry({ name: "Trakt Tv" }), entry({ name: "Trakt Tv" }), entry({ name: "Kitsu" })]);
   expect([...names]).toEqual(["Trakt Tv"]);
+});
+
+const list = (id: string, name: string, host: string | null): AddonList => ({ id, name, host, state: { state: "ready" }, entries: [], more: false });
+
+test("a publisher's list that shares a name with another chip says its host", () => {
+  const official = list("official", "Official", null);
+  const theirs = list("addon-1:official", "Official", "dir.example");
+  const other = list("addon-1:dir", "Directory", "dir.example");
+  const all = [official, list("community", "Community", null), theirs, other];
+  expect(listLabel(official, all)).toBe("Official");
+  expect(listLabel(theirs, all)).toBe("Official, dir.example");
+  expect(listLabel(other, all)).toBe("Directory");
+});
+
+test("search finds every word, case and accents aside, in the name, host or description", () => {
+  const e = entry({ name: "Türkçe Altyazı", host: "subs.example", description: "Subtitles for films" });
+  expect(matches(e, "")).toBe(true);
+  expect(matches(e, "turkce")).toBe(true);
+  expect(matches(e, "TURKÇE films")).toBe(true);
+  expect(matches(e, "subs.example")).toBe(true);
+  expect(matches(e, "turkce series")).toBe(false);
 });

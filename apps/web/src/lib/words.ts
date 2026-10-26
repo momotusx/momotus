@@ -251,6 +251,12 @@ export const findAddons = {
   configure: "Configure",
   turnOn: "Turn on",
   fromHost: "from {host}",
+  fromList: "From {host}",
+  loadingFrom: "Asking {host}",
+  emptyFrom: "Nothing to show from {host} here.",
+  more: "Showing the first {n} of this list.",
+  searchLabel: "Search this list",
+  searchEmpty: "Nothing in this list matches.",
 } as const;
 
 /** Account (the sync page) copy (plans/m7-sync.md, plans/accounts.md 4.3). No protocol words: a device

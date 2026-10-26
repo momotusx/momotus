@@ -14,7 +14,7 @@ import type { ListedAddon } from "../core/generated/ListedAddon";
 import { onProfileReset } from "../core/profiles";
 import { focusEl, isBackKey } from "../focus/dom";
 import { form } from "../form";
-import { type Action, cardAction, type Filter, filterEmpty, filters, initial, providesLine, repeatedNames, shows, spoken } from "../lib/find-addons";
+import { type Action, cardAction, type Filter, filterEmpty, filters, initial, listLabel, matches, providesLine, repeatedNames, shows, spoken } from "../lib/find-addons";
 import { cards, forgetAllCards, forgetCard, runCard } from "../lib/install-cards";
 import { findAddons as w, providesText } from "../lib/words";
 import { InstallField } from "./addons";
@@ -34,10 +34,10 @@ const PAGE = 24;
 /** The list, filter and rendered count, kept in this history entry: Back to
  * the page shows the same cards, so focus finds the card it left. A new visit
  * opens on Official, All. */
-type Picks = { list: string; filter: Filter; shown: number };
+type Picks = { list: string; filter: Filter; shown: number; query: string };
 function savedPicks(): Picks {
   const p = (history.state as { findAddons?: Partial<Picks> } | null)?.findAddons;
-  return { list: p?.list ?? "official", filter: p?.filter ?? "all", shown: p?.shown ?? PAGE };
+  return { list: p?.list ?? "official", filter: p?.filter ?? "all", shown: p?.shown ?? PAGE, query: p?.query ?? "" };
 }
 
 function Card(props: { entry: ListedAddon; fkey: string; sameName: boolean }) {
@@ -165,7 +165,11 @@ function Lists(props: { fresh: boolean; picks: Picks; onPicks: (p: Partial<Picks
   const ready = (id: string) => lists().find((l) => l.id === id)?.state.state === "ready";
   const count = (id: string) => (ready(id) ? lists().find((l) => l.id === id)?.entries.length.toString() : undefined);
   // Each entry keeps its place in the whole list, so its focus key holds across filters.
-  const visible = createMemo(() => (current()?.entries ?? []).map((entry, at) => ({ entry, at })).filter(({ entry }) => shows(entry, props.picks.filter)));
+  const visible = createMemo(() =>
+    (current()?.entries ?? []).map((entry, at) => ({ entry, at })).filter(({ entry }) => shows(entry, props.picks.filter) && matches(entry, props.picks.query)),
+  );
+  // A publisher's list (an addon the user installed) names where it comes from.
+  const host = () => current()?.host ?? null;
   const repeated = createMemo(() => repeatedNames(current()?.entries ?? []));
   const failure = () => {
     const status = view.state.status;
@@ -192,28 +196,48 @@ function Lists(props: { fresh: boolean; picks: Picks; onPicks: (p: Partial<Picks
         <Chips
           label={w.listLabel}
           group="fa-lists"
-          items={[
-            { value: "official", label: w.official, note: count("official") },
-            { value: "community", label: w.communityList, note: count("community") },
-          ]}
+          items={lists().map((l) => ({ value: l.id, label: listLabel(l, lists()), note: count(l.id) }))}
           selected={props.picks.list}
-          onSelect={(list) => props.onPicks({ list, shown: PAGE })}
+          onSelect={(list) => props.onPicks({ list, shown: PAGE, query: "" })}
           autofocus
         />
         <Chips label={w.showLabel} group="fa-filter" items={filters} selected={props.picks.filter} onSelect={(filter) => props.onPicks({ filter, shown: PAGE })} />
       </div>
-      <Show when={props.picks.list === "community"}>
+      <Show when={host()}>
+        {(from) => (
+          <p class="fa-from">
+            <Show when={!tv()} fallback={w.fromList.replace("{host}", from())}>
+              <a href={`https://${from()}/`} target="_blank" rel="noopener noreferrer" data-f="fa:from">
+                {w.fromList.replace("{host}", from())}
+                <ExternalLink aria-hidden />
+              </a>
+            </Show>
+          </p>
+        )}
+      </Show>
+      <Show when={props.picks.list !== "official"}>
         <p class="fa-note">
           <Info aria-hidden />
           {w.community}
         </p>
+      </Show>
+      <Show when={!tv() && ready(props.picks.list) && (current()?.entries.length ?? 0) > 0}>
+        <input
+          class="fa-search"
+          type="search"
+          data-f="fa:search"
+          aria-label={w.searchLabel}
+          placeholder={w.searchLabel}
+          value={props.picks.query}
+          onInput={(e) => props.onPicks({ query: e.currentTarget.value, shown: PAGE })}
+        />
       </Show>
       <div class="fa-tools">
         <Switch>
           <Match when={!failure() && (!current() || current()?.state.state === "loading")}>
             <p class="st warn live" role="status">
               <i class="dot" />
-              {w.loading}
+              {host() ? w.loadingFrom.replace("{host}", host() ?? "") : w.loading}
             </p>
           </Match>
           <Match when={ready(props.picks.list)}>
@@ -250,7 +274,10 @@ function Lists(props: { fresh: boolean; picks: Picks; onPicks: (p: Partial<Picks
           </ul>
         </Match>
         <Match when={current()?.entries.length === 0}>
-          <p class="note">{w.empty}</p>
+          <p class="note">{host() ? w.emptyFrom.replace("{host}", host() ?? "") : w.empty}</p>
+        </Match>
+        <Match when={visible().length === 0 && props.picks.query.trim() !== ""}>
+          <p class="note">{w.searchEmpty}</p>
         </Match>
         <Match when={visible().length === 0 && props.picks.filter !== "all"}>
           <p class="note">{filterEmpty(props.picks.filter as Exclude<Filter, "all">)}</p>
@@ -263,6 +290,9 @@ function Lists(props: { fresh: boolean; picks: Picks; onPicks: (p: Partial<Picks
           </ul>
           <Show when={visible().length > props.picks.shown}>
             <div class="sentinel" ref={more} />
+          </Show>
+          <Show when={current()?.more && visible().length <= props.picks.shown}>
+            <p class="note fa-more">{w.more.replace("{n}", String(current()?.entries.length ?? 0))}</p>
           </Show>
         </Match>
       </Switch>

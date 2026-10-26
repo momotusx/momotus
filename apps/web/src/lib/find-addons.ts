@@ -2,6 +2,7 @@
  * sends facts (`installed`, `configuration`); these rules turn them into one
  * action, the same on every app (plans/m12-addon-discovery.md 3.2). */
 
+import type { AddonList } from "../core/generated/AddonList";
 import type { ListedAddon } from "../core/generated/ListedAddon";
 import { kindLabel, providesText, findAddons as w } from "./words";
 
@@ -89,4 +90,25 @@ export function spoken(entry: ListedAddon, act: Action, sameName: boolean, provi
   const name = verb ? `${verb} ${entry.name}` : entry.name;
   const parts = [name, sameName ? w.fromHost.replace("{host}", entry.host) : null, providesWords.toLowerCase(), act.kind === "none" ? act.word.toLowerCase() : null];
   return parts.filter(Boolean).join(", ");
+}
+
+const nameOf = (list: AddonList) => (list.id === "official" ? w.official : list.id === "community" ? w.communityList : list.name);
+
+/** A list's chip: its name, with its host when another list has the same name
+ * (a publisher may call its list "Official"; Cinemeta's own lists have no host). */
+export function listLabel(list: AddonList, lists: AddonList[]): string {
+  const name = nameOf(list);
+  const same = lists.some((l) => l.id !== list.id && nameOf(l).toLocaleLowerCase("en") === name.toLocaleLowerCase("en"));
+  return same && list.host ? `${name}, ${list.host}` : name;
+}
+
+/** Text compared case and accents aside: "Türkçe" finds "turkce". */
+export const fold = (text: string) => text.normalize("NFD").replace(/\p{M}/gu, "").toLocaleLowerCase("en");
+
+/** The search field's rule: every word of the query in the name, host or description. */
+export function matches(entry: ListedAddon, query: string): boolean {
+  const words = fold(query).split(/\s+/).filter(Boolean);
+  if (!words.length) return true;
+  const text = fold(`${entry.name} ${entry.host} ${entry.description ?? ""}`);
+  return words.every((word) => text.includes(word));
 }

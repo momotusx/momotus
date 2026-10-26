@@ -1,5 +1,6 @@
-import { expect, type Page, test } from "@playwright/test";
-import { SHOTS } from "./core";
+import { type Browser, expect, type Page, test } from "@playwright/test";
+import type { ChildProcess } from "node:child_process";
+import { ADDON_LISTS_PORT, Client, cleanup, PORTS, SHOTS, startBridge } from "./core";
 
 // The live Official list (plans/m12-addon-discovery.md). The setup installed
 // Cinemeta and OpenSubtitles v3; WatchHub is not installed.
@@ -80,4 +81,87 @@ test("TV: a card is one focus stop, Back goes to the chips, and there is no Conf
   await expect(page.locator(".fa-note")).toBeVisible();
   await expect(page.locator(".fa-help").first()).toContainText("on your phone or computer");
   await expect(page.locator('a[data-f$=":configure"]')).toHaveCount(0);
+});
+
+// Lists from an addon the user installed (plans/plugins-and-marketplace.md 7.1),
+// on a core of its own: stremio-addons.net's directory, as recorded.
+test.describe("a directory addon's list", () => {
+  let core: { proc: ChildProcess; data: string } | null = null;
+  const DIRECTORY = "https://stremio-addons.net/api/manifest.json";
+
+  test.beforeAll(async () => {
+    core = await startBridge(ADDON_LISTS_PORT);
+    const c = new Client(`ws://127.0.0.1:${ADDON_LISTS_PORT}/ws`);
+    try {
+      await c.req("installAddon", { url: DIRECTORY });
+      await c.req("setPrefs", { patch: { defaultsSeen: 1 } });
+    } finally {
+      c.close();
+    }
+  });
+  test.afterAll(() => {
+    if (core) cleanup(core.proc, core.data);
+  });
+
+  async function open(browser: Browser, form: string, size: { width: number; height: number }): Promise<Page> {
+    const context = await browser.newContext({ viewport: size, colorScheme: "dark", reducedMotion: "reduce", baseURL: `http://127.0.0.1:${PORTS.vite}` });
+    await context.routeWebSocket(/\/ws$/, (ws) => {
+      const upstream = new WebSocket(`ws://127.0.0.1:${ADDON_LISTS_PORT}/ws`);
+      const early: string[] = [];
+      upstream.addEventListener("open", () => {
+        for (const m of early.splice(0)) upstream.send(m);
+      });
+      upstream.addEventListener("message", (e) => ws.send(String(e.data)));
+      upstream.addEventListener("close", () => ws.close());
+      ws.onMessage((m) => (upstream.readyState === WebSocket.OPEN ? upstream.send(String(m)) : early.push(String(m))));
+      ws.onClose(() => upstream.close());
+    });
+    const page = await context.newPage();
+    await page.goto(`/find-addons?form=${form}`);
+    return page;
+  }
+
+  test("desktop: its own chip, the host it comes from, and a search over the list", async ({ browser }) => {
+    const page = await open(browser, "desktop", { width: 1440, height: 900 });
+    const chip = page.getByRole("radio", { name: /^stremio-addons\.net/ });
+    await expect(chip).toBeVisible({ timeout: 20_000 });
+    // Cinemeta's lists keep their slots.
+    await expect(page.getByRole("radio").first()).toHaveAccessibleName(/^Official/);
+    await chip.click();
+    const from = page.locator(".fa-from a");
+    await expect(from).toHaveText("From stremio-addons.net");
+    await expect(from).toHaveAttribute("href", "https://stremio-addons.net/");
+    await expect(page.locator(".fa-note")).toContainText("Community addons are made by other people");
+    await expect(page.locator(".fa-card:not(.skel)").first()).toBeVisible({ timeout: 20_000 });
+    // The chip counts what the list shows: hundreds of addons.
+    const count = async () => Number((await chip.textContent())?.match(/(\d+)\s*$/)?.[1] ?? 0);
+    await expect.poll(count).toBeGreaterThan(100);
+    const shown = await count();
+    await page.screenshot({ path: `${SHOTS}/find-addons-directory-desktop.jpg`, type: "jpeg", quality: 80 });
+
+    const search = page.getByRole("searchbox", { name: "Search this list" });
+    await search.fill("OpenSubtitles");
+    await expect.poll(async () => page.locator(".fa-card").count()).toBeLessThan(Math.min(shown, 24));
+    for (const text of await page.locator(".fa-card").allInnerTexts()) expect(text.toLowerCase()).toContain("opensubtitles");
+    await search.fill("zzzz no such addon zzzz");
+    await expect(page.locator(".note")).toHaveText("Nothing in this list matches.");
+    // No link of an entry is ever in the page: they may hold an addon's keys.
+    await search.fill("");
+    const hrefs = await page.locator(".fa-card a").evaluateAll((links) => links.map((a) => a.getAttribute("href") ?? ""));
+    for (const href of hrefs) expect(href.endsWith("manifest.json")).toBe(false);
+    await page.context().close();
+  });
+
+  test("TV: the list's chip and its host, with no link to follow", async ({ browser }) => {
+    const page = await open(browser, "tv", { width: 1920, height: 1080 });
+    const chip = page.getByRole("radio", { name: /^stremio-addons\.net/ });
+    await expect(chip).toBeVisible({ timeout: 20_000 });
+    await chip.click();
+    await expect(page.locator(".fa-from")).toHaveText("From stremio-addons.net");
+    await expect(page.locator(".fa-from a")).toHaveCount(0);
+    await expect(page.locator(".fa-card:not(.skel)").first()).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByRole("searchbox")).toHaveCount(0);
+    await page.screenshot({ path: `${SHOTS}/find-addons-directory-tv.jpg`, type: "jpeg", quality: 80 });
+    await page.context().close();
+  });
 });
