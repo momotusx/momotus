@@ -70,6 +70,24 @@ test("TV: Enter on a tab not shown switches at once, with the settle's history, 
 
 test("TV: Back on the bar goes Home from under a pushed Settings page, past it", async ({ browser }) => {
   const context = await browser.newContext({ viewport: { width: 1920, height: 1080 }, reducedMotion: "reduce" });
+  // The Addons page's own list answers 600 ms late, as on a loaded core: its first focus (the first addon) comes
+  // with it and must have landed before the viewer goes up to the bar, as a remote's viewer would see it.
+  let addonsAsked = 0;
+  await context.routeWebSocket(/\/ws$/, (ws) => {
+    const server = ws.connectToServer();
+    ws.onMessage((message) => {
+      const text = String(message);
+      let late = false;
+      try {
+        const m = JSON.parse(text) as { op?: string; view?: string };
+        late = m.op === "subscribe" && m.view === "addons" && ++addonsAsked > 1;
+      } catch {
+        // Not JSON: passed on as it is.
+      }
+      if (late) setTimeout(() => server.send(text), 600);
+      else server.send(text);
+    });
+  });
   const page = await context.newPage();
   await page.goto("/settings?form=tv");
   const addons = page.locator('[data-f="settings:addons"]');
@@ -77,8 +95,11 @@ test("TV: Back on the bar goes Home from under a pushed Settings page, past it",
   await addons.focus();
   await page.keyboard.press("Enter");
   await expect(page).toHaveURL(/\/addons/);
-  // The bar is there, lit as Settings: onto Discover, which shows after the settle in the pushed page's place.
-  await page.locator('[data-f="nav:/settings"]').focus();
+  await expect.poll(() => focused(page)).toBe("addon:0:enabled");
+  // Up to the bar by key (a focus moved by script is no viewer's move, and the page's late first focus would take
+  // it back), lit as Settings: onto Discover, which shows after the settle in the pushed page's place.
+  for (let i = 0; i < 12 && !(await focused(page))?.startsWith("nav:"); i++) await page.keyboard.press("ArrowUp");
+  expect(await focused(page)).toBe("nav:/settings");
   for (let i = 0; i < 4; i++) await page.keyboard.press("ArrowLeft");
   expect(await focused(page)).toBe("nav:/discover");
   await expect(page).toHaveURL(/\/discover/, { timeout: 2_000 });
