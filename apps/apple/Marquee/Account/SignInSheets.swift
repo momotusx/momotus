@@ -147,7 +147,7 @@ enum SignInSheets {
     // MARK: The relay's brokered sign-in
 
     /// Opens a brokered sign-in's page and waits for its return to
-    /// `marquee://auth`: its fragment, for the view's `returned` command.
+    /// `momotus://auth`: its fragment, for the view's `returned` command.
     /// Only this session's own callback is taken, never a link opened elsewhere.
     @MainActor
     static func browser(_ url: URL) async throws -> String {
@@ -155,7 +155,7 @@ enum SignInSheets {
         // Held until its callback: a session nothing holds can end its sheet at once.
         var session: ASWebAuthenticationSession?
         let callback: URL = try await withCheckedThrowingContinuation { continuation in
-            let opened = ASWebAuthenticationSession(url: url, callback: .customScheme("marquee")) { url, error in
+            let opened = ASWebAuthenticationSession(url: url, callback: .customScheme("momotus")) { url, error in
                 if let url { continuation.resume(returning: url) } else {
                     let cancelled = (error as? ASWebAuthenticationSessionError)?.code == .canceledLogin
                     continuation.resume(throwing: cancelled ? Failure.cancelled : Failure.other(error?.localizedDescription ?? "no return"))

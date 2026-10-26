@@ -530,7 +530,7 @@ class PairingView(
 }
 
 /**
- * A relay's brokered sign-in (`signIn`), or Apple's revoke (`appleRevoke`), returning to `marquee://auth`
+ * A relay's brokered sign-in (`signIn`), or Apple's revoke (`appleRevoke`), returning to `momotus://auth`
  * (plans/core-protocol.md "Sign-in"). Every phase reaches [onPhase] on the state thread as it arrives.
  */
 class SignInView(
@@ -568,6 +568,6 @@ class SignInView(
 
     companion object {
         /** Where the relay sends the browser back: the app's own scheme (an Auth Tab's redirect scheme). */
-        const val RETURN = "marquee://auth"
+        const val RETURN = "momotus://auth"
     }
 }

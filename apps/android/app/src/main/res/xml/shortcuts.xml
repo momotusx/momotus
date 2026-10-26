@@ -7,8 +7,8 @@
         android:shortcutId="sign_in_another"
         android:shortcutShortLabel="@string/sign_in_another">
         <intent
-            android:action="app.marquee.android.SIGN_IN_ANOTHER"
+            android:action="app.momotus.android.SIGN_IN_ANOTHER"
             android:targetClass="app.marquee.android.MainActivity"
-            android:targetPackage="app.marquee.android" />
+            android:targetPackage="app.momotus.android" />
     </shortcut>
 </shortcuts>

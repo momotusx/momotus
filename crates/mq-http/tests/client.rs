@@ -55,7 +55,7 @@ async fn reads_json_and_sends_range() {
     assert_eq!(value["ok"], true);
     let head = head.await.unwrap().to_ascii_lowercase();
     assert!(head.contains("range: bytes=100-149"), "{head}");
-    assert!(head.contains("user-agent: marquee/"), "{head}");
+    assert!(head.contains("user-agent: momotus/"), "{head}");
 }
 
 #[tokio::test]

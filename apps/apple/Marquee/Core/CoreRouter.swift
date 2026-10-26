@@ -2,7 +2,7 @@ import Foundation
 import Synchronization
 import os
 
-let coreLog = Logger(subsystem: "app.marquee", category: "core")
+let coreLog = Logger(subsystem: "app.momotus", category: "core")
 
 /// Receives every core message on a core thread (the protocol in
 /// plans/core-protocol.md). Replies go to the waiter registered for their

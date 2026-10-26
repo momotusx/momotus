@@ -2178,7 +2178,7 @@ async fn an_hls_playback_is_served_entirely_through_loopback() {
         .chain(far_log.lock().unwrap().iter())
     {
         assert!(
-            asked.head.contains("user-agent: marquee/"),
+            asked.head.contains("user-agent: momotus/"),
             "{}",
             asked.head
         );
@@ -3004,7 +3004,7 @@ async fn a_dash_playback_is_served_entirely_through_loopback() {
         .chain(far_log.lock().unwrap().iter())
     {
         assert!(
-            asked.head.contains("user-agent: marquee/"),
+            asked.head.contains("user-agent: momotus/"),
             "{}",
             asked.head
         );

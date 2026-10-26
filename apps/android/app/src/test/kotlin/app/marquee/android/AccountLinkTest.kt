@@ -25,10 +25,10 @@ class AccountLinkTest {
     fun `a Custom Tab's return is the sign-in's, and only marquee auth`() {
         val back =
             assertIs<AccountLink.Return>(
-                accountLink(view("marquee://auth#flow=f&code=c&relay=sync.example.org"), "link.example"),
+                accountLink(view("momotus://auth#flow=f&code=c&relay=sync.example.org"), "link.example"),
             )
         assertEquals("flow=f&code=c&relay=sync.example.org", back.uri.encodedFragment)
-        assertNull(accountLink(view("marquee://elsewhere#flow=f"), "link.example"))
+        assertNull(accountLink(view("momotus://elsewhere#flow=f"), "link.example"))
         assertNull(accountLink(view("https://link.example/auth#flow=f"), "link.example"))
     }
 
@@ -46,7 +46,7 @@ class AccountLinkTest {
     @Test
     fun `the shortcut opens the scanner, a launch from recents repeats nothing`() {
         assertEquals(AccountLink.Shortcut, accountLink(Intent(SIGN_IN_ANOTHER), "link.example"))
-        val old = view("marquee://auth#flow=f").addFlags(Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY)
+        val old = view("momotus://auth#flow=f").addFlags(Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY)
         assertNull(accountLink(old, "link.example"))
     }
 

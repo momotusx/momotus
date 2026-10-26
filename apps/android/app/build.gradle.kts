@@ -16,7 +16,7 @@ android {
     ndkVersion = "27.1.12297006"
 
     defaultConfig {
-        applicationId = "app.marquee.android"
+        applicationId = "app.momotus.android"
         minSdk = 24
         targetSdk = 36
         versionCode = 1
@@ -144,13 +144,13 @@ androidComponents {
         val benchmark = variant.buildType == "benchmarkRelease" || variant.buildType == "nonMinifiedRelease"
         variant.buildConfigFields?.put("BENCHMARK", BuildConfigField("boolean", "$benchmark", "a benchmark build"))
         if (benchmark) variant.sources.kotlin?.addStaticSourceDirectory("src/release/kotlin")
-        // Their own package beside a device's Marquee: a benchmark run installs and uninstalls it, never the viewer's
+        // Their own package beside a device's Momotus: a benchmark run installs and uninstalls it, never the viewer's
         // app or its data.
-        if (benchmark) variant.applicationId.set("app.marquee.android.benchmark")
+        if (benchmark) variant.applicationId.set("app.momotus.android.benchmark")
         // A walk build's own package (gradle property marquee.applicationIdSuffix, for example .walk), so a walk
         // never installs over the owner's app (plans/accounts-social-sync.md H14). Empty for every other build.
         val walkSuffix = property("marquee.applicationIdSuffix").toString()
-        if (!benchmark && walkSuffix.isNotEmpty()) variant.applicationId.set("app.marquee.android$walkSuffix")
+        if (!benchmark && walkSuffix.isNotEmpty()) variant.applicationId.set("app.momotus.android$walkSuffix")
         val walk = variant.buildType == "debug" && walkSuffix.isNotEmpty()
         variant.buildConfigFields?.put("WALK", BuildConfigField("boolean", "$walk", "a debug walk build"))
         // One versionCode per ABI APK, so two APKs of one release never share one (arm64 above armeabi-v7a,

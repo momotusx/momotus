@@ -215,7 +215,7 @@ mod tests {
     async fn a_list_past_its_page_cap_is_an_error() {
         let (hosts, asked) = endless().await;
         let http = HttpClient::new(ClientConfig::default()).unwrap();
-        let api = Api::new(http, hosts, "client", "Marquee/test");
+        let api = Api::new(http, hosts, "client", "Momotus/test");
         let auth = Auth::new("https://example.org/trakt");
         let now = crate::trakt::auth::now_ms();
         let record: TraktRecord = serde_json::from_value(serde_json::json!({

@@ -73,7 +73,7 @@ class StartService : Service() {
         if (wake == null) {
             wake =
                 getSystemService(PowerManager::class.java)
-                    ?.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "marquee:start")
+                    ?.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "momotus:start")
                     ?.apply { acquire(LIMIT_MS) }
         }
         if (wifi == null) {
@@ -82,7 +82,7 @@ class StartService : Service() {
             wifi =
                 applicationContext
                     .getSystemService(WifiManager::class.java)
-                    ?.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "marquee:start")
+                    ?.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "momotus:start")
                     ?.apply {
                         setReferenceCounted(false)
                         acquire()

@@ -2,6 +2,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <queries>
-        <package android:name="app.marquee.android" />
+        <package android:name="app.momotus.android" />
     </queries>
 </manifest>

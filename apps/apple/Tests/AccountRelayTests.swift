@@ -13,7 +13,7 @@ import Testing
 
 private let relayAddress = ProcessInfo.processInfo.environment["MARQUEE_SIGNIN_RELAY"]
 
-/// Follows a page without redirects, so the `marquee://auth` return is seen, not followed.
+/// Follows a page without redirects, so the `momotus://auth` return is seen, not followed.
 private final class NoRedirect: NSObject, URLSessionTaskDelegate {
     func urlSession(_ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse,
                     newRequest request: URLRequest) async -> URLRequest? { nil }
@@ -27,7 +27,7 @@ private func browse(_ url: String, as subject: String) async throws -> String {
         let (body, answer) = try await session.data(from: next)
         let http = try #require(answer as? HTTPURLResponse)
         if let location = http.value(forHTTPHeaderField: "Location") {
-            if location.hasPrefix("marquee://auth#") { return String(location.dropFirst("marquee://auth#".count)) }
+            if location.hasPrefix("momotus://auth#") { return String(location.dropFirst("momotus://auth#".count)) }
             next = try #require(URL(string: location, relativeTo: next)?.absoluteURL)
             continue
         }

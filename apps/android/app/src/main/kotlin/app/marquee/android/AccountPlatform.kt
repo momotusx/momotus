@@ -35,7 +35,7 @@ import java.lang.ref.WeakReference
 /**
  * Android's half of a sign-in (plans/accounts.md 4.4): the account passkey and Google's ID token through
  * Credential Manager, and the relay's brokered flow in an Auth Tab where Chrome has one (it reports a cancel),
- * else a Custom Tab returning to `marquee://auth`. A return reaches only the run that waits for it ([run]),
+ * else a Custom Tab returning to `momotus://auth`. A return reaches only the run that waits for it ([run]),
  * and [BrokeredRun.returned] takes it only from the app's own scheme and only for that relay.
  */
 class AccountPlatform(
@@ -64,11 +64,11 @@ class AccountPlatform(
         val browser = CustomTabsClient.getPackageName(a, null)
         val launcher = authTab
         if (browser != null && launcher != null && CustomTabsClient.isAuthTabSupported(a, browser)) {
-            // Its return comes as the launcher's result: a `marquee://auth` link meanwhile is not this run's.
+            // Its return comes as the launcher's result: a `momotus://auth` link meanwhile is not this run's.
             run?.viaAuthTab = true
             AuthTabIntent.Builder().build().launch(launcher, uri, SCHEME)
         } else {
-            // No Auth Tab: the return comes as a `marquee://auth` link, taken only while a run waits.
+            // No Auth Tab: the return comes as a `momotus://auth` link, taken only while a run waits.
             CustomTabsIntent.Builder().build().launchUrl(a, uri)
         }
     }
@@ -83,7 +83,7 @@ class AccountPlatform(
         }
     }
 
-    /** A `marquee://auth` link from a Custom Tab: handed to the run that waits, unless it runs in an Auth Tab. */
+    /** A `momotus://auth` link from a Custom Tab: handed to the run that waits, unless it runs in an Auth Tab. */
     fun customTabReturn(uri: Uri): Boolean = run?.linkReturned(uri.toString()) == true
 
     private val credentials by lazy { CredentialManager.create(app) }
@@ -193,7 +193,7 @@ class AccountPlatform(
         }
 
     companion object {
-        /** The app's own scheme, the Auth Tab's redirect scheme: `marquee://auth`. */
-        const val SCHEME = "marquee"
+        /** The app's own scheme, the Auth Tab's redirect scheme: `momotus://auth`. */
+        const val SCHEME = "momotus"
     }
 }

@@ -536,12 +536,12 @@ final class SyncModel {
     /// A relay's brokered sign-in (Google, Facebook, any other): the view to
     /// open in an auth session, ending in `found`, `new` or `failed`.
     func signInView(server: String, provider: String) -> LiveRecord<SignInSnapshot> {
-        LiveRecord("signIn", params: ["server": server, "provider": provider, "return": "marquee://auth"], core: core)
+        LiveRecord("signIn", params: ["server": server, "provider": provider, "return": "momotus://auth"], core: core)
     }
 
     /// Apple's revoke on a surface without the native sheet: the same view, ending in `receipt`.
     func appleRevokeView(server: String) -> LiveRecord<SignInSnapshot> {
-        LiveRecord("appleRevoke", params: ["server": server, "return": "marquee://auth"], core: core)
+        LiveRecord("appleRevoke", params: ["server": server, "return": "momotus://auth"], core: core)
     }
 
     /// Hands the auth session's own return to its view; the core takes only

@@ -109,7 +109,7 @@ class AccountActionsTest {
         val before = platform.opened.size
         core.push(view, """{"phase":"browser","url":"https://sync.example.org/go","expiresMs":9}""")
         core.waitFor("page") { platform.opened.size > before }
-        assertTrue(actions.run!!.returned("marquee://auth#flow=f&code=c&relay=sync.example.org"))
+        assertTrue(actions.run!!.returned("momotus://auth#flow=f&code=c&relay=sync.example.org"))
         core.push(view, end)
     }
 

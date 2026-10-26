@@ -109,7 +109,7 @@ class AccountSignInTest {
         core.waitFor("the view") { core.ops().count { it == "subscribe" } > views && s.run != null }
         core.push("signIn", """{"phase":"browser","url":"https://sync.example.org/v1/auth/mock/go","expiresMs":9}""")
         core.waitFor("the page opened") { platform.opened.size > pages }
-        assertTrue(s.run!!.returned("marquee://auth#flow=f&code=c&relay=sync.example.org"))
+        assertTrue(s.run!!.returned("momotus://auth#flow=f&code=c&relay=sync.example.org"))
         core.push("signIn", end)
     }
 
@@ -140,24 +140,24 @@ class AccountSignInTest {
         s.choose("mock")
         core.waitFor("the view") { s.run != null }
         val run = s.run!!
-        assertFalse(run.returned("marquee://auth#flow=f&code=c&relay=sync.example.org"), "no page opened yet")
+        assertFalse(run.returned("momotus://auth#flow=f&code=c&relay=sync.example.org"), "no page opened yet")
         core.push("signIn", """{"phase":"browser","url":"https://sync.example.org/go","expiresMs":9}""")
         core.waitFor("opened") { platform.opened.size == 1 }
         core.push("signIn", """{"phase":"browser","url":"https://sync.example.org/go","expiresMs":9}""")
         Thread.sleep(50)
         assertEquals(1, platform.opened.size, "the page opens once")
         assertFalse(run.returned("https://evil.example/auth#flow=f&code=c"), "only the app's own return")
-        assertFalse(run.returned("marquee://other#flow=f&code=c"))
-        assertFalse(run.returned("marquee://auth#flow=f&code=c&relay=evil.example"), "another relay's return")
+        assertFalse(run.returned("momotus://other#flow=f&code=c"))
+        assertFalse(run.returned("momotus://auth#flow=f&code=c&relay=evil.example"), "another relay's return")
         assertTrue(core.commands.isEmpty(), "nothing reached the core")
-        assertTrue(run.returned("marquee://auth#flow=f&code=c&relay=sync.example.org"))
+        assertTrue(run.returned("momotus://auth#flow=f&code=c&relay=sync.example.org"))
         core.waitFor("command") { core.commands.isNotEmpty() }
         val (view, command) = core.commands.single()
         assertEquals("signIn", view)
         assertEquals("returned", command.getValue("type").jsonPrimitive.content)
         assertEquals("flow=f&code=c&relay=sync.example.org", command.getValue("fragment").jsonPrimitive.content)
         val params = core.last("subscribe").getValue("params").jsonObject
-        assertEquals("marquee://auth", params.getValue("return").jsonPrimitive.content)
+        assertEquals("momotus://auth", params.getValue("return").jsonPrimitive.content)
     }
 
     @Test
@@ -342,7 +342,7 @@ class AccountSignInTest {
         core.waitFor("the second view") { core.ops().count { it == "subscribe" } == 2 && s.run != null }
         core.push("signIn", """{"phase":"browser","url":"https://sync.example.org/go","expiresMs":9}""")
         core.waitFor("opened") { platform.opened.isNotEmpty() }
-        assertTrue(s.run!!.returned("marquee://auth#flow=g&code=d&relay=sync.example.org"))
+        assertTrue(s.run!!.returned("momotus://auth#flow=g&code=d&relay=sync.example.org"))
         core.push("signIn", """{"phase":"new","ticket":"NEW"}""")
         core.waitFor("created again") { creates == 2 }
         assertEquals(
@@ -465,7 +465,7 @@ class AccountSignInTest {
         core.waitFor("asked", timeoutMs = 4_000) { s.failure != null }
         assertEquals(AccountCopy.NO_REDIRECT, s.failure!!.text)
         assertTrue(
-            s.run!!.returned("marquee://auth#flow=f&code=c&relay=sync.example.org"),
+            s.run!!.returned("momotus://auth#flow=f&code=c&relay=sync.example.org"),
             "a late return still finishes it",
         )
         core.push("signIn", """{"phase":"new","ticket":"T7"}""")
@@ -574,15 +574,15 @@ class AccountSignInTest {
         core.push("signIn", """{"phase":"browser","url":"https://sync.example.org/go","expiresMs":9}""")
         core.waitFor("opened") { platform.opened.isNotEmpty() }
         val run = s.run!!
-        assertTrue(run.linkReturned("marquee://auth#flow=other&code=c&relay=sync.example.org"))
+        assertTrue(run.linkReturned("momotus://auth#flow=other&code=c&relay=sync.example.org"))
         s.resumed()
         core.waitFor("asked", timeoutMs = 4_000) { s.failure != null }
         assertEquals(AccountCopy.NO_REDIRECT, s.failure!!.text, "the core kept waiting: no return was taken")
         run.viaAuthTab = true
         assertFalse(
-            run.linkReturned("marquee://auth#flow=f&code=c&relay=sync.example.org"),
+            run.linkReturned("momotus://auth#flow=f&code=c&relay=sync.example.org"),
             "an Auth Tab run takes its return from the tab only",
         )
-        assertTrue(run.returned("marquee://auth#flow=f&code=c&relay=sync.example.org"))
+        assertTrue(run.returned("momotus://auth#flow=f&code=c&relay=sync.example.org"))
     }
 }

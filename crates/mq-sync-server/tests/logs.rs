@@ -60,7 +60,7 @@ fn a_refused_sign_in_start_is_logged_on_stderr() {
     assert!(ready.contains("sync_server_ready"), "{ready}");
 
     // One plain HTTP request (the tests' reqwest has no TLS provider to build a client with).
-    let body = serde_json::json!({ "verifierHash": "00".repeat(32), "purpose": "signin", "return": "marquee://auth" }).to_string();
+    let body = serde_json::json!({ "verifierHash": "00".repeat(32), "purpose": "signin", "return": "momotus://auth" }).to_string();
     let mut stream = std::net::TcpStream::connect(("127.0.0.1", port)).unwrap();
     write!(
         stream,

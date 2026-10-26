@@ -53,7 +53,7 @@ test("the app association files are valid JSON with the owner's values left to f
   expect(apple.applinks.details[0].components[0]["/"]).toBe("/pair");
   expect(apple.webcredentials.apps[0]).toBe("{{APPLE_TEAM_ID}}.{{APPLE_BUNDLE_ID}}");
   const android = JSON.parse(read(".well-known/assetlinks.json"));
-  expect(android[0].target.package_name).toBe("app.marquee.android");
+  expect(android[0].target.package_name).toBe("app.momotus.android");
   expect(android[0].target.sha256_cert_fingerprints).toEqual(["{{ANDROID_SIGNING_SHA256}}"]);
 });
 
@@ -65,7 +65,7 @@ import { build } from "./build";
 const ENV = {
   RELAY_URL: "https://sync.example.org",
   PROVIDERS: "google,facebook",
-  ANDROID_PACKAGES: "app.marquee.android,app.marquee.android.walk",
+  ANDROID_PACKAGES: "app.momotus.android,app.momotus.android.walk",
   ANDROID_SIGNING_SHA256: Array(32).fill("AB").join(":"),
 };
 const built = (env: Record<string, string | undefined>) => {
@@ -110,15 +110,15 @@ test("the deletion page offers only the sync service's providers, and Apple's li
 test("assetlinks names each package with the certificate, and the Apple file comes only with Apple's values", () => {
   const { files, read } = built(ENV);
   const links = JSON.parse(read(".well-known/assetlinks.json"));
-  expect(links.map((s: { target: { package_name: string } }) => s.target.package_name)).toEqual(["app.marquee.android", "app.marquee.android.walk"]);
+  expect(links.map((s: { target: { package_name: string } }) => s.target.package_name)).toEqual(["app.momotus.android", "app.momotus.android.walk"]);
   for (const statement of links) {
     expect(statement.relation).toContain("delegate_permission/common.get_login_creds");
     expect(statement.target.sha256_cert_fingerprints).toEqual([ENV.ANDROID_SIGNING_SHA256]);
   }
   expect(files).not.toContain(".well-known/apple-app-site-association");
   expect(read("_headers")).not.toContain("apple-app-site-association");
-  const apple = built({ ...ENV, APPLE_TEAM_ID: "TEAM123456", APPLE_BUNDLE_ID: "app.marquee" });
-  expect(JSON.parse(apple.read(".well-known/apple-app-site-association")).webcredentials.apps).toEqual(["TEAM123456.app.marquee"]);
+  const apple = built({ ...ENV, APPLE_TEAM_ID: "TEAM123456", APPLE_BUNDLE_ID: "app.momotus.dev" });
+  expect(JSON.parse(apple.read(".well-known/apple-app-site-association")).webcredentials.apps).toEqual(["TEAM123456.app.momotus.dev"]);
   expect(apple.read("_headers")).toContain("/.well-known/apple-app-site-association");
   expect(() => built({ ...ENV, APPLE_TEAM_ID: "TEAM123456" })).toThrow("together");
 });

@@ -175,7 +175,7 @@ impl Relay {
     /// ticket, and the account it signs in to.
     async fn sign_in(&self, provider: &str, sub: &str) -> Taken {
         self.mock.next(Next::Pick(sub.into()));
-        let flow = start_brokered(&http(), &self.url, provider, "marquee://auth", false)
+        let flow = start_brokered(&http(), &self.url, provider, "momotus://auth", false)
             .await
             .unwrap();
         let fragment = browse(&flow.url).await;
@@ -340,7 +340,7 @@ async fn a_brokered_sign_in_makes_an_account_and_finds_it_again() {
     assert!(!subject.windows(5).any(|w| w == b"alice"));
     // A cancelled provider page comes back as cancelled.
     relay.mock.next(Next::Cancel);
-    let flow = start_brokered(&http(), &relay.url, "mock", "marquee://auth", false)
+    let flow = start_brokered(&http(), &relay.url, "mock", "momotus://auth", false)
         .await
         .unwrap();
     let err = flow
@@ -350,7 +350,7 @@ async fn a_brokered_sign_in_makes_an_account_and_finds_it_again() {
     assert!(matches!(err, SyncError::Cancelled), "{err:?}");
     // The provider's ID token names another nonce than the flow's.
     relay.mock.next(Next::WrongNonce("alice".into()));
-    let flow = start_brokered(&http(), &relay.url, "mock", "marquee://auth", false)
+    let flow = start_brokered(&http(), &relay.url, "mock", "momotus://auth", false)
         .await
         .unwrap();
     let fragment = browse(&flow.url).await;
@@ -367,7 +367,7 @@ async fn a_brokered_sign_in_makes_an_account_and_finds_it_again() {
 async fn a_flow_needs_its_verifier_and_its_code_once() {
     let relay = Relay::new().await;
     relay.mock.next(Next::Pick("alice".into()));
-    let flow = start_brokered(&http(), &relay.url, "mock", "marquee://auth", false)
+    let flow = start_brokered(&http(), &relay.url, "mock", "momotus://auth", false)
         .await
         .unwrap();
     let fragment = browse(&flow.url).await;
@@ -416,7 +416,7 @@ async fn a_flow_needs_its_verifier_and_its_code_once() {
 async fn an_expired_flow_says_so_and_a_callback_completes_once() {
     let relay = Relay::new().await;
     relay.mock.next(Next::Pick("alice".into()));
-    let late = start_brokered(&http(), &relay.url, "mock", "marquee://auth", false)
+    let late = start_brokered(&http(), &relay.url, "mock", "momotus://auth", false)
         .await
         .unwrap();
     let native = start_native(&http(), &relay.url, "mock", false)
@@ -436,7 +436,7 @@ async fn an_expired_flow_says_so_and_a_callback_completes_once() {
 
     // Finished once: a second callback for the same flow is a page, not a return.
     relay.mock.next(Next::Pick("alice".into()));
-    let flow = start_brokered(&http(), &relay.url, "mock", "marquee://auth", false)
+    let flow = start_brokered(&http(), &relay.url, "mock", "momotus://auth", false)
         .await
         .unwrap();
     let browser = reqwest::Client::builder()
@@ -816,7 +816,7 @@ async fn unlinking_and_apple_revocation_receipts() {
 
     // Brokered revoke: the Services ID's secret, a receipt for the Apple link.
     relay.mock.next(Next::Pick("apple-1".into()));
-    let flow = start_brokered(&http(), &relay.url, "apple", "marquee://auth", true)
+    let flow = start_brokered(&http(), &relay.url, "apple", "momotus://auth", true)
         .await
         .unwrap();
     let revoked = flow
@@ -903,7 +903,7 @@ async fn facebook_signs_in_by_code_exchange_and_debug_token() {
     );
     relay.mock.answer_for_another_app();
     relay.mock.next(Next::Pick("fb-user".into()));
-    let flow = start_brokered(&http(), &relay.url, "facebook", "marquee://auth", false)
+    let flow = start_brokered(&http(), &relay.url, "facebook", "momotus://auth", false)
         .await
         .unwrap();
     let refused = flow
@@ -1334,7 +1334,7 @@ async fn discovery_naming_another_issuer_is_refused() {
         |c| c.identity = Some(serde_json::from_value(file).unwrap()),
     )
     .await;
-    let refused = start_brokered(&http(), &relay.url, "renamed", "marquee://auth", false)
+    let refused = start_brokered(&http(), &relay.url, "renamed", "momotus://auth", false)
         .await
         .unwrap_err();
     assert!(
@@ -1478,7 +1478,7 @@ async fn returns_are_allowlisted_and_open_flows_capped() {
     let relay = Relay::new().await;
     for to in [
         "https://evil.example/auth",
-        "marquee://auth?x=1",
+        "momotus://auth?x=1",
         "http://192.168.1.2:80/auth",
         "https://link.example/other",
     ] {
@@ -1493,12 +1493,17 @@ async fn returns_are_allowlisted_and_open_flows_capped() {
             "{to}: {refused:?}"
         );
     }
-    for to in ["http://127.0.0.1:5173/auth", "https://link.example/delete"] {
+    // The scheme of builds made before the Momotus app ids still returns.
+    for to in [
+        "marquee://auth",
+        "http://127.0.0.1:5173/auth",
+        "https://link.example/delete",
+    ] {
         start_brokered(&http(), &relay.url, "mock", to, false)
             .await
             .unwrap();
     }
-    for _ in 2..20 {
+    for _ in 3..20 {
         start_native(&http(), &relay.url, "mock", false)
             .await
             .unwrap();
@@ -1584,7 +1589,7 @@ async fn a_token_alone_deletes_nothing() {
 async fn a_sign_in_in_progress_keeps_no_client_address() {
     let relay = Relay::new().await;
     for _ in 0..2 {
-        start_brokered(&http(), &relay.url, "mock", "marquee://auth", false)
+        start_brokered(&http(), &relay.url, "mock", "momotus://auth", false)
             .await
             .unwrap();
     }

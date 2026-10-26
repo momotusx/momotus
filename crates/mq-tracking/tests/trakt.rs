@@ -129,7 +129,7 @@ impl Mock {
 
 fn api(hosts: Hosts) -> Api {
     let http = HttpClient::new(ClientConfig::default()).unwrap();
-    Api::new(http, hosts, "client-1", "Marquee/test")
+    Api::new(http, hosts, "client-1", "Momotus/test")
 }
 
 fn tokens_body(access: &str, refresh: &str) -> String {
@@ -198,7 +198,7 @@ async fn device_flow_waits_slows_down_and_gets_tokens() {
     assert!(sent[0].body.contains(r#""code":"dc""#));
     assert!(sent.iter().all(|s| !s.body.contains("client_secret")));
     assert!(sent[0].head.contains("trakt-api-key: client-1"));
-    assert!(sent[0].head.contains("user-agent: marquee/test"));
+    assert!(sent[0].head.contains("user-agent: momotus/test"));
 }
 
 #[tokio::test]
@@ -506,7 +506,7 @@ async fn live_unknown_app_is_refused_not_transient() {
         http,
         Hosts::default(),
         "marquee-unknown-client",
-        "Marquee/test",
+        "Momotus/test",
     );
     let started = std::time::Instant::now();
     let answer = api

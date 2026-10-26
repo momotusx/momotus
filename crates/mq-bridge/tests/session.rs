@@ -1321,7 +1321,7 @@ async fn sign_in_over_the_protocol() {
     assert_eq!(refused["code"], "wrongFlow", "{refused}");
 
     mock.next(mock_oidc::Next::Pick("alice".into()));
-    let params = json!({"server": server, "provider": "mock", "return": "marquee://auth"});
+    let params = json!({"server": server, "provider": "mock", "return": "momotus://auth"});
     s.handle_text(
         &json!({"id": 6, "op": "subscribe", "view": "signIn", "params": params}).to_string(),
     )

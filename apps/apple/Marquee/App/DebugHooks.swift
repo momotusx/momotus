@@ -160,7 +160,7 @@ enum DebugHooks {
     }
 
     #if os(macOS)
-    /// `notifyutil -p app.marquee.snapshot` writes each window to
+    /// `notifyutil -p app.momotus.snapshot` writes each window to
     /// $TMPDIR/marquee-window-<n>.png, drawn by AppKit (no screen recording).
     static func listenForSnapshots() {
         let center = CFNotificationCenterGetDarwinNotifyCenter()
@@ -168,7 +168,7 @@ enum DebugHooks {
             DispatchQueue.main.async {
                 MainActor.assumeIsolated { DebugHooks.snapshotWindows() }
             }
-        }, "app.marquee.snapshot" as CFString, nil, .deliverImmediately)
+        }, "app.momotus.snapshot" as CFString, nil, .deliverImmediately)
     }
 
     @MainActor private static func snapshotWindows() {

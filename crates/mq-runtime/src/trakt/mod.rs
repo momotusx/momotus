@@ -248,7 +248,7 @@ impl Trakt {
 
     fn api(&self) -> Option<(Api, TraktConfig)> {
         let config = self.config()?;
-        let agent = format!("Marquee/{}", env!("CARGO_PKG_VERSION"));
+        let agent = format!("Momotus/{}", env!("CARGO_PKG_VERSION"));
         let api = Api::new(
             self.http.clone(),
             config.hosts.clone(),

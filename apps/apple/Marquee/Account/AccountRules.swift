@@ -198,11 +198,11 @@ enum AccountRules {
         return named != server
     }
 
-    /// A brokered sign-in's return (`marquee://auth#...`): its fragment, for
+    /// A brokered sign-in's return (`momotus://auth#...`): its fragment, for
     /// the `signIn` view's `returned` command. Only the auth session's own
     /// callback is passed here, never a link opened from elsewhere.
     static func returnedFragment(_ url: URL) -> String? {
-        guard url.scheme == "marquee", url.host() == "auth" else { return nil }
+        guard url.scheme == "momotus", url.host() == "auth" else { return nil }
         return url.fragment(percentEncoded: true)
     }
 

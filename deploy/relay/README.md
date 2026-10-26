@@ -9,7 +9,7 @@ Marquee's sync relay (`mq-sync-server`) at `https://momotus.normalisdead.mom`, o
 | `backup.py` | SQLite's online backup, integrity check, the roster journal, `SHA256SUMS` |
 | `identity.py` | creates the identity file (a new key, never printed) and merges the provider values into it |
 | `deploy.sh` | build, backup, preflight on a copy, switch, health, rollback |
-| `pull-backup.sh`, `app.marquee.relay-backup.plist` | the Mac's daily pull of the newest set, 7 kept |
+| `pull-backup.sh`, `app.momotus.relay-backup.plist` | the Mac's daily pull of the newest set, 7 kept |
 
 Checks: `bun test deploy/relay`, `uv run python -I deploy/relay/backup.py --self-test`, `uv run python -I deploy/relay/identity.py --self-test`, `shellcheck deploy/relay/*.sh`.
 
@@ -38,11 +38,13 @@ MQ_RELAY_SSH=... deploy/relay/deploy.sh
 
 ```sh
 RELAY_URL=https://momotus.normalisdead.mom PROVIDERS=google,facebook \
-ANDROID_PACKAGES=app.marquee.android,app.marquee.android.walk \
+ANDROID_PACKAGES=app.momotus.android,app.momotus.android.walk,app.marquee.android \
 ANDROID_SIGNING_SHA256=<the signing certificate's SHA-256> bun apps/linkhost/build.ts
 # wrangler, not cf deploy: cf deploy ignores wrangler.jsonc and makes a new project
 (cd apps/linkhost && bunx wrangler@4.45.0 deploy --dry-run && bunx wrangler@4.45.0 deploy)
 ```
+
+`app.marquee.android` is the Android app from before the Momotus ids (an install from before 2026-10-26): it stays in the list, so its passkeys and `/pair` links keep working, until no device runs it. The relay also still takes its sign-in return, `marquee://auth`, beside `momotus://auth`.
 
 Rollback: the saved tunnel config back, the CNAME deleted, the Worker deleted.
 
@@ -79,7 +81,7 @@ env -u MARQUEE_LINK_HOST xcodebuild ... MARQUEE_SYNC_SERVER=$MARQUEE_SYNC_SERVER
 # Web: apps/web/.env.production.local holds VITE_MARQUEE_SYNC_SERVER; mq-bridge built with MARQUEE_LINK_HOST
 ```
 
-A walk build (`-Pmarquee.applicationIdSuffix=.walk`) installs beside the owner's app; its home-screen shortcut still opens `app.marquee.android` (`res/xml/shortcuts.xml` names the package), so a walk never uses the shortcut.
+A walk build (`-Pmarquee.applicationIdSuffix=.walk`) installs beside the owner's app; its home-screen shortcut still opens `app.momotus.android` (`res/xml/shortcuts.xml` names the package), so a walk never uses the shortcut.
 
 The relay runs with `--trust-proxy`: a budgeted call to it on the server itself (a `curl` to `127.0.0.1:8787/v1/pairings`) needs a `cf-connecting-ip` header, else it answers 400 `noClientAddress`; `/v1/relay` is not budgeted.
 
@@ -93,9 +95,11 @@ The web app signs in only from `http://127.0.0.1:<port>`: the relay sends broker
 mkdir -p ~/.local/share/momotus
 cp deploy/relay/pull-backup.sh ~/.local/share/momotus/pull-backup.sh
 sed -e "s|__SCRIPT__|$HOME/.local/share/momotus/pull-backup.sh|" -e "s|__SSH__|$MQ_RELAY_SSH|" \
-  deploy/relay/app.marquee.relay-backup.plist > ~/Library/LaunchAgents/app.marquee.relay-backup.plist
-launchctl bootstrap "gui/$(id -u)" ~/Library/LaunchAgents/app.marquee.relay-backup.plist
+  deploy/relay/app.momotus.relay-backup.plist > ~/Library/LaunchAgents/app.momotus.relay-backup.plist
+launchctl bootstrap "gui/$(id -u)" ~/Library/LaunchAgents/app.momotus.relay-backup.plist
 ```
+
+A Mac that installed it before the rename runs it as `app.marquee.relay-backup`: `launchctl bootout "gui/$(id -u)/app.marquee.relay-backup"` and delete `~/Library/LaunchAgents/app.marquee.relay-backup.plist` first, or both pull each day.
 
 The pull reads the server's backups with `sudo -n`. The narrowest rule for the account it uses is one sudoers line, `<user> ALL=(root) NOPASSWD: /usr/bin/ls -1 /var/lib/momotus/backups, /usr/bin/cat /var/lib/momotus/backups/*`, added by the owner if he wants the pull to run without full sudo.
 

@@ -885,11 +885,12 @@ fn fresh() -> String {
     B64URL.encode(random::<32>())
 }
 
-/// Only the app's own scheme, a loopback `/auth` page (RFC 8252 7.3: the
+/// Only the app's own scheme (`marquee://auth` too, for builds made before the
+/// Momotus app ids), a loopback `/auth` page (RFC 8252 7.3: the
 /// web app in development, e2e and the desktop shells) and the link host's
 /// deletion page take a brokered result.
 fn allowed_return(identity: &Identity, to: &str) -> bool {
-    if to == "marquee://auth" {
+    if to == "momotus://auth" || to == "marquee://auth" {
         return true;
     }
     let Ok(url) = url::Url::parse(to) else {

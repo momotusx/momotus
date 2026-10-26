@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # shellcheck disable=SC2029 # the server-side paths are named on the client side, on purpose
-# On the Mac, daily and at login (launchd, app.marquee.relay-backup.plist): copies the server's
+# On the Mac, daily and at login (launchd, app.momotus.relay-backup.plist): copies the server's
 # newest relay backup set into ~/.local/share/momotus/relay-backups (plans/accounts-social-sync.md
 # H9), checks its sums, keeps 7, and shows a notification when the last good pull or the public
 # health check is older than 48 hours.
@@ -27,7 +27,7 @@ notify() {
   if [ -n "${MQ_PULL_NOTIFY:-}" ]; then
     echo "$1" >>"$MQ_PULL_NOTIFY"
   else
-    osascript -e "display notification \"$1\" with title \"Marquee relay backup\"" || true
+    osascript -e "display notification \"$1\" with title \"Momotus relay backup\"" || true
   fi
 }
 

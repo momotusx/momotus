@@ -26,7 +26,7 @@ mod versions;
 use versions::{Device, versions};
 
 #[derive(Parser)]
-#[command(name = "mq", about = "Marquee core driver")]
+#[command(name = "mq", about = "Momotus core driver")]
 struct Cli {
     /// Data directory for the library database.
     #[arg(long, env = "MQ_DATA", default_value = ".mq-data")]

@@ -58,7 +58,7 @@
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="marquee" android:host="auth" />
+                <data android:scheme="momotus" android:host="auth" />
             </intent-filter>
             <!-- A phone camera on a TV's code opens https://<link host>/pair: the scanner, which asks for the code
                  once more (D6). The link host is the owner's (marquee.linkHost); its assetlinks.json verifies it. -->

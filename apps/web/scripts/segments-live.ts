@@ -52,7 +52,7 @@ const results = [];
 let changed = false;
 for (const c of CASES) {
   const started = performance.now();
-  const res = await fetch(c.url, { headers: { "user-agent": "Marquee e2e live check" }, signal: AbortSignal.timeout(15_000) });
+  const res = await fetch(c.url, { headers: { "user-agent": "Momotus e2e live check" }, signal: AbortSignal.timeout(15_000) });
   const ms = Math.round(performance.now() - started);
   if (res.status === 404) {
     results.push({ source: c.source, hit: false, kinds: [], ms });

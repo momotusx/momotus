@@ -161,9 +161,9 @@ private func announcement(_ kind: String, member: String? = "m", by: String? = "
     #expect(!AccountRules.opensScanner(link, linkHost: "other.example"))
     #expect(!AccountRules.opensScanner(link, linkHost: nil))
     #expect(!AccountRules.opensScanner(try #require(URL(string: "https://link.example/delete")), linkHost: "link.example"))
-    // The auth session's return: only marquee://auth, its fragment as it came.
-    #expect(AccountRules.returnedFragment(try #require(URL(string: "marquee://auth#flow=f&code=c&relay=127.0.0.1"))) == "flow=f&code=c&relay=127.0.0.1")
-    #expect(AccountRules.returnedFragment(try #require(URL(string: "marquee://pair#flow=f"))) == nil)
+    // The auth session's return: only momotus://auth, its fragment as it came.
+    #expect(AccountRules.returnedFragment(try #require(URL(string: "momotus://auth#flow=f&code=c&relay=127.0.0.1"))) == "flow=f&code=c&relay=127.0.0.1")
+    #expect(AccountRules.returnedFragment(try #require(URL(string: "momotus://pair#flow=f"))) == nil)
 }
 
 @Test func reportLostNamesTheCount() {

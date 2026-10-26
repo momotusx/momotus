@@ -85,7 +85,7 @@ class PlayerHost(
         // The id is unique per host: a new player can start while the old one is still being cleared.
         session =
             try {
-                MediaSession.Builder(context, player).setId("marquee-${ids.incrementAndGet()}").build()
+                MediaSession.Builder(context, player).setId("momotus-${ids.incrementAndGet()}").build()
             } catch (e: RuntimeException) {
                 player.release()
                 throw e

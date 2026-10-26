@@ -12,7 +12,7 @@ const port = Number(process.argv[2] ?? 7780);
 const BLENDER = "https://download.blender.org/durian";
 
 const manifest = {
-  id: "app.marquee.localtest",
+  id: "app.momotus.localtest",
   version: "0.1.0",
   name: "Local Test",
   description: "Sintel sample streams for verification",

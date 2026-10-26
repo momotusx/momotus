@@ -40,13 +40,13 @@ async function until<T>(what: string, ms: number, probe: () => T | null | false)
 const results: { ok: boolean }[] = [];
 let skipped = 0;
 for (let run = 1; run <= runs; run++) {
-  adb("shell", "am", "force-stop", "app.marquee.android");
+  adb("shell", "am", "force-stop", "app.momotus.android");
   adb("logcat", "-c");
   // Touch mode is a display-wide state that any tap or swipe turns on, and in it focus requests do
   // not land; a TV is never in touch mode. A navigation key leaves it, and goes to the launcher
   // here (Tab does nothing there), before the app starts.
   key("KEYCODE_TAB");
-  adb("shell", "am", "start", "-n", "app.marquee.android/.MainActivity", "--es", "form", "tv");
+  adb("shell", "am", "start", "-n", "app.momotus.android/app.marquee.android.MainActivity", "--es", "form", "tv");
   const first = await until("Home focus", 40_000, () => focused(dump()));
 
   // From the hero (or the first Continue Watching card) down into the lanes, then right.

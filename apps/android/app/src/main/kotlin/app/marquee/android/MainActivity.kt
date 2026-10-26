@@ -92,7 +92,7 @@ class MainActivity : ComponentActivity() {
     }
 
     /**
-     * The account links (plans/accounts.md 4.2, 4.4): a Custom Tab's `marquee://auth` return goes to the sign-in
+     * The account links (plans/accounts.md 4.2, 4.4): a Custom Tab's `momotus://auth` return goes to the sign-in
      * that waits (nothing happens when none does); the `/pair` App Link and the Sign in another device shortcut
      * open the scanner.
      */
@@ -162,7 +162,7 @@ internal sealed interface AccountLink {
 }
 
 /** The app shortcut's action (`res/xml/shortcuts.xml`). */
-internal const val SIGN_IN_ANOTHER = "app.marquee.android.SIGN_IN_ANOTHER"
+internal const val SIGN_IN_ANOTHER = "app.momotus.android.SIGN_IN_ANOTHER"
 
 internal fun accountLink(
     intent: Intent?,

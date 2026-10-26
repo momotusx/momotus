@@ -2,7 +2,7 @@
 # The core must be built first: apps/apple/scripts/build-core.sh [--tvos]
 name: Marquee
 options:
-  bundleIdPrefix: app.marquee
+  bundleIdPrefix: app.momotus
   deploymentTarget:
     macOS: "15.0"
     iOS: "18.0"
@@ -40,8 +40,8 @@ settings:
     # engine off; the launch log says which), the walk hooks and the sampler compiled into the app only, never
     # into the engine.
     MARQUEE_WALK_BUILD: ""
-    # The app's bundle id; a walk build takes its own (app.marquee.walk) so it never installs over the owner's app.
-    MARQUEE_APP_ID: app.marquee.dev
+    # The app's bundle id; a walk build takes its own (app.momotus.walk) so it never installs over the owner's app.
+    MARQUEE_APP_ID: app.momotus.dev
   configs:
     # A Release build (an archive) is a store build unless it says otherwise: MARQUEE_CORE_BUILD=own on the
     # xcodebuild line for an own Release build, so the second engine is never on in an archive by accident (the
@@ -302,7 +302,7 @@ targets:
       - path: Marquee/Onboarding/SubtitleStepRules.swift
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: app.marquee.dev.tests
+        PRODUCT_BUNDLE_IDENTIFIER: app.momotus.dev.tests
         GENERATE_INFOPLIST_FILE: YES
   # The iPhone walk of plans/player-gestures.md 7.2: real touches on the player, which only XCUITest gives a phone.
   # Its own scheme; in no app's scheme, and no app target depends on it. Run only through scripts/walk-ui.sh.
@@ -314,8 +314,8 @@ targets:
       - name: Refuse any app id but the walk's
         basedOnDependencyAnalysis: false
         script: |
-          if [ "$MARQUEE_APP_ID" != app.marquee.walk ]; then
-            echo "error: MarqueeWalkUITests builds the app as app.marquee.walk only (scripts/walk-ui.sh), not $MARQUEE_APP_ID."
+          if [ "$MARQUEE_APP_ID" != app.momotus.walk ]; then
+            echo "error: MarqueeWalkUITests builds the app as app.momotus.walk only (scripts/walk-ui.sh), not $MARQUEE_APP_ID."
             exit 1
           fi
     sources:
@@ -325,7 +325,7 @@ targets:
     settings:
       base:
         TEST_TARGET_NAME: Marquee-iOS
-        PRODUCT_BUNDLE_IDENTIFIER: app.marquee.walk.uitests
+        PRODUCT_BUNDLE_IDENTIFIER: app.momotus.walk.uitests
         GENERATE_INFOPLIST_FILE: YES
     scheme:
       testTargets: [MarqueeWalkUITests]

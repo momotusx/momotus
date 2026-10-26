@@ -166,7 +166,7 @@ class AccountsRelayTest {
             val r = http.send(request, HttpResponse.BodyHandlers.ofString())
             val location = r.headers().firstValue("location").orElse(null)
             if (location != null) {
-                if (location.startsWith("marquee://")) return location
+                if (location.startsWith("momotus://")) return location
                 request = HttpRequest.newBuilder(request.uri().resolve(location)).GET().build()
                 return@repeat
             }

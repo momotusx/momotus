@@ -269,7 +269,7 @@ pub struct ClientConfig {
 impl Default for ClientConfig {
     fn default() -> Self {
         Self {
-            user_agent: format!("Marquee/{}", env!("CARGO_PKG_VERSION")),
+            user_agent: format!("Momotus/{}", env!("CARGO_PKG_VERSION")),
             connect_timeout: Duration::from_secs(5),
             per_host_limit: 6,
             global_limit: 32,

@@ -42,10 +42,10 @@ const check = (name: string, ok: boolean, detail?: unknown) => {
   if (!ok) result.failed = [...((result.failed as string[]) ?? []), name];
 };
 
-adb("shell", "am", "force-stop", "app.marquee.android");
+adb("shell", "am", "force-stop", "app.momotus.android");
 adb("logcat", "-c");
 key("KEYCODE_TAB");
-adb("shell", "am", "start", "-n", "app.marquee.android/.MainActivity", "--es", "form", "tv", "--es", "title", "movie:tt1727587");
+adb("shell", "am", "start", "-n", "app.momotus.android/app.marquee.android.MainActivity", "--es", "form", "tv", "--es", "title", "movie:tt1727587");
 await until("the title page with its version line", 60_000, () => /1080p, 15 MB/.test(dump()));
 // A run that reached the end leaves the title marked watched, which keeps it out of Continue
 // Watching: turn the mark off first (Resume, Versions, Library, Watched are the four buttons).
@@ -109,7 +109,7 @@ check("no reports while paused", progressLines(log()).length === reports);
 // Leaving the app: coming back finds the same player (the first key brings the controls back).
 key("KEYCODE_HOME");
 await Bun.sleep(2_000);
-adb("shell", "am", "start", "-n", "app.marquee.android/.MainActivity");
+adb("shell", "am", "start", "-n", "app.momotus.android/app.marquee.android.MainActivity");
 await Bun.sleep(3_000);
 key("KEYCODE_DPAD_DOWN");
 await Bun.sleep(1_500);
@@ -151,9 +151,9 @@ key("KEYCODE_BACK");
 await until("the title page again", 30_000, () => /Resume( from 0:\d\d| · \d+ min left)/.test(dump()));
 
 // Kill and relaunch: Continue Watching leads Home.
-adb("shell", "am", "force-stop", "app.marquee.android");
+adb("shell", "am", "force-stop", "app.momotus.android");
 key("KEYCODE_TAB");
-adb("shell", "am", "start", "-n", "app.marquee.android/.MainActivity", "--es", "form", "tv");
+adb("shell", "am", "start", "-n", "app.momotus.android/app.marquee.android.MainActivity", "--es", "form", "tv");
 const home = await until("Continue Watching on Home", 60_000, () => /Continue Watching/.test(dump()) && dump());
 check("Continue Watching shows after a restart", /Sintel/.test(home), { durationMs });
 

@@ -581,6 +581,6 @@ pub async fn browse(url: &str) -> String {
         .to_str()
         .unwrap()
         .to_owned();
-    assert!(to.starts_with("marquee://auth#"), "{to}");
+    assert!(to.starts_with("momotus://auth#"), "{to}");
     to.split_once('#').unwrap().1.to_owned()
 }

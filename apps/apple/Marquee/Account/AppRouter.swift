@@ -24,7 +24,7 @@ final class AppRouter {
 
     #if os(iOS)
     /// The quick action's type.
-    static let signInAnotherType = "app.marquee.signInAnother"
+    static let signInAnotherType = "app.momotus.signInAnother"
 
     /// The home-screen quick action: only a phone or tablet in an account approves.
     static func updateQuickAction(joined: Bool) {

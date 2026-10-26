@@ -98,7 +98,7 @@ pub struct SignInView {
 
 impl SignInView {
     /// `return_to` is where the provider sends the user back (the app's
-    /// `marquee://auth`, or a loopback page); `revoke` runs Apple's revoke.
+    /// `momotus://auth`, or a loopback page); `revoke` runs Apple's revoke.
     pub fn open(core: &Core, server: &str, provider: &str, return_to: &str, revoke: bool) -> Self {
         let snapshot = SharedObservable::new(SignInSnapshot::Starting);
         let (back, returned) = mpsc::channel(4);

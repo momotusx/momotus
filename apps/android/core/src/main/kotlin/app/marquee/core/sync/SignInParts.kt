@@ -58,7 +58,7 @@ sealed interface GoogleAnswer {
 
 /**
  * One brokered sign-in (or Apple's revoke) in the core's `signIn` view: the provider page opens once, and the
- * redirect is handed over only while this run waits, only from `marquee://auth`, and only when it names this
+ * redirect is handed over only while this run waits, only from `momotus://auth`, and only when it names this
  * relay. The core takes only its own flow's return as well, so a stray link ends nothing.
  */
 class BrokeredRun(
@@ -80,7 +80,7 @@ class BrokeredRun(
     private var returnedOnce = false
 
     /**
-     * Opened in an Auth Tab: its return comes back as the tab's result, so a `marquee://auth` link delivered as an
+     * Opened in an Auth Tab: its return comes back as the tab's result, so a `momotus://auth` link delivered as an
      * intent while it runs can only be another app's or a web page's ([linkReturned]).
      */
     @Volatile
@@ -115,20 +115,20 @@ class BrokeredRun(
     }
 
     /**
-     * The app's auth session came back with [uri] (`marquee://auth#...`). True when it was this run's to take:
+     * The app's auth session came back with [uri] (`momotus://auth#...`). True when it was this run's to take:
      * it waits, the link is the app's own return, and it names this relay.
      */
     fun returned(uri: String): Boolean {
         if (end.isCompleted || !shown) return false
         val parsed = runCatching { URI(uri) }.getOrNull() ?: return false
-        if (parsed.scheme != "marquee" || parsed.host != "auth") return false
+        if (parsed.scheme != "momotus" || parsed.host != "auth") return false
         val fragment = parsed.rawFragment ?: return false
         if (!AccountRules.sameRelay(fragment, server)) return false
         signIn.returned(fragment)
         return true
     }
 
-    /** A `marquee://auth` link delivered to the app (a Custom Tab's return): taken only by a run not in an Auth Tab. */
+    /** A `momotus://auth` link delivered to the app (a Custom Tab's return): taken only by a run not in an Auth Tab. */
     fun linkReturned(uri: String): Boolean = !viaAuthTab && returned(uri)
 
     /** The provider page was left without a return (an Auth Tab reports it): the run ends as cancelled. */

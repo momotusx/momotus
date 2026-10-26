@@ -3,13 +3,13 @@ import XCTest
 
 /// The iPhone walk of plans/player-gestures.md 7.2: real touches on the walk build's player, which only XCUITest can
 /// give a physical iPhone. Run only through `apps/apple/scripts/walk-ui.sh <UDID>`, which builds the app under its own
-/// bundle id; the target's build refuses any other id, and the test drives `app.marquee.walk` alone, so the owner's app
+/// bundle id; the target's build refuses any other id, and the test drives `app.momotus.walk` alone, so the owner's app
 /// is never installed over or touched. The walk install needs a source for Sintel first. Muted (`-MQMute YES`); upward
 /// volume drags raise the level by at most 0.1 and the end stop is checked at 0; the walk build puts the volume it found
 /// back when the player closes, and the brightness keeper the brightness. No drag starts in the top or bottom band:
 /// those are the system's and would leave the app (test 24 covers them).
 @MainActor final class PlayerGesturesWalk: XCTestCase {
-    static let walkApp = "app.marquee.walk"
+    static let walkApp = "app.momotus.walk"
 
     // Every instance reaches the same running app, so the helpers ask for their own.
     private var app: XCUIApplication { XCUIApplication(bundleIdentifier: Self.walkApp) }
