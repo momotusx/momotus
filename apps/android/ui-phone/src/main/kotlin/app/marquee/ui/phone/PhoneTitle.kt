@@ -16,7 +16,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.windowInsetsTopHeight
 import androidx.compose.foundation.lazy.LazyColumn
@@ -38,6 +37,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -82,7 +82,6 @@ import app.marquee.design.RoundButton
 import app.marquee.design.RowHeader
 import app.marquee.design.Score
 import app.marquee.design.Scrims
-import app.marquee.design.SecondaryButton
 import app.marquee.design.Skeleton
 import app.marquee.design.StateMessage
 import app.marquee.design.Status
@@ -194,7 +193,17 @@ fun PhoneTitle(
                 ) {
                     item(
                         key = "art",
-                    ) { Hero(details.background ?: details.poster, details.logo, details.name, hasArt, side) }
+                    ) {
+                        // The cover first: covers are vertical, and a backdrop is often a crop of the same art.
+                        Hero(
+                            details.cover ?: details.background ?: details.poster,
+                            details.logo,
+                            details.name,
+                            hasArt,
+                            side,
+                            details.cover != null,
+                        )
+                    }
                     item(
                         key = "info",
                     ) { Info(title, versions, versionsFailed, onPlay, onVersions, onGenre) }
@@ -270,6 +279,9 @@ fun PhoneTitle(
 }
 
 private const val HERO_RATIO = 1.45f
+
+/** The title's artwork, for tests. */
+internal const val TITLE_ART_TAG = "title-art"
 
 /** The rated cover's width on a phone: the band's digits stay legible from 200 dp up. */
 private val COVER_WIDTH = 200.dp
@@ -354,14 +366,21 @@ private fun MoreLikeThis(
     }
 }
 
-/** The narrowest the title's primary gets beside Watched before Watched moves under it. */
-private val PRIMARY_MIN = 220.dp
-
-/** The artwork's height: the width at [HERO_RATIO], held to 60% of the window (landscape, tablets). */
+/**
+ * The artwork's height: a cover at its own 2:3, whole, held to 75% of the window; a backdrop at
+ * [HERO_RATIO], held to 60% (landscape, tablets).
+ */
 @Composable
-private fun heroHeight(): Dp {
+internal fun heroHeight(cover: Boolean = false): Dp {
     val window = windowDp()
-    return minOf(window.width / HERO_RATIO, window.height * 0.6f)
+    return if (cover) {
+        minOf(window.width * 1.5f, window.height * 0.75f)
+    } else {
+        minOf(
+            window.width / HERO_RATIO,
+            window.height * 0.6f,
+        )
+    }
 }
 
 /**
@@ -376,6 +395,7 @@ private fun Hero(
     name: String,
     hasArt: Boolean,
     side: Dp,
+    cover: Boolean,
 ) {
     if (!hasArt) {
         Logo(
@@ -393,9 +413,16 @@ private fun Hero(
         return
     }
     val page = Marquee.colors.bg
-    Box(Modifier.fillMaxWidth().height(heroHeight())) {
-        // Dark under the light status bar icons and toward the light logo.
-        Backdrop(art, Modifier.matchParentSize(), foot = Scrims.phoneTitleFoot, top = Scrims.phoneTitleTop)
+    Box(Modifier.fillMaxWidth().height(heroHeight(cover)).testTag(TITLE_ART_TAG)) {
+        // Dark under the light status bar icons and toward the light logo. A cover held under its 2:3
+        // keeps its top, where the faces are.
+        Backdrop(
+            art,
+            Modifier.matchParentSize(),
+            foot = if (cover) Scrims.phoneCoverFoot else Scrims.phoneTitleFoot,
+            top = Scrims.phoneTitleTop,
+            alignment = if (cover) Alignment.TopCenter else Alignment.Center,
+        )
         Box(
             Modifier
                 .align(Alignment.BottomStart)
@@ -446,35 +473,22 @@ private fun Info(
         )
         Genres(header, details, onGenre)
         details.description?.let { Synopsis(it) }
-        // As the web lays a phone title out: the primary with Watched beside it as a pill (movies),
-        // then the other actions as equal circles in one row, their words on up to two lines. On a
-        // small phone or with large text Watched moves under the primary rather than squeeze its words.
-        FlowRow(
-            horizontalArrangement = Arrangement.spacedBy(Marquee.space.xs),
-            verticalArrangement = Arrangement.spacedBy(Marquee.space.xs),
-        ) {
-            PrimaryButton(
-                label = primary.label,
-                icon = PlayFilled,
-                modifier = Modifier.widthIn(min = PRIMARY_MIN).weight(1f),
-                enabled = TitleCopy.live(primary, target),
-                onClick = {
-                    when (val to = TitleCopy.playTo(primary, target, versions)) {
-                        is PlayTo.Player -> target?.let { onPlay(to.key, it.videoId) }
-                        PlayTo.Versions -> target?.let { onVersions(it.videoId) }
-                        PlayTo.Nowhere -> Unit
-                    }
-                },
-            )
-            if (details.kind == "movie") {
-                SecondaryButton(
-                    label = if (header.watched) "Watched" else "Mark as watched",
-                    onClick = { title.setWatched(details.id, !header.watched) },
-                    icon = Icons.Check,
-                    selected = header.watched,
-                )
-            }
-        }
+        // As the web lays a phone title out: the primary across the page, then the other actions as
+        // equal circles in one row, their words on up to two lines. Watched is one of those small
+        // circles, never a big button (the owner's rule).
+        PrimaryButton(
+            label = primary.label,
+            icon = PlayFilled,
+            modifier = Modifier.fillMaxWidth(),
+            enabled = TitleCopy.live(primary, target),
+            onClick = {
+                when (val to = TitleCopy.playTo(primary, target, versions)) {
+                    is PlayTo.Player -> target?.let { onPlay(to.key, it.videoId) }
+                    PlayTo.Versions -> target?.let { onVersions(it.videoId) }
+                    PlayTo.Nowhere -> Unit
+                }
+            },
+        )
         if (target == null) {
             StatusNote(TitleCopy.nothingToPlay(header.nextAirs))
         } else {
@@ -508,6 +522,18 @@ private fun Info(
                     modifier = Modifier.weight(1f),
                     selected = header.inLibrary,
                     showLabel = true,
+                )
+            }
+            // Movies only: an episode carries its own mark.
+            if (details.kind == "movie") {
+                RoundButton(
+                    icon = Icons.CircleCheck,
+                    label = "Watched",
+                    onClick = { title.setWatched(details.id, !header.watched) },
+                    modifier = Modifier.weight(1f),
+                    selected = header.watched,
+                    showLabel = true,
+                    spoken = if (header.watched) "Watched" else "Mark as watched",
                 )
             }
         }

@@ -11,6 +11,7 @@ import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import app.marquee.core.client.CoreClient
@@ -243,5 +244,89 @@ class PhoneTitleActionsTest {
         }
         compose.onAllNodes(hasContentDescription("Add to Library")).assertCountEquals(0)
         compose.onAllNodes(hasContentDescription("In Library")).assertCountEquals(0)
+    }
+
+    /** Draws [snapshot]'s page and waits for its Play. */
+    private fun draw(snapshot: TitleSnapshot) {
+        client.attach { text ->
+            val msg = CoreJson.parseToJsonElement(text).jsonObject
+            val id = msg["id"]?.jsonPrimitive?.longOrNull ?: return@attach
+            val result =
+                if (msg["op"]?.jsonPrimitive?.content == "subscribe") {
+                    """{"sub":7,"snapshot":${CoreJson.encodeToString(TitleSnapshot.serializer(), snapshot)}}"""
+                } else {
+                    "{}"
+                }
+            client.onMessage("""{"id":$id,"ok":true,"result":$result}""")
+        }
+        val view = TitleView(client, scope, "movie", "tt1")
+        compose.setContent {
+            MarqueeTheme(Form.Phone) {
+                PhoneTitle(
+                    view,
+                    versions(EmptyKind.Unreachable, EmptyAction.TryAgain).copy(empty = null, done = false),
+                    onPlay = { _, _ -> },
+                    onVersions = {},
+                    onEpisode = {},
+                    onEpisodeVersions = {},
+                )
+            }
+        }
+        compose.waitForIdle()
+        view.open()
+        val deadline = System.currentTimeMillis() + 120_000
+        while (compose.onAllNodesWithText("Play").fetchSemanticsNodes().isEmpty()) {
+            check(System.currentTimeMillis() < deadline) { "the title never drew" }
+            Snapshot.sendApplyNotifications()
+            compose.waitForIdle()
+            Thread.sleep(10)
+        }
+    }
+
+    private fun bounds(tag: String) = compose.onNodeWithTag(tag).fetchSemanticsNode().boundsInRoot
+
+    private fun withArt(
+        poster: String? = null,
+        cover: String? = null,
+        background: String? = null,
+    ) = title.copy(
+        header =
+            title.header.copy(
+                details = title.header.details!!.copy(poster = poster, cover = cover, background = background),
+            ),
+    )
+
+    @Test
+    fun `a cover shows whole in a 2 by 3 frame`() {
+        draw(
+            withArt(
+                poster = "https://a.example/p.jpg",
+                cover = "https://a.example/c.jpg",
+                background = "https://a.example/b.jpg",
+            ),
+        )
+        val art = bounds(TITLE_ART_TAG)
+        // 411 dp wide: 616.5 dp high, far under 75 percent of the 2400 dp window.
+        assertEquals(1.5f, art.height / art.width, 0.01f)
+    }
+
+    @Test
+    fun `a backdrop alone keeps the wide frame`() {
+        draw(withArt(background = "https://a.example/b.jpg"))
+        val art = bounds(TITLE_ART_TAG)
+        assertEquals(1 / 1.45f, art.height / art.width, 0.01f)
+    }
+
+    @Test
+    fun `Watched is a small circle in the actions' row, never a big button`() {
+        draw(title)
+        compose.onAllNodesWithText("Mark as watched").assertCountEquals(0)
+        // Its spoken name says the state; its circle is Library's, level with it.
+        val circle = { name: String -> compose.onNode(hasContentDescription(name)).fetchSemanticsNode().boundsInRoot }
+        val watched = circle("Mark as watched")
+        val library = circle("Add to Library")
+        assertEquals(library.top, watched.top, 1f)
+        assertEquals(library.width, watched.width, 1f)
+        assertEquals(library.height, watched.height, 1f)
     }
 }
