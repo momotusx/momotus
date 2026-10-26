@@ -16,6 +16,7 @@ import app.marquee.core.client.CoreLog
 import app.marquee.core.session.CoreSession
 import app.marquee.core.startsFresh
 import app.marquee.core.views.HomeView
+import app.marquee.ui.tv.FocusMemory
 import app.marquee.ui.tv.TvHomeState
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -77,6 +78,9 @@ class AppState(
     val home: HomeView get() = homeView ?: session.home().also { homeView = it }
     var tvHome by mutableStateOf(TvHomeState(lowMemory))
         private set
+
+    /** Where focus was on Discover (TV), so the tab bar's Down and Back to Discover land on it (plans/discover-v2.md 6.5). */
+    val discoverFocus = FocusMemory()
 
     /** "Remove from Continue Watching" on a held tile, with five seconds for Undo before it goes to the core. */
     val removal = PendingRemoval(viewModelScope) { session.ops.removeFromContinue(it.id) }

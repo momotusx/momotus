@@ -25,11 +25,19 @@ object DiscoverCopy {
         return "No ${s.genre ?: "titles"}$decade${service?.let { " on $it" } ?: ""} right now."
     }
 
-    /** Under the poster: the IMDb score for the IMDb sort (the order is made from it), else the year. */
-    fun caption(
+    /**
+     * On the poster's corner: the value the list is ordered by, the IMDb score for the IMDb sort (even with the cover's
+     * band, which can be weeks old) and the year for the date sorts; nothing for the others.
+     */
+    fun corner(
         sort: String?,
         tile: Tile,
-    ): String? = if (sort == "imdb" && tile.ratings.imdb != null) "IMDb ${tile.ratings.imdb}" else tile.releaseInfo
+    ): String? =
+        when (sort) {
+            "imdb" -> tile.ratings.imdb?.let { "IMDb $it" }
+            "newest", "oldest" -> tile.releaseInfo
+            else -> null
+        }
 
     private fun services(n: Int) = if (n == 1) "service" else "services"
 }

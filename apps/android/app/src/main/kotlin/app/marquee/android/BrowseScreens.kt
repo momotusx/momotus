@@ -26,6 +26,7 @@ import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
@@ -41,10 +42,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusRestorer
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -76,6 +80,7 @@ import app.marquee.design.FieldInput
 import app.marquee.design.FocusInk
 import app.marquee.design.Form
 import app.marquee.design.Icons
+import app.marquee.design.KeepInView
 import app.marquee.design.Marquee
 import app.marquee.design.MarqueeFonts
 import app.marquee.design.MqIcon
@@ -85,6 +90,7 @@ import app.marquee.design.PullDown
 import app.marquee.design.RowHeader
 import app.marquee.design.SecondaryButton
 import app.marquee.design.SegmentTrack
+import app.marquee.design.ServiceTile
 import app.marquee.design.Skeleton
 import app.marquee.design.StateMessage
 import app.marquee.design.TextRole
@@ -95,7 +101,10 @@ import app.marquee.design.laneHeight
 import app.marquee.design.liftRoom
 import app.marquee.design.marqueeFocus
 import app.marquee.ui.phone.LocalBarSpace
+import app.marquee.ui.tv.FocusMemory
+import app.marquee.ui.tv.requesterFor
 import app.marquee.ui.tv.tvContentTop
+import app.marquee.ui.tv.watch
 
 // Search and Discover (plans/android-design-v2.md 5.1, 5.2): one layout for TV and phone; the design
 // components size themselves by form, and the D-pad moves between them by geometry.
@@ -457,7 +466,12 @@ private fun ResultRow(
 internal fun Poster(
     tile: Tile,
     onOpen: (Tile) -> Unit,
+    modifier: Modifier = Modifier,
     caption: String? = tile.releaseInfo,
+    corner: String? = null,
+    focusRequester: FocusRequester? = null,
+    onFocusChange: ((Boolean) -> Unit)? = null,
+    enabled: Boolean = true,
 ) {
     val (art, fallback) = TileCopy.art(tile, wide = false)
     PosterTile(
@@ -465,10 +479,14 @@ internal fun Poster(
         imageUrl = art,
         fallbackImageUrl = fallback,
         onClick = { onOpen(tile) },
-        modifier = Modifier.padding(top = Marquee.tiles.pad),
+        modifier = Modifier.padding(top = Marquee.tiles.pad).then(modifier),
         progress = tile.progress,
         caption = caption,
         ratings = TileCopy.ratings(tile.ratings),
+        cornerLabel = corner,
+        focusRequester = focusRequester,
+        onFocusChange = onFocusChange,
+        enabled = enabled,
     )
 }
 
@@ -481,6 +499,8 @@ fun DiscoverScreen(
     /** A genre chip's ask (a title page's genre), sent once Discover has its first snapshot. */
     request: DiscoverRequest? = null,
     onRequestSent: () -> Unit = {},
+    /** Where focus was on Discover (TV): each control row and the grid remember their last focused item. */
+    focus: FocusMemory = remember { FocusMemory() },
 ) {
     val holder =
         viewModel<DiscoverHolder>(
@@ -489,7 +509,7 @@ fun DiscoverScreen(
         )
     val view = holder.view
     val snapshot = view.snapshot
-    // One select of the kind and the genre, after the first snapshot: the core picks the catalog (C40).
+    // One select of the kind and the genre, after the first snapshot: the core reads it as a link (C40).
     val activity = LocalActivity.current
     GenreAskEffect(
         request,
@@ -500,7 +520,24 @@ fun DiscoverScreen(
     )
     val metrics = Marquee.tiles
     val side = Marquee.safe.side
+    val tv = Marquee.form == Form.Tv
     val grid = rememberLazyGridState()
+    // What the grid shows (6.1): the core's items, except that on TV a late list that reorders the grid waits while
+    // focus is in it ("More titles arrived. Show"), and a list loading after a change keeps the one before, dimmed.
+    var shown by remember { mutableStateOf<List<Tile>>(emptyList()) }
+    var held by remember { mutableStateOf(false) }
+    var inGrid by remember { mutableStateOf(false) }
+    val items = snapshot?.items.orEmpty()
+    LaunchedEffect(items, inGrid) {
+        val grows = items.size >= shown.size && items.take(shown.size).map { it.id } == shown.map { it.id }
+        if (!tv || !inGrid || grows || items.isEmpty()) {
+            if (items.isNotEmpty() || snapshot?.state !is DiscoverState.Loading) shown = items
+            held = false
+        } else {
+            held = items.map { it.id } != shown.map { it.id }
+        }
+    }
+    val dimmed = items.isEmpty() && snapshot?.state is DiscoverState.Loading && shown.isNotEmpty()
     // Ask for the next page as the end comes into view.
     LaunchedEffect(grid, view) {
         snapshotFlow {
@@ -515,7 +552,7 @@ fun DiscoverScreen(
     LazyVerticalGrid(
         columns = GridCells.Adaptive(metrics.poster.width),
         state = grid,
-        modifier = Modifier.fillMaxSize().focusRestorer(),
+        modifier = Modifier.fillMaxSize(),
         contentPadding =
             pagePadding().let {
                 PaddingValues(
@@ -559,7 +596,11 @@ fun DiscoverScreen(
             }
 
             else -> {
-                full("kinds") {
+                // Up from a row lands where the row above was last focused (6.5); the kinds go up to the tab bar.
+                val upToRail = focus.rowEntry(ROW_RAIL)
+                val upToKinds = focus.rowEntry(ROW_KINDS)
+                val upToFilters = focus.rowEntry(ROW_FILTERS)
+                full(ROW_KINDS) {
                     // Movies, Series and Anime are the segmented control; any other kind is in a More pull-down,
                     // so the control keeps its shape (plans/discover-v2.md 6.1).
                     val main = snapshot.kinds.filter { it.first in MAIN_KINDS }
@@ -570,7 +611,15 @@ fun DiscoverScreen(
                     ) {
                         SegmentTrack(Modifier.focusRestorer()) {
                             for ((value, name) in main) {
-                                Chip(name, value == snapshot.kind, { view.select(kind = value) }, inTrack = true)
+                                val key = "kind:$value"
+                                Chip(
+                                    name,
+                                    value == snapshot.kind,
+                                    { view.select(kind = value) },
+                                    inTrack = true,
+                                    focusRequester = focus.requesterFor(key),
+                                    onFocusChange = focus.watch(ROW_KINDS, key),
+                                )
                             }
                         }
                         if (more.isNotEmpty()) {
@@ -586,31 +635,62 @@ fun DiscoverScreen(
                     }
                 }
                 if (snapshot.platforms.isNotEmpty()) {
-                    full("rail") {
-                        // The services by name in our own type, All first (6.6); the chosen one takes the selected fill.
+                    full(ROW_RAIL) {
+                        // The services as their logos, All first (6.6); the chosen one is ringed and kept in view, with
+                        // room at the ends for its ring.
+                        val rail = rememberLazyListState()
+                        KeepInView(rail, snapshot.platforms.indexOfFirst { it.id == snapshot.platform } + 1)
                         LazyRow(
-                            Modifier.liftRoom(Marquee.tiles.pad).focusRestorer(),
-                            contentPadding = PaddingValues(vertical = Marquee.tiles.pad),
+                            state = rail,
+                            modifier =
+                                Modifier
+                                    .liftRoom(Marquee.tiles.pad)
+                                    .focusRestorer()
+                                    .focusProperties { if (upToKinds != null) up = upToKinds },
+                            contentPadding = PaddingValues(horizontal = RING_ROOM, vertical = Marquee.tiles.pad),
                             horizontalArrangement = Arrangement.spacedBy(Marquee.space.xs),
                         ) {
                             item(key = "all") {
-                                Chip("All", snapshot.platform == null, { view.select(platform = GenreChange.Clear) })
+                                ServiceTile(
+                                    "All",
+                                    null,
+                                    snapshot.platform == null,
+                                    { view.select(platform = GenreChange.Clear) },
+                                    focusRequester = focus.requesterFor("rail:all"),
+                                    onFocusChange = focus.watch(ROW_RAIL, "rail:all"),
+                                )
                             }
                             items(snapshot.platforms, key = { it.id }) { p ->
-                                Chip(
+                                val key = "rail:${p.id}"
+                                ServiceTile(
                                     p.name,
+                                    p.logo,
                                     snapshot.platform == p.id,
                                     { view.select(platform = GenreChange.To(p.id)) },
+                                    focusRequester = focus.requesterFor(key),
+                                    onFocusChange = focus.watch(ROW_RAIL, key),
                                 )
                             }
                         }
                     }
                 }
-                full("filters") {
-                    val first = remember { FocusRequester() }
+                full(ROW_FILTERS) {
+                    val genreKey = "filters:genre"
+                    val yearKey = "filters:year"
                     val filtered = snapshot.genre != null || snapshot.decade != null || snapshot.platform != null
+                    // Clear hands focus to the first menu that stays, else the rail's All (6.5).
+                    val handOff =
+                        when {
+                            snapshot.genreChoices.isNotEmpty() -> focus.requester(genreKey)
+                            snapshot.decades.isNotEmpty() -> focus.requester(yearKey)
+                            else -> focus.requester("rail:all")
+                        }
+                    val up = upToRail ?: upToKinds
                     Row(
-                        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                        Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState())
+                            .focusProperties { if (up != null) this.up = up },
                         horizontalArrangement = Arrangement.spacedBy(Marquee.space.xs),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
@@ -625,7 +705,9 @@ fun DiscoverScreen(
                                 snapshot.genreLabel,
                                 any + snapshot.genreChoices.map { it.name to it.name },
                                 snapshot.genre,
-                                Modifier.focusRequester(first),
+                                Modifier
+                                    .focusRequester(focus.requesterFor(genreKey))
+                                    .onFocusChanged { focus.watch(ROW_FILTERS, genreKey)(it.isFocused) },
                             ) { view.select(genre = if (it == null) GenreChange.Clear else GenreChange.To(it)) }
                         }
                         if (snapshot.decades.isNotEmpty()) {
@@ -633,24 +715,43 @@ fun DiscoverScreen(
                                 "Year",
                                 listOf<Pair<String?, String>>(null to "Any year") + snapshot.decades.map { it to it },
                                 snapshot.decade,
-                                if (snapshot.genreChoices.isEmpty()) Modifier.focusRequester(first) else Modifier,
+                                Modifier
+                                    .focusRequester(focus.requesterFor(yearKey))
+                                    .onFocusChanged { focus.watch(ROW_FILTERS, yearKey)(it.isFocused) },
                             ) { view.select(decade = if (it == null) GenreChange.Clear else GenreChange.To(it)) }
                         }
                         if (filtered) {
-                            // Focus moves to the first menu before Clear leaves the row (6.5).
-                            SecondaryButton("Clear", {
-                                runCatching { first.requestFocus() }
-                                view.select(
-                                    genre = GenreChange.Clear,
-                                    platform = GenreChange.Clear,
-                                    decade = GenreChange.Clear,
-                                )
-                            }, spoken = "Clear filters")
+                            SecondaryButton(
+                                "Clear",
+                                {
+                                    runCatching { handOff?.requestFocus() }
+                                    view.select(
+                                        genre = GenreChange.Clear,
+                                        platform = GenreChange.Clear,
+                                        decade = GenreChange.Clear,
+                                    )
+                                },
+                                Modifier.onFocusChanged { focus.watch(ROW_FILTERS, "filters:clear")(it.isFocused) },
+                                spoken = "Clear filters",
+                            )
                         }
                         val sorts: List<Pair<String?, String>> =
                             snapshot.sorts.map { it.id to it.label } + snapshot.lists.map { "list:${it.id}" to it.name }
                         if (sorts.isNotEmpty()) {
-                            PullDown("Sort", sorts, snapshot.sort) { if (it != null) view.select(sort = it) }
+                            PullDown(
+                                "Sort",
+                                sorts,
+                                snapshot.sort,
+                                Modifier
+                                    .focusRequester(focus.requesterFor("filters:sort"))
+                                    .onFocusChanged { focus.watch(ROW_FILTERS, "filters:sort")(it.isFocused) },
+                            ) { if (it != null) view.select(sort = it) }
+                        }
+                        if (held) {
+                            SecondaryButton("More titles arrived. Show", {
+                                shown = items
+                                held = false
+                            })
                         }
                     }
                 }
@@ -665,7 +766,14 @@ fun DiscoverScreen(
                         }
                     }
 
-                    snapshot.items.isEmpty() && state is DiscoverState.Loading -> {
+                    dimmed -> {
+                        // The list before, dimmed and out of focus's reach, until the new one lands.
+                        itemsIndexed(shown, key = { index, tile -> "prev:${tile.id}#$index" }) { _, tile ->
+                            Poster(tile, onOpen, modifier = Modifier.alpha(DIMMED), enabled = false)
+                        }
+                    }
+
+                    shown.isEmpty() && state is DiscoverState.Loading -> {
                         full("skeleton") {
                             Row(
                                 Modifier.padding(top = metrics.pad),
@@ -674,19 +782,46 @@ fun DiscoverScreen(
                         }
                     }
 
-                    snapshot.items.isEmpty() && state is DiscoverState.Failed -> {
+                    items.isEmpty() && state is DiscoverState.Failed -> {
                         full("failed-items") {
                             Note("This list did not load: ${state.reason}", failed = true, side = 0.dp)
                         }
                     }
 
-                    snapshot.items.isEmpty() -> {
+                    items.isEmpty() -> {
                         full("nothing") { Note(DiscoverCopy.empty(snapshot), side = 0.dp) }
                     }
 
                     else -> {
-                        itemsIndexed(snapshot.items, key = { index, tile -> "${tile.id}#$index" }) { _, tile ->
-                            Poster(tile, onOpen, caption = DiscoverCopy.caption(snapshot.sort, tile))
+                        val columns = grid.layoutInfo.maxSpan.coerceAtLeast(1)
+                        itemsIndexed(shown, key = { index, tile -> "${tile.id}#$index" }) { index, tile ->
+                            val key = "tile:${tile.id}"
+                            Poster(
+                                tile,
+                                onOpen,
+                                corner = DiscoverCopy.corner(snapshot.sort, tile),
+                                // The corner shows the year for the date sorts: the caption does not repeat it.
+                                caption =
+                                    if (snapshot.sort == "newest" ||
+                                        snapshot.sort == "oldest"
+                                    ) {
+                                        null
+                                    } else {
+                                        tile.releaseInfo
+                                    },
+                                // The grid's first line goes up to the filter row's last focused control (6.5).
+                                modifier =
+                                    if (index < columns && upToFilters != null) {
+                                        Modifier.focusProperties { up = upToFilters }
+                                    } else {
+                                        Modifier
+                                    },
+                                focusRequester = focus.requesterFor(key),
+                                onFocusChange = { gained ->
+                                    focus.watch(ROW_GRID, key)(gained)
+                                    inGrid = gained
+                                },
+                            )
                         }
                         full("foot") {
                             val foot =
@@ -708,6 +843,17 @@ fun DiscoverScreen(
         }
     }
 }
+
+/** Room at the rail's ends for the chosen tile's ring. */
+private val RING_ROOM = 8.dp
+
+/** The previous list's opacity while the next one loads. */
+private const val DIMMED = 0.45f
+
+private const val ROW_KINDS = "kinds"
+private const val ROW_RAIL = "rail"
+private const val ROW_FILTERS = "filters"
+private const val ROW_GRID = "grid"
 
 /** Movies, Series and Anime: the segmented control (plans/discover-v2.md 6.1). */
 private val MAIN_KINDS = setOf("movie", "series", "anime")

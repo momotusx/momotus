@@ -48,7 +48,7 @@ class DiscoverCopyTest {
     }
 
     @Test
-    fun `the caption is the IMDb score only for the IMDb sort`() {
+    fun `the corner shows the value the list is ordered by`() {
         val tile =
             Tile(
                 id = "tt1",
@@ -58,7 +58,8 @@ class DiscoverCopyTest {
                 releaseInfo = "2021",
                 ratings = Ratings(imdb = "8.4"),
             )
-        assertEquals("IMDb 8.4", DiscoverCopy.caption("imdb", tile))
-        assertEquals("2021", DiscoverCopy.caption("newest", tile))
+        assertEquals("IMDb 8.4", DiscoverCopy.corner("imdb", tile))
+        assertEquals("2021", DiscoverCopy.corner("newest", tile))
+        assertEquals(null, DiscoverCopy.corner("popular", tile))
     }
 }

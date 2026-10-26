@@ -27,6 +27,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.testTag
@@ -119,6 +120,10 @@ fun PosterTile(
     rank: Int? = null,
     /** A Top 10 tile's genre, one line under the art when the tile has no caption. */
     genre: String? = null,
+    /** A small label on the art's top corner: the value a Discover list is ordered by ("IMDb 8.4", "2024"). */
+    cornerLabel: String? = null,
+    /** False: shown only, never focused or pressed (Discover's previous list, dimmed while the next loads). */
+    enabled: Boolean = true,
 ) {
     val metrics = Marquee.tiles
     val colors = Marquee.colors
@@ -129,7 +134,7 @@ fun PosterTile(
     val state =
         (
             listOfNotNull(rank?.let { "Number $it" }, genre) +
-                listOfNotNull(caption ?: progress?.let { "${(it * 100).roundToInt()}% watched" }) +
+                listOfNotNull(cornerLabel, caption ?: progress?.let { "${(it * 100).roundToInt()}% watched" }) +
                 ratings +
                 listOfNotNull("Watched".takeIf { watched })
         ).joinToString(", ").ifEmpty { null }
@@ -151,7 +156,13 @@ fun PosterTile(
                 .semantics {
                     contentDescription = title
                     if (state != null) stateDescription = state
-                }.focusClickable(onClick, Role.Button, onLongClick = onLongClick, longClickLabel = longClickLabel),
+                }.focusClickable(
+                    onClick,
+                    Role.Button,
+                    enabled = enabled,
+                    onLongClick = onLongClick,
+                    longClickLabel = longClickLabel,
+                ),
         ) {
             RemoteImage(
                 imageUrl,
@@ -163,6 +174,11 @@ fun PosterTile(
             ) {
                 if (rank != null) RankNumeral(rank, Modifier.align(Alignment.TopStart))
                 if (watched) WatchedChip(Modifier.align(Alignment.TopStart))
+                // Bottom right, just above RPDB's ratings band (about a tenth of the cover) when the cover has one.
+                if (cornerLabel != null) {
+                    val band = if (fallbackImageUrl != null) size.height * BAND_SHARE else 0.dp
+                    CornerLabel(cornerLabel, Modifier.align(Alignment.BottomEnd).padding(bottom = band))
+                }
                 if (progress != null) ProgressBar(progress, Modifier.align(Alignment.BottomStart))
             }
         }
@@ -290,6 +306,29 @@ private fun WatchedChip(modifier: Modifier) {
     }
 }
 
+/** The share of an RPDB cover its ratings band takes at the bottom (84 of 859 px), plus a little air. */
+private const val BAND_SHARE = 0.105f
+
+/** The value a Discover list is ordered by, compact, at the art's bottom corner. */
+@Composable
+private fun CornerLabel(
+    text: String,
+    modifier: Modifier,
+) {
+    val tv = Marquee.form == Form.Tv
+    MqText(
+        text,
+        modifier
+            .padding(if (tv) 8.dp else 4.dp)
+            .clip(RoundedCornerShape(if (tv) 8.dp else 6.dp))
+            .background(Color.Black.copy(alpha = 0.78f))
+            .padding(horizontal = if (tv) 8.dp else 5.dp, vertical = if (tv) 2.dp else 1.dp),
+        role = TextRole.Caption,
+        weight = FontWeight.SemiBold,
+        maxLines = 1,
+    )
+}
+
 private val EPISODE_PAD = 16.dp
 
 /** The 25 percent inner keyline over art, so dark art never melts into the page: 1 point on TV, half on a phone. */
@@ -329,3 +368,42 @@ private fun RankNumeral(
 
 /** A Top 10 tile's genre line, for tests of where it sits. */
 const val RANK_GENRE_TAG = "rank-genre"
+
+/**
+ * A streaming service on Discover's rail (plans/discover-v2.md 6.6, the owner, 2026-10-26): its logo on a
+ * rounded square, as the Apple TV app and JustWatch draw them, with [name] as the words while the logo loads, when
+ * there is none ([logoUrl] null: no TMDB key, or TMDB has none), and always as what a screen reader says. The chosen
+ * one has a white ring; focus lifts it as art.
+ */
+@Composable
+fun ServiceTile(
+    name: String,
+    logoUrl: String?,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    focusRequester: FocusRequester? = null,
+    onFocusChange: ((Boolean) -> Unit)? = null,
+) {
+    val side = if (Marquee.form == Form.Tv) 84.dp else 52.dp
+    val corner = Marquee.radius.m
+    val lift = remember { mutableStateOf(false) }
+    val ring = 3.dp
+    Box(
+        Modifier
+            .lifted(lift)
+            .then(modifier)
+            .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
+            .marqueeFocus(corner + ring, Tokens.FOCUS_SCALE_ART, lift = lift, art = true)
+            .then(if (onFocusChange != null) Modifier.onFocusChanged { onFocusChange(it.isFocused) } else Modifier)
+            .border(ring, if (selected) Marquee.colors.text else Color.Transparent, RoundedCornerShape(corner + ring))
+            .padding(ring + 2.dp)
+            .clip(RoundedCornerShape(corner))
+            .semantics {
+                contentDescription = name
+                this.selected = selected
+            }.focusClickable(onClick, Role.RadioButton),
+    ) {
+        RemoteImage(logoUrl, side, side, fallbackText = name)
+    }
+}

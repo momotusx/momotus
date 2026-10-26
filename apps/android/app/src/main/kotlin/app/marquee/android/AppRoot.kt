@@ -555,6 +555,7 @@ private fun AppNav(
                             onRequestSent = { app.discoverRequest = null },
                             onSetup = { backStack.add(Route.Onboarding) },
                             onAddons = { choose(Route.Settings) },
+                            focus = app.discoverFocus,
                         )
                     }
                     entry<Route.Library> {
@@ -789,7 +790,16 @@ private fun AppNav(
             selected = selected,
             showNav = framed,
             onSelect = ::choose,
-            contentEntry = { if (top == Route.Home) app.tvHome.focus.lastEntry() else null },
+            contentEntry = {
+                when (top) {
+                    Route.Home -> app.tvHome.focus.lastEntry()
+
+                    // Discover: where focus last was, else the selected kind (6.5), never the grid by geometry.
+                    Route.Discover -> app.discoverFocus.lastEntry() ?: app.discoverFocus.rowEntry("kinds")
+
+                    else -> null
+                }
+            },
             onNavFocus = { app.tvHome.focus.leftContent() },
             onKey = { app.tvHome.focus.interacted() },
             nav = tvNav,
