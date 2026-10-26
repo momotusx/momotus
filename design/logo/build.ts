@@ -19,11 +19,11 @@ export const ART = { scale: 1.28, x: -0.2, y: 0.08 };
 export const KEEP = [[330, 37], [353, 58], [403, 58], [353, 108], [403, 108], [470, 60], [652, 128], [420, 158],
   [655, 146], [694, 190], [621, 170], [632, 330]] as const;
 export const ANDROID_K = 0.95;
-/** The tvOS front layer's bird: its whole ink (0.978 of its square, from 0.0107 down) at 0.82 of the layer's
- * height, in the middle, so the tilt never shows an edge cut. The square's side and top left in a w x h layer. */
+/** The tvOS front layer's bird: its whole ink (INK) at 0.82 of the layer's height, in the middle, so the tilt
+ * never shows an edge cut. The square's side and top left in a w x h layer. */
 export function tvFront(w: number, h: number) {
-  const s = (0.82 * h) / 0.978;
-  return { s, x: w / 2 - 0.5 * s, y: (h - 0.978 * s) / 2 - 0.0107 * s };
+  const s = (0.82 * h) / (INK.bottom - INK.top);
+  return { s, x: w / 2 - ((INK.left + INK.right) / 2) * s, y: (h - (INK.bottom - INK.top) * s) / 2 - INK.top * s };
 }
 export const MASKABLE_K = 0.83;
 
@@ -33,6 +33,19 @@ const mono = readFileSync(join(here, "motmot-mono.svg"), "utf8");
 const wordmark = readFileSync(join(here, "wordmark.svg"), "utf8");
 
 const viewBox = (svg: string) => svg.match(/viewBox="([^"]+)"/)![1].split(/\s+/).map(Number);
+
+/** The bird's ink box in its square (0 to 1), from the points of motmot.svg's silhouette; control points count
+ * too, so the box is never smaller than the bird. */
+export const INK = (() => {
+  const [vx, vy, vw] = viewBox(master);
+  const d = master.match(/<clipPath id="c-sil"><path d="([^"]+)"/)![1];
+  const n = d.match(/-?\d+(?:\.\d+)?/g)!.map(Number);
+  const xs = n.filter((_, i) => i % 2 === 0), ys = n.filter((_, i) => i % 2 === 1);
+  return {
+    left: (Math.min(...xs) - vx) / vw, right: (Math.max(...xs) - vx) / vw,
+    top: (Math.min(...ys) - vy) / vw, bottom: (Math.max(...ys) - vy) / vw,
+  };
+})();
 const inner = (svg: string) => svg.replace(/^[\s\S]*?<svg[^>]*>/, "").replace(/<\/svg>\s*$/, "").replace(/<title>[^<]*<\/title>/, "");
 
 /** The bird (its square viewBox) drawn into the box x, y, size. */

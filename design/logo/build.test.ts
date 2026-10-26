@@ -5,7 +5,7 @@ import { expect, test } from "bun:test";
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { ANDROID_K, ART, KEEP, MASKABLE_K, tvFront } from "./build";
+import { ANDROID_K, ART, INK, KEEP, MASKABLE_K, tvFront } from "./build";
 
 const root = join(import.meta.dir, "../..");
 const at = (...p: string[]) => join(root, ...p);
@@ -54,10 +54,10 @@ test("the head, eye, beak and racket stay whole in the tile, Android's 66 dp cir
   // tvOS: the whole bird inside its front layer, 5 percent clear of every edge, for every stack size.
   for (const [w, h] of [[400, 240], [1280, 768]]) {
     const { s, x, y } = tvFront(w, h);
-    expect(x + 0.0945 * s).toBeGreaterThanOrEqual(0.05 * w);
-    expect(x + 0.9055 * s).toBeLessThanOrEqual(0.95 * w);
-    expect(y + 0.0107 * s).toBeGreaterThanOrEqual(0.05 * h);
-    expect(y + 0.989 * s).toBeLessThanOrEqual(0.95 * h);
+    expect(x + INK.left * s).toBeGreaterThanOrEqual(0.05 * w);
+    expect(x + INK.right * s).toBeLessThanOrEqual(0.95 * w);
+    expect(y + INK.top * s).toBeGreaterThanOrEqual(0.05 * h);
+    expect(y + INK.bottom * s).toBeLessThanOrEqual(0.95 * h);
   }
 });
 

@@ -11,6 +11,6 @@ The owner's own drawing of a motmot (the genus is Momotus), `drawing.jpeg`, is t
 | `build.ts` | Writes every platform's icons, banners, launch art and marks from these files: `bun design/logo/build.ts` (needs `rsvg-convert` and ImageMagick). |
 | `build.test.ts` | Checks the outputs: sizes, the kept parts inside each safe zone, and that the Apple asset catalog compiles clean. |
 
-The icon is pick 4c: the bird at 1.28 of the tile, its body cut by the left and bottom edges, the head, eye, beak and racket tail whole, on near-black #0B0D0E. On Android the art shrinks to 0.95 so those parts stay inside the 66 dp circle no mask cuts; the maskable web icon shrinks it to 0.83 for its 80 percent circle.
+The icon is pick 4c: the bird at 1.28 of the tile, its body cut by the left and bottom edges, the head, eye, beak and racket tail whole, on near-black #0B0D0E. The tvOS icon is the one exception: its front layer holds the whole bird, 0.82 of the layer's height and clear of every edge, because tvOS moves the front layer more than the back when the icon tilts and a bird cut by the layer's edge would show the cut. On Android the art shrinks to 0.95 so those parts stay inside the 66 dp circle no mask cuts; the maskable web icon shrinks it to 0.83 for its 80 percent circle.
 
 Never restyle the drawing: its shapes, line, colours and shading are the owner's.
