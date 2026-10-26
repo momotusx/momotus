@@ -73,11 +73,15 @@ function corner(sort: string | null, t: Tile) {
 /** A service on the rail: its logo (TMDB's, from the core) on a rounded square, its name the label and
  * the words while the logo loads, when there is none, or when it does not load (6.6). */
 function ServiceTile(props: { id: string; name: string; logo: string | null; on: boolean; pick: () => void }) {
+  let el!: HTMLButtonElement;
+  // The chosen service scrolls into view with room for its ring.
+  createEffect(() => props.on && queueMicrotask(() => el.scrollIntoView({ inline: "nearest", block: "nearest" })));
   const [failed, setFailed] = createSignal(false);
   const [loaded, setLoaded] = createSignal(false);
   const art = () => !!props.logo && !failed();
   return (
     <button
+      ref={el}
       class="svc-tile"
       classList={{ on: props.on, logo: art() && loaded() }}
       role="radio"
@@ -242,7 +246,9 @@ function DiscoverPage(props: { retry: () => void }) {
                       All
                     </button>
                     <For each={s().platforms}>
-                      {(p) => <ServiceTile id={p.id} name={p.name} logo={p.logo} on={s().platform === p.id} pick={() => select({ platform: p.id })} />}
+                      {(p) => (
+                        <ServiceTile id={p.id} name={p.name} logo={p.logo} on={s().platform === p.id} pick={() => select({ platform: p.id })} />
+                      )}
                     </For>
                   </div>
                 </div>
@@ -328,6 +334,8 @@ function DiscoverPage(props: { retry: () => void }) {
                     scope="discover"
                     onNearEnd={loadMore}
                     corner={(t) => corner(s().sort, t)}
+                    // The corner shows the year for the date sorts: the line under the name does not repeat it.
+                    sub={() => (s().sort === "newest" || s().sort === "oldest" ? null : undefined)}
                     footer={
                       <div class="grid-foot-row">
                         <p class="grid-foot st" classList={{ warn: s().state.state === "loading", bad: s().state.state === "failed" }}>

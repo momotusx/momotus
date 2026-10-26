@@ -19,6 +19,8 @@ export function Grid(props: {
   footer?: JSX.Element;
   /** A small label on the poster's corner: the value the list is ordered by (Discover). */
   corner?: (t: Tile) => JSX.Element | null;
+  /** The line under a tile's name in place of the year (undefined keeps the year). */
+  sub?: (t: Tile) => string | null | undefined;
 }) {
   let sentinel!: HTMLDivElement;
   let grid!: HTMLDivElement;
@@ -74,6 +76,7 @@ export function Grid(props: {
               autofocus={props.autofocus && i() === 0}
               onOpen={props.onOpen}
               corner={props.corner?.(t)}
+              sub={props.sub?.(t)}
             />
           )}
         </For>

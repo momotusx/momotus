@@ -96,13 +96,15 @@ export function TileCard(props: {
   wide?: boolean;
   /** A remove button on the tile (Continue Watching off TV; TV removes from the title page). */
   onRemove?: () => Promise<unknown>;
-  /** A small label on the poster's top corner (Discover's sort value). */
+  /** A small label on the poster's corner (Discover's sort value). */
   corner?: JSX.Element | null;
+  /** The line under the name in place of the year: null leaves it out (the corner shows the year already). */
+  sub?: string | null;
 }) {
   // Two lines under the art: the name, then the core's caption (Continue
   // Watching, Library) or the year.
   const cap = () => (props.captions === false ? null : caption(props.tile));
-  const sub = () => cap() ?? props.tile.genre ?? props.tile.releaseInfo;
+  const sub = () => (props.sub !== undefined ? props.sub : (cap() ?? props.tile.genre ?? props.tile.releaseInfo));
   // A 2:3 poster shows the core's cover (RPDB's, its scores drawn in) and its addon's poster when
   // that does not load; Continue Watching's still crops a poster from its top, so it takes the plain one.
   const plain = () => props.tile.posterFallback ?? props.tile.poster;
@@ -147,7 +149,10 @@ export function TileCard(props: {
           )}
         </Show>
         <Show when={props.corner}>
-          <span class="corner">{props.corner}</span>
+          {/* Above the cover's ratings band when it has one (RPDB's covers carry their addon poster as fallback). */}
+          <span class="corner" classList={{ banded: !!props.tile.posterFallback }}>
+            {props.corner}
+          </span>
         </Show>
         {/* A track and a fill on a dark strip, so progress shows on white art. */}
         <Show when={props.tile.progress !== null}>
