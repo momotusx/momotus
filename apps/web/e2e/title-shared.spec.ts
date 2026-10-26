@@ -441,3 +441,40 @@ test("phone: the title's art is its cover, whole at 2:3, no title over it; Watch
   await expect(watched).toHaveAttribute("aria-pressed", "false");
   await context.close();
 });
+
+// A cover the core does not know to print its title (another host's: an anime's Kitsu poster, an addon's own art)
+// keeps the logo, under the cover. Here the core's answer is changed on its way to say so.
+test("phone: a cover not known to print its title keeps the logo under it", async ({ browser }) => {
+  const [width, height, scale] = FORMS.phone;
+  const context = await browser.newContext({ viewport: { width, height }, deviceScaleFactor: scale, isMobile: true, hasTouch: true, reducedMotion: "reduce" });
+  await context.routeWebSocket(/\/ws$/, (ws) => {
+    const server = ws.connectToServer();
+    server.onMessage((message) => ws.send(String(message).replaceAll('"coverTitled":true', '"coverTitled":false')));
+  });
+  const page = await context.newPage();
+  await page.goto(`/title/movie/${BBB_ID}?form=phone`);
+  await expect(page.locator('[data-f="title:play"]')).toBeVisible({ timeout: 30_000 });
+  const art = await page.locator(".title-scr.cover .title-bd").boundingBox();
+  const logo = page.locator(".info .title-logo");
+  await expect(logo).toBeVisible();
+  const box = await logo.boundingBox();
+  expect(art && box && box.y >= art.y + art.height).toBe(true);
+  await context.close();
+});
+
+// A cover shows only where its 2:3 fits: a landscape phone and a tablet keep the backdrop band, with the logo.
+for (const [w, h] of [
+  [844, 390],
+  [800, 1280],
+] as const) {
+  test(`phone form at ${w}x${h}: the backdrop band with the logo, no cover`, async ({ browser }) => {
+    const context = await browser.newContext({ viewport: { width: w, height: h }, isMobile: true, hasTouch: true, reducedMotion: "reduce" });
+    const page = await context.newPage();
+    await page.goto(`/title/movie/${BBB_ID}?form=phone`);
+    await expect(page.locator('[data-f="title:play"]')).toBeVisible({ timeout: 30_000 });
+    await expect(page.locator(".title-scr.cover")).toHaveCount(0);
+    expect((await page.locator(".title-bd").boundingBox())?.height).toBe(360);
+    await expect(page.locator(".info .title-logo")).toBeVisible();
+    await context.close();
+  });
+}

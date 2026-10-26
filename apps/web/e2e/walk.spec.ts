@@ -69,7 +69,8 @@ async function walk(browser: Browser, form: Form) {
   // 2. A series: its logo and its episodes.
   await time("title", async () => {
     await act(page, form, cw(GOT.id));
-    await expect(page.locator(".title-logo, .title-name").first()).toBeVisible({ timeout: 30_000 });
+    // A phone shows a metahub cover with no logo (it prints the title): its meta line says the page is there.
+    await expect(page.locator(".title-logo, .title-name, .info .meta").first()).toBeVisible({ timeout: 30_000 });
   });
   await time("episodes", () => expect(page.locator(".ep-t").first()).toBeVisible({ timeout: 30_000 }));
   await page.waitForTimeout(400);

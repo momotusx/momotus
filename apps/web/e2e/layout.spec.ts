@@ -162,6 +162,8 @@ async function drawnLogo(browser: Browser, form: Form, path: string, selector: s
   await context.route(/^https:\/\/images\.metahub\.space\/logo\//, (r) =>
     r.fulfill({ status: 200, contentType: "image/svg+xml", headers: { "access-control-allow-origin": "*" }, body: logoSvg(w, h) }),
   );
+  // A phone's title page shows a metahub cover with no logo (it prints the title): with no cover the logo is back.
+  if (form === "phone" && path !== "/") await context.route(/^https:\/\/images\.metahub\.space\/poster\//, (r) => r.fulfill({ status: 404 }));
   await go();
   const logo = page.locator(selector).first();
   await expect(logo).toBeVisible({ timeout: 30_000 });

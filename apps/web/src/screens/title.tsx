@@ -25,7 +25,7 @@ import type { HomeRow } from "../core/generated/HomeRow";
 import type { Episode } from "../core/generated/Episode";
 import type { VersionsSnapshot } from "../core/generated/VersionsSnapshot";
 import { focusEl, remember } from "../focus/dom";
-import { form } from "../form";
+import { form, viewport } from "../form";
 import { airDate, clock, decoded, episodeLabel, offersLibrary, parseVideo, pct, playPath, playState, runtimeMinutes, seasonName, versionsPath } from "../lib/format";
 import { blockedWords, choiceWords, problemWords } from "../lib/words";
 import { firstFocus } from "./title-focus";
@@ -182,8 +182,11 @@ function TitlePage(props: { kind: string; id: string; retry: () => void }) {
     ].filter(Boolean) as string[];
   };
 
-  // A phone shows the cover first: covers are vertical, and a backdrop is often a crop of the same art.
-  const cover = () => (form() === "phone" ? d()?.cover : null) ?? null;
+  // A phone shows the cover first: covers are vertical, and a backdrop is often a crop of the same art. Only where
+  // its 2:3 fits: a portrait phone (up to 600 px wide), held to 75 percent of the screen, losing at most an eighth at
+  // its foot; a landscape phone or a tablet keeps the backdrop band.
+  const coverFits = () => viewport().w <= 600 && viewport().h * 0.75 >= viewport().w * 1.5 * 0.88;
+  const cover = () => (form() === "phone" && coverFits() ? d()?.cover : null) ?? null;
   const coverShown = () => !!cover() && !artMissing();
 
   return (
@@ -227,10 +230,11 @@ function TitlePage(props: { kind: string; id: string; retry: () => void }) {
           {(x) => (
             <>
               <section class="info" aria-label={x().name} data-reveal-top>
-                {/* A cover prints its own title: no second one over or under it, only the heading for screen readers.
-                    Otherwise a title with a logo keeps a fixed slot for it, the logo or its name at the slot's foot,
-                    so nothing under it moves whatever arrives, and whenever (a cold logo takes about a second). */}
-                <Show when={!coverShown()} fallback={<h1 class="sr">{x().name}</h1>}>
+                {/* A cover known to print its title (the core says so: metahub's do) gets no second one, only the heading
+                    for screen readers; another cover keeps the logo or the name under it. Otherwise a title with a logo
+                    keeps a fixed slot for it, the logo or its name at the slot's foot, so nothing under it moves whatever
+                    arrives, and whenever (a cold logo takes about a second). */}
+                <Show when={!(coverShown() && d()?.coverTitled)} fallback={<h1 class="sr">{x().name}</h1>}>
                   <Show when={x().logo} fallback={<Logo src={null} name={x().name} class="title-logo" />}>
                     <div class="logo-slot">
                       <Logo src={x().logo} name={x().name} class="title-logo" />

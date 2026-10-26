@@ -49,6 +49,9 @@ export { form, pinned };
 // The canvas scale (`--k`): desktop shelves are sized in CSS pixels, so their canvas size is px / k.
 const [scale, setScale] = createSignal(1);
 export { scale };
+// The window's size in CSS pixels, as `fit` last saw it.
+const [viewport, setViewport] = createSignal({ w: window.innerWidth, h: window.innerHeight });
+export { viewport };
 
 /** Lets Settings switch the form factor for this device. */
 export function chooseForm(next: Form | null) {
@@ -75,6 +78,7 @@ export function fit() {
   document.querySelector('meta[name="theme-color"]')?.setAttribute("content", pageColor(current));
   const w = window.innerWidth;
   const h = window.innerHeight;
+  setViewport({ w, h });
   let k = 1;
   let cw = w;
   let ch = h;
