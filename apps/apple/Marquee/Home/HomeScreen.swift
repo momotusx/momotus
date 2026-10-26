@@ -9,6 +9,8 @@ struct HomeScreen: View {
     var scrolled: Binding<Bool> = .constant(false)
     @Environment(CoreClient.self) private var core
     @Environment(\.metrics) private var metrics
+    /// The shell's word: a pushed title or the player is over Home.
+    @Environment(\.heroCovered) private var covered
     @Environment(SyncModel.self) private var sync
     @Environment(ProfileSession.self) private var profiles
     @State private var width: CGFloat = 0
@@ -202,6 +204,9 @@ struct HomeScreen: View {
             HeroView(hero: nil, height: heroHeight, play: playHero)
         } else {
             HeroCarousel(heroes: model.header.heroes, height: heroHeight, play: playHero)
+                // Home's own pages over the hero cover it too: profiles, the account, the hero's Versions and
+                // player, the recommended addons, first run (review r2, R2-4).
+                .environment(\.heroCovered, covered || showProfiles || showAccount || showHeroVersions || playing != nil || reviewing || onboarding)
         }
         #endif
     }

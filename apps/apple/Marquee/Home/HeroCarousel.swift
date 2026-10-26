@@ -17,6 +17,11 @@ struct HeroCarousel: View {
     @Environment(\.heroCovered) private var covered
     @Environment(\.accessibilityVoiceOverEnabled) private var voiceOver
     @Environment(\.accessibilitySwitchControlEnabled) private var switchControl
+    /// Previews turned off in Settings while one plays: it goes at once (review r2).
+    @AppStorage(HeroTrailers.previewsKey) private var previewsOn = true
+    #if os(macOS)
+    @FocusState private var heroFocus: Bool
+    #endif
     @State private var pager = HeroPagerModel(count: 0)
     @State private var page: String?
     private var trailer: TrailerState { .shared }
@@ -116,6 +121,7 @@ struct HeroCarousel: View {
         }
         // Home off screen, under a page or the player: no trailer, and its player let go.
         .onChange(of: live) { _, now in if !now { TrailerPlayer.shared.release() } }
+        .onChange(of: previewsOn) { _, on in if !on { TrailerPlayer.shared.release() } }
         // The pages either side are drawn only once they slide in: their art is fetched ahead, so a slide never
         // brings a blank page in.
         .task(id: index) { await prefetch(around: index) }
@@ -127,10 +133,19 @@ struct HeroCarousel: View {
         .accessibilityLabel("Featured")
         #if os(macOS)
         // The Mac has no swipe without a trackpad: arrows at the edges under the pointer, and Left and Right
-        // once the hero has focus (a click on it gives it).
+        // once the hero has focus. An edit-style focusable takes it from a click; the system's ring would wrap the
+        // whole window, so the design's ring is drawn inside the hero, for keyboard navigation only (review r2, R2-1).
         .overlay { if hovering && heroes.count > 1 { arrows.transition(.opacity) } }
         .animation(Theme.Motion.panel, value: hovering)
-        .focusable(interactions: .activate)
+        .focusable(interactions: .edit)
+        .focusEffectDisabled()
+        .focused($heroFocus)
+        .overlay {
+            Color.clear
+                .padding(10)
+                .modifier(FocusRing(shape: RoundedRectangle(cornerRadius: 14, style: .continuous), active: heroFocus))
+                .allowsHitTesting(false)
+        }
         .onKeyPress(.leftArrow) { key(-1) }
         .onKeyPress(.rightArrow) { key(1) }
         #endif
