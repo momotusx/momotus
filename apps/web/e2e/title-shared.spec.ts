@@ -338,6 +338,8 @@ for (const form of Object.keys(FORMS) as Form[]) {
       const frames = await page.evaluate(() => (window as unknown as { frames_: string[] }).frames_);
       expect(frames, frames.join("\n")).toHaveLength(1);
       expect(frames[0]).not.toContain(".logo-slot none");
+      // The slot's height per form (the owner's pick B): TV 192, desktop 144 at this 1440 window, phone 96.
+      expect(Math.round(((await page.locator(".info .logo-slot").boundingBox())?.height ?? 0) * 2) / 2).toBe({ tv: 192, desktop: 144, phone: 96 }[form]);
       // Big Buck Bunny is in Continue Watching (the run's seed): on TV its Remove is there with the first frame.
       expect(frames[0]).toContain(form === "tv" ? "remove 1" : "remove 0");
       if (logo.r) {
