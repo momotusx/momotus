@@ -230,6 +230,8 @@ struct TitleDetails: Decodable, Hashable, Sendable {
     let ratedPoster: String?
     /// The poster at the size the iPhone's title page draws it (metahub's large); nil from an older core.
     let cover: String?
+    /// The cover is known to print the title (metahub's): no logo with it. Nil from an older core.
+    let coverTitled: Bool?
     let background: String?
     let logo: String?
     let releaseInfo: String?

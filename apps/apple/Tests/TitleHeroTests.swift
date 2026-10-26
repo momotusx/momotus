@@ -243,13 +243,25 @@ private func spot(_ part: CGRect, in box: CGRect) -> (top: CGFloat, end: CGFloat
     let large = "https://images.metahub.space/poster/large/tt22084616/img"
     #expect(try details(["cover": large]).cover == large)
     #expect(try details().cover == nil)
-    // The page draws the cover first, on the iPhone only, and sizes the frame by it.
-    let screen = try String(contentsOf: URL(fileURLWithPath: #filePath).deletingLastPathComponent()
-        .appending(path: "../Marquee/Title/TitleScreen.swift"), encoding: .utf8)
-    #expect(screen.contains("if !metrics.wide, let cover = details.cover {\n"))
-    #expect(screen.contains("CoverArt(url: cover, name: details.name, height: coverHeroHeight(width: width, height: height))"))
-    #expect(screen.contains("TitleHeroPhone(facts: facts, logo: false)"))
-    #expect(screen.contains("if details?.cover != nil { return coverHeroHeight(width: width, height: height) }"))
+}
+
+// The cover shows only where its 2:3 fits (a portrait iPhone, held to 75 percent of the window, losing at most an
+// eighth at its foot); a landscape iPhone or a window over 600 pt keeps the backdrop band.
+@Test func theCoverShowsOnlyWhereItFits() {
+    for (w, h) in [(CGFloat(390), CGFloat(844)), (375, 667), (320, 568), (430, 932)] {
+        #expect(coverFits(width: w, height: h), "\(w)x\(h)")
+    }
+    for (w, h) in [(CGFloat(844), CGFloat(390)), (667, 375), (700, 1100), (390, 500)] {
+        #expect(!coverFits(width: w, height: h), "\(w)x\(h)")
+    }
+}
+
+// The logo goes with a cover the core does not know to print its title (an anime's Kitsu poster, an addon's art),
+// and with an older core's, which says nothing; only a metahub cover goes without.
+@Test func onlyACoverKnownToPrintItsTitleGoesWithoutTheLogo() throws {
+    #expect(!coverWantsLogo(try details(["cover": "https://images.metahub.space/poster/large/tt1/img", "coverTitled": true])))
+    #expect(coverWantsLogo(try details(["cover": "https://media.kitsu.app/anime/poster_images/1/large.jpg", "coverTitled": false])))
+    #expect(coverWantsLogo(try details(["cover": "https://images.metahub.space/poster/large/tt1/img"])))
 }
 
 // A cover prints its own title: the iPhone draws no logo over or under it (the kind line leads the words), and the

@@ -184,9 +184,15 @@ struct TitleScreen: View {
         guard width > 0, height > 0 else { return 633 }
         // A cover at its own 2:3, whole, held to 75 percent of the window (covers are vertical, and a
         // backdrop is often a crop of the same art).
-        if details?.cover != nil { return coverHeroHeight(width: width, height: height) }
+        if phoneCover != nil { return coverHeroHeight(width: width, height: height) }
         // The iPhone's 390x680 hero, its status bar under the art's top, held to most of a short window.
         return min(width * 633 / 390, max(height * 0.85, 280))
+    }
+
+    /// The cover the iPhone shows: only where its 2:3 fits (a portrait window, `coverFits`), never on the Mac or iPad.
+    private var phoneCover: String? {
+        guard !metrics.wide, width > 0, height > 0, coverFits(width: width, height: height) else { return nil }
+        return details?.cover
     }
 
     @ViewBuilder private var v3Hero: some View {
@@ -196,12 +202,15 @@ struct TitleScreen: View {
                 if metrics.wide {
                     TitleHeroWide(facts: facts, columnWidth: panelOpen && !panelCovers ? WideLayout.panelColumnWidth(window: width) : 900,
                                   open: openLink, more: { reading = true }) { wideActions(details) }
-                } else if details.cover != nil {
-                    // The cover stands whole above the words (it prints its own title): they start at its foot.
+                } else if phoneCover != nil {
+                    // The cover stands whole above the words, which start at its foot: with no logo when the core
+                    // knows the cover prints the title (metahub's), else with it. Unseen until the page's top inset
+                    // is known, so the words never land one inset low and jump.
                     VStack(spacing: 0) {
                         Color.clear.frame(height: max(0, coverHeroHeight(width: width, height: height) - insetTop))
-                        TitleHeroPhone(facts: facts, logo: false) { phoneButtons() } secondaries: { phoneSecondaries(details) }
+                        TitleHeroPhone(facts: facts, logo: coverWantsLogo(details)) { phoneButtons() } secondaries: { phoneSecondaries(details) }
                     }
+                    .opacity(insetTop > 0 ? 1 : 0)
                 } else {
                     TitleHeroPhone(facts: facts) { phoneButtons() } secondaries: { phoneSecondaries(details) }
                 }
@@ -228,10 +237,11 @@ struct TitleScreen: View {
             .background {
                 // The phone's art runs up under the status bar; the Mac's starts under the black header.
                 ZStack(alignment: .top) {
-                    if !metrics.wide, let cover = details.cover {
+                    if let cover = phoneCover {
                         // The iPhone shows the cover first, whole at its 2:3 from the screen's top, with no words
                         // over it: the status bar's wash at its top, and only its bottom edge fading into the page.
-                        CoverArt(url: cover, name: details.name, height: coverHeroHeight(width: width, height: height))
+                        // A large cover that does not load gives way to the addon's poster, then to the name.
+                        CoverArt(url: cover, fallbackURL: details.poster, name: details.name, height: coverHeroHeight(width: width, height: height))
                     } else {
                         ArtImage(url: details.background ?? details.poster, maxPixels: ArtSize.backdrop,
                                  alignment: details.background == nil ? .top : .center)

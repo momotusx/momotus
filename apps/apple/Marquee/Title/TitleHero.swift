@@ -37,16 +37,30 @@ func coverHeroHeight(width: CGFloat, height: CGFloat) -> CGFloat {
     min(width * 1.5, height * 0.75)
 }
 
+/// Whether a cover shows at all: only where its 2:3 fits, a portrait iPhone (up to 600 pt wide) held to 75 percent
+/// of the window, losing at most an eighth at its foot. A landscape iPhone keeps the backdrop band.
+func coverFits(width: CGFloat, height: CGFloat) -> Bool {
+    width <= 600 && height * 0.75 >= width * 1.5 * 0.88
+}
+
+/// The logo goes with a cover unless the core knows the cover prints the title (metahub's do); an older core,
+/// which says nothing, keeps it.
+func coverWantsLogo(_ details: TitleDetails) -> Bool {
+    details.coverTitled != true
+}
+
 /// The iPhone's cover: whole at its 2:3 across the screen (`coverHeroHeight`), kept by its top, with the status
 /// bar's wash at its top and only its bottom edge fading into the page (`BackdropStops.coverFoot`); no words go
 /// over it. It is the title's heading for VoiceOver, since the cover prints the title.
 struct CoverArt: View {
     let url: String
+    /// The addon's own poster when the large cover does not load; the name when neither does.
+    var fallbackURL: String? = nil
     let name: String
     let height: CGFloat
 
     var body: some View {
-        ArtImage(url: url, maxPixels: ArtSize.backdrop, alignment: .top)
+        ArtImage(url: url, fallbackURL: fallbackURL, maxPixels: ArtSize.backdrop, fallback: name, alignment: .top)
             .frame(height: height)
             .frame(maxWidth: .infinity)
             .clipped()
