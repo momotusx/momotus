@@ -426,14 +426,16 @@ fn catalog_slots(addons: &[InstalledAddon]) -> Vec<CatalogSlot> {
 
 /// The user's order first (ids that still exist, first mention wins), then
 /// every other catalog in addon order; each with whether it is hidden. A
-/// twin, a row titled as one before it in addon order (in any case), is
+/// twin, a catalog titled as one before it in addon order (in any case), is
 /// hidden until the user shows it: no addon's name tells the two apart (the
-/// owner, 2026-10-22). The user's own choice wins either way.
+/// owner, 2026-10-22). The catalog's own title decides, not the row's: a
+/// Top 10 row's "Top 10 Movies" leaves the twins as they were. The user's
+/// own choice wins either way.
 fn arrange(slots: Vec<CatalogSlot>, prefs: &HomeRows) -> Vec<(CatalogSlot, bool)> {
     let mut titles = HashSet::new();
     let twins: Vec<bool> = slots
         .iter()
-        .map(|s| !titles.insert(row_title(s).to_lowercase()))
+        .map(|s| !titles.insert(list_title(s).to_lowercase()))
         .collect();
     let rank = |id: &str| prefs.order.iter().position(|o| o == id);
     let mut slots: Vec<(usize, CatalogSlot)> = slots.into_iter().enumerate().collect();
@@ -1065,17 +1067,25 @@ fn maybe_pick_hero(rows: &Mutex<ObservableVector<HomeRow>>, header: &SharedObser
         .filter(|row| row.row_id != CONTINUE_ROW_ID)
         .collect();
     let current = header.get().heroes;
+    // A kept page takes its row's reason afresh: a ranked catalog that moved
+    // its title from #3 to #5 says #5, as its Top 10 row does.
     let mut next: Vec<Hero> = current
         .iter()
-        .filter(|hero| {
-            rows.iter().any(|r| {
-                r.row_id == hero.row_id
-                    && r.tiles
-                        .iter()
-                        .any(|t| t.id == hero.tile.id && t.background.is_some())
+        .filter_map(|hero| {
+            rows.iter().find_map(|r| {
+                let index = r
+                    .tiles
+                    .iter()
+                    .position(|t| t.id == hero.tile.id && t.background.is_some());
+                (r.row_id == hero.row_id)
+                    .then_some(index)
+                    .flatten()
+                    .map(|index| Hero {
+                        reason: hero_reason(r, index + 1),
+                        ..hero.clone()
+                    })
             })
         })
-        .cloned()
         .collect();
     let rounds = if settled { HERO_PER_ROW } else { 1 };
     for round in 1..=rounds {

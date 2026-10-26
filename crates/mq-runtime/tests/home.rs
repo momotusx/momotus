@@ -1583,7 +1583,15 @@ async fn a_ranked_catalog_is_a_top_10_row_with_real_places() {
         movies("60", 12, 2),
     )
     .await;
-    let mut other = catalog_addon("other", Duration::ZERO, 200, movies("70", 12, 2)).await;
+    // Named apart, so it is no twin of Cinemeta's Popular Movies.
+    let mut other = named_catalog_addon(
+        "other",
+        "Trending",
+        Duration::ZERO,
+        200,
+        movies("70", 12, 2),
+    )
+    .await;
     (cinemeta.position, other.position) = (0, 1);
     core.library()
         .set_addons("p", &[cinemeta, other], &core.hlc())
@@ -1602,7 +1610,7 @@ async fn a_ranked_catalog_is_a_top_10_row_with_real_places() {
     assert_eq!(rows[0].tiles[0].genre.as_deref(), Some("Drama"));
     assert!(!rows[0].title.to_lowercase().contains("cinemeta"));
     // The other addon's catalog keeps its own name and draws no numerals.
-    assert_eq!(rows[1].title, "Popular Movies");
+    assert_eq!(rows[1].title, "Trending Movies");
     assert!(!rows[1].ranked);
     assert_eq!(rows[1].tiles.len(), 12);
     assert!(
@@ -1616,7 +1624,7 @@ async fn a_ranked_catalog_is_a_top_10_row_with_real_places() {
         (heroes[0].tile.id.as_str(), heroes[0].reason.as_str()),
         ("tt6002", "#3 in Popular Movies")
     );
-    assert_eq!(heroes[1].reason, "Popular Movies");
+    assert_eq!(heroes[1].reason, "Trending Movies");
     // Customize Home keeps the row's id, so a hidden Top 10 stays hidden.
     let id = rows[0].row_id.clone();
     assert!(
@@ -1667,4 +1675,49 @@ async fn a_row_gives_the_carousel_two_pages_at_most() {
     .await;
     tokio::time::sleep(Duration::from_millis(100)).await;
     assert_eq!(hero_ids(&view), ["tt8000", "tt9000", "tt8001", "tt9001"]);
+}
+
+/// A Top 10 row keeps the twin rules its catalog had (review r1, M1): another
+/// addon's "Popular Movies" after Cinemeta's Popular stays a hidden twin,
+/// though Cinemeta's row now reads "Top 10 Movies"; and in the other order
+/// Cinemeta's is the twin.
+#[tokio::test]
+async fn a_top_10_row_leaves_the_twins_as_they_were() {
+    let core = Core::temporary("p").unwrap();
+    let mut cinemeta = catalog_addon(
+        "com.linvo.cinemeta",
+        Duration::ZERO,
+        200,
+        movies("60", 12, 0),
+    )
+    .await;
+    let mut tmdb = catalog_addon("tmdb", Duration::ZERO, 200, movies("70", 12, 0)).await;
+    let listed = |core: &Core| -> Vec<(String, bool)> {
+        core.home_catalogs()
+            .into_iter()
+            .map(|c| (c.title, c.hidden))
+            .collect()
+    };
+    (cinemeta.position, tmdb.position) = (0, 1);
+    core.library()
+        .set_addons("p", &[cinemeta.clone(), tmdb.clone()], &core.hlc())
+        .unwrap();
+    assert_eq!(
+        listed(&core),
+        [
+            ("Top 10 Movies".into(), false),
+            ("Popular Movies".into(), true)
+        ]
+    );
+    (cinemeta.position, tmdb.position) = (1, 0);
+    core.library()
+        .set_addons("p", &[tmdb, cinemeta], &core.hlc())
+        .unwrap();
+    assert_eq!(
+        listed(&core),
+        [
+            ("Popular Movies".into(), false),
+            ("Top 10 Movies".into(), true)
+        ]
+    );
 }
