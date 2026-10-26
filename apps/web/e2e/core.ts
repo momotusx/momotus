@@ -55,6 +55,9 @@ export const DOWNLOADS_PORT = 17830 + shift;
 export const PLUGINS_PORT = 17831 + shift;
 /** The dual subtitles spec's own: a core whose one addon names Turkish, English and German files. */
 export const DUAL_PORT = 17832 + shift;
+
+/** The kind chips' own: a core with a streaming account, so a title lists debrid torrents beside direct links. */
+export const KINDS_PORT = 17836 + shift;
 /** Every browser a run launches takes these: each name but this machine's resolves to the browser's
  * recorder, whose certificate it does not check, so pages load images and frames from the
  * recording and a run needs the network only to record (none with MQ_E2E_OFFLINE=1). A spec that

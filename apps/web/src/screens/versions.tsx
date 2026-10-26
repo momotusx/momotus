@@ -21,6 +21,7 @@ import { KeyedPage } from "../components/keyed-page";
 import { Why } from "../components/why";
 import { op } from "../core/client";
 import type { SectionQuality } from "../core/generated/SectionQuality";
+import type { SourceKind } from "../core/generated/SourceKind";
 import type { VersionRow } from "../core/generated/VersionRow";
 import type { VersionsSnapshot } from "../core/generated/VersionsSnapshot";
 import { videoContext } from "../core/video";
@@ -201,27 +202,24 @@ export function VersionsPage(props: { kind: string; id: string; videoId: string;
     heldKeys.set(place, now.key);
     return now;
   };
-  // The kind chips (plans/plugins-and-marketplace.md 4.2): All is today's page; a kind shows its own
-  // first row in the card and its rows in the sections. The choice holds while the page is open.
-  const [kind, setKind] = createSignal<KindChoice>("all");
-  const chips = createMemo(() => {
-    const s = snap();
-    return s && !dimmed() ? kindChips([...(s.recommended ? [s.recommended] : []), ...s.rows], s.debridService) : [];
-  });
-  const shownKind = () => (chips().some((c) => c.value === kind()) ? kind() : "all");
+  // The kind chips (plans/plugins-and-marketplace.md 4.2): the core counts the kinds and, under one
+  // (`setKind`, which freezes the pick), sends that kind's own card, rows and sections and no
+  // shortcuts. The chips show from two kinds on and then stay while the page is open.
+  const shownKind = (): KindChoice => snap()?.selectedKind ?? "all";
+  const [chipsShown, setChipsShown] = createSignal(false);
+  createEffect(() => (snap()?.kinds.length ?? 0) >= 2 && !dimmed() && setChipsShown(true));
+  const chips = () => (chipsShown() ? kindChips(snap()?.kinds ?? []) : []);
+  // The last kind asked for, which the core may not have answered yet.
+  let asked: KindChoice = "all";
   const chooseKind = (k: KindChoice) => {
-    freeze();
-    setKind(k);
+    asked = k;
+    void ctx.versions()?.command({ type: "setKind", kind: k === "all" ? null : k });
   };
-  const pick = () => {
-    const k = shownKind();
-    const s = snap();
-    if (k === "all") return holdRow("pick", s?.recommended);
-    return holdRow(`pick:${k}`, [s?.recommended, ...(s?.rows ?? [])].find((r) => r?.kind === k));
-  };
-  // The shortcuts are relative to the core's pick: under a kind they hide.
+  // The page owns the choice: leaving it lists every kind again for the title and the player.
+  onCleanup(() => (asked !== "all" || shownKind() !== "all") && chooseKind("all"));
+  const pick = () => holdRow(`pick:${shownKind()}`, snap()?.recommended);
   const shortcut = (id: "smaller" | "sharper") => {
-    const r = shownKind() === "all" ? holdRow(id, snap()?.[id]) : null;
+    const r = holdRow(id, snap()?.[id]);
     return r && r.key !== pick()?.key ? r : null;
   };
   const video = `${props.kind}/${props.id}/${props.videoId}`;
@@ -274,12 +272,9 @@ export function VersionsPage(props: { kind: string; id: string; videoId: string;
   };
   const rowsOf = (g: Sec): VersionRow[] => {
     const rows = dimmed() ? new Map(listed().map((r) => [r.key, r])) : byKey();
-    const k = shownKind();
-    // Under a kind the card shows its first row, so its section does not list it again.
-    const card = k === "all" ? null : pick()?.key;
     return keysOf(g)
-      .map((key) => rows.get(key))
-      .filter((r): r is VersionRow => !!r && (k === "all" || (r.kind === k && r.key !== card)));
+      .map((k) => rows.get(k))
+      .filter((r): r is VersionRow => !!r);
   };
   const label = (g: Sec) => (g === "found" ? null : versionsWords.sections[g]);
   const toggle = (g: Sec) => {
@@ -411,8 +406,8 @@ export function VersionsPage(props: { kind: string; id: string; videoId: string;
           </div>
           {/* Reserved from the first paint, so nothing below moves when it fills or empties. */}
           <p class="vstatus">{statusLine()}</p>
-          {/* The kind chips, only with two kinds or more; their line is reserved from the first paint too.
-              Down from a chip goes back to Play, as Up from Play comes to the chip that is on. */}
+          {/* The kind chips, from two kinds on (no line kept for them before). Down from a chip goes back
+              to Play, as Up from Play comes to the chip that is on. */}
           <div
             class="vkinds"
             onKeyDown={(e) => {
@@ -489,7 +484,7 @@ export function VersionsPage(props: { kind: string; id: string; videoId: string;
               >
                 {(p) => (
                   <>
-                    <p class="best">{keeping || shownKind() === "all" ? best() : kindBest(p().kind, snap()?.debridService ?? null)}</p>
+                    <p class="best">{keeping || shownKind() === "all" ? best() : kindBest(shownKind() as SourceKind, snap()?.kinds ?? [])}</p>
                     <h2>{qualityText(p().quality)}</h2>
                     <Show when={p().features.length}>
                       <p class="badges">

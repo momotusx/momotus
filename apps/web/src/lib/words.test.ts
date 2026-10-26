@@ -322,23 +322,24 @@ test("the start audio is the first wanted language the file lists", () => {
   expect(startAudio([{ id: "a", language: "pt-BR" }], ["pt"])).toBe("a");
 });
 
-test("the kind chips show only with two kinds, and name the debrid service", () => {
-  const rows = (...kinds: VersionRow["kind"][]) => kinds.map((kind, i) => ({ key: String(i), kind }) as VersionRow);
-  expect(kindChips(rows("torrent", "torrent"), null)).toEqual([]);
-  expect(kindChips([], null)).toEqual([]);
-  const two = kindChips(rows("debrid", "torrent", "torrent", "direct"), null);
-  expect(two.map((c) => [c.value, c.label, c.note])).toEqual([
-    ["all", "All", "4"],
-    ["torrent", "Torrents", "2"],
-    ["direct", "Direct links", "1"],
-    ["debrid", "Debrid", "1"],
+test("the kind chips are the core's kinds after All, each with its count, the debrid one named by its service", () => {
+  const chips = kindChips([
+    { kind: "torrent", service: null, count: 37 },
+    { kind: "direct", service: null, count: 1 },
+    { kind: "debrid", service: null, count: 1204 },
   ]);
-  expect(two[1]?.a11y).toBe("Torrents, 2 versions");
-  expect(two[2]?.a11y).toBe("Direct links, 1 version");
-  // One service names the chip; with several or none the core sends none.
-  expect(kindChips(rows("debrid", "direct"), "Real-Debrid").map((c) => c.label)).toEqual(["All", "Direct links", "Real-Debrid"]);
-  expect(kindBest("torrent", null)).toBe("Best torrent");
-  expect(kindBest("direct", "Real-Debrid")).toBe("Best direct link");
-  expect(kindBest("debrid", "Real-Debrid")).toBe("Best on Real-Debrid");
-  expect(kindBest("debrid", null)).toBe("Best debrid link");
+  expect(chips.map((c) => [c.value, c.label, c.note])).toEqual([
+    ["all", "All", undefined],
+    ["torrent", "Torrents", "37"],
+    ["direct", "Direct links", "1"],
+    ["debrid", "Debrid", "1,204"],
+  ]);
+  expect(chips[1]?.a11y).toBe("Torrents, 37 versions");
+  expect(chips[2]?.a11y).toBe("Direct links, 1 version");
+  const named = [{ kind: "debrid" as const, service: "Real-Debrid", count: 2 }];
+  expect(kindChips(named)[1]?.label).toBe("Real-Debrid");
+  expect(kindBest("debrid", named)).toBe("Best on Real-Debrid");
+  expect(kindBest("debrid", [])).toBe("Best debrid link");
+  expect(kindBest("torrent", named)).toBe("Best torrent");
+  expect(kindBest("direct", named)).toBe("Best direct link");
 });

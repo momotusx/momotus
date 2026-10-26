@@ -16,7 +16,7 @@ import type { EmptyKind } from "../src/core/generated/EmptyKind";
 import type { Prefs } from "../src/core/generated/Prefs";
 import type { StreamConditions } from "../src/core/generated/StreamConditions";
 import type { VersionsSnapshot } from "../src/core/generated/VersionsSnapshot";
-import { Client, cleanup, DEFAULTS_PORT, GOT, PORTS, SHOTS, startBridge } from "./core";
+import { Client, cleanup, DEFAULTS_PORT, GOT, KINDS_PORT, PORTS, SHOTS, startBridge } from "./core";
 
 type Form = "tv" | "desktop" | "phone";
 const FORMS = {
@@ -690,77 +690,14 @@ test.describe("Versions", () => {
     await page.context().close();
   });
 
-  test("one kind of version draws no kind chips, and their line is reserved", async ({ browser }) => {
+  test("one kind of version draws no kind chips and keeps no line for them", async ({ browser }) => {
     const page = await device(browser, "desktop", PORTS.bridge);
     await page.goto(path("desktop"));
     await firstRow(page);
     await expect(page.locator(".vkinds .chip")).toHaveCount(0);
-    expect(await page.locator(".vkinds").evaluate((e) => e.getBoundingClientRect().height)).toBeGreaterThan(0);
+    await expect(page.locator(".vkinds")).toBeHidden();
     await page.context().close();
   });
-
-  // Two torrent copies of the core's first row join its direct links (plans/plugins-and-marketplace.md 4.3).
-  const twoKinds = (s: VersionsSnapshot): VersionsSnapshot => {
-    const a = s.rows[0] ?? s.recommended;
-    if (!s.done || !a) return s;
-    const torrents = [1, 2].map((n) => ({ ...a, key: `${a.key}#t${n}`, kind: "torrent" as const, quality: n === 1 ? "4K" : "720p" }));
-    const rows = [...s.rows, ...torrents];
-    // Each in its quality's section, as the core lists every row.
-    const add = (quality: "uhd" | "hd", key: string) => (sections.some((x) => x.quality === quality) ? sections.map((x) => (x.quality === quality ? { ...x, keys: [...x.keys, key] } : x)) : [...sections, { quality, keys: [key] }]);
-    let sections = s.sections;
-    sections = add("uhd", torrents[0]?.key ?? "");
-    sections = add("hd", torrents[1]?.key ?? "");
-    return { ...s, rows, sections };
-  };
-
-  for (const form of ["tv", "desktop", "phone"] as const) {
-    test(`${form}: two kinds draw the kind chips; a kind fills the card and the sections with its own rows`, async ({ browser }) => {
-      const page = await device(browser, form, PORTS.bridge, { versions: twoKinds });
-      await page.goto(path(form));
-      await firstRow(page);
-      const group = page.getByRole("radiogroup", { name: "Sources" });
-      await expect(group.getByRole("radio")).toHaveText([/^All\s*\d+$/, /^Torrents\s*2$/, /^Direct links\s*\d+$/]);
-      await expect(group.getByRole("radio", { name: "Torrents, 2 versions" })).toHaveAttribute("aria-checked", "false");
-      await expect(group.getByRole("radio").first()).toHaveAttribute("aria-checked", "true");
-      await expect(page.locator(".pick .best")).not.toHaveText("Best torrent");
-      if (form === "tv") {
-        // Up from Play comes to the chip that is on, Right moves along, OK keeps focus on it.
-        await expect.poll(() => focused(page)).toBe("versions:play");
-        await page.keyboard.press("ArrowUp");
-        await expect.poll(() => focused(page)).toBe("vkinds:all");
-        await page.keyboard.press("ArrowRight");
-        await page.keyboard.press("Enter");
-        await expect.poll(() => focused(page)).toBe("vkinds:torrent");
-      } else {
-        // A click with no pointer before it (a screen reader's), so the chip alone freezes the pick.
-        sent.length = 0;
-        await group.getByRole("radio", { name: "Torrents, 2 versions" }).dispatchEvent("click");
-      }
-      await expect(group.getByRole("radio", { name: "Torrents, 2 versions" })).toHaveAttribute("aria-checked", "true");
-      // Choosing a kind freezes the pick.
-      expect(sent.some((m) => m.op === "command" && (m.command as { type?: string } | undefined)?.type === "freeze")).toBe(true);
-      // The card is the kind's first row; the sections list the rest of the kind, never the card's again.
-      await expect(page.locator(".pick .best")).toHaveText("Best torrent");
-      await expect(page.locator(".pick h2")).toHaveText("4K");
-      await expect(page.locator(".vrow")).toHaveCount(1);
-      await expect(page.locator('[data-f^="vshort:"]')).toHaveCount(0);
-      await shot(page, "versions-kinds-torrent", form);
-      if (form === "tv") {
-        // Down from a chip goes back to Play, which plays the kind's first row.
-        await page.keyboard.press("ArrowDown");
-        await expect.poll(() => focused(page)).toBe("versions:play");
-        await page.keyboard.press("Enter");
-        await expect(page).toHaveURL(/\/play\//);
-        expect(await page.evaluate(() => (history.state as { key?: string } | null)?.key)).toMatch(/#t1$/);
-      } else {
-        // All is today's page again.
-        await group.getByRole("radio").first().click();
-        await expect(page.locator(".pick .best")).not.toHaveText("Best torrent");
-        await expect(page.locator(".vrow")).not.toHaveCount(1);
-      }
-      await page.context().close();
-    });
-  }
 
   test("a version whose quality is not stated has no quality badge, and its row is one height with the rest", async ({ browser }) => {
     // Two copies of the first row in one section, the first with no stated quality.
@@ -935,4 +872,87 @@ test.describe("Versions", () => {
     await expect(note).toHaveCount(0);
     expect(sent.find((m) => m.op === "undoLearned")).toMatchObject({ screenClass: 1080, choice: "size" });
   });
+});
+
+// The kind chips on real rows (plans/plugins-and-marketplace.md 4.2, 4.3): a core of its own with a streaming
+// account, so the title's Torrentio torrents are debrid beside the sample source's direct links. The core
+// counts the kinds and ranks the chosen one in its own pass; the page renders what it sends.
+test.describe("Versions: kind chips", () => {
+  let kinds: { proc: ChildProcess; data: string } | null = null;
+  const path = (form: Form) => `/title/series/${GOT.id}/versions/${GOT.resume}?form=${form}`;
+  const setKinds = () => sent.filter((m) => m.op === "command" && (m.command as { type?: string } | undefined)?.type === "setKind").map((m) => (m.command as { kind: string | null }).kind);
+
+  test.beforeAll(async () => {
+    kinds = await startBridge(KINDS_PORT);
+    const c = new Client(`ws://127.0.0.1:${KINDS_PORT}/ws`);
+    try {
+      for (const url of ["https://v3-cinemeta.strem.io/manifest.json", "https://torrentio.strem.fun/manifest.json", `http://127.0.0.1:${PORTS.source}/manifest.json`]) {
+        await c.req("installAddon", { url });
+      }
+      await c.req("setPrefs", { patch: { defaultsSeen: 1 } });
+      await c.req("setDebridKey", { service: "realdebrid", key: "MQDUMMYE2EKINDS" });
+    } finally {
+      c.close();
+    }
+  });
+  test.afterAll(() => {
+    if (kinds) cleanup(kinds.proc, kinds.data);
+  });
+
+  async function opened(browser: Browser, form: Form) {
+    const page = await device(browser, form, KINDS_PORT);
+    await page.goto(path(form));
+    await expect(page.locator(".vrow .line").first()).toBeVisible({ timeout: 60_000 });
+    await expect(page.locator(".vstatus")).toHaveText("", { timeout: 60_000 });
+    const group = page.getByRole("radiogroup", { name: "Sources" });
+    await expect(group.getByRole("radio")).toHaveText([/^All$/, /^Direct links\s*\d+$/, /^Debrid\s*\d+$/]);
+    await expect(group.getByRole("radio").first()).toHaveAttribute("aria-checked", "true");
+    return { page, group };
+  }
+
+  test("TV: Up from Play reaches the chip that is on, Right moves along, OK chooses a kind and keeps the focus, Down is Play", async ({ browser }) => {
+    const { page, group } = await opened(browser, "tv");
+    await expect.poll(() => focused(page)).toBe("versions:play");
+    await page.keyboard.press("ArrowUp");
+    await expect.poll(() => focused(page)).toBe("vkinds:all");
+    await page.keyboard.press("ArrowRight");
+    await page.keyboard.press("Enter");
+    await expect.poll(() => focused(page)).toBe("vkinds:direct");
+    expect(setKinds()).toEqual(["direct"]);
+    await expect(group.getByRole("radio", { name: /^Direct links, / })).toHaveAttribute("aria-checked", "true");
+    // The core's direct pass: its card, every row a direct link, no shortcuts.
+    await expect(page.locator(".pick .best")).toHaveText("Best direct link");
+    await expect(page.locator('[data-f^="vshort:"]')).toHaveCount(0);
+    for (const line of await page.locator(".vrow .lt").allTextContents()) expect(line).toMatch(/direct link/);
+    await shot(page, "versions-kinds-direct", "tv");
+    await page.keyboard.press("ArrowDown");
+    await expect.poll(() => focused(page)).toBe("versions:play");
+    await page.context().close();
+  });
+
+  for (const form of ["desktop", "phone"] as const) {
+    test(`${form}: a kind chip lists that kind from the core, All lists every one, and leaving lists every kind again`, async ({ browser }) => {
+      const { page, group } = await opened(browser, form);
+      const all = await page.locator(".vrow").count();
+      const debrid = group.getByRole("radio", { name: /^Debrid, \d+ versions?$/ });
+      await debrid.click();
+      expect(setKinds()).toEqual(["debrid"]);
+      await expect(debrid).toHaveAttribute("aria-checked", "true");
+      await expect(page.locator(".pick .best")).toHaveText("Best debrid link");
+      await expect(page.locator('[data-f^="vshort:"]')).toHaveCount(0);
+      await shot(page, "versions-kinds-debrid", form);
+      await group.getByRole("radio").first().click();
+      expect(setKinds()).toEqual(["debrid", null]);
+      await expect(page.locator(".pick .best")).not.toHaveText("Best debrid link");
+      await expect(page.locator(".vrow")).toHaveCount(all);
+      // A kind left chosen is let go when the page goes.
+      await debrid.click();
+      await page.evaluate((p) => {
+        history.pushState(null, "", p);
+        dispatchEvent(new PopStateEvent("popstate"));
+      }, `/title/series/${GOT.id}?form=${form}`);
+      await expect.poll(setKinds).toEqual(["debrid", null, "debrid", null]);
+      await page.context().close();
+    });
+  }
 });

@@ -15,6 +15,7 @@ import type { LearnedChoice } from "../core/generated/LearnedChoice";
 import type { Network } from "../core/generated/Network";
 import type { Prefs } from "../core/generated/Prefs";
 import type { ReasonLine } from "../core/generated/ReasonLine";
+import type { KindChip } from "../core/generated/KindChip";
 import type { SourceKind } from "../core/generated/SourceKind";
 import type { Speed } from "../core/generated/Speed";
 import type { StreamPrefs } from "../core/generated/StreamPrefs";
@@ -892,24 +893,27 @@ export function problemWords(reason: string): { text: string; raw: string | null
 
 /** A kind chip's choice: every version, or one kind. */
 export type KindChoice = "all" | SourceKind;
-const KINDS: SourceKind[] = ["torrent", "direct", "debrid"];
 
-/** The Versions page's kind chips (plans/plugins-and-marketplace.md 4.2): All, then each kind listed, with
- * their counts; none while fewer than two kinds are listed. `rows` is the pick and the listed rows;
- * `service` is the snapshot's `debridService`. */
-export function kindChips(rows: VersionRow[], service: string | null) {
-  const count = (k: KindChoice) => (k === "all" ? rows.length : rows.filter((r) => r.kind === k).length);
-  const kinds = KINDS.filter((k) => count(k) > 0);
-  if (kinds.length < 2) return [];
-  const label = (k: KindChoice) => (k === "debrid" ? (service ?? choice.kind.debrid) : choice.kind[k]);
-  return (["all", ...kinds] as KindChoice[]).map((value) => ({
-    value,
-    label: label(value),
-    note: count(value).toLocaleString("en-US"),
-    a11y: choice.kind.a11y.replace("{kind}", label(value)).replace("{versions}", counted("versions", count(value))),
-  }));
+/** A kind's chip words: its name, the debrid chip the service the core names ("Real-Debrid") or "Debrid". */
+const kindName = (k: KindChip) => (k.kind === "debrid" ? (k.service ?? choice.kind.debrid) : choice.kind[k.kind]);
+
+/** The Versions page's kind chips (plans/plugins-and-marketplace.md 4.2), from the core's `kinds`: All, then each
+ * kind with its count of rows, spoken "Torrents, 37 versions". */
+export function kindChips(kinds: KindChip[]) {
+  const all = { value: "all" as KindChoice, label: choice.kind.all, note: undefined as string | undefined, a11y: choice.kind.all };
+  return [
+    all,
+    ...kinds.map((k) => ({
+      value: k.kind as KindChoice,
+      label: kindName(k),
+      note: k.count.toLocaleString("en-US"),
+      a11y: choice.kind.a11y.replace("{kind}", kindName(k)).replace("{versions}", counted("versions", k.count)),
+    })),
+  ];
 }
 
 /** The card's kicker under a kind: "Best torrent", "Best on Real-Debrid". */
-export const kindBest = (k: SourceKind, service: string | null) =>
-  k === "debrid" && service ? choice.kind.best.service.replace("{service}", service) : choice.kind.best[k];
+export function kindBest(kind: SourceKind, kinds: KindChip[]) {
+  const service = kinds.find((k) => k.kind === kind)?.service;
+  return kind === "debrid" && service ? choice.kind.best.service.replace("{service}", service) : choice.kind.best[kind];
+}
