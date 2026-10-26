@@ -99,6 +99,7 @@ class TvHeroCarouselTest {
                 hero("tt2", "The Series", "series"),
                 hero("tt3", "Last Movie", "movie"),
             ),
+        start: SemanticsMatcher = hasContentDescription("Play First Movie"),
     ) {
         val snapshot =
             HomeSnapshot(
@@ -141,7 +142,7 @@ class TvHeroCarouselTest {
             }
         }
         home.open()
-        waitFor("the first page's Play has the focus") { focused(hasContentDescription("Play First Movie")) }
+        waitFor("the start focus") { focused(start) }
     }
 
     private fun frames(ms: Long) {
@@ -229,6 +230,20 @@ class TvHeroCarouselTest {
         )
         frames(5_000)
         waitFor("the timer went on after the hold") { showing("The Series") }
+    }
+
+    @Test
+    fun `a remembered Play on a page without one lands on Details at once`() {
+        // Review r2 N2, r3 L3: a restore asking for Play on a series page falls back to Details, not the 15 s wait.
+        show(
+            listOf(hero("tt2", "The Series", "series"), hero("tt1", "First Movie", "movie")),
+            start = hasText("Details"),
+        )
+        press(Key.DirectionDown)
+        waitFor("a row tile has the focus") { focused(hasContentDescription("Row title 1", substring = true)) }
+        ui.launch { restoreFocus(home, state, "hero:play") }
+        frames(1_000)
+        assertEquals(true, focused(hasText("Details")), "the restore did not land on Details within a second")
     }
 
     @Test

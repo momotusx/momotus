@@ -374,13 +374,14 @@ class TvHomeScrollTest {
     fun `from the hero's Play on a low-memory TV, every Down finds its lane composed`() = heroLanesReady(low = true)
 
     /**
-     * Review r2, S4: with two hero pages the carousel's clock runs once focus leaves the hero, and still a Down
-     * recomposes nothing of Home: the clock reads the page's place and the hero's focus in its own scope.
+     * Review r2, S4: with two hero pages Home carries the carousel's clock and its 5 s key hold, and still a Down
+     * recomposes nothing of Home: the clock reads the page's place and the key hold in its own scope. Each Down
+     * holds the clock, so this pins the reads, not a move while the clock ticks (review r3, L2).
      */
     @Test
     fun `with a running carousel, a Down recomposes nothing of Home`() {
         state = TvHomeState()
-        // From Continue Watching: focus off the hero, so the clock runs through every move.
+        // From Continue Watching, off the hero.
         show(hero = true, heroes = 2)
         val moves = (1..4).map { press(Key.DirectionDown, idle = false) }
         moves.forEachIndexed { i, move -> assertEquals(0, move.homeBodies, "TvHome recomposed on step ${i + 1}") }

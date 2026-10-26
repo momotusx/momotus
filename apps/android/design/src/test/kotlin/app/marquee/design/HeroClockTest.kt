@@ -142,6 +142,24 @@ class HeroClockTest {
         }
 
     @Test
+    fun theDotRedrawsAboutEvery80MsNotEveryFrame() {
+        // Review r3, M1: a dwell of 60 Hz frames writes the value the dot draws about 100 times, not 500.
+        val clock = HeroClock(3, dwellMs = 8000)
+        var writes = 0
+        var frames = 0
+        var seen = clock.progress
+        while (!clock.tick(16, running = true)) {
+            frames++
+            if (clock.progress != seen) {
+                writes++
+                seen = clock.progress
+            }
+        }
+        assertTrue("a dwell was $frames frames", frames in 495..505)
+        assertTrue("the dot's value changed $writes times over a dwell of $frames frames", writes in 95..101)
+    }
+
+    @Test
     fun aTrailerWritesTheSameValue() {
         val clock = HeroClock(3, dwellMs = 8000)
         clock.trailer(0.4f)

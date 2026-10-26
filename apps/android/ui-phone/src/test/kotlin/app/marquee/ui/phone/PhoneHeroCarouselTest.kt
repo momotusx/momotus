@@ -4,17 +4,20 @@ import android.os.Handler
 import android.os.Looper
 import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeLeft
+import androidx.compose.ui.test.swipeRight
 import app.marquee.core.client.CoreClient
 import app.marquee.core.client.CoreJson
 import app.marquee.core.model.Hero
 import app.marquee.core.model.HomeHeader
 import app.marquee.core.model.HomeRow
 import app.marquee.core.model.HomeSnapshot
+import app.marquee.core.model.HomeUpdate
 import app.marquee.core.model.RowState
 import app.marquee.core.model.Tile
 import app.marquee.core.views.HomeView
@@ -79,10 +82,12 @@ class PhoneHeroCarouselTest {
         reason = "Popular Movies",
     )
 
-    private fun show() {
+    private val all = listOf(hero("tt1", "Page One"), hero("tt2", "Page Two"), hero("tt3", "Page Three"))
+
+    private fun show(pages: List<Hero> = all) {
         val snapshot =
             HomeSnapshot(
-                HomeHeader(listOf(hero("tt1", "Page One"), hero("tt2", "Page Two"), hero("tt3", "Page Three"))),
+                HomeHeader(pages),
                 listOf(
                     HomeRow(
                         "row",
@@ -178,5 +183,19 @@ class PhoneHeroCarouselTest {
         waitFor("the swipe reached the second page") { settledOn("Page Two") }
         frames(30_000)
         assertTrue(settledOn("Page Two"), "the timer paged after a swipe by hand")
+    }
+
+    @Test
+    fun `a carousel that began with one page swipes back from its first page to its last once it grew`() {
+        // Review r2 N1, r3 L3: the pager leaves its first loop when the list grows.
+        show(all.take(1))
+        val update = CoreJson.encodeToString(HomeUpdate.serializer(), HomeUpdate.Header(HomeHeader(all)))
+        client.onMessage("""{"sub":7,"updates":[$update]}""")
+        waitFor("the list grew to three dots") {
+            compose.onAllNodesWithContentDescription("Page 3 of 3, Page Three").fetchSemanticsNodes().isNotEmpty()
+        }
+        waitFor("still on the first page") { settledOn("Page One") }
+        compose.onNodeWithText("Page One").performTouchInput { swipeRight() }
+        waitFor("the swipe back reached the last page") { settledOn("Page Three") }
     }
 }

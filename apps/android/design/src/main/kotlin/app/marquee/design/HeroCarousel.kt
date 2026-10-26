@@ -51,9 +51,21 @@ class HeroClock(
 ) {
     var count by mutableIntStateOf(count)
 
-    /** 0 to 1 through the page's dwell, or through its trailer while one plays. */
+    /**
+     * 0 to 1 through the page's dwell, or through its trailer while one plays. Written once per 1 percent, as the
+     * web does: the dot that draws it redraws about every 80 ms instead of every frame, the same to the eye on a
+     * 44 dp pill (review r3, M1: the TV clock now runs while Home sits idle).
+     */
     var progress by mutableFloatStateOf(0f)
         private set
+
+    /** The dwell's exact place, which [progress] follows by whole percents. */
+    private var exact = 0f
+
+    private fun set(value: Float) {
+        exact = value
+        progress = value
+    }
 
     /** Paged by hand: auto-advance stops for the session. */
     var stopped by mutableStateOf(false)
@@ -65,37 +77,44 @@ class HeroClock(
         running: Boolean,
     ): Boolean {
         if (!running || stopped || count < 2) return false
-        progress = (progress + dtMs.toFloat() / dwellMs).coerceAtMost(1f)
-        if (progress < 1f) return false
-        progress = 0f
-        return true
+        exact = (exact + dtMs.toFloat() / dwellMs).coerceAtMost(1f)
+        if (exact >= 1f) {
+            set(0f)
+            return true
+        }
+        // A hair under a percent, so float steps of 0.002 still land on every fifth frame.
+        if (exact - progress >= STEP - 1e-4f) progress = exact
+        return false
     }
 
     /** A trailer's place in its cap, written to the same value. */
     fun trailer(fraction: Float) {
-        progress = fraction.coerceIn(0f, 1f)
+        set(fraction.coerceIn(0f, 1f))
     }
 
     /** Any touch or key: the dwell starts over. */
     fun input() {
-        progress = 0f
+        set(0f)
     }
 
     /** The viewer paged: no more timed pages this session. */
     fun manual() {
         stopped = true
-        progress = 0f
+        set(0f)
     }
 
     /** A page change from the timer: the next dwell starts. */
     fun paged() {
-        progress = 0f
+        set(0f)
     }
 
     companion object {
         // The owner's B2 (design/tokens.json motion): a page stays 8 s and slides in 650 ms.
         const val DWELL_MS = Tokens.HERO_DWELL_MS
         const val SLIDE_MS = Tokens.HERO_SLIDE_MS
+
+        /** The smallest change of [progress] that reaches the dot. */
+        const val STEP = 0.01f
     }
 }
 
