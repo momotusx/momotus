@@ -8,6 +8,7 @@ import SearchIcon from "lucide-solid/icons/search";
 import Settings from "lucide-solid/icons/settings";
 import { type Component, createEffect, createMemo, createSignal, For, on, onCleanup, Show, untrack } from "solid-js";
 import { ProfileButton } from "./components/avatar";
+import Brand from "./components/brand";
 import { bridgeUrl, link } from "./core/client";
 // The debrid accounts follow the core from the start, whatever screen is open.
 import "./core/debrid";
@@ -132,7 +133,9 @@ function TopNav() {
   const search = destinations.find((d) => d.path === "/search") as Destination;
   return (
     <nav class="topnav" aria-label="Main" data-fgroup="rail" inert={searchOpen() || undefined}>
-      <span class="brand">Momotus</span>
+      <span class="brand">
+        <Brand alone />
+      </span>
       <div class="tabbar">
         <For each={tv() ? destinations : destinations.filter((d) => d !== search)}>{link}</For>
         <Show when={tv()}>
@@ -285,7 +288,11 @@ function Shell(props: RouteSectionProps) {
         <Show
           when={profiles()}
           fallback={
-            <Show when={profilesFailed()} fallback={<div class="boot brand" role="status" aria-label="Momotus is starting">Momotus</div>}>
+            <Show when={profilesFailed()} fallback={
+                <div class="boot brand" role="status" aria-label="Momotus is starting">
+                  <Brand fill />
+                </div>
+              }>
               {(r) => <p class="banner bad">{r()}</p>}
             </Show>
           }

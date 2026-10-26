@@ -22,6 +22,7 @@ import { mayMakeKit } from "../lib/sync";
 import { plainAddress, syncWords } from "../lib/words";
 import { Session } from "./pairing";
 import "./browse.css";
+import Brand from "../components/brand";
 import "./settings.css";
 import "./onboarding.css";
 
@@ -133,7 +134,9 @@ function Frame(props: { label: string; children: JSX.Element }) {
   return (
     <main class="welcome page" data-vscroll>
       <header class="welcome-head">
-        <div class="brand">Momotus</div>
+        <div class="brand">
+          <Brand />
+        </div>
       </header>
       <section class="step-body" aria-label={props.label}>
         {props.children}
@@ -213,7 +216,9 @@ export default function SignInScreen() {
     <Show when={!sync.joined()} fallback={<Navigate href="/sync" />}>
       <main class="welcome page" data-vscroll>
         <header class="welcome-head">
-          <div class="brand">Momotus</div>
+          <div class="brand">
+          <Brand />
+        </div>
         </header>
         <SignInStart from={fromOf(q)} doors={() => <Navigate href="/sync" />} />
       </main>

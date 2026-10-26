@@ -158,10 +158,23 @@ h1, h2, h3 { font-family: var(--font-display); font-weight: var(--weight-heading
  * one in a white 20 percent pill, the rest at 64 percent; the profile at its end. */
 .topnav { position: absolute; left: 0; right: 0; top: 0; z-index: 10; height: calc(var(--nav-top) + var(--nav-h)); pointer-events: none; }
 .topnav > * { pointer-events: auto; }
-.brand { font: var(--weight-display) 38px / 1 var(--font-display); letter-spacing: var(--tracking-display); }
+/* The mark (components/brand.tsx), sized by its font size: the bird 1.45 em, the name 0.45 of the bird. */
+.brand { font: var(--weight-display) 38px / 1 var(--font-display); display: inline-flex; align-items: center; gap: .29em; }
+.brand .mk { display: block; width: 1.45em; height: 1.45em; }
+.brand .wm { display: block; height: .65em; width: auto; }
+.brand-fill { position: relative; display: inline-flex; }
+.brand-fill > span { display: inline-flex; align-items: center; gap: .29em; }
+.brand-fill .faint { opacity: .2; }
+.brand-fill .solid { position: absolute; inset: 0;
+  -webkit-mask: linear-gradient(90deg, #000 calc(var(--brand-p) - 3%), transparent calc(var(--brand-p) + 3%));
+  mask: linear-gradient(90deg, #000 calc(var(--brand-p) - 3%), transparent calc(var(--brand-p) + 3%)); animation: brand-fill 2.4s linear infinite; }
+@property --brand-p { syntax: "<percentage>"; inherits: false; initial-value: 103%; }
+@keyframes brand-fill { from { --brand-p: -3%; } to { --brand-p: 103%; } }
+@media (prefers-reduced-motion: reduce) { .brand-fill .solid { animation: none; } }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .topnav .brand { position: absolute; left: var(--safe-side); top: calc(var(--nav-top) + var(--nav-h) / 2); translate: 0 -50%; }
-/* Before the core has answered: the wordmark alone, centered. */
-.boot.brand { position: fixed; inset: 0; display: grid; place-items: center; margin: 0; }
+/* Before the core has answered: the mark and the name, centered, filling. */
+.boot.brand { position: fixed; inset: 0; display: grid; place-items: center; margin: 0; font-size: 56px; }
 .tabbar { position: absolute; left: 50%; top: var(--nav-top); translate: -50% 0; display: flex; align-items: center; gap: 4px; height: var(--nav-h); padding: 0 8px;
   border-radius: var(--radius-pill); background: var(--surface); }
 .nav { display: inline-flex; align-items: center; gap: 12px; height: 60px; padding: 0 26px; border-radius: var(--radius-pill);

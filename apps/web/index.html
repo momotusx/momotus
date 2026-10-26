@@ -7,11 +7,16 @@
     <!-- The page color (design/tokens.json bg), for the browser bar on a phone. -->
     <meta name="theme-color" content="#1C1C1E" />
     <title>Momotus</title>
+    <!-- Icons and the install manifest: design/logo/build.ts. -->
+    <link rel="icon" href="/favicon.ico" sizes="32x32" />
+    <link rel="icon" href="/icon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/manifest.webmanifest" />
   </head>
   <body>
-    <!-- The wordmark until the app draws (main.tsx clears it), styled here
+    <!-- The mark and the name until the app draws (main.tsx clears it), styled here
          since the stylesheets come with the script. -->
-    <div id="root"><div class="boot" style="position:fixed;inset:0;display:grid;place-items:center;background:#1C1C1E;color:rgba(255,255,255,.92);font:700 32px/1 system-ui,sans-serif;letter-spacing:-0.02em">Momotus</div></div>
+    <div id="root"><div class="boot" style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center;gap:23px;background:#1C1C1E"><img src="/brand/mark.webp" alt="" style="width:81px;height:81px" /><img src="/brand/wordmark.svg" alt="Momotus" style="height:36px" /></div></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

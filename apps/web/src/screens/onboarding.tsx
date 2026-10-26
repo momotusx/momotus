@@ -33,6 +33,7 @@ import { InstallField } from "./addons";
 import { allLanguages, QUICK } from "./settings";
 import { SignInStart, TvSignIn } from "./sign-in";
 import "./browse.css";
+import Brand from "../components/brand";
 import "./settings.css";
 import "./onboarding.css";
 
@@ -101,7 +102,9 @@ export default function Onboarding() {
   return (
     <main class="welcome page" data-vscroll>
       <header class="welcome-head">
-        <div class="brand">Momotus</div>
+        <div class="brand">
+          <Brand />
+        </div>
         {/* Browse first still passes the switches: nothing is installed unasked. */}
         <Show when={step() === 1 || step() === "doors"}>
           <A class="skip" href={fresh() ? "/welcome?step=2&then=home" : "/"} replace={!fresh()} onClick={() => !fresh() && resetHistoryBase()} data-f="welcome:skip">
