@@ -1015,7 +1015,7 @@ fn aired_episodes(meta: &MetaItem, now_ms: i64) -> Vec<String> {
 /// else after the furthest one watched (marks from Trakt or by hand), else
 /// from its first episode; an episode not out yet is never the target, and
 /// a series watched to its last episode starts again from its first.
-fn play_target(
+pub(crate) fn play_target(
     meta: &MetaItem,
     kind: &str,
     resume: Option<(String, i64, i64)>,

@@ -1721,3 +1721,157 @@ async fn a_top_10_row_leaves_the_twins_as_they_were() {
         ]
     );
 }
+
+/// One addon with a series and a movie catalog, each one title with a
+/// backdrop, and the series' meta (`meta`, answered with `status`): S1:E1,
+/// S1:E2 and S2:E1, all out.
+async fn hero_play_addon(status: u16, meta: &'static str) -> AddonRow {
+    const SHOW: &str = r#"{"metas":[{"id":"tt9","type":"series","name":"Show","background":"https://images.example/tt9-bg.jpg"}]}"#;
+    const FILM: &str = r#"{"metas":[{"id":"tt1","type":"movie","name":"Film","background":"https://images.example/tt1-bg.jpg"}]}"#;
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    tokio::spawn(async move {
+        while let Ok((mut socket, _)) = listener.accept().await {
+            tokio::spawn(async move {
+                let mut buf = [0u8; 2048];
+                let n = socket.read(&mut buf).await.unwrap_or(0);
+                let head = String::from_utf8_lossy(&buf[..n]);
+                let path = head.split_whitespace().nth(1).unwrap_or("");
+                let (code, body) = if path.starts_with("/catalog/series/") {
+                    (200, SHOW)
+                } else if path.starts_with("/catalog/movie/") {
+                    (200, FILM)
+                } else if path.starts_with("/meta/series/tt9") {
+                    (status, meta)
+                } else {
+                    (404, "{}")
+                };
+                let resp = format!(
+                    "HTTP/1.1 {code} X\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{body}",
+                    body.len()
+                );
+                let _ = socket.write_all(resp.as_bytes()).await;
+            });
+        }
+    });
+    let manifest = serde_json::json!({
+        "id": "heroes", "version": "1.0.0", "name": "Heroes",
+        "types": ["movie", "series"], "resources": ["catalog", "meta"], "idPrefixes": ["tt"],
+        "catalogs": [
+            {"type": "series", "id": "top", "name": "Popular"},
+            {"type": "movie", "id": "top", "name": "Popular"}
+        ]
+    });
+    AddonRow {
+        transport_url: format!("http://{addr}/manifest.json"),
+        manifest_json: manifest.to_string(),
+        position: 0,
+        enabled: true,
+        allow_private: true,
+    }
+}
+
+const SHOW_META: &str = r#"{"meta":{"id":"tt9","type":"series","name":"Show","videos":[
+  {"id":"tt9:2:1","title":"Return","season":2,"episode":1,"released":"2021-01-01T00:00:00Z"},
+  {"id":"tt9:1:1","title":"Pilot","season":1,"episode":1,"released":"2020-01-01T00:00:00Z"},
+  {"id":"tt9:1:2","title":"Second","season":1,"episode":2,"released":"2020-01-08T00:00:00Z"}]}}"#;
+
+/// A hero page's Play, by title id: (video, label, resume position).
+fn hero_play(view: &HomeView, id: &str) -> Option<(String, String, Option<i64>)> {
+    let hero = view
+        .snapshot()
+        .header
+        .heroes
+        .into_iter()
+        .find(|h| h.tile.id == id)?;
+    hero.play.map(|p| (p.video_id, p.label, p.resume_ms))
+}
+
+fn progress(core: &Core, video: &'static str, item: &'static str, position_ms: i64) {
+    core.library()
+        .set_progress(
+            "p",
+            ProgressRow {
+                video_id: video,
+                item_id: item,
+                position_ms,
+                duration_ms: 1000,
+                updated_ms: position_ms,
+            },
+            &core.hlc(),
+        )
+        .unwrap();
+}
+
+/// Every hero page carries the main action the title page's button has
+/// (the owner, 2026-10-26: Carrie showed Details alone): a series never
+/// watched plays S1:E1, one in progress resumes its episode, one finished to
+/// a season's last episode plays the next season's first; a movie plays or
+/// resumes. It follows progress live, with Home open.
+#[tokio::test]
+async fn every_hero_page_plays_what_its_title_page_would() {
+    let core = Core::temporary("p").unwrap();
+    core.library()
+        .set_addons("p", &[hero_play_addon(200, SHOW_META).await], &core.hlc())
+        .unwrap();
+    let view = HomeView::open(&core);
+    let want = |id: &'static str, play: (&'static str, &'static str, Option<i64>)| {
+        move |v: &HomeView| hero_play(v, id) == Some((play.0.to_owned(), play.1.to_owned(), play.2))
+    };
+    view_until(
+        &view,
+        "a series never watched",
+        want("tt9", ("tt9:1:1", "Play S1:E1", None)),
+    )
+    .await;
+    view_until(&view, "a movie", want("tt1", ("tt1", "Play", None))).await;
+
+    progress(&core, "tt9:1:2", "tt9", 400);
+    view_until(
+        &view,
+        "a series in progress",
+        want("tt9", ("tt9:1:2", "Resume S1:E2", Some(400))),
+    )
+    .await;
+
+    progress(&core, "tt9:1:2", "tt9", 990);
+    view_until(
+        &view,
+        "the next season",
+        want("tt9", ("tt9:2:1", "Play S2:E1", None)),
+    )
+    .await;
+
+    progress(&core, "tt1", "tt1", 300);
+    view_until(
+        &view,
+        "a movie in progress",
+        want("tt1", ("tt1", "Resume", Some(300))),
+    )
+    .await;
+}
+
+/// A series whose episodes the hero does not know yet reads them from its
+/// meta (above); with no meta answer it has no Play and offers Details
+/// alone, and a meta that lists no episodes plays the title as one, as the
+/// title page does.
+#[tokio::test]
+async fn a_hero_series_without_episodes_offers_what_its_meta_allows() {
+    for (status, meta, want) in [
+        (404, "{}", None),
+        (
+            200,
+            r#"{"meta":{"id":"tt9","type":"series","name":"Show"}}"#,
+            Some(("tt9".to_owned(), "Play".to_owned(), None)),
+        ),
+    ] {
+        let core = Core::temporary("p").unwrap();
+        core.library()
+            .set_addons("p", &[hero_play_addon(status, meta).await], &core.hlc())
+            .unwrap();
+        let view = HomeView::open(&core);
+        // The movie's page is resolved in the same round as the series'.
+        view_until(&view, "the movie's Play", |v| hero_play(v, "tt1").is_some()).await;
+        assert_eq!(hero_play(&view, "tt9"), want, "meta answered {status}");
+    }
+}

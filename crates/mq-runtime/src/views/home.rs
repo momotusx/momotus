@@ -10,6 +10,7 @@ use crate::live::{FRAME, ListDiff, coalesce};
 use crate::ratings::Ratings;
 use crate::views::playback::{NextEpisode, next_after};
 use crate::views::settings::HomeRows;
+use crate::views::title::{PlayTarget, play_target};
 use crate::{Core, CoreError};
 use eyeball::SharedObservable;
 use eyeball_im::ObservableVector;
@@ -233,6 +234,12 @@ pub struct Hero {
     /// A YouTube video id to play muted in the hero, when the addon names a
     /// trailer.
     pub trailer: Option<String>,
+    /// What the hero's Play plays, as the title page's primary button reads
+    /// it ("Play", "Resume S2:E3", "Play S1:E1"), so every app plays the same
+    /// video. None until a series' episodes are read from its meta, while its
+    /// next episode is not out, and when no addon gives its meta: the hero
+    /// then offers Details alone.
+    pub play: Option<PlayTarget>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -317,6 +324,7 @@ impl HomeView {
             rows.clone(),
             header.clone(),
         ));
+        tasks.spawn(watch_hero_play(core.clone(), header.clone()));
         Self {
             core: core.clone(),
             rows,
@@ -1110,6 +1118,7 @@ fn maybe_pick_hero(rows: &Mutex<ObservableVector<HomeRow>>, header: &SharedObser
                     genres: blurb.genres,
                     runtime: blurb.runtime,
                     trailer: blurb.trailer,
+                    play: None,
                 });
             }
         }
@@ -1117,6 +1126,76 @@ fn maybe_pick_hero(rows: &Mutex<ObservableVector<HomeRow>>, header: &SharedObser
     if current != next {
         header.set(HomeHeader { heroes: next });
     }
+}
+
+/// Gives each hero page its Play: when the pages change, and when progress
+/// or watched marks do. A series' meta comes from the addon cache after the
+/// first look; a movie needs none.
+async fn watch_hero_play(core: Core, header: SharedObservable<HomeHeader>) {
+    let mut pages = header.subscribe();
+    let mut changes = core.library().subscribe();
+    loop {
+        let heroes = header.get().heroes;
+        let targets =
+            futures_util::future::join_all(heroes.iter().map(|hero| hero_play(&core, &hero.tile)))
+                .await;
+        let found: HashMap<String, Option<PlayTarget>> = heroes
+            .iter()
+            .map(|h| h.tile.id.clone())
+            .zip(targets)
+            .collect();
+        // Merged into the pages as they are now: a page picked meanwhile
+        // waits for the next round, which its own change starts.
+        header.update_if(|current| {
+            let mut changed = false;
+            for hero in &mut current.heroes {
+                if let Some(play) = found.get(&hero.tile.id)
+                    && hero.play != *play
+                {
+                    hero.play = play.clone();
+                    changed = true;
+                }
+            }
+            changed
+        });
+        // Waits for a change of pages, or of what Play reads.
+        loop {
+            tokio::select! {
+                page = pages.next() => match page {
+                    Some(_) => break,
+                    None => return,
+                },
+                tables = crate::views::next_change(&mut changes) => match tables {
+                    Some(t) if t.iter().any(|t| matches!(t, Table::Progress | Table::Watched)) => break,
+                    Some(_) => {}
+                    None => return,
+                },
+            }
+        }
+    }
+}
+
+/// The title page's primary button for one hero page, on this profile.
+async fn hero_play(core: &Core, tile: &Tile) -> Option<PlayTarget> {
+    let meta = if tile.kind == "movie" {
+        // A movie plays itself: its meta adds nothing to the target.
+        serde_json::from_value(serde_json::json!(
+            {"id": tile.id, "type": tile.kind, "name": tile.name}
+        ))
+        .ok()?
+    } else {
+        core.fetch_meta(&tile.kind, &tile.id).await.ok()?.0
+    };
+    let profile = core.profile();
+    let library = core.library();
+    let resume = library.latest_progress(profile, &tile.id).unwrap_or(None);
+    let watched: HashSet<String> = library
+        .watched_videos(profile, &tile.id)
+        .unwrap_or_default()
+        .into_iter()
+        .collect();
+    let now = mq_library::hlc::now_ms() as i64;
+    play_target(&meta, &tile.kind, resume, &watched, now).0
 }
 
 async fn watch_continue(
