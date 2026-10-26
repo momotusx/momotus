@@ -81,7 +81,7 @@ env -u MARQUEE_LINK_HOST xcodebuild ... MARQUEE_SYNC_SERVER=$MARQUEE_SYNC_SERVER
 # Web: apps/web/.env.production.local holds VITE_MARQUEE_SYNC_SERVER; mq-bridge built with MARQUEE_LINK_HOST
 ```
 
-A walk build (`-Pmarquee.applicationIdSuffix=.walk`) installs beside the owner's app; its home-screen shortcut still opens `app.momotus.android` (`res/xml/shortcuts.xml` names the package), so a walk never uses the shortcut.
+A walk build (`-Pmarquee.applicationIdSuffix=.walk`) installs beside the owner's app; its home-screen shortcut opens the walk build itself (`shortcut_package`, set per variant in `app/build.gradle.kts`).
 
 The relay runs with `--trust-proxy`: a budgeted call to it on the server itself (a `curl` to `127.0.0.1:8787/v1/pairings`) needs a `cf-connecting-ip` header, else it answers 400 `noClientAddress`; `/v1/relay` is not budgeted.
 

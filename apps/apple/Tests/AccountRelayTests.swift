@@ -9,7 +9,8 @@ import Testing
 // session's browser is played by URLSession, which follows the provider's
 // picker and stops at the return; the other sheets are scripted. The suite
 // signs in 14 times, 28 of the 30 sign-in calls a minute the relay allows one
-// address: start a run a minute after the last.
+// address: start a run a minute after the last. The relay is one built from this
+// checkout: one from before the Momotus ids refuses the momotus://auth return.
 
 private let relayAddress = ProcessInfo.processInfo.environment["MARQUEE_SIGNIN_RELAY"]
 

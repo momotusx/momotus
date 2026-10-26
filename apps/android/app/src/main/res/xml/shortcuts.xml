@@ -9,6 +9,6 @@
         <intent
             android:action="app.momotus.android.SIGN_IN_ANOTHER"
             android:targetClass="app.marquee.android.MainActivity"
-            android:targetPackage="app.momotus.android" />
+            android:targetPackage="@string/shortcut_package" />
     </shortcut>
 </shortcuts>

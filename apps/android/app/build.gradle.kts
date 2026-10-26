@@ -1,5 +1,6 @@
 import com.android.build.api.variant.BuildConfigField
 import com.android.build.api.variant.FilterConfiguration
+import com.android.build.api.variant.ResValue
 
 plugins {
     alias(libs.plugins.android.application)
@@ -74,7 +75,10 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
-    buildFeatures { buildConfig = true }
+    buildFeatures {
+        buildConfig = true
+        resValues = true
+    }
 
     testOptions {
         // Compose tests run on Robolectric with the app's resources and manifest (its intent filters).
@@ -153,6 +157,11 @@ androidComponents {
         if (!benchmark && walkSuffix.isNotEmpty()) variant.applicationId.set("app.momotus.android$walkSuffix")
         val walk = variant.buildType == "debug" && walkSuffix.isNotEmpty()
         variant.buildConfigFields?.put("WALK", BuildConfigField("boolean", "$walk", "a debug walk build"))
+        // The home-screen shortcut opens the package it came with (res/xml/shortcuts.xml), never the owner's app.
+        variant.resValues.put(
+            variant.makeResValueKey("string", "shortcut_package"),
+            variant.applicationId.map { ResValue(it, "the shortcut's own package") },
+        )
         // One versionCode per ABI APK, so two APKs of one release never share one (arm64 above armeabi-v7a,
         // so a device that runs both takes arm64).
         variant.outputs.forEach { output ->

@@ -6,7 +6,8 @@
  * FAILOVER=1 bun scripts/sintel-addon.ts   adds two broken mirrors ahead of the 1080p trailer
  * BROKEN=1 bun scripts/sintel-addon.ts     every stream is a dead URL (the failure screen)
  * Install in the emulator: `adb reverse tcp:7780 tcp:7780`, then http://127.0.0.1:7780/manifest.json
- * Install on the host bridge: http://127.0.0.1:7780/manifest.json */
+ * Install on the host bridge: http://127.0.0.1:7780/manifest.json
+ * The manifest id is also in apps/android/core/src/test/resources/traces/addons.jsonl: change both together. */
 
 const port = Number(process.argv[2] ?? 7780);
 const BLENDER = "https://download.blender.org/durian";

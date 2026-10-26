@@ -7,7 +7,7 @@ enum Keychain {
     private static func query(_ account: String) -> [String: Any] {
         [
             kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: "app.momotus",
+            kSecAttrService as String: "app.marquee",
             kSecAttrAccount as String: account,
             kSecUseDataProtectionKeychain as String: true,
         ]
@@ -55,7 +55,7 @@ enum Keychain {
     static func accounts(prefix: String) throws -> [String] {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: "app.momotus",
+            kSecAttrService as String: "app.marquee",
             kSecUseDataProtectionKeychain as String: true,
             kSecMatchLimit as String: kSecMatchLimitAll,
             kSecReturnAttributes as String: true,
