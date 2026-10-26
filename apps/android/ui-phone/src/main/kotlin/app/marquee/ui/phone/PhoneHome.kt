@@ -141,6 +141,8 @@ fun PhoneHome(
     /** Above the rows: offline, the way to the downloads (plans/offline-downloads.md 3.5). */
     banner: (@Composable () -> Unit)? = null,
 ) {
+    // A snapshot that came while this page first drew reaches every reader (LiveView.follow).
+    home.follow()
     var menuFor by remember { mutableStateOf<Tile?>(null) }
     menuFor?.let { tile ->
         ActionMenu(

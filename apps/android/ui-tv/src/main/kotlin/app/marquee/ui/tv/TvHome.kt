@@ -185,6 +185,8 @@ fun TvHome(
      */
     removal: PendingRemoval? = null,
 ) {
+    // A snapshot that came while this page first drew reaches every reader (LiveView.follow).
+    home.follow()
     val safe = Marquee.safe
     val metrics = Marquee.tiles
     // The hero carousel (plans/appletv-polish.md 4.1): one page, kept by its title so a page leaving before it never

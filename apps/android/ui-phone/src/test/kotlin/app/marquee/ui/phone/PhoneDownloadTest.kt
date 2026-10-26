@@ -31,6 +31,7 @@ import app.marquee.design.Form
 import app.marquee.design.MarqueeTheme
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.cancel
@@ -288,5 +289,62 @@ class PhoneDownloadTest {
         )
         control("Download, S1:E1").assertExists()
         control("Downloaded, S1:E2").assertExists()
+    }
+
+    /**
+     * The core answers while the window draws for the first time: that write reaches no recomposer yet, and a page
+     * that read the view's state without following it stayed empty until the next change (the Downloads page had
+     * this; LiveView.follow keeps every screen on its view's latest state).
+     */
+    @Test
+    fun `a title answered during the first draw shows`() {
+        val snapshot = CoreJson.encodeToString(TitleSnapshot.serializer(), TitleSnapshot(film(), emptyList()))
+        var answer: (() -> Unit)? = null
+        client.attach { text ->
+            val msg = CoreJson.parseToJsonElement(text).jsonObject
+            val id = msg["id"]?.jsonPrimitive?.longOrNull ?: return@attach
+            val reply = { result: String -> client.onMessage("""{"id":$id,"ok":true,"result":$result}""") }
+            if (msg["op"]?.jsonPrimitive?.content == "subscribe") {
+                answer = { reply("""{"sub":7,"snapshot":$snapshot}""") }
+            } else {
+                reply("{}")
+            }
+        }
+        // Its own scope: the subscribe goes out while the first composition holds the main thread.
+        val background = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        val view = TitleView(client, background, "movie", "tt1")
+        var first = true
+        compose.setContent {
+            MarqueeTheme(Form.Phone) { PhoneTitle(view, null, { _, _ -> }, {}, {}, {}, downloads = downloads) }
+            if (first) {
+                first = false
+                answerNow(view) { answer }
+            }
+        }
+        try {
+            val deadline = System.currentTimeMillis() + 20_000
+            while (compose.onAllNodesWithText("Sintel").fetchSemanticsNodes().isEmpty()) {
+                check(System.currentTimeMillis() < deadline) { "the title never drew" }
+                Snapshot.sendApplyNotifications()
+                compose.waitForIdle()
+                Thread.sleep(10)
+            }
+        } finally {
+            background.cancel()
+        }
+    }
+
+    /** Opens [view], sends the core's answer and waits until the view applied it, all before the caller returns. */
+    private fun answerNow(
+        view: TitleView,
+        answer: () -> (() -> Unit)?,
+    ) {
+        view.open()
+        val deadline = System.currentTimeMillis() + 10_000
+        while (answer() == null) check(System.currentTimeMillis() < deadline) { "no subscribe" }
+        answer()!!.invoke()
+        // The state thread applies it in a few ms; the view's state is snapshot state, which this composition
+        // cannot see change, so the wait is a plain one.
+        Thread.sleep(500)
     }
 }

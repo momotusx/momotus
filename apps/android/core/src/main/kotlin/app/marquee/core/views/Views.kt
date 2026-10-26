@@ -78,6 +78,16 @@ class HomeView(
     var offline: HomeOffline? by mutableStateOf(null)
         private set
 
+    override fun touch() {
+        val (h, o, r) = Triple(hero, offline, rows.toList())
+        hero = null
+        hero = h
+        offline = null
+        offline = o
+        rows.clear()
+        rows.addAll(r)
+    }
+
     override fun applySnapshot(snapshot: HomeSnapshot) {
         heroes = snapshot.header.heroes
         offline = snapshot.header.offline
@@ -153,6 +163,16 @@ class TitleView(
         get() =
             (header?.state as? TitleState.Failed)?.reason
                 ?: (status as? ViewStatus.Failed)?.reason?.takeIf { header == null }
+
+    override fun touch() {
+        val (h, e, s) = Triple(header, episodes.toList(), similar)
+        header = null
+        header = h
+        episodes.clear()
+        episodes.addAll(e)
+        similar = emptyList()
+        similar = s
+    }
 
     override fun applySnapshot(snapshot: TitleSnapshot) {
         header = snapshot.header

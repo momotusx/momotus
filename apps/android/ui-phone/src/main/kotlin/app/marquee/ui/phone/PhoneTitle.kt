@@ -147,6 +147,8 @@ fun PhoneTitle(
     onPerson: (String) -> Unit = {},
     downloads: TitleDownloads? = null,
 ) {
+    // A snapshot that came while this page first drew reaches every reader (LiveView.follow).
+    title.follow()
     val header = title.header
     val details = header?.details
     val failure = title.failure

@@ -1,8 +1,11 @@
 package app.marquee.core.views
 
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshots.Snapshot
 import app.marquee.core.client.CoreClient
 import app.marquee.core.client.CoreError
 import app.marquee.core.client.CoreLog
@@ -71,6 +74,20 @@ abstract class LiveView<S, U>(
     private var closed = false
     private var job: Job? = null
     private val resubscribeTimes = ArrayDeque<Long>()
+
+    /**
+     * Call once at the top of a screen that reads this view's state. A snapshot the core sent while that screen first
+     * composed can reach none of its readers: they read the state before it landed, and nothing tells them again.
+     * Once the screen is attached, the view writes its state again on the state thread, so every reader composes
+     * with the latest.
+     */
+    @Composable
+    fun follow() {
+        LaunchedEffect(this) { client.onState { Snapshot.withMutableSnapshot { touch() } } }
+    }
+
+    /** Writes the view's state again, values unchanged, so its readers compose again ([follow]). */
+    protected open fun touch() {}
 
     /** The subscription now (it changes when the view subscribes again), or null before the first reply. */
     val currentSubscription: Subscription?

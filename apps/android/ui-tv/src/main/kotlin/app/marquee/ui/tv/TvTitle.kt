@@ -159,6 +159,8 @@ fun TvTitle(
     /** Remove from Continue Watching, on every synced device; null where the page has no such button. */
     onUncontinue: (suspend () -> Unit)? = null,
 ) {
+    // A snapshot that came while this page first drew reaches every reader (LiveView.follow).
+    title.follow()
     val safe = Marquee.safe
     val header = title.header
     val details = header?.details
