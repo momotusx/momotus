@@ -224,7 +224,7 @@ fun SettingsScreen(
     val holder = settingsHolder(session)
     val runner = rememberRunner()
     val tv = Marquee.form == Form.Tv
-    val downloads = !tv && downloadsView(session).snapshot != null
+    val downloads = !tv && downloadsView(session).current() != null
     val context = LocalContext.current
     val snapshot = gate.snapshot
     val me = snapshot?.profiles?.firstOrNull { it.id == snapshot.active }
@@ -294,7 +294,7 @@ fun SettingsScreen(
             add(
                 SettingsPart(SettingsSection.Playback) {
                     Column(verticalArrangement = Arrangement.spacedBy(if (tv) 20.dp else 16.dp)) {
-                        val streams = holder.prefs.snapshot?.streams
+                        val streams = holder.prefs.current()?.streams
                         SettingsGroup({
                             SettingsRow(
                                 Icons.SlidersHorizontal,
@@ -373,10 +373,11 @@ private fun Sources(
     val addonsLine =
         when {
             addons.status is ViewStatus.Failed -> "Addons could not load"
-            else -> addons.snapshot?.addons?.let(AddonsCopy::summary) ?: ""
+            else -> addons.current()?.addons?.let(AddonsCopy::summary) ?: ""
         }
     val debrid =
-        session.debrid.snapshot
+        session.debrid
+            .current()
             ?.accounts
             ?.size ?: 0
     val trakt = (LocalContext.current.applicationContext as MarqueeApp).trakt
@@ -462,7 +463,7 @@ fun AddonsScreen(
     val installFocus = remember { FocusRequester() }
     LinkSheet(session, link, installFocus)
     val addons =
-        holder.addons.snapshot
+        addonsSnapshot
             ?.addons
             .orEmpty()
             .filter { !sourcesOnly || "stream" in it.provides }
@@ -500,7 +501,7 @@ fun AddonsScreen(
                 item(key = "addons-failed") { Note("Addons could not load", failed = true) }
             }
 
-            addons.isEmpty() && holder.addons.snapshot != null -> {
+            addons.isEmpty() && addonsSnapshot != null -> {
                 item(key = "addons-none") {
                     Note(
                         if (sourcesOnly) {
@@ -866,7 +867,7 @@ private fun Playback(
     busy: Boolean,
     run: (String, suspend () -> Unit) -> Unit,
 ) {
-    val prefs = holder.prefs.snapshot ?: return
+    val prefs = holder.prefs.current() ?: return
     val ops = holder.session.ops
     Section(0.dp, groupRadius()) {
         Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.s)) {

@@ -134,7 +134,7 @@ fun TvVersions(
     held: Boolean = false,
 ) {
     val safe = Marquee.safe
-    val snapshot = versions?.snapshot
+    val snapshot = versions?.current()
     val failure = (versions?.status as? ViewStatus.Failed)?.reason
     val empty = snapshot?.empty?.takeIf { snapshot.recommended == null }
     val step = { it: EmptyStep ->

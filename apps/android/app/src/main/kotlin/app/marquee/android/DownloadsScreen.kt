@@ -98,7 +98,7 @@ fun DownloadsScreen(
     kids: Boolean,
 ) {
     val view = downloadsView(session)
-    val snapshot = view.snapshot
+    val snapshot = view.current()
     var menu by remember { mutableStateOf<DownloadRow?>(null) }
     menu?.let { row -> RowMenu(row, actions, nav) { menu = null } }
     val onControl: ((DownloadRow) -> Unit)? = if (kids) null else ({ menu = it })
@@ -207,7 +207,7 @@ fun DownloadedSeriesScreen(
     kids: Boolean,
     onGone: () -> Unit,
 ) {
-    val snapshot = downloadsView(session).snapshot
+    val snapshot = downloadsView(session).current()
     var menu by remember { mutableStateOf<DownloadRow?>(null) }
     var confirm by remember { mutableStateOf(false) }
     menu?.let { row -> RowMenu(row, actions, nav) { menu = null } }
@@ -386,7 +386,7 @@ private fun Storage(storage: DownloadStorage) {
 /** Settings > Downloads (3.7): Wi-Fi only, Smart downloads, the storage line and Delete all. */
 @Composable
 internal fun DownloadsSettings(session: CoreSession) {
-    val snapshot = downloadsView(session).snapshot ?: return
+    val snapshot = downloadsView(session).current() ?: return
     val scope = rememberCoroutineScope()
     var confirm by remember { mutableStateOf(false) }
 

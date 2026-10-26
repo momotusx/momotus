@@ -1,5 +1,7 @@
 package app.marquee.core.views
 
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
@@ -42,6 +44,8 @@ import app.marquee.core.model.TraktStatus
 import app.marquee.core.model.VersionsSnapshot
 import app.marquee.core.model.applyDiffs
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
@@ -207,17 +211,37 @@ open class RecordView<S>(
     var snapshot: S? by mutableStateOf(null)
         private set
 
+    private val latestFlow = MutableStateFlow<S?>(null)
+
+    /**
+     * The same snapshot as a flow that hands a new collector the value it holds now: what [current] reads.
+     */
+    val latest: StateFlow<S?> get() = latestFlow
+
+    /**
+     * The snapshot as a screen reads it in composition: the latest one, read again once the screen is attached. A
+     * snapshot written while the window's first composition runs reaches no recomposer yet, so a screen that read
+     * [snapshot] alone stayed empty until the next change. [snapshot] stays right outside composition (callbacks,
+     * effects, `snapshotFlow`).
+     */
+    @Composable
+    fun current(): S? = latest.collectAsState().value
+
     /** How many opening snapshots arrived: one per subscription, so a new core's first one shows. */
     var opens by mutableIntStateOf(0)
         private set
 
     override fun applySnapshot(snapshot: S) {
         this.snapshot = snapshot
+        latestFlow.value = snapshot
         opens++
     }
 
     override fun applyUpdates(updates: List<S>) {
-        updates.lastOrNull()?.let { snapshot = it }
+        updates.lastOrNull()?.let {
+            snapshot = it
+            latestFlow.value = it
+        }
     }
 }
 

@@ -187,7 +187,7 @@ fun DebridScreen(session: CoreSession) {
             key = "debrid",
             factory = viewModelFactory { initializer { DebridHolder(session) } },
         )
-    val snapshot = session.debrid.snapshot
+    val snapshot = session.debrid.current()
     val durable = session.secrets.health != SecretStore.Health.MemoryOnly
     LazyColumn(
         Modifier.fillMaxSize().focusRestorer(),
@@ -381,7 +381,7 @@ private fun SignIn(
     val tv = Marquee.form == Form.Tv
     val context = LocalContext.current
     val colors = Marquee.colors
-    val phase = view.snapshot ?: DebridLoginSnapshot.Starting
+    val phase = view.current() ?: DebridLoginSnapshot.Starting
     // The connection this sign-in replaces, if any: done counts only for a new one, stored. An old
     // account (reconnecting) must not pass for the new one before its record arrives.
     val before = remember(view) { account?.generation }

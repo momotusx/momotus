@@ -79,7 +79,7 @@ fun CalendarScreen(
         )
     val view = holder.view
     KeepToday(view)
-    val snapshot = view.snapshot
+    val snapshot = view.current()
     val today = snapshot?.today ?: CalendarCopy.localDay()
     val days = snapshot?.days.orEmpty()
     // The first day on or after today goes to the top. Series keep arriving while the schedule
@@ -123,7 +123,7 @@ private fun Head(
     today: String,
     onDiscover: () -> Unit,
 ) {
-    val snapshot = view.snapshot
+    val snapshot = view.current()
     val status = view.status
     Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.s)) {
         BrowseHeader("Calendar")

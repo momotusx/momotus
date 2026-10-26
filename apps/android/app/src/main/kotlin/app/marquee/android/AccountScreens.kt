@@ -134,7 +134,7 @@ private fun SignInPairing(
     val name = remember { context.deviceName(tv = false) }
     LaunchedEffect(server) { if (holder.view == null) holder.start(server, name) }
     val view = holder.view ?: return
-    val joined = view.snapshot is PairingSnapshot.Joined && !sync.joining
+    val joined = view.current() is PairingSnapshot.Joined && !sync.joining
     LaunchedEffect(joined) {
         if (joined) {
             context.rememberJoin(server, name)
@@ -431,7 +431,7 @@ fun TvSignInScreen(
             holder.start(server, name)
         }
     }
-    val joined = holder.view?.snapshot is PairingSnapshot.Joined
+    val joined = holder.view?.current() is PairingSnapshot.Joined
     LazyColumn(
         Modifier.fillMaxSize().focusRestorer(),
         contentPadding = pagePadding(framed = false),

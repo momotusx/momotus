@@ -145,7 +145,7 @@ fun TitleScreen(
         playKey?.let(app.versions::use)
     }
     val versions = playKey?.let(app.versions::view)
-    val snapshot = versions?.snapshot
+    val snapshot = versions?.current()
     val failed = versions?.status is ViewStatus.Failed
     val title = name.orEmpty()
     // A tap on an episode plays it (the player picks its version); its versions are in the hold menu.

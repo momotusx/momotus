@@ -71,7 +71,7 @@ fun StreamChoiceScreen(session: CoreSession) {
             key = "stream-choice",
             factory = viewModelFactory { initializer { StreamChoiceHolder(session) } },
         )
-    val prefs = holder.prefs.snapshot
+    val prefs = holder.prefs.current()
     val page = holder.page
     LazyColumn(
         Modifier.fillMaxSize().focusRestorer(),
@@ -95,7 +95,8 @@ fun StreamChoiceScreen(session: CoreSession) {
             item(key = "rows") {
                 val account =
                     (
-                        session.debrid.snapshot
+                        session.debrid
+                            .current()
                             ?.accounts
                             ?.size ?: 0
                     ) > 0

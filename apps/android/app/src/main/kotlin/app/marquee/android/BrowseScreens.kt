@@ -296,7 +296,7 @@ fun SearchScreen(
     val holder =
         viewModel<SearchHolder>(key = "search", factory = viewModelFactory { initializer { SearchHolder(session) } })
     val view = holder.view
-    val snapshot = view.snapshot
+    val snapshot = view.current()
     LaunchedEffect(holder) { if (holder.query.isNotEmpty()) view.setQuery(holder.query) }
 
     fun send(text: String) {
@@ -525,17 +525,18 @@ fun DiscoverScreen(
             factory = viewModelFactory { initializer { DiscoverHolder(session) } },
         )
     val view = holder.view
+    val snapshot = view.current()
     // One select of the kind and the genre, after the first snapshot: the core reads it as a link (C40).
     val activity = LocalActivity.current
     GenreAskEffect(
         request,
-        ready = view.snapshot != null,
+        ready = snapshot != null,
         select = { view.select(kind = it.kind, genre = GenreChange.To(it.genre)) },
         onSent = onRequestSent,
         changingConfigurations = { activity?.isChangingConfigurations == true },
     )
     DiscoverContent(
-        view.snapshot,
+        snapshot,
         failed = view.status is ViewStatus.Failed,
         pick = {
             view.select(
@@ -1021,7 +1022,7 @@ fun LibraryScreen(
             factory = viewModelFactory { initializer { LibraryHolder(session) } },
         )
     val view = holder.view
-    val snapshot = view.snapshot
+    val snapshot = view.current()
     val metrics = Marquee.tiles
     val side = Marquee.safe.side
     LazyVerticalGrid(

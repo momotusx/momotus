@@ -2096,6 +2096,8 @@ fun PairingScreen(
             holder.start(s, n)
         }
     }
+    // Once joined, the page is the result and Done: no second pairing starts from it.
+    val joined = holder.view?.current() is PairingSnapshot.Joined
     LazyColumn(
         Modifier.fillMaxSize().focusRestorer(),
         contentPadding = pagePadding(framed = false),
@@ -2130,8 +2132,6 @@ fun PairingScreen(
                 }
             }
         }
-        // Once joined, the page is the result and Done: no second pairing starts from it.
-        val joined = holder.view?.snapshot is PairingSnapshot.Joined
         if (known.isEmpty() && !joined) {
             item(key = "once") { Note("Enter your sync server once; this device remembers it.") }
         }
@@ -2187,7 +2187,7 @@ internal fun Session(
         if (status is ViewStatus.Failed) {
             "could not start"
         } else {
-            when (view.snapshot) {
+            when (view.current()) {
                 is PairingSnapshot.Confirm -> "confirm"
                 is PairingSnapshot.Joined -> if (sync.joining) null else "joined"
                 PairingSnapshot.Expired -> "expired"
@@ -2209,7 +2209,7 @@ internal fun Session(
         )
         return
     }
-    when (val p = view.snapshot) {
+    when (val p = view.current()) {
         null, PairingSnapshot.Starting -> {
             StatusWord("Contacting ${SyncRules.hostOf(server)}", Status.Warn)
         }

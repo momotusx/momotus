@@ -1,6 +1,8 @@
 plugins {
     alias(libs.plugins.android.library)
     alias(libs.plugins.kotlin.serialization)
+    // RecordView.current(): a view's snapshot as a screen reads it.
+    alias(libs.plugins.kotlin.compose)
 }
 
 android {

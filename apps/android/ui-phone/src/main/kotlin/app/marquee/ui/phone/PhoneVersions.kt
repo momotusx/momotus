@@ -133,7 +133,7 @@ fun PhoneVersions(
     val side = Marquee.safe.side
     val action = if (download) Action(DOWNLOAD_THIS, Icons.ArrowDownToLine) else Action(PLAY_THIS, PlayFilled)
     val colors = Marquee.colors
-    val snapshot = versions?.snapshot
+    val snapshot = versions?.current()
     val empty = snapshot?.empty?.takeIf { snapshot.recommended == null }
     val step = { it: EmptyStep ->
         when (it) {

@@ -125,7 +125,7 @@ private fun Attempt(
         )
         return
     }
-    when (val s = view.snapshot) {
+    when (val s = view.current()) {
         null, ImportSnapshot.Starting -> {
             StatusWord("Starting the sign-in", Status.Warn)
         }

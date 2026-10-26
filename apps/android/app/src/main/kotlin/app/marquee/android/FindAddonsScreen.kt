@@ -298,7 +298,7 @@ fun FindAddonsScreen(
     val pasteFocus = remember { FocusRequester() }
     LinkSheet(session, link, pasteFocus)
     val view = page.view
-    val snapshot = view.snapshot
+    val snapshot = view.current()
     // A result is about the state it was pressed in: a new installed state clears it.
     LaunchedEffect(snapshot) { snapshot?.let { s -> cards.follow(s.lists.flatMap { it.entries }) } }
     val lists = snapshot?.lists.orEmpty()

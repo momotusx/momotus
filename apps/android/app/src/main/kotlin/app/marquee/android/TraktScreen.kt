@@ -365,7 +365,7 @@ private fun SignIn(
     val tv = Marquee.form == Form.Tv
     val context = LocalContext.current
     val colors = Marquee.colors
-    val phase = view.snapshot ?: TraktLoginSnapshot.Starting
+    val phase = view.current() ?: TraktLoginSnapshot.Starting
     // Connected once the record is stored and acknowledged: the view no longer offers it.
     val done = phase is TraktLoginSnapshot.Done && status.state == "connected" && status.record == null
     LaunchedEffect(done) { if (done) onDone() }
