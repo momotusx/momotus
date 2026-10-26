@@ -475,6 +475,7 @@ final class PlayerModel {
         (loadedURL, rendered, firstFrameMs, playback, ended, nextCancelled, nextFailure, nextVersions) = (nil, false, nil, nil, false, false, nil, nil)
         (loadedAttempt, stoppedAt, pendingStart) = (nil, nil, nil)
         (position, duration, skippedAt) = (0, 0, nil)
+        heatHandled = false
         selectSubtitle(nil)
         // Floating in Picture in Picture there is no page to start the new
         // run: the model starts it, and a page brought back joins it.
@@ -660,6 +661,8 @@ final class PlayerModel {
     }
 
     func togglePlay() {
+        // Playing again answers a line that waited for it (a heat pause).
+        if !playing, statusLine == Self.heatPaused { statusLine = nil }
         if backend == .aether, let aether {
             if playing { aether.pause(); report(paused: true) } else { if ended { seek(to: 0) }; aether.play() }
             return
@@ -896,8 +899,10 @@ final class PlayerModel {
             addon: WebVTT.text(at: PlayerLayout.cueTime(position: position, delay: subtitleDelay), in: cues))
     }
 
-    private func showStatus(_ words: String) {
+    /// `untilPlay`: the line stays until the viewer plays again (a heat pause), not for a few seconds.
+    private func showStatus(_ words: String, untilPlay: Bool = false) {
         statusLine = words
+        guard !untilPlay else { return }
         Task {
             try? await Task.sleep(for: .seconds(5))
             if statusLine == words { statusLine = nil }
@@ -970,13 +975,17 @@ final class PlayerModel {
                 #endif
             }
             #endif
+            #if os(iOS)
+            // A play that starts on a hot phone takes its heat step now, before the source starts: a move instead of
+            // the load, or the load held.
+            let pick = EngineChoice.backend(
+                container: playback?.container, audio: playback?.audio ?? [], engine: playback?.engine,
+                enabled: EngineChoice.enabledHere)
+            if heatCheck(atStart: true, engine: pick == .aether) { return }
+            #endif
             // Another source: a stall on the last one ends with it.
             sendStall(stall.interrupted())
             load(url, key: snapshot.key, attempt: snapshot.attempt, at: start)
-            #if os(iOS)
-            // A play that starts on a hot phone takes its heat step now, not at the next thermal change.
-            heatCheck()
-            #endif
         case "failed":
             player.pause()
             notice = nil
@@ -1279,6 +1288,9 @@ final class PlayerModel {
         core.commandNow(sub, command)
     }
 
+    /// The status line a heat pause leaves until the viewer plays again.
+    static let heatPaused = "Paused: the phone is running hot."
+
     #if os(iOS)
     /// The heat step on every thermal change; `heatCheck` also runs at each ready, so a play that starts on a hot phone
     /// is not left until the next change.
@@ -1286,39 +1298,52 @@ final class PlayerModel {
         Task { [weak self] in
             for await _ in NotificationCenter.default.notifications(named: ProcessInfo.thermalStateDidChangeNotification) {
                 guard let self else { return }
-                self.heatCheck()
+                self.heatCheck(atStart: false, engine: self.backend == .aether)
             }
         }
     }
 
     /// Once per play, at thermal serious or worse: an engine play above 1080p moves to a cooler listed version, or
-    /// pauses when none is listed (`EngineChoice.heatStep`), and says why on the status line. The first pick a failover
-    /// left behind is not a candidate (a move back to it would be refused), and a step that does nothing is not spent.
-    private func heatCheck() {
-        guard !heatHandled else { return }
+    /// pauses when none is listed (`EngineChoice.heatStep`, `heatAction`), and says why on the status line. The first
+    /// pick a failover left behind is not a candidate (a move back to it would be refused); a step that does nothing is
+    /// not spent. True when it took the start's place (a move), so the caller loads nothing.
+    @discardableResult
+    private func heatCheck(atStart: Bool, engine: Bool) -> Bool {
+        guard !heatHandled else { return false }
         let playingKey = playback?.key ?? route.key
         let rows = (versions?.snapshot.map { [$0.recommended].compactMap { $0 } + $0.rows } ?? [])
             .filter { $0.key == playingKey || $0.key != route.key }
         let step = EngineChoice.heatStep(
             hot: ProcessInfo.processInfo.thermalState.rawValue >= ProcessInfo.ThermalState.serious.rawValue,
-            on: EngineChoice.platform, engine: backend == .aether, playing: playingKey,
+            on: EngineChoice.platform, engine: engine, playing: playingKey,
             rows: rows.map { ($0.key, $0.quality) })
-        switch step {
-        case .keep: return
+        switch EngineChoice.heatAction(step, atStart: atStart, playing: playing, waiting: waiting) {
+        case .none:
+            return false
         case .move(let key):
             heatHandled = true
             let quality = rows.first { $0.key == key }?.quality ?? "a lighter version"
             coreLog.notice("metric heat_step move to=\(key, privacy: .public)")
             switchVersion(key)
             showStatus("Moved to \(quality) to keep the phone cool.")
+            return atStart
+        case .holdStart:
+            heatHandled = true
+            coreLog.notice("metric heat_step hold")
+            holdPause = true
+            showStatus(Self.heatPaused, untilPlay: true)
+            return false
         case .pause:
-            guard playingNow else { return }
             heatHandled = true
             coreLog.notice("metric heat_step pause")
-            togglePlay()
-            showStatus("Paused: the phone is running hot.")
+            if backend == .aether, let aether { aether.pause() } else { player.pause() }
+            report(paused: true)
+            showStatus(Self.heatPaused, untilPlay: true)
+            return false
         }
     }
+
+
     #endif
 
     /// For the model's lifetime: the player goes with it, so nothing removes these.

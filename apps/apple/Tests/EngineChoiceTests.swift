@@ -317,13 +317,25 @@ import Testing
     #expect(EngineChoice.heatStep(hot: true, on: .phone, engine: true, playing: "q", rows: [(key: "q", quality: "1440p"), (key: "c", quality: "1080p")]) == .move("c"))
     // The first cooler version in the list's order, not the lowest.
     #expect(EngineChoice.heatStep(hot: true, on: .phone, engine: true, playing: "a", rows: [(key: "a", quality: "4K"), (key: "d", quality: "720p"), (key: "c", quality: "1080p")]) == .move("d"))
-    // Its wiring (a source check): every thermal change and every ready run the check, once per play; a pause that
-    // stops nothing is not spent.
+    // Code r10, the action through its seam: a mid-play pause is a real pause of a play that is playing or waiting
+    // (never a toggle, which would start a waiting play); at a source's start the load is held instead.
+    #expect(EngineChoice.heatAction(.pause, atStart: false, playing: false, waiting: true) == .pause)
+    #expect(EngineChoice.heatAction(.pause, atStart: false, playing: true, waiting: false) == .pause)
+    #expect(EngineChoice.heatAction(.pause, atStart: false, playing: false, waiting: false) == .none, "a paused play is not paused again")
+    #expect(EngineChoice.heatAction(.pause, atStart: true, playing: false, waiting: true) == .holdStart)
+    #expect(EngineChoice.heatAction(.move("c"), atStart: true, playing: false, waiting: true) == .move("c"))
+    #expect(EngineChoice.heatAction(.keep, atStart: false, playing: true, waiting: false) == .none)
+    // Its wiring (a source check): every thermal change runs it mid-play; every ready runs it before the load, and a
+    // move takes the load's place; the pause is a real pause, not togglePlay; the next episode gets its own step.
     let model = try playerModel()
-    #expect(model.contains("for await _ in NotificationCenter.default.notifications(named: ProcessInfo.thermalStateDidChangeNotification) {\n                guard let self else { return }\n                self.heatCheck()"))
-    #expect(model.contains("load(url, key: snapshot.key, attempt: snapshot.attempt, at: start)\n            #if os(iOS)\n            // A play that starts on a hot phone takes its heat step now, not at the next thermal change.\n            heatCheck()"))
-    #expect(model.contains("guard !heatHandled else { return }"))
-    #expect(model.contains("case .pause:\n            guard playingNow else { return }"))
+    #expect(model.contains("self.heatCheck(atStart: false, engine: self.backend == .aether)"))
+    #expect(model.contains("if heatCheck(atStart: true, engine: pick == .aether) { return }\n            #endif\n            // Another source: a stall on the last one ends with it.\n            sendStall(stall.interrupted())\n            load(url, key: snapshot.key, attempt: snapshot.attempt, at: start)"))
+    #expect(model.contains("if backend == .aether, let aether { aether.pause() } else { player.pause() }"))
+    #expect(try body(of: "    private func heatCheck(", in: model).contains("togglePlay") == false)
+    #expect(model.contains("heatHandled = false\n        selectSubtitle(nil)"))
+    // The heat pause's line stays until the viewer plays again.
+    #expect(model.contains("guard !untilPlay else { return }"))
+    #expect(model.contains("if !playing, statusLine == Self.heatPaused { statusLine = nil }"))
     #expect(model.contains(".filter { $0.key == playingKey || $0.key != route.key }"))
 }
 

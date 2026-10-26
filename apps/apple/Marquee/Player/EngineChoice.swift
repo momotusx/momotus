@@ -103,6 +103,23 @@ enum EngineChoice {
         return cooler.map { .move($0.key) } ?? .pause
     }
 
+    /// What the player does with a heat step (code r10): at a source's start it moves before loading or loads held
+    /// (never starting); mid-play it moves, or pauses only a play that is playing or waiting, with a real pause.
+    enum HeatAction: Equatable {
+        case none
+        case move(String)
+        case holdStart
+        case pause
+    }
+
+    static func heatAction(_ step: HeatStep, atStart: Bool, playing: Bool, waiting: Bool) -> HeatAction {
+        switch step {
+        case .keep: .none
+        case .move(let key): .move(key)
+        case .pause: atStart ? .holdStart : (playing || waiting ? .pause : .none)
+        }
+    }
+
     static var enabledHere: Bool { enabled(on: platform) && admitsThisDevice }
 
     /// The phone's switch covers iPhones with 6 GB or more (iphone-a's class; 8 GB phones too), not iPads and not smaller
