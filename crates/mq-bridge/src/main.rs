@@ -10,9 +10,10 @@ use axum::routing::get;
 use futures_util::{SinkExt, StreamExt};
 use mq_bridge::{Outgoing, Output, Session};
 use mq_runtime::{Core, CoreConfig, StoreId};
+use std::collections::HashSet;
 use std::net::{IpAddr, SocketAddr};
 use std::path::PathBuf;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 #[tokio::main]
 async fn main() {
@@ -54,29 +55,58 @@ async fn main() {
 struct Bridge {
     core: Core,
     origins: Arc<[String]>,
+    refused: Arc<Refused>,
 }
 
 fn router(core: Core, origins: Vec<String>) -> Router {
     let origins = origins.into();
-    Router::new()
-        .route("/ws", get(ws))
-        .with_state(Bridge { core, origins })
+    Router::new().route("/ws", get(ws)).with_state(Bridge {
+        core,
+        origins,
+        refused: Arc::default(),
+    })
+}
+
+/// Origins already said refused: each is said once, so a page that keeps
+/// knocking fills no log.
+#[derive(Default)]
+struct Refused(Mutex<HashSet<String>>);
+
+/// Refused origins remembered; past this many, no more are said.
+const REFUSED_MAX: usize = 64;
+/// An origin as it is said, at most this many characters.
+const ORIGIN_SAID_MAX: usize = 200;
+
+impl Refused {
+    /// `origin`, cut to `ORIGIN_SAID_MAX` characters, the first time it is
+    /// refused; `None` after that.
+    fn first(&self, origin: &str) -> Option<String> {
+        let said: String = origin.chars().take(ORIGIN_SAID_MAX).collect();
+        let mut seen = self.0.lock().unwrap_or_else(|e| e.into_inner());
+        (seen.len() < REFUSED_MAX && seen.insert(said.clone())).then_some(said)
+    }
 }
 
 async fn ws(
     upgrade: WebSocketUpgrade,
     headers: HeaderMap,
-    State(Bridge { core, origins }): State<Bridge>,
+    State(Bridge {
+        core,
+        origins,
+        refused,
+    }): State<Bridge>,
 ) -> axum::response::Response {
     let origin = headers.get(header::ORIGIN).and_then(|v| v.to_str().ok());
     if !origin_allowed(origin, &origins) {
         // Another program's page, or another site's: no session for it.
-        // Said here, since the page itself only sees a failed handshake.
-        eprintln!(
-            "socket refused for origin {}; allowed: {}",
-            origin.unwrap_or_default(),
-            origins.join(", ")
-        );
+        // Said here, once per origin, since the page itself only sees a
+        // failed handshake.
+        if let Some(said) = refused.first(origin.unwrap_or_default()) {
+            eprintln!(
+                "socket refused for origin {said}; allowed: {}",
+                origins.join(", ")
+            );
+        }
         return StatusCode::FORBIDDEN.into_response();
     }
     // The page reached this socket by a loopback name: the link stays on
@@ -260,6 +290,26 @@ mod tests {
                 "http://u@h:1",
                 "https://"
             ]
+        );
+    }
+
+    #[test]
+    fn a_refused_origin_is_said_once_and_cut_short() {
+        let refused = super::Refused::default();
+        assert_eq!(
+            refused.first("http://localhost:3000").as_deref(),
+            Some("http://localhost:3000")
+        );
+        assert_eq!(refused.first("http://localhost:3000"), None);
+        let long = format!("http://{}.example", "a".repeat(500));
+        assert_eq!(refused.first(&long).map(|s| s.chars().count()), Some(200));
+        for port in 0..100 {
+            refused.first(&format!("http://localhost:{port}"));
+        }
+        assert_eq!(
+            refused.first("http://new.example"),
+            None,
+            "a full memory says no more"
         );
     }
 

@@ -23,7 +23,8 @@ for env in "$root/.env.trakt.local" "$root/.env.tmdb.local"; do
   fi
 done
 cd "$root"
-export MQ_BRIDGE_ORIGINS="${MQ_BRIDGE_ORIGINS:-http://127.0.0.1:${PORT:-5173},http://localhost:${PORT:-5173}}"
+# Unset only: an empty MQ_BRIDGE_ORIGINS stays empty, so the bridge opens for its own origin alone.
+export MQ_BRIDGE_ORIGINS="${MQ_BRIDGE_ORIGINS-http://127.0.0.1:${PORT:-5173},http://localhost:${PORT:-5173}}"
 if [[ "${MQ_TORRENT:-1}" == "0" ]]; then
   exec cargo run -p mq-bridge -- "$@"
 fi
