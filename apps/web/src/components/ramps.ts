@@ -38,6 +38,9 @@ export const ramps = {
   ],
   /** The phone title: the art over the logo, fading into the page under it. */
   titlePhone: [{ deg: 0, stops: [[0.04, 1], [0.5, 0.45], [0.78, 0.1]] }],
+  /** The phone title over a cover: its foot, where a poster prints its own title, under the page color, so the
+   * logo and the meta line read alone. */
+  titleCover: [{ deg: 0, stops: [[0, 1], [0.3, 0.92], [0.5, 0.5], [0.72, 0]] }],
 } satisfies Record<string, readonly Layer[]>;
 export type Ramp = keyof typeof ramps;
 

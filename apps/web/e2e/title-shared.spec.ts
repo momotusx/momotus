@@ -386,3 +386,33 @@ for (const form of ["tv", "phone"] as const) {
     await context.close();
   });
 }
+
+// The owner, 2026-10-26: covers are vertical, so a phone's title art is the cover, whole at its own 2:3 (held to
+// 75 percent of the screen), and the backdrop only when there is none. Watched is a small circle in the actions'
+// row beside Library, never a big button (the owner's standing rule).
+test("phone: the title's art is its cover, whole at 2:3; Watched is a small circle beside Library", async ({ browser }) => {
+  const { context, page } = await open(browser, "phone", `/title/movie/${BBB_ID}`);
+  await expect(page.locator('[data-f="title:play"]')).toBeVisible({ timeout: 30_000 });
+  const art = page.locator(".title-scr.cover .title-bd");
+  await expect(art).toBeVisible();
+  const box = await art.boundingBox();
+  // 390 wide: 585 high, under 75 percent of the 844 screen.
+  expect(box && Math.round(box.height / 0.5) * 0.5).toBe(585);
+  expect(box?.width).toBe(390);
+  // The large cover (metahub's large poster), kept by its top.
+  const img = art.locator("img");
+  await expect(img).toHaveAttribute("src", /\/poster\/large\//);
+  await expect(img).toHaveCSS("object-position", "50% 0%");
+  // The words sit over the art's foot: the logo's top within its lower 200 px.
+  const logo = await page.locator(".info .title-logo").boundingBox();
+  expect(logo && logo.y > 585 - 200 && logo.y < 585).toBe(true);
+  // Watched: one of the row's circles, as small as Library and level with it.
+  const watched = page.locator('[data-f="title:watched"]');
+  const library = page.locator('[data-f="title:library"]');
+  const [w, l] = [await watched.boundingBox(), await library.boundingBox()];
+  expect(w && l && Math.abs(w.y - l.y) < 1).toBe(true);
+  expect(w && l && w.width <= l.width + 1 && w.height <= l.height + 1).toBe(true);
+  expect(w && w.height < 90 && w.width < 110).toBe(true);
+  await expect(watched).toHaveAttribute("aria-pressed", "false");
+  await context.close();
+});

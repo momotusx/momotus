@@ -182,15 +182,18 @@ function TitlePage(props: { kind: string; id: string; retry: () => void }) {
     ].filter(Boolean) as string[];
   };
 
+  // A phone shows the cover first: covers are vertical, and a backdrop is often a crop of the same art.
+  const cover = () => (form() === "phone" ? d()?.cover : null) ?? null;
+
   return (
-    <div class="title-scr" classList={{ movie: !series(), noart: artMissing() }} ref={page} data-vscroll={form() === "phone" ? undefined : ""}>
+    <div class="title-scr" classList={{ movie: !series(), noart: artMissing(), cover: !!cover() && !artMissing() }} ref={page} data-vscroll={form() === "phone" ? undefined : ""}>
       {/* No backdrop (none named, or it does not load): the poster's upper part,
           faint, keeps the page from opening on a blank half. */}
       <Backdrop
-        src={d()?.background}
+        src={cover() ?? d()?.background}
         fallback={d()?.poster}
         class="title-bd"
-        ramp={form() === "phone" ? "titlePhone" : series() ? "title" : "titleMovie"}
+        ramp={form() === "phone" ? (cover() ? "titleCover" : "titlePhone") : series() ? "title" : "titleMovie"}
         onMissing={() => d() && setArtMissing(true)}
       />
       <Show when={trailerShown()}>
