@@ -112,6 +112,21 @@ test("TV: the timer pages with the focus on a hero button, which goes with the p
   await context.close();
 });
 
+test("TV: Up from the first row during a timed slide lands on the hero", async ({ browser }) => {
+  // Review r3, L1: the track scrolls during the 650 ms, the old page inert and the new one part off screen.
+  const context = await browser.newContext({ viewport: { width: 1920, height: 1080 } });
+  const page = await home(context, "tv");
+  await page.locator(".row [data-f]").first().focus();
+  const base = await activePage(page);
+  // 200 ms into the timer's slide.
+  await page.clock.runFor(8_200);
+  expect(await activePage(page)).not.toBe(base);
+  await page.keyboard.press("ArrowUp");
+  await expect.poll(() => page.evaluate(() => (document.activeElement as HTMLElement | null)?.dataset.f ?? "")).toMatch(/^hero:/);
+  expect(await page.evaluate(() => !!document.activeElement?.closest(".hero-page.on"))).toBe(true);
+  await context.close();
+});
+
 /** A stand-in for YouTube's IFrame API: a blank frame, muted only after `mute()` and a short delay as
  * the real one answers, PLAYING after `playVideo`, or `error` when the page asks for one. Every call
  * is logged in order on `window.ytLog`. */
