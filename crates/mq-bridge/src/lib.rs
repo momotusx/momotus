@@ -1921,10 +1921,17 @@ impl Session {
             }
             (View::Versions(versions), "freeze") => versions.freeze(),
             (View::Discover(discover), "select") => {
-                let text = |key: &str| command.get(key).and_then(Value::as_str);
-                // An absent genre keeps the current one; null clears it.
-                let genre = command.get("genre").map(Value::as_str);
-                discover.select(text("kind"), text("catalog"), genre);
+                let text = |key: &str| command.get(key).and_then(Value::as_str).map(str::to_owned);
+                // Absent keeps the current value; null clears it.
+                let maybe = |key: &str| command.get(key).map(|v| v.as_str().map(str::to_owned));
+                discover.choose(mq_runtime::DiscoverChoice {
+                    kind: text("kind"),
+                    platform: maybe("platform"),
+                    sort: text("sort"),
+                    genre: maybe("genre"),
+                    decade: maybe("decade"),
+                    catalog: text("catalog"),
+                });
             }
             (View::Discover(discover), "loadMore") => discover.load_more(),
             // An absent or null id clears the preview.

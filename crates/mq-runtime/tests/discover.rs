@@ -413,7 +413,8 @@ async fn flaky_addon() -> (AddonRow, Arc<Mutex<Vec<String>>>) {
                 .nth(1)
                 .unwrap_or_default()
                 .to_owned();
-            let again = log.lock().unwrap().contains(&path);
+            // Each path fails twice (a page and its one retry), then answers.
+            let again = log.lock().unwrap().iter().filter(|p| **p == path).count() >= 2;
             log.lock().unwrap().push(path.clone());
             let ids: Vec<u32> = if path.contains("skip=4") {
                 vec![]
@@ -494,6 +495,8 @@ async fn a_failed_page_is_asked_again() {
         [
             "top.json",
             "top.json",
+            "top.json",
+            "skip=3.json",
             "skip=3.json",
             "skip=3.json",
             "skip=4.json"
@@ -1248,7 +1251,8 @@ async fn a_normal_paged_list_asks_each_page_once() {
 async fn a_failed_ask_past_a_repeat_is_asked_again() {
     let (row, asked) = paged(|skip, times| match skip {
         0..40 => Some((0..20).collect()),
-        40 if times == 1 => None,
+        // The page and its one retry fail; the next load's ask answers.
+        40 if times <= 2 => None,
         40..60 => Some((40..60).collect()),
         _ => Some(vec![]),
     })
@@ -1260,7 +1264,7 @@ async fn a_failed_ask_past_a_repeat_is_asked_again() {
     assert_eq!(ids(&view).len(), 20, "what it had is kept");
     view.load_more();
     until(&view, |s| s.items.len() == 40).await;
-    assert_eq!(*asked.lock().unwrap(), [0, 20, 40, 20, 40]);
+    assert_eq!(*asked.lock().unwrap(), [0, 20, 40, 40, 20, 40]);
 }
 
 /// Pages that overlap the one before by a few titles: each title once, in

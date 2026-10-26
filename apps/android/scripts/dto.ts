@@ -71,6 +71,10 @@ const DEFAULTED = new Map([
   ["SubtitleTrack.languageName", "\"\""],
   ["SubtitleTrack.name", "\"\""],
   ["Prefs.defaultsSeen", "0"],
+  // Discover v2 (plans/discover-v2.md section 4): an older core sends none of these.
+  ["DiscoverSnapshot.genreLabel", "\"Genre\""],
+  ["DiscoverSnapshot.scope", "Scope(services = 0, failed = 0, pending = 0)"],
+  ["Prefs.discover", "DiscoverPrefs()"],
   ["PlaybackSnapshot.retries", "0"],
   // plans/play-every-version.md 2e: an older core never offers another version mid-start.
   ["PlaybackSnapshot.chooseAnother", "false"],
@@ -123,6 +127,10 @@ const INT = new Set([
   // Tile.rank: a Top 10 tile's place, 1 to 10.
   "rank",
   "overCount",
+  // Discover v2: a list's scope (plans/discover-v2.md section 4).
+  "services",
+  "failed",
+  "looked",
   // Captions.languages: how many subtitle languages a video has (C34).
   "languages",
   "delayMs",

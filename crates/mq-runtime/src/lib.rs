@@ -13,6 +13,7 @@ pub mod live;
 mod profiles;
 pub mod ratings;
 pub mod segments;
+mod services;
 pub mod speed;
 mod trakt;
 mod turkcealtyazi;
@@ -40,7 +41,10 @@ pub use views::addons::{AddonInfo, AddonsSnapshot, AddonsView};
 pub use views::calendar::{
     CalendarDay, CalendarItem, CalendarSeries, CalendarSnapshot, CalendarView,
 };
-pub use views::discover::{CatalogChoice, DiscoverSnapshot, DiscoverState, DiscoverView};
+pub use views::discover::{
+    CatalogChoice, DiscoverChoice, DiscoverSnapshot, DiscoverState, DiscoverView, GenreChoice,
+    Platform, Scope, SortChoice,
+};
 pub use views::genres::{GenreTile, GenresSnapshot, GenresView, KindGenres};
 pub use views::home::{HomeCatalog, HomeRow, HomeUpdate, HomeView, RowState, Tile};
 pub use views::import::{ImportSnapshot, ImportSummary, ImportView};
@@ -55,7 +59,7 @@ pub use views::playback::{
 };
 pub use views::profiles::{ProfileInfo, ProfilesSnapshot, ProfilesView, SessionState, WipePending};
 pub use views::search::{SearchSnapshot, SearchView};
-pub use views::settings::{HomeRows, Prefs, SettingsView};
+pub use views::settings::{DiscoverPrefs, HomeRows, Prefs, SettingsView};
 pub use views::sign_in::{SignInSnapshot, SignInView};
 pub use views::title::{Episode, TitleHeader, TitleUpdate, TitleView};
 pub use views::versions::{

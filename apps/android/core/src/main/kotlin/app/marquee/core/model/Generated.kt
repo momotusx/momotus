@@ -386,21 +386,49 @@ data class Devices(
     override fun toString() = "Devices(members=$members, fingerprint=$fingerprint, epoch=$epoch, rotationPending=$rotationPending, account=$account, record=${record?.let { "hidden" }})"
 }
 
+/** Discover's kind, service, sort, genre and decade, as `select` takes them; null for All, Any or not chosen. Written by Discover itself. */
+@Serializable
+data class DiscoverPrefs(
+    val kind: String? = null,
+    val platform: String? = null,
+    val sort: String? = null,
+    val genre: String? = null,
+    val decade: String? = null,
+)
+
 @Serializable
 data class DiscoverSnapshot(
-    /** Kinds with at least one catalog: ("movie", "Movies"). A catalog of a type Marquee does not know (Trakt Tv's "trakt") is filed under the kind its name says ("Popular movies"), else ("other", "Other"); the raw type is never a kind here. */
+    /** Kinds with at least one catalog: ("movie", "Movies"), Movies, Series and Anime first. A catalog of a type Marquee does not know (Trakt Tv's "trakt") is filed under the kind its name says ("Popular movies"), else ("other", "Other"); the raw type is never a kind here. */
     val kinds: List<Tuple2<String, String>> = emptyList(),
     val kind: String? = null,
-    /** Catalogs of the selected type, in addon order. */
+    /** Catalogs of the selected type, in addon order (the screen before Discover v2; kept until every app reads `sorts`). */
     val catalogs: List<CatalogChoice> = emptyList(),
+    /** The catalog a paged list comes from; null for a complete set. */
     val catalog: String? = null,
-    /** Genre options of the selected catalog. */
+    /** Genre options: the catalog's own, or the genres a complete set gives (`genreChoices` with counts). */
     val genres: List<String> = emptyList(),
     val genre: String? = null,
     /** The catalog only answers with a genre picked. */
     val genreRequired: Boolean,
     /** A genre asked with a kind and no catalog (a title page's genre chip) that no catalog of that kind lists: Discover shows the kind without it, on its first catalog that needs no genre (else its first, with that catalog's first genre), and says so (core backlog C40). None otherwise. */
     val missingGenre: String? = null,
+    /** The services the rail offers for the kind ("All" is null). */
+    val platforms: List<Platform> = emptyList(),
+    val platform: String? = null,
+    /** The orders the sort menu offers for the kind and service. */
+    val sorts: List<SortChoice> = emptyList(),
+    val sort: String? = null,
+    /** Every other catalog of the kind, by its own name ("More lists"). */
+    val lists: List<CatalogChoice> = emptyList(),
+    val genreChoices: List<GenreChoice> = emptyList(),
+    /** What the genre menu is called: "Genre", or "Year" or "Period" when the list's genre extra holds those. */
+    val genreLabel: String = "Genre",
+    /** The Year menu's choices; empty when the list cannot be dated. */
+    val decades: List<String> = emptyList(),
+    val decade: String? = null,
+    val scope: Scope = Scope(services = 0, failed = 0, pending = 0),
+    /** A sort asked for (or remembered) that the kind or service does not offer: the list shows the kind's first sort instead. */
+    val missingSort: String? = null,
     val items: List<Tile> = emptyList(),
     /** The item `preview {id}` named, with what its catalog said of it, so a preview shows its synopsis without opening a title view (core backlog C44a). Null until one is named and listed: an id named before its page came is filled in when it comes. A `None` or a new list (another kind, catalog or genre) clears it. */
     val preview: ItemDetails? = null,
@@ -507,6 +535,13 @@ data class ForkPreview(
     val onServer: Boolean,
     /** The hash of the relay's last entry as shown (it commits to the whole chain). `useServerRoster` takes it back and refuses with `rosterChanged` when the roster moved since. */
     val head: String,
+)
+
+/** A genre the Genre menu offers; `count` is how many listed titles give it when the list is a complete set, null for a catalog's own options. */
+@Serializable
+data class GenreChoice(
+    val name: String,
+    val count: Int? = null,
 )
 
 @Serializable
@@ -1017,6 +1052,13 @@ sealed interface PairingSnapshot {
     ) : PairingSnapshot
 }
 
+/** A streaming service the rail offers: `id` is the stable key apps map to their tile, `name` the name shown. */
+@Serializable
+data class Platform(
+    val id: String,
+    val name: String,
+)
+
 @Serializable(with = Playability.Serializer::class)
 enum class Playability(
     val wire: String,
@@ -1137,6 +1179,8 @@ data class Prefs(
     val learned: LearnedByClass,
     /** Raised by "Forget what was learned"; a counter stamped with an older epoch reads as zero. */
     val learnedEpoch: Int,
+    /** Discover's last choice, which it opens on (plans/discover-v2.md 6.1). */
+    val discover: DiscoverPrefs = DiscoverPrefs(),
 )
 
 @Serializable
@@ -1384,6 +1428,17 @@ data class ScheduledDeletion(
     val provider: String? = null,
 )
 
+/** What the list on screen covers, for the footer: `titles` in a complete set (null for a paged list), the `services` it comes from, how many of them `failed` or are still `pending`, how many titles a decade `looked` through, and the scope `note` that goes with the sort's label ("on your services"). */
+@Serializable
+data class Scope(
+    val titles: Int? = null,
+    val services: Int,
+    val failed: Int,
+    val pending: Int,
+    val looked: Int? = null,
+    val note: String? = null,
+)
+
 @Serializable
 data class SearchSnapshot(
     val query: String,
@@ -1515,6 +1570,14 @@ sealed interface Slot {
     @SerialName("none")
     data object None : Slot
 }
+
+/** An order the sort menu offers. `id` is what `select {sort}` takes: `popular`, `trending`, `imdb`, `fresh`, `highest`, `airing`, `newest`, `oldest`, `az`, or `list:<catalog id>` for one of `lists`. `mark` names the rating mark drawn beside the label (`imdb`, `rt`). */
+@Serializable
+data class SortChoice(
+    val id: String,
+    val label: String,
+    val mark: String? = null,
+)
 
 /** How a stream starts (plans/m13-stream-choice.md 3.2). */
 @Serializable(with = SourceClass.Serializer::class)

@@ -42,6 +42,25 @@ pub struct Prefs {
     /// Raised by "Forget what was learned"; a counter stamped with an older
     /// epoch reads as zero.
     pub learned_epoch: u32,
+    /// Discover's last choice, which it opens on (plans/discover-v2.md 6.1).
+    pub discover: DiscoverPrefs,
+}
+
+/// Discover's kind, service, sort, genre and decade, as `select` takes
+/// them; null for All, Any or not chosen. Written by Discover itself.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(
+    feature = "ts",
+    derive(ts_rs::TS),
+    ts(export, export_to = "../../../apps/web/src/core/generated/")
+)]
+#[serde(rename_all = "camelCase", default)]
+pub struct DiscoverPrefs {
+    pub kind: Option<String>,
+    pub platform: Option<String>,
+    pub sort: Option<String>,
+    pub genre: Option<String>,
+    pub decade: Option<String>,
 }
 
 /// Subtitle text size, each app mapping it to its player's scale.
@@ -89,6 +108,7 @@ impl Default for Prefs {
             defaults_seen: 0,
             learned: crate::learn::LearnedByClass::default(),
             learned_epoch: 0,
+            discover: DiscoverPrefs::default(),
         }
     }
 }
