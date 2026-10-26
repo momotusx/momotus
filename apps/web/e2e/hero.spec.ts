@@ -82,6 +82,36 @@ test("TV: Right from the last button pages on with the focus on the same button,
   await context.close();
 });
 
+test("TV: the timer pages with the focus on a hero button, which goes with the page; a key holds the pages 5 s", async ({ browser }) => {
+  // The owner, 2026-10-26: the TV hero slides while focus rests on it.
+  const context = await browser.newContext({ viewport: { width: 1920, height: 1080 } });
+  const page = await home(context, "tv");
+  const pages = await page.locator(".hero-page").count();
+  const key = await page.evaluate(() => (document.querySelector('.hero-page.on [data-f="hero:play"]') ? "hero:play" : "hero:details"));
+  await page.locator(`.hero-page.on [data-f="${key}"]`).focus();
+  const base = await activePage(page);
+  await page.clock.runFor(9000);
+  await expect.poll(() => activePage(page)).toBe((base + 1) % pages);
+  // The same button on the new page, else its first.
+  const want = await page.evaluate(
+    (k) => (document.querySelector(`.hero-page.on [data-f="${k}"]`) ? k : (document.querySelector(".hero-page.on .acts [data-f]") as HTMLElement | null)?.dataset.f),
+    key,
+  );
+  const now = await page.evaluate(() => {
+    const el = document.activeElement as HTMLElement | null;
+    return { f: el?.dataset.f, on: !!el?.closest(".hero-page.on") };
+  });
+  expect(now).toEqual({ f: want, on: true });
+  // A key: the pages hold until 5 s after it, then a whole dwell.
+  await page.keyboard.press("Shift");
+  const held = await activePage(page);
+  await page.clock.runFor(10_000);
+  expect(await activePage(page)).toBe(held);
+  await page.clock.runFor(4_000);
+  await expect.poll(() => activePage(page)).toBe((held + 1) % pages);
+  await context.close();
+});
+
 /** A stand-in for YouTube's IFrame API: a blank frame, muted only after `mute()` and a short delay as
  * the real one answers, PLAYING after `playVideo`, or `error` when the page asks for one. Every call
  * is logged in order on `window.ytLog`. */

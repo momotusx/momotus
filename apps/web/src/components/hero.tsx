@@ -29,6 +29,8 @@ const SLIDE_MS = tokens.motion.heroSlideMs;
 const PARALLAX = tokens.motion.heroParallax;
 // The player starts loading as soon as a page has settled, under its art (plans/appletv-polish.md 4.2).
 const TRAILER_DELAY_MS = 700;
+// TV: how long after the last key the timed pages wait.
+const KEY_HOLD_MS = 5000;
 const TRAILER_CAP_S = 45;
 const ease = bezier(0.22, 1, 0.36, 1);
 
@@ -116,7 +118,12 @@ export function HeroCarousel(props: { heroes: Hero[]; waiting: boolean; playHref
   const slideTo = (i: number) => {
     stopTrailer();
     if (pending) return apply(pending);
+    // Focus on a hero button goes with the page to the same button (Play to Play, else the first one), before the
+    // old page goes inert: the TV hero slides while focus rests on it (the owner, 2026-10-26).
+    const el = document.activeElement as HTMLElement | null;
+    const held = el?.closest(".hero-page.on .acts") ? el.dataset.f : undefined;
     setIndex(i);
+    if (held) refocus(held);
     if (reducedMotion()) return jump(i);
     const from = track.scrollLeft;
     const to = i * width();
@@ -150,14 +157,17 @@ export function HeroCarousel(props: { heroes: Hero[]; waiting: boolean; playHref
   });
 
   // The clock: one progress value for the pill and the advance (decision 7), only while nothing holds it.
+  let keyAt = -Infinity;
   onMount(() => {
     let last = performance.now();
     let written = -1;
     let frame = requestAnimationFrame(function loop(now) {
       const dt = frameStep(now, last);
       last = now;
+      // TV: a key pressed holds the pages until 5 s after it, so nothing slides while the viewer moves.
+      const keyHeld = form() === "tv" && now - keyAt < KEY_HOLD_MS;
       const running =
-        visible && !document.hidden && !hovered && !pressing && !sliding && !paused() && !trailerOn() && !reducedMotion() && untrack(list).length > 1;
+        visible && !document.hidden && !hovered && !pressing && !sliding && !keyHeld && !paused() && !trailerOn() && !reducedMotion() && untrack(list).length > 1;
       const next = pager.tick(dt, running);
       if (next !== null) slideTo(next);
       // The 24 px pill moves 3 px a second: a write each 1 percent is as smooth and spares the frames between.
@@ -169,7 +179,10 @@ export function HeroCarousel(props: { heroes: Hero[]; waiting: boolean; playHref
     });
     onCleanup(() => cancelAnimationFrame(frame));
     // Any key, pointer move or touch starts the dwell over (input idle, not focus).
-    const restart = () => pager.input();
+    const restart = (e: Event) => {
+      pager.input();
+      if (e.type === "keydown") keyAt = performance.now();
+    };
     for (const kind of ["keydown", "pointermove", "touchstart"] as const) window.addEventListener(kind, restart, { passive: true, capture: true });
     onCleanup(() => {
       for (const kind of ["keydown", "pointermove", "touchstart"] as const) window.removeEventListener(kind, restart, { capture: true });
@@ -276,14 +289,14 @@ export function HeroCarousel(props: { heroes: Hero[]; waiting: boolean; playHref
     const to = index() + (forward ? 1 : -1);
     if (to < 0 || to >= list().length) return;
     e.preventDefault();
-    const key = el.dataset.f;
     page(to);
-    // The new page is live as soon as the signal is set: focus it now, before the old one goes inert.
+  };
+  /** The new page is live as soon as the signal is set: its same button takes the focus, else its first. */
+  const refocus = (key: string) =>
     queueMicrotask(() => {
       const next = track.querySelector<HTMLElement>(`.hero-page.on [data-f="${key}"]`) ?? track.querySelector<HTMLElement>(".hero-page.on .acts [data-f]");
       next?.focus({ preventScroll: true });
     });
-  };
 
   const many = () => list().length > 1;
   return (
