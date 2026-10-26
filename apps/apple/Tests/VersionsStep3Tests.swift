@@ -663,5 +663,12 @@ private func kinds(_ kinds: [(String, Int)], service: String? = nil, selected: S
         .appending(path: "../Marquee/Versions/VersionsScreen.swift"), encoding: .utf8)
     let chipRow = try body(of: "private var kindRow", in: page)
     #expect(chipRow.contains("model.setKind(chip.kind)") && chipRow.contains(".accessibilityLabel(chip.spoken)"))
-    #expect(page.contains(".onDisappear { if asked != nil || snapshot?.selectedKind != nil { model.setKind(nil) } }"))
+    #expect(page.contains(".onDisappear { if VersionWords.resetsKind(asked: asked, selected: snapshot?.selectedKind, playing: leftToPlay) { model.setKind(nil) } }"))
+    #expect(!VersionWords.resetsKind(asked: "torrent", selected: "torrent", playing: true), "the player plays within the kind")
+    #expect(VersionWords.resetsKind(asked: "torrent", selected: nil))
+    #expect(VersionWords.resetsKind(asked: nil, selected: "debrid"))
+    #expect(!VersionWords.resetsKind(asked: nil, selected: nil), "nothing asked, nothing listed: nothing to send")
+    // The chips head the list, under the card on a phone, and are named as a group.
+    #expect(try body(of: "private var table", in: page).contains("kindRow"))
+    #expect(chipRow.contains(".accessibilityLabel(StreamChoice.words.kind.label)") && chipRow.contains("guard chip.kind != on"))
 }

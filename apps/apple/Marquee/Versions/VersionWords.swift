@@ -387,6 +387,12 @@ enum VersionWords {
         let spoken: String
     }
 
+    /// Leaving the page lists every kind again when a kind was asked for or is listed, unless it leaves for the
+    /// player, which plays and moves on within the kind.
+    static func resetsKind(asked: String?, selected: String?, playing: Bool = false) -> Bool {
+        !playing && (asked != nil || selected != nil)
+    }
+
     /// The core's kinds call for chips: two or more. Once shown, the page keeps them.
     static func showsKinds(_ s: VersionsSnapshot?) -> Bool { (s?.kinds ?? []).count >= 2 }
 

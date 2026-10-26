@@ -31,6 +31,8 @@ struct VersionsScreen: View {
     @State private var chipsShown = false
     /// The last kind asked of the core, which may not have answered yet; leaving the page lists every kind again.
     @State private var asked: String?
+    /// The page left for the player, which plays and moves on within the kind: leaving then keeps it.
+    @State private var leftToPlay = false
 
     var body: some View {
         ScrollView(.vertical) {
@@ -54,7 +56,8 @@ struct VersionsScreen: View {
         .topScrim()
         .onAppear(perform: model.freeze)
         .onChange(of: VersionWords.showsKinds(snapshot), initial: true) { _, shows in if shows { chipsShown = true } }
-        .onDisappear { if asked != nil || snapshot?.selectedKind != nil { model.setKind(nil) } }
+        .onAppear { leftToPlay = false }
+        .onDisappear { if VersionWords.resetsKind(asked: asked, selected: snapshot?.selectedKind, playing: leftToPlay) { model.setKind(nil) } }
         .onChange(of: snapshot?.sections, initial: true) { _, sections in
             if choose != nil { held = VersionWords.hold(sections, shown: held) }
         }
@@ -78,7 +81,9 @@ struct VersionsScreen: View {
 
     /// Plays `key`: back in the player under the page, else a new player.
     private func play(_ key: String) {
-        if let keep { keep(key) } else if let choose { choose(key) } else { playing = model.play(key) }
+        if let keep { keep(key); return }
+        leftToPlay = true
+        if let choose { choose(key) } else { playing = model.play(key) }
     }
 
     private func leave() {
@@ -140,12 +145,12 @@ struct VersionsScreen: View {
             }
             .textFont(Theme.type.callout, relativeTo: .callout)
             .foregroundStyle(Theme.Palette.text)
-            kindRow
         }
     }
 
     /// The kind chips from two kinds on, then kept while the page is open: one choice at a time, each kind with its
-    /// count of rows. A chip asks the core (`setKind`, which freezes the pick); no line is kept for them before.
+    /// count of rows. A chip asks the core (`setKind`, which freezes the pick); no line is kept for them before. They
+    /// head the list, under the card on a phone, so a row that arrives late moves the list and never Play.
     @ViewBuilder private var kindRow: some View {
         let on = snapshot?.selectedKind
         if chipsShown {
@@ -153,6 +158,8 @@ struct VersionsScreen: View {
                 HStack(spacing: 8) {
                     ForEach(VersionWords.kindChips(snapshot), id: \.self) { chip in
                         Button {
+                            // The chip that is on again asks nothing.
+                            guard chip.kind != on else { return }
                             asked = chip.kind
                             model.setKind(chip.kind)
                         } label: {
@@ -169,7 +176,11 @@ struct VersionsScreen: View {
             }
             .scrollIndicators(.hidden)
             .scrollClipDisabled()
-            .padding(.top, 6)
+            .accessibilityElement(children: .contain)
+            .accessibilityLabel(StreamChoice.words.kind.label)
+            #if os(tvOS)
+            .focusSection()
+            #endif
         }
     }
 
@@ -215,6 +226,7 @@ struct VersionsScreen: View {
 
     private var table: some View {
         VStack(alignment: .leading, spacing: 14) {
+            kindRow
             if let note = snapshot?.note, !undone, let text = StreamChoice.learnedNote(note, device: StreamChoice.device) {
                 LearnedNoteBar(text: text) { undo(note) }
             }
