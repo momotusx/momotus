@@ -144,7 +144,7 @@ final class TrailerPlayer: NSObject {
         #endif
         web.navigationDelegate = self
         // The bundle id as the page's address: YouTube reads it as the embedding app (its Referer rule).
-        web.loadHTMLString(Self.page, baseURL: URL(string: "https://\(Bundle.main.bundleIdentifier ?? "app.marquee.dev")/"))
+        web.loadHTMLString(Self.page, baseURL: URL(string: "https://\(Bundle.main.bundleIdentifier ?? "app.momotus.dev")/"))
         return web
     }
 

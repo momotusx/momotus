@@ -314,7 +314,7 @@ class TrailerHost internal constructor(
 
     private companion object {
         /** The app's own id as the page's address: YouTube reads it as the embedding app (its Referer rule). */
-        const val BASE = "https://app.marquee.android/"
+        const val BASE = "https://app.momotus.android/"
 
         /** The player's page: the official IFrame API, muted and read back before it plays (decision 6). */
         val PAGE =
