@@ -24,6 +24,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.testTag
 import androidx.compose.ui.unit.Dp
 
 /*
@@ -40,14 +41,18 @@ fun BrandMark(
     Image(painterResource(R.drawable.brand_mark), contentDescription = null, modifier = modifier.size(size))
 }
 
-/** B: the bird, then the name, its letters 0.45 of the bird's height. Spoken once, as the name. */
+/**
+ * B: the bird, then the name, its letters 0.45 of the bird's height. Spoken once, as the name, unless `spoken` is
+ * false where text beside it already says the name.
+ */
 @Composable
 fun BrandLockup(
     bird: Dp,
     modifier: Modifier = Modifier,
+    spoken: Boolean = true,
 ) {
     Row(
-        modifier.clearAndSetSemantics { contentDescription = "Momotus" },
+        modifier.clearAndSetSemantics { if (spoken) contentDescription = "Momotus" },
         horizontalArrangement = Arrangement.spacedBy(bird * 0.2f),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -81,7 +86,12 @@ fun BrandLoading(
             label = "sweep",
         )
     // Two copies drawn, one name spoken.
-    Box(modifier.clearAndSetSemantics { contentDescription = "Momotus" }) {
+    Box(
+        modifier.clearAndSetSemantics {
+            contentDescription = "Momotus"
+            testTag = BRAND_SWEEP
+        },
+    ) {
         BrandLockup(bird, Modifier.graphicsLayer { alpha = 0.2f })
         BrandLockup(
             bird,
@@ -102,6 +112,9 @@ fun BrandLoading(
         )
     }
 }
+
+/** The sweeping loading mark, for tests. */
+const val BRAND_SWEEP = "brand-sweep"
 
 private const val FEATHER = 0.03f
 private const val SWEEP_MS = 2400

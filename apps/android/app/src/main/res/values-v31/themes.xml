@@ -2,10 +2,7 @@
 <resources>
     <!-- Android 12 and later draw a splash from these: the icon's bird in its near-black circle on the
          page colour the first screen opens on. -->
-    <style name="Theme.Marquee" parent="android:Theme.Material.NoActionBar">
-        <item name="android:windowBackground">@color/marquee_bg_dark</item>
-        <item name="android:statusBarColor">@color/marquee_bg_dark</item>
-        <item name="android:navigationBarColor">@color/marquee_bg_dark</item>
+    <style name="Theme.Marquee" parent="Base.Theme.Marquee">
         <item name="android:windowSplashScreenBackground">@color/marquee_bg_dark</item>
         <item name="android:windowSplashScreenAnimatedIcon">@mipmap/ic_launcher_foreground</item>
         <item name="android:windowSplashScreenIconBackgroundColor">@color/ic_launcher_background</item>

@@ -1,9 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- Colors come from design/tokens.json through scripts/tokens.ts (tokens_colors.xml). -->
-    <style name="Theme.Marquee" parent="android:Theme.Material.NoActionBar">
+    <style name="Base.Theme.Marquee" parent="android:Theme.Material.NoActionBar">
         <item name="android:windowBackground">@color/marquee_bg_dark</item>
         <item name="android:statusBarColor">@color/marquee_bg_dark</item>
         <item name="android:navigationBarColor">@color/marquee_bg_dark</item>
     </style>
+
+    <style name="Theme.Marquee" parent="Base.Theme.Marquee" />
 </resources>
