@@ -5,6 +5,7 @@ import app.marquee.core.FindAddons.Filter
 import app.marquee.core.client.CoreJson
 import app.marquee.core.client.CoreTimeouts
 import app.marquee.core.model.AddonCatalogSnapshot
+import app.marquee.core.model.AddonList
 import app.marquee.core.model.Configuration
 import app.marquee.core.model.Installed
 import app.marquee.core.model.ListState
@@ -313,5 +314,32 @@ class FindAddonsTest {
         assertEquals(before[b.key], after[b.key])
         assertEquals("org.b@b.example#2", after[copy.key])
         assertTrue(after.values.none { "secret" in it || "manifest" in it })
+    }
+
+    private fun list(
+        id: String,
+        name: String,
+        host: String?,
+    ) = AddonList(id = id, name = name, host = host, state = ListState.Ready)
+
+    @Test
+    fun `a publisher's list that shares a name with another chip says its host`() {
+        val official = list("official", "Official", null)
+        val theirs = list("addon-1:official", "Official", "dir.example")
+        val other = list("addon-1:dir", "Directory", "dir.example")
+        val all = listOf(official, list("community", "Community", null), theirs, other)
+        assertEquals("Official", FindAddons.listLabel(official, all))
+        assertEquals("Official, dir.example", FindAddons.listLabel(theirs, all))
+        assertEquals("Directory", FindAddons.listLabel(other, all))
+    }
+
+    @Test
+    fun `search finds every word, case and accents aside, in the name, host or description`() {
+        val e = entry(name = "Türkçe Altyazı", host = "subs.example").copy(description = "Subtitles for films")
+        assertTrue(FindAddons.matches(e, ""))
+        assertTrue(FindAddons.matches(e, "turkce"))
+        assertTrue(FindAddons.matches(e, "TURKÇE films"))
+        assertTrue(FindAddons.matches(e, "subs.example"))
+        assertTrue(!FindAddons.matches(e, "turkce series"))
     }
 }

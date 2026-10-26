@@ -88,6 +88,7 @@ import app.marquee.design.KeyPresses
 import app.marquee.design.Marquee
 import app.marquee.design.MqIcon
 import app.marquee.design.MqText
+import app.marquee.design.MqTextField
 import app.marquee.design.SecondaryButton
 import app.marquee.design.Skeleton
 import app.marquee.design.Spinner
@@ -102,8 +103,9 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlin.math.max
 
-// Find addons (plans/m12-addon-discovery.md 3.4 to 3.7): Cinemeta's Official and Community lists as
-// glass cards, each installed or turned on in one press. The web's screens/find-addons.tsx.
+// Find addons (plans/m12-addon-discovery.md 3.4 to 3.7): Cinemeta's Official and Community lists, then
+// the lists of addons the user installed (plans/plugins-and-marketplace.md 7.1), as glass cards, each
+// installed or turned on in one press. The web's screens/find-addons.tsx.
 
 private const val OFFICIAL = "official"
 private const val COMMUNITY = "community"
@@ -117,6 +119,9 @@ class FindAddonsHolder(
     /** The list and filter, kept while the page is on the stack; a new visit opens on Official, All. */
     var list by mutableStateOf(OFFICIAL)
     var filter by mutableStateOf(FindAddons.Filter.All)
+
+    /** The phone's search over the open list; a new list starts with none. */
+    var query by mutableStateOf("")
 
     /** Each card's memory by its key, so a regrouped row never loses it. */
     internal val memories = CardMemories()
@@ -290,7 +295,14 @@ fun FindAddonsScreen(
     val loading = failure == null && (current == null || current.state == ListState.Loading)
     val entries = current?.entries.orEmpty()
     val filter = holder.filter
-    val visible = remember(entries, filter) { entries.filter { FindAddons.shows(it, filter) } }
+    val query = holder.query
+    val visible =
+        remember(entries, filter, query) {
+            entries.filter { FindAddons.shows(it, filter) && FindAddons.matches(it, query) }
+        }
+    // A publisher's list (an addon the user installed) names where it comes from.
+    val host = current?.host
+    val context = LocalContext.current
     val repeated = remember(entries) { FindAddons.repeatedNames(entries) }
     val visibleKeys = remember(visible) { visible.map { it.key } }
 
@@ -418,14 +430,21 @@ fun FindAddonsScreen(
             item(key = "lists") {
                 Choices(
                     FindAddonsCopy.LIST_LABEL,
-                    listOf(
-                        OFFICIAL to listOfNotNull(FindAddonsCopy.OFFICIAL, count(OFFICIAL)).joinToString(" "),
-                        COMMUNITY to listOfNotNull(FindAddonsCopy.COMMUNITY_LIST, count(COMMUNITY)).joinToString(" "),
-                    ),
+                    if (lists.isEmpty()) {
+                        listOf(OFFICIAL to FindAddonsCopy.OFFICIAL, COMMUNITY to FindAddonsCopy.COMMUNITY_LIST)
+                    } else {
+                        lists.map {
+                            it.id to
+                                listOfNotNull(FindAddons.listLabel(it, lists), count(it.id)).joinToString(" ")
+                        }
+                    },
                     holder.list,
                     listChip,
                     onControl,
-                ) { holder.list = it }
+                ) {
+                    holder.list = it
+                    holder.query = ""
+                }
             }
             item(key = "filters") {
                 Choices(
@@ -436,10 +455,41 @@ fun FindAddonsScreen(
                     onControl,
                 ) { holder.filter = it }
             }
-            if (holder.list == COMMUNITY) item(key = "community") { CommunityNote() }
+            if (host != null) {
+                item(key = "from") {
+                    if (tv) {
+                        MqText(FindAddonsCopy.fromList(host), role = TextRole.Callout, color = Marquee.colors.muted)
+                    } else {
+                        Row {
+                            SecondaryButton(
+                                FindAddonsCopy.fromList(host),
+                                { openLink(context, "https://$host/") },
+                                icon = Icons.ExternalLink,
+                            )
+                        }
+                    }
+                }
+            }
+            if (holder.list != OFFICIAL) item(key = "community") { CommunityNote() }
+            if (!tv && current?.state == ListState.Ready && entries.isNotEmpty()) {
+                item(key = "search") {
+                    MqTextField(
+                        query,
+                        { holder.query = it },
+                        label = FindAddonsCopy.SEARCH_LABEL,
+                        placeholder = FindAddonsCopy.SEARCH_LABEL,
+                    )
+                }
+            }
             when {
                 loading -> {
-                    item(key = "loading") { StatusNote(FindAddonsCopy.LOADING, tone = Status.Warn, busy = true) }
+                    item(key = "loading") {
+                        StatusNote(
+                            host?.let(FindAddonsCopy::loadingFrom) ?: FindAddonsCopy.LOADING,
+                            tone = Status.Warn,
+                            busy = true,
+                        )
+                    }
                     items(3, key = { "skeleton:$it" }) { Skeleton(Modifier.fillMaxWidth().heightIn(min = 160.dp)) }
                 }
 
@@ -482,7 +532,13 @@ fun FindAddonsScreen(
                     }
                     when {
                         entries.isEmpty() -> {
-                            item(key = "empty") { Note(FindAddonsCopy.EMPTY, side = 0.dp) }
+                            item(
+                                key = "empty",
+                            ) { Note(host?.let(FindAddonsCopy::emptyFrom) ?: FindAddonsCopy.EMPTY, side = 0.dp) }
+                        }
+
+                        visible.isEmpty() && query.isNotBlank() -> {
+                            item(key = "search-empty") { Note(FindAddonsCopy.SEARCH_EMPTY, side = 0.dp) }
                         }
 
                         visible.isEmpty() -> {
@@ -515,6 +571,9 @@ fun FindAddonsScreen(
                                     }
                                     repeat(columns - row.size) { Spacer(Modifier.weight(1f)) }
                                 }
+                            }
+                            if (current?.more == true) {
+                                item(key = "more") { Note(FindAddonsCopy.more(entries.size), side = 0.dp) }
                             }
                         }
                     }

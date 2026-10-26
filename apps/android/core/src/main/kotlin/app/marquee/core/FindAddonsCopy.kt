@@ -44,6 +44,12 @@ object FindAddonsCopy {
     const val CONFIGURE = "Configure"
     const val TURN_ON = "Turn on"
     const val FROM_HOST = "from {host}"
+    const val FROM_LIST = "From {host}"
+    const val LOADING_FROM = "Asking {host}"
+    const val EMPTY_FROM = "Nothing to show from {host} here."
+    const val MORE = "Showing the first {n} of this list."
+    const val SEARCH_LABEL = "Search this list"
+    const val SEARCH_EMPTY = "Nothing in this list matches."
 
     /** Android only, not in the shared words: Configure where no app opens web pages. */
     const val NO_BROWSER = "No app here opens web pages. Open the addon's website on another device."
@@ -52,4 +58,13 @@ object FindAddonsCopy {
     fun filterEmpty(kind: String) = FILTER_EMPTY.replace("{kind}", kind)
 
     fun fromHost(host: String) = FROM_HOST.replace("{host}", host)
+
+    /** A publisher's list (an addon the user installed): where it comes from, and its own words. */
+    fun fromList(host: String) = FROM_LIST.replace("{host}", host)
+
+    fun loadingFrom(host: String) = LOADING_FROM.replace("{host}", host)
+
+    fun emptyFrom(host: String) = EMPTY_FROM.replace("{host}", host)
+
+    fun more(n: Int) = MORE.replace("{n}", n.toString())
 }

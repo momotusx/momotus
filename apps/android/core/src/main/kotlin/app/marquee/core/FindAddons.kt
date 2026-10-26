@@ -1,8 +1,10 @@
 package app.marquee.core
 
+import app.marquee.core.model.AddonList
 import app.marquee.core.model.Configuration
 import app.marquee.core.model.Installed
 import app.marquee.core.model.ListedAddon
+import java.text.Normalizer
 import java.util.Locale
 
 /**
@@ -22,6 +24,47 @@ object FindAddons {
         Sources(FindAddonsCopy.SOURCES, "stream", FindAddonsCopy.KIND_SOURCES),
         Subtitles(FindAddonsCopy.SUBTITLES, "subtitles", FindAddonsCopy.KIND_SUBTITLES),
         Catalogs(FindAddonsCopy.CATALOGS, "catalog", FindAddonsCopy.KIND_CATALOGS),
+    }
+
+    private fun nameOf(list: AddonList) =
+        when (list.id) {
+            "official" -> FindAddonsCopy.OFFICIAL
+            "community" -> FindAddonsCopy.COMMUNITY_LIST
+            else -> list.name
+        }
+
+    /**
+     * A list's chip: its name, with its host when another list has the same name (a publisher may
+     * call its list "Official"; Cinemeta's own lists have no host). The web's `listLabel`.
+     */
+    fun listLabel(
+        list: AddonList,
+        lists: List<AddonList>,
+    ): String {
+        val name = nameOf(list)
+        val same = lists.any { it.id != list.id && nameOf(it).equals(name, ignoreCase = true) }
+        val host = list.host
+        return if (same && host != null) "$name, $host" else name
+    }
+
+    /** Text compared case and accents aside: "Türkçe" finds "turkce". */
+    fun fold(text: String): String =
+        Normalizer
+            .normalize(text, Normalizer.Form.NFD)
+            .replace(MARKS, "")
+            .lowercase(Locale.ENGLISH)
+
+    private val MARKS = Regex("\\p{M}+")
+
+    /** The search field's rule: every word of the query in the name, host or description. */
+    fun matches(
+        entry: ListedAddon,
+        query: String,
+    ): Boolean {
+        val words = fold(query).split(Regex("\\s+")).filter { it.isNotEmpty() }
+        if (words.isEmpty()) return true
+        val text = fold("${entry.name} ${entry.host} ${entry.description.orEmpty()}")
+        return words.all { it in text }
     }
 
     fun shows(

@@ -53,6 +53,12 @@ class FindAddonsCopyTest {
                     "configure" to CONFIGURE,
                     "turnOn" to TURN_ON,
                     "fromHost" to FROM_HOST,
+                    "fromList" to FROM_LIST,
+                    "loadingFrom" to LOADING_FROM,
+                    "emptyFrom" to EMPTY_FROM,
+                    "more" to MORE,
+                    "searchLabel" to SEARCH_LABEL,
+                    "searchEmpty" to SEARCH_EMPTY,
                 )
             }
         assertEquals(shared.keys, ours.keys)
