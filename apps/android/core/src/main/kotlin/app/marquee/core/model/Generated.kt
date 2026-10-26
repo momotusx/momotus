@@ -554,6 +554,8 @@ data class Hero(
     val trailer: String? = null,
     /** What the hero's Play plays, as the title page's primary button reads it ("Play", "Resume S2:E3", "Play S1:E1"), so every app plays the same video. None until a series' episodes are read from its meta, while its next episode is not out, and when no addon gives its meta: the hero then offers Details alone. */
     val play: PlayTarget? = null,
+    /** The page's meta is still being read: Play may come. Apps keep Play's place meanwhile, so it never pushes the buttons when it lands. */
+    val playPending: Boolean = false,
 )
 
 @Serializable

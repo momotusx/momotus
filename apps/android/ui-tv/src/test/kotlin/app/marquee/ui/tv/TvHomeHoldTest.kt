@@ -334,6 +334,7 @@ class TvHomeHoldTest {
                     listOf("Drama"),
                     "2 h 36 min",
                     play = PlayTarget("tt9", "Play"),
+                    playPending = false,
                 ),
         )
         waitFor("the hero draws") {

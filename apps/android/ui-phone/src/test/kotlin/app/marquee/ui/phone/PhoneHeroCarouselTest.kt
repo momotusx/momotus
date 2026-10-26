@@ -50,6 +50,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import java.io.File
 import java.util.concurrent.Executors
 import kotlin.coroutines.CoroutineContext
 import kotlin.test.assertEquals
@@ -95,6 +96,7 @@ class PhoneHeroCarouselTest {
         rowId = "row",
         reason = "Popular Movies",
         play = PlayTarget(id, "Play"),
+        playPending = false,
     )
 
     private val all = listOf(hero("tt1", "Page One"), hero("tt2", "Page Two"), hero("tt3", "Page Three"))
@@ -140,7 +142,7 @@ class PhoneHeroCarouselTest {
             MarqueeTheme(Form.Phone) { PhoneHome(home, onOpen = {}, onPlay = onPlay, onSetup = {}, onAddons = {}) }
         }
         home.open()
-        waitFor("the first page") { settledOn("Page One") }
+        waitFor("the first page") { settledOn(pages.first().tile.name) }
     }
 
     /** Whether [name]'s words are on screen; the pager also composes its neighbours, off screen. */
@@ -227,6 +229,7 @@ class PhoneHeroCarouselTest {
                 rowId = "row",
                 reason = "Popular Series",
                 play = PlayTarget("tt7:2:3", "Resume S2:E3", resumeMs = 600_000),
+                playPending = false,
             )
         show(listOf(series, all[0]), onPlay = { played = it })
         waitFor("the series page") { settledOn("The Series") }
@@ -268,5 +271,45 @@ class PhoneHeroCarouselTest {
         } finally {
             HeroTrailers.sound = false
         }
+    }
+
+    @Test
+    fun `a page whose Play is still coming keeps its place, so Details never moves when it lands`() {
+        // Review r4: the core names a series' episode a moment after its page.
+        val reading =
+            Hero(
+                Tile(id = "tt7", kind = "series", name = "The Series", posterShape = "poster"),
+                rowId = "row",
+                reason = "Popular Series",
+                playPending = true,
+            )
+        show(listOf(reading))
+        val buttons = {
+            compose
+                .onNodeWithTag(
+                    PHONE_HERO_BUTTONS,
+                    useUnmergedTree = true,
+                ).fetchSemanticsNode()
+                .boundsInRoot
+        }
+        val before = buttons()
+        val landed = reading.copy(play = PlayTarget("tt7:1:1", "Play S1:E1"), playPending = false)
+        val update = CoreJson.encodeToString(HomeUpdate.serializer(), HomeUpdate.Header(HomeHeader(listOf(landed))))
+        client.onMessage("""{"sub":7,"updates":[$update]}""")
+        waitFor("Play landed") {
+            compose.onAllNodesWithText("Play S1:E1", useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() &&
+                compose.onAllNodesWithTag(PHONE_HERO_BUTTONS, useUnmergedTree = true).fetchSemanticsNodes().size == 1
+        }
+        // The row is centered: the same width puts Details where it was.
+        val after = buttons()
+        assertEquals(before.left to before.right, after.left to after.right, "the buttons moved when Play landed")
+    }
+
+    @Test
+    fun `the sound switch is drawn from the moment a trailer plays, when a kept sound starts`() {
+        // Review r4, W2: drawn from `shown` (4.5 s later), a kept sound played with no switch to stop it.
+        val source = File("src/main/kotlin/app/marquee/ui/phone/PhoneHome.kt").readText()
+        assertTrue("if (trailer.playing && (!HeroTrailers.walk" in source, "the switch follows trailer.playing")
+        assertTrue("trailer.shown && (!HeroTrailers.walk" !in source, "the switch waits for the art to fade")
     }
 }

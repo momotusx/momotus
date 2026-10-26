@@ -175,6 +175,7 @@ class TvHomeScrollTest {
                     listOf("Drama"),
                     "1 h",
                     play = PlayTarget("h1", "Play"),
+                    playPending = false,
                 )
             } else {
                 null

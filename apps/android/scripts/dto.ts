@@ -62,6 +62,8 @@ const FLOAT = new Set(["progress", "bitrateMbps", "needMbps", "haveMbps", "mbps"
 const DEFAULTED = new Map([
   // Recorded Home traces from before the hero carousel and Top 10 rows (plans/appletv-polish.md H1, R1).
   ["Hero.rowId", "\"\""],
+  // Recorded Home traces from before the hero's Play (plans/appletv-polish.md 18): no Play on its way.
+  ["Hero.playPending", "false"],
   ["HomeRow.ranked", "false"],
   ["AddonsSnapshot.fresh", "false"],
   ["AddonInfo.builtIn", "false"],

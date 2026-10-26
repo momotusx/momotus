@@ -10,7 +10,9 @@ import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.pressKey
 import app.marquee.core.client.CoreClient
@@ -19,6 +21,7 @@ import app.marquee.core.model.Hero
 import app.marquee.core.model.HomeHeader
 import app.marquee.core.model.HomeRow
 import app.marquee.core.model.HomeSnapshot
+import app.marquee.core.model.HomeUpdate
 import app.marquee.core.model.PlayTarget
 import app.marquee.core.model.RowState
 import app.marquee.core.model.Tile
@@ -88,11 +91,13 @@ class TvHeroCarouselTest {
         name: String,
         kind: String,
         play: PlayTarget? = if (kind == "movie") PlayTarget(id, "Play") else null,
+        pending: Boolean = false,
     ) = Hero(
         Tile(id = id, kind = kind, name = name, posterShape = "poster"),
         rowId = "cinemeta:movie:top",
         reason = "#1 in Popular",
         play = play,
+        playPending = pending,
     )
 
     private fun show(
@@ -281,5 +286,29 @@ class TvHeroCarouselTest {
         ui.launch { focusFirstRow(home, state) }
         waitFor("Back put the focus on the series page's Details") { focused(hasText("Details")) }
         assertEquals(true, state.focus.onFirstRow.value, "Back landed on the start row, so the next Back leaves")
+    }
+
+    @Test
+    fun `a page whose Play is still coming keeps its place, so Details never moves when it lands`() {
+        // Review r4: the core names a series' episode a moment after its page.
+        val reading = hero("tt2", "The Series", "series", pending = true)
+        show(listOf(reading), start = hasText("Details"))
+        assertEquals(1, compose.onAllNodesWithTag(TV_PLAY_SLOT).fetchSemanticsNodes().size, "Play's place is kept")
+        val before =
+            compose
+                .onNodeWithText("Details")
+                .fetchSemanticsNode()
+                .boundsInRoot.left
+        val landed = reading.copy(play = PlayTarget("tt2:1:1", "Play S1:E1"), playPending = false)
+        val update = CoreJson.encodeToString(HomeUpdate.serializer(), HomeUpdate.Header(HomeHeader(listOf(landed))))
+        client.onMessage("""{"sub":7,"updates":[$update]}""")
+        waitFor("Play landed") { compose.onAllNodesWithText("Play S1:E1").fetchSemanticsNodes().isNotEmpty() }
+        assertEquals(0, compose.onAllNodesWithTag(TV_PLAY_SLOT).fetchSemanticsNodes().size)
+        val after =
+            compose
+                .onNodeWithText("Details")
+                .fetchSemanticsNode()
+                .boundsInRoot.left
+        assertEquals(before, after, 1f, "Details moved when Play landed")
     }
 }

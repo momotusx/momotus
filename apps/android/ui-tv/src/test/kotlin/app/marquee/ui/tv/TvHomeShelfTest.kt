@@ -146,6 +146,7 @@ class TvHomeShelfTest {
             listOf("Horror", "Thriller"),
             "1 h 36 min",
             play = PlayTarget("tt1", "Play"),
+            playPending = false,
         )
 
     private fun show(

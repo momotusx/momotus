@@ -113,11 +113,18 @@ class TileCopyTest {
     @Test
     fun `a hero says its kind and genres, then its year and runtime`() {
         val full =
-            Hero(tile(releaseInfo = "2026"), "", "r", runtime = "145 min", genres = listOf("Action", "Adventure"))
+            Hero(
+                tile(releaseInfo = "2026"),
+                "",
+                "r",
+                runtime = "145 min",
+                genres = listOf("Action", "Adventure"),
+                playPending = false,
+            )
         // The top shelf's two lines: the kind and genres (600), then the facts before the ratings row.
         assertEquals("Movie · Action · Adventure", TileCopy.heroGenres(full))
         assertEquals("2026 · 145 min", TileCopy.heroFacts(full))
-        assertNull(TileCopy.heroFacts(Hero(tile(kind = "series"), "", "r")))
+        assertNull(TileCopy.heroFacts(Hero(tile(kind = "series"), "", "r", playPending = false)))
     }
 
     @Test

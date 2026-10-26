@@ -29,8 +29,10 @@ class FirstTargetTest {
             "",
             "reason",
             play = PlayTarget("h", "Play"),
+            playPending = false,
         )
-    private val seriesHero = Hero(Tile(id = "s", kind = "series", name = "S", posterShape = "poster"), "", "reason")
+    private val seriesHero =
+        Hero(Tile(id = "s", kind = "series", name = "S", posterShape = "poster"), "", "reason", playPending = false)
 
     @Test
     fun `the first tile of the first lane wins when there is no hero`() {
@@ -91,8 +93,11 @@ class FirstTargetTest {
     @Test
     fun `a hero page waits a moment for the core's Play, then its Details takes the focus`() {
         val rows = listOf(row("b", RowState.Ready, "z"))
-        assertNull(firstTarget(rows, seriesHero, patient = true), "Play may still come")
-        assertEquals("hero:details", firstTarget(rows, seriesHero, patient = false))
+        val reading = seriesHero.copy(playPending = true)
+        assertNull(firstTarget(rows, reading, patient = true), "Play may still come")
+        assertEquals("hero:details", firstTarget(rows, reading, patient = false))
+        // The core read the page and found no Play (no meta, the next episode not out): Details at once.
+        assertEquals("hero:details", firstTarget(rows, seriesHero, patient = true), "a page with no Play to come")
         val withPlay = seriesHero.copy(play = PlayTarget("s:1:1", "Play S1:E1"))
         assertEquals("hero:play", firstTarget(rows, withPlay, patient = true), "a series page with Play starts on it")
     }

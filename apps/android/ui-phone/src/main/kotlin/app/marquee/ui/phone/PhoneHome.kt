@@ -42,6 +42,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
@@ -413,8 +414,8 @@ private fun PhoneHeroCarousel(
             )
         }
         // The trailer's sound, at the hero's foot level with the dots, as the TV app's (plans/appletv-polish.md 18):
-        // drawn while a trailer plays, under one name, on or off.
-        if (trailer.shown && (!HeroTrailers.walk || HeroTrailers.walkSwitch)) {
+        // drawn from the moment a trailer plays, when a kept sound starts too (review r4, W2), under one name, on or off.
+        if (trailer.playing && (!HeroTrailers.walk || HeroTrailers.walkSwitch)) {
             TrailerSoundSwitch(trailers, Modifier.align(Alignment.BottomEnd).padding(end = 16.dp, bottom = 5.dp))
         }
     }
@@ -526,6 +527,11 @@ private fun PhoneHero(
                             onClick = { onPlay(tile.copy(videoId = play.videoId)) },
                             modifier = Modifier.width(178.dp).describe("${play.label} ${tile.name}"),
                         )
+                    } else if (hero.playPending) {
+                        // Play's place while the core reads the page's episodes: Details never moves when it lands.
+                        Box(Modifier.alpha(0f)) {
+                            PrimaryButton("Play", {}, Modifier.width(178.dp), icon = PlayFilled, enabled = false)
+                        }
                     }
                     RoundButton(Icons.Info, "Details", { onOpen(tile) })
                 }

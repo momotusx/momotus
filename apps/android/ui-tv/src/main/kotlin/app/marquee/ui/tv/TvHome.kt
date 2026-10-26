@@ -40,6 +40,7 @@ import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.graphics.graphicsLayer
@@ -54,8 +55,10 @@ import androidx.compose.ui.platform.LocalAccessibilityManager
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
@@ -643,6 +646,18 @@ private fun TvHero(
                             },
                     )
                 }
+                if (play == null && hero.playPending) {
+                    // Play's place while the core reads the page's episodes, so Details never moves when it lands;
+                    // a series' usual words. ponytail: a longer label ("Resume S12:E10") still nudges Details.
+                    Box(Modifier.alpha(0f).clearAndSetSemantics { testTag = TV_PLAY_SLOT }) {
+                        PrimaryButton(
+                            if (tile.kind == "movie") "Play" else "Play S1:E1",
+                            {},
+                            icon = PlayFilled,
+                            enabled = false,
+                        )
+                    }
+                }
                 SecondaryButton(
                     "Details",
                     { onOpen(tile) },
@@ -1034,7 +1049,7 @@ internal fun focusAfterRemove(
  * else the first tile of the first lane. While the first lane is still loading and [patient], there is no target yet, so
  * focus never lands on a lower lane just because it answered first; lanes that came back empty or
  * failed are skipped. The hero's Play comes from the core a moment after its page: while [playPatient], a page
- * without one waits for it rather than settle on Details.
+ * whose Play may still come (`playPending`) waits for it rather than settle on Details; one with none goes there.
  */
 fun firstTarget(
     rows: List<HomeRow>,
@@ -1042,7 +1057,7 @@ fun firstTarget(
     patient: Boolean,
     playPatient: Boolean = patient,
 ): String? {
-    if (hero != null && !hero.playable() && playPatient) return null
+    if (hero != null && !hero.playable() && hero.playPending && playPatient) return null
     hero.focusKey()?.let { return it }
     for (row in rows) {
         row.tileKeys().firstOrNull()?.let { return it }
@@ -1065,6 +1080,9 @@ internal fun startRow(
 }
 
 private const val PATIENCE_MS = 3_000L
+
+/** Play's invisible place on a hero page whose Play may still come. */
+internal const val TV_PLAY_SLOT = "hero-play-slot"
 
 /** Where Home's one-time card goes: under Continue Watching, else first. */
 internal fun cardSplit(rows: List<HomeRow>): Int = rows.indexOfFirst { it.rowId == TileCopy.CONTINUE_ROW } + 1
