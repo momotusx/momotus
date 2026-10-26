@@ -355,7 +355,7 @@ export const syncWords = {
   pasteLabel: "Or paste the code",
   pasteOnly: "Paste the code",
   noScan: "This browser cannot scan codes. On the new device, choose Copy the code, then paste it here.",
-  pasteHint: "marquee:pair?...",
+  pasteHint: "The code the new device shows",
   reviewAsk: "Approve a new device?",
   reviewText: "Approve it only if the new device is in front of you and shows the code you scanned. Whoever confirms the six digits next joins your account.",
   approve: "Approve",

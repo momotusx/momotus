@@ -10,7 +10,7 @@ mod mock_oidc;
 
 use base64::Engine as _;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD as B64URL;
-use mock_oidc::{Mock, Next, browse};
+use mock_oidc::{Mock, Next, browse, browse_to};
 use mq_http::{ClientConfig, HttpClient, HttpError, RequestOptions};
 use mq_library::Library;
 use mq_library::hlc::HlcClock;
@@ -331,6 +331,14 @@ async fn a_brokered_sign_in_makes_an_account_and_finds_it_again() {
     let links = phone.links().await;
     assert_eq!(links.len(), 1);
     assert_eq!(links[0].provider, "mock", "the route id, never the issuer");
+    // A build from before the Momotus ids starts with marquee://auth and is sent back there.
+    relay.mock.next(Next::Pick("alice".into()));
+    let old = start_brokered(&http(), &relay.url, "mock", "marquee://auth", false)
+        .await
+        .unwrap();
+    let fragment = browse_to(&old.url, "marquee://auth#").await;
+    let taken = old.finish(&http(), &fragment).await.unwrap();
+    assert_eq!(taken.account, Some(phone.record.keys.account), "old scheme");
     // Nothing of the provider is kept: no subject in the clear.
     let subject: Vec<u8> = relay
         .sql()

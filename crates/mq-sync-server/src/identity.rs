@@ -886,7 +886,8 @@ fn fresh() -> String {
 }
 
 /// Only the app's own scheme (`marquee://auth` too, for builds made before the
-/// Momotus app ids), a loopback `/auth` page (RFC 8252 7.3: the
+/// Momotus app ids, until no device runs one: plans/rename-momotus.md phase 3),
+/// a loopback `/auth` page (RFC 8252 7.3: the
 /// web app in development, e2e and the desktop shells) and the link host's
 /// deletion page take a brokered result.
 fn allowed_return(identity: &Identity, to: &str) -> bool {

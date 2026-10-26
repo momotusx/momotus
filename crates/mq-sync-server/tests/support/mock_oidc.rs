@@ -548,6 +548,12 @@ async fn debug_token(State(mock): State<Mock>, Query(q): Query<DebugToken>) -> J
 /// (a redirect, or Apple's form post) and stops at the return, whose
 /// fragment it answers.
 pub async fn browse(url: &str) -> String {
+    browse_to(url, "momotus://auth#").await
+}
+
+/// [browse], for a flow started with another return: the fragment of the
+/// redirect to `to_app` (`marquee://auth#` for a build from before the Momotus ids).
+pub async fn browse_to(url: &str, to_app: &str) -> String {
     let browser = reqwest::Client::builder()
         .redirect(reqwest::redirect::Policy::none())
         .build()
@@ -581,6 +587,6 @@ pub async fn browse(url: &str) -> String {
         .to_str()
         .unwrap()
         .to_owned();
-    assert!(to.starts_with("momotus://auth#"), "{to}");
+    assert!(to.starts_with(to_app), "{to}");
     to.split_once('#').unwrap().1.to_owned()
 }
