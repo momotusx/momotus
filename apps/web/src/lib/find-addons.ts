@@ -103,15 +103,17 @@ export const fold = (text: string) =>
     .replace(/\p{M}/gu, "")
     .toLocaleLowerCase("en");
 
-/** Each entry's folded text, made once per entry object (a list's entries are new objects only when it is read again). */
-const folded = new WeakMap<ListedAddon, string>();
+/** Each entry's folded text with the text it came from: made once per entry, and again when an
+ * entry updated in place changed its name, host or description. */
+const folded = new WeakMap<ListedAddon, { source: string; text: string }>();
 const foldedOf = (entry: ListedAddon) => {
-  let text = folded.get(entry);
-  if (text === undefined) {
-    text = fold(`${entry.name} ${entry.host} ${entry.description ?? ""}`);
-    folded.set(entry, text);
+  const source = `${entry.name} ${entry.host} ${entry.description ?? ""}`;
+  let kept = folded.get(entry);
+  if (kept?.source !== source) {
+    kept = { source, text: fold(source) };
+    folded.set(entry, kept);
   }
-  return text;
+  return kept.text;
 };
 
 /** The query's words, folded: made once per query, then tested against each entry. */

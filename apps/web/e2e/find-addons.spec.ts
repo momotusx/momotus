@@ -152,6 +152,26 @@ test.describe("a directory addon's list", () => {
     await page.context().close();
   });
 
+  test("a list whose addon goes falls back to Official", async ({ browser }) => {
+    const page = await open(browser, "desktop", { width: 1440, height: 900 });
+    const chip = page.getByRole("radio", { name: /^stremio-addons\.net/ });
+    await expect(chip).toBeVisible({ timeout: 20_000 });
+    await chip.click();
+    await expect(page.locator(".fa-from a")).toHaveText("From stremio-addons.net");
+    // The directory is turned off elsewhere (another device, the Addons page): its list goes.
+    const c = new Client(`ws://127.0.0.1:${ADDON_LISTS_PORT}/ws`);
+    try {
+      await c.req("setAddonEnabled", { url: DIRECTORY, enabled: false });
+      await expect(page.getByRole("radio", { name: /^Official/ })).toHaveAttribute("aria-checked", "true");
+      await expect(page.locator(".fa-card:not(.skel)").first()).toBeVisible();
+      await expect(chip).toHaveCount(0);
+    } finally {
+      await c.req("setAddonEnabled", { url: DIRECTORY, enabled: true });
+      c.close();
+    }
+    await page.context().close();
+  });
+
   test("TV: the list's chip and its host, with no link to follow", async ({ browser }) => {
     const page = await open(browser, "tv", { width: 1920, height: 1080 });
     const chip = page.getByRole("radio", { name: /^stremio-addons\.net/ });

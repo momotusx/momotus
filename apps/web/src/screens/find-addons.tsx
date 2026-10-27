@@ -317,13 +317,19 @@ export default function FindAddons() {
   const saved = savedPicks();
   const [picks, setPicks] = createSignal<Picks>(saved);
   const update = (p: Partial<Picks>) => setPicks({ ...picks(), ...p });
-  // Kept in the history entry, written once typing and scrolling settle (Safari refuses more than 100 writes in 30 s).
+  // Kept in the history entry: a list or filter pick at once (a card pressed right after keeps it), typing
+  // and scrolling once they settle (Safari refuses more than 100 writes in 30 s).
   let pending: ReturnType<typeof setTimeout> | undefined;
-  createEffect(() => {
+  const keep = (now: Picks) => history.replaceState({ ...(history.state ?? {}), findAddons: now }, "");
+  createEffect(on([() => picks().list, () => picks().filter], () => {
+    clearTimeout(pending);
+    keep(picks());
+  }));
+  createEffect(on([() => picks().query, () => picks().shown], () => {
     const now = picks();
     clearTimeout(pending);
-    pending = setTimeout(() => history.replaceState({ ...(history.state ?? {}), findAddons: now }, ""), 300);
-  });
+    pending = setTimeout(() => keep(now), 300);
+  }, { defer: true }));
   onCleanup(() => clearTimeout(pending));
   // Try again and Refresh close the view and open it with `fresh`, which
   // waits for the network instead of the addon cache; results from before
