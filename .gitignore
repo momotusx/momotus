@@ -14,6 +14,7 @@
 # local secrets
 .env
 *.local
+*.local.properties
 /.playwright-mcp/
 /.mq-data/
 /apps/web/test-results/

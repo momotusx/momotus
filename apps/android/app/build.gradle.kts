@@ -1,6 +1,7 @@
 import com.android.build.api.variant.BuildConfigField
 import com.android.build.api.variant.FilterConfiguration
 import com.android.build.api.variant.ResValue
+import java.util.Properties
 
 plugins {
     alias(libs.plugins.android.application)
@@ -10,6 +11,16 @@ plugins {
 
 /** The last digit of a split APK's versionCode, by its ABI. */
 val abiCodes = mapOf("armeabi-v7a" to 1, "arm64-v8a" to 2)
+
+/**
+ * The release key (storeFile, storePassword, keyAlias, keyPassword) from keystore.local.properties, gitignored, on the
+ * machine that ships releases. Without the file a release build is signed with the debug key, so every other checkout
+ * still builds one.
+ */
+val releaseKey =
+    rootProject.file("keystore.local.properties").takeIf { it.isFile }?.let { file ->
+        Properties().apply { file.inputStream().use { load(it) } }
+    }
 
 android {
     namespace = "app.marquee.android"
@@ -60,13 +71,23 @@ android {
         }
     }
 
+    signingConfigs {
+        if (releaseKey != null) {
+            create("release") {
+                storeFile = file(releaseKey.getProperty("storeFile"))
+                storePassword = releaseKey.getProperty("storePassword")
+                keyAlias = releaseKey.getProperty("keyAlias")
+                keyPassword = releaseKey.getProperty("keyPassword")
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-            // Local release builds only; store signing is a release-process decision.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
         }
     }
 
