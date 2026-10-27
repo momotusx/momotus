@@ -1272,7 +1272,8 @@ async function shelfCatalog() {
       const skip = Number(/skip=(\d+)/.exec(url)?.[1] ?? 0);
       const n = (asked.get(skip) ?? 0) + 1;
       asked.set(skip, n);
-      if ((skip === 0 || skip === 30) && n === 1) return json(500, { error: "busy" });
+      // The core asks a page twice before it calls it failed: both fail, then Try again gets it.
+      if ((skip === 0 || skip === 30) && n <= 2) return json(500, { error: "busy" });
       const count = skip === 0 ? 30 : skip === 30 ? 10 : 0;
       const metas = Array.from({ length: count }, (_, i) => ({ id: `mqjs${skip + i}`, type: "movie", name: `Shelf Title ${skip + i}` }));
       return void setTimeout(() => json(200, { metas }), 800);
