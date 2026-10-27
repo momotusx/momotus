@@ -192,6 +192,36 @@ class PairingApprovalTest {
         }
 
     @Test
+    fun `a second code replaces the sheet in place, never through Idle, and its Sign in stays busy`() =
+        runTest {
+            val core = Core()
+            val sheet = approval(core)
+            sheet.offer(link, scanned = false)
+            advanceUntilIdle()
+            core.readMs = 500
+            sheet.offer(hall, scanned = false)
+            assertEquals(Step.Sheet("Sign in \"Den\"?", "tv"), sheet.step, "no Idle between the two sheets")
+            advanceTimeBy(100)
+            assertEquals(
+                Step.Sheet("Sign in \"Den\"?", "tv"),
+                sheet.step,
+                "the old sheet stays while the new code is read",
+            )
+            advanceUntilIdle()
+            assertEquals(Step.Sheet("Sign in \"Hall\"?", "tv"), sheet.step)
+            // An approval cancelled by a new code never clears the next one's busy.
+            core.readMs = 0
+            core.approveMs = 1_000
+            sheet.signIn()
+            advanceTimeBy(100)
+            sheet.offer(link, scanned = false)
+            sheet.signIn()
+            advanceTimeBy(100)
+            assertEquals(true, sheet.busy, "the second approval is still out")
+            sheet.close()
+        }
+
+    @Test
     fun `a scan here of another code asks again under that screen's name`() =
         runTest {
             val core = Core()

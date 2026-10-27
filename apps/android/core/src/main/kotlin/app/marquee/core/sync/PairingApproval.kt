@@ -11,6 +11,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 /**
@@ -78,19 +79,23 @@ class PairingApproval(
     private var member: String? = null
 
     /**
-     * The read or approval under way, and the wait after it: [close] (and so every new code) cancels them, and a
-     * cancelled coroutine never resumes past its suspended core call (the core's calls cancel promptly), so a late
-     * answer writes nothing.
+     * The read or approval under way, and the wait after it: [close] and every new code cancel them, and a
+     * cancelled coroutine never resumes past its suspended core call, so a late answer writes nothing. Nothing is
+     * lost by it: the account runs each op in the app's own scope (`SyncAccount.withRecord`) and stores its record
+     * whether or not this sheet still waits.
      */
     private var work: Job? = null
     private var waiting: Job? = null
 
-    /** A code arrived: it replaces any other, and its wait. */
+    /**
+     * A code arrived: it replaces any other, and its wait. The sheet on screen stays until the new code is read
+     * (never [Step.Idle] between, which would open the scanner over it).
+     */
     fun offer(
         qr: String,
         scanned: Boolean,
     ) {
-        close()
+        stop()
         code = qr
         this.scanned = scanned
         work =
@@ -144,13 +149,17 @@ class PairingApproval(
 
     /** The sheet closed: nothing under way writes to it again, and no wait goes on. */
     fun close() {
+        stop()
+        step = Step.Idle
+    }
+
+    private fun stop() {
         work?.cancel()
         work = null
         waiting?.cancel()
         waiting = null
         member = null
         busy = false
-        step = Step.Idle
     }
 
     private fun send(unlocked: Boolean) {
@@ -169,7 +178,8 @@ class PairingApproval(
                 } catch (e: Exception) {
                     step = failed(e)
                 } finally {
-                    busy = false
+                    // A cancelled approval leaves busy to whatever replaced it.
+                    if (isActive) busy = false
                 }
             }
     }
