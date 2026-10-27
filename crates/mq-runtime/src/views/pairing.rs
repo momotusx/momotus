@@ -23,14 +23,10 @@ use tokio::task::JoinHandle;
 use tokio::time::Instant;
 
 /// How often the screen asks whether its code was answered: every 2 s while
-/// a scan is likely (its first 5 minutes), then 5 s, then 10 s past an hour,
-/// so a TV left on its first screen for days costs the relay little.
+/// a scan is likely (its first 5 minutes), then every 5 s, so a TV left on its
+/// first screen for days costs the relay little and still sees a Sign in within 5 s.
 fn poll_every(open: Duration) -> Duration {
-    Duration::from_secs(match open.as_secs() {
-        0..300 => 2,
-        300..3600 => 5,
-        _ => 10,
-    })
+    Duration::from_secs(if open.as_secs() < 300 { 2 } else { 5 })
 }
 /// The next code shows this long before the current one ends (at most a
 /// fifth of a code's life).
@@ -257,8 +253,8 @@ mod tests {
     fn the_poll_slows_as_the_screen_stays_open() {
         let at = |s| poll_every(Duration::from_secs(s)).as_secs();
         assert_eq!(
-            [at(0), at(299), at(300), at(3599), at(3600), at(86_400)],
-            [2, 2, 5, 5, 10, 10]
+            [at(0), at(299), at(300), at(3600), at(86_400)],
+            [2, 2, 5, 5, 5]
         );
     }
 }
