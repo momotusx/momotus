@@ -59,6 +59,29 @@ import XCTest
             sleep(1)
             shot("versions-kinds-\(name)")
         }
+        // Turned with a kind chosen: the chip that is on stays on and in reach, both ways.
+        let direct = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Direct links, ")).firstMatch
+        for orientation in [UIDeviceOrientation.landscapeLeft, .portrait] {
+            XCUIDevice.shared.orientation = orientation
+            sleep(2)
+            XCTAssertTrue(direct.isSelected, "Direct links stays on after turning")
+            XCTAssertTrue(direct.isHittable, "Direct links is in reach after turning")
+            shot("versions-kinds-turned-\(orientation == .portrait ? "portrait" : "landscape")")
+        }
+        // Back on the title page every kind is listed again: Versions opens on All.
+        let back = app.navigationBars.buttons.element(boundBy: 0)
+        if back.exists {
+            back.tap()
+        } else {
+            // The system's edge swipe.
+            app.coordinate(withNormalizedOffset: CGVector(dx: 0.01, dy: 0.5))
+                .press(forDuration: 0.05, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.8, dy: 0.5)))
+        }
+        XCTAssertTrue(versions.waitForExistence(timeout: 10), "back on the title page")
+        versions.tap()
+        XCTAssertTrue(all.waitForExistence(timeout: 30), "the chips again")
+        XCTAssertTrue(all.isSelected, "the title page listed every kind again")
+        shot("versions-kinds-back-all")
     }
 
     private func shot(_ name: String) {
