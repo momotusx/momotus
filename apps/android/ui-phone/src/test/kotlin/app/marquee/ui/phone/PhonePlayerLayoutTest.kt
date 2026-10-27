@@ -207,6 +207,19 @@ class PhonePlayerLayoutTest {
     }
 
     @Test
+    fun `under a wide film the hidden controls leave the subtitles 8% of the picture over the picture's foot`() {
+        // A 2.39:1 film (1920 by 803): PhonePlayer passes the controller's ratio, so the foot is the picture's.
+        player.pictureSize = VideoSize(1920, 803)
+        playing()
+        player.say("Who are you, and what are you doing here")
+        controlsHidden()
+        val root = compose.onRoot().fetchSemanticsNode().boundsInRoot
+        val picture = minOf(root.height, root.width * 803f / 1920f)
+        val foot = cues().foot
+        assertEquals((root.height + picture) / 2 - picture * CUE_RISE, foot, 0.5f, "8% of the picture over its foot")
+    }
+
+    @Test
     fun `two lines at the largest size shrink under the transport, down to 75%, while the controls show`() {
         playing(SubtitleSize.ExtraLarge)
         player.say("Who are you, and what are you doing here\nwith a sword and a dragon's tooth")
@@ -247,18 +260,5 @@ class PhonePlayerLayoutTest {
     private companion object {
         /** The subtitle view's room beside a cue's text, of its text size (SubtitlePainter's inner padding). */
         const val TEXT_PADDING = 0.125f
-    }
-
-    @Test
-    fun `under a wide film the hidden controls leave the subtitles 8% of the picture over the picture's foot`() {
-        // A 2.39:1 film (1920 by 803): PhonePlayer passes the controller's ratio, so the foot is the picture's.
-        player.pictureSize = VideoSize(1920, 803)
-        playing()
-        player.say("Who are you, and what are you doing here")
-        controlsHidden()
-        val root = compose.onRoot().fetchSemanticsNode().boundsInRoot
-        val picture = minOf(root.height, root.width * 803f / 1920f)
-        val foot = cues().foot
-        assertEquals((root.height + picture) / 2 - picture * CUE_RISE, foot, 0.5f, "8% of the picture over its foot")
     }
 }

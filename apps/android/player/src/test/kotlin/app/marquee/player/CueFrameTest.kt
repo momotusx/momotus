@@ -195,8 +195,8 @@ class CueFrameTest {
 
     @Test
     fun `with the controls up the foot is the higher of the two`() {
-        // Controls 60 px tall: just over them, higher than the plain foot of a 16:9 picture.
-        assertEquals(480f, cueFoot(540f, 960f, 16f / 9, lifted = 480f), 1e-3f)
+        // Controls 60 px tall and the 8 px gap: the lifted foot 472, higher than the plain foot of a 16:9 picture.
+        assertEquals(472f, cueFoot(540f, 960f, 16f / 9, lifted = 472f), 1e-3f)
         // A wide film's plain foot is higher than a short controls' block: the plain foot holds.
         val plain = cueFoot(540f, 960f, 2.39f, lifted = null)
         assertEquals(plain, cueFoot(540f, 960f, 2.39f, lifted = 520f), 1e-3f)
