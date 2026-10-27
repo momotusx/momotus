@@ -31,7 +31,7 @@ import androidx.compose.ui.test.requestFocus
 import androidx.compose.ui.unit.dp
 import app.marquee.core.client.CoreClient
 import app.marquee.core.client.CoreJson
-import app.marquee.core.client.stateThread
+import app.marquee.core.client.StateThreadRule
 import app.marquee.core.model.CastMember
 import app.marquee.core.model.PlayTarget
 import app.marquee.core.model.Ratings
@@ -49,7 +49,6 @@ import app.marquee.design.MarqueeTheme
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.cancel
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.jsonObject
@@ -82,8 +81,9 @@ class TvTitleScoresTest {
     @get:Rule
     val compose = createAndroidComposeRule<ComponentActivity>()
 
-    private val executor = stateThread("test-state")
-    private val client = CoreClient(executor.asCoroutineDispatcher())
+    @get:Rule
+    val stateThread = StateThreadRule()
+    private val client = CoreClient(stateThread.dispatcher)
     private val main =
         object : CoroutineDispatcher() {
             private val handler = Handler(Looper.getMainLooper())
@@ -101,7 +101,6 @@ class TvTitleScoresTest {
     fun stop() {
         scope.cancel()
         client.close()
-        executor.shutdownNow()
     }
 
     private fun page(

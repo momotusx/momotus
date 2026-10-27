@@ -34,6 +34,9 @@ android {
         }
     }
 
+    // StateThreadRule, shared by the UI tests of every module.
+    testFixtures { enable = true }
+
     lint {
         // Deliberate: arm64 and armeabi-v7a, no x86 (plans/m6-android.md D10), as the app.
         disable += "ChromeOsAbiSupport"
@@ -74,6 +77,7 @@ dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.rustls.platform.verifier)
 
+    testFixturesImplementation(libs.junit)
     testImplementation(libs.junit)
     testImplementation(libs.kotlin.test.junit)
     testImplementation(libs.kotlinx.coroutines.test)

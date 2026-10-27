@@ -36,6 +36,7 @@ dependencies {
     implementation(libs.androidx.lifecycle.runtime.compose)
 
     testImplementation(libs.junit)
+    testImplementation(testFixtures(project(":core")))
     testImplementation(libs.kotlin.test.junit)
     testImplementation(libs.robolectric)
     testImplementation(platform(libs.compose.bom))

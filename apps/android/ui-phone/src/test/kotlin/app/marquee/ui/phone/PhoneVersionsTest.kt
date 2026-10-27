@@ -2,7 +2,6 @@ package app.marquee.ui.phone
 
 import android.os.Handler
 import android.os.Looper
-import android.os.MessageQueue
 import androidx.activity.OnBackPressedDispatcher
 import androidx.activity.compose.LocalOnBackPressedDispatcherOwner
 import androidx.compose.runtime.CompositionLocalProvider
@@ -40,7 +39,7 @@ import app.marquee.core.StreamChoiceCopy
 import app.marquee.core.VersionsCopy
 import app.marquee.core.client.CoreClient
 import app.marquee.core.client.CoreJson
-import app.marquee.core.client.stateThread
+import app.marquee.core.client.StateThreadRule
 import app.marquee.core.model.EmptyAction
 import app.marquee.core.model.EmptyKind
 import app.marquee.core.model.EmptyVersions
@@ -70,7 +69,6 @@ import app.marquee.design.MarqueeTheme
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.cancel
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonObject
@@ -86,7 +84,6 @@ import org.robolectric.annotation.Config
 import java.util.concurrent.CopyOnWriteArrayList
 import kotlin.coroutines.CoroutineContext
 import kotlin.test.assertEquals
-import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /** The Versions screen on a phone with the core's stream choice (plans/m13-stream-choice.md 3.7, 3.9, 3.11). */
@@ -96,8 +93,9 @@ class PhoneVersionsTest {
     @get:Rule
     val compose = createComposeRule()
 
-    private val executor = stateThread("test-state")
-    private val client = CoreClient(executor.asCoroutineDispatcher())
+    @get:Rule
+    val stateThread = StateThreadRule()
+    private val client = CoreClient(stateThread.dispatcher)
     private val main =
         object : CoroutineDispatcher() {
             private val handler = Handler(Looper.getMainLooper())
@@ -113,26 +111,8 @@ class PhoneVersionsTest {
 
     @After
     fun stop() {
-        nothingWaitsOnTheStateThread()
         scope.cancel()
         client.close()
-        executor.shutdownNow()
-    }
-
-    /**
-     * The state thread's Looper is never looped (stateThread): anything posted to it would never run. After a whole
-     * screen's life on it (snapshots, updates, commands, Compose's apply observers), nothing may wait there.
-     */
-    private fun nothingWaitsOnTheStateThread() {
-        val looper = executor.submit<Looper?> { Looper.myLooper() }.get()!!
-        // The queue's head message, due or delayed: Robolectric's looper shadow waits for a thread that loops.
-        val head =
-            MessageQueue::class.java
-                .getDeclaredField(
-                    "mMessages",
-                ).apply { isAccessible = true }
-                .get(looper.queue)
-        assertNull(head, "something posted to the state thread: $head")
     }
 
     private val gib = 1L shl 30

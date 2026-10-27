@@ -34,7 +34,7 @@ import app.marquee.core.SubtitleStep
 import app.marquee.core.client.CoreClient
 import app.marquee.core.client.CoreJson
 import app.marquee.core.client.CoreTransport
-import app.marquee.core.client.stateThread
+import app.marquee.core.client.StateThreadRule
 import app.marquee.core.model.LanguageChoice
 import app.marquee.core.session.CoreOps
 import app.marquee.design.Form
@@ -43,7 +43,6 @@ import app.marquee.design.MarqueeTheme
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.cancel
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -72,8 +71,9 @@ class SubtitleStepScreenTest {
     @get:Rule
     val compose = createComposeRule()
 
-    private val executor = stateThread("test-state")
-    private val client = CoreClient(executor.asCoroutineDispatcher())
+    @get:Rule
+    val stateThread = StateThreadRule()
+    private val client = CoreClient(stateThread.dispatcher)
 
     // The step runs on the main looper, as on viewModelScope: SubtitleStep is main-thread only, and its state
     // written from another thread reached the composition late or, now and then, not before a check gave up.
@@ -96,7 +96,6 @@ class SubtitleStepScreenTest {
     fun stop() {
         scope.cancel()
         client.close()
-        executor.shutdownNow()
     }
 
     private val languages =

@@ -22,7 +22,7 @@ import app.marquee.core.StreamChoiceCopy
 import app.marquee.core.client.CoreClient
 import app.marquee.core.client.CoreJson
 import app.marquee.core.client.CoreLog
-import app.marquee.core.client.stateThread
+import app.marquee.core.client.StateThreadRule
 import app.marquee.core.model.OtherVersion
 import app.marquee.core.views.PlaybackView
 import com.google.common.util.concurrent.Futures
@@ -30,7 +30,6 @@ import com.google.common.util.concurrent.ListenableFuture
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.cancel
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.contentOrNull
@@ -39,6 +38,7 @@ import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.long
 import kotlinx.serialization.json.longOrNull
 import org.junit.After
+import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -65,8 +65,9 @@ class SubtitleFailureTest {
     private val video = "http://127.0.0.1:7780/video.mp4"
     private val subtitle = "http://127.0.0.1:7781/subsense/tur.srt"
 
-    private val executor = stateThread("test-state")
-    private val client = CoreClient(executor.asCoroutineDispatcher())
+    @get:Rule
+    val stateThread = StateThreadRule()
+    private val client = CoreClient(stateThread.dispatcher)
     private val sent = CopyOnWriteArrayList<JsonObject>()
 
     // The controller's work runs on the main looper, as on a device.
@@ -158,7 +159,6 @@ class SubtitleFailureTest {
     fun stop() {
         scope.cancel()
         client.close()
-        executor.shutdownNow()
     }
 
     /**

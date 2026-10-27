@@ -41,6 +41,7 @@ dependencies {
     implementation(libs.androidx.lifecycle.runtime.compose)
 
     testImplementation(libs.junit)
+    testImplementation(testFixtures(project(":core")))
     testImplementation(libs.kotlin.test.junit)
     // Media3's playlist parsers take android.net.Uri (ManifestCorpusTest).
     testImplementation(libs.robolectric)

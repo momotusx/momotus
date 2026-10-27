@@ -12,6 +12,7 @@ import app.marquee.core.client.CoreError
 import app.marquee.core.client.CoreJson
 import app.marquee.core.client.CoreLog
 import app.marquee.core.client.DeviceCapsParams
+import app.marquee.core.client.StateThread
 import app.marquee.core.client.TitleFacts
 import app.marquee.core.client.versionsParams
 import app.marquee.core.ffi.CoreListener
@@ -49,7 +50,6 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.launch
@@ -87,11 +87,8 @@ class CoreSession(
 ) {
     val metrics = BridgeMetrics()
 
-    // One thread with a Looper of its own that is never looped: nothing may post to it (stateThread).
-    private val stateThread =
-        app.marquee.core.client
-            .stateThread("marquee-state")
-    val client = CoreClient(stateThread.asCoroutineDispatcher(), CoreJson, metrics)
+    // One looped thread of its own; nothing but its dispatcher posts there (StateThread).
+    val client = CoreClient(StateThread("marquee-state").dispatcher, CoreJson, metrics)
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     val ops = CoreOps(client)
     val secrets = SecretStore(File(context.noBackupFilesDir, "secrets.bin"), KeystoreKeySource())

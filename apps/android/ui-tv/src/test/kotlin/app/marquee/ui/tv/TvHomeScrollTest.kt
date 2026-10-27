@@ -31,7 +31,7 @@ import androidx.compose.ui.unit.dp
 import app.marquee.core.TileCopy
 import app.marquee.core.client.CoreClient
 import app.marquee.core.client.CoreJson
-import app.marquee.core.client.stateThread
+import app.marquee.core.client.StateThreadRule
 import app.marquee.core.model.Hero
 import app.marquee.core.model.HomeHeader
 import app.marquee.core.model.HomeRow
@@ -47,7 +47,6 @@ import app.marquee.design.Tokens
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.cancel
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -76,8 +75,9 @@ class TvHomeScrollTest {
     @get:Rule
     val compose = createComposeRule()
 
-    private val executor = stateThread("test-state")
-    private val client = CoreClient(executor.asCoroutineDispatcher())
+    @get:Rule
+    val stateThread = StateThreadRule()
+    private val client = CoreClient(stateThread.dispatcher)
     private val main =
         object : CoroutineDispatcher() {
             private val handler = Handler(Looper.getMainLooper())
@@ -125,7 +125,6 @@ class TvHomeScrollTest {
         Composer.setTracer(null)
         scope.cancel()
         client.close()
-        executor.shutdownNow()
     }
 
     private fun tile(

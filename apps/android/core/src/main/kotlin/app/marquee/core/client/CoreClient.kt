@@ -1,6 +1,7 @@
 package app.marquee.core.client
 
-import android.os.Looper
+import android.os.Handler
+import android.os.HandlerThread
 import androidx.compose.runtime.snapshots.Snapshot
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
@@ -8,6 +9,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.android.asCoroutineDispatcher
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
@@ -27,8 +29,6 @@ import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.longOrNull
 import kotlinx.serialization.json.put
 import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.ExecutorService
-import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.time.Duration
 
@@ -106,20 +106,22 @@ private class PushGroup<U>(
 }
 
 /**
- * A [CoreClient]'s state thread: one thread with a Looper of its own, never looped. The client applies its
- * batches there, so the Compose apply observers run there too, and Compose runs a view's layout command at once
- * when the calling thread's Looper is the view's handler's. A view that is detaching has no handler, so on a
- * thread with no Looper (null is null) that command touched views off the main thread: a
- * CalledFromWrongThreadException that failed the whole batch, and in tests the test. With a Looper the command
- * goes to the view's handler, or nowhere once it is gone.
+ * A [CoreClient]'s state thread: a [HandlerThread] whose Looper loops, so anything ever posted there runs instead of
+ * waiting forever. The client applies its batches there, so the Compose apply observers run there too, and Compose
+ * runs a view's layout command at once when the calling thread's Looper is the view's handler's. A view that is
+ * detaching has no handler, so on a thread with no Looper (null is null) that command touched views off the main
+ * thread: a CalledFromWrongThreadException that failed the whole batch, and in tests the test. With a Looper the
+ * command goes to the view's handler, or nowhere once it is gone.
+ *
+ * Nothing but [dispatcher]'s own [handler] may post to this Looper; the UI tests' StateThreadRule asserts it.
  */
-fun stateThread(name: String): ExecutorService =
-    Executors.newSingleThreadExecutor { task ->
-        Thread({
-            Looper.prepare()
-            task.run()
-        }, name)
-    }
+class StateThread(
+    name: String,
+) {
+    val thread = HandlerThread(name).apply { start() }
+    val handler = Handler(thread.looper)
+    val dispatcher = handler.asCoroutineDispatcher(name)
+}
 
 /**
  * Client for the core protocol (plans/core-protocol.md), the Kotlin twin of `bridge.ts`.

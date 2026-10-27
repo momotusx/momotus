@@ -38,7 +38,7 @@ import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.unit.dp
 import app.marquee.core.client.CoreClient
 import app.marquee.core.client.CoreJson
-import app.marquee.core.client.stateThread
+import app.marquee.core.client.StateThreadRule
 import app.marquee.core.model.CastMember
 import app.marquee.core.model.EmptyAction
 import app.marquee.core.model.EmptyKind
@@ -74,7 +74,6 @@ import coil3.request.Options
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.cancel
 import kotlinx.serialization.json.jsonObject
@@ -105,8 +104,9 @@ class PhoneTitleActionsTest {
     @get:Rule
     val compose = createComposeRule()
 
-    private val executor = stateThread("test-state")
-    private val client = CoreClient(executor.asCoroutineDispatcher())
+    @get:Rule
+    val stateThread = StateThreadRule()
+    private val client = CoreClient(stateThread.dispatcher)
     private val main =
         object : CoroutineDispatcher() {
             private val handler = Handler(Looper.getMainLooper())
@@ -124,7 +124,6 @@ class PhoneTitleActionsTest {
     fun stop() {
         scope.cancel()
         client.close()
-        executor.shutdownNow()
         SingletonImageLoader.reset()
     }
 
