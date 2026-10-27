@@ -55,12 +55,14 @@ def providers(env_text: str) -> dict:
     if env.get("GOOGLE_WEB_CLIENT_ID"):
         blocks["google"] = {"webClientId": env["GOOGLE_WEB_CLIENT_ID"], "webClientSecret": env["GOOGLE_WEB_CLIENT_SECRET"]}
     if env.get("FACEBOOK_APP_ID"):
+        # The relay signs in with PKCE: the app secret is optional.
         blocks["facebook"] = {
             "appId": env["FACEBOOK_APP_ID"],
-            "appSecret": env["FACEBOOK_APP_SECRET"],
             "graph": f"https://graph.facebook.com/{GRAPH}",
             "dialog": f"https://www.facebook.com/{GRAPH}/dialog/oauth",
         }
+        if env.get("FACEBOOK_APP_SECRET"):
+            blocks["facebook"]["appSecret"] = env["FACEBOOK_APP_SECRET"]
     if not blocks:
         raise SystemExit("no provider values on stdin")
     return blocks
@@ -100,6 +102,9 @@ def self_test() -> None:
         # A second merge replaces the providers and still keeps the key.
         assert merge(path, "FACEBOOK_APP_ID=2\nFACEBOOK_APP_SECRET=fs2\n") == first
         assert "google" not in json.loads(path.read_text())
+        # Facebook with no secret (the relay's PKCE flow): no appSecret entry.
+        assert merge(path, "FACEBOOK_APP_ID=3\n") == first
+        assert "appSecret" not in json.loads(path.read_text())["facebook"]
         # No key, no merge; an existing file is never created over.
         write(path, {"publicUrl": "https://x", "linkHost": "x"})
         for action in (lambda: merge(path, env), lambda: create(path)):

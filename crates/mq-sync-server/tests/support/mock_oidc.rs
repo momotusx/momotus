@@ -1,7 +1,7 @@
 //! A mock OpenID provider for the relay's sign-in, on loopback: discovery,
 //! a JWKS from a key made at start (ES256; RS256 from a test-only key), an
 //! authorize page with a subject picker, cancel and stall, a token endpoint,
-//! revocation, and Facebook's code exchange and `debug_token`. The relay's
+//! revocation, and Facebook's PKCE code exchange and `/me`. The relay's
 //! tests use it in-process; `cargo run -p mq-sync-server --example mock-oidc`
 //! serves it for a person to click through. Real providers are never called.
 #![allow(dead_code)]
@@ -41,6 +41,8 @@ struct Grant {
     sub: String,
     nonce: Option<String>,
     client_id: String,
+    /// The PKCE challenge the authorize request carried (S256).
+    challenge: Option<String>,
 }
 
 enum Key {
@@ -57,8 +59,12 @@ struct Shared {
     access: HashMap<String, (String, String)>,
     secrets: Vec<(String, String)>,
     revoked: Vec<String>,
-    /// Facebook's `debug_token` answers for this app instead of the real one.
+    /// Facebook's ID token names another app from now on.
     other_app: bool,
+    /// Facebook's `/me` names another user from now on.
+    other_user: bool,
+    /// Every `code_verifier` Facebook's exchange saw.
+    verifiers: Vec<String>,
 }
 
 #[derive(Clone)]
@@ -189,7 +195,7 @@ impl Mock {
             .route("/token", post(token))
             .route("/revoke", post(revoke))
             .route("/oauth/access_token", get(facebook_exchange))
-            .route("/debug_token", get(debug_token))
+            .route("/me", get(facebook_me))
             .with_state(mock.clone());
         tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
         mock
@@ -302,15 +308,26 @@ impl Mock {
                     sub: sub.into(),
                     nonce: None,
                     client_id: client_id.into(),
+                    challenge: None,
                 },
             )
         });
         code
     }
 
-    /// Facebook's `debug_token` names another app from now on.
+    /// Facebook's ID token names another app from now on.
     pub fn answer_for_another_app(&self) {
         self.with(|s| s.other_app = true);
+    }
+
+    /// Facebook's `/me` names another user than the ID token from now on.
+    pub fn answer_for_another_user(&self) {
+        self.with(|s| s.other_user = true);
+    }
+
+    /// Every `code_verifier` Facebook's exchange saw.
+    pub fn verifiers(&self) -> Vec<String> {
+        self.with(|s| s.verifiers.clone())
     }
 }
 
@@ -344,6 +361,10 @@ struct Authorize {
     nonce: Option<String>,
     #[serde(default)]
     response_mode: Option<String>,
+    #[serde(default)]
+    code_challenge: Option<String>,
+    #[serde(default)]
+    code_challenge_method: Option<String>,
     /// From the picker page: who signs in, or `cancel`.
     #[serde(default)]
     choose: Option<String>,
@@ -417,6 +438,10 @@ async fn authorize(State(mock): State<Mock>, Query(q): Query<Authorize>) -> Resp
                         sub,
                         nonce,
                         client_id: q.client_id.clone(),
+                        challenge: q
+                            .code_challenge
+                            .clone()
+                            .filter(|_| q.code_challenge_method.as_deref() == Some("S256")),
                     },
                 )
             });
@@ -497,29 +522,56 @@ async fn revoke(State(mock): State<Mock>, Form(form): Form<RevokeForm>) -> Statu
 struct FacebookExchange {
     code: String,
     client_id: String,
+    #[serde(default)]
     client_secret: String,
+    #[serde(default)]
+    code_verifier: String,
 }
 
+/// Facebook's code exchange (OIDC with PKCE): the secret is optional when
+/// the verifier comes; a code whose authorize request had a challenge needs
+/// the verifier that hashes to it. Answers an RS256 ID token, as Facebook.
 async fn facebook_exchange(
     State(mock): State<Mock>,
     Query(q): Query<FacebookExchange>,
 ) -> Response {
-    let access = mock.with(|s| {
+    let issued = mock.with(|s| {
         s.secrets
             .push((q.client_id.clone(), q.client_secret.clone()));
+        s.verifiers.push(q.code_verifier.clone());
         let grant = s
             .codes
             .remove(&q.code)
             .filter(|g| g.client_id == q.client_id)?;
+        let hashed = B64URL.encode(ring::digest::digest(
+            &ring::digest::SHA256,
+            q.code_verifier.as_bytes(),
+        ));
+        match &grant.challenge {
+            Some(challenge) if *challenge != hashed => return None,
+            None if q.code_verifier.is_empty() && q.client_secret.is_empty() => return None,
+            _ => {}
+        }
+        let now = now_s();
+        let aud = if s.other_app {
+            "another app".to_owned()
+        } else {
+            grant.client_id.clone()
+        };
+        let mut claims =
+            json!({ "iss": s.issuer, "aud": aud, "sub": grant.sub, "iat": now, "exp": now + 600 });
+        if let Some(nonce) = &grant.nonce {
+            claims["nonce"] = json!(nonce);
+        }
+        let rsa = s.keys.iter().find(|k| matches!(k, Key::Rsa { .. }))?;
+        let id_token = rsa.sign(&claims);
         let access = random();
         s.access
             .insert(access.clone(), (grant.sub, grant.client_id));
-        Some(access)
+        Some(json!({ "access_token": access, "token_type": "bearer", "id_token": id_token }))
     });
-    match access {
-        Some(access) => {
-            Json(json!({ "access_token": access, "token_type": "bearer" })).into_response()
-        }
+    match issued {
+        Some(answer) => Json(answer).into_response(),
         None => (
             StatusCode::BAD_REQUEST,
             Json(json!({ "error": { "message": "bad code" } })),
@@ -528,20 +580,30 @@ async fn facebook_exchange(
     }
 }
 
-#[derive(Deserialize)]
-struct DebugToken {
-    input_token: String,
-    access_token: String,
-}
-
-async fn debug_token(State(mock): State<Mock>, Query(q): Query<DebugToken>) -> Json<Value> {
-    Json(mock.with(|s| match s.access.get(&q.input_token) {
-        Some((sub, app)) if q.access_token.starts_with(&format!("{app}|")) => json!({ "data": {
-            "app_id": if s.other_app { "another app" } else { app.as_str() },
-            "is_valid": true, "user_id": sub,
-        }}),
-        _ => json!({ "data": { "is_valid": false } }),
-    }))
+/// Facebook's `/me?fields=id` under the user token (a bearer header).
+async fn facebook_me(State(mock): State<Mock>, headers: axum::http::HeaderMap) -> Response {
+    let token = headers
+        .get(header::AUTHORIZATION)
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.strip_prefix("Bearer "))
+        .unwrap_or_default()
+        .to_owned();
+    let user = mock.with(|s| {
+        let (sub, _) = s.access.get(&token)?;
+        Some(if s.other_user {
+            "another user".to_owned()
+        } else {
+            sub.clone()
+        })
+    });
+    match user {
+        Some(id) => Json(json!({ "id": id })).into_response(),
+        None => (
+            StatusCode::BAD_REQUEST,
+            Json(json!({ "error": { "message": "bad token" } })),
+        )
+            .into_response(),
+    }
 }
 
 /// The test's browser: follows the provider page and the relay's callback

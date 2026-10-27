@@ -15,7 +15,6 @@
     "clientIds": ["android client id.apps.googleusercontent.com", "ios client id.apps.googleusercontent.com"]
   },
   "facebook": {
-    "appId": "app id",
-    "appSecret": "app secret"
+    "appId": "app id"
   }
 }

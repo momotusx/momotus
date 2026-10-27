@@ -66,6 +66,7 @@ const NOTICE_MAX_AGE_S: u64 = 24 * 60 * 60;
 
 const APPLE_ISSUER: &str = "https://appleid.apple.com";
 const GOOGLE_ISSUER: &str = "https://accounts.google.com";
+const FACEBOOK_ISSUER: &str = "https://www.facebook.com";
 
 /// The identity file (`--identity`). Secrets stay in memory; nothing here
 /// is ever logged.
@@ -130,7 +131,12 @@ pub struct GoogleConfig {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct FacebookConfig {
     pub app_id: String,
+    /// Optional: the code exchange proves the flow with PKCE instead.
+    #[serde(default)]
     pub app_secret: String,
+    /// The OpenID issuer of Facebook's ID tokens (its discovery and keys).
+    #[serde(default = "facebook_issuer")]
+    pub issuer: String,
     #[serde(default = "facebook_graph")]
     pub graph: String,
     #[serde(default = "facebook_dialog")]
@@ -152,6 +158,9 @@ fn apple_issuer() -> String {
 }
 fn google_issuer() -> String {
     GOOGLE_ISSUER.into()
+}
+fn facebook_issuer() -> String {
+    FACEBOOK_ISSUER.into()
 }
 fn facebook_graph() -> String {
     "https://graph.facebook.com/v21.0".into()
@@ -208,6 +217,8 @@ enum Kind {
 struct Discovery {
     issuer: String,
     authorization_endpoint: String,
+    /// Facebook's document names none: its exchange is on the Graph API.
+    #[serde(default)]
     token_endpoint: String,
     jwks_uri: String,
     #[serde(default)]
@@ -280,6 +291,9 @@ impl Identity {
             f.facebook
                 .as_ref()
                 .map(|fb| ("Facebook's dialog", fb.dialog.as_str())),
+            f.facebook
+                .as_ref()
+                .map(|fb| ("the Facebook issuer", fb.issuer.as_str())),
         ];
         let oidc = f
             .oidc
@@ -385,7 +399,7 @@ impl Identity {
             Kind::Apple => self.file.apple.as_ref().map(|a| a.issuer.as_str()),
             Kind::Google => self.file.google.as_ref().map(|g| g.issuer.as_str()),
             Kind::Oidc(i) => Some(self.file.oidc[i].issuer.as_str()),
-            Kind::Facebook => None,
+            Kind::Facebook => self.file.facebook.as_ref().map(|f| f.issuer.as_str()),
         }
     }
 
@@ -503,7 +517,7 @@ impl Identity {
         }
         let endpoints = [
             Some(found.authorization_endpoint.as_str()),
-            Some(found.token_endpoint.as_str()),
+            Some(found.token_endpoint.as_str()).filter(|e| !e.is_empty()),
             Some(found.jwks_uri.as_str()),
             found.revocation_endpoint.as_deref(),
         ];
@@ -606,6 +620,7 @@ impl Identity {
         provider: &str,
         flow: &str,
         nonce: &str,
+        challenge: &str,
     ) -> Result<String, String> {
         let (client_id, _) = match kind {
             // The secret is not needed for the page; Apple's is never made for it.
@@ -639,7 +654,10 @@ impl Identity {
                 .append_pair("state", flow);
             match kind {
                 Kind::Facebook => {
-                    q.append_pair("scope", "public_profile");
+                    q.append_pair("scope", "openid public_profile")
+                        .append_pair("nonce", nonce)
+                        .append_pair("code_challenge", challenge)
+                        .append_pair("code_challenge_method", "S256");
                 }
                 Kind::Apple => {
                     q.append_pair("response_mode", "form_post")
@@ -660,6 +678,7 @@ impl Identity {
         client: (String, String),
         code: &str,
         redirect: &str,
+        verifier: &str,
     ) -> Result<Value, String> {
         let (endpoint, method) = match kind {
             Kind::Facebook => (
@@ -678,6 +697,7 @@ impl Identity {
             ("redirect_uri", redirect.to_owned()),
             ("client_id", client.0),
             ("client_secret", client.1),
+            ("code_verifier", verifier.to_owned()),
         ]
         .into_iter()
         .filter(|(_, v)| !v.is_empty())
@@ -703,27 +723,24 @@ impl Identity {
             .map_err(|e| format!("code exchange: {}", e.kind()))
     }
 
-    /// Facebook (D12): the user token checked with `debug_token` under the
-    /// app token; the app, validity and user id, then the token is dropped.
-    async fn facebook_user(&self, access: &str) -> Result<String, String> {
+    /// Facebook: the user token's `/me` must name the ID token's user (one
+    /// public_profile call, which Meta also asks of a live app).
+    async fn facebook_me(&self, access: &str, sub: &str) -> Result<(), String> {
         let fb = self.file.facebook.as_ref().ok_or("no Facebook")?;
-        let mut url =
-            url::Url::parse(&format!("{}/debug_token", fb.graph)).map_err(|e| e.to_string())?;
-        url.query_pairs_mut()
-            .append_pair("input_token", access)
-            .append_pair("access_token", &format!("{}|{}", fb.app_id, fb.app_secret));
-        let answer: Value = self
+        let url = format!("{}/me?fields=id", fb.graph);
+        let options = RequestOptions {
+            headers: vec![("authorization".into(), format!("Bearer {access}"))],
+            ..self.options(&fb.graph)
+        };
+        let me: Value = self
             .http
-            .get(url.as_str(), &self.options(&fb.graph))
+            .get(&url, &options)
             .await
             .and_then(|r| r.json())
-            .map_err(|e| format!("debug_token: {}", e.kind()))?;
-        let data = answer.get("data").ok_or("debug_token: no data")?;
-        let app_ok = data.get("app_id").and_then(Value::as_str) == Some(fb.app_id.as_str());
-        let valid = data.get("is_valid").and_then(Value::as_bool) == Some(true);
-        match data.get("user_id").and_then(Value::as_str) {
-            Some(user) if app_ok && valid && !user.is_empty() => Ok(user.to_owned()),
-            _ => Err("debug_token: not this app's valid user".into()),
+            .map_err(|e| format!("me: {}", e.kind()))?;
+        match me.get("id").and_then(Value::as_str) {
+            Some(id) if id == sub => Ok(()),
+            _ => Err("me: another user than the ID token".into()),
         }
     }
 
@@ -885,6 +902,19 @@ fn fresh() -> String {
     B64URL.encode(random::<32>())
 }
 
+/// A flow's PKCE verifier (RFC 7636), from its stored nonce: only the relay
+/// holds it, and the provider sees the nonce only through `nonce_for`. The
+/// fixed prefix keeps it apart from `nonce_for`'s hash, whatever the host.
+fn pkce_verifier(nonce: &[u8]) -> String {
+    B64URL.encode(Sha256::digest(
+        [b"momotus-pkce\0".as_slice(), nonce].concat(),
+    ))
+}
+
+fn pkce_challenge(verifier: &str) -> String {
+    B64URL.encode(Sha256::digest(verifier.as_bytes()))
+}
+
 /// Only the app's own scheme (`marquee://auth` too, for builds made before the
 /// Momotus app ids, until no device runs one: plans/rename-momotus.md phase 3),
 /// a loopback `/auth` page (RFC 8252 7.3: the
@@ -1024,6 +1054,7 @@ async fn start_flow(
                 provider,
                 &flow,
                 &nonce_for(&nonce_bytes, &id.public_host),
+                &pkce_challenge(&pkce_verifier(&nonce_bytes)),
             )
             .await
             .map_err(|e| {
@@ -1224,34 +1255,36 @@ async fn verify_code(
 ) -> Result<(String, String, Value), String> {
     let client = id.brokered_client(kind)?;
     let audience = vec![client.0.clone()];
+    let nonce = B64URL.decode(&row.nonce).map_err(|_| "bad nonce")?;
+    // Only Facebook's page carried a challenge.
+    let verifier = match kind {
+        Kind::Facebook => pkce_verifier(&nonce),
+        _ => String::new(),
+    };
     let tokens = id
-        .exchange(kind, client, code, &id.callback(provider))
+        .exchange(kind, client, code, &id.callback(provider), &verifier)
         .await?;
     let name = id.provider_name(kind);
-    let sub = match kind {
-        Kind::Facebook => {
-            let access = tokens
-                .get("access_token")
-                .and_then(Value::as_str)
-                .ok_or("no access token")?;
-            id.facebook_user(access).await?
-        }
-        _ => {
-            let token = tokens
-                .get("id_token")
-                .and_then(Value::as_str)
-                .ok_or("no ID token")?;
-            let nonce = B64URL.decode(&row.nonce).map_err(|_| "bad nonce")?;
-            id.verify(
-                kind,
-                token,
-                &audience,
-                &nonce_for(&nonce, &id.public_host),
-                now,
-            )
-            .await?
-        }
-    };
+    let token = tokens
+        .get("id_token")
+        .and_then(Value::as_str)
+        .ok_or("no ID token")?;
+    let sub = id
+        .verify(
+            kind,
+            token,
+            &audience,
+            &nonce_for(&nonce, &id.public_host),
+            now,
+        )
+        .await?;
+    if kind == Kind::Facebook {
+        let access = tokens
+            .get("access_token")
+            .and_then(Value::as_str)
+            .ok_or("no access token")?;
+        id.facebook_me(access, &sub).await?;
+    }
     Ok((name, sub, tokens))
 }
 
@@ -1413,7 +1446,7 @@ pub(crate) async fn native(
                 .unwrap_or_default();
             let exchanged = async {
                 let secret = id.apple_secret(&client_id)?;
-                id.exchange(kind, (client_id.clone(), secret), code, "")
+                id.exchange(kind, (client_id.clone(), secret), code, "", "")
                     .await
             };
             let tokens = match exchanged.await {
@@ -1953,6 +1986,24 @@ mod tests {
         }
         // The mock on loopback may name its own plain http endpoints.
         assert!(discovered("http://127.0.0.1:8790", "http://127.0.0.1:8790/jwks").is_ok());
+    }
+
+    /// Facebook's live discovery (read 2026-10-27): no token endpoint, an
+    /// authorize endpoint without `www`, keys under a trailing slash.
+    #[test]
+    fn facebook_discovery_as_served_passes() {
+        let found: Discovery = serde_json::from_value(json!({
+            "issuer": "https://www.facebook.com",
+            "authorization_endpoint": "https://facebook.com/dialog/oauth/",
+            "jwks_uri": "https://www.facebook.com/.well-known/oauth/openid/jwks/",
+            "response_types_supported": ["id_token", "token id_token"],
+            "id_token_signing_alg_values_supported": ["RS256"],
+        }))
+        .unwrap();
+        assert!(found.token_endpoint.is_empty());
+        for endpoint in [&found.authorization_endpoint, &found.jwks_uri] {
+            assert!(discovered(&found.issuer, endpoint).is_ok(), "{endpoint}");
+        }
     }
 
     #[test]

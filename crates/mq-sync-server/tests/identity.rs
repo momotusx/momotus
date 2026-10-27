@@ -72,7 +72,7 @@ fn identity_json(mock: &Mock, relay: &str, key: &str, apple_key: &str) -> Value 
             "webClientId": "google-web", "webClientSecret": "gs", "clientIds": ["google-android"],
             "issuer": mock.url,
         },
-        "facebook": { "appId": "fb-app", "appSecret": "fs", "graph": mock.url, "dialog": format!("{}/authorize", mock.url) },
+        "facebook": { "appId": "fb-app", "graph": mock.url, "dialog": format!("{}/authorize", mock.url), "issuer": mock.url },
         "oidc": [{ "id": "mock", "issuer": mock.url, "clientId": "marquee", "clientSecret": "ms" }],
     })
 }
@@ -895,30 +895,112 @@ async fn unlinking_and_apple_revocation_receipts() {
     let _ = &relay.apple_key;
 }
 
-/// Facebook: the code exchanged with the app secret, the user from
-/// `debug_token` under the app token; another app's token is refused.
+/// Facebook with no app secret: OIDC with PKCE. The page asks for `openid`
+/// with a nonce and an S256 challenge; the exchange sends the verifier and no
+/// secret; the ID token's issuer, audience, nonce and signature are checked,
+/// and `/me` must name the same user. Another app's token, a wrong nonce and
+/// another user at `/me` are refused.
 #[tokio::test]
-async fn facebook_signs_in_by_code_exchange_and_debug_token() {
+async fn facebook_signs_in_with_pkce_and_no_app_secret() {
     let relay = Relay::new().await;
-    let taken = relay.sign_in("facebook", "fb-user").await;
-    let phone = Device::create(&relay, &taken, false).await.unwrap();
-    assert_eq!(phone.links().await[0].provider, "facebook");
-    assert!(
-        relay
-            .mock
-            .secrets()
-            .contains(&("fb-app".into(), "fs".into()))
-    );
-    relay.mock.answer_for_another_app();
     relay.mock.next(Next::Pick("fb-user".into()));
     let flow = start_brokered(&http(), &relay.url, "facebook", "momotus://auth", false)
         .await
         .unwrap();
-    let refused = flow
+    let page = url::Url::parse(&flow.url).unwrap();
+    let q: std::collections::HashMap<String, String> = page.query_pairs().into_owned().collect();
+    assert_eq!(q["scope"], "openid public_profile");
+    assert_eq!(q["code_challenge_method"], "S256");
+    assert_eq!(q["code_challenge"].len(), 43);
+    assert!(!q["nonce"].is_empty());
+    assert!(!flow.url.contains("secret"));
+    let taken = flow
         .finish(&http(), &browse(&flow.url).await)
         .await
-        .unwrap_err();
-    assert!(matches!(refused, SyncError::SignInRefused), "{refused:?}");
+        .unwrap();
+    let phone = Device::create(&relay, &taken, false).await.unwrap();
+    assert_eq!(phone.links().await[0].provider, "facebook");
+    assert_eq!(
+        relay.mock.secrets(),
+        vec![("fb-app".to_owned(), String::new())]
+    );
+    let verifier = relay.mock.verifiers()[0].clone();
+    assert!(verifier.len() >= 43, "{verifier}");
+    assert!(
+        !flow.url.contains(&verifier),
+        "the verifier never leaves the relay before the exchange"
+    );
+
+    // Each refusal on a relay and mock of its own, so one cause at a time.
+    async fn refused(next: Next, tweak: impl FnOnce(&Mock)) -> SyncError {
+        let relay = Relay::new().await;
+        tweak(&relay.mock);
+        relay.mock.next(next);
+        let flow = start_brokered(&http(), &relay.url, "facebook", "momotus://auth", false)
+            .await
+            .unwrap();
+        flow.finish(&http(), &browse(&flow.url).await)
+            .await
+            .unwrap_err()
+    }
+    let wrong_nonce = refused(Next::WrongNonce("fb-user".into()), |_| {}).await;
+    assert!(
+        matches!(wrong_nonce, SyncError::SignInRefused),
+        "{wrong_nonce:?}"
+    );
+    let other_app = refused(Next::Pick("fb-user".into()), Mock::answer_for_another_app).await;
+    assert!(
+        matches!(other_app, SyncError::SignInRefused),
+        "{other_app:?}"
+    );
+    let other_user = refused(Next::Pick("fb-user".into()), Mock::answer_for_another_user).await;
+    assert!(
+        matches!(other_user, SyncError::SignInRefused),
+        "{other_user:?}"
+    );
+}
+
+/// The PKCE verifier comes from the flow's raw nonce, which a Facebook flow
+/// never hands out: a native start is refused and a brokered start answers
+/// no nonce. An identity file that still names an app secret sends it along
+/// with the verifier.
+#[tokio::test]
+async fn facebook_keeps_its_nonce_and_takes_an_old_secret() {
+    let relay = Relay::new().await;
+    let browser = reqwest::Client::new();
+    let start = |native: bool| {
+        let body = if native {
+            json!({ "verifierHash": "ab".repeat(32), "purpose": "signin", "native": true })
+        } else {
+            json!({ "verifierHash": "ab".repeat(32), "purpose": "signin", "return": "momotus://auth" })
+        };
+        browser
+            .post(format!("{}/v1/auth/facebook/start", relay.url))
+            .header("content-type", "application/json")
+            .body(body.to_string())
+            .send()
+    };
+    assert_eq!(start(true).await.unwrap().status(), 400);
+    let brokered: Value =
+        serde_json::from_str(&start(false).await.unwrap().text().await.unwrap()).unwrap();
+    assert!(brokered["url"].is_string());
+    assert!(
+        brokered.get("nonce").is_none_or(Value::is_null),
+        "{brokered}"
+    );
+
+    let old = Relay::with(|c| {
+        let file = c.identity.as_mut().unwrap();
+        file.facebook.as_mut().unwrap().app_secret = "fs".into();
+    })
+    .await;
+    let taken = old.sign_in("facebook", "fb-user").await;
+    Device::create(&old, &taken, false).await.unwrap();
+    assert_eq!(
+        old.mock.secrets(),
+        vec![("fb-app".to_owned(), "fs".to_owned())]
+    );
+    assert!(!old.mock.verifiers()[0].is_empty());
 }
 
 /// On a relay with sign-in and no invite, a replayed genesis creates
