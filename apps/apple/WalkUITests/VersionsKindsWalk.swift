@@ -16,6 +16,15 @@ import XCTest
             return
         }
         continueAfterFailure = true
+        // A failed step never leaves the phone turned.
+        addTeardownBlock { @MainActor in XCUIDevice.shared.orientation = .portrait }
+        // The Local Network prompt (the Sintel source sits on this Mac) is allowed whenever it shows.
+        addUIInterruptionMonitor(withDescription: "Local Network") { alert in
+            let allow = alert.buttons["Allow"]
+            guard allow.exists else { return false }
+            allow.tap()
+            return true
+        }
         let app = app
         app.launchArguments = ["-MQMute", "YES", "-MQOpenTitle", "movie:tt1727587"]
         app.launchArguments += (ProcessInfo.processInfo.environment["MQ_WALK_ARGS"] ?? "").split(separator: " ").map(String.init)
@@ -30,6 +39,9 @@ import XCTest
             app.launch()
         }
         let versions = app.buttons["Versions"]
+        // An interruption monitor runs only when the test touches the app.
+        app.swipeUp()
+        app.swipeDown()
         guard versions.waitForExistence(timeout: 60) else {
             shot("no Versions button")
             XCTFail("the title page never showed Versions")
