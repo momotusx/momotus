@@ -138,7 +138,7 @@ fun PosterTile(
     val state =
         (
             listOfNotNull(rank?.let { "Number $it" }, genre) +
-                listOfNotNull(cornerLabel, caption ?: progress?.let { "${(it * 100).roundToInt()}% watched" }) +
+                listOfNotNull(caption ?: progress?.let { "${(it * 100).roundToInt()}% watched" }) +
                 ratings +
                 listOfNotNull("Watched".takeIf { watched })
         ).joinToString(", ").ifEmpty { null }
