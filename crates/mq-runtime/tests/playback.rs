@@ -3288,3 +3288,60 @@ async fn a_title_with_the_word_forced_still_gets_a_subtitle() {
         Some(s.subtitles[0].url.as_str())
     );
 }
+
+/// A TMDB that names `language` as every title's original one.
+async fn tmdb_naming(language: &'static str) -> String {
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    tokio::spawn(async move {
+        while let Ok((mut socket, _)) = listener.accept().await {
+            tokio::spawn(async move {
+                let mut buf = vec![0u8; 4096];
+                let _ = socket.read(&mut buf).await;
+                let body = serde_json::json!({
+                    "movie_results": [{"id": 45745, "vote_average": 7.0, "vote_count": 10, "original_language": language}],
+                    "tv_results": []
+                })
+                .to_string();
+                let resp = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                    body.len()
+                );
+                let _ = socket.write_all(resp.as_bytes()).await;
+            });
+        }
+    });
+    format!("http://{addr}")
+}
+
+/// The owner, 2026-10-27: a title starts in its original language when the
+/// file has it. `audioLanguages` names it once TMDB does; audio languages
+/// the user chose stand over it.
+#[tokio::test]
+async fn the_audio_starts_in_the_original_unless_the_user_chose() {
+    let base = origin().await;
+    let core = Core::temporary("p").unwrap();
+    core.set_tmdb_host(mq_runtime::TmdbHost {
+        url: tmdb_naming("ja").await,
+        token: Some("test-token".into()),
+        local: true,
+    });
+    let streams = format!(
+        r#"{{"streams":[{{"name":"Live","url":"{base}/ok.mkv","behaviorHints":{{"proxyHeaders":{{"request":{{"x-key":"1"}}}}}}}}]}}"#
+    );
+    let view = PlaybackView::open(&core, setup(&core, &streams), target());
+    until(&view, "the original language", |s| {
+        s.audio_languages == ["ja"]
+    })
+    .await;
+    drop(view);
+
+    core.set_prefs(&serde_json::json!({ "streams": { "languages": ["tr", "en"] } }))
+        .unwrap();
+    let view = PlaybackView::open(&core, setup(&core, &streams), target());
+    assert_eq!(view.snapshot().audio_languages, ["tr", "en"]);
+    settled(&view).await;
+    // TMDB is never asked over a choice: it stays.
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    assert_eq!(view.snapshot().audio_languages, ["tr", "en"]);
+}

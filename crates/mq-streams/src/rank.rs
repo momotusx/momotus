@@ -923,11 +923,14 @@ fn score(stream: ParsedStream, class: SourceClass, input: &RankInput<'_>) -> Sco
     let fails_here = no_picture(s, input) || did_not_play(s, input) || wrong_file(s, input);
     let window = window_of(s, class, input);
     let key = RankKey {
-        language: input.prefs.languages.is_empty()
-            || langs.is_empty()
-            || input.prefs.languages.iter().any(|l| langs.contains(l)),
+        language: input.prefs.languages.is_empty() || langs.is_empty() || wanted(langs, input),
         legit: legit(s),
         year_ok: year_ok(s, input.conditions, input.target),
+        original: input
+            .conditions
+            .original_language
+            .as_ref()
+            .is_none_or(|o| langs.is_empty() || langs.contains(o)),
         sustains,
         pace: if download {
             3
@@ -1156,7 +1159,7 @@ fn within(
         (false, false, true) => 40.0,
         _ => 20.0,
     };
-    score += language_score(s, input.prefs) as f32;
+    score += language_score(s, input) as f32;
     score -= over_resolution_penalty(s, input) as f32;
     score.clamp(0.0, 1000.0) as u16
 }
@@ -1177,16 +1180,23 @@ fn surround(channels: Option<&str>) -> bool {
     matches!(channels, Some("5.1" | "7.1"))
 }
 
-fn language_score(s: &ParsedStream, prefs: &StreamPrefs) -> i32 {
+fn language_score(s: &ParsedStream, input: &RankInput<'_>) -> i32 {
     let langs = &s.release.languages;
-    if prefs.languages.is_empty() || langs.is_empty() {
+    if input.prefs.languages.is_empty() || langs.is_empty() {
         return 50;
     }
-    if prefs.languages.iter().any(|l| langs.contains(l)) {
-        100
-    } else {
-        0
-    }
+    if wanted(langs, input) { 100 } else { 0 }
+}
+
+/// The release names a language the user wants, or the title's original
+/// one when the user chose none (`Conditions::original_language`).
+fn wanted(langs: &[String], input: &RankInput<'_>) -> bool {
+    input
+        .prefs
+        .languages
+        .iter()
+        .chain(&input.conditions.original_language)
+        .any(|l| langs.contains(l))
 }
 
 /// Collapses duplicates into one row each; the rest become its failover.
@@ -1243,11 +1253,12 @@ fn assign_groups_and_reasons(rows: &mut [RankedRow], input: &RankInput<'_>) {
     for row in rows.iter_mut() {
         let s = &row.stream;
         let wants_lang = !input.prefs.languages.is_empty() && !s.release.languages.is_empty();
-        let lang_match = input
+        let yours = input
             .prefs
             .languages
             .iter()
             .any(|l| s.release.languages.contains(l));
+        let lang_match = wanted(&s.release.languages, input);
         row.group = if any_ready && row.class != SourceClass::Ready {
             Group::NeedsDownload
         } else if wants_lang && !lang_match {
@@ -1270,7 +1281,7 @@ fn assign_groups_and_reasons(rows: &mut [RankedRow], input: &RankInput<'_>) {
         if s.release.resolution.height() == screen_class(input.caps.display_height) {
             reasons.push(Reason::MatchesScreen);
         }
-        if wants_lang && lang_match {
+        if wants_lang && yours {
             reasons.push(Reason::YourLanguage);
         }
         if row.group == Group::SmallerFaster {

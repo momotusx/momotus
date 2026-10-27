@@ -213,6 +213,10 @@ pub struct Conditions {
     /// every row, the whole file plus 1 GiB must fit, and among versions as
     /// good the smaller file first.
     pub download: bool,
+    /// The language the title was made in (ISO 639-1), when the user chose
+    /// no audio languages: a release in it, or naming none, is the
+    /// original and ranks above a dub (`RankKey::original`).
+    pub original_language: Option<String>,
 }
 
 impl Default for Conditions {
@@ -250,6 +254,7 @@ impl Default for Conditions {
             metered: false,
             held: Default::default(),
             download: false,
+            original_language: None,
         }
     }
 }
@@ -415,6 +420,10 @@ pub struct RankKey {
     /// No year in the name, or one within 3 years of the title's or the
     /// episode's.
     pub year_ok: bool,
+    /// The release is in the title's original language, names no
+    /// language, or the original is not known: a dub ranks below the
+    /// original whenever both can start (`Conditions::original_language`).
+    pub original: bool,
     /// The bitrate is unknown or within the safe speed of its kind: at
     /// most 0.7 of the speed, that is a speed at least 1.43 times the
     /// bitrate.

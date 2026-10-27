@@ -124,6 +124,12 @@ pub struct PlaybackSnapshot {
     /// low-vision viewers (its container flag or its name, read as the file
     /// opens): the player's AD mark (core backlog C35).
     pub audio_description: bool,
+    /// The audio languages every app starts the file in, most wanted first:
+    /// the profile's audio languages when the user chose some, else the
+    /// title's original language once TMDB names it. A player turns on the
+    /// first of them the file has; with none of them in the file, or an
+    /// empty list, its own pick (the device's language) stands.
+    pub audio_languages: Vec<String>,
     /// The next released episode, for an Up Next card.
     pub next: Option<NextEpisode>,
     /// The playing stream's binge group; pass it as `bingeGroup` when opening
@@ -831,6 +837,7 @@ impl State {
                 spoken_language: None,
                 start_subtitle_failed: false,
                 audio_description: false,
+                audio_languages: Vec::new(),
                 next: None,
                 binge_group: None,
                 segments: Vec::new(),
@@ -982,8 +989,12 @@ impl PlaybackView {
                 .as_str()
                 .map(str::to_owned)
         });
+        state.snapshot.audio_languages = chosen_audio(core);
         let snapshot = SharedObservable::new(state.snapshot.clone());
         let shared = Arc::new(Mutex::new(state));
+        if lock(&shared).snapshot.audio_languages.is_empty() {
+            spawn_original(core, &target, &shared, &snapshot);
+        }
         let report = {
             let (shared, snapshot) = (Arc::downgrade(&shared), snapshot.clone());
             move |trakt| {
@@ -1720,6 +1731,40 @@ impl PlaybackView {
 
 /// The view's resolve task and its run.
 type TaskSlot = Mutex<Option<(u64, JoinHandle<()>)>>;
+
+/// The profile's audio languages as tags, most wanted first: a choice the
+/// user made, which every start follows.
+fn chosen_audio(core: &Core) -> Vec<String> {
+    let mut tags: Vec<String> = Vec::new();
+    for code in &core.prefs().streams.languages {
+        let tag = crate::languages::language(code).tag;
+        if !tags.contains(&tag) {
+            tags.push(tag);
+        }
+    }
+    tags
+}
+
+/// With no audio languages chosen, the title's original language becomes
+/// `audioLanguages` once TMDB names it (kept from the title page, so
+/// usually at once).
+fn spawn_original(
+    core: &Core,
+    target: &PlayTarget,
+    state: &Arc<Mutex<State>>,
+    snapshot: &SharedObservable<PlaybackSnapshot>,
+) {
+    let (core, kind, item) = (core.clone(), target.kind.clone(), target.item_id.clone());
+    let (state, snapshot) = (Arc::downgrade(state), snapshot.clone());
+    tokio::spawn(async move {
+        let original = core.original_language(&item, &kind).await;
+        if let (Some(original), Some(state)) = (original, state.upgrade()) {
+            let mut s = lock(&state);
+            s.snapshot.audio_languages = vec![original];
+            snapshot.set(s.snapshot.clone());
+        }
+    });
+}
 
 /// A new resolve run of the view, installed as its task.
 fn spawn_resolve(
@@ -2706,10 +2751,11 @@ async fn resolve_next(
                     let early = async {
                         tokio::time::sleep(START_SUBTITLE_WAIT).await;
                         rated_done.notified().await;
+                        let audio = lock(&state).snapshot.audio_languages.clone();
                         let wants = StartWants::read(
                             &core,
                             &target,
-                            audio_of(probed.clone().await, &stream),
+                            audio_of(probed.clone().await, &stream, &audio),
                             device.as_deref(),
                         );
                         // Nothing to settle early with no first language.
@@ -2730,10 +2776,11 @@ async fn resolve_next(
                         _ = async { tokio::join!(addons, built_in, rated) } => {}
                         () = early => {}
                     }
+                    let audio = lock(&state).snapshot.audio_languages.clone();
                     let wants = StartWants::read(
                         &core,
                         &target,
-                        audio_of(probed.await, &stream),
+                        audio_of(probed.await, &stream, &audio),
                         device.as_deref(),
                     );
                     settle_start(&state, &snapshot, run, &wants, true);
@@ -4860,6 +4907,8 @@ fn release(w: &mq_protocol::WireSubtitle) -> Option<String> {
 struct Probed {
     fps: Option<f64>,
     audio: Vec<String>,
+    /// Every audio track's language, in the file's order.
+    tracks: Vec<String>,
     /// An audio track is described for blind and low-vision viewers.
     described: bool,
 }
@@ -4873,17 +4922,20 @@ async fn probe_video(reader: Option<&dyn mq_media::RangeReader>) -> Probed {
     let budget = mq_media::ProbeBudget::default();
     let found = mq_media::probe(reader, budget, &mq_media::CancellationToken::new()).await;
     let fps = found.video.as_ref().and_then(|v| v.fps.value);
+    let tag = |a: &mq_media::AudioTrack| {
+        a.language
+            .value
+            .clone()
+            .filter(|l| !l.eq_ignore_ascii_case("und"))
+            .map(|l| crate::languages::language(&l).tag)
+    };
     let track = found
         .audio
         .iter()
         .find(|a| a.default.value == Some(true))
         .or(found.audio.first());
-    let audio = track
-        .and_then(|a| a.language.value.clone())
-        .filter(|l| !l.eq_ignore_ascii_case("und"))
-        .map(|l| crate::languages::language(&l).tag)
-        .into_iter()
-        .collect();
+    let audio = track.and_then(tag).into_iter().collect();
+    let tracks = found.audio.iter().filter_map(tag).collect();
     let described = found
         .audio
         .iter()
@@ -4891,6 +4943,7 @@ async fn probe_video(reader: Option<&dyn mq_media::RangeReader>) -> Probed {
     Probed {
         fps,
         audio,
+        tracks,
         described,
     }
 }
@@ -4919,17 +4972,33 @@ fn subtitle_wants(set: &[String], device: Option<&str>) -> Vec<String> {
     }
 }
 
-/// The audio's languages: the file's, else the release's when the file says none.
-fn audio_of(probed: Probed, stream: &ParsedStream) -> Vec<String> {
-    if !probed.audio.is_empty() {
-        return probed.audio;
-    }
-    stream
+/// The audio's languages: the first of `wanted` (`audioLanguages`) the file
+/// has, as the players start it, else the file's default; the release's
+/// when the file says none.
+fn audio_of(probed: Probed, stream: &ParsedStream, wanted: &[String]) -> Vec<String> {
+    use crate::languages::primary;
+    let release: Vec<String> = stream
         .release
         .languages
         .iter()
         .map(|l| crate::languages::language(l).tag)
-        .collect()
+        .collect();
+    let listed = if probed.tracks.is_empty() {
+        &release
+    } else {
+        &probed.tracks
+    };
+    if let Some(w) = wanted
+        .iter()
+        .find(|w| listed.iter().any(|l| primary(l) == primary(w)))
+    {
+        return vec![w.clone()];
+    }
+    if probed.audio.is_empty() {
+        release
+    } else {
+        probed.audio
+    }
 }
 
 /// What the start subtitle is chosen with, read once per settle: the
@@ -5899,7 +5968,7 @@ mod tests {
         );
     }
 
-    fn stream(json: &str) -> ParsedStream {
+    pub(super) fn stream(json: &str) -> ParsedStream {
         let body = format!(r#"{{"streams":[{json}]}}"#);
         let wire = mq_protocol::decode_streams(body.as_bytes()).unwrap();
         mq_streams::normalize(&wire.streams[0], "a", "A", 0, 0)
@@ -8126,5 +8195,43 @@ mod subtitle_order_tests {
         assert_eq!(first(&["tr", "en"], "tr"), None);
         assert_eq!(first(&["tr"], "und"), None);
         assert_eq!(first(&["tr"], "xx"), None);
+    }
+
+    /// The audio the start subtitle is chosen against is the track the
+    /// players start: the first wanted language the file has (the original
+    /// over a French default), else the default; the release's languages
+    /// when the file names none.
+    #[test]
+    fn the_start_audio_is_the_wanted_track_the_file_has() {
+        let tags = |v: &[&str]| v.iter().map(|t| (*t).to_owned()).collect::<Vec<_>>();
+        let probed = |audio: &[&str], tracks: &[&str]| Probed {
+            audio: tags(audio),
+            tracks: tags(tracks),
+            ..Probed::default()
+        };
+        let multi = super::tests::stream(
+            r#"{"url":"http://a/x.mkv","title":"Show.S01E01.MULTi.FRENCH.1080p.WEB\nMulti Audio / 🇫🇷"}"#,
+        );
+        let plain =
+            super::tests::stream(r#"{"url":"http://a/x.mkv","title":"Show.S01E01.1080p.WEB"}"#);
+        let french_first = probed(&["fr"], &["fr", "en"]);
+        assert_eq!(
+            audio_of(french_first.clone(), &multi, &tags(&["en"])),
+            ["en"]
+        );
+        assert_eq!(
+            audio_of(french_first.clone(), &multi, &tags(&["de"])),
+            ["fr"]
+        );
+        assert_eq!(audio_of(french_first, &multi, &[]), ["fr"]);
+        // A regional tag counts with its language.
+        assert_eq!(
+            audio_of(probed(&["pt-BR"], &["pt-BR"]), &plain, &tags(&["pt"])),
+            ["pt"]
+        );
+        // Nothing read from the file: the release's languages.
+        assert_eq!(audio_of(Probed::default(), &multi, &tags(&["en"])), ["fr"]);
+        assert_eq!(audio_of(Probed::default(), &multi, &tags(&["fr"])), ["fr"]);
+        assert!(audio_of(Probed::default(), &plain, &tags(&["en"])).is_empty());
     }
 }

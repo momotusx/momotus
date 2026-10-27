@@ -628,3 +628,72 @@ async fn a_frozen_pick_stays_through_an_account_change() {
     assert!(snap.frozen, "the pick under focus stays");
     assert_eq!(snap.recommended.unwrap().via, "first");
 }
+
+const DUB_AND_ORIGINAL: &str = r#"{"streams":[
+ {"name":"Torrentio\n1080p","title":"Game.of.Thrones.S01E01.MULTi.FRENCH.1080p.WEB.H264-FW\n👤 300 💾 2.1 GB\nMulti Audio / 🇫🇷","infoHash":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","fileIdx":0},
+ {"name":"Torrentio\n1080p","title":"Game.of.Thrones.S01E01.1080p.WEB.H264-ORIG\n👤 40 💾 2.1 GB","infoHash":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","fileIdx":0}
+]}"#;
+
+/// A TMDB that names English as every title's original language.
+async fn tmdb_english() -> String {
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    tokio::spawn(async move {
+        while let Ok((mut socket, _)) = listener.accept().await {
+            tokio::spawn(async move {
+                let mut buf = [0u8; 2048];
+                let _ = socket.read(&mut buf).await;
+                let body = r#"{"movie_results":[],"tv_results":[{"id":1399,"vote_average":8.5,"vote_count":10,"original_language":"en"}]}"#;
+                let resp = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                    body.len()
+                );
+                let _ = socket.write_all(resp.as_bytes()).await;
+            });
+        }
+    });
+    format!("http://{addr}")
+}
+
+/// The owner, 2026-10-27: with no audio languages chosen, the original
+/// release leads a better seeded dub in the device's language once TMDB
+/// names the original; a choice the user made stands over it.
+#[tokio::test]
+async fn the_original_leads_a_dub_unless_the_user_chose() {
+    mq_relparse::warm_up();
+    let pick = |tmdb: Option<String>, chosen: bool| async move {
+        let core = opens_torrents();
+        if let Some(url) = tmdb {
+            core.set_tmdb_host(mq_runtime::TmdbHost {
+                url,
+                token: Some("test-token".into()),
+                local: true,
+            });
+        }
+        if chosen {
+            core.set_prefs(&serde_json::json!({ "streams": { "languages": ["fr"] } }))
+                .unwrap();
+        }
+        let addon = stream_addon("torrents", Duration::ZERO, DUB_AND_ORIGINAL).await;
+        core.library()
+            .set_addons("p", &[addon], &core.hlc())
+            .unwrap();
+        // A French device's languages, as the bridge fills them.
+        let mut params = params();
+        params.prefs.languages = vec!["fr".into(), "en".into()];
+        let view = VersionsView::open(&core, params);
+        until(&view, "done", |s| s.done).await;
+        let best = view.snapshot().recommended.unwrap();
+        best.release_name
+    };
+    let fw = |name: &str| name.contains("-FW");
+    assert!(fw(&pick(None, false).await), "no original known: the dub");
+    assert!(
+        !fw(&pick(Some(tmdb_english().await), false).await),
+        "the original"
+    );
+    assert!(
+        fw(&pick(Some(tmdb_english().await), true).await),
+        "the user's choice"
+    );
+}

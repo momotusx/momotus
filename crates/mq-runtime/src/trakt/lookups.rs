@@ -265,6 +265,14 @@ impl Core {
         found
     }
 
+    /// The language `imdb` was made in, as the core's tag ("en"), from
+    /// TMDB's answer for it as `kind`; `None` as for `tmdb_find`, or when
+    /// TMDB names a language the core does not know.
+    pub(crate) async fn original_language(&self, imdb: &str, kind: &str) -> Option<String> {
+        let code = self.tmdb_find(imdb, Some(kind)).await?.original_language?;
+        crate::languages::is_known(&code).then(|| crate::languages::tag(&code))
+    }
+
     /// One TMDB answer kept a day under `key` in the map `pick` names:
     /// asked with `ask` and read with `read` (a 404 reads as `empty`) unless
     /// held. `None` with no token, on a kids profile, while TMDB is quiet or
@@ -537,11 +545,12 @@ mod tests {
             id: 278,
             score: 8.7,
             votes: 500,
+            original_language: None,
         };
         lock(&owner.trakt().lookups).tmdb.put(
             "tt0111161".into(),
             Got::Answer(tmdb::Finds {
-                movie: Some(found),
+                movie: Some(found.clone()),
                 show: None,
             }),
             Instant::now(),

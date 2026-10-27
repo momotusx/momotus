@@ -28,6 +28,12 @@ viable: boolean,
  */
 yearOk: boolean, 
 /**
+ * The release is in the title's original language, names no
+ * language, or the original is not known: a dub ranks below the
+ * original whenever both can start (`Conditions::original_language`).
+ */
+original: boolean, 
+/**
  * The bitrate is unknown or within the safe speed of its kind: at
  * most 0.7 of the speed, that is a speed at least 1.43 times the
  * bitrate.

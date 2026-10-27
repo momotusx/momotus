@@ -207,22 +207,23 @@ fn each_key_field_outranks_every_later_one() {
         legit: best(1),
         viable: best(2),
         year_ok: best(3),
-        sustains: best(4),
-        pace: if best(5) { 3 } else { 0 },
-        covered: if best(6) { 1000 } else { 0 },
-        playability: if best(7) {
+        original: best(4),
+        sustains: best(5),
+        pace: if best(6) { 3 } else { 0 },
+        covered: if best(7) { 1000 } else { 0 },
+        playability: if best(8) {
             Playability::Native
         } else {
             Playability::NeedsTranscode
         },
-        size_ok: best(8),
-        tier: if best(9) { 3 } else { 0 },
-        binge: best(10),
-        effective_height: if best(11) { 2160 } else { 0 },
-        start: if best(12) { 4 } else { 0 },
-        within: if best(13) { 1000 } else { 0 },
+        size_ok: best(9),
+        tier: if best(10) { 3 } else { 0 },
+        binge: best(11),
+        effective_height: if best(12) { 2160 } else { 0 },
+        start: if best(13) { 4 } else { 0 },
+        within: if best(14) { 1000 } else { 0 },
     };
-    for i in 0..14 {
+    for i in 0..15 {
         assert!(
             compose(&|k| k == i) > compose(&|k| k > i),
             "field {i} must outrank every later field"
@@ -362,6 +363,100 @@ fn a_foreign_language_release_never_wins_on_seeds() {
         "{}",
         best.stream.raw_description
     );
+}
+
+/// With the title's original language known, a release in it, or naming no
+/// language, ranks above a dub in the device's language, however seeded
+/// the dub; without it the dub in the user's language leads, as before.
+#[test]
+fn the_original_ranks_above_a_dub() {
+    let caps = DeviceCaps::basic_1080p();
+    // A French device's languages, as the bridge fills them for a user who
+    // chose none.
+    let prefs = StreamPrefs {
+        languages: vec!["fr".into(), "en".into()],
+        ..StreamPrefs::default()
+    };
+    let all = streams(
+        "torrentio",
+        0,
+        json!({ "streams": [
+            { "name": "Torrentio\n1080p", "title": "The.Last.of.Us.S02E03.MULTi.FRENCH.1080p.WEB.H264-FW.mkv\n👤 900 💾 2.1 GB\nMulti Audio / 🇫🇷",
+              "infoHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "fileIdx": 0 },
+            { "name": "Torrentio\n1080p", "title": "The.Last.of.Us.S02E03.1080p.WEB.H264-CAKES.mkv\n👤 40 💾 2.1 GB",
+              "infoHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "fileIdx": 0 }
+        ]}),
+    );
+    let best = |original: Option<&str>| {
+        let conditions = Conditions {
+            original_language: original.map(str::to_owned),
+            ..engine().clone()
+        };
+        let input = RankInput {
+            caps: &caps,
+            prefs: &prefs,
+            target: &target(),
+            last_binge_group: None,
+            kids: None,
+            conditions: &conditions,
+        };
+        let ranked = rank(all.clone(), &input);
+        let best = ranked.best().unwrap();
+        (
+            best.stream.raw_description.contains("CAKES"),
+            best.key.original,
+        )
+    };
+    assert_eq!(
+        best(None),
+        (false, true),
+        "no original known: the dub leads"
+    );
+    assert_eq!(best(Some("en")), (true, true), "the original leads");
+}
+
+/// A title made in a language the user does not speak: a release in that
+/// language is no foreign one (not "Other languages") and leads a dub in
+/// the user's language.
+#[test]
+fn a_release_in_the_original_language_is_wanted() {
+    let caps = DeviceCaps::basic_1080p();
+    let prefs = StreamPrefs {
+        languages: vec!["en".into()],
+        ..StreamPrefs::default()
+    };
+    let conditions = Conditions {
+        original_language: Some("ko".into()),
+        ..engine().clone()
+    };
+    let input = RankInput {
+        caps: &caps,
+        prefs: &prefs,
+        target: &target(),
+        last_binge_group: None,
+        kids: None,
+        conditions: &conditions,
+    };
+    let all = streams(
+        "torrentio",
+        0,
+        json!({ "streams": [
+            { "name": "Torrentio\n1080p", "title": "The.Last.of.Us.S02E03.1080p.WEB.H264-DUB.mkv\n👤 900 💾 2.1 GB\n🇬🇧",
+              "infoHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "fileIdx": 0 },
+            { "name": "Torrentio\n1080p", "title": "The.Last.of.Us.S02E03.1080p.WEB.H264-ORIG.mkv\n👤 40 💾 2.1 GB\n🇰🇷",
+              "infoHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "fileIdx": 0 }
+        ]}),
+    );
+    let ranked = rank(all, &input);
+    let best = ranked.best().unwrap();
+    assert!(
+        best.stream.raw_description.contains("ORIG"),
+        "{}",
+        best.stream.raw_description
+    );
+    assert_eq!(best.stream.release.languages, ["ko"]);
+    assert_ne!(best.group, Group::OtherLanguages);
+    assert!(!best.reasons.contains(&Reason::YourLanguage));
 }
 
 /// A release that states no resolution ranks below one that does, among

@@ -667,7 +667,8 @@ async fn look_up(ctx: Ctx) {
     let tmdb = async {
         let found = ctx.core.tmdb_find(&imdb, kind).await;
         let url = found.as_ref().map(tmdb_url);
-        ctx.put(|s| s.tmdb = Some(percent(found.map(|f| (f.score, f.votes)), url)));
+        let score = found.as_ref().map(|f| (f.score, f.votes));
+        ctx.put(|s| s.tmdb = Some(percent(score, url)));
         found
     };
     match asked {
@@ -1564,6 +1565,7 @@ mod tests {
             id: 1396,
             score: 9.0,
             votes: 18925,
+            original_language: None,
         };
         assert_eq!(tmdb_url(&found), "https://www.themoviedb.org/tv/1396");
         let text = |score| match percent(Some((score, 50)), None) {

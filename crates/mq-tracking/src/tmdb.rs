@@ -199,7 +199,7 @@ pub fn textless_backdrop(body: &Value) -> Option<String> {
 }
 
 /// What `find` says of an IMDb id.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Found {
     /// `movie` or `series`, as addons name the kinds.
     pub kind: &'static str,
@@ -208,10 +208,13 @@ pub struct Found {
     /// TMDB's user score, 0 to 10.
     pub score: f64,
     pub votes: u64,
+    /// The language the title was made in, as TMDB names it (ISO 639-1,
+    /// "en"): the audio a playback starts in when the file has it.
+    pub original_language: Option<String>,
 }
 
 /// What `find` lists for an IMDb id: its first movie and its first show.
-#[derive(Debug, Clone, Copy, PartialEq, Default)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct Finds {
     pub movie: Option<Found>,
     pub show: Option<Found>,
@@ -224,9 +227,9 @@ impl Finds {
     /// show.
     pub fn of(&self, kind: Option<&str>) -> Option<Found> {
         match kind {
-            Some("movie") => self.movie,
-            Some("series") => self.show,
-            _ => self.movie.or(self.show),
+            Some("movie") => self.movie.clone(),
+            Some("series") => self.show.clone(),
+            _ => self.movie.clone().or_else(|| self.show.clone()),
         }
     }
 }
@@ -242,6 +245,11 @@ pub fn finds(body: &Value) -> Finds {
                 .as_f64()
                 .filter(|s| (0.0..=10.0).contains(s))?,
             votes: item["vote_count"].as_u64()?,
+            // Two lowercase letters only: it names a language, nothing else.
+            original_language: item["original_language"]
+                .as_str()
+                .filter(|l| l.len() == 2 && l.bytes().all(|b| b.is_ascii_lowercase()))
+                .map(str::to_owned),
         })
     };
     Finds {
@@ -263,18 +271,21 @@ mod tests {
     /// not know.
     #[test]
     fn a_find_answer_gives_kind_score_and_votes() {
-        let movie = serde_json::json!({"movie_results": [{"id": 278, "vote_average": 8.733, "vote_count": 31655}], "tv_results": []});
+        let movie = serde_json::json!({"movie_results": [{"id": 278, "vote_average": 8.733, "vote_count": 31655, "original_language": "en"}], "tv_results": []});
         assert_eq!(
             found(&movie),
             Some(Found {
                 kind: "movie",
                 id: 278,
                 score: 8.733,
-                votes: 31655
+                votes: 31655,
+                original_language: Some("en".into()),
             })
         );
-        let show = serde_json::json!({"movie_results": [], "tv_results": [{"id": 1396, "vote_average": 9.0, "vote_count": 18925}]});
-        assert_eq!(found(&show).map(|f| f.kind), Some("series"));
+        let show = serde_json::json!({"movie_results": [], "tv_results": [{"id": 1396, "vote_average": 9.0, "vote_count": 18925, "original_language": "../x"}]});
+        assert_eq!(found(&show).as_ref().map(|f| f.kind), Some("series"));
+        // Anything but two lowercase letters names no language.
+        assert_eq!(found(&show).and_then(|f| f.original_language), None);
         let none = serde_json::json!({"movie_results": [], "tv_results": [], "person_results": []});
         assert_eq!(found(&none), None);
         let odd = serde_json::json!({"movie_results": [{"id": 1, "vote_average": 12.0, "vote_count": 3}]});

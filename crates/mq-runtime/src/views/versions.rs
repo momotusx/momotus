@@ -604,6 +604,7 @@ fn unbeatable(k: &RankKey) -> bool {
         && k.language
         && k.legit
         && k.year_ok
+        && k.original
         && k.sustains
         && k.size_ok
         && k.playability == Playability::Native
@@ -611,14 +612,15 @@ fn unbeatable(k: &RankKey) -> bool {
 
 /// Two rows the ranking holds equal on everything but the resolution and
 /// what breaks ties under it: the same language, a real release, the
-/// year, keeping up, pace and, past the speed, how far past it
-/// (`covered`), how it plays, the size and the start tier.
+/// year, the original or a dub, keeping up, pace and, past the speed, how
+/// far past it (`covered`), how it plays, the size and the start tier.
 fn same_footing(a: &RankKey, b: &RankKey) -> bool {
     let footing = |k: &RankKey| {
         (
             k.language,
             k.legit,
             k.year_ok,
+            k.original,
             k.sustains,
             k.pace,
             k.covered,
@@ -1058,6 +1060,9 @@ impl VersionsView {
             metered: core.network() == crate::speed::Network::Cellular,
             held,
             download,
+            // From TMDB once it answers, for a user who chose no audio
+            // languages (`original`).
+            original_language: None,
         };
         let item_id = item_id.map_or_else(
             || {
@@ -1757,6 +1762,15 @@ async fn collect(
             params.target.season,
         ));
     }
+    // The original language ranks above a dub only for a user who chose no
+    // audio languages: a choice wins.
+    if core.prefs().streams.languages.is_empty() && core.tmdb_ready() {
+        side.spawn(original(
+            core.clone(),
+            params.kind.clone(),
+            ranking.item_id.clone(),
+        ));
+    }
     let mut answered = addons.is_empty();
     loop {
         let event = tokio::select! {
@@ -1930,6 +1944,8 @@ type CacheKey = (Option<mq_debrid::StoreId>, String);
 /// What a side task found.
 enum Side {
     Meta(TitleFacts),
+    /// The title's original language, if TMDB knows it.
+    Original(Option<String>),
     Cache(Vec<(CacheKey, bool)>),
     Live(Vec<(String, u32)>),
 }
@@ -1945,10 +1961,17 @@ impl Side {
                 c.episodes_in_season = c.episodes_in_season.or(f.episodes_in_season);
                 s.conditions.runtime_min = c.runtime_s.map(|r| r / 60);
             }
+            Side::Original(o) => s.rank.original_language = o,
             Side::Cache(found) => s.cache.extend(found),
             Side::Live(found) => s.live.extend(found),
         }
     }
+}
+
+/// The title's original language from TMDB, within 3 s.
+async fn original(core: Core, kind: String, item_id: String) -> Side {
+    let found = tokio::time::timeout(SIDE_WAIT, core.original_language(&item_id, &kind)).await;
+    Side::Original(found.ok().flatten())
 }
 
 /// The app sent no runtime or year, or for an episode no air date or
@@ -3001,6 +3024,7 @@ mod tests {
             legit: true,
             viable: true,
             year_ok: true,
+            original: true,
             sustains: true,
             pace: 3,
             covered: 0,
@@ -3019,11 +3043,12 @@ mod tests {
     #[test]
     fn only_a_ready_file_at_its_best_is_unbeatable() {
         assert!(unbeatable(&best_ready()));
-        let worse: [fn(&mut RankKey); 7] = [
+        let worse: [fn(&mut RankKey); 8] = [
             |k| k.tier = 2,
             |k| k.language = false,
             |k| k.legit = false,
             |k| k.year_ok = false,
+            |k| k.original = false,
             |k| k.sustains = false,
             |k| k.size_ok = false,
             |k| k.playability = Playability::Unstated,

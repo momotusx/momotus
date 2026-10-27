@@ -1328,6 +1328,8 @@ data class PlaybackSnapshot(
     val startSubtitleFailed: Boolean = false,
     /** The playing file has an audio track described for blind and low-vision viewers (its container flag or its name, read as the file opens): the player's AD mark (core backlog C35). */
     val audioDescription: Boolean = false,
+    /** The audio languages every app starts the file in, most wanted first: the profile's audio languages when the user chose some, else the title's original language once TMDB names it. A player turns on the first of them the file has; with none of them in the file, or an empty list, its own pick (the device's language) stands. */
+    val audioLanguages: List<String> = emptyList(),
     /** The next released episode, for an Up Next card. */
     val next: NextEpisode? = null,
     /** The playing stream's binge group; pass it as `bingeGroup` when opening Versions for the next episode so the same release line is picked. */
@@ -1518,6 +1520,8 @@ data class RankKey(
     val viable: Boolean,
     /** No year in the name, or one within 3 years of the title's or the episode's. */
     val yearOk: Boolean,
+    /** The release is in the title's original language, names no language, or the original is not known: a dub ranks below the original whenever both can start (`Conditions::original_language`). */
+    val original: Boolean,
     /** The bitrate is unknown or within the safe speed of its kind: at most 0.7 of the speed, that is a speed at least 1.43 times the bitrate. */
     val sustains: Boolean,
     /** How far the bitrate is over the row's speed (x = bitrate / speed): 3 when it sustains (x at most 0.7) or the bitrate is unknown, 2 when the speed covers it with no margin (x at most 1), 1 up to 1.5 times the speed, 0 beyond. Among rows that cannot keep up, the one that pauses least ranks first, before resolution (research R1). */

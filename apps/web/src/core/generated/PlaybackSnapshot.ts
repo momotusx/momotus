@@ -91,6 +91,14 @@ startSubtitleFailed: boolean,
  */
 audioDescription: boolean, 
 /**
+ * The audio languages every app starts the file in, most wanted first:
+ * the profile's audio languages when the user chose some, else the
+ * title's original language once TMDB names it. A player turns on the
+ * first of them the file has; with none of them in the file, or an
+ * empty list, its own pick (the device's language) stands.
+ */
+audioLanguages: Array<string>, 
+/**
  * The next released episode, for an Up Next card.
  */
 next: NextEpisode | null, 
