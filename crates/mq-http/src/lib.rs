@@ -1102,6 +1102,14 @@ impl HttpClient {
         }
     }
 
+    /// `url` passes this handle's hop rule, if it has one.
+    fn check_hops(&self, url: &Url) -> Result<(), HttpError> {
+        match &self.hops {
+            Some(rule) if !rule.allows(url) => Err(HttpError::BlockedPrivate(OUT_OF_HOPS.into())),
+            _ => Ok(()),
+        }
+    }
+
     /// A scoped handle (this one's scope, else `scoped(&[])`) whose every
     /// hop, the first included, buffered or streamed, must pass `rule`
     /// before it connects: a redirect to another host is refused.
@@ -1206,6 +1214,8 @@ impl HttpClient {
         range: Option<String>,
     ) -> Result<Response, HttpError> {
         let url = Url::parse(raw).map_err(|_| HttpError::InvalidUrl(redact_str(raw)))?;
+        // The rule holds before anything else, a development replay too.
+        self.check_hops(&url)?;
         let replay = self.replayed(&url, opts);
         let (sent, opts) = match &replay {
             Some((to, replay_opts)) => (to.clone(), replay_opts),
@@ -1277,6 +1287,8 @@ impl HttpClient {
         opts: &RequestOptions,
     ) -> Result<StreamingResponse, HttpError> {
         let parsed = Url::parse(url).map_err(|_| HttpError::InvalidUrl(redact_str(url)))?;
+        // The rule holds before anything else, a development replay too.
+        self.check_hops(&parsed)?;
         let replay = self.replayed(&parsed, opts);
         let (sent, opts) = match &replay {
             Some((to, replay_opts)) => (to.clone(), replay_opts),
@@ -1386,13 +1398,7 @@ impl HttpClient {
         let deadline = req.timeout.map(|total| Instant::now() + total);
         let mut hops = 0;
         loop {
-            if self
-                .hops
-                .as_ref()
-                .is_some_and(|rule| !rule.allows(&req.url))
-            {
-                return Err(HttpError::BlockedPrivate(OUT_OF_HOPS.into()));
-            }
+            self.check_hops(&req.url)?;
             let host = req.url.host_str().unwrap_or_default();
             let acquire = self.budget.acquire(host, opts.priority);
             let permit = match deadline {

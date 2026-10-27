@@ -41,6 +41,11 @@ const RETRY_SOON: Duration = Duration::from_secs(600);
 const MAX_ITEMS: usize = 50_000;
 const INDEX_BYTES: usize = 8 << 20;
 const INDEX_WAIT: Duration = Duration::from_secs(30);
+/// Pages of the list read at most.
+const MAX_PAGES: usize = 20;
+/// How long a film's pass waits for the very first list; the fetch goes on
+/// without it.
+const FIRST_LIST: Duration = Duration::from_secs(10);
 const META_BYTES: usize = 2 << 20;
 const META_FILES: usize = 2_000;
 const META_WAIT: Duration = Duration::from_secs(3);
@@ -120,19 +125,17 @@ pub(crate) fn link() -> Url {
 /// list has no such film. The first use waits for the list; a stale list
 /// is used while a new one is fetched.
 pub(crate) async fn streams(core: &Core, names: &[&str], year: Option<u16>) -> Vec<ParsedStream> {
-    if !wanted(core) {
-        return Vec::new();
-    }
-    ready(core).await;
-    let Some(year) = year else {
+    let Some(year) = year.filter(|_| wanted(core)) else {
         return Vec::new();
     };
+    ready(core).await;
     let found = names
         .iter()
         .map(|n| norm(n))
         .filter(|n| !n.is_empty())
         .find_map(|n| core.library().archive_film(&n, year).ok().flatten());
-    let Some(id) = found else {
+    // The profile may have changed while the list came.
+    let Some(id) = found.filter(|_| wanted(core)) else {
         return Vec::new();
     };
     let Some(files) = files(core, &id).await else {
@@ -146,18 +149,20 @@ pub(crate) async fn streams(core: &Core, names: &[&str], year: Option<u16>) -> V
         .collect()
 }
 
-/// Makes sure a list is there: the first fetch is waited for, a stale
-/// list is refreshed in the background. Never on mobile data, never while
-/// a backoff holds.
+/// Makes sure a list is there: a fetch runs on its own, so leaving the
+/// page never cancels it; with no list yet the pass waits for it up to
+/// `FIRST_LIST`. Never on mobile data, never while a backoff holds.
 async fn ready(core: &Core) {
     if !due(core) {
         return;
     }
-    if core.library().archive_films().unwrap_or(0) == 0 {
-        refresh(core).await;
-    } else {
+    let first = core.library().archive_films().unwrap_or(0) == 0;
+    let task = tokio::spawn({
         let core = core.clone();
-        tokio::spawn(async move { refresh(&core).await });
+        async move { refresh(&core).await }
+    });
+    if first {
+        let _ = tokio::time::timeout(FIRST_LIST, task).await;
     }
 }
 
@@ -172,7 +177,8 @@ fn fetched(core: &Core) -> Fetched {
 fn due(core: &Core) -> bool {
     let now = mq_library::hlc::now_ms();
     let f = fetched(core);
-    let stale = f.fetched_ms.is_none_or(|t| now >= t + WEEK_MS)
+    // A list from the future (the clock moved back) is stale too.
+    let stale = f.fetched_ms.is_none_or(|t| now >= t + WEEK_MS || t > now)
         || core.library().archive_films().unwrap_or(0) == 0;
     let missed = lock(&core.archive().missed).is_some_and(|t| t.elapsed() < RETRY_SOON);
     stale && now >= f.retry_ms && !missed && core.network() != crate::speed::Network::Cellular
@@ -191,9 +197,12 @@ async fn refresh(core: &Core) {
     let mut f = fetched(core);
     let now = mq_library::hlc::now_ms();
     match fetch_index(core).await {
+        // Switched off or away while it came: nothing is kept.
+        Ok(_) if !wanted(core) => return,
         Ok(films) => {
             if let Err(e) = core.library().put_archive_index(&films) {
                 tracing::warn!("archive list not stored: {e}");
+                *lock(&archive.missed) = Some(Instant::now());
                 return;
             }
             f = Fetched {
@@ -219,12 +228,10 @@ async fn refresh(core: &Core) {
     }
 }
 
-/// No answer came: offline, a timeout, a refused address.
+/// No answer came: offline or a timeout. A hop the rule refused is an
+/// answer (archive.org sent it elsewhere) and backs off.
 fn unanswered(e: &HttpError) -> bool {
-    matches!(
-        e,
-        HttpError::Network(_) | HttpError::Timeout(_) | HttpError::BlockedPrivate(_)
-    )
+    matches!(e, HttpError::Network(_) | HttpError::Timeout(_))
 }
 
 /// Every page of the `scrape` answer, within the caps, as the list.
@@ -233,7 +240,10 @@ async fn fetch_index(core: &Core) -> Result<Vec<ArchiveFilm>, HttpError> {
     let base = core.archive().origin.join("services/search/v1/scrape");
     let base = base.map_err(|e| HttpError::InvalidUrl(e.to_string()))?;
     let (mut items, mut bytes, mut cursor) = (Vec::new(), 0usize, None::<String>);
-    loop {
+    for page in 0.. {
+        if page == MAX_PAGES {
+            return Err(HttpError::TooLarge { limit: MAX_PAGES });
+        }
         let mut url = base.clone();
         url.query_pairs_mut()
             .append_pair("q", QUERY)
@@ -250,9 +260,11 @@ async fn fetch_index(core: &Core) -> Result<Vec<ArchiveFilm>, HttpError> {
         let response = http.get(url.as_str(), &opts).await?;
         bytes += response.body.len();
         let mut page: Value = response.json()?;
-        if let Some(Value::Array(found)) = page.get_mut("items").map(Value::take) {
-            items.extend(found);
-        }
+        // An answer without its items is no list: the old one stays.
+        let Some(Value::Array(found)) = page.get_mut("items").map(Value::take) else {
+            return Err(HttpError::Decode("no items".into()));
+        };
+        items.extend(found);
         if items.len() > MAX_ITEMS {
             return Err(HttpError::TooLarge { limit: MAX_ITEMS });
         }
@@ -261,7 +273,11 @@ async fn fetch_index(core: &Core) -> Result<Vec<ArchiveFilm>, HttpError> {
             _ => break,
         }
     }
-    Ok(index(&items))
+    let films = index(&items);
+    if films.is_empty() {
+        return Err(HttpError::Decode("no films".into()));
+    }
+    Ok(films)
 }
 
 /// The list from the `scrape` items, by the rules of 5.2: a film needs an
@@ -281,7 +297,8 @@ pub fn index(items: &[Value]) -> Vec<ArchiveFilm> {
         // Archive identifiers are these characters; anything else never
         // reaches a URL.
         let valid = |c: char| c.is_ascii_alphanumeric() || "._-".contains(c);
-        if identifier.is_empty() || !identifier.chars().all(valid) {
+        let starts = identifier.starts_with(|c: char| c.is_ascii_alphanumeric());
+        if !starts || identifier.len() > 100 || !identifier.chars().all(valid) {
             continue;
         }
         let Some(year) = year_of(&title, first(item.get("year"))) else {
@@ -469,6 +486,7 @@ async fn files(core: &Core, id: &str) -> Option<Arc<Vec<File>>> {
     let files = Arc::new(videos(&meta));
     let mut items = lock(&archive.items);
     if items.len() >= META_ITEMS
+        && !items.contains_key(id)
         && let Some(oldest) = items
             .iter()
             .min_by_key(|(_, (at, _))| *at)
@@ -493,7 +511,10 @@ fn videos(meta: &Value) -> Vec<File> {
         .take(META_FILES)
         .filter_map(|f| {
             let name = f.get("name")?.as_str()?;
-            let mp4 = name.to_ascii_lowercase().ends_with(".mp4");
+            // A name that is no plain file name never becomes a row, key
+            // or URL.
+            let plain = name.len() <= 255 && !name.chars().any(|c| c.is_control() || hidden(c));
+            let mp4 = plain && name.to_ascii_lowercase().ends_with(".mp4");
             mp4.then(|| File {
                 name: name.to_owned(),
                 height: number(f.get("height")).and_then(|h| u32::try_from(h).ok()),
@@ -538,12 +559,18 @@ fn stream(origin: &Url, id: &str, file: &File, index: u32) -> Option<ParsedStrea
     Some(s)
 }
 
-/// Item text as shown: control and bidi formatting characters dropped, at
-/// most `TEXT_MAX` characters.
+/// Format and separator characters that change how text reads without
+/// showing: bidi marks, overrides and isolates, zero widths, line and
+/// paragraph separators, the soft hyphen and the BOM.
+fn hidden(c: char) -> bool {
+    matches!(c, '\u{00ad}' | '\u{061c}' | '\u{200b}'..='\u{200f}' | '\u{2028}'..='\u{202e}' | '\u{2060}'..='\u{206f}' | '\u{feff}')
+}
+
+/// Item text as shown: control and `hidden` characters dropped, at most
+/// `TEXT_MAX` characters.
 fn clean(text: &str) -> String {
-    let bidi = |c: char| matches!(c, '\u{200e}' | '\u{200f}' | '\u{061c}' | '\u{202a}'..='\u{202e}' | '\u{2066}'..='\u{2069}');
     text.chars()
-        .filter(|c| !c.is_control() && !bidi(*c))
+        .filter(|c| !c.is_control() && !hidden(*c))
         .take(TEXT_MAX)
         .collect()
 }
@@ -556,7 +583,7 @@ pub(crate) fn forget_unwanted(core: &Core) {
     };
     let any = profiles
         .iter()
-        .filter(|p| p.access != Some(true))
+        .filter(|p| !p.kids())
         .any(|p| core.for_profile(&p.id).prefs().archive);
     if !any {
         let _ = core.library().clear_archive_index();

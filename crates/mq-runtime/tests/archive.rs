@@ -23,6 +23,7 @@ const DAY_MS: u64 = 86_400_000;
 #[derive(Default)]
 struct Answers {
     scrape: Option<(u16, Vec<u8>)>,
+    list_delay: Duration,
     items: HashMap<String, (u16, Vec<u8>, Duration)>,
 }
 
@@ -54,6 +55,7 @@ impl Fixture {
         let asked: Arc<Mutex<Vec<String>>> = Arc::default();
         let answers: Arc<Mutex<Answers>> = Arc::new(Mutex::new(Answers {
             scrape: Some((200, SCRAPE.as_bytes().to_vec())),
+            list_delay: Duration::ZERO,
             items: HashMap::from([(NOSFERATU.to_owned(), (200, nosferatu(), Duration::ZERO))]),
         }));
         let (log, said) = (asked.clone(), answers.clone());
@@ -61,7 +63,11 @@ impl Fixture {
             let host = r.header("host").unwrap_or_default().to_owned();
             log.lock().unwrap().push(format!("{host}{}", r.path));
             if r.path.starts_with("/services/search/v1/scrape") {
-                let scrape = said.lock().unwrap().scrape.clone();
+                let (scrape, delay) = {
+                    let a = said.lock().unwrap();
+                    (a.scrape.clone(), a.list_delay)
+                };
+                std::thread::sleep(delay);
                 return match scrape {
                     Some((status, body)) => reply(status, &body),
                     None => {
@@ -187,6 +193,12 @@ async fn settled(core: &Core, params: VersionsParams) -> VersionsView {
 fn archive_keys(view: &VersionsView) -> Vec<String> {
     let s = view.snapshot();
     s.archive.rows.iter().map(|r| r.key.clone()).collect()
+}
+
+/// A refresh runs in the background once a list exists: time for one to
+/// reach the fixture before a test says none did.
+async fn quiet() {
+    tokio::time::sleep(Duration::from_millis(400)).await;
 }
 
 fn fetched_days_ago(core: &Core, days: u64) {
@@ -461,6 +473,7 @@ async fn the_list_is_weekly_never_on_mobile_data_and_backs_off() {
     // and the old one matches meanwhile.
     fetched_days_ago(&core, 6);
     settled(&core, nosferatu_film()).await;
+    quiet().await;
     assert_eq!(fixture.lists(), 1);
     fetched_days_ago(&core, 8);
     fixture.answer_list(503, b"{}".to_vec());
@@ -475,6 +488,7 @@ async fn the_list_is_weekly_never_on_mobile_data_and_backs_off() {
     assert_eq!(wait(&state(&core)), 1);
     assert_eq!(core.library().archive_films().unwrap(), 8, "kept");
     settled(&core, nosferatu_film()).await;
+    quiet().await;
     assert_eq!(fixture.lists(), 2, "held for a day");
     // The day passes: 429 now, three days; then seven, and seven again.
     fixture.answer_list(429, b"{}".to_vec());
@@ -523,10 +537,11 @@ async fn caps_and_hops_hold() {
     settled(&core, nosferatu_film()).await;
     until("refused", || state(&core)["refusals"] == 2).await;
     assert_eq!(core.library().archive_films().unwrap(), 0);
-    // A list that moves off archive.org: not followed, not a refusal.
+    // A list that moves off archive.org: never followed, and a refusal.
     let fresh = core_at(&fixture);
     fixture.answers.lock().unwrap().scrape = None;
     settled(&fresh, nosferatu_film()).await;
+    until("refused", || state(&fresh)["refusals"] == 1).await;
     assert!(
         !fixture.asked().iter().any(|a| a.starts_with("elsewhere.")),
         "{:?}",
@@ -558,11 +573,17 @@ async fn caps_and_hops_hold() {
 
 /// A stream addon on loopback answering `body` for any request.
 async fn stream_addon(body: String) -> AddonRow {
+    stream_addon_counted(body, Arc::default()).await
+}
+
+/// `stream_addon`, counting the requests it answers in `hits`.
+async fn stream_addon_counted(body: String, hits: Arc<Mutex<usize>>) -> AddonRow {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
     tokio::spawn(async move {
         while let Ok((mut socket, _)) = listener.accept().await {
             let body = body.clone();
+            *hits.lock().unwrap() += 1;
             tokio::spawn(async move {
                 let mut buf = [0u8; 2048];
                 let _ = socket.read(&mut buf).await;
@@ -653,16 +674,48 @@ async fn the_pass_is_pending_apart_and_survives_an_addon_change() {
     until("the pass", || !view.snapshot().archive.pending).await;
     assert_eq!(archive_keys(&view).len(), 3);
     let items = fixture.items();
-    let addon = stream_addon(json!({"streams": []}).to_string()).await;
+    let hits: Arc<Mutex<usize>> = Arc::default();
+    let addon = stream_addon_counted(json!({"streams": []}).to_string(), hits.clone()).await;
     core.library()
         .set_addons("p", &[addon], &core.hlc())
         .unwrap();
     until("the addon's answer", || {
         let s = view.snapshot();
-        s.done && s.empty.is_none() && s.pending_addons.is_empty()
+        *hits.lock().unwrap() > 0 && s.done && s.empty.is_none() && s.pending_addons.is_empty()
     })
     .await;
     tokio::time::sleep(Duration::from_millis(200)).await;
     assert_eq!(archive_keys(&view).len(), 3, "the pass survives");
     assert_eq!(fixture.items(), items, "and is not run again");
+}
+
+/// An answer with no items, or none that is a film, is no list: the old
+/// one stays and the source backs off. Leaving the page never cancels the
+/// first list.
+#[tokio::test]
+async fn a_bad_answer_keeps_the_list_and_leaving_keeps_the_fetch() {
+    let fixture = Fixture::start();
+    let core = core_at(&fixture);
+    fixture.answers.lock().unwrap().list_delay = Duration::from_millis(600);
+    let view = VersionsView::open(&core, nosferatu_film());
+    until("the list asked", || fixture.lists() == 1).await;
+    drop(view);
+    until("the list kept", || {
+        core.library().archive_films().unwrap() == 8
+    })
+    .await;
+    fixture.answers.lock().unwrap().list_delay = Duration::ZERO;
+    for (refusals, body) in [(1, r#"{"error":"busy"}"#), (2, r#"{"items":[]}"#)] {
+        fetched_days_ago(&core, 8);
+        let mut s = state(&core);
+        s["refusals"] = json!(refusals - 1);
+        core.library()
+            .set_device_value("archive_index", &s.to_string())
+            .unwrap();
+        fixture.answer_list(200, body.as_bytes().to_vec());
+        let view = settled(&core, nosferatu_film()).await;
+        until("refused", || state(&core)["refusals"] == refusals).await;
+        assert_eq!(core.library().archive_films().unwrap(), 8, "{body}");
+        assert_eq!(archive_keys(&view).len(), 3, "the old list matches");
+    }
 }

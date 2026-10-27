@@ -133,8 +133,10 @@ pub fn archive_hops() -> HopRule {
 /// (`mq-plugin:`) and addon links get no hop rule.
 pub fn upstream_http(http: &HttpClient, addon_url: Option<&Url>) -> HttpClient {
     let scoped = http.scoped(&scope(addon_url));
-    match addon_url.map(Url::as_str) {
-        Some(ARCHIVE) => scoped.with_hops(archive_hops()),
+    match addon_url {
+        // The Archive is the one built-in source: any `mq-builtin:` link
+        // keeps to archive.org rather than going anywhere.
+        Some(link) if link.scheme() == "mq-builtin" => scoped.with_hops(archive_hops()),
         _ => scoped,
     }
 }
