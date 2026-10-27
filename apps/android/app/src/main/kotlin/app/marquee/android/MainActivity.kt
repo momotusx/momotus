@@ -12,7 +12,10 @@ import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Density
 import androidx.core.graphics.drawable.toDrawable
 import app.marquee.core.route.Route
 import app.marquee.design.MarqueeTheme
@@ -77,8 +80,15 @@ class MainActivity : ComponentActivity() {
             addonLink(intent)?.let { (application as MarqueeApp).addonLink = it }
             accountIntent(intent)
         }
+        // A debug walk only: `--ei widthDp 360 --ef fontScale 1.3` lays the app out as a phone that wide at that font
+        // size, so a walk checks a narrow screen and large text without touching the device's display or font settings.
+        val widthDp = intent.getIntExtra("widthDp", 0).takeIf { debuggable }
+        val fontScale = intent.getFloatExtra("fontScale", 0f).takeIf { debuggable }
         setContent {
-            MarqueeTheme(form) { MarqueeRoot(session, form, debugStack) }
+            val asWalked = walkDensity(LocalDensity.current, resources.displayMetrics.widthPixels, widthDp, fontScale)
+            CompositionLocalProvider(LocalDensity provides asWalked) {
+                MarqueeTheme(form) { MarqueeRoot(session, form, debugStack) }
+            }
         }
     }
 
@@ -196,3 +206,18 @@ internal fun accountLink(
  * landscape window itself, so the device's own rotation setting is never touched.
  */
 internal fun Intent.walkLandscape(debuggable: Boolean): Boolean = debuggable && getBooleanExtra("landscape", false)
+
+/**
+ * The density a walk asks for: [base] with the width spread over [widthDp] and the font scaled to [fontScale], each
+ * only when asked (positive); [base] itself otherwise.
+ */
+internal fun walkDensity(
+    base: Density,
+    widthPx: Int,
+    widthDp: Int?,
+    fontScale: Float?,
+): Density {
+    val density = widthDp?.takeIf { it > 0 }?.let { widthPx / it.toFloat() } ?: base.density
+    val font = fontScale?.takeIf { it > 0f } ?: base.fontScale
+    return if (density == base.density && font == base.fontScale) base else Density(density, font)
+}
