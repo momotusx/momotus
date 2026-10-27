@@ -1838,6 +1838,12 @@ async fn lists_with_one_name_are_named_with_their_hosts() {
                 catalog("COMMUNITY"),
             ),
             directory_row(&dir.public_url("four.b7.test"), "four", catalog("Mine")),
+            // Two catalogs with no name of their own: both take the addon's.
+            directory_row(
+                &dir.public_url("five.b7.test"),
+                "five",
+                json!([{"type": "all", "id": "a"}, {"type": "all", "id": "b"}]),
+            ),
         ],
     );
     let names: Vec<String> = settled(&AddonCatalogView::open_from(&core, &cinemeta.url(), false))
@@ -1854,7 +1860,9 @@ async fn lists_with_one_name_are_named_with_their_hosts() {
             "Directory, one.b7.test",
             "directory, two.b7.test",
             "COMMUNITY, three.b7.test",
-            "Mine"
+            "Mine",
+            "Directory addon, five.b7.test, a",
+            "Directory addon, five.b7.test, b",
         ]
     );
 }
@@ -1889,4 +1897,34 @@ fn a_list_is_read_one_entry_at_a_time_with_the_same_rules() {
     );
     assert!(!more);
     assert!(read_list(b"{\"metas\": []}", 10).is_none());
+}
+
+#[tokio::test]
+async fn two_installed_addons_lists_are_read_at_once() {
+    let cinemeta = Source::start(OFFICIAL, COMMUNITY).await;
+    let core = Core::temporary("p").unwrap();
+    let mut opened = Vec::new();
+    let mut rows = Vec::new();
+    for n in 0..3 {
+        let (url, rx, _) = silent(&format!("slot{n}.b7.test")).await;
+        rows.push(directory_row(
+            &url,
+            &format!("slot{n}"),
+            json!([{"type": "all", "id": "dir", "name": format!("S{n}")}]),
+        ));
+        opened.push(rx);
+    }
+    install(&core, &rows);
+    let _view = AddonCatalogView::open_from(&core, &cinemeta.url(), false);
+    // Two lists are asked; the third waits for a slot while they hang.
+    let mut asked = 0;
+    for rx in &mut opened {
+        if tokio::time::timeout(Duration::from_millis(1500), rx.recv())
+            .await
+            .is_ok()
+        {
+            asked += 1;
+        }
+    }
+    assert_eq!(asked, 2);
 }

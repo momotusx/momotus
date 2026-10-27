@@ -787,15 +787,28 @@ fn addon_lists(core: &Core, cinemeta: &Url) -> Vec<ListSource> {
 /// two lists with one name, and none but Cinemeta's reads "Official".
 fn name_apart(lists: &mut [ListSource]) {
     let key = |name: &str| name.to_lowercase();
-    let mut count: HashMap<String, usize> = LISTS.iter().map(|(_, name)| (key(name), 1)).collect();
-    for list in lists.iter() {
-        *count.entry(key(&list.name)).or_default() += 1;
-    }
+    let counts = |lists: &[ListSource]| {
+        let mut count: HashMap<String, usize> =
+            LISTS.iter().map(|(_, name)| (key(name), 1)).collect();
+        for list in lists {
+            *count.entry(key(&list.name)).or_default() += 1;
+        }
+        count
+    };
+    let count = counts(lists);
     for list in lists.iter_mut() {
         if count[&key(&list.name)] > 1
             && let Some(host) = &list.host
         {
             list.name = format!("{}, {host}", list.name);
+        }
+    }
+    // Lists of one addon that still read the same (catalogs with no name
+    // of their own take the addon's): their catalog ids tell them apart.
+    let count = counts(lists);
+    for list in lists.iter_mut() {
+        if count[&key(&list.name)] > 1 && list.host.is_some() {
+            list.name = format!("{}, {}", list.name, list.catalog.1);
         }
     }
 }
@@ -856,11 +869,20 @@ impl Fetches {
         }
         let (core, slots, id) = (core.clone(), self.slots.clone(), list.id.clone());
         let handle = self.tasks.spawn(async move {
-            let _slot = match list.host {
-                Some(_) => Some(slots.acquire_owned().await),
-                None => None,
-            };
-            let result = fetch_list(&core, &list, fresh).await;
+            // One deadline from the start, the wait for a fetch slot
+            // included: a list behind hung ones fails in time, it does not
+            // wait round after round.
+            let fetched = tokio::time::timeout(TIMEOUT, async {
+                let _slot = match list.host {
+                    Some(_) => Some(slots.acquire_owned().await),
+                    None => None,
+                };
+                fetch_list(&core, &list, fresh).await
+            });
+            let who = list.host.as_deref().unwrap_or("Cinemeta");
+            let result = fetched
+                .await
+                .unwrap_or_else(|_| Err(list_failure(&AddonError::TimedOut, who)));
             (list.id, generation, result)
         });
         self.by_task.insert(handle.id(), (id.clone(), generation));
