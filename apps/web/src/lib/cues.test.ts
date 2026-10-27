@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { type CueRects, cuePlace, cueSpot, SAFE_LINE } from "./cues";
+import { type CueRects, cuePlace, cueSpot, FOOT, SAFE_LINE } from "./cues";
 
 /** A 1920x1080 TV, the element filling it. */
 const tv = { top: 0, bottom: 1080, width: 1920, height: 1080 };
@@ -18,29 +18,46 @@ function drawn(rects: CueRects) {
 
 const safeLine = tv.bottom - tv.height * SAFE_LINE;
 
-test("two lines over a letterboxed wide film on a TV hang from a foot inside the picture, over the safe line", () => {
-  // No controls block to measure the band against, only the safe line: the pure rule's fallback. The page has
-  // `.osd` (hidden by opacity) from the first frame to the end, so this case is the rule's own, rarely the page's.
+/** The picture's foot and height on the TV under a 2.39:1 film. */
+const wideFoot = 1080 - (1080 - 803) / 2;
+const wideHeight = 803;
+
+test("two lines over a letterboxed wide film on a TV hang 8% of the picture over its foot, over the safe line", () => {
+  // No controls block in the rects: the pure foot. The page has `.osd` (hidden by opacity) from the first frame to the
+  // end; a hidden block changes nothing on a landscape screen, as the second case shows.
   const lines = drawn({ box: tv, video: wide, up: false, lines: two });
   expect(lines.fromFoot).toBe(true);
+  expect(lines.bottom).toBeCloseTo(wideFoot - wideHeight * FOOT, 5);
   expect(lines.bottom).toBeLessThanOrEqual(safeLine);
-  expect(lines.bottom).toBeCloseTo(941.5 - 8, 5);
   expect(lines.top).toBeGreaterThanOrEqual(0);
   // The same with the hidden controls' block in the page.
-  expect(drawn({ box: tv, video: wide, bar: { top: 870, bottom: 1026 }, up: false, lines: two }).bottom).toBeCloseTo(933.5, 5);
+  expect(drawn({ box: tv, video: wide, bar: { top: 870, bottom: 1026 }, up: false, lines: two }).bottom).toBeCloseTo(wideFoot - wideHeight * FOOT, 5);
 });
 
-test("one line fits the band under the picture: drawn there, still over the safe line", () => {
+test("one line on a landscape TV hangs from the same foot as two, never in the band (no jump between cues)", () => {
   const one = drawn({ box: tv, video: wide, up: false, lines: two / 2 });
-  expect(one.fromFoot).toBe(false);
-  expect(one.top).toBeCloseTo(941.5 + 10, 5);
-  expect(one.bottom).toBeLessThanOrEqual(safeLine);
+  const both = drawn({ box: tv, video: wide, up: false, lines: two });
+  expect(one.fromFoot).toBe(true);
+  expect(one.bottom).toBeCloseTo(both.bottom, 5);
+  expect(one.bottom).toBeLessThan(wideFoot);
 });
 
-test("a picture that fills the screen keeps its lines over the safe line, not 16 px from the foot", () => {
+test("a picture that fills the screen hangs its lines 8% of its height over its foot, over the safe line", () => {
   const full = drawn({ box: tv, video: { width: 1920, height: 1080 }, up: false, lines: two });
   expect(full.fromFoot).toBe(true);
-  expect(full.bottom).toBeCloseTo(safeLine, 5);
+  expect(full.bottom).toBeCloseTo(1080 - 1080 * FOOT, 5);
+  // A landscape phone (844x390, 16:9 pillarboxed): 8% of 390, 31.2 px.
+  const phone = { top: 0, bottom: 390, width: 844, height: 390 };
+  expect(drawn({ box: phone, video: { width: 1920, height: 1080 }, up: false, lines: 2 * 24 * 1.3 }).bottom).toBeCloseTo(390 - 390 * FOOT, 5);
+  // The video's size not known yet: the element's own height stands for the picture.
+  expect(drawn({ box: tv, video: { width: 0, height: 0 }, up: false, lines: two }).bottom).toBeCloseTo(1080 - 1080 * FOOT, 5);
+});
+
+test("an element that does not start at the page's top keeps the same foot from its own foot", () => {
+  const desktop = { top: 100, bottom: 910, width: 1440, height: 810 };
+  const picture = 1440 / 2.39;
+  const lines = drawn({ box: desktop, video: { width: 1920, height: 1920 / 2.39 }, up: false, lines: two });
+  expect(lines.bottom).toBeCloseTo(910 - (810 - picture) / 2 - picture * FOOT, 5);
 });
 
 test("the controls up: 8 px over the scrubber, 85% while they would meet the transport", () => {
@@ -53,6 +70,16 @@ test("the controls up: 8 px over the scrubber, 85% while they would meet the tra
   expect(near.shrink).toBe(true);
 });
 
+test("a wide film with the controls up: the higher of its 8% foot and 8 px over the scrubber", () => {
+  const rects = { box: tv, video: wide, bar: { top: 860, bottom: 1026 }, transport: { top: 486, bottom: 594 }, up: true, lines: two };
+  // A low scrubber (900): the picture's own foot, 877.26, is the higher.
+  const low = drawn({ ...rects, scrubber: { top: 900, bottom: 908 } });
+  expect(low.bottom).toBeCloseTo(wideFoot - wideHeight * FOOT, 5);
+  expect(low.shrink).toBe(false);
+  // A high one (850): 8 px over it.
+  expect(drawn({ ...rects, scrubber: { top: 850, bottom: 858 } }).bottom).toBeCloseTo(842, 5);
+});
+
 test("a phone upright draws under the picture, in the band over the controls, as before", () => {
   const phone = { top: 0, bottom: 844, width: 390, height: 844 };
   const lines = drawn({ box: phone, video: { width: 1920, height: 1080 }, bar: { top: 700, bottom: 820 }, up: false, lines: 2 * 24 * 1.3 });
@@ -60,6 +87,16 @@ test("a phone upright draws under the picture, in the band over the controls, as
   expect(lines.fromFoot).toBe(false);
   expect(lines.top).toBeCloseTo(pictureFoot + 10, 5);
   expect(lines.bottom).toBeLessThanOrEqual(700);
+});
+
+test("a phone upright with more lines than its band holds hangs them 8% of the picture over its foot", () => {
+  const phone = { top: 0, bottom: 844, width: 390, height: 844 };
+  const picture = (1080 * 390) / 1920;
+  const pictureFoot = 844 - (844 - picture) / 2;
+  // Four Large lines: 4 x 24 x 1.3 = 124.8 px, more than the band over the controls holds (640 - 531.7 - 10).
+  const lines = drawn({ box: phone, video: { width: 1920, height: 1080 }, bar: { top: 640, bottom: 820 }, up: false, lines: 4 * 24 * 1.3 });
+  expect(lines.fromFoot).toBe(true);
+  expect(lines.bottom).toBeCloseTo(pictureFoot - picture * FOOT, 5);
 });
 
 const cue = { line: "auto" as number | "auto", snapToLines: true, position: "auto" as number | "auto", align: "center", size: 100 };

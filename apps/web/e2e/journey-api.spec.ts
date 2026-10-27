@@ -1889,7 +1889,7 @@ test("phone player, portrait and landscape: transport centred, scrubber then opt
           const scale = Math.min(box.width / v.videoWidth, box.height / v.videoHeight);
           const band = (box.height - v.videoHeight * scale) / 2;
           const span = el.querySelector("span") as HTMLElement;
-          return { top: r.top, bottom: r.bottom, lines: el.querySelectorAll("span").length, font: parseFloat(getComputedStyle(span).fontSize), pictureBottom: box.bottom - band, foot: box.bottom };
+          return { top: r.top, bottom: r.bottom, lines: el.querySelectorAll("span").length, font: parseFloat(getComputedStyle(span).fontSize), pictureBottom: box.bottom - band, picture: v.videoHeight * scale, foot: box.bottom };
         });
       const clear = (c: { top: number; bottom: number } | null, b: DOMRect) => !!c && (c.bottom <= b.top || c.top >= b.bottom);
       const portrait = size.height > size.width;
@@ -1923,7 +1923,7 @@ test("phone player, portrait and landscape: transport centred, scrubber then opt
       }
       await p.screenshot({ path: `${SHOTS}/phone-player-${size.width}x${size.height}.png` });
       // Controls hidden: portrait keeps the lines in the band; landscape takes
-      // them back to the foot, full size.
+      // them back to the foot, 8% of the picture over its foot, full size.
       await expect(p.locator(".player-scr")).toHaveClass(/idle/, { timeout: 10_000 });
       if (portrait) {
         const c = await cue();
@@ -1932,7 +1932,7 @@ test("phone player, portrait and landscape: transport centred, scrubber then opt
       } else {
         await expect.poll(async () => (await cue())?.font).toBe(24);
         const c = await cue();
-        expect((c?.foot ?? 0) - (c?.bottom ?? 0)).toBeLessThanOrEqual(30);
+        expect(Math.abs((c?.pictureBottom ?? 0) - (c?.bottom ?? 0) - 0.08 * (c?.picture ?? 0))).toBeLessThanOrEqual(2);
       }
       await context.close();
     }
@@ -1969,11 +1969,14 @@ test("TV and desktop player: the page draws the lines, over the 5% line, clear o
           const s = document.querySelector<HTMLElement>(".player-scr .scrub");
           if (!el) return null;
           const box = v.getBoundingClientRect();
-          return { bottom: el.getBoundingClientRect().bottom, foot: box.bottom, height: box.height, scrub: s?.getBoundingClientRect().top ?? Infinity };
+          // The picture inside the element (object-fit: contain): a 16:9 film is letterboxed on a 16:10 desktop.
+          const picture = v.videoHeight * Math.min(box.width / v.videoWidth, box.height / v.videoHeight);
+          return { bottom: el.getBoundingClientRect().bottom, pictureBottom: box.bottom - (box.height - picture) / 2, picture, height: box.height, scrub: s?.getBoundingClientRect().top ?? Infinity };
         });
-      // Controls hidden: the lines end over the title-safe line.
+      // Controls hidden: the lines end 8% of the picture over its foot (within 0.5% of the screen), so over the
+      // title-safe line too.
       await expect(p.locator(".player-scr")).toHaveClass(/idle/, { timeout: 10_000 });
-      await expect.poll(async () => { const c = await cue(); return c ? c.foot - c.bottom - c.height * 0.05 : -1; }).toBeGreaterThanOrEqual(-1);
+      await expect.poll(async () => { const c = await cue(); return c ? Math.abs(c.pictureBottom - c.bottom - c.picture * 0.08) / c.height : 1; }).toBeLessThanOrEqual(0.005);
       // The controls up (a key on a TV, the pointer on a desktop; while hidden the first press only shows them):
       // the lines end over the scrubber, which is on screen.
       if (form === "tv") await p.keyboard.press("ArrowUp");
