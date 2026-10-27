@@ -425,6 +425,8 @@ fun Chip(
  *
  * @param kept the segment kept wholly in view by the track's own scroll, at first layout and whenever it changes
  *   or moves (a held choice on a narrow track or at a large font); the page around the track never scrolls for it.
+ *   The segments are laid out by a plain Layout, which answers no intrinsic sizes: keep the track out of
+ *   IntrinsicSize parents.
  */
 @Composable
 fun SegmentTrack(
