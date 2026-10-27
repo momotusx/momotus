@@ -285,15 +285,7 @@ private fun AppNav(
     val needsVersions = routes.any { it is Route.Title || it is Route.Versions || it is Route.Player }
     LaunchedEffect(needsVersions) { if (!needsVersions) app.versions.closeAll() }
 
-    // A kind chosen on Versions holds while that video's Versions page or player is on the stack; once the video leaves
-    // (back to its title, a player ending on the title, any other place), every kind is listed again, so the title's
-    // Play plays the core's pick (plans/plugins-and-marketplace.md 4.2).
-    val choosing = choosingVideos(routes)
-    var choosingBefore by remember { mutableStateOf(choosing) }
-    LaunchedEffect(choosing) {
-        for (gone in choosingBefore - choosing) app.versions.listEveryKind(gone)
-        choosingBefore = choosing
-    }
+    KindResetEffect(routes, app.versions::listEveryKind)
 
     fun choose(place: Route) {
         val next = switchedTo(routes, place)
@@ -1004,3 +996,21 @@ internal fun offlineBanner(
         !offline || top is Route.Player -> null
         else -> anyDone && top != Route.Downloads && top !is Route.DownloadedSeries
     }
+
+/**
+ * A kind chosen on Versions holds while that video's Versions page or player is on the stack; once the video leaves
+ * (back to its title, a player ending on the title, any other place), every kind is listed again, so the title's Play
+ * plays the core's pick (plans/plugins-and-marketplace.md 4.2).
+ */
+@Composable
+internal fun KindResetEffect(
+    routes: List<Route>,
+    listEveryKind: (videoId: String) -> Unit,
+) {
+    val choosing = choosingVideos(routes)
+    var choosingBefore by remember { mutableStateOf(choosing) }
+    LaunchedEffect(choosing) {
+        for (gone in choosingBefore - choosing) listEveryKind(gone)
+        choosingBefore = choosing
+    }
+}
