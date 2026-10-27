@@ -25,6 +25,13 @@ async fn reply_to(rx: &mut mpsc::UnboundedReceiver<Outgoing>, id: u64) -> Value 
     }
 }
 
+/// Sends `request` and waits for its reply.
+async fn ask(s: &mut Session, rx: &mut mpsc::UnboundedReceiver<Outgoing>, request: Value) -> Value {
+    let id = request["id"].as_u64().unwrap();
+    s.handle_text(&request.to_string()).await;
+    reply_to(rx, id).await
+}
+
 #[tokio::test]
 async fn subscribe_command_unsubscribe_and_errors() {
     let core = Core::temporary("p").unwrap();
@@ -1041,15 +1048,6 @@ async fn passkeys_over_the_protocol() {
             rx,
         )
     };
-    async fn ask(
-        s: &mut Session,
-        rx: &mut mpsc::UnboundedReceiver<Outgoing>,
-        request: Value,
-    ) -> Value {
-        let id = request["id"].as_u64().unwrap();
-        s.handle_text(&request.to_string()).await;
-        reply_to(rx, id).await
-    }
     let b64 = |bytes: [u8; 32]| base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(bytes);
     let prf = b64([5u8; 32]);
     let (mut phone, mut phone_rx) = session(true);
@@ -1946,5 +1944,30 @@ async fn the_code_renews_itself_and_still_signs_the_screen_in() {
     })
     .await
     .expect("joined, and says who let it in");
+
+    // "Not you?" after the screen already pulled: its next round says it
+    // was removed, so it drops to the doors instead of a stale Home.
+    let PairingSnapshot::Joined {
+        record: tv_record, ..
+    } = pairing.snapshot()
+    else {
+        unreachable!()
+    };
+    let (tx_b, mut rx_b) = Output::channel();
+    let mut b = Session::new(core_b, tx_b);
+    let round = json!({"id": 1, "op": "syncNow", "record": tv_record});
+    let pulled = ask(&mut b, &mut rx_b, round.clone()).await;
+    assert_eq!(pulled["ok"], true, "{pulled}");
+    let device = approved["result"]["member"].clone();
+    let record = approved["result"]["record"].clone();
+    let removed = ask(
+        &mut a,
+        &mut rx_a,
+        json!({"id": 3, "op": "removeDevice", "record": record, "device": device}),
+    )
+    .await;
+    assert_eq!(removed["ok"], true, "{removed}");
+    let dropped = ask(&mut b, &mut rx_b, round).await;
+    assert_eq!(dropped["code"], "dropped", "{dropped}");
     let _ = std::fs::remove_dir_all(&dir);
 }

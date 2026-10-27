@@ -1049,6 +1049,13 @@ async fn create_account(
     let network = match state.identity.as_deref() {
         Some(id) if !invite && ticket.is_none() && state.config.invite.is_none() => {
             match client(&state, peer, &headers) {
+                Ok(address) if client_limited(&state, address, SIGN_UP) => {
+                    return identity::coded(
+                        StatusCode::TOO_MANY_REQUESTS,
+                        "busy",
+                        "too many sign-ups",
+                    );
+                }
                 Ok(address) => Some(id.network_tag(&address)),
                 Err(refused) => return refused,
             }
@@ -2248,7 +2255,7 @@ impl ClockWatch {
 #[derive(Default)]
 pub(crate) struct Limits {
     per_client: HashMap<(usize, IpAddr), (u64, u32)>,
-    global: [(u64, u32); 7],
+    global: [(u64, u32); 8],
     /// Codes mailed per client today (IPv6 per /48), in memory only
     /// (plans/accounts-email.md E6): (window start, mails).
     daily: HashMap<IpAddr, (u64, u32)>,
@@ -2287,6 +2294,10 @@ pub(crate) const APPLE_NOTICES: (usize, u32, u32) = (5, 10, 60);
 /// that passed its checks; relay-wide it stays under the mail service's
 /// 10 requests a second.
 pub(crate) const MAIL: (usize, u32, u32) = (6, 5, 60);
+/// A sign-up without a ticket, before its entry is parsed or the database
+/// locked; per address only (the network and relay caps follow in the
+/// transaction).
+const SIGN_UP: (usize, u32, u32) = (7, 10, 0);
 
 /// The account's scheduled deletion, if one waits, with the provider of the
 /// identity that asked (none for a Start over, or once that link is gone),

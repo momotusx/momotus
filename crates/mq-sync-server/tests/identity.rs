@@ -677,6 +677,14 @@ async fn a_sign_up_without_a_ticket_counts_against_its_network() {
         .await
         .unwrap_err();
     assert!(matches!(fourth, SyncError::SignupLimit), "{fourth:?}");
+    // Past ten a minute from one address, one is turned away before any work.
+    for _ in 0..6 {
+        let _ = mq_sync::create_account(&http(), &relay.url, None, "Phone").await;
+    }
+    let flood = mq_sync::create_account(&http(), &relay.url, None, "Phone")
+        .await
+        .unwrap_err();
+    assert!(matches!(flood, SyncError::Busy), "{flood:?}");
     // A sign-in still makes one.
     let bob = relay.sign_in("mock", "bob").await;
     Device::create(&relay, &bob, false).await.unwrap();

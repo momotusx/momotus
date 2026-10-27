@@ -22,7 +22,16 @@ use std::time::Duration;
 use tokio::task::JoinHandle;
 use tokio::time::Instant;
 
-const POLL_EVERY: Duration = Duration::from_secs(2);
+/// How often the screen asks whether its code was answered: every 2 s while
+/// a scan is likely (its first 5 minutes), then 5 s, then 10 s past an hour,
+/// so a TV left on its first screen for days costs the relay little.
+fn poll_every(open: Duration) -> Duration {
+    Duration::from_secs(match open.as_secs() {
+        0..300 => 2,
+        300..3600 => 5,
+        _ => 10,
+    })
+}
 /// The next code shows this long before the current one ends (at most a
 /// fifth of a code's life).
 const RENEW_EARLY: Duration = Duration::from_secs(30);
@@ -117,6 +126,7 @@ async fn run(
     snapshot: SharedObservable<PairingSnapshot>,
 ) {
     let form = Some(form.as_str()).filter(|f| !f.is_empty());
+    let opened = Instant::now();
     // The code on screen, and the one that gave way to it.
     let mut current: Option<(Live, Instant)> = None;
     let mut previous: Option<Live> = None;
@@ -159,7 +169,7 @@ async fn run(
                 }
             }
         }
-        tokio::time::sleep(POLL_EVERY).await;
+        tokio::time::sleep(poll_every(opened.elapsed())).await;
         // Each live code once: the one that gave way first, then the current.
         if previous.as_ref().is_some_and(|p| Instant::now() >= p.until) {
             previous = None;
@@ -236,5 +246,19 @@ async fn collect(core: &Core, request: &PairingRequest) -> Poll {
             tracing::info!("pairing reply refused: {e}");
             Poll::Ended
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_poll_slows_as_the_screen_stays_open() {
+        let at = |s| poll_every(Duration::from_secs(s)).as_secs();
+        assert_eq!(
+            [at(0), at(299), at(300), at(3599), at(3600), at(86_400)],
+            [2, 2, 5, 5, 10, 10]
+        );
     }
 }

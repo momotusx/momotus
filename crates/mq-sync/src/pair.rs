@@ -34,7 +34,7 @@ use hpke::aead::ChaCha20Poly1305;
 use hpke::kdf::HkdfSha256;
 use hpke::kem::X25519HkdfSha256;
 use hpke::{Deserializable, OpModeR, OpModeS, Serializable};
-use mq_http::HttpClient;
+use mq_http::{HttpClient, HttpError};
 use mq_library::Library;
 use mq_library::hlc::{HlcClock, now_ms};
 use serde::{Deserialize, Serialize};
@@ -213,12 +213,15 @@ pub async fn start_pairing_as(
     })
 }
 
-/// A lowercase host name with no scheme, port, path, user or empty label.
+/// A lowercase domain name with a dot and no scheme, port, path, user or
+/// empty label: never an IP literal or a one-label name such as `localhost`,
+/// which would point a phone's link into its own network.
 fn bare_host(host: &str) -> bool {
     let parsed = url::Url::parse(&format!("https://{host}/")).ok();
-    host.split('.').all(|label| !label.is_empty())
+    host.contains('.')
+        && host.split('.').all(|label| !label.is_empty())
         && parsed.is_some_and(|u| {
-            u.host_str() == Some(host)
+            u.domain() == Some(host)
                 && u.port().is_none()
                 && u.path() == "/"
                 && u.username().is_empty()
@@ -236,7 +239,25 @@ const QR_NAME_CHARS: usize = 40;
 fn clean_name(name: &str) -> Option<String> {
     let hidden = |c: char| {
         c.is_control()
-            || matches!(c, '\u{200B}'..='\u{200F}' | '\u{202A}'..='\u{202E}' | '\u{2060}'..='\u{2069}' | '\u{FEFF}' | '\u{00AD}')
+            || matches!(
+                c,
+                '\u{00AD}'
+                    | '\u{034F}'
+                    | '\u{061C}'
+                    | '\u{115F}'
+                    | '\u{1160}'
+                    | '\u{180E}'
+                    | '\u{200B}'..='\u{200F}'
+                    | '\u{202A}'..='\u{202E}'
+                    | '\u{2060}'..='\u{2069}'
+                    | '\u{2800}'
+                    | '\u{3164}'
+                    | '\u{FE00}'..='\u{FE0F}'
+                    | '\u{FEFF}'
+                    | '\u{FFA0}'
+                    | '\u{E0000}'..='\u{E007F}'
+                    | '\u{E0100}'..='\u{E01EF}'
+            )
     };
     let kept: String = name
         .chars()
@@ -591,16 +612,25 @@ pub async fn approve_pairing_with(
     if session.roster.admitted(&keys.id()) {
         return Err(bad("this code belongs to a device already in the account"));
     }
-    let near: Near = http
-        .get_json(
+    // A relay from before the near check has no such route: never near, so
+    // only a scan behind the screen lock approves there.
+    let near = match http
+        .get_json::<Near>(
             &format!("{}/v1/pairings/{pairing}/near", config.server),
             &options(&config.server, &session.record.device_token),
         )
-        .await?;
-    if !near.near && !how.scanned {
+        .await
+    {
+        Ok(answer) => answer.near,
+        Err(HttpError::Status {
+            status: 404 | 405, ..
+        }) => false,
+        Err(e) => return Err(e.into()),
+    };
+    if !near && !how.scanned {
         return Err(SyncError::ScanRequired);
     }
-    if !near.near && !how.unlocked {
+    if !near && !how.unlocked {
         return Err(SyncError::UnlockRequired);
     }
     let (seq, hash) = session.roster.head().unwrap_or_default();
@@ -1111,6 +1141,10 @@ mod tests {
             "a..b",
             "user@host",
             "a.example?x",
+            "10.0.0.1",
+            "192.168.1.1",
+            "localhost",
+            "[::1]",
         ] {
             assert!(!bare_host(odd), "{odd}");
         }
@@ -1134,6 +1168,10 @@ mod tests {
             Some("Two lines here")
         );
         assert_eq!(clean_name(" \u{200D}\t").as_deref(), None);
+        assert_eq!(
+            clean_name("Den\u{061C}\u{3164}\u{2800}\u{FE0F}\u{E0041}\u{180E} TV").as_deref(),
+            Some("Den TV")
+        );
         let long = "Ç".repeat(41);
         assert_eq!(clean_name(&long).map(|n| n.chars().count()), Some(40));
 

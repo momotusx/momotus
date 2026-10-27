@@ -104,7 +104,8 @@ fn save(data: &Path, record: &SyncConfig) -> Result<(), String> {
     std::fs::rename(&temp, path).map_err(|e| e.to_string())
 }
 
-/// New device: prints the pairing code, waits for approval and joins.
+/// New device: prints the pairing code, waits for approval and joins. A
+/// test peer: one code, which ends with its slot (the apps renew theirs).
 pub async fn pair(data: &Path, server: &str, name: &str) -> Result<(), String> {
     let http = http()?;
     let request = mq_sync::pair::start_pairing(&http, server)

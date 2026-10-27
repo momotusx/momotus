@@ -462,6 +462,42 @@ async fn a_link_approves_only_from_the_screens_network() {
     assert_eq!(refused.code(), Some("scanRequired"), "{refused}");
 }
 
+/// A relay from before the near check has no `near` route: a phone on this
+/// version treats it as never near, so a link asks for a scan and a scan
+/// behind the screen lock still approves.
+#[tokio::test]
+async fn a_relay_without_near_takes_a_scan_only() {
+    use axum::response::IntoResponse;
+    let mut b = [0u8; 8];
+    getrandom::fill(&mut b).unwrap();
+    let dir = std::env::temp_dir().join(format!("mq-pair-{}", hex::encode(b)));
+    std::fs::create_dir_all(&dir).unwrap();
+    let app = router(&dir.join("relay.sqlite"), Config::default())
+        .unwrap()
+        .layer(axum::middleware::from_fn(
+            |request: axum::extract::Request, next: axum::middleware::Next| async move {
+                if request.uri().path().ends_with("/near") {
+                    axum::http::StatusCode::NOT_FOUND.into_response()
+                } else {
+                    next.run(request).await
+                }
+            },
+        ));
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let server = format!("http://{}", listener.local_addr().unwrap());
+    tokio::spawn(async move { mq_sync_server::serve(listener, app).await.unwrap() });
+    let mut phone = Device::first(&server, "Phone").await;
+    let tv = start_pairing(&http(), &server).await.unwrap();
+    let link = Approval {
+        scanned: false,
+        unlocked: false,
+    };
+    let refused = phone.approve_as(&tv.qr, link).await.unwrap_err();
+    assert_eq!(refused.code(), Some("scanRequired"), "{refused}");
+    phone.approve(&tv.qr).await.unwrap();
+    assert!(tv.poll(&http()).await.unwrap().is_some());
+}
+
 /// A slot filled in its last second is still collected after its end, even
 /// once another device opened a slot (whose cleanup must spare it), until
 /// its grace ends; an empty one is not (Q5).
