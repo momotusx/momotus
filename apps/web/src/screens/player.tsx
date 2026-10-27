@@ -358,7 +358,7 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
   const secondDelay = () => delayOf(second()?.url);
   createEffect(() => engine.setSubtitleDelay(subDelay()));
   createEffect(() => engine.setSubtitleDelay(secondDelay(), 2));
-  // The core's start audio, applied again only when it changes, never over a track the viewer picked since.
+  // The core's start audio, applied again only when it changes (the engine keeps a track the viewer picked).
   const audioLanguages = createMemo(() => snap()?.audioLanguages ?? [], [], { equals: (a, b) => a.join() === b.join() });
   createEffect(() => engine.setAudioLanguages(audioLanguages()));
   let unsent: { url: string; ms: number } | null = null;

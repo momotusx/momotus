@@ -92,6 +92,8 @@ final class PlayerModel {
     /// The file's own default audio track, marked in the picker.
     private(set) var audioDefault: Int?
     private(set) var audioTrack: Int?
+    /// The viewer picked an audio track in this file (`selectAudio`): the core's start audio leaves it.
+    @ObservationIgnored private var viewerPickedAudio = false
     @ObservationIgnored private var audioGroup: AVMediaSelectionGroup?
     /// The file's own subtitles (a stream's WebVTT renditions, a file's text
     /// tracks) by name, and the index of the one on. AVKit draws them in the
@@ -245,10 +247,16 @@ final class PlayerModel {
     private func startAudio() {
         guard let index = TrackPicker.startAudio(audioTrackLanguages, wanted: playback?.audioLanguages ?? []),
               index != audioTrack else { return }
-        selectAudio(index)
+        turnOnAudio(index)
     }
 
+    /// The viewer's pick (or one carried over a reopen): a later start audio never goes over it.
     func selectAudio(_ index: Int) {
+        viewerPickedAudio = true
+        turnOnAudio(index)
+    }
+
+    private func turnOnAudio(_ index: Int) {
         if backend == .aether {
             guard engineAudioIDs.indices.contains(index) else { return }
             aether?.selectAudio(id: engineAudioIDs[index])
@@ -328,6 +336,7 @@ final class PlayerModel {
     /// Reads the audio and subtitle tracks once the file is open.
     private func loadTracks(_ item: AVPlayerItem, generation: Int) {
         (audioTracks, audioTrackLanguages, audioDefault, audioTrack, audioGroup) = ([], [], nil, nil, nil)
+        viewerPickedAudio = false
         (textTracks, textTrackLanguages, textTrack, textGroup, textOptions, textTimeable) = ([], [], nil, nil, [], [])
 
         let asset = item.asset
@@ -939,7 +948,7 @@ final class PlayerModel {
         let startAudioChanged = snapshot.audioLanguages != playback?.audioLanguages
         playback = snapshot
         // The core named the start audio after the tracks came: it turns on while the engine's own pick still plays.
-        if startAudioChanged, audioTrack == audioDefault { startAudio() }
+        if startAudioChanged, !viewerPickedAudio { startAudio() }
         if PlayerLayout.retryRose(old: lastRetries, new: snapshot.retries) { showTryingAgain() }
         lastRetries = snapshot.retries ?? lastRetries
         if let start = snapshot.start { startWindow.saw(start.haveBytes, at: .now) }
@@ -1158,6 +1167,7 @@ final class PlayerModel {
         }
         aether = session
         (audioTracks, audioTrack, textTracks, textTrack, textTimeable, engineCues, engineImages) = ([], nil, [], nil, [], [], [])
+        viewerPickedAudio = false
         let mine = { [weak self] in self.map { $0.generation == generation } ?? false }
         #if DEBUG
         let muted = DebugHooks.mute

@@ -36,7 +36,10 @@ export function createVideoEngine(events: EngineEvents): Engine {
 
   // The core's start audio (`audioLanguages`): the first of them the file lists turns on as it opens.
   let wantedAudio: string[] = [];
+  // The viewer picked a track in this file: a later start audio never goes over it.
+  let picked = false;
   const applyStartAudio = () => {
+    if (picked) return;
     const list = audioList();
     const all = list ? Array.from(list) : [];
     const id = startAudio(all, wantedAudio);
@@ -153,6 +156,7 @@ export function createVideoEngine(events: EngineEvents): Engine {
     tracks,
     load(url, startSec, hold = false) {
       if (onMetadata) video.removeEventListener("loadedmetadata", onMetadata);
+      picked = false;
       start.set(startSec);
       video.src = url;
       const applyStart = () => {
@@ -202,6 +206,7 @@ export function createVideoEngine(events: EngineEvents): Engine {
     selectTrack(kind, id) {
       const list = audioList();
       if (kind !== "audio" || !list) return;
+      picked = true;
       for (const t of Array.from(list)) t.enabled = t.id === id;
       readTracks();
     },
