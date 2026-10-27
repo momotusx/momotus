@@ -5,7 +5,7 @@ import Wrench from "lucide-solid/icons/wrench";
 import RefreshCw from "lucide-solid/icons/refresh-cw";
 import Sparkle from "lucide-solid/icons/sparkle";
 import ShieldAlert from "lucide-solid/icons/shield-alert";
-import { createEffect, createSignal, For, Match, on, Show, Switch } from "solid-js";
+import { createEffect, createSignal, For, Match, on, onCleanup, Show, Switch } from "solid-js";
 import { HeroCarousel } from "../components/hero";
 import { CONTINUE_ROW, Row } from "../components/row";
 import { homeView, liveView, op, prefsView, retryHomeRow } from "../core/client";
@@ -78,6 +78,13 @@ function AccountCard() {
   createEffect(() => {
     if (sync.joined() && !sync.devices()) void sync.loadDevices().catch(() => undefined);
   });
+  // Right after a pairing, "Signed in from" the device that approved it, for 8 s: a line with no button, so
+  // nothing takes focus from Home (plans/tv-qr-login.md 5.5).
+  createEffect(() => {
+    if (!sync.joinedBy()) return;
+    const timer = setTimeout(() => sync.setJoinedBy(null), 8000);
+    onCleanup(() => clearTimeout(timer));
+  });
   const card = () =>
     homeCard({
       deletion: sync.report()?.deletion ?? null,
@@ -86,6 +93,7 @@ function AccountCard() {
       members: sync.devices()?.members ?? null,
       profile: activeProfile(profiles()),
       alone: sync.joined() && needsSecondWayIn(sync.devices()?.members ?? null),
+      signedInFrom: sync.joinedBy(),
       date: (ms) => new Date(ms).toLocaleDateString(undefined, { dateStyle: "medium" }),
     });
   const [problem, setProblem] = createSignal<string | null>(null);

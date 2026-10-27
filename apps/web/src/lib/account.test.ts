@@ -59,7 +59,11 @@ test("the shared file is read as it is, and its about names only keys it has", (
 const NOT_ON_THE_WEB = {
   passkey: ["usePasskey", "passkeyHere", "savePasskeyHere", "passkeyLabel", "joinedWithPasskey", "lastUsed", "givingAway", "kitHere", "kitDropped", "tooManyKits", "kitTaken", "plainLink"],
   passkeySheet: ["noSecondWayIn", "noSecondWayInActions", "passkeyCancelled", "passkeyCancelledActions", "kitUnknownPasskey", "kitUnknownPasskeyActions"],
-  approving: ["approveWarning", "scanAgainHere", "codeFound", "otherRelayCode", "otherRelayCodeActions"],
+  approving: ["approveWarning", "scanAgainHere", "codeFound", "otherRelayCode", "otherRelayCodeActions", "approveAsk", "approveAskTv", "approveAskOther", "approveButton", "approveNear", "approveUnnamed", "approveScanHere", "approveDone", "approveNotYou", "approveSlow", "approveAnswered", "approveExpired", "approveKids"],
+  // The TV's screen before plans/tv-qr-login.md, still read by the native apps until their phases.
+  retired: ["tvSignInHow", "tvWithoutAccount"],
+  // The native first run's passkey probe: the web shows Create at once (D11).
+  nativeFirstRun: ["continue"],
 };
 
 test("the web reads every key it shows, and only the passkey and approve keys stay unread", async () => {
@@ -130,11 +134,16 @@ test("only the owner clears a security notice; a kids profile shows none", () =>
 
 test("Home's one account card goes by priority", () => {
   const date = () => "28 Oct";
-  const base = { deletion: null, gone: false, announcements: [], members: null, profile: owner, alone: false, date };
+  const base = { deletion: null, gone: false, announcements: [], members: null, profile: owner, alone: false, signedInFrom: null, date };
   expect(homeCard(base)).toBeNull();
   expect(homeCard({ ...base, alone: true })?.kind).toBe("secondWay");
   // The nudge leads to a recovery kit, the owner's to make (D17).
   expect(homeCard({ ...base, alone: true, profile: other })).toBeNull();
+  // The device that signed this one in comes before announcements, on every profile but a kids one.
+  const fresh = { ...base, alone: true, signedInFrom: "Pixel", announcements: [note("passkey")] };
+  expect(homeCard(fresh)).toEqual({ kind: "signedIn", text: "Signed in from Pixel" });
+  expect(homeCard({ ...fresh, profile: other })?.kind).toBe("signedIn");
+  expect(homeCard({ ...fresh, profile: kid })).toBeNull();
   const withNote = { ...base, alone: true, announcements: [note("passkey")] };
   expect(homeCard(withNote)).toMatchObject({ kind: "announcement", ok: true, notYou: true, member: "m1" });
   expect(homeCard({ ...withNote, profile: other })).toMatchObject({ kind: "announcement", ok: false, notYou: false });
@@ -154,6 +163,9 @@ test("Home's one account card goes by priority", () => {
   );
   expect(cancelUnlink("email")).toBe("Cancel and turn off email sign-in");
   expect(cancelUnlink("google")).toBe("Cancel and turn off Google sign-in");
+  // A sign-up without a sign-in that hit its network's limit says so, with no provider named.
+  expect(signInFailure("signupLimit")?.text).toBe(shared.signupLimitNetwork);
+  expect(signInFailure("signupLimit", "google")?.text).toContain("Google account");
 });
 
 test("a second way in is a recovery kit or another phone or tablet, as the protocol says", () => {

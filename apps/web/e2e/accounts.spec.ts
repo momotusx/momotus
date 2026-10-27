@@ -159,14 +159,13 @@ async function providerPage(page: Page, button: string, who: "alice" | "bob" | "
 }
 
 /** Desk approves the code another device shows (the development builds' paste page, the e2e
- * peer's path; the web itself approves nothing) and answers the six digits. */
-async function approve(code: string): Promise<string> {
+ * peer's path; the web itself approves nothing), as a scan behind its passkey: every core here is on
+ * loopback, which is never near (plans/tv-qr-login.md Q2). */
+async function approve(code: string) {
   await go(desk, "/sync/add");
   await desk.locator('[data-f="sync-add:code"]').fill(code);
   await desk.locator('[data-f="sync-add:approve"]').click();
-  const digits = (await desk.locator(".confirm .code").textContent()) ?? "";
-  expect(digits).toMatch(/^\d{6}$/);
-  return digits;
+  await expect(desk.locator(".confirm .step")).toHaveText("Signing in");
 }
 
 /** Presses Sync now on Account, so the next round's report (announcements, deletion) is in. */
@@ -630,7 +629,7 @@ test.describe.serial("accounts on the web", () => {
     c.close();
   });
 
-  test("the TV's first run is the code for a phone: Desk approves it, and the TV skips the doors", async () => {
+  test("the TV's first run is the code for a phone: Desk approves it, and the TV opens Home", async () => {
     // The TV has no email row, and the email route sends it to Sign in (E13).
     await expect(tv.locator("html")).toHaveAttribute("data-form", "tv");
     await go(tv, "/sign-in");
@@ -640,18 +639,27 @@ test.describe.serial("accounts on the web", () => {
     await expect(tv).toHaveURL(/\/sign-in$/);
     await go(tv, "/welcome");
     await expect(tv.locator("h1")).toHaveText("Sign in with your phone");
-    await expect(tv.getByText("On your phone, open Momotus and tap Sign in another device")).toBeVisible();
+    await expect(tv.getByText("Scan with your phone's camera")).toBeVisible();
     await expect(tv.locator(".qrbox svg")).toBeVisible();
-    await expect(tv.locator('[data-f="signin:tv-without"]')).toHaveText("Use without an account");
-    await expect(tv.locator('[data-f="signin:tv-kit"]')).toHaveText("Use a recovery kit");
+    await expect(tv.locator(".qrbox svg")).toHaveAttribute("aria-label", "QR code. Scan it with your phone's camera to sign in.");
+    // Nothing else to choose: Browse first is the one focus stop, and it has focus.
+    await expect(tv.locator('[data-f="welcome:skip"]')).toBeFocused();
+    await expect(tv.locator("main :is(button, a)")).toHaveCount(1);
     expect(asked.find((a) => a.port === P.c && a.view === "pairing")?.form).toBe("tv");
     await shot(tv, "accounts-first-run-tv");
     const code = codes.get(P.c) ?? "";
-    expect(code).toMatch(/^marquee:pair\?v=2&|^https:\/\/[^/]+\/pair#v=3&/);
-    const digits = await approve(code);
-    await expect(tv.locator(".confirm .code")).toHaveText(digits);
-    await press(tv, "pair:yes");
+    // The relay names its link host: a phone camera opens the code as a link.
+    expect(code).toMatch(new RegExp(`^https://${LINK_HOST}/pair#v=3&`));
+    expect(code).toMatch(/&f=tv$/);
+    await approve(code);
     await expect(tv).toHaveURL(new RegExp(`127.0.0.1:${PORTS.vite}/$`), { timeout: 30_000 });
+    // Home says who let it in for 8 s, with nothing to focus (plans/tv-qr-login.md 5.5).
+    const card = tv.locator(".account-card");
+    await expect(card).toHaveAttribute("data-card", "signedIn");
+    await expect(card).toContainText("Signed in from ");
+    await expect(card.locator("button, a")).toHaveCount(0);
+    await shot(tv, "accounts-tv-signed-in");
+    await expect(tv.locator('.account-card[data-card="signedIn"]')).toHaveCount(0, { timeout: 12_000 });
     await desk.locator('[data-f="sync-add:done"]').click();
   });
 
@@ -668,9 +676,7 @@ test.describe.serial("accounts on the web", () => {
     await expect(phone.locator(".sync-ask p")).toHaveText("Your old library can't be opened. It is deleted in 7 days unless one of your old devices cancels.");
     await shot(phone, "accounts-found-phone");
     await phone.locator('[data-f="signin:start-over-cancel"]').click();
-    const digits = await approve(codes.get(P.b) ?? "");
-    await expect(phone.locator(".confirm .code")).toHaveText(digits);
-    await phone.locator('[data-f="pair:yes"]').click();
+    await approve(codes.get(P.b) ?? "");
     await expect(phone).toHaveURL(new RegExp(`127.0.0.1:${PORTS.vite}/$`), { timeout: 30_000 });
     await desk.locator('[data-f="sync-add:done"]').click();
   });

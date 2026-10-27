@@ -65,7 +65,8 @@ export function signInFailure(code: string, provider = ""): Failure | null {
     case "ticketExpired":
       return { text: w.ticketExpired, actions: acts(w.ticketExpiredActions, ["retry"]) };
     case "signupLimit":
-      return { text: fill(w.signupLimit, { providerAccount: account }), actions: acts(w.signupLimitActions, ["other"]) };
+      // Without a provider: the sign-up without a sign-in, counted per network (plans/tv-qr-login.md Q7).
+      return { text: provider ? fill(w.signupLimit, { providerAccount: account }) : w.signupLimitNetwork, actions: acts(w.signupLimitActions, ["other"]) };
     case "linkedElsewhere":
       return { text: fill(w.linkedElsewhere, { providerAccount: account }), actions: acts(w.linkedElsewhereActions, ["move", "cancel"]) };
     case "busy":
@@ -205,11 +206,13 @@ export function announcementLine(a: Announcement, members: readonly MemberInfo[]
 }
 
 /** Home's one account card (4.3), by priority: the scheduled deletion, the account deleted
- * elsewhere, the first announcement this profile shows, the nudge for a second way in. */
+ * elsewhere, the device that signed this one in (plans/tv-qr-login.md 5.5), the first announcement
+ * this profile shows, the nudge for a second way in. */
 export type Card =
   | { kind: "deletion"; text: string; provider: string | null }
   | { kind: "gone"; text: string; remove: boolean }
   | { kind: "announcement"; text: string; id: string; ok: boolean; notYou: boolean; member: string | null }
+  | { kind: "signedIn"; text: string }
   | { kind: "secondWay"; text: string; detail: string };
 
 export interface CardState {
@@ -220,6 +223,8 @@ export interface CardState {
   profile: Profile | null;
   /** This device syncs and knows the account's members, and none of them is a second way in. */
   alone: boolean;
+  /** The device that approved this one's pairing, until OK. */
+  signedInFrom: string | null;
   date: (ms: number) => string;
 }
 
@@ -233,6 +238,7 @@ export function homeCard(s: CardState): Card | null {
     return { kind: "deletion", text: provider ? fill(w.deletionScheduledBy, { provider: providerName(provider), date }) : fill(w.deletionScheduled, { date }), provider };
   }
   if (s.gone) return { kind: "gone", text: w.accountGone, remove: s.profile?.isOwner ?? false };
+  if (s.signedInFrom) return { kind: "signedIn", text: fill(w.tvSignedInFrom, { device: s.signedInFrom }) };
   for (const a of s.announcements) {
     const seen = shown(a, s.profile);
     if (seen.show) return { kind: "announcement", text: announcementLine(a, s.members), id: a.id, ok: seen.ok, notYou: a.kind === "passkey" && seen.ok, member: a.member };

@@ -28,6 +28,7 @@ import { autoFocusSoon, goBack } from "../focus/dom";
 import type { FirstRunStill } from "../core/generated/FirstRunStill";
 import { form } from "../form";
 import { resetHistoryBase } from "../history";
+import { accountWords } from "../lib/account";
 import { afterContinue, catalogMissing, choicesFor, defaultsWords, grouped, switchable } from "../lib/defaults";
 import { choiceWords, findAddons, languageName, type Tone } from "../lib/words";
 import * as sync from "../core/sync";
@@ -135,8 +136,16 @@ export default function Onboarding() {
         </Show>
         {/* Browse first still passes the switches: nothing is installed unasked. */}
         <Show when={step() === 1 || step() === "doors"}>
-          <A class="skip" href={fresh() ? "/welcome?step=2&then=home" : "/"} replace={!fresh()} onClick={() => !fresh() && resetHistoryBase()} data-f="welcome:skip">
-            Browse first
+          <A
+            class="skip"
+            href={fresh() ? "/welcome?step=2&then=home" : "/"}
+            replace={!fresh()}
+            onClick={() => !fresh() && resetHistoryBase()}
+            data-f="welcome:skip"
+            // On a TV's sign-in screen it is the one focus stop (plans/tv-qr-login.md 5.5).
+            data-autofocus={form() === "tv" && step() === 1 ? "" : undefined}
+          >
+            {accountWords.browseFirst}
             <ChevronRight aria-hidden />
           </A>
         </Show>

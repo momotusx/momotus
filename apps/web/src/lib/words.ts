@@ -378,10 +378,6 @@ export const syncWords = {
   reviewText: "Approve it only if the new device is in front of you and shows the code you scanned. Whoever confirms the six digits next joins your account.",
   approve: "Approve",
   approving: "Approving",
-  approvedStep: "The new device now shows six digits. They must be these:",
-  approvedHelp: "If they match, confirm on the new device. If they differ, say so there, and press They differ here.",
-  differ: "They differ",
-  differEnded: "The approval ended and your sync key changed: whoever answered cannot join with it, and a device that already did is removed, with any device it added.",
   done: "Done",
   // The joining device's side
   copyCode: "Copy the code",
@@ -537,7 +533,6 @@ const notDone = {
   serverList: "Nothing changed.",
   compare: "The lists could not be compared.",
   unlock: "Sync is still locked.",
-  differ: "The approval is still open.",
 } as const;
 
 export type SyncStep = "start" | "recover" | "remember" | keyof typeof notDone;

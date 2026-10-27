@@ -41,9 +41,14 @@ test("the pages run no inline script or style, and each policy names only what i
     expect(html).toMatch(/http-equiv="Content-Security-Policy"/);
     expect(html).toMatch(/default-src 'none'/);
   }
-  // The pairing page has no script at all: the code after # is never read there.
-  expect(read("pair/index.html")).not.toMatch(/<script/);
-  expect(read("pair/index.html")).not.toMatch(/script-src/);
+  // The pairing page runs one script of its own, which only hands the code to the app (plans/tv-qr-login.md 5.7).
+  const pair = read("pair/index.html");
+  expect(pair.match(/<script/g)).toHaveLength(1);
+  expect(pair).toMatch(/<script src="\/pair\/pair.js" defer><\/script>/);
+  expect(pair).toMatch(/script-src 'self';/);
+  expect(read("_headers")).toMatch(/\/pair\*\n {2}Content-Security-Policy: default-src 'none'; script-src 'self';/);
+  // It makes no request and writes no markup.
+  expect(read("pair/pair.js")).not.toMatch(/fetch|XMLHttpRequest|sendBeacon|Image|WebSocket|innerHTML|outerHTML|insertAdjacent|document.write/);
   // The deletion page calls the sync service and nothing else.
   expect(read("delete/index.html")).toMatch(/connect-src \{\{RELAY_URL\}\};/);
   expect(read("_headers")).toMatch(/\/delete\*\n {2}Content-Security-Policy: [^\n]*connect-src \{\{RELAY_URL\}\};[^\n]*frame-ancestors 'none'/);
@@ -83,6 +88,7 @@ test("the build fills every placeholder and lists every file, .well-known includ
     "delete/index.html",
     "linkhost.css",
     "pair/index.html",
+    "pair/pair.js",
     "privacy/index.html",
     "terms/index.html",
   ]);
@@ -212,4 +218,24 @@ test("the deletion page's email words are the apps' own, from apps/shared/accoun
   expect(WORDS.busy).toBe(shared.busy);
   const html = read("delete/index.html");
   for (const key of ["codeMissing", "continueWithEmail", "emailLabel", "emailSend", "codeLabel"] as const) expect(html, key).toContain(shared[key]);
+});
+
+/** pair.js run against a stub page: the app link only for a well-formed code, the fragment as an href. */
+function runPair(hash: string) {
+  const el = (hidden: boolean) => ({ hidden, href: "", setAttribute(_: string, v: string) { this.href = v; } });
+  const page: Record<string, ReturnType<typeof el>> = { open: el(true), "open-note": el(true), "no-code": el(false), "open-app": el(false) };
+  const run = new Function("location", "document", "URLSearchParams", read("pair/pair.js"));
+  run({ hash }, { getElementById: (id: string) => page[id] }, URLSearchParams);
+  return page;
+}
+
+test("the pairing page opens the app only for a pairing code", () => {
+  const code = "#v=3&s=https%3A%2F%2Fsync.example&p=slot&k=box&g=sign&n=Den&f=tv";
+  const page = runPair(code);
+  expect(page["open-app"].href).toBe(`momotus://pair${code}`);
+  expect([page.open.hidden, page["open-note"].hidden, page["no-code"].hidden]).toEqual([false, false, true]);
+  for (const odd of ["", "#v=2&s=a&p=b&k=c&g=d", "#v=3&s=a&p=b&k=c", "#x#v=3&s=a&p=b&k=c&g=d"]) {
+    const kept = runPair(odd);
+    expect([kept.open.hidden, kept["open-app"].href, kept["no-code"].hidden], odd).toEqual([true, "", false]);
+  }
 });

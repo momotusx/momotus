@@ -301,11 +301,19 @@ export function claimPairing(): symbol | null {
   }
 }
 
-/** The confirmed pairing ended without a record (rejected, failed, expired or left). */
+/** The pairing ended without a record (failed, expired or left). */
 export const endPairing = (claim: symbol) => freeSlot(claim);
 
-/** The record a confirmed pairing brought, joined only while its claim owns the slot. */
-export const joinPaired = (next: SyncRecord, claim: symbol) => joinOwned(claim, next);
+/** The device that approved this one's pairing, for Home's "Signed in from" line until OK (memory only). */
+const [joinedBy, setJoinedBy] = createSignal<string | null>(null);
+export { joinedBy, setJoinedBy };
+
+/** The record a pairing brought, joined only while its claim owns the slot; `by` the approving device. */
+export function joinPaired(next: SyncRecord, claim: symbol, by: string | null): boolean {
+  const took = joinOwned(claim, next);
+  if (took) setJoinedBy(by);
+  return took;
+}
 
 /** Before a change that cannot be undone: the passkey when this browser remembers the account. */
 async function gate() {
@@ -314,19 +322,12 @@ async function gate() {
 /** The same step before Remove from this device as before Sign out. */
 export const passkeyStep = gate;
 
-/** Vouches for the device that shows `qr`; returns the six digits it must show too. */
-/** Vouches for the device that shows `qr`; returns the six digits it must show too. Hands over the account, so the passkey first. */
+/** Vouches for the device that shows `qr`, scanned here (the development approve page, for the e2e's
+ * peers): returns the new device's member id. Hands over the account, so the passkey first, which is
+ * the screen lock the core asks of a scan from another network (plans/tv-qr-login.md Q2). */
 export async function approvePairing(qr: string): Promise<string> {
   await gate();
-  return (await withRecord<{ code: string; record: SyncRecord }>("approvePairing", { qr }, (r) => r.record)).code;
-}
-
-/** The digits on the new device differ: the approval of `qr` ends now, with a key rotation
- * that drops the device if it joined. The passkey first. */
-export async function cancelPairing(qr: string) {
-  await gate();
-  await withRecord<SyncRecord>("cancelPairing", { qr }, (r) => r);
-  setFingerprint(null);
+  return (await withRecord<{ member: string; record: SyncRecord }>("approvePairing", { qr, via: "scan", unlocked: true }, (r) => r.record)).member;
 }
 
 /** The kit, to show once: nothing here keeps it. */

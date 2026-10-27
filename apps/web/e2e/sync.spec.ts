@@ -520,17 +520,15 @@ test.describe.serial("sync across three devices", () => {
       };
     });
     await desk.locator('[data-f="sync-add:review-approve"]').click();
-    const digits = (await desk.locator(".confirm .code").textContent()) ?? "";
-    expect(digits).toMatch(/^\d{6}$/);
+    await expect(desk.locator(".confirm .step")).toHaveText("Signing in");
     // The approval returns only after its record was sealed, or said not to be: the note is
-    // already there when the digits are.
+    // already there when its answer is.
     expect(await desk.locator(".sync-storage").isVisible()).toBe(true);
     // Where the user is: the add page says the newest key was not stored.
     await expect(desk.locator(".sync-storage")).toContainText("could not store the newest sync key");
     await shot(desk, "sync-add-desktop");
 
-    await expect(phone.locator(".confirm .code")).toHaveText(digits);
-    await phone.locator('[data-f="pair:yes"]').click();
+    // Nothing is asked on Phone: it joins as soon as the approval reaches it.
     await expect(phone.locator(".summary h2")).toHaveText("This device joined the account");
     await phone.locator('[data-f="pair:done"]').click();
     await expect(phone).toHaveURL(/\/sync$/);
@@ -725,86 +723,32 @@ test.describe.serial("sync across three devices", () => {
     await go(desk, "/sync");
   });
 
-  test("Phone, found again: They differ before it confirms ends the approval, and its join fails", async () => {
-    await phone.locator('[data-f="sync:pair"]').click();
-    // The server is remembered: the code shows at once.
-    await phone.locator('[data-f="pair:copy"]').click();
-    const code = await phone.evaluate(() => navigator.clipboard.readText());
-    await go(desk, "/sync/add");
-    await desk.locator('[data-f="sync-add:code"]').fill(code);
-    await desk.locator('[data-f="sync-add:approve"]').click();
-    const digits = (await desk.locator(".confirm .code").textContent()) ?? "";
-    await expect(phone.locator(".confirm .code")).toHaveText(digits);
-    // The passkey answers without verifying the user first: the page refuses it, nothing
-    // changes, and the button stays and says why.
-    await passkey.cdp.send("WebAuthn.setResponseOverrideBits", { authenticatorId: passkey.id, isBadUV: true });
-    await desk.locator('[data-f="sync-add:differ"]').click();
-    await expect(desk.locator(".confirm .st.bad")).toHaveText("The passkey did not confirm it, so nothing changed.");
-    await expect(desk.locator('[data-f="sync-add:differ"]')).toBeVisible();
-    await passkey.cdp.send("WebAuthn.setResponseOverrideBits", { authenticatorId: passkey.id, isBadUV: false });
-    // Desk says the digits differ before the device confirmed: the approval ends now.
-    await desk.locator('[data-f="sync-add:differ"]').click();
-    await expect(desk.locator(".confirm .st")).toHaveText("The approval ended and your sync key changed: whoever answered cannot join with it, and a device that already did is removed, with any device it added.");
-    // Whoever holds the other screen confirms anyway: the join no longer fits.
-    await phone.locator('[data-f="pair:yes"]').click();
-    await expect(phone.locator(".problem h2")).toHaveText("Pairing stopped");
-    await expect(phone.locator(".problem p")).toContainText("changed while pairing");
-    await desk.locator('[data-f="sync-add:done"]').click();
-    await expect.poll(() => names(desk)).toEqual(["Desk", "Living room TV"]);
-  });
-
-  test("Phone pairs again; a Yes refused before the join and a code it rejects add nothing", async () => {
+  test("Phone pairs again: an account started meanwhile is refused while its code shows, and the join lands", async () => {
     await go(phone, "/sync");
     await phone.locator('[data-f="sync:pair"]').click();
     await phone.locator('[data-f="pair:copy"]').click();
-    await go(desk, "/sync/add");
-    await desk.locator('[data-f="sync-add:code"]').fill(await phone.evaluate(() => navigator.clipboard.readText()));
-    await desk.locator('[data-f="sync-add:approve"]').click();
-    await expect(phone.locator(".confirm .code")).toHaveText((await desk.locator(".confirm .code").textContent()) ?? "");
-    // An account appears in Phone's tab meanwhile (started from code: no screen does that while
-    // /pair is open). Yes is refused before the join, so the sync server never lists Phone.
-    await phone.evaluate(async (server) => {
+    // An account started in Phone's tab while its code shows (from code: no screen does that while
+    // /pair is open) is refused: the code holds the browser's account slot (plans/tv-qr-login.md 5.5).
+    const refused = await phone.evaluate(async (server) => {
       const url = "/src/core/sync.ts";
       const m = (await import(/* @vite-ignore */ url)) as { createAccount: (s: string, n: string, i: string) => Promise<void> };
-      await m.createAccount(server, "Stray", "");
+      return m.createAccount(server, "Stray", "").then(
+        () => "",
+        (e: { code?: string }) => e.code ?? "",
+      );
     }, SERVER);
-    await phone.locator('[data-f="pair:yes"]').click();
-    await expect(phone.locator(".problem")).toContainText("This device already syncs.");
-    await desk.locator('[data-f="sync-add:done"]').click();
-    await syncNow(desk);
-    await expect.poll(() => names(desk)).toEqual(["Desk", "Living room TV"]);
-    // Phone leaves that account, then pairs again.
-    await go(phone, "/sync");
-    await synced(phone);
-    // Keeping the library here (D13 asks, ticked by default; e2e/accounts.spec.ts removes it).
-    await phone.locator('[data-f="sync:remove-library"]').click();
-    await phone.locator('[data-f="sync:leave"]').click();
-    await expect(phone.getByText("This device no longer syncs. Your library stays here.")).toBeVisible();
-
-    await phone.locator('[data-f="sync:pair"]').click();
-    await phone.locator('[data-f="pair:copy"]').click();
-    let code = await phone.evaluate(() => navigator.clipboard.readText());
+    expect(refused).toBe("joining");
+    const code = await phone.evaluate(() => navigator.clipboard.readText());
     await go(desk, "/sync/add");
     await desk.locator('[data-f="sync-add:code"]').fill(code);
     const signed = await signCount();
     await desk.locator('[data-f="sync-add:approve"]').click();
     // Approving hands over the account: the passkey signed first.
     await expect.poll(signCount).toBeGreaterThan(signed);
-    await expect(phone.locator(".confirm .code")).toHaveText((await desk.locator(".confirm .code").textContent()) ?? "");
-    await phone.locator('[data-f="pair:no"]').click();
-    await expect(phone.locator(".problem h2")).toHaveText("Pairing stopped");
-    await go(desk, "/sync");
-    await expect.poll(() => names(desk)).toEqual(["Desk", "Living room TV"]);
-
-    await phone.locator('[data-f="pair:again"]').click();
-    await phone.locator('[data-f="pair:copy"]').click();
-    await expect.poll(() => phone.evaluate(() => navigator.clipboard.readText())).not.toBe(code);
-    code = await phone.evaluate(() => navigator.clipboard.readText());
-    await go(desk, "/sync/add");
-    await desk.locator('[data-f="sync-add:code"]').fill(code);
-    await desk.locator('[data-f="sync-add:approve"]').click();
-    await expect(phone.locator(".confirm .code")).toHaveText((await desk.locator(".confirm .code").textContent()) ?? "");
-    await phone.locator('[data-f="pair:yes"]').click();
+    await expect(desk.locator(".confirm .step")).toHaveText("Signing in");
+    // Nothing is asked on Phone: it joins and says who let it in.
+    await expect(phone.locator(".summary h2")).toHaveText("This device joined the account");
+    await expect(phone.locator(".summary")).toContainText("Signed in from Desk");
     await phone.locator('[data-f="pair:done"]').click();
     await synced(phone);
     await desk.locator('[data-f="sync-add:done"]').click();

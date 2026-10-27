@@ -77,16 +77,18 @@ test("a create in flight keeps a pairing from being confirmed, and joins with it
   expect(syncing()).toEqual(["created"]);
 });
 
-test("a confirmed pairing keeps a create from starting, and joins with the paired account", async () => {
+test("a pairing on screen keeps a create from starting, and joins with the paired account", async () => {
   const claim = sync.claimPairing();
   expect(claim).not.toBeNull();
   // Start an account meanwhile: refused before its request goes, with its own words.
   const refused = await sync.createAccount("https://sync.example", "Desk", "").catch((e: { code?: string; message: string }) => e);
   expect((refused as { code?: string }).code).toBe("joining");
   expect(calls.filter((c) => c.name === "createSyncAccount")).toEqual([]);
-  expect(sync.joinPaired(account("paired"), claim as symbol)).toBe(true);
+  expect(sync.joinPaired(account("paired"), claim as symbol, "Pixel")).toBe(true);
   await until(joinedRound);
   expect(syncing()).toEqual(["paired"]);
+  // Home names the device that let this one in, until OK.
+  expect(sync.joinedBy()).toBe("Pixel");
 });
 
 test("an answer that no longer owns the slot is dropped", async () => {
@@ -96,7 +98,7 @@ test("an answer that no longer owns the slot is dropped", async () => {
   const creating = sync.createAccount("https://sync.example", "Desk", "");
   await until(asked("createSyncAccount"));
   // The old pairing's record arrives late: it joins nothing.
-  expect(sync.joinPaired(account("late"), old)).toBe(false);
+  expect(sync.joinPaired(account("late"), old, "Pixel")).toBe(false);
   calls.find((c) => c.name === "createSyncAccount")?.answer(account("created"));
   await creating;
   await until(joinedRound);

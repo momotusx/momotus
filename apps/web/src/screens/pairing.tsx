@@ -2,9 +2,7 @@ import Check from "lucide-solid/icons/check";
 import Copy from "lucide-solid/icons/copy";
 import LoaderCircle from "lucide-solid/icons/loader-circle";
 import QrCode from "lucide-solid/icons/qr-code";
-import RefreshCw from "lucide-solid/icons/refresh-cw";
 import Settings2 from "lucide-solid/icons/settings-2";
-import X from "lucide-solid/icons/x";
 import { createEffect, createResource, createSignal, Match, on, onCleanup, Show, Switch } from "solid-js";
 import { Qr } from "../components/qr";
 import { A } from "@solidjs/router";
@@ -12,52 +10,43 @@ import { liveView, privateLink } from "../core/client";
 import { autoFocusSoon } from "../focus/dom";
 import type { PairingSnapshot as Pairing } from "../core/generated/PairingSnapshot";
 import { form } from "../form";
+import { signInServer } from "../core/sign-in";
 import * as sync from "../core/sync";
+import { accountWords as aw, fill } from "../lib/account";
 import { pairingProblem, plainAddress, serverHost, syncWords } from "../lib/words";
 import "./browse.css";
 import "./settings.css";
 
-/** A pairing code and its steps; `how` says where the code is scanned (default: the Account page of a device that syncs). */
-export function Session(props: { server: string; name: string; onDone: () => void; onJoined: () => void; how?: string }) {
-  const view = liveView<Pairing>("pairing", { server: props.server, name: props.name, form: sync.deviceForm() });
-  const p = () => view.state.data;
-  // When the code stops working, as a time of day ("1:54 PM").
+/** A pairing code and its steps (plans/tv-qr-login.md 5.5): the QR and `how`, the next code in its
+ * place as each ends, then the join, with nothing asked here (the phone checked this screen). The
+ * browser's account slot is held from the start, so no other account can start here meanwhile;
+ * `onJoined` gets the approving device's name. */
+export function Session(props: { server: string; name: string; onJoined: (by: string | null) => void; how?: string }) {
+  // An account that appeared here meanwhile is never replaced: the slot is taken before the first
+  // code shows, and a browser that already holds an account shows no code.
+  const claim = sync.claimPairing();
+  const view = claim ? liveView<Pairing>("pairing", { server: props.server, name: props.name, form: sync.deviceForm() }) : null;
+  const p = () => view?.state.data;
+  const [refused, setRefused] = createSignal(!claim);
   const [copied, setCopied] = createSignal(false);
-  // The join is stored the moment it arrives, once, as a copy: the view's store may change it.
   let took = false;
-  // An account that appeared here meanwhile is never replaced: Yes is refused before the sync
-  // server lists this device, and once confirmed nothing else may start one until the record comes.
-  const [refused, setRefused] = createSignal(false);
-  let claim: symbol | null = null;
-  const release = () => {
-    if (claim) sync.endPairing(claim);
-    claim = null;
-  };
-  const confirm = () => {
-    claim ??= sync.claimPairing();
-    if (!claim) {
-      setRefused(true);
-      return void view.command({ type: "reject" });
-    }
-    void view.command({ type: "confirm" });
-  };
+  onCleanup(() => {
+    if (claim && !took) sync.endPairing(claim);
+  });
+  // The code renews itself for as long as this shows (plans/tv-qr-login.md Q5): nothing to press.
   createEffect(() => {
     const s = p();
-    if (s?.phase === "failed" || s?.phase === "expired") release();
-    if (s?.phase !== "joined" || took) return;
+    if (s?.phase !== "joined" || took || !claim) return;
     took = true;
-    if (claim && sync.joinPaired(JSON.parse(JSON.stringify(s.record)), claim)) props.onJoined();
+    // The join is stored as a copy the moment it arrives: the view's store may change it.
+    if (sync.joinPaired(JSON.parse(JSON.stringify(s.record)), claim, s.by)) props.onJoined(s.by);
     else setRefused(true);
-    claim = null;
   });
-  onCleanup(release);
-  const until = (ms: number) => new Date(ms).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
-  // Each step that asks something takes focus to its answer: on a TV the remote is never left
-  // on the form below while "Yes, they match" waits.
+  // The step that asks something takes focus: on a TV the remote is never left on a button that went.
   createEffect(
     on(
-      () => p()?.phase ?? view.state.status.state,
-      () => autoFocusSoon(() => document.querySelector<HTMLElement>("main :is(.confirm, .summary, .problem) [data-autofocus]")),
+      () => p()?.phase ?? view?.state.status.state,
+      () => autoFocusSoon(() => document.querySelector<HTMLElement>("main :is(.summary, .problem) [data-autofocus]")),
     ),
   );
   return (
@@ -69,27 +58,26 @@ export function Session(props: { server: string; name: string; onDone: () => voi
         </p>
       }
     >
-      <Match when={view.state.status.state === "failed"}>
+      <Match when={refused()}>
+        <section class="problem">
+          <p>{syncWords.alreadyJoined}</p>
+        </section>
+      </Match>
+      <Match when={view?.state.status.state === "failed"}>
         <section class="problem">
           <h2>Pairing could not start</h2>
-          <p>{pairingProblem((view.state.status as { reason: string }).reason)}</p>
+          <p>{pairingProblem((view?.state.status as { reason: string }).reason)}</p>
         </section>
       </Match>
       <Match when={p()?.phase === "waiting" && (p() as Extract<Pairing, { phase: "waiting" }>)}>
         {(w) => (
-          <div class="pair-grid">
-            <div class="qrbox">
-              <Qr text={w().qr} label="Pairing QR code" />
+          <div class="pair-grid" classList={{ tv: form() === "tv" }}>
+            {/* A new code takes the old one's place, with the same size and no new announcement. */}
+            <div class="qrbox" aria-live="off">
+              <Qr text={w().qr} label={aw.tvQrLabel} ecc="L" border={4} />
             </div>
             <div class="pair-steps">
-              <p class="step">{props.how ?? "On a device that already syncs, open Settings, then Account, then Add a device, and scan this code."}</p>
-              <p class="st warn live">
-                <i class="dot" />
-                {/* One text box: the dot's flex row would split the time and the period into columns. */}
-                <span>
-                  Waiting for the other device. The code works until <span class="num">{until(w().expiresMs)}</span>.
-                </span>
-              </p>
+              <p class="step">{props.how ?? aw.tvScanHow}</p>
               <Show when={form() !== "tv"}>
                 <p class="note small">{syncWords.copyHelp}</p>
                 <div class="acts">
@@ -114,55 +102,11 @@ export function Session(props: { server: string; name: string; onDone: () => voi
           </div>
         )}
       </Match>
-      <Match when={refused()}>
-        <section class="problem">
-          <p>{syncWords.alreadyJoined}</p>
-        </section>
-      </Match>
-      <Match when={p()?.phase === "confirm" && (p() as Extract<Pairing, { phase: "confirm" }>)}>
-        {(c) => (
-          <section class="confirm">
-            <p class="step">Does the other device show the same six digits?</p>
-            <p class="code" aria-hidden="true">
-              {c().code}
-            </p>
-            <p class="sr">{`Code ${c().code.split("").join(" ")}`}</p>
-            <div class="acts">
-              <button class="btn primary" data-f="pair:yes" data-autofocus onClick={confirm}>
-                <Check aria-hidden />
-                Yes, they match
-              </button>
-              <button class="btn" data-f="pair:no" onClick={() => void view.command({ type: "reject" })}>
-                <X aria-hidden />
-                No, they differ
-              </button>
-            </div>
-          </section>
-        )}
-      </Match>
-      <Match when={p()?.phase === "joined"}>
-        <section class="summary">
-          <h2>
-            <Check aria-hidden />
-            This device joined the account
-          </h2>
-          <p class="note small">{syncWords.tabOnly}</p>
-          <div class="acts">
-            <A class="btn primary" href="/sync" data-f="pair:done" data-autofocus>
-              Done
-            </A>
-          </div>
-        </section>
-      </Match>
-      <Match when={p()?.phase === "expired" || p()?.phase === "failed"}>
-        <section class="problem">
-          <h2>{p()?.phase === "expired" ? "The code expired" : "Pairing stopped"}</h2>
-          <p>{p()?.phase === "failed" ? pairingProblem((p() as { reason: string }).reason) : "Start again for a new code."}</p>
-          <button class="btn primary" data-f="pair:again" data-autofocus onClick={props.onDone}>
-            <RefreshCw aria-hidden />
-            Start again
-          </button>
-        </section>
+      <Match when={p()?.phase === "joining" || p()?.phase === "joined"}>
+        <p class="st warn live big-state">
+          <LoaderCircle aria-hidden class="spin" />
+          {aw.approveSigningIn}
+        </p>
       </Match>
     </Switch>
   );
@@ -173,13 +117,14 @@ function PairForm() {
   // nothing is typed. The fields live under Advanced, open only when no
   // server is known yet.
   // A remembered address with a user name or password (an older version saved it) is not used.
-  const known = sync.rememberedServer();
+  // The hosted relay too, so a build that knows it shows the code at once (plans/tv-qr-login.md 5.5).
+  const known = signInServer();
   const [server, setServer] = createSignal(known);
   const [name, setName] = createSignal(sync.defaultDeviceName());
   const [run, setRun] = createSignal<{ server: string; name: string; n: number } | null>(known ? { server: known, name: name(), n: 1 } : null);
   const [advanced, setAdvanced] = createSignal(!known);
   // Once joined, the page is the result and Done: no second pairing starts from it.
-  const [joined, setJoined] = createSignal(false);
+  const [joined, setJoined] = createSignal<{ by: string | null } | null>(null);
   const [bad, setBad] = createSignal(false);
   const start = (e: Event) => {
     e.preventDefault();
@@ -192,8 +137,25 @@ function PairForm() {
   };
   return (
     <>
-      <Show when={run()} keyed>
-        {(r) => <Session server={r.server} name={r.name} onDone={() => setRun({ ...r, n: r.n + 1 })} onJoined={() => setJoined(true)} />}
+      <Show when={joined()}>
+        {(j) => (
+          <section class="summary">
+            <h2>
+              <Check aria-hidden />
+              This device joined the account
+            </h2>
+            <Show when={j().by}>{(by) => <p>{fill(aw.tvSignedInFrom, { device: by() })}</p>}</Show>
+            <p class="note small">{syncWords.tabOnly}</p>
+            <div class="acts">
+              <A class="btn primary" href="/sync" data-f="pair:done" data-autofocus>
+                Done
+              </A>
+            </div>
+          </section>
+        )}
+      </Show>
+      <Show when={!joined() && run()} keyed>
+        {(r) => <Session server={r.server} name={r.name} onJoined={(by) => setJoined({ by })} />}
       </Show>
       <Show when={!joined()}>
       <Show when={!known}>
@@ -242,7 +204,7 @@ export default function PairingScreen() {
   return (
     <main class="browse page settings-page" data-vscroll>
       <h1>Pair this device</h1>
-      <p class="lede">Joins your sync account so library, progress and addons follow you. Nothing is kept until both screens show the same code.</p>
+      <p class="lede">Joins your sync account so library, progress and addons follow you. Scan the code with your phone's camera.</p>
       <Show
         when={allowed.state === "ready"}
         fallback={

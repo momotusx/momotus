@@ -169,8 +169,9 @@ async function homeAfterPull(navigate: (to: string, o?: { replace?: boolean }) =
   navigate("/", { replace: true });
 }
 
-/** The first screen (4.1.1): Continue with each provider the sync service offers, Other ways to
- * sign in, Not now. With no sync service known, or one that offers none, `doors` instead. */
+/** The first screen (4.1.1): Continue with each provider the sync service offers (none: Create
+ * and I already use Momotus at once), Other ways to sign in, Not now. With no sync service known,
+ * `doors` instead. */
 export function SignInStart(props: { from: From; doors: () => JSX.Element }) {
   const navigate = useNavigate();
   const server = signInServer();
@@ -190,7 +191,9 @@ export function SignInStart(props: { from: From; doors: () => JSX.Element }) {
     else if (a === "notNow") leave();
     else s.setFailure(null);
   };
-  const doors = () => !server || (providers.state === "ready" && providers().length === 0);
+  // No sync service known: the doors. One that offers no provider still signs up here (plans/tv-qr-login.md 5.4).
+  const doors = () => !server;
+  const none = () => providers.state === "ready" && providers().length === 0;
   const buttons = () => (providers.state === "ready" ? providerOrder(providers()) : []);
   // Never on a TV (E13): typing an address and a code with a remote is the slow path the QR replaced.
   const email = () => form() !== "tv" && providers.state === "ready" && providers().includes(EMAIL);
@@ -205,6 +208,9 @@ export function SignInStart(props: { from: From; doors: () => JSX.Element }) {
           when={providers.state !== "errored"}
           fallback={<FailureNote failure={signInFailure("unreachable") as Failure} fkey="signin:relay" onAct={(a) => (a === "retry" ? void refetch() : leave())} />}
         >
+          <Show when={none()}>
+            <Create server={server} from={props.from} />
+          </Show>
           <div class="acts sign-in-providers" data-fgroup="providers">
             <For each={buttons()}>
               {(p, i) => (
@@ -807,30 +813,11 @@ function useHeldTicket(from: From) {
   return { run, busy, said, act };
 }
 
-/** `new`: Create your Marquee account, or "I already use Marquee on another device": the pairing
+/** `new`: Create your Momotus account, or "I already use Momotus on another device": the pairing
  * code, then the sign-in is linked with the ticket held. */
 export function NewAccount() {
   const [q] = useSearchParams();
   const from = fromOf(q);
-  const navigate = useNavigate();
-  const name = sync.defaultDeviceName();
-  const t = useHeldTicket(from);
-  const [pairing, setPairing] = createSignal(0);
-  const create = (move = false) =>
-    t.run(async (ticket) => {
-      const h = held();
-      if (!h) return;
-      await sync.createAccount(h.server, name, "", ticket, move);
-      sync.rememberJoin(h.server, name);
-      setHeld(null);
-      navigate(afterCreate(from), { replace: true });
-    });
-  const link = () =>
-    t.run(async (ticket) => {
-      await sync.linkIdentity(ticket);
-      setHeld(null);
-      await homeAfterPull(navigate);
-    });
   return (
     <Show when={held()} fallback={<Navigate href={firstScreen(from)} />}>
       {(h) => (
@@ -839,26 +826,75 @@ export function NewAccount() {
           <Show when={from === "account"}>
             <p class="lead">{w.libraryAdded}</p>
           </Show>
-          <Show
-            when={pairing()}
-            keyed
-            fallback={
-              <div class="acts">
-                <button class="btn primary" data-f="signin:create" data-autofocus aria-busy={t.busy() || undefined} onClick={() => void create()}>
-                  {w.createAccount}
-                </button>
-                <button class="btn" data-f="signin:already" onClick={() => setPairing(1)}>
-                  {w.alreadyUse}
-                </button>
-              </div>
-            }
-          >
-            {(n) => <Session server={h().server} name={name} how={w.tvSignInHow} onJoined={() => void link()} onDone={() => setPairing(n + 1)} />}
-          </Show>
-          <SignInState said={t.said()} fkey="signin:new" onAct={(a) => t.act(a)} />
+          <Create server={h().server} from={from} />
         </Frame>
       )}
     </Show>
+  );
+}
+
+/** Create, or join by the pairing code. With a sign-in held, the create takes its ticket and a
+ * join links it; without one (a sync service that offers no provider) the create is the network's
+ * sign-up (plans/tv-qr-login.md Q7) and a join links nothing. */
+function Create(props: { server: string; from: From }) {
+  const navigate = useNavigate();
+  const name = sync.defaultDeviceName();
+  const t = useHeldTicket(props.from);
+  const [pairing, setPairing] = createSignal(false);
+  const [busy, setBusy] = createSignal(false);
+  const [failure, setFailure] = createSignal<Failure | null>(null);
+  const made = () => {
+    sync.rememberJoin(props.server, name);
+    setHeld(null);
+    navigate(afterCreate(props.from), { replace: true });
+  };
+  const create = async () => {
+    if (held()) {
+      return t.run(async (ticket) => {
+        await sync.createAccount(props.server, name, "", ticket);
+        made();
+      });
+    }
+    if (busy()) return;
+    setBusy(true);
+    setFailure(null);
+    try {
+      await sync.createAccount(props.server, name, "");
+      made();
+    } catch (e) {
+      setFailure(signInFailure(codeOf(e)));
+    } finally {
+      setBusy(false);
+    }
+  };
+  const joined = () => {
+    if (!held()) return void homeAfterPull(navigate);
+    void t.run(async (ticket) => {
+      await sync.linkIdentity(ticket);
+      setHeld(null);
+      await homeAfterPull(navigate);
+    });
+  };
+  return (
+    <>
+      <Show
+        when={pairing()}
+        fallback={
+          <div class="acts">
+            <button class="btn primary" data-f="signin:create" data-autofocus aria-busy={t.busy() || busy() || undefined} onClick={() => void create()}>
+              {w.createAccount}
+            </button>
+            <button class="btn" data-f="signin:already" onClick={() => setPairing(true)}>
+              {w.alreadyUse}
+            </button>
+          </div>
+        }
+      >
+        <Session server={props.server} name={name} how={form() === "phone" ? w.phoneScanHow : w.tvScanHow} onJoined={joined} />
+      </Show>
+      <Show when={failure()}>{(f) => <FailureNote failure={f()} fkey="signin:create" onAct={(a) => (a === "retry" ? void create() : a === "other" ? navigate(`/sign-in/other${tail(props.from)}`) : setFailure(null))} />}</Show>
+      <SignInState said={t.said()} fkey="signin:new" onAct={(a) => t.act(a)} />
+    </>
   );
 }
 
@@ -871,7 +907,6 @@ export function Found() {
   const navigate = useNavigate();
   const name = sync.defaultDeviceName();
   const t = useHeldTicket(from);
-  const [run, setRun] = createSignal(1);
   const [asking, setAsking] = createSignal(false);
   const startOver = () =>
     t.run(async (ticket) => {
@@ -892,9 +927,7 @@ export function Found() {
         <Frame label={w.signInTitle}>
           <h1>{w.signInTitle}</h1>
           <p class="lead">{w.foundWeb}</p>
-          <Show when={run()} keyed>
-            {(n) => <Session server={h().server} name={name} how={w.tvSignInHow} onJoined={joined} onDone={() => setRun(n + 1)} />}
-          </Show>
+          <Session server={h().server} name={name} how={w.tvScanHow} onJoined={joined} />
           <div class="acts">
             <A class="btn" href="/sync/recover" data-f="signin:found-kit" data-autofocus>
               {w.useRecoveryKit}
@@ -923,28 +956,17 @@ export function Found() {
   );
 }
 
-/** A TV's first run (4.2): the pairing code for a phone to scan, its six digits after approval;
- * Use without an account leads to the doors, and a recovery kit stays for households with no
- * phone running Marquee. A TV that joined skips the doors. */
+/** A TV's first run (plans/tv-qr-login.md 5.5): the QR and "Scan with your phone's camera", a new
+ * code in place as each ends; the welcome header's Browse first is the one focus stop (a recovery
+ * kit is reachable from Settings after it). A TV that joined opens Home after its first pull. */
 export function TvSignIn(props: { doors: () => JSX.Element }) {
   const navigate = useNavigate();
   const server = signInServer();
-  const [run, setRun] = createSignal(1);
   return (
     <Show when={server && sync.settled() && sync.mayPair()} fallback={props.doors()}>
-      <section class="step-body" aria-label={w.tvSignIn}>
+      <section class="step-body tv-sign-in" aria-label={w.tvSignIn}>
         <h1>{w.tvSignIn}</h1>
-        <Show when={run()} keyed>
-          {(n) => <Session server={server} name={sync.defaultDeviceName()} how={w.tvSignInHow} onJoined={() => void homeAfterPull(navigate)} onDone={() => setRun(n + 1)} />}
-        </Show>
-        <div class="acts">
-          <A class="btn" href="/welcome?step=doors" data-f="signin:tv-without" data-autofocus>
-            {w.tvWithoutAccount}
-          </A>
-          <A class="btn" href="/sync/recover" data-f="signin:tv-kit">
-            {w.useRecoveryKit}
-          </A>
-        </div>
+        <Session server={server} name={sync.defaultDeviceName()} onJoined={() => void homeAfterPull(navigate)} />
       </section>
     </Show>
   );

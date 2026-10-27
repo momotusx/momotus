@@ -25,7 +25,6 @@ import RefreshCw from "lucide-solid/icons/refresh-cw";
 import ShieldAlert from "lucide-solid/icons/shield-alert";
 import Trash from "lucide-solid/icons/trash";
 import TriangleAlert from "lucide-solid/icons/triangle-alert";
-import X from "lucide-solid/icons/x";
 import { createEffect, createMemo, createResource, createSignal, For, type JSX, on, onCleanup, onMount, Show } from "solid-js";
 import { privateLink } from "../core/client";
 import type { IdentityLink } from "../core/generated/IdentityLink";
@@ -1175,9 +1174,7 @@ export function AddDevice() {
   const [code, setCode] = createSignal("");
   const [busy, setBusy] = createSignal(false);
   const [error, setError] = createSignal<string | null>(null);
-  const [approved, setApproved] = createSignal<{ digits: string; code: string } | null>(null);
-  const [differ, setDiffer] = createSignal<string | null>(null);
-  const [differError, setDifferError] = createSignal<string | null>(null);
+  const [approved, setApproved] = createSignal<string | null>(null);
   const approve = async (qr: string) => {
     if (busy() || !qr.trim()) return;
     setScanning(false);
@@ -1185,7 +1182,7 @@ export function AddDevice() {
     setBusy(true);
     setError(null);
     try {
-      setApproved({ digits: await sync.approvePairing(qr.trim()), code: qr.trim() });
+      setApproved(await sync.approvePairing(qr.trim()));
       setCode("");
       focusSoon('[data-f="sync-add:done"]');
     } catch (e) {
@@ -1199,24 +1196,6 @@ export function AddDevice() {
     setScanning(false);
     setReviewing(qr);
     focusSoon('[data-f="sync-add:review-cancel"]');
-  };
-  // The digits differ: whoever confirmed them is not the device in front of the user.
-  const theyDiffer = async () => {
-    const a = approved();
-    if (!a || busy()) return;
-    setBusy(true);
-    setDifferError(null);
-    try {
-      // Ended through the core whether or not the device joined yet: the key rotates now.
-      await sync.cancelPairing(a.code);
-      setDiffer(w.differEnded);
-      void sync.loadDevices().catch(() => undefined);
-    } catch (e) {
-      // A cancelled passkey or a failed call changes nothing: the button stays.
-      setDifferError(say(e, "differ"));
-    } finally {
-      setBusy(false);
-    }
   };
   return (
     <main class="browse page settings-page sync-page" data-vscroll>
@@ -1291,30 +1270,15 @@ export function AddDevice() {
               </Show>
             }
           >
-            {(a) => (
-              <section class="confirm">
-                <p class="step">{w.approvedStep}</p>
-                <Spoken class="code" text={a().digits} label="Code" />
-                <p class="note small">{w.approvedHelp}</p>
-                <Show when={sync.remembered()}>
-                  <p class="note small">{w.passkeyAsk}</p>
-                </Show>
-                <Show when={differ()}>{(d) => <Said tone="warn">{d()}</Said>}</Show>
-                <Show when={differError()}>{(e) => <Said tone="bad">{e()}</Said>}</Show>
-                <div class="acts">
-                  <button class="btn primary" data-f="sync-add:done" data-autofocus onClick={() => navigate("/sync")}>
-                    <Check aria-hidden />
-                    {w.done}
-                  </button>
-                  <Show when={!differ()}>
-                    <button class="btn" data-f="sync-add:differ" aria-busy={busy() || undefined} onClick={() => void theyDiffer()}>
-                      <X aria-hidden />
-                      {w.differ}
-                    </button>
-                  </Show>
-                </div>
-              </section>
-            )}
+            <section class="confirm">
+              <p class="step">{aw.approveSigningIn}</p>
+              <div class="acts">
+                <button class="btn primary" data-f="sync-add:done" data-autofocus onClick={() => navigate("/sync")}>
+                  <Check aria-hidden />
+                  {w.done}
+                </button>
+              </div>
+            </section>
           </Show>
         </NeedsAccount>
       </Show>

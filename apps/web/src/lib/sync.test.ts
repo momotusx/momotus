@@ -237,7 +237,6 @@ test("sync failures read by code and by action, and never show the server's addr
   expect(stepProblem("passkey", "x", "remember")).toBe("The passkey did not confirm it, so nothing changed.");
   expect(syncProblem("forget", "x")).toBe(syncWords.forgetFailed);
   expect(syncProblem("wrongRecord", "this record is not this device's sync account")).toBe(syncWords.wrongRecord);
-  expect(stepProblem(undefined, "http status 502", "differ")).toStartWith("The approval is still open.");
   // A relay that lost this device's token cannot be read: it says so, never "try again".
   expect(stepProblem(undefined, "http status 401", "compare")).toBe(syncWords.forkTokenLost);
   expect(stepProblem(undefined, "http status 502", "compare")).toStartWith("The lists could not be compared.");
@@ -246,7 +245,7 @@ test("sync failures read by code and by action, and never show the server's addr
   expect(syncProblem("alreadyJoined", "x")).toBe(syncWords.alreadyJoined);
   expect(syncProblem(undefined, "roster: this device cannot report itself")).toBe("This device cannot report itself.");
   expect(syncProblem(undefined, "pairing: not a pairing code")).toBe("Not a pairing code.");
-  const steps = ["start", "recover", "approve", "load", "kit", "remove", "lost", "leave", "serverList", "unlock", "compare", "differ", "remember"] as const;
+  const steps = ["start", "recover", "approve", "load", "kit", "remove", "lost", "leave", "serverList", "unlock", "compare", "remember"] as const;
   for (const raw of ["network: error sending request for url (http://user:secret@relay.example/v1/push)", "http status 502", "timed out after 10s"]) {
     for (const words of [syncProblem(undefined, raw), ...steps.map((s) => stepProblem(undefined, raw, s))]) {
       expect(words.includes("relay.example") || words.includes("secret") || words.includes("http")).toBe(false);

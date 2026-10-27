@@ -4,20 +4,21 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="referrer" content="no-referrer" />
-    <!-- No script: the pairing code after # never leaves this phone, and this page never reads it. -->
-    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'self'; img-src 'self'; base-uri 'none'; form-action 'none'" />
+    <!-- pair.js reads the code after # on this phone and hands it to the app; it sends nothing anywhere. -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; base-uri 'none'; form-action 'none'" />
     <title>Sign in to Momotus on a TV</title>
     <link rel="stylesheet" href="/linkhost.css" />
+    <script src="/pair/pair.js" defer></script>
   </head>
   <body>
     <main>
       <h1>Sign in to Momotus on that screen</h1>
-      <p>This code signs a TV or computer in to your Momotus account. Only a phone with Momotus signed in can do that, by scanning it in the app.</p>
-      <ol>
-        <li>Get Momotus on this phone and sign in.</li>
-        <li>Tap Sign in another device.</li>
-        <li>Scan the code on the screen in front of you once more, and check that both show the same six digits.</li>
-      </ol>
+      <p>This code signs a TV or computer in to your Momotus account.</p>
+      <div class="acts" id="open" hidden>
+        <a class="button" id="open-app" href="momotus://pair">Open in Momotus</a>
+      </div>
+      <p id="open-note" hidden>Nothing happened? Install Momotus first, sign in, then scan the code again.</p>
+      <p id="no-code">Scan the code on the screen with your phone's camera.</p>
       <div class="acts">
         <a class="button" href="{{APP_STORE_URL}}">Get Momotus on the App Store</a>
         <a class="button" href="{{PLAY_STORE_URL}}">Get Momotus on Google Play</a>
