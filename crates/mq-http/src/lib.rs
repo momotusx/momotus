@@ -103,6 +103,12 @@ pub enum HttpError {
 }
 
 impl HttpError {
+    /// A handle's `HopRule` refused a hop (another host, or https to
+    /// http), as opposed to a name that resolved only to private addresses.
+    pub fn hop_refused(&self) -> bool {
+        matches!(self, HttpError::BlockedPrivate(m) if m == OUT_OF_HOPS)
+    }
+
     /// What went wrong as a fixed word, for logs that must not name an
     /// address (a sync relay's host is the user's own).
     pub fn kind(&self) -> &'static str {
@@ -1426,7 +1432,14 @@ impl HttpClient {
             if self.hops.as_ref().is_some_and(|rule| !rule.follow) {
                 return Ok((response, permit));
             }
-            let Some(next) = next_hop(status, response.headers().get(LOCATION), &req.url)? else {
+            // Under a hop rule a downgrade to http is the rule's refusal too.
+            let next = next_hop(status, response.headers().get(LOCATION), &req.url).map_err(
+                |e| match self.hops {
+                    Some(_) => HttpError::BlockedPrivate(OUT_OF_HOPS.into()),
+                    None => e,
+                },
+            )?;
+            let Some(next) = next else {
                 return Ok((response, permit));
             };
             drop(response);

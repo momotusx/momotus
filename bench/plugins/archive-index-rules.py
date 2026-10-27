@@ -8,6 +8,12 @@ import sys
 from collections import Counter
 
 NOISE = r"\b(full movie|full hd|hd|restored|english|dubbed|subtitled|colorized)\b"
+# Latin letters with accents as their plain ones, as the core folds them.
+FOLDS = {"àáâãäåāăą": "a", "çćĉċč": "c", "ďđ": "d", "èéêëēĕėęě": "e", "ĝğġģ": "g", "ĥħ": "h",
+         "ìíîïĩīĭįı": "i", "ĵ": "j", "ķ": "k", "ĺļľŀł": "l", "ñńņňŉ": "n", "òóôõöøōŏő": "o",
+         "ŕŗř": "r", "śŝşš": "s", "ţťŧ": "t", "ùúûüũūŭůűų": "u", "ŵ": "w", "ýÿŷ": "y", "źżž": "z",
+         "ß": "ss", "æ": "ae", "œ": "oe"}
+FOLD = str.maketrans({c: to for chars, to in FOLDS.items() for c in chars})
 
 
 def first(value):
@@ -26,7 +32,7 @@ def year_of(item: dict) -> int | None:
 
 
 def norm(title: str) -> str:
-    t = re.sub(r"\([^)]*\)|\[[^\]]*\]", " ", title.lower())
+    t = re.sub(r"\([^)]*\)|\[[^\]]*\]", " ", title.lower().translate(FOLD))
     t = re.sub(NOISE, " ", t)
     t = re.sub(r"[^a-z0-9]+", " ", t).strip()
     return " ".join(re.sub(r"^the ", "", t).split())

@@ -228,10 +228,15 @@ async fn refresh(core: &Core) {
     }
 }
 
-/// No answer came: offline or a timeout. A hop the rule refused is an
-/// answer (archive.org sent it elsewhere) and backs off.
+/// No answer came: offline, a timeout, a name that resolved only to
+/// private addresses. A hop the rule refused is an answer (archive.org sent
+/// it elsewhere) and backs off.
 fn unanswered(e: &HttpError) -> bool {
-    matches!(e, HttpError::Network(_) | HttpError::Timeout(_))
+    match e {
+        HttpError::Network(_) | HttpError::Timeout(_) => true,
+        HttpError::BlockedPrivate(_) => !e.hop_refused(),
+        _ => false,
+    }
 }
 
 /// Every page of the `scrape` answer, within the caps, as the list.
@@ -240,8 +245,12 @@ async fn fetch_index(core: &Core) -> Result<Vec<ArchiveFilm>, HttpError> {
     let base = core.archive().origin.join("services/search/v1/scrape");
     let base = base.map_err(|e| HttpError::InvalidUrl(e.to_string()))?;
     let (mut items, mut bytes, mut cursor) = (Vec::new(), 0usize, None::<String>);
-    for page in 0.. {
-        if page == MAX_PAGES {
+    for n in 0.. {
+        // A profile switched off, or to a kids profile, asks no further page.
+        if !wanted(core) {
+            return Err(HttpError::Network("the list is no longer wanted".into()));
+        }
+        if n == MAX_PAGES {
             return Err(HttpError::TooLarge { limit: MAX_PAGES });
         }
         let mut url = base.clone();
@@ -415,7 +424,8 @@ fn without_noise(text: &str) -> (String, bool) {
 /// digits. The meta's name is matched the same way.
 #[doc(hidden)]
 pub fn norm(title: &str) -> String {
-    let (bare, _) = without_noise(&without_brackets(&title.to_lowercase()));
+    let lower = fold_accents(&title.to_lowercase());
+    let (bare, _) = without_noise(&without_brackets(&lower));
     let words: Vec<&str> = bare
         .split(|c: char| !(c.is_ascii_lowercase() || c.is_ascii_digit()))
         .filter(|w| !w.is_empty())
@@ -425,6 +435,43 @@ pub fn norm(title: &str) -> String {
         _ => &words[..],
     };
     words.join(" ")
+}
+
+/// Latin letters with accents as their plain ones ("Fantômas" is
+/// "fantomas"), lowercase in and out; the rules script folds the same.
+fn fold_accents(text: &str) -> String {
+    const FOLDS: [(&str, &str); 22] = [
+        ("àáâãäåāăą", "a"),
+        ("çćĉċč", "c"),
+        ("ďđ", "d"),
+        ("èéêëēĕėęě", "e"),
+        ("ĝğġģ", "g"),
+        ("ĥħ", "h"),
+        ("ìíîïĩīĭįı", "i"),
+        ("ĵ", "j"),
+        ("ķ", "k"),
+        ("ĺļľŀł", "l"),
+        ("ñńņňŉ", "n"),
+        ("òóôõöøōŏő", "o"),
+        ("ŕŗř", "r"),
+        ("śŝşš", "s"),
+        ("ţťŧ", "t"),
+        ("ùúûüũūŭůűų", "u"),
+        ("ŵ", "w"),
+        ("ýÿŷ", "y"),
+        ("źżž", "z"),
+        ("ß", "ss"),
+        ("æ", "ae"),
+        ("œ", "oe"),
+    ];
+    let mut out = String::with_capacity(text.len());
+    for c in text.chars() {
+        match FOLDS.iter().find(|(from, _)| from.contains(c)) {
+            Some((_, to)) => out.push_str(to),
+            None => out.push(c),
+        }
+    }
+    out
 }
 
 /// `text` with each "(...)" and "[...]" replaced by a space; an opening
@@ -563,7 +610,7 @@ fn stream(origin: &Url, id: &str, file: &File, index: u32) -> Option<ParsedStrea
 /// showing: bidi marks, overrides and isolates, zero widths, line and
 /// paragraph separators, the soft hyphen and the BOM.
 fn hidden(c: char) -> bool {
-    matches!(c, '\u{00ad}' | '\u{061c}' | '\u{200b}'..='\u{200f}' | '\u{2028}'..='\u{202e}' | '\u{2060}'..='\u{206f}' | '\u{feff}')
+    matches!(c, '\u{00ad}' | '\u{061c}' | '\u{180e}' | '\u{200b}'..='\u{200f}' | '\u{2028}'..='\u{202e}' | '\u{2060}'..='\u{206f}' | '\u{feff}' | '\u{e0000}'..='\u{e007f}')
 }
 
 /// Item text as shown: control and `hidden` characters dropped, at most

@@ -24,6 +24,8 @@ const DAY_MS: u64 = 86_400_000;
 struct Answers {
     scrape: Option<(u16, Vec<u8>)>,
     list_delay: Duration,
+    /// The list comes in two pages, the first naming a cursor.
+    paged: bool,
     items: HashMap<String, (u16, Vec<u8>, Duration)>,
 }
 
@@ -56,6 +58,7 @@ impl Fixture {
         let answers: Arc<Mutex<Answers>> = Arc::new(Mutex::new(Answers {
             scrape: Some((200, SCRAPE.as_bytes().to_vec())),
             list_delay: Duration::ZERO,
+            paged: false,
             items: HashMap::from([(NOSFERATU.to_owned(), (200, nosferatu(), Duration::ZERO))]),
         }));
         let (log, said) = (asked.clone(), answers.clone());
@@ -63,9 +66,13 @@ impl Fixture {
             let host = r.header("host").unwrap_or_default().to_owned();
             log.lock().unwrap().push(format!("{host}{}", r.path));
             if r.path.starts_with("/services/search/v1/scrape") {
-                let (scrape, delay) = {
+                let (scrape, delay, paged) = {
                     let a = said.lock().unwrap();
-                    (a.scrape.clone(), a.list_delay)
+                    (a.scrape.clone(), a.list_delay, a.paged)
+                };
+                let scrape = match (paged, scrape) {
+                    (true, Some((status, _))) => Some((status, page(r.path.contains("cursor=")))),
+                    (_, scrape) => scrape,
                 };
                 std::thread::sleep(delay);
                 return match scrape {
@@ -122,6 +129,20 @@ impl Fixture {
     fn answer_item(&self, id: &str, status: u16, body: Vec<u8>, delay: Duration) {
         (self.answers.lock().unwrap().items).insert(id.to_owned(), (status, body, delay));
     }
+}
+
+/// The fixture list in two pages: the first half with a cursor, then the
+/// rest.
+fn page(second: bool) -> Vec<u8> {
+    let all: Value = serde_json::from_str(SCRAPE).unwrap();
+    let items = all["items"].as_array().unwrap();
+    let (first, rest) = items.split_at(items.len() / 2);
+    match second {
+        false => json!({"items": first, "cursor": "c2"}),
+        true => json!({"items": rest}),
+    }
+    .to_string()
+    .into_bytes()
 }
 
 /// Nosferatu's files: three MP4s of different heights, a fourth shorter
@@ -256,9 +277,11 @@ fn titles_normalize_as_the_rules_script_does() {
         ("HD-Hunter", "hunter"),
         ("Shadow (unfinished", "shadow unfinished"),
         ("His Girl Friday!", "his girl friday"),
-        ("Café Society", "caf society"),
+        ("Café Society", "cafe society"),
         ("Plan 9 from Outer Space", "plan 9 from outer space"),
         ("Fullhd Days", "fullhd days"),
+        ("Fantômas", "fantomas"),
+        ("Die Büchse der Pandora", "die buchse der pandora"),
     ] {
         assert_eq!(norm(title), normalized, "{title}");
     }
@@ -718,4 +741,60 @@ async fn a_bad_answer_keeps_the_list_and_leaving_keeps_the_fetch() {
         assert_eq!(core.library().archive_films().unwrap(), 8, "{body}");
         assert_eq!(archive_keys(&view).len(), 3, "the old list matches");
     }
+}
+
+/// A film with no year asks nothing at all, not even for the list.
+#[tokio::test]
+async fn a_film_with_no_year_asks_nothing_at_all() {
+    let fixture = Fixture::start();
+    let core = core_at(&fixture);
+    let view = settled(&core, film("Nosferatu", None, "tt0013442")).await;
+    assert!(archive_keys(&view).is_empty());
+    quiet().await;
+    assert!(fixture.asked().is_empty(), "{:?}", fixture.asked());
+}
+
+/// Every page of the list asks again whether the profile wants it: the
+/// source switched off while the first page comes asks no second page and
+/// keeps nothing. Both pages come in when it stays on.
+#[tokio::test]
+async fn a_switch_off_stops_the_remaining_pages() {
+    let fixture = Fixture::start();
+    {
+        let mut a = fixture.answers.lock().unwrap();
+        a.paged = true;
+        a.list_delay = Duration::from_millis(600);
+    }
+    let core = core_at(&fixture);
+    let _view = VersionsView::open(&core, nosferatu_film());
+    until("the first page asked", || fixture.lists() == 1).await;
+    core.set_prefs(&json!({"archive": false})).unwrap();
+    tokio::time::sleep(Duration::from_millis(1500)).await;
+    assert_eq!(fixture.lists(), 1, "{:?}", fixture.asked());
+    assert_eq!(core.library().archive_films().unwrap(), 0);
+    let core = core_at(&fixture);
+    settled(&core, nosferatu_film()).await;
+    until("both pages", || {
+        core.library().archive_films().unwrap() == 8
+    })
+    .await;
+    assert_eq!(fixture.lists(), 3);
+}
+
+/// Removing the last profile that wants the source deletes its list.
+#[tokio::test]
+async fn removing_the_last_profile_that_wants_it_deletes_the_list() {
+    let fixture = Fixture::start();
+    let owner = Core::temporary(OWNER).unwrap();
+    owner.use_archive_at(fixture.origin());
+    let guest = owner.for_profile(&owner.create_profile("Guest", "fox").unwrap());
+    guest
+        .set_prefs(&json!({"archiveNoticeSeen": true}))
+        .unwrap();
+    settled(&guest, nosferatu_film()).await;
+    owner.set_prefs(&json!({"archive": false})).unwrap();
+    // The owner has it off; the guest still wants it.
+    assert_eq!(owner.library().archive_films().unwrap(), 8);
+    owner.delete_profile(guest.profile()).unwrap();
+    assert_eq!(owner.library().archive_films().unwrap(), 0);
 }

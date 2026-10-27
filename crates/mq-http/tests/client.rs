@@ -1397,6 +1397,11 @@ async fn a_hop_rule_keeps_every_hop_on_its_domain() {
         match r.path.as_str() {
             "/sub" => reply("302 Found", &to("dn1.hops.c-archive.test"), ""),
             "/away" => reply("302 Found", &to("other.c-archive.test"), ""),
+            "/down" => reply(
+                "302 Found",
+                &format!("Location: http://hops.c-archive.test:{port}/file\r\n"),
+                "",
+            ),
             _ => reply("200 OK", "", "ok"),
         }
         .into_bytes()
@@ -1414,9 +1419,12 @@ async fn a_hop_rule_keeps_every_hop_on_its_domain() {
     .expect("a subdomain hop");
     assert_eq!(&ok.body[..], b"ok");
     assert_eq!(ok.final_url.host_str(), Some("dn1.hops.c-archive.test"));
-    // A first-hop 302 to another host is refused, buffered and streamed.
+    // A first-hop 302 to another host is refused, buffered and streamed, as
+    // the rule's own refusal; so is a redirect down to http.
     let away = format!("{}/away", base("hops.c-archive.test"));
-    refused(&http, &away).await;
+    assert!(refused(&http, &away).await.hop_refused());
+    let down = format!("{}/down", base("hops.c-archive.test"));
+    assert!(refused(&http, &down).await.hop_refused());
     let streamed = within("stream", http.stream(&away, None, &playback()))
         .await
         .err()

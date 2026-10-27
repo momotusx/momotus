@@ -356,8 +356,9 @@ impl Core {
     }
 
     /// Tests: the Archive source at a fixture `origin`; only before its
-    /// first use.
+    /// first use. Development builds only.
     #[doc(hidden)]
+    #[cfg(debug_assertions)]
     pub fn use_archive_at(&self, origin: url::Url) {
         let _ = self.inner.archive.set(crate::archive::Archive::new(origin));
     }
@@ -431,6 +432,11 @@ impl Core {
         let _gate = self.sync_gate().await;
         self.note_sync_member(config);
         let report = mq_sync::sync_once(self.library(), self.http(), config, self.clock()).await;
+        // A synced switch, kids register or removal may leave no profile
+        // that wants the Archive's list (plans/plugins-and-marketplace.md 5.1).
+        if report.is_ok() {
+            crate::archive::forget_unwanted(self);
+        }
         // The account's lists are here now: what a profile never had can be
         // given without overwriting newer edits made elsewhere.
         if report.is_ok()

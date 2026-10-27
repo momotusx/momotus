@@ -249,6 +249,7 @@ impl Core {
         self.library().delete_profile(id, self.clock())?;
         // Its Trakt rounds stop and its tokens leave memory.
         self.trakt().forget(id);
+        crate::archive::forget_unwanted(self);
         Ok(())
     }
 
