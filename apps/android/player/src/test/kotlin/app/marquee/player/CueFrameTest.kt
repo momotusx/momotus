@@ -179,4 +179,26 @@ class CueFrameTest {
         assertEquals(0.8f, scale(80f), 1e-6f)
         assertEquals(CUE_FLOOR, scale(10f), 1e-6f)
     }
+
+    @Test
+    fun `the foot sits 8 percent of the picture over the picture's foot, never on a wide film's band`() {
+        // A 960 by 540 TV: a 16:9 picture fills it, 8% of 540 over the screen's foot as before.
+        assertEquals(540f * (1 - CUE_RISE), cueFoot(540f, 960f, 16f / 9, lifted = null), 1e-3f)
+        // A 2.39:1 film: its picture 401.7 tall with a 69 band under it; the foot 8% of the picture over its foot.
+        val picture = 960f / 2.39f
+        val wide = cueFoot(540f, 960f, 2.39f, lifted = null)
+        assertEquals((540f + picture) / 2 - picture * CUE_RISE, wide, 1e-3f)
+        assertTrue(wide < (540f + picture) / 2, "inside the picture, not on its band: $wide")
+        // The ratio not known yet: the view's own height stands for the picture.
+        assertEquals(540f * (1 - CUE_RISE), cueFoot(540f, 960f, 0f, lifted = null), 1e-3f)
+    }
+
+    @Test
+    fun `with the controls up the foot is the higher of the two`() {
+        // Controls 60 px tall: just over them, higher than the plain foot of a 16:9 picture.
+        assertEquals(480f, cueFoot(540f, 960f, 16f / 9, lifted = 480f), 1e-3f)
+        // A wide film's plain foot is higher than a short controls' block: the plain foot holds.
+        val plain = cueFoot(540f, 960f, 2.39f, lifted = null)
+        assertEquals(plain, cueFoot(540f, 960f, 2.39f, lifted = 520f), 1e-3f)
+    }
 }

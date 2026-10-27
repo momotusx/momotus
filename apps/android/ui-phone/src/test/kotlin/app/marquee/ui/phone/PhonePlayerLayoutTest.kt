@@ -12,6 +12,7 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
+import androidx.media3.common.VideoSize
 import androidx.media3.common.text.Cue
 import androidx.media3.ui.SubtitleView
 import app.marquee.core.model.Segment
@@ -22,6 +23,7 @@ import app.marquee.design.MarqueeTheme
 import app.marquee.player.CUE_FLOOR
 import app.marquee.player.CUE_LINE
 import app.marquee.player.CUE_LINES
+import app.marquee.player.CUE_RISE
 import app.marquee.player.PlaybackController
 import app.marquee.player.SUBTITLES_TAG
 import app.marquee.player.subtitleScale
@@ -245,5 +247,18 @@ class PhonePlayerLayoutTest {
     private companion object {
         /** The subtitle view's room beside a cue's text, of its text size (SubtitlePainter's inner padding). */
         const val TEXT_PADDING = 0.125f
+    }
+
+    @Test
+    fun `under a wide film the hidden controls leave the subtitles 8% of the picture over the picture's foot`() {
+        // A 2.39:1 film (1920 by 803): PhonePlayer passes the controller's ratio, so the foot is the picture's.
+        player.pictureSize = VideoSize(1920, 803)
+        playing()
+        player.say("Who are you, and what are you doing here")
+        controlsHidden()
+        val root = compose.onRoot().fetchSemanticsNode().boundsInRoot
+        val picture = minOf(root.height, root.width * 803f / 1920f)
+        val foot = cues().foot
+        assertEquals((root.height + picture) / 2 - picture * CUE_RISE, foot, 0.5f, "8% of the picture over its foot")
     }
 }

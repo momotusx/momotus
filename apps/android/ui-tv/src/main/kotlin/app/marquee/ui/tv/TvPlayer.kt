@@ -395,6 +395,7 @@ fun TvPlayer(
             controller.subtitleSize,
             subtitleLift = if (showControls) controlsHeight else 0.dp,
             addonCues = { controller.addonCues() }.takeIf { controller.addonOn },
+            videoRatio = controller.videoRatio,
         )
 
         // The loading screen until the picture comes, and over the paused picture while it stalls.

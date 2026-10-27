@@ -4,6 +4,7 @@ import android.os.Looper
 import androidx.media3.common.Player
 import androidx.media3.common.SimpleBasePlayer
 import androidx.media3.common.TrackSelectionParameters
+import androidx.media3.common.VideoSize
 import androidx.media3.common.text.Cue
 import androidx.media3.common.text.CueGroup
 import com.google.common.util.concurrent.Futures
@@ -20,6 +21,9 @@ internal class PlayingPlayer : SimpleBasePlayer(Looper.getMainLooper()) {
     /** A source was set and prepared before the file opens: Media3 buffers it. */
     private var prepared = false
     private var cues = emptyList<Cue>()
+
+    /** The picture's size once the file is open; unknown unless a test sets it, as a fake with no frames has none. */
+    var pictureSize: VideoSize = VideoSize.UNKNOWN
     private var tracks = TrackSelectionParameters.DEFAULT
 
     override fun getState(): State {
@@ -36,6 +40,7 @@ internal class PlayingPlayer : SimpleBasePlayer(Looper.getMainLooper()) {
                 .setContentPositionMs(PositionSupplier.getConstant(at))
                 .setNewlyRenderedFirstFrame(firstFrame)
                 .setCurrentCues(CueGroup(cues, at * 1000))
+                .setVideoSize(if (ready) pictureSize else VideoSize.UNKNOWN)
                 .setTrackSelectionParameters(tracks)
         if (!ready && prepared) {
             return state

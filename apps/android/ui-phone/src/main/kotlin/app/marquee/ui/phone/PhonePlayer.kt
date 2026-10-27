@@ -318,6 +318,7 @@ fun PhonePlayer(
             subtitleCeiling = if (showControls) maxOf(titleFoot, transportFoot) else 0.dp,
             subtitleCorner = corner.takeIf { showSkip || showNextCard },
             addonCues = { controller.addonCues() }.takeIf { controller.addonOn },
+            videoRatio = controller.videoRatio,
         )
         // The level swipes' own layer, right over the picture: the controls, lists and cards drawn after it are hit
         // first, so a touch on any of them never reaches it, and the picture's taps (on the Box) still see the rest.

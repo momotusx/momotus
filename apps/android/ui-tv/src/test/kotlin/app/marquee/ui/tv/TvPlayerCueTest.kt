@@ -10,10 +10,12 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onRoot
+import androidx.media3.common.VideoSize
 import androidx.media3.common.text.Cue
 import androidx.media3.ui.SubtitleView
 import app.marquee.design.Form
 import app.marquee.design.MarqueeTheme
+import app.marquee.player.CUE_RISE
 import app.marquee.player.PlaybackController
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
@@ -117,5 +119,23 @@ class TvPlayerCueTest {
         // Anchored at its foot, so the second line grows upward: both lines over the 5% title-safe line.
         assertTrue(foot <= root.height * 0.95f, "the lines end over the safe line: $foot of ${root.height}")
         assertEquals(Cue.ANCHOR_TYPE_END, cue().lineAnchor, "hung from the foot")
+    }
+
+    @Test
+    fun `under a wide film the hidden controls leave the cue 8% of the picture over the picture's foot`() {
+        // A 2.39:1 film (1920 by 803): the TvPlayer passes the controller's ratio, so the foot leaves the black band.
+        player.pictureSize = VideoSize(1920, 803)
+        compose.setContent { MarqueeTheme(Form.Tv) { TvPlayer(controller, false, {}, null, { _, _ -> }, {}) } }
+        compose.runOnIdle { player.open() }
+        compose.waitUntil(10_000) { controller.stage == PlaybackController.Stage.Playing }
+        player.say("MI5 SECURITY SERVICE\nSECRET")
+        compose.waitUntil(10_000) {
+            compose.onAllNodesWithContentDescription("Back 10 seconds").fetchSemanticsNodes().isEmpty()
+        }
+        compose.waitForIdle()
+        val root = compose.onRoot().fetchSemanticsNode().boundsInRoot
+        val picture = minOf(root.height, root.width * 803f / 1920f)
+        val foot = cueFoot()
+        assertEquals((root.height + picture) / 2 - picture * CUE_RISE, foot, 0.5f, "8% of the picture over its foot")
     }
 }

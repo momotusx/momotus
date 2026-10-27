@@ -36,6 +36,7 @@ import app.marquee.core.model.SubtitleSize
 import kotlinx.coroutines.delay
 import kotlin.math.ceil
 import kotlin.math.max
+import kotlin.math.min
 
 /**
  * The picture and its subtitles. The picture goes to a SurfaceView, which is what lets the
@@ -62,6 +63,8 @@ fun PlayerVideo(
     subtitleCorner: Rect? = null,
     /** An addon track drawn by the app ([PlaybackController.addonCues]): its cues now, read every frame; null for none. */
     addonCues: (() -> List<Cue>)? = null,
+    /** The picture's width over its height, its pixel shape counted ([PlaybackController.videoRatio]); 0 before. */
+    videoRatio: Float = 0f,
 ) {
     BoxWithConstraints(modifier.background(Color.Black)) {
         ContentFrame(
@@ -115,11 +118,12 @@ fun PlayerVideo(
                         height = height,
                         width = width,
                         foot =
-                            if (subtitleLift > 0.dp) {
-                                height - subtitleLift.toPx() - gap
-                            } else {
-                                height * (1 - SubtitleView.DEFAULT_BOTTOM_PADDING_FRACTION)
-                            },
+                            cueFoot(
+                                height,
+                                width,
+                                videoRatio,
+                                lifted = (height - subtitleLift.toPx() - gap).takeIf { subtitleLift > 0.dp },
+                            ),
                         ceiling = if (subtitleCeiling > 0.dp) (subtitleCeiling + CUE_CLEARANCE).toPx() else 0f,
                         text = text,
                         corner = subtitleCorner?.let { Rect(it.left - gap, it.top - gap, it.right, it.bottom) },
@@ -180,6 +184,30 @@ fun cueFrame(
         }
     return CueFrame(1f - foot / height, text * scale, span, center)
 }
+
+/**
+ * The foot of the cues set from the foot, px from the top: [CUE_RISE] of the picture's height over the picture's foot
+ * (the picture fitted to the view at [ratio]; the view's own height before the ratio is known), and with the controls
+ * up the higher of that and [lifted] (just over them). On a landscape screen that foot is always at least 8% of the
+ * screen over its foot, so the 5% title-safe line never binds; the black band under wide video never takes the lines.
+ */
+internal fun cueFoot(
+    height: Float,
+    width: Float,
+    ratio: Float,
+    lifted: Float?,
+): Float {
+    val picture = if (ratio > 0f) min(height, width / ratio) else height
+    val plain = (height + picture) / 2 - picture * CUE_RISE
+    return lifted?.let { min(plain, it) } ?: plain
+}
+
+/**
+ * The cues' foot over the picture's foot, a share of the picture's height: Media3's own default, which its PlayerView
+ * measures on the content frame, between EBU R 95's 5% and CEA-608's 10%, on every platform
+ * (plans/dual-subtitles.md 11).
+ */
+const val CUE_RISE = SubtitleView.DEFAULT_BOTTOM_PADDING_FRACTION
 
 /** The lines the corner rule makes room for, and the rule's budget when the cues are not known: two. */
 const val CUE_LINES = 2
