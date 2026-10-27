@@ -32,7 +32,15 @@ struct AccountCard: View {
     }
 
     var body: some View {
-        if let card {
+        // Right after a pairing, "Signed in from" the device that approved it,
+        // for 8 s: a line nothing focuses (plans/tv-qr-login.md 5.5).
+        if let by = sync.joinedBy {
+            Said(tone: .ok, text: AccountRules.fill(words.tvSignedInFrom, ["device": by]))
+                .task {
+                    try? await Task.sleep(for: .seconds(8))
+                    sync.joinedBy = nil
+                }
+        } else if let card {
             VStack(alignment: .leading, spacing: Theme.Space.xs) {
                 content(card)
                 if let error { Said(tone: .bad, text: error) }

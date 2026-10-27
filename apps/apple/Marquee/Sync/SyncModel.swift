@@ -51,6 +51,9 @@ final class SyncModel {
     private(set) var pairing: LiveRecord<PairingSnapshot>?
     /// The last join: in the Keychain (true), for this session only (false), or none yet.
     private(set) var joinStored: Bool?
+    /// The device that approved this one's pairing (plans/tv-qr-login.md 5.5):
+    /// Home says "Signed in from" it for a moment. Memory only.
+    var joinedBy: String?
     /// Joined with a recovery kit and no new kit made since: the page asks for one.
     private(set) var recovered: Bool {
         didSet { defaults.set(recovered, forKey: "syncRecovered") }
@@ -196,7 +199,8 @@ final class SyncModel {
         guard !keyUnreadable else { return }
         let attempt = LiveRecord<PairingSnapshot>("pairing", params: ["server": server, "name": name, "form": DeviceForm.current], core: core)
         attempt.onSnapshot = { [weak self, weak attempt] snapshot in
-            guard case .joined(let record) = snapshot, let self, let attempt, self.pairing === attempt, self.joinStored == nil else { return }
+            guard case .joined(let record, let by) = snapshot, let self, let attempt, self.pairing === attempt, self.joinStored == nil else { return }
+            self.joinedBy = by
             self.join(record)
         }
         joinStored = nil
@@ -295,25 +299,28 @@ final class SyncModel {
         return list
     }
 
-    /// Vouches for the device that shows `qr` and hands it the account.
-    /// Returns the six digits the new device must show too.
-    /// Behind the OS prompt: whoever confirms the digits next joins the account.
-    func approvePairing(_ qr: String) async throws -> String {
-        try await confirmOwner(SyncWords.authApprove)
-        struct Approved: Decodable, Sendable { let code: String; let record: JSONValue }
-        let approved: Approved = try await withRecord("approvePairing", ["qr": qr]) { $0.record }
-        // The new device joins once it confirms; the list catches up on the next look.
-        try? await loadDevices()
-        return approved.code
+    /// Vouches for the device that shows `qr` and hands it the account
+    /// (plans/tv-qr-login.md Q2): `scanned` when this app's camera read it,
+    /// the only producer of a scan. The core first asks whether that screen
+    /// shares this phone's network; not near, a link answers `scanRequired`
+    /// (thrown) and a scan `unlockRequired`, which the OS prompt answers here
+    /// before the same call goes again. Returns the new device's member id.
+    func approvePairing(_ qr: String, scanned: Bool) async throws -> String {
+        struct Approved: Decodable, Sendable { let member: String; let record: JSONValue }
+        let fields: [String: any Sendable] = ["qr": qr, "via": scanned ? "scan" : "link"]
+        do {
+            let approved: Approved = try await withRecord("approvePairing", fields.merging(["unlocked": false]) { a, _ in a }) { $0.record }
+            return approved.member
+        } catch let error as CoreError where error.code == "unlockRequired" {
+            try await confirmOwner(SyncWords.authApprove)
+            let approved: Approved = try await withRecord("approvePairing", fields.merging(["unlocked": true]) { a, _ in a }) { $0.record }
+            return approved.member
+        }
     }
 
-    /// The digits on the new device differ: the approval of `qr` ends now, with
-    /// a key rotation that drops the device if it joined meanwhile (and every
-    /// device it let in). Behind the OS prompt; a cancelled prompt changes nothing.
-    func cancelPairing(_ qr: String) async throws {
-        try await confirmOwner(SyncWords.authDiffer)
-        let _: JSONValue = try await withRecord("cancelPairing", ["qr": qr]) { $0 }
-        try? await loadDevices()
+    /// What a pairing code says, for the approve sheet (its name cleaned by the core).
+    func readPairingCode(_ qr: String) async throws -> PairingCode {
+        try await core.call("readPairingCode", ["qr": qr], as: PairingCode.self)
     }
 
     /// Both sides of a different device list, read only.

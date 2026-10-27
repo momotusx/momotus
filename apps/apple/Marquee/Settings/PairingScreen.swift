@@ -1,9 +1,10 @@
 import Foundation
 import SwiftUI
 
-/// Joins this device to a sync account: a device that already syncs scans
-/// the QR, both show the same six digits, the user confirms, and the record
-/// it hands over goes to the Keychain. Nothing is kept before confirming.
+/// Joins this device to a sync account (plans/tv-qr-login.md 5.5): a phone
+/// that already syncs scans the QR, by its camera or the app's scanner, and
+/// the record it hands over goes to the Keychain; nothing is asked here. A new
+/// code takes the old one's place as each ends; after three, Show a new code.
 /// The attempt belongs to the sync model, which stores the join as it arrives.
 struct PairingScreen: View {
     let core: CoreClient
@@ -11,6 +12,8 @@ struct PairingScreen: View {
     var done: (() -> Void)?
     /// The build's hosted relay: the code shows at once, with no form (sign-in, a TV's first run).
     var autostart: String?
+    /// The code shows at once with no field: the given server, else the build's hosted relay (plans/tv-qr-login.md 5.5).
+    private var shownServer: String? { autostart ?? AccountServer.default }
     /// A TV's first run: "Sign in with your phone" and how, in place of the page's own words.
     var heading: String?
     var lede: String?
@@ -49,7 +52,7 @@ struct PairingScreen: View {
                     JoinedState(core: core, stored: true, done: done)
                 } else if sync.keyUnreadable {
                     KeyUnreadable()
-                } else if autostart == nil {
+                } else if shownServer == nil {
                     form
                 }
                 if !joinedHere, !more.isEmpty {
@@ -74,9 +77,9 @@ struct PairingScreen: View {
         .task(id: sync.pairing?.taskId) { sync.pairing?.start() }
         // The hosted relay: the code at once, no form to fill.
         .task {
-            guard let autostart, sync.pairing == nil, !sync.joined, !sync.keyUnreadable else { return }
-            UserDefaults.standard.set(autostart, forKey: SyncRecord.serverKey)
-            sync.startPairing(server: autostart, name: name)
+            guard let start = shownServer, sync.pairing == nil, !sync.joined, !sync.keyUnreadable else { return }
+            UserDefaults.standard.set(start, forKey: SyncRecord.serverKey)
+            sync.startPairing(server: start, name: name)
         }
         .confirmationDialog(SyncWords.replaceAsk, isPresented: $replacing, titleVisibility: .visible) {
             Button(SyncWords.replaceButton, role: .destructive) { start(confirmed: true) }
@@ -90,16 +93,11 @@ struct PairingScreen: View {
         #endif
     }
 
-    /// The step whose answer is on screen: confirm, or start again after an expiry or a failure.
+    /// The step whose answer is on screen: start again after the view could not open.
     private var answerStep: String? {
         guard let pairing = sync.pairing else { return nil }
         if pairing.failure != nil { return "failure" }
-        switch pairing.snapshot {
-        case .confirm?: return "confirm"
-        case .expired?: return "expired"
-        case .failed?: return "failed"
-        default: return nil
-        }
+        return nil
     }
 
     /// Why pairing stopped, and Start again.
@@ -173,14 +171,21 @@ struct PairingScreen: View {
                 .foregroundStyle(Theme.Palette.muted)
         case .waiting(let qr, let expiresMs)?:
             VStack(alignment: .leading, spacing: Theme.Space.s) {
-                QRCode(text: qr).frame(width: metrics.wide ? 240 : 200, height: metrics.wide ? 240 : 200)
-                Text("On a device that already syncs, open Settings, then Account, then Add a device, and scan this code.")
+                #if os(tvOS)
+                // Apple TV's sign-in screens: the code on the left, the line on the right; a new code in place.
+                HStack(alignment: .center, spacing: Theme.Space.xl) {
+                    QRCode(text: qr, pairing: true).frame(width: 440, height: 440)
+                    Text(AccountWords.shared.tvScanHow)
+                        .display(Theme.type.title3)
+                        .foregroundStyle(Theme.Palette.text)
+                }
+                #else
+                QRCode(text: qr, pairing: true).frame(width: metrics.wide ? 280 : 240, height: metrics.wide ? 280 : 240)
+                Text(lede ?? AccountWords.shared.tvScanHow)
                     .textFont(Theme.type.body)
                     .foregroundStyle(Theme.Palette.text)
                 let expires = Date(timeIntervalSince1970: TimeInterval(expiresMs) / 1000)
-                Text("The code works until \(expires.formatted(date: .omitted, time: .shortened)).")
-                    .textFont(Theme.type.callout, relativeTo: .callout)
-                    .foregroundStyle(Theme.Palette.muted)
+                #endif
                 #if !os(tvOS)
                 // No camera on the other side: the code goes over by paste, on this device only, until it expires.
                 Text(SyncWords.copyHelp)
@@ -195,29 +200,13 @@ struct PairingScreen: View {
                 .buttonStyle(PillButtonStyle())
                 #endif
             }
-        case .confirm(let code)?:
-            VStack(alignment: .leading, spacing: Theme.Space.s) {
-                Text("Does the other device show the same six digits?")
-                    .textFont(Theme.type.body)
-                    .foregroundStyle(Theme.Palette.text)
-                Text(code)
-                    .font(.mono(Theme.type.hero + 8))
-                    .tracking(8)
-                    .foregroundStyle(Theme.Palette.text)
-                HStack(spacing: 12) {
-                    Button { pairing.command(["type": "confirm"]) } label: { Label("Yes, they match", glyph: "check") }
-                        .buttonStyle(PillButtonStyle(prominent: true))
-                        .focused($answer)
-                    Button { pairing.command(["type": "reject"]) } label: { Label("No, they differ", glyph: "x") }
-                        .buttonStyle(PillButtonStyle())
-                }
-            }
+        case .joining?:
+            Label(AccountWords.shared.approveSigningIn, glyph: "clock")
+                .textFont(Theme.type.headline, weight: .semibold, relativeTo: .headline)
+                .foregroundStyle(Theme.Palette.text)
         case .joined?:
             JoinedState(core: core, stored: sync.joinStored, done: done)
-        case .expired?:
-            again("The code expired before it was scanned.", symbol: "clock-alert")
-        case .failed(let reason)?:
-            again(PairingWords.problem(reason), symbol: "triangle-alert")
+
         }
     }
 

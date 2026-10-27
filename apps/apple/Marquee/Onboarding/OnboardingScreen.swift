@@ -45,7 +45,6 @@ struct OnboardingScreen: View {
     @State private var note: (ok: Bool, text: String)?
     @State private var showImport = false
     @State private var showPairing = false
-    @State private var showTVKit = false
     /// The still the framed steps show (B4), asked once as first run opens.
     @State private var still: FirstRunStill?
     /// TV: the doors step enters on the first door, not on Browse first.
@@ -102,17 +101,17 @@ struct OnboardingScreen: View {
         // Already in an account when first run opens: sign-in is done. (A join made
         // in it ends it there, Home or the doors.)
         .onAppear { if sync.joined, step == .signIn || step == .tvSignIn { step = .doors } }
-        .navigationDestination(isPresented: $showTVKit) { SyncJoinScreen(kit: true, server: AccountServer.default) }
     }
 
-    /// A TV's first run (4.2): the QR a signed-in phone scans, the six digits,
-    /// a recovery kit, or no account. A TV that joined goes Home, past the doors.
+    /// A TV's first run (plans/tv-qr-login.md 5.5): the QR a phone's camera
+    /// scans, "Scan with your phone's camera", and Browse first, the one focus
+    /// stop, which leads to the doors (a recovery kit is reachable from there).
+    /// A TV that joined goes Home, past the doors.
     private func tvSignInStep(_ server: String) -> some View {
         PairingScreen(core: core, done: close, autostart: server,
-                      heading: AccountWords.shared.tvSignIn, lede: AccountWords.shared.tvSignInHow,
+                      heading: AccountWords.shared.tvSignIn, lede: AccountWords.shared.tvScanHow,
                       more: [
-                          PairingMore(title: AccountWords.shared.useRecoveryKit, glyph: "life-buoy") { showTVKit = true },
-                          PairingMore(title: AccountWords.shared.tvWithoutAccount, glyph: "door-open") {
+                          PairingMore(title: AccountWords.shared.browseFirst, glyph: "chevron-right") {
                               sync.endPairing()
                               step = .doors
                           },

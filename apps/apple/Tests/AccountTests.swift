@@ -203,12 +203,18 @@ private func announcement(_ kind: String, member: String? = "m", by: String? = "
     #expect(AccountRules.lastUsed(member("k2", kit: true), members: []) == nil)
 }
 
-@Test func onlyTheLinkHostsPairPathOpensTheScanner() throws {
-    let link = try #require(URL(string: "https://link.example/pair#v=3&s=x"))
-    #expect(AccountRules.opensScanner(link, linkHost: "link.example"))
-    #expect(!AccountRules.opensScanner(link, linkHost: "other.example"))
-    #expect(!AccountRules.opensScanner(link, linkHost: nil))
-    #expect(!AccountRules.opensScanner(try #require(URL(string: "https://link.example/delete")), linkHost: "link.example"))
+@Test func aPairingCodeByLinkReachesTheSheetWholeAndNothingElseDoes() throws {
+    // plans/tv-qr-login.md 5.6: the link host's /pair, or momotus://pair from its page; the code whole, for the core.
+    let url = { (text: String) in try #require(URL(string: text)) }
+    let link = "https://link.example/pair#v=3&s=x&p=y&k=z&g=w&n=Den&f=tv"
+    #expect(AccountRules.pairingCode(try url(link), linkHost: "link.example") == link)
+    #expect(AccountRules.pairingCode(try url(link), linkHost: "other.example") == nil)
+    #expect(AccountRules.pairingCode(try url(link), linkHost: nil) == nil)
+    let handed = "momotus://pair#v=3&s=x&p=y&k=z&g=w"
+    #expect(AccountRules.pairingCode(try url(handed), linkHost: nil) == handed)
+    for other in ["https://link.example/delete#v=3", "https://link.example/pair", "momotus://auth#flow=f", "momotus://pair/x#v=3", "other://pair#v=3"] {
+        #expect(AccountRules.pairingCode(try url(other), linkHost: "link.example") == nil, "\(other)")
+    }
     // The auth session's return: only momotus://auth, its fragment as it came.
     #expect(AccountRules.returnedFragment(try #require(URL(string: "momotus://auth#flow=f&code=c&relay=127.0.0.1"))) == "flow=f&code=c&relay=127.0.0.1")
     #expect(AccountRules.returnedFragment(try #require(URL(string: "momotus://pair#flow=f"))) == nil)

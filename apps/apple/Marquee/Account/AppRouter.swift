@@ -5,22 +5,25 @@ import UIKit
 #endif
 
 /// Where Sign in another device opens from outside a page (plans/accounts.md
-/// 4.2): the home-screen quick action, the `/pair` universal link a phone
-/// camera opens, and the top bar's profile menu. The shell shows the scanner
-/// on each request; a phone not signed in yet goes to the Account page first.
+/// 4.2, plans/tv-qr-login.md 5.6): the home-screen quick action and the top
+/// bar's profile menu (the scanner), and a pairing code by link, the `/pair`
+/// universal link or `momotus://pair` from the link host's page (the approve
+/// sheet with that code). A phone not signed in yet goes to the Account page first.
 @MainActor @Observable
 final class AppRouter {
     static let shared = AppRouter()
 
-    /// Bumped by each request; the shell presents the scanner when it changes.
+    /// Bumped by each request; the shell presents the sheet when it changes.
     private(set) var scanRequests = 0
-    /// The request came from the `/pair` link: the scanner asks to scan once more here.
-    private(set) var fromLink = false
+    /// The code a link brought, for the sheet to take once; none opens the scanner. Memory only.
+    var pendingCode: String?
 
-    func requestScan(fromLink: Bool = false) {
-        self.fromLink = fromLink
+    func requestScan(code: String? = nil) {
+        pendingCode = code
         scanRequests += 1
     }
+
+
 
     #if os(iOS)
     /// The quick action's type.
@@ -43,6 +46,22 @@ final class SceneDelegate: NSObject, UIWindowSceneDelegate {
         MainActor.assumeIsolated { BrightnessKeeper.repair((scene as? UIWindowScene)?.screen) }
         if options.shortcutItem?.type == AppRouter.signInAnotherType {
             MainActor.assumeIsolated { AppRouter.shared.requestScan() }
+        }
+        // A cold start by a pairing code's link (plans/tv-qr-login.md 5.6).
+        open(options.urlContexts)
+    }
+
+    /// `momotus://pair#...` from the link host's page while the app runs. This
+    /// delegate replaces SwiftUI's own, so URLs arrive here, not in `onOpenURL`.
+    func scene(_ scene: UIScene, openURLContexts contexts: Set<UIOpenURLContext>) {
+        open(contexts)
+    }
+
+    private func open(_ contexts: Set<UIOpenURLContext>) {
+        guard let url = contexts.first?.url else { return }
+        MainActor.assumeIsolated {
+            guard let code = AccountRules.pairingCode(url, linkHost: PasskeyContract.relyingParty) else { return }
+            AppRouter.shared.requestScan(code: code)
         }
     }
 

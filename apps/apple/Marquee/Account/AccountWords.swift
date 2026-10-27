@@ -25,6 +25,7 @@ struct AccountWords: Decodable, Sendable {
     let providerName: [String: String]
     let signInTitle: String
     let continueWith: String
+    let `continue`: String
     let otherWays: String
     let usePasskey: String
     let scanFromDevice: String
@@ -45,6 +46,25 @@ struct AccountWords: Decodable, Sendable {
     let scanAgainHere: String
     let codeFound: String
     let usePhoneToSignIn: String
+    let tvScanHow: String
+    let tvQrLabel: String
+    let browseFirst: String
+    let tvSignedInFrom: String
+    let approveAsk: String
+    let approveAskTv: String
+    let approveAskOther: String
+    let approveUnnamed: String
+    let approveButton: String
+    let approveNear: String
+    let approveScanHere: String
+    let approveSigningIn: String
+    let approveDone: String
+    let approveNotYou: String
+    let approveSlow: String
+    let approveAnswered: String
+    let approveExpired: String
+    let approveKids: String
+    let phoneScanHow: String
     let passkeyLabel: String
     let recoveryKitName: String
     let joinedWithPasskey: String
@@ -84,6 +104,7 @@ struct AccountWords: Decodable, Sendable {
     let ticketExpiredActions: [String]
     let signupLimit: String
     let signupLimitActions: [String]
+    let signupLimitNetwork: String
     let linkedElsewhere: String
     let linkedElsewhereActions: [String]
     let busy: String
@@ -135,7 +156,7 @@ struct AccountWords: Decodable, Sendable {
 
     /// Every key the file holds but its "about".
     static let keys: Set<String> = [
-        "announceDevice", "announceDeviceUnnamed", "announcePasskey", "announceKit", "announceRemoved", "announceRemovedUnnamed", "announceRemovedPasskey", "announceRemovedKit", "announceLeft", "announceLeftUnnamed", "announceDropped", "announceUnnamedDevice", "announceGoneDevice", "announceNotYou", "removePasskeyAsk", "announceOk", "providerAccount", "providerAccountOther", "providerName", "signInTitle", "continueWith", "otherWays", "usePasskey", "scanFromDevice", "useRecoveryKit", "useOwnServer", "notNow", "passkeyHere", "createAccount", "alreadyUse", "libraryAdded", "cantUseAny", "tvSignIn", "tvSignInHow", "tvWithoutAccount", "switchProfile", "signInAnother", "approveWarning", "scanAgainHere", "codeFound", "usePhoneToSignIn", "passkeyLabel", "recoveryKitName", "joinedWithPasskey", "lastUsed", "givingAway", "kitHere", "kitDropped", "tooManyKits", "kitTaken", "plainLink", "debridConnected", "traktConnected", "unlinkAnyway", "deleteAnyway", "accountGone", "accountGoneActions", "deletionScheduled", "deletionScheduledBy", "deletionCancel", "deletionCancelUnlink", "secondWayIn", "noSecondWayIn", "noSecondWayInActions", "removeLibraryAsk", "removeLibraryDebrid", "reportLostRemove", "unreachable", "unreachableActions", "noRedirect", "noRedirectActions", "passkeyCancelled", "passkeyCancelledActions", "kitUnknownPasskey", "kitUnknownPasskeyActions", "startOverWarning", "ticketExpired", "ticketExpiredActions", "signupLimit", "signupLimitActions", "linkedElsewhere", "linkedElsewhereActions", "busy", "otherRelay", "otherRelayCode", "otherRelayCodeActions", "signInRefused", "signInWindow", "popupBlocked", "returnClose", "ownServerLabel", "ownServerUse", "foundWeb", "startOver", "signedInWith", "linkAnother", "linkedOn", "unlink", "savePasskeyHere", "unlinkLast", "appleRevokeFailed", "wiping", "wipeFailed", "secondWayInText", "notOwner",
+        "announceDevice", "announceDeviceUnnamed", "announcePasskey", "announceKit", "announceRemoved", "announceRemovedUnnamed", "announceRemovedPasskey", "announceRemovedKit", "announceLeft", "announceLeftUnnamed", "announceDropped", "announceUnnamedDevice", "announceGoneDevice", "announceNotYou", "removePasskeyAsk", "announceOk", "providerAccount", "providerAccountOther", "providerName", "signInTitle", "continueWith", "continue", "otherWays", "usePasskey", "scanFromDevice", "useRecoveryKit", "useOwnServer", "notNow", "passkeyHere", "createAccount", "alreadyUse", "libraryAdded", "cantUseAny", "tvSignIn", "tvSignInHow", "tvWithoutAccount", "switchProfile", "signInAnother", "approveWarning", "scanAgainHere", "codeFound", "usePhoneToSignIn", "tvScanHow", "tvQrLabel", "browseFirst", "tvSignedInFrom", "approveAsk", "approveAskTv", "approveAskOther", "approveUnnamed", "approveButton", "approveNear", "approveScanHere", "approveSigningIn", "approveDone", "approveNotYou", "approveSlow", "approveAnswered", "approveExpired", "approveKids", "phoneScanHow", "passkeyLabel", "recoveryKitName", "joinedWithPasskey", "lastUsed", "givingAway", "kitHere", "kitDropped", "tooManyKits", "kitTaken", "plainLink", "debridConnected", "traktConnected", "unlinkAnyway", "deleteAnyway", "accountGone", "accountGoneActions", "deletionScheduled", "deletionScheduledBy", "deletionCancel", "deletionCancelUnlink", "secondWayIn", "noSecondWayIn", "noSecondWayInActions", "removeLibraryAsk", "removeLibraryDebrid", "reportLostRemove", "unreachable", "unreachableActions", "noRedirect", "noRedirectActions", "passkeyCancelled", "passkeyCancelledActions", "kitUnknownPasskey", "kitUnknownPasskeyActions", "startOverWarning", "ticketExpired", "ticketExpiredActions", "signupLimit", "signupLimitActions", "signupLimitNetwork", "linkedElsewhere", "linkedElsewhereActions", "busy", "otherRelay", "otherRelayCode", "otherRelayCodeActions", "signInRefused", "signInWindow", "popupBlocked", "returnClose", "ownServerLabel", "ownServerUse", "foundWeb", "startOver", "signedInWith", "linkAnother", "linkedOn", "unlink", "savePasskeyHere", "unlinkLast", "appleRevokeFailed", "wiping", "wipeFailed", "secondWayInText", "notOwner",
         "continueWithEmail", "emailTitle", "emailLabel", "emailSend", "badAddress", "codeTitle", "codeSentTo", "codeLabel", "codeResent", "codeMissing", "codeResend", "codeResendIn", "codeOtherAddress", "wrongCode", "codeExpired", "codeExpiredActions", "emailWait", "emailLimit", "emailLimitActions", "mailUnavailable", "mailUnavailableActions", "deletionScheduledByEmail", "deletionCancelUnlinkEmail",
     ]
 

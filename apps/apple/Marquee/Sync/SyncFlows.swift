@@ -165,38 +165,37 @@ struct SyncField: View {
     }
 }
 
-/// Add a device: scan (iPhone and iPad) or paste the code the new device
-/// shows, say which sync server it joins through and approve it, then show
-/// the six digits the new device must show too. A TV says to use a phone.
+/// The approve sheet (plans/tv-qr-login.md 5.6): a code a link brought (the
+/// `/pair` universal link, `momotus://pair` from the link host's page) or this
+/// phone's camera scanner, the only producer of a scan. "Sign in "<name>"?"
+/// with Sign in; the core says whether that screen shares this phone's
+/// network. Not near, a link asks for a scan here and a scan for the screen
+/// lock (the model asks it), before anything is sent. Then Signing in, and
+/// Done once the device list shows it, with Not you? Remove it. A TV says to
+/// use a phone.
 struct AddDeviceScreen: View {
-    /// Opened by the `/pair` link a phone camera followed: scan once more here (D6).
-    var fromLink = false
     @Environment(SyncModel.self) private var sync
     @Environment(\.metrics) private var metrics
     @Environment(\.dismiss) private var dismiss
-    @State private var code = ""
+    @State private var step = ApproveStep.idle
     @State private var scanning = false
-    /// The code waiting for the step that names its sync server.
-    @State private var reviewing: String?
-    /// The reviewed code names another sync server than this account's (section 5).
-    @State private var otherRelay = false
+    /// The code on the sheet, and whether this phone's camera read it.
+    @State private var code: (text: String, scanned: Bool)?
+    @State private var device = AccountWords.shared.approveUnnamed
+    @State private var member: String?
     @State private var busy = false
-    @State private var error: String?
-    @State private var digits: String?
-    /// The code the digits belong to: They differ ends its approval.
-    @State private var approvedCode: String?
-    /// They differ ended the approval: its words replace the digits.
-    @State private var ended = false
-    @FocusState private var typing: String?
+    @State private var waiting: Task<Void, Never>?
+
+    private typealias A = AccountWords
 
     var body: some View {
         ScrollView(.vertical) {
             VStack(alignment: .leading, spacing: Theme.Space.m) {
-                ScreenTitle(text: AccountWords.shared.signInAnother)
+                ScreenTitle(text: A.shared.signInAnother)
                 #if os(tvOS)
                 Elsewhere(glyph: "qr-code", title: W.tvOnly, text: W.tvAdd)
                 #else
-                if let digits { approved(digits) } else if let reviewing { review(reviewing) } else { entry }
+                steps
                 #endif
             }
             .frame(maxWidth: 760, alignment: .leading)
@@ -207,11 +206,23 @@ struct AddDeviceScreen: View {
         .scrollIndicators(.hidden)
         .background(Theme.Palette.bg)
         .topScrim()
+        .task {
+            // A link's code, taken once; none opens the scanner (one tap from the shortcut).
+            if let linked = AppRouter.shared.pendingCode {
+                AppRouter.shared.pendingCode = nil
+                offer(linked, scanned: false)
+            } else {
+                scanning = true
+            }
+        }
+        .onDisappear { waiting?.cancel() }
         #if os(iOS)
         .fullScreenCover(isPresented: $scanning) {
             QRScanner { found in
                 scanning = false
-                take(found)
+                let text = found.trimmingCharacters(in: .whitespacesAndNewlines)
+                // After "scan it here" the user already said Sign in: it goes on at once.
+                if step == .scanHere { signIn(text, scanned: true) } else { offer(text, scanned: true) }
             } cancel: {
                 scanning = false
             }
@@ -219,147 +230,162 @@ struct AddDeviceScreen: View {
         #endif
     }
 
-    private var entry: some View {
-        VStack(alignment: .leading, spacing: Theme.Space.m) {
+    @ViewBuilder private var steps: some View {
+        switch step {
+        case .idle:
             Text(W.addLede)
                 .textFont(Theme.type.body)
                 .foregroundStyle(Theme.Palette.muted)
                 .fixedSize(horizontal: false, vertical: true)
-            if fromLink { Callout(glyph: "camera", text: AccountWords.shared.scanAgainHere) }
-            Callout(glyph: "shield-alert", text: W.addWarning)
-            #if os(iOS)
-            Button { error = nil; scanning = true } label: { Label(W.scan, glyph: "camera") }
-                .buttonStyle(PillButtonStyle(prominent: true))
-            #endif
-            if let error { Said(tone: .bad, text: error) }
-        }
-    }
-
-    /// A scanned or pasted code goes to the step that names its sync server first; never straight to approving.
-    private func take(_ text: String) {
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard SyncRules.isPairingCode(trimmed) else {
-            error = W.notACode
-            return
-        }
-        typing = nil
-        error = nil
-        announce(AccountWords.shared.codeFound)
-        otherRelay = AccountRules.isOtherRelayCode(trimmed, joined: sync.joinedServer())
-        reviewing = trimmed
-    }
-
-    @ViewBuilder private func review(_ qr: String) -> some View {
-        if otherRelay {
-            // The core refuses it anyway: say why, and scan again (section 5).
-            VStack(alignment: .leading, spacing: Theme.Space.m) {
-                Said(tone: .bad, text: AccountWords.shared.otherRelayCode)
-                FlowRow(spacing: Theme.Space.xs) {
-                    #if os(iOS)
-                    Button { reviewing = nil; otherRelay = false; scanning = true } label: {
-                        Label(AccountWords.shared.otherRelayCodeActions[0], glyph: "camera")
-                    }
-                    .buttonStyle(PillButtonStyle(prominent: true))
-                    #endif
-                    Button(W.cancel) { reviewing = nil; otherRelay = false }
-                        .buttonStyle(PillButtonStyle())
-                }
-            }
-        } else {
-            reviewStep(qr)
-        }
-    }
-
-    private func reviewStep(_ qr: String) -> some View {
-        VStack(alignment: .leading, spacing: Theme.Space.m) {
-            // The code is for the user's own sync server (the core refuses any other): the question is the device.
-            Text(W.reviewAsk)
-                .display(Theme.type.title3)
-                .foregroundStyle(Theme.Palette.text)
-                .fixedSize(horizontal: false, vertical: true)
-            Text(W.reviewText)
-                .textFont(Theme.type.body)
-                .foregroundStyle(Theme.Palette.muted)
-                .fixedSize(horizontal: false, vertical: true)
-            Callout(glyph: "shield-alert", text: AccountWords.shared.approveWarning)
-            if let error { Said(tone: .bad, text: error) }
-            FlowRow(spacing: Theme.Space.xs) {
-                Button { approve(qr) } label: { Label(busy ? W.approving : W.approve, glyph: "check") }
-                    .buttonStyle(PillButtonStyle(prominent: true))
-                    .disabled(busy)
-                Button(W.cancel) { reviewing = nil; error = nil }
-                    .buttonStyle(PillButtonStyle())
-                    .disabled(busy)
-            }
-        }
-    }
-
-    private func approve(_ qr: String) {
-        guard !busy else { return }
-        busy = true
-        error = nil
-        Task {
-            defer { busy = false }
-            do {
-                digits = try await sync.approvePairing(qr)
-                approvedCode = qr
-                ended = false
-                code = ""
-                reviewing = nil
-            } catch {
-                self.error = SyncProblem(error, action: .approve).words
-            }
-        }
-    }
-
-    private func approved(_ digits: String) -> some View {
-        VStack(alignment: .leading, spacing: Theme.Space.m) {
-            if ended {
-                // The old digits and "confirm on the new device" go: they no longer apply.
-                Said(tone: .warn, text: W.differEnded)
-            } else {
-                Text(W.approvedStep)
-                    .textFont(Theme.type.body)
+            scanButton
+        case .sheet(let ask, let form):
+            HStack(spacing: Theme.Space.s) {
+                Glyph(form == "tv" ? "tv" : "monitor-smartphone")
                     .foregroundStyle(Theme.Palette.text)
-                Text(digits)
-                    .font(.mono(Theme.type.hero + 8))
-                    .tracking(8)
+                Text(ask)
+                    .display(Theme.type.title3)
                     .foregroundStyle(Theme.Palette.text)
-                    .accessibilityLabel("Code \(digits.map(String.init).joined(separator: " "))")
-                Text(W.approvedHelp)
-                    .textFont(Theme.type.callout, relativeTo: .callout)
-                    .foregroundStyle(Theme.Palette.muted)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            if let error { Said(tone: .bad, text: error) }
+            .accessibilityElement(children: .combine)
+            // The one defence on the near path: a full line, at any text size (r2 native P2-1).
+            Text(A.shared.approveNear)
+                .textFont(Theme.type.body)
+                .foregroundStyle(Theme.Palette.text)
+                .fixedSize(horizontal: false, vertical: true)
+            FlowRow(spacing: Theme.Space.xs) {
+                Button { if let code { signIn(code.text, scanned: code.scanned) } } label: { Label(A.shared.approveButton, glyph: "check") }
+                    .buttonStyle(PillButtonStyle(prominent: true))
+                    .disabled(busy)
+                Button(W.cancel) { dismiss() }
+                    .buttonStyle(PillButtonStyle())
+            }
+        case .scanHere:
+            Said(tone: .warn, text: A.shared.approveScanHere)
+            scanButton
+        case .signingIn:
+            Said(tone: .warn, text: A.shared.approveSigningIn)
+        case .done:
+            Said(tone: .ok, text: AccountRules.fill(A.shared.approveDone, ["device": device]))
             FlowRow(spacing: Theme.Space.xs) {
                 Button { dismiss() } label: { Label(W.done, glyph: "check") }
                     .buttonStyle(PillButtonStyle(prominent: true))
-                // The digits differ: whoever confirmed them is not the device in front of the user.
-                if !ended {
-                    Button { theyDiffer() } label: { Label(W.differ, glyph: "x") }
-                        .buttonStyle(PillButtonStyle())
-                        .disabled(busy)
-                }
+                Button(A.shared.approveNotYou) { notYou() }
+                    .buttonStyle(PillButtonStyle())
+                    .disabled(busy)
+            }
+        case .slow:
+            Said(tone: .warn, text: AccountRules.fill(A.shared.approveSlow, ["device": device]))
+            Button(A.shared.announceOk) { dismiss() }
+                .buttonStyle(PillButtonStyle(prominent: true))
+        case .failed(let words):
+            Said(tone: .bad, text: words)
+            FlowRow(spacing: Theme.Space.xs) {
+                scanButton
+                Button(W.done) { dismiss() }
+                    .buttonStyle(PillButtonStyle())
             }
         }
     }
 
-    /// Ends the approval whether or not the device joined yet; a cancelled
-    /// prompt or a failed call changes nothing, and the button stays.
-    private func theyDiffer() {
-        guard !busy, let qr = approvedCode else { return }
+    @ViewBuilder private var scanButton: some View {
+        #if os(iOS)
+        Button { scanning = true } label: { Label(W.scan, glyph: "camera") }
+            .buttonStyle(PillButtonStyle(prominent: true))
+        #endif
+    }
+
+    /// A code arrived: it replaces any other, and its wait.
+    private func offer(_ text: String, scanned: Bool) {
+        waiting?.cancel()
+        member = nil
+        code = (text, scanned)
+        Task {
+            do {
+                let read = try await sync.readPairingCode(text)
+                device = read.name ?? A.shared.approveUnnamed
+                step = .sheet(ask: ApproveStep.ask(read), form: read.form)
+            } catch {
+                step = .failed(W.notACode)
+            }
+        }
+    }
+
+    private func signIn(_ text: String, scanned: Bool) {
+        guard !busy else { return }
         busy = true
-        error = nil
+        code = (text, scanned)
         Task {
             defer { busy = false }
             do {
-                try await sync.cancelPairing(qr)
-                ended = true
-                announce(W.differEnded)
+                let joined = try await sync.approvePairing(text, scanned: scanned)
+                member = joined
+                step = .signingIn
+                announce(A.shared.approveSigningIn)
+                wait(for: joined)
+            } catch let error as CoreError where error.code == "scanRequired" {
+                step = .scanHere
+                scanning = true
             } catch {
-                self.error = SyncProblem(error, action: .differ).words
+                step = .failed(ApproveStep.words(error))
             }
+        }
+    }
+
+    /// One poll of the device list, every 2 s up to 60 s, until the new device is in it.
+    private func wait(for joined: String) {
+        waiting?.cancel()
+        waiting = Task {
+            for _ in 0..<30 {
+                try? await Task.sleep(for: .seconds(2))
+                if Task.isCancelled { return }
+                if let list = try? await sync.loadDevices(), list.members.contains(where: { $0.id == joined }) {
+                    step = .done
+                    announce(AccountRules.fill(A.shared.approveDone, ["device": device]))
+                    return
+                }
+            }
+            step = .slow
+        }
+    }
+
+    /// Not you? Remove it: the device just signed in leaves the account.
+    private func notYou() {
+        guard let member, !busy else { return }
+        busy = true
+        Task {
+            defer { busy = false }
+            do {
+                try await sync.removeDevice(member)
+                dismiss()
+            } catch {
+                step = .failed(SyncProblem(error, action: .remove).words)
+            }
+        }
+    }
+}
+
+/// The approve sheet's steps, and its words for a code and a refusal.
+enum ApproveStep: Equatable {
+    case idle
+    case sheet(ask: String, form: String?)
+    case scanHere
+    case signingIn
+    case done
+    case slow
+    case failed(String)
+
+    /// "Sign in "<name>"?", else by the screen's form.
+    static func ask(_ code: PairingCode) -> String {
+        if let name = code.name { return AccountRules.fill(AccountWords.shared.approveAsk, ["device": name]) }
+        return code.form == "tv" ? AccountWords.shared.approveAskTv : AccountWords.shared.approveAskOther
+    }
+
+    static func words(_ error: any Error) -> String {
+        switch (error as? CoreError)?.code {
+        case "codeAnswered": AccountWords.shared.approveAnswered
+        case "codeExpired": AccountWords.shared.approveExpired
+        default: SyncProblem(error, action: .approve).words
         }
     }
 }

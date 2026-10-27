@@ -60,7 +60,7 @@ struct SignInScreen: View {
         }
         .navigationDestination(isPresented: $showOther) { otherWays }
         .navigationDestination(isPresented: $showPairing) {
-            PairingScreen(core: core, done: joined, autostart: flow.server)
+            PairingScreen(core: core, done: joined, autostart: flow.server, lede: words.phoneScanHow)
         }
         .navigationDestination(isPresented: $showKit) { SyncJoinScreen(kit: true, server: flow.server) }
         .navigationDestination(isPresented: $showMakeKit) { RecoveryKitScreen() }
@@ -123,8 +123,18 @@ struct SignInScreen: View {
                 }
                 .buttonStyle(PillButtonStyle(prominent: flow.providers.isEmpty))
             }
+            // No provider on this sync service: Create, or join by a phone's scan (plans/tv-qr-login.md 5.4); under
+            // email when email is the way in.
+            if flow.providers.isEmpty, !flow.unreachable {
+                Button { Task { await flow.createHere(name: DeviceName.current, userName: userName) } } label: {
+                    Label(words.createAccount, glyph: "plus").frame(maxWidth: .infinity)
+                }
+                .buttonStyle(PillButtonStyle(prominent: !flow.offersEmail))
+                Button { showPairing = true } label: { Label(words.alreadyUse, glyph: "qr-code").frame(maxWidth: .infinity) }
+                    .buttonStyle(PillButtonStyle())
+            }
             Button { showOther = true } label: { Label(words.otherWays, glyph: "key-round") }
-                .buttonStyle(PillButtonStyle(prominent: flow.providers.isEmpty && !flow.offersEmail))
+                .buttonStyle(PillButtonStyle())
             Button(words.notNow, action: notNow)
                 .buttonStyle(.textLink)
                 .textFont(Theme.type.callout, weight: .semibold, relativeTo: .callout)

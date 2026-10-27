@@ -64,14 +64,14 @@ private func fixture<T: Decodable>(_ name: String, as type: T.Type) throws -> T 
     let decode = { (json: String) in try JSONDecoder().decode(PairingSnapshot.self, from: Data(json.utf8)) }
     #expect(try decode(#"{"phase":"waiting","qr":"marquee-pair:abc","expiresMs":1760000000000}"#)
         == .waiting(qr: "marquee-pair:abc", expiresMs: 1_760_000_000_000))
-    #expect(try decode(#"{"phase":"confirm","code":"123456"}"#) == .confirm(code: "123456"))
-    #expect(try decode(#"{"phase":"failed","reason":"no answer"}"#) == .failed(reason: "no answer"))
+    #expect(try decode(#"{"phase":"joining"}"#) == .joining)
+    #expect(try decode(#"{"phase":"joined","record":{},"by":"Pixel"}"#) == .joined(record: .object([:]), by: "Pixel"))
 }
 
 @Test func storedRecordsKeep64BitNumbersExact() throws {
     // The keystore record is opaque: it must come back byte for byte in meaning.
     let json = #"{"phase":"joined","record":{"device":18446744073709551615,"epoch":3,"token":"t","flags":[true,null]}}"#
-    guard case .joined(let record) = try JSONDecoder().decode(PairingSnapshot.self, from: Data(json.utf8)) else {
+    guard case .joined(let record, _) = try JSONDecoder().decode(PairingSnapshot.self, from: Data(json.utf8)) else {
         Issue.record("expected joined")
         return
     }

@@ -259,7 +259,7 @@ struct MainShell: View {
         // Sign in another device (plans/accounts.md 4.2): the scanner, or the Account page first.
         .sheet(isPresented: $showScanner) {
             NavigationStack {
-                if sync.joined { AddDeviceScreen(fromLink: AppRouter.shared.fromLink) } else { SyncScreen() }
+                if sync.joined { AddDeviceScreen() } else { SyncScreen() }
             }
             .environment(sync)
             .environment(profiles)
@@ -278,10 +278,10 @@ struct MainShell: View {
         })
         // Never on a kids profile: Account and approving are not its own.
         .onChange(of: AppRouter.shared.scanRequests) { if profiles.snapshot?.current?.kids != true { showScanner = true } }
-        // A phone camera on a TV's code opens /pair here: the scanner, never the code in the link (D6).
+        // A phone camera on a TV's code opens /pair here: the approve sheet with that code (plans/tv-qr-login.md 5.6).
         .onContinueUserActivity(NSUserActivityTypeBrowsingWeb) { activity in
-            guard let url = activity.webpageURL, AccountRules.opensScanner(url, linkHost: PasskeyContract.relyingParty) else { return }
-            AppRouter.shared.requestScan(fromLink: true)
+            guard let url = activity.webpageURL, let code = AccountRules.pairingCode(url, linkHost: PasskeyContract.relyingParty) else { return }
+            AppRouter.shared.requestScan(code: code)
         }
         #elseif os(macOS)
         places

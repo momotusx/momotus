@@ -121,24 +121,32 @@ struct ImportScreen: View {
 /// A QR code drawn locally from text, crisp at any size.
 struct QRCode: View {
     let text: String
+    /// A pairing code (plans/tv-qr-login.md 5.5): error correction L and a
+    /// four-module white quiet zone, read from across a room, with its spoken name.
+    var pairing = false
 
     var body: some View {
-        if let image = Self.render(text) {
+        if let image = Self.render(text, pairing: pairing) {
             Image(decorative: image, scale: 1)
                 .interpolation(.none)
                 .resizable()
                 .scaledToFit()
-                .padding(10)
+                .padding(pairing ? 0 : 10)
                 .background(RoundedRectangle(cornerRadius: Theme.Radius.s).fill(.white))
-                .accessibilityLabel("QR code")
+                .accessibilityLabel(pairing ? AccountWords.shared.tvQrLabel : "QR code")
         }
     }
 
-    private static func render(_ text: String) -> CGImage? {
+    static func render(_ text: String, pairing: Bool = false) -> CGImage? {
         let filter = CIFilter.qrCodeGenerator()
         filter.message = Data(text.utf8)
-        filter.correctionLevel = "M"
-        guard let output = filter.outputImage else { return nil }
+        filter.correctionLevel = pairing ? "L" : "M"
+        guard var output = filter.outputImage else { return nil }
+        if pairing {
+            // The generator leaves one module around the code: three more make the four a dark screen needs.
+            let zone = output.extent.insetBy(dx: -3, dy: -3)
+            output = output.composited(over: CIImage(color: .white).cropped(to: zone))
+        }
         return CIContext().createCGImage(output, from: output.extent)
     }
 }

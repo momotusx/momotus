@@ -172,6 +172,8 @@ enum AccountRules {
         case "passkeyCancelled": return Trouble(text: words.passkeyCancelled, actions: words.passkeyCancelledActions)
         case "kitUnknown": return Trouble(text: words.kitUnknownPasskey, actions: words.kitUnknownPasskeyActions)
         case "ticketExpired": return Trouble(text: words.ticketExpired, actions: words.ticketExpiredActions)
+        // Without a provider: the sign-up without a sign-in, counted per network (plans/tv-qr-login.md Q7).
+        case "signupLimit" where (provider ?? "").isEmpty: return Trouble(text: words.signupLimitNetwork, actions: words.signupLimitActions)
         case "signupLimit": return Trouble(text: fill(words.signupLimit, ["providerAccount": account]), actions: words.signupLimitActions)
         case "linkedElsewhere": return Trouble(text: fill(words.linkedElsewhere, ["providerAccount": account]), actions: words.linkedElsewhereActions)
         case "busy": return Trouble(text: words.busy, actions: [])
@@ -203,16 +205,22 @@ enum AccountRules {
     }
 
     /// A kit's row line: "Last used: <device>, <date>", that device's name when it is still a member.
+    /// The pairing code a URL carries, whole, for the core to read: the link
+    /// host's `/pair` link, or `momotus://pair#...`; nil for any other URL
+    /// (`momotus://auth` is the sign-in's return). A link is never a scan
+    /// (plans/tv-qr-login.md 5.6).
+    static func pairingCode(_ url: URL, linkHost: String?) -> String? {
+        guard url.fragment(percentEncoded: true)?.isEmpty == false else { return nil }
+        if url.scheme == "momotus", url.host() == "pair", url.path().isEmpty { return url.absoluteString }
+        if let linkHost, !linkHost.isEmpty, url.scheme == "https", url.host() == linkHost, url.path() == "/pair" {
+            return url.absoluteString
+        }
+        return nil
+    }
+
     static func lastUsed(_ kit: MemberInfo, members: [MemberInfo]) -> String? {
         guard let by = kit.lastUsedBy, let ms = kit.lastUsedMs else { return nil }
         return fill(words.lastUsed, ["device": byName(by, members), "date": date(ms)])
-    }
-
-    /// The universal link a phone camera opens: `https://<link host>/pair`.
-    /// It only opens the scanner; its fragment is never read (D6).
-    static func opensScanner(_ url: URL, linkHost: String?) -> Bool {
-        guard let linkHost, !linkHost.isEmpty else { return false }
-        return url.scheme == "https" && url.host() == linkHost && url.path() == "/pair"
     }
 
     /// The sync server a scanned pairing code names (its `s` field): in the

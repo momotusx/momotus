@@ -499,6 +499,20 @@ final class SignInFlow {
         }
     }
 
+    /// Create your Momotus account on a sync service that lists no provider
+    /// (plans/tv-qr-login.md 5.4): the network's sign-up, then its passkey.
+    func createHere(name: String, userName: String) async {
+        stage = .working
+        trouble = nil
+        do {
+            try await sync.createAccount(server: server, invite: "", name: name)
+            stage = .created
+            await savePasskey(userName: userName)
+        } catch {
+            fail(error)
+        }
+    }
+
     /// Start over after its warning: a new account takes the identity from the old one.
     func startOver(ticket: String, name: String, userName: String) async {
         stage = .working

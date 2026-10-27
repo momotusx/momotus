@@ -48,6 +48,9 @@ settings:
     # torrent core is its own choice: STORE=1 for build-core.sh).
     Release:
       MARQUEE_CORE_BUILD: store
+      # A Release build signs in to the hosted relay by default (plans/tv-qr-login.md Q9); the link host stays
+      # empty: no associated domains without the paid program.
+      MARQUEE_SYNC_SERVER: https://momotus.normalisdead.mom
 targetTemplates:
   App:
     type: application
@@ -173,6 +176,10 @@ targets:
         # xcodegen writes 1.0 and 1 otherwise, over the build settings.
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        # momotus://pair from the link host's page hands a TV's code to the app (plans/tv-qr-login.md 5.6).
+        CFBundleURLTypes:
+          - CFBundleURLName: app.momotus.pair
+            CFBundleURLSchemes: [momotus]
         MarqueeSyncServer: $(MARQUEE_SYNC_SERVER)
         MarqueeLinkHost: $(MARQUEE_LINK_HOST)
         MarqueeCoreBuild: $(MARQUEE_CORE_BUILD)

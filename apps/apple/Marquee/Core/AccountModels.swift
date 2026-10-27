@@ -23,8 +23,6 @@ enum ImportSnapshot: Decodable, Hashable, Sendable {
                 qrUrl: try c.decodeIfPresent(String.self, forKey: .qrUrl))
         case "importing": self = .importing(step: try c.decode(String.self, forKey: .step))
         case "done": self = .done(try c.decode(ImportSummary.self, forKey: .summary))
-        case "expired": self = .expired
-        case "failed": self = .failed(reason: try c.decode(String.self, forKey: .reason))
         case let phase:
             throw DecodingError.dataCorruptedError(forKey: .phase, in: c, debugDescription: "unknown import phase \(phase)")
         }
@@ -46,24 +44,21 @@ enum PairingSnapshot: Decodable, Hashable, Sendable {
     case starting
     /// `qr` is the text to show as a QR code.
     case waiting(qr: String, expiresMs: Int64)
-    /// Both screens show this code; the user confirms they match.
-    case confirm(code: String)
-    /// The keystore record to store; the app never looks inside it.
-    case joined(record: JSONValue)
-    case expired
-    case failed(reason: String)
+    /// A phone approved: this device is joining.
+    case joining
+    /// The keystore record to store (the app never looks inside it), and the
+    /// approving device's name as the account knows it.
+    case joined(record: JSONValue, by: String?)
 
-    private enum Key: String, CodingKey { case phase, qr, expiresMs, code, record, reason }
+    private enum Key: String, CodingKey { case phase, qr, expiresMs, record, by }
 
     init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: Key.self)
         switch try c.decode(String.self, forKey: .phase) {
         case "starting": self = .starting
         case "waiting": self = .waiting(qr: try c.decode(String.self, forKey: .qr), expiresMs: try c.decode(Int64.self, forKey: .expiresMs))
-        case "confirm": self = .confirm(code: try c.decode(String.self, forKey: .code))
-        case "joined": self = .joined(record: try c.decode(JSONValue.self, forKey: .record))
-        case "expired": self = .expired
-        case "failed": self = .failed(reason: try c.decode(String.self, forKey: .reason))
+        case "joining": self = .joining
+        case "joined": self = .joined(record: try c.decode(JSONValue.self, forKey: .record), by: try c.decodeIfPresent(String.self, forKey: .by))
         case let phase:
             throw DecodingError.dataCorruptedError(forKey: .phase, in: c, debugDescription: "unknown pairing phase \(phase)")
         }
@@ -369,4 +364,12 @@ struct NativeStart: Decodable, Hashable, Sendable {
 struct EmailStart: Decodable, Hashable, Sendable {
     let flow: String
     let expiresMs: Int64
+}
+
+/// What a pairing code says (`readPairingCode`): its sync server, and the
+/// name and form the screen gives itself, cleaned by the core.
+struct PairingCode: Decodable, Hashable, Sendable {
+    let server: String
+    let name: String?
+    let form: String?
 }
