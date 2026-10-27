@@ -3243,3 +3243,106 @@ async fn a_listener_the_system_took_is_bound_again_on_its_port() {
     let fresh = HttpClient::new(ClientConfig::default()).unwrap();
     assert_eq!(range(&fresh, &lease.url, 10, 10).await, data[10..20]);
 }
+
+/// An Archive playback (plans/plugins-and-marketplace.md 5.3) keeps every
+/// hop on archive.org: its file, an HLS segment and a subtitle each reach a
+/// download node, and a first-hop 302 to another host is refused for all
+/// three, with that host never asked. An addon's playback has no such rule.
+#[tokio::test]
+async fn an_archive_playback_keeps_every_hop_on_archive_org() {
+    let loopback: std::net::IpAddr = "127.0.0.1".parse().unwrap();
+    for name in ["archive.org", "dn1.archive.org", "elsewhere.c-archive.test"] {
+        mq_http::test_dns::set_public(name, &[loopback]);
+    }
+    let asked: Arc<Mutex<Vec<String>>> = Arc::default();
+    let log = asked.clone();
+    let port = mq_http::test_dns::https_requests(move |r| {
+        let host = r.header("host").unwrap_or_default().to_owned();
+        log.lock().unwrap().push(format!("{host}{}", r.path));
+        let port = host.rsplit(':').next().unwrap_or_default().to_owned();
+        let moved = |h: &str, path: &str| {
+            format!(
+                "HTTP/1.1 302 Found\r\nLocation: https://{h}:{port}{path}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+            )
+        };
+        let ok = |kind: &str, body: &str| {
+            format!(
+                "HTTP/1.1 200 OK\r\nContent-Type: {kind}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                body.len()
+            )
+        };
+        let path = r.path.as_str();
+        match path.strip_prefix("/download") {
+            Some(rest) if rest.contains("away") => moved("elsewhere.c-archive.test", "/x"),
+            Some(rest) => moved("dn1.archive.org", &format!("/items{rest}")),
+            None if path.ends_with(".m3u8") => ok(
+                "application/vnd.apple.mpegurl",
+                &format!("#EXTM3U\n#EXT-X-TARGETDURATION:4\n#EXTINF:4,\nseg.ts\n#EXTINF:4,\nhttps://archive.org:{port}/download/away.ts\n#EXT-X-ENDLIST\n"),
+            ),
+            None if path.ends_with(".srt") => ok("text/plain", "1\n00:00:01,000 --> 00:00:02,000\nHello\n"),
+            None => ok("video/mp4", "abcd"),
+        }
+        .into_bytes()
+    });
+    let archive = Url::parse(mq_server::ARCHIVE).unwrap();
+    let upstream = |path: &str| Upstream::Http {
+        url: format!("https://archive.org:{port}/download{path}"),
+        headers: vec![],
+        addon_url: Some(archive.clone()),
+    };
+    let http = HttpClient::new(ClientConfig::default()).unwrap();
+    let server = StreamServer::start(http.clone()).await.unwrap();
+    // A plain file through a download node.
+    let lease = server.register(upstream("/film/ok.mp4"), "ok.mp4");
+    let (head, body) = raw_full(&server, &lease.url, "bytes=0-").await;
+    assert!(head.starts_with("http/1.1 20"), "{head}");
+    assert_eq!(body, b"abcd");
+    // A file whose first hop moves off archive.org.
+    let lease = server.register(upstream("/film/away.mp4"), "away.mp4");
+    let (head, _) = raw_full(&server, &lease.url, "bytes=0-").await;
+    assert!(head.starts_with("http/1.1 502"), "{head}");
+    // HLS: the segment on a node plays, the one that moves off is refused.
+    let lease = server
+        .open(upstream("/film/m.m3u8"), "v.mkv", Duration::from_secs(5))
+        .await
+        .expect("the Archive playlist opens");
+    let playlist = text(&http.get(&lease.url, &local()).await.unwrap());
+    let segments = named_urls(&playlist);
+    assert_eq!(segments.len(), 2, "{playlist}");
+    let (head, body) = raw_full(&server, &segments[0], "bytes=0-").await;
+    assert!(head.starts_with("http/1.1 20"), "{head}");
+    assert_eq!(body, b"abcd");
+    let (head, _) = raw_full(&server, &segments[1], "bytes=0-").await;
+    assert!(head.starts_with("http/1.1 502"), "{head}");
+    // Subtitles: one on a node is served, one that moves off is not.
+    let slot = lease.subtitles();
+    let track = |path: &str| {
+        let url = format!("https://archive.org:{port}/download{path}");
+        slot.add(&url, "eng", Some(&archive)).unwrap()
+    };
+    let served = text(&http.get(&track("/film/a.srt"), &local()).await.unwrap());
+    assert!(served.contains("Hello"), "{served}");
+    let refused = text(&http.get(&track("/film/away.srt"), &local()).await.unwrap());
+    assert_eq!(refused, "WEBVTT\n\n");
+    let asked = asked.lock().unwrap().clone();
+    assert!(
+        asked.iter().any(|a| a.starts_with("dn1.archive.org")),
+        "{asked:?}"
+    );
+    assert!(
+        !asked.iter().any(|a| a.starts_with("elsewhere.")),
+        "{asked:?}"
+    );
+    // The rule is the Archive's alone: an addon's link to the same file
+    // follows the redirect off archive.org.
+    let lease = server.register(
+        Upstream::Http {
+            url: format!("https://archive.org:{port}/download/film/away.mp4"),
+            headers: vec![],
+            addon_url: None,
+        },
+        "away.mp4",
+    );
+    let (head, _) = raw_full(&server, &lease.url, "bytes=0-").await;
+    assert!(head.starts_with("http/1.1 20"), "{head}");
+}

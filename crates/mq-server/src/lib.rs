@@ -36,7 +36,7 @@ use axum::routing::get;
 use bytes::{Bytes, BytesMut};
 use futures_util::{FutureExt, Stream, StreamExt, stream};
 use manifest::{Children, Declared, Role, Sniffed};
-use mq_http::{HttpClient, HttpError, Priority, RequestOptions, Url};
+use mq_http::{HopRule, HttpClient, HttpError, Priority, RequestOptions, Url};
 use mq_media::CancellationToken;
 use std::collections::HashMap;
 use std::future::Future;
@@ -108,12 +108,35 @@ impl PartialEq for Subtitle {
 }
 
 /// The addresses an install's own host adds to its playbacks' scope
-/// (`mq_http::local_addrs`); none without an install.
+/// (`mq_http::local_addrs`); none without an install, nor for a built-in
+/// source (`mq-builtin:`), which has no host.
 fn scope(addon_url: Option<&Url>) -> Vec<IpAddr> {
     addon_url
         .and_then(Url::host_str)
         .map(mq_http::local_addrs)
         .unwrap_or_default()
+}
+
+/// The built-in Internet Archive source's link: its streams carry it as
+/// their `addon_url` (plans/plugins-and-marketplace.md 5.3).
+pub const ARCHIVE: &str = "mq-builtin:archive";
+
+/// Where the Internet Archive source's requests may go: archive.org and its
+/// download nodes, over https.
+pub fn archive_hops() -> HopRule {
+    HopRule::under("archive.org")
+}
+
+/// The handle one playback's requests go out on, its body, ahead-reads, HLS
+/// children and subtitles alike: scoped to the listing install's host, and
+/// for the Archive source held to `archive_hops` on every hop. Plugin
+/// (`mq-plugin:`) and addon links get no hop rule.
+pub fn upstream_http(http: &HttpClient, addon_url: Option<&Url>) -> HttpClient {
+    let scoped = http.scoped(&scope(addon_url));
+    match addon_url.map(Url::as_str) {
+        Some(ARCHIVE) => scoped.with_hops(archive_hops()),
+        _ => scoped,
+    }
 }
 
 /// Where one playback's bytes come from.
@@ -530,7 +553,7 @@ impl StreamServer {
                 headers,
                 addon_url,
             } => {
-                let http = self.shared.http.scoped(&scope(addon_url.as_ref()));
+                let http = upstream_http(&self.shared.http, addon_url.as_ref());
                 let source = ahead::Source::new(http, url, headers);
                 source.prefetch();
                 Content::Http(source)
@@ -1044,7 +1067,7 @@ async fn serve_subtitle(
                 timeout: Duration::from_secs(20),
                 ..Default::default()
             };
-            let http = shared.http.scoped(&scope(addon_url.as_ref()));
+            let http = upstream_http(&shared.http, addon_url.as_ref());
             match playback
                 .released
                 .run_until_cancelled(http.get(&url, &opts))
