@@ -344,6 +344,7 @@ html[data-engine="mpv"] .player-scr.started .player-bd { opacity: 0; }
 .flag { flex: none; width: 40px; height: 40px; border-radius: 50%; }
 /* The mark's letters at the TV's floor of 23 points. */
 .flag.none { display: grid; place-items: center; background: var(--control); font: 600 23px / 1 var(--font-text); color: var(--text); }
+.flag-glyph { width: 56%; height: 56%; }
 .flag-space { flex: none; width: 40px; }
 /* A language's own name beside it only when both fit: else it wraps onto a hidden second line. */
 .lname { display: flex; flex: 1; flex-wrap: wrap; column-gap: 10px; min-width: 0; height: 32px; overflow: hidden; }

@@ -456,6 +456,7 @@ struct Learning {
     caps: DeviceCaps,
     item_id: String,
     prefs: StreamPrefs,
+    device_language: Option<String>,
 }
 
 /// A row the user picked: its stream and failover chain for playback, the
@@ -469,6 +470,8 @@ pub struct Pick {
     /// device's language, then English (the bridge fills them in). The
     /// playback orders subtitles with them too.
     pub languages: Vec<String>,
+    /// The device's language (`VersionsParams::device_language`).
+    pub device_language: Option<String>,
     /// The meta runtime the view ranked with: a torrent's window is sized
     /// with the same rate (plans/streaming-window.md 2.2).
     pub runtime_s: Option<u32>,
@@ -799,6 +802,10 @@ pub struct VersionsParams {
     pub last_binge_group: Option<String>,
     /// What the app knows of the title; the meta fills the rest (4.3).
     pub facts: TitleFacts,
+    /// The device's language as the core's tag ("no" for "nb"), as the
+    /// app sends it: a profile with no subtitle languages starts subtitles
+    /// in it (plans/onboarding-language-picker.md).
+    pub device_language: Option<String>,
 }
 
 impl VersionsParams {
@@ -806,10 +813,10 @@ impl VersionsParams {
     /// from a download's stored request (plans/offline-downloads.md 4.5).
     pub fn from_json(params: &Value, mut prefs: StreamPrefs) -> Result<Self, String> {
         let num = |key: &str| params.get(key).and_then(Value::as_u64).map(|n| n as u32);
+        let device: Option<String> = field(params, "language")?;
+        let device = device.map(|code| crate::languages::tag(&code));
         if prefs.languages.is_empty() {
-            let device: Option<String> = field(params, "language")?;
-            let device = device.map(|code| crate::languages::tag(&code));
-            prefs.languages = device.into_iter().chain(["en".to_owned()]).collect();
+            prefs.languages = device.iter().cloned().chain(["en".to_owned()]).collect();
             prefs.languages.dedup();
         }
         let mut caps = DeviceCaps::basic_1080p();
@@ -864,6 +871,7 @@ impl VersionsParams {
                 field::<String>(params, "released")?.as_deref(),
                 num("episodesInSeason"),
             ),
+            device_language: device,
         })
     }
 }
@@ -994,6 +1002,7 @@ impl VersionsView {
                 .unwrap_or_else(|| params.video_id.split(':').next().unwrap_or_default())
                 .to_owned(),
             prefs: params.prefs.clone(),
+            device_language: params.device_language.clone(),
         });
         params.prefs = core.learned_prefs(params.prefs, screen);
         if params.last_binge_group.is_none() {
@@ -1232,6 +1241,7 @@ impl VersionsView {
                 caps: params.caps.clone(),
                 item_id: String::new(),
                 prefs: params.prefs.clone(),
+                device_language: params.device_language.clone(),
             }),
             _tasks: JoinSet::new(),
         }
@@ -1401,6 +1411,7 @@ impl VersionsView {
             handle,
             note,
             languages: self.learning.prefs.languages.clone(),
+            device_language: self.learning.device_language.clone(),
             runtime_s: s.rank.runtime_s,
         }
     }
@@ -2839,6 +2850,7 @@ impl VersionsView {
 #[cfg(test)]
 pub(crate) fn film_params() -> VersionsParams {
     VersionsParams {
+        device_language: None,
         kind: "movie".into(),
         video_id: "tt1".into(),
         target: Target {

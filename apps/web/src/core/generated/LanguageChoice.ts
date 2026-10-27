@@ -3,9 +3,19 @@
 /**
  * A language for the settings pickers (journey reviews 2026-10-20, web
  * P2-11, Android P2-4): `code` is the tag the core reads it by, `name`
- * its English name.
+ * its English name, `native` its own name, `sort` its place in the A to Z
+ * directory.
  */
 export type LanguageChoice = { code: string, name: string, 
+/**
+ * The language's own name ("Türkçe").
+ */
+native: string, 
+/**
+ * The directory key: the English name with a qualifier moved behind
+ * ("Azerbaijani, South"), so its letter is where a person looks.
+ */
+sort: string, 
 /**
  * The language the device's own code reads as ("nb" is Norwegian,
  * "no"): the one a picker offers and chooses as the device's.

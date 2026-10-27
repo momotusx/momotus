@@ -7,7 +7,7 @@
 //
 // Every flag is a 512 square under one circle mask. The mask goes (the app clips each flag to its circle), so
 // the asset catalog's renderer sees flat shapes only.
-import { mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 const VERSION = "2.8.3";
@@ -20,7 +20,9 @@ const app = join(import.meta.dir, "..", "Marquee");
 const out = join(app, "Resources", "Flags.xcassets");
 const MASK = '<mask id="a"><circle cx="256" cy="256" r="256" fill="#fff"/></mask><g mask="url(#a)">';
 // Language tags only: the question mark (xx) and the two constructed sets have no tag a track carries.
-const TAG = /^(?!xx$)[a-z]{2,3}(-[a-z]{2,4})?$/;
+const TAG = /^(?!xx$)[a-z]{2,3}(-[a-z0-9]{2,4})?$/;
+// The languages drawn with the neutral language glyph (design/flags.ts writes the list beside the overlay).
+const glyphs: string[] = existsSync(join(pkg, "glyph.json")) ? JSON.parse(readFileSync(join(pkg, "glyph.json"), "utf8")) : [];
 
 const dir = join(pkg, "flags", "language");
 const tags = readdirSync(dir)
@@ -53,6 +55,10 @@ writeFileSync(
 enum FlagSet {
     static let tags: Set<String> = [
 ${tags.map((t) => `        "${t}",`).join("\n")}
+    ]
+    /// The languages drawn with the neutral language glyph, not a flag (design/flag-overrides.json).
+    static let glyphs: Set<String> = [
+${glyphs.map((t) => `        "${t}",`).join("\n")}
     ]
 }
 `,

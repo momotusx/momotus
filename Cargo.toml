@@ -19,6 +19,8 @@ url = { version = "2", features = ["serde"] }
 thiserror = "2"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "sync"] }
 tracing = "0.1"
+# The language picker's fold (plans/onboarding-language-picker.md): NFKD and the mark test.
+unicode-normalization = "0.1"
 
 # Line tables keep backtraces readable at a fraction of the disk full debug
 # info takes (every test file is its own binary).

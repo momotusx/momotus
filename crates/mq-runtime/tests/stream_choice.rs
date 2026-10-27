@@ -60,6 +60,7 @@ fn meta() -> String {
 
 fn params(facts: TitleFacts) -> VersionsParams {
     VersionsParams {
+        device_language: None,
         kind: "series".into(),
         video_id: "tt1:1:1".into(),
         target: Target {
@@ -506,6 +507,7 @@ async fn a_limit_the_user_set_is_named_as_chosen() {
     let view = VersionsView::open(
         &core,
         VersionsParams {
+            device_language: None,
             prefs: core.prefs().streams,
             ..params(facts)
         },
@@ -680,6 +682,7 @@ async fn versions_for(core: &Core, caps: DeviceCaps) -> VersionsView {
     let view = VersionsView::open(
         core,
         VersionsParams {
+            device_language: None,
             caps,
             ..params(facts)
         },
@@ -1756,6 +1759,7 @@ async fn live_versions_done_with_live_seeders() {
             }
             core.install_addon(link).await.unwrap();
             let params = VersionsParams {
+                device_language: None,
                 kind: "movie".into(),
                 video_id: "tt1727587".into(),
                 target: Target {
@@ -2343,6 +2347,7 @@ async fn up_next_keeps_its_release_line_with_its_shortcuts_and_sections() {
     let view = VersionsView::open(
         &core,
         VersionsParams {
+            device_language: None,
             last_binge_group: Some("bbb-720".into()),
             ..params(TitleFacts::default())
         },
@@ -2447,6 +2452,7 @@ async fn the_shortcuts_freeze_with_the_pick() {
         let view = VersionsView::open(
             &core,
             VersionsParams {
+                device_language: None,
                 last_binge_group: Some("bbb-720".into()),
                 ..params(TitleFacts::default())
             },

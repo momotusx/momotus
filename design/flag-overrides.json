@@ -1,0 +1,26 @@
+{
+  "about": "Language flags (plans/onboarding-language-picker.md, Flags): circle-flags' language set, except these. country: a language shown by a country's (or a region's) file; glyph: languages shown by the neutral language glyph, their files removed. Read by design/flags.ts.",
+  "country": {
+    "es-419": { "set": "country", "file": "mx" },
+    "es-mx": { "set": "country", "file": "mx" },
+    "pt-BR": { "set": "country", "file": "br" },
+    "pt-MZ": { "set": "country", "file": "mz" },
+    "cnr": { "set": "country", "file": "me" },
+    "tet": { "set": "country", "file": "tl" },
+    "as": { "set": "country", "file": "in" },
+    "kn": { "set": "country", "file": "in" },
+    "ml": { "set": "country", "file": "in" },
+    "mni": { "set": "country", "file": "in" },
+    "mr": { "set": "country", "file": "in" },
+    "or": { "set": "country", "file": "in" },
+    "sat": { "set": "country", "file": "in" },
+    "ta": { "set": "country", "file": "in" },
+    "te": { "set": "country", "file": "in" },
+    "sd": { "set": "country", "file": "pk" },
+    "ast": { "set": "country", "file": "es" },
+    "ext": { "set": "country", "file": "es" },
+    "nv": { "set": "country", "file": "us" },
+    "wen": { "set": "country", "file": "de" }
+  },
+  "glyph": ["zh", "zh-Hans", "zh-Hant", "yue", "zh-x-bilingual", "ku", "ab", "azb", "rki", "ar", "prs", "ps", "zgh", "eo", "ia", "tok", "syr"]
+}

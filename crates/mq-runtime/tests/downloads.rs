@@ -385,6 +385,7 @@ fn params() -> VersionsParams {
         prefs: StreamPrefs::default(),
         last_binge_group: None,
         facts: Default::default(),
+        device_language: None,
     }
 }
 

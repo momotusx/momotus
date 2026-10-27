@@ -106,6 +106,53 @@ async fn languages_mark_the_devices_own() {
     assert!(marked(&reply_to(&mut rx, 2).await).is_empty());
 }
 
+/// The language picker's call answers what was typed, in its order, and
+/// leaves the old list call as it was (plans/onboarding-language-picker.md).
+#[tokio::test]
+async fn the_language_picker_answers_over_the_protocol() {
+    let core = Core::temporary("p").unwrap();
+    let (tx, mut rx) = Output::channel();
+    let mut session = Session::new(core, tx);
+    let codes = |list: &Value| -> Vec<String> {
+        list.as_array()
+            .unwrap()
+            .iter()
+            .map(|l| l["code"].as_str().unwrap().to_owned())
+            .collect()
+    };
+    session
+        .handle_text(&json!({"id": 1, "op": "languagePicker", "device": "en"}).to_string())
+        .await;
+    let first = reply_to(&mut rx, 1).await["result"].clone();
+    assert_eq!(first["noneFirst"], true);
+    assert_eq!(codes(&first["suggested"])[0], "en");
+    assert_eq!(codes(&first["results"]).len(), 113);
+    assert_eq!(first["results"][0]["native"], "Аԥсшәа");
+    session
+        .handle_text(
+            &json!({"id": 2, "op": "languagePicker", "query": "pt br", "chosen": ["tr"]})
+                .to_string(),
+        )
+        .await;
+    let found = reply_to(&mut rx, 2).await["result"].clone();
+    assert!(found["suggested"].as_array().unwrap().is_empty());
+    assert_eq!(codes(&found["results"])[0], "pt-BR");
+    session
+        .handle_text(
+            &json!({"id": 3, "op": "languagePicker", "query": "latino", "audio": true}).to_string(),
+        )
+        .await;
+    assert_eq!(
+        codes(&reply_to(&mut rx, 3).await["result"]["results"]),
+        ["es"]
+    );
+    session
+        .handle_text(&json!({"id": 4, "op": "languages", "device": "tr"}).to_string())
+        .await;
+    let old = reply_to(&mut rx, 4).await;
+    assert!(old["result"].is_array(), "the old call keeps its array");
+}
+
 #[tokio::test]
 #[ignore = "network"]
 async fn live_home_and_title_over_the_protocol() {

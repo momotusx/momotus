@@ -213,7 +213,20 @@ class SubtitleLanguagesTest {
     fun `a language takes its own flag, else its language's, else none`() {
         assertEquals(FLAGS["pt-br"], flagFor("pt-br"))
         assertNotNull(flagFor("pt-br"))
-        assertEquals(FLAGS["zh"], flagFor("zh-hant"), "no flag for the script: the language's")
+        assertEquals(FLAGS["es"], flagFor("es-ar"), "no flag for the region: the language's")
+        assertNotNull(flagFor("es-419"))
+        // The core's tags are mixed case: Brazil's and Mozambique's flags, not Portugal's.
+        assertEquals(FLAGS["pt-br"], flagFor("pt-BR"))
+        assertEquals(FLAGS["pt-mz"], flagFor("pt-MZ"))
+        assertNotNull(FLAGS["pt-mz"])
+        // The Chinese variants and the contested or constructed languages show the language glyph
+        // (design/flag-overrides.json); any other tag without a flag keeps its letters.
+        assertNull(flagFor("zh-Hant"))
+        assertEquals(true, flagGlyph("zh-Hant"))
+        assertEquals(true, flagGlyph("zh"))
+        assertEquals(true, flagGlyph("ar-EG"), "a region of a glyph language")
+        assertEquals(false, flagGlyph("zz"))
+        assertEquals(false, flagGlyph("tlh"))
         assertNull(flagFor(""))
         assertNull(flagFor("zz"))
         // No flag: a neutral mark with two letters, and a question mark for tracks that name no language.

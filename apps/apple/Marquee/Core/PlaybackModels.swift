@@ -897,6 +897,13 @@ enum TrackPicker {
         return FlagSet.tags.contains(base) ? "flag-\(base)" : nil
     }
 
+    /// Whether a language with no flag shows the neutral language glyph (design/flag-overrides.json): the Chinese
+    /// variants, contested and constructed ones; any other tag keeps its two letters.
+    static func glyph(_ tag: String) -> Bool {
+        let lower = tag.lowercased()
+        return FlagSet.glyphs.contains(lower) || FlagSet.glyphs.contains(SubtitleMenu.base(lower))
+    }
+
     /// The neutral mark's letters: "EN"; "?" for a track that names no language.
     static func letters(_ tag: String) -> String {
         tag.isEmpty ? "?" : String(SubtitleMenu.base(tag).prefix(2)).uppercased()

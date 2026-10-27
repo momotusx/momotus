@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import type { SubtitleTrack } from "../core/generated/SubtitleTrack";
-import { bestOption, byLanguage, FITS, fileChoice, flagFile, MATCHES, matchesLanguage, middle, offSummary, optionCount, pickerLanguages, startOption, trackDetail } from "./subtitles";
+import { bestOption, byLanguage, FITS, fileChoice, flagFile, flagGlyph, MATCHES, matchesLanguage, middle, offSummary, optionCount, pickerLanguages, startOption, trackDetail } from "./subtitles";
 
 const track = (language: string, languageName: string, name: string, more: Partial<SubtitleTrack> = {}): SubtitleTrack => ({
   url: `http://127.0.0.1/sub/${language}/${name}`,
@@ -198,4 +198,9 @@ test("a pick inside the file tells the core its language, as the file names it",
   expect(fileChoice("pt-BR")).toEqual({ type: "subtitleChosen", url: null, language: "pt-BR" });
   // A file that names none: the pick still clears the core's start pick.
   expect(fileChoice(null)).toEqual({ type: "subtitleChosen", url: null });
+});
+
+test("a language with no flag shows the glyph when it is a glyph language, else its letters", () => {
+  for (const tag of ["zh-Hant", "zh", "ar", "ar-EG", "ps", "tok"]) expect([tag, flagGlyph(tag)]).toEqual([tag, true]);
+  for (const tag of ["tlh", "zz", "pt-BR", "en"]) expect([tag, flagGlyph(tag)]).toEqual([tag, false]);
 });

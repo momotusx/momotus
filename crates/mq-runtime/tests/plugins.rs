@@ -99,6 +99,7 @@ fn film(id: &str) -> VersionsParams {
         prefs: StreamPrefs::default(),
         last_binge_group: None,
         facts: TitleFacts::read(Some("90 min"), Some("2001"), None, None),
+        device_language: None,
     }
 }
 

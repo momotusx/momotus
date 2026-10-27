@@ -167,6 +167,7 @@ async fn until(what: &str, check: impl Fn() -> bool) {
 
 fn params(kind: &str, video_id: &str, title: &str) -> VersionsParams {
     VersionsParams {
+        device_language: None,
         kind: kind.into(),
         video_id: video_id.into(),
         target: Target {

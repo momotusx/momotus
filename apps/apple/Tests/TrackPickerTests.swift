@@ -81,8 +81,17 @@ private let klingon = track(5, "tlh", "tlh", "Klingon")
     #expect(TrackPicker.flag("en") == "flag-en")
     #expect(TrackPicker.flag("pt-BR") == "flag-pt-br")
     // A region without its own flag takes its language's.
-    #expect(TrackPicker.flag("zh-Hant") == "flag-zh")
+    #expect(TrackPicker.flag("es-AR") == "flag-es")
+    #expect(TrackPicker.flag("es-419") == "flag-es-419")
+    // The Chinese variants and the contested or constructed languages show the language glyph (design/flag-overrides.json).
+    #expect(TrackPicker.flag("zh-Hant") == nil)
+    #expect(TrackPicker.glyph("zh-Hant"))
+    #expect(TrackPicker.glyph("zh"))
+    #expect(TrackPicker.flag("ar") == nil)
+    #expect(TrackPicker.glyph("ar-EG"))
+    #expect(TrackPicker.flag("pt-MZ") == "flag-pt-mz")
     #expect(TrackPicker.flag("tlh") == nil)
+    #expect(!TrackPicker.glyph("tlh"))
     #expect(TrackPicker.letters("tlh") == "TL")
     let l = TrackPicker.languages([english1, english2], file: [])[0]
     #expect(TrackPicker.spoken(l, auto: true, selected: true) == "English, Auto, 2 options, selected")

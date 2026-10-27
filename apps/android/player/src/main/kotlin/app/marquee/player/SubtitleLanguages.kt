@@ -80,7 +80,11 @@ private val MARKS = Regex("\\p{Mn}+")
 fun flagLetters(key: String): String = key.take(2).uppercase().ifEmpty { "?" }
 
 /** The circle-flags drawable for a language key: its own, else its language's ("pt-br", then "pt"); null for none. */
-fun flagFor(key: String): Int? = FLAGS[key] ?: FLAGS[key.substringBefore('-')]
+fun flagFor(key: String): Int? = key.lowercase().let { FLAGS[it] ?: FLAGS[it.substringBefore('-')] }
+
+/** Whether a language with no flag shows the neutral language glyph (design/flag-overrides.json): the Chinese
+ * variants, contested and constructed ones; any other tag keeps its two letters. */
+fun flagGlyph(key: String): Boolean = key.lowercase() in GLYPHS || key.lowercase().substringBefore('-') in GLYPHS
 
 /**
  * An option's quiet line: where it is from and what it is ([TrackChoice.detail]), the core's match ("Matches this

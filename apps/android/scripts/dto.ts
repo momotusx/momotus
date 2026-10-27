@@ -132,6 +132,9 @@ const DEFAULTED = new Map([
   ["SubtitleTrack.nativeName", "\"\""],
   // The device's language in the pickers: an older core marks none.
   ["LanguageChoice.device", "false"],
+  // The language picker (plans/onboarding-language-picker.md): an older core sends no own name and no sort key.
+  ["LanguageChoice.native", "\"\""],
+  ["LanguageChoice.sort", "\"\""],
   ["SubtitleTrack.fits", "false"],
   // The best-timed subtitle (plans/player-polish.md 2g): an older core marks no hash match.
   ["SubtitleTrack.hashMatch", "false"],

@@ -653,6 +653,7 @@ async fn play(
     let versions = VersionsView::open(
         core,
         VersionsParams {
+            device_language: None,
             kind: kind.clone(),
             video_id: id.clone(),
             target: Target {

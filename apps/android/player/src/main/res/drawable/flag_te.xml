@@ -9,15 +9,21 @@
         <clip-path android:pathData="M0 256 a256 256 0 1 0 512 0 a256 256 0 1 0 -512 0 z" />
         <path
             android:fillColor="#EEEEEE"
-            android:pathData="M0 0 h512 v128 l-256 64 L0 128 Z" />
-        <path
-            android:fillColor="#338AF3"
-            android:pathData="M0 128 h512 v128 l-256 64 L0 256 Z" />
+            android:pathData="m0 160 256 -32 256 32 v192 l-256 32 L0 352 z" />
         <path
             android:fillColor="#FF9811"
-            android:pathData="M0 256 h512 v128 l-256 64 L0 384 Z" />
+            android:pathData="M0 0 h512 v160 H0 Z" />
         <path
-            android:fillColor="#496E2D"
-            android:pathData="M0 384 h512 v128 H0 z" />
+            android:fillColor="#6DA544"
+            android:pathData="M0 352 h512 v160 H0 Z" />
+        <path
+            android:fillColor="#0052B4"
+            android:pathData="M184 256 a72 72 0 1 0 144 0 a72 72 0 1 0 -144 0 z" />
+        <path
+            android:fillColor="#EEEEEE"
+            android:pathData="M208 256 a48 48 0 1 0 96 0 a48 48 0 1 0 -96 0 z" />
+        <path
+            android:fillColor="#0052B4"
+            android:pathData="M232 256 a24 24 0 1 0 48 0 a24 24 0 1 0 -48 0 z" />
     </group>
 </vector>

@@ -134,6 +134,7 @@ pub(crate) async fn versions(
     let view = VersionsView::open(
         core,
         VersionsParams {
+            device_language: None,
             kind: kind.clone(),
             video_id: id.clone(),
             target: Target {

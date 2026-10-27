@@ -998,13 +998,28 @@ data class KindGenres(
     val genres: List<GenreTile> = emptyList(),
 )
 
-/** A language for the settings pickers (journey reviews 2026-10-20, web P2-11, Android P2-4): `code` is the tag the core reads it by, `name` its English name. */
+/** A language for the settings pickers (journey reviews 2026-10-20, web P2-11, Android P2-4): `code` is the tag the core reads it by, `name` its English name, `native` its own name, `sort` its place in the A to Z directory. */
 @Serializable
 data class LanguageChoice(
     val code: String,
     val name: String,
+    /** The language's own name ("Türkçe"). */
+    val native: String = "",
+    /** The directory key: the English name with a qualifier moved behind ("Azerbaijani, South"), so its letter is where a person looks. */
+    val sort: String = "",
     /** The language the device's own code reads as ("nb" is Norwegian, "no"): the one a picker offers and chooses as the device's. */
     val device: Boolean = false,
+)
+
+/** The picker's whole answer (plans/onboarding-language-picker.md): the suggested languages, where No subtitles goes, and the results. */
+@Serializable
+data class LanguageList(
+    /** The chosen languages, then the device's, then the common ones, at most six besides the chosen; empty while a query is typed. */
+    val suggested: List<LanguageChoice> = emptyList(),
+    /** Subtitles: No subtitles goes first and is the pre-chosen state (an English device, or one whose language the table lacks, with nothing chosen); else it goes last. Audio has no No subtitles. */
+    val noneFirst: Boolean,
+    /** With no query, every language in directory order; with one, the matches, best first; empty when nothing matches. */
+    val results: List<LanguageChoice> = emptyList(),
 )
 
 /** The counters of one screen class, each in -5..5. A counter stamped with an older epoch than the profile's reads as zero. */

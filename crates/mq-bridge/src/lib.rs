@@ -12,7 +12,7 @@
 //! "cancelPairing" | "readPairingCode" |
 //! "forkPreview" | "useServerRoster" | "createProfile" | "allowTitle" | "updateProfile" | "deleteProfile" |
 //! "setPin" | "switchProfile" | "unlockProfile" | "lockSession" | "removeFromContinue" |
-//! "languages" | "plugins" | "pluginDirectory" | "previewPluginRepo" | "addPluginRepo" | "removePluginRepo" |
+//! "languages" | "languagePicker" | "plugins" | "pluginDirectory" | "previewPluginRepo" | "addPluginRepo" | "removePluginRepo" |
 //! "setPluginRepoEnabled" | "setPluginEnabled",
 //! ...}`.
 //! Views: home, search, discover, library, title, versions, playback, addons, addonCatalog,
@@ -488,6 +488,21 @@ enum Request {
         id: u64,
         #[serde(default)]
         device: Option<String>,
+    },
+    /// The language picker's answer (plans/onboarding-language-picker.md):
+    /// replies `{suggested, noneFirst, results}` for what was typed
+    /// (`query`), the profile's `chosen` languages in rank order and the
+    /// device's code; `audio` gives one row per primary language.
+    LanguagePicker {
+        id: u64,
+        #[serde(default)]
+        device: Option<String>,
+        #[serde(default)]
+        query: String,
+        #[serde(default)]
+        chosen: Vec<String>,
+        #[serde(default)]
+        audio: bool,
     },
     /// Every Home catalog in Home's order, hidden ones included, for the
     /// "Customize Home" screen.
@@ -1734,6 +1749,16 @@ impl Session {
             Request::Languages { id, device } => {
                 let all = mq_runtime::languages::all(device.as_deref());
                 self.reply(json!(id), Ok(json!(all)));
+            }
+            Request::LanguagePicker {
+                id,
+                device,
+                query,
+                chosen,
+                audio,
+            } => {
+                let list = mq_runtime::languages::picker(device.as_deref(), &query, &chosen, audio);
+                self.reply(json!(id), Ok(json!(list)));
             }
             Request::SetTrakt { id, record } => {
                 self.spawn_fenced(id, async move {
@@ -2996,6 +3021,19 @@ mod tests {
         norway["language"] = json!("nb");
         let parsed = versions_params(&norway, StreamPrefs::default()).unwrap();
         assert_eq!(parsed.prefs.languages, ["no", "en"]);
+        // The device's language reaches playback as the core's tag, also when
+        // the profile has audio languages of its own (the start subtitle's
+        // fallback, plans/onboarding-language-picker.md).
+        assert_eq!(parsed.device_language.as_deref(), Some("no"));
+        let own = StreamPrefs {
+            languages: vec!["en".into()],
+            ..StreamPrefs::default()
+        };
+        let parsed = versions_params(&norway, own).unwrap();
+        assert_eq!(
+            (parsed.prefs.languages, parsed.device_language.as_deref()),
+            (vec!["en".to_owned()], Some("no"))
+        );
 
         // Languages the user chose win over the device's.
         let chosen = StreamPrefs {

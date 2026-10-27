@@ -414,7 +414,8 @@ private struct PickerRow<Content: View>: View {
     }
 }
 
-/// A language's circle flag (circle-flags), or a neutral round mark with its two letters; never an emoji.
+/// A language's circle flag (circle-flags), or a neutral round mark with the language glyph or its two letters;
+/// never an emoji.
 struct FlagMark: View {
     let tag: String
 
@@ -422,6 +423,13 @@ struct FlagMark: View {
         Group {
             if let name = TrackPicker.flag(tag) {
                 Image(name).resizable().interpolation(.high)
+            } else if TrackPicker.glyph(tag) {
+                // Fixed, not Dynamic Type: it sits in the 24 pt circle.
+                Image("languages").renderingMode(.template).resizable().scaledToFit()
+                    .frame(width: 13, height: 13)
+                    .foregroundStyle(Theme.Palette.text)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(Circle().fill(.white.opacity(0.18)))
             } else {
                 Text(TrackPicker.letters(tag))
                     .textFont(10, weight: .bold)

@@ -92,7 +92,8 @@ private val SHEET_GROUP = Color(0xFF2C2C2E)
 
 const val SEARCH_LANGUAGES = "Search languages"
 
-/** A language's flag (circle-flags, never emoji); with none, a neutral round mark with its two letters. */
+/** A language's flag (circle-flags, never emoji); with none, a neutral round mark with the language glyph
+ * ([flagGlyph]) or its two letters. */
 @Composable
 fun LanguageFlag(
     key: String,
@@ -107,13 +108,17 @@ fun LanguageFlag(
             modifier.size(size).clip(CircleShape).background(Marquee.colors.raised),
             contentAlignment = Alignment.Center,
         ) {
-            MqText(
-                flagLetters(key),
-                role = TextRole.Caption,
-                color = Marquee.colors.muted,
-                weight = FontWeight.SemiBold,
-                maxLines = 1,
-            )
+            if (flagGlyph(key)) {
+                MqIcon(Icons.Languages, tint = Marquee.colors.muted, size = size * 0.56f)
+            } else {
+                MqText(
+                    flagLetters(key),
+                    role = TextRole.Caption,
+                    color = Marquee.colors.muted,
+                    weight = FontWeight.SemiBold,
+                    maxLines = 1,
+                )
+            }
         }
     }
 }

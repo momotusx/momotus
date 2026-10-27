@@ -4,6 +4,7 @@
  * (plans/player-polish.md 2.4). */
 
 import type { SubtitleTrack } from "../core/generated/SubtitleTrack";
+import { GLYPHS } from "./flag-glyphs";
 import { languageTag } from "./words";
 
 export type LanguageSection = { language: string; name: string; tracks: { track: SubtitleTrack; index: number }[] };
@@ -147,6 +148,13 @@ export function trackDetail(t: SubtitleTrack, max = 46): string[] {
 
 /** A language's flag file in circle-flags' language set (`has` says which
  * exist): the tag itself ("pt-br"), else its language ("zh" for "zh-Hant"). */
+/** Whether a language with no flag shows the neutral language glyph (design/flag-overrides.json): the Chinese
+ * variants, contested and constructed ones; any other tag keeps its two letters. */
+export function flagGlyph(tag: string): boolean {
+  const lower = tag.toLowerCase();
+  return GLYPHS.has(lower) || GLYPHS.has(lower.split("-")[0] ?? lower);
+}
+
 export function flagFile(tag: string, has: (name: string) => boolean): string | null {
   const lower = tag.toLowerCase();
   const base = lower.split("-")[0] ?? lower;

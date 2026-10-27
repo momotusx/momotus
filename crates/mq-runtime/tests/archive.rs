@@ -183,6 +183,7 @@ fn film(title: &str, year: Option<u16>, id: &str) -> VersionsParams {
         prefs: StreamPrefs::default(),
         last_binge_group: None,
         facts: TitleFacts::read(Some("90 min"), year_text.as_deref(), None, None),
+        device_language: None,
     }
 }
 

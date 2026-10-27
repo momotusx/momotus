@@ -702,6 +702,9 @@ struct State {
     /// The audio languages the pick was ranked with (`Pick::languages`):
     /// the profile's, else the device's, then English. Empty without a pick.
     languages: Vec<String>,
+    /// The device's language (`Pick::device_language`): the start
+    /// subtitle's language when the profile has none set.
+    device_language: Option<String>,
     /// Each subtitle track's place, by URL: its source's position in the
     /// installed list (the stream's own first), then its rank there. Off
     /// the wire; `subtitles` is sorted by it within a language, after the
@@ -865,6 +868,7 @@ impl State {
             start_base: 0.0,
             source_since: tokio::time::Instant::now(),
             languages: Vec::new(),
+            device_language: None,
             #[cfg(feature = "torrent")]
             failed_hashes: Vec::new(),
             #[cfg(feature = "torrent")]
@@ -995,6 +999,7 @@ impl PlaybackView {
         let view = Self::open_with(core, pick.candidates, Some(pick.handle), target, plays);
         let mut s = lock(&view.state);
         s.languages = pick.languages;
+        s.device_language = pick.device_language;
         s.runtime_s = pick.runtime_s;
         drop(s);
         view
@@ -2452,7 +2457,8 @@ async fn resolve_next(
                 // Read once: a pick while the list fills reorders nothing
                 // under it (the built-in source, the addons and the frame
                 // rate rank alike).
-                let wanted = preferred_languages(&core, &state);
+                let device = start_device(&core, &state);
+                let wanted = preferred_languages(&core, &state, device.as_deref());
                 // The stream's own tracks come from its addon.
                 let addon_url = stream.addon_url.as_ref();
                 let slot = lease.subtitles();
@@ -2618,6 +2624,7 @@ async fn resolve_next(
                             &core,
                             &target,
                             audio_of(probed.clone().await, &stream),
+                            device.as_deref(),
                         );
                         // Nothing to settle early with no first language.
                         // ponytail: looks at the list every 100 ms; a signal
@@ -2633,7 +2640,12 @@ async fn resolve_next(
                         _ = async { tokio::join!(addons, built_in, rated) } => {}
                         () = early => {}
                     }
-                    let wants = StartWants::read(&core, &target, audio_of(probed.await, &stream));
+                    let wants = StartWants::read(
+                        &core,
+                        &target,
+                        audio_of(probed.await, &stream),
+                        device.as_deref(),
+                    );
                     settle_start(&state, &snapshot, run, &wants, true);
                 };
                 let next = async {
@@ -4773,6 +4785,30 @@ async fn probe_video(reader: Option<&dyn mq_media::RangeReader>) -> Probed {
     }
 }
 
+/// The device's language while the profile has never set its subtitle
+/// languages (`Core::subtitle_languages_set`): an empty list it chose is No
+/// subtitles, and stays so.
+fn start_device(core: &Core, state: &Mutex<State>) -> Option<String> {
+    let device = lock(state).device_language.clone();
+    device.filter(|_| !core.subtitle_languages_set())
+}
+
+/// The languages a start subtitle is looked for in: the profile's subtitle
+/// languages, else the device's language, so a profile that skipped the
+/// subtitles step still starts with subtitles (the owner: the best subtitle
+/// is turned on, never left to a manual pick), whatever its audio
+/// languages say. `auto_subtitle` still drops the audio's own language, so
+/// an English device with English audio starts with none, as the
+/// onboarding step's English-device rule does.
+fn subtitle_wants(set: &[String], device: Option<&str>) -> Vec<String> {
+    let tag = |l: &str| crate::languages::language(l).tag;
+    if set.is_empty() {
+        device.map(tag).into_iter().collect()
+    } else {
+        set.iter().map(|l| tag(l)).collect()
+    }
+}
+
 /// The audio's languages: the file's, else the release's when the file says none.
 fn audio_of(probed: Probed, stream: &ParsedStream) -> Vec<String> {
     if !probed.audio.is_empty() {
@@ -4787,8 +4823,8 @@ fn audio_of(probed: Probed, stream: &ParsedStream) -> Vec<String> {
 }
 
 /// What the start subtitle is chosen with, read once per settle: the
-/// title's remembered choice, the profile's subtitle languages and the
-/// audio's.
+/// title's remembered choice, the profile's subtitle languages (else the
+/// device's, `subtitle_wants`) and the audio's.
 #[derive(Clone)]
 struct StartWants {
     remembered: Option<String>,
@@ -4797,13 +4833,8 @@ struct StartWants {
 }
 
 impl StartWants {
-    fn read(core: &Core, target: &PlayTarget, audio: Vec<String>) -> Self {
-        let explicit = core
-            .prefs()
-            .subtitle_languages
-            .iter()
-            .map(|l| crate::languages::language(l).tag)
-            .collect();
+    fn read(core: &Core, target: &PlayTarget, audio: Vec<String>, device: Option<&str>) -> Self {
+        let explicit = subtitle_wants(&core.prefs().subtitle_languages, device);
         Self {
             remembered: remembered_subtitle(core, target),
             explicit,
@@ -5178,7 +5209,7 @@ fn extra_value(name: &str, value: String) -> ExtraValue {
 /// subtitle languages, then the audio languages the pick was ranked with
 /// (the profile's, else the device's, then English, as for audio), or the
 /// profile's audio languages without a pick.
-fn preferred_languages(core: &Core, state: &Mutex<State>) -> Vec<String> {
+fn preferred_languages(core: &Core, state: &Mutex<State>, device: Option<&str>) -> Vec<String> {
     let prefs = core.prefs();
     let picked = lock(state).languages.clone();
     let audio = if picked.is_empty() {
@@ -5187,7 +5218,10 @@ fn preferred_languages(core: &Core, state: &Mutex<State>) -> Vec<String> {
         picked
     };
     let mut tags: Vec<String> = Vec::new();
-    for code in prefs.subtitle_languages.iter().chain(&audio) {
+    for code in subtitle_wants(&prefs.subtitle_languages, device)
+        .iter()
+        .chain(&audio)
+    {
         let tag = crate::languages::language(code).tag;
         if !tags.contains(&tag) {
             tags.push(tag);
@@ -7421,6 +7455,41 @@ mod auto_subtitle_tests {
                 "{remembered:?} {explicit:?} {audio:?}"
             );
         }
+    }
+
+    /// A profile with no subtitle languages (it skipped the subtitles step)
+    /// still starts with subtitles in the device's language, unless the
+    /// audio is in it (the iPhone, 2026-10-26: English and German listed,
+    /// none turned on).
+    #[test]
+    fn no_subtitle_languages_fall_back_to_the_devices() {
+        let tracks = [
+            track("tr1", "tur"),
+            track("en1", "eng"),
+            track("de1", "ger"),
+        ];
+        let tags = |l: &[&str]| -> Vec<String> { l.iter().map(|s| s.to_string()).collect() };
+        let start = |set: &[&str], device: Option<&str>, audio: &[&str]| {
+            auto_subtitle(
+                None,
+                &subtitle_wants(&tags(set), device),
+                &tags(audio),
+                &tracks,
+            )
+        };
+        // An English device: English audio has none, as the onboarding rule.
+        assert_eq!(start(&[], Some("en"), &["en"]), None);
+        // An English device, German audio: English subtitles.
+        assert_eq!(start(&[], Some("en"), &["de"]).as_deref(), Some("en1"));
+        // A Turkish device, English audio: Turkish.
+        assert_eq!(start(&[], Some("tr"), &["en"]).as_deref(), Some("tr1"));
+        // A Turkish device, Turkish audio: none, never English behind it.
+        assert_eq!(start(&[], Some("tr"), &["tr"]), None);
+        // The profile's own languages win over the device's.
+        assert_eq!(start(&["de"], Some("tr"), &["en"]).as_deref(), Some("de1"));
+        // Read as the core's tags; no device, no language.
+        assert_eq!(subtitle_wants(&[], Some("tur")), ["tr"]);
+        assert!(subtitle_wants(&[], None).is_empty());
     }
 
     /// Review of feat/subtitle-best P2-3: a forced track is never turned

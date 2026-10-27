@@ -134,6 +134,17 @@ impl Core {
     }
 
     /// The profile's preferences, defaults for anything never set.
+    /// Whether the profile ever set its subtitle languages (the onboarding
+    /// step's Continue, Settings, a subtitle picked while watching): an
+    /// empty list then means No subtitles, not a question never answered.
+    pub(crate) fn subtitle_languages_set(&self) -> bool {
+        self.library()
+            .settings(self.profile())
+            .unwrap_or_default()
+            .iter()
+            .any(|(key, _)| key == "subtitleLanguages")
+    }
+
     pub fn prefs(&self) -> Prefs {
         let rows = self.library().settings(self.profile()).unwrap_or_default();
         let mut merged = serde_json::to_value(Prefs::default()).unwrap_or_default();

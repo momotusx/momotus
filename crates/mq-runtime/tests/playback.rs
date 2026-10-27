@@ -1539,6 +1539,7 @@ async fn without_subtitle_languages_the_device_language_then_english_lead() {
         languages.push("en".into());
         languages.dedup();
         let params = VersionsParams {
+            device_language: None,
             kind: "movie".into(),
             video_id: "tt1727587".into(),
             target: mq_streams::Target {
@@ -1578,6 +1579,80 @@ async fn without_subtitle_languages_the_device_language_then_english_lead() {
             .map(|t| t.language_name.as_str())
             .collect();
         assert_eq!(names, order, "device {device:?}, profile {own:?}");
+    }
+}
+
+/// A profile with no subtitle languages starts subtitles in the device's
+/// language, whatever its audio languages say: a Turkish device whose
+/// profile lists English audio turns Turkish on, not English (the lead,
+/// 2026-10-26); with no device language nothing is turned on by itself, and
+/// a profile that chose No subtitles (an empty list it wrote) keeps none.
+#[tokio::test]
+async fn without_subtitle_languages_the_device_language_turns_on() {
+    use mq_runtime::{VersionsParams, VersionsView};
+    let (video, _) = counted_origin().await;
+    let subs: Vec<_> = ["eng", "tur"]
+        .iter()
+        .map(|lang| serde_json::json!({"id": lang, "lang": lang, "url": format!("https://subs.test/{lang}.srt")}))
+        .collect();
+    let streams = serde_json::json!({"streams": [{"url": format!("{video}/v.mkv"), "title": "Sintel.2010.1080p.WEB-DL", "subtitles": subs}]});
+    for (device, chose_none, expected) in [
+        (Some("tr"), false, Some("tr")),
+        (None, false, None),
+        (Some("tr"), true, None),
+    ] {
+        let core = Core::temporary("p").unwrap();
+        if chose_none {
+            core.set_prefs(&serde_json::json!({ "subtitleLanguages": [] }))
+                .unwrap();
+        }
+        install(&core, &[answering_addon(streams.to_string()).await]);
+        let params = VersionsParams {
+            device_language: device.map(str::to_owned),
+            kind: "movie".into(),
+            video_id: "tt1727587".into(),
+            target: mq_streams::Target {
+                title: "Sintel".into(),
+                year: None,
+                season: None,
+                episode: None,
+            },
+            caps: mq_streams::DeviceCaps::basic_1080p(),
+            // The profile's own audio language: English.
+            prefs: mq_streams::StreamPrefs {
+                languages: vec!["en".into()],
+                ..Default::default()
+            },
+            last_binge_group: None,
+            facts: Default::default(),
+        };
+        let versions = VersionsView::open(&core, params);
+        let mut key = None;
+        for _ in 0..3000 {
+            let s = versions.snapshot();
+            if let Some(r) = s.recommended.as_ref().filter(|_| s.done) {
+                key = Some(r.key.clone());
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+        let key = key.unwrap_or_else(|| panic!("no pick: {:?}", versions.snapshot()));
+        let plays = versions.plays();
+        let view = PlaybackView::open_picked(&core, versions.pick(&key), target(), &plays);
+        let s = until(&view, "the tracks", |s| {
+            s.phase == PlaybackPhase::Ready && !s.subtitles_pending
+        })
+        .await;
+        // The core serves the track from its own address: read it back by its language.
+        let on = s.auto_subtitle.as_ref().map(|url| {
+            let track = s.subtitles.iter().find(|t| &t.url == url).unwrap();
+            track.language.clone()
+        });
+        assert_eq!(
+            on.as_deref(),
+            expected,
+            "device {device:?}, chose none {chose_none}"
+        );
     }
 }
 

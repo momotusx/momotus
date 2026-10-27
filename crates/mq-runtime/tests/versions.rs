@@ -63,6 +63,7 @@ fn opens_torrents() -> Core {
 
 fn params() -> VersionsParams {
     VersionsParams {
+        device_language: None,
         kind: "series".into(),
         video_id: "tt0944947:1:1".into(),
         target: Target {

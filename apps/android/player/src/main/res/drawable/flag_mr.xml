@@ -8,13 +8,22 @@
     <group>
         <clip-path android:pathData="M0 256 a256 256 0 1 0 512 0 a256 256 0 1 0 -512 0 z" />
         <path
+            android:fillColor="#EEEEEE"
+            android:pathData="m0 160 256 -32 256 32 v192 l-256 32 L0 352 z" />
+        <path
             android:fillColor="#FF9811"
-            android:pathData="M0 0 h512 L384 320 0 256 Z" />
+            android:pathData="M0 0 h512 v160 H0 Z" />
+        <path
+            android:fillColor="#6DA544"
+            android:pathData="M0 352 h512 v160 H0 Z" />
+        <path
+            android:fillColor="#0052B4"
+            android:pathData="M184 256 a72 72 0 1 0 144 0 a72 72 0 1 0 -144 0 z" />
         <path
             android:fillColor="#EEEEEE"
-            android:pathData="M512 0 320 256 H0 v256 h512 V256 Z" />
+            android:pathData="M208 256 a48 48 0 1 0 96 0 a48 48 0 1 0 -96 0 z" />
         <path
-            android:fillColor="#D80027"
-            android:pathData="M112 148 v-40 l28 -28 h40 l28 28 v40 l-28 28 h-40 z" />
+            android:fillColor="#0052B4"
+            android:pathData="M232 256 a24 24 0 1 0 48 0 a24 24 0 1 0 -48 0 z" />
     </group>
 </vector>

@@ -8,7 +8,7 @@
 // Every flag is a 512 square under one circle mask: the mask becomes the group's clip path, and each shape a
 // path (circles, ellipses and rounded rects drawn as arcs). Path data is read and written again with plain
 // separators, since the minified arcs pack their flags ("a8 8 0 011 1"), which Android's parser misreads.
-import { mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 const VERSION = "2.8.3";
@@ -21,7 +21,9 @@ const here = join(import.meta.dir, "..", "player");
 const res = join(here, "src", "main", "res", "drawable");
 const MASK = '<mask id="a"><circle cx="256" cy="256" r="256" fill="#fff"/></mask><g mask="url(#a)">';
 // Language tags only: the question mark (xx) and the two constructed sets have no tag a track carries.
-const TAG = /^(?!xx$)[a-z]{2,3}(-[a-z]{2,4})?$/;
+const TAG = /^(?!xx$)[a-z]{2,3}(-[a-z0-9]{2,4})?$/;
+// The languages drawn with the neutral language glyph (design/flags.ts writes the list beside the overlay).
+const glyphs: string[] = existsSync(join(pkg, "glyph.json")) ? JSON.parse(readFileSync(join(pkg, "glyph.json"), "utf8")) : [];
 
 const ARITY: Record<string, number> = { m: 2, l: 2, h: 1, v: 1, c: 6, s: 4, q: 4, t: 2, a: 7, z: 0 };
 
@@ -85,14 +87,12 @@ const shape = (tag: string): string | null => {
   const name = /^<([a-z]+)/.exec(tag)![1]!;
   const a = attrs(tag);
   if (a.fill === "none") return null;
-  // ta.svg mirrors one circle: scale(-1 1) on a circle at negative x.
-  const flip = a.transform === "scale(-1 1)" ? -1 : 1;
-  if (a.transform && flip === 1) throw new Error(`transform ${a.transform}`);
+  if (a.transform) throw new Error(`transform ${a.transform}`);
   const d =
     name === "path"
       ? a.d!
       : name === "circle"
-        ? ellipse(flip * n(a.cx), n(a.cy), n(a.r), n(a.r))
+        ? ellipse(n(a.cx), n(a.cy), n(a.r), n(a.r))
         : name === "ellipse"
           ? ellipse(n(a.cx), n(a.cy), n(a.rx), n(a.ry))
           : name === "rect"
@@ -139,6 +139,12 @@ const kotlin = `package app.marquee.player
 internal val FLAGS: Map<String, Int> =
     mapOf(
 ${tags.map((t) => `        "${t}" to R.drawable.flag_${t.replace("-", "_")},`).join("\n")}
+    )
+
+/** The languages drawn with the neutral language glyph, not a flag (design/flag-overrides.json). */
+internal val GLYPHS: Set<String> =
+    setOf(
+${glyphs.map((t) => `        "${t}",`).join("\n")}
     )
 `;
 writeFileSync(join(here, "src", "main", "kotlin", "app", "marquee", "player", "Flags.kt"), kotlin);
