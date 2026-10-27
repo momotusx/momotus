@@ -291,6 +291,22 @@ internal class DiscoverScreenTest : DiscoverScreenRules() {
         compose.waitForIdle()
         tileNode("t5").assertIsFocused()
     }
+
+    @Test
+    @Config(qualifiers = "w960dp-h540dp")
+    fun `on TV focus moving while a title is on top does not change where Back returns`() {
+        show(discover(), Form.Tv)
+        tileNode("t5").requestFocus()
+        // The title page on top (AppRoot pauses the memory): its own first focus lands somewhere else.
+        focus.paused = true
+        tileNode("t0").requestFocus()
+        focus.paused = false
+        visible = false
+        compose.waitForIdle()
+        visible = true
+        compose.waitForIdle()
+        tileNode("t5").assertIsFocused()
+    }
 }
 
 /** The layout on a 360 dp phone, with real fonts (native graphics), since widths and lines are what it is about. */
