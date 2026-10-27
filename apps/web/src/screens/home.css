@@ -294,6 +294,9 @@
 /* B2's depth (components/hero.tsx): the art reaches 7.5 percent past each side, the most it lags its page while
  * that page is in view. */
 .hero-page .hero-bd { left: -7.5%; right: -7.5%; will-change: transform; }
+/* The ramps and the vignette stay on the frame the words read over (art.test.ts measures them there): inside the
+ * wider art box, 7.5 percent of the frame on each side is 7.5 / 1.15 percent of the box. */
+.hero-page .hero-bd::after, .hero-page .hero-bd .ramp { left: calc(7.5% / 1.15); right: calc(7.5% / 1.15); }
 .hero.trailer-on .hero-page.on .hero-bd img { opacity: 0; }
 /* The trailer's sound switch at the hero's bottom right, its middle level with the dots' (the owner, 2026-10-26). The
  * hero's secondaries' fill stands in for glass, as the dots' platter: no live blur over a playing trailer. */

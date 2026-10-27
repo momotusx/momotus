@@ -362,8 +362,11 @@ export function Row(props: {
             </div>
           </Match>
           <Match when={ready()}>
+            {/* Never a stop of its own: a row far from view draws no tiles, and Chrome makes a scroller with
+                nothing focusable inside a Tab stop. Its tiles carry the focus. */}
             <div
               class="track"
+              tabIndex={-1}
               data-hscroll={m().inset + m().peek}
               ref={attachTrack}
               onScroll={(e) => {

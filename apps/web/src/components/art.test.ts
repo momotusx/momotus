@@ -49,7 +49,7 @@ const spots: Spot[] = [
   ["home tv, the genre line", "hero", dark.bg, [1920, 1080], [TV_EDGE, 0.4083], "line"],
   ["home tv, the synopsis", "hero", dark.bg, [1920, 1080], [TV_EDGE, 0.4509], "muted"],
   ["home tv, the meta line", "hero", dark.bg, [1920, 1080], [TV_EDGE, 0.5491], "dim"],
-  ["home tv, Details pill", "hero", dark.bg, [1920, 1080], [0.2365, 0.663], "pill"],
+  ["home tv, Details pill", "hero", dark.bg, [1920, 1080], [0.3225, 0.663], "pill"],
   ["home tv, the reason", "hero", dark.bg, [1920, 1080], [TV_EDGE, 0.6046], "line"],
   ["title tv series, Start over", "title", dark.bg, [1920, 1080], [0.4398, 0.3817], "pill"],
   ["title tv series, Remove from Continue Watching circle", "title", dark.bg, [1920, 1080], [0.3184, 0.5503], "pill"],

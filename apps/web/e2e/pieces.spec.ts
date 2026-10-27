@@ -393,6 +393,8 @@ test("desktop: tv.apple.com's hero at every window, its column where the glass c
     await page.goto("/?form=desktop");
     await expect(page.locator(".hero-page.on .reason")).toBeVisible({ timeout: 30_000 });
     await expect(page.locator(".row .row-head h2").first()).toBeVisible({ timeout: 30_000 });
+    // The core's Play lands a moment after its page (its slot is held meanwhile, with no key to measure).
+    await expect(page.locator('.hero-page.on [data-f="hero:play"]')).toBeVisible({ timeout: 30_000 });
     const g = await page.evaluate(() => {
       const r = (s: string) => document.querySelector(s)?.getBoundingClientRect() as DOMRect;
       const text = (s: string) => {
@@ -500,6 +502,7 @@ test("phone: the iPhone's hero at every screen, the large title and the profile 
     await page.goto("/?form=phone");
     await expect(page.locator(".hero-page.on .reason")).toBeVisible({ timeout: 30_000 });
     await expect(page.locator(".row .row-head").first()).toBeVisible({ timeout: 30_000 });
+    await expect(page.locator('.hero-page.on [data-f="hero:play"]')).toBeVisible({ timeout: 30_000 });
     const g = await page.evaluate(() => {
       const r = (s: string) => document.querySelector(s)?.getBoundingClientRect() as DOMRect;
       const tabs = r("nav.tabs");
@@ -551,12 +554,13 @@ test("TV: the secondaries over a backdrop sit where the glass check measures the
   // The top shelf's column (art.test.ts, TV_EDGE 0.4688 for every line): each line's top no higher than
   // the check measures it, the column no wider, Details' label no further right.
   for (const [selector, y] of [[".hero-page.on .genre", 0.4083], [".hero-page.on .hero-syn", 0.4509], [".hero-page.on .meta", 0.5491], [".hero-page.on .reason", 0.6046]] as const) {
-    const at = await spot(page, selector, ".hero-page.on .hero-bd", true);
+    // Over the page's ramps, which the glass check composites: the art box itself reaches past the frame (B2).
+    const at = await spot(page, selector, ".hero-page.on .hero-bd .ramp", true);
     expect(at.x, selector).toBeLessThanOrEqual(0.4688 + 0.002);
     expect(at.y, selector).toBeGreaterThanOrEqual(y - 0.005);
   }
-  const details = await spot(page, '[data-f="hero:details"]', ".hero-page.on .hero-bd");
-  expect(details.x).toBeLessThanOrEqual(0.2365 + 34 / 1920 + 0.002);
+  const details = await spot(page, '[data-f="hero:details"]', ".hero-page.on .hero-bd .ramp");
+  expect(details.x).toBeLessThanOrEqual(0.3225 + 34 / 1920 + 0.002);
   expect(details.y).toBeGreaterThanOrEqual(0.663 - 18 / 1080 - 0.005);
   await page.goto(`/title/series/${GOT.id}?form=tv`);
   await expect(page.locator('[data-f="title:startover"]')).toBeVisible({ timeout: 30_000 });
