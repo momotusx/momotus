@@ -1460,7 +1460,8 @@ async fn played_here(
 /// counts in R, so what the trim left is room the resume plays in. With
 /// free space short of the window's floor but for that folder, the second
 /// playback opens a window and reads the resume region from disk.
-#[cfg(feature = "torrent")]
+// The engine's piece states (`mq_engine::test_hooks`).
+#[cfg(feature = "test-hooks")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn a_resume_counts_its_own_folder_in_the_room() {
     const MIB: u64 = 1 << 20;
@@ -1561,7 +1562,8 @@ async fn a_resume_counts_its_own_folder_in_the_room() {
 /// A season pack (review r2 P1-1): the played episode's bytes are room for
 /// the next episode's window, whose keeper evicts them first, never for it
 /// whole.
-#[cfg(feature = "torrent")]
+// The engine's piece states (`mq_engine::test_hooks`).
+#[cfg(feature = "test-hooks")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn a_packs_played_episode_is_room_for_the_next_only_in_a_window() {
     const MIB: u64 = 1 << 20;
@@ -1726,7 +1728,7 @@ async fn read_range(url: &str, at: u64, len: u64) -> Vec<u8> {
 }
 
 /// What a folder takes on disk.
-#[cfg(feature = "torrent")]
+#[cfg(feature = "test-hooks")]
 fn folder_bytes(dir: &std::path::Path) -> u64 {
     use std::os::unix::fs::MetadataExt;
     std::fs::read_dir(dir).map_or(0, |entries| {
