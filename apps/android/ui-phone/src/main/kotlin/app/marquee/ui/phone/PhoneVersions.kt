@@ -3,7 +3,6 @@
 package app.marquee.ui.phone
 
 import androidx.activity.compose.BackHandler
-import androidx.activity.compose.LocalActivity
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.gestures.awaitEachGesture
@@ -37,7 +36,6 @@ import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
@@ -186,35 +184,15 @@ fun PhoneVersions(
     val press = { if (snapshot?.recommended != null && snapshot.frozen != true) versions?.freeze() }
     // The kind chips (plans/plugins-and-marketplace.md 4.2): the core counts the kinds and, under one (`setKind`, which
     // freezes the pick), sends that kind's own card, rows and sections. They show from two kinds on, then stay while the
-    // page is open; leaving it lists every kind again, unless it leaves for the player, which plays within the kind.
+    // page is open. The kind holds while this video's Versions page or player is on the stack (AppRoot).
     var chipsShown by rememberSaveable { mutableStateOf(false) }
     val showsKinds = VersionsCopy.showsKinds(snapshot)
     LaunchedEffect(showsKinds) { if (showsKinds) chipsShown = true }
     val chips = if (chipsShown || showsKinds) VersionsCopy.kindChips(snapshot) else emptyList()
-    var asked by rememberSaveable { mutableStateOf<SourceKind?>(null) }
-    var playing by remember { mutableStateOf(false) }
-    // Back on the page from the player: leaving it again lists every kind.
-    LifecycleResumeEffect(Unit) {
-        playing = false
-        onPauseOrDispose {}
-    }
     // The chip that is on again asks nothing.
     val chooseKind: (SourceKind?) -> Unit = { k ->
-        if (k != snapshot?.selectedKind) {
-            asked = k
-            versions?.setKind(k)
-        }
+        if (k != snapshot?.selectedKind) versions?.setKind(k)
     }
-    val play: (String) -> Unit = { key ->
-        playing = true
-        onPlay(key)
-    }
-    val activity = LocalActivity.current
-    val reset by rememberUpdatedState {
-        val changing = activity?.isChangingConfigurations == true
-        if (VersionsCopy.resetsKind(asked, versions?.snapshot?.selectedKind, playing, changing)) versions?.setKind(null)
-    }
-    DisposableEffect(versions) { onDispose { reset() } }
     val failure = (versions?.status as? ViewStatus.Failed)?.reason
     val listState = rememberLazyListState()
     // The first scroll pins the recommendation, once there is one: a pin before that would keep the
@@ -284,7 +262,7 @@ fun PhoneVersions(
                     VersionsCopy.kicker(snapshot, StreamChoiceCopy.BEST_PHONE),
                     failure,
                     { versions?.retry() },
-                    play,
+                    onPlay,
                     Modifier.padding(vertical = Marquee.space.s),
                     action,
                 ) {
@@ -298,7 +276,7 @@ fun PhoneVersions(
                 item(key = key) {
                     SecondaryButton(
                         VersionsCopy.shortcutLabel(label, row),
-                        { play(row.key) },
+                        { onPlay(row.key) },
                         Modifier.fillMaxWidth(),
                         icon = if (label == StreamChoiceCopy.SMALLER) Icons.Gauge else Icons.Gem,
                     )
@@ -338,7 +316,7 @@ fun PhoneVersions(
                     SourceRow(
                         row,
                         empty?.kind,
-                        play,
+                        onPlay,
                         {
                             lastSheet = row.key
                             sheet = row
@@ -365,7 +343,7 @@ fun PhoneVersions(
             snapshot?.note?.let { note -> item(key = "note") { LearnedLine(note, onUndo) } }
         }
         sheet?.let { row ->
-            DetailsSheet(row, why = empty?.kind, onPlay = play, onClose = { sheet = null }, action = action)
+            DetailsSheet(row, why = empty?.kind, onPlay = onPlay, onClose = { sheet = null }, action = action)
         }
     }
 }
@@ -381,16 +359,20 @@ private fun KindChips(
     onChoose: (SourceKind?) -> Unit,
 ) {
     if (chips.isEmpty()) return
-    // The chip that is on stays in view on a narrow track or at a large font.
+    // The chip the viewer chose stays in view on a narrow track or at a large font; nothing else scrolls the page to it.
     val selected = remember { BringIntoViewRequester() }
-    LaunchedEffect(on, chips.size) { selected.bringIntoView() }
+    var chosen by remember { mutableStateOf(false) }
+    LaunchedEffect(on) { if (chosen) selected.bringIntoView() }
     // Named as a group: "Sources".
     SegmentTrack(Modifier.selectableGroup().semantics { contentDescription = StreamChoiceCopy.KIND_LABEL }) {
         for (chip in chips) {
             Chip(
                 chip.label,
                 chip.kind == on,
-                { onChoose(chip.kind) },
+                {
+                    chosen = true
+                    onChoose(chip.kind)
+                },
                 if (chip.kind == on) Modifier.bringIntoViewRequester(selected) else Modifier,
                 detail = chip.note,
                 inTrack = true,

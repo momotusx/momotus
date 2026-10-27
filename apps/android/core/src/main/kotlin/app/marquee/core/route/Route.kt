@@ -294,3 +294,18 @@ fun afterChoice(
     val overPlayer = below is Route.Player && below.id == versions.id && below.videoId == versions.videoId
     return if (overPlayer) stack.dropLast(2) + chosen else stack + chosen
 }
+
+/**
+ * The videos whose Versions page or player is on [stack]. A kind chosen on Versions (plans/plugins-and-marketplace.md
+ * 4.2) holds while one of them is: the player plays within it. Once a video leaves this set (back to its title page,
+ * a player that ends on the title, any other place), every kind of it is listed again, so the title's Play plays the
+ * core's pick.
+ */
+fun choosingVideos(stack: List<Route>): Set<String> =
+    stack.mapNotNullTo(HashSet()) {
+        when (it) {
+            is Route.Versions -> it.videoId
+            is Route.Player -> it.videoId
+            else -> null
+        }
+    }

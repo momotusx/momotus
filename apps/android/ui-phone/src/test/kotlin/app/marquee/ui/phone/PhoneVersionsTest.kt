@@ -6,7 +6,6 @@ import android.os.MessageQueue
 import androidx.activity.OnBackPressedDispatcher
 import androidx.activity.compose.LocalOnBackPressedDispatcherOwner
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.semantics.SemanticsActions
@@ -205,9 +204,6 @@ class PhoneVersionsTest {
     /** What the screen sent the core, in order: written on the state thread, read on the test thread. */
     private val sent = CopyOnWriteArrayList<String>()
 
-    /** The screen is composed; false removes it, as leaving the page does. */
-    private val shown = mutableStateOf(true)
-
     /** The screen on a view whose core answers the subscribe with [snapshot]. */
     private fun show(snapshot: VersionsSnapshot) {
         client.attach { text ->
@@ -226,16 +222,14 @@ class PhoneVersionsTest {
         compose.setContent {
             back = LocalOnBackPressedDispatcherOwner.current?.onBackPressedDispatcher
             MarqueeTheme(Form.Phone) {
-                if (shown.value) {
-                    PhoneVersions(
-                        "Sintel",
-                        view,
-                        onPlay = { played += it },
-                        onAddSource = { sources++ },
-                        onBack = { backs++ },
-                        onUndo = { undone += it },
-                    )
-                }
+                PhoneVersions(
+                    "Sintel",
+                    view,
+                    onPlay = { played += it },
+                    onAddSource = { sources++ },
+                    onBack = { backs++ },
+                    onUndo = { undone += it },
+                )
             }
         }
         // The view opens once the screen composed and its recomposer runs: a snapshot the core's state thread
@@ -578,7 +572,7 @@ class PhoneVersionsTest {
     }
 
     @Test
-    fun `the chips sit under the card, so a late row never moves Play, and leaving lists every kind again`() {
+    fun `the chips sit under the card, with their counts, and a chip asks the core for its kind`() {
         val a = row("a", ReasonLine.Quick(1204, 2 * gib)).copy(quality = "4K")
         val kinds = listOf(KindChip(SourceKind.Torrent, null, 37), KindChip(SourceKind.Direct, null, 1))
         show(snapshot(a, listOf(row("b", ReasonLine.Few(31)))).copy(kinds = kinds))
@@ -588,9 +582,6 @@ class PhoneVersionsTest {
         compose.onNodeWithText("37", useUnmergedTree = true).assertExists()
         compose.onNodeWithContentDescription("Torrents, 37 versions").performClick()
         compose.waitUntil(5_000) { sent.any { "\"setKind\"" in it && "\"torrent\"" in it } }
-        shown.value = false
-        compose.waitForIdle()
-        compose.waitUntil(5_000) { sent.any { "\"setKind\"" in it && "\"kind\":null" in it } }
     }
 
     @Test

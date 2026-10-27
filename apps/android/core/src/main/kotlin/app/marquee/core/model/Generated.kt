@@ -981,7 +981,7 @@ data class KidsTitlesSnapshot(
     val max: Int,
 )
 
-/** A kind chip: the kind, the rows holding a source of it, and for debrid the service its sources that name one agree on ("Real-Debrid"; null when they name several or none, and the chip says "Debrid"). */
+/** A kind chip: the kind, the rows holding a source of it, and for debrid the one service every such source resolves on ("Real-Debrid": the one it names, or the only account; null otherwise, and the chip says "Debrid"). */
 @Serializable
 data class KindChip(
     val kind: SourceKind,

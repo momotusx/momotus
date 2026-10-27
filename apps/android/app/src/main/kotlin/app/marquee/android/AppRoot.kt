@@ -57,6 +57,7 @@ import app.marquee.core.route.DefaultsMode
 import app.marquee.core.route.Route
 import app.marquee.core.route.afterChoice
 import app.marquee.core.route.calendarInLibrary
+import app.marquee.core.route.choosingVideos
 import app.marquee.core.route.hasBackLink
 import app.marquee.core.route.isTopLevel
 import app.marquee.core.route.linkedTo
@@ -283,6 +284,16 @@ private fun AppNav(
     // needs one is left (the title page, Versions, the player).
     val needsVersions = routes.any { it is Route.Title || it is Route.Versions || it is Route.Player }
     LaunchedEffect(needsVersions) { if (!needsVersions) app.versions.closeAll() }
+
+    // A kind chosen on Versions holds while that video's Versions page or player is on the stack; once the video leaves
+    // (back to its title, a player ending on the title, any other place), every kind is listed again, so the title's
+    // Play plays the core's pick (plans/plugins-and-marketplace.md 4.2).
+    val choosing = choosingVideos(routes)
+    var choosingBefore by remember { mutableStateOf(choosing) }
+    LaunchedEffect(choosing) {
+        for (gone in choosingBefore - choosing) app.versions.listEveryKind(gone)
+        choosingBefore = choosing
+    }
 
     fun choose(place: Route) {
         val next = switchedTo(routes, place)

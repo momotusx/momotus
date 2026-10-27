@@ -10,6 +10,7 @@ import app.marquee.core.model.tileKeys
 import app.marquee.core.route.Route
 import app.marquee.core.route.afterChoice
 import app.marquee.core.route.calendarInLibrary
+import app.marquee.core.route.choosingVideos
 import app.marquee.core.route.hasBackLink
 import app.marquee.core.route.isTopLevel
 import app.marquee.core.route.linkedTo
@@ -179,5 +180,21 @@ class RouteTest {
             listOf(Route.Home, other, versions, chosen),
             afterChoice(listOf(Route.Home, other, versions), chosen),
         )
+    }
+
+    @Test
+    fun `a kind holds while the video's Versions page or player is on the stack, then every kind is listed again`() {
+        val title = Route.Title("series", "tt1")
+        val versions = Route.Versions("series", "tt1", "tt1:1:1", "Show")
+        val player = Route.Player("series", "tt1", "tt1:1:1", "Show")
+        // Versions, a chip, Play: the player plays within the kind.
+        assertEquals(setOf("tt1:1:1"), choosingVideos(listOf(Route.Home, title, versions, player)))
+        // Versions over the paused player, a choice: the page and the old player give way to the new one.
+        val chosen = player.copy(key = "bt:a:0")
+        assertEquals(setOf("tt1:1:1"), choosingVideos(afterChoice(listOf(Route.Home, title, player, versions), chosen)))
+        // The player ends on the title (its Episodes), or Back from Versions: the video leaves the set.
+        assertEquals(emptySet(), choosingVideos(listOf(Route.Home, title)))
+        // Settings opened from Versions (a source to add) keeps it.
+        assertEquals(setOf("tt1:1:1"), choosingVideos(listOf(Route.Home, title, versions, Route.Settings)))
     }
 }

@@ -251,13 +251,11 @@ class TvVersionsTest {
     /** What the screen sent the core, in order: written on the state thread, read on the test thread. */
     private val sent = CopyOnWriteArrayList<String>()
 
-    /** The screen is composed; false removes it, as leaving the page does. */
-    private val shown = mutableStateOf(true)
-
     /** The screen on a view whose core answers the subscribe with [snapshot]. */
     private fun show(
         snapshot: VersionsSnapshot,
         held: Boolean = false,
+        heading: String = "Sintel",
     ) {
         client.attach { text ->
             sent += text
@@ -274,18 +272,16 @@ class TvVersionsTest {
         val view = VersionsView(client, scope, JsonObject(emptyMap()))
         compose.setContent {
             MarqueeTheme(Form.Tv) {
-                if (shown.value) {
-                    TvVersions(
-                        "Sintel",
-                        view,
-                        FocusMemory(),
-                        onPlay = { played += it },
-                        onAddSource = { sources++ },
-                        onBack = { backs++ },
-                        onUndo = { undone += it },
-                        held = held,
-                    )
-                }
+                TvVersions(
+                    heading,
+                    view,
+                    FocusMemory(),
+                    onPlay = { played += it },
+                    onAddSource = { sources++ },
+                    onBack = { backs++ },
+                    onUndo = { undone += it },
+                    held = held,
+                )
             }
         }
         // The view opens once the screen composed and its recomposer runs: a snapshot the core's state thread
@@ -963,60 +959,22 @@ class TvVersionsTest {
             .boundsInRoot
 
     @Test
-    fun `chips that arrive late move neither Play nor the card`() {
-        show(coherent())
+    // Real text measures: the heading's width is what is pinned.
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun `chips that arrive late move neither Play nor the card, and the heading keeps its width`() {
+        val long = "Sintel, S1:E2 The Gatekeeper of the Dragon's Lair Beyond the Northern Mountains and the Sea"
+        show(coherent(), heading = long)
         val play = bounds("Play this version")
+        val heading = bounds(long)
+        val title = bounds("Versions")
         update(kinds())
         compose.waitUntil(10_000) {
             Snapshot.sendApplyNotifications()
             compose.onAllNodesWithContentDescription("All").fetchSemanticsNodes().isNotEmpty()
         }
         assertEquals(play, bounds("Play this version"))
-    }
-
-    private fun hide() {
-        shown.value = false
-        compose.waitForIdle()
-    }
-
-    @Test
-    fun `leaving the page lists every kind again, but not for the player or when nothing was asked`() {
-        show(kinds())
-        compose.waitUntil(5_000) {
-            compose.onAllNodes(isFocused() and hasText("Play this version")).fetchSemanticsNodes().isNotEmpty()
-        }
-        press(Key.DirectionUp)
-        press(Key.DirectionRight)
-        press(Key.DirectionCenter)
-        compose.waitUntil(5_000) { sent.any { "\"setKind\"" in it && "\"torrent\"" in it } }
-        hide()
-        compose.waitUntil(5_000) { sent.any { "\"setKind\"" in it && "\"kind\":null" in it } }
-    }
-
-    @Test
-    fun `leaving for the player keeps the kind the player plays within`() {
-        show(kinds())
-        compose.waitUntil(5_000) {
-            compose.onAllNodes(isFocused() and hasText("Play this version")).fetchSemanticsNodes().isNotEmpty()
-        }
-        press(Key.DirectionUp)
-        press(Key.DirectionRight)
-        press(Key.DirectionCenter)
-        compose.waitUntil(5_000) { sent.any { "\"setKind\"" in it } }
-        press(Key.DirectionDown)
-        press(Key.DirectionCenter)
-        assertEquals(listOf("pick"), played)
-        hide()
-        Thread.sleep(300)
-        assertTrue(sent.none { "\"kind\":null" in it }, "$sent")
-    }
-
-    @Test
-    fun `leaving with no kind asked sends nothing`() {
-        show(kinds())
-        hide()
-        Thread.sleep(300)
-        assertTrue(sent.none { "\"setKind\"" in it }, "$sent")
+        assertEquals(heading, bounds(long))
+        assertEquals(title, bounds("Versions"))
     }
 
     @Test

@@ -2,7 +2,6 @@
 
 package app.marquee.ui.tv
 
-import androidx.activity.compose.LocalActivity
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -28,14 +27,12 @@ import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -180,35 +177,15 @@ fun TvVersions(
     }
     // The kind chips (plans/plugins-and-marketplace.md 4.2): the core counts the kinds and, under one (`setKind`, which
     // freezes the pick), sends that kind's own card, rows and sections. They show from two kinds on, then stay while the
-    // page is open; leaving it lists every kind again, unless it leaves for the player, which plays within the kind.
+    // page is open. The kind holds while this video's Versions page or player is on the stack (AppRoot).
     var chipsShown by rememberSaveable { mutableStateOf(false) }
     val showsKinds = VersionsCopy.showsKinds(snapshot)
     LaunchedEffect(showsKinds) { if (showsKinds) chipsShown = true }
     val chips = if (chipsShown || showsKinds) VersionsCopy.kindChips(snapshot) else emptyList()
-    var asked by rememberSaveable { mutableStateOf<SourceKind?>(null) }
-    var playing by remember { mutableStateOf(false) }
-    // Back on the page from the player: leaving it again lists every kind.
-    LifecycleResumeEffect(Unit) {
-        playing = false
-        onPauseOrDispose {}
-    }
     // The chip that is on again asks nothing.
     val chooseKind: (SourceKind?) -> Unit = { k ->
-        if (k != snapshot?.selectedKind) {
-            asked = k
-            versions?.setKind(k)
-        }
+        if (k != snapshot?.selectedKind) versions?.setKind(k)
     }
-    val play: (String) -> Unit = { key ->
-        playing = true
-        onPlay(key)
-    }
-    val activity = LocalActivity.current
-    val reset by rememberUpdatedState {
-        val changing = activity?.isChangingConfigurations == true
-        if (VersionsCopy.resetsKind(asked, versions?.snapshot?.selectedKind, playing, changing)) versions?.setKind(null)
-    }
-    DisposableEffect(versions) { onDispose { reset() } }
     // The list, for Right from the empty state's actions.
     val list = remember { FocusRequester() }
     val listState = rememberLazyListState()
@@ -267,10 +244,10 @@ fun TvVersions(
             Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.s)) {
                 Pick(snapshot, VersionsCopy.kicker(snapshot, StreamChoiceCopy.BEST_TV), failure, {
                     versions?.retry()
-                }, focus, play) {
+                }, focus, onPlay) {
                     if (empty != null) Empty(empty, step, focus, list.takeIf { empty.rows.isNotEmpty() })
                 }
-                Shortcuts(snapshot, focus, list.takeIf { !snapshot?.rows.isNullOrEmpty() }, play)
+                Shortcuts(snapshot, focus, list.takeIf { !snapshot?.rows.isNullOrEmpty() }, onPlay)
             }
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(Marquee.space.s)) {
                 // The rows found when none plays are simply listed, dimmed, as they would rank once the reason is
@@ -287,7 +264,7 @@ fun TvVersions(
                         snapshot?.rows.isNullOrEmpty() && snapshot?.plugins?.rows.isNullOrEmpty(),
                     focus,
                     list,
-                    play,
+                    onPlay,
                     Modifier.weight(1f),
                 )
                 snapshot?.note?.let { LearnedLine(it, onUndo) }
@@ -319,7 +296,8 @@ private fun statusTone(row: VersionRow) = if (VersionsCopy.good(row.status)) Sta
 
 /**
  * The heading in a plain line over "Versions", and at the right how the search goes. Between them [chips], the kind
- * chips, in the room the heading already takes, so nothing moves when they come.
+ * chips: the heading keeps its width and the chips take the room left, scrolling sideways when it is short, inside
+ * the height the heading already takes, so nothing moves when they come.
  */
 @Composable
 private fun Header(
@@ -329,11 +307,11 @@ private fun Header(
 ) {
     val colors = Marquee.colors
     Row(Modifier.fillMaxWidth(), Arrangement.spacedBy(Marquee.space.m), Alignment.Bottom) {
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(Marquee.space.xs)) {
+        Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.xs)) {
             MqText(heading, role = TextRole.Callout, color = colors.dim, weight = FontWeight.SemiBold, maxLines = 1)
             MqText("Versions", Modifier.semantics { heading() }, role = TextRole.Title1, maxLines = 1)
         }
-        chips()
+        Box(Modifier.weight(1f), contentAlignment = Alignment.BottomEnd) { chips() }
         Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(Marquee.space.xs)) {
             VersionsCopy.progress(snapshot)?.let { (text, state) -> StatusWord(text, tone(state)) }
         }
@@ -471,9 +449,10 @@ private fun KindChips(
     onChoose: (SourceKind?) -> Unit,
 ) {
     if (chips.isEmpty()) return
-    // The chip that is on stays in view on a narrow track or at a large font.
+    // The chip the viewer chose stays in view on a narrow track or at a large font; nothing else scrolls the page to it.
     val selected = remember { BringIntoViewRequester() }
-    LaunchedEffect(on, chips.size) { selected.bringIntoView() }
+    var chosen by remember { mutableStateOf(false) }
+    LaunchedEffect(on) { if (chosen) selected.bringIntoView() }
     SegmentTrack(
         Modifier
             .focusProperties { enter = { focus.requester(kindKey(on)) ?: FocusRequester.Default } }
@@ -487,7 +466,10 @@ private fun KindChips(
             Chip(
                 chip.label,
                 chip.kind == on,
-                { onChoose(chip.kind) },
+                {
+                    chosen = true
+                    onChoose(chip.kind)
+                },
                 Modifier
                     .focusProperties { down = focus.requester(PLAY) ?: FocusRequester.Default }
                     .then(if (chip.kind == on) Modifier.bringIntoViewRequester(selected) else Modifier),

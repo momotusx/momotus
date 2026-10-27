@@ -90,6 +90,11 @@ class VersionsHolder(
 
     fun closeAll() = recent.toList().forEach(::close)
 
+    /** Every kind of [videoId] is listed again on its open views (plans/plugins-and-marketplace.md 4.2). */
+    fun listEveryKind(videoId: String) {
+        for ((key, view) in views) if (key.videoId == videoId && view.snapshot?.selectedKind != null) view.setKind(null)
+    }
+
     private companion object {
         const val MAX_OPEN = 2
     }

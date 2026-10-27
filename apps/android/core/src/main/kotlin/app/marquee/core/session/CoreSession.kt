@@ -86,6 +86,8 @@ class CoreSession(
     private val context: Context,
 ) {
     val metrics = BridgeMetrics()
+
+    // One thread with a Looper of its own that is never looped: nothing may post to it (stateThread).
     private val stateThread =
         app.marquee.core.client
             .stateThread("marquee-state")

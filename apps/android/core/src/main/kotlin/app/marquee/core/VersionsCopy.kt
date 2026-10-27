@@ -469,17 +469,6 @@ object VersionsCopy {
             }
     }
 
-    /**
-     * Leaving the page lists every kind again when a kind was asked for or is listed, unless it leaves for the
-     * player, which plays and moves on within the chosen kind, or only for a configuration change.
-     */
-    fun resetsKind(
-        asked: SourceKind?,
-        selected: SourceKind?,
-        playing: Boolean,
-        changing: Boolean,
-    ): Boolean = !playing && !changing && (asked != null || selected != null)
-
     /** The core's kinds call for chips: two kinds or more. Once shown, the page keeps them. */
     fun showsKinds(snapshot: VersionsSnapshot?): Boolean = snapshot?.kinds.orEmpty().size >= 2
 
