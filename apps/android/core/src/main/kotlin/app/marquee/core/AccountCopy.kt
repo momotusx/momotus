@@ -34,6 +34,7 @@ object AccountCopy {
     val PROVIDER_NAME = mapOf("apple" to "Apple", "google" to "Google", "facebook" to "Facebook", "email" to "Email")
     const val SIGN_IN_TITLE = "Sign in"
     const val CONTINUE_WITH = "Continue with {provider}"
+    const val CONTINUE = "Continue"
     const val OTHER_WAYS = "Other ways to sign in"
     const val USE_PASSKEY = "Use a passkey"
     const val SCAN_FROM_DEVICE = "Scan from a signed-in device"
@@ -56,6 +57,26 @@ object AccountCopy {
     const val SCAN_AGAIN_HERE = "To sign in, scan the code on the screen in front of you once more here."
     const val CODE_FOUND = "Code found"
     const val USE_PHONE_TO_SIGN_IN = "Use your phone to sign in other devices"
+    const val TV_SCAN_HOW = "Scan with your phone's camera"
+    const val TV_QR_LABEL = "QR code. Scan it with your phone's camera to sign in."
+    const val BROWSE_FIRST = "Browse first"
+    const val TV_SIGNED_IN_FROM = "Signed in from {device}"
+    const val APPROVE_ASK = "Sign in \"{device}\"?"
+    const val APPROVE_ASK_TV = "Sign in this TV?"
+    const val APPROVE_ASK_OTHER = "Sign in this device?"
+    const val APPROVE_UNNAMED = "The other device"
+    const val APPROVE_BUTTON = "Sign in"
+    const val APPROVE_NEAR = "Only sign in a screen you can see."
+    const val APPROVE_SCAN_HERE =
+        "Your phone isn't on the same network as that screen. Turn off mobile data or VPN, or scan the code here."
+    const val APPROVE_SIGNING_IN = "Signing in"
+    const val APPROVE_DONE = "{device} is signed in"
+    const val APPROVE_NOT_YOU = "Not you? Remove it"
+    const val APPROVE_SLOW = "{device} hasn't finished signing in. If it shows a new code, scan that one."
+    const val APPROVE_ANSWERED = "Another phone already signed in this screen. If that wasn't you, sign out on it."
+    const val APPROVE_EXPIRED = "This code expired. Scan the new one on the screen."
+    const val APPROVE_KIDS = "Ask a grown-up to sign in this screen."
+    const val PHONE_SCAN_HOW = "Scan with your other phone's camera"
     const val PASSKEY_LABEL = "Passkey, saved on {device}"
     const val RECOVERY_KIT_NAME = "Recovery kit"
     const val JOINED_WITH_PASSKEY = "Joined with a passkey on {date}"
@@ -106,6 +127,9 @@ object AccountCopy {
         "This {providerAccount} has made several Momotus accounts lately. Try again later or use another " +
             "way."
     val SIGNUP_LIMIT_ACTIONS = listOf("Other ways to sign in")
+    const val SIGNUP_LIMIT_NETWORK =
+        "Too many new accounts from this network today. Connect to Wi-Fi and try again, or sign in on a device you " +
+            "already use."
     const val LINKED_ELSEWHERE = "This {providerAccount} already signs in to another Momotus account."
     val LINKED_ELSEWHERE_ACTIONS = listOf("Use it for this account instead", "Cancel")
     const val BUSY = "Too many sign-ins from this network just now. Try again in a minute."
@@ -186,6 +210,7 @@ object AccountCopy {
             "providerName" to PROVIDER_NAME,
             "signInTitle" to SIGN_IN_TITLE,
             "continueWith" to CONTINUE_WITH,
+            "continue" to CONTINUE,
             "otherWays" to OTHER_WAYS,
             "usePasskey" to USE_PASSKEY,
             "scanFromDevice" to SCAN_FROM_DEVICE,
@@ -206,6 +231,25 @@ object AccountCopy {
             "scanAgainHere" to SCAN_AGAIN_HERE,
             "codeFound" to CODE_FOUND,
             "usePhoneToSignIn" to USE_PHONE_TO_SIGN_IN,
+            "tvScanHow" to TV_SCAN_HOW,
+            "tvQrLabel" to TV_QR_LABEL,
+            "browseFirst" to BROWSE_FIRST,
+            "tvSignedInFrom" to TV_SIGNED_IN_FROM,
+            "approveAsk" to APPROVE_ASK,
+            "approveAskTv" to APPROVE_ASK_TV,
+            "approveAskOther" to APPROVE_ASK_OTHER,
+            "approveUnnamed" to APPROVE_UNNAMED,
+            "approveButton" to APPROVE_BUTTON,
+            "approveNear" to APPROVE_NEAR,
+            "approveScanHere" to APPROVE_SCAN_HERE,
+            "approveSigningIn" to APPROVE_SIGNING_IN,
+            "approveDone" to APPROVE_DONE,
+            "approveNotYou" to APPROVE_NOT_YOU,
+            "approveSlow" to APPROVE_SLOW,
+            "approveAnswered" to APPROVE_ANSWERED,
+            "approveExpired" to APPROVE_EXPIRED,
+            "approveKids" to APPROVE_KIDS,
+            "phoneScanHow" to PHONE_SCAN_HOW,
             "passkeyLabel" to PASSKEY_LABEL,
             "recoveryKitName" to RECOVERY_KIT_NAME,
             "joinedWithPasskey" to JOINED_WITH_PASSKEY,
@@ -245,6 +289,7 @@ object AccountCopy {
             "ticketExpiredActions" to TICKET_EXPIRED_ACTIONS,
             "signupLimit" to SIGNUP_LIMIT,
             "signupLimitActions" to SIGNUP_LIMIT_ACTIONS,
+            "signupLimitNetwork" to SIGNUP_LIMIT_NETWORK,
             "linkedElsewhere" to LINKED_ELSEWHERE,
             "linkedElsewhereActions" to LINKED_ELSEWHERE_ACTIONS,
             "busy" to BUSY,

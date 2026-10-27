@@ -157,6 +157,12 @@ open class SyncAccount(
     /** Waits, in memory only, for Account's "Use it for this account instead" (the ticket's 10 minutes). */
     var heldLink: HeldLink? by mutableStateOf(null)
 
+    /**
+     * The device that approved this one's pairing (plans/tv-qr-login.md 5.5): Home says "Signed in from" it for a
+     * moment. Memory only.
+     */
+    var joinedBy: String? by mutableStateOf(null)
+
     /** A kit made and not yet confirmed saved: its id (its row in the device list) and its letters. */
     data class HeldKit(
         val id: String,
@@ -425,12 +431,19 @@ open class SyncAccount(
         return list
     }
 
-    /** Vouches for the device that shows [qr]; returns the six digits it must show too. */
-    suspend fun approvePairing(qr: String): String {
-        val approved = withRecord("approvePairing", { ops.approvePairing(it, qr) }) { it.record }
-        // The new device joins once it confirms; the list catches up on the next look.
-        runCatching { loadDevices() }
-        return approved.code
+    /**
+     * Vouches for the device that shows [qr] (plans/tv-qr-login.md Q2); returns its member id, which the
+     * device list shows once it joined. [scanned]: this app's camera read it; [unlocked]: the screen lock
+     * was just passed.
+     */
+    suspend fun approvePairing(
+        qr: String,
+        scanned: Boolean,
+        unlocked: Boolean,
+    ): String {
+        val approved =
+            withRecord("approvePairing", { ops.approvePairing(it, qr, scanned, unlocked) }) { it.record }
+        return approved.member
     }
 
     /**
@@ -608,12 +621,6 @@ open class SyncAccount(
         withRecord("useServerRoster", { ops.useServerRoster(it, drop, head) }) { it }
         problem = null
         request()
-    }
-
-    /** "They differ": ends the approval of [qr] now; a device that joined with it is dropped. */
-    suspend fun cancelPairing(qr: String) {
-        withRecord("cancelPairing", { ops.cancelPairing(it, qr) }) { it }
-        runCatching { loadDevices() }
     }
 
     /**

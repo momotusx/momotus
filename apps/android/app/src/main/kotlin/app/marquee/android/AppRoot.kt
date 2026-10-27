@@ -44,6 +44,7 @@ import androidx.navigation3.runtime.entryProvider
 import androidx.navigation3.runtime.rememberNavBackStack
 import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
 import androidx.navigation3.ui.NavDisplay
+import app.marquee.core.AccountCopy
 import app.marquee.core.AccountRules
 import app.marquee.core.Format
 import app.marquee.core.PendingRemoval
@@ -69,6 +70,7 @@ import app.marquee.design.Marquee
 import app.marquee.design.MqText
 import app.marquee.design.SecondaryButton
 import app.marquee.design.StateMessage
+import app.marquee.design.Status
 import app.marquee.design.TextRole
 import app.marquee.design.actionWindow
 import app.marquee.ui.phone.PhoneHome
@@ -81,6 +83,7 @@ import app.marquee.ui.tv.firstTarget
 import app.marquee.ui.tv.focusFirstRow
 import app.marquee.ui.tv.shownHero
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /** The whole app below the theme: the start decision, the frame, the pages, and the core-stopped cover. */
@@ -331,8 +334,8 @@ private fun AppNav(
         if (sync.joined && onFirstScreen && !created) arrive()
     }
 
-    // Sign in another device (the app shortcut, or a phone camera on a TV's QR): the scanner, after the sign-in
-    // when this device has no account yet. A TV approves nothing (D6), and a kids profile reaches no account page.
+    // Sign in another device (the app shortcut, or a pairing code by link): the approve sheet, after the sign-in when
+    // this device has no account yet. A TV approves nothing; a kids profile hears to ask a grown-up (the sheet says).
     val signingIn = routes.any { it is Route.SignIn }
     LaunchedEffect(marquee.pendingScan, sync.joined, signingIn) {
         when {
@@ -340,15 +343,14 @@ private fun AppNav(
                 Unit
             }
 
-            tv || AccountRules.activeProfile(gate.snapshot)?.kids == true -> {
+            tv -> {
                 marquee.pendingScan = false
+                marquee.pendingCode = null
             }
 
-            sync.joined -> {
+            sync.joined || AccountRules.activeProfile(gate.snapshot)?.kids == true -> {
                 marquee.pendingScan = false
-                if (marquee.accounts.rows(tv).approve && backStack.lastOrNull() != Route.AddDevice) {
-                    backStack.add(Route.AddDevice)
-                }
+                if (backStack.lastOrNull() != Route.AddDevice) backStack.add(Route.AddDevice)
             }
 
             else -> {
@@ -426,7 +428,6 @@ private fun AppNav(
                             sync,
                             marquee.accounts.server(marquee),
                             onDoors = ::pop,
-                            onKit = { backStack.add(Route.SyncJoin(kit = true)) },
                             onIn = ::arrive,
                         )
                     }
@@ -494,8 +495,24 @@ private fun AppNav(
                         }
                         // Home's one account card slot comes first (plans/accounts.md 4.3): a scheduled deletion
                         // is the one thing that must not wait behind the addons card.
+                        // Right after a pairing, "Signed in from" the device that approved it, for 8 s: a line nothing
+                        // focuses, so first focus and the tabs bar stay as they are (plans/tv-qr-login.md 5.5).
+                        val signedInFrom = sync.joinedBy
+                        LaunchedEffect(signedInFrom) {
+                            if (signedInFrom != null) {
+                                delay(8_000)
+                                sync.joinedBy = null
+                            }
+                        }
                         val accountCard: (@Composable () -> Unit)? =
-                            marquee.accounts.homeCard()?.let { shown ->
+                            signedInFrom?.let { by ->
+                                {
+                                    Said(
+                                        AccountRules.fill(AccountCopy.TV_SIGNED_IN_FROM, mapOf("device" to by)),
+                                        Status.Ok,
+                                    )
+                                }
+                            } ?: marquee.accounts.homeCard()?.let { shown ->
                                 {
                                     AccountCard(
                                         marquee.accounts,
@@ -724,10 +741,14 @@ private fun AppNav(
                     entry<Route.SyncFork> { ForkScreen(sync, onDone = ::pop) }
                     entry<Route.SyncJoin> { route -> SyncJoinScreen(sync, route.kit, onDone = ::pop) }
                     entry<Route.AddDevice> {
-                        AddDeviceScreen(sync, onDone = {
-                            marquee.scanAgain = false
-                            pop()
-                        }, scanAgain = marquee.scanAgain)
+                        AddDeviceScreen(
+                            sync,
+                            marquee.accounts.approval,
+                            approves = marquee.accounts.rows(tv).approve,
+                            linked = marquee.pendingCode,
+                            onTaken = { marquee.pendingCode = null },
+                            onDone = ::pop,
+                        )
                     }
                     entry<Route.RecoveryKit> { RecoveryKitScreen(sync, onDone = ::pop) }
                     entry<Route.ReportLost> { route -> ReportLostScreen(sync, route.id, onDone = ::pop) }

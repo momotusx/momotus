@@ -107,8 +107,8 @@ class MainActivity : ComponentActivity() {
 
     /**
      * The account links (plans/accounts.md 4.2, 4.4): a Custom Tab's `momotus://auth` return goes to the sign-in
-     * that waits (nothing happens when none does); the `/pair` App Link and the Sign in another device shortcut
-     * open the scanner.
+     * that waits (nothing happens when none does); a pairing code by link (the `/pair` App Link, or `momotus://pair`
+     * from the link host's page) opens the approve sheet, and the Sign in another device shortcut the scanner.
      */
     private fun accountIntent(intent: Intent?) {
         val app = application as MarqueeApp
@@ -117,8 +117,9 @@ class MainActivity : ComponentActivity() {
                 app.accountPlatform.customTabReturn(link.uri)
             }
 
-            AccountLink.Pair -> {
-                app.scanAgain = true
+            is AccountLink.Pair -> {
+                // The newest code wins (plans/tv-qr-login.md 5.6); it lives in memory only.
+                app.pendingCode = link.code
                 app.pendingScan = true
             }
 
@@ -169,8 +170,13 @@ internal sealed interface AccountLink {
         val uri: Uri,
     ) : AccountLink
 
-    /** `https://<link host>/pair#...`: the fragment is never read (D6). */
-    data object Pair : AccountLink
+    /**
+     * A pairing code by link: `https://<link host>/pair#...` or `momotus://pair#...` (the link host's Open in
+     * Momotus), whole, for the core to read. A link is never a scan (plans/tv-qr-login.md Q2).
+     */
+    data class Pair(
+        val code: String,
+    ) : AccountLink
 
     data object Shortcut : AccountLink
 }
@@ -192,7 +198,11 @@ internal fun accountLink(
         }
 
         linkHost.isNotEmpty() && data.scheme == "https" && data.host == linkHost && data.path == "/pair" -> {
-            AccountLink.Pair
+            AccountLink.Pair(data.toString())
+        }
+
+        data.scheme == AccountPlatform.SCHEME && data.host == "pair" && data.path.isNullOrEmpty() -> {
+            AccountLink.Pair(data.toString())
         }
 
         else -> {

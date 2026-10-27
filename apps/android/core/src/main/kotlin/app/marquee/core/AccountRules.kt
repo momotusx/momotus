@@ -101,7 +101,12 @@ object AccountRules {
 
             "signupLimit" -> {
                 Failure(
-                    fill(AccountCopy.SIGNUP_LIMIT, mapOf("providerAccount" to account)),
+                    // Without a provider: the sign-up without a sign-in, counted per network (plans/tv-qr-login.md Q7).
+                    if (provider.isEmpty()) {
+                        AccountCopy.SIGNUP_LIMIT_NETWORK
+                    } else {
+                        fill(AccountCopy.SIGNUP_LIMIT, mapOf("providerAccount" to account))
+                    },
                     acts(AccountCopy.SIGNUP_LIMIT_ACTIONS, listOf(Act.Other)),
                 )
             }

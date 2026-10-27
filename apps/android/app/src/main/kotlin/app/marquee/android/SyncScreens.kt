@@ -2,6 +2,8 @@ package app.marquee.android
 
 import android.Manifest
 import android.content.Context
+import android.os.Build
+import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -75,10 +77,10 @@ import app.marquee.core.model.LostPreview
 import app.marquee.core.model.MemberInfo
 import app.marquee.core.model.PairingSnapshot
 import app.marquee.core.session.CoreSession
+import app.marquee.core.sync.PairingApproval
 import app.marquee.core.sync.SyncAccount
 import app.marquee.core.views.PairingView
 import app.marquee.core.views.ViewStatus
-import app.marquee.design.CodeText
 import app.marquee.design.FocusInk
 import app.marquee.design.Form
 import app.marquee.design.Icons
@@ -90,6 +92,7 @@ import app.marquee.design.MqTextField
 import app.marquee.design.PrimaryButton
 import app.marquee.design.Qr
 import app.marquee.design.SecondaryButton
+import app.marquee.design.Spinner
 import app.marquee.design.StateMessage
 import app.marquee.design.Status
 import app.marquee.design.StatusWord
@@ -135,10 +138,21 @@ internal fun Context.rememberJoin(
     putString(NAME, name)
 }
 
-/** How other devices list this one: the name it joined with last, else one by its form. */
+/**
+ * How other devices list this one, and the name its pairing QR shows the phone that scans it (plans/tv-qr-login.md
+ * Q4): the name it joined with last, else a TV's own device name (the one Cast shows on the network) and a
+ * phone's model, never the owner's own phone name.
+ */
 internal fun Context.deviceName(tv: Boolean): String =
     getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(NAME, null)?.trim()?.ifEmpty { null }
-        ?: if (tv) "Momotus TV" else "Momotus phone"
+        ?: if (tv) {
+            Settings.Global
+                .getString(contentResolver, Settings.Global.DEVICE_NAME)
+                ?.trim()
+                ?.ifEmpty { null } ?: "Momotus TV"
+        } else {
+            Build.MODEL?.trim()?.ifEmpty { null } ?: "Momotus phone"
+        }
 
 private fun clock(ms: Long) = DateFormat.getTimeInstance(DateFormat.SHORT).format(Date(ms))
 
@@ -1222,17 +1236,23 @@ fun SyncJoinScreen(
 // Add a device
 
 /**
- * Approve a new device: scan its code (a phone with a camera) or paste it, then a step that names its
- * sync server, then the six digits the new device must show. A scanned or pasted code never goes
- * straight to approving. A TV says to use a phone, and still takes a pasted code.
+ * The approve sheet (plans/tv-qr-login.md 5.6): a code by [linked] (the `/pair` App Link, `momotus://pair`) or from
+ * this phone's camera scanner, the only producer of a scan. "Sign in "<name>"?" with Sign in; the core says whether
+ * that screen shares this phone's network. Not near, a link asks for a scan here and a scan for the screen lock,
+ * before anything is sent. Then Signing in, and Done once the device list shows it, with Not you? Remove it. A TV
+ * says to use a phone; a kids profile, to ask a grown-up.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun AddDeviceScreen(
     sync: SyncController,
+    approval: PairingApproval,
+    /** This profile may sign other devices in ([AccountRules.rows]). */
+    approves: Boolean,
+    /** A code a link brought, taken once ([onTaken]). */
+    linked: String?,
+    onTaken: () -> Unit,
     onDone: () -> Unit,
-    /** Opened from a phone camera on a TV's QR (the `/pair` App Link): that scan counts for nothing here. */
-    scanAgain: Boolean = false,
 ) {
     val context = LocalContext.current
     val tv = Marquee.form == Form.Tv
@@ -1242,19 +1262,8 @@ fun AddDeviceScreen(
 
     /** Why the camera is not scanning: not allowed, or not working. */
     var noCamera by remember { mutableStateOf<String?>(null) }
-
-    /** The code waiting for the step that names its sync server. */
-    var reviewing by remember { mutableStateOf<String?>(null) }
-    var busy by remember { mutableStateOf(false) }
-    var error by remember { mutableStateOf<String?>(null) }
-    var digits by remember { mutableStateOf<String?>(null) }
-
-    /** The code that was approved, for They differ. */
-    var approvedQr by remember { mutableStateOf<String?>(null) }
-    var ended by remember { mutableStateOf(false) }
-    var differError by remember { mutableStateOf<String?>(null) }
+    var lockSaid by remember { mutableStateOf<String?>(null) }
     val owner = rememberOwnerCheck()
-    val scanFocus = remember { FocusRequester() }
     val permission =
         rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
             scanning = granted
@@ -1262,71 +1271,58 @@ fun AddDeviceScreen(
         }
 
     fun scan() {
-        error = null
         noCamera = null
         if (context.cameraAllowed()) scanning = true else permission.launch(Manifest.permission.CAMERA)
     }
 
-    // Sign in another device is one tap: the scanner opens with the page (plans/accounts.md 4.2).
-    LaunchedEffect(Unit) { if (canScan && sync.joined) scan() }
-
-    fun take(text: String) {
-        val trimmed = text.trim()
-        if (!SyncRules.isPairingCode(trimmed) || SyncRules.pairingHost(trimmed) == null) {
-            error = SyncCopy.NOT_A_CODE
-            return
-        }
-        error = null
-        reviewing = trimmed
+    val step = approval.step
+    LaunchedEffect(linked, approves) {
+        if (linked != null && approves && !tv) approval.offer(linked, scanned = false)
+        if (linked != null) onTaken()
     }
-
-    fun approve(qr: String) {
-        if (busy) return
-        busy = true
-        error = null
-        scope.launch {
+    // Sign in another device is one tap: the scanner opens with the page; so it does when a link must be scanned here.
+    LaunchedEffect(step) {
+        val scanNow = step == PairingApproval.Step.ScanHere || (step == PairingApproval.Step.Idle && linked == null)
+        if (canScan && sync.joined && approves && scanNow) {
+            scan()
+        }
+        if (step == PairingApproval.Step.Removed) onDone()
+    }
+    // Not on that screen's network: the screen lock, then the same approval (Q6); none on this phone says why.
+    LaunchedEffect(step) {
+        if (step != PairingApproval.Step.Unlock) return@LaunchedEffect
+        lockSaid =
             try {
-                // Letting a device in asks for the screen lock; a phone without one refuses (a non-null askAgain).
-                error =
-                    guarded(owner, tv, SyncCopy.AUTH_APPROVE, askAgain = { }.takeUnless { tv }) {
-                        digits = sync.approvePairing(qr)
-                        approvedQr = qr
-                        reviewing = null
-                    }
+                guarded(owner, tv, SyncCopy.AUTH_APPROVE, askAgain = { }) { approval.unlocked() }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                error = wordsOf(e, Action.Approve)
-            } finally {
-                busy = false
+                wordsOf(e, Action.Approve)
             }
-        }
     }
-
-    // The digits differ: whoever confirmed them is not the device in front of the user. The approval ends
-    // through the core whether or not that device joined yet; one that did is removed with a new key.
-    fun theyDiffer() {
-        val qr = approvedQr ?: return
-        if (busy) return
-        busy = true
-        differError = null
-        scope.launch {
-            try {
-                // Ending access never waits for a screen lock this device does not have.
-                differError =
-                    guarded(owner, tv, SyncCopy.AUTH_DIFFER, askAgain = null) {
-                        sync.cancelPairing(qr)
-                        ended = true
+    DisposableEffect(Unit) { onDispose { approval.close() } }
+    val camera: @Composable (onCode: (String) -> Unit) -> Unit = { onCode ->
+        if (scanning) {
+            QrScanner(
+                onCode = { found ->
+                    // Cancel or leaving may have come first: a code that arrives after does nothing.
+                    if (scanning) {
+                        scanning = false
+                        onCode(found.trim())
                     }
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                // A failed call changes nothing: the button stays.
-                differError = wordsOf(e, Action.Remove)
-            } finally {
-                busy = false
-            }
+                },
+                onFailed = {
+                    scanning = false
+                    noCamera = SyncCopy.NO_CAMERA
+                },
+                modifier = Modifier.fillMaxWidth().aspectRatio(1f).clip(RoundedCornerShape(Marquee.radius.card)),
+            )
+            MqText(SyncCopy.SCANNING, role = TextRole.Callout)
+            SecondaryButton(SyncCopy.CANCEL, { scanning = false })
+        } else {
+            PrimaryButton(SyncCopy.SCAN, ::scan, icon = Icons.Camera, focusRequester = stepFocus())
         }
+        noCamera?.let { Said(it, Status.Bad) }
     }
     LazyColumn(
         Modifier.fillMaxSize().focusRestorer(),
@@ -1335,107 +1331,128 @@ fun AddDeviceScreen(
     ) {
         item(key = "head") { BrowseHeader(AccountCopy.SIGN_IN_ANOTHER) }
         block("body") {
-            NeedsAccount(sync, onDone) {
-                val shown = digits
-                val pending = reviewing
-                when {
-                    // The approval ended: the old digits and "confirm on the new device" go, and a new code can come.
-                    shown != null && ended -> {
-                        Said(SyncCopy.DIFFER_ENDED, Status.Warn)
-                        FlowRow(
-                            horizontalArrangement = Arrangement.spacedBy(Marquee.space.xs),
-                            verticalArrangement = Arrangement.spacedBy(Marquee.space.xs),
-                        ) {
-                            PrimaryButton(SyncCopy.ADD_AGAIN, {
-                                digits = null
-                                approvedQr = null
-                                ended = false
-                                if (canScan) scan()
-                            }, icon = Icons.QrCode, focusRequester = stepFocus())
-                            SecondaryButton(SyncCopy.DONE, onDone, icon = Icons.Check)
-                        }
-                    }
-
-                    shown != null -> {
-                        MqText(SyncCopy.APPROVED_STEP)
-                        CodeText(shown)
-                        MqText(SyncCopy.APPROVED_HELP, role = TextRole.Callout, color = Marquee.colors.muted)
-                        differError?.let { Said(it, Status.Bad) }
-                        FlowRow(
-                            horizontalArrangement = Arrangement.spacedBy(Marquee.space.xs),
-                            verticalArrangement = Arrangement.spacedBy(Marquee.space.xs),
-                        ) {
-                            PrimaryButton(SyncCopy.DONE, onDone, icon = Icons.Check, focusRequester = stepFocus())
-                            SecondaryButton(SyncCopy.DIFFER, ::theyDiffer, icon = Icons.X, busy = busy)
-                        }
-                    }
-
-                    // The code's server is always this account's own: the question is about the device.
-                    pending != null -> {
-                        // Said once the scanner took a code, for TalkBack too.
-                        LiveSpoken(AccountCopy.CODE_FOUND) { StatusWord(AccountCopy.CODE_FOUND, Status.Ok) }
-                        MqText(SyncCopy.REVIEW_ASK, role = TextRole.Title3)
-                        Callout(Icons.ShieldAlert, AccountCopy.APPROVE_WARNING)
-                        error?.let { Said(it, Status.Bad) }
-                        FlowRow(
-                            horizontalArrangement = Arrangement.spacedBy(Marquee.space.xs),
-                            verticalArrangement = Arrangement.spacedBy(Marquee.space.xs),
-                        ) {
-                            PrimaryButton(
-                                if (busy) SyncCopy.APPROVING else SyncCopy.APPROVE,
-                                { approve(pending) },
-                                icon = Icons.Check,
-                                focusRequester = stepFocus(),
-                            )
-                            SecondaryButton(SyncCopy.CANCEL, {
-                                if (!busy) {
-                                    reviewing = null
-                                    error = null
-                                    scope.refocus(scanFocus)
-                                }
-                            })
-                        }
-                    }
-
-                    // A TV approves nothing (D6): the phone signs it in.
-                    tv || !canScan -> {
-                        MqText(AccountCopy.USE_PHONE_TO_SIGN_IN, color = Marquee.colors.muted)
-                        noCamera?.let { Said(it, Status.Bad) }
-                    }
-
-                    else -> {
-                        if (scanAgain) Callout(Icons.QrCode, AccountCopy.SCAN_AGAIN_HERE)
-                        MqText(SyncCopy.ADD_LEDE, color = Marquee.colors.muted)
-                        Callout(Icons.ShieldAlert, SyncCopy.ADD_WARNING)
-                        if (scanning) {
-                            QrScanner(
-                                onCode = { found ->
-                                    // Cancel or leaving may have come first: a code that arrives after does nothing.
-                                    if (scanning) {
-                                        scanning = false
-                                        take(found)
-                                    }
-                                },
-                                onFailed = {
-                                    scanning = false
-                                    noCamera = SyncCopy.NO_CAMERA
-                                },
-                                modifier =
-                                    Modifier
-                                        .fillMaxWidth()
-                                        .aspectRatio(
-                                            1f,
-                                        ).clip(RoundedCornerShape(Marquee.radius.card)),
-                            )
-                            MqText(SyncCopy.SCANNING, role = TextRole.Callout)
-                            SecondaryButton(SyncCopy.CANCEL, { scanning = false })
-                        } else {
-                            PrimaryButton(SyncCopy.SCAN, ::scan, icon = Icons.Camera, focusRequester = scanFocus)
-                        }
-                        noCamera?.let { Said(it, Status.Bad) }
-                        error?.let { Said(it, Status.Bad) }
-                    }
+            when {
+                // A TV approves nothing: the phone signs it in.
+                tv -> {
+                    MqText(AccountCopy.USE_PHONE_TO_SIGN_IN, color = Marquee.colors.muted)
                 }
+
+                !approves -> {
+                    MqText(AccountCopy.APPROVE_KIDS, color = Marquee.colors.muted)
+                }
+
+                else -> {
+                    NeedsAccount(
+                        sync,
+                        onDone,
+                    ) { ApproveSteps(approval, step, lockSaid, canScan, camera, ::scan, onDone) }
+                }
+            }
+        }
+    }
+}
+
+/** The sheet's steps, by [PairingApproval.Step]. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun ApproveSteps(
+    approval: PairingApproval,
+    step: PairingApproval.Step,
+    lockSaid: String?,
+    canScan: Boolean,
+    camera: @Composable (onCode: (String) -> Unit) -> Unit,
+    scan: () -> Unit,
+    onDone: () -> Unit,
+) {
+    when (step) {
+        PairingApproval.Step.Idle -> {
+            if (canScan) {
+                MqText(SyncCopy.ADD_LEDE, color = Marquee.colors.muted)
+                camera { approval.offer(it, scanned = true) }
+            } else {
+                MqText(AccountCopy.USE_PHONE_TO_SIGN_IN, color = Marquee.colors.muted)
+            }
+        }
+
+        is PairingApproval.Step.Sheet -> {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(Marquee.space.s),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                MqIcon(
+                    when (step.form) {
+                        "tv" -> Icons.Tv
+                        "computer", "web" -> Icons.Monitor
+                        else -> Icons.Smartphone
+                    },
+                )
+                MqText(step.ask, role = TextRole.Title3)
+            }
+            // The one defence on the near path: a full line, at any font scale (r2 native P2-1).
+            MqText(AccountCopy.APPROVE_NEAR, role = TextRole.Body)
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(Marquee.space.xs),
+                verticalArrangement = Arrangement.spacedBy(Marquee.space.xs),
+            ) {
+                PrimaryButton(
+                    AccountCopy.APPROVE_BUTTON,
+                    approval::signIn,
+                    icon = Icons.Check,
+                    enabled = !approval.busy,
+                    focusRequester = stepFocus(),
+                )
+                SecondaryButton(SyncCopy.CANCEL, onDone)
+            }
+        }
+
+        PairingApproval.Step.ScanHere -> {
+            Said(AccountCopy.APPROVE_SCAN_HERE, Status.Warn)
+            if (canScan) camera { approval.scannedHere(it) }
+        }
+
+        PairingApproval.Step.Unlock -> {
+            lockSaid?.let { Said(it, Status.Bad) } ?: Spinner()
+        }
+
+        is PairingApproval.Step.SigningIn -> {
+            LiveSpoken(AccountCopy.APPROVE_SIGNING_IN) { StatusWord(AccountCopy.APPROVE_SIGNING_IN, Status.Warn) }
+        }
+
+        is PairingApproval.Step.Done -> {
+            LiveSpoken(AccountRules.fill(AccountCopy.APPROVE_DONE, mapOf("device" to step.device))) {
+                StatusWord(AccountRules.fill(AccountCopy.APPROVE_DONE, mapOf("device" to step.device)), Status.Ok)
+            }
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(Marquee.space.xs),
+                verticalArrangement = Arrangement.spacedBy(Marquee.space.xs),
+            ) {
+                PrimaryButton(SyncCopy.DONE, onDone, icon = Icons.Check, focusRequester = stepFocus())
+                SecondaryButton(AccountCopy.APPROVE_NOT_YOU, approval::notYou, busy = approval.busy)
+            }
+        }
+
+        is PairingApproval.Step.Slow -> {
+            Said(AccountRules.fill(AccountCopy.APPROVE_SLOW, mapOf("device" to step.device)), Status.Warn)
+            PrimaryButton(AccountCopy.ANNOUNCE_OK, onDone, focusRequester = stepFocus())
+        }
+
+        PairingApproval.Step.Removed -> {
+            Unit
+        }
+
+        is PairingApproval.Step.Failed -> {
+            Said(step.words, Status.Bad)
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(Marquee.space.xs),
+                verticalArrangement = Arrangement.spacedBy(Marquee.space.xs),
+            ) {
+                if (canScan) {
+                    PrimaryButton(SyncCopy.SCAN, {
+                        approval.close()
+                        scan()
+                    }, icon = Icons.Camera, focusRequester = stepFocus())
+                }
+                SecondaryButton(SyncCopy.DONE, onDone)
             }
         }
     }
@@ -2050,6 +2067,7 @@ class PairingHolder(
         val joined = current.snapshot as? PairingSnapshot.Joined ?: return
         if (handed === current) return
         handed = current
+        sync.joinedBy = joined.by
         sync.didJoin(joined.record)
     }
 
@@ -2073,8 +2091,9 @@ fun PairingScreen(
             key = "pairing",
             factory = viewModelFactory { initializer { PairingHolder(session, sync, deviceForm(context, tv)) } },
         )
-    // A remembered address with a user name or password (an older version saved it) is not used.
-    val known = remember(context) { context.knownServer() }
+    // A remembered address with a user name or password (an older version saved it) is not used. The build's hosted
+    // relay too, so the code shows at once with no field (plans/tv-qr-login.md 5.5).
+    val known = remember(context) { context.knownServer().ifEmpty { BuildConfig.SYNC_SERVER } }
     var server by rememberSaveable { mutableStateOf(known) }
     var name by rememberSaveable { mutableStateOf(context.deviceName(tv)) }
     // The fields are open only while no server is known: with one, the code shows at once.
@@ -2107,8 +2126,8 @@ fun PairingScreen(
             Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.s)) {
                 BrowseHeader(SyncCopy.PAIR_TITLE)
                 MqText(
-                    "Joins your sync account so library, progress and addons follow you. Nothing is kept until both " +
-                        "screens show the same code.",
+                    "Joins your sync account so library, progress and addons follow you. Scan the code with " +
+                        "your phone's camera.",
                     modifier = Modifier.padding(horizontal = Marquee.safe.side).widthIn(max = 900.dp),
                     role = TextRole.Callout,
                     color = Marquee.colors.muted,
@@ -2128,7 +2147,7 @@ fun PairingScreen(
         holder.view?.let { view ->
             item(key = "session") {
                 Column(Modifier.padding(horizontal = Marquee.safe.side)) {
-                    Session(view, sync, server, onAgain = begin, onDone = onDone)
+                    Session(view, sync, server, onDone = onDone)
                 }
             }
         }
@@ -2165,48 +2184,23 @@ fun PairingScreen(
     }
 }
 
-/** One attempt, from the code to the join. */
+/**
+ * One pairing, from the code to the join (plans/tv-qr-login.md 5.5): the QR, a new one in its place as each ends, for
+ * as long as the screen is open (nothing to press), then Signing in and the join, with nothing asked here (the phone
+ * checked this screen). [how] says where to scan it.
+ */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun Session(
     view: PairingView,
     sync: SyncController,
     server: String,
-    onAgain: () -> Unit,
     onDone: () -> Unit,
+    how: String = AccountCopy.TV_SCAN_HOW,
 ) {
     val tv = Marquee.form == Form.Tv
-    val context = LocalContext.current
-    val status = view.status
-    // Each step that asks something takes focus to its answer: on a TV the remote is never left on
-    // the form below while "Yes, they match" waits.
-    val answer = remember { FocusRequester() }
-    var copied by remember(view) { mutableStateOf(false) }
-    // Named by hand, not by class name: a release build shortens class names.
-    val step =
-        if (status is ViewStatus.Failed) {
-            "could not start"
-        } else {
-            when (view.current()) {
-                is PairingSnapshot.Confirm -> "confirm"
-                is PairingSnapshot.Joined -> if (sync.joining) null else "joined"
-                PairingSnapshot.Expired -> "expired"
-                is PairingSnapshot.Failed -> "stopped"
-                else -> null
-            }
-        }
-    LaunchedEffect(step) {
-        if (tv && step != null) focusSoon(answer)
-    }
-    if (status is ViewStatus.Failed) {
-        StateMessage(
-            "Pairing could not start",
-            SyncCopy.pairingProblem(status.reason),
-            icon = Icons.CircleAlert,
-            actionLabel = "Start again",
-            onAction = onAgain,
-            actionFocus = answer,
-        )
+    (view.status as? ViewStatus.Failed)?.let {
+        Said(SyncCopy.pairingProblem(it.reason), Status.Bad)
         return
     }
     when (val p = view.current()) {
@@ -2215,95 +2209,36 @@ internal fun Session(
         }
 
         is PairingSnapshot.Waiting -> {
-            val until = DateFormat.getTimeInstance(DateFormat.SHORT).format(Date(p.expiresMs))
-            val steps = @Composable {
-                Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.s)) {
-                    MqText(
-                        "On a device that already syncs, open Settings, then Account, then Add a device, " +
-                            "and scan this code.",
-                        role = TextRole.Callout,
-                        modifier = Modifier.widthIn(max = 720.dp),
-                    )
-                    StatusWord("Waiting for the other device. The code works until $until.", Status.Warn)
-                    // A phone can hand the code over as text; it holds public keys only.
-                    if (!tv) {
-                        SecondaryButton(if (copied) SyncCopy.COPIED else SyncCopy.COPY_CODE, {
-                            SyncClipboard.copyCode(context, p.qr)
-                            copied = true
-                        }, icon = if (copied) Icons.Check else Icons.Copy)
-                        MqText(SyncCopy.COPY_HELP, role = TextRole.Caption, color = Marquee.colors.muted)
-                    }
-                }
-            }
+            // A walk build says the code in its log, where a walk reads it (public keys and a slot only; never in
+            // another build).
+            if (BuildConfig.WALK) LaunchedEffect(p.qr) { CoreLog.d("walk: pairing code ${p.qr}") }
+            // A new code takes the old one's place, at the same size (r1 native P2-3).
             if (tv) {
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(Marquee.space.xl),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Qr(p.qr, "Pairing QR code", 320.dp)
-                    steps()
+                    Qr(p.qr, AccountCopy.TV_QR_LABEL, 300.dp, pairing = true)
+                    MqText(how, role = TextRole.Title3, modifier = Modifier.widthIn(max = 560.dp))
                 }
             } else {
                 Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.s)) {
-                    Qr(p.qr, "Pairing QR code", 240.dp)
-                    steps()
+                    Qr(p.qr, AccountCopy.TV_QR_LABEL, 260.dp, pairing = true)
+                    MqText(how, role = TextRole.Callout)
                 }
             }
         }
 
-        is PairingSnapshot.Confirm -> {
-            Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.s)) {
-                MqText("Does the other device show the same six digits?", role = TextRole.Callout)
-                CodeText(p.code)
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(Marquee.space.xs),
-                    verticalArrangement = Arrangement.spacedBy(Marquee.space.xs),
-                ) {
-                    PrimaryButton("Yes, they match", view::confirm, icon = Icons.Check, focusRequester = answer)
-                    SecondaryButton("No, they differ", view::reject, icon = Icons.CircleX)
-                }
+        PairingSnapshot.Joining, is PairingSnapshot.Joined -> {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(Marquee.space.s),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Spinner()
+                MqText(AccountCopy.APPROVE_SIGNING_IN, role = TextRole.Headline)
             }
-        }
-
-        is PairingSnapshot.Joined -> {
-            Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.s)) {
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(Marquee.space.xs),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    MqIcon(Icons.CircleCheck, tint = Marquee.colors.ok)
-                    MqText("This device joined your sync account.", role = TextRole.Headline)
-                }
-                // Done waits until the join is stored on this device.
-                if (sync.joining) {
-                    StatusWord("Saving the account on this device", Status.Warn)
-                } else {
-                    SyncState(sync)
-                    PrimaryButton("Done", onDone, focusRequester = answer)
-                }
-            }
-        }
-
-        PairingSnapshot.Expired -> {
-            StateMessage(
-                "The code expired",
-                "Start again for a new code.",
-                icon = Icons.Clock,
-                actionLabel = "Start again",
-                onAction = onAgain,
-                actionFocus = answer,
-            )
-        }
-
-        is PairingSnapshot.Failed -> {
-            StateMessage(
-                "Pairing stopped",
-                SyncCopy.pairingProblem(p.reason),
-                icon = Icons.CircleAlert,
-                actionLabel = "Start again",
-                onAction = onAgain,
-                actionFocus = answer,
-            )
+            // The page that opened the code moves on once the join is stored on this device.
+            if (p is PairingSnapshot.Joined && !sync.joining) LaunchedEffect(Unit) { onDone() }
         }
     }
 }

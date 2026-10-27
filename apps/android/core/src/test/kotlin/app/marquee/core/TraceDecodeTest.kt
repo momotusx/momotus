@@ -11,6 +11,7 @@ import app.marquee.core.model.HomeSnapshot
 import app.marquee.core.model.HomeUpdate
 import app.marquee.core.model.LibrarySnapshot
 import app.marquee.core.model.LostPreview
+import app.marquee.core.model.PairingCode
 import app.marquee.core.model.PairingSnapshot
 import app.marquee.core.model.PlaybackSnapshot
 import app.marquee.core.model.Prefs
@@ -127,6 +128,7 @@ class TraceDecodeTest {
                 "syncDevices" to Devices.serializer(),
                 "lostPreview" to LostPreview.serializer(),
                 "approvePairing" to ApprovedPairing.serializer(),
+                "readPairingCode" to PairingCode.serializer(),
                 "createRecoveryKit" to RecoveryKitResult.serializer(),
                 "forkPreview" to ForkPreview.serializer(),
             )
@@ -171,8 +173,9 @@ class TraceDecodeTest {
         assertEquals(
             mapOf(
                 "subscribe" to 2,
-                "pairing" to 4,
+                "pairing" to 3,
                 "approvePairing" to 2,
+                "readPairingCode" to 1,
                 "syncNow" to 2,
                 "syncDevices" to 2,
                 "lostPreview" to 1,

@@ -33,11 +33,13 @@ class AccountLinkTest {
     }
 
     @Test
-    fun `the link host's pair page opens the scanner, no other host or path does`() {
-        assertEquals(
-            AccountLink.Pair,
-            accountLink(view("https://link.example/pair#v=3&s=x&p=y&k=z&g=w"), "link.example"),
-        )
+    fun `a pairing code by link reaches the sheet whole, from the link host or its page, and nowhere else`() {
+        val code = "https://link.example/pair#v=3&s=x&p=y&k=z&g=w&n=Den&f=tv"
+        assertEquals(AccountLink.Pair(code), accountLink(view(code), "link.example"))
+        // The link host's Open in Momotus, for a phone where the link did not open the app (plans/tv-qr-login.md 5.7).
+        val handed = "momotus://pair#v=3&s=x&p=y&k=z&g=w"
+        assertEquals(AccountLink.Pair(handed), accountLink(view(handed), ""))
+        assertNull(accountLink(view("momotus://pair/x#v=3"), "link.example"))
         assertNull(accountLink(view("https://evil.example/pair#v=3"), "link.example"))
         assertNull(accountLink(view("https://link.example/delete"), "link.example"))
         assertNull(accountLink(view("https://link.example/pair"), ""), "a build without a link host takes none")
@@ -62,6 +64,32 @@ class AccountLinkTest {
         assertEquals(
             AccountCopy.SIGN_IN_ANOTHER,
             RuntimeEnvironment.getApplication().getString(R.string.sign_in_another),
+        )
+    }
+}
+
+/**
+ * Only the camera says a code was scanned (plans/tv-qr-login.md 4): the core trusts the app's word, so no photo
+ * import, paste or link may reach the sheet as a scan. Every place that marks a code scanned is a camera callback.
+ */
+class ScanWordTest {
+    @Test
+    fun `only the camera marks a code scanned`() {
+        val sources =
+            java
+                .io
+                .File("src/main/kotlin")
+                .walk()
+                .filter { it.extension == "kt" }
+                .flatMap { file -> file.readLines().map { file.name to it.trim() } }
+                .toList()
+        val scans = sources.filter { (_, line) -> "scanned = true" in line || "scannedHere(" in line }
+        assertEquals(
+            listOf(
+                "SyncScreens.kt" to "camera { approval.offer(it, scanned = true) }",
+                "SyncScreens.kt" to "if (canScan) camera { approval.scannedHere(it) }",
+            ),
+            scans,
         )
     }
 }

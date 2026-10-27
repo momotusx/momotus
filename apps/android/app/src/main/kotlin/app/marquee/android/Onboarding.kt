@@ -933,10 +933,11 @@ private fun Door(
 
 /** A quiet text action in a screen's corner; [back] puts its chevron first, pointing back. */
 @Composable
-private fun SkipLink(
+internal fun SkipLink(
     label: String,
     onClick: () -> Unit,
     back: Boolean = false,
+    focusRequester: FocusRequester? = null,
 ) {
     var focused by remember { mutableStateOf(false) }
     // On TV the focused link turns white with dark words (focusPalette).
@@ -944,6 +945,7 @@ private fun SkipLink(
     Row(
         Modifier
             .heightIn(min = 48.dp)
+            .then(focusRequester?.let { Modifier.focusRequester(it) } ?: Modifier)
             .marqueeFocus(Marquee.radius.m)
             .onFocusChanged { focused = it.isFocused }
             .clip(RoundedCornerShape(Marquee.radius.m))

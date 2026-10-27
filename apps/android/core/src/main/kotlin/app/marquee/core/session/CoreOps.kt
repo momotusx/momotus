@@ -21,6 +21,7 @@ import app.marquee.core.model.LearnedChoice
 import app.marquee.core.model.LostPreview
 import app.marquee.core.model.NativeStart
 import app.marquee.core.model.Network
+import app.marquee.core.model.PairingCode
 import app.marquee.core.model.Prefs
 import app.marquee.core.model.ProfilesSnapshot
 import app.marquee.core.model.RecordReply
@@ -605,12 +606,31 @@ class CoreOps(
     suspend fun syncNow(record: SyncRecord): SyncReport =
         call("syncNow", mapOf("record" to record), SyncReport.serializer())
 
-    /** Vouches for the device showing `qr`; show the code big, the new device must show the same. Store the returned record. */
+    /**
+     * Vouches for the device showing [qr] (plans/tv-qr-login.md Q2): [scanned] when this app's camera
+     * scanner read it, [unlocked] once the screen lock was just passed. Not near that screen, a link answers
+     * `scanRequired` and a scan `unlockRequired`, before anything is sent. Store the returned record.
+     */
     suspend fun approvePairing(
         record: SyncRecord,
         qr: String,
+        scanned: Boolean,
+        unlocked: Boolean,
     ): ApprovedPairing =
-        call("approvePairing", mapOf("record" to record, "qr" to text(qr)), ApprovedPairing.serializer())
+        call(
+            "approvePairing",
+            mapOf(
+                "record" to record,
+                "qr" to text(qr),
+                "via" to text(if (scanned) "scan" else "link"),
+                "unlocked" to JsonPrimitive(unlocked),
+            ),
+            ApprovedPairing.serializer(),
+        )
+
+    /** What a pairing code says, for the approve sheet; fails for text that is not one. No network. */
+    suspend fun readPairingCode(qr: String): PairingCode =
+        call("readPairingCode", mapOf("qr" to text(qr)), PairingCode.serializer())
 
     /** The kit is shown once and never stored. Store the returned record. */
     suspend fun createRecoveryKit(record: SyncRecord): RecoveryKitResult =
@@ -750,14 +770,4 @@ class CoreOps(
                 "useServerRoster",
                 mapOf("record" to record, "drop" to JsonArray(drop.map(::text)), "head" to text(head)),
             ).jsonObject
-
-    /**
-     * The digits on the new device differ: ends the approval of [qr] now, with a key rotation that drops
-     * the device if it joined meanwhile. Returns the record to store. Put behind the OS re-authentication
-     * prompt.
-     */
-    suspend fun cancelPairing(
-        record: SyncRecord,
-        qr: String,
-    ): SyncRecord = client.request("cancelPairing", mapOf("record" to record, "qr" to text(qr))).jsonObject
 }

@@ -67,13 +67,20 @@
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="momotus" android:host="auth" />
             </intent-filter>
-            <!-- A phone camera on a TV's code opens https://<link host>/pair: the scanner, which asks for the code
-                 once more (D6). The link host is the owner's (marquee.linkHost); its assetlinks.json verifies it. -->
+            <!-- A phone camera on a TV's code opens https://<link host>/pair: the approve sheet (plans/tv-qr-login.md
+                 5.6). The link host is the owner's (marquee.linkHost); its assetlinks.json verifies it. -->
             <intent-filter android:autoVerify="true">
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="https" android:host="${linkHost}" android:path="/pair" />
+            </intent-filter>
+            <!-- The same code handed on by the link host's page (Open in Momotus), where the link did not open the app. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="momotus" android:host="pair" />
             </intent-filter>
             <!-- Sign in another device from the home screen (4.2). -->
             <meta-data

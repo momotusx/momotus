@@ -9,6 +9,7 @@ import app.marquee.core.sync.AccountActions
 import app.marquee.core.sync.AccountSignIn
 import app.marquee.core.sync.BrokeredRun
 import app.marquee.core.sync.LibraryRemoval
+import app.marquee.core.sync.PairingApproval
 import app.marquee.core.sync.SyncAccount
 
 /**
@@ -64,6 +65,22 @@ class AccountFlows(
 
     fun endSignIn() {
         signIn = null
+    }
+
+    /** The approve sheet's one code at a time (plans/tv-qr-login.md 5.6), for the app's life. */
+    val approval by lazy {
+        PairingApproval(
+            app.session.scope,
+            read = app.session.ops::readPairingCode,
+            approve = app.sync::approvePairing,
+            members = {
+                app.sync
+                    .loadDevices()
+                    .members
+                    .map { it.id }
+            },
+            remove = app.sync::removeDevice,
+        )
     }
 
     /** The Account page's sign-in links, passkeys and deletion. */

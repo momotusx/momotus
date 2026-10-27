@@ -26,6 +26,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.autofill.ContentType
+import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.platform.LocalContext
@@ -66,6 +67,7 @@ import app.marquee.design.Spinner
 import app.marquee.design.Status
 import app.marquee.design.SwitchRow
 import app.marquee.design.TextRole
+import app.marquee.design.focusSoon
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -141,11 +143,11 @@ private fun SignInPairing(
             onJoined()
         }
     }
-    Session(view, sync, server, onAgain = { holder.start(server, name) }, onDone = onJoined)
+    Session(view, sync, server, onDone = onJoined, how = AccountCopy.PHONE_SCAN_HOW)
 }
 
 /**
- * The phone's sign-in (4.1): Continue with each provider the relay offers (none: today's doors at once), Other
+ * The phone's sign-in (4.1): Continue with each provider the relay offers (none: Continue, plans/tv-qr-login.md 5.4), Other
  * ways to sign in, and Not now; then `found` (the QR, a recovery kit, Start over) or `new` (Create, or I already
  * use Marquee), and the passkey or second-way step. [onCreated] goes on to the first-run steps, [onIn] past them.
  */
@@ -185,11 +187,6 @@ fun SignInScreen(
     BackHandler(enabled = step == Step.Email) { signIn.back() }
     LaunchedEffect(step) {
         when (step) {
-            // A relay with no way to sign in: the sign-in screen is today's doors (4.1.1).
-            is Step.Start -> {
-                if (step.providers.isEmpty() && !step.email && signIn.failure == null) notNow()
-            }
-
             is Step.Done -> {
                 context.rememberJoin(flows.server(context), context.deviceName(tv = false))
                 flows.endSignIn()
@@ -256,7 +253,8 @@ fun SignInScreen(
                     providers(step.providers, signIn::choose)
                     // Email is its own row under the providers, the primary one when it is the only way (D6: never
                     // on a TV, whose sign-in is the QR).
-                    if (step.email && !tv) {
+                    val email = step.email && !tv
+                    if (email) {
                         block("email-row") {
                             val choose = { signIn.choose(AccountRules.EMAIL) }
                             if (step.providers.isEmpty()) {
@@ -268,6 +266,17 @@ fun SignInScreen(
                                 )
                             } else {
                                 SecondaryButton(AccountCopy.CONTINUE_WITH_EMAIL, choose, icon = Icons.Mail)
+                            }
+                        }
+                    }
+                    // No provider on this sync service: Continue, a passkey here or a new account (plans/tv-qr-login.md
+                    // 5.4); under email when email is the way in.
+                    if (step.providers.isEmpty()) {
+                        block("continue") {
+                            if (email) {
+                                SecondaryButton(AccountCopy.CONTINUE, signIn::continueHere)
+                            } else {
+                                PrimaryButton(AccountCopy.CONTINUE, signIn::continueHere, focusRequester = stepFocus())
                             }
                         }
                     }
@@ -406,8 +415,8 @@ private fun LazyListScope.otherWays(
 }
 
 /**
- * A TV's first run (4.2, D6): Sign in with your phone, the pairing code and, once a phone approved it, the six
- * digits; Use without an account leads to the doors, Use a recovery kit stays for households with no phone.
+ * A TV's first run (plans/tv-qr-login.md 5.5): Sign in with your phone, the QR and "Scan with your phone's camera",
+ * and Browse first, which leads to the doors. A phone on the TV's network signs it in with one tap; then Home.
  */
 @Composable
 fun TvSignInScreen(
@@ -415,7 +424,6 @@ fun TvSignInScreen(
     sync: SyncController,
     server: String,
     onDoors: () -> Unit,
-    onKit: () -> Unit,
     onIn: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -431,25 +439,29 @@ fun TvSignInScreen(
             holder.start(server, name)
         }
     }
-    val joined = holder.view?.current() is PairingSnapshot.Joined
+    val browse = remember { FocusRequester() }
+    // Browse first is the one focus stop, and has it (plans/tv-qr-login.md 5.5).
+    LaunchedEffect(Unit) { focusSoon(browse) }
     LazyColumn(
         Modifier.fillMaxSize().focusRestorer(),
         contentPadding = pagePadding(framed = false),
         verticalArrangement = Arrangement.spacedBy(Marquee.space.m),
     ) {
         item(key = "head") { BrowseHeader(AccountCopy.TV_SIGN_IN) }
-        block("how") { MqText(AccountCopy.TV_SIGN_IN_HOW, color = Marquee.colors.muted) }
         holder.view?.let { view ->
             item(key = "session") {
                 Column(Modifier.padding(horizontal = Marquee.safe.side).widthIn(max = 1100.dp)) {
-                    Session(view, sync, server, onAgain = { holder.start(server, name) }, onDone = onIn)
+                    Session(view, sync, server, onDone = onIn)
                 }
             }
         }
-        // A TV that joined skips the doors.
-        if (!joined) {
-            item(key = "without") { LinkRow(Icons.House, AccountCopy.TV_WITHOUT_ACCOUNT, "", onDoors) }
-            item(key = "kit") { LinkRow(Icons.LifeBuoy, AccountCopy.USE_RECOVERY_KIT, "", onKit) }
+        // A recovery kit is reachable from the doors (Settings, Account), for a person who cannot scan.
+        if (holder.view?.snapshot !is PairingSnapshot.Joined) {
+            item(key = "browse") {
+                Box(Modifier.padding(horizontal = Marquee.safe.side)) {
+                    SkipLink(AccountCopy.BROWSE_FIRST, onDoors, browse)
+                }
+            }
         }
     }
 }

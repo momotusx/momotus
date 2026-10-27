@@ -37,8 +37,8 @@ android {
         // party and the App Link host for /pair) and the Google web client id Credential Manager asks for. Each is
         // the owner's (gradle properties marquee.syncServer, marquee.linkHost, marquee.googleWebClientId); unset,
         // the first run shows today's doors, no passkey is offered and Google goes through the relay's own flow.
-        buildConfigField("String", "SYNC_SERVER", "\"${property("marquee.syncServer")}\"")
-        buildConfigField("String", "LINK_HOST", "\"${property("marquee.linkHost")}\"")
+        buildConfigField("String", "SYNC_SERVER", "\"${hosted("marquee.syncServer", release = false)}\"")
+        buildConfigField("String", "LINK_HOST", "\"${hosted("marquee.linkHost", release = false)}\"")
         buildConfigField("String", "GOOGLE_WEB_CLIENT_ID", "\"${property("marquee.googleWebClientId")}\"")
         // Which core this build packages, as scripts/build-core.sh wrote it: "own" (the torrent engine on arm64-v8a)
         // or "store" (none, STORE=1), "none" before the script has run; and the ABIs whose core carries the engine.
@@ -52,7 +52,8 @@ android {
         buildConfigField("String", "CORE_BUILD", "\"${coreBuild["kind"] ?: "none"}\"")
         buildConfigField("String", "CORE_ENGINE_ABIS", "\"${coreBuild["engine_abis"].orEmpty()}\"")
         // A host that never resolves (RFC 2606) stands in while there is none, so the App Link filter is valid.
-        manifestPlaceholders["linkHost"] = property("marquee.linkHost").toString().ifEmpty { "link.marquee.invalid" }
+        manifestPlaceholders["linkHost"] =
+            hosted("marquee.linkHost", release = false).ifEmpty { "link.marquee.invalid" }
     }
 
     // One APK per ABI, so a device installs only its own core library (a TV stick has little room):
@@ -88,6 +89,11 @@ android {
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
+            // A release build signs in to the hosted relay by default (plans/tv-qr-login.md Q9); debug builds,
+            // walks and the suites keep the empty default unless given -P values.
+            buildConfigField("String", "SYNC_SERVER", "\"${hosted("marquee.syncServer", release = true)}\"")
+            buildConfigField("String", "LINK_HOST", "\"${hosted("marquee.linkHost", release = true)}\"")
+            manifestPlaceholders["linkHost"] = hosted("marquee.linkHost", release = true)
         }
     }
 
@@ -231,3 +237,16 @@ dependencies {
     testImplementation(libs.compose.ui.test.junit4)
     debugImplementation(libs.compose.ui.test.manifest)
 }
+
+/** A hosted value: the gradle property when set, else in a release build the hosted relay's (plans/tv-qr-login.md Q9). */
+fun hosted(
+    name: String,
+    release: Boolean,
+): String =
+    property(name).toString().ifEmpty {
+        when {
+            !release -> ""
+            name == "marquee.syncServer" -> "https://momotus.normalisdead.mom"
+            else -> "momotus.normalisdead.mom"
+        }
+    }

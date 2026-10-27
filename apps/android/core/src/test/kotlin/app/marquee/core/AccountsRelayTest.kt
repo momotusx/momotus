@@ -365,10 +365,8 @@ class AccountsRelayTest {
             shown = pairing.snapshot
             shown is PairingSnapshot.Waiting
         }
-        val code = runBlocking { desk.sync.approvePairing((shown as PairingSnapshot.Waiting).qr) }
-        waitUntil("Pad's digits") { pairing.snapshot is PairingSnapshot.Confirm }
-        assertEquals(code, (pairing.snapshot as PairingSnapshot.Confirm).code, "both screens show the same six digits")
-        pairing.confirm()
+        // Desk scanned it, behind its lock: loopback is never near (plans/tv-qr-login.md Q2).
+        runBlocking { desk.sync.approvePairing((shown as PairingSnapshot.Waiting).qr, scanned = true, unlocked = true) }
         waitUntil("joined") { pairing.snapshot is PairingSnapshot.Joined }
         runBlocking { pad.sync.join((pairing.snapshot as PairingSnapshot.Joined).record).join() }
         b.joined()

@@ -395,8 +395,40 @@ class AccountSignIn(
         }
     }
 
-    /** Create your Marquee account: the account with the ticket, then its passkey. */
-    fun create() = withTicket { h -> createWith(h, move = false) }
+    /**
+     * Continue on a sync service that lists no provider (plans/tv-qr-login.md 5.4): a passkey on this device
+     * opens its account; none, or one no account knows, is `new`, whose Create needs no sign-in there.
+     */
+    fun continueHere() =
+        launch {
+            failure = null
+            if (platform.rpId.isNotEmpty()) {
+                step = Step.Working(null)
+                val got = platform.passkeyGet(Passkeys.get(platform.rpId), immediate = true)
+                if (got is PasskeyResult.Used && got.prf != null) {
+                    try {
+                        sync.recover(server, kit = null, name = deviceName, prf = got.prf, form = form)
+                        step = Step.Done(created = false)
+                        return@launch
+                    } catch (e: CoreError) {
+                        if (e.code != "kitUnknown") throw e
+                    }
+                }
+            }
+            step = Step.New
+        }
+
+    /** Create your Momotus account: with the ticket a sign-in brought, else the network's sign-up; then its passkey. */
+    fun create() =
+        if (held != null) {
+            withTicket { h -> createWith(h, move = false) }
+        } else {
+            launch {
+                step = Step.Working(null)
+                sync.createAccount(server, "", deviceName, form = form)
+                savePasskey()
+            }
+        }
 
     private suspend fun createWith(
         h: Held,

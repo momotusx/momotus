@@ -1201,29 +1201,18 @@ sealed interface PairingSnapshot {
     ) : PairingSnapshot
 
     @Serializable
-    @SerialName("confirm")
-    data class Confirm(
-        val code: String,
-    ) : PairingSnapshot
+    @SerialName("joining")
+    data object Joining : PairingSnapshot
 
     @Serializable
     @SerialName("joined")
     data class Joined(
         val record: SyncRecord,
+        val by: String? = null,
     ) : PairingSnapshot {
         // Holds keys or a token: never printed.
-        override fun toString() = "Joined(record=hidden)"
+        override fun toString() = "Joined(record=hidden, by=$by)"
     }
-
-    @Serializable
-    @SerialName("expired")
-    data object Expired : PairingSnapshot
-
-    @Serializable
-    @SerialName("failed")
-    data class Failed(
-        val reason: String,
-    ) : PairingSnapshot
 }
 
 /** A streaming service the rail offers: `id` is the stable key apps map to their tile, `name` the name shown. */

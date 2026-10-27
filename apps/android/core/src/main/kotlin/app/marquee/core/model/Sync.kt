@@ -18,14 +18,22 @@ data class InstalledAddon(
     val name: String,
 )
 
-/** Reply of `approvePairing`: show [code] big, the new device must show the same; store [record]. */
+/** Reply of `approvePairing`: store [record]; [member] is the new device's id, which `syncDevices` lists once it joined. */
 @Serializable
 data class ApprovedPairing(
-    val code: String,
+    val member: String,
     val record: SyncRecord,
 ) {
-    override fun toString() = "ApprovedPairing(code=$code)"
+    override fun toString() = "ApprovedPairing(member=$member)"
 }
+
+/** Reply of `readPairingCode`: what a pairing code says, for the approve sheet; [name] cleaned by the core. */
+@Serializable
+data class PairingCode(
+    val server: String,
+    val name: String? = null,
+    val form: String? = null,
+)
 
 /** Reply of `createRecoveryKit`: show [kit] once and keep no copy; store [record]. [id] is the kit's `syncDevices` entry. */
 @Serializable

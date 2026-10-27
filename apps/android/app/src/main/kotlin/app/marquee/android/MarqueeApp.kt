@@ -54,12 +54,12 @@ class MarqueeApp :
     val accounts by lazy { AccountFlows(this) }
 
     /**
-     * Sign in another device was asked for (the app shortcut, Account, or a phone camera on a TV's QR, which opens
-     * the `/pair` App Link): the scanner opens, after sign-in when this device has no account yet. [scanAgain]
-     * says why the code must be scanned once more here.
+     * Sign in another device was asked for (the app shortcut, Account, or a pairing code by link): the approve sheet
+     * opens, after sign-in when this device has no account yet. [pendingCode] is the code a link brought (none: the
+     * scanner opens); memory only, gone with the process (plans/tv-qr-login.md 5.6).
      */
     var pendingScan: Boolean by mutableStateOf(false)
-    var scanAgain: Boolean by mutableStateOf(false)
+    var pendingCode: String? by mutableStateOf(null)
 
     /** No network, or none this app may use: every phone page says so (plans/offline-downloads.md 3.5). */
     var offline: Boolean by mutableStateOf(false)

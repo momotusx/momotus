@@ -18,10 +18,12 @@ import com.google.zxing.BarcodeFormat
 import com.google.zxing.EncodeHintType
 import com.google.zxing.qrcode.QRCodeWriter
 import com.google.zxing.qrcode.decoder.ErrorCorrectionLevel
+import kotlin.math.floor
 
 /**
- * A QR code (dark modules on a white quiet zone, as on the web): ECC M with a two-module border.
- * [label] is what a screen reader says.
+ * A QR code (dark modules on a white quiet zone, as on the web): ECC M with a two-module border by default; a
+ * pairing code asks for ECC L and four modules, to be read from across a room (plans/tv-qr-login.md 5.5). Each
+ * module is a whole number of pixels, centred, so no edge blurs. [label] is what a screen reader says.
  */
 @Composable
 fun Qr(
@@ -29,20 +31,24 @@ fun Qr(
     label: String,
     size: Dp,
     modifier: Modifier = Modifier,
+    /** A pairing code: ECC L and a four-module quiet zone. */
+    pairing: Boolean = false,
 ) {
     val matrix =
-        remember(text) {
-            val hints = mapOf(EncodeHintType.ERROR_CORRECTION to ErrorCorrectionLevel.M, EncodeHintType.MARGIN to 2)
+        remember(text, pairing) {
+            val ecc = if (pairing) ErrorCorrectionLevel.L else ErrorCorrectionLevel.M
+            val hints = mapOf(EncodeHintType.ERROR_CORRECTION to ecc, EncodeHintType.MARGIN to if (pairing) 4 else 2)
             // Size 0 asks for one pixel per module; the canvas scales it.
             QRCodeWriter().encode(text, BarcodeFormat.QR_CODE, 0, 0, hints)
         }
     Canvas(modifier.size(size).semantics { contentDescription = label }) {
         val cells = matrix.width
-        val cell = this.size.minDimension / cells
+        val cell = floor(this.size.minDimension / cells).coerceAtLeast(1f)
+        val start = (this.size.minDimension - cell * cells) / 2
         drawRect(Color.White)
         for (y in 0 until cells) {
             for (x in 0 until cells) {
-                if (matrix[x, y]) drawRect(QR_DARK, Offset(x * cell, y * cell), Size(cell + 0.5f, cell + 0.5f))
+                if (matrix[x, y]) drawRect(QR_DARK, Offset(start + x * cell, start + y * cell), Size(cell, cell))
             }
         }
     }

@@ -612,11 +612,7 @@ class PairingView(
             },
         ),
         PairingSnapshot.serializer(),
-    ) {
-    fun confirm() = post(command("confirm"))
-
-    fun reject() = post(command("reject"))
-}
+    )
 
 /**
  * A relay's brokered sign-in (`signIn`), or Apple's revoke (`appleRevoke`), returning to `momotus://auth`

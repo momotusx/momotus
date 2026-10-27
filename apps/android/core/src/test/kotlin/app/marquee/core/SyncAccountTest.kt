@@ -151,8 +151,11 @@ class SyncAccountTest {
             answers["syncDevices"] = { ok(devices.replace("}", ""","record":${record(4)}}""")) }
             sync.loadDevices()
             assertEquals(5, store.held.revision())
-            answers["approvePairing"] = { ok("""{"code":"123456","record":${record(7)}}""") }
-            assertEquals("123456", sync.approvePairing("marquee:pair?v=2&s=https%3A%2F%2Fx&p=1"))
+            answers["approvePairing"] = { ok("""{"member":"m7","record":${record(7)}}""") }
+            assertEquals(
+                "m7",
+                sync.approvePairing("marquee:pair?v=2&s=https%3A%2F%2Fx&p=1", scanned = true, unlocked = false),
+            )
             assertEquals(7, store.held.revision())
         }
 
@@ -285,9 +288,11 @@ class SyncAccountTest {
         runBlocking {
             val store = Store(record(1))
             val sync = account(store)
-            answers["approvePairing"] = { ok("""{"code":"1","record":${record(2)}}""") }
+            answers["approvePairing"] = { ok("""{"member":"m1","record":${record(2)}}""") }
             store.durable = false
-            assertFailsWith<CoreError> { sync.approvePairing("marquee:pair?v=2&s=https%3A%2F%2Fx&p=1") }
+            assertFailsWith<CoreError> {
+                sync.approvePairing("marquee:pair?v=2&s=https%3A%2F%2Fx&p=1", scanned = true, unlocked = false)
+            }
             assertEquals("storage", sync.problem?.code)
             // Nothing goes out while the record is not stored.
             val before = asked.size
@@ -352,18 +357,23 @@ class SyncAccountTest {
         }
 
     @Test
-    fun `They differ ends the approval through the core and keeps the new key`() =
+    fun `an approval tells the core how the code came and whether the lock just passed`() =
         runBlocking {
             val store = Store(record(1))
             val sync = account(store)
-            var qr: String? = null
-            answers["cancelPairing"] = { msg ->
-                qr = msg.getValue("qr").jsonPrimitive.content
-                ok(record(3).toString())
+            var sent: Map<String, String>? = null
+            answers["approvePairing"] = { msg ->
+                sent =
+                    mapOf(
+                        "via" to msg.getValue("via").jsonPrimitive.content,
+                        "unlocked" to msg.getValue("unlocked").jsonPrimitive.content,
+                    )
+                ok("""{"member":"m3","record":${record(3)}}""")
             }
-            sync.cancelPairing("marquee:pair?v=2&s=x&p=1")
-            assertEquals("marquee:pair?v=2&s=x&p=1", qr)
-            assertEquals(3, store.held.revision())
+            sync.approvePairing("marquee:pair?v=2&s=x&p=1", scanned = false, unlocked = false)
+            assertEquals(mapOf("via" to "link", "unlocked" to "false"), sent)
+            sync.approvePairing("marquee:pair?v=2&s=x&p=1", scanned = true, unlocked = true)
+            assertEquals(mapOf("via" to "scan", "unlocked" to "true"), sent)
         }
 
     @Test

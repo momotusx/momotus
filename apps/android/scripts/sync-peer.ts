@@ -9,8 +9,7 @@
  *
  * POST /create {server, name}           start an account here (the first device)
  * POST /pair {server, name}             show a code to join an existing account; GET /pairing reads its state
- * POST /confirm                         the digits match: join
- * POST /approve {qr}                    approve another device's code; answers {code}
+ * POST /approve {qr}                    approve another device's code, as a scan behind the screen lock; answers {member}
  * POST /recover {server, kit, name}     join with a recovery kit
  * POST /kit                             make a recovery kit; answers {kit} (a throwaway walk account's)
  * POST /sync                            one round (going again while the core asks); answers the report's facts
@@ -89,11 +88,10 @@ const routes: Record<string, (body: Json) => Promise<unknown>> = {
     }
     return s;
   },
-  "POST /confirm": async () => request("command", { sub: pairing?.sub, command: { type: "confirm" } }),
   "POST /approve": async (b) => {
-    const r = await request("approvePairing", { record, qr: b.qr });
+    const r = await request("approvePairing", { record, qr: b.qr, via: "scan", unlocked: true });
     keep(r.record);
-    return { code: r.code };
+    return { member: r.member };
   },
   "POST /recover": async (b) => {
     record = await request("recover", { server: b.server, kit: b.kit, name: b.name });

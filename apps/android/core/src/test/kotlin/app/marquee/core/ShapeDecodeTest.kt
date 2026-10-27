@@ -185,10 +185,10 @@ class ShapeDecodeTest {
         val joined =
             strict.decodeFromString(
                 PairingSnapshot.serializer(),
-                """{"phase":"joined","record":{"server":"s"}}""",
+                """{"phase":"joined","record":{"server":"s"},"by":"Pixel"}""",
             )
         assertIs<PairingSnapshot.Joined>(joined)
-        assertEquals("Joined(record=hidden)", joined.toString()) // never prints the record
+        assertEquals("Joined(record=hidden, by=Pixel)", joined.toString()) // never prints the record
         assertIs<PairingSnapshot.Waiting>(
             strict.decodeFromString(
                 PairingSnapshot.serializer(),
@@ -196,16 +196,8 @@ class ShapeDecodeTest {
             ),
         )
         assertEquals(
-            PairingSnapshot.Confirm("123456"),
-            strict.decodeFromString(PairingSnapshot.serializer(), """{"phase":"confirm","code":"123456"}"""),
-        )
-        assertEquals(
-            PairingSnapshot.Expired,
-            strict.decodeFromString(PairingSnapshot.serializer(), """{"phase":"expired"}"""),
-        )
-        assertEquals(
-            PairingSnapshot.Failed("no"),
-            strict.decodeFromString(PairingSnapshot.serializer(), """{"phase":"failed","reason":"no"}"""),
+            PairingSnapshot.Joining,
+            strict.decodeFromString(PairingSnapshot.serializer(), """{"phase":"joining"}"""),
         )
     }
 }
