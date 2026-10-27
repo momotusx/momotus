@@ -270,8 +270,9 @@ fun SignInScreen(
                         }
                     }
                     // No provider on this sync service: Continue, a passkey here or a new account (plans/tv-qr-login.md
-                    // 5.4); under email when email is the way in.
-                    if (step.providers.isEmpty()) {
+                    // 5.4); under email when email is the way in. Not while the service did not answer: its failure and Try
+                    // again say what to do.
+                    if (step.providers.isEmpty() && signIn.failure == null) {
                         block("continue") {
                             if (email) {
                                 SecondaryButton(AccountCopy.CONTINUE, signIn::continueHere)

@@ -29,6 +29,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
@@ -1263,6 +1264,9 @@ fun AddDeviceScreen(
     /** Why the camera is not scanning: not allowed, or not working. */
     var noCamera by remember { mutableStateOf<String?>(null) }
     var lockSaid by remember { mutableStateOf<String?>(null) }
+
+    /** Each Try again after a cancelled or failed lock prompt asks it once more. */
+    var lockTries by remember { mutableIntStateOf(0) }
     val owner = rememberOwnerCheck()
     val permission =
         rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
@@ -1289,8 +1293,9 @@ fun AddDeviceScreen(
         if (step == PairingApproval.Step.Removed) onDone()
     }
     // Not on that screen's network: the screen lock, then the same approval (Q6); none on this phone says why.
-    LaunchedEffect(step) {
+    LaunchedEffect(step, lockTries) {
         if (step != PairingApproval.Step.Unlock) return@LaunchedEffect
+        lockSaid = null
         lockSaid =
             try {
                 guarded(owner, tv, SyncCopy.AUTH_APPROVE, askAgain = { }) { approval.unlocked() }
@@ -1345,7 +1350,7 @@ fun AddDeviceScreen(
                     NeedsAccount(
                         sync,
                         onDone,
-                    ) { ApproveSteps(approval, step, lockSaid, canScan, camera, ::scan, onDone) }
+                    ) { ApproveSteps(approval, step, lockSaid, { lockTries++ }, canScan, camera, ::scan, onDone) }
                 }
             }
         }
@@ -1359,6 +1364,7 @@ private fun ApproveSteps(
     approval: PairingApproval,
     step: PairingApproval.Step,
     lockSaid: String?,
+    askLockAgain: () -> Unit,
     canScan: Boolean,
     camera: @Composable (onCode: (String) -> Unit) -> Unit,
     scan: () -> Unit,
@@ -1411,7 +1417,19 @@ private fun ApproveSteps(
         }
 
         PairingApproval.Step.Unlock -> {
-            lockSaid?.let { Said(it, Status.Bad) } ?: Spinner()
+            if (lockSaid == null) {
+                Spinner()
+            } else {
+                // A cancelled or failed prompt: ask again, or leave with nothing sent.
+                Said(lockSaid, Status.Bad)
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(Marquee.space.xs),
+                    verticalArrangement = Arrangement.spacedBy(Marquee.space.xs),
+                ) {
+                    PrimaryButton(SyncCopy.RETRY, askLockAgain, focusRequester = stepFocus())
+                    SecondaryButton(SyncCopy.CANCEL, onDone)
+                }
+            }
         }
 
         is PairingApproval.Step.SigningIn -> {

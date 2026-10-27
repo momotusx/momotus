@@ -5,6 +5,7 @@ import app.marquee.core.model.PairingCode
 import app.marquee.core.sync.PairingApproval
 import app.marquee.core.sync.PairingApproval.Step
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -22,6 +23,10 @@ class PairingApprovalTest {
         var listed = listOf<String>()
         val removed = mutableListOf<String>()
         var reads = 0
+
+        /** How long a read or an approval takes, in virtual ms. */
+        var readMs = 0L
+        var approveMs = 0L
     }
 
     private fun TestScope.approval(core: Core) =
@@ -29,10 +34,14 @@ class PairingApprovalTest {
             this,
             read = {
                 core.reads++
-                if (it.startsWith("https://")) PairingCode("https://sync", "Den", "tv") else error("not a code")
+                delay(core.readMs)
+                // Named by the code's own n=, as the core reads it.
+                val name = Regex("[#&]n=([^&]*)").find(it)?.groupValues?.get(1)
+                if (it.startsWith("https://")) PairingCode("https://sync", name, "tv") else error("not a code")
             },
             approve = { _, scanned, unlocked ->
                 core.approvals += scanned to unlocked
+                delay(core.approveMs)
                 core.answer(scanned, unlocked)
             },
             members = { core.listed },
@@ -126,14 +135,77 @@ class PairingApprovalTest {
             advanceUntilIdle()
             sheet.signIn()
             advanceTimeBy(100)
-            sheet.offer(link.replace("n=Den", "n=Hall"), scanned = false)
+            sheet.offer(hall, scanned = false)
             advanceUntilIdle()
-            assertEquals(Step.Sheet("Sign in \"Den\"?", "tv"), sheet.step, "the stub reads every link as Den")
+            assertEquals(Step.Sheet("Sign in \"Hall\"?", "tv"), sheet.step)
             core.listed = listOf("m1")
             advanceTimeBy(5_000)
             // The first code's wait ended with it: nothing moves the sheet on.
-            assertEquals(Step.Sheet("Sign in \"Den\"?", "tv"), sheet.step)
+            assertEquals(Step.Sheet("Sign in \"Hall\"?", "tv"), sheet.step)
             sheet.close()
             assertEquals(Step.Idle, sheet.step)
+        }
+
+    private val hall = link.replace("n=Den", "n=Hall")
+
+    @Test
+    fun `a slow read of the first code never names the second`() =
+        runTest {
+            val core = Core()
+            val sheet = approval(core)
+            core.readMs = 1_000
+            sheet.offer(link, scanned = false)
+            advanceTimeBy(100)
+            core.readMs = 0
+            sheet.offer(hall, scanned = false)
+            advanceUntilIdle()
+            assertEquals(Step.Sheet("Sign in \"Hall\"?", "tv"), sheet.step)
+        }
+
+    @Test
+    fun `an approval that answers after close or a new code writes nothing and waits for nothing`() =
+        runTest {
+            val core = Core()
+            val sheet = approval(core)
+            core.approveMs = 1_000
+            sheet.offer(link, scanned = false)
+            advanceUntilIdle()
+            sheet.signIn()
+            advanceTimeBy(100)
+            sheet.close()
+            core.listed = listOf("m1")
+            advanceTimeBy(70_000)
+            assertEquals(Step.Idle, sheet.step)
+            // A new code while the old approval is out: its sheet stays, and its Sign in works.
+            sheet.offer(link, scanned = false)
+            advanceUntilIdle()
+            sheet.signIn()
+            advanceTimeBy(100)
+            sheet.offer(hall, scanned = false)
+            advanceTimeBy(70_000)
+            assertEquals(Step.Sheet("Sign in \"Hall\"?", "tv"), sheet.step)
+            core.approveMs = 0
+            sheet.signIn()
+            advanceTimeBy(100)
+            assertEquals(Step.SigningIn("Hall"), sheet.step)
+            sheet.close()
+        }
+
+    @Test
+    fun `a scan here of another code asks again under that screen's name`() =
+        runTest {
+            val core = Core()
+            core.answer = { scanned, _ -> if (scanned) "m3" else refused("scanRequired") }
+            val sheet = approval(core)
+            sheet.offer(link, scanned = false)
+            advanceUntilIdle()
+            sheet.signIn()
+            advanceUntilIdle()
+            assertEquals(Step.ScanHere, sheet.step)
+            sheet.scannedHere(hall)
+            advanceUntilIdle()
+            assertEquals(Step.Sheet("Sign in \"Hall\"?", "tv"), sheet.step)
+            assertEquals(listOf(false to false), core.approvals, "nothing sent for the scanned code yet")
+            sheet.close()
         }
 }

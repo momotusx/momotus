@@ -16,6 +16,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.em
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.EncodeHintType
+import com.google.zxing.common.BitMatrix
 import com.google.zxing.qrcode.QRCodeWriter
 import com.google.zxing.qrcode.decoder.ErrorCorrectionLevel
 import kotlin.math.floor
@@ -34,16 +35,10 @@ fun Qr(
     /** A pairing code: ECC L and a four-module quiet zone. */
     pairing: Boolean = false,
 ) {
-    val matrix =
-        remember(text, pairing) {
-            val ecc = if (pairing) ErrorCorrectionLevel.L else ErrorCorrectionLevel.M
-            val hints = mapOf(EncodeHintType.ERROR_CORRECTION to ecc, EncodeHintType.MARGIN to if (pairing) 4 else 2)
-            // Size 0 asks for one pixel per module; the canvas scales it.
-            QRCodeWriter().encode(text, BarcodeFormat.QR_CODE, 0, 0, hints)
-        }
+    val matrix = remember(text, pairing) { qrMatrix(text, pairing) }
     Canvas(modifier.size(size).semantics { contentDescription = label }) {
         val cells = matrix.width
-        val cell = floor(this.size.minDimension / cells).coerceAtLeast(1f)
+        val cell = qrCell(this.size.minDimension, cells)
         val start = (this.size.minDimension - cell * cells) / 2
         drawRect(Color.White)
         for (y in 0 until cells) {
@@ -55,6 +50,23 @@ fun Qr(
 }
 
 private val QR_DARK = Color(0xFF0F0D0B)
+
+/** The code's modules, quiet zone included, one cell each. */
+fun qrMatrix(
+    text: String,
+    pairing: Boolean,
+): BitMatrix {
+    val ecc = if (pairing) ErrorCorrectionLevel.L else ErrorCorrectionLevel.M
+    val hints = mapOf(EncodeHintType.ERROR_CORRECTION to ecc, EncodeHintType.MARGIN to if (pairing) 4 else 2)
+    // Size 0 asks for one pixel per module; the canvas scales it.
+    return QRCodeWriter().encode(text, BarcodeFormat.QR_CODE, 0, 0, hints)
+}
+
+/** Pixels a module takes in a [side] px square: a whole number, at least one. */
+fun qrCell(
+    side: Float,
+    cells: Int,
+): Float = floor(side / cells).coerceAtLeast(1f)
 
 /**
  * A code to type on another device (design audit 5): monospace with 0.1 em tracking, read out one

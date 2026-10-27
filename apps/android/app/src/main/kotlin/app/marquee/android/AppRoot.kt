@@ -497,7 +497,9 @@ private fun AppNav(
                         // is the one thing that must not wait behind the addons card.
                         // Right after a pairing, "Signed in from" the device that approved it, for 8 s: a line nothing
                         // focuses, so first focus and the tabs bar stay as they are (plans/tv-qr-login.md 5.5).
-                        val signedInFrom = sync.joinedBy
+                        // A scheduled deletion still comes first.
+                        val shownCard = marquee.accounts.homeCard()
+                        val signedInFrom = sync.joinedBy.takeUnless { shownCard is AccountRules.Card.Deletion }
                         LaunchedEffect(signedInFrom) {
                             if (signedInFrom != null) {
                                 delay(8_000)
@@ -512,7 +514,7 @@ private fun AppNav(
                                         Status.Ok,
                                     )
                                 }
-                            } ?: marquee.accounts.homeCard()?.let { shown ->
+                            } ?: shownCard?.let { shown ->
                                 {
                                     AccountCard(
                                         marquee.accounts,

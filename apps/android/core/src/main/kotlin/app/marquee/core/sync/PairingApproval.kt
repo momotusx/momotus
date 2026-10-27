@@ -76,6 +76,13 @@ class PairingApproval(
     private var scanned = false
     private var device = ""
     private var member: String? = null
+
+    /**
+     * The read or approval under way, and the wait after it: [close] (and so every new code) cancels them, and a
+     * cancelled coroutine never resumes past its suspended core call (the core's calls cancel promptly), so a late
+     * answer writes nothing.
+     */
+    private var work: Job? = null
     private var waiting: Job? = null
 
     /** A code arrived: it replaces any other, and its wait. */
@@ -86,23 +93,27 @@ class PairingApproval(
         close()
         code = qr
         this.scanned = scanned
-        scope.launch {
-            step =
-                try {
-                    val read = read(qr)
-                    device = read.name ?: AccountCopy.APPROVE_UNNAMED
-                    Step.Sheet(ask(read), read.form)
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (_: Exception) {
-                    Step.Failed(SyncCopy.NOT_A_CODE)
-                }
-        }
+        work =
+            scope.launch {
+                step =
+                    try {
+                        val read = read(qr)
+                        device = read.name ?: AccountCopy.APPROVE_UNNAMED
+                        Step.Sheet(ask(read), read.form)
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (_: Exception) {
+                        Step.Failed(SyncCopy.NOT_A_CODE)
+                    }
+            }
     }
 
-    /** A code scanned here after [Step.ScanHere]: it goes on at once, the user already said Sign in. */
+    /**
+     * A code scanned here after [Step.ScanHere]. The same code goes on at once: the user already said Sign in
+     * to it. Another one is a new sheet, so the name the user answers is always the scanned screen's.
+     */
     fun scannedHere(qr: String) {
-        code = qr
+        if (qr != code) return offer(qr, scanned = true)
         scanned = true
         signIn()
     }
@@ -131,11 +142,14 @@ class PairingApproval(
         }
     }
 
-    /** The sheet closed: no wait goes on. */
+    /** The sheet closed: nothing under way writes to it again, and no wait goes on. */
     fun close() {
+        work?.cancel()
+        work = null
         waiting?.cancel()
         waiting = null
         member = null
+        busy = false
         step = Step.Idle
     }
 
@@ -143,20 +157,21 @@ class PairingApproval(
         val qr = code ?: return
         if (busy) return
         busy = true
-        scope.launch {
-            try {
-                val joined = approve(qr, scanned, unlocked)
-                member = joined
-                step = Step.SigningIn(device)
-                waitFor(joined)
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                step = failed(e)
-            } finally {
-                busy = false
+        work =
+            scope.launch {
+                try {
+                    val joined = approve(qr, scanned, unlocked)
+                    member = joined
+                    step = Step.SigningIn(device)
+                    waitFor(joined)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    step = failed(e)
+                } finally {
+                    busy = false
+                }
             }
-        }
     }
 
     private fun waitFor(joined: String) {
