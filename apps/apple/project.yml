@@ -285,6 +285,8 @@ targets:
       - path: Marquee/Home/HeroLayout.swift
       - path: Marquee/Home/HeroText.swift
       - path: Marquee/Theme/Glyph.swift
+      # The pairing QR, rendered and read back at TV size in Tests/PairingQrTests.swift.
+      - path: Marquee/Theme/QRCode.swift
       - path: Marquee/Title/TitleHero.swift
       - path: Marquee/Title/TitleScores.swift
       - path: Marquee/Title/TitleEpisodes.swift

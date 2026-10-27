@@ -175,6 +175,7 @@ struct SyncField: View {
 /// use a phone.
 struct AddDeviceScreen: View {
     @Environment(SyncModel.self) private var sync
+    @Environment(ProfileSession.self) private var profiles
     @Environment(\.metrics) private var metrics
     @Environment(\.dismiss) private var dismiss
     @State private var step = ApproveStep.idle
@@ -185,8 +186,13 @@ struct AddDeviceScreen: View {
     @State private var member: String?
     @State private var busy = false
     @State private var waiting: Task<Void, Never>?
+    /// Bumped by every new code and by leaving: an answer that comes back after
+    /// the sheet moved on writes nothing (an approval sent cannot be called back).
+    @State private var generation = 0
 
     private typealias A = AccountWords
+
+    private var kids: Bool { profiles.snapshot?.current?.kids == true }
 
     var body: some View {
         ScrollView(.vertical) {
@@ -195,7 +201,14 @@ struct AddDeviceScreen: View {
                 #if os(tvOS)
                 Elsewhere(glyph: "qr-code", title: W.tvOnly, text: W.tvAdd)
                 #else
-                steps
+                if kids {
+                    Text(A.shared.approveKids)
+                        .textFont(Theme.type.body)
+                        .foregroundStyle(Theme.Palette.muted)
+                        .fixedSize(horizontal: false, vertical: true)
+                } else {
+                    steps
+                }
                 #endif
             }
             .frame(maxWidth: 760, alignment: .leading)
@@ -208,21 +221,27 @@ struct AddDeviceScreen: View {
         .topScrim()
         .task {
             // A link's code, taken once; none opens the scanner (one tap from the shortcut).
-            if let linked = AppRouter.shared.pendingCode {
+            if kids {
+                AppRouter.shared.pendingCode = nil
+            } else if let linked = AppRouter.shared.pendingCode {
                 AppRouter.shared.pendingCode = nil
                 offer(linked, scanned: false)
             } else {
                 scanning = true
             }
         }
-        .onDisappear { waiting?.cancel() }
+        .onDisappear {
+            generation += 1
+            waiting?.cancel()
+        }
         #if os(iOS)
         .fullScreenCover(isPresented: $scanning) {
             QRScanner { found in
                 scanning = false
                 let text = found.trimmingCharacters(in: .whitespacesAndNewlines)
-                // After "scan it here" the user already said Sign in: it goes on at once.
-                if step == .scanHere { signIn(text, scanned: true) } else { offer(text, scanned: true) }
+                // After "scan it here" the user already said Sign in to this code: it goes on at once.
+                // Another code is a new sheet, so the name answered is always the scanned screen's.
+                if step == .scanHere, text == code?.text { signIn(text, scanned: true) } else { offer(text, scanned: true) }
             } cancel: {
                 scanning = false
             }
@@ -297,17 +316,23 @@ struct AddDeviceScreen: View {
 
     /// A code arrived: it replaces any other, and its wait.
     private func offer(_ text: String, scanned: Bool) {
+        generation += 1
+        let mine = generation
         waiting?.cancel()
         member = nil
+        busy = false
         code = (text, scanned)
         Task {
+            let next: ApproveStep
             do {
                 let read = try await sync.readPairingCode(text)
+                guard mine == generation else { return }
                 device = read.name ?? A.shared.approveUnnamed
-                step = .sheet(ask: ApproveStep.ask(read), form: read.form)
+                next = .sheet(ask: ApproveStep.ask(read), form: read.form)
             } catch {
-                step = .failed(W.notACode)
+                next = .failed(W.notACode)
             }
+            if mine == generation { step = next }
         }
     }
 
@@ -315,37 +340,41 @@ struct AddDeviceScreen: View {
         guard !busy else { return }
         busy = true
         code = (text, scanned)
+        let mine = generation
         Task {
-            defer { busy = false }
+            defer { if mine == generation { busy = false } }
             do {
                 let joined = try await sync.approvePairing(text, scanned: scanned)
+                guard mine == generation else { return }
                 member = joined
                 step = .signingIn
                 announce(A.shared.approveSigningIn)
-                wait(for: joined)
+                wait(for: joined, mine: mine)
             } catch let error as CoreError where error.code == "scanRequired" {
+                guard mine == generation else { return }
                 step = .scanHere
                 scanning = true
             } catch {
-                step = .failed(ApproveStep.words(error))
+                if mine == generation { step = .failed(ApproveStep.words(error)) }
             }
         }
     }
 
     /// One poll of the device list, every 2 s up to 60 s, until the new device is in it.
-    private func wait(for joined: String) {
+    private func wait(for joined: String, mine: Int) {
         waiting?.cancel()
         waiting = Task {
             for _ in 0..<30 {
                 try? await Task.sleep(for: .seconds(2))
-                if Task.isCancelled { return }
+                if Task.isCancelled || mine != generation { return }
                 if let list = try? await sync.loadDevices(), list.members.contains(where: { $0.id == joined }) {
+                    guard mine == generation else { return }
                     step = .done
                     announce(AccountRules.fill(A.shared.approveDone, ["device": device]))
                     return
                 }
             }
-            step = .slow
+            if mine == generation { step = .slow }
         }
     }
 

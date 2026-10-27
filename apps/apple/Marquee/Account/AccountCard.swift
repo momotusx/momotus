@@ -31,10 +31,15 @@ struct AccountCard: View {
             owner: owner, kids: kids)
     }
 
+    private var isDeletion: Bool {
+        if case .deletion = card { true } else { false }
+    }
+
     var body: some View {
         // Right after a pairing, "Signed in from" the device that approved it,
         // for 8 s: a line nothing focuses (plans/tv-qr-login.md 5.5).
-        if let by = sync.joinedBy {
+        // A scheduled deletion still comes first.
+        if let by = sync.joinedBy, !isDeletion {
             Said(tone: .ok, text: AccountRules.fill(words.tvSignedInFrom, ["device": by]))
                 .task {
                     try? await Task.sleep(for: .seconds(8))

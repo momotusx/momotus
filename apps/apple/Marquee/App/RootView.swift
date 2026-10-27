@@ -276,8 +276,8 @@ struct MainShell: View {
             .environment(profiles)
             .environment(\.metrics, metrics)
         })
-        // Never on a kids profile: Account and approving are not its own.
-        .onChange(of: AppRouter.shared.scanRequests) { if profiles.snapshot?.current?.kids != true { showScanner = true } }
+        // On a kids profile the sheet only says to ask a grown-up: approving is not its own.
+        .onChange(of: AppRouter.shared.scanRequests) { showScanner = true }
         // A phone camera on a TV's code opens /pair here: the approve sheet with that code (plans/tv-qr-login.md 5.6).
         .onContinueUserActivity(NSUserActivityTypeBrowsingWeb) { activity in
             guard let url = activity.webpageURL, let code = AccountRules.pairingCode(url, linkHost: PasskeyContract.relyingParty) else { return }
