@@ -3,6 +3,7 @@ import type { BlockedVersions } from "./BlockedVersions";
 import type { EmptyVersions } from "./EmptyVersions";
 import type { HiddenSummary } from "./HiddenSummary";
 import type { LearnedNote } from "./LearnedNote";
+import type { SourceRows } from "./SourceRows";
 import type { VersionRow } from "./VersionRow";
 import type { VersionSection } from "./VersionSection";
 import type { VersionsConditions } from "./VersionsConditions";
@@ -53,4 +54,10 @@ sections: Array<VersionSection>,
  * windows and the full deadline, but a swarm where no peer unchoked by
  * the end of the first window (30 s) is let go then.
  */
-nobodySharing: boolean, };
+nobodySharing: boolean, 
+/**
+ * "From the Internet Archive" (plans/plugins-and-marketplace.md 4.4,
+ * 5): its own pass, after the addons' rows, never the pick, never a
+ * failover; `done` never waits for it.
+ */
+archive: SourceRows, };

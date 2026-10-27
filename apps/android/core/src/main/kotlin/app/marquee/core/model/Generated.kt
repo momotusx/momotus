@@ -1183,6 +1183,10 @@ data class Prefs(
     val learnedEpoch: Int,
     /** Discover's last choice, which it opens on (plans/discover-v2.md 6.1). */
     val discover: DiscoverPrefs = DiscoverPrefs(),
+    /** Films from the Internet Archive in Versions (plans/plugins-and-marketplace.md 5.1). */
+    val archive: Boolean = true,
+    /** A screen showed this profile the Archive line: the first-run addon step, the Versions notice or the Settings notice. Until then the core never contacts archive.org for it. */
+    val archiveNoticeSeen: Boolean = false,
 )
 
 @Serializable
@@ -1397,6 +1401,21 @@ data class RestoreAnswer(
     val tombstones: List<DebridTombstone> = emptyList(),
 )
 
+/** Where a row comes from: an installed addon, ranked for the pick, or a built-in source listed in a section of its own and never picked (plans/plugins-and-marketplace.md 4.4). */
+@Serializable(with = RowOrigin.Serializer::class)
+enum class RowOrigin(
+    val wire: String,
+) {
+    Addon("addon"),
+    Archive("archive"),
+
+    /** A value from a newer core that this app does not know yet. */
+    Unknown(""),
+    ;
+
+    object Serializer : FallbackEnumSerializer<RowOrigin>("RowOrigin", RowOrigin.entries, RowOrigin::wire, Unknown)
+}
+
 @Serializable
 @JsonClassDiscriminator("state")
 sealed interface RowState {
@@ -1594,6 +1613,13 @@ enum class SourceClass(
 
     object Serializer : FallbackEnumSerializer<SourceClass>("SourceClass", SourceClass.entries, SourceClass::wire, Unknown)
 }
+
+/** The rows of a source that ranks in a pass of its own, in that pass's order, and whether it is still working (an item being read). */
+@Serializable
+data class SourceRows(
+    val rows: List<VersionRow> = emptyList(),
+    val pending: Boolean,
+)
 
 /** A connection's speed for one kind of source, in Mbit/s, and how many playbacks measured it (0: the prior). */
 @Serializable
@@ -2102,6 +2128,12 @@ data class VersionRow(
     val score: RankKey,
     /** "On this device": the version last played for this video, and this device holds its start at the resume point, so it starts with no peer (plans/player-polish.md 2b). Show it as the row's line. */
     val onDevice: String? = null,
+    /** Where the row comes from (plans/plugins-and-marketplace.md 4.4). */
+    val origin: RowOrigin = RowOrigin.Addon,
+    /** The host an Archive row plays from, in punycode; null for an addon's row. */
+    val host: String? = null,
+    /** "Internet Archive" on an Archive row; null for an addon's row. */
+    val sourceName: String? = null,
 )
 
 /** What the ranking read for this view, for the header "This TV: 4K HDR, about 42 Mbit/s on Wi-Fi, 61 GB free". */
@@ -2160,6 +2192,8 @@ data class VersionsSnapshot(
     val sections: List<VersionSection> = emptyList(),
     /** Every listed version is a swarm the engine would fetch whose trackers count one seeder or none: almost nobody is sharing this title right now, so say so before Play. Its attempt keeps the stall windows and the full deadline, but a swarm where no peer unchoked by the end of the first window (30 s) is let go then. */
     val nobodySharing: Boolean,
+    /** "From the Internet Archive" (plans/plugins-and-marketplace.md 4.4, 5): its own pass, after the addons' rows, never the pick, never a failover; `done` never waits for it. */
+    val archive: SourceRows = SourceRows(pending = false),
 )
 
 @Serializable

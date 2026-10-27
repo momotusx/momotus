@@ -1710,14 +1710,23 @@ async fn reachable(
         ),
         _ => {}
     }
-    urls.extend(stream.addon_url.as_ref().map(ToString::to_string));
+    // A built-in source (`mq-builtin:`) has no link to ask, and its file is
+    // asked as its playback asks it, held to its hosts.
+    let builtin = (stream.addon_url.as_ref()).filter(|u| u.scheme() == "mq-builtin");
+    let http = match builtin {
+        Some(link) => mq_server::upstream_http(core.http(), Some(link)),
+        None => {
+            urls.extend(stream.addon_url.as_ref().map(ToString::to_string));
+            core.http().clone()
+        }
+    };
     let opts = mq_http::RequestOptions {
         timeout: REACH,
         allow_private: true,
         ..Default::default()
     };
     for url in urls.iter().take(3) {
-        let asked = tokio::time::timeout(REACH, core.http().get_range(url, 0, 1, &opts)).await;
+        let asked = tokio::time::timeout(REACH, http.get_range(url, 0, 1, &opts)).await;
         if let Ok(
             Ok(_) | Err(mq_http::HttpError::Status { .. } | mq_http::HttpError::TooLarge { .. }),
         ) = asked

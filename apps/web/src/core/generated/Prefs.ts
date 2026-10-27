@@ -41,4 +41,15 @@ learnedEpoch: number,
 /**
  * Discover's last choice, which it opens on (plans/discover-v2.md 6.1).
  */
-discover: DiscoverPrefs, };
+discover: DiscoverPrefs, 
+/**
+ * Films from the Internet Archive in Versions
+ * (plans/plugins-and-marketplace.md 5.1).
+ */
+archive: boolean, 
+/**
+ * A screen showed this profile the Archive line: the first-run addon
+ * step, the Versions notice or the Settings notice. Until then the
+ * core never contacts archive.org for it.
+ */
+archiveNoticeSeen: boolean, };

@@ -3,6 +3,7 @@ import type { Group } from "./Group";
 import type { RankKey } from "./RankKey";
 import type { Reason } from "./Reason";
 import type { ReasonLine } from "./ReasonLine";
+import type { RowOrigin } from "./RowOrigin";
 import type { SourceClass } from "./SourceClass";
 import type { VersionStatus } from "./VersionStatus";
 
@@ -42,4 +43,17 @@ score: RankKey,
  * device holds its start at the resume point, so it starts with no
  * peer (plans/player-polish.md 2b). Show it as the row's line.
  */
-onDevice: string | null, };
+onDevice: string | null, 
+/**
+ * Where the row comes from (plans/plugins-and-marketplace.md 4.4).
+ */
+origin: RowOrigin, 
+/**
+ * The host an Archive row plays from, in punycode; null for an
+ * addon's row.
+ */
+host: string | null, 
+/**
+ * "Internet Archive" on an Archive row; null for an addon's row.
+ */
+sourceName: string | null, };

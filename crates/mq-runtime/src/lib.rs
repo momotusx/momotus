@@ -3,6 +3,8 @@
 //! Each view is a typed object. Records are delivered as whole snapshots,
 //! lists as index-based diffs coalesced to one batch per frame.
 
+#[doc(hidden)]
+pub mod archive;
 mod core;
 mod covers;
 mod debrid;
@@ -64,6 +66,6 @@ pub use views::sign_in::{SignInSnapshot, SignInView};
 pub use views::title::{Episode, TitleHeader, TitleUpdate, TitleView};
 pub use views::versions::{
     BlockedReason, BlockedVersions, EmptyAction, EmptyKind, EmptyVersions, Pick, PickHandle,
-    SectionQuality, TitleFacts, VersionRow, VersionSection, VersionStatus, VersionsConditions,
-    VersionsParams, VersionsSnapshot, VersionsView,
+    RowOrigin, SectionQuality, SourceRows, TitleFacts, VersionRow, VersionSection, VersionStatus,
+    VersionsConditions, VersionsParams, VersionsSnapshot, VersionsView,
 };

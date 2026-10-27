@@ -16,6 +16,7 @@ pub(crate) fn migrations() -> Migrations<'static> {
         M::up(V12),
         M::up_with_hook(V13, hash_addon_links),
         M::up(V14),
+        M::up(V15),
     ])
 }
 
@@ -424,6 +425,19 @@ CREATE TABLE imdb_ids (
 );
 "#;
 
+/// The Internet Archive's film list (plans/plugins-and-marketplace.md 5.2):
+/// one row per film by normalized title and year, device-wide, never
+/// synced and not a profile's (a public list, not what anyone watched).
+const V15: &str = r#"
+CREATE TABLE archive_index (
+    title       TEXT NOT NULL,
+    year        INTEGER NOT NULL,
+    identifier  TEXT NOT NULL,
+    downloads   INTEGER NOT NULL,
+    PRIMARY KEY (title, year)
+) WITHOUT ROWID;
+"#;
+
 #[cfg(test)]
 mod tests {
     use super::migrations;
@@ -478,7 +492,8 @@ mod tests {
         };
         let (schema_before, rows_before) = (schema(&c), rows(&c));
         assert!(rows_before.iter().any(|r| r.starts_with("library_items: ")));
-        migrations().to_latest(&mut c).unwrap();
+        // V14 alone: a later version adds tables of its own.
+        migrations().to_version(&mut c, 14).unwrap();
         let left: i64 = c
             .query_row(
                 "SELECT COUNT(*) FROM sqlite_master WHERE tbl_name = 'ratings'",

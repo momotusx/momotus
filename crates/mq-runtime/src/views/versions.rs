@@ -65,6 +65,42 @@ pub struct VersionRow {
     /// device holds its start at the resume point, so it starts with no
     /// peer (plans/player-polish.md 2b). Show it as the row's line.
     pub on_device: Option<String>,
+    /// Where the row comes from (plans/plugins-and-marketplace.md 4.4).
+    pub origin: RowOrigin,
+    /// The host an Archive row plays from, in punycode; null for an
+    /// addon's row.
+    pub host: Option<String>,
+    /// "Internet Archive" on an Archive row; null for an addon's row.
+    pub source_name: Option<String>,
+}
+
+/// Where a row comes from: an installed addon, ranked for the pick, or a
+/// built-in source listed in a section of its own and never picked
+/// (plans/plugins-and-marketplace.md 4.4).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[cfg_attr(
+    feature = "ts",
+    derive(ts_rs::TS),
+    ts(export, export_to = "../../../apps/web/src/core/generated/")
+)]
+#[serde(rename_all = "camelCase")]
+pub enum RowOrigin {
+    Addon,
+    Archive,
+}
+
+/// The rows of a source that ranks in a pass of its own, in that pass's
+/// order, and whether it is still working (an item being read).
+#[derive(Debug, Clone, Default, PartialEq, Serialize)]
+#[cfg_attr(
+    feature = "ts",
+    derive(ts_rs::TS),
+    ts(export, export_to = "../../../apps/web/src/core/generated/")
+)]
+#[serde(rename_all = "camelCase")]
+pub struct SourceRows {
+    pub rows: Vec<VersionRow>,
+    pub pending: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -139,6 +175,10 @@ pub struct VersionsSnapshot {
     /// windows and the full deadline, but a swarm where no peer unchoked by
     /// the end of the first window (30 s) is let go then.
     pub nobody_sharing: bool,
+    /// "From the Internet Archive" (plans/plugins-and-marketplace.md 4.4,
+    /// 5): its own pass, after the addons' rows, never the pick, never a
+    /// failover; `done` never waits for it.
+    pub archive: SourceRows,
 }
 
 /// What the ranking read for this view, for the header "This TV: 4K HDR,
@@ -382,6 +422,11 @@ struct State {
     /// A kids profile: what keeps it from playing is said in a child's
     /// words.
     kids: bool,
+    /// The Internet Archive's streams for this film, their own pass, and
+    /// whether it is still asking (plans/plugins-and-marketplace.md 4.4).
+    archive: Vec<ParsedStream>,
+    archive_ranked: Ranked,
+    archive_pending: bool,
 }
 
 pub struct VersionsView {
@@ -935,6 +980,10 @@ impl VersionsView {
             kept_checked: !cfg!(feature = "torrent"),
             addons: eligible.len(),
             kids: verified.is_some(),
+            archive: Vec::new(),
+            archive_ranked: Ranked::default(),
+            // Movies only (5.3), for a profile that may contact archive.org.
+            archive_pending: params.kind == "movie" && crate::archive::wanted(core),
         }));
         let snapshot = SharedObservable::new(render(&lock(&state)));
         let mut tasks = JoinSet::new();
@@ -958,6 +1007,14 @@ impl VersionsView {
             state.clone(),
             snapshot.clone(),
         ));
+        if lock(&state).archive_pending {
+            tasks.spawn(archive_pass(
+                core.clone(),
+                ranking.clone(),
+                state.clone(),
+                snapshot.clone(),
+            ));
+        }
         tasks.spawn(supervise(
             core.clone(),
             (changes, accounts),
@@ -1013,6 +1070,9 @@ impl VersionsView {
             kept_checked: true,
             addons: 0,
             kids: true,
+            archive: Vec::new(),
+            archive_ranked: Ranked::default(),
+            archive_pending: false,
         };
         Self {
             core: core.clone(),
@@ -1086,6 +1146,17 @@ impl VersionsView {
     /// The stream for row `key` followed by its failover chain, for playback.
     pub fn candidates(&self, key: &str) -> Vec<ParsedStream> {
         let s = lock(&self.state);
+        // An Archive row plays from its own pass alone (4.4).
+        if key.starts_with(crate::archive::KEY_PREFIX) {
+            return holding(&s.archive_ranked.rows, |st| st.key == key)
+                .map(|r| {
+                    std::iter::once(&r.stream)
+                        .chain(&r.failover)
+                        .cloned()
+                        .collect()
+                })
+                .unwrap_or_default();
+        }
         // The frozen pick plays its own source first, wherever a later
         // answer folded it (code review 2026-10-20 P2-3).
         let row = s
@@ -1282,6 +1353,39 @@ async fn supervise(
         restart(&mut s, &addons);
         snapshot.set(render(&s));
     }
+}
+
+/// The Internet Archive's rows for this film (plans/plugins-and-marketplace.md
+/// 5.3), ranked in a pass of their own: the title the app sent (the meta's
+/// name) and its year. An addon change leaves them (`restart`).
+async fn archive_pass(
+    core: Core,
+    ranking: Arc<Ranking>,
+    state: Arc<Mutex<State>>,
+    snapshot: SharedObservable<VersionsSnapshot>,
+) {
+    let p = &ranking.params;
+    let year = p.target.year.or(p.facts.title_year);
+    let found = crate::archive::streams(&core, &[p.target.title.as_str()], year).await;
+    let mut s = lock(&state);
+    s.archive = found;
+    s.archive_pending = false;
+    rank_archive(&mut s, &ranking);
+    snapshot.set(render(&s));
+}
+
+/// The Archive pass: its streams ranked alone, with the view's input.
+fn rank_archive(s: &mut State, ranking: &Ranking) {
+    let params = &ranking.params;
+    let input = RankInput {
+        caps: &params.caps,
+        prefs: &params.prefs,
+        target: &params.target,
+        last_binge_group: params.last_binge_group.as_deref(),
+        kids: ranking.kids.as_deref(),
+        conditions: &s.rank,
+    };
+    s.archive_ranked = rank(s.archive.clone(), &input);
 }
 
 /// A streaming account came, went or was replaced: the rows rank by the
@@ -2026,6 +2130,7 @@ fn rerank(s: &mut State, ranking: &Ranking) {
             s.recommended = Some(row);
         }
     }
+    rank_archive(s, ranking);
     reblock(s, ranking);
 }
 
@@ -2164,6 +2269,12 @@ fn render(s: &State) -> VersionsSnapshot {
         sharper: shortcut_row(&s.sharper),
         sections,
         nobody_sharing: nobody_sharing(s),
+        archive: SourceRows {
+            rows: (s.archive_ranked.rows.iter())
+                .map(|r| row_dto(r, kept, s.rank.debrid))
+                .collect(),
+            pending: s.archive_pending,
+        },
     }
 }
 
@@ -2185,6 +2296,10 @@ fn empty(s: &State) -> Option<EmptyVersions> {
     // The refused view asks no addon.
     if s.kids && s.addons == 0 {
         return named(EmptyKind::KidsNothing, EmptyAction::None);
+    }
+    // The Archive may still list this film, or lists it (4.4).
+    if s.archive_pending || !s.archive_ranked.rows.is_empty() {
+        return None;
     }
     if !s.done || !s.ranked.rows.is_empty() {
         return None;
@@ -2265,6 +2380,7 @@ fn row_dto(r: &RankedRow, kept: Option<&str>, account: bool) -> VersionRow {
         Some(st.key.as_str()) == kept && crate::views::playback::by_engine(st, account, true)
     });
     let rel = &s.release;
+    let archive = s.key.starts_with(crate::archive::KEY_PREFIX);
     VersionRow {
         key: s.key.clone(),
         quality: quality_word(rel.resolution.height(), rel.quality),
@@ -2289,6 +2405,13 @@ fn row_dto(r: &RankedRow, kept: Option<&str>, account: bool) -> VersionRow {
         bitrate_mbps: r.bitrate_mbps,
         score: r.key,
         on_device: on_device.then(|| crate::views::playback::ON_DEVICE.to_owned()),
+        origin: if archive {
+            RowOrigin::Archive
+        } else {
+            RowOrigin::Addon
+        },
+        host: archive.then(|| crate::archive::HOST.to_owned()),
+        source_name: archive.then(|| crate::archive::NAME.to_owned()),
     }
 }
 

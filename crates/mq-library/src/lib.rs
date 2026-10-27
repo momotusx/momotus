@@ -5,6 +5,7 @@
 //! (profile, video), watched is one boolean per (profile, video). Every synced
 //! row carries an `hlc` string that sorts in causal order.
 
+mod archive;
 pub mod hlc;
 mod policy;
 mod profiles;
@@ -13,6 +14,7 @@ mod store;
 mod sync;
 mod tracker;
 
+pub use archive::ArchiveFilm;
 pub use hlc::{Hlc, HlcClock};
 
 pub use policy::{AllowedList, AllowedRow, Authorization, MAX_ALLOWED, Policy};

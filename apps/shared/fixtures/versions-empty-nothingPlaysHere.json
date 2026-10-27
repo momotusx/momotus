@@ -1,4 +1,8 @@
 {
+  "archive": {
+    "pending": false,
+    "rows": []
+  },
   "blocked": {
     "count": 1,
     "reason": "nothingPlaysHere",
@@ -8,6 +12,7 @@
         "failoverCount": 0,
         "features": [],
         "group": "best",
+        "host": null,
         "key": "url:http://127.0.0.1:1/v.mp4",
         "languages": [],
         "line": {
@@ -16,6 +21,7 @@
           "sizeBytes": null
         },
         "onDevice": null,
+        "origin": "addon",
         "quality": "1080p",
         "reasons": [
           "readyNow",
@@ -40,6 +46,7 @@
         },
         "sizeBytes": null,
         "sourceClass": "ready",
+        "sourceName": null,
         "status": {
           "kind": "direct"
         },
@@ -79,6 +86,7 @@
         "failoverCount": 0,
         "features": [],
         "group": "best",
+        "host": null,
         "key": "url:http://127.0.0.1:1/v.mp4",
         "languages": [],
         "line": {
@@ -87,6 +95,7 @@
           "sizeBytes": null
         },
         "onDevice": null,
+        "origin": "addon",
         "quality": "1080p",
         "reasons": [
           "readyNow",
@@ -111,6 +120,7 @@
         },
         "sizeBytes": null,
         "sourceClass": "ready",
+        "sourceName": null,
         "status": {
           "kind": "direct"
         },

@@ -133,9 +133,10 @@ pub(crate) const PROFILE_TABLES: [&str; 18] = [
 /// Tables that hold no profile's rows: sync's own state, the device's, the
 /// tombstones, `http_cache`, which is cleared whole when a profile goes
 /// (its keys are addon URLs, which can carry a profile's keys and searches),
-/// and `imdb_ids`, cleared with it (its ids are titles the profile saw).
+/// `imdb_ids`, cleared with it (its ids are titles the profile saw), and
+/// `archive_index`, a public film list.
 #[cfg(test)]
-pub(crate) const DEVICE_TABLES: [&str; 7] = [
+pub(crate) const DEVICE_TABLES: [&str; 8] = [
     "sync_state",
     "sync_outbox",
     "sync_roster",
@@ -143,6 +144,7 @@ pub(crate) const DEVICE_TABLES: [&str; 7] = [
     "profile_gone",
     "http_cache",
     "imdb_ids",
+    "archive_index",
 ];
 
 /// Deletes every row of a gone profile.

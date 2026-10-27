@@ -147,6 +147,8 @@ struct Inner {
     /// TurkceAltyazi.org, read on this device: its caches and its one
     /// request at a time.
     turkcealtyazi: std::sync::OnceLock<Arc<mq_turkcealtyazi::Site>>,
+    /// The Internet Archive source: its fetch state and the items read.
+    archive: std::sync::OnceLock<crate::archive::Archive>,
     /// Each genre's art for the genre grids, by catalog and genre (core
     /// backlog C43), with when it was looked up.
     genre_art: std::sync::Mutex<HashMap<String, crate::views::genres::Looked>>,
@@ -295,6 +297,7 @@ impl Core {
                 pulled: std::sync::atomic::AtomicBool::new(false),
                 live_seeders: std::sync::Mutex::default(),
                 turkcealtyazi: std::sync::OnceLock::new(),
+                archive: std::sync::OnceLock::new(),
                 genre_art: std::sync::Mutex::default(),
                 walk,
             }),
@@ -342,6 +345,21 @@ impl Core {
     pub fn use_turkcealtyazi_at(&self, origin: url::Url, limits: mq_turkcealtyazi::Limits) {
         let site = mq_turkcealtyazi::Site::with(self.http().clone(), origin, limits);
         let _ = self.inner.turkcealtyazi.set(Arc::new(site));
+    }
+
+    /// The built-in Internet Archive source (plans/plugins-and-marketplace.md 5).
+    pub(crate) fn archive(&self) -> &crate::archive::Archive {
+        self.inner.archive.get_or_init(|| {
+            let origin = url::Url::parse(crate::archive::ORIGIN).expect("a valid origin");
+            crate::archive::Archive::new(origin)
+        })
+    }
+
+    /// Tests: the Archive source at a fixture `origin`; only before its
+    /// first use.
+    #[doc(hidden)]
+    pub fn use_archive_at(&self, origin: url::Url) {
+        let _ = self.inner.archive.set(crate::archive::Archive::new(origin));
     }
 
     pub fn segments(&self) -> &crate::segments::Finder {

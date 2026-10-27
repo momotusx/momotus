@@ -75,6 +75,12 @@ const DEFAULTED = new Map([
   ["DiscoverSnapshot.genreLabel", "\"Genre\""],
   ["DiscoverSnapshot.scope", "Scope(services = 0, failed = 0, pending = 0)"],
   ["Prefs.discover", "DiscoverPrefs()"],
+  // The Internet Archive source (plans/plugins-and-marketplace.md 4.4, 5): an older core sends
+  // none of these, and its rows are all addon rows.
+  ["Prefs.archive", "true"],
+  ["Prefs.archiveNoticeSeen", "false"],
+  ["VersionRow.origin", "RowOrigin.Addon"],
+  ["VersionsSnapshot.archive", "SourceRows(pending = false)"],
   ["PlaybackSnapshot.retries", "0"],
   // plans/play-every-version.md 2e: an older core never offers another version mid-start.
   ["PlaybackSnapshot.chooseAnother", "false"],

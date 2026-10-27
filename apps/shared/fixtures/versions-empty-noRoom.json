@@ -1,4 +1,8 @@
 {
+  "archive": {
+    "pending": false,
+    "rows": []
+  },
   "blocked": {
     "count": 2,
     "reason": "noSpace",
@@ -8,6 +12,7 @@
         "failoverCount": 0,
         "features": [],
         "group": "best",
+        "host": null,
         "key": "bt:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:0",
         "languages": [],
         "line": {
@@ -16,6 +21,7 @@
           "sizeBytes": 2147483648
         },
         "onDevice": null,
+        "origin": "addon",
         "quality": "1080p",
         "reasons": [
           "playsDirectly",
@@ -40,6 +46,7 @@
         },
         "sizeBytes": 2147483648,
         "sourceClass": "swarm",
+        "sourceName": null,
         "status": {
           "kind": "torrent",
           "seeds": 900
@@ -51,6 +58,7 @@
         "failoverCount": 0,
         "features": [],
         "group": "best",
+        "host": null,
         "key": "bt:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb:1",
         "languages": [],
         "line": {
@@ -60,6 +68,7 @@
           "sizeBytes": 1610612736
         },
         "onDevice": null,
+        "origin": "addon",
         "quality": "1080p",
         "reasons": [
           "playsDirectly",
@@ -84,6 +93,7 @@
         },
         "sizeBytes": 1610612736,
         "sourceClass": "swarm",
+        "sourceName": null,
         "status": {
           "kind": "torrent",
           "seeds": 100

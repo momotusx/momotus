@@ -44,6 +44,13 @@ pub struct Prefs {
     pub learned_epoch: u32,
     /// Discover's last choice, which it opens on (plans/discover-v2.md 6.1).
     pub discover: DiscoverPrefs,
+    /// Films from the Internet Archive in Versions
+    /// (plans/plugins-and-marketplace.md 5.1).
+    pub archive: bool,
+    /// A screen showed this profile the Archive line: the first-run addon
+    /// step, the Versions notice or the Settings notice. Until then the
+    /// core never contacts archive.org for it.
+    pub archive_notice_seen: bool,
 }
 
 /// Discover's kind, service, sort, genre and decade, as `select` takes
@@ -109,6 +116,8 @@ impl Default for Prefs {
             learned: crate::learn::LearnedByClass::default(),
             learned_epoch: 0,
             discover: DiscoverPrefs::default(),
+            archive: true,
+            archive_notice_seen: false,
         }
     }
 }
@@ -212,6 +221,10 @@ impl Core {
         for (leaf, value) in writes {
             self.library()
                 .set_setting(self.profile(), &leaf, &value, self.clock())?;
+        }
+        // The Archive's list goes once no profile here wants it (5.1).
+        if fields.contains_key("archive") {
+            crate::archive::forget_unwanted(self);
         }
         // A preference set by hand zeroes what learning counted for it (3.9).
         let by_hand: Vec<LearnedChoice> = [
