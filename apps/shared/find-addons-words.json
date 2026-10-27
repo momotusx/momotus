@@ -38,5 +38,8 @@
   "emptyFrom": "Nothing to show from {host} here.",
   "more": "Showing the first {n} of this list.",
   "searchLabel": "Search this list",
-  "searchEmpty": "Nothing in this list matches."
+  "searchEmpty": "Nothing in this list matches.",
+  "noRoom": "Too many lists to show this one here. Remove an addon to see it.",
+  "matching": "{n} matching",
+  "fromHint": "Opens the website"
 }

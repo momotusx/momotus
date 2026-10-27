@@ -14,7 +14,7 @@ import type { ListedAddon } from "../core/generated/ListedAddon";
 import { onProfileReset } from "../core/profiles";
 import { focusEl, isBackKey } from "../focus/dom";
 import { form } from "../form";
-import { type Action, cardAction, type Filter, filterEmpty, filters, initial, listLabel, matches, providesLine, repeatedNames, shows, spoken } from "../lib/find-addons";
+import { type Action, cardAction, type Filter, filterEmpty, filters, initial, matches, providesLine, queryWords, repeatedNames, shows, spoken } from "../lib/find-addons";
 import { cards, forgetAllCards, forgetCard, runCard } from "../lib/install-cards";
 import { findAddons as w, providesText } from "../lib/words";
 import { InstallField } from "./addons";
@@ -165,9 +165,15 @@ function Lists(props: { fresh: boolean; picks: Picks; onPicks: (p: Partial<Picks
   const ready = (id: string) => lists().find((l) => l.id === id)?.state.state === "ready";
   const count = (id: string) => (ready(id) ? lists().find((l) => l.id === id)?.entries.length.toString() : undefined);
   // Each entry keeps its place in the whole list, so its focus key holds across filters.
+  // The query folded once per change; each entry's folded text is kept (lib/find-addons).
+  const words = createMemo(() => queryWords(props.picks.query));
   const visible = createMemo(() =>
-    (current()?.entries ?? []).map((entry, at) => ({ entry, at })).filter(({ entry }) => shows(entry, props.picks.filter) && matches(entry, props.picks.query)),
+    (current()?.entries ?? []).map((entry, at) => ({ entry, at })).filter(({ entry }) => shows(entry, props.picks.filter) && matches(entry, words())),
   );
+  // The picked list went (its addon was turned off or removed): Official, not "Asking" for ever.
+  createEffect(() => {
+    if (lists().length > 0 && !current()) props.onPicks({ list: "official", shown: PAGE, query: "" });
+  });
   // A publisher's list (an addon the user installed) names where it comes from.
   const host = () => current()?.host ?? null;
   const repeated = createMemo(() => repeatedNames(current()?.entries ?? []));
@@ -196,25 +202,13 @@ function Lists(props: { fresh: boolean; picks: Picks; onPicks: (p: Partial<Picks
         <Chips
           label={w.listLabel}
           group="fa-lists"
-          items={lists().map((l) => ({ value: l.id, label: listLabel(l, lists()), note: count(l.id) }))}
+          items={lists().map((l) => ({ value: l.id, label: l.name, note: count(l.id) }))}
           selected={props.picks.list}
           onSelect={(list) => props.onPicks({ list, shown: PAGE, query: "" })}
           autofocus
         />
         <Chips label={w.showLabel} group="fa-filter" items={filters} selected={props.picks.filter} onSelect={(filter) => props.onPicks({ filter, shown: PAGE })} />
       </div>
-      <Show when={host()}>
-        {(from) => (
-          <p class="fa-from">
-            <Show when={!tv()} fallback={w.fromList.replace("{host}", from())}>
-              <a href={`https://${from()}/`} target="_blank" rel="noopener noreferrer" data-f="fa:from">
-                {w.fromList.replace("{host}", from())}
-                <ExternalLink aria-hidden />
-              </a>
-            </Show>
-          </p>
-        )}
-      </Show>
       <Show when={props.picks.list !== "official"}>
         <p class="fa-note">
           <Info aria-hidden />
@@ -231,8 +225,24 @@ function Lists(props: { fresh: boolean; picks: Picks; onPicks: (p: Partial<Picks
           value={props.picks.query}
           onInput={(e) => props.onPicks({ query: e.currentTarget.value, shown: PAGE })}
         />
+        <p class="sr" role="status" aria-live="polite">
+          {props.picks.query.trim() ? w.matching.replace("{n}", String(visible().length)) : ""}
+        </p>
       </Show>
       <div class="fa-tools">
+        <Show when={host()}>
+          {(from) => (
+            <p class="fa-from">
+              {/* The core sends hosts of enabled addons on public hosts only: a link there leaves the app on purpose. */}
+              <Show when={!tv()} fallback={w.fromList.replace("{host}", from())}>
+                <a href={`https://${from()}/`} target="_blank" rel="noopener noreferrer" data-f="fa:from" title={w.fromHint}>
+                  {w.fromList.replace("{host}", from())}
+                  <ExternalLink aria-hidden />
+                </a>
+              </Show>
+            </p>
+          )}
+        </Show>
         <Switch>
           <Match when={!failure() && (!current() || current()?.state.state === "loading")}>
             <p class="st warn live" role="status">
@@ -273,6 +283,9 @@ function Lists(props: { fresh: boolean; picks: Picks; onPicks: (p: Partial<Picks
             </For>
           </ul>
         </Match>
+        <Match when={current()?.entries.length === 0 && current()?.more}>
+          <p class="note">{w.noRoom}</p>
+        </Match>
         <Match when={current()?.entries.length === 0}>
           <p class="note">{host() ? w.emptyFrom.replace("{host}", host() ?? "") : w.empty}</p>
         </Match>
@@ -283,6 +296,9 @@ function Lists(props: { fresh: boolean; picks: Picks; onPicks: (p: Partial<Picks
           <p class="note">{filterEmpty(props.picks.filter as Exclude<Filter, "all">)}</p>
         </Match>
         <Match when={true}>
+          <Show when={current()?.more}>
+            <p class="note fa-more">{w.more.replace("{n}", String(current()?.entries.length ?? 0))}</p>
+          </Show>
           <ul class="fa-grid" onKeyDown={back}>
             <For each={visible().slice(0, props.picks.shown)}>
               {(item) => <Card entry={item.entry} fkey={`fa:${props.picks.list}:${item.at}`} sameName={repeated().has(item.entry.name)} />}
@@ -290,9 +306,6 @@ function Lists(props: { fresh: boolean; picks: Picks; onPicks: (p: Partial<Picks
           </ul>
           <Show when={visible().length > props.picks.shown}>
             <div class="sentinel" ref={more} />
-          </Show>
-          <Show when={current()?.more && visible().length <= props.picks.shown}>
-            <p class="note fa-more">{w.more.replace("{n}", String(current()?.entries.length ?? 0))}</p>
           </Show>
         </Match>
       </Switch>
@@ -304,7 +317,14 @@ export default function FindAddons() {
   const saved = savedPicks();
   const [picks, setPicks] = createSignal<Picks>(saved);
   const update = (p: Partial<Picks>) => setPicks({ ...picks(), ...p });
-  createEffect(() => history.replaceState({ ...(history.state ?? {}), findAddons: picks() }, ""));
+  // Kept in the history entry, written once typing and scrolling settle (Safari refuses more than 100 writes in 30 s).
+  let pending: ReturnType<typeof setTimeout> | undefined;
+  createEffect(() => {
+    const now = picks();
+    clearTimeout(pending);
+    pending = setTimeout(() => history.replaceState({ ...(history.state ?? {}), findAddons: now }, ""), 300);
+  });
+  onCleanup(() => clearTimeout(pending));
   // Try again and Refresh close the view and open it with `fresh`, which
   // waits for the network instead of the addon cache; results from before
   // are about the old list.

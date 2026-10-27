@@ -2,7 +2,6 @@
  * sends facts (`installed`, `configuration`); these rules turn them into one
  * action, the same on every app (plans/m12-addon-discovery.md 3.2). */
 
-import type { AddonList } from "../core/generated/AddonList";
 import type { ListedAddon } from "../core/generated/ListedAddon";
 import { kindLabel, providesText, findAddons as w } from "./words";
 
@@ -92,23 +91,31 @@ export function spoken(entry: ListedAddon, act: Action, sameName: boolean, provi
   return parts.filter(Boolean).join(", ");
 }
 
-const nameOf = (list: AddonList) => (list.id === "official" ? w.official : list.id === "community" ? w.communityList : list.name);
+/** Letters that do not decompose, written as their plain Latin, the same on
+ * every app (apps/shared/find-addons-fold.json). */
+const PLAIN: Record<string, string> = { ı: "i", İ: "i", ł: "l", Ł: "l", ø: "o", Ø: "o", đ: "d", Đ: "d", ß: "ss", æ: "ae", Æ: "ae", œ: "oe", Œ: "oe" };
 
-/** A list's chip: its name, with its host when another list has the same name
- * (a publisher may call its list "Official"; Cinemeta's own lists have no host). */
-export function listLabel(list: AddonList, lists: AddonList[]): string {
-  const name = nameOf(list);
-  const same = lists.some((l) => l.id !== list.id && nameOf(l).toLocaleLowerCase("en") === name.toLocaleLowerCase("en"));
-  return same && list.host ? `${name}, ${list.host}` : name;
-}
+/** Text compared case and accents aside: "Türkçe Altyazı" finds "turkce altyazi". */
+export const fold = (text: string) =>
+  text
+    .replace(/[ıİłŁøØđĐßæÆœŒ]/g, (c) => PLAIN[c] ?? c)
+    .normalize("NFD")
+    .replace(/\p{M}/gu, "")
+    .toLocaleLowerCase("en");
 
-/** Text compared case and accents aside: "Türkçe" finds "turkce". */
-export const fold = (text: string) => text.normalize("NFD").replace(/\p{M}/gu, "").toLocaleLowerCase("en");
+/** Each entry's folded text, made once per entry object (a list's entries are new objects only when it is read again). */
+const folded = new WeakMap<ListedAddon, string>();
+const foldedOf = (entry: ListedAddon) => {
+  let text = folded.get(entry);
+  if (text === undefined) {
+    text = fold(`${entry.name} ${entry.host} ${entry.description ?? ""}`);
+    folded.set(entry, text);
+  }
+  return text;
+};
+
+/** The query's words, folded: made once per query, then tested against each entry. */
+export const queryWords = (query: string) => fold(query).split(/\s+/).filter(Boolean);
 
 /** The search field's rule: every word of the query in the name, host or description. */
-export function matches(entry: ListedAddon, query: string): boolean {
-  const words = fold(query).split(/\s+/).filter(Boolean);
-  if (!words.length) return true;
-  const text = fold(`${entry.name} ${entry.host} ${entry.description ?? ""}`);
-  return words.every((word) => text.includes(word));
-}
+export const matches = (entry: ListedAddon, words: string[]) => words.length === 0 || words.every((word) => foldedOf(entry).includes(word));

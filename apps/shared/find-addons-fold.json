@@ -1,0 +1,57 @@
+[
+  {
+    "text": "Türkçe Altyazı",
+    "query": "turkce",
+    "match": true
+  },
+  {
+    "text": "Türkçe Altyazı",
+    "query": "altyazi",
+    "match": true
+  },
+  {
+    "text": "İstanbul Films",
+    "query": "istanbul",
+    "match": true
+  },
+  {
+    "text": "Łódź Kino",
+    "query": "lodz",
+    "match": true
+  },
+  {
+    "text": "Straße",
+    "query": "strasse",
+    "match": true
+  },
+  {
+    "text": "Ørsted",
+    "query": "orsted",
+    "match": true
+  },
+  {
+    "text": "Æther and Œuvre",
+    "query": "aether oeuvre",
+    "match": true
+  },
+  {
+    "text": "Đorđe",
+    "query": "dorde",
+    "match": true
+  },
+  {
+    "text": "Subtitles for films",
+    "query": "SUBTITLES films",
+    "match": true
+  },
+  {
+    "text": "Subtitles for films",
+    "query": "series",
+    "match": false
+  },
+  {
+    "text": "Anything",
+    "query": "   ",
+    "match": true
+  }
+]

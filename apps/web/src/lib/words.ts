@@ -257,6 +257,9 @@ export const findAddons = {
   more: "Showing the first {n} of this list.",
   searchLabel: "Search this list",
   searchEmpty: "Nothing in this list matches.",
+  noRoom: "Too many lists to show this one here. Remove an addon to see it.",
+  matching: "{n} matching",
+  fromHint: "Opens the website",
 } as const;
 
 /** Account (the sync page) copy (plans/m7-sync.md, plans/accounts.md 4.3). No protocol words: a device

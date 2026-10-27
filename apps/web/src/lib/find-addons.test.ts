@@ -1,8 +1,8 @@
 import { expect, test } from "bun:test";
 import shared from "../../../shared/find-addons-words.json";
 import type { ListedAddon } from "../core/generated/ListedAddon";
-import type { AddonList } from "../core/generated/AddonList";
-import { action, cardAction, filterEmpty, initial, listLabel, matches, providesLine, repeatedNames, shows, spoken } from "./find-addons";
+import vectors from "../../../shared/find-addons-fold.json";
+import { action, cardAction, filterEmpty, initial, matches, providesLine, queryWords, repeatedNames, shows, spoken } from "./find-addons";
 import { findAddons } from "./words";
 
 const entry = (over: Partial<ListedAddon>): ListedAddon => ({
@@ -85,23 +85,9 @@ test("only names shown twice in a list are marked", () => {
   expect([...names]).toEqual(["Trakt Tv"]);
 });
 
-const list = (id: string, name: string, host: string | null): AddonList => ({ id, name, host, state: { state: "ready" }, entries: [], more: false });
-
-test("a publisher's list that shares a name with another chip says its host", () => {
-  const official = list("official", "Official", null);
-  const theirs = list("addon-1:official", "Official", "dir.example");
-  const other = list("addon-1:dir", "Directory", "dir.example");
-  const all = [official, list("community", "Community", null), theirs, other];
-  expect(listLabel(official, all)).toBe("Official");
-  expect(listLabel(theirs, all)).toBe("Official, dir.example");
-  expect(listLabel(other, all)).toBe("Directory");
-});
-
-test("search finds every word, case and accents aside, in the name, host or description", () => {
-  const e = entry({ name: "Türkçe Altyazı", host: "subs.example", description: "Subtitles for films" });
-  expect(matches(e, "")).toBe(true);
-  expect(matches(e, "turkce")).toBe(true);
-  expect(matches(e, "TURKÇE films")).toBe(true);
-  expect(matches(e, "subs.example")).toBe(true);
-  expect(matches(e, "turkce series")).toBe(false);
+test("search folds case, accents and letters that do not decompose, as every app does", () => {
+  for (const v of vectors) {
+    const e = entry({ name: v.text, host: "x.example" });
+    expect(matches(e, queryWords(v.query))).toBe(v.match);
+  }
 });
