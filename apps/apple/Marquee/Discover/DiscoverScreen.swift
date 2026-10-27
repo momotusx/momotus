@@ -121,7 +121,8 @@ struct DiscoverScreen: View {
 
     /// The item to ask the core's details of, with its list, so a new list asks again.
     private var previewAsk: DiscoverPreviewAsk? {
-        guard let s = discover.snapshot, let tile = preview else { return nil }
+        // Not while a change loads: the preview shows the list before, which the new list's details do not hold.
+        guard let s = discover.snapshot, !(s.items.isEmpty && s.state == .loading), let tile = preview else { return nil }
         return DiscoverPreviewAsk(id: tile.id, list: s.list)
     }
 
