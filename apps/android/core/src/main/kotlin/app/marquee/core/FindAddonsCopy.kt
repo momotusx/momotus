@@ -50,6 +50,9 @@ object FindAddonsCopy {
     const val MORE = "Showing the first {n} of this list."
     const val SEARCH_LABEL = "Search this list"
     const val SEARCH_EMPTY = "Nothing in this list matches."
+    const val NO_ROOM = "Too many lists to show this one here. Remove an addon to see it."
+    const val MATCHING = "{n} matching"
+    const val FROM_HINT = "Opens the website"
 
     /** Android only, not in the shared words: Configure where no app opens web pages. */
     const val NO_BROWSER = "No app here opens web pages. Open the addon's website on another device."
@@ -67,4 +70,6 @@ object FindAddonsCopy {
     fun emptyFrom(host: String) = EMPTY_FROM.replace("{host}", host)
 
     fun more(n: Int) = MORE.replace("{n}", n.toString())
+
+    fun matching(n: Int) = MATCHING.replace("{n}", n.toString())
 }

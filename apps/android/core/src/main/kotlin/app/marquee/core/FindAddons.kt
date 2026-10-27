@@ -26,46 +26,52 @@ object FindAddons {
         Catalogs(FindAddonsCopy.CATALOGS, "catalog", FindAddonsCopy.KIND_CATALOGS),
     }
 
-    private fun nameOf(list: AddonList) =
-        when (list.id) {
-            "official" -> FindAddonsCopy.OFFICIAL
-            "community" -> FindAddonsCopy.COMMUNITY_LIST
-            else -> list.name
-        }
-
     /**
-     * A list's chip: its name, with its host when another list has the same name (a publisher may
-     * call its list "Official"; Cinemeta's own lists have no host). The web's `listLabel`.
+     * The list the page shows: the one picked, or Official once the lists are in and the picked one
+     * is gone (its addon was turned off or removed), never "Asking" for ever.
      */
-    fun listLabel(
-        list: AddonList,
+    fun shownList(
         lists: List<AddonList>,
-    ): String {
-        val name = nameOf(list)
-        val same = lists.any { it.id != list.id && nameOf(it).equals(name, ignoreCase = true) }
-        val host = list.host
-        return if (same && host != null) "$name, $host" else name
-    }
+        picked: String,
+    ): String = if (lists.isNotEmpty() && lists.none { it.id == picked }) "official" else picked
 
-    /** Text compared case and accents aside: "Türkçe" finds "turkce". */
-    fun fold(text: String): String =
-        Normalizer
-            .normalize(text, Normalizer.Form.NFD)
-            .replace(MARKS, "")
-            .lowercase(Locale.ENGLISH)
-
+    /** Letters that do not decompose, as their plain Latin (apps/shared/find-addons-fold.json). */
+    private val PLAIN =
+        mapOf(
+            'ı' to "i",
+            'İ' to "i",
+            'ł' to "l",
+            'Ł' to "l",
+            'ø' to "o",
+            'Ø' to "o",
+            'đ' to "d",
+            'Đ' to "d",
+            'ß' to "ss",
+            'æ' to "ae",
+            'Æ' to "ae",
+            'œ' to "oe",
+            'Œ' to "oe",
+        )
     private val MARKS = Regex("\\p{M}+")
+    private val SPACES = Regex("\\s+")
 
-    /** The search field's rule: every word of the query in the name, host or description. */
-    fun matches(
-        entry: ListedAddon,
-        query: String,
-    ): Boolean {
-        val words = fold(query).split(Regex("\\s+")).filter { it.isNotEmpty() }
-        if (words.isEmpty()) return true
-        val text = fold("${entry.name} ${entry.host} ${entry.description.orEmpty()}")
-        return words.all { it in text }
+    /** Text compared case and accents aside: "Türkçe Altyazı" finds "turkce altyazi". */
+    fun fold(text: String): String {
+        val plain = buildString { for (c in text) append(PLAIN[c] ?: c) }
+        return Normalizer.normalize(plain, Normalizer.Form.NFD).replace(MARKS, "").lowercase(Locale.ENGLISH)
     }
+
+    /** An entry's text as the search reads it, folded: made once per entry, not per keystroke. */
+    fun searchText(entry: ListedAddon): String = fold("${entry.name} ${entry.host} ${entry.description.orEmpty()}")
+
+    /** The query's words, folded once per change. */
+    fun queryWords(query: String): List<String> = fold(query).split(SPACES).filter { it.isNotEmpty() }
+
+    /** The search field's rule: every word of the query in the entry's folded text. */
+    fun matches(
+        searchText: String,
+        words: List<String>,
+    ): Boolean = words.all { it in searchText }
 
     fun shows(
         entry: ListedAddon,

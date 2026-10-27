@@ -59,6 +59,9 @@ class FindAddonsCopyTest {
                     "more" to MORE,
                     "searchLabel" to SEARCH_LABEL,
                     "searchEmpty" to SEARCH_EMPTY,
+                    "noRoom" to NO_ROOM,
+                    "matching" to MATCHING,
+                    "fromHint" to FROM_HINT,
                 )
             }
         assertEquals(shared.keys, ours.keys)

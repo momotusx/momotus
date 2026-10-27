@@ -23,7 +23,7 @@ import kotlinx.serialization.json.jsonObject
 
 /**
  * Debug builds only: launch extras open the design gallery (`screen=gallery`) or the diagnostics
- * screen (`screen=diagnostics`), with `form=tv|phone` and `theme=dark|light`. Release builds have
+ * screen (`screen=diagnostics`), or measure Find addons (`screen=bench-find-addons`), with `form=tv|phone` and `theme=dark|light`. Release builds have
  * a stub in `src/release`, so none of this ships.
  */
 object DebugEntry {
@@ -37,6 +37,11 @@ object DebugEntry {
         when (activity.intent.getStringExtra("screen")) {
             "gallery" -> {
                 activity.setContent { GalleryHost(form) }
+            }
+
+            "bench-find-addons" -> {
+                val lines = FindAddonsBench.run()
+                activity.setContent { BasicText(lines.joinToString("\n"), Modifier.padding(24.dp)) }
             }
 
             "diagnostics" -> {

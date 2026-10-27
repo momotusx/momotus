@@ -4,6 +4,7 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.focusable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -24,7 +25,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -63,6 +66,8 @@ import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -288,6 +293,14 @@ fun FindAddonsScreen(
     // A result is about the state it was pressed in: a new installed state clears it.
     LaunchedEffect(snapshot) { snapshot?.let { s -> cards.follow(s.lists.flatMap { it.entries }) } }
     val lists = snapshot?.lists.orEmpty()
+    // The picked list went (its addon turned off or removed): Official, never "Asking" for ever.
+    LaunchedEffect(lists) {
+        val shown = FindAddons.shownList(lists, holder.list)
+        if (shown != holder.list) {
+            holder.list = shown
+            holder.query = ""
+        }
+    }
     val current = lists.firstOrNull { it.id == holder.list }
     val failure =
         (view.status as? ViewStatus.Failed)?.reason
@@ -296,9 +309,12 @@ fun FindAddonsScreen(
     val entries = current?.entries.orEmpty()
     val filter = holder.filter
     val query = holder.query
+    // Each entry's text folded once per list, the query once per change.
+    val searchTexts = remember(entries) { entries.map(FindAddons::searchText) }
+    val words = remember(query) { FindAddons.queryWords(query) }
     val visible =
-        remember(entries, filter, query) {
-            entries.filter { FindAddons.shows(it, filter) && FindAddons.matches(it, query) }
+        remember(entries, filter, words) {
+            entries.filterIndexed { at, e -> FindAddons.shows(e, filter) && FindAddons.matches(searchTexts[at], words) }
         }
     // A publisher's list (an addon the user installed) names where it comes from.
     val host = current?.host
@@ -435,7 +451,7 @@ fun FindAddonsScreen(
                     } else {
                         lists.map {
                             it.id to
-                                listOfNotNull(FindAddons.listLabel(it, lists), count(it.id)).joinToString(" ")
+                                listOfNotNull(it.name, count(it.id)).joinToString(" ")
                         }
                     },
                     holder.list,
@@ -455,30 +471,32 @@ fun FindAddonsScreen(
                     onControl,
                 ) { holder.filter = it }
             }
-            if (host != null) {
-                item(key = "from") {
-                    if (tv) {
-                        MqText(FindAddonsCopy.fromList(host), role = TextRole.Callout, color = Marquee.colors.muted)
-                    } else {
-                        Row {
-                            SecondaryButton(
-                                FindAddonsCopy.fromList(host),
-                                { openLink(context, "https://$host/") },
-                                icon = Icons.ExternalLink,
-                            )
-                        }
-                    }
-                }
-            }
             if (holder.list != OFFICIAL) item(key = "community") { CommunityNote() }
             if (!tv && current?.state == ListState.Ready && entries.isNotEmpty()) {
                 item(key = "search") {
-                    MqTextField(
-                        query,
-                        { holder.query = it },
-                        label = FindAddonsCopy.SEARCH_LABEL,
-                        placeholder = FindAddonsCopy.SEARCH_LABEL,
-                    )
+                    Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.xs)) {
+                        MqTextField(
+                            query,
+                            { holder.query = it },
+                            label = FindAddonsCopy.SEARCH_LABEL,
+                            placeholder = FindAddonsCopy.SEARCH_LABEL,
+                            keyboardOptions =
+                                KeyboardOptions(
+                                    capitalization = KeyboardCapitalization.None,
+                                    autoCorrectEnabled = false,
+                                    imeAction = ImeAction.Search,
+                                ),
+                        )
+                        // How many match, said politely once typing settles.
+                        if (query.isNotBlank()) {
+                            MqText(
+                                FindAddonsCopy.matching(visible.size),
+                                role = TextRole.Caption,
+                                color = Marquee.colors.muted,
+                                modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+                            )
+                        }
+                    }
                 }
             }
             when {
@@ -512,7 +530,28 @@ fun FindAddonsScreen(
 
                 else -> {
                     item(key = "refresh") {
-                        Row {
+                        // Where a publisher's list comes from, beside Refresh: a link off the TV, words on it.
+                        // The core sends hosts of enabled addons on public hosts only.
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(Marquee.space.s),
+                            verticalArrangement = Arrangement.spacedBy(Marquee.space.xs),
+                            itemVerticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            if (host != null && !tv) {
+                                SecondaryButton(
+                                    FindAddonsCopy.fromList(host),
+                                    { openLink(context, "https://$host/") },
+                                    icon = Icons.ExternalLink,
+                                    spoken = "${FindAddonsCopy.fromList(host)}. ${FindAddonsCopy.FROM_HINT}",
+                                )
+                            }
+                            if (host != null && tv) {
+                                MqText(
+                                    FindAddonsCopy.fromList(host),
+                                    role = TextRole.Callout,
+                                    color = Marquee.colors.muted,
+                                )
+                            }
                             SecondaryButton(
                                 FindAddonsCopy.REFRESH,
                                 ::retry,
@@ -531,6 +570,10 @@ fun FindAddonsScreen(
                         }
                     }
                     when {
+                        entries.isEmpty() && current?.more == true -> {
+                            item(key = "no-room") { Note(FindAddonsCopy.NO_ROOM, side = 0.dp) }
+                        }
+
                         entries.isEmpty() -> {
                             item(
                                 key = "empty",
@@ -549,6 +592,11 @@ fun FindAddonsScreen(
                             // Keyed by the first card's id and host, never its link (item keys are saved): an
                             // entry added or moved keeps every other row's remembered state.
                             val ids = FindAddons.stableIds(entries)
+                            // Above the cards, never after them: TV landing counts card rows from the
+                            // end of the list (`land`), so the rows stay the last items.
+                            if (current?.more == true) {
+                                item(key = "more") { Note(FindAddonsCopy.more(entries.size), side = 0.dp) }
+                            }
                             items(rows, key = { "row:${holder.list}:${ids[it.first().key]}" }) { row ->
                                 val memories = holder.memories.forRow(row.map { it.key })
                                 Row(
@@ -572,9 +620,6 @@ fun FindAddonsScreen(
                                     repeat(columns - row.size) { Spacer(Modifier.weight(1f)) }
                                 }
                             }
-                            if (current?.more == true) {
-                                item(key = "more") { Note(FindAddonsCopy.more(entries.size), side = 0.dp) }
-                            }
                         }
                     }
                 }
@@ -596,7 +641,7 @@ private const val LISTS_ITEM = 3
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun <T : Any> Choices(
+internal fun <T : Any> Choices(
     label: String,
     choices: List<Pair<T, String>>,
     selected: T,
@@ -604,32 +649,45 @@ private fun <T : Any> Choices(
     onFocusChange: (Boolean) -> Unit,
     onSelect: (T) -> Unit,
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.xs)) {
-        Kicker(label, side = 0.dp)
-        FlowRow(
-            horizontalArrangement = Arrangement.spacedBy(Marquee.space.xs),
-            verticalArrangement = Arrangement.spacedBy(Marquee.space.xs),
-        ) {
-            // Keyed by value, so a count arriving in a label keeps focus on its chip.
-            choices.forEachIndexed { at, (value, name) ->
-                key(value) {
-                    Chip(
-                        name,
-                        selected = value == selected,
-                        onClick = { onSelect(value) },
-                        modifier =
-                            Modifier.focusProperties {
-                                if (at == 0) left = FocusRequester.Cancel
-                                if (at == choices.lastIndex) right = FocusRequester.Cancel
-                            },
-                        focusRequester = requester.takeIf { value == selected },
-                        onFocusChange = onFocusChange,
-                    )
-                }
+    // Keyed by value, so a count arriving in a label keeps focus on its chip.
+    val chips: @Composable () -> Unit = {
+        choices.forEachIndexed { at, (value, name) ->
+            key(value) {
+                Chip(
+                    name,
+                    selected = value == selected,
+                    onClick = { onSelect(value) },
+                    modifier =
+                        Modifier.focusProperties {
+                            if (at == 0) left = FocusRequester.Cancel
+                            if (at == choices.lastIndex) right = FocusRequester.Cancel
+                        },
+                    focusRequester = requester.takeIf { value == selected },
+                    onFocusChange = onFocusChange,
+                )
             }
         }
     }
+    Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.xs)) {
+        Kicker(label, side = 0.dp)
+        // Past four choices one row that scrolls sideways (focus brings a chip into view), never
+        // a stack of rows between the page's top and its cards.
+        if (choices.size > MAX_WRAPPED_CHOICES) {
+            Row(
+                Modifier.horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(Marquee.space.xs),
+            ) { chips() }
+        } else {
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(Marquee.space.xs),
+                verticalArrangement = Arrangement.spacedBy(Marquee.space.xs),
+            ) { chips() }
+        }
+    }
 }
+
+/** Choices that may wrap; more scroll in one row. */
+internal const val MAX_WRAPPED_CHOICES = 4
 
 /** Community's caution, on glass. */
 @Composable

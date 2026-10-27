@@ -323,23 +323,28 @@ class FindAddonsTest {
     ) = AddonList(id = id, name = name, host = host, state = ListState.Ready)
 
     @Test
-    fun `a publisher's list that shares a name with another chip says its host`() {
-        val official = list("official", "Official", null)
-        val theirs = list("addon-1:official", "Official", "dir.example")
-        val other = list("addon-1:dir", "Directory", "dir.example")
-        val all = listOf(official, list("community", "Community", null), theirs, other)
-        assertEquals("Official", FindAddons.listLabel(official, all))
-        assertEquals("Official, dir.example", FindAddons.listLabel(theirs, all))
-        assertEquals("Directory", FindAddons.listLabel(other, all))
+    fun `a picked list that went falls back to Official once the lists are in`() {
+        val lists = listOf(list("official", "Official", null), list("community", "Community", null))
+        assertEquals("community", FindAddons.shownList(lists, "community"))
+        assertEquals("official", FindAddons.shownList(lists, "addon-1:dir"))
+        // Before the first snapshot nothing is gone yet.
+        assertEquals("addon-1:dir", FindAddons.shownList(emptyList(), "addon-1:dir"))
     }
 
     @Test
-    fun `search finds every word, case and accents aside, in the name, host or description`() {
-        val e = entry(name = "Türkçe Altyazı", host = "subs.example").copy(description = "Subtitles for films")
-        assertTrue(FindAddons.matches(e, ""))
-        assertTrue(FindAddons.matches(e, "turkce"))
-        assertTrue(FindAddons.matches(e, "TURKÇE films"))
-        assertTrue(FindAddons.matches(e, "subs.example"))
-        assertTrue(!FindAddons.matches(e, "turkce series"))
+    fun `search folds as every app does (apps-shared-find-addons-fold json)`() {
+        val vectors = Json.parseToJsonElement(File("../../shared/find-addons-fold.json").readText()).jsonArray
+        for (v in vectors) {
+            val o = v.jsonObject
+            val text = o["text"]!!.jsonPrimitive.content
+            val query = o["query"]!!.jsonPrimitive.content
+            val match = o["match"]!!.jsonPrimitive.booleanOrNull!!
+            val e = entry(name = text, host = "x.example")
+            assertEquals(
+                match,
+                FindAddons.matches(FindAddons.searchText(e), FindAddons.queryWords(query)),
+                "$text / $query",
+            )
+        }
     }
 }
