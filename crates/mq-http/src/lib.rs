@@ -27,6 +27,8 @@ const MAX_REDIRECTS: usize = 5;
 /// A scoped handle's refusal. It never names the address, which may be the
 /// user's own.
 const OUT_OF_SCOPE: &str = "outside the playback's scope";
+/// A hop a handle's `HopRule` refuses.
+const OUT_OF_HOPS: &str = "outside the source's hosts";
 
 fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
     m.lock().unwrap_or_else(|e| e.into_inner())
@@ -287,6 +289,61 @@ pub struct HttpClient {
     /// Set on a handle from `scoped`: its addresses, canonical and sorted.
     /// Each request takes the current generation's client for them.
     scope: Option<Arc<[IpAddr]>>,
+    /// Set by `with_hops`: where every hop of a scoped handle may go.
+    hops: Option<Arc<HopRule>>,
+}
+
+/// Where a handle's requests may go, hop by hop, checked before each one
+/// connects, the first included (plans/plugins-and-marketplace.md 5.3,
+/// 6.4); with `follow` off a redirect is returned as it is.
+#[derive(Clone)]
+pub struct HopRule {
+    allowed: Arc<dyn Fn(&Url) -> bool + Send + Sync>,
+    follow: bool,
+}
+
+impl HopRule {
+    pub fn new(allowed: impl Fn(&Url) -> bool + Send + Sync + 'static, follow: bool) -> Self {
+        Self {
+            allowed: Arc::new(allowed),
+            follow,
+        }
+    }
+
+    /// https to `domain` (lowercase ASCII, as URLs carry it) or one of its
+    /// subdomains, redirects followed. A trailing dot, an IP literal or
+    /// userinfo is refused.
+    /// ponytail: any port on those hosts; a port rule when a source needs one.
+    pub fn under(domain: &str) -> Self {
+        let domain = domain.to_ascii_lowercase();
+        Self::new(
+            move |url| {
+                let Some(url::Host::Domain(host)) = url.host() else {
+                    return false;
+                };
+                url.scheme() == "https"
+                    && url.username().is_empty()
+                    && url.password().is_none()
+                    && (host == domain
+                        || host
+                            .strip_suffix(domain.as_str())
+                            .is_some_and(|sub| sub.len() > 1 && sub.ends_with('.')))
+            },
+            true,
+        )
+    }
+
+    pub fn allows(&self, url: &Url) -> bool {
+        (self.allowed)(url)
+    }
+}
+
+impl std::fmt::Debug for HopRule {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("HopRule")
+            .field("follow", &self.follow)
+            .finish_non_exhaustive()
+    }
 }
 
 /// The unscoped clients and their connection pools.
@@ -503,10 +560,12 @@ impl reqwest::dns::Resolve for Allowed {
     fn resolve(&self, name: reqwest::dns::Name) -> reqwest::dns::Resolving {
         let allowed = self.clone();
         Box::pin(async move {
-            let kept: Vec<SocketAddr> = lookup(name.as_str())
-                .await?
+            // Test builds: a loopback fixture stands for a public origin
+            // here too (`test_dns::set_public`).
+            let (found, stand_ins) = public_lookup(name.as_str()).await?;
+            let kept: Vec<SocketAddr> = found
                 .into_iter()
-                .filter(|a| allowed.permits(a.ip()))
+                .filter(|a| stand_ins.contains(&a.ip()) || allowed.permits(a.ip()))
                 .collect();
             if kept.is_empty() {
                 return Err(Box::new(Blocked) as Box<dyn std::error::Error + Send + Sync>);
@@ -698,9 +757,9 @@ pub mod test_dns {
 
     static PUBLIC: LazyLock<Mutex<HashMap<String, Vec<IpAddr>>>> = LazyLock::new(Default::default);
 
-    /// Answers `name` with `addrs` for the unscoped public-only clients, as
-    /// if they were public: a loopback fixture then stands for a public
-    /// origin. The name's `set` answers come first and are filtered as
+    /// Answers `name` with `addrs` for the unscoped public-only clients and
+    /// the scoped handles, as if they were public: a loopback fixture then
+    /// stands for a public origin. The name's `set` answers come first and are filtered as
     /// usual, so a test can mix private answers in.
     pub fn set_public(name: &str, addrs: &[IpAddr]) {
         let mut names = PUBLIC.lock().unwrap_or_else(|e| e.into_inner());
@@ -1014,6 +1073,7 @@ impl HttpClient {
             budget: Arc::new(Budget::new(config.per_host_limit, config.global_limit)),
             scopes: Arc::new(Scopes::new(config)),
             scope: None,
+            hops: None,
         })
     }
 
@@ -1038,7 +1098,20 @@ impl HttpClient {
             budget: self.budget.clone(),
             scopes: self.scopes.clone(),
             scope: Some(key.into()),
+            hops: self.hops.clone(),
         }
+    }
+
+    /// A scoped handle (this one's scope, else `scoped(&[])`) whose every
+    /// hop, the first included, buffered or streamed, must pass `rule`
+    /// before it connects: a redirect to another host is refused.
+    pub fn with_hops(&self, rule: HopRule) -> HttpClient {
+        let mut handle = match self.scope {
+            Some(_) => self.clone(),
+            None => self.scoped(&[]),
+        };
+        handle.hops = Some(Arc::new(rule));
+        handle
     }
 
     /// The torrent engine's destination rule: the one `scoped` applies to
@@ -1313,6 +1386,13 @@ impl HttpClient {
         let deadline = req.timeout.map(|total| Instant::now() + total);
         let mut hops = 0;
         loop {
+            if self
+                .hops
+                .as_ref()
+                .is_some_and(|rule| !rule.allows(&req.url))
+            {
+                return Err(HttpError::BlockedPrivate(OUT_OF_HOPS.into()));
+            }
             let host = req.url.host_str().unwrap_or_default();
             let acquire = self.budget.acquire(host, opts.priority);
             let permit = match deadline {
@@ -1337,6 +1417,9 @@ impl HttpClient {
             let headers = build_headers(&headers, req.range.clone());
             let response = open(&client, &req, headers, opts).await?;
             let status = response.status().as_u16();
+            if self.hops.as_ref().is_some_and(|rule| !rule.follow) {
+                return Ok((response, permit));
+            }
             let Some(next) = next_hop(status, response.headers().get(LOCATION), &req.url)? else {
                 return Ok((response, permit));
             };

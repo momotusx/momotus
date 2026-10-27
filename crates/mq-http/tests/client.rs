@@ -1373,3 +1373,122 @@ fn canaries_count_what_reaches_them() {
         ]
     );
 }
+
+/// A hop rule (plans/plugins-and-marketplace.md 5.3): https to the domain
+/// and its subdomains only, checked on every hop before it connects,
+/// buffered and streamed alike; a first-hop 302 to another host is refused.
+#[tokio::test]
+async fn a_hop_rule_keeps_every_hop_on_its_domain() {
+    use mq_http::HopRule;
+    for name in [
+        "hops.c-archive.test",
+        "dn1.hops.c-archive.test",
+        "other.c-archive.test",
+    ] {
+        test_dns::set_public(name, &[LOOPBACK]);
+    }
+    let asked: Arc<Mutex<Vec<String>>> = Arc::default();
+    let log = asked.clone();
+    let port = test_dns::https_requests(move |r| {
+        let host = r.header("host").unwrap_or_default().to_owned();
+        log.lock().unwrap().push(format!("{host}{}", r.path));
+        let port = host.rsplit(':').next().unwrap_or_default().to_owned();
+        let to = |h: &str| format!("Location: https://{h}:{port}/file\r\n");
+        match r.path.as_str() {
+            "/sub" => reply("302 Found", &to("dn1.hops.c-archive.test"), ""),
+            "/away" => reply("302 Found", &to("other.c-archive.test"), ""),
+            _ => reply("200 OK", "", "ok"),
+        }
+        .into_bytes()
+    });
+    let base = |h: &str| format!("https://{h}:{port}");
+    let http = HttpClient::new(ClientConfig::default())
+        .unwrap()
+        .with_hops(HopRule::under("hops.c-archive.test"));
+    // A redirect to a subdomain (a download node) is followed.
+    let ok = within(
+        "sub",
+        http.get(&format!("{}/sub", base("hops.c-archive.test")), &playback()),
+    )
+    .await
+    .expect("a subdomain hop");
+    assert_eq!(&ok.body[..], b"ok");
+    assert_eq!(ok.final_url.host_str(), Some("dn1.hops.c-archive.test"));
+    // A first-hop 302 to another host is refused, buffered and streamed.
+    let away = format!("{}/away", base("hops.c-archive.test"));
+    refused(&http, &away).await;
+    let streamed = within("stream", http.stream(&away, None, &playback()))
+        .await
+        .err()
+        .expect("a streamed hop off the domain");
+    assert_eq!(streamed.kind(), "blocked address", "{streamed}");
+    // A first URL off the domain, a look-alike, plain http, userinfo and a
+    // trailing dot never connect.
+    for url in [
+        format!("{}/file", base("other.c-archive.test")),
+        format!("https://evilhops.c-archive.test:{port}/file"),
+        format!("http://hops.c-archive.test:{port}/file"),
+        format!("https://u:p@hops.c-archive.test:{port}/file"),
+        format!("https://hops.c-archive.test.:{port}/file"),
+        format!("https://127.0.0.1:{port}/file"),
+    ] {
+        refused(&http, &url).await;
+    }
+    let asked_now = asked.lock().unwrap().clone();
+    assert!(
+        asked_now
+            .iter()
+            .all(|a| !a.starts_with("other.") && !a.starts_with("evil")),
+        "{asked_now:?}"
+    );
+    // The rule rides on the handle: a scoped handle derived from it keeps it.
+    refused(
+        &http.scoped(&[LOOPBACK]),
+        &format!("{}/file", base("other.c-archive.test")),
+    )
+    .await;
+    // A rule that does not follow returns the redirect as it is.
+    let manual = HttpClient::new(ClientConfig::default())
+        .unwrap()
+        .with_hops(HopRule::new(|u| u.scheme() == "https", false));
+    let moved = within(
+        "manual",
+        manual.stream(
+            &format!("{}/away", base("hops.c-archive.test")),
+            None,
+            &playback(),
+        ),
+    )
+    .await
+    .unwrap_or_else(|e| panic!("{e}"));
+    assert_eq!(moved.status, 302);
+    let asked = asked
+        .lock()
+        .unwrap()
+        .iter()
+        .filter(|a| a.starts_with("other."))
+        .count();
+    assert_eq!(asked, 0);
+}
+
+#[test]
+fn a_hop_rule_reads_the_host_alone() {
+    use mq_http::HopRule;
+    let rule = HopRule::under("Archive.org");
+    let allows = |u: &str| Url::parse(u).is_ok_and(|u| rule.allows(&u));
+    assert!(allows("https://archive.org/download/a/b.mp4"));
+    assert!(allows("https://ia800300.us.archive.org/0/items/a/b.mp4"));
+    assert!(allows("https://ARCHIVE.org:8443/x"));
+    for refused in [
+        "http://archive.org/x",
+        "https://notarchive.org/x",
+        "https://archive.org.evil.test/x",
+        "https://.archive.org/x",
+        "https://archive.org./x",
+        "https://user@archive.org/x",
+        "https://207.241.224.2/x",
+        "ftp://archive.org/x",
+    ] {
+        assert!(!allows(refused), "{refused}");
+    }
+}
