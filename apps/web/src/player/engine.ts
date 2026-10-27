@@ -74,6 +74,9 @@ export interface Engine {
   setSubtitleDelay(sec: number, line?: 1 | 2): void;
   /** The hidden text track that holds line `line`'s cues, once it is in; null for none. */
   cueTrack(line: 1 | 2): TextTrack | null;
+  /** The audio languages to start each file in (the core's `audioLanguages`): the first track in one of them turns
+   * on as the file opens, or at once when they come later. */
+  setAudioLanguages(languages: string[]): void;
   /** One of the engine's own tracks (`tracks`). */
   selectTrack(kind: Track["kind"], id: string): void;
   /** Leaving the player: stop and let go of the source. */

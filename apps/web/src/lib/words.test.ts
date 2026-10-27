@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { addonHost, addonsSummary, nextVersion, qualityCell, sheetDetails, languageName, pairingProblem, plainAddress, problemWords, restartLine, serverHost, statusText, subtitleNote, lowerFirst } from "./words";
+import { addonHost, addonsSummary, nextVersion, qualityCell, sheetDetails, languageName, pairingProblem, plainAddress, problemWords, restartLine, serverHost, startAudio, statusText, subtitleNote, lowerFirst } from "./words";
 import shared from "../../../shared/stream-choice-words.json";
 import type { EmptyAction } from "../core/generated/EmptyAction";
 import type { EmptyKind } from "../core/generated/EmptyKind";
@@ -306,4 +306,18 @@ test("Settings' Addons line counts and never names an addon", () => {
   expect(addonsSummary([a(true, ["stream"]), a(false, ["stream"])])).toBe("2 installed. 1 finds streams.");
   expect(addonsSummary([a(true, ["stream"]), a(true, ["stream", "meta"]), a(true, ["subtitles"])])).toBe("3 installed. 2 find streams.");
   expect(addonsSummary([a(true, ["stream"])])).not.toContain("Torrentio");
+});
+
+test("the start audio is the first wanted language the file lists", () => {
+  // A French release's tracks: French first, the original English second, one untagged.
+  const tracks = [
+    { id: "1", language: "fre" },
+    { id: "2", language: "en" },
+    { id: "3", language: "" },
+  ];
+  expect(startAudio(tracks, ["en"])).toBe("2");
+  expect(startAudio(tracks, ["de", "fr"])).toBe("1");
+  expect(startAudio(tracks, ["ja"])).toBeNull();
+  expect(startAudio(tracks, [])).toBeNull();
+  expect(startAudio([{ id: "a", language: "pt-BR" }], ["pt"])).toBe("a");
 });

@@ -240,6 +240,14 @@ final class PlayerModel {
     /// version, a card offers the way on.
     var showEndCard: Bool { ended || nextFailure != nil }
 
+    /// The core's start audio (`audioLanguages`: the user's audio languages, else the title's original): the first of
+    /// them the file has turns on; with none, the engine's own pick stays.
+    private func startAudio() {
+        guard let index = TrackPicker.startAudio(audioTrackLanguages, wanted: playback?.audioLanguages ?? []),
+              index != audioTrack else { return }
+        selectAudio(index)
+    }
+
     func selectAudio(_ index: Int) {
         if backend == .aether {
             guard engineAudioIDs.indices.contains(index) else { return }
@@ -331,7 +339,7 @@ final class PlayerModel {
             audioTrackLanguages = group.options.map(Self.tag)
             audioDefault = group.defaultOption.flatMap { group.options.firstIndex(of: $0) }
             audioTrack = item.currentMediaSelection.selectedMediaOption(in: group).flatMap { group.options.firstIndex(of: $0) }
-            if let index = carriedTracks?.audio { selectAudio(index) }
+            if let index = carriedTracks?.audio { selectAudio(index) } else { startAudio() }
             carriedTracks?.audio = nil
         }
         Task { [weak self] in
@@ -928,7 +936,10 @@ final class PlayerModel {
         if let words = PlayerLayout.startSubtitleFailedWords(snapshot), PlayerLayout.startSubtitleFailedWords(playback) == nil {
             showStatus(words)
         }
+        let startAudioChanged = snapshot.audioLanguages != playback?.audioLanguages
         playback = snapshot
+        // The core named the start audio after the tracks came: it turns on while the engine's own pick still plays.
+        if startAudioChanged, audioTrack == audioDefault { startAudio() }
         if PlayerLayout.retryRose(old: lastRetries, new: snapshot.retries) { showTryingAgain() }
         lastRetries = snapshot.retries ?? lastRetries
         if let start = snapshot.start { startWindow.saw(start.haveBytes, at: .now) }
@@ -1238,6 +1249,8 @@ final class PlayerModel {
         if audioArrived, let index = carriedTracks?.audio {
             carriedTracks?.audio = nil
             selectAudio(index)
+        } else if audioArrived {
+            startAudio()
         }
         guard textArrived, !text.isEmpty else { return }
         startFile = nil

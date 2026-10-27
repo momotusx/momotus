@@ -328,3 +328,15 @@ private let klingon = track(5, "tlh", "tlh", "Klingon")
     #expect(model.components(separatedBy: "TrackPicker.placeName(index:").count == 3)
     #expect(!model.contains("one: \"Default\""))
 }
+
+@Test func theStartAudioIsTheFirstWantedLanguageTheFileHas() {
+    // A French release's tracks: French first and default, the original English second, one untagged.
+    let tracks: [String?] = ["fre", "eng", nil]
+    #expect(TrackPicker.startAudio(tracks, wanted: ["en"]) == 1)
+    #expect(TrackPicker.startAudio(tracks, wanted: ["de", "fr"]) == 0)
+    // None of them in the file, or none wanted: the engine's own pick stays.
+    #expect(TrackPicker.startAudio(tracks, wanted: ["ja"]) == nil)
+    #expect(TrackPicker.startAudio(tracks, wanted: []) == nil)
+    // A regional track counts with its language; "und" names none.
+    #expect(TrackPicker.startAudio(["und", "pt-BR"], wanted: ["pt"]) == 1)
+}

@@ -136,6 +136,12 @@ class PlaybackController(
     var tryingAgain by mutableStateOf(false)
         private set
 
+    /** The device's audio language [PlayerHost] set, which the core's start audio goes before. */
+    private val deviceAudio: List<String> = player.trackSelectionParameters.preferredAudioLanguages
+
+    /** The core's start audio last applied (`PlaybackSnapshot.audioLanguages`). */
+    private var coreAudio: List<String> = emptyList()
+
     /** The core's count of Try again taken (`PlaybackSnapshot.retries`), from the first snapshot on. */
     private var retriesSeen: Int? = null
     private var tryingAgainJob: Job? = null
@@ -472,6 +478,16 @@ class PlaybackController(
         // The core's start subtitle, once, as if picked; nothing goes back to the core.
         startSubtitle(s.autoSubtitle, chose, pick != null, started)?.let { url ->
             s.subtitles.firstOrNull { it.url == url }?.let(::startWith)
+        }
+        // The core's start audio (the original, or the user's audio languages), ahead of the device's language: set
+        // before the file loads, or as soon as the core knows it.
+        if (s.audioLanguages != coreAudio) {
+            coreAudio = s.audioLanguages
+            player.trackSelectionParameters =
+                player.trackSelectionParameters
+                    .buildUpon()
+                    .setPreferredAudioLanguages(*audioLanguages(coreAudio, deviceAudio).toTypedArray())
+                    .build()
         }
         when (s.phase) {
             PlaybackPhase.Ready -> {

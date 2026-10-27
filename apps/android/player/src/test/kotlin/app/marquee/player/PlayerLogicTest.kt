@@ -13,6 +13,14 @@ import kotlin.test.assertTrue
 
 class PlayerLogicTest {
     @Test
+    fun `the core's start audio goes before the device's language`() {
+        assertEquals(listOf("ja", "en"), audioLanguages(core = listOf("ja"), device = listOf("en")))
+        assertEquals(listOf("en"), audioLanguages(core = listOf("en"), device = listOf("en")))
+        assertEquals(listOf("tr", "en", "nl"), audioLanguages(core = listOf("tr", "en"), device = listOf("nl")))
+        assertEquals(listOf("en"), audioLanguages(core = emptyList(), device = listOf("en")))
+    }
+
+    @Test
     fun `a Try again counts from the first snapshot on`() {
         assertEquals(false, retriedSince(seen = null, retries = 3))
         assertEquals(true, retriedSince(seen = 0, retries = 1))

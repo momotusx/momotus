@@ -182,6 +182,16 @@ fun retriedSince(
     retries: Int,
 ): Boolean = seen != null && retries > seen
 
+/**
+ * The audio languages the player prefers, most wanted first: the core's start audio (`PlaybackSnapshot.audioLanguages`:
+ * the user's audio languages, else the title's original one), then the device's language [PlayerHost] began with.
+ * The player turns on the first one the file has; a track picked by hand stays.
+ */
+fun audioLanguages(
+    core: List<String>,
+    device: List<String>,
+): List<String> = (core + device).distinct()
+
 /** What failed, as `failOver` reports it: the core words it for the attempt list. */
 enum class FailureKind(
     val wire: String,

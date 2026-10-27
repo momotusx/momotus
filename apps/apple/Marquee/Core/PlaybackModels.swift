@@ -260,6 +260,9 @@ struct PlaybackSnapshot: Decodable, Hashable, Sendable {
     let container: String?
     /// The release's audio formats in the core's names ("dts_hd_ma") (optional for older cores).
     let audio: [String]?
+    /// The audio languages to start the file in, most wanted first: the profile's audio languages when the user chose
+    /// some, else the title's original language once the core knows it (optional for older cores).
+    let audioLanguages: [String]?
     /// The second engine this version played on here before ("aether") (optional for older cores).
     let engine: String?
     /// When the start budget ends, epoch ms, while a first play is still opening; read only then
@@ -762,6 +765,13 @@ struct PlayRoute: Hashable, Identifiable {
 /// languages first, in the core's order with the profile's on top, each with its flag, English name, own name
 /// and count; then one language's options, the file's own tracks first. The web's `lib/subtitles.ts`.
 enum TrackPicker {
+    /// The audio track to start the file in: the first of `wanted` (the core's `audioLanguages`) one of `languages`
+    /// (each track's tag, nil for none) is; nil keeps the engine's own pick.
+    static func startAudio(_ languages: [String?], wanted: [String]) -> Int? {
+        let bases = languages.map { tag($0).map { SubtitleMenu.base(fileTag($0)) } }
+        return wanted.lazy.compactMap { bases.firstIndex(of: SubtitleMenu.base($0)) }.first
+    }
+
     /// One of the file's own tracks, by its place in the player's list.
     struct FileTrack: Hashable {
         let index: Int

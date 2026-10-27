@@ -60,6 +60,17 @@ const iso1: Record<string, string> = { eng: "en", tur: "tr", fre: "fr", fra: "fr
 /** "fre" to "fr", "pob" to "pt-BR": ISO 639-1 where the table knows one, else the code in lower case. */
 export const languageTag = (code: string): string => iso1[code.toLowerCase()] ?? code.toLowerCase();
 
+/** The audio track to start a file in: the first of `wanted` (the core's `audioLanguages`) a track's language is;
+ * null keeps the engine's own pick. */
+export function startAudio(tracks: { id: string; language: string }[], wanted: string[]): string | null {
+  const base = (code: string) => languageTag(code).split("-")[0];
+  for (const w of wanted) {
+    const hit = tracks.find((t) => t.language && base(t.language) === base(w));
+    if (hit) return hit.id;
+  }
+  return null;
+}
+
 /** "fr" or "fre" to "French"; unknown codes stay as given, upper-cased. */
 export function languageName(code: string): string {
   const c = code.toLowerCase();

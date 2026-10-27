@@ -4,6 +4,7 @@
 
 import { createSignal, Show } from "solid-js";
 import { earlyFailure, mediaFailure, pendingStart } from "../lib/failover";
+import { startAudio } from "../lib/words";
 import type { Engine, EngineEvents, Track } from "./engine";
 
 export function createVideoEngine(events: EngineEvents): Engine {
@@ -31,6 +32,15 @@ export function createVideoEngine(events: EngineEvents): Engine {
         ? Array.from(list, (t) => ({ id: t.id, kind: "audio" as const, lang: t.language || null, label: t.label || t.language || "Track", selected: t.enabled }))
         : [],
     );
+  };
+
+  // The core's start audio (`audioLanguages`): the first of them the file lists turns on as it opens.
+  let wantedAudio: string[] = [];
+  const applyStartAudio = () => {
+    const list = audioList();
+    const all = list ? Array.from(list) : [];
+    const id = startAudio(all, wantedAudio);
+    if (id) for (const t of all) t.enabled = t.id === id;
   };
 
   // Each line's delay moves its cues from the time their file gave them.
@@ -149,6 +159,7 @@ export function createVideoEngine(events: EngineEvents): Engine {
         onMetadata = null;
         const at = start.take();
         if (at != null && at > 0) video.currentTime = at;
+        applyStartAudio();
         readTracks();
         events.onLoaded();
       };
@@ -183,6 +194,11 @@ export function createVideoEngine(events: EngineEvents): Engine {
       shiftCues(line);
     },
     cueTrack: (line) => lines[line]?.track ?? null,
+    setAudioLanguages(languages) {
+      wantedAudio = languages;
+      applyStartAudio();
+      readTracks();
+    },
     selectTrack(kind, id) {
       const list = audioList();
       if (kind !== "audio" || !list) return;
