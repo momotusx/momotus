@@ -59,6 +59,7 @@ import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -421,27 +422,58 @@ fun Chip(
  * A segmented control (design/DECISION.md, Selected): the track around [content], [Chip]s with `inTrack`.
  * It scrolls sideways when its choices outrun the width (three catalogs, each with its addon, on a phone),
  * from [side] in; the room above and below lets a focused segment rise and cast its shadow.
+ *
+ * @param kept the segment kept wholly in view by the track's own scroll, at first layout and whenever it changes
+ *   or moves (a held choice on a narrow track or at a large font); the page around the track never scrolls for it.
  */
 @Composable
 fun SegmentTrack(
     modifier: Modifier = Modifier,
     side: Dp = 0.dp,
-    content: @Composable RowScope.() -> Unit,
+    kept: Int = -1,
+    content: @Composable () -> Unit,
 ) {
     val room = Marquee.tiles.pad
+    val scroll = rememberScrollState()
+    val inset = with(LocalDensity.current) { (side + TRACK_PAD).roundToPx() }
+    // The kept segment's span on the track, with the inset on both sides.
+    var span by remember { mutableStateOf<IntRange?>(null) }
+    LaunchedEffect(span, scroll.viewportSize) {
+        val s = span ?: return@LaunchedEffect
+        val view = scroll.viewportSize
+        when {
+            view == 0 -> Unit
+            s.first < scroll.value -> scroll.scrollTo(s.first)
+            s.last > scroll.value + view -> scroll.scrollTo(s.last - view)
+        }
+    }
     Box(
         modifier
             .liftRoom(room)
-            .horizontalScroll(rememberScrollState())
+            .horizontalScroll(scroll)
             .padding(horizontal = side, vertical = room),
     ) {
-        Row(
-            Modifier.background(SEGMENT_TRACK, RoundedCornerShape(Marquee.radius.pill)).padding(4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            content = content,
-        )
+        // A row, centred vertically, that knows where its segments sit.
+        Layout(
+            content,
+            Modifier.background(SEGMENT_TRACK, RoundedCornerShape(Marquee.radius.pill)).padding(TRACK_PAD),
+        ) { measurables, constraints ->
+            val placeables = measurables.map { it.measure(constraints.copy(minWidth = 0, minHeight = 0)) }
+            val height = placeables.maxOfOrNull { it.height } ?: 0
+            layout(placeables.sumOf { it.width }, height) {
+                var x = 0
+                placeables.forEachIndexed { i, p ->
+                    if (i == kept) span = x..(x + p.width + 2 * inset)
+                    p.place(x, (height - p.height) / 2)
+                    x += p.width
+                }
+                if (kept !in placeables.indices) span = null
+            }
+        }
     }
 }
+
+private val TRACK_PAD = 4.dp
 
 /**
  * Scrolls [state] so item [index] is wholly on screen, at first layout and whenever [index] changes:

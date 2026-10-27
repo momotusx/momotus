@@ -81,6 +81,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
+import org.robolectric.annotation.GraphicsMode
 import java.util.concurrent.CopyOnWriteArrayList
 import kotlin.coroutines.CoroutineContext
 import kotlin.test.assertEquals
@@ -562,6 +563,29 @@ class PhoneVersionsTest {
         compose.onNodeWithText("37", useUnmergedTree = true).assertExists()
         compose.onNodeWithContentDescription("Torrents, 37 versions").performClick()
         compose.waitUntil(5_000) { sent.any { "\"setKind\"" in it && "\"torrent\"" in it } }
+    }
+
+    @Test
+    @Config(fontScale = 2f)
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun `at a large font the chip that is on starts wholly in view, by the track's own scroll`() {
+        val a = row("a", ReasonLine.Quick(1204, 2 * gib)).copy(quality = "4K")
+        val kinds =
+            listOf(
+                KindChip(SourceKind.Torrent, null, 1204),
+                KindChip(SourceKind.Direct, null, 12),
+                KindChip(SourceKind.Debrid, "Real-Debrid", 31),
+            )
+        show(snapshot(a, emptyList()).copy(kinds = kinds, selectedKind = SourceKind.Debrid))
+        compose.waitForIdle()
+        val track = compose.onNodeWithContentDescription(StreamChoiceCopy.KIND_LABEL).fetchSemanticsNode().boundsInRoot
+        val all = compose.onNodeWithContentDescription("All").fetchSemanticsNode().boundsInRoot
+        val on = compose.onNodeWithContentDescription("Real-Debrid, 31 versions").fetchSemanticsNode().boundsInRoot
+        assertTrue(all.left < track.left, "the track scrolled: All $all, track $track")
+        assertTrue(
+            on.left >= track.left - 0.5f && on.right <= track.right + 0.5f,
+            "Real-Debrid $on out of the track $track",
+        )
     }
 
     @Test

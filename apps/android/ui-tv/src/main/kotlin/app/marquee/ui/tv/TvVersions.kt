@@ -8,6 +8,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -17,13 +18,12 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.relocation.BringIntoViewRequester
-import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
@@ -294,10 +294,12 @@ private fun tone(tone: VersionsCopy.Tone) =
 
 private fun statusTone(row: VersionRow) = if (VersionsCopy.good(row.status)) Status.Ok else Status.Warn
 
+private const val HEADING_SHARE = 0.45f
+
 /**
  * The heading in a plain line over "Versions", and at the right how the search goes. Between them [chips], the kind
- * chips: the heading keeps its width and the chips take the room left, scrolling sideways when it is short, inside
- * the height the heading already takes, so nothing moves when they come.
+ * chips: the heading keeps its width, at most [HEADING_SHARE] of the row, and the chips take the room left,
+ * scrolling sideways when it is short, inside the height the heading already takes, so nothing moves when they come.
  */
 @Composable
 private fun Header(
@@ -306,14 +308,21 @@ private fun Header(
     chips: @Composable () -> Unit,
 ) {
     val colors = Marquee.colors
-    Row(Modifier.fillMaxWidth(), Arrangement.spacedBy(Marquee.space.m), Alignment.Bottom) {
-        Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.xs)) {
-            MqText(heading, role = TextRole.Callout, color = colors.dim, weight = FontWeight.SemiBold, maxLines = 1)
-            MqText("Versions", Modifier.semantics { heading() }, role = TextRole.Title1, maxLines = 1)
-        }
-        Box(Modifier.weight(1f), contentAlignment = Alignment.BottomEnd) { chips() }
-        Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(Marquee.space.xs)) {
-            VersionsCopy.progress(snapshot)?.let { (text, state) -> StatusWord(text, tone(state)) }
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        // At most HEADING_SHARE of the width, so a long heading leaves the chips their room.
+        val cap = maxWidth * HEADING_SHARE
+        Row(Modifier.fillMaxWidth(), Arrangement.spacedBy(Marquee.space.m), Alignment.Bottom) {
+            Column(
+                Modifier.widthIn(max = cap),
+                verticalArrangement = Arrangement.spacedBy(Marquee.space.xs),
+            ) {
+                MqText(heading, role = TextRole.Callout, color = colors.dim, weight = FontWeight.SemiBold, maxLines = 1)
+                MqText("Versions", Modifier.semantics { heading() }, role = TextRole.Title1, maxLines = 1)
+            }
+            Box(Modifier.weight(1f), contentAlignment = Alignment.BottomEnd) { chips() }
+            Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(Marquee.space.xs)) {
+                VersionsCopy.progress(snapshot)?.let { (text, state) -> StatusWord(text, tone(state)) }
+            }
         }
     }
 }
@@ -449,10 +458,6 @@ private fun KindChips(
     onChoose: (SourceKind?) -> Unit,
 ) {
     if (chips.isEmpty()) return
-    // The chip the viewer chose stays in view on a narrow track or at a large font; nothing else scrolls the page to it.
-    val selected = remember { BringIntoViewRequester() }
-    var chosen by remember { mutableStateOf(false) }
-    LaunchedEffect(on) { if (chosen) selected.bringIntoView() }
     SegmentTrack(
         Modifier
             .focusProperties { enter = { focus.requester(kindKey(on)) ?: FocusRequester.Default } }
@@ -460,19 +465,16 @@ private fun KindChips(
             .selectableGroup()
             // Named as a group: "Sources".
             .semantics { contentDescription = StreamChoiceCopy.KIND_LABEL },
+        // The chip that is on stays in view on a narrow track or at a large font, by the track's own scroll.
+        kept = chips.indexOfFirst { it.kind == on },
     ) {
         for (chip in chips) {
             val key = kindKey(chip.kind)
             Chip(
                 chip.label,
                 chip.kind == on,
-                {
-                    chosen = true
-                    onChoose(chip.kind)
-                },
-                Modifier
-                    .focusProperties { down = focus.requester(PLAY) ?: FocusRequester.Default }
-                    .then(if (chip.kind == on) Modifier.bringIntoViewRequester(selected) else Modifier),
+                { onChoose(chip.kind) },
+                Modifier.focusProperties { down = focus.requester(PLAY) ?: FocusRequester.Default },
                 focusRequester = focus.requesterFor(key),
                 onFocusChange = focus.watch(null, key),
                 detail = chip.note,

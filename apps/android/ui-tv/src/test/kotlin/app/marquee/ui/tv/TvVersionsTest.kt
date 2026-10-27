@@ -959,6 +959,21 @@ class TvVersionsTest {
 
     @Test
     @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun `a long heading leaves the chip row All and the chip that is on, wholly in view`() {
+        val long = "Sintel, S1:E2 The Gatekeeper of the Dragon's Lair Beyond the Northern Mountains and the Sea"
+        show(kinds(selected = SourceKind.Debrid), heading = long)
+        val track = compose.onNodeWithContentDescription(StreamChoiceCopy.KIND_LABEL).fetchSemanticsNode().boundsInRoot
+        for (chip in listOf("All", "TorBox, 1 version")) {
+            val box = compose.onNodeWithContentDescription(chip).fetchSemanticsNode().boundsInRoot
+            assertTrue(
+                box.left >= track.left - 0.5f && box.right <= track.right + 0.5f,
+                "$chip $box out of the track $track",
+            )
+        }
+    }
+
+    @Test
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
     fun `shot - the kind chips`() {
         assumeTrue("MARQUEE_SHOTS is not set", out != null)
         show(kinds())
