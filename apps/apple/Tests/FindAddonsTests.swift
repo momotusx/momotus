@@ -49,7 +49,7 @@ private func recorded() throws -> AddonCatalogSnapshot {
     @Test func theWordsAreTheSharedOnes() throws {
         let url = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appending(path: "../../shared/find-addons-words.json")
         let shared = try JSONDecoder().decode([String: String].self, from: Data(contentsOf: url))
-        #expect(shared.count == 40)
+        #expect(shared.count == 43)
         #expect(W.table == shared)
         for (key, value) in shared { #expect(W.table[key] == value, "\(key)") }
     }
@@ -342,30 +342,16 @@ private func recorded() throws -> AddonCatalogSnapshot {
 
 // Lists from installed addons (plans/plugins-and-marketplace.md 7.1).
 
-private func list(_ id: String, _ name: String, _ host: String?) -> AddonList {
-    AddonList(id: id, name: name, host: host, state: .ready, entries: [], more: false)
-}
-
 extension FindAddonsTests {
-@Test func aPublishersListThatSharesANameSaysItsHost() {
-    let official = list("official", "Official", nil)
-    let theirs = list("addon-1:official", "Official", "dir.example")
-    let other = list("addon-1:dir", "Directory", "dir.example")
-    let all = [official, list("community", "Community", nil), theirs, other]
-    #expect(official.label(among: all) == "Official")
-    #expect(theirs.label(among: all) == "Official, dir.example")
-    #expect(other.label(among: all) == "Directory")
-}
-
-@Test func searchFindsEveryWordCaseAndAccentsAside() {
-    let found = ListedAddon(
-        key: "https://subs.example/manifest.json", id: "org.example", host: "subs.example", name: "Türkçe Altyazı",
-        description: "Subtitles for films", types: ["movie"], provides: ["subtitles"], configuration: .none,
-        configureUrl: "https://subs.example/configure", installed: .absent, copyKey: nil)
-    #expect(found.matches(""))
-    #expect(found.matches("turkce"))
-    #expect(found.matches("TURKÇE films"))
-    #expect(found.matches("subs.example"))
-    #expect(!found.matches("turkce series"))
+@Test func searchFoldsAsEveryAppDoes() throws {
+    let url = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appending(path: "../../shared/find-addons-fold.json")
+    struct Vector: Decodable { let text: String; let query: String; let match: Bool }
+    for v in try JSONDecoder().decode([Vector].self, from: Data(contentsOf: url)) {
+        let found = ListedAddon(
+            key: "https://x.example/manifest.json", id: "org.example", host: "x.example", name: v.text,
+            description: nil, types: ["movie"], provides: ["subtitles"], configuration: .none,
+            configureUrl: "https://x.example/configure", installed: .absent, copyKey: nil)
+        #expect(ListedAddon.searchText(found).matches(ListedAddon.queryWords(v.query)) == v.match, "\(v.text) / \(v.query)")
+    }
 }
 }

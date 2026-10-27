@@ -286,36 +286,27 @@ enum FindStatus: Equatable {
     }
 }
 
-extension AddonList {
-    private var shownName: String {
-        switch id {
-        case "official": W.official
-        case "community": W.communityList
-        default: name
-        }
+extension ListedAddon {
+    /// Letters that do not decompose, as their plain Latin (apps/shared/find-addons-fold.json).
+    private static let plain: [Character: String] = [
+        "ı": "i", "İ": "i", "ł": "l", "Ł": "l", "ø": "o", "Ø": "o", "đ": "d", "Đ": "d",
+        "ß": "ss", "æ": "ae", "Æ": "ae", "œ": "oe", "Œ": "oe",
+    ]
+
+    /// Text compared case and accents aside: "Türkçe Altyazı" finds "turkce altyazi".
+    static func fold(_ text: String) -> String {
+        let spelled = text.map { plain[$0] ?? String($0) }.joined()
+        return spelled.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: Locale(identifier: "en"))
     }
 
-    /// The list's chip: its name, with its host when another list has the
-    /// same name (a publisher may call its list "Official"; Cinemeta's own
-    /// lists have no host). The web's `listLabel`.
-    func label(among lists: [AddonList]) -> String {
-        let same = lists.contains { $0.id != id && $0.shownName.lowercased() == shownName.lowercased() }
-        if same, let host { return "\(shownName), \(host)" }
-        return shownName
-    }
+    /// An entry's text as the search reads it, folded.
+    static func searchText(_ entry: ListedAddon) -> String { fold("\(entry.name) \(entry.host) \(entry.description ?? "")") }
+
+    /// The query's words, folded once per change.
+    static func queryWords(_ query: String) -> [Substring] { fold(query).split(whereSeparator: \.isWhitespace) }
 }
 
-extension ListedAddon {
-    /// Text compared case and accents aside: "Türkçe" finds "turkce".
-    static func fold(_ text: String) -> String {
-        text.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: Locale(identifier: "en"))
-    }
-
-    /// The search field's rule: every word of the query in the name, host or description.
-    func matches(_ query: String) -> Bool {
-        let words = Self.fold(query).split(whereSeparator: \.isWhitespace)
-        guard !words.isEmpty else { return true }
-        let text = Self.fold("\(name) \(host) \(description ?? "")")
-        return words.allSatisfy { text.contains($0) }
-    }
+extension String {
+    /// The search field's rule: every word of the query in this folded text.
+    func matches(_ words: [Substring]) -> Bool { words.allSatisfy { contains($0) } }
 }

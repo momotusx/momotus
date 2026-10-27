@@ -20,6 +20,18 @@ final class FindAddonsPage {
     /// Every list in the core's order: Cinemeta's two, then the installed addons'.
     var lists: [AddonList] { catalog.snapshot?.lists ?? [] }
 
+    /// Each entry's folded search text, made once per entry, not per keystroke or render.
+    @ObservationIgnored private var searchTexts: [String: String] = [:]
+
+    func searchText(of entry: ListedAddon) -> String {
+        if let text = searchTexts[entry.key] { return text }
+        let text = ListedAddon.searchText(entry)
+        // A key whose text changed (a refreshed list) is made again, and the cache never outgrows the lists.
+        if searchTexts.count > 10_000 { searchTexts.removeAll() }
+        searchTexts[entry.key] = text
+        return text
+    }
+
     func status(of id: String) -> FindStatus { FindStatus(failure: catalog.failure, list: list(id)) }
 
     /// The page appeared. The first time, results from an earlier visit go:

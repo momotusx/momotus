@@ -59,6 +59,19 @@ struct FindAddonsScreen: View {
         .onChange(of: status) { old, new in
             if let words = new.announcement(after: old) { announce(words) }
         }
+        // The picked list went (its addon was turned off or removed): Official, never "Asking" for ever.
+        .onChange(of: page.lists.map(\.id), initial: true) { _, ids in
+            if !ids.isEmpty, !ids.contains(list) {
+                list = "official"
+                query = ""
+            }
+        }
+        // How many match, said once typing settles.
+        .task(id: query) {
+            guard !query.trimmingCharacters(in: .whitespaces).isEmpty else { return }
+            try? await Task.sleep(for: .milliseconds(600))
+            if !Task.isCancelled { announce(W.with(W.matching, n: visible.count)) }
+        }
         #if os(tvOS)
         .defaultFocus($focus, entryFocus)
         .onChange(of: visibleKeys) { _, keys in recover(keys) }
@@ -106,7 +119,8 @@ struct FindAddonsScreen: View {
                             query = ""
                         }
                     },
-                    focus: $focus)
+                    focus: $focus,
+                    onePastFour: true)
                 tools
             }
             ChipRow(
@@ -127,7 +141,7 @@ struct FindAddonsScreen: View {
             return [Chip(id: FindFocus.list("official"), title: W.official),
                     Chip(id: FindFocus.list("community"), title: W.communityList)]
         }
-        return lists.map { Chip(id: FindFocus.list($0.id), title: $0.label(among: lists), detail: count($0.id)) }
+        return lists.map { Chip(id: FindFocus.list($0.id), title: $0.name, detail: count($0.id)) }
     }
 
     /// Where a publisher's list comes from: a link to its site, plain text on a TV.
@@ -137,7 +151,9 @@ struct FindAddonsScreen: View {
         note(words)
         #else
         if let site = URL(string: "https://\(host)/") {
+            // The core sends hosts of enabled addons on public hosts only.
             Link(destination: site) { Label(words, glyph: "external-link") }
+                .accessibilityHint(W.fromHint)
                 .buttonStyle(PillButtonStyle())
         } else {
             note(words)
@@ -197,7 +213,8 @@ struct FindAddonsScreen: View {
 
     private var visible: [ListedAddon] {
         guard let current, current.state == .ready else { return [] }
-        return current.entries.filter { filter.shows($0) && $0.matches(query) }
+        let words = ListedAddon.queryWords(query)
+        return current.entries.filter { filter.shows($0) && page.searchText(of: $0).matches(words) }
     }
 
     private var visibleKeys: [String] { visible.map(\.key) }
@@ -225,13 +242,16 @@ struct FindAddonsScreen: View {
                 VStack(alignment: .leading, spacing: Theme.Space.s) { failureWords(failure); tryAgain }
             }
         } else if let current, current.state == .ready {
-            if current.entries.isEmpty {
+            if current.entries.isEmpty, current.more == true {
+                note(W.noRoom)
+            } else if current.entries.isEmpty {
                 note(current.host.map { W.with(W.emptyFrom, host: $0) } ?? W.empty)
             } else if visible.isEmpty, !query.trimmingCharacters(in: .whitespaces).isEmpty {
                 note(W.searchEmpty)
             } else if visible.isEmpty, let words = filter.emptyWords {
                 note(words)
             } else {
+                if current.more == true { note(W.with(W.more, n: current.entries.count)) }
                 let repeated = ListedAddon.repeatedNames(current.entries)
                 let columns = [GridItem(.adaptive(minimum: columnWidth), spacing: gap, alignment: .top)]
                 LazyVGrid(columns: columns, alignment: .leading, spacing: gap) {
@@ -245,7 +265,6 @@ struct FindAddonsScreen: View {
                 // Coming back to the grid lands on the card it left.
                 .defaultFocus($focus, lastCard.map(FindFocus.card) ?? visibleKeys.first.map(FindFocus.card), priority: .userInitiated)
                 #endif
-                if current.more == true { note(W.with(W.more, n: current.entries.count)) }
             }
         }
     }

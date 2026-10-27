@@ -16,10 +16,13 @@ struct ChipRow<ID: Hashable>: View {
     let select: (ID) -> Void
     /// A page that moves focus itself (TV Find addons) binds its chips here.
     var focus: FocusState<ID?>.Binding?
+    /// Past four chips, one row that scrolls on every form too (Find addons'
+    /// lists), never a stack of wrapped rows above the content.
+    var onePastFour = false
     @Environment(\.metrics) private var metrics
 
     var body: some View {
-        if metrics.wide {
+        if metrics.wide, !(onePastFour && chips.count > 4) {
             HStack(alignment: .firstTextBaseline, spacing: Theme.Space.s) {
                 caption.frame(width: 104, alignment: .leading)
                 FlowRow(spacing: 10) { buttons }

@@ -41,6 +41,9 @@ enum FindAddonsWords {
     static let more = "Showing the first {n} of this list."
     static let searchLabel = "Search this list"
     static let searchEmpty = "Nothing in this list matches."
+    static let noRoom = "Too many lists to show this one here. Remove an addon to see it."
+    static let matching = "{n} matching"
+    static let fromHint = "Opens the website"
 
     /// Every word by its key in the shared file, for the parity test.
     static let table: [String: String] = [
@@ -54,6 +57,7 @@ enum FindAddonsWords {
         "setUp": setUp, "setUpOff": setUpOff, "install": install, "configure": configure,
         "turnOn": turnOn, "fromHost": fromHost, "fromList": fromList, "loadingFrom": loadingFrom,
         "emptyFrom": emptyFrom, "more": more, "searchLabel": searchLabel, "searchEmpty": searchEmpty,
+        "noRoom": noRoom, "matching": matching, "fromHint": fromHint,
     ]
 
     /// A word with its `{host}` or `{n}` filled in.
