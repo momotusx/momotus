@@ -927,7 +927,10 @@ export function Found() {
         <Frame label={w.signInTitle}>
           <h1>{w.signInTitle}</h1>
           <p class="lead">{w.foundWeb}</p>
-          <Session server={h().server} name={name} how={w.tvScanHow} onJoined={joined} />
+          {/* Start over needs the account slot the code holds: asked, the code goes; Cancel makes a new one. */}
+          <Show when={!asking()}>
+            <Session server={h().server} name={name} how={w.tvScanHow} onJoined={joined} />
+          </Show>
           <div class="acts">
             <A class="btn" href="/sync/recover" data-f="signin:found-kit" data-autofocus>
               {w.useRecoveryKit}

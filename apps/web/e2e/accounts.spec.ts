@@ -837,6 +837,21 @@ test.describe.serial("accounts on the web", () => {
     await expect(late.locator('[data-f="signin:email:address"]')).toHaveValue("");
   });
 
+  test("Desk signs in as bob, whose account has no device left: Start over makes a new one", async () => {
+    await go(desk, "/welcome");
+    await providerPage(desk, "signin:mock", "bob");
+    await expect(desk).toHaveURL(/\/sign-in\/found\?from=welcome$/);
+    await expect(desk.locator(".qrbox svg")).toBeVisible();
+    await desk.locator('[data-f="signin:cant"]').click();
+    // The code gave the account slot back while Start over is asked.
+    await expect(desk.locator(".qrbox svg")).toHaveCount(0);
+    const from = asked.length;
+    await desk.locator('[data-f="signin:start-over"]').click();
+    await expect(desk).toHaveURL(/\/sync\/kit\?first=1&then=doors$/, { timeout: 30_000 });
+    expect(asked.slice(from).find((a) => a.port === P.a && a.op === "createSyncAccount")?.fields).toContain("move");
+    await expect(desk.locator(".sign-in-failure")).toHaveCount(0);
+  });
+
   test("no ticket or receipt reaches storage, history or the URL, and no page threw", async () => {
     expect(secrets.size).toBeGreaterThan(4);
     for (const page of [desk, phone, tv, mail, late]) {
