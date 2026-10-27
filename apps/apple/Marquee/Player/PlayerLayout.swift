@@ -504,12 +504,13 @@ enum PhoneFrame {
 }
 
 extension PlayerLayout {
-    /// Where a drawn subtitle's foot sits, from the screen's top: at the
-    /// picture's foot, and over the controls' foot block (on the iPhone the
-    /// scrubber and the actions) while they show, the safe area's foot counted:
-    /// the lower part of the screen, never its top.
+    /// Where a drawn subtitle's foot sits, from the screen's top: 8% of the
+    /// picture's height over the picture's foot (`subtitleRise`), and over the
+    /// controls' foot block (on the iPhone the scrubber and the actions) while
+    /// they show, the safe area's foot counted: the lower part of the screen,
+    /// never its top, never on a landscape screen's band.
     static func subtitleFoot(screenHeight: CGFloat, pictureHeight: CGFloat, safeBottom: CGFloat, controlsShown: Bool, controlsHeight: CGFloat) -> CGFloat {
-        let pictureFoot = (screenHeight + pictureHeight) / 2 - 16
+        let pictureFoot = (screenHeight + pictureHeight) / 2 - pictureHeight * subtitleRise
         let clear = controlsShown ? safeBottom + controlsHeight + 16 : subtitleClear(screenHeight: screenHeight, safeBottom: safeBottom)
         return min(pictureFoot, screenHeight - clear)
     }
@@ -521,6 +522,11 @@ extension PlayerLayout {
     static func subtitleClear(screenHeight: CGFloat, safeBottom: CGFloat) -> CGFloat {
         max(40, safeBottom + 24, screenHeight * 0.05)
     }
+
+    /// A subtitle's foot over the picture's foot, a share of the picture's
+    /// height: Media3's own default on its content frame, between EBU R 95's
+    /// 5% and CEA-608's 10%, on every platform (plans/dual-subtitles.md 11).
+    static let subtitleRise: CGFloat = 0.08
 }
 
 extension PhoneFrame {
@@ -559,7 +565,7 @@ extension PhoneFrame {
         if min(plain, overPill) - pictureBottom >= boxHeight + bandGap {
             return (pictureBottom + bandGap + boxHeight, 1)
         }
-        let pictureFoot = pictureBottom - 16
+        let pictureFoot = pictureBottom - max(16, pictureHeight * PlayerLayout.subtitleRise)
         guard controlsShown else { return (min(min(pictureFoot, plain) - 10, overPill), 1) }
         let clear = screenHeight / 2 + transportHalfHeight + subtitleClearance
         let low = min(pictureFoot, plain)

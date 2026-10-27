@@ -753,10 +753,10 @@ private func route(_ key: String, sub: UInt64 = 3) -> PlayRoute {
     #expect(across == 273, "over the scrubber block and the home indicator")
     #expect(across > 402 / 2, "in the lower half")
     #expect(PlayerLayout.subtitleFoot(screenHeight: 402, pictureHeight: 402, safeBottom: 21, controlsShown: false, controlsHeight: 92) == 357)
-    // Upright, at the picture's foot, well over the scrubber at the screen's foot.
-    #expect(PlayerLayout.subtitleFoot(screenHeight: 874, pictureHeight: 226, safeBottom: 34, controlsShown: true, controlsHeight: 92) == 534)
-    // A Mac window: no safe area; over the title-safe line, 5% of its height.
-    #expect(PlayerLayout.subtitleFoot(screenHeight: 900, pictureHeight: 900, safeBottom: 0, controlsShown: false, controlsHeight: 200) == 855)
+    // Upright, 8% of the picture over its foot, well over the scrubber at the screen's foot.
+    #expect(abs(PlayerLayout.subtitleFoot(screenHeight: 874, pictureHeight: 226, safeBottom: 34, controlsShown: true, controlsHeight: 92) - 531.92) < 0.001)
+    // A Mac window: no safe area; 8% of the picture over its foot, over the title-safe line (5%).
+    #expect(PlayerLayout.subtitleFoot(screenHeight: 900, pictureHeight: 900, safeBottom: 0, controlsShown: false, controlsHeight: 200) == 828)
 }
 
 @Test func drawnSubtitlesKeepOverTheTitleSafeLine() {
@@ -764,15 +764,15 @@ private func route(_ key: String, sub: UInt64 = 3) -> PlayRoute {
     // the 5% line, and grow upward (the view keeps the foot and aligns the box to it).
     let picture: CGFloat = 1920 / 2.39
     let tv = PlayerLayout.subtitleFoot(screenHeight: 1080, pictureHeight: picture, safeBottom: 60, controlsShown: false, controlsHeight: 200)
-    #expect(tv <= (1080 + picture) / 2, "inside the picture, not on its bar")
+    #expect(abs((1080 + picture) / 2 - picture * 0.08 - tv) < 0.001, "8% of the picture over its foot, not on its bar: \(tv)")
     #expect(tv <= 1080 * 0.95, "over the title-safe line")
-    // A 1080 pt screen with no safe area and a picture whose foot (1033) sits between the old 40 pt floor (1040)
-    // and the 5% line (1026): the foot comes up to the line.
+    // A 1080 pt screen with no safe area and a picture 1018 pt tall (its foot at 1049): 8% of it over its foot
+    // (967.56), well over the 5% line (1026).
     let edge = PlayerLayout.subtitleFoot(screenHeight: 1080, pictureHeight: 1018, safeBottom: 0, controlsShown: false, controlsHeight: 200)
-    #expect(edge == 1026, "over the title-safe line: \(edge)")
-    // A Mac screen 1117 pt tall whose picture fills it: 40 pt was under the 5% line (55.85 pt).
+    #expect(abs(edge - 967.56) < 0.001, "8% of the picture over its foot: \(edge)")
+    // A Mac screen 1117 pt tall whose picture fills it: 89.36 pt, over the 5% line (55.85 pt).
     let mac = PlayerLayout.subtitleFoot(screenHeight: 1117, pictureHeight: 1117, safeBottom: 0, controlsShown: false, controlsHeight: 200)
-    #expect(1117 - mac >= 55.8, "over the title-safe line: \(mac)")
+    #expect(abs(1117 - mac - 89.36) < 0.001, "8% of the picture: \(mac)")
     // The iPhone's own rule keeps the same floor with the controls hidden.
     let phone = PhoneFrame.subtitle(screenHeight: 1117, pictureHeight: 1117, safeBottom: 0, controlsShown: false, scrubberTop: 1000, boxHeight: 80)
     #expect(1117 - phone.foot >= 55.8)
@@ -820,9 +820,10 @@ private func route(_ key: String, sub: UInt64 = 3) -> PlayRoute {
         #expect(upright.foot == 618)
         #expect(upright.scale == 1)
     }
-    // A tall picture leaves no band that holds the box: the foot inside the picture, as before.
+    // A tall picture leaves no band that holds the box: the foot inside the picture, 8% of it (48 pt) over its foot
+    // (737), then the hidden controls' 10 pt.
     let tall = PhoneFrame.subtitle(screenHeight: 874, pictureHeight: 600, safeBottom: 34, controlsShown: false, scrubberTop: 755, boxHeight: 72)
-    #expect(tall.foot == 711)
+    #expect(tall.foot == 679)
     #expect(tall.scale == 1)
 }
 

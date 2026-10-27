@@ -572,7 +572,9 @@ struct PlayerScreen: View {
         let foot = PlayerLayout.subtitleFoot(
             screenHeight: size.height, pictureHeight: fittedHeight(size), safeBottom: safeBottom,
             controlsShown: controlsShown, controlsHeight: controlsHeight)
-        return (foot - 10, 1)
+        // Hidden, the foot is the rule's (8% of the picture over its foot); shown, it keeps 10 pt more over the
+        // controls, as it had.
+        return (controlsShown ? foot - 10 : foot, 1)
     }
 
     /// Height of the picture fitted into `size`, or the full height before it is known.
