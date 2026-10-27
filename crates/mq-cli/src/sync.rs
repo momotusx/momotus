@@ -104,8 +104,7 @@ fn save(data: &Path, record: &SyncConfig) -> Result<(), String> {
     std::fs::rename(&temp, path).map_err(|e| e.to_string())
 }
 
-/// New device: prints the pairing code, waits for approval, joins after the
-/// user confirms the codes match.
+/// New device: prints the pairing code, waits for approval and joins.
 pub async fn pair(data: &Path, server: &str, name: &str) -> Result<(), String> {
     let http = http()?;
     let request = mq_sync::pair::start_pairing(&http, server)
@@ -118,16 +117,6 @@ pub async fn pair(data: &Path, server: &str, name: &str) -> Result<(), String> {
             return Err("the pairing code expired".into());
         }
         if let Some(offer) = request.poll(&http).await.map_err(failed(data))? {
-            // Nothing is kept until the user confirms the other device shows
-            // the same code.
-            super::emit(json!({ "event": "confirm", "code": offer.code }));
-            let mut answer = String::new();
-            std::io::stdin()
-                .read_line(&mut answer)
-                .map_err(|e| e.to_string())?;
-            if !answer.trim().eq_ignore_ascii_case("y") {
-                return Err("the codes did not match; nothing was kept".into());
-            }
             let record = request
                 .claim(&http, offer, name)
                 .await
@@ -139,15 +128,16 @@ pub async fn pair(data: &Path, server: &str, name: &str) -> Result<(), String> {
     }
 }
 
-/// Device that syncs: vouches for the device showing `qr`.
+/// Device that syncs: vouches for the device showing `qr`, which its operator
+/// read off that screen.
 pub async fn approve(core: &Core, data: &Path, qr: &str) -> Result<(), String> {
     let record = read(data)?;
-    let (code, record) =
+    let (member, record) =
         mq_sync::pair::approve_pairing(core.library(), core.http(), &record, core.clock(), qr)
             .await
             .map_err(failed(data))?;
     save(data, &record)?;
-    super::emit(json!({ "event": "approved", "code": code }));
+    super::emit(json!({ "event": "approved", "member": member }));
     Ok(())
 }
 

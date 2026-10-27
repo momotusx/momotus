@@ -52,6 +52,14 @@ const RECEIPT_MS: u64 = 10 * 60 * 1000;
 /// Sign-ups one identity may make in `SIGNUP_WINDOW_MS`.
 pub(crate) const SIGNUP_CAP: i64 = 3;
 pub(crate) const SIGNUP_WINDOW_MS: u64 = 30 * 24 * 60 * 60 * 1000;
+/// Sign-ups without a sign-in (plans/tv-qr-login.md Q7), per network and
+/// relay-wide, in `NETWORK_WINDOW_MS`.
+pub(crate) const NETWORK_SIGNUP_CAP: i64 = 3;
+pub(crate) const RELAY_SIGNUP_CAP: i64 = 100;
+/// The start of a network sign-up's subject in `signups`, so they are
+/// counted apart from the identities' (whose subjects are bare MACs).
+const NETWORK_PREFIX: &[u8] = b"net\0";
+pub(crate) const NETWORK_WINDOW_MS: u64 = 24 * 60 * 60 * 1000;
 /// A deletion asked for from the web page waits this long, shown on every device.
 pub(crate) const DELETION_WAIT_MS: u64 = 7 * 24 * 60 * 60 * 1000;
 /// A flow past its time is kept this much longer, emptied, so a late
@@ -408,6 +416,24 @@ impl Identity {
     /// taken meanwhile holds the address itself.
     fn client_tag(&self, address: &std::net::IpAddr) -> String {
         hex::encode(self.subject("client address", &address.to_string()))
+    }
+
+    /// A sign-up without a sign-in counts against its network under this
+    /// keyed hash (plans/tv-qr-login.md Q7), so no address is stored: an IPv4
+    /// address, or an IPv6 /48, which one customer often holds whole.
+    pub(crate) fn network_tag(&self, address: &std::net::IpAddr) -> Vec<u8> {
+        let network = match address {
+            std::net::IpAddr::V6(v6) => {
+                let mask = !0u128 << 80;
+                std::net::IpAddr::V6((u128::from(*v6) & mask).into())
+            }
+            v4 => *v4,
+        };
+        [
+            NETWORK_PREFIX,
+            &self.subject("network", &network.to_string()),
+        ]
+        .concat()
     }
 
     fn issuer(&self, kind: Kind) -> Option<&str> {
@@ -1585,6 +1611,27 @@ pub(crate) fn signups(db: &Connection, subject: &[u8], now: u64) -> rusqlite::Re
     )
 }
 
+/// Whether a sign-up without a sign-in from the network `subject` names
+/// stays under its budget and the relay's.
+pub(crate) fn network_signup_allowed(
+    db: &Connection,
+    subject: &[u8],
+    now: u64,
+) -> rusqlite::Result<bool> {
+    let since = now.saturating_sub(NETWORK_WINDOW_MS) as i64;
+    let mine: i64 = db.query_row(
+        "SELECT COUNT(*) FROM signups WHERE subject = ?1 AND at_ms > ?2",
+        params![subject, since],
+        |r| r.get(0),
+    )?;
+    let all: i64 = db.query_row(
+        "SELECT COUNT(*) FROM signups WHERE substr(subject, 1, 4) = ?1 AND at_ms > ?2",
+        params![NETWORK_PREFIX, since],
+        |r| r.get(0),
+    )?;
+    Ok(mine < NETWORK_SIGNUP_CAP && all < RELAY_SIGNUP_CAP)
+}
+
 /// The account's links.
 pub(crate) async fn links(State(state): State<AppState>, headers: HeaderMap) -> Response {
     let db = lock(&state);
@@ -2005,6 +2052,58 @@ pub(crate) fn expire(db: &Connection, now: u64) -> rusqlite::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Sign-ups without a ticket: 3 per network a day and 100 relay-wide,
+    /// counting only network rows, so a day of sign-ins neither uses up the
+    /// budget nor is stopped by it (plans/tv-qr-login.md Q7).
+    #[test]
+    fn network_sign_ups_stop_at_both_caps() {
+        let db = Connection::open_in_memory().unwrap();
+        db.execute_batch("CREATE TABLE signups (subject BLOB NOT NULL, at_ms INTEGER NOT NULL);")
+            .unwrap();
+        let now = 10 * NETWORK_WINDOW_MS;
+        let add = |subject: &[u8], at: u64| {
+            db.execute(
+                "INSERT INTO signups (subject, at_ms) VALUES (?1, ?2)",
+                params![subject, at as i64],
+            )
+            .unwrap();
+        };
+        let net = |name: &str| [NETWORK_PREFIX, name.as_bytes()].concat();
+        let home = net("home");
+        for _ in 0..NETWORK_SIGNUP_CAP {
+            assert!(network_signup_allowed(&db, &home, now).unwrap());
+            add(&home, now);
+        }
+        assert!(!network_signup_allowed(&db, &home, now).unwrap());
+        assert!(network_signup_allowed(&db, &net("other"), now).unwrap());
+        // A day on, the network starts again.
+        assert!(network_signup_allowed(&db, &home, now + NETWORK_WINDOW_MS).unwrap());
+        // Identity sign-ups do not count toward the relay-wide cap.
+        for n in 0..RELAY_SIGNUP_CAP {
+            add(format!("identity {n}").as_bytes(), now);
+        }
+        assert!(network_signup_allowed(&db, &net("other"), now).unwrap());
+        for n in NETWORK_SIGNUP_CAP..RELAY_SIGNUP_CAP {
+            add(&net(&format!("n{n}")), now);
+        }
+        assert!(!network_signup_allowed(&db, &net("other"), now).unwrap());
+    }
+
+    /// One /48 is one network; another /48 is another.
+    #[test]
+    fn an_ipv6_network_is_its_48() {
+        let id = Identity::new(
+            serde_json::from_value(json!({ "key": "1".repeat(64) })).unwrap(),
+            "relay.example",
+        )
+        .unwrap();
+        let tag = |a: &str| id.network_tag(&a.parse().unwrap());
+        assert_eq!(tag("2001:db8:1:2::1"), tag("2001:db8:1:ffff::9"));
+        assert_ne!(tag("2001:db8:1::1"), tag("2001:db8:2::1"));
+        assert_ne!(tag("198.51.100.7"), tag("198.51.100.8"));
+        assert!(tag("198.51.100.7").starts_with(NETWORK_PREFIX));
+    }
 
     #[test]
     fn a_public_issuer_names_only_public_https_endpoints() {

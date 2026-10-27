@@ -265,13 +265,19 @@ impl Device {
     /// A second device joins by pairing.
     async fn pair(&mut self) -> Device {
         let tv = start_pairing(&http(), &self.record.server).await.unwrap();
-        let (code, record) =
+        // The relay names its link host: the QR is a link a phone camera opens
+        // (plans/tv-qr-login.md Q8).
+        assert!(
+            tv.qr.starts_with("https://link.example/pair#v=3&"),
+            "{}",
+            tv.qr
+        );
+        let (_, record) =
             approve_pairing(&self.library, &http(), &self.record, &self.clock, &tv.qr)
                 .await
                 .unwrap();
         self.record = record;
         let offer = tv.poll(&http()).await.unwrap().expect("offer");
-        assert_eq!(offer.code, code);
         Device {
             record: tv.claim(&http(), offer, "TV").await.unwrap(),
             library: Library::temporary().unwrap(),
@@ -651,14 +657,61 @@ async fn a_ticket_is_used_once_and_expires() {
     relay.later(11 * 60 * 1000);
     let expired = Device::create(&relay, &late, false).await.err().unwrap();
     assert!(matches!(expired, SyncError::TicketExpired), "{expired:?}");
-    // Without a ticket an identity relay takes no sign-up.
-    let none = mq_sync::create_account(&http(), &relay.url, None, "Phone")
+}
+
+/// With no ticket and no invite an identity relay still makes an account,
+/// at most 3 a day from one network (plans/tv-qr-login.md Q7): the default
+/// server works before any provider is set up. A ticket sign-up is not
+/// counted against the network.
+#[tokio::test]
+async fn a_sign_up_without_a_ticket_counts_against_its_network() {
+    let relay = Relay::new().await;
+    let ticket = relay.sign_in("mock", "alice").await;
+    Device::create(&relay, &ticket, false).await.unwrap();
+    for n in 0..3 {
+        mq_sync::create_account(&http(), &relay.url, None, "Phone")
+            .await
+            .unwrap_or_else(|e| panic!("sign-up {n}: {e}"));
+    }
+    let fourth = mq_sync::create_account(&http(), &relay.url, None, "Phone")
+        .await
+        .unwrap_err();
+    assert!(matches!(fourth, SyncError::SignupLimit), "{fourth:?}");
+    // A sign-in still makes one.
+    let bob = relay.sign_in("mock", "bob").await;
+    Device::create(&relay, &bob, false).await.unwrap();
+    relay.later(24 * 60 * 60 * 1000 + 1);
+    mq_sync::create_account(&http(), &relay.url, None, "Phone")
+        .await
+        .unwrap();
+    // The network is kept as a keyed hash: no address in the database.
+    let bytes = std::fs::read(&relay.db).unwrap_or_default();
+    assert!(!bytes.windows(9).any(|w| w == b"127.0.0.1"));
+    // An invite on the relay turns sign-ups without a ticket off.
+    let closed = Relay::with(|c| c.invite = Some("letmein".into())).await;
+    let refused = mq_sync::create_account(&http(), &closed.url, None, "Phone")
         .await
         .unwrap_err();
     assert!(
-        matches!(none, SyncError::Http(HttpError::Status { status: 403, .. })),
-        "{none:?}"
+        matches!(
+            refused,
+            SyncError::Http(HttpError::Status { status: 403, .. })
+        ),
+        "{refused:?}"
     );
+}
+
+/// Sign-ups without a sign-in stop while the accounts store more than the
+/// relay's ceiling (plans/tv-qr-login.md Q7); a sign-in still makes one.
+#[tokio::test]
+async fn a_full_relay_takes_no_sign_up_without_a_sign_in() {
+    let relay = Relay::with(|c| c.signup_bytes = 0).await;
+    let refused = mq_sync::create_account(&http(), &relay.url, None, "Phone")
+        .await
+        .unwrap_err();
+    assert!(matches!(refused, SyncError::SignupLimit), "{refused:?}");
+    let alice = relay.sign_in("mock", "alice").await;
+    Device::create(&relay, &alice, false).await.unwrap();
 }
 
 /// The answer to a create was lost: the retry finds the account made and

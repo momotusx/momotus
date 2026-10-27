@@ -455,15 +455,32 @@ async fn sync_account_then_two_devices_share_preferences() {
 
     // An approval ended with cancelPairing rotates the key at once.
     let http = mq_http::HttpClient::new(mq_http::ClientConfig::default()).unwrap();
-    let tv = mq_sync::pair::start_pairing(&http, &server).await.unwrap();
+    let tv = mq_sync::pair::start_pairing_as(&http, &server, "Den\u{202E}", Some("tv"))
+        .await
+        .unwrap();
+    // The sheet reads the code through the core: the name cleaned.
+    a.handle_text(&json!({"id": 9, "op": "readPairingCode", "qr": tv.qr}).to_string())
+        .await;
+    let read = next(&mut rx_a).await;
+    assert_eq!(read["result"]["name"], "Den", "{read}");
+    assert_eq!(read["result"]["form"], "tv", "{read}");
+    // A link from a screen that is not on this network (loopback never is)
+    // approves nothing (plans/tv-qr-login.md Q2).
     a.handle_text(
-        &json!({"id": 11, "op": "approvePairing", "record": record, "qr": tv.qr}).to_string(),
+        &json!({"id": 10, "op": "approvePairing", "record": record, "qr": tv.qr}).to_string(),
+    )
+    .await;
+    let refused = next(&mut rx_a).await;
+    assert_eq!(refused["code"], "scanRequired", "{refused}");
+    a.handle_text(
+        &json!({"id": 11, "op": "approvePairing", "record": record, "qr": tv.qr, "via": "scan", "unlocked": true}).to_string(),
     )
     .await;
     let approved = next(&mut rx_a).await;
-    assert_eq!(
-        approved["result"]["code"].as_str().map(str::len),
-        Some(6),
+    assert!(
+        approved["result"]["member"]
+            .as_str()
+            .is_some_and(|m| !m.is_empty()),
         "{approved}"
     );
     let after = approved["result"]["record"].clone();
@@ -872,7 +889,7 @@ async fn joining_a_sync_account_ends_the_defaults_step() {
         stored => stored.clone(),
     };
 
-    // Paired: B shows its QR, A approves it, B confirms the code.
+    // Paired: B shows its QR, A approves it, B joins with nothing asked.
     let core_b = Core::temporary("p").unwrap();
     assert!(core_b.addons_fresh());
     // An addons view open through the join drops `fresh` at once.
@@ -901,13 +918,11 @@ async fn joining_a_sync_account_ends_the_defaults_step() {
         unreachable!()
     };
     a.handle_text(
-        &json!({"id": 2, "op": "approvePairing", "record": record, "qr": qr}).to_string(),
+        &json!({"id": 2, "op": "approvePairing", "record": record, "qr": qr, "via": "scan", "unlocked": true}).to_string(),
     )
     .await;
     let approved = next(&mut rx_a).await;
     assert_eq!(approved["ok"], true, "{approved}");
-    until(|s| matches!(s, PairingSnapshot::Confirm { .. })).await;
-    pairing.confirm();
     until(|s| matches!(s, PairingSnapshot::Joined { .. })).await;
     assert!(!core_b.addons_fresh(), "paired");
     tokio::time::timeout(Duration::from_secs(5), async {
@@ -1676,14 +1691,14 @@ async fn addons_follow_the_account_both_ways_through_a_relay() {
     else {
         unreachable!()
     };
-    let (n, text) = call(json!({"op": "approvePairing", "record": record_a, "qr": qr}));
+    let (n, text) = call(
+        json!({"op": "approvePairing", "record": record_a, "qr": qr, "via": "scan", "unlocked": true}),
+    );
     a.handle_text(&text).await;
     let approved = reply_to(&mut rx_a, n).await;
     assert_eq!(approved["ok"], true, "{approved}");
     record_a = approved["result"]["record"].clone();
-    until(|s| matches!(s, PairingSnapshot::Confirm { .. })).await;
-    pairing.confirm();
-    let PairingSnapshot::Joined { record } =
+    let PairingSnapshot::Joined { record, .. } =
         until(|s| matches!(s, PairingSnapshot::Joined { .. })).await
     else {
         unreachable!()
@@ -1875,4 +1890,61 @@ async fn email_sign_in_over_the_protocol() {
     .await;
     assert_eq!(wait["code"], "emailWait", "{wait}");
     let _ = std::fs::remove_dir_all(dir);
+}
+
+/// The owner's rule (plans/tv-qr-login.md Q5): the TV's code renews itself
+/// for as long as the screen is open, with nothing pressed. Two codes end,
+/// and the third still signs the screen in.
+#[tokio::test]
+async fn the_code_renews_itself_and_still_signs_the_screen_in() {
+    use mq_runtime::views::pairing::{PairingSnapshot, PairingView};
+    let dir = std::env::temp_dir().join(format!("mq-bridge-renew-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let config = mq_sync_server::Config {
+        pairing_ms: 3_000,
+        ..Default::default()
+    };
+    let app = mq_sync_server::router(&dir.join("relay.sqlite"), config).unwrap();
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let server = format!("http://{}", listener.local_addr().unwrap());
+    tokio::spawn(async move { mq_sync_server::serve(listener, app).await.unwrap() });
+
+    let core_a = Core::temporary("p").unwrap();
+    let (tx_a, mut rx_a) = Output::channel();
+    let mut a = Session::new(core_a.clone(), tx_a);
+    a.handle_text(
+        &json!({"id": 1, "op": "createSyncAccount", "server": server, "name": "Phone"}).to_string(),
+    )
+    .await;
+    let record = next(&mut rx_a).await["result"].clone();
+
+    let core_b = Core::temporary("p").unwrap();
+    let pairing = PairingView::open(&core_b, &server, "TV", Some("tv"));
+    let mut seen: Vec<String> = Vec::new();
+    tokio::time::timeout(Duration::from_secs(30), async {
+        while seen.len() < 3 {
+            if let PairingSnapshot::Waiting { qr, .. } = pairing.snapshot()
+                && seen.last() != Some(&qr)
+            {
+                seen.push(qr);
+            }
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+    })
+    .await
+    .expect("two codes ended and a third showed, with nothing pressed");
+    a.handle_text(
+        &json!({"id": 2, "op": "approvePairing", "record": record, "qr": seen[2], "via": "scan", "unlocked": true}).to_string(),
+    )
+    .await;
+    let approved = next(&mut rx_a).await;
+    assert_eq!(approved["ok"], true, "{approved}");
+    tokio::time::timeout(Duration::from_secs(20), async {
+        while !matches!(pairing.snapshot(), PairingSnapshot::Joined { by: Some(ref by), .. } if by == "Phone") {
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+    })
+    .await
+    .expect("joined, and says who let it in");
+    let _ = std::fs::remove_dir_all(&dir);
 }

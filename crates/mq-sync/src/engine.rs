@@ -465,6 +465,21 @@ pub enum SyncError {
     MailUnavailable,
     #[error("that code is not right")]
     WrongCode,
+    /// The screen that shows this code is not on this device's network and the
+    /// code came by a link (plans/tv-qr-login.md Q2): only a live scan in the
+    /// app approves it. Nothing was sent.
+    #[error("scan the code on the screen in front of you")]
+    ScanRequired,
+    /// Not on that screen's network: the phone's screen lock comes first (Q6).
+    /// Nothing was sent.
+    #[error("unlock this phone to sign in that screen")]
+    UnlockRequired,
+    /// Another device already answered this pairing code.
+    #[error("someone else already answered this code")]
+    CodeAnswered,
+    /// The pairing code ended (5 minutes) or never was.
+    #[error("this pairing code expired")]
+    CodeExpired,
 }
 
 /// The relay's coded answers map in one place. Only the relay's own 410
@@ -494,6 +509,8 @@ impl From<HttpError> for SyncError {
             (429, Some("emailLimit")) => SyncError::EmailLimit,
             (503, Some("mailUnavailable")) => SyncError::MailUnavailable,
             (403, Some("wrongCode")) => SyncError::WrongCode,
+            (409, Some("codeAnswered")) => SyncError::CodeAnswered,
+            (410, Some("codeExpired")) => SyncError::CodeExpired,
             _ => SyncError::Http(e),
         }
     }
@@ -556,6 +573,10 @@ impl SyncError {
             SyncError::EmailLimit => "emailLimit",
             SyncError::MailUnavailable => "mailUnavailable",
             SyncError::WrongCode => "wrongCode",
+            SyncError::ScanRequired => "scanRequired",
+            SyncError::UnlockRequired => "unlockRequired",
+            SyncError::CodeAnswered => "codeAnswered",
+            SyncError::CodeExpired => "codeExpired",
             _ => return None,
         })
     }

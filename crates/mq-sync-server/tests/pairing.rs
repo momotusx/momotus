@@ -3,7 +3,10 @@
 use mq_http::{ClientConfig, HttpClient, HttpError, RequestOptions};
 use mq_library::hlc::HlcClock;
 use mq_library::{AddonRow, Library};
-use mq_sync::pair::{approve_pairing, cancel_pairing, make_kit, recover, start_pairing};
+use mq_sync::pair::{
+    Approval, approve_pairing_with, cancel_pairing, make_kit, recover, start_pairing,
+    start_pairing_as,
+};
 use mq_sync::{
     Announced, Announcement, SyncConfig, SyncError, ack_announcements, devices, remove_devices,
     report_lost, sync_once,
@@ -26,6 +29,38 @@ async fn relay_with(config: Config) -> (String, PathBuf) {
     let base = format!("http://{}", listener.local_addr().unwrap());
     tokio::spawn(async move { mq_sync_server::serve(listener, app).await.unwrap() });
     (base, db)
+}
+
+/// The client network every request arrives from, as Cloudflare names it.
+type Network = std::sync::Arc<std::sync::Mutex<&'static str>>;
+
+/// A relay behind the trusted proxy whose every request comes from the
+/// network `Network` holds when it is sent: a TV and a phone on one Mac
+/// then stand on two networks, or one.
+async fn relay_on(network: Network) -> String {
+    let mut b = [0u8; 8];
+    getrandom::fill(&mut b).unwrap();
+    let dir = std::env::temp_dir().join(format!("mq-pair-{}", hex::encode(b)));
+    std::fs::create_dir_all(&dir).unwrap();
+    let config = Config {
+        trust_proxy: true,
+        ..Config::default()
+    };
+    let app = router(&dir.join("relay.sqlite"), config)
+        .unwrap()
+        .layer(axum::middleware::from_fn(
+            move |mut request: axum::extract::Request, next: axum::middleware::Next| {
+                let from = *network.lock().unwrap();
+                request
+                    .headers_mut()
+                    .insert("cf-connecting-ip", from.parse().unwrap());
+                next.run(request)
+            },
+        ));
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    tokio::spawn(async move { mq_sync_server::serve(listener, app).await.unwrap() });
+    base
 }
 
 /// Tokens that can push: one per device that joined.
@@ -116,18 +151,27 @@ impl Device {
             .collect()
     }
 
+    /// A scan behind the screen lock, which approves wherever the screen is.
     async fn approve(&mut self, qr: &str) -> Result<String, SyncError> {
-        let (code, record) =
-            approve_pairing(&self.library, &http(), &self.record, &self.clock, qr).await?;
+        let trusted = Approval {
+            scanned: true,
+            unlocked: true,
+        };
+        self.approve_as(qr, trusted).await
+    }
+
+    async fn approve_as(&mut self, qr: &str, how: Approval) -> Result<String, SyncError> {
+        let (member, record) =
+            approve_pairing_with(&self.library, &http(), &self.record, &self.clock, qr, how)
+                .await?;
         self.record = record;
-        Ok(code)
+        Ok(member)
     }
 
     async fn pair(&mut self, server: &str, name: &str) -> Device {
         let tv = start_pairing(&http(), server).await.unwrap();
-        let code = self.approve(&tv.qr).await.unwrap();
+        self.approve(&tv.qr).await.unwrap();
         let offer = tv.poll(&http()).await.unwrap().expect("offer");
-        assert_eq!(offer.code, code);
         Device::with(tv.claim(&http(), offer, name).await.unwrap())
     }
 
@@ -181,7 +225,7 @@ async fn only_a_phone_or_tablet_approves() {
     let pairing = start_pairing(&http(), &server).await.unwrap();
     phone.approve(&pairing.qr).await.unwrap();
     let offer = pairing.poll(&http()).await.unwrap().expect("offer");
-    let record = pairing
+    let (record, _) = pairing
         .claim_as(&http(), offer, "TV", Some("tv"))
         .await
         .unwrap();
@@ -326,20 +370,16 @@ async fn a_flood_never_hides_a_join_silently() {
 }
 
 #[tokio::test]
-async fn a_tv_joins_by_qr_once_after_matching_codes() {
+async fn a_tv_joins_by_qr_once() {
     let (server, db) = relay().await;
     let mut phone = Device::first(&server, "Phone").await;
     let tv = start_pairing(&http(), &server).await.unwrap();
     assert!(tv.qr.starts_with("marquee:pair?v=2&"), "{}", tv.qr);
     assert_eq!(tv.poll(&http()).await.unwrap(), None, "waiting");
 
-    let shown_on_phone = phone.approve(&tv.qr).await.unwrap();
+    phone.approve(&tv.qr).await.unwrap();
     let offer = tv.poll(&http()).await.unwrap().expect("offer");
-    assert_eq!(
-        offer.code, shown_on_phone,
-        "both screens show the same code"
-    );
-    assert_eq!(active(&db), 1, "no token before the user confirms");
+    assert_eq!(active(&db), 1, "no token before the TV claims");
 
     let record = tv.claim(&http(), offer, "Living room TV").await.unwrap();
     assert_eq!(record.keys, phone.record.keys);
@@ -367,6 +407,137 @@ async fn a_tv_joins_by_qr_once_after_matching_codes() {
     );
 }
 
+/// A link signs a screen in with one tap only from that screen's own public
+/// network; from elsewhere only a live scan does, behind the screen lock, and
+/// nothing reaches the slot before (plans/tv-qr-login.md Q2, Q6). A private
+/// address is never near. The TV learns who let it in.
+#[tokio::test]
+async fn a_link_approves_only_from_the_screens_network() {
+    let network: Network = std::sync::Arc::new(std::sync::Mutex::new("198.51.100.7"));
+    let server = relay_on(network.clone()).await;
+    let at = |n: &'static str| *network.lock().unwrap() = n;
+    let link = Approval {
+        scanned: false,
+        unlocked: false,
+    };
+    let mut phone = Device::first(&server, "Phone").await;
+
+    at("203.0.113.9");
+    let tv = start_pairing_as(&http(), &server, "Living room TV", Some("tv"))
+        .await
+        .unwrap();
+    assert!(tv.qr.contains("&n=Living+room+TV&f=tv"), "{}", tv.qr);
+
+    at("198.51.100.7");
+    let refused = phone.approve_as(&tv.qr, link).await.unwrap_err();
+    assert_eq!(refused.code(), Some("scanRequired"), "{refused}");
+    let scanned = Approval {
+        scanned: true,
+        unlocked: false,
+    };
+    let locked = phone.approve_as(&tv.qr, scanned).await.unwrap_err();
+    assert_eq!(locked.code(), Some("unlockRequired"), "{locked}");
+    assert_eq!(tv.poll(&http()).await.unwrap(), None, "nothing was sent");
+    phone.approve(&tv.qr).await.unwrap();
+    let offer = tv.poll(&http()).await.unwrap().expect("offer");
+    let (record, by) = tv
+        .claim_as(&http(), offer, "Living room TV", Some("tv"))
+        .await
+        .unwrap();
+    assert_eq!(by.as_deref(), Some("Phone"), "the TV says who let it in");
+    assert_eq!(record.keys, phone.record.keys);
+
+    // From the screen's own network a link is enough; IPv6 counts per /64.
+    at("2001:db8::1");
+    let laptop = start_pairing(&http(), &server).await.unwrap();
+    at("2001:db8::2");
+    phone.approve_as(&laptop.qr, link).await.unwrap();
+    assert!(laptop.poll(&http()).await.unwrap().is_some());
+
+    // A private address says nothing about where a device is (a proxy, a
+    // home server's own network).
+    at("10.0.0.5");
+    let den = start_pairing(&http(), &server).await.unwrap();
+    let refused = phone.approve_as(&den.qr, link).await.unwrap_err();
+    assert_eq!(refused.code(), Some("scanRequired"), "{refused}");
+}
+
+/// A slot filled in its last second is still collected after its end, even
+/// once another device opened a slot (whose cleanup must spare it), until
+/// its grace ends; an empty one is not (Q5).
+#[tokio::test]
+async fn a_slot_filled_at_its_end_is_still_collected() {
+    let offset = std::sync::Arc::<std::sync::atomic::AtomicI64>::default();
+    let config = Config {
+        clock_offset_ms: offset.clone(),
+        ..Config::default()
+    };
+    let (server, _) = relay_with(config).await;
+    let mut phone = Device::first(&server, "Phone").await;
+    let tv = start_pairing(&http(), &server).await.unwrap();
+    let late_tv = start_pairing(&http(), &server).await.unwrap();
+    let empty = start_pairing(&http(), &server).await.unwrap();
+    assert_eq!(tv.ttl, std::time::Duration::from_secs(300));
+    let at = |ms: i64| offset.store(ms, std::sync::atomic::Ordering::Relaxed);
+    let end = 5 * 60 * 1000;
+    at(end - 1000);
+    phone.approve(&tv.qr).await.unwrap();
+    phone.approve(&late_tv.qr).await.unwrap();
+    at(end + 10 * 1000);
+    start_pairing(&http(), &server).await.unwrap();
+    at(end + 30 * 1000);
+    let offer = tv
+        .poll(&http())
+        .await
+        .unwrap()
+        .expect("collected in the grace");
+    tv.claim(&http(), offer, "TV").await.unwrap();
+    let gone = empty.poll(&http()).await.unwrap_err();
+    assert!(
+        matches!(gone, SyncError::Http(HttpError::Status { status: 404, .. })),
+        "{gone:?}"
+    );
+    let late = phone.approve(&empty.qr).await.unwrap_err();
+    assert_eq!(late.code(), Some("codeExpired"), "{late}");
+    // Past the grace the filled one is gone too.
+    at(end + 61 * 1000);
+    let over = late_tv.poll(&http()).await.unwrap_err();
+    assert!(
+        matches!(over, SyncError::Http(HttpError::Status { status: 404, .. })),
+        "{over:?}"
+    );
+}
+
+/// A code that ended or was answered says so by code, for the phone's
+/// sheet; `near` needs a device of an account.
+#[tokio::test]
+async fn near_answers_only_a_device_and_names_ended_codes() {
+    let (server, _) = relay().await;
+    let mut phone = Device::first(&server, "Phone").await;
+    let mut stranger = Device::first(&server, "Stranger").await;
+    let tv = start_pairing(&http(), &server).await.unwrap();
+    let slot = tv
+        .qr
+        .split("&p=")
+        .nth(1)
+        .unwrap()
+        .split('&')
+        .next()
+        .unwrap();
+    let near = format!("{server}/v1/pairings/{slot}/near");
+    let anyone = http().get(&near, &local()).await.unwrap_err();
+    assert!(
+        matches!(anyone, HttpError::Status { status: 401, .. }),
+        "{anyone:?}"
+    );
+    stranger.approve(&tv.qr).await.unwrap();
+    let answered = phone.approve(&tv.qr).await.unwrap_err();
+    assert_eq!(answered.code(), Some("codeAnswered"), "{answered}");
+    let gone = tv.qr.replace(slot, "00000000000000000000000000000000");
+    let expired = phone.approve(&gone).await.unwrap_err();
+    assert_eq!(expired.code(), Some("codeExpired"), "{expired}");
+}
+
 #[tokio::test]
 async fn someone_else_who_saw_the_qr_cannot_slip_in() {
     let (server, db) = relay().await;
@@ -374,14 +545,12 @@ async fn someone_else_who_saw_the_qr_cannot_slip_in() {
     let mut stranger = Device::first(&server, "Stranger").await;
     let tv = start_pairing(&http(), &server).await.unwrap();
 
-    // The stranger answers first; the owner's phone is told so, and shows
-    // no code that could match the one on the TV.
-    let strangers_code = stranger.approve(&tv.qr).await.unwrap();
+    // The stranger answers first; the owner's phone is told so
+    // (plans/tv-qr-login.md 4: the TV would then show the stranger's device).
+    stranger.approve(&tv.qr).await.unwrap();
     let err = phone.approve(&tv.qr).await.unwrap_err();
-    assert!(err.to_string().contains("someone else"), "{err}");
+    assert_eq!(err.code(), Some("codeAnswered"), "{err}");
     let offer = tv.poll(&http()).await.unwrap().expect("offer");
-    assert_eq!(offer.code, strangers_code);
-    // The user rejects: nothing is claimed, so no token exists for the TV.
     drop(offer);
     assert_eq!(active(&db), 2, "only the two accounts' own devices");
 
@@ -828,4 +997,40 @@ async fn a_joining_devices_first_sync_takes_the_accounts_addon_list() {
         [x, y, z],
         "nothing of the TV's defaults reached the account"
     );
+}
+
+/// A relay names its link host, but the core puts only a bare host name in a
+/// link: a hostile relay's `evil.example/x?` gives the plain code (Q8).
+#[tokio::test]
+async fn a_hostile_link_host_never_reaches_the_code() {
+    for (host, link) in [
+        ("evil.example/x?", false),
+        ("Link.Example", false),
+        ("link.example", true),
+    ] {
+        let app = axum::Router::new().route(
+            "/v1/pairings",
+            axum::routing::post(move || async move {
+                axum::Json(serde_json::json!({
+                    "pairing": "slot", "take": "t", "expiresMs": 1, "ttlMs": 300000, "linkHost": host,
+                }))
+            }),
+        );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let server = format!("http://{}", listener.local_addr().unwrap());
+        tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+        let code = start_pairing(&http(), &server).await.unwrap();
+        assert_eq!(
+            code.qr.starts_with("https://link.example/pair#v=3&"),
+            link,
+            "{host}: {}",
+            code.qr
+        );
+        assert_eq!(
+            code.qr.starts_with("marquee:pair?v=2&"),
+            !link,
+            "{host}: {}",
+            code.qr
+        );
+    }
 }

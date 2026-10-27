@@ -9,7 +9,7 @@
 //! "restoreDebrid" | "ackDebrid" | "setDebridKey" | "disconnectDebrid" |
 //! "createSyncAccount" | "syncNow" | "approvePairing" | "createRecoveryKit" | "recover" |
 //! "syncDevices" | "lostPreview" | "removeDevice" | "reportLost" | "signOut" | "deleteAccount" |
-//! "cancelPairing" |
+//! "cancelPairing" | "readPairingCode" |
 //! "forkPreview" | "useServerRoster" | "createProfile" | "allowTitle" | "updateProfile" | "deleteProfile" |
 //! "setPin" | "switchProfile" | "unlockProfile" | "lockSession" | "removeFromContinue" |
 //! "languages",
@@ -267,6 +267,18 @@ enum Request {
     ApprovePairing {
         id: u64,
         record: Box<SyncConfig>,
+        qr: String,
+        /// `scan` (the app's own scanner) or `link` (the default: the system
+        /// camera, the link host's page, a message), plans/tv-qr-login.md Q2.
+        #[serde(default)]
+        via: Option<String>,
+        /// The screen lock was just passed (asked on `unlockRequired`).
+        #[serde(default)]
+        unlocked: bool,
+    },
+    /// What a pairing code says, for the approving sheet.
+    ReadPairingCode {
+        id: u64,
         qr: String,
     },
     /// Makes a recovery kit and adds it to the roster, on the owner profile
@@ -698,7 +710,7 @@ enum View {
     Library(LibraryView),
     Calendar(CalendarView),
     Discover(DiscoverView),
-    Pairing(PairingView),
+    Pairing { _view: PairingView },
     SignIn(SignInView),
     Settings { _view: SettingsView },
     Addons { _view: AddonsView },
@@ -724,7 +736,7 @@ impl View {
             View::Library(_) => "library",
             View::Calendar(_) => "calendar",
             View::Discover(_) => "discover",
-            View::Pairing(_) => "pairing",
+            View::Pairing { .. } => "pairing",
             View::SignIn(_) => "signIn",
             View::Settings { .. } => "settings",
             View::Addons { .. } => "addons",
@@ -1269,14 +1281,31 @@ impl Session {
             Request::SyncNow { id, record } => {
                 self.spawn(id, async move { answer(core.sync(&record).await) });
             }
-            Request::ApprovePairing { id, record, qr } => {
+            Request::ApprovePairing {
+                id,
+                record,
+                qr,
+                via,
+                unlocked,
+            } => {
+                let how = mq_sync::pair::Approval {
+                    scanned: via.as_deref() == Some("scan"),
+                    unlocked,
+                };
                 self.spawn(id, async move {
                     let _gate = core.sync_gate().await;
                     let (library, http, clock) = (core.library(), core.http(), core.clock());
-                    mq_sync::pair::approve_pairing(library, http, &record, clock, &qr)
+                    mq_sync::pair::approve_pairing_with(library, http, &record, clock, &qr, how)
                         .await
-                        .map(|(code, record)| json!({ "code": code, "record": record }))
+                        .map(|(member, record)| json!({ "member": member, "record": record }))
                 });
+            }
+            Request::ReadPairingCode { id, qr } => {
+                send_answer(
+                    &self.out,
+                    json!(id),
+                    answer(mq_sync::pair::read_pairing_code(&qr)),
+                );
             }
             Request::CreateRecoveryKit { id, record } => {
                 // A kit is a portable copy of the account key (D17).
@@ -2187,7 +2216,11 @@ impl Session {
                     PairingView::open(&core, &param(params, "server")?, &name, form.as_deref());
                 let (snapshot, updates) = pairing.subscribe();
                 let forward = tokio::spawn(forward(sub, updates, out, fence));
-                (View::Pairing(pairing), to_value(&snapshot)?, forward)
+                (
+                    View::Pairing { _view: pairing },
+                    to_value(&snapshot)?,
+                    forward,
+                )
             }
             // A brokered sign-in; `appleRevoke` is Apple's revoke flow, for
             // surfaces without a native Apple sheet.
@@ -2349,8 +2382,6 @@ impl Session {
                     .set_in_library(&id, value)
                     .map_err(|e| e.to_string())?;
             }
-            (View::Pairing(pairing), "confirm") => pairing.confirm(),
-            (View::Pairing(pairing), "reject") => pairing.reject(),
             (View::SignIn(sign_in), "returned") => sign_in.returned(&param(command, "fragment")?),
             (View::Calendar(calendar), "setToday") => {
                 let today = command

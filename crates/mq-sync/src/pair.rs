@@ -2,12 +2,14 @@
 //! the relay can read or forge (plan: "Phase 2" and "Phase 3").
 //!
 //! Pairing: the new device makes its member keys and shows a QR with a relay
-//! slot id and its public keys; a device of the account seals the current
-//! key bundle, the roster head, a sponsor statement for exactly those keys
-//! and a six-digit code to the new device's box key with HPKE (RFC 9180),
-//! and shows the code. The new device keeps nothing until the user confirms
-//! both screens show the same code; then it claims a token that can only
-//! join, checks the roster, and signs its own `addDevice`.
+//! slot id, its public keys, its name and form, and a six-digit code made
+//! from them. A device of the account first asks the relay whether the slot
+//! was opened from its own network; if not, the user types the code shown
+//! under the QR, which must match the scanned keys (plans/tv-qr-login.md
+//! Q2). Only then it seals the current key bundle, the roster head and a
+//! sponsor statement for exactly those keys to the new device's box key
+//! with HPKE (RFC 9180). The new device opens it, claims a token that can
+//! only join, checks the roster, and signs its own `addDevice`.
 //!
 //! Recovery: a 160-bit kit derives a lookup id, a redeem secret, a tag key
 //! and member keys. Making a kit appends it to the roster with a box of the
@@ -22,7 +24,7 @@ use crate::engine::{
 };
 use crate::roster::{
     Bundle, FORMS, Hex, Id, KitKind, MAX_KITS, MemberKeys, MemberSecret, NewKit, Role, Sponsor,
-    open_form, seal_form, seal_name,
+    open_form, open_name, seal_form, seal_name,
 };
 use crate::wire::{AccountResponse, AppendRequest, Redeemed, RosterHead};
 use base64::Engine as _;
@@ -41,7 +43,13 @@ use sha2::{Digest, Sha256};
 pub(crate) type Kem = X25519HkdfSha256;
 pub(crate) type PrivateKey = <Kem as hpke::Kem>::PrivateKey;
 pub(crate) type PublicKey = <Kem as hpke::Kem>::PublicKey;
-const PAIR_INFO: &[u8] = b"marquee/pair/v2";
+/// v3: the payload lost its six digits, so an old device shown a new phone's
+/// payload fails at once instead of waiting for digits (Q10).
+const PAIR_INFO: &[u8] = b"marquee/pair/v3";
+/// A phone built before v3 still signs a new device in (the rename's
+/// migration, plans/rename-momotus.md 2): its payload carries six digits the
+/// new device ignores, since that phone checked the screen its old way.
+const PAIR_INFO_V2: &[u8] = b"marquee/pair/v2";
 /// X25519 encapsulated key length, in front of the HPKE ciphertext.
 const ENC: usize = 32;
 
@@ -99,20 +107,27 @@ struct PairPayload {
     keys: Bundle,
     head: RosterHead,
     sponsor: Sponsor,
-    code: String,
+    /// A v2 payload's six digits: read, never shown or sent.
+    #[serde(default, skip_serializing)]
+    code: Option<String>,
 }
 
-/// A pairing a device of the account approved. Show `code`; only when the
-/// user confirms it matches the other device, `claim` it.
+/// A pairing payload sealed to `secret` for `slot`: a v3 phone's, or a v2 one's (Q10).
+fn open_payload(secret: &PrivateKey, slot: &str, blob: &[u8]) -> Result<PairPayload, SyncError> {
+    let open = |info| open_with(secret, info, slot.as_bytes(), blob);
+    let plain = open(PAIR_INFO).or_else(|_| open(PAIR_INFO_V2))?;
+    serde_json::from_slice(&plain).map_err(|_| bad("pairing reply is malformed"))
+}
+
+/// A pairing a device of the account approved: `claim` it.
 #[derive(Clone, PartialEq, Eq)]
 pub struct Offer {
-    pub code: String,
     payload: PairPayload,
 }
 
 impl std::fmt::Debug for Offer {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Offer({})", self.code)
+        write!(f, "Offer")
     }
 }
 
@@ -122,13 +137,26 @@ struct Slot {
     pairing: String,
     take: String,
     expires_ms: u64,
+    /// How long the slot lives, so the new device counts it on its own
+    /// monotonic clock, not a wall clock that may be wrong (Q5).
+    #[serde(default)]
+    ttl_ms: Option<u64>,
+    /// The relay's link host: the QR is then a link a phone camera opens.
+    #[serde(default)]
+    link_host: Option<String>,
 }
 
 /// A pairing in progress on the new device.
 pub struct PairingRequest {
     /// Text for the QR code.
     pub qr: String,
+    /// When the slot ends, by the relay's clock.
     pub expires_ms: u64,
+    /// How long it lives, counted from `sent`.
+    pub ttl: std::time::Duration,
+    /// When this device asked for the slot: the relay's life for it starts
+    /// no earlier, so a view counted from here never outlives it.
+    pub sent: std::time::Instant,
     server: String,
     pairing: String,
     take: String,
@@ -136,9 +164,22 @@ pub struct PairingRequest {
 }
 
 /// Opens a pairing slot on the relay, makes this device's member keys and
-/// returns the QR to show.
+/// returns the QR to show (with no name or form in it).
 pub async fn start_pairing(http: &HttpClient, server: &str) -> Result<PairingRequest, SyncError> {
+    start_pairing_as(http, server, "", None).await
+}
+
+/// As `start_pairing`, the QR naming this device and its form, which the
+/// approving phone shows (Q4).
+pub async fn start_pairing_as(
+    http: &HttpClient,
+    server: &str,
+    name: &str,
+    form: Option<&str>,
+) -> Result<PairingRequest, SyncError> {
     require_secure(server)?;
+    let form = checked_form(form)?;
+    let sent = std::time::Instant::now();
     let slot: Slot = http
         .post_json(
             &format!("{server}/v1/pairings"),
@@ -148,14 +189,92 @@ pub async fn start_pairing(http: &HttpClient, server: &str) -> Result<PairingReq
         .await?
         .json()?;
     let member = MemberSecret::generate();
-    let qr = pairing_code(LINK_HOST, server, &slot.pairing, member.public());
+    let name = clean_name(name);
+    let shown = Shown {
+        name: name.as_deref(),
+        form,
+    };
+    // The relay's word for its link host goes into a link: a host name, or none (Q8).
+    let link_host = slot.link_host.as_deref().filter(|h| bare_host(h));
+    let qr = pairing_code(link_host, server, &slot.pairing, member.public(), shown);
+    // A relay from before `ttlMs`: its own end against this clock, at best.
+    let ttl = slot
+        .ttl_ms
+        .unwrap_or_else(|| slot.expires_ms.saturating_sub(now_ms()));
     Ok(PairingRequest {
         qr,
         expires_ms: slot.expires_ms,
+        ttl: std::time::Duration::from_millis(ttl),
+        sent,
         server: server.to_owned(),
         pairing: slot.pairing,
         take: slot.take,
         member,
+    })
+}
+
+/// A lowercase host name with no scheme, port, path, user or empty label.
+fn bare_host(host: &str) -> bool {
+    let parsed = url::Url::parse(&format!("https://{host}/")).ok();
+    host.split('.').all(|label| !label.is_empty())
+        && parsed.is_some_and(|u| {
+            u.host_str() == Some(host)
+                && u.port().is_none()
+                && u.path() == "/"
+                && u.username().is_empty()
+                && u.query().is_none()
+        })
+}
+
+/// Longest device name a QR carries, in characters.
+const QR_NAME_CHARS: usize = 40;
+
+/// A device name as a phone may show it: no control, bidi or zero-width
+/// characters (a screen must not pass off a name like "Momotus (verified)"
+/// written right to left), whitespace collapsed, at most `QR_NAME_CHARS`
+/// characters; none when nothing is left (Q4).
+fn clean_name(name: &str) -> Option<String> {
+    let hidden = |c: char| {
+        c.is_control()
+            || matches!(c, '\u{200B}'..='\u{200F}' | '\u{202A}'..='\u{202E}' | '\u{2060}'..='\u{2069}' | '\u{FEFF}' | '\u{00AD}')
+    };
+    let kept: String = name
+        .chars()
+        .map(|c| if c.is_whitespace() { ' ' } else { c })
+        .filter(|c| !hidden(*c))
+        .collect();
+    let words: Vec<&str> = kept.split_whitespace().collect();
+    let joined: String = words.join(" ").chars().take(QR_NAME_CHARS).collect();
+    Some(joined.trim_end().to_owned()).filter(|n| !n.is_empty())
+}
+
+/// What the QR says about the device that shows it, for the approving
+/// phone's question only: the device's own claim, never a check (Q4).
+#[derive(Clone, Copy, Default)]
+struct Shown<'a> {
+    name: Option<&'a str>,
+    form: Option<&'a str>,
+}
+
+/// What a scanned or opened pairing code says, for the approving phone's
+/// sheet: its sync server, and the name and form the screen gives itself,
+/// cleaned (`readPairingCode`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct PairingCode {
+    pub server: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub form: Option<String>,
+}
+
+/// Reads a pairing code for the sheet: refuses anything that is not one.
+pub fn read_pairing_code(qr: &str) -> Result<PairingCode, SyncError> {
+    let fields = code_fields(qr)?;
+    Ok(PairingCode {
+        server: fields.get("s").ok_or_else(|| bad("not a pairing code"))?,
+        name: fields.get("n").as_deref().and_then(clean_name),
+        form: fields.get("f").filter(|f| FORMS.contains(&f.as_str())),
     })
 }
 
@@ -181,43 +300,36 @@ impl PairingRequest {
         let blob = B64
             .decode(&taken.sealed)
             .map_err(|_| bad("pairing reply is not base64"))?;
-        let plain = open_with(
-            self.member.box_secret(),
-            PAIR_INFO,
-            self.pairing.as_bytes(),
-            &blob,
-        )?;
-        let payload: PairPayload =
-            serde_json::from_slice(&plain).map_err(|_| bad("pairing reply is malformed"))?;
+        let payload = open_payload(self.member.box_secret(), &self.pairing, &blob)?;
         if payload.server != self.server {
             return Err(bad("the reply names another sync server"));
         }
-        Ok(Some(Offer {
-            code: payload.code.clone(),
-            payload,
-        }))
+        Ok(Some(Offer { payload }))
     }
 
-    /// After the user confirmed the codes match: claims a token that can
-    /// only join, checks the roster up to the head the approver saw, and
-    /// appends this device's own `addDevice`. Returns the keystore record.
+    /// Claims a token that can only join, checks the roster up to the head
+    /// the approver saw, and appends this device's own `addDevice`. Returns
+    /// the keystore record.
     pub async fn claim(
         &self,
         http: &HttpClient,
         offer: Offer,
         name: &str,
     ) -> Result<SyncConfig, SyncError> {
-        self.claim_as(http, offer, name, None).await
+        self.claim_as(http, offer, name, None)
+            .await
+            .map(|(record, _)| record)
     }
 
-    /// As `claim`, with this device's form (one of `FORMS`).
+    /// As `claim`, with this device's form (one of `FORMS`); also the name
+    /// of the device that approved it, as the account knows it.
     pub async fn claim_as(
         &self,
         http: &HttpClient,
         offer: Offer,
         name: &str,
         form: Option<&str>,
-    ) -> Result<SyncConfig, SyncError> {
+    ) -> Result<(SyncConfig, Option<String>), SyncError> {
         let form = checked_form(form)?;
         let payload = offer.payload;
         let info = relay_info(http, &self.server).await?;
@@ -261,7 +373,8 @@ async fn join(
     by: JoinBy,
     (name, form): (&str, Option<&str>),
     relay_id: Id,
-) -> Result<SyncConfig, SyncError> {
+) -> Result<(SyncConfig, Option<String>), SyncError> {
+    let by_kit = matches!(by, JoinBy::Kit { .. });
     let (entries, _) = fetch_roster(http, server, token, 0).await?;
     let roster = rebuild(&entries).map_err(|e| SyncError::Roster(e.to_string()))?;
     let (keys, sponsor) = match by {
@@ -284,6 +397,15 @@ async fn join(
             (keys, Sponsor::new(&kit, &roster, member.public()))
         }
     };
+    // Who let this device in, by the name the account knows it by (a kit has none here).
+    let approver = match by_kit {
+        true => None,
+        false => roster
+            .members()
+            .get(&sponsor.by)
+            .and_then(|m| m.name.as_deref())
+            .and_then(|sealed| open_name(&keys, &sponsor.by, sealed)),
+    };
     let entry = roster.add_device_as(
         member,
         sponsor,
@@ -300,7 +422,7 @@ async fn join(
     )
     .await?;
     let seq = roster.head().map_or(0, |(seq, _)| seq + 1);
-    Ok(SyncConfig {
+    let record = SyncConfig {
         server: server.to_owned(),
         device_token: token.to_owned(),
         member: Hex(member.seed()),
@@ -311,34 +433,60 @@ async fn join(
         },
         relay_id,
         revision: 1,
-    })
+    };
+    Ok((record, approver))
+}
+
+/// A pairing code's fields, after its form and version checked out.
+struct Fields(Vec<(String, String)>);
+
+impl Fields {
+    fn get(&self, name: &str) -> Option<String> {
+        self.0
+            .iter()
+            .find(|(k, _)| k == name)
+            .map(|(_, v)| v.clone())
+    }
+}
+
+/// The fields of any pairing code. v3 carries them in the fragment of an
+/// https link (any host: the link host of whichever relay made it), or of
+/// `momotus://pair`, which the link host's page hands to an app it cannot
+/// open by link (an iPhone without associated domains); v2 in a `marquee:`
+/// query.
+fn code_fields(qr: &str) -> Result<Fields, SyncError> {
+    let url = url::Url::parse(qr.trim()).map_err(|_| bad("not a pairing code"))?;
+    let (fields, version) = match (url.scheme(), url.host_str(), url.path()) {
+        ("https", _, "/pair") | ("momotus", Some("pair"), "") => {
+            (url.fragment().unwrap_or_default(), "3")
+        }
+        ("marquee", None, "pair") => (url.query().unwrap_or_default(), "2"),
+        _ => return Err(bad("not a pairing code")),
+    };
+    let fields = Fields(
+        url::form_urlencoded::parse(fields.as_bytes())
+            .map(|(k, v)| (k.into_owned(), v.into_owned()))
+            .collect(),
+    );
+    if fields.get("v").as_deref() != Some(version) {
+        return Err(bad("not a pairing code"));
+    }
+    Ok(fields)
 }
 
 /// A pairing code shown by a new device: its slot and its keys. Refuses a
 /// code for another sync server.
 fn read_code(server: &str, qr: &str) -> Result<(String, MemberKeys), SyncError> {
-    let url = url::Url::parse(qr).map_err(|_| bad("not a pairing code"))?;
-    // v3 carries its fields in the fragment of an https link (any host: the
-    // link host of whichever build made it); v2 in a `marquee:` query.
-    let (fields, version) = match (url.scheme(), url.path()) {
-        ("https", "/pair") => (url.fragment().unwrap_or_default(), "3"),
-        ("marquee", "pair") => (url.query().unwrap_or_default(), "2"),
-        _ => return Err(bad("not a pairing code")),
-    };
-    let field = |name: &str| {
-        url::form_urlencoded::parse(fields.as_bytes())
-            .find(|(k, _)| k == name)
-            .map(|(_, v)| v.into_owned())
-    };
-    if field("v").as_deref() != Some(version) {
-        return Err(bad("not a pairing code"));
-    }
-    let pairing = field("p").ok_or_else(|| bad("pairing code has no slot"))?;
-    if field("s").as_deref() != Some(server) {
+    let fields = code_fields(qr)?;
+    let pairing = fields
+        .get("p")
+        .ok_or_else(|| bad("pairing code has no slot"))?;
+    if fields.get("s").as_deref() != Some(server) {
         return Err(bad("the code is for another sync server"));
     }
     let key = |name: &str| {
-        field(name)
+        fields
+            .get(name)
             .and_then(|k| B64URL.decode(k).ok())
             .and_then(|k| <[u8; 32]>::try_from(k).ok())
             .map(Hex)
@@ -349,39 +497,77 @@ fn read_code(server: &str, qr: &str) -> Result<(String, MemberKeys), SyncError> 
     Ok((pairing, MemberKeys { sign, boxk }))
 }
 
-/// The link host this build names (`MARQUEE_LINK_HOST` when it was built):
-/// the TV's QR is then an app link to the scanner (D6).
-const LINK_HOST: Option<&str> = option_env!("MARQUEE_LINK_HOST");
-
 /// The text of a new device's QR: `https://<link host>/pair#v=3&...` when the
-/// build names a link host (a phone camera opens the app's scanner; the
-/// fragment never reaches the host), else `marquee:pair?v=2&...`. The relay,
-/// the slot and the device's public keys; no device name.
-fn pairing_code(link_host: Option<&str>, server: &str, slot: &str, keys: &MemberKeys) -> String {
-    let fields = url::form_urlencoded::Serializer::new(String::new())
+/// relay names a link host (a phone camera opens the app; the fragment never
+/// reaches the host), else `marquee:pair?v=2&...`. The relay, the slot, the
+/// device's public keys, and its name and form when given.
+fn pairing_code(
+    link_host: Option<&str>,
+    server: &str,
+    slot: &str,
+    keys: &MemberKeys,
+    shown: Shown,
+) -> String {
+    let mut fields = url::form_urlencoded::Serializer::new(String::new());
+    fields
         .append_pair("v", if link_host.is_some() { "3" } else { "2" })
         .append_pair("s", server)
         .append_pair("p", slot)
         .append_pair("k", &B64URL.encode(keys.boxk.0))
-        .append_pair("g", &B64URL.encode(keys.sign.0))
-        .finish();
+        .append_pair("g", &B64URL.encode(keys.sign.0));
+    if let Some(name) = shown.name {
+        fields.append_pair("n", name);
+    }
+    if let Some(form) = shown.form {
+        fields.append_pair("f", form);
+    }
+    let fields = fields.finish();
     match link_host {
         Some(host) => format!("https://{host}/pair#{fields}"),
         None => format!("marquee:pair?{fields}"),
     }
 }
 
-/// On a device that already syncs: vouches for the device whose QR was
-/// scanned and hands it the account. Returns the code to show (the new
-/// device must show the same) and this device's record to store. If the
-/// new device does not join in time, the next sync cancels the approval
-/// with a key rotation.
+/// How the approving phone got the code (plans/tv-qr-login.md Q2): a live
+/// scan in its own scanner, or a link (the system camera, the link host's
+/// page, a message); and whether its screen lock was just passed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Approval {
+    pub scanned: bool,
+    pub unlocked: bool,
+}
+
+/// On a device that already syncs, by a trusted caller (the CLI, test
+/// peers): as `approve_pairing_with` for a scan behind the screen lock.
 pub async fn approve_pairing(
     library: &Library,
     http: &HttpClient,
     config: &SyncConfig,
     clock: &HlcClock,
     qr: &str,
+) -> Result<(String, SyncConfig), SyncError> {
+    let trusted = Approval {
+        scanned: true,
+        unlocked: true,
+    };
+    approve_pairing_with(library, http, config, clock, qr, trusted).await
+}
+
+/// On a device that already syncs: vouches for the device whose QR it got
+/// and hands it the account. The relay says first whether the new device
+/// opened its code from this device's network. If not, only a live scan
+/// approves (`ScanRequired` for a link), and only after the screen lock
+/// (`UnlockRequired`), both before anything is kept or sent (Q2, Q6).
+/// Returns the new device's member id (hex) and this device's record to
+/// store. If the new device does not join in time, the next sync cancels
+/// the approval with a key rotation.
+pub async fn approve_pairing_with(
+    library: &Library,
+    http: &HttpClient,
+    config: &SyncConfig,
+    clock: &HlcClock,
+    qr: &str,
+    how: Approval,
 ) -> Result<(String, SyncConfig), SyncError> {
     let (pairing, keys) = read_code(&config.server, qr)?;
     let public =
@@ -405,7 +591,18 @@ pub async fn approve_pairing(
     if session.roster.admitted(&keys.id()) {
         return Err(bad("this code belongs to a device already in the account"));
     }
-    let code = six_digits();
+    let near: Near = http
+        .get_json(
+            &format!("{}/v1/pairings/{pairing}/near", config.server),
+            &options(&config.server, &session.record.device_token),
+        )
+        .await?;
+    if !near.near && !how.scanned {
+        return Err(SyncError::ScanRequired);
+    }
+    if !near.near && !how.unlocked {
+        return Err(SyncError::UnlockRequired);
+    }
     let (seq, hash) = session.roster.head().unwrap_or_default();
     let payload = PairPayload {
         server: config.server.clone(),
@@ -413,7 +610,7 @@ pub async fn approve_pairing(
         keys: session.record.keys.clone(),
         head: RosterHead { seq, hash },
         sponsor: Sponsor::new(&session.member, &session.roster, &keys),
-        code: code.clone(),
+        code: None,
     };
     let plain = serde_json::to_vec(&payload).expect("plain struct");
     let blob = seal_to(&public, PAIR_INFO, pairing.as_bytes(), &plain)?;
@@ -449,26 +646,21 @@ pub async fn approve_pairing(
         Ok(_) => {}
         Err(mq_http::HttpError::Status { status: 409, .. }) => {
             undo()?;
-            return Err(bad(
-                "someone else already answered this code; reject it on the new device",
-            ));
+            return Err(SyncError::CodeAnswered);
         }
         Err(mq_http::HttpError::Status { status: 410, .. }) => {
             undo()?;
-            return Err(bad(
-                "this pairing code expired; start again on the new device",
-            ));
+            return Err(SyncError::CodeExpired);
         }
         Err(e) => return Err(e.into()),
     }
     let record = session.changed().unwrap_or_else(|| session.record.clone());
-    Ok((code, record))
+    Ok((hex::encode(keys.id().0), record))
 }
 
-fn six_digits() -> String {
-    let mut b = [0u8; 4];
-    getrandom::fill(&mut b).expect("os randomness");
-    format!("{:06}", u32::from_le_bytes(b) % 1_000_000)
+#[derive(Deserialize)]
+struct Near {
+    near: bool,
 }
 
 /// A fresh recovery kit: 160 random bits as 32 base32 characters in groups
@@ -733,7 +925,7 @@ pub async fn recover_with(
     if redeemed.kit != keys.member.id() {
         return Err(SyncError::KitUnknown);
     }
-    let record = join(
+    let (record, _) = join(
         http,
         server,
         &redeemed.device_token,
@@ -810,7 +1002,6 @@ mod tests {
         assert!(kit_keys("ABCD-EFGH").is_err());
         assert_eq!(base32(b"foobar"), "MZXW6YTBOI");
         assert_eq!(unbase32("MZXW6YTBOI").unwrap(), b"foobar");
-        assert_eq!(six_digits().len(), 6);
     }
 
     /// The HKDF step every platform shares (`apps/shared/passkey-vectors.json`,
@@ -844,18 +1035,26 @@ mod tests {
         assert_eq!(read_prf(&padded), Some([0; 32]));
     }
 
-    /// The TV's QR as an app link to the scanner when the build names a
-    /// link host (v3, its fields in the fragment), as `marquee:pair` when
-    /// not (v2); both read, for this relay only.
+    /// The QR as a link a phone camera opens when the relay names a link
+    /// host (v3, its fields in the fragment, also under `momotus://pair`,
+    /// which the link host's page hands on), as `marquee:pair` when not
+    /// (v2); all read, for this relay only. Name and form ride along.
     #[test]
-    fn pairing_codes_read_in_both_forms() {
+    fn pairing_codes_read_in_every_form() {
         let keys = *MemberSecret::generate().public();
         let server = "https://sync.example.org";
-        let v3 = pairing_code(Some("link.example.org"), server, "slot", &keys);
+        let shown = Shown {
+            name: Some("Living room TV"),
+            form: Some("tv"),
+        };
+        let v3 = pairing_code(Some("link.example.org"), server, "slot", &keys, shown);
         assert!(v3.starts_with("https://link.example.org/pair#v=3&"), "{v3}");
-        let v2 = pairing_code(None, server, "slot", &keys);
+        assert!(v3.ends_with("&n=Living+room+TV&f=tv"), "{v3}");
+        let app = v3.replace("https://link.example.org/pair#", "momotus://pair#");
+        let v2 = pairing_code(None, server, "slot", &keys, Shown::default());
         assert!(v2.starts_with("marquee:pair?v=2&"), "{v2}");
-        for code in [&v3, &v2] {
+        assert!(!v2.contains("&n="), "{v2}");
+        for code in [&v3, &app, &v2] {
             let (slot, read) = read_code(server, code).unwrap();
             assert_eq!((slot.as_str(), read), ("slot", keys));
             assert!(
@@ -867,9 +1066,103 @@ mod tests {
             v3.replace("v=3", "v=2"),
             v3.replace("/pair#", "/other#"),
             v3.replace("https:", "http:"),
+            app.replace("momotus://pair#", "momotus://auth#"),
+            app.replace("momotus://pair#", "momotus://pair/x#"),
+            app.replace("momotus://pair#", "other://pair#"),
             v2.replace("v=2", "v=3"),
         ] {
             assert!(read_code(server, &wrong).is_err(), "{wrong}");
         }
+    }
+
+    /// A new device opens a v3 payload and an old phone's v2 one, its digits
+    /// ignored; one sealed under another info or slot does not open (Q10).
+    #[test]
+    fn a_new_device_opens_an_old_phones_payload() {
+        let tv = MemberSecret::generate();
+        let public = PublicKey::from_bytes(&tv.public().boxk.0).unwrap();
+        for (info, opens) in [
+            (PAIR_INFO, true),
+            (PAIR_INFO_V2, true),
+            (b"marquee/pair/v1".as_slice(), false),
+        ] {
+            let blob = seal_to(&public, info, b"slot", b"{}").unwrap();
+            let opened = open_payload(tv.box_secret(), "slot", &blob);
+            // "{}" is no payload: what matters is whether it opened.
+            let malformed =
+                matches!(&opened, Err(SyncError::Pairing(why)) if why.contains("malformed"));
+            assert_eq!(malformed, opens, "{info:?}");
+        }
+        let blob = seal_to(&public, PAIR_INFO_V2, b"other", b"{}").unwrap();
+        assert!(
+            !matches!(open_payload(tv.box_secret(), "slot", &blob), Err(SyncError::Pairing(why)) if why.contains("malformed"))
+        );
+    }
+
+    /// A relay names its link host; only a bare host name goes into the link.
+    #[test]
+    fn only_a_bare_host_makes_a_link() {
+        assert!(bare_host("momotus.normalisdead.mom"));
+        for odd in [
+            "evil.example/x?",
+            "host:443",
+            "Link.Example",
+            "",
+            "a..b",
+            "user@host",
+            "a.example?x",
+        ] {
+            assert!(!bare_host(odd), "{odd}");
+        }
+    }
+
+    /// The name a screen gives itself reaches the sheet as plain text: no
+    /// control, bidi or zero-width characters, whitespace collapsed, 40
+    /// characters at most; a form outside the five is none (Q4).
+    #[test]
+    fn a_screens_name_reaches_the_sheet_as_plain_text() {
+        assert_eq!(
+            clean_name("Living room TV").as_deref(),
+            Some("Living room TV")
+        );
+        assert_eq!(
+            clean_name("Momotus\u{202E}deifirev\u{202C} TV").as_deref(),
+            Some("Momotusdeifirev TV")
+        );
+        assert_eq!(
+            clean_name("Two\nlines\u{200B} here ").as_deref(),
+            Some("Two lines here")
+        );
+        assert_eq!(clean_name(" \u{200D}\t").as_deref(), None);
+        let long = "Ç".repeat(41);
+        assert_eq!(clean_name(&long).map(|n| n.chars().count()), Some(40));
+
+        let keys = *MemberSecret::generate().public();
+        let shown = Shown {
+            name: Some("Den"),
+            form: Some("tv"),
+        };
+        let qr = pairing_code(
+            Some("link.example.org"),
+            "https://sync.example.org",
+            "slot",
+            &keys,
+            shown,
+        );
+        let read = read_pairing_code(&qr).unwrap();
+        assert_eq!(
+            (
+                read.server.as_str(),
+                read.name.as_deref(),
+                read.form.as_deref()
+            ),
+            ("https://sync.example.org", Some("Den"), Some("tv"))
+        );
+        let odd = qr
+            .replace("n=Den", "n=%E2%80%AEevil%0A")
+            .replace("f=tv", "f=fridge");
+        let read = read_pairing_code(&odd).unwrap();
+        assert_eq!((read.name.as_deref(), read.form), (Some("evil"), None));
+        assert!(read_pairing_code("https://link.example.org/other#v=3").is_err());
     }
 }

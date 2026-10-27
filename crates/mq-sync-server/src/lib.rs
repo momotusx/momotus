@@ -69,7 +69,11 @@ const MAX_PAIRINGS: i64 = 1000;
 /// and a handful of addresses can no longer fill `MAX_PAIRINGS` and stop
 /// every QR join (plans/accounts-social-sync.md, review A P2-9).
 const PAIRINGS_PER_CLIENT: usize = 10;
-const PAIRING_MS: u64 = 10 * 60 * 1000;
+/// Five minutes: a TV renews its code by itself (plans/tv-qr-login.md Q5).
+const PAIRING_MS: u64 = 5 * 60 * 1000;
+/// A filled slot is still collected this long past its end: a phone may fill
+/// it in its last second, and the new device looks every 2 s.
+const FILLED_GRACE_MS: u64 = 60 * 1000;
 /// Largest sealed pairing blob.
 const MAX_SMALL_BLOB: usize = 64 * 1024;
 /// A pending token (claimed, not yet joined) lives this long.
@@ -113,6 +117,13 @@ pub struct Config {
     /// The wait between two codes to one mailbox (60 s). Tests only
     /// (`--mail-gap-ms`).
     pub mail_gap_ms: u64,
+    /// Sign-ups without a sign-in stop while the accounts store more than
+    /// this (plans/tv-qr-login.md Q7): the brake on what they can cost. It
+    /// counts `account.bytes`, the sealed record bodies, not roster rows, the
+    /// journal or the write-ahead log.
+    pub signup_bytes: u64,
+    /// How long a pairing slot lives (5 minutes; tests shorten it).
+    pub pairing_ms: u64,
 }
 
 impl Default for Config {
@@ -128,6 +139,8 @@ impl Default for Config {
             housekeeping_every: std::time::Duration::from_secs(3600),
             clients_per_address: 1,
             mail_gap_ms: 60 * 1000,
+            signup_bytes: 5 * 1024 * 1024 * 1024,
+            pairing_ms: PAIRING_MS,
         }
     }
 }
@@ -163,6 +176,11 @@ struct AppState {
     open_pairings: Arc<Mutex<OpenPairings>>,
     /// Whole addon lists refused since start (older apps), for the log.
     old_lists: Arc<std::sync::atomic::AtomicU64>,
+    /// `near` answers since the last housekeeping line: [near, not near], so
+    /// the one-tap rate is a measured number (no addresses).
+    near_checks: Arc<[std::sync::atomic::AtomicU64; 2]>,
+    /// Sign-ups without a sign-in refused since the last housekeeping line.
+    signups_refused: Arc<std::sync::atomic::AtomicU64>,
 }
 
 /// Opens (or creates) the relay database at `db` and its roster journal
@@ -170,7 +188,7 @@ struct AppState {
 /// must be the one the database was made with.
 pub fn router(db: &Path, config: Config) -> Result<Router, String> {
     if let Some(host) = &config.public_host {
-        check_public_host(host)?;
+        check_host(host, "--public-host")?;
     }
     let conn = Connection::open(db).map_err(|e| e.to_string())?;
     let (conn, generation, generation_since_ms, relay_id) =
@@ -182,6 +200,18 @@ pub fn router(db: &Path, config: Config) -> Result<Router, String> {
                 .as_deref()
                 .ok_or("an identity file needs the relay's public host")?;
             let identity = identity::Identity::new(file.clone(), host)?;
+            // It goes into every pairing QR as `https://{host}/pair` (plans/tv-qr-login.md Q8).
+            if let Some(link) = identity.link_host() {
+                check_host(link, "linkHost")?;
+            }
+            if config.invite.is_none() {
+                tracing::info!(
+                    "sign-up without a sign-in is on: {} a day per network, {} a day in all, none past {} stored bytes; --invite turns it off",
+                    identity::NETWORK_SIGNUP_CAP,
+                    identity::RELAY_SIGNUP_CAP,
+                    config.signup_bytes
+                );
+            }
             check_identity_key(&conn, &identity.fingerprint())?;
             Some(Arc::new(identity))
         }
@@ -205,6 +235,8 @@ pub fn router(db: &Path, config: Config) -> Result<Router, String> {
         grace_created: Arc::default(),
         open_pairings: Arc::default(),
         old_lists: Arc::default(),
+        near_checks: Arc::default(),
+        signups_refused: Arc::default(),
     };
     if tokio::runtime::Handle::try_current().is_ok() {
         tokio::spawn(housekeeping(state.clone(), every));
@@ -220,6 +252,7 @@ pub fn router(db: &Path, config: Config) -> Result<Router, String> {
         .route("/v1/pull", get(pull))
         .route("/v1/pairings", post(open_pairing))
         .route("/v1/pairings/{id}", put(fill_pairing))
+        .route("/v1/pairings/{id}/near", get(near_pairing))
         .route("/v1/pairings/{id}/take", post(take_pairing))
         .route("/v1/recovery/redeem", post(redeem_kit));
     if state.identity.is_some() {
@@ -250,7 +283,7 @@ pub fn router(db: &Path, config: Config) -> Result<Router, String> {
 /// `--public-host` as devices compare it with their relay address (the URL's
 /// host: lowercase, no scheme, port or path). Anything else would refuse
 /// every token, nonce and return without saying why.
-fn check_public_host(host: &str) -> Result<(), String> {
+fn check_host(host: &str, what: &str) -> Result<(), String> {
     let parsed = url::Url::parse(&format!("https://{host}/")).ok();
     let plain = parsed.as_ref().is_some_and(|u| {
         u.host_str() == Some(host)
@@ -262,7 +295,7 @@ fn check_public_host(host: &str) -> Result<(), String> {
         Ok(())
     } else {
         Err(format!(
-            "--public-host {host:?} must be the relay's host as devices write it: lowercase, without scheme, port or path"
+            "{what} {host:?} must be a host as devices write it: lowercase, without scheme, port or path"
         ))
     }
 }
@@ -315,6 +348,26 @@ fn checkpoint(db: &Connection) {
 
 fn run_due(state: &AppState) {
     let now = state.now_ms();
+    let [near, far] = &*state.near_checks;
+    let (near, far) = (
+        near.swap(0, Ordering::Relaxed),
+        far.swap(0, Ordering::Relaxed),
+    );
+    if near + far > 0 {
+        tracing::info!("pairing checks: {near} near, {far} not near");
+    }
+    let refused = state.signups_refused.swap(0, Ordering::Relaxed);
+    if refused > 0 {
+        let stored: i64 = lock(state)
+            .query_row("SELECT COALESCE(SUM(bytes), 0) FROM account", [], |r| {
+                r.get(0)
+            })
+            .unwrap_or(-1);
+        tracing::info!(
+            "{refused} sign-ups without a sign-in refused; accounts store {stored} of {} bytes",
+            state.config.signup_bytes
+        );
+    }
     let mut db = lock(state);
     if let Err(e) = identity::expire(&db, now) {
         tracing::warn!("expire sign-in rows: {e}");
@@ -976,8 +1029,12 @@ fn invited(state: &AppState, headers: &HeaderMap) -> bool {
 /// (at most 3 in 30 days). An identity linked elsewhere is refused unless
 /// `move` (Start over): its link moves here and the old account is
 /// scheduled for deletion. The ticket is used only once the account is made.
+/// With neither, a sign-in relay still creates it under its network's
+/// budget (plans/tv-qr-login.md Q7), so its default works before any
+/// provider is configured.
 async fn create_account(
     State(state): State<AppState>,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
     headers: HeaderMap,
     Json(request): Json<AccountRequest>,
 ) -> Response {
@@ -987,7 +1044,18 @@ async fn create_account(
         true => invite_matches(&state, &headers),
         false => invited(&state, &headers),
     };
-    if !invite && ticket.is_none() {
+    // Neither: a sign-in relay with no invite set takes it on the network's
+    // budget; setting an invite turns that off (the operator's switch).
+    let network = match state.identity.as_deref() {
+        Some(id) if !invite && ticket.is_none() && state.config.invite.is_none() => {
+            match client(&state, peer, &headers) {
+                Ok(address) => Some(id.network_tag(&address)),
+                Err(refused) => return refused,
+            }
+        }
+        _ => None,
+    };
+    if !invite && ticket.is_none() && network.is_none() {
         let why = match signs_in {
             true => "a sign-in or an invite is required",
             false => "an invite is required",
@@ -1027,6 +1095,25 @@ async fn create_account(
                 Ok(old) => scheduled = old,
                 Err(refused) => return Ok(Err(refused)),
             }
+        }
+        if let Some(network) = &network {
+            let stored: i64 =
+                tx.query_row("SELECT COALESCE(SUM(bytes), 0) FROM account", [], |r| {
+                    r.get(0)
+                })?;
+            let full = stored as u64 >= state.config.signup_bytes;
+            if full || !identity::network_signup_allowed(&tx, network, now)? {
+                state.signups_refused.fetch_add(1, Ordering::Relaxed);
+                return Ok(Err(identity::coded(
+                    StatusCode::TOO_MANY_REQUESTS,
+                    "signupLimit",
+                    "too many new accounts from this network today",
+                )));
+            }
+            tx.execute(
+                "INSERT INTO signups (subject, at_ms) VALUES (?1, ?2)",
+                params![network, now as i64],
+            )?;
         }
         if let Err(refused) = append_entries(
             &tx,
@@ -2312,6 +2399,33 @@ fn client(state: &AppState, peer: SocketAddr, headers: &HeaderMap) -> Result<IpA
     })
 }
 
+/// Whether a client address (as `client()` gives it) is one on the public
+/// internet: not loopback, private, link-local, unspecified or a carrier's
+/// shared range (RFC 6598), which a relay never sees from outside.
+fn public(address: &IpAddr) -> bool {
+    match address {
+        IpAddr::V4(v4) => {
+            let [a, b, ..] = v4.octets();
+            // 0/8, 10/8, 100.64/10, 127/8, 169.254/16, 172.16/12, 192.0.0/24,
+            // 192.168/16, 198.18/15; the documentation ranges stay public (tests).
+            !(a == 0
+                || v4.is_loopback()
+                || v4.is_private()
+                || v4.is_link_local()
+                || (a == 100 && (64..128).contains(&b))
+                || v4.octets()[..3] == [192, 0, 0]
+                || (a == 198 && (18..20).contains(&b)))
+        }
+        IpAddr::V6(v6) => {
+            let first = v6.segments()[0];
+            !(v6.is_loopback()
+                || v6.is_unspecified()
+                || (first & 0xfe00) == 0xfc00
+                || (first & 0xffc0) == 0xfe80)
+        }
+    }
+}
+
 /// Serves the relay with peer addresses available to the rate limits.
 pub async fn serve(listener: tokio::net::TcpListener, app: Router) -> std::io::Result<()> {
     axum::serve(
@@ -2380,9 +2494,10 @@ async fn open_pairing(
         );
     }
     let open = (|| -> rusqlite::Result<i64> {
+        // Ended slots go once a filled one could no longer be collected.
         db.execute(
             "DELETE FROM pairing WHERE expires_ms <= ?1",
-            params![now as i64],
+            params![now.saturating_sub(FILLED_GRACE_MS) as i64],
         )?;
         db.query_row("SELECT COUNT(*) FROM pairing", [], |r| r.get(0))
     })();
@@ -2397,14 +2512,26 @@ async fn open_pairing(
         Err(e) => return storage_error("open pairing", e),
     }
     let (id, take) = (random_hex(16), random_hex(16));
-    let expires_ms = now + PAIRING_MS;
+    let expires_ms = now + state.config.pairing_ms;
     match db.execute(
         "INSERT INTO pairing (id, take_hash, expires_ms) VALUES (?1, ?2, ?3)",
         params![id, token_hash(&take), expires_ms as i64],
     ) {
         Ok(_) => {
             held.push((id.clone(), expires_ms));
-            Json(json!({ "pairing": id, "take": take, "expiresMs": expires_ms })).into_response()
+            // The link host makes the QR a link a phone camera opens (plans/tv-qr-login.md Q8).
+            let link_host = state
+                .identity
+                .as_deref()
+                .and_then(identity::Identity::link_host);
+            Json(json!({
+                "pairing": id,
+                "take": take,
+                "expiresMs": expires_ms,
+                "ttlMs": state.config.pairing_ms,
+                "linkHost": link_host,
+            }))
+            .into_response()
         }
         Err(e) => storage_error("open pairing", e),
     }
@@ -2445,14 +2572,68 @@ async fn fill_pairing(
             )
             .optional()
         {
-            Ok(Some(())) => error(
+            Ok(Some(())) => identity::coded(
                 StatusCode::CONFLICT,
-                "someone else already answered this code; reject it on the new device",
+                "codeAnswered",
+                "someone else already answered this code",
             ),
-            Ok(None) => error(StatusCode::GONE, "this pairing code expired"),
+            Ok(None) => {
+                identity::coded(StatusCode::GONE, "codeExpired", "this pairing code expired")
+            }
             Err(e) => storage_error("fill pairing", e),
         },
         Err(e) => storage_error("fill pairing", e),
+    }
+}
+
+/// For a device of an account about to approve a slot: whether the new
+/// device opened it from this caller's network (plans/tv-qr-login.md Q2).
+/// Near, the phone signs it in with one tap; else it asks for the code the
+/// new device shows. Only the open-slot map in memory knows the opener's
+/// address, so after a restart every slot reads as not near.
+async fn near_pairing(
+    State(state): State<AppState>,
+    UrlPath(id): UrlPath<String>,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
+) -> Response {
+    let address = match client(&state, peer, &headers) {
+        Ok(address) => address,
+        Err(refused) => return refused,
+    };
+    let now = state.now_ms();
+    let db = lock(&state);
+    if let Err(refusal) = active(authorize(&db, &headers)) {
+        return *refusal;
+    }
+    let row: rusqlite::Result<Option<(bool, i64)>> = db
+        .query_row(
+            "SELECT sealed IS NOT NULL, expires_ms FROM pairing WHERE id = ?1",
+            params![id],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .optional();
+    match row {
+        Ok(Some((true, _))) => identity::coded(
+            StatusCode::CONFLICT,
+            "codeAnswered",
+            "someone else already answered this code",
+        ),
+        Ok(Some((false, expires))) if expires as u64 > now => {
+            // A loopback or private address is a proxy or a home server's own
+            // network, never proof that two devices sit together.
+            let near = public(&address)
+                && state
+                    .open_pairings
+                    .lock()
+                    .unwrap_or_else(|p| p.into_inner())
+                    .get(&address)
+                    .is_some_and(|held| held.iter().any(|(slot, _)| *slot == id));
+            state.near_checks[usize::from(!near)].fetch_add(1, Ordering::Relaxed);
+            Json(json!({ "near": near })).into_response()
+        }
+        Ok(_) => identity::coded(StatusCode::GONE, "codeExpired", "this pairing code expired"),
+        Err(e) => storage_error("near pairing", e),
     }
 }
 
@@ -2493,7 +2674,9 @@ async fn take_pairing(
     if !same(&take_hash, &token_hash(&claim.take)) {
         return error(StatusCode::NOT_FOUND, "no pairing with that code");
     }
-    if expires as u64 <= state.now_ms() {
+    // A filled slot waits out the grace for its collection; an empty one ends.
+    let grace = if sealed.is_some() { FILLED_GRACE_MS } else { 0 };
+    if expires as u64 + grace <= state.now_ms() {
         return error(StatusCode::NOT_FOUND, "pairing expired");
     }
     let (Some(sealed), Some(account)) = (sealed, account.as_deref().and_then(account_id)) else {
@@ -2597,6 +2780,41 @@ async fn redeem_kit(
 mod tests {
     use super::*;
 
+    /// Only a public address can show two devices sit together (plans/tv-qr-login.md 4);
+    /// the documentation ranges count as public, so tests can use them.
+    #[test]
+    fn near_needs_a_public_address() {
+        for (address, public_one) in [
+            ("0.1.2.3", false),
+            ("10.0.0.5", false),
+            ("100.64.0.1", false),
+            ("100.127.255.254", false),
+            ("127.0.0.1", false),
+            ("169.254.1.1", false),
+            ("172.16.0.1", false),
+            ("172.31.255.1", false),
+            ("192.0.0.8", false),
+            ("192.168.1.10", false),
+            ("198.18.0.1", false),
+            ("198.19.255.1", false),
+            ("::", false),
+            ("::1", false),
+            ("fd00::1", false),
+            ("fe80::1", false),
+            ("100.128.0.1", true),
+            ("172.32.0.1", true),
+            ("198.20.0.1", true),
+            ("192.0.2.7", true),
+            ("198.51.100.7", true),
+            ("203.0.113.9", true),
+            ("2001:db8::1", true),
+            ("8.8.8.8", true),
+            ("2606:4700::1", true),
+        ] {
+            assert_eq!(public(&address.parse().unwrap()), public_one, "{address}");
+        }
+    }
+
     /// Once a journal write failed, no roster write is stored until a
     /// restart has written the journal again: a gap could never be filled.
     #[tokio::test]
@@ -2624,12 +2842,15 @@ mod tests {
             grace_created: Arc::default(),
             open_pairings: Arc::default(),
             old_lists: Arc::default(),
+            near_checks: Arc::default(),
+            signups_refused: Arc::default(),
         };
         let create = || {
             let (entry, _) =
                 Roster::genesis_entry(&MemberSecret::generate(), Hex(random()), "a", now_ms());
             create_account(
                 State(state.clone()),
+                ConnectInfo(SocketAddr::from(([127, 0, 0, 1], 0))),
                 HeaderMap::new(),
                 Json(AccountRequest {
                     entry,
@@ -2677,12 +2898,15 @@ mod tests {
             grace_created: Arc::default(),
             open_pairings: Arc::default(),
             old_lists: Arc::default(),
+            near_checks: Arc::default(),
+            signups_refused: Arc::default(),
         };
         let member = MemberSecret::generate();
         let genesis = || Roster::genesis_entry(&member, Hex(random()), "a", now_ms()).0;
         let create = |entry| {
             create_account(
                 State(state.clone()),
+                ConnectInfo(SocketAddr::from(([127, 0, 0, 1], 0))),
                 HeaderMap::new(),
                 Json(AccountRequest {
                     entry,
