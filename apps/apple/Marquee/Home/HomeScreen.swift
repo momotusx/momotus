@@ -125,7 +125,11 @@ struct HomeScreen: View {
             }
         }
         // A restarted core builds Home again: onboarding opens again if it was showing.
-        .onAppear { if profiles.resumeOnboarding { onboarding = true } }
+        .onAppear {
+            if profiles.resumeOnboarding { onboarding = true }
+            // Back on Home from the hero's Versions or player: every kind is listed again (plans/plugins-and-marketplace.md 4.2).
+            heroVersions?.listEveryKind()
+        }
         .onChange(of: onboarding) { _, open in profiles.resumeOnboarding = open }
         .modifier(FullScreen(isPresented: $onboarding, fillsWindow: true) {
             NavigationStack {

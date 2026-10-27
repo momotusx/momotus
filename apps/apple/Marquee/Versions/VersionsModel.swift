@@ -82,6 +82,11 @@ final class VersionsModel {
         if let kind { record.command(["type": "setKind", "kind": kind]) } else { record.command(["type": "setKind"]) }
     }
 
+    /// Lists every kind again when one is listed: the screen that opened Versions and the player is back in front.
+    func listEveryKind() {
+        if snapshot?.selectedKind != nil { setKind(nil) }
+    }
+
     /// What the player needs to start `key` (the recommended pick by default).
     func play(_ key: String? = nil, tapped: ContinuousClock.Instant = .now) -> PlayRoute? {
         guard let sub, let key = key ?? snapshot?.recommended?.key else { return nil }

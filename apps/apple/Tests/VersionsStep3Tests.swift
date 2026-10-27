@@ -663,11 +663,16 @@ private func kinds(_ kinds: [(String, Int)], service: String? = nil, selected: S
         .appending(path: "../Marquee/Versions/VersionsScreen.swift"), encoding: .utf8)
     let chipRow = try body(of: "private var kindRow", in: page)
     #expect(chipRow.contains("model.setKind(chip.kind)") && chipRow.contains(".accessibilityLabel(chip.spoken)"))
-    #expect(page.contains(".onDisappear { if VersionWords.resetsKind(asked: asked, selected: snapshot?.selectedKind, playing: leftToPlay) { model.setKind(nil) } }"))
-    #expect(!VersionWords.resetsKind(asked: "torrent", selected: "torrent", playing: true), "the player plays within the kind")
-    #expect(VersionWords.resetsKind(asked: "torrent", selected: nil))
-    #expect(VersionWords.resetsKind(asked: nil, selected: "debrid"))
-    #expect(!VersionWords.resetsKind(asked: nil, selected: nil), "nothing asked, nothing listed: nothing to send")
+    // The kind holds while Versions and the player it opened are in front; the screen that opened them lists every
+    // kind again when it is back (the title for its play target and episodes, Home for its hero).
+    let dir = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+    let title = try String(contentsOf: dir.appending(path: "../Marquee/Title/TitleScreen.swift"), encoding: .utf8)
+    let home = try String(contentsOf: dir.appending(path: "../Marquee/Home/HomeScreen.swift"), encoding: .utf8)
+    let model = try String(contentsOf: dir.appending(path: "../Marquee/Versions/VersionsModel.swift"), encoding: .utf8)
+    #expect(title.contains("versions?.listEveryKind()") && title.contains("episodeVersions?.listEveryKind()"))
+    #expect(home.contains("heroVersions?.listEveryKind()"))
+    #expect(try body(of: "func listEveryKind()", in: model).contains("if snapshot?.selectedKind != nil { setKind(nil) }"))
+    #expect(!page.contains(".onDisappear"), "Versions itself never resets: the player it opens plays within the kind")
     // The chips head the list, under the card on a phone, and are named as a group.
     #expect(try body(of: "private var table", in: page).contains("kindRow"))
     #expect(chipRow.contains(".accessibilityLabel(StreamChoice.words.kind.label)") && chipRow.contains("guard chip.kind != on"))

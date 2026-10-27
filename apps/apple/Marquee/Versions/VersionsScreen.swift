@@ -29,10 +29,6 @@ struct VersionsScreen: View {
     @State private var width: CGFloat = 0
     /// The kind chips (plans/plugins-and-marketplace.md 4.2) showed: they stay while the page is open.
     @State private var chipsShown = false
-    /// The last kind asked of the core, which may not have answered yet; leaving the page lists every kind again.
-    @State private var asked: String?
-    /// The page left for the player, which plays and moves on within the kind: leaving then keeps it.
-    @State private var leftToPlay = false
 
     var body: some View {
         ScrollView(.vertical) {
@@ -56,8 +52,6 @@ struct VersionsScreen: View {
         .topScrim()
         .onAppear(perform: model.freeze)
         .onChange(of: VersionWords.showsKinds(snapshot), initial: true) { _, shows in if shows { chipsShown = true } }
-        .onAppear { leftToPlay = false }
-        .onDisappear { if VersionWords.resetsKind(asked: asked, selected: snapshot?.selectedKind, playing: leftToPlay) { model.setKind(nil) } }
         .onChange(of: snapshot?.sections, initial: true) { _, sections in
             if choose != nil { held = VersionWords.hold(sections, shown: held) }
         }
@@ -82,7 +76,6 @@ struct VersionsScreen: View {
     /// Plays `key`: back in the player under the page, else a new player.
     private func play(_ key: String) {
         if let keep { keep(key); return }
-        leftToPlay = true
         if let choose { choose(key) } else { playing = model.play(key) }
     }
 
@@ -153,7 +146,7 @@ struct VersionsScreen: View {
     /// head the list, under the card on a phone, so a row that arrives late moves the list and never Play.
     @ViewBuilder private var kindRow: some View {
         let on = snapshot?.selectedKind
-        if chipsShown {
+        if chipsShown || VersionWords.showsKinds(snapshot) {
             // The chip that is on stays in view on a narrow track or at a large font.
             ScrollViewReader { proxy in
                 ScrollView(.horizontal) {
@@ -162,7 +155,6 @@ struct VersionsScreen: View {
                             Button {
                                 // The chip that is on again asks nothing.
                                 guard chip.kind != on else { return }
-                                asked = chip.kind
                                 model.setKind(chip.kind)
                             } label: {
                                 HStack(spacing: 6) {

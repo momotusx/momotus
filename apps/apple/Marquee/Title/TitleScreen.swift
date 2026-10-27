@@ -107,7 +107,13 @@ struct TitleScreen: View {
         .onChange(of: shown, initial: true) { _, now in placeShown = now }
         // TMDB and Trakt are asked only while the page shows (`titleVisible`): not under the player or
         // Versions, not in another tab, not with the app in the background.
-        .onAppear { inFront = true }
+        // Back on the title (from Versions, or a player that ends here): a kind chosen there lists every kind again, so
+        // Play plays the core's pick (plans/plugins-and-marketplace.md 4.2).
+        .onAppear {
+            inFront = true
+            versions?.listEveryKind()
+            episodeVersions?.listEveryKind()
+        }
         .onDisappear { inFront = false }
         .onChange(of: pageVisible, initial: true) { _, now in model.setVisible(now) }
         // At rest too: on a short or wide window the words can start under the bar before any scroll.
