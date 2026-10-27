@@ -144,8 +144,12 @@ test("Search merges both addons' movie search into one Movies group, and no grou
 
 test("Discover's catalogs name no addon; Customize Home names each row's on a quiet second line", async ({ browser }) => {
   const page = await open(browser, "/discover");
-  await expect(page.locator('[data-fgroup="catalogs"] [data-f]').first()).toBeVisible({ timeout: 30_000 });
+  await expect(page.locator('[data-fgroup="kinds"] .chip').first()).toBeVisible({ timeout: 30_000 });
+  // The other catalogs are in the Sort menu, by their own names.
+  await page.locator('[data-f="sorts:menu"]').click();
+  await expect(page.locator('[data-fgroup="sorts"] .pull-opt').first()).toBeVisible();
   await noAddonName(page);
+  await page.keyboard.press("Escape");
   await page.goto("/home-rows?form=desktop");
   const popular = page.locator(".hrow", { has: page.locator(".hrow-text b", { hasText: /^Popular Movies$/ }) });
   await expect(popular).toHaveCount(2, { timeout: 30_000 });

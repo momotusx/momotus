@@ -170,7 +170,7 @@ test("desktop: a genre link opens Discover at its top on that kind and genre, on
 test("desktop: a genre the catalog does not list leaves Discover on the kind with no genre", async ({ browser }) => {
   const { context, page } = await open(browser, "desktop", "/discover?kind=series&genre=Not%20A%20Genre");
   await expect.poll(() => chosen(page, "kinds"), { timeout: 30_000 }).toBe("Series");
-  await expect.poll(() => chosen(page, "genres"), { timeout: 30_000 }).toBe("All");
+  await expect.poll(() => chosen(page, "genres"), { timeout: 30_000 }).toBe("Any genre");
   await context.close();
 });
 

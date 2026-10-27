@@ -1291,6 +1291,9 @@ test("Discover: Try again asks a failed catalog, and a failed page, again", asyn
     await c.req("installAddon", { url: shelf.url });
     const { context, page: p } = await page(browser, { width: 1920, height: 1080 });
     await p.goto("/discover?form=tv");
+    // The shelf is one of the other catalogs: it is chosen in the Sort menu.
+    await p.locator('[data-f="sorts:menu"]').click({ timeout: 30_000 });
+    await p.locator('[data-fgroup="sorts"] .pull-opt', { hasText: "Journey Shelf" }).click();
     const tiles = p.locator('[data-f^="g:discover:"]');
     // The catalog failed: Try again, by remote, keeps the focus while it asks.
     const first = p.locator('[data-f="discover:retry-catalog"]');

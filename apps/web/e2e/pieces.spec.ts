@@ -157,11 +157,13 @@ test("Customize Home names each row's addon on a quiet second line; Discover's c
     expect(r.label.startsWith(head) && /^(hidden|shown), row \d+ of \d+$/.test(r.label.slice(head.length)), r.label).toBe(true);
   }
   await page.goto("/discover?form=desktop");
-  const catalogs = page.locator('[data-fgroup="catalogs"] [data-f]');
+  // The catalogs are the Sort menu's choices, each once, with no addon's name beside it.
+  await page.locator('[data-f="sorts:menu"]').click({ timeout: 30_000 });
+  const catalogs = page.locator('[data-fgroup="sorts"] .pull-opt');
   await expect(catalogs.first()).toBeVisible({ timeout: 30_000 });
   const names = await catalogs.allTextContents();
   expect(new Set(names).size).toBe(names.length);
-  await expect(page.locator('[data-fgroup="catalogs"] small')).toHaveCount(0);
+  await expect(page.locator('[data-fgroup="sorts"] .pull-opt small')).toHaveCount(0);
   await context.close();
 });
 
@@ -263,7 +265,7 @@ test("TV: two to four choices are the segmented control, more a pull-down whose 
   expect(await kinds.count()).toBeLessThanOrEqual(4);
   // The selected segment one grey step up with a white label, the rest on the track.
   await page.locator('[data-fgroup="kinds"] .chip:not(.on)').first().focus();
-  await page.locator('[data-fgroup="catalogs"] [data-f]').first().focus();
+  await page.locator('[data-f="genres:menu"]').focus();
   expect(await style(page, '[data-fgroup="kinds"] .chip.on')).toMatchObject({ background: "rgb(99, 99, 102)", color: "rgb(255, 255, 255)", shadow: "none" });
   expect(await style(page, '[data-fgroup="kinds"] .chip:not(.on)')).toMatchObject({ background: "rgba(118, 118, 128, 0.24)", color: "rgba(255, 255, 255, 0.64)" });
   // More than four: a pill that names the choice.
