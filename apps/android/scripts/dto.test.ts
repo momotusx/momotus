@@ -23,7 +23,7 @@ test("the keystore record is a SyncRecord and a class that carries it never prin
   const kotlin = generate(sourceDir);
   expect(kotlin).toContain("val record: SyncRecord? = null,");
   expect(kotlin).toContain("val record: SyncRecord,");
-  expect(kotlin).toContain('override fun toString() = "Joined(record=hidden)"');
+  expect(kotlin).toContain('override fun toString() = "Joined(record=hidden, by=$by)"');
   expect(kotlin).toMatch(/override fun toString\(\) = "SyncReport\(.*record=\$\{record\?\.let \{ "hidden" \}\}/);
   expect(kotlin).not.toContain("Record<string, unknown>");
 });
