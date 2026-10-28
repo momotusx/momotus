@@ -20,6 +20,9 @@ private func source(_ path: String) throws -> String {
     let top = try body(of: "private var top: some View", in: controls)
     #expect(top.components(separatedBy: ".frame(width: Theme.minTarget, height: Theme.minTarget)").count - 1 >= 3,
             "Back, Picture in Picture and AirPlay each keep the minimum")
+    let back = try body(of: "private var leaveBack: some ToolbarContent", in: source("Profiles/ManageProfiles.swift"))
+    #expect(back.contains(".frame(minWidth: Theme.minTarget, minHeight: Theme.minTarget)"), "the editor's own Back lost the minimum")
+    #expect(back.contains(".contentShape(Rectangle())"), "the frame alone does not widen the tap area")
     let shelf = try source("Title/TitleEpisodes.swift")
     let start = try #require(shelf.range(of: "struct SeasonShelf")).lowerBound
     let season = try body(of: "var body: some View", in: String(shelf[start...]))

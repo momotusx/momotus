@@ -200,9 +200,16 @@ struct EditProfile: View {
     @ToolbarContentBuilder private var leaveBack: some ToolbarContent {
         if dirty, shown {
             ToolbarItem(placement: .navigation) {
-                Button(action: leave) { Label("Back", glyph: "chevron-left") }
-                    // The system back is a chevron alone; the control keeps its shape when the first edit swaps them.
-                    .labelStyle(.iconOnly)
+                Button(action: leave) {
+                    Label("Back", glyph: "chevron-left")
+                        // The system back is a chevron alone; the control keeps its shape when the first edit swaps them.
+                        .labelStyle(.iconOnly)
+                        #if os(iOS)
+                        // And its 44 pt target (the bar drew this one at 36).
+                        .frame(minWidth: Theme.minTarget, minHeight: Theme.minTarget)
+                        .contentShape(Rectangle())
+                        #endif
+                }
             }
         }
     }
