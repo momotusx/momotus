@@ -288,7 +288,7 @@ pub fn nonce_for(relay_nonce: &[u8], host: &str) -> String {
 /// and no IP literal, at most 254 bytes. The same string is hashed and
 /// mailed. `None` for anything else.
 pub fn normalize_email(address: &str) -> Option<String> {
-    const ATEXT: &str = "!#$%&'*+-/=?^_{|}~";
+    const ATEXT: &str = "!#$%&'*+-/=?^_`{|}~";
     let (local, domain) = address.trim().split_once('@')?;
     let local_ok = (1..=64).contains(&local.len())
         && local.split('.').all(|part| {
@@ -322,11 +322,22 @@ pub fn normalize_email(address: &str) -> Option<String> {
 /// (E3): no `+tag`, and Gmail's dots and `googlemail.com` folded.
 pub fn mailbox(address: &str) -> String {
     let (local, domain) = address.split_once('@').unwrap_or((address, ""));
-    let local = local.split_once('+').map_or(local, |(base, _)| base);
+    // A tag is cut, but never the whole local part (`+x@` stays itself).
+    let local = match local.split_once('+') {
+        Some((base, _)) if !base.is_empty() => base,
+        _ => local,
+    };
     match domain {
         "gmail.com" | "googlemail.com" => format!("{}@gmail.com", local.replace('.', "")),
         _ => format!("{local}@{domain}"),
     }
+}
+
+/// A typed code as the relay compares it: spaces and dashes dropped, then
+/// exactly 6 digits, or `None`.
+pub fn code_digits(code: &str) -> Option<String> {
+    let digits: String = code.chars().filter(|c| !matches!(c, ' ' | '-')).collect();
+    (digits.len() == 6 && digits.bytes().all(|b| b.is_ascii_digit())).then_some(digits)
 }
 
 /// What redeeming a kit gives: a pending token and the kit's member id.
@@ -446,7 +457,7 @@ mod tests {
 
     #[test]
     fn email_addresses_normalize_and_fold_into_mailboxes() {
-        use super::{mailbox, normalize_email};
+        use super::{code_digits, mailbox, normalize_email};
         let n = |a: &str| normalize_email(a);
         assert_eq!(
             n("  Ann.Lee@Example.ORG ").as_deref(),
@@ -476,5 +487,24 @@ mod tests {
         }
         assert_eq!(mailbox("a.b+c@googlemail.com"), "ab@gmail.com");
         assert_eq!(mailbox("a.b+c@example.org"), "a.b@example.org");
+        assert_eq!(mailbox("+x@gmail.com"), "+x@gmail.com", "no empty mailbox");
+        // The limits: 64 bytes of local part, 63 per label, 254 in all.
+        let label = "d".repeat(63);
+        assert!(n(&format!("{}@x.org", "a".repeat(64))).is_some());
+        assert!(n(&format!("{}@x.org", "a".repeat(65))).is_none());
+        assert!(n(&format!("a@{label}.org")).is_some());
+        assert!(n(&format!("a@d{label}.org")).is_none());
+        let long = |extra: usize| {
+            format!(
+                "{}@{label}.{label}.{}.org",
+                "a".repeat(64),
+                "d".repeat(extra)
+            )
+        };
+        assert_eq!(long(57).len(), 254);
+        assert!(n(&long(57)).is_some() && n(&long(58)).is_none());
+        assert_eq!(code_digits(" 12-34 56").as_deref(), Some("123456"));
+        assert_eq!(code_digits("12345"), None);
+        assert_eq!(code_digits("1234567"), None);
     }
 }

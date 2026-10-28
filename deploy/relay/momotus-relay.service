@@ -13,12 +13,10 @@ StartLimitBurst=10
 User=momotus
 Group=momotus
 LoadCredential=identity.json:/etc/momotus/identity.json
-# Email sign-in (plans/accounts-email.md) stays off until a code mail lands in a Gmail Inbox
-# (section 7's gate; on 2026-10-28 it still went to Spam). To turn it on, uncomment this line and
-# add `--mail %d/ses.json` to ExecStart. Remove both again with the file: systemd may refuse to
-# start a unit whose credential file is missing.
-#LoadCredential=ses.json:/etc/momotus/ses.json
-ExecStart=/opt/momotus/bin/mq-sync-server --db /var/lib/momotus/relay.sqlite --listen 127.0.0.1:8787 --trust-proxy --public-host momotus.normalisdead.mom --identity %d/identity.json
+# Email sign-in's SES key (plans/accounts-email.md). Remove this line and `--mail` with the file:
+# systemd may refuse to start a unit whose credential file is missing.
+LoadCredential=ses.json:/etc/momotus/ses.json
+ExecStart=/opt/momotus/bin/mq-sync-server --db /var/lib/momotus/relay.sqlite --listen 127.0.0.1:8787 --trust-proxy --public-host momotus.normalisdead.mom --identity %d/identity.json --mail %d/ses.json
 Restart=always
 RestartSec=2
 # The relay's refusals (a bad identity file, a database of another schema) exit 2: no restart loop.

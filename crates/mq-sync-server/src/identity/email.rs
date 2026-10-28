@@ -19,12 +19,13 @@ use axum::response::{IntoResponse, Response};
 use hmac::{Hmac, KeyInit, Mac};
 use mq_http::{HttpError, RequestOptions};
 use mq_library::hlc::now_ms;
-use mq_sync::wire::{StartRequest, StartResponse, mailbox, normalize_email};
+use mq_sync::wire::{StartRequest, StartResponse, code_digits, mailbox, normalize_email};
 use rusqlite::{Connection, params};
 use serde::Deserialize;
 use serde_json::json;
 use sha2::{Digest, Sha256};
 use std::net::IpAddr;
+use std::sync::atomic::{AtomicU32, Ordering};
 use std::time::Duration;
 
 /// Mail limits look this far back; their rows go after it.
@@ -65,7 +66,9 @@ fn daily_limit() -> i64 {
 impl EmailConfig {
     pub(crate) fn check(&self) -> Result<(), String> {
         super::secure("the mail endpoint", &self.endpoint())?;
-        let plain = |s: &str| !s.is_empty() && !s.contains(['\r', '\n']);
+        // Keys are visible ASCII; the sender may hold spaces, never control bytes.
+        let key = |s: &str| !s.is_empty() && s.bytes().all(|b| b.is_ascii_graphic());
+        let plain = |s: &str| !s.is_empty() && !s.chars().any(char::is_control);
         let region_ok = !self.region.is_empty()
             && self
                 .region
@@ -74,8 +77,8 @@ impl EmailConfig {
         if !(1..=1000).contains(&self.daily_limit) {
             return Err("the email block's dailyLimit must be 1 to 1000".into());
         }
-        if !(plain(&self.access_key_id)
-            && plain(&self.secret_access_key)
+        if !(key(&self.access_key_id)
+            && key(&self.secret_access_key)
             && plain(&self.from)
             && self.from.contains('@')
             && region_ok)
@@ -145,7 +148,7 @@ fn code_hash(id: &Identity, flow: &str, code: &str) -> Vec<u8> {
     id.subject("email code", &format!("{flow}\0{code}"))
 }
 
-fn events(db: &Connection, kind: &str, key: &[u8], since: u64) -> rusqlite::Result<i64> {
+fn count_events(db: &Connection, kind: &str, key: &[u8], since: u64) -> rusqlite::Result<i64> {
     db.query_row(
         "SELECT COUNT(*) FROM email_event WHERE kind = ?1 AND key = ?2 AND at_ms > ?3",
         params![kind, key, since as i64],
@@ -153,7 +156,7 @@ fn events(db: &Connection, kind: &str, key: &[u8], since: u64) -> rusqlite::Resu
     )
 }
 
-fn event(db: &Connection, kind: &str, key: &[u8], now: u64) -> rusqlite::Result<i64> {
+fn record_event(db: &Connection, kind: &str, key: &[u8], now: u64) -> rusqlite::Result<i64> {
     db.execute(
         "INSERT INTO email_event (kind, key, at_ms) VALUES (?1, ?2, ?3)",
         params![kind, key, now as i64],
@@ -320,9 +323,10 @@ async fn send(
         headers: vec![("x-amz-date".into(), date), ("authorization".into(), auth)],
         ..id.options(&endpoint)
     };
-    match id.http.post_json(url.as_str(), &body, &options).await {
+    let answer = id.http.post_json(url.as_str(), &body, &options).await;
+    // SES's own message may quote the address: the status alone is logged.
+    let outcome = match answer {
         Ok(_) => Ok(()),
-        // SES's own message may quote the address: the status alone is logged.
         // A request timeout or a throttle may still lift or have sent.
         Err(HttpError::Status { status, .. }) if status == 408 || status == 429 => {
             tracing::warn!("the mail service did not take a code now: {status}");
@@ -337,12 +341,35 @@ async fn send(
             }
             Err(NotSent::Refused)
         }
+        // Refused here, before anything went: the configuration's fault.
+        Err(
+            e @ (HttpError::InvalidUrl(_) | HttpError::BlockedPrivate(_) | HttpError::Decode(_)),
+        ) => {
+            tracing::error!("the mail request could not be made: {}", e.kind());
+            Err(NotSent::Refused)
+        }
         Err(e) => {
             tracing::warn!("the mail service did not answer: {}", e.kind());
             Err(NotSent::Unknown)
         }
+    };
+    // A paused or suspended account answers every send with a refusal:
+    // after three in a row, each one is an error the owner sees.
+    // ponytail: one counter for the process, enough for one sender.
+    let refused = match &outcome {
+        Err(NotSent::Refused) => REFUSED_IN_A_ROW.fetch_add(1, Ordering::Relaxed) + 1,
+        _ => {
+            REFUSED_IN_A_ROW.store(0, Ordering::Relaxed);
+            0
+        }
+    };
+    if refused >= 3 {
+        tracing::error!("the mail service refused {refused} codes in a row");
     }
+    outcome
 }
+
+static REFUSED_IN_A_ROW: AtomicU32 = AtomicU32::new(0);
 
 /// `POST /v1/auth/email/start`: the checks, the flow and its events in one
 /// locked step, then the mail. The answer never depends on whether the
@@ -391,8 +418,8 @@ pub(super) async fn start(
                     "a code went to this address a moment ago",
                 )));
             }
-            if events(&db, "mail", &mailbox, day)? >= MAILS_PER_MAILBOX
-                || events(&db, "miss", &mailbox, day)? >= MISSES_PER_MAILBOX
+            if count_events(&db, "mail", &mailbox, day)? >= MAILS_PER_MAILBOX
+                || count_events(&db, "miss", &mailbox, day)? >= MISSES_PER_MAILBOX
                 || mails_today(state, network, now) >= MAILS_PER_CLIENT
             {
                 return Ok(Err(limit()));
@@ -437,7 +464,7 @@ pub(super) async fn start(
                     serde_json::to_string(&verified).expect("plain")
                 ],
             )?;
-            Ok(Ok((event(&db, "mail", &mailbox, now)?, relay + 1)))
+            Ok(Ok((record_event(&db, "mail", &mailbox, now)?, relay + 1)))
         })();
         let (row, sent) = checked.map_err(|e| storage_error("email start", e))??;
         count_mail(state, network, now, true);
@@ -554,18 +581,12 @@ pub(super) fn take(
     };
     let day = now.saturating_sub(EVENT_MS);
     let store = |e| storage_error("email take", e);
-    if events(db, "miss", &mailbox, day).map_err(store)? >= MISSES_PER_MAILBOX {
+    if count_events(db, "miss", &mailbox, day).map_err(store)? >= MISSES_PER_MAILBOX {
         gone(db).map_err(store)?;
         return Err(limit());
     }
-    let digits: String = code.chars().filter(|c| !matches!(c, ' ' | '-')).collect();
-    if digits.len() != 6 || !digits.bytes().all(|b| b.is_ascii_digit()) {
-        return Err(coded(
-            StatusCode::BAD_REQUEST,
-            "badCode",
-            "a code is 6 digits",
-        ));
-    }
+    let digits = code_digits(code)
+        .ok_or_else(|| coded(StatusCode::BAD_REQUEST, "badCode", "a code is 6 digits"))?;
     let fits = row
         .code_hash
         .as_deref()
@@ -579,9 +600,9 @@ pub(super) fn take(
         return Ok(Json(taken).into_response());
     }
     let misses = (|| {
-        event(db, "miss", &mailbox, now)?;
-        event(db, "flowmiss", &sha(flow), now)?;
-        events(db, "flowmiss", &sha(flow), 0)
+        record_event(db, "miss", &mailbox, now)?;
+        record_event(db, "flowmiss", &sha(flow), now)?;
+        count_events(db, "flowmiss", &sha(flow), 0)
     })()
     .map_err(store)?;
     if misses >= MISSES_PER_FLOW {

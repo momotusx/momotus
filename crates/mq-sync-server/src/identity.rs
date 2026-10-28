@@ -93,7 +93,7 @@ pub struct IdentityFile {
     /// Standard OpenID providers (the mock among them), by route id.
     #[serde(default)]
     pub oidc: Vec<OidcConfig>,
-    /// Sign-in by a code mailed through Resend (plans/accounts-email.md).
+    /// Sign-in by a code mailed through Amazon SES (plans/accounts-email.md).
     #[serde(default)]
     pub email: Option<email::EmailConfig>,
 }

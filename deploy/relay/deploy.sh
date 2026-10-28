@@ -58,12 +58,19 @@ if [ -f /var/lib/momotus/relay.sqlite ]; then
   echo "remote: backup $STAMP"
 fi
 # The unit's sandbox, not its flags: no --trust-proxy (no Cloudflare in front of a loopback check).
-# systemd-run does not expand %d, so the command reads $CREDENTIALS_DIRECTORY itself.
+# systemd-run does not expand %d, so the command reads $CREDENTIALS_DIRECTORY itself. The mail
+# credential only when the unit just installed uses it (plans/accounts-email.md E11), so the
+# preflight runs what production will.
+MAIL_CRED=() MAIL_FLAG=""
+if grep -q '^ExecStart=.*--mail' /etc/systemd/system/momotus-relay.service; then
+  MAIL_CRED=(-p LoadCredential=ses.json:/etc/momotus/ses.json)
+  MAIL_FLAG=" --mail \"\$CREDENTIALS_DIRECTORY/ses.json\""
+fi
 systemd-run --unit=momotus-preflight --quiet --collect -p User=momotus -p Group=momotus \
-  -p LoadCredential=identity.json:/etc/momotus/identity.json -p LoadCredential=ses.json:/etc/momotus/ses.json -p ProtectSystem=strict -p ProtectHome=yes \
+  -p LoadCredential=identity.json:/etc/momotus/identity.json "${MAIL_CRED[@]}" -p ProtectSystem=strict -p ProtectHome=yes \
   -p PrivateTmp=yes -p NoNewPrivileges=yes -p ReadWritePaths=/var/lib/momotus-preflight \
   sh -c "exec /opt/momotus/bin/mq-sync-server-$COMMIT --db /var/lib/momotus-preflight/relay.sqlite --listen 127.0.0.1:8789 \
-    --public-host momotus.normalisdead.mom --identity \"\$CREDENTIALS_DIRECTORY/identity.json\" --mail \"\$CREDENTIALS_DIRECTORY/ses.json\""
+    --public-host momotus.normalisdead.mom --identity \"\$CREDENTIALS_DIRECTORY/identity.json\"$MAIL_FLAG"
 if ! health http://127.0.0.1:8789 10; then
   echo "remote: the new binary did not start on a copy of the database; nothing switched:" >&2
   journalctl -u momotus-preflight -n 20 --no-pager >&2 || true

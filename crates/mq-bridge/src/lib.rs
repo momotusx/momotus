@@ -977,6 +977,12 @@ impl Session {
                     send_answer(&self.out, json!(id), Err(refused));
                     return;
                 };
+                // Past the relay's 10 minutes: no call, the same answer it gives.
+                if started.elapsed() >= NATIVE_FLOW_LIFE {
+                    let expired = Failure::from(mq_sync::SyncError::TicketExpired);
+                    send_answer(&self.out, json!(id), Err(expired));
+                    return;
+                }
                 let shared = self.shared.clone();
                 self.spawn(id, async move {
                     let taken = email.finish(core.http(), &code).await;

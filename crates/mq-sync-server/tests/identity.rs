@@ -1740,7 +1740,11 @@ async fn email_start_at(
                 email: Some(address.into()),
                 ..Default::default()
             },
-            &raw(headers),
+            // Longer than the relay's 8 s wait on a stalled mail service.
+            &RequestOptions {
+                timeout: std::time::Duration::from_secs(20),
+                ..raw(headers)
+            },
         )
         .await
         .map_err(refusal)
@@ -2029,15 +2033,19 @@ async fn mail_and_guess_limits_per_mailbox() {
         relay.email_take(&flow, "v", &code).await.err(),
         Some((403, "ticketExpired".into()))
     );
+    // From ten networks, so only the mailbox's own cap can say no.
+    let proxied = relay.proxied().await;
     for i in 1..10 {
-        relay
-            .email_start(&format!("dan+{i}@example.org"), "v")
+        let from = format!("198.51.100.{i}");
+        email_start_at(&proxied, &format!("dan+{i}@example.org"), "v", Some(&from))
             .await
             .unwrap();
         relay.later(61_000);
     }
     assert_eq!(
-        relay.email_start(to, "v").await.err(),
+        email_start_at(&proxied, to, "v", Some("198.51.100.99"))
+            .await
+            .err(),
         Some((429, "emailLimit".into())),
         "the eleventh"
     );
@@ -2298,4 +2306,49 @@ async fn email_configuration_and_an_older_database() {
     )
     .await;
     again.email_start("kim@example.org", "v").await.unwrap();
+}
+
+/// A definite refusal gives the client's daily count back: eleven refused
+/// starts from one network still leave it all ten mails.
+#[tokio::test]
+async fn a_refused_mail_gives_the_client_count_back() {
+    let relay = Relay::new().await;
+    let proxied = relay.proxied().await;
+    relay.mock.mail_fails(Some(400), false);
+    for i in 0..11 {
+        let to = format!("k{i}@example.org");
+        let refused = email_start_at(&proxied, &to, "v", Some("192.0.2.7"));
+        assert_eq!(
+            refused.await.err(),
+            Some((503, "mailUnavailable".into())),
+            "{i}"
+        );
+        if i % 4 == 3 {
+            relay.later(61_000);
+        }
+    }
+    relay.mock.mail_fails(None, false);
+    relay.later(61_000);
+    email_start_at(&proxied, "k11@example.org", "v", Some("192.0.2.7"))
+        .await
+        .unwrap();
+}
+
+/// D10 for email: a fourth account in 30 days for one address is refused.
+#[tokio::test]
+async fn a_fourth_email_sign_up_in_30_days_is_refused() {
+    let relay = Relay::new().await;
+    Device::create(&relay, &relay.email("sam@example.org").await, false)
+        .await
+        .unwrap();
+    for _ in 0..2 {
+        Device::create(&relay, &relay.email("sam@example.org").await, true)
+            .await
+            .unwrap();
+    }
+    let fourth = Device::create(&relay, &relay.email("sam@example.org").await, true)
+        .await
+        .err()
+        .unwrap();
+    assert!(matches!(fourth, SyncError::SignupLimit), "{fourth:?}");
 }

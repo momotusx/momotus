@@ -299,10 +299,7 @@ impl EmailFlow {
     /// The code from the mail: `found` or `new` as a ticket; `WrongCode`
     /// leaves the flow open for another try.
     pub async fn finish(&self, http: &HttpClient, code: &str) -> Result<Taken, SyncError> {
-        let digits: String = code.chars().filter(|c| !matches!(c, ' ' | '-')).collect();
-        if digits.len() != 6 || !digits.bytes().all(|b| b.is_ascii_digit()) {
-            return Err(SyncError::BadCode);
-        }
+        let digits = crate::wire::code_digits(code).ok_or(SyncError::BadCode)?;
         let request = TakeRequest {
             flow: self.flow.clone(),
             verifier: self.verifier.clone(),
