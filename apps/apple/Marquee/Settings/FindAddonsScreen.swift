@@ -260,16 +260,6 @@ struct FindAddonsScreen: View {
     #endif
 }
 
-/// Says something to VoiceOver now (an install's result, a list that came in).
-func announce(_ words: String) {
-    AccessibilityNotification.Announcement(words).post()
-    #if DEBUG
-    // Every announcement goes through here: a walk reads them from the log
-    // where no screen reader runs (the simulator has none).
-    coreLog.notice("debug: announce \(words, privacy: .public)")
-    #endif
-}
-
 /// A link to Find addons as a secondary pill (Addons, Add a source, onboarding).
 struct FindAddonsLink: View {
     let core: CoreClient

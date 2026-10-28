@@ -581,6 +581,16 @@ struct StateLine: View {
     }
 }
 
+/// Says something to VoiceOver now (an install's result, a list that came in).
+func announce(_ words: String) {
+    AccessibilityNotification.Announcement(words).post()
+    #if DEBUG
+    // Every announcement goes through here: a walk reads them from the log
+    // where no screen reader runs (the simulator has none).
+    coreLog.notice("debug: announce \(words, privacy: .public)")
+    #endif
+}
+
 /// What a spoken `StateLine` says: its words when they are new, nothing for a redraw of the
 /// words it already said.
 func spokenLine(last: String?, current: String) -> String? {
