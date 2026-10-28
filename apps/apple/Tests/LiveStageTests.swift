@@ -29,6 +29,8 @@ import Testing
     let screen = try String(contentsOf: file, encoding: .utf8)
     let pinned = try body(of: ".safeAreaInset(edge: .top, spacing: 0)", in: screen)
     #expect(pinned.contains(".failedKept"), "the failure over a kept snapshot left the pinned inset")
+    // DECISION (States): a banner is solid raised.
+    #expect(pinned.contains(".background(Theme.Palette.raised)"), "the pinned banner left raised")
 }
 
 @MainActor @Test func tryAgainClearsTheFailureAtOnce() async throws {

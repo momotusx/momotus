@@ -44,7 +44,7 @@ struct CalendarScreen: View {
                         .padding(.horizontal, metrics.gutter)
                         .padding(.vertical, Theme.Space.xs)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(Theme.Palette.bg)
+                        .background(Theme.Palette.raised)
                 }
             }
             .onChange(of: calendar.snapshot?.startDay, initial: true) { _, day in
