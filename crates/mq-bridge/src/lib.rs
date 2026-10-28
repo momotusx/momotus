@@ -2,8 +2,8 @@
 //! a WebSocket (dev server, browser, Playwright) and over the desktop shells'
 //! IPC channel.
 //!
-//! Requests: `{"id", "op": "subscribe" | "unsubscribe" | "command" | "installAddon" |
-//! "installListed" | "removeAddon" | "moveAddon" | "setAddonEnabled" | "defaultAddons" |
+//! Requests: `{"id", "op": "subscribe" | "unsubscribe" | "command" | "previewAddon" |
+//! "installAddon" | "installListed" | "removeAddon" | "moveAddon" | "setAddonEnabled" | "defaultAddons" |
 //! "installDefaults" | "setPrefs" | "streamConditions" | "resetSpeed" | "forgetLearned" |
 //! "undoLearned" | "setDebridKeys" |
 //! "restoreDebrid" | "ackDebrid" | "setDebridKey" | "disconnectDebrid" |
@@ -75,6 +75,14 @@ enum Request {
         id: u64,
         sub: u64,
         command: Value,
+    },
+    /// What a pasted link would install, for the install sheet; writes nothing.
+    PreviewAddon {
+        id: u64,
+        url: String,
+        /// The user saw the `tokenInLink` warning and goes on anyway.
+        #[serde(default, rename = "acknowledgeToken")]
+        acknowledge_token: bool,
     },
     InstallAddon {
         id: u64,
@@ -1466,18 +1474,28 @@ impl Session {
                 });
                 self.reply(json!(id), result);
             }
+            Request::PreviewAddon {
+                id,
+                url,
+                acknowledge_token,
+            } => {
+                if refuse_token_link(&self.out, id, &url, acknowledge_token) {
+                    return;
+                }
+                // Writes nothing, so not bound to the profile; the install that follows is.
+                self.spawn(id, async move {
+                    core.preview_addon(&url)
+                        .await
+                        .map(|a| json!(a))
+                        .map_err(|e| e.to_string())
+                });
+            }
             Request::InstallAddon {
                 id,
                 url,
                 acknowledge_token,
             } => {
-                // A sign-in in a pasted link's settings: warned and acknowledged first.
-                if !acknowledge_token && mq_runtime::link_carries_token(&url) {
-                    let refused = Failure::coded(
-                        "tokenInLink",
-                        "this link carries a sign-in in its settings: install it only if it is yours",
-                    );
-                    send_answer(&self.out, json!(id), Err(refused));
+                if refuse_token_link(&self.out, id, &url, acknowledge_token) {
                     return;
                 }
                 // Bound to the profile: a switch first makes it `switched`.
@@ -2419,6 +2437,20 @@ fn versions_params(params: &Value, mut prefs: StreamPrefs) -> Result<VersionsPar
 /// The network type a `versions` subscription names, if any.
 fn versions_network(params: &Value) -> Result<Option<mq_runtime::speed::Network>, String> {
     field(params, "network")
+}
+
+/// A sign-in in a pasted link's settings: warned and acknowledged first, for
+/// the preview and the install alike. True when the request was refused.
+fn refuse_token_link(out: &Output, id: u64, url: &str, acknowledged: bool) -> bool {
+    if acknowledged || !mq_runtime::link_carries_token(url) {
+        return false;
+    }
+    let refused = Failure::coded(
+        "tokenInLink",
+        "this link carries a sign-in in its settings: install it only if it is yours",
+    );
+    send_answer(out, json!(id), Err(refused));
+    true
 }
 
 #[cfg(test)]

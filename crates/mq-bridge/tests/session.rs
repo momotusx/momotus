@@ -167,6 +167,50 @@ async fn push_until(
     }
 }
 
+/// The install sheet's preview of a pasted link: what it adds, from where,
+/// and nothing written; a link with a sign-in is refused first, as the
+/// install is.
+#[tokio::test]
+async fn a_preview_names_the_addon_and_installs_nothing() {
+    let base = local_addon().await;
+    let core = Core::temporary("p").unwrap();
+    let (tx, mut rx) = Output::channel();
+    let mut session = Session::new(core.clone(), tx);
+    let url = format!("{base}/manifest.json");
+    session
+        .handle_text(&json!({"id": 1, "op": "previewAddon", "url": url}).to_string())
+        .await;
+    let reply = next(&mut rx).await;
+    assert_eq!(reply["ok"], true, "{reply}");
+    let shown = &reply["result"];
+    assert_eq!(shown["name"], "Local");
+    assert_eq!(shown["host"], "127.0.0.1");
+    assert_eq!(shown["provides"], json!(["stream"]));
+    assert_eq!(shown["types"], json!(["movie"]));
+    assert_eq!(
+        shown["url"], "",
+        "a link may hold keys: the app has its own"
+    );
+    assert!(
+        core.library().addons("p").unwrap().is_empty(),
+        "nothing installed"
+    );
+    let theirs = "https://trakt.example/eyJ0b2tlbiI6IngifQ/manifest.json";
+    session
+        .handle_text(&json!({"id": 2, "op": "previewAddon", "url": theirs}).to_string())
+        .await;
+    assert_eq!(next(&mut rx).await["code"], "tokenInLink");
+    session
+        .handle_text(
+            &json!({"id": 3, "op": "previewAddon", "url": theirs, "acknowledgeToken": true})
+                .to_string(),
+        )
+        .await;
+    let tried = next(&mut rx).await;
+    assert_eq!(tried["ok"], false);
+    assert_ne!(tried["code"], "tokenInLink", "{tried}");
+}
+
 #[tokio::test]
 async fn versions_then_playback_then_progress() {
     let base = local_addon().await;
@@ -744,7 +788,7 @@ async fn defaults_and_links_with_a_sign_in_over_the_protocol() {
         .await;
     let listed = next(&mut rx).await;
     let addons = listed["result"]["addons"].as_array().unwrap();
-    assert_eq!(addons.len(), 10, "{listed}");
+    assert_eq!(addons.len(), 11, "{listed}");
     assert_eq!(addons[1]["key"], "torrentio");
     assert_eq!(addons[1]["installed"], "absent");
     session

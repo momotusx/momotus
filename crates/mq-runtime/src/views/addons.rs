@@ -116,45 +116,50 @@ fn list(core: &Core) -> AddonsSnapshot {
         .into_iter()
         .filter_map(|row| {
             let manifest: Manifest = serde_json::from_str(&row.manifest_json).ok()?;
-            let url = url::Url::parse(&row.transport_url).ok()?;
-            let built_in =
-                crate::turkcealtyazi::is_builtin(&row.transport_url, Some(manifest.id.as_str()));
-            // Its old host is never opened: not even to configure it.
-            let configure_url =
-                crate::views::addon_catalog::configure_page(&url, &manifest).filter(|_| !built_in);
-            // The core's own source: its name and line, not the old addon's
-            // (whose text is Turkish and speaks of Stremio).
-            let (name, description) = if built_in {
-                let d = crate::turkcealtyazi::default();
-                (d.name.clone(), Some(d.line.clone()))
-            } else {
-                (manifest.name, manifest.description)
-            };
-            Some(AddonInfo {
-                host: url.host_str().unwrap_or_default().to_owned(),
-                url: row.transport_url,
-                name,
-                description,
-                logo: manifest.logo.map(|u| u.to_string()),
-                version: manifest.version.to_string(),
-                enabled: row.enabled,
-                provides: manifest
-                    .resources
-                    .iter()
-                    .map(|r| match r {
-                        ManifestResource::Short(name) => name.clone(),
-                        ManifestResource::Full { name, .. } => name.clone(),
-                    })
-                    .collect(),
-                configure_url,
-                types: manifest.types,
-                configurable: manifest.behavior_hints.configurable && !built_in,
-                built_in,
-            })
+            info(row.transport_url, manifest, row.enabled)
         })
         .collect();
     AddonsSnapshot {
         addons,
         fresh: core.addons_fresh(),
     }
+}
+
+/// What the Addons page shows for one link and its manifest; also the
+/// answer of `Core::preview_addon`, before anything is installed.
+pub(crate) fn info(transport_url: String, manifest: Manifest, enabled: bool) -> Option<AddonInfo> {
+    let url = url::Url::parse(&transport_url).ok()?;
+    let built_in = crate::turkcealtyazi::is_builtin(&transport_url, Some(manifest.id.as_str()));
+    // Its old host is never opened: not even to configure it.
+    let configure_url =
+        crate::views::addon_catalog::configure_page(&url, &manifest).filter(|_| !built_in);
+    // The core's own source: its name and line, not the old addon's
+    // (whose text is Turkish and speaks of Stremio).
+    let (name, description) = if built_in {
+        let d = crate::turkcealtyazi::default();
+        (d.name.clone(), Some(d.line.clone()))
+    } else {
+        (manifest.name, manifest.description)
+    };
+    Some(AddonInfo {
+        host: url.host_str().unwrap_or_default().to_owned(),
+        url: transport_url,
+        name,
+        description,
+        logo: manifest.logo.map(|u| u.to_string()),
+        version: manifest.version.to_string(),
+        enabled,
+        provides: manifest
+            .resources
+            .iter()
+            .map(|r| match r {
+                ManifestResource::Short(name) => name.clone(),
+                ManifestResource::Full { name, .. } => name.clone(),
+            })
+            .collect(),
+        configure_url,
+        types: manifest.types,
+        configurable: manifest.behavior_hints.configurable && !built_in,
+        built_in,
+    })
 }

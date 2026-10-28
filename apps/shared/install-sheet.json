@@ -1,0 +1,172 @@
+{
+  "words": {
+    "title": "Install {name}?",
+    "from": "From {host}",
+    "adds": "Adds {what}.",
+    "addsFor": "Adds {what} for {kinds}.",
+    "note": "It comes from a third party. Momotus does not check it.",
+    "install": "Install",
+    "cancel": "Cancel",
+    "checking": "Checking"
+  },
+  "resources": {
+    "stream": "sources",
+    "subtitles": "subtitles",
+    "catalog": "catalogs",
+    "meta": "title details",
+    "addon_catalog": "addon lists"
+  },
+  "kinds": {
+    "movie": "movies",
+    "series": "series",
+    "channel": "channels",
+    "tv": "live TV",
+    "anime": "anime"
+  },
+  "rules": "Resource words in manifest order, each once; unknown resources left out; none left gives no line. Types are trimmed and lowercased first and empty ones dropped; kinds in manifest order, each once, an unknown type as it is (lowercased); no kinds, or only addon lists, gives the line without 'for'. Lists join as 'a', 'a and b', 'a, b and c'. Names are inserted as they are: '$' and braces in a name are plain text.",
+  "vectors": [
+    {
+      "provides": [
+        "stream"
+      ],
+      "types": [
+        "movie",
+        "series"
+      ],
+      "line": "Adds sources for movies and series."
+    },
+    {
+      "provides": [
+        "subtitles"
+      ],
+      "types": [
+        "movie",
+        "series"
+      ],
+      "line": "Adds subtitles for movies and series."
+    },
+    {
+      "provides": [
+        "catalog",
+        "meta"
+      ],
+      "types": [
+        "movie"
+      ],
+      "line": "Adds catalogs and title details for movies."
+    },
+    {
+      "provides": [
+        "stream",
+        "subtitles",
+        "catalog"
+      ],
+      "types": [
+        "movie",
+        "series",
+        "channel",
+        "tv"
+      ],
+      "line": "Adds sources, subtitles and catalogs for movies, series, channels and live TV."
+    },
+    {
+      "provides": [
+        "catalog",
+        "catalog",
+        "meta",
+        "meta"
+      ],
+      "types": [
+        "anime",
+        "anime"
+      ],
+      "line": "Adds catalogs and title details for anime."
+    },
+    {
+      "provides": [
+        "addon_catalog"
+      ],
+      "types": [
+        "movie",
+        "series",
+        "channel",
+        "tv"
+      ],
+      "line": "Adds addon lists."
+    },
+    {
+      "provides": [
+        "subtitles"
+      ],
+      "types": [],
+      "line": "Adds subtitles."
+    },
+    {
+      "provides": [
+        "stream"
+      ],
+      "types": [
+        "movie",
+        "Podcasts"
+      ],
+      "line": "Adds sources for movies and podcasts."
+    },
+    {
+      "provides": [
+        "something_new"
+      ],
+      "types": [
+        "movie"
+      ],
+      "line": ""
+    },
+    {
+      "provides": [],
+      "types": [
+        "movie"
+      ],
+      "line": ""
+    },
+    {
+      "provides": [
+        "stream"
+      ],
+      "types": [
+        "Movie",
+        " movie ",
+        ""
+      ],
+      "line": "Adds sources for movies."
+    },
+    {
+      "provides": [
+        "constructor",
+        "toString"
+      ],
+      "types": [
+        "movie"
+      ],
+      "line": ""
+    },
+    {
+      "provides": [
+        "subtitles"
+      ],
+      "types": [
+        "toString",
+        "__proto__"
+      ],
+      "line": "Adds subtitles for tostring and __proto__."
+    }
+  ],
+  "titleVectors": [
+    {
+      "name": "Cool $' Pack",
+      "title": "Install Cool $' Pack?"
+    },
+    {
+      "name": "A {host} B $&",
+      "title": "Install A {host} B $&?"
+    }
+  ]
+}

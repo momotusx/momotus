@@ -975,6 +975,20 @@ impl Core {
         Ok(addon)
     }
 
+    /// Fetches the manifest and answers what the Addons page would show for
+    /// it, writing nothing: the install sheet's content for a pasted link.
+    /// The answer's `url` is empty: the app has the link it pasted, and a
+    /// link may hold keys.
+    pub async fn preview_addon(&self, transport_url: &str) -> Result<crate::AddonInfo, CoreError> {
+        let addon = self.addons().fetch_manifest(transport_url).await?;
+        let mut info =
+            crate::views::addons::info(addon.transport_url.to_string(), addon.manifest, false)
+                .ok_or_else(|| CoreError::BadManifest("the link is not a web address".into()))?;
+        info.url.clear();
+        info.configure_url = None;
+        Ok(info)
+    }
+
     /// Fetches the manifest of every installed addon of every profile again,
     /// at most once a day, and puts each one that changed in place, as
     /// `install_addon` does. A link that fails keeps its manifest; a round
