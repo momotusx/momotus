@@ -9,6 +9,8 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.asPaddingValues
@@ -100,6 +102,8 @@ fun PhoneShell(
     insetSides: Boolean = true,
     /** The blue back link of a pushed page ([app.marquee.core.route.hasBackLink]); null draws none. */
     onBack: (() -> Unit)? = null,
+    /** The capsule's last tab, the active profile; null leaves its slot empty (no profile known yet). */
+    profile: PhoneProfileTab? = null,
     content: @Composable () -> Unit,
 ) {
     val showBar = showTabs && !WindowInsets.isImeVisible
@@ -150,6 +154,7 @@ fun PhoneShell(
             PhoneBar(
                 selected,
                 onSelect,
+                profile,
                 Modifier
                     .align(Alignment.BottomCenter)
                     .navigationBarsPadding()
@@ -199,19 +204,33 @@ private val places =
         Route.Discover to Place("Discover", Icons.Compass),
         Route.Library to Place("Library", Icons.LibraryBig),
         Route.Calendar to Place("Calendar", Icons.CalendarDays),
-        Route.Settings to Place("Settings", Icons.Settings),
     )
 
 /**
- * Browsing places first, then the tools, as on the web and Apple: five, as the iPhone's. Calendar is a row
- * at the top of Library (D6), which is lit while it shows.
+ * Browsing places first, then Search and the profile, as on the web and Apple: five, as the iPhone's. Calendar is a
+ * row at the top of Library (D6), which is lit while it shows. Settings has no tab: the profile's menu opens it.
  */
-private val order = listOf(Route.Home, Route.Discover, Route.Library, Route.Search, Route.Settings)
+private val order = listOf(Route.Home, Route.Discover, Route.Library, Route.Search)
+
+/** The profile tab's word; the profile's name is in its spoken label. */
+private const val PROFILE_LABEL = "Profile"
+
+/**
+ * The capsule's last tab (plans/nav-profile.md): the active profile's avatar over "Profile", lit while Settings shows.
+ * A button, never a selected tab, so it still opens its menu when lit.
+ */
+class PhoneProfileTab(
+    /** The spoken label: "Profile: <name>". */
+    val spoken: String,
+    val onClick: () -> Unit,
+    val avatar: @Composable () -> Unit,
+)
 
 @Composable
 private fun PhoneBar(
     selected: Route,
     onSelect: (Route) -> Unit,
+    profile: PhoneProfileTab?,
     modifier: Modifier,
 ) {
     val colors = Marquee.colors
@@ -224,7 +243,7 @@ private fun PhoneBar(
     // largest size (the caption, then 8 percent smaller a step, down to a floor) that fits its slot, else the icons
     // alone, each place keeping its label as its spoken name.
     BoxWithConstraints(modifier) {
-        val room = with(density) { ((maxWidth - 8.dp) / order.size - LABEL_PAD * 2).toPx() }
+        val room = with(density) { ((maxWidth - 8.dp) / (order.size + 1) - LABEL_PAD * 2).toPx() }
         val labelSize =
             remember(measurer, caption, density.density, density.fontScale, room) {
                 fitLabels(measurer, caption, room)
@@ -252,47 +271,79 @@ private fun PhoneBar(
             for (route in order) {
                 val place = places.getValue(route)
                 val isSelected = route == lit
-                // The selected place in the key blue on a darker inner capsule; the rest white.
-                val ink = if (isSelected) colors.key else Color.White
-                Column(
+                Slot(
+                    place.label,
+                    isSelected,
+                    labelSize,
                     Modifier
-                        .weight(1f)
-                        .height(TAB_HEIGHT)
-                        // A keyboard on a phone or a tablet sees where it is, apart from the selected place.
-                        .marqueeFocus(TAB_HEIGHT / 2, scale = 1f)
-                        .clip(shape)
-                        .background(if (isSelected) TAB_ON else Color.Transparent)
                         .semantics { contentDescription = place.label }
                         .focusSelectable(isSelected, { onSelect(route) }, Role.Tab),
-                    verticalArrangement = Arrangement.spacedBy(1.dp, Alignment.CenterVertically),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                ) {
-                    MqIcon(place.icon, tint = ink)
-                    if (labelSize != null) {
-                        BasicText(
-                            place.label,
-                            modifier =
-                                Modifier
-                                    .padding(horizontal = LABEL_PAD)
-                                    .clearAndSetSemantics {
-                                        testTag = TAB_LABEL_TAG
-                                        this[LabelSizeKey] = labelSize.value
-                                    },
-                            style =
-                                TextStyle(
-                                    color = ink,
-                                    fontSize = labelSize,
-                                    fontFamily = MarqueeFonts.text,
-                                    fontWeight = FontWeight.SemiBold,
-                                    lineHeight = labelSize * 1.4f,
-                                ),
-                            maxLines = 1,
-                            softWrap = false,
-                            overflow = TextOverflow.Clip,
-                        )
-                    }
-                }
+                ) { ink -> MqIcon(place.icon, tint = ink) }
             }
+            // Lit while Settings shows, which has no tab; still a button that opens the menu.
+            if (profile != null) {
+                Slot(
+                    PROFILE_LABEL,
+                    lit == Route.Settings,
+                    labelSize,
+                    Modifier
+                        .semantics { contentDescription = profile.spoken }
+                        .focusClickable(profile.onClick, Role.Button),
+                ) { profile.avatar() }
+            } else {
+                Spacer(Modifier.weight(1f))
+            }
+        }
+    }
+}
+
+/** One of the capsule's five slots: its icon over its fitted word, the lit one in the key blue on a darker inner capsule. */
+@Composable
+private fun RowScope.Slot(
+    label: String,
+    isSelected: Boolean,
+    labelSize: TextUnit?,
+    action: Modifier,
+    icon: @Composable (ink: Color) -> Unit,
+) {
+    val shape = RoundedCornerShape(Marquee.radius.pill)
+    // The selected place in the key blue on a darker inner capsule; the rest white.
+    val ink = if (isSelected) Marquee.colors.key else Color.White
+    Column(
+        Modifier
+            .weight(1f)
+            .height(TAB_HEIGHT)
+            // A keyboard on a phone or a tablet sees where it is, apart from the selected place.
+            .marqueeFocus(TAB_HEIGHT / 2, scale = 1f)
+            .clip(shape)
+            .background(if (isSelected) TAB_ON else Color.Transparent)
+            .then(action),
+        verticalArrangement = Arrangement.spacedBy(1.dp, Alignment.CenterVertically),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        icon(ink)
+        if (labelSize != null) {
+            BasicText(
+                label,
+                modifier =
+                    Modifier
+                        .padding(horizontal = LABEL_PAD)
+                        .clearAndSetSemantics {
+                            testTag = TAB_LABEL_TAG
+                            this[LabelSizeKey] = labelSize.value
+                        },
+                style =
+                    TextStyle(
+                        color = ink,
+                        fontSize = labelSize,
+                        fontFamily = MarqueeFonts.text,
+                        fontWeight = FontWeight.SemiBold,
+                        lineHeight = labelSize * 1.4f,
+                    ),
+                maxLines = 1,
+                softWrap = false,
+                overflow = TextOverflow.Clip,
+            )
         }
     }
 }
@@ -307,8 +358,8 @@ private fun fitLabels(
     while (true) {
         val style = TextStyle(fontSize = size, fontFamily = MarqueeFonts.text, fontWeight = FontWeight.SemiBold)
         val widest =
-            order.maxOf {
-                measurer.measure(places.getValue(it).label, style, softWrap = false, maxLines = 1).size.width
+            (order.map { places.getValue(it).label } + PROFILE_LABEL).maxOf {
+                measurer.measure(it, style, softWrap = false, maxLines = 1).size.width
             }
         if (widest <= room) return size
         if (size.value <= LABEL_FLOOR_SP) return null

@@ -78,6 +78,12 @@ class ProfileGate(
     /** What [chosen] was when the switch began: Cancel goes back to it (the start picker stays a question). */
     private var chosenBefore = false
 
+    /** A profile with a PIN the bar's menu chose: the picker it opens shows that keypad, once ([takeAsked]). */
+    var asked: String? = null
+
+    /** The pushed picker, as it opens: the profile whose keypad to show, once. */
+    fun takeAsked(): String? = asked.also { asked = null }
+
     private var resetCount by mutableIntStateOf(0)
 
     /** Whether the app may show profile content, or only the picker. */

@@ -34,6 +34,7 @@ import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.testTagsAsResourceId
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
@@ -71,6 +72,7 @@ import app.marquee.design.StateMessage
 import app.marquee.design.TextRole
 import app.marquee.design.actionWindow
 import app.marquee.ui.phone.PhoneHome
+import app.marquee.ui.phone.PhoneProfileTab
 import app.marquee.ui.phone.PhoneShell
 import app.marquee.ui.tv.TvHome
 import app.marquee.ui.tv.TvNavFocus
@@ -801,6 +803,19 @@ private fun AppNav(
 
     val selected = routes.lastOrNull { it.isTopLevel } ?: Route.Home
     val framed = top.isTopLevel
+
+    // The profile's menu (plans/nav-profile.md): a profile with a PIN opens the picker on its keypad.
+    fun pinFor(id: String) {
+        gate.asked = id
+        backStack.add(Route.Profiles)
+    }
+    var profileMenu by remember { mutableStateOf(false) }
+    val me = gate.snapshot?.let { s -> s.profiles.firstOrNull { it.id == s.active } }
+    val phoneProfile =
+        me?.let {
+            PhoneProfileTab("Profile: ${it.name}", { profileMenu = true }) { ProfileAvatar(it, 26.dp) }
+        }
+    if (profileMenu && !tv) ProfileMenu(gate, { profileMenu = false }, { choose(Route.Settings) }, ::pinFor)
     if (tv) {
         TvShell(
             selected = selected,
@@ -827,7 +842,7 @@ private fun AppNav(
             onNavFocus = { app.tvHome.focus.leftContent() },
             onKey = { app.tvHome.focus.interacted() },
             nav = tvNav,
-            profileButton = { PillProfile(gate) { backStack.add(Route.Profiles) } },
+            profileButton = { lit, bar -> PillProfile(gate, lit, bar, { choose(Route.Settings) }, ::pinFor) },
             content = content,
         )
     } else {
@@ -838,6 +853,7 @@ private fun AppNav(
             statusStrip = top !is Route.Title && top !is Route.Player,
             insetSides = top !is Route.Player,
             onBack = if (top.hasBackLink) ({ systemBack?.onBackPressed() ?: pop() }) else null,
+            profile = phoneProfile,
             content = content,
         )
     }

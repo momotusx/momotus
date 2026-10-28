@@ -157,11 +157,17 @@ fun MacrobenchmarkScope.sweepTvTabs() {
     device.waitForIdle()
 }
 
-/** The phone's tab bar: each place opened once by its tab (its first open in this process), then Home again. Search is left
- * out: its field takes the keyboard, which covers the bar. */
+/** The phone's tab bar: each place opened once by its tab (its first open in this process), Settings through the profile's
+ * menu, then Home again. Search is left out: its field takes the keyboard, which covers the bar. */
 fun MacrobenchmarkScope.visitPhoneTabs() {
     for (place in listOf("Discover", "Library", "Settings", "Home")) {
-        device.wait(Until.findObject(By.desc(place)), 5_000)?.click() ?: error("no $place tab")
+        val settings = place == "Settings"
+        if (settings) {
+            device.wait(Until.findObject(By.descStartsWith("Profile: ")), 5_000)?.click()
+                ?: error("no profile tab")
+        }
+        device.wait(Until.findObject(if (settings) By.text(place) else By.desc(place)), 5_000)?.click()
+            ?: error("no $place tab")
         Thread.sleep(TAB_MS)
     }
 }

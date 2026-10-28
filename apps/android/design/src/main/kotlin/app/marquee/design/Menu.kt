@@ -43,6 +43,8 @@ data class MenuAction(
     val label: String,
     val icon: ImageVector?,
     val heading: Boolean = false,
+    /** What a screen reader says for the row, when its words alone say less (a profile's lock). */
+    val spoken: String? = null,
     val onClick: () -> Unit,
 )
 
@@ -125,6 +127,7 @@ fun ActionMenu(
                         },
                         modifier = Modifier.fillMaxWidth(),
                         focusRequester = if (index == start) first else null,
+                        spoken = action.spoken,
                     )
                 }
             }

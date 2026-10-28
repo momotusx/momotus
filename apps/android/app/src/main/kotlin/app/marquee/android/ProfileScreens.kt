@@ -81,11 +81,13 @@ import app.marquee.core.ProfileCopy
 import app.marquee.core.client.CoreError
 import app.marquee.core.model.ProfileInfo
 import app.marquee.core.session.CoreSession
+import app.marquee.design.ActionMenu
 import app.marquee.design.AvatarArt
 import app.marquee.design.FocusInk
 import app.marquee.design.Form
 import app.marquee.design.Icons
 import app.marquee.design.Marquee
+import app.marquee.design.MenuAction
 import app.marquee.design.MqIcon
 import app.marquee.design.MqText
 import app.marquee.design.MqTextField
@@ -101,6 +103,7 @@ import app.marquee.design.focusSoon
 import app.marquee.design.marqueeFocus
 import app.marquee.ui.phone.pageTop
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
@@ -402,25 +405,90 @@ private fun PinKey(
     }
 }
 
-/** The active profile's avatar at the TV pill's end: it opens the picker. */
+/**
+ * The active profile's avatar at the TV bar's end (plans/nav-profile.md), opening [ProfileMenu]. [lit] while Settings
+ * shows: the tab's white 20 percent pill. [modifier] is the bar's (its entry and focus report) and comes first.
+ */
 @Composable
 fun PillProfile(
     gate: ProfileGate,
-    onClick: () -> Unit,
+    lit: Boolean,
+    modifier: Modifier,
+    onSettings: () -> Unit,
+    onPin: (String) -> Unit,
 ) {
     val s = gate.snapshot ?: return
     val me = s.profiles.firstOrNull { it.id == s.active } ?: return
     var focused by remember { mutableStateOf(false) }
+    var open by remember { mutableStateOf(false) }
     Box(
-        Modifier
+        modifier
             .padding(start = 8.dp)
             // In the bar, as the tabs: it scales and turns white, and does not rise out of the bar.
-            .marqueeFocus(23.dp, Tokens.FOCUS_SCALE_TILE, rise = false)
+            .marqueeFocus(PILL_TARGET / 2, Tokens.FOCUS_SCALE_TILE, rise = false)
             .onFocusChanged { focused = it.isFocused }
-            .padding(3.dp)
-            .semantics(mergeDescendants = true) { contentDescription = "Profile: ${me.name}, switch profile" }
-            .focusClickable(onClick, Role.Button),
-    ) { ProfileAvatar(me, 40.dp, lit = focused && Marquee.form == Form.Tv) }
+            .clip(CircleShape)
+            .background(if (lit && !focused) PILL_LIT else Color.Transparent)
+            .padding(4.dp)
+            .semantics(mergeDescendants = true) { contentDescription = "Profile: ${me.name}" }
+            .focusClickable({ open = true }, Role.Button),
+    ) { ProfileAvatar(me, PILL_TARGET - 8.dp, lit = focused && Marquee.form == Form.Tv) }
+    if (open) ProfileMenu(gate, { open = false }, onSettings, onPin)
+}
+
+/** The TV avatar's target, over Material's 48; the lit pill is the tabs' white at 20 percent. */
+private val PILL_TARGET = 52.dp
+private val PILL_LIT = Color(0x33FFFFFF)
+
+/**
+ * The profile's menu (plans/nav-profile.md): every profile, the current one checked and another with a PIN locked,
+ * then Settings; nothing account-like. A row does what its picker tile does: the current one closes the menu, a
+ * syncing one nothing, one with a PIN opens the picker on its keypad ([onPin]), any other switches.
+ */
+@Composable
+fun ProfileMenu(
+    gate: ProfileGate,
+    onDismiss: () -> Unit,
+    onSettings: () -> Unit,
+    onPin: (String) -> Unit,
+) {
+    val s = gate.snapshot ?: return
+    // The menu leaves with its first choice: the switch starts at once (undispatched), and its work runs on the
+    // session's scope ([ProfileGate.switchTo]), so this scope ending only stops the wait.
+    val scope = rememberCoroutineScope()
+    val rows =
+        s.profiles.map { p ->
+            val current = p.id == s.active
+            val locked = p.hasPin && !current && !p.syncing
+            MenuAction(
+                if (p.syncing) "${p.name} · Syncing" else p.name,
+                when {
+                    current -> Icons.Check
+                    locked -> Icons.Lock
+                    else -> null
+                },
+                spoken =
+                    listOfNotNull(
+                        p.name,
+                        "current profile".takeIf { current },
+                        "still syncing".takeIf { p.syncing },
+                        "locked with a PIN".takeIf { locked },
+                    ).joinToString(", "),
+            ) {
+                when {
+                    current || p.syncing -> {}
+
+                    p.hasPin -> {
+                        onPin(p.id)
+                    }
+
+                    else -> {
+                        scope.launch(start = CoroutineStart.UNDISPATCHED) { gate.switchTo(p.id, null) }
+                    }
+                }
+            }
+        } + MenuAction("Settings", Icons.Settings, onClick = onSettings)
+    ActionMenu("Profiles", rows, onDismiss, start = s.profiles.indexOfFirst { it.id == s.active }.coerceAtLeast(0))
 }
 
 /** The modes of the picker: a cold start's question, a locked session, or opened over the app. */
@@ -451,7 +519,9 @@ fun PickerScreen(
     // The profile whose keypad is open: picked here, or a switch the gate holds as refused (its
     // keypad opens again with the reason, whichever picker asked).
     // Kept across a rotation, which the device's lock screen can bring while a reset waits.
-    var picked by rememberSaveable { mutableStateOf<String?>(null) }
+    // Opened by the bar's menu on a profile with a PIN: its keypad first, and its Cancel goes back where the menu was.
+    val asked = rememberSaveable { if (mode == PickerMode.Switch) gate.takeAsked() else null }
+    var picked by rememberSaveable { mutableStateOf(asked) }
     val target = picked ?: gate.switching.takeIf { gate.switchProblem != null }
     var said by remember { mutableStateOf("") }
     val first = remember { FocusRequester() }
@@ -540,8 +610,12 @@ fun PickerScreen(
                 title = "Enter the PIN for ${chosen.name}",
                 onSubmit = { pin -> enter(chosen, pin) },
                 onCancel = {
-                    picked = null
-                    if (gate.switching != null) gate.cancelSwitch()
+                    if (picked != null && picked == asked) {
+                        onBack()
+                    } else {
+                        picked = null
+                        if (gate.switching != null) gate.cancelSwitch()
+                    }
                 },
                 extra =
                     if (chosen.isOwner) {

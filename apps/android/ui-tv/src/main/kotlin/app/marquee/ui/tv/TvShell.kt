@@ -85,8 +85,11 @@ fun TvShell(
     onKey: () -> Unit,
     modifier: Modifier = Modifier,
     nav: TvNavFocus = remember { TvNavFocus() },
-    /** The active profile's avatar at the bar's end; it opens the picker. */
-    profileButton: (@Composable () -> Unit)? = null,
+    /**
+     * The active profile's avatar at the bar's end, opening its menu (plans/nav-profile.md). `lit` while Settings shows,
+     * which has no tab of its own: then `modifier` carries the bar's entry, so Up and Back land on it.
+     */
+    profileButton: (@Composable (lit: Boolean, modifier: Modifier) -> Unit)? = null,
     content: @Composable () -> Unit,
 ) {
     // A bar that left (a pushed page) holds nothing; one that comes back reports its focus again.
@@ -204,11 +207,10 @@ private val places =
         Route.Discover to Place("Discover", Icons.Compass),
         Route.Library to Place("Library", Icons.LibraryBig),
         Route.Calendar to Place("Calendar", Icons.CalendarDays),
-        Route.Settings to Place("Settings", Icons.Settings),
     )
 
 /** Browsing places first, then the tools, as on the web; the tools show their icon beside the word. */
-private val tools = setOf(Route.Search, Route.Settings)
+private val tools = setOf(Route.Search)
 
 @Composable
 private fun TvTopNav(
@@ -217,7 +219,7 @@ private fun TvTopNav(
     onNavFocus: () -> Unit,
     nav: TvNavFocus,
     modifier: Modifier,
-    profileButton: (@Composable () -> Unit)?,
+    profileButton: (@Composable (lit: Boolean, modifier: Modifier) -> Unit)?,
 ) {
     val current = nav.current
     val pill = RoundedCornerShape(Marquee.radius.pill)
@@ -268,7 +270,9 @@ private fun TvTopNav(
             horizontalArrangement = Arrangement.spacedBy(4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            for (route in TOP_LEVEL.filter { it !in tools } + TOP_LEVEL.filter { it in tools }) {
+            // Settings has no tab: the profile's menu at the end opens it.
+            val tabs = TOP_LEVEL - Route.Settings
+            for (route in tabs.filter { it !in tools } + tabs.filter { it in tools }) {
                 NavItem(route, route == selected, current, choose, onNavFocus) { gained ->
                     if (gained) {
                         resting = route
@@ -277,7 +281,13 @@ private fun TvTopNav(
                     }
                 }
             }
-            profileButton?.invoke()
+            val lit = selected == Route.Settings
+            profileButton?.invoke(
+                lit,
+                Modifier
+                    .then(if (lit) Modifier.focusRequester(current) else Modifier)
+                    .onFocusChanged { if (it.isFocused) onNavFocus() },
+            )
         }
     }
 }
@@ -317,7 +327,7 @@ private fun NavItem(
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        // Search and Settings carry their icon; the browsing places are words alone, as on the web. The
+        // Search carries its icon; the browsing places are words alone, as on the web. The
         // active tab is pure white in its pill, the rest 64 percent.
         val ink =
             when {

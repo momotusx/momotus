@@ -67,6 +67,16 @@ class TvTabsTest {
                     onNavFocus = {},
                     onKey = {},
                     nav = nav,
+                    // The app's avatar: a focusable named after its state, carrying the bar's modifier first.
+                    profileButton = { lit, bar ->
+                        Box(
+                            bar
+                                .size(
+                                    52.dp,
+                                ).semantics { contentDescription = if (lit) "profile lit" else "profile" }
+                                .focusable(),
+                        )
+                    },
                 ) {
                     // Each place: one focusable item named after it.
                     Box(Modifier.size(200.dp).semantics { contentDescription = "page $selected" }.focusable())
@@ -172,9 +182,10 @@ class TvTabsTest {
         // Down into Home; something there opens Settings (as Calendar's Discover or Settings' addons do).
         press(Key.DirectionDown)
         elsewhere(Route.Settings)
-        // Up to the bar on Settings, Left to Search, and Back on the bar pops to Home before the settle.
+        // Up to the bar on the profile (Settings has no tab), Left to Search, and Back on the bar pops to Home before
+        // the settle.
         press(Key.DirectionUp)
-        tab("Settings").assertIsFocused()
+        compose.onNodeWithContentDescription("profile lit").assertIsFocused()
         press(Key.DirectionLeft)
         tab("Search").assertIsFocused()
         elsewhere(Route.Home)
@@ -204,6 +215,35 @@ class TvTabsTest {
         tab("Discover").assertIsFocused()
         compose.mainClock.advanceTimeBy(TAB_SETTLE_MS * 2)
         page(Route.Discover).assertExists()
+        assertEquals(emptyList(), opened)
+    }
+
+    @Test
+    fun `the bar ends with the profile, which shows no place when focus rests on it`() {
+        show()
+        // Home, Discover, Library, Calendar, Search, then the profile; Right stops there. No Settings tab.
+        repeat(6) { press(Key.DirectionRight) }
+        compose.onNodeWithContentDescription("profile").assertIsFocused()
+        compose.onNode(hasText("Settings")).assertDoesNotExist()
+        compose.mainClock.advanceTimeBy(TAB_SETTLE_MS * 4)
+        // The tabs passed on the way opened nothing; resting on the profile opens nothing.
+        assertEquals(emptyList(), opened)
+        assertEquals(true, nav.held)
+    }
+
+    @Test
+    fun `with Settings shown, Back from its content and the bar's entry land on the profile`() {
+        selected = Route.Settings
+        show(onHome = false)
+        page(Route.Settings).performSemanticsAction(SemanticsActions.RequestFocus)
+        compose.mainClock.advanceTimeByFrame()
+        assertEquals(true, compose.runOnIdle { nav.backToBar() })
+        compose.mainClock.advanceTimeByFrame()
+        compose.onNodeWithContentDescription("profile lit").assertIsFocused()
+        press(Key.DirectionDown)
+        page(Route.Settings).assertIsFocused()
+        press(Key.DirectionUp)
+        compose.onNodeWithContentDescription("profile lit").assertIsFocused()
         assertEquals(emptyList(), opened)
     }
 }

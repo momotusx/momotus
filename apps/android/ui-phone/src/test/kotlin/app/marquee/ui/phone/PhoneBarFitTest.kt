@@ -1,18 +1,26 @@
 package app.marquee.ui.phone
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.getBoundsInRoot
+import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.isSelected
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.performClick
 import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -31,6 +39,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
+import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
@@ -45,17 +54,22 @@ class PhoneBarFitTest {
     @get:Rule
     val compose = createComposeRule()
 
+    private val profile = PhoneProfileTab("Profile: Main", {}) { Box(Modifier.size(26.dp)) }
+
     private fun show(fontScale: Float) {
         compose.setContent {
             val density = LocalDensity.current
             CompositionLocalProvider(LocalDensity provides Density(density.density, fontScale)) {
-                MarqueeTheme(Form.Phone) { PhoneShell(selected = Route.Home, showTabs = true, onSelect = {}) {} }
+                MarqueeTheme(
+                    Form.Phone,
+                ) { PhoneShell(selected = Route.Home, showTabs = true, onSelect = {}, profile = profile) {} }
             }
         }
         compose.waitForIdle()
     }
 
-    private val tabs get() = compose.onAllNodes(SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Tab))
+    // The four places and the profile (a button: it opens a menu).
+    private val tabs get() = compose.onAllNodes(hasClickAction())
 
     private val labels get() = compose.onAllNodes(hasTestTag(TAB_LABEL_TAG), useUnmergedTree = true)
 
@@ -116,11 +130,11 @@ class PhoneBarFitTest {
             CompositionLocalProvider(LocalDensity provides Density(density.density, scale)) {
                 MarqueeTheme(Form.Phone) {
                     caption = Marquee.type.caption.value
-                    PhoneShell(selected = Route.Home, showTabs = true, onSelect = {}) {}
+                    PhoneShell(selected = Route.Home, showTabs = true, onSelect = {}, profile = profile) {}
                 }
             }
         }
-        val words = listOf("Home", "Discover", "Library", "Search", "Settings")
+        val words = listOf("Home", "Discover", "Library", "Search", "Profile")
         for (text in listOf(1.0f, 1.15f, 1.3f, 1.4f, 1.5f, 1.7f, 2.0f)) {
             scale = text
             compose.waitForIdle()
@@ -152,5 +166,26 @@ class PhoneBarFitTest {
                 if (size < caption) assertTrue(widest(size / 0.92f) > room, "at $text times a step above $size sp fits")
             }
         }
+    }
+
+    @Test
+    fun `the profile is the last tab, a button that opens its menu while lit on Settings`() {
+        var opened = 0
+        val tab = PhoneProfileTab("Profile: Main", { opened++ }) { Box(Modifier.size(26.dp)) }
+        compose.setContent {
+            MarqueeTheme(
+                Form.Phone,
+            ) { PhoneShell(selected = Route.Settings, showTabs = true, onSelect = {}, profile = tab) {} }
+        }
+        compose.waitForIdle()
+        // Settings has no tab of its own, and no place is lit in its stead.
+        compose.onAllNodes(isSelected()).assertCountEquals(0)
+        tabs.assertCountEquals(5)
+        val last = tabs[4].getBoundsInRoot()
+        val profile = compose.onNodeWithContentDescription("Profile: Main")
+        assertEquals(last, profile.getBoundsInRoot())
+        profile.assert(SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Button))
+        profile.performClick()
+        assertEquals(1, opened)
     }
 }
