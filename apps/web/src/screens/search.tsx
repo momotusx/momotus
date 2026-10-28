@@ -178,7 +178,6 @@ function SearchPanel(props: { dialog?: boolean }) {
   const scopeLabel = () => (current() ? kindLabel(current() as string) : "All");
   const count = () => rows().reduce((n, r) => n + scoped(r).length, 0);
   const remember = () => void view.command({ type: "remember" });
-
   let input!: HTMLInputElement;
   onMount(() => {
     // Opened again by Back: the shell restores the result that was opened.

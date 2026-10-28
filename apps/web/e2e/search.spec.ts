@@ -226,3 +226,4 @@ test("tv: Back from a result reopens the palette on the result that was opened",
   await expect.poll(() => focused(page)).toBe("nav:/search");
   await context.close();
 });
+

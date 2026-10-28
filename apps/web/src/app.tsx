@@ -1,5 +1,6 @@
 import { A, type RouteSectionProps, Route, Router, useLocation, useNavigate } from "@solidjs/router";
 import CalendarDays from "lucide-solid/icons/calendar-days";
+import ChevronLeft from "lucide-solid/icons/chevron-left";
 import CircleAlert from "lucide-solid/icons/circle-alert";
 import Compass from "lucide-solid/icons/compass";
 import House from "lucide-solid/icons/house";
@@ -72,6 +73,14 @@ export function parentOf(path: string): string | null {
   return path === "/" ? null : "/";
 }
 
+/** Where a pushed page draws its back link (phone and desktop; TV has the remote's Back): over the title's art, or as a
+ * bar of its own above Versions and the profile switcher (design/DECISION.md, Navigation). */
+export function backAt(path: string): "art" | "bar" | null {
+  const parts = path.split("/").filter(Boolean);
+  if (parts[0] === "title" && parts.length === 3) return "art";
+  if (parts[0] === "title" && parts[3] === "versions") return "bar";
+  return path === "/profiles" ? "bar" : null;
+}
 
 /** How long the focus rests on a TV tab before its place shows: the androidx.tv TabRow's debounce. Longer than a
  * held arrow's repeat, so a sweep across the bar opens no place on the way. */
@@ -279,6 +288,7 @@ function Shell(props: RouteSectionProps) {
     ),
   );
   const nav = () => hasNav(location.pathname);
+  const backPlace = () => (form() === "tv" ? null : backAt(location.pathname));
   // Nothing of a profile shows before the core says which one runs and
   // whether it is locked (plans/m11-profiles.md, P1 apps v2 5).
   return (
@@ -303,7 +313,25 @@ function Shell(props: RouteSectionProps) {
               <div class="nav-scrim" classList={{ on: scrolled() }} aria-hidden="true" />
               <TopNav />
             </Show>
-            <div class="screen" inert={searchOpen() || undefined}>
+            <Show when={backPlace()}>
+              {(place) => (
+                <div class="backbar" classList={{ bar: place() === "bar" }} inert={searchOpen() || undefined}>
+                  <a
+                    class="back"
+                    href={parentOf(location.pathname) ?? "/"}
+                    data-f="back"
+                    on:click={(e) => {
+                      e.preventDefault();
+                      back();
+                    }}
+                  >
+                    <ChevronLeft aria-hidden />
+                    Back
+                  </a>
+                </div>
+              )}
+            </Show>
+            <div class="screen" classList={{ barred: backPlace() === "bar" }} inert={searchOpen() || undefined}>
               {props.children}
             </div>
             <Show when={nav() && form() === "phone"}>

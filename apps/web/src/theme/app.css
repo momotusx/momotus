@@ -221,10 +221,18 @@ h1, h2, h3 { font-family: var(--font-display); font-weight: var(--weight-heading
 .tabs a.on { color: var(--key); background: rgba(10, 10, 10, .92); }
 .tabs svg { width: 28px; height: 28px; }
 
-/* A round glass back button on deep pages. */
-.back { position: absolute; left: var(--safe-side); top: var(--nav-top); z-index: 10; display: grid; place-items: center; width: var(--nav-h); height: var(--nav-h);
-  border-radius: 50%; color: var(--text); }
-.back svg { width: 30px; height: 30px; }
+/* A pushed page's way back (design/DECISION.md, Navigation): the key-blue chevron and the word, at the top left;
+ * phone and desktop only, TV has the remote's Back. Over the title's art it sits on a near-black pill, deep enough
+ * to keep 4.5:1 over white art (the e2e computes it); Versions and the profile switcher get a bar of their own,
+ * and `.screen` starts below it (desktop; the phone's bar is in the flow). */
+.backbar { position: absolute; z-index: 10; left: var(--safe-side); top: calc(3 * var(--px, 1px)); }
+.back { display: inline-flex; align-items: center; gap: calc(2 * var(--px, 1px)); height: calc(24 * var(--px, 1px)); padding: 0 calc(10 * var(--px, 1px)) 0 calc(4 * var(--px, 1px));
+  border-radius: var(--radius-pill); color: var(--key); font: 600 calc(15 * var(--px, 1px)) / 1 var(--font-text);
+  background: color-mix(in srgb, var(--bar-desktop) 88%, transparent); }
+.back svg { width: calc(18 * var(--px, 1px)); height: calc(18 * var(--px, 1px)); }
+.backbar.bar { left: 0; right: 0; top: 0; height: var(--nav-h); display: flex; align-items: center; padding: 0 calc(40 * var(--px, 1px)) 0 var(--safe-side); background: var(--bar-desktop); }
+.backbar.bar .back { background: none; }
+[data-form="desktop"] .screen.barred { top: var(--nav-h); }
 
 /* Connection banner: solid `raised` with a white glyph (design/DECISION.md, States). */
 .banner { position: absolute; left: 50%; top: calc(var(--nav-top) + var(--nav-h) + 16px); transform: translateX(-50%); z-index: 50; display: flex; align-items: center; gap: 14px;
@@ -272,8 +280,10 @@ h1, h2, h3 { font-family: var(--font-display); font-weight: var(--weight-heading
 [data-form="phone"] .dot { width: 9px; height: 9px; }
 [data-form="phone"] .st { gap: 8px; }
 [data-form="phone"] .problem { gap: 10px; }
-[data-form="phone"] .back { left: 16px; top: calc(12px + env(safe-area-inset-top)); width: 40px; height: 40px; }
-[data-form="phone"] .back svg { width: 20px; height: 20px; }
+[data-form="phone"] .backbar { position: fixed; left: 8px; top: calc(4px + env(safe-area-inset-top)); }
+[data-form="phone"] .back { height: 44px; padding: 0 14px 0 8px; font-size: 17px; }
+[data-form="phone"] .back svg { width: 24px; height: 24px; }
+[data-form="phone"] .backbar.bar { position: relative; left: auto; right: auto; top: auto; height: auto; padding: calc(4px + env(safe-area-inset-top)) 8px 0; background: none; }
 
 /* TV focus, the white lift. A focused control or row turns white with dark
  * words and rises by focus.rise over its lift shadow (each rule keeps its own
