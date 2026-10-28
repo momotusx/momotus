@@ -20,8 +20,12 @@ final class SystemEvents {
         memory.resume()
         network.pathUpdateHandler = { [weak self] path in
             MainActor.assumeIsolated {
+                var satisfied = path.status == .satisfied
+                #if DEBUG
+                if DebugHooks.offline { satisfied = false }
+                #endif
                 let report = NetworkReport.of(
-                    satisfied: path.status == .satisfied, wifi: path.usesInterfaceType(.wifi),
+                    satisfied: satisfied, wifi: path.usesInterfaceType(.wifi),
                     ethernet: path.usesInterfaceType(.wiredEthernet), cellular: path.usesInterfaceType(.cellular),
                     expensive: path.isExpensive, constrained: path.isConstrained, desktop: Self.desktop)
                 // With no network the last real one stays the one speeds are read for.
@@ -90,6 +94,10 @@ struct ScenePhaseForward: ViewModifier {
                 #if !os(tvOS)
                 // Below iOS 26 the downloads wait (`app`) before the system suspends the app: when the last window
                 // leaves, never while another iPad window is in front (review r1 m7).
+                #if DEBUG
+                // Plan 7, review m-r2-3: what UIKit says of the scenes when SwiftUI says `.background`.
+                DebugHooks.note("background windowsInFront=\(Self.windowsInFront)")
+                #endif
                 if KeeperLogic.appLeft(windowsInFront: Self.windowsInFront) { downloads?.handle(.background) }
                 #endif
                 #if os(iOS) || os(tvOS)

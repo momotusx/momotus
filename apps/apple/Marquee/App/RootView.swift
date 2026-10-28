@@ -202,10 +202,12 @@ struct MainShell: View {
                 for url in DebugHooks.installAddons {
                     do {
                         try await core.perform("installAddon", ["url": url])
+                        DebugHooks.note("install from \(URL(string: url)?.host() ?? "?") done")
                     } catch {
                         // The host only: an addon link can carry a key in its path.
                         let host = URL(string: url)?.host() ?? "?"
                         coreLog.notice("debug install from \(host, privacy: .public): \(error.localizedDescription, privacy: .public)")
+                        DebugHooks.note("install from \(host) failed: \(error.localizedDescription)")
                     }
                 }
                 if let patch = DebugHooks.prefsPatch {

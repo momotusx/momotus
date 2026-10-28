@@ -33,6 +33,27 @@ enum DebugHooks {
     /// `-MQTab discover` starts on that tab.
     static var tab: AppTab? { UserDefaults.standard.string(forKey: "MQTab").flatMap(AppTab.init(rawValue:)) }
 
+    /// `-MQOpenDownloads YES` opens Library's Downloads page once Library shows.
+    static var openDownloads: Bool { UserDefaults.standard.bool(forKey: "MQOpenDownloads") }
+
+    /// `-MQOffline YES`: the app takes every network path as none (the shell's banner, the core held offline), so
+    /// a walk shows the offline pages without the phone's airplane mode.
+    static var offline: Bool { UserDefaults.standard.bool(forKey: "MQOffline") }
+
+    /// One walk line on stderr and in `Documents/walk.log`, which `devicectl device copy from` reads off a phone.
+    static func note(_ line: String) {
+        FileHandle.standardError.write(Data("walk \(line)\n".utf8))
+        let url = URL.documentsDirectory.appending(path: "walk.log")
+        let data = Data("\(Date().ISO8601Format()) \(line)\n".utf8)
+        if let handle = try? FileHandle(forWritingTo: url) {
+            handle.seekToEndOfFile()
+            handle.write(data)
+            try? handle.close()
+        } else {
+            try? data.write(to: url)
+        }
+    }
+
     /// `-MQMute YES`: every player starts muted, so a walk never makes a sound.
     static var mute: Bool { UserDefaults.standard.bool(forKey: "MQMute") }
 

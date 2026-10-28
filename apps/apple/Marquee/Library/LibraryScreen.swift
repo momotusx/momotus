@@ -81,6 +81,10 @@ struct LibraryScreen: View {
             links?.library = nil
             showDownloads = true
         }
+        #if DEBUG
+        // `-MQOpenDownloads YES` (with `-MQTab library`): a Mac walk's shot of Downloads with no input sent.
+        .task { if DebugHooks.openDownloads { showDownloads = true } }
+        #endif
         #endif
     }
 
