@@ -856,6 +856,7 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
     }),
   );
   const playAgain = () => {
+    setStopped(false);
     setEnded(false);
     setSkippedAt(null);
     engine.seek(0);
@@ -1243,7 +1244,6 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
             >
               {(n) => (
                 <>
-                  <p class="kicker">Next episode</p>
                   <h2>
                     {episodeLabel(n().season, n().episode)} {n().title}
                   </h2>

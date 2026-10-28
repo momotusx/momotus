@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { browserZoom, desktopScale } from "./zoom";
+import { browserZoom, desktopScale, isWebKit } from "./zoom";
 
 test("desktopScale grows with the zoom instead of cancelling it, and holds its clamps", () => {
   // A window of 1440 CSS px at 100 percent, and the same window at 125 and 200 percent (1152 and 720 CSS px).
@@ -34,4 +34,14 @@ test("browserZoom reads a real browser zoom and refuses what only looks like one
   expect(browserZoom(1440, 1252, 1.15)).toBe(1);
   expect(browserZoom(1440, 1252, 1.15, true)).toBeCloseTo(1.15, 5);
   expect(browserZoom(1440, 778, 1.85, true)).toBeCloseTo(1.85, 5);
+});
+
+test("isWebKit is Safari alone, not the browsers that also say AppleWebKit", () => {
+  const safari = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Safari/605.1.15";
+  const chrome = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36";
+  const edge = `${chrome} Edg/126.0.0.0`;
+  const chromeIos = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/126.0.0.0 Mobile/15E148 Safari/604.1";
+  const androidChrome = "Mozilla/5.0 (Linux; Android 14; Pixel 9) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36";
+  expect(isWebKit(safari)).toBe(true);
+  for (const ua of [chrome, edge, chromeIos, androidChrome]) expect(isWebKit(ua)).toBe(false);
 });

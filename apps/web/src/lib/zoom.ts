@@ -6,6 +6,10 @@ const ZOOM_STEPS = [1.1, 1.25, 1.5, 1.75, 2, 2.5, 3, 4, 5];
 /** Safari's own steps, between Chromium's. */
 const WEBKIT_STEPS = [1.15, 1.85];
 
+/** Safari: its user agent says Safari and none of the Chromium or Firefox names that also say AppleWebKit. Only Safari
+ * offers the 115 and 185 percent zoom steps. */
+export const isWebKit = (ua: string) => /^((?!chrome|chromium|android|crios|fxios|edg).)*safari/i.test(ua);
+
 /** The browser zoom (a saved site zoom, Ctrl and plus), 1 to 5, from what the page can see: Chromium and WebKit report
  * `outerWidth` unzoomed and `innerWidth` in CSS px, so their ratio is the zoom, and `devicePixelRatio` is the display's
  * scale times it. A ratio counts only when the two agree: DPR over the ratio lands on a display scale (a border or a

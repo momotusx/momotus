@@ -1373,16 +1373,27 @@ test("Up Next: Cancel keeps this episode from going on by itself, Play now still
     await nearEnd(12);
     await expect(p.locator(".next .num")).toContainText(/\d/, { timeout: 30_000 });
   };
-  // Cancel: the card goes, the episode plays on, and at its end the end card shows instead of the next episode.
+  // Cancel from the keyboard: the card goes and the focus goes to play and pause. At the end of the episode the end
+  // card shows (with no eyebrow) instead of the next episode starting.
   await open();
-  await p.locator('[data-f="next:cancel"]').click();
+  await p.locator('[data-f="next:cancel"]').focus();
+  await p.keyboard.press("Enter");
   await expect(p.locator(".next")).toHaveCount(0);
   await expect(p.locator('[data-f="player:toggle"]')).toBeFocused();
   await nearEnd(0.5);
   await expect(p.locator(".endcard")).toBeVisible({ timeout: 30_000 });
+  await expect(p.locator(".endcard .kicker")).toHaveCount(0);
   await p.waitForTimeout(1500);
   await expect(p).toHaveURL(/mqj2:1:1/);
-  // The next play (a fresh page) counts down again, and Play now goes on at once.
+  // Play again is a new start of this play: the countdown comes back.
+  await p.locator('[data-f="end:again"]').click();
+  await nearEnd(12);
+  await expect(p.locator(".next .num")).toContainText(/\d/, { timeout: 30_000 });
+  // The next play (a fresh page): a pointer Cancel works the same, apart from the focus (a mouse takes none).
+  await open();
+  await p.locator('[data-f="next:cancel"]').click();
+  await expect(p.locator(".next")).toHaveCount(0);
+  // And again fresh: the countdown is back, and Play now goes on at once.
   await open();
   await expect(p.locator('[data-f="next:cancel"]')).toBeVisible();
   await p.locator('[data-f="next:play"]').click();
