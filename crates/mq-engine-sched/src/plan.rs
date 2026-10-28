@@ -202,6 +202,13 @@ pub fn window_plan(cfg: &Config, i: WindowInputs) -> WindowPlan {
             .available_ram
             .map_or(RAM_CEILING_BYTES, |a| a / 4)
             .min(RAM_CEILING_BYTES);
+        // A least ring over the ceiling (64 MiB pieces: 344 MiB) would only
+        // stall on a full disk: it takes RAM where the device has twice it
+        // free (review r3).
+        let ram = match i.available_ram {
+            Some(free) if least > ram && least <= free / 2 => least,
+            _ => ram,
+        };
         let memory = room < budget.min(ram) && least <= ram;
         if memory {
             budget = budget.min(ram);

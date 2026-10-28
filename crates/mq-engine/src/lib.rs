@@ -30,9 +30,9 @@ pub use pick::FileHint;
 pub use reader::{RangeReader, StreamReader};
 pub use scrape::{SwarmCount, TrackerTrace};
 pub use window::{
-    APFS_HEAD_BYTES, Counted, FLOOR_BYTES, HeldBytes, RAM_CEILING_BYTES, RESERVE_BYTES,
-    RESUME_BYTES, RING_BYTES, STOP_BYTES, WindowInputs, WindowPlan, available_ram, counted_on_disk,
-    counted_on_disk_keeping, free_space, window_plan, window_within,
+    APFS_HEAD_BYTES, Counted, FLOOR_BYTES, HARD_STOP_BYTES, HeldBytes, RAM_CEILING_BYTES,
+    RESERVE_BYTES, RESUME_BYTES, RING_BYTES, STOP_BYTES, WindowInputs, WindowPlan, available_ram,
+    counted_on_disk, counted_on_disk_keeping, free_space, window_plan, window_within,
 };
 
 use std::collections::{HashMap, HashSet};
@@ -345,6 +345,8 @@ pub struct TorrentStats {
     pub window_bytes: Option<u64>,
     /// The window's pieces stay in RAM (plans/streaming-window-chunks.md).
     pub window_in_ram: bool,
+    /// Held for space: no request starts (plans/no-space-warnings.md).
+    pub stopped_for_space: bool,
     /// What the scheduler counts as held: verified pieces and open ones at
     /// full size (a window's only).
     pub held_bytes: Option<u64>,
@@ -1089,6 +1091,16 @@ impl Engine {
             .into_handle()
             .ok_or_else(|| anyhow::anyhow!("torrent was not added"))?;
         let (msgs, msg_rx) = mpsc::unbounded_channel();
+        // Held for space from its first request, not from the next guard
+        // tick: a torrent already held, or one started at the hard stop.
+        if t.space_stopped.load(Ordering::Relaxed)
+            || self
+                .free()
+                .is_some_and(|free| free <= window::HARD_STOP_BYTES)
+        {
+            t.space_stopped.store(true, Ordering::Relaxed);
+            let _ = msgs.send(adapter::Msg::Halt(true));
+        }
         // A rate set before the torrent went live.
         if let Some((file, bytes_per_s, readahead)) = *lock(&t.rate) {
             let _ = msgs.send(adapter::Msg::Rate {
@@ -1239,6 +1251,7 @@ impl Engine {
         (s.bytes_per_s, s.readahead_bytes) = (snap.rate.map(|r| r.1), snap.rate.map(|r| r.2));
         s.window_bytes = lock(&t.window).map(|w| w.plan.budget);
         s.window_in_ram = t.memory.load(Ordering::Relaxed);
+        s.stopped_for_space = t.space_stopped.load(Ordering::Relaxed);
         s.held_bytes = snap.held_bytes;
         s.evict_rounds = t.rounds.load(Ordering::Relaxed);
         s.refetched_bytes = snap.refetched_bytes;
@@ -1723,6 +1736,18 @@ impl Engine {
         Ok(true)
     }
 
+    /// Whether `h` is held for space, or would be at its next tick (plans/
+    /// no-space-warnings.md): a start it holds is not the swarm's failure
+    /// (review r3 P2).
+    pub fn short_of_space(&self, h: TorrentHandle) -> bool {
+        let Ok(t) = self.torrent(h) else {
+            return false;
+        };
+        t.space_stopped.load(Ordering::Relaxed)
+            || (!t.memory.load(Ordering::Relaxed)
+                && self.free().is_some_and(|free| free <= window::STOP_BYTES))
+    }
+
     /// The player paused or plays again (`report_progress`): a paused
     /// window's anchor keeps its readahead, and maintenance does not pause
     /// the torrent (plans/streaming-window.md 2.3, 2.4).
@@ -1958,17 +1983,25 @@ impl Engine {
         // r1 m5); but not into a disk at the stop: it stays stopped, the read
         // waits, and the keeper or the guard starts it once space is back or
         // the window needs none (review r2 N4, plans/no-space-warnings.md).
-        if window::halted(&l.managed) {
-            let was = t.space_stopped.load(Ordering::Relaxed);
-            let full = self.free().is_some_and(|free| {
+        // A torrent held for space with no keeper or guard to release it (no
+        // window, no claim) is released by its next read once space is back.
+        let (halted, was) = (
+            window::halted(&l.managed),
+            t.space_stopped.load(Ordering::Relaxed),
+        );
+        let full = !t.memory.load(Ordering::Relaxed)
+            && self.free().is_some_and(|free| {
                 free <= window::STOP_BYTES || (was && free <= window::RESUME_BYTES)
             });
-            if full && !t.memory.load(Ordering::Relaxed) {
-                t.space_stopped.store(true, Ordering::Relaxed);
-            } else {
+        if full && halted {
+            t.space_stopped.store(true, Ordering::Relaxed);
+        } else if !full && (halted || was) {
+            if halted {
                 self.inner.session.unpause(&l.managed).await?;
-                t.space_stopped.store(false, Ordering::Relaxed);
             }
+            // The scheduler outlives the pause: it is released too.
+            let _ = l.msgs.send(adapter::Msg::Halt(false));
+            t.space_stopped.store(false, Ordering::Relaxed);
         }
         Ok(Some((l.managed.clone(), l.msgs.clone())))
     }

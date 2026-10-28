@@ -17,9 +17,9 @@ use std::time::{Duration, Instant};
 
 use mq_engine::librqbit::sync_log::{self, Fail, Point};
 use mq_engine::{
-    APFS_HEAD_BYTES, Claim, Engine, EngineError, FLOOR_BYTES, FileHint, RAM_CEILING_BYTES,
-    RESERVE_BYTES, RESUME_BYTES, RING_BYTES, STOP_BYTES, TorrentHandle, Window, WindowPlan,
-    test_hooks,
+    APFS_HEAD_BYTES, Claim, Engine, EngineError, FLOOR_BYTES, FileHint, HARD_STOP_BYTES,
+    RAM_CEILING_BYTES, RESERVE_BYTES, RESUME_BYTES, RING_BYTES, STOP_BYTES, TorrentHandle, Window,
+    WindowPlan, test_hooks,
 };
 use tokio::io::AsyncReadExt;
 
@@ -726,8 +726,9 @@ async fn the_next_file_of_a_live_torrent_gets_its_round_and_ends_the_window() {
 
 /// f. Every punch refused: after three failed rounds the window drops and
 /// the file plays on whole to the end, every byte right; it never ends for
-/// space. Under the floor it is not made a window again, and at the stop it
-/// stops fetching, with no error (plans/no-space-warnings.md).
+/// space. Under the floor it is not made a window again; a file fully on
+/// disk only reads, so the growth stop leaves it, and the hard stop stops it,
+/// with no error (plans/no-space-warnings.md).
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn refused_punches_play_on_whole_and_stop_at_the_stop() {
     let s = support::swarm_big(48 << 20, PIECE).await;
@@ -749,9 +750,19 @@ async fn refused_punches_play_on_whole_and_stop_at_the_stop() {
     test_hooks::set_free(&w.engine, Some(FLOOR_BYTES - 1));
     tokio::time::sleep(Duration::from_secs(11)).await;
     assert_eq!(w.stats().await.window_bytes, None, "made a window again");
-    // At the stop: paused, and a read gets no error.
+    // At the stop, fully on disk: it plays on.
     test_hooks::set_free(&w.engine, Some(STOP_BYTES));
-    until("paused at the stop", || async { w.stats().await.paused }).await;
+    tokio::time::sleep(Duration::from_secs(6)).await;
+    assert!(
+        !w.stats().await.stopped_for_space,
+        "a file on disk stopped for growth"
+    );
+    // At the hard stop: paused, and a read gets no error.
+    test_hooks::set_free(&w.engine, Some(HARD_STOP_BYTES));
+    until("paused at the hard stop", || async {
+        w.stats().await.stopped_for_space
+    })
+    .await;
     assert!(w.read(0, MIB).await == w.movie(0, MIB));
 }
 
@@ -997,7 +1008,7 @@ async fn under_the_floor_a_window_plays_on_in_a_ring() {
     );
     let len = w.s.movie.len() as u64;
     assert!(w.read(4 * MIB, len).await == w.movie(4 * MIB, len));
-    assert!(!w.stats().await.paused, "fetching stopped");
+    assert!(!w.stats().await.stopped_for_space, "fetching stopped");
 }
 
 /// q where the torrent is piece files: under the floor its window turns to
@@ -1021,7 +1032,10 @@ async fn under_the_floor_piece_files_play_on_from_ram() {
     // A RAM ring writes nothing to disk: the stop never pauses it.
     test_hooks::set_free(&w.engine, Some(STOP_BYTES));
     tokio::time::sleep(Duration::from_secs(2)).await;
-    assert!(!w.stats().await.paused, "a RAM ring stopped for the disk");
+    assert!(
+        !w.stats().await.stopped_for_space,
+        "a RAM ring stopped for the disk"
+    );
 }
 
 /// q for a whole file: under the floor a playback with no window becomes a
@@ -1077,37 +1091,48 @@ async fn under_the_floor_a_whole_file_plays_on_in_a_ring() {
     );
 }
 
-/// The silent stop (plans/no-space-warnings.md): at the stop a window on
-/// disk stops fetching, a read waits with no error and nothing more reaches
-/// the disk; once space is back over the resume mark the read finishes,
-/// every byte right.
+/// The silent stop (plans/no-space-warnings.md): at the hard stop a window
+/// on disk becomes a ring and stops fetching, the player's range left open
+/// across both waits with no error and nothing more reaches the disk; once
+/// space is back over the resume mark the read finishes, every byte right
+/// (a replan that dropped the open read never evicted again and stalled).
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn at_the_stop_a_read_waits_and_finishes_once_space_is_back() {
-    let w = windowed(48 << 20, plan(), None).await;
+async fn at_the_hard_stop_a_read_waits_and_finishes_once_space_is_back() {
+    let w = windowed(160 << 20, plan(), None).await;
     assert!(w.read(0, 4 * MIB).await == w.movie(0, 4 * MIB));
     // A 64 MiB band: a fast link does not stop and resume in one tick
     // (review r2 N11).
     const { assert!(RESUME_BYTES - STOP_BYTES >= 64 * MIB) };
-    test_hooks::set_free(&w.engine, Some(STOP_BYTES));
-    until("paused at the stop", || async { w.stats().await.paused }).await;
-    // Blocks already past the write call when it paused may still land
-    // (review r2): a second for them, then nothing more.
-    tokio::time::sleep(Duration::from_secs(1)).await;
-    let before = allocated(&w.dir());
+    // The player's range is open, and stays open across the ring's replan
+    // under the floor and the stop: its first MiB read, the rest after.
     let reader = w.engine.open_reader(w.t, "default", w.movie).await.unwrap();
     let len = w.s.movie.len() as u64;
     let mut range = reader.range(4 * MIB, Some(len)).await.unwrap();
+    let mut first = vec![0; MIB as usize];
+    range.read_exact(&mut first).await.unwrap();
+    assert!(first == w.movie(4 * MIB, 5 * MIB));
+    // At the hard stop every torrent writing to disk stops, growing or not
+    // (review r3 P3); the read waits with no error.
+    test_hooks::set_free(&w.engine, Some(HARD_STOP_BYTES));
+    until("paused at the hard stop", || async {
+        w.stats().await.stopped_for_space
+    })
+    .await;
     let rest = tokio::spawn(async move {
         let mut got = Vec::new();
         range.read_to_end(&mut got).await.map(|_| got)
     });
+    // Blocks already past the write call when it paused may still land
+    // (review r2): a second for them, then nothing more.
+    tokio::time::sleep(Duration::from_secs(1)).await;
+    let before = allocated(&w.dir());
     tokio::time::sleep(Duration::from_secs(3)).await;
     assert!(!rest.is_finished(), "the read went on past the stop");
-    assert!(w.stats().await.paused, "a read woke it");
+    assert!(w.stats().await.stopped_for_space, "a read woke it");
     assert!(allocated(&w.dir()) <= before, "bytes reached the disk");
     test_hooks::set_free(&w.engine, Some(RESUME_BYTES + 1));
     let got = within(60, rest).await.unwrap().unwrap();
-    assert!(got == w.movie(4 * MIB, len), "bytes differ");
+    assert!(got == w.movie(5 * MIB, len), "bytes differ");
 }
 
 /// Review r1 m5: a torrent a fatal write error stopped (a full disk) starts
@@ -1143,7 +1168,7 @@ async fn under_the_stop_a_full_window_evicts_to_its_ring_and_plays_on() {
         let (engine, t, paused) = (w.engine.clone(), w.t, paused.clone());
         async move {
             loop {
-                if engine.stats(t).await.is_ok_and(|s| s.paused) {
+                if engine.stats(t).await.is_ok_and(|s| s.stopped_for_space) {
                     paused.store(true, Ordering::Relaxed);
                 }
                 tokio::time::sleep(Duration::from_millis(5)).await;
@@ -1172,6 +1197,72 @@ async fn under_the_stop_a_full_window_evicts_to_its_ring_and_plays_on() {
     watch.abort();
     assert!(!paused.load(Ordering::Relaxed), "the ring was stopped");
     test_hooks::set_free_base(&w.engine, None);
+}
+
+/// Review r3: a ring that holds its budget plays on with the free space held
+/// at the stop (not raised by its own evictions): linear reads, each piece
+/// written after one freed, never paused.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_full_ring_plays_on_with_free_held_at_the_stop() {
+    let w = windowed(128 << 20, plan(), None).await;
+    // Under the floor first: the window becomes its ring and fills it.
+    test_hooks::set_free(&w.engine, Some(FLOOR_BYTES - 1));
+    let ring = RING_BYTES.max(2 * u64::from(PIECE));
+    until("the ring", || async {
+        w.stats().await.window_bytes == Some(ring)
+    })
+    .await;
+    assert!(w.read(0, 64 * MIB).await == w.movie(0, 64 * MIB));
+    test_hooks::set_free(&w.engine, Some(STOP_BYTES));
+    let paused = Arc::new(AtomicBool::new(false));
+    let watch = tokio::spawn({
+        let (engine, t, paused) = (w.engine.clone(), w.t, paused.clone());
+        async move {
+            loop {
+                if engine.stats(t).await.is_ok_and(|s| s.stopped_for_space) {
+                    paused.store(true, Ordering::Relaxed);
+                }
+                tokio::time::sleep(Duration::from_millis(5)).await;
+            }
+        }
+    });
+    let len = w.s.movie.len() as u64;
+    assert!(w.read(64 * MIB, len).await == w.movie(64 * MIB, len));
+    watch.abort();
+    assert!(!paused.load(Ordering::Relaxed), "a full ring was stopped");
+}
+
+/// Review r3 P3: at the hard stop even a ring that holds its budget stops
+/// (its next writes come before the punches that pay for them), stays
+/// stopped tick after tick, and fetches again 64 MiB over it.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn at_the_hard_stop_even_a_full_ring_stops() {
+    let w = windowed(128 << 20, plan(), None).await;
+    // Under the floor first: the window becomes its ring and fills it.
+    test_hooks::set_free(&w.engine, Some(FLOOR_BYTES - 1));
+    let ring = RING_BYTES.max(2 * u64::from(PIECE));
+    until("the ring", || async {
+        w.stats().await.window_bytes == Some(ring)
+    })
+    .await;
+    assert!(w.read(0, 64 * MIB).await == w.movie(0, 64 * MIB));
+    test_hooks::set_free(&w.engine, Some(HARD_STOP_BYTES));
+    until("paused at the hard stop", || async {
+        w.stats().await.stopped_for_space
+    })
+    .await;
+    for _ in 0..30 {
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        assert!(
+            w.stats().await.stopped_for_space,
+            "restarted at the hard stop"
+        );
+    }
+    test_hooks::set_free(&w.engine, Some(HARD_STOP_BYTES + 64 * MIB + 1));
+    until("fetching again", || async {
+        !w.stats().await.stopped_for_space
+    })
+    .await;
 }
 
 /// Review r2 N4: a torrent a fatal write error stopped is not started again
@@ -1448,6 +1539,11 @@ fn a_ram_ring_stays_within_the_devices_memory() {
     // disk ring.
     let huge = plan(64 * MIB, Some(400 * MIB));
     assert!(!huge.memory, "{huge:?}");
+    // Its least ring (344 MiB, over the ceiling) takes RAM where the device
+    // has twice it free, so it does not stall on a full disk (review r3).
+    let roomy = plan(64 * MIB, Some(1 << 30));
+    assert!(roomy.memory && roomy.playing >= 64 * MIB, "{roomy:?}");
+    assert!(roomy.budget > RAM_CEILING_BYTES, "{roomy:?}");
     // Plenty of memory still stops at the ceiling.
     let tv = plan(16 * MIB, Some(8 << 30));
     assert!(tv.memory && tv.budget <= RAM_CEILING_BYTES, "{tv:?}");

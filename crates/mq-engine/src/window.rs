@@ -32,6 +32,13 @@ pub const FLOOR_BYTES: u64 = RESERVE_BYTES / 4 * 3;
 pub const STOP_BYTES: u64 = 256 * MIB;
 pub const RESUME_BYTES: u64 = STOP_BYTES + 64 * MIB;
 
+/// The hard stop (review r3 P3): at or under it every torrent writing to
+/// disk stops, growing or not. A ring at its budget writes a cycle's pieces
+/// before the punches that pay for them: its slack (`max(8 MiB, 2 pieces)`)
+/// and two open pieces, 64 MiB with 16 MiB pieces. It fetches again 64 MiB
+/// over it.
+pub const HARD_STOP_BYTES: u64 = 64 * MIB;
+
 /// How often the keeper reads the free space when nothing wakes it.
 const GUARD_EVERY: Duration = Duration::from_secs(1);
 
@@ -253,20 +260,26 @@ impl Engine {
             if !t.claimed() || seen.now.is_some() {
                 continue;
             }
-            let Some((file, bytes_per_s, readahead)) = *lock(&t.rate) else {
-                continue;
-            };
-            if free < FLOOR_BYTES
+            let rate = *lock(&t.rate);
+            if let Some((file, bytes_per_s, _)) = rate
+                && free < FLOOR_BYTES
                 && !t.unpunched.load(Ordering::Relaxed)
                 && self.replan(h, file, bytes_per_s, false, free, seen).await
             {
                 let _ = self.keep(h);
                 continue;
             }
-            // A whole file only grows.
-            if self.space_stop(&t, free, true).await {
+            // A whole file grows until the file is on disk (review r3); a
+            // start, before its rate, grows.
+            let held = self.ask(&t, adapter::Msg::Written).await.unwrap_or(0);
+            let len = rate.and_then(|(file, ..)| t.files.get(file)).map(|f| f.len);
+            let growing = len.is_none_or(|len| held < len);
+            if self.space_stop(&t, free, growing).await {
                 continue;
             }
+            let Some((file, bytes_per_s, readahead)) = rate else {
+                continue;
+            };
             let starved = t.starved.load(Ordering::Relaxed);
             let now = match () {
                 _ if free < RESERVE_BYTES => true,
@@ -336,38 +349,45 @@ impl Engine {
 
     /// The silent stop ([`STOP_BYTES`]): at or under it a torrent that is
     /// `growing` on disk pauses with no words, its reads waiting; over
-    /// [`RESUME_BYTES`], or once it no longer grows, it fetches again.
-    /// Whether it is stopped.
+    /// [`RESUME_BYTES`], or once it no longer grows, it fetches again. At
+    /// [`HARD_STOP_BYTES`] every torrent writing to disk stops. Whether it
+    /// is stopped.
     pub(crate) async fn space_stop(&self, t: &Torrent, free: u64, growing: bool) -> bool {
         let was = t.space_stopped.load(Ordering::Relaxed);
         let now = match () {
+            _ if free <= HARD_STOP_BYTES => true,
+            _ if was && free <= HARD_STOP_BYTES + 64 * MIB => true,
             _ if !growing => false,
             _ if free <= STOP_BYTES => true,
             _ if free > RESUME_BYTES => false,
             _ => was,
         };
-        if now == was {
+        // Held, it is told again each tick: a scheduler started since (a new
+        // file choice) holds too.
+        if now == was && !now {
             return now;
         }
+        // The scheduler holds its requests: the torrent stays live, so an
+        // open read just waits and goes on at the release (no pause, whose
+        // restart would leave a read on the old state behind).
         let live = t.live.lock().await;
         if let Some(l) = live.as_ref() {
-            let _round = t.keeper.lock().await;
-            let done = if now && !halted(&l.managed) {
-                let paused = self.inner.session.pause(&l.managed).await;
-                let _ = l.msgs.send(adapter::Msg::Stopped);
-                paused
-            } else if !now && halted(&l.managed) && t.claimed() {
-                self.inner.session.unpause(&l.managed).await
-            } else {
-                Ok(())
-            };
-            if let Err(e) = done {
+            let _ = l.msgs.send(adapter::Msg::Halt(now));
+            // One held still by librqbit (a read refused to start it into a
+            // full disk, a fatal write) starts again with the space.
+            if !now
+                && halted(&l.managed)
+                && t.claimed()
+                && let Err(e) = self.inner.session.unpause(&l.managed).await
+            {
                 tracing::warn!("{}: fetching for space: {e:#}", t.info_hash);
                 return was;
             }
         }
         t.space_stopped.store(now, Ordering::Relaxed);
-        tracing::info!(free, stopped = now, "{}: fetching for space", t.info_hash);
+        if now != was {
+            tracing::info!(free, stopped = now, "{}: fetching for space", t.info_hash);
+        }
         now
     }
 
@@ -495,6 +515,9 @@ async fn keep_windows(engine: &Weak<Inner>, h: TorrentHandle, t: &Arc<Torrent>) 
     let mut claimed = false;
     let mut punched: Option<std::time::Instant> = None;
     let mut generation = None;
+    // What the window held when the free space first fell to the resume
+    // mark: the stop holds back growth past it (review r3).
+    let mut at_stop: Option<u64> = None;
     loop {
         let every = match punched {
             Some(at) if at.elapsed() < HOLES_FOR => HOLES_EVERY,
@@ -518,6 +541,7 @@ async fn keep_windows(engine: &Weak<Inner>, h: TorrentHandle, t: &Arc<Torrent>) 
             generation = Some(state.generation);
             (claimed, punched) = (state.claimed, None);
             failed.clear();
+            at_stop = None;
         }
         claimed |= t.claimed();
         if claimed && !t.claimed() {
@@ -588,9 +612,16 @@ async fn keep_windows(engine: &Weak<Inner>, h: TorrentHandle, t: &Arc<Torrent>) 
                 break;
             }
         }
-        // The stop is for growth only: a window that holds its budget
-        // writes a piece for each one it frees (review r2 N2).
-        let growing = written + state.plan.slack < full.saturating_sub(shortfall);
+        // The stop is for growth only (review r2 N2, r3): past what the
+        // window held when the free space first fell to the resume mark, by
+        // more than its slack. A ring that plays on writes a piece for each
+        // one it frees, within that. Reset over the resume mark only, so a
+        // stopped window keeps the 64 MiB band (review r2 N11).
+        if free > RESUME_BYTES {
+            at_stop = None;
+        }
+        let base = *at_stop.get_or_insert(written);
+        let growing = written > base + state.plan.slack;
         engine.space_stop(t, free, growing).await;
     }
 }

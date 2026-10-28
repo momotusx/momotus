@@ -1466,6 +1466,33 @@ fn a_budget_change_keeps_the_player_read() {
     assert!(!h.s.to_evict().is_empty(), "the read is still the player's");
 }
 
+/// A window planned again for space (a ring under the floor,
+/// plans/no-space-warnings.md) while the player's read stays open keeps that
+/// read: the keeper still evicts behind it, else the ring fills and the read
+/// waits for good.
+#[test]
+fn a_new_window_keeps_an_open_player_read() {
+    const P: u64 = 64 * KIB;
+    let g = Geometry::new(P as u32, &[16 * MIB]).unwrap();
+    let mut h = Harness::new(g, small_cfg());
+    h.s.set_window(Some(Window {
+        budget: 64 * P,
+        slack: 4 * P,
+        ..window(0)
+    }));
+    for piece in 0..40 {
+        h.send(Event::PieceVerified { piece });
+    }
+    open(&mut h, 1, 0, 2 * MIB, None);
+    h.s.set_window(Some(Window {
+        budget: 30 * P,
+        slack: 4 * P,
+        ..window(0)
+    }));
+    h.tick(1);
+    assert!(!h.s.to_evict().is_empty(), "the read is still the player's");
+}
+
 /// Two ranges read at once (AVPlayer reads an MP4's index this way): when
 /// the newer closes, the older one that reads on past its blocking window
 /// takes the focus back (review r2 P2-1), with its windows and `B`, and

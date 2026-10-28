@@ -104,6 +104,9 @@ pub struct Scheduler {
     last_focus: Option<(DemandId, usize, Range<PieceIdx>)>,
     dirty: bool,
     fill_all: bool,
+    /// Held for space (plans/no-space-warnings.md): no request starts,
+    /// those in flight land, and every open read waits for the release.
+    halted: bool,
     touched: Vec<PeerId>,
     latencies: VecDeque<u64>,
     payload_log: VecDeque<(u64, u64)>,
@@ -182,6 +185,7 @@ impl Scheduler {
             last_focus: None,
             dirty: false,
             fill_all: false,
+            halted: false,
             touched: Vec::new(),
             latencies: VecDeque::new(),
             payload_log: VecDeque::new(),
@@ -252,7 +256,9 @@ impl Scheduler {
     pub fn set_window(&mut self, window: Option<Window>) {
         self.window = window.filter(|w| w.file < self.geo.files().len());
         self.full_budget = self.window.map_or(0, |w| w.budget);
-        self.player_read = false;
+        // A window planned again for space keeps the player's open read: a
+        // ring that may not evict behind it fills and stalls the read.
+        self.player_read = self.demands.iter().any(|d| !d.probe);
         self.grace = None;
         self.dirty = true;
     }
@@ -291,6 +297,13 @@ impl Scheduler {
             *b = bytes_per_s.max(1);
             self.dirty = true;
         }
+    }
+
+    /// Held for space (plans/no-space-warnings.md): no request starts until
+    /// the release.
+    pub fn set_halted(&mut self, on: bool) {
+        self.halted = on;
+        self.fill_all = true;
     }
 
     /// Readahead of `file` past its playback window, in bytes (the
@@ -687,11 +700,14 @@ impl Scheduler {
                 self.cancel(id, b, out);
             }
         }
-        self.hedge(out);
-        // Hedging keeps a possibly late request alive; once the duplicate
-        // budget is spent, stalled holders hand urgent blocks back instead.
-        if self.hedge_in_window + u64::from(BLOCK) > self.hedge_allowance() {
-            self.release_stalled(out);
+        // Held for space, no hedge starts either (plans/no-space-warnings.md).
+        if !self.halted {
+            self.hedge(out);
+            // Hedging keeps a possibly late request alive; once the duplicate
+            // budget is spent, stalled holders hand urgent blocks back instead.
+            if self.hedge_in_window + u64::from(BLOCK) > self.hedge_allowance() {
+                self.release_stalled(out);
+            }
         }
         self.fill_all = true;
     }
@@ -1530,7 +1546,7 @@ impl Scheduler {
             t
         };
         self.fill_all = false;
-        if fill.is_empty() && self.urgent_cursor >= self.urgent.len() {
+        if self.halted || (fill.is_empty() && self.urgent_cursor >= self.urgent.len()) {
             return;
         }
         let cands = self.eligible();

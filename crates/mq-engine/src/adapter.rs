@@ -64,6 +64,8 @@ pub(crate) enum Msg {
     },
     /// The player paused or plays again.
     Paused(bool),
+    /// Held for space, or released (plans/no-space-warnings.md).
+    Halt(bool),
     /// The keeper's round: what to evict now.
     ToEvict(tokio::sync::oneshot::Sender<Vec<u32>>),
     /// What the scheduler counts as held.
@@ -686,6 +688,14 @@ impl Translator {
             Msg::Paused(paused) => {
                 if let Some(s) = self.sched.as_mut() {
                     s.set_paused(paused);
+                }
+                self.feed(Event::Tick {
+                    now_us: self.now_us,
+                })
+            }
+            Msg::Halt(on) => {
+                if let Some(s) = self.sched.as_mut() {
+                    s.set_halted(on);
                 }
                 self.feed(Event::Tick {
                     now_us: self.now_us,
