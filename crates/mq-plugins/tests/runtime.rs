@@ -549,3 +549,23 @@ fn stream_caps() {
         Outcome::Done(Vec::new())
     );
 }
+
+/// A cancelled call drops the replies it was waiting on, so the host sees
+/// them closed and can abort those requests.
+#[test]
+fn cancel_closes_pending_replies() {
+    let (tx, mut rx) = mpsc::unbounded_channel::<HostRequest>();
+    let cancel = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let thread = call(
+        plugin("await Promise.all([fetch('https://a.example/1'), fetch('https://a.example/2')]);"),
+        limits(),
+        cancel.clone(),
+        tx,
+    )
+    .unwrap();
+    let held = [rx.blocking_recv().unwrap(), rx.blocking_recv().unwrap()];
+    assert!(held.iter().all(|r| !r.reply.is_closed()));
+    cancel.store(true, std::sync::atomic::Ordering::Relaxed);
+    assert_eq!(thread.join().unwrap(), Outcome::Cancelled);
+    assert!(held.iter().all(|r| r.reply.is_closed()));
+}
