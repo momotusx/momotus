@@ -20,7 +20,7 @@ struct CalendarScreen: View {
                 LazyVStack(alignment: .leading, spacing: Theme.Space.m) {
                     ScreenTitle(text: "Calendar")
                     if let failure = calendar.stage.failure {
-                        StateLine(symbol: "triangle-alert", text: failure, action: ("Try again", calendar.retry))
+                        StateLine(symbol: "triangle-alert", text: failure, action: ("Try again", calendar.retry), spoken: true)
                     }
                     if let s = calendar.snapshot {
                         notes(s)
@@ -61,7 +61,7 @@ struct CalendarScreen: View {
         if !s.failed.isEmpty {
             StateLine(
                 symbol: "triangle-alert",
-                text: "Could not load " + s.failed.map { series in series.reason.map { "\(series.name) (\($0))" } ?? series.name }.joined(separator: ", "))
+                text: "Could not load " + s.failed.map { series in series.reason.map { "\(series.name) (\($0))" } ?? series.name }.joined(separator: ", "), spoken: true)
         }
         if !s.noSchedule.isEmpty {
             StateLine(symbol: "calendar-x", text: "No dated episodes yet: " + s.noSchedule.map(\.name).joined(separator: ", "))

@@ -130,7 +130,7 @@ struct TitleScreen: View {
             VStack(alignment: .leading, spacing: Theme.Space.l) {
                 hero
                 if let failure = model.failure, fallback != .failed(failure) {
-                    StateLine(symbol: "triangle-alert", text: failure)
+                    StateLine(symbol: "triangle-alert", text: failure, spoken: true)
                         .padding(.horizontal, metrics.gutter)
                 }
                 lower
@@ -152,7 +152,7 @@ struct TitleScreen: View {
                     // Why Resume cannot start, under the hero, never over the art.
                     VersionNote(target: model.header?.playTarget, versions: versions?.snapshot, failure: versions?.failure)
                     if let failure = model.failure, fallback != .failed(failure) {
-                        StateLine(symbol: "triangle-alert", text: failure)
+                        StateLine(symbol: "triangle-alert", text: failure, spoken: true)
                     }
                 }
                 // Beside the open panel the note keeps to the hero's column.
@@ -267,7 +267,7 @@ struct TitleScreen: View {
                 .ignoresSafeArea(edges: metrics.wide ? [] : .top)
             }
         } else if case .failed(let reason) = fallback {
-            StateLine(symbol: "triangle-alert", text: reason, action: ("Try again", model.retry))
+            StateLine(symbol: "triangle-alert", text: reason, action: ("Try again", model.retry), spoken: true)
                 .padding(.horizontal, metrics.gutter)
                 .padding(.top, Theme.Space.xl)
         } else {
@@ -654,7 +654,7 @@ struct TitleScreen: View {
                     play: { play(fromStart: $0) }, focus: $primaryFocused)
                 actions(details)
             } else if case .failed(let reason) = fallback {
-                StateLine(symbol: "triangle-alert", text: reason, action: ("Try again", model.retry))
+                StateLine(symbol: "triangle-alert", text: reason, action: ("Try again", model.retry), spoken: true)
             } else {
                 Text("Loading details")
                     .textFont(Theme.type.callout, relativeTo: .callout)

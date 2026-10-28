@@ -296,6 +296,7 @@ targets:
       - path: Marquee/Sync/KitLedger.swift
       - path: Marquee/Sync/Clipboard.swift
       - path: Marquee/Settings/FindAddonsPage.swift
+      - path: Marquee/Settings/FindAddonsScreen.swift
       - path: Marquee/Profiles/ProfileSession.swift
       - path: Marquee/Trakt/TraktModel.swift
       - path: Marquee/Trakt/TraktWords.swift

@@ -547,12 +547,18 @@ struct StateLine: View {
     var action: (title: String, run: () -> Void)?
     /// True only where the fix is the page's one action and so its primary.
     var primary = false
+    /// Says its words to VoiceOver when it appears and whenever they change (a status or failure the
+    /// user would otherwise never hear). Off by default: most lines sit on a page the user just opened.
+    var spoken = false
+    @State private var lastSpoken: String?
 
     var body: some View {
         ViewThatFits(in: .horizontal) {
             HStack(spacing: Theme.Space.s) { reason; fix }
             VStack(alignment: .leading, spacing: Theme.Space.s) { reason; fix }
         }
+        .onAppear(perform: speak)
+        .onChange(of: text) { speak() }
     }
 
     private var reason: some View {
@@ -562,9 +568,21 @@ struct StateLine: View {
             .fixedSize(horizontal: false, vertical: true)
     }
 
+    private func speak() {
+        guard spoken, let words = spokenLine(last: lastSpoken, current: text) else { return }
+        lastSpoken = words
+        announce(words)
+    }
+
     @ViewBuilder private var fix: some View {
         if let action {
             Button(action.title, action: action.run).buttonStyle(PillButtonStyle(prominent: primary))
         }
     }
+}
+
+/// What a spoken `StateLine` says: its words when they are new, nothing for a redraw of the
+/// words it already said.
+func spokenLine(last: String?, current: String) -> String? {
+    current.isEmpty || current == last ? nil : current
 }

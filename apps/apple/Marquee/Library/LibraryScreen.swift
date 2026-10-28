@@ -20,7 +20,7 @@ struct LibraryScreen: View {
                 CalendarRow()
                 #endif
                 if let failure = library.stage.failure {
-                    StateLine(symbol: "triangle-alert", text: failure, action: ("Try again", library.retry))
+                    StateLine(symbol: "triangle-alert", text: failure, action: ("Try again", library.retry), spoken: true)
                 }
                 if let s = library.snapshot, total(s) == 0 {
                     // Nothing to filter or sort: the way in instead of chips that say "All 0".

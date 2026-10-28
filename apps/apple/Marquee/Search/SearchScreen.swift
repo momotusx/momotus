@@ -116,14 +116,14 @@ struct SearchScreen: View {
         SearchField(input: input, prompt: Self.prompt, focused: $fieldFocused).padding(.horizontal, margin)
         if search.failure != nil {
             // The core's words can name a host or an addon: the shared line instead.
-            StateLine(symbol: "triangle-alert", text: SearchWords.failed, action: ("Try again", search.retry))
+            StateLine(symbol: "triangle-alert", text: SearchWords.failed, action: ("Try again", search.retry), spoken: true)
                 .padding(.horizontal, margin)
         }
         if !typed {
             idle.padding(.horizontal, margin)
         } else {
             if let line = SearchWords.answered(search.snapshot, query: query) {
-                StateLine(symbol: "search", text: line).padding(.horizontal, margin)
+                StateLine(symbol: "search", text: line, spoken: true).padding(.horizontal, margin)
             }
             if metrics.wide { wideResults } else { phoneResults }
         }
@@ -228,13 +228,13 @@ struct SearchScreen: View {
     #if os(tvOS)
     @ViewBuilder private var tvContent: some View {
         if search.failure != nil {
-            StateLine(symbol: "triangle-alert", text: SearchWords.failed, action: ("Try again", search.retry))
+            StateLine(symbol: "triangle-alert", text: SearchWords.failed, action: ("Try again", search.retry), spoken: true)
                 .padding(.horizontal, metrics.gutter)
         }
         if !typed {
             StateLine(symbol: "search", text: SearchWords.idle(search.snapshot)).padding(.horizontal, metrics.gutter)
         } else if let line = SearchWords.answered(search.snapshot, query: query) {
-            StateLine(symbol: "search", text: line).padding(.horizontal, metrics.gutter)
+            StateLine(symbol: "search", text: line, spoken: true).padding(.horizontal, metrics.gutter)
         }
         ForEach(search.snapshot?.rows ?? [], id: \.rowId) { row in
             RowView(row: row, retry: { setQuery(query) })
