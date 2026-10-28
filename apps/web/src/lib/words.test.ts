@@ -152,8 +152,8 @@ test("every zero-playable state reads its shared line with its actions in the ta
 test("the device line reads as one sentence, leaving out what is not known", () => {
   const measured = { mbps: 42.2, samples: 3 };
   const prior = { mbps: 15, samples: 0 };
-  expect(conditionsLine({ screenClass: 2160, hdr: true, network: "wifi", speed: measured, freeBytes: 61 * GiB })).toBe("4K HDR, about 42 Mbit/s on Wi-Fi, 61 GB free");
-  expect(conditionsLine({ screenClass: 1080, hdr: false, network: "cellular", speed: prior, freeBytes: null })).toBe("1080p, mobile data");
+  expect(conditionsLine({ screenClass: 2160, hdr: true, network: "wifi", speed: measured })).toBe("4K HDR, about 42 Mbit/s on Wi-Fi");
+  expect(conditionsLine({ screenClass: 1080, hdr: false, network: "cellular", speed: prior })).toBe("1080p, mobile data");
   const v: VersionsConditions = {
     screenClass: 480, hdr: false, network: "other", http: prior, p2p: measured, freeBytes: null,
     runtimeMin: 52, sizeLimitBytes: 5 * GiB, minSeeders: 50, engine: true, account: false,

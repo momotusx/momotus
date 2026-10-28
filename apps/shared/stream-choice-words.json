@@ -334,7 +334,6 @@
     },
     "hdr": "{screen} HDR",
     "speed": "about {mbps} Mbit/s on {network}",
-    "free": "{free} free",
     "networks": {
       "wifi": "Wi-Fi",
       "ethernet": "Ethernet",

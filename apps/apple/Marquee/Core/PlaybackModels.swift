@@ -77,7 +77,7 @@ struct VersionSection: Decodable, Hashable, Sendable {
 }
 
 /// What the ranking read (plans/m13-stream-choice.md 4.2): "This TV: 4K HDR,
-/// about 42 Mbit/s on Wi-Fi, 61 GB free".
+/// about 42 Mbit/s on Wi-Fi".
 struct VersionsConditions: Decodable, Hashable, Sendable {
     /// 2160, 1080, 720 or 480.
     let screenClass: Int

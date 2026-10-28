@@ -293,7 +293,7 @@ struct SyncProblem: Equatable {
         case "insecure": return "The sync server address must start with https."
         case "kitUnknown": return SyncWords.wrongKit
         // The app's own: the Keychain kept a new record from it, so nothing is sent until it is stored.
-        case "storage": return "This device could not store the sync account's key, so sync is paused. Free some storage, then sync again."
+        case "storage": return "This device could not store the sync account's key, so sync is paused. Try syncing again."
         case "unconfirmed":
             return action == .differ ? "The approval is still open: this device did not confirm it is you." : "Nothing changed: this device did not confirm it is you."
         case "noPasscode": return "Set a device passcode first: Momotus asks for it before changing your devices or making a kit."

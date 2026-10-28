@@ -67,8 +67,7 @@ enum DeviceCaps {
         StreamChoice.conditionsLine(
             screenClass: StreamChoice.screenClass(lines: displayHeight()), hdr: AVPlayer.eligibleForHDRPlayback,
             network: c?.network ?? network,
-            speed: c.map { StreamChoice.speed(http: $0.http, p2p: $0.p2p, engine: $0.engine, account: account) } ?? Speed(mbps: 0, samples: 0),
-            freeBytes: c?.freeBytes)
+            speed: c.map { StreamChoice.speed(http: $0.http, p2p: $0.p2p, engine: $0.engine, account: account) } ?? Speed(mbps: 0, samples: 0))
     }
 
     /// "4K, HDR", "1080p": the display as the setup check names it.

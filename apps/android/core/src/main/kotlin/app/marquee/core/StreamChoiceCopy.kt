@@ -358,7 +358,6 @@ object StreamChoiceCopy {
     val SCREENS = mapOf(2160 to "4K", 1080 to "1080p", 720 to "720p", 480 to "SD")
     const val SCREEN_HDR = "{screen} HDR"
     const val SPEED = "about {mbps} Mbit/s on {network}"
-    const val FREE = "{free} free"
     val NETWORKS =
         mapOf(
             Network.Wifi to "Wi-Fi",
@@ -530,21 +529,19 @@ object StreamChoiceCopy {
 
     private fun screenWord(screenClass: Int) = SCREENS[screenClass] ?: "${screenClass}p"
 
-    /** "4K HDR, about 42 Mbit/s on Wi-Fi, 61 GB free": the screen, the connection and the disk. */
+    /** "4K HDR, about 42 Mbit/s on Wi-Fi": the screen and the connection, never the disk (plans/no-space-warnings.md). */
     fun conditionsLine(
         screenClass: Int,
         hdr: Boolean,
         network: Network,
         speed: Speed,
-        freeBytes: Long?,
     ): String {
         val screen = screenWord(screenClass)
         val net = NETWORKS[network] ?: NETWORKS.getValue(Network.Other)
         // A speed only once a playback measured it; before that the network alone.
         val measured = speed.samples > 0
         val said = if (measured) SPEED.replace("{mbps}", "${whole(speed.mbps)}").replace("{network}", net) else net
-        val free = freeBytes?.let { FREE.replace("{free}", Format.bytes(it)) }
-        return listOfNotNull(if (hdr) SCREEN_HDR.replace("{screen}", screen) else screen, said, free).joinToString(", ")
+        return listOf(if (hdr) SCREEN_HDR.replace("{screen}", screen) else screen, said).joinToString(", ")
     }
 
     /** "this TV" or "this phone". */
@@ -563,7 +560,6 @@ object StreamChoiceCopy {
                     c.hdr,
                     c.network,
                     speedFor(c.http, c.p2p, c.engine, c.account),
-                    c.freeBytes,
                 ),
             ),
         )

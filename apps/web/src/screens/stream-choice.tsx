@@ -64,7 +64,6 @@ export default function StreamChoice() {
       hdr: caps.hdr.length > 0,
       network: c?.network ?? networkType(),
       speed: c ? speedFor(c, hasAccount()) : { mbps: 0, samples: 0 },
-      freeBytes: c?.freeBytes ?? null,
     });
   };
 

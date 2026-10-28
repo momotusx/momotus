@@ -260,7 +260,6 @@ private fun Device(
             hdr = caps?.hdr.orEmpty().isNotEmpty(),
             network = c?.network ?: caps?.network ?: Network.Other,
             speed = c?.let { StreamChoiceCopy.speedFor(it.http, it.p2p, it.engine, account) } ?: Speed(0f, 0),
-            freeBytes = c?.freeBytes,
         )
     FlowRow(
         horizontalArrangement = Arrangement.spacedBy(Marquee.space.s),

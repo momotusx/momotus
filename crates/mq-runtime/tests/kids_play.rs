@@ -1966,3 +1966,38 @@ async fn answered(view: &VersionsView) {
         tokio::time::sleep(Duration::from_millis(100)).await;
     }
 }
+
+/// Review r3 P2: a start our own space stop holds is not the swarm's
+/// failure. It reads as a start that failed, and no dead swarm is
+/// remembered against a torrent the engine held for space
+/// (plans/no-space-warnings.md).
+#[cfg(feature = "test-hooks")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_start_held_for_space_is_not_a_dead_swarm() {
+    let (s, _t, _owner, kid, found) = torrent_kid().await;
+    // The swarm goes quiet (its seeder gone) while the engine's disk is at
+    // the stop: the start does not come, and the engine holds the torrent
+    // for space, so it is not the swarm's failure.
+    drop(s._seeder);
+    kid.set_free_bytes(mq_engine::RESERVE_BYTES + (1 << 30));
+    mq_engine::test_hooks::set_free(&s.leecher, Some(mq_engine::STOP_BYTES));
+    let view = PlaybackView::open(&kid, found, target("movie", "tt1", "tt1"));
+    let deadline = std::time::Instant::now() + Duration::from_secs(150);
+    while view.snapshot().phase == PlaybackPhase::Resolving {
+        assert!(std::time::Instant::now() < deadline, "never ended");
+        tokio::time::sleep(Duration::from_millis(200)).await;
+    }
+    let snap = view.snapshot();
+    assert_eq!(snap.phase, PlaybackPhase::Failed, "{snap:?}");
+    let last = snap.attempts.last().map(|a| a.error.as_str());
+    assert_eq!(last, Some("did not start here"), "{:?}", snap.attempts);
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_millis() as u64;
+    let dead = mq_runtime::speed::dead_swarms(kid.library(), now);
+    assert!(
+        !dead.contains(&s.info_hash.to_ascii_lowercase()),
+        "a swarm held for space was remembered dead: {dead:?}"
+    );
+}

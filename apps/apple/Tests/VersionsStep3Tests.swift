@@ -84,6 +84,10 @@ private func snapshot(_ empty: EmptyVersions?, pick: VersionRow? = nil, done: Bo
     #expect(PlayerLayout.failureActions(empty: "nothingPlaysHere", offer: true, canChoose: true) == [.offer, .choose, .back])
     // An older core names no state: Try again first.
     #expect(PlayerLayout.failureActions(empty: nil, offer: false, canChoose: false) == [.retry, .back])
+    // An older core's noRoom (gone, plans/no-space-warnings.md) reads as any kind this build does not know.
+    #expect(PlayerLayout.failureActions(empty: "noRoom", offer: false, canChoose: true)
+        == PlayerLayout.failureActions(empty: "somethingNew", offer: false, canChoose: true))
+    #expect(TitlePlay.of(snapshot(empty("noRoom"))) == TitlePlay.of(snapshot(empty("somethingNew"))))
     #expect(PlayerLayout.failureHeadline(empty: nil, offer: true) == "This version could not be played")
     #expect(PlayerLayout.failureLabel(.offer, offer: "720p WEB") == "Play 720p WEB instead")
     #expect(PlayerLayout.failureLabel(.choose, offer: nil) == "Choose another version")
@@ -236,9 +240,11 @@ private func literals(_ source: String) -> [String] {
 
 @Test func noViewerReadsTheOldDeadEndWordsOnVersionsTheTitleOrThePlayer() throws {
     let app = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appending(path: "../Marquee")
-    // No free space or storage warning anywhere (plans/no-space-warnings.md).
-    let banned = ["no playable", "not measured", "estimated", "add an account", "show them", "hidden (", "via ",
-                  "free space", "nearly full", "device is full", "storage full", "no room", "for this storage"]
+    // No free space or storage warning anywhere (plans/no-space-warnings.md): the same list as the web's.
+    let space = ["free space", "{free}", "nearly full", "device is full", "storage full", "storage is full", "no room",
+                 "for this storage", "not enough space", "not enough room", "not enough storage", "out of space",
+                 "low on storage", "free some storage"]
+    let banned = ["no playable", "not measured", "estimated", "add an account", "show them", "hidden (", "via "] + space
     // The shared words too: every string but the rules text, by its path. The dead keys that wait for every
     // app to read `empty` (plan Step 3 item 6).
     let pending: Set = [
@@ -268,6 +274,16 @@ private func literals(_ source: String) -> [String] {
         }
     }
     #expect(scanned >= 20)
+    // Space words nowhere else a viewer reads either: every folder of the app.
+    let all = try FileManager.default.subpathsOfDirectory(atPath: app.path()).filter { $0.hasSuffix(".swift") }
+    for file in all {
+        for text in literals(try String(contentsOf: app.appending(path: file), encoding: .utf8)) {
+            for word in space {
+                #expect(!text.lowercased().contains(word), "\(file): \"\(text)\" holds \"\(word)\"")
+            }
+        }
+    }
+    #expect(all.count > scanned)
     // The scanner itself: it finds a literal and leaves a comment alone.
     #expect(literals(#"let a = "Add an account" // "Show them""#) == ["Add an account"])
 }

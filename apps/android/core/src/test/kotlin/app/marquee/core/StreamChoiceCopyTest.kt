@@ -259,7 +259,6 @@ class StreamChoiceCopyTest {
                         put("screens", buildJsonObject { for ((cls, v) in SCREENS) put("$cls", v) })
                         put("hdr", SCREEN_HDR)
                         put("speed", SPEED)
-                        put("free", FREE)
                         put("networks", buildJsonObject { for ((n, v) in NETWORKS) put(n.wire, v) })
                     },
                 )
@@ -453,12 +452,12 @@ class StreamChoiceCopyTest {
         val measured = Speed(42.2f, 3)
         val prior = Speed(15f, 0)
         assertEquals(
-            "4K HDR, about 42 Mbit/s on Wi-Fi, 61 GB free",
-            StreamChoiceCopy.conditionsLine(2160, true, Network.Wifi, measured, 61 * gib),
+            "4K HDR, about 42 Mbit/s on Wi-Fi",
+            StreamChoiceCopy.conditionsLine(2160, true, Network.Wifi, measured),
         )
         assertEquals(
             "1080p, mobile data",
-            StreamChoiceCopy.conditionsLine(1080, false, Network.Cellular, prior, null),
+            StreamChoiceCopy.conditionsLine(1080, false, Network.Cellular, prior),
         )
         val v =
             VersionsConditions(
@@ -484,7 +483,7 @@ class StreamChoiceCopyTest {
         // A network type from a newer core reads as "this network".
         assertEquals(
             "1080p, this network",
-            StreamChoiceCopy.conditionsLine(1080, false, Network.Unknown, prior, null),
+            StreamChoiceCopy.conditionsLine(1080, false, Network.Unknown, prior),
         )
     }
 

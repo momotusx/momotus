@@ -2197,8 +2197,40 @@ fn attempt(stream: &ParsedStream, error: &str) -> Attempt {
             .service
             .clone()
             .unwrap_or_else(|| stream.addon_name.clone()),
-        error: error.to_owned(),
+        error: said(error),
     }
+}
+
+/// An attempt's line as the viewer reads it: a full disk, from whatever
+/// arm, reads as a start that failed, never in the system's words (the
+/// owner's rule, plans/no-space-warnings.md, review r3 P1); a service's
+/// words about its storage, or an older core's, too.
+fn said(error: &str) -> String {
+    if names_full_disk(error) {
+        NOT_STARTED.to_owned()
+    } else {
+        error.to_owned()
+    }
+}
+
+/// Words for a full disk or storage: the system's (ENOSPC,
+/// `ErrorKind::StorageFull`), a service's, an older core's.
+fn names_full_disk(text: &str) -> bool {
+    let text = text.to_ascii_lowercase();
+    [
+        "os error 28",
+        "no space left",
+        "storagefull",
+        "storage full",
+        "storage is full",
+        "disk full",
+        "disk is full",
+        "out of space",
+        "not enough space",
+        "free space",
+    ]
+    .iter()
+    .any(|w| text.contains(w))
 }
 
 /// An engine error that a write met on a full disk (ENOSPC), however the
@@ -2207,14 +2239,12 @@ fn attempt(stream: &ParsedStream, error: &str) -> Attempt {
 fn disk_full(e: &mq_engine::EngineError) -> bool {
     use mq_engine::EngineError;
     let io = |e: &std::io::Error| e.kind() == std::io::ErrorKind::StorageFull;
-    match e {
+    let kind = match e {
         EngineError::Io(e) => io(e),
-        EngineError::Torrent(e) => {
-            e.chain().any(|c| c.downcast_ref().is_some_and(io))
-                || format!("{e:#}").contains("(os error 28)")
-        }
+        EngineError::Torrent(e) => e.chain().any(|c| c.downcast_ref().is_some_and(io)),
         _ => false,
-    }
+    };
+    kind || names_full_disk(&format!("{e:#}"))
 }
 
 /// Saves a position. At the end it marks the video watched, with the write
@@ -2300,7 +2330,7 @@ async fn resolve_next(
             s.snapshot.attempts.push(Attempt {
                 key: String::new(),
                 via: "Momotus".into(),
-                error: format!("local stream server did not start: {e}"),
+                error: said(&format!("local stream server did not start: {e}")),
             });
             failed(&mut s);
             snapshot.set(s.snapshot.clone());
@@ -2626,6 +2656,9 @@ async fn resolve_next(
             Err(error) => {
                 let pick = {
                     let mut s = lock(&state);
+                    if names_full_disk(&error) {
+                        failed_to_start(&mut s);
+                    }
                     s.snapshot.attempts.push(attempt(&stream, &error));
                     note_failure(&mut s);
                     snapshot.set(s.snapshot.clone());
@@ -3234,10 +3267,14 @@ async fn open_torrent(
         Ok::<_, mq_engine::EngineError>((file, info, ready))
     };
     let started = started.await;
+    // A start our own space stop held is not the swarm's failure: nothing
+    // is remembered against it (review r3 P2).
+    let short = engine.short_of_space(torrent);
     // Another source of a swarm that did not start is skipped in this view.
-    if started
-        .as_ref()
-        .is_ok_and(|(_, _, started)| not_started(started))
+    if !short
+        && started
+            .as_ref()
+            .is_ok_and(|(_, _, started)| not_started(started))
     {
         lock(state).failed_hashes.push(hash);
     }
@@ -3264,6 +3301,11 @@ async fn open_torrent(
         // torrent, its hold and its files stay, since another profile may
         // be playing it, and the next candidate plays instead.
         Err(mq_engine::EngineError::Held) => return Err("This title is not on the list".into()),
+        Ok((_, _, Started::Late { .. } | Started::Stalled { .. })) if short => {
+            did_not_start();
+            failed_to_start(&mut lock(state));
+            NOT_STARTED.to_owned()
+        }
         Ok((_, _, Started::Late { unchoked })) => {
             did_not_start();
             failed_to_start(&mut lock(state));
@@ -5856,13 +5898,18 @@ mod tests {
             "no peer sent"
         ))));
         assert!(!disk_full(&EngineError::NoFile));
-        // A service's words about its own storage stay its (review P3-1).
+        // A service's words about its storage are not said either (the
+        // owner's rule, review of 2026-10-27), nor an older core's line;
+        // other words stay.
         let link = stream(r#"{"url":"https://cdn.example/v.mkv"}"#);
-        let said = attempt(&link, "Your storage is full, the torrent was not added");
-        assert_eq!(
-            said.error,
-            "Your storage is full, the torrent was not added"
-        );
+        for text in [
+            "Your storage is full, the torrent was not added",
+            "This device needs a little free space to play this",
+        ] {
+            assert_eq!(attempt(&link, text).error, NOT_STARTED, "{text}");
+        }
+        let other = "No peer sent the torrent's details in time";
+        assert_eq!(attempt(&link, other).error, other);
         // It reads notStarted, beside swarms that did not start too; with a
         // source that could not be reached, unreachable (review 2026-10-23
         // P3-2).
@@ -5878,6 +5925,50 @@ mod tests {
         assert_eq!(s.failed_as, Some(EmptyKind::NotStarted));
         fail(&mut s, "The source could not be reached", None);
         assert_eq!(s.failed_as, Some(EmptyKind::Unreachable));
+    }
+
+    /// Review r3 P1: every way a full disk reaches an attempt line (the
+    /// torrent's add or claim stringified, an io error that only says it in
+    /// its text, the stream server, the engine's own words) reads as a
+    /// start that failed; no line carries the system's words.
+    #[cfg(feature = "torrent")]
+    #[test]
+    fn no_attempt_line_carries_the_full_disks_words() {
+        use mq_engine::EngineError;
+        let enospc = || std::io::Error::from_raw_os_error(28);
+        let link = stream(r#"{"url":"https://cdn.example/v.mkv"}"#);
+        let raw = [
+            // add_magnet and claim: `.map_err(|e| e.to_string())`.
+            EngineError::Torrent(
+                std::io::Error::other(format!("fatal error: {}", enospc())).into(),
+            )
+            .to_string(),
+            EngineError::Io(enospc()).to_string(),
+            // An io error whose kind is lost, its text kept.
+            EngineError::Io(std::io::Error::other(format!("writing: {}", enospc()))).to_string(),
+            format!("local stream server did not start: {}", enospc()),
+            format!("{:?}", std::io::ErrorKind::StorageFull),
+            "No space left on device".to_owned(),
+        ];
+        for text in raw {
+            let line = attempt(&link, &text).error;
+            assert_eq!(line, NOT_STARTED, "{text}");
+            let lower = line.to_ascii_lowercase();
+            for banned in [
+                "os error 28",
+                "no space left",
+                "storage",
+                "disk",
+                "free space",
+            ] {
+                assert!(!lower.contains(banned), "{text}: {line}");
+            }
+        }
+        // The Io arm by its text too.
+        assert!(disk_full(&EngineError::Io(std::io::Error::other(format!(
+            "writing: {}",
+            enospc()
+        )))));
     }
 
     /// The engine's verified bytes and connected peers, one per second

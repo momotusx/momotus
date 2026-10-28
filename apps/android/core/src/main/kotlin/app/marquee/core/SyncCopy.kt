@@ -242,8 +242,7 @@ object SyncCopy {
 
     /** The keystore kept a new record in memory only: nothing is sent until it is stored. */
     const val STORAGE =
-        "This device could not store the sync account's key, so sync is paused. Free some storage, " +
-            "then sync again."
+        "This device could not store the sync account's key, so sync is paused. Try syncing again."
 
     /** A join whose record the keystore kept in memory only. */
     const val JOINED_SESSION_ONLY =

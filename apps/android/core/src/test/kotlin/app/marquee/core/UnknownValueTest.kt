@@ -86,6 +86,9 @@ class UnknownValueTest {
             listOf(HideReason.NeedsDebrid, HideReason.TooLarge, HideReason.NotForKids),
             known.hidden.byReason.map { it.first },
         )
+        // An older core's space reasons (gone, plans/no-space-warnings.md) read as Unknown, never a crash.
+        assertEquals(HideReason.Unknown, CoreJson.decodeFromString(HideReason.serializer(), "\"noSpace\""))
+        assertEquals(EmptyKind.Unknown, CoreJson.decodeFromString(EmptyKind.serializer(), "\"noRoom\""))
         // A zero-playable state from a newer core reads as Unknown, and its line as noResults's.
         val empty =
             snapshot.replace(

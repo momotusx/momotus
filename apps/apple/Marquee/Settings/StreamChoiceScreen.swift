@@ -114,7 +114,7 @@ struct StreamChoiceScreen: View {
         .padding(.top, 4)
     }
 
-    /// "This device": the screen, the connection and the disk, and Measure again.
+    /// "This device": the screen and the connection, and Measure again.
     private var device: some View {
         LabelledRow(label: w.device.label) {
             VStack(alignment: .leading, spacing: 10) {

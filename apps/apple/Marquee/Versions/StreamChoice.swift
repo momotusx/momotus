@@ -161,7 +161,6 @@ struct StreamChoiceWords: Decodable, Sendable {
         let screens: [String: String]
         let hdr: String
         let speed: String
-        let free: String
         let networks: [String: String]
     }
 
@@ -321,14 +320,14 @@ enum StreamChoice {
         words.conditions.screens[String(screenClass)] ?? "\(screenClass)p"
     }
 
-    /// "4K HDR, about 42 Mbit/s on Wi-Fi, 61 GB free"; an unmeasured speed names the network alone.
-    static func conditionsLine(screenClass: Int, hdr: Bool, network: String, speed: Speed, freeBytes: Int64?) -> String {
+    /// "4K HDR, about 42 Mbit/s on Wi-Fi"; an unmeasured speed names the network alone. Never the disk
+    /// (plans/no-space-warnings.md).
+    static func conditionsLine(screenClass: Int, hdr: Bool, network: String, speed: Speed) -> String {
         let c = words.conditions
         let screen = screenWord(screenClass)
         let net = c.networks[network] ?? c.networks["other"] ?? network
         let speedPart = speed.samples > 0 ? fill(c.speed, ["mbps": String(Int(speed.mbps.rounded())), "network": net]) : net
-        let free = freeBytes.flatMap { fill(c.free, ["free": bytes($0)]) }
-        return [hdr ? fill(c.hdr, ["screen": screen]) : screen, speedPart, free].compactMap { $0 }.joined(separator: ", ")
+        return [hdr ? fill(c.hdr, ["screen": screen]) : screen, speedPart].compactMap { $0 }.joined(separator: ", ")
     }
 
     /// "tv", "desktop" or "phone": how the words name this device.

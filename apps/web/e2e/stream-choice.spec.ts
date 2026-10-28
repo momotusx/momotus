@@ -159,7 +159,7 @@ test.describe("Settings > Stream choice", () => {
     await expect(page.locator('[data-fgroup="choice-ready"]')).toHaveCount(0);
     // The core's conditions: priors only, so nothing measured and no Measure again.
     // No speed is said until a playback has measured it: the network alone.
-    await expect(page.locator(".device-line .cond")).toHaveText(/^(4K|1080p|720p)( HDR)?, (Wi-Fi|Ethernet|mobile data|this network)(, \d+(\.\d)? [KMG]B free)?$/);
+    await expect(page.locator(".device-line .cond")).toHaveText(/^(4K|1080p|720p)( HDR)?, (Wi-Fi|Ethernet|mobile data|this network)$/);
     await expect(page.locator('[data-f="choice:measure"]')).toHaveCount(0);
     expect(sent.some((m) => m.op === "streamConditions")).toBe(true);
 
@@ -218,7 +218,7 @@ test.describe("Settings > Stream choice", () => {
     await page.goto("/stream-choice?form=tv");
     const cond = page.locator(".device-line .cond");
     // No account and the engine: the torrent speed is the one that decides.
-    await expect(cond).toHaveText(/^(4K|1080p|720p)( HDR)?, about 18 Mbit\/s on Wi-Fi, 61 GB free$/);
+    await expect(cond).toHaveText(/^(4K|1080p|720p)( HDR)?, about 18 Mbit\/s on Wi-Fi$/);
     const again = page.locator('[data-f="choice:measure"]');
     await again.scrollIntoViewIfNeeded();
     await again.focus();

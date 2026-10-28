@@ -755,16 +755,16 @@ function says(face: string, part: string): boolean {
   return false;
 }
 
-/** Why nothing can play, and its actions in order (plans/play-every-version.md, the shared Step 3
- * table): Play from this device with a kept source and Try again when no source answered, else the
- * kind's one action. Back follows every list. Choose a version is the player's and the title's,
- * never Versions' own (`onVersions`). */
 /** An empty state's words; a kind this build does not know (an older or newer bridge) reads as noResults's
  * quiet line, as on Android. */
 export function emptyEntry(kind: EmptyKind): { text: string; action?: string; row?: string } {
   return (choice.empty as Partial<Record<string, { text: string; action?: string; row?: string }>>)[kind] ?? choice.empty.noResults;
 }
 
+/** Why nothing can play, and its actions in order (plans/play-every-version.md, the shared Step 3
+ * table): Play from this device with a kept source and Try again when no source answered, else the
+ * kind's one action. Back follows every list. Choose a version is the player's and the title's,
+ * never Versions' own (`onVersions`). */
 export function emptyWords(e: Pick<EmptyVersions, "kind" | "action">, onVersions = false) {
   const w = emptyEntry(e.kind);
   const steps: { step: Exclude<EmptyAction, "none">; text: string }[] = [];
@@ -774,13 +774,12 @@ export function emptyWords(e: Pick<EmptyVersions, "kind" | "action">, onVersions
   return { text: w.text, steps };
 }
 
-/** What the device line says: the screen, the connection and the disk. */
+/** What the device line says: the screen and the connection. */
 export interface DeviceConditions {
   screenClass: number;
   hdr: boolean;
   network: Network;
   speed: Speed;
-  freeBytes: number | null;
 }
 
 /** The speed that decides here: HTTP with a streaming service account or
@@ -793,14 +792,14 @@ export const deviceName = (f: Form) => c.devices[f];
 
 const screenWord = (cls: number) => c.screens[String(cls) as keyof typeof c.screens] ?? `${cls}p`;
 
-/** "4K HDR, about 42 Mbit/s on Wi-Fi, 61 GB free". */
+/** "4K HDR, about 42 Mbit/s on Wi-Fi": the screen and the connection, never the disk
+ * (plans/no-space-warnings.md). */
 export function conditionsLine(d: DeviceConditions): string {
   const screen = screenWord(d.screenClass);
   const network = c.networks[d.network];
   // The speed once a playback has measured it; until then the network alone, never a guess.
   const speed = d.speed.samples > 0 ? part(c.speed, { mbps: Math.round(d.speed.mbps), network }) : network;
-  const free = d.freeBytes === null ? null : part(c.free, { free: bytes(d.freeBytes) });
-  return [d.hdr ? part(c.hdr, { screen }) : screen, speed, free].filter((x) => x !== null).join(", ");
+  return [d.hdr ? part(c.hdr, { screen }) : screen, speed].join(", ");
 }
 
 /** The one-time note on Versions (3.9), with the preferences now in effect:
