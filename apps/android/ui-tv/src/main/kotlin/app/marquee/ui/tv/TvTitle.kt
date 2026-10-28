@@ -714,9 +714,10 @@ private fun Episodes(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 // Up goes back to the card the pills belong to, wherever the search would have put it.
-                val back = Modifier.focusProperties {
-                    up = focus.requester("episode:${shown.videoId}") ?: FocusRequester.Default
-                }
+                val back =
+                    Modifier.focusProperties {
+                        up = focus.requester("episode:${shown.videoId}") ?: FocusRequester.Default
+                    }
                 MqText(
                     "${Format.episodeLabel(shown.season, shown.episode)} ${shown.title}".trim(),
                     role = TextRole.Callout,
@@ -737,8 +738,9 @@ private fun Episodes(
                     { title.setWatched(shown.videoId, !shown.watched) },
                     back,
                     icon = if (shown.watched) Icons.EyeOff else Icons.Check,
-                    spoken = (if (shown.watched) "Mark as not watched: " else "Mark as watched: ") +
-                        TitleCopy.episode(shown).removePrefix("Watched, "),
+                    spoken =
+                        (if (shown.watched) "Mark as not watched: " else "Mark as watched: ") +
+                            TitleCopy.episode(shown).removePrefix("Watched, "),
                 )
             }
         }

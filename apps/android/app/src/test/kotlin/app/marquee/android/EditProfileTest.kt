@@ -95,7 +95,10 @@ class EditProfileTest {
         gate.start()
     }
 
-    private fun until(what: String, done: () -> Boolean) {
+    private fun until(
+        what: String,
+        done: () -> Boolean,
+    ) {
         val deadline = System.currentTimeMillis() + 60_000
         while (!done()) {
             check(System.currentTimeMillis() < deadline) { "never: $what" }
@@ -142,10 +145,13 @@ class EditProfileTest {
         restoration.emulateSavedInstanceStateRestore()
         until("the page again") { compose.onAllNodesWithContentDescription("Name").fetchSemanticsNodes().isNotEmpty() }
         name().assertTextEquals("Cy", includeEditableText = true)
-        compose.onNode(SemanticsMatcher("Rocket is selected") {
-            it.config.getOrNull(SemanticsProperties.ContentDescription)?.contains("Rocket") == true &&
-                it.config.getOrNull(SemanticsProperties.Selected) == true
-        }).assertExists()
+        compose
+            .onNode(
+                SemanticsMatcher("Rocket is selected") {
+                    it.config.getOrNull(SemanticsProperties.ContentDescription)?.contains("Rocket") == true &&
+                        it.config.getOrNull(SemanticsProperties.Selected) == true
+                },
+            ).assertExists()
     }
 
     private fun back() = compose.runOnUiThread { compose.activity.onBackPressedDispatcher.onBackPressed() }

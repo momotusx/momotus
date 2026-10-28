@@ -38,7 +38,12 @@ class LibraryEmptyTest {
     @Test
     fun `an empty library offers Discover, and it goes there`() {
         session.client.attach { text ->
-            val id = CoreJson.parseToJsonElement(text).jsonObject["id"]?.jsonPrimitive?.longOrNull ?: return@attach
+            val id =
+                CoreJson
+                    .parseToJsonElement(text)
+                    .jsonObject["id"]
+                    ?.jsonPrimitive
+                    ?.longOrNull ?: return@attach
             session.client.onMessage("""{"id":$id,"ok":true,"result":{"sub":4,"snapshot":{"sort":"recent"}}}""")
         }
         var discovered = 0
