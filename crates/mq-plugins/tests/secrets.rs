@@ -14,9 +14,10 @@ use tokio::sync::mpsc;
 
 const SENTINEL: &str = "mq-sentinel-7d1f0c2e9b";
 
-/// The values of every `.env.*.local` beside the workspace (the app's real
-/// secrets on a machine that builds release cores) and of `~/opt/momotus/secrets`.
-fn local_secrets() -> Vec<String> {
+/// Every `.env.*.local` value beside the workspace (the app's real secrets
+/// on a machine that builds release cores) and in `~/opt/momotus/secrets`,
+/// each named by its file and variable.
+fn local_secrets() -> Vec<(String, String)> {
     let mut dirs: Vec<std::path::PathBuf> = Path::new(env!("CARGO_MANIFEST_DIR"))
         .ancestors()
         .map(Path::to_path_buf)
@@ -36,8 +37,10 @@ fn local_secrets() -> Vec<String> {
             }
             let text = std::fs::read_to_string(entry.path()).unwrap_or_default();
             for line in text.lines() {
-                if let Some((_, value)) = line.split_once('=') {
-                    out.push(value.trim().trim_matches(['"', '\'']).to_owned());
+                if let Some((key, value)) = line.split_once('=') {
+                    let key = key.trim().trim_start_matches("export ").trim();
+                    let value = value.trim().trim_matches(['"', '\'']).to_owned();
+                    out.push((format!("{}: {key}", entry.path().display()), value));
                 }
             }
         }
@@ -49,25 +52,32 @@ fn local_secrets() -> Vec<String> {
 fn no_app_secret_reaches_a_plugin() {
     // SAFETY: the only test in this binary, before any thread starts.
     unsafe { std::env::set_var("MARQUEE_TMDB_READ_TOKEN_TEST", SENTINEL) };
-    let mut secrets: Vec<String> = [
-        option_env!("MARQUEE_TMDB_READ_TOKEN"),
-        option_env!("MARQUEE_TMDB_API_KEY"),
-        option_env!("MARQUEE_TRAKT_CLIENT_ID"),
-        option_env!("MARQUEE_LINK_HOST"),
-        option_env!("MARQUEE_SYNC_SERVER"),
+    // (where it comes from, the value); a failure names the first, never
+    // the second, so a failing run cannot leak a token into a log.
+    let mut secrets: Vec<(String, String)> = [
+        (
+            "MARQUEE_TMDB_READ_TOKEN",
+            option_env!("MARQUEE_TMDB_READ_TOKEN"),
+        ),
+        ("MARQUEE_TMDB_API_KEY", option_env!("MARQUEE_TMDB_API_KEY")),
+        (
+            "MARQUEE_TRAKT_CLIENT_ID",
+            option_env!("MARQUEE_TRAKT_CLIENT_ID"),
+        ),
+        ("MARQUEE_LINK_HOST", option_env!("MARQUEE_LINK_HOST")),
+        ("MARQUEE_SYNC_SERVER", option_env!("MARQUEE_SYNC_SERVER")),
     ]
     .into_iter()
-    .flatten()
-    .map(str::to_owned)
+    .filter_map(|(k, v)| Some((format!("compile-time {k}"), v?.to_owned())))
     .collect();
     secrets.extend(
         std::env::vars()
             .filter(|(k, _)| k.starts_with("MARQUEE_"))
-            .map(|(_, v)| v),
+            .map(|(k, v)| (format!("environment {k}"), v)),
     );
     secrets.extend(local_secrets());
-    secrets.retain(|s| s.len() >= 8);
-    assert!(secrets.iter().any(|s| s == SENTINEL));
+    secrets.retain(|(_, v)| v.len() >= 8);
+    assert!(secrets.iter().any(|(_, v)| v == SENTINEL));
     let body = r#"
         const seen = new Set();
         const found = [];
@@ -157,13 +167,12 @@ fn no_app_secret_reaches_a_plugin() {
         posted.contains("getRandomValues") && posted.contains("SCRAPER_ID"),
         "the walk saw the globals"
     );
-    for secret in &secrets {
-        assert!(
-            !posted.contains(secret.as_str()),
-            "a secret of {} bytes is visible",
-            secret.len()
-        );
-    }
+    let visible: Vec<&str> = secrets
+        .iter()
+        .filter(|(_, v)| posted.contains(v.as_str()))
+        .map(|(name, _)| name.as_str())
+        .collect();
+    assert!(visible.is_empty(), "visible to a plugin: {visible:?}");
     let plain = fetches.last().unwrap();
     assert_eq!(
         (plain.method, plain.headers.len(), plain.body.is_none()),
