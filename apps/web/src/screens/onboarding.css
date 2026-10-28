@@ -130,3 +130,77 @@
 [data-form="phone"] .check .cl { font-size: 14px; }
 [data-form="phone"] .check .st { font-size: 13px; }
 [data-form="phone"] .fix { height: 32px; padding: 0 10px; font-size: 12px; }
+
+/* B4, the letterbox (the owner's pick of 2026-10-28, design/DECISION.md): the question steps are a film frame
+ * on black. A 2.39:1 frame, no taller than 40 percent of the screen, centered in the column (the phone's spans
+ * the width), holds the still and the question set as its subtitle on the player's 60 percent scrim; the
+ * choices wait in the bar under it, which grows with them. */
+.welcome.page:has(> .framed) { --film-cap: calc(var(--ch, 100vh) * .4); background: #000; }
+[data-form="phone"] .welcome.page:has(> .framed) { --film-cap: 40svh; }
+.step-body.framed { justify-items: center; gap: 0; width: min(100%, 1560px); max-width: none; margin: 40px auto 0; }
+.film { position: relative; width: min(100%, calc(var(--film-cap) * 2.39)); aspect-ratio: 2.39; overflow: hidden; background: #000; }
+.film img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: 50% 40%; }
+.film .film-cue { position: absolute; left: 6%; right: 6%; bottom: 9%; display: grid; justify-items: center; gap: 10px; text-align: center; color: #fff; }
+.film .film-cue :is(h1, p) span { background: rgba(0, 0, 0, .6); padding: 0 .3em; -webkit-box-decoration-break: clone; box-decoration-break: clone; }
+.framed .film h1 { font: 600 var(--type-title2) / 1.3 var(--font-text); letter-spacing: var(--tracking-label); color: #fff; }
+.framed .film .lead { font: 500 var(--type-headline) / 1.4 var(--font-text); color: #fff; max-width: none; }
+.framed .film h1:focus { outline: none; }
+.framed .film h1:focus-visible span { outline: var(--focus-ring) solid var(--key); outline-offset: 2px; }
+/* The bar: the choices side by side on TV and desktop, stacked on the phone. */
+.framed :is(.doors, .langs) { margin-top: 48px; }
+.framed .doors { display: flex; flex-wrap: wrap; justify-content: center; gap: 24px; width: 100%; }
+.framed .door { flex: 0 1 520px; flex-direction: row; align-items: center; gap: 24px; min-height: 120px; padding: 18px 36px 18px 20px; border-radius: var(--radius-pill);
+  background: rgba(255, 255, 255, .12); box-shadow: none; }
+.framed .door > svg:first-child { width: 76px; height: 76px; padding: 20px; border-radius: 50%; background: rgba(255, 255, 255, .12); }
+.framed .door b { font: 600 var(--type-headline) / 1.2 var(--font-text); }
+.framed .door small { margin-top: 4px; color: var(--dim); }
+.framed .door .chev { display: none; }
+.framed .langs { width: 100%; }
+.framed .acts { justify-self: center; margin-top: 32px; }
+[data-form="tv"] .framed .door:focus > svg:first-child { background: rgba(0, 0, 0, .08); }
+@media (hover: hover) { [data-form="desktop"] .framed .door:hover { background: rgba(255, 255, 255, .2); } }
+/* TV: the frame and its bar sit in the middle of the screen. */
+[data-form="tv"] .welcome.page:has(> .framed) { display: flex; flex-direction: column; }
+[data-form="tv"] .welcome.page > .framed { flex: 1; align-content: center; margin-top: 0; padding-bottom: 40px; }
+/* Desktop: the gallery's 1440 frame in CSS pixels. */
+[data-form="desktop"] .step-body.framed { margin-top: calc(24 * var(--px)); }
+[data-form="desktop"] .framed .film h1 { font-size: calc(40 * var(--px)); }
+[data-form="desktop"] .framed .film .lead { font-size: calc(19 * var(--px)); }
+[data-form="desktop"] .framed :is(.doors, .langs) { margin-top: calc(28 * var(--px)); }
+[data-form="desktop"] .framed .doors { gap: calc(16 * var(--px)); }
+[data-form="desktop"] .framed .door { flex-basis: calc(410 * var(--px)); gap: calc(16 * var(--px)); min-height: calc(88 * var(--px)); padding: calc(12 * var(--px)) calc(22 * var(--px)) calc(12 * var(--px)) calc(20 * var(--px)); }
+[data-form="desktop"] .framed .door > svg:first-child { width: calc(48 * var(--px)); height: calc(48 * var(--px)); padding: calc(13 * var(--px)); }
+[data-form="desktop"] .framed .door b { font-size: calc(18 * var(--px)); }
+[data-form="desktop"] .framed .door small { font-size: calc(13 * var(--px)); }
+/* Phone: the frame spans the width, the line and the choices stack under it. */
+[data-form="phone"] .step-body.framed { margin: 24px -16px 0; width: calc(100% + 32px); }
+[data-form="phone"] .framed .film { width: min(100%, calc(var(--film-cap) * 2.39)); }
+[data-form="phone"] .framed .film .film-cue { bottom: 12%; left: 14px; right: 14px; }
+[data-form="phone"] .framed .film h1 { font-size: 22px; }
+[data-form="phone"] .framed > .lead { margin: 16px 24px 0; font-size: 14px; text-align: center; color: var(--dim); }
+[data-form="phone"] .framed :is(.doors, .langs, .acts) { width: auto; margin: 20px 16px 0; align-self: stretch; justify-self: stretch; }
+[data-form="phone"] .framed .doors { display: grid; gap: 10px; }
+[data-form="phone"] .framed .door { min-height: 72px; gap: 12px; padding: 12px 18px 12px 14px; }
+[data-form="phone"] .framed .door > svg:first-child { width: 44px; height: 44px; padding: 12px; }
+[data-form="phone"] .framed .door b { font-size: 16px; }
+[data-form="phone"] .framed .door small { font-size: 12px; }
+
+/* The header's step count and Back. */
+.welcome-step { display: flex; align-items: center; gap: 24px; margin-left: auto; margin-right: 24px; }
+.step-count { display: flex; align-items: center; gap: 14px; font: 600 var(--type-caption) var(--font-text); color: var(--dim); }
+.step-count .dots { display: flex; gap: 8px; }
+.step-count .dots i { width: 10px; height: 10px; border-radius: 5px; background: rgba(255, 255, 255, .4); }
+.step-count .dots i.on { width: 28px; background: #fff; }
+[data-form="desktop"] .welcome-step { gap: calc(16 * var(--px)); }
+[data-form="desktop"] .step-count { gap: calc(14 * var(--px)); font-size: calc(15 * var(--px)); }
+[data-form="desktop"] .step-count .dots i { width: calc(8 * var(--px)); height: calc(8 * var(--px)); }
+[data-form="desktop"] .step-count .dots i.on { width: calc(22 * var(--px)); }
+[data-form="phone"] .welcome-step { gap: 12px; margin-right: 12px; }
+[data-form="phone"] .step-count { gap: 8px; font-size: 12px; }
+[data-form="phone"] .step-count .dots { display: none; }
+/* One bar under the frame: the choices share its line on TV and desktop. */
+:is([data-form="tv"], [data-form="desktop"]) .step-body.framed { width: 100%; }
+:is([data-form="tv"], [data-form="desktop"]) .framed .doors { flex-wrap: nowrap; }
+/* The phone's header keeps the mark and Skip; the count is read, not shown. */
+[data-form="phone"] .step-count { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+[data-form="tv"] .framed .film h1 { font-size: var(--type-title3); }

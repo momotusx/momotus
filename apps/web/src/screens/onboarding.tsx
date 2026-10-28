@@ -8,6 +8,7 @@
 
 import { A, useNavigate, useSearchParams } from "@solidjs/router";
 import Check from "lucide-solid/icons/check";
+import ChevronLeft from "lucide-solid/icons/chevron-left";
 import ChevronRight from "lucide-solid/icons/chevron-right";
 import DoorOpen from "lucide-solid/icons/door-open";
 import Gem from "lucide-solid/icons/gem";
@@ -23,7 +24,8 @@ import type { AddonsSnapshot } from "../core/generated/AddonsSnapshot";
 import type { DefaultAddonInfo } from "../core/generated/DefaultAddonInfo";
 import type { DefaultAddons } from "../core/generated/DefaultAddons";
 import type { LanguageChoice } from "../core/generated/LanguageChoice";
-import { autoFocusSoon } from "../focus/dom";
+import { autoFocusSoon, goBack } from "../focus/dom";
+import type { FirstRunStill } from "../core/generated/FirstRunStill";
 import { form } from "../form";
 import { resetHistoryBase } from "../history";
 import { afterContinue, catalogMissing, choicesFor, defaultsWords, grouped, switchable } from "../lib/defaults";
@@ -82,8 +84,16 @@ export default function Onboarding() {
   const [query, setQuery] = useSearchParams();
   const step = () =>
     query.step === "2" ? 2 : query.step === "3" ? 3 : query.step === "choice" ? "choice" : query.step === "subs" ? "subs" : query.step === "doors" ? "doors" : 1;
-  // A new step puts focus on its first action (on a remote or after keys).
+  // A new step puts focus on its first action (on a remote or after keys). Off the TV a step change puts it on
+  // the step's heading, so a screen reader starts at the question.
   createEffect(on(step, () => autoFocusSoon(() => document.querySelector<HTMLElement>(".welcome [data-autofocus]"))));
+  createEffect(
+    on(step, () => form() !== "tv" && requestAnimationFrame(() => document.querySelector<HTMLElement>(".welcome h1")?.focus({ preventScroll: true })), {
+      defer: true,
+    }),
+  );
+  // The steps a first run walks: the doors, the recommended addons, the stream question, subtitles.
+  const count = () => ({ 1: 1, doors: 1, 2: 2, choice: 3, subs: 4 })[String(step())] ?? null;
   const { addons, defaults, error } = useDefaults();
   const fresh = () => addons.state.data?.fresh ?? true;
   const [note, setNote] = createSignal<{ tone: Tone; text: string } | null>(null);
@@ -105,6 +115,24 @@ export default function Onboarding() {
         <div class="brand">
           <Brand />
         </div>
+        <Show when={count()}>
+          {(n) => (
+            <div class="welcome-step">
+              <Show when={n() > 1}>
+                <button class="skip step-back" data-f="welcome:back" onClick={() => goBack()}>
+                  <ChevronLeft aria-hidden />
+                  Back
+                </button>
+              </Show>
+              <span class="step-count">
+                <span class="dots" aria-hidden="true">
+                  <For each={[1, 2, 3, 4]}>{(i) => <i classList={{ on: i === n() }} />}</For>
+                </span>
+                Step {n()} of 4
+              </span>
+            </div>
+          )}
+        </Show>
         {/* Browse first still passes the switches: nothing is installed unasked. */}
         <Show when={step() === 1 || step() === "doors"}>
           <A class="skip" href={fresh() ? "/welcome?step=2&then=home" : "/"} replace={!fresh()} onClick={() => !fresh() && resetHistoryBase()} data-f="welcome:skip">
@@ -174,16 +202,48 @@ export default function Onboarding() {
   );
 }
 
+// The still every framed step shows (`firstRunStill`): asked once per app run, at the first framed step.
+let still: Promise<FirstRunStill | null> | undefined;
+const firstStill = () => (still ??= op<FirstRunStill | null>("firstRunStill").catch(() => null));
+
+/** B4, the letterbox (the owner's pick of 2026-10-28): a 2.39:1 frame holding a film's still with the step's
+ * question set as its subtitle; no still (offline, slow), the frame stays black with the question. The lead
+ * line rides under the question on TV and desktop, under the frame on the phone. Both are decorative art and
+ * a real heading. */
+function Film(props: { title: string; lead?: string }) {
+  const [art, setArt] = createSignal<string | null>(null);
+  onMount(() => void firstStill().then((s) => setArt(s?.background ?? null)));
+  return (
+    <>
+      <div class="film">
+        <Show when={art()} keyed>
+          {(src) => <img src={src} alt="" decoding="async" class="fade" onLoad={(e) => e.currentTarget.classList.add("in")} />}
+        </Show>
+        <div class="film-cue">
+          <h1 id="welcome-q" tabindex="-1">
+            <span>{props.title}</span>
+          </h1>
+          <Show when={props.lead && form() !== "phone"}>
+            <p class="lead">
+              <span>{props.lead}</span>
+            </p>
+          </Show>
+        </div>
+      </div>
+      <Show when={props.lead && form() === "phone"}>
+        <p class="lead">{props.lead}</p>
+      </Show>
+    </>
+  );
+}
+
 /** The doors: I use Stremio, Start fresh, and (no account here yet) I already use Marquee. */
 function Doors(props: { onFresh: () => void }) {
   return (
-    <section class="step-body" aria-label="Choose a start">
-      <h1>How would you like to begin?</h1>
+    <section class="step-body framed" aria-labelledby="welcome-q">
       {/* After Create the account exists: the line would say the opposite. */}
-      <Show when={!sync.joined()}>
-        <p class="lead">No account needed. Everything stays on this device until you turn on sync.</p>
-      </Show>
-      <div class="doors" data-fgroup="doors">
+      <Film title="How would you like to begin?" lead={sync.joined() ? undefined : "No account needed. Everything stays on this device until you turn on sync."} />
+      <div class="doors" role="group" aria-labelledby="welcome-q" data-fgroup="doors">
         <A class="door" href="/import?from=welcome" data-f="welcome:stremio" data-autofocus>
           <DoorOpen aria-hidden />
           <span>
@@ -314,7 +374,7 @@ function Recommended(props: { defaults: DefaultAddons | null; error: string | nu
   };
   return (
     <section class="step-body" aria-label={defaultsWords.title}>
-      <h1>{defaultsWords.title}</h1>
+      <h1 tabindex="-1">{defaultsWords.title}</h1>
       <p class="lead">{props.review ? defaultsWords.review : defaultsWords.lead}</p>
       <Show when={props.error}>
         {(e) => (
@@ -412,10 +472,9 @@ function Question(props: { then?: string }) {
     }
   };
   return (
-    <section class="step-body question" aria-label={q.title}>
-      <h1>{q.title}</h1>
-      <p class="lead">{q.lead}</p>
-      <div class="doors two" data-fgroup="choice">
+    <section class="step-body framed question" aria-labelledby="welcome-q">
+      <Film title={q.title} lead={q.lead} />
+      <div class="doors two" role="group" aria-labelledby="welcome-q" data-fgroup="choice">
         <button class="door" data-f="welcome:fast" data-autofocus aria-disabled={busy()} onClick={() => void pick(q.fast.patch)}>
           <Zap aria-hidden />
           <span>
@@ -518,10 +577,9 @@ function Subtitles(props: { then?: string }) {
     </button>
   );
   return (
-    <section class="step-body" aria-label="Subtitles">
-      <h1>Subtitles</h1>
-      <p class="lead">Pick the language subtitles start in. They turn on when a film's audio is in another language. Change it later in Settings, under Playback.</p>
-      <div class="langs" role="radiogroup" aria-label="Subtitle language" data-fgroup="subs">
+    <section class="step-body framed" aria-labelledby="welcome-q">
+      <Film title="Subtitles" lead="Pick the language subtitles start in. They turn on when a film's audio is in another language. Change it later in Settings, under Playback." />
+      <div class="langs" role="radiogroup" aria-labelledby="welcome-q" data-fgroup="subs">
         <For each={common()}>{(code) => row(code, nameOf(code))}</For>
         {row(null, "No subtitles", "Turn them on while watching")}
       </div>
@@ -602,7 +660,7 @@ function SetupCheck(props: {
   };
   return (
     <section class="step-body check" aria-label="Setup check">
-      <h1>Setup check</h1>
+      <h1 tabindex="-1">Setup check</h1>
       <ul>
         <For each={rows()}>
           {(c) => (
@@ -652,7 +710,7 @@ export function RecommendedAddons() {
   };
   return (
     <main class="browse page settings-page column" data-vscroll>
-      <h1>{defaultsWords.title}</h1>
+      <h1 tabindex="-1">{defaultsWords.title}</h1>
       <p class="lede">{defaultsWords.settingsLede}</p>
       <For each={[error(), problem()].filter(Boolean)}>
         {(e) => (
