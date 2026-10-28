@@ -125,6 +125,10 @@ function CalendarPage(props: { retry: () => void }) {
     <main class="browse page cal" data-vscroll>
       <header class="cal-head">
         <h1>Calendar</h1>
+        {/* There from the start, so its change is heard: the failure's one line (the block below is its look). */}
+        <p class="sr" role="status">
+          {view.state.status.state === "failed" ? "The calendar could not open." : ""}
+        </p>
         <p class="lede">New episodes of the series in your library, {span()}.</p>
         <Show when={(s()?.pending ?? 0) > 0}>
           <p class="st warn" role="status">

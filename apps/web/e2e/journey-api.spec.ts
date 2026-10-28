@@ -614,6 +614,8 @@ test("Calendar that could not open offers Try again, focused, and an empty one a
   const retry = p.locator('[data-f="calendar:retry"]');
   await expect(retry).toBeFocused({ timeout: 30_000 });
   await expect(p.locator(".problem h2")).toHaveText("The calendar could not open");
+  // Said by a live region that was there before it failed.
+  await expect(p.locator('.cal [role="status"]').first()).toHaveText("The calendar could not open.");
   await p.keyboard.press("Enter");
   await expect(retry).toHaveCount(0);
   // This core's library holds no series: the empty state names the way on, a button that takes the focus.
