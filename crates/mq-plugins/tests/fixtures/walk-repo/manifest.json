@@ -1,0 +1,18 @@
+{
+  "name": "Momotus fixtures",
+  "version": "1.0.0",
+  "description": "The acceptance walk's repository: openly licensed films from the Internet Archive.",
+  "author": "Momotus",
+  "scrapers": [
+    {
+      "id": "open-films",
+      "name": "Open films",
+      "version": "1.0.0",
+      "filename": "open-films.js",
+      "description": "Blender open movies from the Internet Archive.",
+      "supportedTypes": ["movie"],
+      "contentLanguage": ["en"],
+      "enabled": true
+    }
+  ]
+}

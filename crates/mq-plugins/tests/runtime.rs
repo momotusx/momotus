@@ -606,3 +606,39 @@ fn the_fixture_provider_runs() {
         Outcome::Done(Vec::new())
     );
 }
+
+/// The acceptance walk's provider (tests/fixtures/walk-repo): the walks play
+/// a real legal stream, Big Buck Bunny (Blender Foundation, CC BY 3.0) from
+/// archive.org. Here archive.org's metadata answer is recorded, so the test
+/// stays off the network: one row for Big Buck Bunny, and no request for a
+/// title it does not know.
+#[test]
+fn the_walk_provider_finds_its_film() {
+    let script = include_str!("fixtures/walk-repo/open-films.js");
+    let meta = include_str!("fixtures/walk-repo/archive-metadata.json");
+    let mut bunny = movie(script);
+    bunny.info = Info {
+        imdb_id: Some("tt1254207".into()),
+        title: "Big Buck Bunny".into(),
+        year: Some(2008),
+    };
+    let (out, seen) = run_with(bunny, ok(meta));
+    assert_eq!(
+        seen.fetches[0].url,
+        "https://archive.org/metadata/BigBuckBunny_124"
+    );
+    assert_eq!(
+        out,
+        Outcome::Done(vec![PluginStream {
+            url: "https://archive.org/download/BigBuckBunny_124/Content/big_buck_bunny_720p_surround.mp4".into(),
+            name: Some("Open films".into()),
+            title: Some("Big Buck Bunny (360p)".into()),
+            quality: Some("360p".into()),
+            size: Some("59 MB".into()),
+            ..Default::default()
+        }])
+    );
+    let (out, seen) = run_with(movie(script), ok(meta));
+    assert_eq!(out, Outcome::Done(Vec::new()));
+    assert!(seen.fetches.is_empty());
+}
