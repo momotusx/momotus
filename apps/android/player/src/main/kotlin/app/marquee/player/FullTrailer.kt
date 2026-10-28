@@ -53,6 +53,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import app.marquee.core.model.Trailer
 import app.marquee.design.Form
+import app.marquee.design.HeroTrailers
 import app.marquee.design.Icons
 import app.marquee.design.LiveSpoken
 import app.marquee.design.Marquee
@@ -82,7 +83,8 @@ fun TrailerDialog(
     val state = remember { TrailerState() }
     var index by remember { mutableIntStateOf(0) }
     var failed by remember { mutableStateOf(false) }
-    var loud by remember { mutableStateOf(true) }
+    // On at open (the viewer asked for it), except in a walk build, which plays every trailer silent.
+    var loud by remember { mutableStateOf(!HeroTrailers.walk) }
     val close by rememberUpdatedState(onClose)
     LaunchedEffect(index) {
         val trailer = trailers.getOrNull(index) ?: return@LaunchedEffect
@@ -149,20 +151,19 @@ fun FullTrailer(
     // Where a held key or a drag will land, drawn on the bar until it is let go.
     var target by remember { mutableStateOf<Float?>(null) }
     var barFocused by remember { mutableStateOf(false) }
-    // True from a select key going down in this window: the key-up of the press that opened it is not ours.
-    var ownPress by remember { mutableStateOf(false) }
     val seekBy = { by: Float ->
         if (state.length > 0f) onSeek(trailerSeekTarget(target ?: state.seconds, state.length, by))
     }
-    LaunchedEffect(Unit) {
-        withFrameNanos { }
-        withFrameNanos { }
-        runCatching { (if (tv) bar else toggle).requestFocus() }
-    }
+    // The bar on a TV, Pause elsewhere; Close once nothing can play.
     LaunchedEffect(failed) {
-        if (failed) {
-            withFrameNanos { }
-            runCatching { closer.requestFocus() }
+        withFrameNanos { }
+        withFrameNanos { }
+        runCatching {
+            when {
+                failed -> closer
+                tv -> bar
+                else -> toggle
+            }.requestFocus()
         }
     }
     // The wait shows only past 300 ms, so a quick start never flashes it.
@@ -179,23 +180,8 @@ fun FullTrailer(
             .fillMaxSize()
             .background(Marquee.colors.bg)
             .testTag(FULL_TRAILER_TAG)
-            .onPreviewKeyEvent { event ->
-                if (event.key in SELECT_KEYS) {
-                    when (event.type) {
-                        KeyEventType.KeyDown -> {
-                            if (event.nativeKeyEvent.repeatCount == 0) ownPress = true
-                            return@onPreviewKeyEvent !ownPress
-                        }
-
-                        KeyEventType.KeyUp -> {
-                            val foreign = !ownPress
-                            ownPress = false
-                            return@onPreviewKeyEvent foreign
-                        }
-                    }
-                }
-                mediaKey(event, onToggle, seekBy)
-            }.windowInsetsPadding(WindowInsets.safeDrawing)
+            .onPreviewKeyEvent { mediaKey(it, state.paused, onToggle, seekBy) }
+            .windowInsetsPadding(WindowInsets.safeDrawing)
             .padding(horizontal = if (tv) 96.dp else 16.dp, vertical = if (tv) 48.dp else 16.dp),
         verticalArrangement = Arrangement.spacedBy(if (tv) 28.dp else 14.dp, Alignment.CenterVertically),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -320,7 +306,7 @@ internal fun barKey(
             else -> 0
         }
     if (direction == 0) {
-        if (event.type == KeyEventType.KeyDown && event.key in SELECT_KEYS) {
+        if (event.type == KeyEventType.KeyDown && event.key in SELECT_KEYS && event.nativeKeyEvent.repeatCount == 0) {
             onToggle()
             return true
         }
@@ -347,15 +333,20 @@ internal fun barKey(
     }
 }
 
-/** The remote's media keys, wherever the focus is: play and pause, rewind and fast forward by 10 s. */
+/** The remote's media keys, wherever the focus is: play and pause (Play only plays, Pause only pauses), rewind and fast
+ * forward by 10 s. A held play key toggles once. */
 private fun mediaKey(
     event: KeyEvent,
+    paused: Boolean,
     onToggle: () -> Unit,
     seekBy: (Float) -> Unit,
 ): Boolean {
     if (event.type != KeyEventType.KeyDown) return event.key in MEDIA_KEYS
+    val first = event.nativeKeyEvent.repeatCount == 0
     when (event.key) {
-        Key.MediaPlayPause, Key.MediaPlay, Key.MediaPause -> onToggle()
+        Key.MediaPlayPause -> if (first) onToggle()
+        Key.MediaPlay -> if (first && paused) onToggle()
+        Key.MediaPause -> if (first && !paused) onToggle()
         Key.MediaRewind -> seekBy(-SEEK_S)
         Key.MediaFastForward -> seekBy(SEEK_S)
         else -> return false

@@ -10,6 +10,7 @@ import android.view.MotionEvent
 import android.view.ViewGroup
 import android.view.accessibility.AccessibilityManager
 import android.webkit.ConsoleMessage
+import android.webkit.RenderProcessGoneDetail
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
@@ -209,11 +210,12 @@ class TrailerHost internal constructor(
      * before its script would run nothing, or worse, the browser's own `stop()`, which cancels the page's load.
      */
     private var loaded = false
-    private var waiting: String? = null
+    private val waiting = mutableListOf<String>()
 
+    /** Before the page loads, calls wait in order: a press of Sound while it loads must not drop the play itself. */
     private fun run(js: String) {
         val view = web
-        if (loaded && view != null) view.evaluateJavascript(js, null) else waiting = js
+        if (loaded && view != null) view.evaluateJavascript(js, null) else waiting += js
     }
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -251,10 +253,19 @@ class TrailerHost internal constructor(
                         url: String?,
                     ) {
                         loaded = true
-                        waiting?.let { js ->
-                            waiting = null
-                            view.evaluateJavascript(js, null)
-                        }
+                        val calls = waiting.toList()
+                        waiting.clear()
+                        calls.forEach { view.evaluateJavascript(it, null) }
+                    }
+
+                    // The renderer died (memory on a small TV): whoever plays hears it stopped, the next play makes a
+                    // fresh one.
+                    override fun onRenderProcessGone(
+                        view: WebView,
+                        detail: RenderProcessGoneDetail,
+                    ): Boolean {
+                        main.post { destroy() }
+                        return true
                     }
                 }
             view.loadDataWithBaseURL(BASE, PAGE, "text/html", "utf-8", null)
@@ -281,6 +292,11 @@ class TrailerHost internal constructor(
         state.loading = true
         state.buffering = true
         state.paused = false
+        state.playing = false
+        state.shown = false
+        state.fraction = 0f
+        state.seconds = 0f
+        state.length = 0f
         view()
         run("play('$checked', $cap, $generation, $full, ${loud && !HeroTrailers.walk})")
     }
@@ -330,7 +346,7 @@ class TrailerHost internal constructor(
         }
         web = null
         loaded = false
-        waiting = null
+        waiting.clear()
     }
 
     private fun onMessage(json: String) {
@@ -392,14 +408,14 @@ class TrailerHost internal constructor(
             <!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1">
             <style>html,body{margin:0;height:100%;background:transparent;overflow:hidden}
             #p{position:fixed;inset:0;pointer-events:none}
-            #p iframe{width:100%;height:100%;border:0;display:block;pointer-events:none}</style></head>
+            #p>*{position:absolute;inset:0;width:100%;height:100%;border:0;display:block;pointer-events:none}</style></head>
             <body><div id="p"></div><script>
-            let player=null, timers=[], ended=true, playing=false, poll=null, api=null, gen=0, full=false;
+            let player=null, box=null, timers=[], ended=true, playing=false, poll=null, api=null, gen=0, full=false;
             const say=(o)=>console.log("MQT "+JSON.stringify(Object.assign({gen,full},o)));
             function load(){ if(api) return api; api=new Promise((ok,no)=>{ window.onYouTubeIframeAPIReady=()=>ok(window.YT);
               const s=document.createElement("script"); s.src="https://www.youtube.com/iframe_api"; s.onerror=()=>{ api=null; no(); }; document.head.append(s); }); return api; }
             function finish(why){ if(ended) return; ended=true; timers.forEach(clearTimeout); clearInterval(poll); timers=[];
-              const p=player; player=null; setTimeout(()=>{ try{p&&p.destroy()}catch(e){} document.getElementById("p").replaceChildren(); }, why==="cap"||why==="ended"?650:0);
+              const p=player, b=box; player=null; setTimeout(()=>{ try{p&&p.destroy()}catch(e){} b&&b.remove(); }, why==="cap"||why==="ended"?650:0);
               say({event:"end",why}); }
             function captionsOff(){ try{ const t=player&&player.getOption("captions","track"); if(t&&Object.keys(t).length) player.setOption("captions","track",{}); player&&player.unloadModule("captions"); }catch(e){} }
             function halt(){ finish("stopped"); }
@@ -408,7 +424,7 @@ class TrailerHost internal constructor(
             function seek(s){ if(!player) return; const from=player.getCurrentTime(); player.seekTo(Math.max(0,s),true); say({event:"seek",from:Math.round(from),to:Math.round(s)}); }
             async function play(id, cap, g, f, loud){
               finish("stopped"); gen=g; full=f; ended=false; playing=false;
-              const box=document.createElement("div"); document.getElementById("p").replaceChildren(box);
+              box=document.createElement("div"); document.getElementById("p").append(box);
               timers.push(setTimeout(()=>{ if(!playing) finish("timeout"); }, f?15000:9000));
               let YT; try{ YT=await load(); }catch(e){ if(gen===g) finish("error"); return; }
               if(ended||gen!==g) return;

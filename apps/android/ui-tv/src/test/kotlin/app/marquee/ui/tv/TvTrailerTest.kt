@@ -22,6 +22,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 /** The full-screen trailer on a TV (plans/trailer-inline.md 7): the bar has the focus and Left and Right seek. */
 @OptIn(ExperimentalTestApi::class)
@@ -74,6 +75,20 @@ class TvTrailerTest {
         compose.runOnIdle { state.seconds = 4f }
         compose.onNode(isFocused()).performKeyInput { pressKey(Key.DirectionLeft) }
         compose.runOnIdle { assertEquals(listOf(40f, 50f, 40f, 148f, 0f), seeks) }
+    }
+
+    @Test
+    fun `a held Right previews growing steps and seeks once, when it is let go`() {
+        show()
+        compose.onNode(isFocused()).performKeyInput {
+            keyDown(Key.DirectionRight)
+            advanceEventTime(2_000)
+            keyUp(Key.DirectionRight)
+        }
+        compose.runOnIdle {
+            assertEquals(1, seeks.size, "one seek for the whole hold: $seeks")
+            assertTrue(seeks[0] > 40f, "the step grew while held: $seeks")
+        }
     }
 
     @Test
