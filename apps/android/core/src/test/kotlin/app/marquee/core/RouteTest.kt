@@ -10,6 +10,7 @@ import app.marquee.core.model.tileKeys
 import app.marquee.core.route.Route
 import app.marquee.core.route.afterChoice
 import app.marquee.core.route.calendarInLibrary
+import app.marquee.core.route.hasBackLink
 import app.marquee.core.route.isTopLevel
 import app.marquee.core.route.linkedTo
 import app.marquee.core.route.restoredStack
@@ -57,6 +58,15 @@ class RouteTest {
         assertTrue(Route.Settings.isTopLevel)
         assertFalse(title.isTopLevel)
         assertFalse(Route.Onboarding.isTopLevel)
+    }
+
+    @Test
+    fun `the back link is for the title, Versions and the profile pages only`() {
+        val versions = Route.Versions("movie", "tt1", "tt1", "Sintel")
+        val player = Route.Player("movie", "tt1", "tt1", "Sintel")
+        val pushed = listOf(title, versions, Route.Profiles, Route.ManageProfiles, Route.EditProfile())
+        assertTrue(pushed.all { it.hasBackLink })
+        assertFalse(listOf(Route.Home, Route.Settings, Route.Onboarding, player, Route.Sync).any { it.hasBackLink })
     }
 
     private fun tile(id: String) = Tile(id = id, kind = "movie", name = id, posterShape = "poster")

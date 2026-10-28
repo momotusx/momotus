@@ -1,6 +1,7 @@
 package app.marquee.android
 
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.LocalOnBackPressedDispatcherOwner
 import androidx.activity.compose.ReportDrawnWhen
 import androidx.compose.animation.ContentTransform
 import androidx.compose.animation.SizeTransform
@@ -53,6 +54,7 @@ import app.marquee.core.route.DefaultsMode
 import app.marquee.core.route.Route
 import app.marquee.core.route.afterChoice
 import app.marquee.core.route.calendarInLibrary
+import app.marquee.core.route.hasBackLink
 import app.marquee.core.route.isTopLevel
 import app.marquee.core.route.linkedTo
 import app.marquee.core.route.restoredStack
@@ -232,6 +234,8 @@ private fun AppNav(
     val routes = backStack.map { it as Route }
     val top = routes.last()
     val tv = form == Form.Tv
+    // The phone's back link is the system Back: a page that guards leaving (an edited profile) is asked first.
+    val systemBack = LocalOnBackPressedDispatcherOwner.current?.onBackPressedDispatcher
 
     fun open(tile: Tile) {
         backStack.add(Route.Title(tile.kind, tile.id))
@@ -823,6 +827,7 @@ private fun AppNav(
             onSelect = ::choose,
             statusStrip = top !is Route.Title && top !is Route.Player,
             insetSides = top !is Route.Player,
+            onBack = if (top.hasBackLink) ({ systemBack?.onBackPressed() ?: pop() }) else null,
             content = content,
         )
     }

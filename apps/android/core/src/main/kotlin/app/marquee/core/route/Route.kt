@@ -179,6 +179,15 @@ val TOP_LEVEL: List<Route> =
 val Route.isTopLevel: Boolean get() = this in TOP_LEVEL
 
 /**
+ * The pushed pages a phone gives the blue back link (design/DECISION.md, Navigation). The player, the first run and the
+ * Settings sub-pages keep the way out they have.
+ */
+val Route.hasBackLink: Boolean
+    get() =
+        this is Route.Title || this is Route.Versions || this is Route.Profiles ||
+            this is Route.ManageProfiles || this is Route.EditProfile
+
+/**
  * The back stack after choosing a top-level destination: Home is the root, and the chosen place
  * sits on it, replacing whatever top-level place and titles were above.
  */

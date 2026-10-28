@@ -54,6 +54,7 @@ import app.marquee.design.MarqueeFonts
 import app.marquee.design.MqIcon
 import app.marquee.design.MqText
 import app.marquee.design.TextRole
+import app.marquee.design.focusClickable
 import app.marquee.design.focusSelectable
 import app.marquee.design.marqueeFocus
 import app.marquee.design.windowDp
@@ -79,6 +80,8 @@ fun PhoneShell(
     statusStrip: Boolean = true,
     /** False for the player, whose picture runs edge to edge and keeps its own cutout padding. */
     insetSides: Boolean = true,
+    /** The blue back link of a pushed page ([app.marquee.core.route.hasBackLink]); null draws none. */
+    onBack: (() -> Unit)? = null,
     content: @Composable () -> Unit,
 ) {
     val showBar = showTabs && !WindowInsets.isImeVisible
@@ -90,7 +93,17 @@ fun PhoneShell(
         // In landscape the navigation bar and a camera cutout can sit at a side: pages keep clear of both.
         val sides = WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal)
         Box(if (insetSides) Modifier.windowInsetsPadding(sides) else Modifier) {
-            CompositionLocalProvider(LocalBarSpace provides space) { content() }
+            CompositionLocalProvider(LocalBarSpace provides space) {
+                if (onBack != null && statusStrip) {
+                    // The link's row takes the status bar's room, so the page under it does not pad for it again.
+                    Column(Modifier.windowInsetsPadding(WindowInsets.statusBars)) {
+                        BackLink(onBack)
+                        Box(Modifier.weight(1f).fillMaxWidth()) { content() }
+                    }
+                } else {
+                    content()
+                }
+            }
         }
         // Pages start below the status bar but scroll under it: a strip of page color keeps the
         // text off the clock and icons. At rest it covers only the page's own background.
@@ -100,6 +113,15 @@ fun PhoneShell(
                     .fillMaxWidth()
                     .windowInsetsTopHeight(WindowInsets.statusBars)
                     .background(Marquee.colors.bg),
+            )
+        }
+        // A page whose artwork runs under the status bar gets the link over it, on a dark pill that keeps the blue
+        // legible.
+        if (onBack != null && !statusStrip) {
+            BackLink(
+                onBack,
+                Modifier.windowInsetsPadding(WindowInsets.statusBars).windowInsetsPadding(sides),
+                floating = true,
             )
         }
         if (showBar) {
@@ -116,6 +138,30 @@ fun PhoneShell(
                     ),
             )
         }
+    }
+}
+
+/** The pushed page's way back, in the key blue as Apple's navigation bar draws it. */
+@Composable
+private fun BackLink(
+    onBack: () -> Unit,
+    modifier: Modifier = Modifier,
+    floating: Boolean = false,
+) {
+    val side = Marquee.safe.side
+    val shape = RoundedCornerShape(Marquee.radius.pill)
+    Row(
+        modifier
+            .padding(start = if (floating) side - 4.dp else 0.dp, top = if (floating) 4.dp else 0.dp)
+            .height(BACK_HEIGHT)
+            .clip(shape)
+            .then(if (floating) Modifier.background(Marquee.colors.bg.copy(alpha = 0.8f)) else Modifier)
+            .focusClickable(onBack, Role.Button)
+            .padding(start = if (floating) 8.dp else side - 4.dp, end = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        MqIcon(Icons.ChevronLeft, tint = Marquee.colors.key)
+        MqText("Back", role = TextRole.Body, color = Marquee.colors.key)
     }
 }
 
@@ -223,3 +269,6 @@ private val BAR_HEIGHT = 62.dp
 private val TAB_HEIGHT = 54.dp
 private val BAR_SIDE = 21.dp
 private val BAR_MARGIN = 12.dp
+
+/** A back link's height: Material's 48 dp target. */
+private val BACK_HEIGHT = 48.dp
