@@ -150,8 +150,8 @@ test.describe("Settings > Stream choice", () => {
     await row.click();
     await expect(page).toHaveURL(/\/stream-choice/);
     await expect(page.locator("h1")).toHaveText("Stream choice");
-    // A Settings page: the navigation stays, with Settings lit.
-    await expect(page.locator('[data-f="nav:/settings"]')).toBeVisible();
+    // A Settings page: the navigation stays, with the profile (Settings' way in) lit.
+    await expect(page.locator('[data-f="nav:/profiles"]')).toHaveClass(/\bon\b/);
     // The defaults (3.8), read from the core.
     for (const f of ["choice-size:5368709120", "choice-seeders:50", "choice-height:null", "choice-hdr:true", "choice-learn:true"])
       await expect(page.locator(`[data-f="${f}"]`), f).toHaveAttribute("aria-checked", "true");

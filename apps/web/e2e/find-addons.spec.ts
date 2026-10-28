@@ -55,7 +55,8 @@ test("a late install result lands on its own card after the page closed and open
   await expect(install()).toBeFocused();
 
   // Leave through the app (the page closes its view), then come back.
-  await page.locator('a[href="/settings"]').first().click();
+  await page.locator('[data-f="nav:/profiles"]').click();
+  await page.locator('[data-f="pmenu:settings"]').click();
   await expect(page).toHaveURL(/\/settings/);
   await page.locator('[data-f="settings:find-addons"]').click();
   await expect(install()).toHaveText("Installing");

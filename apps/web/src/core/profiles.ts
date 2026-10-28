@@ -58,6 +58,19 @@ export async function resetProfileState() {
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+// A profile the bar's menu chose (components/avatar.tsx): the picker it opens picks it, once. Not in the history
+// entry, so a reload or Forward onto the picker never picks again.
+let picking: string | null = null;
+export const pickOnOpen = (id: string) => {
+  picking = id;
+};
+/** The picker, as it opens: the profile to pick, once. */
+export function takePick(): string | null {
+  const id = picking;
+  picking = null;
+  return id;
+}
+
 let switching = false;
 
 /** Tears down, then switches; a view still closing (`viewsOpen`) is waited for, up to five times.

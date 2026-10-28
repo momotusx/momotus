@@ -97,9 +97,9 @@ test("TV: Back on the bar goes Home from under a pushed Settings page, past it",
   await expect(page).toHaveURL(/\/addons/);
   await expect.poll(() => focused(page)).toBe("addon:0:enabled");
   // Up to the bar by key (a focus moved by script is no viewer's move, and the page's late first focus would take
-  // it back), lit as Settings: onto Discover, which shows after the settle in the pushed page's place.
+  // it back), lit as Settings on the profile: onto Discover, which shows after the settle in the pushed page's place.
   for (let i = 0; i < 12 && !(await focused(page))?.startsWith("nav:"); i++) await page.keyboard.press("ArrowUp");
-  expect(await focused(page)).toBe("nav:/settings");
+  expect(await focused(page)).toBe("nav:/profiles");
   for (let i = 0; i < 4; i++) await page.keyboard.press("ArrowLeft");
   expect(await focused(page)).toBe("nav:/discover");
   await expect(page).toHaveURL(/\/discover/, { timeout: 2_000 });
@@ -126,7 +126,7 @@ test("TV: Back on the bar of a pushed Settings page goes Home", async ({ browser
   // Up to the bar, by key, once the page took its first focus.
   await expect.poll(() => focused(page)).toMatch(/^(?!settings:)/);
   for (let i = 0; i < 12 && !(await focused(page))?.startsWith("nav:"); i++) await page.keyboard.press("ArrowUp");
-  expect(await focused(page)).toBe("nav:/settings");
+  expect(await focused(page)).toBe("nav:/profiles");
   await page.keyboard.press("Escape");
   await expect.poll(() => path(page)).toBe("/");
   await expect.poll(() => focused(page)).toBe("nav:/");

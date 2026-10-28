@@ -31,7 +31,8 @@ test("debrid: a key connects, is counted, can be replaced and disconnects", asyn
   await expect(page.locator('[data-f="debrid:premiumize:field"]')).toHaveCount(0);
   await expect(card.locator(".dcard-head .st")).toHaveText("Connected");
 
-  await page.locator('[data-f="nav:/settings"]').click();
+  await page.locator('[data-f="nav:/profiles"]').click();
+  await page.locator('[data-f="pmenu:settings"]').click();
   await expect(page.locator('[data-f="settings:debrid"]')).toContainText("1 debrid service in use.");
 
   await page.locator('[data-f="settings:debrid"]').click();

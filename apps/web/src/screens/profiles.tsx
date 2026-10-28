@@ -11,7 +11,7 @@ import { BridgeError } from "../core/bridge";
 import { op } from "../core/client";
 import type { ProfileInfo } from "../core/generated/ProfileInfo";
 import type { ProfilesSnapshot } from "../core/generated/ProfilesSnapshot";
-import { markChosen, profiles, switchProfile, unlockProfile } from "../core/profiles";
+import { markChosen, profiles, switchProfile, takePick, unlockProfile } from "../core/profiles";
 import { autoFocusSoon, goBack } from "../focus/dom";
 import { holdModal } from "../focus/modal";
 import { markBack, setLeaveGuarded, takeAfterBack, takeBack } from "../history";
@@ -256,6 +256,13 @@ export function Picker(props: { mode: "start" | "locked" | "switch" }) {
     const r = await enter(p);
     if (r.kind !== "ok") setSaid(r.kind === "problem" ? r.text : "That did not work. Try again.");
   };
+  // Opened by the bar's menu for one profile: picked here, as its tile would be. A keypad it opened cancels back to
+  // where the menu was.
+  const asked = props.mode === "switch" ? takePick() : null;
+  onMount(() => {
+    const p = asked ? s()?.profiles.find((q) => q.id === asked) : undefined;
+    if (p) void pick(p);
+  });
   // Managing profiles is for the open app: the start and locked pickers only choose.
   const manages = () => props.mode === "switch" && owner() && !locked();
   const canAdd = () => manages() && (s()?.profiles.length ?? 0) < (s()?.max ?? 0);
@@ -301,6 +308,7 @@ export function Picker(props: { mode: "start" | "locked" | "switch" }) {
             onSubmit={(pin) => enter(t(), pin)}
             onCancel={() => {
               const id = t().id;
+              if (id === asked) return goBack();
               setTarget(null);
               autoFocusSoon(() => document.querySelector<HTMLElement>(`[data-f="profile:${id}"]`));
             }}

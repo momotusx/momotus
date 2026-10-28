@@ -9,7 +9,7 @@ import RefreshCw from "lucide-solid/icons/refresh-cw";
 import SearchIcon from "lucide-solid/icons/search";
 import Settings from "lucide-solid/icons/settings";
 import { type Component, createEffect, createMemo, createSignal, For, on, onCleanup, Show, untrack } from "solid-js";
-import { ProfileButton } from "./components/avatar";
+import { ProfileMenu } from "./components/avatar";
 import Brand from "./components/brand";
 import { bridgeUrl, link } from "./core/client";
 // The debrid accounts follow the core from the start, whatever screen is open.
@@ -58,8 +58,10 @@ const settingsPages = ["/settings", "/addons", "/recommended-addons", "/find-add
 const isSettingsPage = (path: string) => settingsPages.includes(path) || path.startsWith("/profiles/") || path.startsWith("/sync/");
 const section = (path: string) => (isSettingsPage(path) ? "/settings" : path);
 const hasNav = (path: string) => destinations.some((d) => d.path === section(path));
-// The phone has five tabs: Calendar is a row at the top of Library, lit as Library (design/DECISION.md, Navigation).
-const phoneTabs = destinations.filter((d) => d.path !== "/calendar");
+// Settings is a place without a bar item: the profile's menu at the bar's far right opens it (plans/nav-profile.md).
+const barPlaces = destinations.filter((d) => d.path !== "/settings");
+// The phone has five tabs, the profile last: Calendar is a row at the top of Library, lit as Library (design/DECISION.md, Navigation).
+const phoneTabs = barPlaces.filter((d) => d.path !== "/calendar");
 const lit = (path: string) => (form() === "phone" && path === "/calendar" ? "/library" : section(path));
 
 /** Where Back goes when there is no in-app history (a deep link or reload). */
@@ -139,6 +141,14 @@ function TopNav() {
       <span>{d.label}</span>
     </A>
   );
+  // The profile menu's Settings, as Select on its tab was: on TV a replace, or into the page when it shows already.
+  const settings = () => {
+    clearTimeout(settle);
+    if (!tv()) navigate("/settings");
+    else if (section(location.pathname) === "/settings") move("down");
+    else navigate("/settings", { replace: true });
+  };
+  const profile = () => <ProfileMenu lit={section(location.pathname) === "/settings"} onSettings={settings} />;
   // Desktop: Search sits at the right in the header field's place; it opens the palette.
   const search = destinations.find((d) => d.path === "/search") as Destination;
   return (
@@ -147,10 +157,8 @@ function TopNav() {
         <Brand alone />
       </span>
       <div class="tabbar">
-        <For each={tv() ? destinations : destinations.filter((d) => d !== search)}>{link}</For>
-        <Show when={tv()}>
-          <ProfileButton />
-        </Show>
+        <For each={tv() ? barPlaces : barPlaces.filter((d) => d !== search)}>{link}</For>
+        <Show when={tv()}>{profile()}</Show>
       </div>
       <Show when={!tv()}>
         <div class="topnav-end">
@@ -158,16 +166,17 @@ function TopNav() {
             <search.icon aria-hidden />
             <span>{search.label}</span>
           </A>
-          <ProfileButton />
+          {profile()}
         </div>
       </Show>
     </nav>
   );
 }
 
-/** The phone: the iPhone's floating glass capsule, five tabs, the selected one in the key blue. */
+/** The phone: the iPhone's floating glass capsule, four places and the profile, the selected one in the key blue. */
 function Tabs() {
   const location = useLocation();
+  const navigate = useNavigate();
   return (
     <nav class="tabs" aria-label="Main" inert={searchOpen() || undefined}>
       <For each={phoneTabs}>
@@ -178,6 +187,7 @@ function Tabs() {
           </A>
         )}
       </For>
+      <ProfileMenu tab lit={lit(location.pathname) === "/settings"} onSettings={() => navigate("/settings")} />
     </nav>
   );
 }

@@ -17,7 +17,6 @@ import { capableNow, coverSize, meteredNow, previewsOn, REVEAL_MS, TRAILER_LAYOU
 import { playPath, ratingParts, titlePath } from "../lib/format";
 import { kindLabel } from "../lib/words";
 import { Backdrop, Logo } from "./art";
-import { ProfileButton } from "./avatar";
 import { Ratings } from "./ratings";
 import { separators } from "./separators";
 import { muted, playTrailer, setMuted, stopTrailer, trailerPlaying } from "./yt-player";
@@ -360,11 +359,10 @@ export function HeroCarousel(props: { heroes: Hero[]; waiting: boolean }) {
       <div class="hero-trailer" aria-hidden="true">
         <div ref={box} class="hero-player" />
       </div>
-      {/* The phone's large title and the profile button over the art, as the iPhone TV app. They never slide. */}
+      {/* The phone's large title over the art, as the iPhone TV app; the profile is the capsule's last tab. It never slides. */}
       <Show when={form() === "phone"}>
         <header class="ph-top">
           <h1 class="ph-title">Home</h1>
-          <ProfileButton />
         </header>
       </Show>
       <TrailerMute />

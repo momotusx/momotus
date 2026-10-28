@@ -395,11 +395,11 @@ test("TV: a focus moved without a key stays where it went when the screen's list
   await expect(page).toHaveURL(/\/addons/);
   await expect.poll(() => hold.release !== null).toBe(true);
   // No key: the focus moves as a screen reader or a script would move it.
-  await page.locator('[data-f="nav:/settings"]').focus();
+  await page.locator('[data-f="nav:/profiles"]').focus();
   hold.release?.();
   await expect(page.locator('[data-f="addon:0:enabled"]')).toBeVisible();
   await page.waitForTimeout(800);
-  expect(await focused()).toBe("nav:/settings");
+  expect(await focused()).toBe("nav:/profiles");
   await context.close();
 });
 

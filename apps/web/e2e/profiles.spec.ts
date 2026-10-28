@@ -85,17 +85,18 @@ test("profiles: add, pick, PIN, switch both ways, locked start", async ({ page }
   await page.locator(`[data-f="profile:${kid}"]`).focus();
   await page.keyboard.press("Enter");
   await expect(page).toHaveURL(/\/(\?form=tv)?$/);
-  await expect(page.locator('[data-f="nav:/profiles"]')).toHaveAttribute("aria-label", "Profile: Kid, switch profile");
+  await expect(page.locator('[data-f="nav:/profiles"]')).toHaveAttribute("aria-label", "Profile: Kid");
   expect((await picker()).active).toBe(kid);
 
   // The browser's own Back never reopens Main's pages under Kid, across a reload too, and the app
   // goes on from there without bouncing back Home.
   await page.goBack();
-  await expect(page.locator('[data-f="nav:/profiles"]')).toHaveAttribute("aria-label", "Profile: Kid, switch profile");
+  await expect(page.locator('[data-f="nav:/profiles"]')).toHaveAttribute("aria-label", "Profile: Kid");
   await expect(page).not.toHaveURL(/\/profiles\/edit\/default/);
   await page.locator('[data-f="nav:/library"]').click();
   await expect(page).toHaveURL(/\/library/);
-  await page.locator('[data-f="nav:/settings"]').click();
+  await page.locator('[data-f="nav:/profiles"]').click();
+  await page.locator('[data-f="pmenu:settings"]').click();
   await expect(page).toHaveURL(/\/settings/);
   await expect(page.locator('[data-f="settings:profiles"]')).toContainText("Kid");
   // Kits are Main's to make (D17): Kid reaching the kit page by its address lands on the sync page.
@@ -111,7 +112,7 @@ test("profiles: add, pick, PIN, switch both ways, locked start", async ({ page }
   await page.keyboard.type("1111");
   await expect(page.locator(".pin-said")).toHaveText("Wrong PIN");
   await page.keyboard.type(PIN);
-  await expect(page.locator('[data-f="nav:/profiles"]')).toHaveAttribute("aria-label", "Profile: Main, switch profile");
+  await expect(page.locator('[data-f="nav:/profiles"]')).toHaveAttribute("aria-label", "Profile: Main");
 
   // A cold start on a protected profile is locked until its PIN.
   await page.goto("/library?form=tv");
@@ -125,7 +126,8 @@ test("profiles: add, pick, PIN, switch both ways, locked start", async ({ page }
 
   // Put it back, inside the app (a reload would lock it again): Main's PIN
   // removed with the current one, then Kid deleted.
-  await page.locator('[data-f="nav:/settings"]').click();
+  await page.locator('[data-f="nav:/profiles"]').click();
+  await page.locator('[data-f="pmenu:settings"]').click();
   await page.locator('[data-f="settings:profile-edit"]').click();
   await page.locator('[data-f="pedit:pin:remove"]').click();
   await page.keyboard.type(PIN);
@@ -163,16 +165,16 @@ test("profiles: the browser's Forward never reopens another profile's pages", as
     await expect(page).toHaveURL(/\/calendar/);
     await page.goBack();
     await page.goBack();
-    await expect(page.locator('[data-f="nav:/profiles"]')).toHaveAttribute("aria-label", "Profile: Main, switch profile");
+    await expect(page.locator('[data-f="nav:/profiles"]')).toHaveAttribute("aria-label", "Profile: Main");
     // Another device or tab makes Kid the device's profile; this tab reloads and picks Kid.
     await c.req("switchProfile", { profile: kid });
     await page.reload();
     await page.locator(`[data-f="profile:${kid}"]`).click();
-    await expect(page.locator('[data-f="nav:/profiles"]')).toHaveAttribute("aria-label", "Profile: Kid, switch profile");
+    await expect(page.locator('[data-f="nav:/profiles"]')).toHaveAttribute("aria-label", "Profile: Kid");
     // Forward reaches Main's Library: it opens as Kid's Home instead.
     await page.goForward();
     await expect(page).not.toHaveURL(/\/library/);
-    await expect(page.locator('[data-f="nav:/profiles"]')).toHaveAttribute("aria-label", "Profile: Kid, switch profile");
+    await expect(page.locator('[data-f="nav:/profiles"]')).toHaveAttribute("aria-label", "Profile: Kid");
   } finally {
     await c.req("switchProfile", { profile: "default" }).catch(() => undefined);
     if (kid) await c.req("deleteProfile", { profile: kid }).catch(() => undefined);

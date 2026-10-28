@@ -257,11 +257,9 @@
 [data-form="phone"] .row-msg .why { font-size: 13px; }
 [data-form="phone"] .row-msg .row-acts { margin-left: 0; gap: 8px; }
 [data-form="phone"] .row-msg-icon { width: 22px; height: 22px; }
-/* The large title "Home" (34/700 at 16, its top at 47 or the status bar's foot) and the profile button. */
+/* The large title "Home" (34/700 at 16, its top at 47 or the status bar's foot). */
 [data-form="phone"] .ph-top { position: absolute; left: 16px; right: 14px; top: max(47px, env(safe-area-inset-top)); z-index: 2; height: 54px; display: flex; align-items: center; justify-content: space-between; }
 [data-form="phone"] .ph-title { font: 700 34px / 41px var(--font-display); letter-spacing: var(--tracking-display); color: #fff; }
-[data-form="phone"] .ph-top .pavatar { display: grid; place-items: center; width: 44px; height: 44px; }
-[data-form="phone"] .ph-top .avatar-s { width: 40px; height: 40px; font-size: 17px; }
 
 /* The hero carousel (plans/appletv-polish.md 4.1): pages side by side in a snapping track, each with
  * its own art and words; the phone's top row, the dots and the trailer's box stay put. */

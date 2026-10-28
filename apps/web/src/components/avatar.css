@@ -12,3 +12,41 @@
 .nav.pavatar { padding: 0 9px; margin-left: 6px; }
 .nav.pavatar .avatar-s { width: 40px; height: 40px; font-size: 18px; }
 .nav.pavatar .avatar > svg { width: 52%; height: 52%; }
+
+/* The bar's profile menu (plans/nav-profile.md): the profiles, the current one checked, then Settings, on solid
+ * `surface` under the avatar, as a pull-down's list (screens/browse.css) draws it. */
+.pmenu { position: relative; display: flex; }
+.pmenu-list { position: absolute; z-index: 30; top: calc(100% + 12px); right: 0; display: grid; gap: 2px; min-width: 440px; max-width: 640px;
+  padding: 10px; border-radius: var(--radius-l); background: var(--surface); box-shadow: var(--lift-focus-edge); }
+.pmenu-row { position: relative; display: flex; align-items: center; gap: 14px; width: 100%; min-height: 48px; padding: 16px 20px 16px 58px;
+  border-radius: var(--radius-m); font: 600 var(--type-callout) / 1.2 var(--font-text); color: var(--text); text-align: left; }
+.pmenu-row b { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: inherit; }
+.pmenu-row span { font: 400 var(--type-caption) / 1.2 var(--font-text); color: var(--dim); }
+.pmenu-row[aria-checked="true"] { background: var(--raised); }
+.pmenu-row[aria-disabled="true"] b { color: var(--dim); }
+.pmenu-check { position: absolute; left: 20px; top: 50%; translate: 0 -50%; width: 24px; height: 24px; }
+.pmenu-lock { flex: none; width: 22px; height: 22px; color: var(--dim); }
+.pmenu-line { height: 1px; margin: 6px 12px; background: var(--line); }
+@media (hover: hover) { .pmenu-row:hover { background: var(--raised); } }
+/* Lit while Settings shows: TV gets the tab's white pill (`.nav.on`); the desktop header rings the avatar. */
+[data-form="desktop"] .nav.pavatar.on .avatar { box-shadow: 0 0 0 calc(2 * var(--px)) var(--bg), 0 0 0 calc(4 * var(--px)) var(--text); }
+/* Desktop: a 48 px target around the small avatar, without moving the header. */
+[data-form="desktop"] .pmenu .nav.pavatar { padding: calc(10 * var(--px)); margin: calc(-10 * var(--px)); }
+[data-form="desktop"] .pmenu-list { top: calc(100% + 24px); min-width: calc(320 * var(--px)); padding: calc(6 * var(--px)); border-radius: calc(12 * var(--px)); }
+[data-form="desktop"] .pmenu-row { min-height: calc(48 * var(--px)); gap: calc(8 * var(--px)); padding: calc(10 * var(--px)) calc(14 * var(--px)) calc(10 * var(--px)) calc(40 * var(--px));
+  border-radius: calc(8 * var(--px)); font-size: calc(16 * var(--px)); }
+[data-form="desktop"] .pmenu-row span { font-size: calc(13 * var(--px)); }
+[data-form="desktop"] .pmenu-check { left: calc(14 * var(--px)); width: calc(16 * var(--px)); height: calc(16 * var(--px)); }
+[data-form="desktop"] .pmenu-lock { width: calc(14 * var(--px)); height: calc(14 * var(--px)); }
+/* Phone: the capsule's last tab, the avatar over "Profile"; its list opens upward from the capsule. */
+.tabs .pmenu { flex: 1; min-width: 0; height: 54px; }
+.ptab { display: grid; justify-items: center; align-content: center; gap: 1px; width: 100%; height: 54px; border-radius: 27px;
+  font: 600 11px / 13px var(--font-text); color: #fff; }
+.ptab.on { color: var(--key); background: rgba(10, 10, 10, .92); }
+.ptab .avatar-s { width: 28px; height: 28px; border-radius: 50%; font-size: 13px; }
+.ptab.on .avatar-s { box-shadow: 0 0 0 1.5px var(--key); }
+[data-form="phone"] .pmenu-list { top: auto; bottom: calc(100% + 14px); min-width: 240px; max-width: calc(100vw - 42px); padding: 6px; border-radius: 14px; }
+[data-form="phone"] .pmenu-row { gap: 8px; padding: 12px 14px 12px 40px; border-radius: 10px; font-size: 16px; }
+[data-form="phone"] .pmenu-row span { font-size: 13px; }
+[data-form="phone"] .pmenu-check { left: 12px; width: 18px; height: 18px; }
+[data-form="phone"] .pmenu-lock { width: 16px; height: 16px; }

@@ -191,7 +191,9 @@ test("TV: the solid tab bar, 68 tall at 46, every tab with its word, the active 
   expect(Math.abs(box.x + box.width / 2 - 960)).toBeLessThanOrEqual(1);
   expect((await style(page, ".topnav .tabbar")).background).toBe("rgb(44, 44, 46)");
   const tabs = bar.locator(".nav:not(.pavatar)");
-  await expect(tabs).toHaveText(["Home", "Discover", "Library", "Calendar", "Search", "Settings"]);
+  // Settings has no tab: the profile at the bar's end opens it (plans/nav-profile.md).
+  await expect(tabs).toHaveText(["Home", "Discover", "Library", "Calendar", "Search"]);
+  await expect(bar.locator(".nav").last()).toHaveAttribute("data-f", "nav:/profiles");
   // Off the active tab (focus moves to the content on load).
   await page.locator(".row .tile").first().focus();
   expect(await style(page, ".tabbar .nav.on")).toMatchObject({ background: "rgba(255, 255, 255, 0.2)", color: "rgb(255, 255, 255)" });
@@ -213,7 +215,7 @@ test("desktop: tv.apple.com's 52 px black header, text tabs centered, Search and
   expect(Math.round(box.height)).toBe(52);
   expect((await style(page, ".topnav")).background).toBe("rgb(0, 0, 0)");
   const tabs = bar.locator(".tabbar .nav");
-  await expect(tabs).toHaveText(["Home", "Discover", "Library", "Calendar", "Settings"]);
+  await expect(tabs).toHaveText(["Home", "Discover", "Library", "Calendar"]);
   const tabBox = (await bar.locator(".tabbar").boundingBox())!;
   expect(Math.abs(tabBox.x + tabBox.width / 2 - 720)).toBeLessThanOrEqual(1);
   // 16/600 in CSS pixels on the scaled canvas; the active one at 92 percent, the rest at 64.
@@ -238,7 +240,7 @@ test("phone: the floating glass capsule, 348x62 and 21 from the edges, five tabs
   const box = (await bar.boundingBox())!;
   expect(box).toMatchObject({ x: 21, width: 348, height: 62 });
   expect(Math.round(844 - box.y - box.height)).toBe(21);
-  await expect(bar.locator("a")).toHaveText(["Home", "Discover", "Library", "Search", "Settings"]);
+  await expect(bar.locator("a, .ptab")).toHaveText(["Home", "Discover", "Library", "Search", "Profile"]);
   const s = await style(page, "nav.tabs");
   expect(s.background).toBe("rgba(32, 32, 32, 0.8)");
   expect(s.blur).toContain("blur(24px)");
@@ -506,7 +508,7 @@ test("phone: the iPhone's hero at every screen, the large title and the profile 
     const g = await page.evaluate(() => {
       const r = (s: string) => document.querySelector(s)?.getBoundingClientRect() as DOMRect;
       const tabs = r("nav.tabs");
-      return { hero: [r(".hero").left, r(".hero").top, r(".hero").width, r(".hero").height], foot: r(".hero").bottom, head: [r(".row .row-head").top, r(".row .row-head").bottom], tabs: tabs.top, lines: r(".hero-page.on .hero-lines").top, reason: r(".hero-page.on .reason").top, play: r('[data-f="hero:play"]').bottom, title: r(".ph-title").top, avatar: [r(".ph-top .pavatar").width, r(".ph-top .pavatar").height] };
+      return { hero: [r(".hero").left, r(".hero").top, r(".hero").width, r(".hero").height], foot: r(".hero").bottom, head: [r(".row .row-head").top, r(".row .row-head").bottom], tabs: tabs.top, lines: r(".hero-page.on .hero-lines").top, reason: r(".hero-page.on .reason").top, play: r('[data-f="hero:play"]').bottom, title: r(".ph-title").top };
     });
     const label = `${w}x${h}`;
     // 680 at 390 wide, never taller than the window less 164: the first shelf's header shows above the tab bar.
@@ -520,15 +522,14 @@ test("phone: the iPhone's hero at every screen, the large title and the profile 
     expect(Math.abs(g.foot - g.reason - 140), `${label} reason`).toBeLessThanOrEqual(3);
     expect(Math.abs(g.foot - g.play - 56), `${label} buttons`).toBeLessThanOrEqual(1.5);
     expect(g.title, label).toBeGreaterThanOrEqual(47);
-    expect(g.avatar, label).toEqual([44, 44]);
     await context.close();
   }
-  // "Home" is the page's heading, the hero's title the next level; the profile button opens the picker.
+  // "Home" is the page's heading, the hero's title the next level; the profile is the capsule's, not the header's.
   const { context, page } = await open(browser, "phone", "/");
   await expect(page.locator(".hero-page.on .reason")).toBeVisible({ timeout: 30_000 });
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Home");
   await expect(page.locator(".hero-page.on").getByRole("heading", { level: 2 })).toHaveCount(1);
-  await expect(page.locator('.ph-top [data-f="nav:/profiles"]')).toHaveAttribute("href", "/profiles");
+  await expect(page.locator(".ph-top .pavatar")).toHaveCount(0);
   await context.close();
 });
 
