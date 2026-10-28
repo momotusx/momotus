@@ -39,8 +39,14 @@ final class DownloadKeeper {
     /// controls shows it (`downloadProblem`); the next op or the user's Dismiss clears it, never a success of
     /// another op or a timer (review r3 N1).
     private(set) var failure: String?
-    /// Downloads pages on screen: the shell's offline banner leaves Go to Downloads out while one is.
-    var downloadsPages = 0
+    /// Downloads pages on screen, by page: the shell's offline banner leaves Go to Downloads out while one
+    /// is. A set, so an appear twice without a disappear never drifts (review r5 M3).
+    // ponytail: one set for every window; per window if an iPad shows Downloads in one and not another.
+    private(set) var downloadsPages: Set<UUID> = []
+
+    func downloadsPage(_ id: UUID, shown: Bool) {
+        if shown { downloadsPages.insert(id) } else { downloadsPages.remove(id) }
+    }
 
     @ObservationIgnored private let core: CoreClient
     @ObservationIgnored private var logic: KeeperLogic

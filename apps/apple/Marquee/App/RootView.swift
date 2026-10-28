@@ -341,7 +341,7 @@ struct MainShell: View {
     /// Downloads page unless one is on screen.
     private var offline: OfflineShell {
         let shown = OfflineBannerRule.shows(offline: system?.offline == true, tv: false, immersed: immersion.active)
-        let onDownloads = tab == .library && (keeper?.downloadsPages ?? 0) > 0
+        let onDownloads = tab == .library && !(keeper?.downloadsPages.isEmpty ?? true)
         let offers = OfflineBannerRule.offersDownloads(keeper?.snapshot, onDownloads: onDownloads)
         return OfflineShell(shown: shown, gutter: metrics.gutter, open: offers ? {
             links.library = .downloads

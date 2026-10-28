@@ -2,7 +2,7 @@
 #if !os(tvOS)
 import SwiftUI
 
-/// Where Library leads (plans/offline-downloads.md 3.4): the Downloads page. Home's offline banner asks
+/// Where Library leads (plans/offline-downloads.md 3.4): the Downloads page. The shell's offline banner asks
 /// for it through `LinkRequests.library`.
 enum LibraryRoute: Hashable {
     case downloads
@@ -357,8 +357,7 @@ private struct Storage: View {
 extension View {
     /// A Downloads page on screen: the shell's offline banner offers no way to where the user already is.
     func downloadsPage(_ keeper: DownloadKeeper) -> some View {
-        onAppear { keeper.downloadsPages += 1 }
-            .onDisappear { keeper.downloadsPages -= 1 }
+        modifier(DownloadsPage(keeper: keeper))
     }
 
     /// A download op the core refused, over the page's bottom edge until the next op or Dismiss (review r3 N1).
@@ -547,6 +546,18 @@ private struct ListRowChrome: ViewModifier {
                     }
                 }
         }
+    }
+}
+
+/// One Downloads page's place in the keeper's set, under an id of its own.
+private struct DownloadsPage: ViewModifier {
+    let keeper: DownloadKeeper
+    @State private var id = UUID()
+
+    func body(content: Content) -> some View {
+        content
+            .onAppear { keeper.downloadsPage(id, shown: true) }
+            .onDisappear { keeper.downloadsPage(id, shown: false) }
     }
 }
 

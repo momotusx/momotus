@@ -1,3 +1,4 @@
+import Accessibility
 import Foundation
 
 /// The download control's glyph (plans/offline-downloads.md 3.1).
@@ -132,6 +133,15 @@ enum OfflineBannerRule {
     }
 
     static func words(offersDownloads: Bool) -> String { offersDownloads ? DownloadCopy.offline : DownloadCopy.offlineAlone }
+
+    /// What going offline says: the constant "You're offline." at low priority, only when the device was
+    /// online; the banner's other words and its button are never said again (review r5 M2).
+    static func announcement(was: Bool, now: Bool) -> AttributedString? {
+        guard now, !was else { return nil }
+        var words = AttributedString(DownloadCopy.offlineAlone)
+        words.accessibilitySpeechAnnouncementPriority = .low
+        return words
+    }
 }
 
 /// The words of downloads, equal to Android's DownloadCopy.kt and the web's lib/download.ts.

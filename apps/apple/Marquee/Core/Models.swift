@@ -96,7 +96,7 @@ struct HomeHeader: Decodable, Hashable, Sendable {
     let heroes: [Hero]
     /// The first page, which Home shows until the carousel lands.
     var hero: Hero? { heroes.first }
-    /// No network, and downloads to play: "You're offline. Your downloads still play." (3.5).
+    /// No network, and downloads to play (3.5); the shell's banner reads the keeper's view, not this.
     var offline: HomeOffline? = nil
 
     init(heroes: [Hero], offline: HomeOffline? = nil) {

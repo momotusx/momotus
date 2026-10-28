@@ -124,7 +124,8 @@ struct DownloadsSnapshot: Decodable, Hashable, Sendable {
     var profile: String? = nil
 }
 
-/// Home with no network and downloads to play (3.5).
+/// The core's count of downloads that play with no network (3.5). Nothing draws it: the shell's banner reads
+/// the keeper's own view, and Home draws no banner of its own.
 struct HomeOffline: Decodable, Hashable, Sendable {
     let downloads: Int
 }

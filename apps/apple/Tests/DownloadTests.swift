@@ -796,6 +796,35 @@ private func offlineSnapshot(_ states: [String]) throws -> DownloadsSnapshot {
     #expect(!home.contains("OfflineBanner"))
 }
 
+// Going offline is said once, politely, and only the constant: from the one place that sees the change, never
+// from a window's banner, so a rebuilt shell or a second window says nothing again (review r5 M2).
+@MainActor @Test func goingOfflineIsSaidOncePolitely() throws {
+    let said = try #require(OfflineBannerRule.announcement(was: false, now: true))
+    #expect(String(said.characters) == "You're offline.")
+    #expect(said.accessibilitySpeechAnnouncementPriority == .low)
+    #expect(OfflineBannerRule.announcement(was: true, now: true) == nil)
+    #expect(OfflineBannerRule.announcement(was: false, now: false) == nil)
+    #expect(OfflineBannerRule.announcement(was: true, now: false) == nil)
+    let app = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appending(path: "../Marquee")
+    let control = try String(contentsOf: app.appending(path: "Downloads/DownloadControlView.swift"), encoding: .utf8)
+    #expect(!control.contains("Announcement"), "the banner says nothing itself")
+}
+
+// Downloads pages on screen are a set: a page that appears twice and goes once leaves none behind, so Go to
+// Downloads never stays off (review r5 M3).
+@MainActor @Test func downloadsPagesNeverDrift() {
+    let keeper = DownloadKeeper(core: RealCore().client)
+    let (one, two) = (UUID(), UUID())
+    keeper.downloadsPage(one, shown: true)
+    keeper.downloadsPage(one, shown: true)
+    keeper.downloadsPage(two, shown: true)
+    keeper.downloadsPage(one, shown: false)
+    #expect(keeper.downloadsPages == [two])
+    keeper.downloadsPage(two, shown: false)
+    keeper.downloadsPage(two, shown: false)
+    #expect(keeper.downloadsPages.isEmpty)
+}
+
 // A failed op is said once, by the keeper, not by every page that shows the line (review r4 N12); another
 // profile's snapshot clears the line (r4 N13).
 @MainActor @Test func aFailureIsSaidOnceAndStaysWithItsProfile() async throws {

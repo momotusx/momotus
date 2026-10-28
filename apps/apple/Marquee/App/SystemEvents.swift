@@ -29,7 +29,13 @@ final class SystemEvents {
                 // The first update too: a launch with no network, or on a metered one, holds downloads
                 // from the start (plans/offline-downloads.md 4.13).
                 self?.last = report
-                self?.offline = report.network == "none"
+                let offline = report.network == "none"
+                // Said once, politely, on a real change, from here and not from each window's banner
+                // (review r5 M2).
+                if let words = OfflineBannerRule.announcement(was: self?.offline ?? false, now: offline) {
+                    AccessibilityNotification.Announcement(words).post()
+                }
+                self?.offline = offline
                 core.lifecycle("networkChanged", report.fields)
             }
         }

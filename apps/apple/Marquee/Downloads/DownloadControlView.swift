@@ -260,9 +260,6 @@ struct OfflineShell: ViewModifier {
                         .background(Theme.Palette.bg)
                 }
             }
-            .onChange(of: shown, initial: true) { _, now in
-                if now { AccessibilityNotification.Announcement(OfflineBannerRule.words(offersDownloads: open != nil)).post() }
-            }
     }
 }
 #endif
