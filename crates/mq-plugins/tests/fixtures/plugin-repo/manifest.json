@@ -1,0 +1,17 @@
+{
+  "name": "Momotus test plugins",
+  "version": "1.0.0",
+  "description": "An inert test repository for the plugin e2e. Its one provider returns the suite's own generated test film.",
+  "scrapers": [
+    {
+      "id": "test-film",
+      "name": "Test film",
+      "version": "1.0.0",
+      "description": "Returns the e2e test film for any title.",
+      "filename": "test-film.js",
+      "supportedTypes": ["movie", "tv"],
+      "contentLanguage": ["en"],
+      "enabled": true
+    }
+  ]
+}

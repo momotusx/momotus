@@ -570,36 +570,39 @@ fn cancel_closes_pending_replies() {
     assert!(held.iter().all(|r| r.reply.is_closed()));
 }
 
-/// The fixture repository's plugin (tests/fixtures/repo, plan 7.9), with
-/// archive.org's metadata answer recorded: one row for Big Buck Bunny, and
-/// none for a title it does not know.
+/// The e2e's fixture provider (tests/fixtures/plugin-repo, plan 13.14),
+/// with `{{BASE}}` as the e2e serves it: one lookup on its own host, then
+/// one row of the suite's test film.
 #[test]
-fn the_fixture_plugin_finds_its_film() {
-    let script = include_str!("fixtures/repo/open-films.js");
-    let meta = include_str!("fixtures/archive-BigBuckBunny_124.json");
-    let mut bunny = movie(script);
-    bunny.info = Info {
-        imdb_id: Some("tt1254207".into()),
-        title: "Big Buck Bunny".into(),
-        year: Some(2008),
-    };
-    let (out, seen) = run_with(bunny, ok(meta));
-    assert_eq!(
-        seen.fetches[0].url,
-        "https://archive.org/metadata/BigBuckBunny_124"
-    );
+fn the_fixture_provider_runs() {
+    let base = "https://plugins.example:8443";
+    let script = include_str!("fixtures/plugin-repo/test-film.js").replace("{{BASE}}", base);
+    let (out, seen) = run_with(movie(&script), ok(r#"{"title": "Test"}"#));
+    assert_eq!(seen.fetches.len(), 1);
+    assert_eq!(seen.fetches[0].method, Method::Get);
+    assert_eq!(seen.fetches[0].url, format!("{base}/lookup/movie/603"));
     assert_eq!(
         out,
         Outcome::Done(vec![PluginStream {
-            url: "https://archive.org/download/BigBuckBunny_124/Content/big_buck_bunny_720p_surround.mp4".into(),
-            name: Some("Open films".into()),
-            title: Some("Big Buck Bunny (360p)".into()),
-            quality: Some("360p".into()),
-            size: Some("59 MB".into()),
+            url: format!("{base}/media/test-film.webm"),
+            name: Some("Test film".into()),
+            title: Some("Test (test film)".into()),
+            quality: Some("240p".into()),
             ..Default::default()
         }])
     );
-    let (out, seen) = run_with(movie(script), ok(meta));
-    assert_eq!(out, Outcome::Done(Vec::new()));
-    assert!(seen.fetches.is_empty());
+    // A lookup the host answers 404: no rows.
+    let missing = |r: &FetchRequest| {
+        HostReply::Response(FetchResponse {
+            status: 404,
+            status_text: "Not Found".into(),
+            url: r.url.clone(),
+            headers: Vec::new(),
+            body: Vec::new(),
+        })
+    };
+    assert_eq!(
+        run_with(movie(&script), missing).0,
+        Outcome::Done(Vec::new())
+    );
 }
