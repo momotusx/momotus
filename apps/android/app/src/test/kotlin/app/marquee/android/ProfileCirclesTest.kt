@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.captureToImage
@@ -24,6 +25,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 /**
  * The picker's pictures are circles in every state (design/DECISION.md, Profiles and Selected): a focused TV tile lifts
@@ -68,11 +70,22 @@ class ProfileCirclesTest {
         cornerStaysPage()
     }
 
+    /** A pixel inside the circle, above the plus: the tile's fill. */
+    private fun fill() = pixels()[100, 20]
+
     @Test
-    fun `a focused Add profile lifts a circle too`() {
+    fun `a focused Add profile lifts a circle too, and turns white`() {
         tile(Form.Tv) { AddTile(onClick = {}, forceFocus = true) }
         compose.waitForIdle()
         cornerStaysPage()
+        assertTrue(fill().luminance() > 0.7f, "the focused tile is ${fill()}, not white")
+    }
+
+    @Test
+    fun `an Add profile tile at rest is the surface grey`() {
+        tile(Form.Tv) { AddTile(onClick = {}) }
+        compose.waitForIdle()
+        assertTrue(fill().luminance() < 0.3f, "the tile at rest is ${fill()}")
     }
 
     @Test

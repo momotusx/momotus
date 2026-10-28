@@ -696,9 +696,10 @@ internal fun AddTile(
                 .marqueeFocus(size / 2, forced = look)
                 .size(size)
                 .clip(CircleShape)
-                .background(colors.surface),
+                // A focused tile on TV turns white with a dark glyph, as a focused profile does.
+                .background(if (focused) colors.primary else colors.surface),
             contentAlignment = Alignment.Center,
-        ) { MqIcon(Icons.Plus, tint = colors.muted, size = size * 0.4f) }
+        ) { MqIcon(Icons.Plus, tint = if (focused) colors.onPrimary else colors.muted, size = size * 0.4f) }
         MqText(
             "Add profile",
             role = TextRole.Headline,
