@@ -2,14 +2,13 @@
 //! the relay can read or forge (plan: "Phase 2" and "Phase 3").
 //!
 //! Pairing: the new device makes its member keys and shows a QR with a relay
-//! slot id, its public keys, its name and form, and a six-digit code made
-//! from them. A device of the account first asks the relay whether the slot
-//! was opened from its own network; if not, the user types the code shown
-//! under the QR, which must match the scanned keys (plans/tv-qr-login.md
-//! Q2). Only then it seals the current key bundle, the roster head and a
-//! sponsor statement for exactly those keys to the new device's box key
-//! with HPKE (RFC 9180). The new device opens it, claims a token that can
-//! only join, checks the roster, and signs its own `addDevice`.
+//! slot id, its public keys, its name and form. A device of the account first
+//! asks the relay whether the slot was opened from its own network; if not,
+//! only a live scan in its own scanner, behind the screen lock, approves
+//! (plans/tv-qr-login.md Q2). Only then it seals the current key bundle, the
+//! roster head and a sponsor statement for exactly those keys to the new
+//! device's box key with HPKE (RFC 9180). The new device opens it, claims a
+//! token that can only join, checks the roster, and signs its own `addDevice`.
 //!
 //! Recovery: a 160-bit kit derives a lookup id, a redeem secret, a tag key
 //! and member keys. Making a kit appends it to the roster with a box of the
