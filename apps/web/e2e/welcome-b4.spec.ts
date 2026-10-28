@@ -35,18 +35,28 @@ const noStill = (context: BrowserContext) =>
     });
   });
 
-for (const [form, size] of [["tv", [1920, 1080]], ["desktop", [1440, 900]], ["desktop", [1280, 720]], ["phone", [390, 844]], ["phone", [844, 390]]] as const) {
-  test(`${form} ${size.join("x")}: the frame is 2.39:1, no taller than 40 percent of the screen, centered`, async ({ browser }) => {
+for (const [form, size] of [["tv", [1920, 1080]], ["desktop", [1440, 900]], ["desktop", [1280, 720]], ["desktop", [1920, 1080]], ["phone", [390, 844]], ["phone", [844, 390]]] as const) {
+  test(`${form} ${size.join("x")}: the frame is 2.39:1, as wide as the height the header and bar leave allows, centered`, async ({ browser }) => {
     const context = await device(browser, form, size as [number, number]);
     const page = await open(context, form, "doors");
     const box = await page.locator(".film").evaluate((f) => {
       const r = f.getBoundingClientRect();
-      return { w: r.width, h: r.height, left: r.left, right: innerWidth - r.right, vw: innerWidth, vh: innerHeight };
+      const main = document.querySelector(".welcome.page") as HTMLElement;
+      return { w: r.width, h: r.height, left: r.left, right: innerWidth - r.right, vw: innerWidth, vh: innerHeight, scrolls: main.scrollHeight > main.clientHeight + 1 };
     });
     expect(box.w / box.h).toBeCloseTo(2.39, 1);
-    expect(box.h).toBeLessThanOrEqual(box.vh * 0.4 + 1);
     expect(Math.abs(box.left - box.right)).toBeLessThanOrEqual(2);
-    // The phone's frame spans the width while it fits under the cap.
+    // The gallery's desktop: the picture edge to edge, 602 high under a 149 header, over a 149 bar.
+    if (form === "desktop" && size[0] === 1440) {
+      expect(Math.abs(box.w - 1440)).toBeLessThanOrEqual(2);
+      expect(Math.abs(box.h - 602)).toBeLessThanOrEqual(2);
+    }
+    // TV and desktop: header, frame and bar fit the screen, nothing to scroll for; the frame takes most of the width.
+    if (form !== "phone") {
+      expect(box.scrolls, "the doors step fits the screen").toBe(false);
+      expect(box.w).toBeGreaterThanOrEqual(box.vw * 0.75);
+    }
+    // The phone's frame spans the width.
     if (form === "phone" && size[0] < size[1]) expect(box.w).toBeGreaterThanOrEqual(box.vw - 1);
     // The bar holds every choice under the frame, inside the screen's width.
     const doors = await page.locator(".framed .door").evaluateAll((ds, film) => ds.map((d) => d.getBoundingClientRect()).every((r) => r.top >= (film as number) && r.right <= innerWidth + 1), box.h);
@@ -137,10 +147,59 @@ for (const [form, size] of [["tv", [1920, 1080]], ["desktop", [1440, 900]], ["de
         const end = Math.max(...[...block.children].map((c) => c.getBoundingClientRect().bottom));
         return { above: top - head, below: bottom - end };
       });
-      expect(gaps.above, `${step} has room above`).toBeGreaterThan(40);
+      expect(gaps.above, `${step} under the header`).toBeGreaterThanOrEqual(0);
       expect(Math.abs(gaps.above - gaps.below), `${step} ${JSON.stringify(gaps)}`).toBeLessThanOrEqual(4);
       await page.close();
     }
     await context.close();
   });
 }
+
+for (const [form, size] of [["tv", [1920, 1080]], ["desktop", [1440, 900]], ["desktop", [1920, 1080]]] as const) {
+  test(`${form} ${size.join("x")}: the header and the bar keep one column, the frame runs past it`, async ({ browser }) => {
+    const context = await device(browser, form, size as [number, number]);
+    const page = await open(context, form, "doors");
+    await expect(page.locator(".framed .door")).toHaveCount(3);
+    const at = await page.evaluate(() => {
+      const r = (s: string) => (document.querySelector(s) as HTMLElement).getBoundingClientRect();
+      // The bar's own box (a focused door's lift would scale its edge).
+      const bar = r(".framed .doors");
+      return { brand: r(".welcome-head .brand").left, skip: r('[data-f="welcome:skip"]').right, first: bar.left, last: bar.right, film: r(".film") };
+    });
+    expect(Math.abs(at.first - at.brand), "the bar starts on the header's edge").toBeLessThanOrEqual(2);
+    expect(Math.abs(at.last - at.skip), "the bar ends on the header's edge").toBeLessThanOrEqual(2);
+    expect(at.film.left).toBeLessThan(at.brand);
+    await context.close();
+  });
+}
+
+// A small window takes the desktop form (a landscape phone, a small tablet): the question's type follows the
+// frame, so it stays inside the picture.
+for (const size of [[844, 390], [1024, 600]] as const) {
+  test(`desktop ${size.join("x")}: the question and its line stay inside the frame on every framed step`, async ({ browser }) => {
+    const context = await device(browser, "desktop", size as unknown as [number, number]);
+    for (const step of ["doors", "choice", "subs"]) {
+      const page = await open(context, "desktop", step);
+      const inside = await page.evaluate(() => {
+        const film = (document.querySelector(".film") as HTMLElement).getBoundingClientRect();
+        return [...document.querySelectorAll<HTMLElement>(".film-cue h1, .film-cue p")].map((el) => {
+          const r = el.getBoundingClientRect();
+          return { what: el.tagName, ok: r.top >= film.top - 0.5 && r.bottom <= film.bottom + 0.5, r: [r.top, r.bottom], film: [film.top, film.bottom] };
+        });
+      });
+      expect(inside.length).toBeGreaterThanOrEqual(1);
+      for (const i of inside) expect(i.ok, `${step} ${JSON.stringify(i)}`).toBe(true);
+      await page.close();
+    }
+    await context.close();
+  });
+}
+
+test("phone: Back and Skip are 48 px targets with room between them", async ({ browser }) => {
+  const context = await device(browser, "phone");
+  const page = await open(context, "phone", "subs");
+  const [back, skip] = await Promise.all(['[data-f="welcome:back"]', '[data-f="welcome:skip"]'].map((s) => page.locator(s).evaluate((el) => el.getBoundingClientRect().toJSON())));
+  for (const b of [back, skip]) expect(Math.min(b.width, b.height)).toBeGreaterThanOrEqual(48);
+  expect(skip.left - back.right).toBeGreaterThanOrEqual(8);
+  await context.close();
+});

@@ -88,10 +88,10 @@ export default function Onboarding() {
   // the step's heading, so a screen reader starts at the question.
   createEffect(on(step, () => autoFocusSoon(() => document.querySelector<HTMLElement>(".welcome [data-autofocus]"))));
   createEffect(
-    on(step, () => form() !== "tv" && requestAnimationFrame(() => document.querySelector<HTMLElement>(".welcome h1")?.focus({ preventScroll: true })), {
-      defer: true,
-    }),
+    on(step, () => form() !== "tv" && requestAnimationFrame(focusHeading), { defer: true }),
   );
+  // The still is asked as the first run opens (a sign-in step first included), so the frame rarely waits for it.
+  onMount(() => void firstStill());
   // The steps a first run walks: the doors, the recommended addons, the stream question, subtitles.
   const count = () => ({ 1: 1, doors: 1, 2: 2, choice: 3, subs: 4 })[String(step())] ?? null;
   const { addons, defaults, error } = useDefaults();
@@ -202,9 +202,21 @@ export default function Onboarding() {
   );
 }
 
-// The still every framed step shows (`firstRunStill`): asked once per app run, at the first framed step.
+/** Focus on the step's heading, whichever step it is (a sign-in step's too). */
+function focusHeading() {
+  const h = document.querySelector<HTMLElement>(".welcome h1");
+  if (h && !h.hasAttribute("tabindex")) h.tabIndex = -1;
+  h?.focus({ preventScroll: true });
+}
+
+// The still every framed step shows (`firstRunStill`): asked once per app run. The core's "none" (offline, past
+// its budget) is kept for the run; a request that failed (the core not ready yet) is asked again by the next step.
 let still: Promise<FirstRunStill | null> | undefined;
-const firstStill = () => (still ??= op<FirstRunStill | null>("firstRunStill").catch(() => null));
+const firstStill = () =>
+  (still ??= op<FirstRunStill | null>("firstRunStill").catch(() => {
+    still = undefined;
+    return null;
+  }));
 
 /** B4, the letterbox (the owner's pick of 2026-10-28): a 2.39:1 frame holding a film's still with the step's
  * question set as its subtitle; no still (offline, slow), the frame stays black with the question. The lead
