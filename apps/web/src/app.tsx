@@ -37,7 +37,7 @@ import ProfilesScreen, { EditProfile, ManageProfiles, Picker } from "./screens/p
 import Player from "./screens/player";
 import Search, { leaveSearch, openSearch, SearchOverlay, searchOpen } from "./screens/search";
 import SettingsScreen from "./screens/settings";
-import SignInScreen, { Found, NewAccount, OtherWays, OwnServer } from "./screens/sign-in";
+import SignInScreen, { EmailSignIn, Found, NewAccount, OtherWays, OwnServer } from "./screens/sign-in";
 import SyncScreen, { AddDevice, ForkReview, MakeKit, RecoverAccount, ReportLost, StartAccount } from "./screens/sync";
 import { Stub } from "./screens/stub";
 import TraktScreen from "./screens/trakt";
@@ -385,6 +385,7 @@ export function App() {
       <Route path="/sign-in" component={SignInScreen} />
       <Route path="/sign-in/other" component={OtherWays} />
       <Route path="/sign-in/server" component={OwnServer} />
+      <Route path="/sign-in/email" component={EmailSignIn} />
       <Route path="/sign-in/new" component={NewAccount} />
       <Route path="/sign-in/found" component={Found} />
       <Route path="/settings" component={SettingsScreen} />

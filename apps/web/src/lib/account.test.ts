@@ -2,7 +2,28 @@ import { expect, test } from "bun:test";
 import shared from "../../../shared/account-words.json";
 import type { Announcement } from "../core/generated/Announcement";
 import type { MemberInfo } from "../core/generated/MemberInfo";
-import { needsSecondWayIn, announcementLine, continueWith, fill, homeCard, leaveChoice, providerAccount, providerName, providerOrder, revokeFailure, sameRelay, shown, signInFailure } from "./account";
+import {
+  announcementLine,
+  cancelUnlink,
+  codeDigits,
+  continueWith,
+  continueWithEmail,
+  emailEnds,
+  emailFailure,
+  emailFieldError,
+  fill,
+  homeCard,
+  leaveChoice,
+  needsSecondWayIn,
+  providerAccount,
+  providerName,
+  providerOrder,
+  resendIn,
+  revokeFailure,
+  sameRelay,
+  shown,
+  signInFailure,
+} from "./account";
 
 const note = (kind: Announcement["kind"], more: Partial<Announcement> = {}): Announcement => ({
   id: `1.${kind}`,
@@ -127,6 +148,12 @@ test("Home's one account card goes by priority", () => {
   expect(asked).toMatchObject({ kind: "deletion", provider: "google" });
   expect(asked?.text).toBe("Someone signed in with your Google account and asked to delete your Momotus account on 28 Oct. Not you? Cancel, and turn off Google sign-in.");
   expect(homeCard({ ...gone, deletion: { dueMs: 1, provider: null } })?.text).toBe("Your account will be deleted on 28 Oct.");
+  // Email has its own words: it is an address, not an account (plans/accounts-email.md 4).
+  expect(homeCard({ ...gone, deletion: { dueMs: 1, provider: "email" } })?.text).toBe(
+    "Someone signed in with your email address and asked to delete your Momotus account on 28 Oct. Not you? Cancel, and turn off email sign-in.",
+  );
+  expect(cancelUnlink("email")).toBe("Cancel and turn off email sign-in");
+  expect(cancelUnlink("google")).toBe("Cancel and turn off Google sign-in");
 });
 
 test("a second way in is a recovery kit or another phone or tablet, as the protocol says", () => {
@@ -190,4 +217,50 @@ test("a return from another relay is never handed on", () => {
   // A relay is named by its host alone: its port may change when it moves (mq-sync host()).
   expect(sameRelay("flow=f&code=c&relay=127.0.0.1", "http://127.0.0.1:17818")).toBe(true);
   expect(sameRelay("flow=f&code=c&relay=evil.example", "https://sync.example.org")).toBe(false);
+});
+
+test("email is never a provider button: its own row, named Email in links", () => {
+  expect(providerOrder(["email", "mock", "google", "apple"])).toEqual(["apple", "google", "mock"]);
+  expect(providerOrder(["email"])).toEqual([]);
+  expect(continueWithEmail).toBe("Continue with email");
+  expect(providerName("email")).toBe("Email");
+  expect(signInFailure("signupLimit", "email")?.text).toBe("This email address has made several Momotus accounts lately. Try again later or use another way.");
+});
+
+test("each email answer takes the answers table's words and buttons", () => {
+  const labels = (code: string) => emailFailure(code).actions.map((a) => `${a.label}:${a.act}`);
+  expect(emailFailure("ticketExpired").text).toBe(shared.codeExpired);
+  expect(labels("wrongFlow")).toEqual(["Send a new code:resend", "Use another address:otherAddress"]);
+  // signInRefused keeps its own words, with the code stage's way on.
+  expect(emailFailure("signInRefused").text).toBe(shared.signInRefused);
+  expect(labels("signInRefused")).toEqual(labels("ticketExpired"));
+  // emailWait has no button: Send code stays usable.
+  expect(emailFailure("emailWait")).toEqual({ text: shared.emailWait, actions: [] });
+  expect(labels("emailLimit")).toEqual(["Other ways to sign in:other"]);
+  expect(labels("mailUnavailable")).toEqual(["Try again:retry", "Other ways to sign in:other"]);
+  expect(emailFailure("busy")).toEqual(signInFailure("busy") as never);
+  // No coded answer: the relay did not answer, and Try again repeats the stage's call.
+  expect(emailFailure("")).toEqual(signInFailure("unreachable") as never);
+  expect(labels("")[0]).toBe("Try again:retry");
+  // Lines under the field, not failures.
+  expect(emailFieldError("badAddress")).toBe("Enter an email address like name@example.com.");
+  expect(emailFieldError("wrongCode")).toBe(shared.wrongCode);
+  expect(emailFieldError("badCode")).toBe(shared.wrongCode);
+  expect(emailFieldError("busy")).toBeNull();
+  // These end the code's flow; a wrong code or no answer keeps it.
+  for (const code of ["ticketExpired", "wrongFlow", "signInRefused", "emailLimit"]) expect(emailEnds(code), code).toBe(true);
+  for (const code of ["wrongCode", "badCode", "busy", "", "emailWait"]) expect(emailEnds(code), code).toBe(false);
+});
+
+test("the code field keeps digits only and cuts at 6; Send a new code waits 60 s from the mail", () => {
+  expect(codeDigits("123 456")).toBe("123456");
+  expect(codeDigits("123-456")).toBe("123456");
+  expect(codeDigits("12a3")).toBe("123");
+  expect(codeDigits("1234567")).toBe("123456");
+  expect(resendIn(1000, 1000)).toBe(60);
+  expect(resendIn(1000, 1001)).toBe(60);
+  expect(resendIn(1000, 59_500)).toBe(2);
+  expect(resendIn(1000, 61_000)).toBe(0);
+  // Time in the background counts: the count comes from the mail's time, not from ticks.
+  expect(resendIn(1000, 3_600_000)).toBe(0);
 });

@@ -2,7 +2,8 @@
 // sync service's brokered flow and ask for the account's deletion, which runs in 7 days unless
 // one of its devices cancels. Apple's flow both signs in and revokes Sign in with Apple. Only a
 // flow whose verifier sits in this page's own sessionStorage completes; the code in the return
-// is used once and leaves the address bar at once. Nothing here logs.
+// is used once and leaves the address bar at once. Continue with email (plans/accounts-email.md
+// E14) mails a code and takes it on this page, its verifier in memory only. Nothing here logs.
 
 /** The owner's sync service, for example https://sync.example.org (no slash at the end). */
 export const RELAY = "{{RELAY_URL}}";
@@ -55,7 +56,32 @@ const WORDS = {
   noAccount: "This sign-in has no Momotus account. Nothing was deleted.",
   ask: "Delete your Momotus account? It is deleted for every device in 7 days. Until then, any of your devices can cancel it from Home.",
   asked: "Your Momotus account will be deleted on {date}. Any of your devices can cancel it from Home before then.",
+  sent: "We sent a 6-digit code to {email}. It works for 10 minutes.",
+  badAddress: "Enter an email address like name@example.com.",
+  wrongCode: "That code isn't right. Check the email and try again.",
+  codeExpired: "This code can't be used any more. Send a new code.",
+  emailWait: "Wait a minute, then send a new code.",
+  emailLimit: "Too many codes were asked for just now. Try again tomorrow, or use another way to sign in.",
+  mailUnavailable: "The code couldn't be sent right now. Try again later, or use another way to sign in.",
 };
+
+/** What an email step's answer says (the apps' words, as plans/accounts-email.md 4 has them). */
+export function mailWords(code) {
+  const said = {
+    badAddress: WORDS.badAddress,
+    wrongCode: WORDS.wrongCode,
+    badCode: WORDS.wrongCode,
+    ticketExpired: WORDS.codeExpired,
+    emailWait: WORDS.emailWait,
+    emailLimit: WORDS.emailLimit,
+    mailUnavailable: WORDS.mailUnavailable,
+    busy: WORDS.busy,
+  };
+  return said[code] ?? WORDS.failed;
+}
+
+/** The digits of a typed or pasted code (`123 456`, `123-456`). */
+export const codeDigits = (typed) => typed.replace(/\D/g, "").slice(0, 6);
 
 function say(text, tone = "") {
   const line = document.getElementById("said");
@@ -90,6 +116,11 @@ async function finish(back) {
   } catch (e) {
     return say(e.code === "ticketExpired" ? WORDS.expired : e.code === "busy" ? WORDS.busy : WORDS.failed, "bad");
   }
+  ask(taken);
+}
+
+/** A sign-in's ticket: ask before the deletion, or say there is no account. */
+function ask(taken) {
   if (!taken.account) return say(WORDS.noAccount);
   say(WORDS.ask);
   const confirm = document.getElementById("confirm");
@@ -107,8 +138,76 @@ async function finish(back) {
   });
 }
 
+/** Continue with email's flow: in this page's memory only, never in sessionStorage (E14). */
+let mail = null;
+
+const $ = (id) => document.getElementById(id);
+
+/** One call at a time: its button off while it runs. */
+async function busy(button, work) {
+  if (button.disabled) return;
+  button.disabled = true;
+  try {
+    await work();
+  } finally {
+    button.disabled = false;
+  }
+}
+
+function showEmail() {
+  say("");
+  $("email-form").hidden = false;
+  $("email").focus();
+}
+
+async function sendCode() {
+  say("");
+  const email = $("email").value.trim();
+  try {
+    const verifier = newVerifier();
+    const { flow } = await post("/v1/auth/email/start", { verifierHash: await verifierHash(verifier), purpose: "signin", email });
+    mail = { flow, verifier };
+    $("sent").textContent = WORDS.sent.replace("{email}", email);
+    $("code").value = "";
+    $("code-form").hidden = false;
+    $("code").focus();
+  } catch (e) {
+    say(mailWords(e.code), "bad");
+    if (e.code === "badAddress") $("email").focus();
+  }
+}
+
+async function takeCode() {
+  if (!mail) return say(WORDS.codeExpired, "bad");
+  say("");
+  let taken;
+  try {
+    taken = await post("/v1/auth/take", { flow: mail.flow, verifier: mail.verifier, code: codeDigits($("code").value) });
+  } catch (e) {
+    // A wrong code keeps the flow for another try; anything that ended it needs a new code.
+    if (!["wrongCode", "badCode", "busy", ""].includes(e.code ?? "")) mail = null;
+    $("code").value = "";
+    $("code").focus();
+    return say(mailWords(e.code), "bad");
+  }
+  mail = null;
+  $("email-form").hidden = true;
+  $("code-form").hidden = true;
+  ask(taken);
+}
+
 function main() {
-  for (const button of document.querySelectorAll("[data-provider]")) button.addEventListener("click", () => void start(button.dataset.provider));
+  for (const button of document.querySelectorAll("[data-provider]")) {
+    button.addEventListener("click", () => (button.dataset.provider === "email" ? showEmail() : void start(button.dataset.provider)));
+  }
+  $("email-form").addEventListener("submit", (e) => {
+    e.preventDefault();
+    void busy($("send"), sendCode);
+  });
+  $("code-form").addEventListener("submit", (e) => {
+    e.preventDefault();
+    void busy($("take"), takeCode);
+  });
   const fragment = location.hash;
   if (!fragment) return;
   // The code leaves the address bar and the history at once.

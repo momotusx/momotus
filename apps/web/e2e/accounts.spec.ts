@@ -11,14 +11,22 @@
  * The TV's first run is the code for a phone; Desk approves it; its Home shows the Phone's join
  * until OK. A deletion asked from the link host's flow shows on Home with Cancel, and with Cancel
  * and turn off; Desk deletes the account after Apple's revoke, and the TV removes its library from
- * the account-deleted card. No ticket or receipt reaches storage, history or the URL. */
+ * the account-deleted card. No ticket or receipt reaches storage, history or the URL.
+ *
+ * Email (plans/accounts-email.md): the relay mails through the mock's SES, and the spec reads each
+ * code from the mock. Mail signs in by email (both stages, Back, a wrong code, `new`, Create);
+ * Desk links an address from Account; a second deletion is asked on the link host's real page by
+ * email; Late's Send a new code turns on after its minute; Mail signs out and finds its account by
+ * email. The relay allows one mail a minute per address, so each address is mailed again only
+ * after that minute. No address reaches storage, history or the URL. */
 
 import { type Browser, expect, type Page, test } from "@playwright/test";
 import type { ChildProcess } from "node:child_process";
 import { createHash, generateKeyPairSync, randomBytes } from "node:crypto";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { ACCOUNTS_PORTS, Client, PORTS, SHOTS, startBridge, startMockProvider, startRelay } from "./core";
 
 const P = ACCOUNTS_PORTS;
@@ -29,6 +37,14 @@ let scratch = "";
 let desk: Page;
 let phone: Page;
 let tv: Page;
+/** Email sign-in's own devices: Mail signs in by email; Late waits out Send a new code's minute. */
+let mail: Page;
+let late: Page;
+let mockUrl = "";
+const SAM = "sam@example.org";
+const LEE = "lee@example.org";
+const PAT = "pat@example.org";
+const LINKHOST = fileURLToPath(new URL("../../linkhost/", import.meta.url));
 const errors: string[] = [];
 /** The last pairing code each core's page showed, by the core's port. */
 const codes = new Map<number, string>();
@@ -163,11 +179,86 @@ const kept = (page: Page) =>
     return out.join("\n");
   });
 
+/** The last mail text read per address, and when each address was last mailed. */
+const texts = new Map<string, string>();
+const mailed = new Map<string, number>();
+/** The newest mail to `to` from the mock's SES, once it differs from the one read before. */
+async function mailText(to: string): Promise<string> {
+  let text = "";
+  await expect
+    .poll(
+      async () => {
+        const r = await fetch(`${mockUrl}/mail?to=${encodeURIComponent(to)}`);
+        text = r.ok ? ((await r.json()) as { text: string }).text : "";
+        return text !== "" && text !== texts.get(to);
+      },
+      { timeout: 15_000 },
+    )
+    .toBe(true);
+  texts.set(to, text);
+  return text;
+}
+const codeIn = (text: string) => /^\d{6}$/m.exec(text)?.[0] ?? "";
+/** The relay mails an address once a minute: wait out what is left of that minute. */
+async function mailable(to: string) {
+  const at = mailed.get(to);
+  if (at) await new Promise((ok) => setTimeout(ok, Math.max(0, at + 61_000 - Date.now())));
+}
+const emailStarts = (port: number) => asked.filter((a) => a.port === port && a.op === "emailSignInStart").length;
+const codeTries = (port: number) => asked.filter((a) => a.port === port && a.op === "emailSignIn").length;
+
+/** Light and dark shots of one stage at the page's width. */
+async function shots(page: Page, name: string) {
+  for (const scheme of ["dark", "light"] as const) {
+    await page.emulateMedia({ colorScheme: scheme });
+    await shot(page, `${name}-${scheme}`);
+  }
+  await page.emulateMedia({ colorScheme: "dark" });
+}
+
+/** The link host's deletion page as it ships (apps/linkhost/delete, the sync service filled in),
+ * served at its own origin, asked by email (E14): the code is read from the mock. */
+async function deletionByEmail(browser: Browser, address: string) {
+  const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  await context.grantPermissions(["local-network-access"], { origin: `https://${LINK_HOST}` });
+  await context.route(`https://${LINK_HOST}/**`, (route) => {
+    const path = new URL(route.request().url()).pathname;
+    const file = path.replace(/^\/delete\/?$/, "delete/index.html").replace(/^\//, "");
+    const type = file.endsWith(".js") ? "text/javascript" : file.endsWith(".css") ? "text/css" : "text/html";
+    return route.fulfill({ contentType: type, body: readFileSync(join(LINKHOST, file), "utf8").replaceAll("{{RELAY_URL}}", SERVER) });
+  });
+  const page = await context.newPage();
+  page.on("pageerror", (e) => errors.push(`link host: ${e.message}`));
+  await page.goto(`https://${LINK_HOST}/delete`);
+  await page.locator('[data-provider="email"]').click();
+  await expect(page.locator("#email")).toBeFocused();
+  await page.locator("#email").fill(address);
+  await mailable(address);
+  await page.locator("#send").click();
+  await expect(page.locator("#sent")).toHaveText(`We sent a 6-digit code to ${address}. It works for 10 minutes.`);
+  mailed.set(address, Date.now());
+  await expect(page.locator("#code")).toBeFocused();
+  // A wrong code keeps the flow; the right one asks before the deletion.
+  const code = codeIn(await mailText(address));
+  await page.locator("#code").fill(code.replace(/^./, (d) => String((Number(d) + 1) % 10)));
+  await page.locator("#take").click();
+  await expect(page.locator("#said")).toHaveText("That code isn't right. Check the email and try again.");
+  await page.locator("#code").fill(`${code.slice(0, 3)} ${code.slice(3)}`);
+  await page.locator("#take").click();
+  await expect(page.locator("#said")).toHaveText(/^Delete your Momotus account\?/);
+  await page.locator("#confirm").click();
+  await expect(page.locator("#said")).toHaveText(/^Your Momotus account will be deleted on /);
+  // The verifier lived in the page's memory only.
+  expect(await page.evaluate(() => sessionStorage.length)).toBe(0);
+  await context.close();
+}
+
 test.describe.serial("accounts on the web", () => {
   test.beforeAll(async ({ browser }) => {
     scratch = mkdtempSync(join(tmpdir(), "mq-accounts-e2e-"));
     const mock = await startMockProvider(P.mock);
     procs.push(mock);
+    mockUrl = mock.url;
     const apple = generateKeyPairSync("ec", { namedCurve: "P-256" }).privateKey.export({ type: "pkcs8", format: "pem" }).toString();
     const identity = join(scratch, "identity.json");
     writeFileSync(
@@ -178,10 +269,11 @@ test.describe.serial("accounts on the web", () => {
         linkHost: LINK_HOST,
         apple: { teamId: "TEAM", keyId: "KEY1", key: apple, servicesId: "apple-web", bundleIds: ["app.ios"], issuer: mock.url },
         oidc: [{ id: "mock", issuer: mock.url, clientId: "marquee", clientSecret: "ms" }],
+        email: { accessKeyId: "AKIDMOCK", secretAccessKey: "mock/secret/key", region: "us-east-1", from: "noreply@example.org", endpoint: mock.url },
       }),
     );
     procs.push(await startRelay(P.relay, undefined, ["--identity", identity, "--public-host", "127.0.0.1"]));
-    for (const port of [P.a, P.b, P.c]) {
+    for (const port of [P.a, P.b, P.c, P.d, P.e]) {
       procs.push(await startBridge(port));
       // Something to show on Home: the local sample addon (a device with none starts at the welcome steps).
       const c = new Client(`ws://127.0.0.1:${port}/ws`);
@@ -192,15 +284,115 @@ test.describe.serial("accounts on the web", () => {
     desk = await device(browser, P.a, "desktop", true);
     phone = await device(browser, P.b, "phone");
     tv = await device(browser, P.c, "tv");
+    mail = await device(browser, P.d, "desktop");
+    late = await device(browser, P.e, "phone");
   });
 
   test.afterAll(async () => {
-    for (const p of [desk, phone, tv]) await p?.context().close();
+    for (const p of [desk, phone, tv, mail, late]) await p?.context().close();
     for (const { proc, data } of procs) {
       proc.kill();
       if (data) rmSync(data, { recursive: true, force: true });
     }
     if (scratch) rmSync(scratch, { recursive: true, force: true });
+  });
+
+  test("email: never on a TV; Mail signs in by email (Back, a wrong code, new, Create); Late asks a code", async () => {
+    // The TV has no email row, and the email route sends it to Sign in (E13).
+    await go(tv, "/sign-in");
+    await expect(tv.locator('[data-f="signin:mock"]')).toBeVisible();
+    await expect(tv.locator('[data-f="signin:email"]')).toHaveCount(0);
+    await go(tv, "/sign-in/email");
+    await expect(tv).toHaveURL(/\/sign-in$/);
+
+    // Its own row under the providers, never a provider button.
+    await go(mail, "/welcome");
+    await expect(mail.locator(".sign-in-providers .btn")).toHaveText(["Continue with Apple", "Continue with mock"]);
+    const row = mail.locator('[data-f="signin:email"]');
+    await expect(row).toHaveText("Continue with email");
+    await expect(row.locator("svg")).toBeVisible();
+    await row.click();
+    await expect(mail).toHaveURL(/\/sign-in\/email\?from=welcome$/);
+    await expect(mail.locator("h1")).toHaveText("Sign in with email");
+    await expect(mail.locator("form.email-form")).toHaveAttribute("novalidate", "");
+    const address = mail.locator('[data-f="signin:email:address"]');
+    await expect(address).toHaveAttribute("type", "email");
+    await expect(address).toHaveAttribute("autocomplete", "email");
+    await shots(mail, "email-address-1440");
+
+    // A malformed address: the core's line under the field, nothing mailed.
+    const send = mail.locator('[data-f="signin:email:send"]');
+    await address.fill("sam@");
+    await send.click();
+    const line = mail.locator("#signin-email-error");
+    await expect(line).toHaveText("Enter an email address like name@example.com.");
+    await expect(address).toHaveAttribute("aria-invalid", "true");
+    await expect(address).toHaveAttribute("aria-describedby", "signin-email-error");
+    await expect(address).toBeFocused();
+
+    await address.fill(SAM);
+    await send.click();
+    mailed.set(SAM, Date.now());
+    await expect(mail).toHaveURL(/\/sign-in\/email\?stage=code&from=welcome$/);
+    await expect(mail.locator("h1")).toHaveText("Enter the code");
+    await expect(mail.locator(".lead")).toHaveText(`We sent a 6-digit code to ${SAM}. It works for 10 minutes.`);
+    await expect(mail.getByText("It can take a minute. Look for a mail from Momotus, and check your spam folder.")).toBeVisible();
+    const field = mail.locator('[data-f="signin:email:code"]');
+    await expect(field).toBeFocused();
+    await expect(field).toHaveAttribute("inputmode", "numeric");
+    await expect(field).toHaveAttribute("autocomplete", "one-time-code");
+    await expect(field).not.toHaveAttribute("maxlength");
+    const newCode = mail.locator('[data-f="signin:email:new-code"]');
+    await expect(newCode).toBeDisabled();
+    await expect(newCode).toHaveText(/^Send a new code in (60|59|58|57) seconds$/);
+    await shots(mail, "email-code-1440");
+    const code = codeIn(await mailText(SAM));
+    expect(code).toMatch(/^\d{6}$/);
+
+    // Back: the address stage, prefilled; the same address while its flow is open goes back to
+    // the code stage without a new mail.
+    await mail.goBack();
+    await expect(mail).toHaveURL(/\/sign-in\/email\?from=welcome$/);
+    await expect(address).toHaveValue(SAM);
+    const starts = emailStarts(P.d);
+    await send.click();
+    await expect(mail).toHaveURL(/stage=code/);
+    expect(emailStarts(P.d)).toBe(starts);
+
+    // A wrong code, typed: sent once at the sixth digit; its line, the field cleared and focused.
+    await field.pressSequentially(code.replace(/^./, (d) => String((Number(d) + 1) % 10)));
+    await expect(line).toHaveText("That code isn't right. Check the email and try again.");
+    await expect(field).toHaveAttribute("aria-invalid", "true");
+    await expect(field).toHaveValue("");
+    await expect(field).toBeFocused();
+    expect(codeTries(P.d)).toBe(1);
+    // Pasted with a space: the flow kept, digits only, sent once.
+    await field.fill(`${code.slice(0, 3)} ${code.slice(3)}`);
+    await expect(mail).toHaveURL(/\/sign-in\/new\?from=welcome$/);
+    expect(codeTries(P.d)).toBe(2);
+    await mail.locator('[data-f="signin:create"]').click();
+    await expect(mail).toHaveURL(/\/sync\/kit\?first=1&then=doors$/);
+    await mail.locator('[data-f="sync-kit:cancel"]').click();
+    await expect(mail).toHaveURL(/\/welcome\?step=doors$/);
+
+    // Account reads the link as Email, and Link another offers no second one (E12).
+    await go(mail, "/sync");
+    const section = mail.locator('section[aria-label="Signed in with"]');
+    await expect(section.locator(".sync-member h3")).toHaveText(["Email"]);
+    await mail.locator('[data-f="sync:link-another"]').click();
+    await expect(section.locator("[data-provider]")).toHaveText(["Continue with Apple", "Continue with mock"]);
+    await expect(section.locator('[data-f="sync:link:email"]')).toHaveCount(0);
+
+    // Late (a phone, at 375) asks a code for its Send a new code, near the end of the spec.
+    await late.setViewportSize({ width: 375, height: 812 });
+    await go(late, "/sign-in/email");
+    await shots(late, "email-address-375");
+    await late.locator('[data-f="signin:email:address"]').fill(LEE);
+    await late.locator('[data-f="signin:email:send"]').click();
+    mailed.set(LEE, Date.now());
+    await expect(late).toHaveURL(/\/sign-in\/email\?stage=code$/);
+    await mailText(LEE);
+    await shots(late, "email-code-375");
   });
 
   test("Desk signs in: a cancel says nothing, a closed window asks, then new, Create, the kit, the doors", async () => {
@@ -289,6 +481,22 @@ test.describe.serial("accounts on the web", () => {
     expect(asked.filter((a) => a.port === P.a && a.op === "unlinkIdentity").at(-1)?.fields).not.toContain("receipt");
     // Apple again, for the deletion at the end.
     await link();
+
+    // Link another by email (E12): the email row while no email link exists, both stages in place.
+    await desk.locator('[data-f="sync:link-another"]').click();
+    await section.locator('[data-f="sync:link:email"]').click();
+    await expect(section.locator("h3", { hasText: "Sign in with email" })).toBeVisible();
+    await section.locator('[data-f="sync:email:address"]').fill(PAT);
+    await section.locator('[data-f="sync:email:send"]').click();
+    mailed.set(PAT, Date.now());
+    const field = section.locator('[data-f="sync:email:code"]');
+    await expect(field).toBeFocused();
+    await field.fill(codeIn(await mailText(PAT)));
+    await expect(rows).toHaveCount(3);
+    await expect(rows.nth(2).locator("h3")).toHaveText("Email");
+    await desk.locator('[data-f="sync:link-another"]').click();
+    await expect(section.locator("[data-provider]")).toHaveText(["Continue with Apple", "Continue with mock"]);
+    await expect(section.locator('[data-f="sync:link:email"]')).toHaveCount(0);
   });
 
   test("Phone signs in as bob and skips the kit: Home nudges for a second way in", async () => {
@@ -412,7 +620,7 @@ test.describe.serial("accounts on the web", () => {
     await expect(card).toHaveCount(0);
   });
 
-  test("a deletion asked on the link host shows on Home with Cancel, and with Cancel and turn off", async () => {
+  test("a deletion asked on the link host shows on Home with Cancel, and with Cancel and turn off", async ({ browser }) => {
     const due = await requestDeletion("mock", "alice");
     expect(due).toBeGreaterThan(Date.now() + 6 * 86_400_000);
     await syncNow(tv);
@@ -426,16 +634,20 @@ test.describe.serial("accounts on the web", () => {
     await press(tv, "home:account:cancel");
     await expect(card).toHaveCount(0);
 
-    // Asked again; Desk cancels and turns the mock sign-in off, so it cannot simply ask again.
-    await requestDeletion("mock", "alice");
+    // Asked again, on the link host's own page by email (E14); Desk cancels and turns email
+    // sign-in off, so it cannot simply ask again.
+    await deletionByEmail(browser, PAT);
     await syncNow(desk);
     await go(desk, "/");
     const deskCard = desk.locator(".account-card");
     await expect(deskCard).toHaveAttribute("data-card", "deletion");
-    await desk.locator('[data-f="home:account:cancel-unlink"]').click();
+    await expect(deskCard).toContainText("Someone signed in with your email address and asked to delete your Momotus account on");
+    const cancelUnlink = desk.locator('[data-f="home:account:cancel-unlink"]');
+    await expect(cancelUnlink).toHaveText("Cancel and turn off email sign-in");
+    await cancelUnlink.click();
     await expect(deskCard).toHaveCount(0);
     await go(desk, "/sync");
-    await expect(desk.locator('section[aria-label="Signed in with"] .sync-member h3')).toHaveText(["Apple"]);
+    await expect(desk.locator('section[aria-label="Signed in with"] .sync-member h3')).toHaveText(["mock", "Apple"]);
   });
 
   test("Desk deletes the account after Apple's revoke; the TV hears it and removes its library from Home", async () => {
@@ -466,11 +678,59 @@ test.describe.serial("accounts on the web", () => {
     await expect(tv.locator("h1")).toHaveText("Sign in with your phone");
   });
 
+  test("Late's Send a new code turns on after its minute; Mail signs out and finds its account by email", async () => {
+    test.setTimeout(240_000);
+    // Counted from the mail's time: on once the minute is out, then off again for the next.
+    await mailable(LEE);
+    const newCode = late.locator('[data-f="signin:email:new-code"]');
+    await expect(newCode).toHaveText("Send a new code");
+    await expect(newCode).toBeEnabled();
+    const starts = emailStarts(P.e);
+    await newCode.click();
+    await expect(late.getByText("We sent a new code. Use the newest email: older codes stop working.")).toBeVisible();
+    mailed.set(LEE, Date.now());
+    expect(emailStarts(P.e)).toBe(starts + 1);
+    await expect(newCode).toBeDisabled();
+    await late.locator('[data-f="signin:email:code"]').fill(codeIn(await mailText(LEE)));
+    await expect(late).toHaveURL(/\/sign-in\/new$/);
+    await expect(late.locator("h1")).toHaveText("Create your Momotus account");
+
+    // Mail signs out and keeps its library, then signs in by email again: `found`.
+    await go(mail, "/sync");
+    await mail.locator('[data-f="sync:remove-library"]').click();
+    await mail.locator('[data-f="sync:leave"]').click();
+    const signIn = mail.locator('[data-f="sync:sign-in"]');
+    await expect(signIn.or(mail.locator('[data-f="sync:leave-again"]'))).toBeVisible();
+    if (await mail.locator('[data-f="sync:leave-again"]').isVisible()) await mail.locator('[data-f="sync:leave-again"]').click();
+    await expect(signIn).toBeVisible();
+    await go(mail, "/sign-in");
+    await mail.locator('[data-f="signin:email"]').click();
+    await expect(mail).toHaveURL(/\/sign-in\/email$/);
+    // The address stays in memory while the tab lives (never in storage or the URL).
+    await expect(mail.locator('[data-f="signin:email:address"]')).toHaveValue(SAM);
+    await mailable(SAM);
+    await mail.locator('[data-f="signin:email:send"]').click();
+    mailed.set(SAM, Date.now());
+    await expect(mail).toHaveURL(/\/sign-in\/email\?stage=code$/);
+    await mail.locator('[data-f="signin:email:code"]').fill(codeIn(await mailText(SAM)));
+    await expect(mail).toHaveURL(/\/sign-in\/found$/);
+    await expect(mail.locator(".lead")).toHaveText(
+      "This sign-in already has a Momotus account. Scan this code with your phone, where Momotus is signed in, to add this browser.",
+    );
+
+    // A reload at the code stage has no flow: it is the address stage.
+    await go(late, "/sign-in/email?stage=code");
+    await late.reload();
+    await expect(late).toHaveURL(/\/sign-in\/email$/);
+    await expect(late.locator('[data-f="signin:email:address"]')).toHaveValue("");
+  });
+
   test("no ticket or receipt reaches storage, history or the URL, and no page threw", async () => {
     expect(secrets.size).toBeGreaterThan(4);
-    for (const page of [desk, phone, tv]) {
+    for (const page of [desk, phone, tv, mail, late]) {
       const text = await kept(page);
       for (const secret of secrets) expect(text.includes(secret), `a ticket or receipt is kept on ${page.url()}`).toBe(false);
+      for (const address of [SAM, LEE, PAT]) expect(text.includes(address), `an address is kept on ${page.url()}`).toBe(false);
     }
     expect(errors).toEqual([]);
   });

@@ -34,7 +34,7 @@ export const SEARCH_TOP_PORT = 17815 + shift;
 /** The browser's recorder (e2e/replay.ts): every name but this machine's resolves here. */
 export const BROWSER_PORTS = { https: 17816 + shift, http: 17817 + shift };
 /** The accounts spec's own: a relay with sign-in, the mock provider, and one core per device. */
-export const ACCOUNTS_PORTS = { relay: 17818 + shift, mock: 17819 + shift, a: 17820 + shift, b: 17821 + shift, c: 17822 + shift };
+export const ACCOUNTS_PORTS = { relay: 17818 + shift, mock: 17819 + shift, a: 17820 + shift, b: 17821 + shift, c: 17822 + shift, d: 17829 + shift, e: 17830 + shift };
 /** The ratings spec's own: a core with a local addon and one installed with an RPDB key. */
 export const RATINGS_PORT = 17823 + shift;
 /** The player loading spec's own: a core whose one source holds its first byte until the test lets it go. */

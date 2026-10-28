@@ -115,3 +115,13 @@ export interface Held {
 }
 const [held, setHeld] = createSignal<Held | null>(null);
 export { held, setHeld };
+
+/** Sign-in by an emailed code (plans/accounts-email.md): the relay mails a 6-digit code to
+ * `email`; the flow's verifier stays in the core, in memory. The address is checked by the core. */
+export interface EmailFlow {
+  flow: string;
+  expiresMs: number;
+}
+export const emailStart = (server: string, email: string) => op<EmailFlow>("emailSignInStart", { server, email });
+/** The code for `flow`: `found` or `new`, as a provider's sign-in ends. */
+export const emailCode = (flow: string, code: string) => op<Extract<SignInEnd, { phase: "found" | "new" }>>("emailSignIn", { flow, code });

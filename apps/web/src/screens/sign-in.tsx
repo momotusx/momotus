@@ -8,16 +8,33 @@ import { A, Navigate, useNavigate, useSearchParams } from "@solidjs/router";
 import Check from "lucide-solid/icons/check";
 import ChevronRight from "lucide-solid/icons/chevron-right";
 import LifeBuoy from "lucide-solid/icons/life-buoy";
+import Mail from "lucide-solid/icons/mail";
 import QrCode from "lucide-solid/icons/qr-code";
 import Server from "lucide-solid/icons/server";
-import { createResource, createSignal, For, type JSX, onCleanup, onMount, Show } from "solid-js";
+import { createEffect, createResource, createSignal, For, type JSX, on, onCleanup, onMount, Show } from "solid-js";
+import { Dynamic } from "solid-js/web";
 import { profiles } from "../core/profiles";
-import { held, openSignInWindow, relayProviders, runSignIn, type SignInEnd, type SignInRun, setHeld, signInServer } from "../core/sign-in";
+import { type EmailFlow, emailCode, emailStart, held, openSignInWindow, relayProviders, runSignIn, type SignInEnd, type SignInRun, setHeld, signInServer } from "../core/sign-in";
 import * as sync from "../core/sync";
 import { autoFocusSoon } from "../focus/dom";
 import { form } from "../form";
 import { resetHistoryBase } from "../history";
-import { type Act, accountWords as w, continueWith, type Failure, providerOrder, signInFailure } from "../lib/account";
+import {
+  type Act,
+  codeDigits,
+  continueWith,
+  continueWithEmail,
+  EMAIL,
+  emailEnds,
+  emailFailure,
+  emailFieldError,
+  type Failure,
+  fill,
+  providerOrder,
+  resendIn,
+  signInFailure,
+  accountWords as w,
+} from "../lib/account";
 import { mayMakeKit } from "../lib/sync";
 import { plainAddress, syncWords } from "../lib/words";
 import { Session } from "./pairing";
@@ -174,6 +191,9 @@ export function SignInStart(props: { from: From; doors: () => JSX.Element }) {
     else s.setFailure(null);
   };
   const doors = () => !server || (providers.state === "ready" && providers().length === 0);
+  const buttons = () => (providers.state === "ready" ? providerOrder(providers()) : []);
+  // Never on a TV (E13): typing an address and a code with a remote is the slow path the QR replaced.
+  const email = () => form() !== "tv" && providers.state === "ready" && providers().includes(EMAIL);
   return (
     <Show when={!doors()} fallback={props.doors()}>
       <section class="step-body" aria-label={w.signInTitle} aria-busy={providers.loading || undefined}>
@@ -186,7 +206,7 @@ export function SignInStart(props: { from: From; doors: () => JSX.Element }) {
           fallback={<FailureNote failure={signInFailure("unreachable") as Failure} fkey="signin:relay" onAct={(a) => (a === "retry" ? void refetch() : leave())} />}
         >
           <div class="acts sign-in-providers" data-fgroup="providers">
-            <For each={providers.state === "ready" ? providerOrder(providers()) : []}>
+            <For each={buttons()}>
               {(p, i) => (
                 <button class="btn" classList={{ primary: i() === 0 }} data-f={`signin:${p}`} data-provider={p} data-autofocus={i() === 0 ? "" : undefined} onClick={() => s.go(p)}>
                   {continueWith(p)}
@@ -194,6 +214,24 @@ export function SignInStart(props: { from: From; doors: () => JSX.Element }) {
               )}
             </For>
           </div>
+          {/* Below the providers, above Other ways; the primary when it is the only way. */}
+          <Show when={email()}>
+            <div class="acts">
+              <button
+                class="btn"
+                classList={{ primary: buttons().length === 0 }}
+                data-f="signin:email"
+                data-autofocus={buttons().length === 0 ? "" : undefined}
+                onClick={() => {
+                  resume = null;
+                  navigate(emailPath("address", props.from));
+                }}
+              >
+                <Mail aria-hidden />
+                {continueWithEmail}
+              </button>
+            </div>
+          </Show>
           <SignInState said={s.said()} fkey="signin" onAct={act} />
           <div class="acts">
             <A class="btn" href={`/sign-in/other${tail(props.from)}`} data-f="signin:other">
@@ -310,6 +348,358 @@ export function OwnServer() {
 /** The work a sign-in's ticket was held for, run again with a fresh ticket after "Sign in again to finish." */
 type Pending = (ticket: string) => Promise<void>;
 
+type Taken = Extract<SignInEnd, { phase: "found" | "new" }>;
+export type MailStage = "address" | "code";
+interface MailHooks {
+  /** The stage on screen. */
+  stage: () => MailStage;
+  /** A code was mailed, or the open flow's code stage is shown again. */
+  sent: () => void;
+  /** The code's answer. */
+  taken: (end: Taken) => void;
+}
+const unbound: MailHooks = { stage: () => "code", sent: () => undefined, taken: () => undefined };
+
+/** The email screen's state (plans/accounts-email.md 4): the address and the newest flow, in
+ * memory only (E12). Every failure stays on the stage it came from, and Try again repeats that
+ * stage's own call. The screen that shows it binds its stage and what an answer does. */
+export function createMail(server: () => string) {
+  const [address, setAddress] = createSignal("");
+  const [code, setCode] = createSignal("");
+  const [fieldError, setFieldError] = createSignal<string | null>(null);
+  const [failure, setFailure] = createSignal<Failure | null>(null);
+  const [busy, setBusy] = createSignal(false);
+  /** The code's flow ended (`codeExpired`, `emailLimit`): the field stays, read-only, until a new code. */
+  const [ended, setEnded] = createSignal(false);
+  const [resent, setResent] = createSignal(false);
+  /** The address the newest code went to, and when: Send a new code waits 60 s from it. */
+  const [sentTo, setSentTo] = createSignal("");
+  const [sentAt, setSentAt] = createSignal(0);
+  let flow: EmailFlow | null = null;
+  let again: (() => void) | null = null;
+  let hooks = unbound;
+  const failed = (code: string) => {
+    const onCode = hooks.stage() === "code";
+    const line = emailFieldError(code);
+    if (line) {
+      setFieldError(line);
+      if (onCode) setCode("");
+      return;
+    }
+    setFailure(emailFailure(code));
+    if (onCode && emailEnds(code)) {
+      setEnded(true);
+      flow = null;
+    }
+  };
+  const call = (work: () => Promise<Taken | null>) => {
+    if (busy()) return;
+    again = () => call(work);
+    setFailure(null);
+    setFieldError(null);
+    setBusy(true);
+    work().then(
+      (end) => {
+        setBusy(false);
+        if (end) hooks.taken(end);
+      },
+      (e: unknown) => {
+        setBusy(false);
+        failed(codeOf(e));
+      },
+    );
+  };
+  const mail = (resend: boolean) => {
+    const typed = resend ? sentTo() : address().trim();
+    call(async () => {
+      setResent(false);
+      flow = await emailStart(server(), typed);
+      setSentTo(typed);
+      setSentAt(Date.now());
+      setCode("");
+      setEnded(false);
+      setResent(resend);
+      hooks.sent();
+      return null;
+    });
+  };
+  const submit = () => {
+    const f = flow;
+    const typed = code();
+    if (!f || busy() || ended() || typed.length !== 6) return;
+    call(async () => {
+      const end = await emailCode(f.flow, typed);
+      flow = null;
+      return end;
+    });
+  };
+  /** The address stage's start: no line, no code. */
+  const reset = () => {
+    setCode("");
+    setFieldError(null);
+    setFailure(null);
+    setEnded(false);
+  };
+  return {
+    address,
+    setAddress,
+    code,
+    fieldError,
+    failure,
+    busy,
+    ended,
+    resent,
+    sentTo,
+    sentAt,
+    reset,
+    submit,
+    bind: (h: MailHooks | null) => {
+      hooks = h ?? unbound;
+    },
+    /** Send code. The same address while its flow is open goes back to the code stage without a new mail. */
+    send: () => {
+      if (busy()) return;
+      if (flow && sentTo() === address().trim() && flow.expiresMs > Date.now()) {
+        reset();
+        hooks.sent();
+      } else mail(false);
+    },
+    /** Send a new code, to the address the last one went to. */
+    resend: () => mail(true),
+    /** Typed into the code field: digits only, cut at 6; the sixth digit sends it once. */
+    type: (typed: string) => {
+      if (busy() || ended()) return;
+      const digits = codeDigits(typed);
+      if (digits === code()) return;
+      setCode(digits);
+      if (digits.length === 6) submit();
+    },
+    /** Try again: this screen's last call again, the same address or the same code. */
+    retry: () => again?.(),
+    /** A held ticket ran out: a new code to the address in memory, at the code stage; with none
+     * (the tab was reloaded), the address stage, empty. Answers the stage to show. */
+    reopen: (): MailStage => {
+      if (!sentTo()) {
+        reset();
+        return "address";
+      }
+      setAddress(sentTo());
+      flow = null;
+      reset();
+      mail(true);
+      return "code";
+    },
+    dismiss: () => setFailure(null),
+  };
+}
+export type MailState = ReturnType<typeof createMail>;
+
+/** The sign-in screen's email state, kept for the tab: a held ticket's Continue reuses its address. */
+const signInMail = createMail(signInServer);
+/** A held ticket's work, waiting for the new code's ticket, and the page it goes back to. */
+let resume: { path: string; work: Pending | null; account: string | null } | null = null;
+/** That work, handed to the page once it is back. */
+let resumed: Pending | null = null;
+/** The code stage was pushed over the address stage, so Use another address is Back. */
+let pushedCode = false;
+
+/** Each stage is a history entry; the address never is part of it. */
+function emailPath(stage: MailStage, from: From) {
+  const q = new URLSearchParams();
+  if (stage === "code") q.set("stage", "code");
+  if (from === "welcome") q.set("from", "welcome");
+  const s = q.toString();
+  return `/sign-in/email${s ? `?${s}` : ""}`;
+}
+
+/** The two stages of the email screen: the address, then the 6-digit code. */
+export function EmailStages(props: { mail: MailState; stage: MailStage; fkey: string; heading?: "h1" | "h3"; onAct: (a: Act) => void; children?: JSX.Element }) {
+  const m = props.mail;
+  const k = (name: string) => `${props.fkey}:${name}`;
+  const errorId = `${props.fkey.replace(/\W/g, "-")}-error`;
+  let field: HTMLInputElement | undefined;
+  // On a stage change and on a line under the field, focus goes to the stage's field.
+  createEffect(on(() => props.stage, () => queueMicrotask(() => field?.focus()), { defer: true }));
+  createEffect(on(m.fieldError, (e) => e && field?.focus(), { defer: true }));
+  const [now, setNow] = createSignal(Date.now());
+  const tick = setInterval(() => setNow(Date.now()), 1000);
+  onCleanup(() => clearInterval(tick));
+  const wait = () => resendIn(m.sentAt(), now());
+  const fieldLine = () => (
+    <Show when={m.fieldError()}>
+      {(e) => (
+        <p class="st bad" id={errorId} role="status">
+          <i class="dot" />
+          {e()}
+        </p>
+      )}
+    </Show>
+  );
+  return (
+    <>
+      <Show
+        when={props.stage === "code"}
+        fallback={
+          <>
+            <Dynamic component={props.heading ?? "h1"}>{w.emailTitle}</Dynamic>
+            <form
+              class="install email-form"
+              noValidate
+              onSubmit={(e) => {
+                e.preventDefault();
+                m.send();
+              }}
+            >
+              <label class="field-line">
+                <span class="kicker">{w.emailLabel}</span>
+                <input
+                  ref={(el) => (field = el)}
+                  type="email"
+                  name="email"
+                  autocomplete="email"
+                  autocapitalize="off"
+                  spellcheck={false}
+                  value={m.address()}
+                  onInput={(e) => m.setAddress(e.currentTarget.value)}
+                  readOnly={m.busy()}
+                  aria-busy={m.busy() || undefined}
+                  data-f={k("address")}
+                  data-autofocus
+                  aria-invalid={m.fieldError() ? true : undefined}
+                  aria-describedby={m.fieldError() ? errorId : undefined}
+                />
+              </label>
+              {fieldLine()}
+              <button class="btn primary" type="submit" data-f={k("send")} aria-busy={m.busy() || undefined}>
+                {w.emailSend}
+              </button>
+            </form>
+          </>
+        }
+      >
+        <Dynamic component={props.heading ?? "h1"}>{w.codeTitle}</Dynamic>
+        <p class="lead">{fill(w.codeSentTo, { email: m.sentTo() })}</p>
+        <form
+          class="install email-form"
+          noValidate
+          onSubmit={(e) => {
+            e.preventDefault();
+            m.submit();
+          }}
+        >
+          <label class="field-line">
+            <span class="kicker">{w.codeLabel}</span>
+            <input
+              ref={(el) => (field = el)}
+              type="text"
+              name="code"
+              inputmode="numeric"
+              autocomplete="one-time-code"
+              pattern="[0-9 -]*"
+              spellcheck={false}
+              value={m.code()}
+              onInput={(e) => {
+                m.type(e.currentTarget.value);
+                e.currentTarget.value = m.code();
+              }}
+              readOnly={m.busy() || m.ended()}
+              aria-busy={m.busy() || undefined}
+              data-f={k("code")}
+              data-autofocus
+              aria-invalid={m.fieldError() ? true : undefined}
+                  aria-describedby={m.fieldError() ? errorId : undefined}
+            />
+          </label>
+          {fieldLine()}
+        </form>
+        {/* Gmail files these mails as spam today (plans/accounts-email.md 3): always said, at normal weight. */}
+        <p class="aside">{w.codeMissing}</p>
+        <Show when={m.resent()}>
+          <p class="st ok" role="status">
+            <i class="dot" />
+            {w.codeResent}
+          </p>
+        </Show>
+      </Show>
+      <Show when={m.failure()}>{(f) => <FailureNote failure={f()} fkey={props.fkey} onAct={props.onAct} />}</Show>
+      <div class="acts">
+        <Show when={props.stage === "code" && !m.ended()}>
+          {/* Not a live region: the count is read once, and the line below says when it turns on. */}
+          <button class="btn" data-f={k("new-code")} disabled={wait() > 0 || m.busy()} onClick={() => m.resend()}>
+            {wait() > 0 ? fill(w.codeResendIn, { seconds: wait() }) : w.codeResend}
+          </button>
+          <button class="btn" data-f={k("another")} onClick={() => props.onAct("otherAddress")}>
+            {w.codeOtherAddress}
+          </button>
+        </Show>
+        {props.children}
+      </div>
+      <p class="sr" aria-live="polite">
+        {props.stage === "code" && !m.ended() && m.sentAt() && wait() === 0 ? w.codeResend : ""}
+      </p>
+    </>
+  );
+}
+
+/** `/sign-in/email`: Sign in with email, its stage in the query (`?stage=code`), never the
+ * address. A code stage with no code mailed in this tab (a reload) is the address stage; a TV
+ * goes to Sign in (E13). */
+export function EmailSignIn() {
+  const [q] = useSearchParams();
+  const from = fromOf(q);
+  const navigate = useNavigate();
+  const stage = (): MailStage => (q.stage === "code" ? "code" : "address");
+  const m = signInMail;
+  m.bind({
+    stage,
+    sent: () => {
+      if (stage() === "code") return;
+      pushedCode = true;
+      navigate(emailPath("code", from));
+    },
+    taken: (end) => {
+      const r = resume;
+      resume = null;
+      setHeld({ server: signInServer(), provider: EMAIL, ticket: end.ticket, account: end.phase === "found" ? end.account : null });
+      // Back to the page whose ticket ran out, unless the sign-in found an account it did not have.
+      if (r && !(end.phase === "found" && !r.account)) {
+        resumed = r.work;
+        navigate(r.path, { replace: true });
+      } else navigate(`/sign-in/${end.phase}${tail(from)}`);
+    },
+  });
+  onCleanup(() => m.bind(null));
+  createEffect(
+    on(stage, (s) => {
+      if (s === "address") m.reset();
+      else if (!m.sentTo()) navigate(emailPath("address", from), { replace: true });
+    }),
+  );
+  const toAddress = () => {
+    if (pushedCode) {
+      pushedCode = false;
+      navigate(-1);
+    } else navigate(emailPath("address", from), { replace: true });
+  };
+  const act = (a: Act) => {
+    if (a === "retry") m.retry();
+    else if (a === "resend") m.resend();
+    else if (a === "otherAddress") toAddress();
+    else if (a === "other") navigate(firstScreen(from));
+    else if (a === "notNow") navigate(from === "welcome" ? "/welcome?step=doors" : "/sync");
+    else m.dismiss();
+  };
+  return (
+    <Show when={form() !== "tv"} fallback={<Navigate href={firstScreen(from)} />}>
+      <Show when={!sync.joined()} fallback={<Navigate href="/sync" />}>
+        <Frame label={stage() === "code" ? w.codeTitle : w.emailTitle}>
+          <EmailStages mail={m} stage={stage()} fkey="signin:email" onAct={act} />
+        </Frame>
+      </Show>
+    </Show>
+  );
+}
+
 /** The ticket's own failures and the window of a second sign-in, for `new` and `found`. */
 function useHeldTicket(from: From) {
   const navigate = useNavigate();
@@ -346,9 +736,21 @@ function useHeldTicket(from: From) {
       if (pending) void run(pending);
     },
   );
+  // Back from "Sign in again to finish" by email: the work waiting for the new code's ticket.
+  onMount(() => {
+    const work = resumed;
+    resumed = null;
+    if (work) void run(work);
+  });
   const act = (a: Act) => {
     if (a === "retry") {
-      if (!failure() || failed === "ticketExpired") again.again();
+      const h = held();
+      if ((!failure() || failed === "ticketExpired") && h?.provider === EMAIL) {
+        // The code stage with the address still in memory and a new code (4.6), then this page again.
+        resume = { path: location.pathname + location.search, work: pending, account: h.account };
+        pushedCode = false;
+        navigate(emailPath(signInMail.reopen(), from));
+      } else if (!failure() || failed === "ticketExpired") again.again();
       else if (pending) void run(pending);
     } else if (a === "other") navigate(`/sign-in/other${tail(from)}`);
     else {

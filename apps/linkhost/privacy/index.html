@@ -18,6 +18,8 @@
         <li>Your synced data: profiles, addons and their addresses, library, progress, watched marks and settings. Your devices encrypt it before sending it, and the service cannot read it. Only your devices hold the key.</li>
         <li>For each device in your account: a public key, its encrypted name, and when it joined.</li>
         <li>For each sign-in you link (Google, Facebook): a keyed hash of the account number that provider gives Momotus. Not your email, name, photo or any token from the provider.</li>
+        <li>For a sign-in with your email address: a keyed hash of the address, never the address itself. To send the code, your address and the code pass through our mail service, Amazon SES (Amazon Web Services, US East); we do not have it keep copies of the messages, and an address that bounces or complains may stay on its suppression list.</li>
+        <li>For abuse limits, a keyed hash of each address that asked for a code is kept for 24 hours.</li>
         <li>To limit abuse: that keyed hash with the time of each Momotus account it created, kept 30 days.</li>
         <li>While you sign in: a record of that sign-in, kept 10 minutes.</li>
       </ul>

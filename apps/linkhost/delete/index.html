@@ -28,7 +28,21 @@
         <button type="button" data-provider="apple">Continue with Apple</button>
         <button type="button" data-provider="google">Continue with Google</button>
         <button type="button" data-provider="facebook">Continue with Facebook</button>
+        <button type="button" data-provider="email">Continue with email</button>
       </div>
+      <!-- Continue with email: the address, then the code mailed to it, on this page. -->
+      <form id="email-form" novalidate hidden>
+        <label for="email">Email address</label>
+        <input id="email" name="email" type="email" autocomplete="email" autocapitalize="off" spellcheck="false" />
+        <div class="acts"><button type="submit" id="send">Send code</button></div>
+      </form>
+      <form id="code-form" novalidate hidden>
+        <p id="sent"></p>
+        <label for="code">6-digit code</label>
+        <input id="code" name="code" type="text" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9 -]*" spellcheck="false" />
+        <div class="acts"><button type="submit" id="take">Continue</button></div>
+        <p>It can take a minute. Look for a mail from Momotus, and check your spam folder.</p>
+      </form>
       <p id="said" role="status"></p>
       <div class="acts">
         <button type="button" id="confirm" class="danger" hidden>Delete my account</button>

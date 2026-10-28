@@ -2,7 +2,7 @@
 import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { newVerifier, purposeOf, readReturn, verifierHash } from "./delete/delete.js";
+import { codeDigits, mailWords, newVerifier, purposeOf, readReturn, verifierHash } from "./delete/delete.js";
 
 const here = import.meta.dir;
 const read = (path: string) => readFileSync(join(here, path), "utf8");
@@ -166,4 +166,39 @@ test("the deletion page names where the request lives in the app: Settings, Acco
   const html = read("delete/index.html");
   expect(html).toContain("in Settings, Account, with Cancel");
   expect(html).not.toMatch(/\bHome\b/);
+});
+
+test("Continue with email comes with email in PROVIDERS, takes its code on the page, and keeps the verifier in memory", () => {
+  const html = built({ ...ENV, PROVIDERS: "google,email" }).read("delete/index.html");
+  expect(html).toContain('data-provider="email"');
+  expect(built(ENV).read("delete/index.html")).not.toContain('data-provider="email"');
+  // The address field and the code field, the forms never checked by the browser before the page's words.
+  expect(html).toMatch(/<form id="email-form" novalidate hidden>/);
+  expect(html).toMatch(/<input id="email"[^>]*type="email"[^>]*autocomplete="email"/);
+  expect(html).toMatch(/<input id="code"[^>]*inputmode="numeric"[^>]*autocomplete="one-time-code"/);
+  expect(html).not.toMatch(/<input id="code"[^>]*maxlength/);
+  // E14: the email flow never reaches sessionStorage; only the brokered flow's verifier does.
+  const script = read("delete/delete.js");
+  expect(script.match(/sessionStorage\.setItem/g)?.length).toBe(1);
+  expect(script).toContain("let mail = null;");
+  // The CSP is the one every deletion page has.
+  expect(html).toMatch(/connect-src https:\/\/sync\.example\.org;/);
+});
+
+test("the email step's answers read as the apps word them, and a pasted code keeps its digits", () => {
+  expect(mailWords("badAddress")).toBe("Enter an email address like name@example.com.");
+  expect(mailWords("wrongCode")).toBe(mailWords("badCode"));
+  expect(mailWords("ticketExpired")).toBe("This code can't be used any more. Send a new code.");
+  expect(mailWords("emailWait")).toBe("Wait a minute, then send a new code.");
+  expect(mailWords("mailUnavailable")).toContain("couldn't be sent");
+  expect(mailWords("")).toBe("The sign-in did not work. Try again in a moment.");
+  expect(codeDigits("123 456")).toBe("123456");
+  expect(codeDigits("123-4567")).toBe("123456");
+});
+
+test("the privacy page says what email sign-in keeps and who carries the mail", () => {
+  const html = read("privacy/index.html");
+  expect(html).toContain("a keyed hash of the address, never the address itself");
+  expect(html).toContain("Amazon SES (Amazon Web Services, US East)");
+  expect(html).toContain("kept for 24 hours");
 });

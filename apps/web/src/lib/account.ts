@@ -25,11 +25,20 @@ export const continueWith = (id: string) => fill(w.continueWith, { provider: pro
 
 /** The order of a relay's providers on the first screen: Apple, Google and Facebook first, as
  * the web shows no platform's own sheet (4.1.1), then any other in the relay's order. */
-export const providerOrder = (ids: readonly string[]) => [...ids.filter((id) => id in w.providerName).sort((a, b) => Object.keys(w.providerName).indexOf(a) - Object.keys(w.providerName).indexOf(b)), ...ids.filter((id) => !(id in w.providerName))];
+export const providerOrder = (ids: readonly string[]) => {
+  // Email is never a provider button: it is its own "Continue with email" row (plans/accounts-email.md 4).
+  const buttons = ids.filter((id) => id !== EMAIL);
+  const known = Object.keys(w.providerName);
+  return [...buttons.filter((id) => id in w.providerName).sort((a, b) => known.indexOf(a) - known.indexOf(b)), ...buttons.filter((id) => !(id in w.providerName))];
+};
+
+export const EMAIL = "email";
+export const continueWithEmail = w.continueWithEmail;
 
 /** What a button under a failure does: sign in again with the same provider, the other ways,
- * Not now, move the sign-in to this account, go on without Apple's receipt, or put the line away. */
-export type Act = "retry" | "other" | "notNow" | "move" | "anyway" | "cancel";
+ * Not now, move the sign-in to this account, go on without Apple's receipt, or put the line away;
+ * on the email code stage, Send a new code and Use another address. */
+export type Act = "retry" | "other" | "notNow" | "move" | "anyway" | "cancel" | "resend" | "otherAddress";
 export interface Action {
   label: string;
   act: Act;
@@ -73,6 +82,46 @@ export function signInFailure(code: string, provider = ""): Failure | null {
       return { text: w.signInRefused, actions: acts(w.noRedirectActions, ["retry", "other"]) };
   }
 }
+
+/** An email stage's failure with its buttons (plans/accounts-email.md 4, the answers table).
+ * `badAddress`, `wrongCode` and `badCode` are a line under the field instead (`emailFieldError`).
+ * An empty code is an op with no coded answer: the relay did not answer. */
+export function emailFailure(code: string): Failure {
+  const expired = acts(w.codeExpiredActions, ["resend", "otherAddress"]);
+  switch (code) {
+    case "ticketExpired":
+    case "wrongFlow":
+      return { text: w.codeExpired, actions: expired };
+    // Its own words, with the code stage's way on.
+    case "signInRefused":
+      return { text: w.signInRefused, actions: expired };
+    // Send code stays usable: no button of its own.
+    case "emailWait":
+      return { text: w.emailWait, actions: [] };
+    case "emailLimit":
+      return { text: w.emailLimit, actions: acts(w.emailLimitActions, ["other"]) };
+    case "mailUnavailable":
+      return { text: w.mailUnavailable, actions: acts(w.mailUnavailableActions, ["retry", "other"]) };
+    // busy, unreachable and the rest: today's words.
+    default:
+      return signInFailure(code || "unreachable", EMAIL) ?? { text: w.signInRefused, actions: [] };
+  }
+}
+
+/** The line under an email stage's field, or null when the answer is an `emailFailure`. */
+export const emailFieldError = (code: string): string | null => (code === "badAddress" ? w.badAddress : code === "wrongCode" || code === "badCode" ? w.wrongCode : null);
+
+/** A code stage answer that ends its flow: the field stays, read-only, until a new code or another address. */
+export const emailEnds = (code: string) => ["ticketExpired", "wrongFlow", "signInRefused", "emailLimit"].includes(code);
+
+/** The code field's value: digits only (a pasted `123 456` or `123-456` works), cut at 6. */
+export const codeDigits = (typed: string) => typed.replace(/\D/g, "").slice(0, 6);
+
+/** Seconds until Send a new code turns on: 60 after the last mail, counted from its time. */
+export const resendIn = (sentAt: number, now: number) => Math.max(0, Math.ceil((sentAt + 60_000 - now) / 1000));
+
+/** The deletion card's Cancel and turn off <provider> sign-in. */
+export const cancelUnlink = (provider: string) => (provider === EMAIL ? w.deletionCancelUnlinkEmail : fill(w.deletionCancelUnlink, { provider: providerName(provider) }));
 
 /** Apple's revoke did not end in a receipt: the unlink or deletion may go on without it (the relay
  * logs that), labelled `anyway`; a cancelled Apple page says nothing. */
@@ -180,6 +229,7 @@ export function homeCard(s: CardState): Card | null {
   if (s.deletion) {
     const date = s.date(s.deletion.dueMs);
     const provider = s.deletion.provider;
+    if (provider === EMAIL) return { kind: "deletion", text: fill(w.deletionScheduledByEmail, { date }), provider };
     return { kind: "deletion", text: provider ? fill(w.deletionScheduledBy, { provider: providerName(provider), date }) : fill(w.deletionScheduled, { date }), provider };
   }
   if (s.gone) return { kind: "gone", text: w.accountGone, remove: s.profile?.isOwner ?? false };

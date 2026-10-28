@@ -17,6 +17,7 @@ import LifeBuoy from "lucide-solid/icons/life-buoy";
 import Link2 from "lucide-solid/icons/link-2";
 import LogIn from "lucide-solid/icons/log-in";
 import LogOut from "lucide-solid/icons/log-out";
+import Mail from "lucide-solid/icons/mail";
 import MonitorSmartphone from "lucide-solid/icons/monitor-smartphone";
 import Plus from "lucide-solid/icons/plus";
 import QrCode from "lucide-solid/icons/qr-code";
@@ -30,7 +31,7 @@ import { privateLink } from "../core/client";
 import type { IdentityLink } from "../core/generated/IdentityLink";
 import { relayProviders, signInServer } from "../core/sign-in";
 import { pendingWipe, removeHere, wipeState } from "../core/wipe";
-import { type Act, accountWords as aw, activeProfile, needsSecondWayIn, continueWith, type Failure, fill, leaveChoice, providerName, providerOrder, revokeFailure, signInFailure } from "../lib/account";
+import { type Act, accountWords as aw, activeProfile, needsSecondWayIn, continueWith, continueWithEmail, EMAIL, type Failure, fill, leaveChoice, providerName, providerOrder, revokeFailure, signInFailure } from "../lib/account";
 import type { MemberInfo } from "../core/generated/MemberInfo";
 import { profiles } from "../core/profiles";
 import * as sync from "../core/sync";
@@ -69,7 +70,7 @@ import {
   syncWords as w,
 } from "../lib/words";
 import { LinkRow } from "./settings";
-import { FailureNote, SignInState, Tick, useSignIn } from "./sign-in";
+import { createMail, EmailStages, FailureNote, type MailStage, SignInState, Tick, useSignIn } from "./sign-in";
 import "./browse.css";
 import "./settings.css";
 import "./sync.css";
@@ -563,6 +564,8 @@ function SignedInWith(props: { links: IdentityLink[] | undefined; providers: str
   const [failure, setFailure] = createSignal<Failure | null>(null);
   let ticket = "";
   let target: IdentityLink | null = null;
+  /** The provider the ticket came from, for its failure's words. */
+  let via = "";
   const link = async (move: boolean, provider: string) => {
     setFailure(null);
     try {
@@ -576,8 +579,33 @@ function SignedInWith(props: { links: IdentityLink[] | undefined; providers: str
   const linking = useSignIn(server, (end, provider) => {
     if (end.phase === "receipt") return;
     ticket = end.ticket;
+    via = provider;
     void link(false, provider);
   });
+  // Link another by email (E12): the same two stages, in place, ending in the link call.
+  const [emailing, setEmailing] = createSignal<MailStage | null>(null);
+  const mail = createMail(server);
+  mail.bind({
+    stage: () => emailing() ?? "address",
+    sent: () => setEmailing("code"),
+    taken: (end) => {
+      ticket = end.ticket;
+      via = EMAIL;
+      setEmailing(null);
+      void link(false, EMAIL);
+    },
+  });
+  /** At most one Email row: the email way shows only while no email link exists. */
+  const emailOffered = () => props.providers.includes(EMAIL) && !(props.links ?? []).some((l) => l.provider === EMAIL);
+  const emailAct = (a: Act) => {
+    if (a === "retry") mail.retry();
+    else if (a === "resend") mail.resend();
+    else if (a === "otherAddress") {
+      mail.reset();
+      setEmailing("address");
+    } else if (a === "cancel") mail.dismiss();
+    else setEmailing(null);
+  };
   const unlink = async (l: IdentityLink, receipt?: string) => {
     setFailure(null);
     setNote(null);
@@ -602,7 +630,7 @@ function SignedInWith(props: { links: IdentityLink[] | undefined; providers: str
     else void unlink(l);
   };
   const act = (a: Act) => {
-    if (a === "move") void link(true, linking.provider());
+    if (a === "move") void link(true, via);
     else if (a === "anyway" && target) {
       revoking.stop();
       void unlink(target);
@@ -655,15 +683,44 @@ function SignedInWith(props: { links: IdentityLink[] | undefined; providers: str
             </div>
           }
         >
-          <div class="acts">
-            <For each={providerOrder(props.providers)}>
-              {(p) => (
-                <button class="btn" data-f={`sync:link:${p}`} data-provider={p} onClick={() => linking.go(p)}>
-                  {continueWith(p)}
-                </button>
-              )}
-            </For>
-          </div>
+          <Show
+            when={emailing()}
+            fallback={
+              <div class="acts">
+                <For each={providerOrder(props.providers)}>
+                  {(p) => (
+                    <button class="btn" data-f={`sync:link:${p}`} data-provider={p} onClick={() => linking.go(p)}>
+                      {continueWith(p)}
+                    </button>
+                  )}
+                </For>
+                <Show when={emailOffered()}>
+                  <button
+                    class="btn"
+                    data-f="sync:link:email"
+                    onClick={() => {
+                      setFailure(null);
+                      mail.reset();
+                      setEmailing("address");
+                    }}
+                  >
+                    <Mail aria-hidden />
+                    {continueWithEmail}
+                  </button>
+                </Show>
+              </div>
+            }
+          >
+            {(stage) => (
+              <div class="sync-email" role="group" aria-label={aw.emailTitle}>
+                <EmailStages mail={mail} stage={stage()} fkey="sync:email" heading="h3" onAct={emailAct}>
+                  <button class="btn" data-f="sync:email:leave" onClick={() => setEmailing(null)}>
+                    {w.cancel}
+                  </button>
+                </EmailStages>
+              </div>
+            )}
+          </Show>
         </Show>
       </Show>
     </section>

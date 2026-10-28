@@ -15,7 +15,7 @@ import { onProfileReset, profiles } from "../core/profiles";
 import { BridgeError } from "../core/bridge";
 import * as sync from "../core/sync";
 import { removeHere, wipeState } from "../core/wipe";
-import { accountWords as aw, activeProfile, needsSecondWayIn, type Card, fill, homeCard, providerName } from "../lib/account";
+import { accountWords as aw, activeProfile, needsSecondWayIn, type Card, cancelUnlink, homeCard } from "../lib/account";
 import { Tick } from "./sign-in";
 import { cardOffer, defaultsWords, namesLine } from "../lib/defaults";
 import { allFailed } from "../lib/rows";
@@ -130,7 +130,7 @@ function AccountCard() {
                     <Show when={d().provider}>
                       {(p) => (
                         <button class="btn" data-f="home:account:cancel-unlink" onClick={() => run(() => sync.cancelDeletion(true))}>
-                          {fill(aw.deletionCancelUnlink, { provider: providerName(p()) })}
+                          {cancelUnlink(p())}
                         </button>
                       )}
                     </Show>

@@ -2,7 +2,7 @@
 // apps/linkhost/dist (gitignored), for the Worker in wrangler.jsonc (plans/accounts-social-sync.md 4).
 //
 // RELAY_URL               the sync service, https://host with no slash at the end (required)
-// PROVIDERS               the deletion page's buttons, for example google,facebook (required)
+// PROVIDERS               the deletion page's buttons, for example google,facebook,email (required)
 // ANDROID_PACKAGES        application ids assetlinks.json names, comma separated (required)
 // ANDROID_SIGNING_SHA256  their signing certificate's SHA-256, AA:BB:... (required)
 // APPLE_TEAM_ID, APPLE_BUNDLE_ID  both or neither; without them no apple-app-site-association
@@ -12,7 +12,7 @@ import { dirname, join, relative } from "node:path";
 
 const here = import.meta.dir;
 const PAGES = ["pair/index.html", "delete/index.html", "delete/delete.js", "privacy/index.html", "terms/index.html", "linkhost.css", "_headers"];
-const KNOWN_PROVIDERS = ["apple", "google", "facebook"];
+const KNOWN_PROVIDERS = ["apple", "google", "facebook", "email"];
 
 type Env = Record<string, string | undefined>;
 
