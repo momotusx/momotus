@@ -82,9 +82,9 @@ internal fun accountDate(ms: Long): String = DateFormat.getDateInstance(DateForm
 @Composable
 internal fun FailureNote(
     failure: AccountRules.Failure,
-    onAct: (Act) -> Unit,
     /** Read out when it appears (a failure with no button to take the focus). */
     spoken: Boolean = false,
+    onAct: (Act) -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.s)) {
         if (spoken) {
@@ -179,6 +179,7 @@ fun SignInScreen(
         onNotNow()
     }
     val step = signIn.step
+    val tv = Marquee.form == Form.Tv
     // Back on the email screen: the code stage to the address stage, the address stage to Sign in.
     BackHandler(enabled = step == Step.Email) { signIn.back() }
     LaunchedEffect(step) {
@@ -235,7 +236,7 @@ fun SignInScreen(
         if (!firstRun && step is Step.Start) {
             block("added") { MqText(AccountCopy.LIBRARY_ADDED, color = Marquee.colors.muted) }
         }
-        signIn.failure?.let { f -> block("failure") { FailureNote(f, act) } }
+        signIn.failure?.let { f -> block("failure") { FailureNote(f, onAct = act) } }
         when (step) {
             Step.Loading, is Step.Working, is Step.Done -> {
                 block("working") { Spinner() }
@@ -254,7 +255,7 @@ fun SignInScreen(
                     providers(step.providers, signIn::choose)
                     // Email is its own row under the providers, the primary one when it is the only way (D6: never
                     // on a TV, whose sign-in is the QR).
-                    if (step.email && Marquee.form != Form.Tv) {
+                    if (step.email && !tv) {
                         block("email-row") {
                             val choose = { signIn.choose(AccountRules.EMAIL) }
                             if (step.providers.isEmpty()) {
@@ -760,7 +761,7 @@ private fun EmailAddressStage(
             error = form.fieldError,
         )
         form.fieldError?.let { Said(it, Status.Bad) }
-        form.failure?.let { FailureNote(it, onAct, spoken = it.actions.isEmpty()) }
+        form.failure?.let { FailureNote(it, spoken = it.actions.isEmpty(), onAct = onAct) }
         PrimaryButton(AccountCopy.EMAIL_SEND, form::send, icon = Icons.Mail, busy = form.busy)
     }
 }
@@ -814,7 +815,7 @@ private fun EmailCodeStage(
         form.fieldError?.let { Said(it, Status.Bad) }
         if (form.busy) Spinner()
         if (form.resent && form.failure == null) Note(AccountCopy.CODE_RESENT, side = 0.dp, spoken = true)
-        form.failure?.let { FailureNote(it, onAct, spoken = it.actions.isEmpty()) }
+        form.failure?.let { FailureNote(it, spoken = it.actions.isEmpty(), onAct = onAct) }
         // Always shown, at normal weight: the mail may land in spam (plans/accounts-email.md 3).
         MqText(AccountCopy.CODE_MISSING, role = TextRole.Callout, color = Marquee.colors.muted)
         FlowRow(
@@ -822,8 +823,10 @@ private fun EmailCodeStage(
             verticalArrangement = Arrangement.spacedBy(Marquee.space.xs),
         ) {
             // The countdown is read once with the button, not on each tick; the button turning on is said once.
-            LiveSpoken(if (ready) AccountCopy.CODE_RESEND else "") { Box(Modifier.size(1.dp)) }
-            SecondaryButton(resend, form::resend, icon = Icons.Mail, enabled = ready && !form.busy)
+            Box {
+                LiveSpoken(if (ready) AccountCopy.CODE_RESEND else "") { Box(Modifier.size(1.dp)) }
+                SecondaryButton(resend, form::resend, icon = Icons.Mail, enabled = ready && !form.busy)
+            }
             SecondaryButton(AccountCopy.CODE_OTHER_ADDRESS, form::open)
         }
     }

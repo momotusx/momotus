@@ -49,7 +49,7 @@ import androidx.compose.ui.unit.dp
 /**
  * A one-line field on a raised pill whose edge turns accent with focus (design/DECISION.md v2).
  * [label] is its spoken name, [placeholder] shows while it is empty; Up and Down leave it on a remote, and
- * select opens the keyboard there ([FieldInput]). [readOnly] keeps the focus where [enabled] would drop it;
+ * select opens the keyboard there ([FieldInput]). [readOnly] keeps the focus where a disabled field drops it;
  * [contentType] is what autofill offers, [error] the line under the field that the field is described by.
  */
 @Composable
