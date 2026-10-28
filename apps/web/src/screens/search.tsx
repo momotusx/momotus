@@ -190,6 +190,28 @@ function Panel(props: { dialog?: boolean; retry: () => void }) {
   const scopeLabel = () => (current() ? kindLabel(current() as string) : "All");
   const count = () => rows().reduce((n, r) => n + scoped(r).length, 0);
   const remember = () => void view.command({ type: "remember" });
+  // One status region, there from the start, so a screen reader hears each change: Searching, the count, why
+  // there is none, or why the search could not open. The visible lines below are not live: this is their voice.
+  const status = () => {
+    if (view.state.status.state === "failed") return "Search could not open.";
+    const snap = s();
+    if (!searching()) return "";
+    if (!snap || snap.query !== text() || loading()) return "Searching";
+    if (count() > 0) return `${count()} ${count() === 1 ? "result" : "results"}`;
+    return snap.searchable === 0 ? "None of your addons can search." : "No matches";
+  };
+  // The palette is modal and what is behind it is inert: Tab wraps at its first and last control instead of leaving
+  // for the browser's own.
+  const wrapTab = (e: KeyboardEvent & { currentTarget: HTMLElement }) => {
+    if (!props.dialog || e.key !== "Tab") return;
+    const items = [...e.currentTarget.querySelectorAll<HTMLElement>('a[href], button:not(:disabled), input:not(:disabled), [tabindex]:not([tabindex="-1"])')].filter((el) => el.offsetWidth > 0 && !el.closest("[inert]"));
+    const at = items.indexOf(document.activeElement as HTMLElement);
+    const to = e.shiftKey ? (at <= 0 ? items.at(-1) : null) : at === items.length - 1 || at < 0 ? items[0] : null;
+    if (!to) return;
+    e.preventDefault();
+    to.focus();
+  };
+
   let input!: HTMLInputElement;
   onMount(() => {
     // Opened again by Back: the shell restores the result that was opened.
@@ -198,7 +220,10 @@ function Panel(props: { dialog?: boolean; retry: () => void }) {
   });
 
   return (
-    <section class="palette glass strong" classList={{ dialog: props.dialog }} role={props.dialog ? "dialog" : undefined} aria-modal={props.dialog ? "true" : undefined} aria-label="Search">
+    <section class="palette glass strong" classList={{ dialog: props.dialog }} role={props.dialog ? "dialog" : undefined} aria-modal={props.dialog ? "true" : undefined} aria-label="Search" onKeyDown={wrapTab}>
+      <p class="sr" role="status">
+        {status()}
+      </p>
       <label class="field">
         <SearchIcon aria-hidden />
         <span class="sr">Search</span>

@@ -227,3 +227,51 @@ test("tv: Back from a result reopens the palette on the result that was opened",
   await context.close();
 });
 
+test("desktop: one status region carries Searching, the count and No matches, and Tab stays inside the palette", async ({ browser }) => {
+  const { context, page } = await open(browser, "desktop", "/");
+  await expect(page.locator(".hero-page.on .reason")).toBeVisible({ timeout: 30_000 });
+  await openFromNav(page, "desktop");
+  // One region, there from the start and empty until there is something to say.
+  const status = page.locator('.palette [role="status"]');
+  await expect(status).toHaveCount(1);
+  await expect(status).toHaveText("");
+  // What it says follows the search: a query that finds titles ends on their count, one that finds none on No matches.
+  const said: string[] = [];
+  await page.exposeFunction("said", (t: string) => said.push(t));
+  await page.evaluate(() => {
+    const el = document.querySelector('.palette [role="status"]') as HTMLElement;
+    new MutationObserver(() => (window as unknown as { said: (t: string) => void }).said(el.textContent ?? "")).observe(el, { childList: true, characterData: true, subtree: true });
+  });
+  await page.locator('[data-f="search:input"]').fill("thrones");
+  await expect(status).toHaveText(/^\d+ results?$/, { timeout: 30_000 });
+  expect(said).toContain("Searching");
+  await page.locator('[data-f="search:input"]').fill("zzqxjkvv");
+  await expect(status).toHaveText("No matches", { timeout: 30_000 });
+  await page.locator('[data-f="search:input"]').fill("");
+  await expect(status).toHaveText("");
+
+  // Tab past the last control and Shift+Tab before the first wrap inside the dialog.
+  await page.locator('[data-f="search:input"]').fill("thrones");
+  await expect(status).toHaveText(/^\d+ results?$/, { timeout: 30_000 });
+  const inside = () => page.evaluate(() => !!document.activeElement?.closest(".palette"));
+  const first = () => page.evaluate(() => (document.activeElement as HTMLElement).dataset.f ?? "");
+  await page.locator('[data-f="search:input"]').focus();
+  await page.keyboard.press("Shift+Tab");
+  expect(await inside()).toBe(true);
+  const last = await first();
+  expect(last).toMatch(/^hit:/);
+  await page.keyboard.press("Tab");
+  expect(await first()).toBe("search:input");
+  // And all the way round, one Tab at a time, never out.
+  const count = await page.locator(".palette a[href], .palette button:not(:disabled), .palette input").count();
+  for (let i = 0; i < count + 2; i++) {
+    await page.keyboard.press("Tab");
+    expect(await inside()).toBe(true);
+  }
+  // Close gives the focus back to the control that opened it.
+  await page.locator('[data-f="search:close"]').click();
+  await expect(page.locator(".palette-layer")).toHaveCount(0);
+  await expect.poll(() => focused(page)).toBe("nav:/search");
+  await context.close();
+});
+
