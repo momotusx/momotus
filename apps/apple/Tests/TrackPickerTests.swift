@@ -130,7 +130,7 @@ private let klingon = track(5, "tlh", "tlh", "Klingon")
     let catalog = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appending(path: "../Marquee/Resources/Flags.xcassets")
     let sets = try FileManager.default.contentsOfDirectory(atPath: catalog.path()).filter { $0.hasSuffix(".imageset") }
     #expect(Set(sets) == Set(FlagSet.tags.map { "flag-\($0).imageset" }))
-    #expect(FlagSet.tags.count == 198)
+    #expect(FlagSet.tags.count == 200)
     // The mask goes (the app clips to the circle): the renderer gets flat shapes.
     let en = try String(contentsOf: catalog.appending(path: "flag-en.imageset/en.svg"), encoding: .utf8)
     #expect(!en.contains("<mask") && en.hasPrefix("<svg"))

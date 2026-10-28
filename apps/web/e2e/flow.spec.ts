@@ -96,13 +96,10 @@ test("plays a direct source through the core's stream server", async ({ page }) 
   for (let i = 0; i < 4 && (await focused(page)) !== "player:subs"; i++) await page.keyboard.press("ArrowRight");
   await expect.poll(() => focused(page)).toBe("player:subs");
   await page.keyboard.press("Enter");
-  await expect.poll(() => focused(page)).toBe("sub:off");
-  // Languages go by their tag, so a late addon never renames them; Enter on
-  // one turns on its best option at once.
-  const first = page.locator('[data-f^="sublang:"]').first();
-  await expect(first).toBeVisible({ timeout: 30_000 });
-  await page.keyboard.press("ArrowDown");
-  await expect.poll(() => focused(page)).toBe(await first.getAttribute("data-f"));
+  // With no subtitle languages the device's stands in (English here, and the file's audio names no
+  // language), so English started on its own and the picker opens on it. Languages go by their tag, so a
+  // late addon never renames them; Enter on one turns on its best option at once.
+  await expect.poll(() => focused(page), { timeout: 30_000 }).toBe("sublang:en");
   // The right column shows the focused language's options, its tracks by their file's address.
   await expect(page.locator(".subp-opts .opt").first()).toHaveAttribute("data-f", /^sub:http/);
   await page.keyboard.press("Enter");

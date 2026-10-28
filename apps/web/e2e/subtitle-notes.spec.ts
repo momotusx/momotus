@@ -77,7 +77,8 @@ test.beforeAll(async () => {
       }
     }
     await c.req("installAddon", { url: `http://127.0.0.1:${(addon.address() as AddressInfo).port}/manifest.json` });
-    await c.req("setPrefs", { patch: { defaultsSeen: 1 } });
+    // A subtitle language the film lacks: nothing starts on its own, so each file is asked for only when picked.
+    await c.req("setPrefs", { patch: { defaultsSeen: 1, subtitleLanguages: ["ja"] } });
   } finally {
     c.close();
   }

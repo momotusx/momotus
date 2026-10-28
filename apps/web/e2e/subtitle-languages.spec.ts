@@ -218,9 +218,11 @@ test("the picker lists languages first, in the core's order, with flags and coun
   await expect(panel.locator('[data-f="sublang:tr"] .own')).toHaveText("Türkçe");
   await expect(panel.locator('[data-f="sublang:en"] .own')).toHaveCount(0);
   await expect(panel.locator('[data-f="sublang:de"] .own')).toHaveText("Deutsch");
-  // A circle flag, drawn from the bundled file; Off and the search come first, Off chosen (remembered).
-  for (const tag of ["tr", "en", "zh-Hant", "de", "pt-BR"])
+  // A circle flag, drawn from the bundled file; Chinese shows the language glyph (design/flag-overrides.json).
+  // Off and the search come first, Off chosen (remembered).
+  for (const tag of ["tr", "en", "de", "pt-BR"])
     await expect.poll(() => panel.locator(`[data-f="sublang:${tag}"] img.flag`).evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth)).toBeGreaterThan(0);
+  await expect(panel.locator('[data-f="sublang:zh-Hant"] .flag.none .flag-glyph')).toBeVisible();
   await expect(panel.locator('[data-f="sub:search"]')).toBeVisible();
   await expect(panel.locator('[data-f="sub:off"]')).toHaveClass(/\bon\b/);
   // What is on is said, not only drawn: Off is the checked radio, the languages are not.
