@@ -25,7 +25,9 @@ use tokio::task::JoinHandle;
 pub struct Prefs {
     pub streams: StreamPrefs,
     /// Subtitle languages as addons name them (usually ISO 639-2, "eng"),
-    /// most wanted first. Matching tracks are listed first.
+    /// most wanted first. Matching tracks are listed first. An empty list the
+    /// profile wrote (No subtitles, Remove all) is off; one never written lets
+    /// the device's language stand in (`Core::subtitle_languages_set`).
     pub subtitle_languages: Vec<String>,
     /// How big subtitles show, on every device of the profile (journey
     /// reviews 2026-10-20). The delay stays per play, in the apps.
