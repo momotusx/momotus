@@ -994,6 +994,61 @@ async fn the_title_page_opens_offline_from_its_downloads() {
     }
 }
 
+/// A title page opened on a launch whose downloads were all done drops
+/// their badges when they are deleted: no board change came before the
+/// delete for it to compare with (the 2026-10-28 iPhone walk).
+#[tokio::test]
+async fn a_delete_clears_the_badges_of_a_page_opened_after_launch() {
+    let (url, _) = origin(video(1 << 20), How::default()).await;
+    let core = core_with(addon(&url, Duration::ZERO).await).await;
+    for (id, video) in [("e1", "tt9:2:1"), ("e2", "tt9:2:2")] {
+        let mut row = record(
+            id,
+            "tt9",
+            video,
+            "done",
+            kept_version(&url, "http://127.0.0.1:9/manifest.json"),
+        );
+        row.bytes_done = 100;
+        row.bytes_total = Some(100);
+        core.library().add_download(&row).unwrap();
+        put(&core, id, "video.mp4", &[0u8; 100]);
+    }
+    core.downloads().relaunch();
+    core.downloads().set_link(Link::default());
+    let view = mq_runtime::TitleView::open(&core, "series", "tt9");
+    let badges = |view: &mq_runtime::TitleView| {
+        view.snapshot()
+            .episodes
+            .iter()
+            .filter(|e| e.download.is_some())
+            .count()
+    };
+    let deadline = std::time::Instant::now() + Duration::from_secs(20);
+    while badges(&view) != 2 {
+        assert!(
+            std::time::Instant::now() < deadline,
+            "{:?}",
+            view.snapshot().episodes
+        );
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+    core.downloads()
+        .act(
+            &["e1".to_owned(), "e2".to_owned()],
+            mq_runtime::downloads::Action::Remove,
+        )
+        .unwrap();
+    let deadline = std::time::Instant::now() + Duration::from_secs(10);
+    while badges(&view) != 0 {
+        assert!(
+            std::time::Instant::now() < deadline,
+            "the page kept its badges"
+        );
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+}
+
 /// Offline, a download still being written plays as far as it holds; a
 /// read past that ends at once.
 #[tokio::test]

@@ -684,11 +684,40 @@ async fn load_meta(ctx: Ctx) {
 /// Follows the downloads: each change of this title's shows (a ring
 /// filling, a state), and a network that comes back reads the meta again
 /// for a page built from the downloads.
+/// One download's badge as the page shows it: its id, state, reason,
+/// mobile data and percent.
+type Badge = (
+    String,
+    crate::downloads::DownloadState,
+    Option<crate::downloads::DownloadReason>,
+    bool,
+    Option<u64>,
+);
+
+/// Title `id`'s download badges on `board`: a state, or a percent, not
+/// every byte, so only they move its page (code review r1 P3-2).
+fn badges_of(board: &crate::downloads::Board, id: &str) -> Vec<Badge> {
+    board
+        .rows
+        .iter()
+        .filter(|r| r.item_id == id)
+        .map(|r| {
+            let percent = r
+                .bytes_total
+                .filter(|t| *t > 0)
+                .map(|t| r.bytes_done * 100 / t);
+            (r.id.clone(), r.state, r.reason, r.mobile_data, percent)
+        })
+        .collect()
+}
+
 async fn watch_downloads(ctx: Ctx) {
     let downloads = ctx.core.downloads();
     let mut boards = downloads.board().subscribe();
     let mut offline = downloads.link().offline;
-    let mut shown = Vec::new();
+    // What the page shows now: a launch with every download done changes
+    // no board, so a delete must be seen against this, not against none.
+    let mut shown = badges_of(&downloads.board().get(), &ctx.id);
     // A page that fell back while online (the meta failed) reads it again
     // now and then (code review r1 P3-3).
     let mut again = tokio::time::interval(META_AGAIN);
@@ -710,20 +739,7 @@ async fn watch_downloads(ctx: Ctx) {
             tokio::spawn(load_meta(ctx.clone()));
         }
         offline = board.link.offline;
-        // Only this title's badges move its page: a state, or a percent,
-        // not every byte (code review r1 P3-2).
-        let mine: Vec<_> = board
-            .rows
-            .iter()
-            .filter(|r| r.item_id == ctx.id)
-            .map(|r| {
-                let percent = r
-                    .bytes_total
-                    .filter(|t| *t > 0)
-                    .map(|t| r.bytes_done * 100 / t);
-                (r.id.clone(), r.state, r.reason, r.mobile_data, percent)
-            })
-            .collect();
+        let mine = badges_of(&board, &ctx.id);
         if mine != shown {
             shown = mine;
             ctx.render();
