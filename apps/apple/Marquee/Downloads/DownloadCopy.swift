@@ -362,6 +362,8 @@ enum DownloadCopy {
 
     static func deleteAll(_ bytes: Int64) -> String { "Delete all downloads on this device? \(StreamChoice.bytes(bytes))" }
 
+    /// The system's progress item once a batch is whole (the Android notice's words).
+    static let finished = "Downloads finished"
     static let emptyTitle = "Nothing downloaded yet"
     static let emptyBody = "Download movies and episodes to watch them without a connection."
     static let offline = "You're offline. Your downloads still play."

@@ -199,6 +199,7 @@ struct DownloadsSeriesPage: View {
                         Label("More", glyph: "ellipsis")
                     }
                     .accessibilityLabel("More")
+                    .accessibilityIdentifier("downloads-series-more")
                     .downloadConfirm(DownloadCopy.deleteSeries(title.rows.count, title.name), isPresented: $asking) {
                         keeper.act(.remove, .title(itemId))
                     }

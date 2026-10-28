@@ -72,11 +72,13 @@ import XCTest
         banner("3 offline title page")
         openDownloads()
         banner("3 offline Downloads (pushed, with its bar)")
+        clear("3 offline Downloads")
         let row = app.buttons.matching(NSPredicate(format: "label CONTAINS 'Breaking Bad' AND label CONTAINS 'episodes'")).firstMatch
         if row.waitForExistence(timeout: 10) {
             row.tap()
             sleep(2)
             banner("3 offline series page (pushed)")
+            clear("3 offline series page")
         }
 
         // 4. Delete Season on the title page: its confirm's Delete removes the season's rows (review r3 N6).
@@ -145,15 +147,18 @@ import XCTest
         while downloading.exists, Date().timeIntervalSince(done) < 120 { sleep(2) }
         sleep(2)
         shot("6 Downloads, the season done")
-        // The title's row swiped: its Delete asks first for the whole series (DownloadsScreen's confirm, review r3 N6).
-        whole.swipeLeft()
+        // The series page's More, then Delete all: it asks first for the whole series (review r3 N6).
+        whole.tap()
+        sleep(2)
+        let more = app.buttons["downloads-series-more"]
+        XCTAssertTrue(more.waitForExistence(timeout: 10), "the series page has More")
+        more.tap()
+        let all = app.buttons["Delete all"]
+        XCTAssertTrue(all.waitForExistence(timeout: 5), "More has Delete all")
+        shot("6 series page More")
+        all.tap()
         sleep(1)
-        shot("6 row swiped")
-        let swiped = app.buttons.matching(NSPredicate(format: "label == 'Delete'")).firstMatch
-        XCTAssertTrue(swiped.waitForExistence(timeout: 5), "the swipe shows Delete")
-        swiped.tap()
-        sleep(1)
-        confirm("6 Delete series confirm")
+        confirm("6 Delete all confirm")
         XCTAssertTrue(app.staticTexts["Nothing downloaded yet"].waitForExistence(timeout: 20), "the series delete left nothing")
         shot("6 after the series delete")
         app.terminate()
@@ -196,6 +201,19 @@ import XCTest
         shot(name)
         delete.tap()
         sleep(2)
+    }
+
+    /// The page's own top is clear of the banner: a navigation bar's Back, or the title page's back button, can be
+    /// tapped where it shows (review r5 M1).
+    private func clear(_ name: String) {
+        let back = app.navigationBars.buttons.firstMatch
+        let banner = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH \"You're offline.\"")).firstMatch
+        guard back.waitForExistence(timeout: 5), banner.exists else {
+            note("\(name): no back to check")
+            return
+        }
+        note("\(name): back at \(back.frame.minY), banner ends \(banner.frame.maxY)")
+        XCTAssertTrue(back.isHittable, "\(name): Back can be tapped")
     }
 
     /// A shot that also says whether the banner's constant words are on screen.

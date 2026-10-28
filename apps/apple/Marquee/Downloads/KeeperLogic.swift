@@ -178,8 +178,7 @@ struct KeeperLogic {
             if task {
                 // A tap still waiting for its answer holds the task too (review r4 N11).
                 if now.left == 0, taps == 0, asking == 0 {
-                    task = false
-                    out.append(.end(success: true))
+                    finish(&out)
                 } else {
                     out.append(.progress(progress()))
                 }
@@ -227,8 +226,7 @@ struct KeeperLogic {
     private mutating func settle(_ out: inout [KeeperEffect]) {
         if task, (facts?.left ?? 0) == 0 {
             taps = 0
-            task = false
-            out.append(.end(success: true))
+            finish(&out)
         }
     }
 
@@ -267,8 +265,17 @@ struct KeeperLogic {
         }
     }
 
+    /// The batch is over: the item says so, whole, before the task ends, so the system never keeps its last
+    /// "7 of 7 · 99%" (the iphone-a walk, 2026-10-28).
+    private mutating func finish(_ out: inout [KeeperEffect]) {
+        task = false
+        let last = progress()
+        if last.completed > 0 { out.append(.progress(last)) }
+        out.append(.end(success: true))
+    }
+
     /// "Downloading Severance", "3 of 10 · 45%": items done in this batch, then the ones left, with the
-    /// taps the core has not counted yet.
+    /// taps the core has not counted yet; "Downloads finished" once nothing is left.
     private func progress() -> KeeperProgress {
         let now = facts ?? KeeperFacts(left: 0, bytesDone: 0, bytesTotal: 0, title: nil, done: [])
         let finished = now.done.subtracting(doneBefore).count
@@ -279,7 +286,8 @@ struct KeeperLogic {
             .compactMap { $0 }.joined(separator: " \u{B7} ")
         let running = Int64(((fraction ?? 0) * Double(max(now.left, 0)) * 100).rounded())
         // Nothing moves (all waiting for Wi-Fi, a connection, room) and no tap is on its way: never "Downloading".
-        let title = now.running == 0 && taps == 0 ? "Waiting" : now.title.map { "Downloading \($0)" } ?? "Downloading"
+        let title = left == 0 ? DownloadCopy.finished
+            : now.running == 0 && taps == 0 ? "Waiting" : now.title.map { "Downloading \($0)" } ?? "Downloading"
         return KeeperProgress(
             title: title, subtitle: subtitle,
             completed: Int64(finished) * 100 + running, total: Int64(total) * 100)

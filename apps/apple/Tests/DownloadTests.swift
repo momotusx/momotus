@@ -788,7 +788,17 @@ private func offlineSnapshot(_ states: [String]) throws -> DownloadsSnapshot {
             .modifier(OfflineShell(shown: shown, gutter: 20, open: nil)).fixedSize()).fittingSize.height
     }
     #expect(page(true) > page(false))
+    // Stacked (iPhone and iPad), the page starts at the banner's foot: a navigation stack's bar starts under it.
+    let stacked = { (shown: Bool) in
+        NSHostingView(rootView: Text("Search").frame(width: 390, height: 200)
+            .modifier(OfflineShell(shown: shown, gutter: 20, open: nil, stacked: true)).fixedSize()).fittingSize.height
+    }
+    #expect(stacked(true) == page(true))
+    #expect(stacked(false) == page(false))
+    #expect(!OfflineShell.stackedHere, "the Mac keeps its inset")
     let app = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appending(path: "../Marquee")
+    let control = try String(contentsOf: app.appending(path: "Downloads/DownloadControlView.swift"), encoding: .utf8)
+    #expect(control.contains("#if os(iOS)\n    static let stackedHere = true"), "iPhone and iPad stack the banner over the places")
     let shell = try String(contentsOf: app.appending(path: "App/RootView.swift"), encoding: .utf8)
     #expect(shell.components(separatedBy: "places\n        .modifier(offline)").count == 2, "iOS")
     #expect(shell.contains("places\n            .modifier(offline)"), "macOS")
@@ -844,4 +854,23 @@ private func offlineSnapshot(_ states: [String]) throws -> DownloadsSnapshot {
     #expect(keeper.failure != nil, "the same profile keeps it")
     keeper.noteProfile("another")
     #expect(keeper.failure == nil)
+}
+
+// A batch that ends leaves the system's item whole and saying so, never its last "7 of 7 · 99%" (the iphone-a walk,
+// 2026-10-28): the finished progress goes before the task ends.
+@Test func aFinishedBatchLeavesTheItemWhole() {
+    var keeper = KeeperLogic(platform: .continued)
+    _ = keeper.on(.facts(facts(left: 0)))
+    _ = keeper.on(.userAction)
+    var moving = facts(left: 1, done: ["a"], bytes: (99, 100))
+    moving.running = 1
+    _ = keeper.on(.facts(moving))
+    _ = keeper.on(.answered)
+    let last = keeper.on(.facts(facts(left: 0, done: ["a", "b"], title: nil)))
+    let shown = last.compactMap { if case .progress(let p) = $0 { p } else { nil } }.last
+    #expect(shown?.title == DownloadCopy.finished)
+    #expect(shown?.subtitle == "2 of 2")
+    #expect(shown.map { $0.completed == $0.total } == true)
+    let order = last.map { if case .progress = $0 { "progress" } else if case .end = $0 { "end" } else { "" } }.filter { !$0.isEmpty }
+    #expect(order == ["progress", "end"])
 }

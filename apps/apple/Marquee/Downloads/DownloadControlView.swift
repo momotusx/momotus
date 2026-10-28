@@ -249,17 +249,36 @@ struct OfflineShell: ViewModifier {
     let shown: Bool
     let gutter: CGFloat
     let open: (() -> Void)?
+    /// iPhone and iPad: the banner sits above the places in a stack, so each tab's navigation bar and a title's
+    /// hero start under it. An inset outside a NavigationStack moves its pages but not UIKit's bar, which the
+    /// banner then hid with its Back and large title (the iphone-a walk, 2026-10-28). The Mac keeps the inset under
+    /// its window's top bar, where it was right.
+    var stacked = OfflineShell.stackedHere
 
-    func body(content: Content) -> some View {
-        content
-            .safeAreaInset(edge: .top, spacing: 0) {
-                if shown {
-                    OfflineBanner(open: open)
-                        .padding(.horizontal, gutter)
-                        .padding(.vertical, Theme.Space.s)
-                        .background(Theme.Palette.bg)
-                }
+    #if os(iOS)
+    static let stackedHere = true
+    #else
+    static let stackedHere = false
+    #endif
+
+    @ViewBuilder func body(content: Content) -> some View {
+        if stacked {
+            VStack(spacing: 0) {
+                // The banner holds the status bar's strip now; the places start under it.
+                if shown { bar.background(Theme.Palette.bg.ignoresSafeArea(edges: .top)) }
+                content
             }
+        } else {
+            content.safeAreaInset(edge: .top, spacing: 0) {
+                if shown { bar.background(Theme.Palette.bg) }
+            }
+        }
+    }
+
+    private var bar: some View {
+        OfflineBanner(open: open)
+            .padding(.horizontal, gutter)
+            .padding(.vertical, Theme.Space.s)
     }
 }
 #endif
