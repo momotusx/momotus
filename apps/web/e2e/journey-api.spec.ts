@@ -944,7 +944,7 @@ test("a raw reason reads in plain words, the core's text behind Details", async 
 });
 
 /** A trailer run on the stand-in API (yt-fake.ts): what opened, with no way out to YouTube. */
-async function trailerRun(browser: Browser, opts: { form: "tv" | "desktop"; e2e?: boolean; fail?: string[]; duration?: number }) {
+async function trailerRun(browser: Browser, opts: { form: "tv" | "desktop"; e2e?: boolean; fail?: string[]; duration?: number; saveData?: boolean }) {
   const { context, page: p } = await page(browser, opts.form === "tv" ? { width: 1920, height: 1080 } : { width: 1440, height: 900 });
   await fakeYouTube(context);
   // Any watch page, popup or window.open is a way out of the app: none may happen.
@@ -957,6 +957,8 @@ async function trailerRun(browser: Browser, opts: { form: "tv" | "desktop"; e2e?
   await context.addInitScript((o) => {
     const w = window as unknown as { ytFailIds?: string[]; ytDuration?: number; open: (u?: string) => null; opened: string[] };
     if (o.e2e) localStorage.setItem("mq.trailerPreviews", "e2e");
+    // The browser's data saver, as a phone on cellular reports it.
+    if (o.saveData) Object.defineProperty(navigator, "connection", { value: { saveData: true }, configurable: true });
     w.ytFailIds = o.fail;
     w.ytDuration = o.duration;
     w.opened = [];
@@ -1079,6 +1081,15 @@ test("the header plays the trailer muted with a sound switch; the full-screen tr
   await expect(p.locator('[data-f="title:sound"]')).toHaveCount(0);
   expect(await sessionMuted()).toBe(true);
   expect(await leftApp()).toEqual([]);
+  await context.close();
+});
+
+test("on a metered connection the header plays nothing, and Trailer still plays", async ({ browser }) => {
+  const { context, p } = await trailerRun(browser, { form: "desktop", e2e: true, saveData: true });
+  await p.waitForTimeout(1500);
+  expect(await ytLog(p)).toEqual([]);
+  await p.locator('[data-f="title:trailer"]').click();
+  await expect(p.locator(".trailer")).toHaveAttribute("data-state", "playing");
   await context.close();
 });
 
