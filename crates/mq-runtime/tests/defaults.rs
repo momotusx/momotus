@@ -1284,8 +1284,8 @@ async fn the_addon_directory_is_a_default_given_once() {
 }
 
 /// A stand-in for every host off this machine (`set_dev_replay`): the
-/// default catalog's first page answers `body` after `delay`, anything else 404.
-async fn still_host(delay: std::time::Duration, body: &'static str) -> String {
+/// default catalog's first page answers `status` and `body` after `delay`, anything else 404.
+async fn still_host(delay: std::time::Duration, status: u16, body: &'static str) -> String {
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
@@ -1300,7 +1300,7 @@ async fn still_host(delay: std::time::Duration, body: &'static str) -> String {
                 {
                     tokio::time::sleep(delay).await;
                     format!(
-                        "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{body}",
+                        "HTTP/1.1 {status} X\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{body}",
                         body.len()
                     )
                 } else {
@@ -1322,7 +1322,7 @@ async fn first_run_still_is_the_first_backdrop_of_the_default_catalog_or_nothing
         {"id":"tt2","type":"movie","name":"Second","background":"https://images.example/bg/tt2.jpg","logo":"https://images.example/logo/tt2.png"},
         {"id":"tt3","type":"movie","name":"Third","background":"https://images.example/bg/tt3.jpg"}
     ]}"#;
-    mq_http::set_dev_replay(&still_host(Duration::ZERO, metas).await);
+    mq_http::set_dev_replay(&still_host(Duration::ZERO, 200, metas).await);
     let core = Core::temporary(OWNER).unwrap();
     assert_eq!(
         core.first_run_still().await,
@@ -1339,6 +1339,7 @@ async fn first_run_still_is_the_first_backdrop_of_the_default_catalog_or_nothing
     mq_http::set_dev_replay(
         &still_host(
             Duration::ZERO,
+            200,
             r#"{"metas":[{"id":"tt1","type":"movie","name":"No Art"}]}"#,
         )
         .await,
@@ -1348,8 +1349,18 @@ async fn first_run_still_is_the_first_backdrop_of_the_default_catalog_or_nothing
         None
     );
 
+    // A failing host, an answer that is not JSON, or one of another shape: nothing, never a panic.
+    for (status, body) in [(500, metas), (200, "not json"), (200, r#"{"streams":[]}"#)] {
+        mq_http::set_dev_replay(&still_host(Duration::ZERO, status, body).await);
+        assert_eq!(
+            Core::temporary(OWNER).unwrap().first_run_still().await,
+            None,
+            "{status} {body}"
+        );
+    }
+
     // A slow catalog: nothing, once the budget is spent.
-    mq_http::set_dev_replay(&still_host(Duration::from_secs(5), metas).await);
+    mq_http::set_dev_replay(&still_host(Duration::from_secs(5), 200, metas).await);
     let started = Instant::now();
     assert_eq!(
         Core::temporary(OWNER).unwrap().first_run_still().await,

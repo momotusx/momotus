@@ -368,7 +368,10 @@ impl Core {
         };
         let fetched = tokio::time::timeout(
             STILL_BUDGET,
-            self.addons().fetch(&addon, &path, STILL_BUDGET),
+            // A little past the budget, so the request itself never times out first and records a failure
+            // in the health of an addon this profile may install later.
+            self.addons()
+                .fetch(&addon, &path, STILL_BUDGET + Duration::from_millis(200)),
         )
         .await
         .ok()?
