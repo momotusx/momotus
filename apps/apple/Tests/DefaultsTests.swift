@@ -238,7 +238,7 @@ private func on(_ choices: [DefaultChoice]) -> [String: Bool] {
         // Settings switches one where it is, and reads the list again.
         #expect(await fixer.set("trakt", on: false))
         #expect(fixer.list?.addons.first { $0.key == "trakt" }?.installed == .off)
-        #expect(try await installed(core.client).filter { $0.value == .on }.count == 8)
+        #expect(try await installed(core.client).filter { $0.value == .on }.count == 9)
     }
 
     @Test func aLinkWithASignInWaitsForTheUsersWord() async throws {
