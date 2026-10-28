@@ -1003,7 +1003,8 @@ test("a trailer plays in the app: pause and play, seeks by the bar and the remot
   await expect.poll(() => lastSeek(p)).toBe("seekTo 23 true");
   // The remote's rewind key seeks too, from anywhere in the bar.
   await toggle.focus();
-  await p.keyboard.press("MediaRewind");
+  // Playwright has no rewind key: the event a remote's key sends.
+  await p.evaluate(() => document.activeElement?.dispatchEvent(new KeyboardEvent("keydown", { key: "MediaRewind", bubbles: true })));
   await expect.poll(() => lastSeek(p)).toBe("seekTo 13 true");
   // A held Left: the first press seeks, the repeats move the bar only, and letting go seeks once.
   await p.locator('[data-f="trailer:scrub"]').focus();
