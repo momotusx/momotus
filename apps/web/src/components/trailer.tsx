@@ -53,8 +53,8 @@ export function TrailerOverlay(props: { trailers: Trailer[]; onClose: () => void
       onEnd: (why) => {
         if (my !== run) return;
         control = null;
-        if (why === "ended" || why === "cap") return props.onClose();
-        if (why === "stopped") return;
+        // Its end, or stopped from outside (the tab hidden for good, a film starting): the overlay goes with it.
+        if (why !== "error" && why !== "timeout") return props.onClose();
         // Refused here (embedding off, gone) or never ready: the next trailer, then the quiet line.
         if (i + 1 < props.trailers.length) return start(i + 1);
         setFailed(true);
@@ -100,7 +100,7 @@ export function TrailerOverlay(props: { trailers: Trailer[]; onClose: () => void
         e.preventDefault();
         e.stopImmediatePropagation();
         toggle();
-      } else if (e.key === "MediaRewind" || e.key === "MediaFastForward") {
+      } else if ((e.key === "MediaRewind" || e.key === "MediaFastForward") && !e.repeat) {
         e.preventDefault();
         seekBy(e.key === "MediaRewind" ? -SEEK_S : SEEK_S);
       }
@@ -155,7 +155,11 @@ export function TrailerOverlay(props: { trailers: Trailer[]; onClose: () => void
           onKeyDown={(e) => {
             if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
               e.preventDefault();
-              seekBy(e.key === "ArrowLeft" ? -SEEK_S : SEEK_S);
+              const by = e.key === "ArrowLeft" ? -SEEK_S : SEEK_S;
+              // A held key moves the bar and seeks once, when it is let go: YouTube fetches one place, not thirty.
+              const d = time().d;
+              if (e.repeat && d > 0) setHeld(seekTarget(held() ?? time().t, d, by));
+              else seekBy(by);
             } else if (e.key === "Enter") {
               e.preventDefault();
               toggle();
@@ -170,6 +174,13 @@ export function TrailerOverlay(props: { trailers: Trailer[]; onClose: () => void
           onPointerMove={(e) => e.currentTarget.hasPointerCapture(e.pointerId) && seekAt(e, false)}
           onPointerUp={(e) => held() !== null && seekAt(e, true)}
           onPointerCancel={() => setHeld(null)}
+          onKeyUp={() => {
+            const to = held();
+            if (to === null) return;
+            setHeld(null);
+            setTime({ ...time(), t: to });
+            control?.seek(to);
+          }}
         >
           <i class="pos" style={{ width: pct(time().d > 0 ? position() / time().d : 0) }} />
           <b class="knob" style={{ left: pct(time().d > 0 ? position() / time().d : 0) }} />

@@ -2,7 +2,7 @@
  * YouTube's own embedded player on its privacy-enhanced host, muted and read back before it plays, taking no input,
  * one at a time app-wide. The hero and a title's header play it muted under their art; a title's Trailer plays it
  * full screen (`full`) under our own controls, with its own sound. */
-import { createSignal } from "solid-js";
+import { batch, createSignal } from "solid-js";
 import { walkNow, youtubeId } from "../lib/trailers";
 
 type YtPlayer = {
@@ -143,22 +143,26 @@ export function playTrailer(opts: {
       clearInterval(poll);
       const player = self.player;
       self.player = null;
+      // Only its own frame goes: a player started meanwhile in the same host stays.
       const gone = () => {
         try {
           player?.destroy();
         } catch {
           // Already gone with its iframe.
         }
-        opts.host.replaceChildren();
+        box.remove();
       };
       // The art fades back in over 600 ms above a player that still plays, never over black.
       if (why === "cap" || why === "ended") setTimeout(gone, 650);
       else gone();
-      if (current === self) {
-        current = null;
-        setPlaying(false);
-      }
-      opts.onEnd(why);
+      // One batch: the end hears it while the sound switch is still drawn, so a focus on it can move to Trailer.
+      batch(() => {
+        if (current === self) {
+          current = null;
+          setPlaying(false);
+        }
+        opts.onEnd(why);
+      });
     },
   };
   current = self;

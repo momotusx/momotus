@@ -1005,11 +1005,23 @@ test("a trailer plays in the app: pause and play, seeks by the bar and the remot
   await toggle.focus();
   await p.keyboard.press("MediaRewind");
   await expect.poll(() => lastSeek(p)).toBe("seekTo 13 true");
+  // A held Left: the first press seeks, the repeats move the bar only, and letting go seeks once.
+  await p.locator('[data-f="trailer:scrub"]').focus();
+  const seeks = async () => (await ytLog(p)).filter((l) => l.startsWith("seekTo")).length;
+  const before = await seeks();
+  await p.keyboard.down("ArrowLeft");
+  await p.keyboard.down("ArrowLeft");
+  await p.keyboard.down("ArrowLeft");
+  await expect(p.locator('[data-f="trailer:scrub"]')).toHaveAttribute("aria-valuetext", "0:00 of 0:25");
+  expect(await seeks()).toBe(before + 1);
+  await p.keyboard.up("ArrowLeft");
+  await expect.poll(() => lastSeek(p)).toBe("seekTo 0 true");
+  expect(await seeks()).toBe(before + 2);
   // Back closes it, the page stays, focus returns to Trailer.
   await p.keyboard.press("Escape");
   await expect(p.locator(".trailer")).toHaveCount(0);
   await expect.poll(() => p.evaluate(() => (document.activeElement as HTMLElement | null)?.dataset.f)).toBe("title:trailer");
-  expect((await ytLog(p)).at(-1)).toBe("destroy");
+  await expect.poll(async () => (await ytLog(p)).at(-1)).toBe("destroy");
   expect(new URL(p.url()).pathname).toBe("/title/movie/mqjm");
   expect(await leftApp()).toEqual([]);
   await context.close();
@@ -1042,17 +1054,23 @@ test("the header plays the trailer muted with a sound switch; the full-screen tr
   await expect(sound).toHaveAttribute("aria-pressed", "false");
   expect(await p.locator(".info .acts [data-f]").last().getAttribute("data-f")).toBe("title:sound");
   expect(await ytLog(p)).not.toContain("unMute");
+  const sessionMuted = () => p.evaluate(async (url) => ((await import(/* @vite-ignore */ url)) as typeof import("../src/components/yt-player")).muted(), "/src/components/yt-player.ts");
+  // The header's switch is the session's sound (the same module the page runs): on, then off again.
+  await sound.click();
+  await expect(sound).toHaveAttribute("aria-pressed", "true");
+  expect(await sessionMuted()).toBe(false);
+  await sound.click();
+  expect(await sessionMuted()).toBe(true);
   // Trailer: the header's player goes, the full-screen one plays with sound, the session's sound stays off.
   await p.locator('[data-f="title:trailer"]').click();
   await expect(sound).toHaveCount(0);
   await expect.poll(async () => (await ytLog(p)).filter((l) => l.startsWith("new")).length).toBe(2);
-  await expect.poll(() => ytLog(p)).toContain("unMute");
-  const sessionMuted = () => p.evaluate(async (url) => ((await import(/* @vite-ignore */ url)) as typeof import("../src/components/yt-player")).muted(), "/src/components/yt-player.ts");
+  await expect.poll(async () => (await ytLog(p)).filter((l) => l === "unMute").length).toBe(2);
   expect(await sessionMuted()).toBe(true);
   // Its own switch: off mutes it.
   await p.locator('[data-f="trailer:sound"]').click();
   await expect(p.locator('[data-f="trailer:sound"]')).toHaveAttribute("aria-pressed", "false");
-  expect((await ytLog(p)).at(-2)).toBe("mute");
+  await expect.poll(async () => (await ytLog(p)).slice(-2)).toEqual(["mute", "setVolume 0"]);
   // Closed: the header does not play again this visit.
   await p.locator('[data-f="trailer:close"]').click();
   await p.waitForTimeout(1000);

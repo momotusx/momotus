@@ -19,7 +19,11 @@ function script(file: string): string {
   const start = text.indexOf("<script>");
   const end = text.indexOf("</script>", start);
   expect(start).toBeGreaterThan(0);
-  return text.slice(start + "<script>".length, end);
+  const body = text.slice(start + "<script>".length, end);
+  // Read as written: no escapes the Swift or Kotlin string would turn into something else.
+  expect(body).not.toContain("\\");
+  expect(body).not.toContain("$");
+  return body;
 }
 
 const msgs = (page: Page) => page.evaluate(() => (window as unknown as { msgs: Msg[] }).msgs);
@@ -49,7 +53,19 @@ for (const [platform, { file, shim }] of Object.entries(SOURCES)) {
     // From 3 s, a 6 s trailer ends at 5 s: YouTube's end screen never shows.
     await expect.poll(async () => (await msgs(page)).find((m) => m.event === "end"), { timeout: 10_000 }).toMatchObject({ gen: 1, why: "ended" });
     const last = (await msgs(page)).filter((m) => m.event === "time").at(-1);
-    expect(last?.t).toBeLessThan(6);
+    expect(last?.t).toBeLessThanOrEqual(5.5);
+  });
+
+  test(`${platform}: a preview stops a second before its cap, muted, and a refusal ends in an error`, async ({ page }) => {
+    await open(page);
+    await page.evaluate(() => (window as unknown as { play: (...a: unknown[]) => void }).play("abcdefghijk", 2, 1, false, false));
+    await expect.poll(async () => (await msgs(page)).find((m) => m.event === "end"), { timeout: 10_000 }).toMatchObject({ gen: 1, why: "cap" });
+    expect(await ytLog(page)).not.toContain("unMute");
+    await page.evaluate(() => {
+      (window as unknown as { ytFail: boolean }).ytFail = true;
+      (window as unknown as { play: (...a: unknown[]) => void }).play("bcdefghijkl", 45, 2, false, false);
+    });
+    await expect.poll(async () => (await msgs(page)).find((m) => m.event === "end" && m.gen === 2)).toMatchObject({ why: "error" });
   });
 
   test(`${platform}: every message carries its play's generation, so a late stop never reaches the next`, async ({ page }) => {

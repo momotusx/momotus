@@ -150,6 +150,7 @@ function TitlePage(props: { kind: string; id: string; retry: () => void }) {
       hasTrailer: true,
     });
     if (!allowed) return;
+    // ponytail: sized once at the start, as the hero's; a window resized while it plays keeps the first size.
     const size = coverSize(box.offsetWidth, box.offsetHeight);
     Object.assign(headerHost.style, { width: `${size.width}px`, height: `${size.height}px` });
     let reveal: ReturnType<typeof setTimeout> | undefined;
