@@ -10,6 +10,12 @@ enum KeeperPlatform: Sendable {
     case mac
 }
 
+extension DownloadsSnapshot {
+    /// This profile's downloads that move, Library's count: `active` counts the device's, which a kids profile
+    /// does not list (review r3 N4).
+    var moving: Int { downloading.count(where: { $0.state == .running || $0.state == .queued }) }
+}
+
 /// What the keeper reads from a `downloads` snapshot.
 struct KeeperFacts: Equatable, Sendable {
     /// Running, queued and waiting: a download waiting for Wi-Fi is still left to do, so the keeper holds on.
@@ -24,22 +30,34 @@ struct KeeperFacts: Equatable, Sendable {
     var running = 0
     /// A locked session's counts-only snapshot: it lists nothing done, so its `done` says nothing.
     var locked = false
-    /// The titles the done set was read from, so an unchanged list is not read again.
-    var titleCount = 0
+    /// The titles the done set was read from (each title's id and row count), so an unchanged list is not
+    /// read again, and a list of other titles of the same size (another profile's) is (review r3 N7).
+    var titles = 0
 
-    init(left: Int, bytesDone: Int64, bytesTotal: Int64, title: String?, done: Set<String>, running: Int? = nil, locked: Bool = false, titleCount: Int = 0) {
+    init(left: Int, bytesDone: Int64, bytesTotal: Int64, title: String?, done: Set<String>, running: Int? = nil, locked: Bool = false, titles: Int = 0) {
         (self.left, self.bytesDone, self.bytesTotal, self.title, self.done) = (left, bytesDone, bytesTotal, title, done)
         self.running = running ?? left
         self.locked = locked
-        self.titleCount = titleCount
+        self.titles = titles
+    }
+
+    /// The titles' ids and row counts, hashed: cheap next to reading every row.
+    static func titlesKey(_ snapshot: DownloadsSnapshot) -> Int {
+        var hasher = Hasher()
+        for title in snapshot.titles {
+            hasher.combine(title.itemId)
+            hasher.combine(title.rows.count)
+        }
+        return hasher.finalize()
     }
 
     /// `previous`: the facts read last, whose done set is kept when the titles and their done count did not
     /// change (review r2 m-r2-4).
     static func of(_ snapshot: DownloadsSnapshot, previous: KeeperFacts? = nil) -> KeeperFacts {
         let active = snapshot.active
+        let key = titlesKey(snapshot)
         let doneCount = snapshot.titles.reduce(0) { $0 + $1.rows.reduce(0) { $0 + ($1.state == .done ? 1 : 0) } }
-        let done = if let previous, previous.titleCount == snapshot.titles.count, previous.done.count == doneCount {
+        let done = if let previous, previous.titles == key, previous.done.count == doneCount {
             previous.done
         } else {
             Set(snapshot.titles.flatMap(\.rows).filter { $0.state == .done }.map(\.id))
@@ -47,7 +65,7 @@ struct KeeperFacts: Equatable, Sendable {
         return KeeperFacts(
             left: active.running + active.queued + (active.waiting ?? 0), bytesDone: active.bytesDone, bytesTotal: active.bytesTotal,
             title: active.title, done: done, running: active.running + active.queued, locked: snapshot.locked == true,
-            titleCount: snapshot.titles.count)
+            titles: key)
     }
 
     /// The running downloads' share done, nil with no size yet.
@@ -64,7 +82,10 @@ enum KeeperEvent: Equatable, Sendable {
     case foreground
     /// Once a minute while downloads run.
     case minute
-    /// A few seconds after a tap: a tap the core never counted (nothing to download) lets the task go.
+    /// A tap's op answered, a second on so the board's snapshot lands first: once every tap is answered, a
+    /// tap the core never counted (nothing to download, an error) lets the task go (review r3 N2).
+    case answered
+    /// A minute after a tap with no answer (a core that went away): the task goes if nothing is left.
     case settle
 }
 
@@ -107,6 +128,8 @@ struct KeeperLogic {
     /// Done ids when the batch began, and taps the core has not counted yet.
     private var doneBefore: Set<String> = []
     private var taps = 0
+    /// Taps whose op the core has not answered yet: the task waits for them, however slow the add is.
+    private var asking = 0
 
     init(platform: KeeperPlatform) {
         self.platform = platform
@@ -162,6 +185,7 @@ struct KeeperLogic {
             }
             mac(&out)
         case .userAction:
+            asking += 1
             guard platform == .continued, visible else { break }
             taps += 1
             if task {
@@ -175,6 +199,8 @@ struct KeeperLogic {
             // The decision for an expiry in the foreground (the user cancelling the system's progress item while
             // the app is open, review r1 m2): the task ends, and the downloads go on while the app is open, as
             // they do below iOS 26; leaving the app then holds them (`app`). In the background it holds them now.
+            // A refused or ended task forgets its taps: the next one counts from none (review r3 N8).
+            taps = 0
             if task {
                 task = false
                 out.append(.end(success: false))
@@ -186,15 +212,23 @@ struct KeeperLogic {
             force = true
         case .minute:
             force = (facts?.left ?? 0) > 0
+        case .answered:
+            asking = max(0, asking - 1)
+            if asking == 0 { settle(&out) }
         case .settle:
-            if task, (facts?.left ?? 0) == 0 {
-                taps = 0
-                task = false
-                out.append(.end(success: true))
-            }
+            asking = 0
+            settle(&out)
         }
         allowed(&out, force: force)
         return out
+    }
+
+    private mutating func settle(_ out: inout [KeeperEffect]) {
+        if task, (facts?.left ?? 0) == 0 {
+            taps = 0
+            task = false
+            out.append(.end(success: true))
+        }
     }
 
     /// Whether downloads may run now: in front, or held by the system's task; always on the Mac.

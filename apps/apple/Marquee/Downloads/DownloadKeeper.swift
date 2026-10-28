@@ -34,12 +34,17 @@ final class DownloadKeeper {
     static weak var current: DownloadKeeper?
 
     private(set) var view: LiveRecord<DownloadsSnapshot>?
-    /// A failed op, in words.
+    /// Why the last op did not go through, in the words Android and web use. Every screen with download
+    /// controls shows it (`downloadProblem`); the next op or the user's Dismiss clears it, never a success of
+    /// another op or a timer (review r3 N1).
     private(set) var failure: String?
 
     @ObservationIgnored private let core: CoreClient
     @ObservationIgnored private var logic: KeeperLogic
     @ObservationIgnored private var minute: Task<Void, Never>?
+    /// The core generation the view was opened for: every window runs `begin()`, one view serves them all
+    /// (review r3 N3).
+    @ObservationIgnored private var openedFor: Int?
     #if os(iOS)
     /// The continued task once the system started it, and the identifier of the one submitted.
     @ObservationIgnored private var task: AnyObject?
@@ -70,6 +75,8 @@ final class DownloadKeeper {
     /// PIN profile, the picker) gets the device's `active` and `settings` alone, so the Dock bar, the Mac's
     /// activity, the Quit question and the continued task stay right before anyone unlocks (review r1 M2, r2 C1).
     func begin() {
+        guard openedFor != core.generation else { return }
+        openedFor = core.generation
         logic.resend()
         let record = LiveRecord<DownloadsSnapshot>("downloads", core: core)
         record.onSnapshot = { [weak self] snapshot in
@@ -140,26 +147,33 @@ final class DownloadKeeper {
         if let videoId { fields["videoId"] = videoId }
         if let season { fields["season"] = season }
         if let pick { fields["pick"] = ["versionsSub": pick.sub, "key": pick.key] as [String: any Sendable] }
-        send("downloadAdd", fields)
-        tapped()
+        tapped("downloadAdd", fields)
     }
 
-    /// A tap that starts work: the continued task, then `settle` a few seconds on, which lets the task go
-    /// when the core counted nothing to download.
-    private func tapped() {
+    /// A tap that starts work: the continued task, which waits for the op's answer however slow the add is
+    /// (a season's meta on a cold connection); a second after it, or at once on an error, `answered` lets the
+    /// task go when the core counted nothing. A core that never answers lets it go after `settleLimit` (review r3 N2).
+    private func tapped(_ op: String, _ fields: [String: any Sendable]) {
         handle(.userAction)
+        send(op, fields) { [weak self] error in
+            Task { [weak self] in
+                if error == nil { try? await Task.sleep(for: .seconds(1)) }
+                self?.handle(.answered)
+            }
+        }
         Task { [weak self] in
-            try? await Task.sleep(for: .seconds(5))
+            try? await Task.sleep(for: Self.settleLimit)
             self?.handle(.settle)
         }
     }
+
+    nonisolated static let settleLimit: Duration = .seconds(60)
 
     /// Pause, Resume, Cancel or Delete (remove), Try again.
     func act(_ op: DownloadOp, _ target: DownloadTarget, mobileData: Bool = false) {
         var fields = target.fields
         if mobileData { fields["mobileData"] = true }
-        send(op.rawValue, fields)
-        if op == .resume || op == .retry { tapped() }
+        if op == .resume || op == .retry { tapped(op.rawValue, fields) } else { send(op.rawValue, fields) }
     }
 
     /// An item of an existing download that is an op: sent, true. The rest go somewhere and are the caller's.
@@ -177,8 +191,17 @@ final class DownloadKeeper {
         send("setDownloadSettings", fields)
     }
 
-    private func send(_ op: String, _ fields: [String: any Sendable]) {
-        core.sendNow(op, fields) { [weak self] error in self?.failure = error?.localizedDescription }
+    func dismissFailure() { failure = nil }
+
+    private func send(_ op: String, _ fields: [String: any Sendable], answered: (@MainActor @Sendable (CoreError?) -> Void)? = nil) {
+        failure = nil
+        core.sendNow(op, fields) { [weak self] error in
+            if let error {
+                coreLog.notice("downloads: \(op, privacy: .public) failed: \(error.localizedDescription, privacy: .public)")
+                self?.failure = op == "downloadAdd" ? DownloadCopy.addFailed : DownloadCopy.actFailed
+            }
+            answered?(error)
+        }
     }
 
     // MARK: Effects
@@ -342,7 +365,7 @@ final class MacAppDelegate: NSObject, NSApplicationDelegate {
                 alert.addButton(withTitle: "Quit")
                 guard alert.runModal() == .alertSecondButtonReturn else { return .terminateCancel }
             }
-            // The app goes once the core has checkpointed and held the downloads.
+            // The app goes once the core is told to hold the downloads (it answers, or 2 s pass).
             keeper.holdForQuit { sender.reply(toApplicationShouldTerminate: true) }
             return .terminateLater
         }

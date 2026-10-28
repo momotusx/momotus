@@ -143,12 +143,10 @@ struct TitleScreen: View {
             }
         }
         // "Delete Season N downloads" asks first, as a series and Delete all do (review r1 M5).
-        .downloadConfirm(
-            DownloadCopy.deleteSeries(deletingSeason?.count ?? 0, details?.name ?? model.route.name),
-            isPresented: Binding(get: { deletingSeason != nil }, set: { if !$0 { deletingSeason = nil } })
-        ) {
-            if let ids = deletingSeason { keeper?.act(.remove, .ids(ids)) }
+        .downloadConfirm(item: $deletingSeason, title: { DownloadCopy.deleteSeries($0.count, details?.name ?? model.route.name) }) {
+            keeper?.act(.remove, .ids($0))
         }
+        .downloadProblem(keeper)
         #endif
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)

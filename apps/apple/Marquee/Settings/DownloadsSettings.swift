@@ -29,6 +29,7 @@ struct DownloadSettingsSection: View {
                     }
             }
         }
+        .downloadProblem(keeper)
     }
 }
 

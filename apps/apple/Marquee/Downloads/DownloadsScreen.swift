@@ -19,7 +19,7 @@ struct DownloadsRow: View {
                 Glyph("arrow-down-to-line", size: 20)
                 Text("Downloads").textFont(Theme.type.body)
                 Spacer(minLength: 0)
-                if let left = running, left > 0 {
+                if let left = keeper.snapshot?.moving, left > 0 {
                     Text("\(left) downloading")
                         .textFont(Theme.type.callout, relativeTo: .callout)
                         .foregroundStyle(Theme.Palette.dim)
@@ -35,8 +35,6 @@ struct DownloadsRow: View {
         .buttonStyle(FocusPlainStyle(shape: RoundedRectangle(cornerRadius: 26, style: .continuous)))
         .accessibilityHint("Shows what is downloaded on this device")
     }
-
-    private var running: Int? { keeper.snapshot.map { $0.active.running + $0.active.queued } }
 }
 
 /// What a row of the Downloads screens can do: play it, choose another version, open a series.
@@ -86,20 +84,18 @@ struct DownloadsScreen: View {
                 } else if snapshot.downloading.isEmpty {
                     Empty().listRow()
                 }
-            } else if let failure = keeper.view?.failure {
-                StateLine(symbol: "triangle-alert", text: failure, action: ("Try again", { keeper.view?.retry() })).listRow()
+            } else {
+                NotOpen(keeper: keeper).listRow()
             }
         }
         .modifier(player.destinations(core: core, keeper: keeper))
         .navigationDestination(item: $series) { id in
             DownloadsSeriesPage(itemId: id, keeper: keeper, core: core)
         }
-        .downloadConfirm(
-            deleting.map { DownloadCopy.deleteSeries($0.rows.count, $0.name) } ?? "",
-            isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } })
-        ) {
-            if let deleting { keeper.act(.remove, .title(deleting.itemId)) }
+        .downloadConfirm(item: $deleting, title: { DownloadCopy.deleteSeries($0.rows.count, $0.name) }) {
+            keeper.act(.remove, .title($0.itemId))
         }
+        .downloadProblem(keeper)
     }
 
     private var actions: RowActions {
@@ -178,7 +174,9 @@ struct DownloadsSeriesPage: View {
 
     var body: some View {
         DownloadsList(title: title?.name ?? "Downloads") {
-            if let title {
+            if keeper.snapshot == nil {
+                NotOpen(keeper: keeper).listRow()
+            } else if let title {
                 ForEach(seasons(title), id: \.0) { season, rows in
                     SectionHeading(text: season.map(seasonName) ?? "Episodes").padding(.top, Theme.Space.s).listRow()
                     ForEach(rows) { row in
@@ -207,6 +205,7 @@ struct DownloadsSeriesPage: View {
             }
         }
         .modifier(player.destinations(core: core, keeper: keeper))
+        .downloadProblem(keeper)
     }
 
     private var title: DownloadTitle? { keeper.snapshot?.titles.first { $0.itemId == itemId } }
@@ -349,6 +348,49 @@ private struct Storage: View {
         .task {
             let values = try? CoreClient.dataDirectory().resourceValues(forKeys: [.volumeTotalCapacityKey])
             total = values?.volumeTotalCapacity.map(Int64.init)
+        }
+    }
+}
+
+extension View {
+    /// A download op the core refused, over the page's bottom edge until the next op or Dismiss (review r3 N1).
+    func downloadProblem(_ keeper: DownloadKeeper?) -> some View {
+        safeAreaInset(edge: .bottom) {
+            if let keeper, let failure = keeper.failure {
+                StateLine(symbol: "triangle-alert", text: failure, action: ("Dismiss", keeper.dismissFailure))
+                    .flatCard()
+                    .padding(.horizontal, Theme.Space.m)
+                    .padding(.bottom, Theme.Space.s)
+                    .accessibilityElement(children: .contain)
+            }
+        }
+        .onChange(of: keeper?.failure) { _, now in
+            if let now { AccessibilityNotification.Announcement(now).post() }
+        }
+    }
+}
+
+/// The view has no snapshot yet (a core opened again): a spinner a moment on, so a quick open does not
+/// flash one, or why it did not open with Try again; never "Nothing downloaded" (review r3 N5).
+private struct NotOpen: View {
+    let keeper: DownloadKeeper
+    @State private var waited = false
+
+    var body: some View {
+        if let failure = keeper.view?.failure {
+            StateLine(symbol: "triangle-alert", text: failure, action: ("Try again", { keeper.view?.retry() }))
+        } else {
+            ProgressView()
+                .controlSize(.large)
+                .tint(Theme.Palette.text)
+                .opacity(waited ? 1 : 0)
+                .frame(maxWidth: .infinity)
+                .padding(Theme.Space.l)
+                .accessibilityLabel(DownloadCopy.loading)
+                .task {
+                    try? await Task.sleep(for: .milliseconds(250))
+                    waited = true
+                }
         }
     }
 }

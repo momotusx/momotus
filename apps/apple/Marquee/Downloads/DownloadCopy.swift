@@ -350,4 +350,8 @@ enum DownloadCopy {
     static let deleteAllButton = "Delete all downloads"
     static let pick = "Pick the version to keep on this device"
     static let pickAction = "Download this version"
+    /// A download op the core refused, the same lines as Android and web (review r3 N1).
+    static let addFailed = "The download could not start. Try again."
+    static let actFailed = "That did not go through. Try again."
+    static let loading = "Loading downloads"
 }

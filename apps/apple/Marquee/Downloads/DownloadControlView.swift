@@ -176,18 +176,23 @@ struct DownloadedBadge: View {
     }
 }
 
-/// The confirmation every download delete takes (design/DECISION.md, Destructive and Confirmation): an
-/// Apple dialog in the key tint, Cancel and the plain word, no destructive role and no red.
-struct DownloadConfirm: ViewModifier {
-    let title: String
-    @Binding var isPresented: Bool
-    let delete: () -> Void
+/// The confirmation a series', a season's and Delete all's downloads take (design/DECISION.md, Destructive and
+/// Confirmation; one row asks nothing, plans/offline-downloads.md 3.4): an Apple dialog in the key tint, Cancel
+/// and the plain word, no destructive role and no red. The dialog holds the item it was asked for, so Delete
+/// acts on it even when SwiftUI clears the binding before the button runs (review r3 N6).
+struct DownloadConfirm<Item>: ViewModifier {
+    @Binding var item: Item?
+    let title: (Item) -> String
+    let delete: (Item) -> Void
 
     func body(content: Content) -> some View {
         content.background {
             Color.clear
-                .confirmationDialog(title, isPresented: $isPresented, titleVisibility: .visible) {
-                    Button("Delete", action: delete)
+                .confirmationDialog(
+                    item.map(title) ?? "", isPresented: Binding(get: { item != nil }, set: { if !$0 { item = nil } }),
+                    titleVisibility: .visible, presenting: item
+                ) { value in
+                    Button("Delete") { delete(value) }
                     Button("Cancel", role: .cancel) {}
                 }
                 .tint(Theme.Palette.key)
@@ -196,8 +201,15 @@ struct DownloadConfirm: ViewModifier {
 }
 
 extension View {
+    /// Asks before `delete` runs on the item `item` holds; nil dismisses.
+    func downloadConfirm<Item>(item: Binding<Item?>, title: @escaping (Item) -> String, delete: @escaping (Item) -> Void) -> some View {
+        modifier(DownloadConfirm(item: item, title: title, delete: delete))
+    }
+
     func downloadConfirm(_ title: String, isPresented: Binding<Bool>, delete: @escaping () -> Void) -> some View {
-        modifier(DownloadConfirm(title: title, isPresented: isPresented, delete: delete))
+        downloadConfirm(
+            item: Binding(get: { isPresented.wrappedValue ? true : nil }, set: { isPresented.wrappedValue = $0 != nil }),
+            title: { _ in title }, delete: { _ in delete() })
     }
 }
 #endif

@@ -415,10 +415,82 @@ private func submits(_ effects: [KeeperEffect]) -> Int {
     """#
     let snapshot = try JSONDecoder().decode(DownloadsSnapshot.self, from: Data(json.utf8))
     #expect(KeeperFacts.of(snapshot).done == ["d1"])
-    let same = KeeperFacts(left: 1, bytesDone: 0, bytesTotal: 0, title: nil, done: ["kept"], titleCount: 1)
+    let key = KeeperFacts.titlesKey(snapshot)
+    let same = KeeperFacts(left: 1, bytesDone: 0, bytesTotal: 0, title: nil, done: ["kept"], titles: key)
     #expect(KeeperFacts.of(snapshot, previous: same).done == ["kept"])
-    let fewer = KeeperFacts(left: 1, bytesDone: 0, bytesTotal: 0, title: nil, done: ["kept"], titleCount: 0)
+    let fewer = KeeperFacts(left: 1, bytesDone: 0, bytesTotal: 0, title: nil, done: ["kept"], titles: 0)
     #expect(KeeperFacts.of(snapshot, previous: fewer).done == ["d1"])
+    // Another title in its place, the same count (another profile's list): read again (review r3 N7).
+    let other = try JSONDecoder().decode(DownloadsSnapshot.self, from: Data(json.replacingOccurrences(of: "tt1", with: "tt2").utf8))
+    #expect(KeeperFacts.titlesKey(other) != key)
+    #expect(KeeperFacts.of(other, previous: KeeperFacts.of(snapshot)).titles == KeeperFacts.titlesKey(other))
+    var stale = KeeperFacts.of(snapshot)
+    stale.done = ["kept"]
+    #expect(KeeperFacts.of(other, previous: stale).done == ["d1"])
+}
+
+// The task waits for every tap's answer, however slow the add is; once all are answered and the core counted
+// nothing, it goes. `settle` stays the bound for a core that never answers (review r3 N2).
+@Test func aTapWaitsForItsAnswer() {
+    var keeper = KeeperLogic(platform: .continued)
+    _ = keeper.on(.facts(facts(left: 0)))
+    _ = keeper.on(.userAction)
+    _ = keeper.on(.userAction)
+    #expect(!keeper.on(.facts(facts(left: 0))).contains(.end(success: true)))
+    // One of two answered: the other add may still be reading its meta.
+    #expect(!keeper.on(.answered).contains(.end(success: true)))
+    #expect(keeper.task)
+    #expect(keeper.on(.answered).contains(.end(success: true)))
+    // An answered tap whose download runs keeps the task.
+    _ = keeper.on(.userAction)
+    _ = keeper.on(.facts(facts(left: 1)))
+    #expect(!keeper.on(.answered).contains(.end(success: true)))
+    #expect(keeper.task)
+    let source = try? String(contentsOf: URL(fileURLWithPath: #filePath).deletingLastPathComponent().appending(path: "../Marquee/Downloads/DownloadKeeper.swift"), encoding: .utf8)
+    #expect(DownloadKeeper.settleLimit >= .seconds(30))
+    #expect(source?.contains("self?.handle(.answered)") == true)
+}
+
+// A refused or expired task forgets its taps: the next tap counts from none (review r3 N8).
+@Test func anExpiryForgetsItsTaps() {
+    var keeper = KeeperLogic(platform: .continued)
+    _ = keeper.on(.facts(facts(left: 0)))
+    _ = keeper.on(.userAction)
+    _ = keeper.on(.expired)
+    let next = keeper.on(.userAction).compactMap { if case .submit(let p) = $0 { p } else { nil } }.first
+    #expect(next?.subtitle.hasPrefix("1 of 2") == false)
+    #expect(next?.total == 100)
+}
+
+// Library's count is this profile's moving rows, not the device's `active` (review r3 N4).
+@Test func libraryCountsTheProfilesOwnDownloads() throws {
+    let row = { (id: String, state: String) in
+        #"{"id": "\#(id)", "kind": "movie", "itemId": "tt1", "videoId": "tt1", "season": null, "episode": null, "name": "Sintel", "episodeTitle": null, "poster": null, "still": null, "runtime": null, "released": null, "state": "\#(state)", "reason": null, "mobileData": false, "bytesDone": 0, "bytesTotal": 1, "speedBps": null, "etaSecs": null, "quality": null, "subtitles": []}"#
+    }
+    let json = { (rows: [String]) in
+        #"""
+        {"storage": {"downloadsBytes": 0, "freeBytes": null, "neededBytes": null}, "settings": {"wifiOnly": true, "smart": true},
+         "active": {"running": 3, "queued": 2, "waiting": 0, "mobileData": false, "bytesDone": 0, "bytesTotal": 0, "title": null},
+         "downloading": [\#(rows.joined(separator: ","))], "titles": []}
+        """#
+    }
+    let kid = try JSONDecoder().decode(DownloadsSnapshot.self, from: Data(json([]).utf8))
+    #expect(kid.moving == 0)
+    let mine = try JSONDecoder().decode(DownloadsSnapshot.self, from: Data(json([row("a", "running"), row("b", "queued"), row("c", "paused"), row("d", "waiting")]).utf8))
+    #expect(mine.moving == 2)
+}
+
+// The season and series confirms hold the item they ask about, so Delete acts on it whatever SwiftUI does to the
+// binding first (review r3 N6).
+@Test func deleteConfirmsHoldTheirItem() throws {
+    let app = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appending(path: "../Marquee")
+    let downloads = try String(contentsOf: app.appending(path: "Downloads/DownloadsScreen.swift"), encoding: .utf8)
+    let title = try String(contentsOf: app.appending(path: "Title/TitleScreen.swift"), encoding: .utf8)
+    let confirm = try String(contentsOf: app.appending(path: "Downloads/DownloadControlView.swift"), encoding: .utf8)
+    #expect(downloads.contains(".downloadConfirm(item: $deleting,"))
+    #expect(title.contains(".downloadConfirm(item: $deletingSeason,"))
+    #expect(confirm.contains("titleVisibility: .visible, presenting: item"))
+    #expect(confirm.contains("Button(\"Delete\") { delete(value) }"))
 }
 
 // A download waiting for Wi-Fi, a connection, room or the app is still left to do: the keeper holds on for it,
@@ -564,7 +636,7 @@ private func submits(_ effects: [KeeperEffect]) -> Int {
     #expect(!DownloadKeeper.activityOptions.contains(.idleSystemSleepDisabled))
 }
 
-// Quit waits for the core to checkpoint and hold the downloads before the app goes (review r1 M4).
+// Quit waits for the core's answer to the hold (or 2 s) before the app goes (review r1 M4).
 @MainActor @Test func quitWaitsForTheCoresAnswer() async throws {
     let core = RealCore()
     #expect(await core.ready())
@@ -616,4 +688,42 @@ private func submits(_ effects: [KeeperEffect]) -> Int {
     core.client.lifecycle("networkChanged", NetworkReport(network: "none", metered: false, lowData: false).fields)
     try await core.client.perform("downloadsAllowed", ["allowed": true])
     #expect(downloads.failure == nil)
+}
+
+// A refused op says so, in the shared words, until the next op or Dismiss; a later success of another op does not
+// clear it behind the user's back (review r3 N1).
+@MainActor @Test func aRefusedDownloadSaysSo() async throws {
+    let core = RealCore()
+    #expect(await core.ready())
+    let keeper = DownloadKeeper(core: core.client)
+    keeper.begin()
+    #expect(await eventually { keeper.snapshot != nil })
+    // No addon answers this title: the core refuses the add.
+    keeper.add(kind: "movie", itemId: "tt0000001", scope: "video", videoId: "tt0000001")
+    #expect(await eventually(10) { keeper.failure != nil })
+    #expect(keeper.failure == DownloadCopy.addFailed)
+    keeper.dismissFailure()
+    #expect(keeper.failure == nil)
+    keeper.add(kind: "movie", itemId: "tt0000001", scope: "video", videoId: "tt0000001")
+    #expect(await eventually(10) { keeper.failure != nil })
+    // The next op starts clean.
+    keeper.setSettings(smart: false)
+    #expect(keeper.failure == nil)
+    let app = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appending(path: "../Marquee")
+    for file in ["Downloads/DownloadsScreen.swift", "Title/TitleScreen.swift", "Settings/DownloadsSettings.swift"] {
+        let text = try String(contentsOf: app.appending(path: file), encoding: .utf8)
+        #expect(text.contains(".downloadProblem(keeper)"), "\(file)")
+    }
+}
+
+// Every window runs `begin()`; one view serves them all, and a core opened again gets a new one (review r3 N3).
+@MainActor @Test func aSecondWindowKeepsTheOneView() async throws {
+    let core = RealCore()
+    #expect(await core.ready())
+    let keeper = DownloadKeeper(core: core.client)
+    keeper.begin()
+    let first = try #require(keeper.view)
+    keeper.begin()
+    #expect(keeper.view === first)
+    #expect(await eventually { keeper.snapshot != nil })
 }
