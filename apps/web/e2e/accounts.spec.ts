@@ -675,7 +675,10 @@ test.describe.serial("accounts on the web", () => {
     await phone.locator('[data-f="signin:cant"]').click();
     await expect(phone.locator(".sync-ask p")).toHaveText("Your old library can't be opened. It is deleted in 7 days unless one of your old devices cancels.");
     await shot(phone, "accounts-found-phone");
+    const given = codes.get(P.b);
     await phone.locator('[data-f="signin:start-over-cancel"]').click();
+    // Cancel mounts a new session: Desk approves its code, never the one Start over gave back.
+    await expect.poll(() => codes.get(P.b)).not.toBe(given);
     await approve(codes.get(P.b) ?? "");
     await expect(phone).toHaveURL(new RegExp(`127.0.0.1:${PORTS.vite}/$`), { timeout: 30_000 });
     await desk.locator('[data-f="sync-add:done"]').click();
