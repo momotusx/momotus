@@ -67,7 +67,8 @@ for (const form of ["tv", "desktop", "phone"] as const) {
   test(`${form}: the header holds one height with art, before the art lands, and with none`, async ({ browser }) => {
     const loaded = await open(browser, form);
     const art = loaded.page.locator(".set-art img");
-    await expect(art).toHaveClass(/\bin\b/, { timeout: 30_000 });
+    // Its source is enough here: the real picture may take its time on a slow link.
+    await expect(art).toHaveAttribute("src", /./, { timeout: 30_000 });
     const src = (await art.getAttribute("src")) as string;
     const full = await headHeight(loaded.page);
     // The header's own height (the gallery's 380 on desktop, 340 on the phone, 600 TV points), not its words'.
@@ -152,8 +153,9 @@ test("desktop: a menu entry brings its section to the top and fills; the keyboar
   expect(await page.evaluate(() => document.activeElement?.id)).toBe("set-h-playback");
   const top = await page.evaluate(() => (document.getElementById("set-playback") as HTMLElement).getBoundingClientRect().top / innerHeight);
   expect(top).toBeLessThan(0.2);
-  // Scrolling back up fills the section that reaches the top third again.
-  await page.evaluate(() => (document.querySelector(".settings-page") as HTMLElement).scrollTo(0, 0));
+  // The viewer scrolling back up fills the section that reaches the top third again.
+  await page.mouse.move(900, 600);
+  await page.mouse.wheel(0, -6000);
   await expect(page.locator('[data-f="settings-nav:profiles"]')).toHaveAttribute("aria-current", "true");
   await context.close();
 });
@@ -162,7 +164,7 @@ for (const form of ["tv", "desktop", "phone"] as const) {
   test(`${form}: every word on the header keeps 4.5:1 and every glyph 3:1 over a white backdrop`, async ({ browser }) => {
     const { context, page } = await open(browser, form);
     const art = page.locator(".set-art img");
-    await expect(art).toHaveClass(/\bin\b/, { timeout: 30_000 });
+    await expect(art).toHaveAttribute("src", /./, { timeout: 30_000 });
     await page.route((await art.getAttribute("src")) as string, (r) => r.fulfill({ body: WHITE_PNG, contentType: "image/png" }));
     await page.reload();
     await expect(page.locator(".set-art img")).toHaveClass(/\bin\b/, { timeout: 30_000 });

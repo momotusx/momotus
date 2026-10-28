@@ -115,7 +115,7 @@ for (const form of ["tv", "desktop", "phone"] as const) {
     const context = await device(browser, form);
     const first = await open(context, form, "doors");
     const still = first.locator(".film img");
-    await expect(still).toHaveClass(/\bin\b/, { timeout: 30_000 });
+    await expect(still).toHaveAttribute("src", /./, { timeout: 30_000 });
     const src = (await still.getAttribute("src")) as string;
     await first.close();
     await context.route(src, (r) => r.fulfill({ body: WHITE_PNG, contentType: "image/png" }));

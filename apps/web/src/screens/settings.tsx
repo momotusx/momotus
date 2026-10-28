@@ -315,7 +315,12 @@ export default function SettingsScreen() {
     setActive(on);
   };
   let frame = 0;
+  // A menu entry's own scroll keeps its entry filled (a short section may never reach the line); the viewer's next
+  // scroll, by wheel, touch, key or pointer, hands the menu back to the line.
+  let held = false;
+  const release = () => (held = false);
   const onScroll = () => {
+    if (held) return;
     cancelAnimationFrame(frame);
     frame = requestAnimationFrame(spy);
   };
@@ -330,6 +335,7 @@ export default function SettingsScreen() {
     const behavior = reducedMotion() ? "auto" : "smooth";
     if (id === "profiles") page.scrollTo({ top: 0, behavior });
     else sec.scrollIntoView({ block: "start", behavior });
+    held = true;
     setActive(id);
     const to = form() === "tv" || id === "profiles" ? sec.querySelector<HTMLElement>("[data-f]") : sec.querySelector<HTMLElement>("h2[tabindex]");
     if (to) form() === "tv" ? focusEl(to) : to.focus({ preventScroll: true });
@@ -377,7 +383,7 @@ export default function SettingsScreen() {
   );
 
   return (
-    <main class="browse page settings-page a1" data-vscroll ref={page} onScroll={onScroll}>
+    <main class="browse page settings-page a1" data-vscroll ref={page} onScroll={onScroll} onWheel={release} onTouchStart={release} onKeyDown={release} onPointerDown={release}>
       {header}
       <div class="set-body">
         <Show when={form() !== "phone"}>
