@@ -112,3 +112,34 @@ test("a saved site zoom is seen from the first load: text grows at 125, 175, 200
   expect(size(2) / size(1)).toBeGreaterThanOrEqual(1.6);
   expect(size(2.5) / size(1)).toBeGreaterThanOrEqual(2);
 });
+
+test("a narrow desktop canvas, by window or by zoom, keeps Resume, Start over and the actions out of the episode column", async ({ browser }) => {
+  // 768 CSS px wide, and 1440 at 125 percent (1152 CSS px, a canvas of 1840 units): both are under 2000 units.
+  for (const [at, viewport, zoom] of [["768 px", { width: 768, height: 900 }, 1], ["1440 px at 125 percent", { width: 1152, height: 720 }, 1.25]] as const) {
+    const context = await browser.newContext({ viewport, deviceScaleFactor: zoom, reducedMotion: "reduce" });
+    await context.addInitScript((outer) => Object.defineProperty(window, "outerWidth", { get: () => outer }), Math.round(viewport.width * zoom));
+    const page = await context.newPage();
+    await page.goto(`/title/series/${GOT.id}?form=desktop`);
+    await expect(page.locator(".info .syn")).toBeVisible({ timeout: 30_000 });
+    await expect(page.locator("html")).toHaveAttribute("data-narrow", "");
+    // The shared core has this series part way in: Resume with its time, and Start over as its icon.
+    const again = page.locator('[data-f="title:startover"]');
+    await expect(again).toBeVisible();
+    expect((await again.boundingBox())?.width, `${at}: Start over is a circle`).toBeLessThan(80);
+    await expect(again).toHaveAccessibleName("Start over");
+    const eps = (await page.locator(".eps").boundingBox())?.x ?? 0;
+    for (const sel of [".play-row", ".info .acts"]) {
+      const box = await page.locator(sel).boundingBox();
+      expect((box?.x ?? 0) + (box?.width ?? 0), `${at}: ${sel} ends before the episode column`).toBeLessThanOrEqual(eps + 1);
+    }
+    await context.close();
+  }
+  // A wide canvas keeps its words.
+  const wide = await browser.newContext({ viewport: { width: 1440, height: 900 }, reducedMotion: "reduce" });
+  const page = await wide.newPage();
+  await page.goto(`/title/series/${GOT.id}?form=desktop`);
+  await expect(page.locator('[data-f="title:startover"]')).toBeVisible({ timeout: 30_000 });
+  await expect(page.locator("html")).not.toHaveAttribute("data-narrow", "");
+  await expect(page.locator('[data-f="title:startover"]')).toContainText("Start over");
+  await wide.close();
+});

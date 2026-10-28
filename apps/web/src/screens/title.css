@@ -151,16 +151,17 @@
   [data-form="desktop"] .ep { align-items: center; }
   [data-form="desktop"] .ep-acts { display: flex; position: static; padding: 0; background: none; }
 }
-/* A narrow desktop window (under about 960 CSS px, 1920 canvas units): the episode column gets more of the width, the
- * still shrinks, and the strip is icons in circles, so the words keep a readable line beside it. */
-@media (max-width: 960px) {
-  [data-form="desktop"] .title-scr:not(.movie) .info { width: 560px; }
-  [data-form="desktop"] .eps { left: 700px; }
-  [data-form="desktop"] .ep-still { width: 140px; height: 79px; }
-  [data-form="desktop"] .ep-act { width: 52px; padding: 0; justify-content: center; border-radius: 50%; }
-  [data-form="desktop"] .ep-act span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
-}
-@media (max-width: 960px) and (hover: hover) { [data-form="desktop"] .ep:is(:hover, :focus-within) .ep-text { padding-right: 132px; } }
+/* A narrow desktop canvas (`data-narrow`, form.ts: a narrow window, or a zoomed one): the episode column gets more of
+ * the width, the still shrinks, and Start over and the episode actions are icons in circles with their words kept for a
+ * screen reader, as the phone draws them, so the words keep a readable line beside them. */
+[data-form="desktop"][data-narrow] .title-scr:not(.movie) .info { width: 560px; }
+[data-form="desktop"][data-narrow] .eps { left: 700px; }
+[data-form="desktop"][data-narrow] .ep-still { width: 140px; height: 79px; }
+[data-form="desktop"][data-narrow] :is(.ep-act, .btn.again) { width: 52px; padding: 0; justify-content: center; border-radius: 50%; }
+[data-form="desktop"][data-narrow] .btn.again { width: 84px; }
+[data-form="desktop"][data-narrow] :is(.ep-act, .btn.again) span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+[data-form="desktop"][data-narrow] .info .acts { flex-wrap: wrap; gap: 16px 28px; }
+@media (hover: hover) { [data-form="desktop"][data-narrow] .ep:is(:hover, :focus-within) .ep-text { padding-right: 132px; } }
 @media (hover: hover) {
   [data-form="desktop"] .ep:hover .ep-acts { display: flex; }
   [data-form="desktop"] .ep-main:hover { background: var(--glass-strong); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .4); }

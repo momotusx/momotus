@@ -39,6 +39,8 @@ function journeyAddon(film: string): Promise<Server> {
   const metas: Record<string, object> = {
     "/meta/series/mqj1.json": { id: "mqj1", type: "series", name: "Journey Waiting", description: "A synopsis comes first on the page.", videos: [episode("mqj1", 1, AIRED), episode("mqj1", 2, LATER)] },
     "/meta/series/mqj2.json": { id: "mqj2", type: "series", name: "Journey Finished", videos: [episode("mqj2", 1, AIRED), episode("mqj2", 2, AIRED)] },
+    // A name long enough to take several lines on a phone, with no logo and no art.
+    "/meta/series/mqj3.json": { id: "mqj3", type: "series", name: "The Extraordinarily Long Journey Through A Title That Needs Several Lines On A Narrow Phone", videos: [episode("mqj3", 1, AIRED)] },
     "/meta/movie/mqjm.json": { id: "mqjm", type: "movie", name: "Journey Film", releaseInfo: "2008", trailerStreams: [{ title: "Journey Film", ytId: "jrnyTrailer1" }] },
     "/meta/movie/mqjv.json": { id: "mqjv", type: "movie", name: "Journey Versions", releaseInfo: "2008" },
   };
@@ -885,13 +887,16 @@ test("the title's Play yields its white to a focused round action on TV, and the
   await context.close();
 });
 
-test("phone: Back stays clear of the name of a title that has no art or logo", async ({ browser }) => {
+test("phone: Back stays clear of the long name of a title that has no art or logo", async ({ browser }) => {
   const { context, page: p } = await page(browser, { width: 390, height: 844 });
-  await p.goto("/title/series/mqj2?form=phone");
-  const name = p.locator(".logo-slot");
+  await p.goto("/title/series/mqj3?form=phone");
+  // No logo: its name stands in as the heading, on several lines.
+  const name = p.locator("h1.title-logo.logo-text");
   await expect(name).toBeVisible({ timeout: 30_000 });
+  await expect(p.locator(".logo-slot")).toHaveCount(0);
   await expect(p.locator(".title-scr")).toHaveClass(/noart/);
   const [back, words] = await Promise.all([p.locator(".back").boundingBox(), name.boundingBox()]);
+  expect(words?.height, "the name takes more than one line").toBeGreaterThan(40);
   expect((back?.y ?? 0) + (back?.height ?? 0)).toBeLessThanOrEqual(words?.y ?? 0);
   await context.close();
 });

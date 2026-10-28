@@ -240,7 +240,7 @@ function Panel(props: { dialog?: boolean; retry: () => void }) {
           spellcheck={false}
           enterkeyhint="search"
           data-f="search:input"
-          data-autofocus={failed() ? undefined : ""}
+          data-autofocus
           onInput={(e) => send(e.currentTarget.value)}
         />
       </label>
@@ -271,7 +271,7 @@ function Panel(props: { dialog?: boolean; retry: () => void }) {
                 Search could not open.
               </p>
               <Why class="palette-note" reason={(view.state.status as { reason: string }).reason} />
-              <button class="btn" data-f="search:retry" data-autofocus onClick={() => props.retry()}>
+              <button class="btn" data-f="search:retry" onClick={() => props.retry()}>
                 <RefreshCw aria-hidden />
                 Try again
               </button>

@@ -67,6 +67,8 @@ export function chooseForm(next: Form | null) {
   fit();
 }
 
+const NARROW_CANVAS = 2000;
+
 export function fit() {
   const root = document.documentElement;
   const current = pin ?? detect();
@@ -89,6 +91,8 @@ export function fit() {
     cw = w / k;
     ch = h / k;
   }
+  // A desktop canvas under 2000 units wide (a narrow window, or a zoomed one) takes the narrow layouts (title page).
+  root.toggleAttribute("data-narrow", current === "desktop" && cw < NARROW_CANVAS);
   root.style.setProperty("--k", String(k));
   setScale(k);
   root.style.setProperty("--cw", `${cw}px`);

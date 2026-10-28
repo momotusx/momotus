@@ -303,7 +303,7 @@ function TitlePage(props: { kind: string; id: string; retry: () => void }) {
                         would open the same dead end). */}
                     <Show when={!playInert() && target()?.resumeMs ? target() : null}>
                       {(t) => (
-                        <A class="btn big again" href={playPath(props.kind, props.id, t().videoId)} state={{ startOver: true }} data-f="title:startover" aria-label="Start over">
+                        <A class="btn big again" href={playPath(props.kind, props.id, t().videoId)} state={{ startOver: true }} data-f="title:startover" aria-label="Start over" title="Start over">
                           <RotateCcw aria-hidden />
                           <span classList={{ sr: form() === "phone" }}>Start over</span>
                         </A>
@@ -673,7 +673,7 @@ function Episodes(props: { view: TitleView; kind: string; id: string; runtime: n
                 {/* The row plays this episode; choosing its version or marking
                     it watched are the secondary actions beside it. */}
                 <div class="ep-acts" data-fentry data-fowner={`ep:${e.videoId}`}>
-                  <A class="ep-act" href={versionsPath(props.kind, props.id, e.videoId)} data-f={`epv:${e.videoId}`} aria-label={`Choose a version of ${episodeLabel(e.season, e.episode)}`}>
+                  <A class="ep-act" href={versionsPath(props.kind, props.id, e.videoId)} data-f={`epv:${e.videoId}`} aria-label={`Choose a version of ${episodeLabel(e.season, e.episode)}`} title="Choose a version">
                     <Layers aria-hidden />
                     {/* A phone shows the icon in a circle; the word stays for screen readers. */}
                     <span classList={{ sr: form() === "phone" }}>Choose a version</span>
@@ -682,6 +682,7 @@ function Episodes(props: { view: TitleView; kind: string; id: string; runtime: n
                     class="ep-act"
                     data-f={`mark:${e.videoId}`}
                     aria-pressed={e.watched}
+                    title={e.watched ? "Watched" : "Mark as watched"}
                     onClick={() => props.view.command({ type: "setWatched", videoId: e.videoId, value: !e.watched })}
                   >
                     <Check aria-hidden />
