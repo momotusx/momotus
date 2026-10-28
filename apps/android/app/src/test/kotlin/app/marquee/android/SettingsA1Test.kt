@@ -386,7 +386,8 @@ class SettingsA1Test {
 
     /**
      * Every word on the header over white art: each at its top trailing corner (its least covered point), the art
-     * there covered by the ramps as the page color, then the word's own fill.
+     * there covered by the ramps as the page color, then the word's own fill. Native graphics: only they lay text out as a
+     * device does.
      */
     private fun overWhite(
         page: Color,
@@ -396,7 +397,8 @@ class SettingsA1Test {
     ) {
         val art = bounds(SETTINGS_ART)
         for ((what, ink, fill) in words) {
-            val box = boundsOf(compose.onNode(what))
+            // The words themselves, not the row or button they merge into.
+            val box = boundsOf(compose.onNode(what, useUnmergedTree = true))
             val x = (box.right - art.left) / art.width
             val y = (art.bottom - box.top) / art.height
             val covered = 1 - (1 - Scrims.alpha(side, x)) * (1 - Scrims.alpha(foot, y))
@@ -406,6 +408,7 @@ class SettingsA1Test {
     }
 
     @Test
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
     @Config(qualifiers = "w960dp-h540dp-xhdpi")
     fun `TV, every word on the header keeps 4_5 to 1 over a white backdrop`() {
         serve()
@@ -428,6 +431,7 @@ class SettingsA1Test {
     }
 
     @Test
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
     @Config(qualifiers = "w390dp-h844dp-xxhdpi")
     fun `phone, every word on the header keeps 4_5 to 1 over a white backdrop`() {
         serve()

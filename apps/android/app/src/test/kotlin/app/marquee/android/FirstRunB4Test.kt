@@ -193,7 +193,10 @@ class FirstRunB4Test {
         assertTrue(above > 40f, "the frame sits at the top: $above")
     }
 
-    /** Each of [lines] shows whole: no line cut short or hidden. */
+    /**
+     * Each of [lines] shows whole, no line cut short or hidden (native graphics: only they measure text as a
+     * device does).
+     */
     private fun whole(vararg lines: String) {
         for (line in lines) {
             val node = compose.onNodeWithText(line, useUnmergedTree = true).fetchSemanticsNode()
@@ -204,6 +207,7 @@ class FirstRunB4Test {
     }
 
     @Test
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
     @Config(qualifiers = "w960dp-h540dp-xhdpi")
     fun `TV, both stream doors say their lines whole`() {
         question(Form.Tv, null)
@@ -212,6 +216,7 @@ class FirstRunB4Test {
     }
 
     @Test
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
     @Config(qualifiers = "w960dp-h540dp-xhdpi")
     fun `TV, the three doors say their lines whole`() {
         doors(Form.Tv, null)
