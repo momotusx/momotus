@@ -168,16 +168,17 @@ export function playTrailer(opts: {
   current = self;
   const control: TrailerControl = {
     stop: () => self.stop("stopped"),
+    // YouTube's methods arrive with onReady: a press during the wait does nothing.
     toggle: () => {
       const p = self.player;
-      if (!p) return;
+      if (!p?.getPlayerState) return;
       if (p.getPlayerState() === 1) p.pauseVideo();
       else p.playVideo();
     },
-    seek: (s, done = true) => self.player?.seekTo(Math.max(0, s), done),
+    seek: (s, done = true) => self.player?.seekTo?.(Math.max(0, s), done),
     sound: (on) => {
       const p = self.player;
-      if (!p || walkNow()) return;
+      if (!p?.mute || walkNow()) return;
       if (on) {
         p.unMute();
         p.setVolume(100);

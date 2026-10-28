@@ -99,7 +99,8 @@ export function TrailerOverlay(props: { trailers: Trailer[]; onClose: () => void
       if (PLAY_KEYS.has(e.key) && !(e.key === " " && (e.target as Element | null)?.closest?.("button"))) {
         e.preventDefault();
         e.stopImmediatePropagation();
-        toggle();
+        // Once a press: a held key never flickers it.
+        if (!e.repeat) toggle();
       } else if ((e.key === "MediaRewind" || e.key === "MediaFastForward") && !e.repeat) {
         e.preventDefault();
         seekBy(e.key === "MediaRewind" ? -SEEK_S : SEEK_S);
@@ -162,7 +163,7 @@ export function TrailerOverlay(props: { trailers: Trailer[]; onClose: () => void
               else seekBy(by);
             } else if (e.key === "Enter") {
               e.preventDefault();
-              toggle();
+              if (!e.repeat) toggle();
             }
           }}
           // A press seeks there and a drag follows the pointer; YouTube fetches the new place once it is let go.
@@ -174,6 +175,7 @@ export function TrailerOverlay(props: { trailers: Trailer[]; onClose: () => void
           onPointerMove={(e) => e.currentTarget.hasPointerCapture(e.pointerId) && seekAt(e, false)}
           onPointerUp={(e) => held() !== null && seekAt(e, true)}
           onPointerCancel={() => setHeld(null)}
+          onBlur={() => setHeld(null)}
           onKeyUp={() => {
             const to = held();
             if (to === null) return;

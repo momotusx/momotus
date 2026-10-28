@@ -138,7 +138,7 @@ function TitlePage(props: { kind: string; id: string; retry: () => void }) {
   const startHeader = () => {
     const id = headerId();
     const box = headerHost.parentElement;
-    if (headerPlay || !id || !box || trailerOpen() || headerSpent.has(props.id)) return;
+    if (headerPlay || !id || !box || !shown() || trailerOpen() || headerSpent.has(props.id)) return;
     const allowed = trailerAllowed({
       enabled: previewsOn(),
       visible: headerVisible && !document.hidden,

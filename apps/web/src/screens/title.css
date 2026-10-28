@@ -245,9 +245,12 @@
   padding: var(--safe-top) var(--safe-side); background: var(--bg); }
 .trailer-frame { width: 1440px; max-width: 100%; aspect-ratio: 16 / 9; border-radius: var(--radius-l); overflow: hidden; background: #000;
   box-shadow: 0 0 0 1px var(--edge); }
-/* Held to the window's height less the two rows under it, so Close stays on screen on a short window. */
-.trailer-frame { position: relative; width: min(1440px, 100%, calc((100dvh - 2 * var(--safe-top) - 200px) * 16 / 9)); }
-[data-form="phone"] .trailer-frame { width: min(100%, calc((100dvh - 32px - 150px) * 16 / 9)); }
+/* One width for the frame and its rows, held to the window's height less the rows, so Close stays on screen on a
+ * short window. */
+.trailer { --trailer-w: min(1440px, 100%, calc((100dvh - 2 * var(--safe-top) - 200px) * 16 / 9)); }
+[data-form="phone"] .trailer { --trailer-w: min(100%, calc((100dvh - 32px - 150px) * 16 / 9)); }
+.trailer-frame, .trailer-tl, .trailer-bar { width: var(--trailer-w); }
+.trailer-frame { position: relative; }
 .trailer-player { position: absolute; inset: -6%; pointer-events: none; }
 .trailer-player > div, .trailer-player iframe { display: block; width: 100%; height: 100%; border: 0; pointer-events: none; }
 .trailer-wait { position: absolute; left: 50%; top: 50%; width: 48px; height: 48px; margin: -24px 0 0 -24px; color: #fff; opacity: 0;
@@ -257,7 +260,7 @@
 @media (prefers-reduced-motion: reduce) { .trailer-wait { animation: trailer-wait 1ms 300ms forwards; } }
 .trailer-fail { position: absolute; inset: 0; display: grid; place-items: center; padding: 24px; text-align: center; color: var(--muted);
   font: 600 var(--type-callout) / 1.3 var(--font-text); }
-.trailer-tl { width: 1440px; max-width: 100%; display: flex; align-items: center; gap: 20px; }
+.trailer-tl { max-width: 100%; display: flex; align-items: center; gap: 20px; }
 .trailer-tl .num { font: 600 var(--type-callout) / 1 var(--font-text); color: var(--muted); min-width: 4ch; }
 .trailer .scrub { position: relative; flex: 1; height: 8px; border-radius: 4px; background: color-mix(in srgb, var(--text) 25%, transparent); cursor: pointer; touch-action: none; }
 .trailer .scrub::before { content: ""; position: absolute; inset: -20px 0; }
@@ -266,7 +269,7 @@
 .trailer .scrub:focus-visible, [data-form="tv"] .trailer .scrub:focus { outline-offset: 10px; }
 .trailer .scrub:focus-visible .knob, [data-form="tv"] .trailer .scrub:focus .knob { width: 30px; height: 30px; margin: -15px 0 0 -15px; }
 .trailer-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.trailer-bar { width: 1440px; max-width: 100%; display: flex; align-items: center; gap: 20px; }
+.trailer-bar { max-width: 100%; display: flex; align-items: center; gap: 20px; }
 .trailer-bar p { display: flex; align-items: baseline; gap: 16px; margin-right: auto; font: 700 var(--type-headline) / 1.2 var(--font-display); min-width: 0; }
 .trailer-picks { display: flex; gap: 12px; }
 [data-form="phone"] .trailer { padding: 16px; gap: 14px; }
