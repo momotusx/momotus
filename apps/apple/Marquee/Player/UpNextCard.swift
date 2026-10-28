@@ -110,7 +110,6 @@ struct EndCard: View {
                 Button("Back to \(title)", action: back).buttonStyle(PillButtonStyle()).focused($focused)
             }
         } else if let next = model.next {
-            kicker("Next episode")
             heading("S\(next.season):E\(next.episode) \(next.title)")
             actions {
                 Button { Task { await model.playNext() } } label: { Label("Next episode", glyph: "skip-forward") }
@@ -128,13 +127,6 @@ struct EndCard: View {
                     .buttonStyle(PillButtonStyle())
             }
         }
-    }
-
-    private func kicker(_ text: String) -> some View {
-        Text(caps: text)
-            .textFont(Theme.type.caption, weight: .semibold, relativeTo: .caption)
-            .tracking(1.6)
-            .foregroundStyle(.white.opacity(0.7))
     }
 
     private func heading(_ text: String) -> some View {
