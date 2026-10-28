@@ -397,6 +397,8 @@ test("on touch, a tap on Download offers the version too, since no secondary pre
   await goOnline(page, false);
   try {
     await expect(banner(page)).toContainText("You're offline. Your downloads still play.", { timeout: 30_000 });
+    // From the page's top: the taps above scrolled the page under the fixed banner.
+    await page.evaluate(() => window.scrollTo(0, 0));
     const bar = await banner(page).boundingBox();
     const art = await page.locator(".title-bd").boundingBox();
     expect(art?.y, JSON.stringify({ bar, art })).toBeGreaterThanOrEqual((bar?.y ?? 0) + (bar?.height ?? 0) - 1);
