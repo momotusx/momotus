@@ -2310,7 +2310,27 @@ async fn pick_version(core: &Core, row: &DownloadRecord) -> Option<Vec<ParsedStr
             () = &mut settle => break,
         }
     }
-    let key = view.snapshot().recommended?.key;
+    let snapshot = view.snapshot();
+    let Some(key) = snapshot.recommended.map(|r| r.key) else {
+        tracing::debug!(
+            "download {}: no version (done {}, rows {}, hidden {:?}, empty {:?}, blocked {:?}, failed addons {:?})",
+            row.id,
+            snapshot.done,
+            snapshot.rows.len(),
+            snapshot.hidden,
+            snapshot.empty,
+            snapshot.blocked,
+            snapshot.failed_addons
+        );
+        return None;
+    };
+    tracing::debug!(
+        "download {}: picked {} for {:?} (hidden {:?})",
+        row.id,
+        key,
+        facts.name,
+        snapshot.hidden
+    );
     let chain: Vec<ParsedStream> = view
         .pick(&key)
         .candidates

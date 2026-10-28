@@ -722,7 +722,10 @@ async fn a_season_queues_its_aired_episodes_and_kids_add_nothing() {
         },
     )
     .await;
-    let core = core_with(addon(&url, Duration::ZERO).await).await;
+    // A release named for the show: Sintel's would be hidden as another
+    // title, and the season would only look running while it picks.
+    let stream = serde_json::json!({ "name": "Direct\n1080p", "title": "Show.S02.1080p.WEB-DL.mp4", "url": url });
+    let core = core_with(addon_listing(stream, Duration::ZERO).await).await;
     core.downloads().set_link(Link {
         offline: true,
         ..Link::default()
@@ -762,13 +765,22 @@ async fn a_season_queues_its_aired_episodes_and_kids_add_nothing() {
     while view.snapshot().active.running == 0 {
         assert!(
             std::time::Instant::now() < deadline,
-            "the owner's season never ran"
+            "the owner's season never ran: {:?} {:?}",
+            ids.iter()
+                .map(|id| row_of(&core, id).map(|r| (r.state, r.reason, r.bytes_done)))
+                .collect::<Vec<_>>(),
+            view.snapshot().active
         );
         tokio::time::sleep(Duration::from_millis(20)).await;
     }
     let s = view.snapshot();
     assert!(s.downloading.is_empty());
     assert_eq!(s.active.title, None);
+    // Running counted a real download, not a job still picking its version.
+    until(&core, &ids[0], "the first episode downloads", |r| {
+        r.state == DownloadState::Done
+    })
+    .await;
 }
 
 /// A stored download row as a launch finds it.
