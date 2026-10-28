@@ -1,6 +1,8 @@
 // Search, Discover, Library, Addons and Settings DTOs from the core,
 // mirroring apps/web/src/core/generated/*.ts.
 
+import Foundation
+
 struct SearchSnapshot: Decodable, Hashable, Sendable {
     let query: String
     /// Rows with results, loading or failed; catalogs with no match are left out.
@@ -366,6 +368,36 @@ struct LibrarySnapshot: Decodable, Hashable, Sendable {
     /// Types present in the library, for the filter chips.
     let kinds: [KindCount]
     let items: [Tile]
+}
+
+/// The type filter and sort a Library shows. The core keeps them per open view, so a reopened one
+/// starts at `fresh`.
+struct LibraryChoice: Equatable {
+    let kind: String?
+    let sort: String
+    static let fresh = LibraryChoice(kind: nil, sort: "recent")
+}
+
+extension LibrarySnapshot {
+    var choice: LibraryChoice { LibraryChoice(kind: kind, sort: sort) }
+}
+
+/// A command that sets the filter or the sort.
+enum LibraryChange: Equatable {
+    case filter(String?)
+    case sort(String)
+
+    var fields: [String: any Sendable] {
+        switch self {
+        case .filter(let kind): ["type": "setFilter", "kind": kind.map { $0 as any Sendable } ?? (NSNull() as any Sendable)]
+        case .sort(let sort): ["type": "setSort", "sort": sort]
+        }
+    }
+}
+
+/// What puts a reopened Library, now showing `now`, back to the choice the viewer had.
+func libraryRestore(wanted: LibraryChoice, now: LibraryChoice) -> [LibraryChange] {
+    (wanted.kind == now.kind ? [] : [.filter(wanted.kind)]) + (wanted.sort == now.sort ? [] : [.sort(wanted.sort)])
 }
 
 struct KindCount: Decodable, Hashable, Sendable {

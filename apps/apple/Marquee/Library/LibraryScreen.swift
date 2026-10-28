@@ -12,6 +12,9 @@ struct LibraryScreen: View {
         _library = State(initialValue: LiveRecord("library", core: core))
     }
 
+    /// The filter and sort to put back after Try again reopened the view (nil when it was at its defaults).
+    @State private var wanted: LibraryChoice?
+
     var body: some View {
         ScrollView(.vertical) {
             VStack(alignment: .leading, spacing: Theme.Space.m) {
@@ -20,7 +23,7 @@ struct LibraryScreen: View {
                 CalendarRow()
                 #endif
                 if let failure = library.stage.failure {
-                    StateLine(symbol: "triangle-alert", text: failure, action: ("Try again", library.retry), spoken: true)
+                    StateLine(symbol: "triangle-alert", text: failure, action: ("Try again", tryAgain), spoken: true)
                 }
                 if let s = library.snapshot, total(s) == 0 {
                     // Nothing to filter or sort: the way in instead of chips that say "All 0".
@@ -33,12 +36,12 @@ struct LibraryScreen: View {
                             chips: [Chip(id: "", title: "All", detail: "\(total)")]
                                 + s.kinds.map { Chip(id: $0.kind, title: $0.label, detail: "\($0.count)") },
                             isSelected: { $0 == (s.kind ?? "") },
-                            select: { library.command(["type": "setFilter", "kind": $0.isEmpty ? NSNull() : $0]) })
+                            select: { library.command(LibraryChange.filter($0.isEmpty ? nil : $0).fields) })
                         ChipRow(
                             label: "Sort",
                             chips: [Chip(id: "recent", title: "Last watched"), Chip(id: "added", title: "Recently added"), Chip(id: "name", title: "Name")],
                             isSelected: { $0 == s.sort },
-                            select: { library.command(["type": "setSort", "sort": $0]) })
+                            select: { library.command(LibraryChange.sort($0).fields) })
                     }
                     if s.items.isEmpty {
                         StateLine(symbol: "library-big", text: "Nothing of this type in your library.")
@@ -53,6 +56,7 @@ struct LibraryScreen: View {
         }
         .scrollIndicators(.hidden)
         .background(Theme.Palette.bg)
+        .onChange(of: library.snapshot) { _, now in restore(now) }
         .topScrim()
         .task(id: library.taskId) { library.start() }
     }
@@ -66,6 +70,20 @@ struct LibraryScreen: View {
     /// Titles in the library, every kind together.
     private func total(_ s: LibrarySnapshot) -> Int {
         s.kinds.reduce(0) { $0 + $1.count }
+    }
+
+    /// The core keeps the filter and sort per open view, so a reopen would drop them: they are put back
+    /// when the reopened view answers.
+    private func tryAgain() {
+        let now = library.snapshot?.choice
+        wanted = now == .fresh ? nil : now
+        library.retry()
+    }
+
+    private func restore(_ snapshot: LibrarySnapshot?) {
+        guard let wanted, let snapshot else { return }
+        self.wanted = nil
+        for change in libraryRestore(wanted: wanted, now: snapshot.choice) { library.command(change.fields) }
     }
 }
 

@@ -69,3 +69,23 @@ import Testing
     #expect(session.contains("self.view.reopen()"))
     #expect(!session.contains("view.retry()"), "the background loop would clear the failure every 2 s")
 }
+
+@Test func aReopenedLibraryGetsItsFilterAndSortBack() {
+    let seen = LibraryChoice(kind: "series", sort: "name")
+    #expect(libraryRestore(wanted: seen, now: .fresh) == [.filter("series"), .sort("name")])
+    // Only what differs is sent; a viewer at the defaults has nothing to restore.
+    #expect(libraryRestore(wanted: LibraryChoice(kind: nil, sort: "name"), now: .fresh) == [.sort("name")])
+    #expect(libraryRestore(wanted: .fresh, now: .fresh).isEmpty)
+    #expect(LibraryChange.filter(nil).fields["kind"] is NSNull)
+    #expect(LibraryChange.sort("added").fields["sort"] as? String == "added")
+}
+
+@Test func libraryTriesAgainThroughItsRestore() throws {
+    let file = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appending(path: "../Marquee/Library/LibraryScreen.swift")
+    let screen = try String(contentsOf: file, encoding: .utf8)
+    #expect(screen.contains("(\"Try again\", tryAgain)"), "Try again reopens the Library with no restore")
+    #expect(!screen.contains("library.retry)"), "Try again reopens the Library with no restore")
+    // The chips build their commands through `LibraryChange`, so their shape lives in one place.
+    #expect(screen.contains("LibraryChange.filter(") && screen.contains("LibraryChange.sort("))
+    #expect(!screen.contains("\"setFilter\"") && !screen.contains("\"setSort\""), "a chip builds its own command")
+}
