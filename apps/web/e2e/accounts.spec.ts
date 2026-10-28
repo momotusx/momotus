@@ -177,7 +177,14 @@ async function syncNow(page: Page) {
  * returning to the page, take the ticket with the verifier, ask for the deletion. */
 async function requestDeletion(provider: string, who: string): Promise<number> {
   const post = async (path: string, body: unknown) => {
-    const r = await fetch(`${SERVER}${path}`, { method: "POST", headers: { "content-type": "application/json", origin: `https://${LINK_HOST}` }, body: JSON.stringify(body) });
+    const send = () => fetch(`${SERVER}${path}`, { method: "POST", headers: { "content-type": "application/json", origin: `https://${LINK_HOST}` }, body: JSON.stringify(body) });
+    let r = await send();
+    // Every core here reaches the relay from 127.0.0.1, so they share its 30 sign-in calls a
+    // minute: a spent minute is waited out once.
+    if (r.status === 429) {
+      await new Promise((ok) => setTimeout(ok, 61_000));
+      r = await send();
+    }
     expect(r.headers.get("access-control-allow-origin")).toBe(`https://${LINK_HOST}`);
     expect(r.ok, `${path}: ${r.status}`).toBe(true);
     return (await r.json()) as Record<string, unknown>;
@@ -695,6 +702,7 @@ test.describe.serial("accounts on the web", () => {
   });
 
   test("a deletion asked on the link host shows on Home with Cancel, and with Cancel and turn off", async ({ browser }) => {
+    test.setTimeout(300_000);
     const due = await requestDeletion("mock", "alice");
     expect(due).toBeGreaterThan(Date.now() + 6 * 86_400_000);
     await syncNow(tv);
@@ -722,7 +730,9 @@ test.describe.serial("accounts on the web", () => {
     await expect(desk.locator('section[aria-label="Signed in with"] .sync-member h3')).toHaveText(["Apple", "Email"]);
 
     // Asked once more, on the link host's own page by email (E14): the email words, and Cancel
-    // and turn off email sign-in.
+    // and turn off email sign-in. A fresh minute of the relay's sign-in calls first, which every
+    // core here shares (they all reach it from 127.0.0.1).
+    await new Promise((ok) => setTimeout(ok, 61_000));
     await deletionByEmail(browser, PAT);
     await syncNow(desk);
     await go(desk, "/");
