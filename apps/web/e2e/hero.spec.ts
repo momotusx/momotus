@@ -5,6 +5,7 @@
  * on an error. */
 
 import { type Browser, type BrowserContext, expect, type Page, test } from "@playwright/test";
+import { FAKE_API, ytLog } from "./yt-fake";
 
 const activePage = (page: Page) => page.evaluate(() => Number(document.querySelector<HTMLElement>(".hero-page.on")?.dataset.page ?? -1));
 const activeDot = (page: Page) => page.evaluate(() => [...document.querySelectorAll(".hero-dots .dot")].findIndex((d) => d.classList.contains("on")));
@@ -146,43 +147,6 @@ test("TV: Up from the first row during a timed slide lands on the hero", async (
   await context.close();
 });
 
-/** A stand-in for YouTube's IFrame API: a blank frame, muted only after `mute()` and a short delay as
- * the real one answers, PLAYING after `playVideo`, or `error` when the page asks for one. Every call
- * is logged in order on `window.ytLog`. */
-const FAKE_API = `
-window.ytLog = [];
-window.YT = {
-  PlayerState: { PLAYING: 1, ENDED: 0 },
-  Player: function (el, opts) {
-    const frame = document.createElement("iframe");
-    frame.src = "about:blank";
-    el.replaceWith(frame);
-    let muted = false, volume = 100, t = 0, playing = false;
-    const log = (x) => window.ytLog.push(x);
-    log("new " + opts.videoId + " " + opts.host);
-    this.getIframe = () => frame;
-    this.mute = () => { log("mute"); setTimeout(() => { muted = true; }, 30); };
-    this.unMute = () => { log("unMute"); muted = false; };
-    this.setVolume = (v) => { log("setVolume " + v); setTimeout(() => { volume = v; }, 30); };
-    this.isMuted = () => muted;
-    this.getVolume = () => volume;
-    this.getDuration = () => 120;
-    this.unloadModule = (m) => log("unload " + m);
-    this.getOption = () => ({});
-    this.setOption = () => {};
-    this.getCurrentTime = () => t;
-    this.playVideo = () => {
-      log("playVideo muted=" + muted + " volume=" + volume);
-      if (window.ytFail) return setTimeout(() => opts.events.onError({ data: 150 }), 50);
-      setTimeout(() => { playing = true; opts.events.onStateChange({ data: 1 }); }, 50);
-      setInterval(() => { if (playing) t += 0.25; }, 250);
-    };
-    this.destroy = () => { log("destroy"); frame.remove(); };
-    setTimeout(() => opts.events.onReady({ target: this }), 20);
-  },
-};
-window.onYouTubeIframeAPIReady && window.onYouTubeIframeAPIReady();
-`;
 
 async function trailerPage(fail: boolean) {
   return async ({ browser }: { browser: import("@playwright/test").Browser }) => {
@@ -250,7 +214,6 @@ test("phone: the trailer plays muted, after the read-back, full bleed under the 
   await context.close();
 });
 
-const ytLog = (page: Page) => page.evaluate(() => (window as unknown as { ytLog: string[] }).ytLog);
 
 /** The switch's gap to the hero's right edge, and its middle's offset from the dots' middle, in whole px. */
 const switchPlace = (page: Page) =>

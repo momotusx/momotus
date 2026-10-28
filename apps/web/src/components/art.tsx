@@ -1,7 +1,7 @@
 /** Artwork that degrades to words: backdrops fade in once decoded, logos fall
  * back to the title set in the display face, posters to their name. */
 
-import { createEffect, createSignal, on, Show } from "solid-js";
+import { createEffect, createSignal, type JSX, on, Show } from "solid-js";
 import { form } from "../form";
 import { type TrimmedLogo, trimmedLogo } from "../lib/trim";
 import { pageColor } from "../theme/page";
@@ -19,6 +19,8 @@ export function Backdrop(props: {
    * box never shows blank. */
   under?: string | null;
   onMissing?: () => void;
+  /** Drawn under the picture: a title header's trailer. */
+  children?: JSX.Element;
 }) {
   const [failed, setFailed] = createSignal(false);
   createEffect(on(() => props.src, () => setFailed(false), { defer: true }));
@@ -29,6 +31,7 @@ export function Backdrop(props: {
   });
   return (
     <div class={`bd ${props.class ?? ""}`} classList={{ dim: props.dim, blur: standIn() }} aria-hidden="true" style={props.under ? { "background-image": `url("${props.under}")` } : undefined}>
+      {props.children}
       <Show when={shown()} keyed>
         {(src) => (
           <img

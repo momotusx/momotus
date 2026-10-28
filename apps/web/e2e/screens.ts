@@ -5,6 +5,7 @@
 import { expect, type Page } from "@playwright/test";
 import { GOT, reseedBbb, startIfPaused } from "./core";
 import { BBB_ID } from "./source";
+import { fakeYouTube } from "./yt-fake";
 
 export type Form = "tv" | "desktop" | "phone";
 export const FORMS: Record<Form, { width: number; height: number; scale: number }> = {
@@ -59,15 +60,13 @@ export const SCREENS: Screen[] = [
     ready: async (page) => {
       // A stand-in for YouTube's player: the shot is of our overlay, and a run
       // needs no third-party page (its scripts fail without their network).
-      await page.route("https://www.youtube-nocookie.com/embed/**", (route) =>
-        route.fulfill({ contentType: "text/html", body: '<body style="margin:0;background:#000;display:grid;place-items:center;height:100vh"><svg width="96" height="96" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" fill="#fff"/></svg></body>' }),
-      );
+      await fakeYouTube(page);
       await visible('[data-f="title:trailer"]')(page);
       await page.locator('[data-f="title:trailer"]').focus();
       await page.keyboard.press("Enter");
-      await visible(".trailer iframe")(page);
-      // Let the embedded player paint its first frame.
-      await page.waitForTimeout(5000);
+      await visible(".trailer-player iframe")(page);
+      // Playing, with its length on the bar.
+      await page.locator('[data-f="trailer:scrub"][aria-valuemax="120"]').waitFor();
     },
   },
   {

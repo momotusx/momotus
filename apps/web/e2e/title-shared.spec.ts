@@ -1,6 +1,7 @@
 import { type Browser, expect, type Page, test } from "@playwright/test";
 import { GOT } from "./core";
 import { BBB_ID } from "./source";
+import { fakeYouTube } from "./yt-fake";
 
 /** The title page's shared pieces (plans/design-v3-phase34-web.md, step 1): the one Back stack, the
  * link destinations read once per navigation, the version note's reserved slot, no live render pass
@@ -18,6 +19,8 @@ async function open(browser: Browser, form: Form, path: string) {
     hasTouch: form === "phone",
     reducedMotion: "reduce",
   });
+  // A trailer opened here plays in the stand-in for YouTube's player: no third-party network in a run.
+  await fakeYouTube(context);
   const page = await context.newPage();
   await page.goto(`${path}${path.includes("?") ? "&" : "?"}form=${form}`);
   return { context, page };

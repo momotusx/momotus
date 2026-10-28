@@ -77,6 +77,22 @@ export function capableNow(): boolean {
   return gb === undefined || gb >= 6;
 }
 
+/** Where a seek by `by` seconds from `t` lands in a `d` second trailer: never before its start, and never into its
+ * last 2 s, where the player closes it (plans/trailer-inline.md 7). */
+export function seekTarget(t: number, d: number, by: number): number {
+  return Math.min(Math.max(0, t + by), Math.max(0, d - 2));
+}
+
+/** A walk or an e2e run: no trailer plays by itself and none makes a sound, unless the run asked for trailers
+ * (`mq.trailerPreviews` "e2e"). */
+export function walkNow(): boolean {
+  try {
+    return navigator.webdriver && localStorage.getItem(KEY) !== "e2e";
+  } catch {
+    return navigator.webdriver;
+  }
+}
+
 /** A YouTube video id as YouTube writes it, or none: it goes into a player's URL. */
 export function youtubeId(raw: string | null | undefined): string | null {
   return raw && /^[A-Za-z0-9_-]{11}$/.test(raw) ? raw : null;

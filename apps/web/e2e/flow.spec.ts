@@ -1,6 +1,7 @@
 import { expect, type Page, test } from "@playwright/test";
 import { Client, GOT, reseedBbb, startIfPaused, watch } from "./core";
 import { BBB_ID, SAMPLE_EPISODE } from "./source";
+import { fakeYouTube, ytLog } from "./yt-fake";
 
 test.use({ viewport: { width: 1920, height: 1080 } });
 
@@ -208,21 +209,21 @@ test("movie page: trailer overlay and Mark watched by remote", async ({ page }) 
   await page.goto(`/title/movie/${BBB_ID}?form=tv`);
   await expect.poll(() => focused(page)).toBe("title:play");
 
-  // The trailer comes from the meta's trailer list and plays over the page.
+  // The trailer comes from the meta's trailer list and plays over the page, in YouTube's own player (a stand-in).
+  await fakeYouTube(page);
   await page.locator('[data-f="title:trailer"]').focus();
   await page.keyboard.press("Enter");
-  const frame = page.locator(".trailer iframe");
-  await expect(frame).toHaveAttribute("src", /^https:\/\/www\.youtube-nocookie\.com\/embed\/yUQM7H4Swgw\?autoplay=1/);
-  await expect.poll(() => focused(page)).toBe("trailer:close");
+  await expect.poll(() => ytLog(page)).toContain("new yUQM7H4Swgw https://www.youtube-nocookie.com");
+  await expect.poll(() => focused(page)).toBe("trailer:scrub");
   // The page behind is out of reach while the trailer is open.
   await expect(page.locator(".title-main")).toHaveAttribute("inert", /.*/);
   await page.keyboard.press("ArrowUp");
-  await expect.poll(() => focused(page)).toBe("trailer:close");
-  // Left reaches Pause on the bar, and nothing above it.
-  await page.keyboard.press("ArrowLeft");
-  await expect.poll(() => focused(page)).toBe("trailer:toggle");
+  await expect.poll(() => focused(page)).toBe("trailer:scrub");
+  // Down reaches the bar's buttons, and Up comes back to the position.
+  await page.keyboard.press("ArrowDown");
+  await expect.poll(() => focused(page)).toMatch(/^trailer:(toggle|sound|close)$/);
   await page.keyboard.press("ArrowUp");
-  await expect.poll(() => focused(page)).toBe("trailer:toggle");
+  await expect.poll(() => focused(page)).toBe("trailer:scrub");
   // Back closes it and focus returns to the button.
   await page.keyboard.press("Escape");
   await expect(page.locator(".trailer")).toHaveCount(0);

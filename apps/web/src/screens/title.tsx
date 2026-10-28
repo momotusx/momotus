@@ -10,7 +10,9 @@ import Layers from "lucide-solid/icons/layers";
 import Play from "lucide-solid/icons/play";
 import RefreshCw from "lucide-solid/icons/refresh-cw";
 import RotateCcw from "lucide-solid/icons/rotate-ccw";
-import { createEffect, createMemo, createSignal, For, type JSX, Match, onCleanup, Show, Switch } from "solid-js";
+import Volume2 from "lucide-solid/icons/volume-2";
+import VolumeX from "lucide-solid/icons/volume-x";
+import { createEffect, createMemo, createSignal, For, type JSX, Match, on, onCleanup, onMount, Show, Switch } from "solid-js";
 import { Backdrop, Logo } from "../components/art";
 import { SynopsisDialog } from "../components/synopsis";
 import { TitleScores } from "../components/title-scores";
@@ -19,14 +21,16 @@ import { Why } from "../components/why";
 import { askOnce, removeFromContinue, Row } from "../components/row";
 import { separators } from "../components/separators";
 import { TrailerOverlay } from "../components/trailer";
+import { muted, playTrailer, setMuted, type TrailerControl, trailerPlaying } from "../components/yt-player";
 import { type LiveView, type TitleView, titleView, versionsView } from "../core/client";
 import type { EmptyKind } from "../core/generated/EmptyKind";
 import type { HomeRow } from "../core/generated/HomeRow";
 import type { Episode } from "../core/generated/Episode";
 import type { VersionsSnapshot } from "../core/generated/VersionsSnapshot";
-import { focusEl, remember } from "../focus/dom";
+import { focusEl, reducedMotion, remember } from "../focus/dom";
 import { form, viewport } from "../form";
 import { airDate, clock, decoded, episodeLabel, offersLibrary, parseVideo, pct, playPath, playState, runtimeMinutes, seasonName, versionsPath } from "../lib/format";
+import { capableNow, coverSize, meteredNow, previewsOn, REVEAL_MS, TRAILER_LAYOUT, trailerAllowed, walkNow } from "../lib/trailers";
 import { blockedWords, choiceWords, problemWords } from "../lib/words";
 import { firstFocus } from "./title-focus";
 import "./home.css";
@@ -49,6 +53,12 @@ export default function Title() {
 const BACK_ONLY = new Set<EmptyKind>(["noRoom", "needsAccount", "kidsNothing", "noResults"]);
 
 const released = (e: Episode) => !e.released || new Date(e.released).getTime() <= Date.now();
+
+/** The header's trailer (plans/trailer-inline.md 3): the hero's cap, after a short settle. */
+const HEADER_CAP_S = 45;
+const HEADER_DELAY_MS = 300;
+/** Titles whose header trailer ended, failed or was opened full screen this session: it does not play again. */
+const headerSpent = new Set<string>();
 
 function TitlePage(props: { kind: string; id: string; retry: () => void }) {
   const view = titleView(props.kind, props.id);
@@ -117,6 +127,90 @@ function TitlePage(props: { kind: string; id: string; retry: () => void }) {
   createEffect(() => {
     if (view.state.status.state === "open") view.command({ type: "titleVisible", visible: shown() }).catch(() => undefined);
   });
+  // The header's muted trailer under the art, as the hero's (plans/trailer-inline.md 3, 4): the same player, signals
+  // and sound switch; the art fades once YouTube's start controls have gone.
+  const [headerShown, setHeaderShown] = createSignal(false);
+  const headerId = createMemo(() => d()?.trailers[0]?.youtubeId ?? null);
+  let headerHost!: HTMLDivElement;
+  let headerVisible = true;
+  let headerPlay: TrailerControl | null = null;
+  const stopHeader = () => headerPlay?.stop();
+  const startHeader = () => {
+    const id = headerId();
+    const box = headerHost.parentElement;
+    if (headerPlay || !id || !box || trailerOpen() || headerSpent.has(props.id)) return;
+    const allowed = trailerAllowed({
+      enabled: previewsOn(),
+      visible: headerVisible && !document.hidden,
+      reducedMotion: reducedMotion(),
+      metered: meteredNow(),
+      walk: walkNow(),
+      layout: TRAILER_LAYOUT[form()],
+      capable: capableNow(),
+      hasTrailer: true,
+    });
+    if (!allowed) return;
+    const size = coverSize(box.offsetWidth, box.offsetHeight);
+    Object.assign(headerHost.style, { width: `${size.width}px`, height: `${size.height}px` });
+    let reveal: ReturnType<typeof setTimeout> | undefined;
+    headerPlay = playTrailer({
+      host: headerHost,
+      id,
+      capS: HEADER_CAP_S,
+      onPlaying: () => {
+        reveal = setTimeout(() => setHeaderShown(true), REVEAL_MS);
+      },
+      onTime: () => undefined,
+      onEnd: (why) => {
+        clearTimeout(reveal);
+        setHeaderShown(false);
+        headerPlay = null;
+        if (why !== "stopped") headerSpent.add(props.id);
+        // The sound switch goes with it: its focus goes to Trailer.
+        if (document.activeElement?.closest('[data-f="title:sound"], .title-mute')) {
+          const button = document.querySelector<HTMLElement>('[data-f="title:trailer"]');
+          if (button) focusEl(button);
+        }
+      },
+    });
+  };
+  createEffect(
+    on([headerId, shown], ([id, visible]) => {
+      stopHeader();
+      if (!id || !visible) return;
+      const timer = setTimeout(startHeader, HEADER_DELAY_MS);
+      onCleanup(() => clearTimeout(timer));
+    }),
+  );
+  onMount(() => {
+    // At least half the header on screen, as the hero's rule: below that it stops, and comes back from the start.
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const seen = new IntersectionObserver(
+      ([e]) => {
+        const now = !!e && e.intersectionRatio >= 0.5;
+        if (now === headerVisible) return;
+        headerVisible = now;
+        clearTimeout(timer);
+        if (now) timer = setTimeout(startHeader, HEADER_DELAY_MS);
+        else stopHeader();
+      },
+      { threshold: [0, 0.5, 1] },
+    );
+    if (headerHost.parentElement) seen.observe(headerHost.parentElement);
+    onCleanup(() => {
+      clearTimeout(timer);
+      seen.disconnect();
+      stopHeader();
+    });
+  });
+  // Opening the trailer full screen stops the header's for good this visit.
+  const openTrailer = () => {
+    headerSpent.add(props.id);
+    stopHeader();
+    setTrailerOpen(true);
+  };
+  const soundSwitch = () => trailerPlaying() && !walkNow();
+
   // Closing returns focus to the button that opened it.
   const closeTrailer = () => {
     setTrailerOpen(false);
@@ -190,7 +284,7 @@ function TitlePage(props: { kind: string; id: string; retry: () => void }) {
   const coverShown = () => !!cover() && !artMissing();
 
   return (
-    <div class="title-scr" classList={{ movie: !series(), noart: artMissing(), cover: coverShown() }} ref={page} data-vscroll={form() === "phone" ? undefined : ""}>
+    <div class="title-scr" classList={{ movie: !series(), noart: artMissing(), cover: coverShown(), "trailer-on": headerShown() }} ref={page} data-vscroll={form() === "phone" ? undefined : ""}>
       {/* No backdrop (none named, or it does not load): the poster's upper part,
           faint, keeps the page from opening on a blank half. */}
       <Backdrop
@@ -200,7 +294,19 @@ function TitlePage(props: { kind: string; id: string; retry: () => void }) {
         under={coverShown() ? d()?.poster : null}
         ramp={form() === "phone" ? (cover() ? "titleCover" : "titlePhone") : series() ? "title" : "titleMovie"}
         onMissing={() => d() && setArtMissing(true)}
-      />
+      >
+        <div class="hero-trailer" aria-hidden="true">
+          <div ref={headerHost} class="hero-player" />
+        </div>
+      </Backdrop>
+      {/* The phone's header trailer sound, at the art's top right, where nothing else sits. */}
+      <Show when={soundSwitch() && form() === "phone"}>
+        <button class="trailer-mute title-mute" aria-label="Trailer sound" aria-pressed={!muted()} onClick={() => setMuted(!muted())}>
+          <Show when={muted()} fallback={<Volume2 aria-hidden />}>
+            <VolumeX aria-hidden />
+          </Show>
+        </button>
+      </Show>
       <Show when={trailerShown()}>
         <TrailerOverlay trailers={d()?.trailers ?? []} onClose={closeTrailer} />
       </Show>
@@ -334,7 +440,7 @@ function TitlePage(props: { kind: string; id: string; retry: () => void }) {
                     )}
                   </Show>
                   <Show when={x().trailers.length > 0}>
-                    <button class="btn" data-f="title:trailer" data-autofocus={first() === "title:trailer" ? "" : undefined} onClick={() => setTrailerOpen(true)}>
+                    <button class="btn" data-f="title:trailer" data-autofocus={first() === "title:trailer" ? "" : undefined} onClick={openTrailer}>
                       <Film aria-hidden />
                       Trailer
                     </button>
@@ -375,6 +481,15 @@ function TitlePage(props: { kind: string; id: string; retry: () => void }) {
                       <span class="long">
                         {uncontinue.ask() === "confirm" ? "Press again to remove" : uncontinue.ask() === "failed" ? "Not removed, try again" : "Remove from Continue Watching"}
                       </span>
+                    </button>
+                  </Show>
+                  {/* The header trailer's sound, last in the row so nothing moves when it comes and goes. */}
+                  <Show when={soundSwitch() && form() !== "phone"}>
+                    <button class="btn" data-f="title:sound" aria-pressed={!muted()} onClick={() => setMuted(!muted())}>
+                      <Show when={muted()} fallback={<Volume2 aria-hidden />}>
+                        <VolumeX aria-hidden />
+                      </Show>
+                      Sound
                     </button>
                   </Show>
                 </div>

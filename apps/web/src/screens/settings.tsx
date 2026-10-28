@@ -26,7 +26,7 @@ import type { LanguageChoice } from "../core/generated/LanguageChoice";
 import type { Prefs } from "../core/generated/Prefs";
 import type { SubtitleSize } from "../core/generated/SubtitleSize";
 import { chooseForm, type Form, form, pinned } from "../form";
-import { previewsOn, setPreviewsOn } from "../lib/trailers";
+import { headerOnTvNow, previewsOn, setPreviewsOn } from "../lib/trailers";
 import { defaultsWords } from "../lib/defaults";
 import { addonsSummary, choiceSummary, choiceWords, findAddons, languageName, syncSummary, syncWords, tmdbCredit, turkceAltyaziCredit } from "../lib/words";
 import * as sync from "../core/sync";
@@ -530,10 +530,11 @@ export default function SettingsScreen() {
                       isOn={(v) => x().autoplayNext === v}
                       onPick={(v) => patch({ autoplayNext: v })}
                     />
-                    {/* This device only, never synced (plans/appletv-polish.md decision 13); the TV form has none. */}
-                    <Show when={form() !== "tv"}>
+                    {/* This device only, never synced (plans/appletv-polish.md decision 13). A TV shows it where its title pages
+                        may play the header trailer (plans/trailer-inline.md 4a); its Home has none. */}
+                    <Show when={form() !== "tv" || headerOnTvNow()}>
                       <Choice<boolean>
-                        label="Trailer previews on Home"
+                        label="Trailer previews"
                         group="pref-previews"
                         items={[
                           { value: true, label: "On" },
@@ -548,8 +549,8 @@ export default function SettingsScreen() {
                     </Show>
                   </div>
                   <p class="note small">The numbers are the order you turned languages on; number 1 wins. A subtitle you pick while watching makes its language number 1.</p>
-                  <Show when={form() !== "tv"}>
-                    <p class="note small">Trailer previews play muted, from YouTube, when the connection is not metered.</p>
+                  <Show when={form() !== "tv" || headerOnTvNow()}>
+                    <p class="note small">Trailers play muted on {form() === "tv" ? "title pages" : "Home and title pages"}, from YouTube, when the connection is not metered.</p>
                   </Show>
                 </>
               )}

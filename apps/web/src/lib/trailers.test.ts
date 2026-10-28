@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { coverSize, type TrailerSignals, trailerAllowed, youtubeId } from "./trailers";
+import { coverSize, seekTarget, type TrailerSignals, trailerAllowed, youtubeId } from "./trailers";
 
 const ok: TrailerSignals = { enabled: true, visible: true, reducedMotion: false, metered: false, walk: false, layout: "cover", capable: true, hasTrailer: true };
 
@@ -33,4 +33,13 @@ test("the player covers the frame past every edge, 16:9", () => {
   const wide = coverSize(1440, 600);
   expect(wide.width).toBeGreaterThan(1440);
   expect(wide.height).toBeGreaterThan(600);
+});
+
+test("a seek lands inside the trailer, short of the last 2 s where it closes", () => {
+  expect(seekTarget(30, 150, 10)).toBe(40);
+  expect(seekTarget(30, 150, -10)).toBe(20);
+  expect(seekTarget(4, 150, -10)).toBe(0);
+  expect(seekTarget(145, 150, 10)).toBe(148);
+  expect(seekTarget(500, 150, 0)).toBe(148);
+  expect(seekTarget(0, 1, 10)).toBe(0);
 });

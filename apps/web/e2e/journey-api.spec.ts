@@ -10,6 +10,7 @@
 
 import { type Browser, expect, type Page, test } from "@playwright/test";
 import type { ChildProcess } from "node:child_process";
+import { fakeYouTube, ytLog } from "./yt-fake";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { Client, cleanup, JOURNEY_PORT, PORTS, SHOTS, startBridge, startIfPaused, until, watch } from "./core";
@@ -41,7 +42,7 @@ function journeyAddon(film: string): Promise<Server> {
     "/meta/series/mqj2.json": { id: "mqj2", type: "series", name: "Journey Finished", videos: [episode("mqj2", 1, AIRED), episode("mqj2", 2, AIRED)] },
     // A name long enough to take several lines on a phone, with no logo and no art.
     "/meta/series/mqj3.json": { id: "mqj3", type: "series", name: "The Extraordinarily Long Journey Through A Title That Needs Several Lines On A Narrow Phone", videos: [episode("mqj3", 1, AIRED)] },
-    "/meta/movie/mqjm.json": { id: "mqjm", type: "movie", name: "Journey Film", releaseInfo: "2008", trailerStreams: [{ title: "Journey Film", ytId: "jrnyTrailer1" }] },
+    "/meta/movie/mqjm.json": { id: "mqjm", type: "movie", name: "Journey Film", releaseInfo: "2008", trailerStreams: [{ title: "Journey Film", ytId: "jrnyTrailr1" }, { title: "Journey Film Teaser", ytId: "jrnyTeaser1" }] },
     "/meta/movie/mqjv.json": { id: "mqjv", type: "movie", name: "Journey Versions", releaseInfo: "2008" },
   };
   const server = createServer((req, res) => {
@@ -942,31 +943,130 @@ test("a raw reason reads in plain words, the core's text behind Details", async 
   await context.close();
 });
 
-test("a trailer pauses and plays from the bar and the remote's play key", async ({ browser }) => {
-  const { context, page: p } = await page(browser, { width: 1920, height: 1080 });
-  // A stand-in for YouTube's player that tells the page each command it got.
-  await p.route("https://www.youtube-nocookie.com/embed/**", (route) =>
-    route.fulfill({ contentType: "text/html", body: "<script>addEventListener('message', (e) => parent.postMessage({ got: e.data }, '*'));</script>" }),
-  );
-  await p.addInitScript(() => {
-    const w = window as unknown as { got: string[] };
-    w.got = [];
-    addEventListener("message", (e) => e.data?.got && w.got.push(JSON.parse(e.data.got).func));
+/** A trailer run on the stand-in API (yt-fake.ts): what opened, with no way out to YouTube. */
+async function trailerRun(browser: Browser, opts: { form: "tv" | "desktop"; e2e?: boolean; fail?: string[]; duration?: number }) {
+  const { context, page: p } = await page(browser, opts.form === "tv" ? { width: 1920, height: 1080 } : { width: 1440, height: 900 });
+  await fakeYouTube(context);
+  // Any watch page, popup or window.open is a way out of the app: none may happen.
+  const out: string[] = [];
+  await context.route(/youtube\.com\/watch|youtu\.be\//, (r) => {
+    out.push(r.request().url());
+    return r.abort();
   });
-  await p.goto("/title/movie/mqjm?form=tv");
-  await p.locator('[data-f="title:trailer"]').focus({ timeout: 30_000 });
+  context.on("page", (other) => out.push(`page ${other.url()}`));
+  await context.addInitScript((o) => {
+    const w = window as unknown as { ytFailIds?: string[]; ytDuration?: number; open: (u?: string) => null; opened: string[] };
+    if (o.e2e) localStorage.setItem("mq.trailerPreviews", "e2e");
+    w.ytFailIds = o.fail;
+    w.ytDuration = o.duration;
+    w.opened = [];
+    w.open = (u?: string) => (w.opened.push(String(u)), null);
+  }, opts);
+  await p.goto(`/title/movie/mqjm?form=${opts.form}`);
+  await expect(p.locator('[data-f="title:trailer"]')).toBeVisible({ timeout: 30_000 });
+  const leftApp = async () => [...out, ...(await p.evaluate(() => (window as unknown as { opened: string[] }).opened))];
+  return { context, p, leftApp };
+}
+
+const lastSeek = async (p: Page) => (await ytLog(p)).filter((l) => l.startsWith("seekTo")).at(-1);
+
+test("a trailer plays in the app: pause and play, seeks by the bar and the remote, Back closes, nothing leaves for YouTube", async ({ browser }) => {
+  const { context, p, leftApp } = await trailerRun(browser, { form: "tv", duration: 25 });
+  await p.locator('[data-f="title:trailer"]').focus();
   await p.keyboard.press("Enter");
+  // YouTube's own player on its privacy host, in our page.
+  await expect.poll(() => ytLog(p)).toContain("new jrnyTrailr1 https://www.youtube-nocookie.com");
+  await expect(p.locator(".trailer")).toBeVisible();
+  // TV: the position bar has the focus, where Left and Right seek.
+  await expect.poll(() => p.evaluate(() => (document.activeElement as HTMLElement | null)?.dataset.f)).toBe("trailer:scrub");
   const toggle = p.locator('[data-f="trailer:toggle"]');
   await expect(toggle).toHaveText("Pause");
-  await expect(p.locator(".trailer iframe")).toHaveAttribute("src", /enablejsapi=1/);
-  const got = () => p.evaluate(() => (window as unknown as { got: string[] }).got);
-  await toggle.focus();
+  // In a walk it plays muted: no unMute ever.
+  expect(await ytLog(p)).not.toContain("unMute");
+  // Enter on the bar pauses, the remote's play key plays.
   await p.keyboard.press("Enter");
   await expect(toggle).toHaveText("Play");
-  await expect.poll(got).toEqual(["pauseVideo"]);
   await p.keyboard.press("MediaPlayPause");
   await expect(toggle).toHaveText("Pause");
-  await expect.poll(got).toEqual(["pauseVideo", "playVideo"]);
+  expect((await ytLog(p)).filter((l) => l === "pauseVideo" || l.startsWith("playVideo")).slice(-2)).toEqual(["pauseVideo", expect.stringMatching(/^playVideo/)]);
+  await p.keyboard.press("Enter");
+  await expect(toggle).toHaveText("Play");
+  // Left far enough lands on the start; Right 10 s on; never into the last 2 s of a 25 s trailer.
+  for (let i = 0; i < 4; i++) await p.keyboard.press("ArrowLeft");
+  await expect.poll(() => lastSeek(p)).toBe("seekTo 0 true");
+  await p.keyboard.press("ArrowRight");
+  await expect.poll(() => lastSeek(p)).toBe("seekTo 10 true");
+  await expect(p.locator('[data-f="trailer:scrub"]')).toHaveAttribute("aria-valuetext", "0:10 of 0:25");
+  await p.keyboard.press("ArrowRight");
+  await p.keyboard.press("ArrowRight");
+  await expect.poll(() => lastSeek(p)).toBe("seekTo 23 true");
+  // The remote's rewind key seeks too, from anywhere in the bar.
+  await toggle.focus();
+  await p.keyboard.press("MediaRewind");
+  await expect.poll(() => lastSeek(p)).toBe("seekTo 13 true");
+  // Back closes it, the page stays, focus returns to Trailer.
+  await p.keyboard.press("Escape");
+  await expect(p.locator(".trailer")).toHaveCount(0);
+  await expect.poll(() => p.evaluate(() => (document.activeElement as HTMLElement | null)?.dataset.f)).toBe("title:trailer");
+  expect((await ytLog(p)).at(-1)).toBe("destroy");
+  expect(new URL(p.url()).pathname).toBe("/title/movie/mqjm");
+  expect(await leftApp()).toEqual([]);
+  await context.close();
+});
+
+test("a trailer YouTube refuses gives way to the next one, then to a quiet line, never to YouTube", async ({ browser }) => {
+  const { context, p, leftApp } = await trailerRun(browser, { form: "desktop", fail: ["jrnyTrailr1"] });
+  await p.locator('[data-f="title:trailer"]').click();
+  await expect.poll(() => ytLog(p)).toContain("new jrnyTeaser1 https://www.youtube-nocookie.com");
+  await expect(p.locator('[data-f="trailer:toggle"]')).toHaveText("Pause");
+  await expect(p.locator(".trailer-fail")).toHaveCount(0);
+  await p.locator('[data-f="trailer:close"]').click();
+  // Both refused: the line, announced, and Close to leave by.
+  await p.evaluate(() => ((window as unknown as { ytFailIds: string[] }).ytFailIds = ["jrnyTrailr1", "jrnyTeaser1"]));
+  await p.locator('[data-f="title:trailer"]').click();
+  await expect(p.locator(".trailer-fail[role=alert]")).toHaveText("This trailer can't play here.");
+  await expect.poll(() => p.evaluate(() => (document.activeElement as HTMLElement | null)?.dataset.f)).toBe("trailer:close");
+  await expect(p.locator('[data-f="trailer:toggle"]')).toBeDisabled();
+  expect(await leftApp()).toEqual([]);
+  await context.close();
+});
+
+test("the header plays the trailer muted with a sound switch; the full-screen trailer has its own sound and stops it", async ({ browser }) => {
+  const { context, p, leftApp } = await trailerRun(browser, { form: "desktop", e2e: true });
+  // The header starts by itself, muted after the read-back, with the switch last in the row.
+  await expect.poll(() => ytLog(p)).toContain("new jrnyTrailr1 https://www.youtube-nocookie.com");
+  await expect.poll(async () => (await ytLog(p)).find((l) => l.startsWith("playVideo"))).toBe("playVideo muted=true volume=0");
+  const sound = p.locator('[data-f="title:sound"]');
+  await expect(sound).toBeVisible();
+  await expect(sound).toHaveAttribute("aria-pressed", "false");
+  expect(await p.locator(".info .acts [data-f]").last().getAttribute("data-f")).toBe("title:sound");
+  expect(await ytLog(p)).not.toContain("unMute");
+  // Trailer: the header's player goes, the full-screen one plays with sound, the session's sound stays off.
+  await p.locator('[data-f="title:trailer"]').click();
+  await expect(sound).toHaveCount(0);
+  await expect.poll(async () => (await ytLog(p)).filter((l) => l.startsWith("new")).length).toBe(2);
+  await expect.poll(() => ytLog(p)).toContain("unMute");
+  const sessionMuted = () => p.evaluate(async (url) => ((await import(/* @vite-ignore */ url)) as typeof import("../src/components/yt-player")).muted(), "/src/components/yt-player.ts");
+  expect(await sessionMuted()).toBe(true);
+  // Its own switch: off mutes it.
+  await p.locator('[data-f="trailer:sound"]').click();
+  await expect(p.locator('[data-f="trailer:sound"]')).toHaveAttribute("aria-pressed", "false");
+  expect((await ytLog(p)).at(-2)).toBe("mute");
+  // Closed: the header does not play again this visit.
+  await p.locator('[data-f="trailer:close"]').click();
+  await p.waitForTimeout(1000);
+  expect((await ytLog(p)).filter((l) => l.startsWith("new")).length).toBe(2);
+  await expect(p.locator('[data-f="title:sound"]')).toHaveCount(0);
+  expect(await sessionMuted()).toBe(true);
+  expect(await leftApp()).toEqual([]);
+  await context.close();
+});
+
+test("in a walk the header plays nothing", async ({ browser }) => {
+  const { context, p } = await trailerRun(browser, { form: "desktop" });
+  await p.waitForTimeout(1500);
+  expect(await ytLog(p)).toEqual([]);
+  await expect(p.locator('[data-f="title:sound"]')).toHaveCount(0);
   await context.close();
 });
 

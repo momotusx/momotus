@@ -233,16 +233,43 @@
 /* A wheel run: no row takes the hover while the list moves under the pointer (title.tsx, holdHover). */
 .toc.wheeling .ep { pointer-events: none; }
 
-/* Trailer over the page: the frame, then its title and our own controls. */
-.trailer { position: absolute; inset: 0; z-index: 30; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 28px;
+/* The header's trailer under the art (plans/trailer-inline.md 3), in the hero's box (home.css .hero-trailer): the
+ * art fades over it once YouTube's start controls have gone, its ramps staying so the words keep their contrast. */
+.title-scr.trailer-on .title-bd img.fade { opacity: 0; transition-duration: 600ms; }
+[data-form="phone"] .trailer-mute.title-mute { top: calc(env(safe-area-inset-top) + 12px); right: 16px; bottom: auto; width: 44px; height: 44px; }
+[data-form="phone"] .trailer-mute.title-mute svg { width: 20px; height: 20px; }
+
+/* Trailer over the page (plans/trailer-inline.md 7): the frame, the position bar, then its title and our own
+ * controls. YouTube's player sits 6 percent past the frame on every side, so its own bars fall outside the clip. */
+.trailer { position: fixed; inset: 0; z-index: 30; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 28px;
   padding: var(--safe-top) var(--safe-side); background: var(--bg); }
 .trailer-frame { width: 1440px; max-width: 100%; aspect-ratio: 16 / 9; border-radius: var(--radius-l); overflow: hidden; background: #000;
   box-shadow: 0 0 0 1px var(--edge); }
-.trailer-frame iframe { display: block; width: 100%; height: 100%; border: 0; }
+.trailer-frame { position: relative; }
+.trailer-player { position: absolute; inset: -6%; pointer-events: none; }
+.trailer-player > div, .trailer-player iframe { display: block; width: 100%; height: 100%; border: 0; pointer-events: none; }
+.trailer-wait { position: absolute; left: 50%; top: 50%; width: 48px; height: 48px; margin: -24px 0 0 -24px; color: #fff; opacity: 0;
+  animation: trailer-spin 1.2s linear infinite, trailer-wait 1ms 300ms forwards; }
+@keyframes trailer-spin { to { transform: rotate(360deg); } }
+@keyframes trailer-wait { to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .trailer-wait { animation: trailer-wait 1ms 300ms forwards; } }
+.trailer-fail { position: absolute; inset: 0; display: grid; place-items: center; padding: 24px; text-align: center; color: var(--muted);
+  font: 600 var(--type-callout) / 1.3 var(--font-text); }
+.trailer-tl { width: 1440px; max-width: 100%; display: flex; align-items: center; gap: 20px; }
+.trailer-tl .num { font: 600 var(--type-callout) / 1 var(--font-text); color: var(--muted); min-width: 4ch; }
+.trailer .scrub { position: relative; flex: 1; height: 8px; border-radius: 4px; background: color-mix(in srgb, var(--text) 25%, transparent); cursor: pointer; touch-action: none; }
+.trailer .scrub::before { content: ""; position: absolute; inset: -20px 0; }
+.trailer .scrub i { position: absolute; top: 0; bottom: 0; left: 0; border-radius: 4px; background: var(--text); }
+.trailer .scrub .knob { position: absolute; top: 50%; width: 22px; height: 22px; margin: -11px 0 0 -11px; border-radius: 50%; background: var(--text); }
+.trailer .scrub:focus-visible, [data-form="tv"] .trailer .scrub:focus { outline-offset: 10px; }
+.trailer .scrub:focus-visible .knob, [data-form="tv"] .trailer .scrub:focus .knob { width: 30px; height: 30px; margin: -15px 0 0 -15px; }
+.trailer-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .trailer-bar { width: 1440px; max-width: 100%; display: flex; align-items: center; gap: 20px; }
 .trailer-bar p { display: flex; align-items: baseline; gap: 16px; margin-right: auto; font: 700 var(--type-headline) / 1.2 var(--font-display); min-width: 0; }
 .trailer-picks { display: flex; gap: 12px; }
-[data-form="phone"] .trailer { position: fixed; padding: 16px; gap: 14px; }
+[data-form="phone"] .trailer { padding: 16px; gap: 14px; }
+[data-form="phone"] .trailer-tl { gap: 12px; }
+[data-form="phone"] .trailer-tl .num { font-size: 13px; }
 [data-form="phone"] .trailer-frame { border-radius: 12px; }
 [data-form="phone"] .trailer-bar { flex-wrap: wrap; gap: 10px; }
 [data-form="phone"] .trailer-bar p { font-size: 17px; flex-basis: 100%; }

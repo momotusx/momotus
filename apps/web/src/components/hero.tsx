@@ -13,7 +13,7 @@ import type { Hero } from "../core/generated/Hero";
 import { form } from "../form";
 import { reducedMotion } from "../focus/dom";
 import { bezier, frameStep, HeroPager } from "../lib/hero-pager";
-import { capableNow, coverSize, meteredNow, previewsOn, REVEAL_MS, TRAILER_LAYOUT, type TrailerLayout, trailerAllowed } from "../lib/trailers";
+import { capableNow, coverSize, meteredNow, previewsOn, REVEAL_MS, TRAILER_LAYOUT, type TrailerLayout, trailerAllowed, walkNow as walk } from "../lib/trailers";
 import { playPath, ratingParts, titlePath } from "../lib/format";
 import { kindLabel } from "../lib/words";
 import { Backdrop, Logo } from "./art";
@@ -38,15 +38,6 @@ const ease = bezier(0.22, 1, 0.36, 1);
 let shownId: string | null = null;
 /** Pages whose trailer ended, failed or was cut by the viewer this session: they do not play again. */
 const spent = new Set<string>();
-
-/** A walk or an e2e run plays no trailer unless the run asked for one (`mq.trailerPreviews` "e2e"). */
-const walk = () => {
-  try {
-    return navigator.webdriver && localStorage.getItem("mq.trailerPreviews") !== "e2e";
-  } catch {
-    return navigator.webdriver;
-  }
-};
 
 /** The trailer's sound switch at the hero's bottom right, level with the dots (the owner, 2026-10-26): drawn only
  * while one plays, and in a walk only when the run asked for trailers. Its state is the session's (`muted`). */

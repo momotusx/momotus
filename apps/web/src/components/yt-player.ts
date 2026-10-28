@@ -1,9 +1,9 @@
-/** The one muted YouTube player the hero may run (plans/appletv-polish.md 4.2, decisions 6 and 15):
- * YouTube's own embedded player on its privacy-enhanced host, loaded paused under the hero's art, muted
- * and read back before it plays, taking no input, one at a time app-wide. The hero decides when the art
- * above it fades. */
+/** The one YouTube player the app runs (plans/appletv-polish.md 4.2, decisions 6 and 15; plans/trailer-inline.md):
+ * YouTube's own embedded player on its privacy-enhanced host, muted and read back before it plays, taking no input,
+ * one at a time app-wide. The hero and a title's header play it muted under their art; a title's Trailer plays it
+ * full screen (`full`) under our own controls, with its own sound. */
 import { createSignal } from "solid-js";
-import { youtubeId } from "../lib/trailers";
+import { walkNow, youtubeId } from "../lib/trailers";
 
 type YtPlayer = {
   unloadModule(name: string): void;
@@ -15,6 +15,9 @@ type YtPlayer = {
   setVolume(v: number): void;
   getVolume(): number;
   playVideo(): void;
+  pauseVideo(): void;
+  seekTo(seconds: number, allowSeekAhead: boolean): void;
+  getPlayerState(): number;
   getCurrentTime(): number;
   getDuration(): number;
   getIframe(): HTMLIFrameElement;
@@ -32,6 +35,22 @@ declare global {
 }
 
 export type TrailerEnd = "ended" | "cap" | "error" | "timeout" | "stopped";
+
+/** Where a full-screen trailer is, read every 250 ms: seconds in, its length (0 until known), and its state. */
+export interface TrailerTime {
+  t: number;
+  d: number;
+  state: "playing" | "paused" | "buffering";
+}
+
+/** What a full-screen trailer's controls drive. */
+export interface TrailerControl {
+  stop: () => void;
+  toggle: () => void;
+  /** To `s` seconds; `done` false while a drag still moves (YouTube fetches nothing new until it is let go). */
+  seek: (s: number, done?: boolean) => void;
+  sound: (on: boolean) => void;
+}
 
 /** A trailer is on screen: the mute control shows (phone top row, desktop header). */
 const [playing, setPlaying] = createSignal(false);
@@ -80,9 +99,11 @@ export function setMuted(on: boolean) {
   }
 }
 
-/** Plays `id` muted in `host` (an empty box the layout keeps clear), capped at `capS` seconds.
- * `onPlaying` fires once YouTube says it plays; `onTime` gives the place in the cap; `onEnd` says why
- * it stopped. Starting another stops this one first. */
+/** Plays `id` muted in `host` (an empty box the layout keeps clear), capped at `capS` seconds, 0 for its own length
+ * (it still ends a second before, so YouTube's end screen never shows). `onPlaying` fires once YouTube says it plays;
+ * `onTime` gives the place in the cap; `onEnd` says why it stopped. Starting another stops this one first.
+ * `full`: the full-screen trailer. It reports `onState`, never touches the session's sound or the header's switch,
+ * and unmutes once it plays when `sound` says so. */
 export function playTrailer(opts: {
   host: HTMLElement;
   id: string;
@@ -90,7 +111,8 @@ export function playTrailer(opts: {
   onPlaying: () => void;
   onTime: (fraction: number) => void;
   onEnd: (why: TrailerEnd) => void;
-}): () => void {
+  full?: { sound: () => boolean; onState: (s: TrailerTime) => void };
+}): TrailerControl {
   current?.stop("stopped");
   const id = youtubeId(opts.id);
   const box = document.createElement("div");
@@ -99,6 +121,7 @@ export function playTrailer(opts: {
   let poll: ReturnType<typeof setInterval> | undefined;
   let ended = false;
   let playingNow = false;
+  const full = opts.full;
   /** YouTube turns a caption track on for muted playback now and then: it goes again (Phase 0: 1 of 24). */
   const captionsOff = () => {
     const p = self.player;
@@ -139,11 +162,34 @@ export function playTrailer(opts: {
     },
   };
   current = self;
+  const control: TrailerControl = {
+    stop: () => self.stop("stopped"),
+    toggle: () => {
+      const p = self.player;
+      if (!p) return;
+      if (p.getPlayerState() === 1) p.pauseVideo();
+      else p.playVideo();
+    },
+    seek: (s, done = true) => self.player?.seekTo(Math.max(0, s), done),
+    sound: (on) => {
+      const p = self.player;
+      if (!p || walkNow()) return;
+      if (on) {
+        p.unMute();
+        p.setVolume(100);
+      } else {
+        p.mute();
+        p.setVolume(0);
+      }
+    },
+  };
   if (!id) {
     queueMicrotask(() => self.stop("error"));
-    return () => self.stop("stopped");
+    return control;
   }
   const cap = opts.capS;
+  // Nothing playing this long after the start, the script's load included: it gives up (YouTube unreachable).
+  timers.push(setTimeout(() => !playingNow && self.stop("timeout"), full ? 15_000 : 9_000));
   loadApi().then(
     (YT) => {
       if (ended) return;
@@ -182,9 +228,9 @@ export function playTrailer(opts: {
             const check = () => {
               if (ended || !self.player) return;
               if (p.isMuted() && p.getVolume() === 0) {
-                if (!muted()) setMuted(false);
+                if (!full && !muted()) setMuted(false);
                 p.playVideo();
-                timers.push(setTimeout(() => self.player && !playingNow && self.stop("timeout"), 6000));
+                if (!full) timers.push(setTimeout(() => self.player && !playingNow && self.stop("timeout"), 6000));
               } else if (performance.now() < until) timers.push(setTimeout(check, 25));
               else self.stop("error");
             };
@@ -194,17 +240,21 @@ export function playTrailer(opts: {
             if (ended) return;
             if (e.data === YT.PlayerState.PLAYING && !playingNow) {
               playingNow = true;
-              setPlaying(true);
+              if (full) {
+                if (full.sound()) control.sound(true);
+              } else setPlaying(true);
               opts.onPlaying();
               poll = setInterval(() => {
                 const p = self.player;
                 if (!p) return;
-                const length = cap || p.getDuration() || 1;
+                const length = cap || p.getDuration();
                 const t = p.getCurrentTime();
-                opts.onTime(Math.min(1, t / length));
+                opts.onTime(length > 0 ? Math.min(1, t / length) : 0);
+                const state = p.getPlayerState();
+                full?.onState({ t, d: length, state: state === YT.PlayerState.PLAYING ? "playing" : state === 2 ? "paused" : "buffering" });
                 if (Math.round(t * 4) % 4 === 0) captionsOff();
-                // Back to the art 1 s before the cap, so YouTube's end screen never shows.
-                if (cap && t >= cap - 1) self.stop("cap");
+                // Back to the art (or out of full screen) 1 s before the end, so YouTube's end screen never shows.
+                if (length > 0 && t >= length - 1) self.stop(cap ? "cap" : "ended");
               }, 250);
             }
             if (e.data === YT.PlayerState.ENDED) self.stop(cap ? "cap" : "ended");
@@ -216,5 +266,5 @@ export function playTrailer(opts: {
     },
     () => self.stop("error"),
   );
-  return () => self.stop("stopped");
+  return control;
 }
