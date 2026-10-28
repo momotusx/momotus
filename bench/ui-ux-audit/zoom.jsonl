@@ -1,0 +1,5 @@
+{"date":"2026-10-28","check":"saved per-host zoom, canvas scale","browser":"chrome headless (channel chrome)","zoom":1,"dpr":1,"inner":1440,"outer":1440,"k":"0.6260869565217392","form":"desktop","canvasPxPerCssPx":0.6261}
+{"date":"2026-10-28","check":"saved per-host zoom, canvas scale","browser":"chrome headless (channel chrome)","zoom":1.25,"dpr":1.25,"inner":1152,"outer":1440,"k":"0.6260869565217392","form":"desktop","canvasPxPerCssPx":0.7826}
+{"date":"2026-10-28","check":"saved per-host zoom, canvas scale","browser":"chrome headless (channel chrome)","zoom":1.75,"dpr":1.75,"inner":823,"outer":1440,"k":"0.626195652173913","form":"desktop","canvasPxPerCssPx":1.0958}
+{"date":"2026-10-28","check":"saved per-host zoom, canvas scale","browser":"chrome headless (channel chrome)","zoom":2,"dpr":2,"inner":720,"outer":1440,"k":"1","form":"phone","canvasPxPerCssPx":2}
+{"date":"2026-10-28","check":"saved per-host zoom, canvas scale","browser":"chrome headless (channel chrome)","zoom":2.5,"dpr":2.5,"inner":576,"outer":1440,"k":"1","form":"phone","canvasPxPerCssPx":2.5}
