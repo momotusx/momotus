@@ -115,7 +115,8 @@ struct OnboardingScreen: View {
                               sync.endPairing()
                               step = .doors
                           },
-                      ])
+                      ],
+                      doneOnJoin: true)
     }
 
     /// The question steps are framed (B4) and fill the screen; the addons, sign-in and the check keep a column.

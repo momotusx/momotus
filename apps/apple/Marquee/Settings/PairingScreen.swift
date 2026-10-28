@@ -19,6 +19,8 @@ struct PairingScreen: View {
     var lede: String?
     /// More ways under the code (a TV's first run: a recovery kit, no account).
     var more: [PairingMore] = []
+    /// A TV's first run: once the join is kept, `done` at once (Home while the first pull fills it), no result page.
+    var doneOnJoin = false
     @State private var server = UserDefaults.standard.string(forKey: SyncRecord.serverKey) ?? "https://"
     @State private var name = DeviceName.current
     /// The address had a user name or password: it was not kept or sent.
@@ -205,7 +207,7 @@ struct PairingScreen: View {
                 .textFont(Theme.type.headline, weight: .semibold, relativeTo: .headline)
                 .foregroundStyle(Theme.Palette.text)
         case .joined?:
-            JoinedState(core: core, stored: sync.joinStored, done: done)
+            JoinedState(core: core, stored: sync.joinStored, done: done, doneOnJoin: doneOnJoin)
 
         }
     }
@@ -231,6 +233,7 @@ private struct JoinedState: View {
     let stored: Bool?
     /// Where Done goes: Home from onboarding, else back to Settings.
     let done: (() -> Void)?
+    var doneOnJoin = false
     @State private var library: LiveRecord<LibrarySnapshot>
     @State private var addons: LiveRecord<AddonsSnapshot>
     @Environment(SyncModel.self) private var sync
@@ -238,9 +241,10 @@ private struct JoinedState: View {
     @Environment(\.dismiss) private var dismiss
     @FocusState private var doneFocused: Bool
 
-    init(core: CoreClient, stored: Bool?, done: (() -> Void)?) {
+    init(core: CoreClient, stored: Bool?, done: (() -> Void)?, doneOnJoin: Bool = false) {
         self.stored = stored
         self.done = done
+        self.doneOnJoin = doneOnJoin
         _library = State(initialValue: LiveRecord("library", core: core))
         _addons = State(initialValue: LiveRecord("addons", core: core))
     }
@@ -267,6 +271,8 @@ private struct JoinedState: View {
         // The remote lands on Done once the join is kept.
         .onChange(of: stored != nil, initial: true) { _, shown in doneFocused = shown }
         #endif
+        // Kept on this device: a TV's first run goes Home; a session-only join stays to say so.
+        .onChange(of: stored == true, initial: true) { _, kept in if kept, doneOnJoin { done?() } }
         .task(id: library.taskId) { library.start() }
         .task(id: addons.taskId) { addons.start() }
     }

@@ -17,9 +17,12 @@ final class AppRouter {
     private(set) var scanRequests = 0
     /// The code a link brought, for the sheet to take once; none opens the scanner. Memory only.
     var pendingCode: String?
+    /// A request the shell has not presented yet: one made at a cold start, before the shell exists.
+    var unanswered = false
 
     func requestScan(code: String? = nil) {
         pendingCode = code
+        unanswered = true
         scanRequests += 1
     }
 

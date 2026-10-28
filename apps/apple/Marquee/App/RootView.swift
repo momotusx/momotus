@@ -277,7 +277,12 @@ struct MainShell: View {
             .environment(\.metrics, metrics)
         })
         // On a kids profile the sheet only says to ask a grown-up: approving is not its own.
-        .onChange(of: AppRouter.shared.scanRequests) { showScanner = true }
+        // initial: a link or quick action that started the app arrived before this shell existed.
+        .onChange(of: AppRouter.shared.scanRequests, initial: true) {
+            guard AppRouter.shared.unanswered else { return }
+            AppRouter.shared.unanswered = false
+            showScanner = true
+        }
         // A phone camera on a TV's code opens /pair here: the approve sheet with that code (plans/tv-qr-login.md 5.6).
         .onContinueUserActivity(NSUserActivityTypeBrowsingWeb) { activity in
             guard let url = activity.webpageURL, let code = AccountRules.pairingCode(url, linkHost: PasskeyContract.relyingParty) else { return }

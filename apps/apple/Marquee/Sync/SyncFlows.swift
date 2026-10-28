@@ -230,6 +230,12 @@ struct AddDeviceScreen: View {
                 scanning = true
             }
         }
+        // A second link while the sheet is up: its code replaces the first (plans/tv-qr-login.md 5.6).
+        .onChange(of: AppRouter.shared.scanRequests) {
+            guard let linked = AppRouter.shared.pendingCode else { return }
+            AppRouter.shared.pendingCode = nil
+            if !kids { offer(linked, scanned: false) }
+        }
         .onDisappear {
             generation += 1
             waiting?.cancel()
@@ -314,15 +320,17 @@ struct AddDeviceScreen: View {
         #endif
     }
 
-    /// A code arrived: it replaces any other, and its wait.
+    /// A code arrived: it replaces any other, and its wait. Busy until it is read, so the sheet still on
+    /// screen never sends the new code under the old screen's name.
     private func offer(_ text: String, scanned: Bool) {
         generation += 1
         let mine = generation
         waiting?.cancel()
         member = nil
-        busy = false
+        busy = true
         code = (text, scanned)
         Task {
+            defer { if mine == generation { busy = false } }
             let next: ApproveStep
             do {
                 let read = try await sync.readPairingCode(text)
