@@ -989,7 +989,18 @@ fun EditProfileScreen(
     }
     flow?.let { f ->
         // Scrolls on a short landscape phone, where the keypad is taller than the screen.
-        BoxWithConstraints(Modifier.fillMaxSize().background(colors.bg).padding(Marquee.safe.side)) {
+        BoxWithConstraints(
+            Modifier
+                .fillMaxSize()
+                .background(colors.bg)
+                // Under the status bar and the back link's row when the shell draws one.
+                .padding(
+                    start = Marquee.safe.side,
+                    end = Marquee.safe.side,
+                    top = maxOf(Marquee.safe.side, pageTop()),
+                    bottom = Marquee.safe.side,
+                ),
+        ) {
             Column(
                 Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).heightIn(min = maxHeight),
                 verticalArrangement = Arrangement.Center,

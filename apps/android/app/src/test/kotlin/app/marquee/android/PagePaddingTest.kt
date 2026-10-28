@@ -15,6 +15,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.core.graphics.Insets
 import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import app.marquee.core.route.Route
 import app.marquee.design.Form
@@ -50,6 +51,8 @@ class PagePaddingTest {
                 }
             }
         }
+        // A plain activity fits its content to the system bars, which would consume the inset before the page sees it.
+        compose.runOnUiThread { WindowCompat.setDecorFitsSystemWindows(compose.activity.window, false) }
         compose.runOnIdle {
             ViewCompat.dispatchApplyWindowInsets(
                 compose.activity.window.decorView,
