@@ -2089,6 +2089,11 @@ async fn take_stops_at_twenty_misses() {
                 .unwrap();
         }
     }
+    // A flow id alone deletes nothing, even at the gate.
+    assert_eq!(
+        relay.email_take(&mine, "stranger", &code).await.err(),
+        Some((404, String::new()))
+    );
     assert_eq!(
         relay.email_take(&mine, "victim", &code).await.err(),
         Some((429, "emailLimit".into()))
@@ -2123,6 +2128,11 @@ async fn client_and_relay_mail_caps() {
         Some((429, "busy".into())),
         "the minute's budget"
     );
+    assert_eq!(
+        (relay.count("auth_flow"), relay.count("email_event")),
+        (5, 5),
+        "a busy start leaves nothing"
+    );
     email_start_at(&proxied, "f5@example.org", "v", Some("203.0.113.2"))
         .await
         .unwrap();
@@ -2145,6 +2155,27 @@ async fn client_and_relay_mail_caps() {
         Some((429, "emailLimit".into())),
         "ten a day per client"
     );
+    // IPv6 counts per /48 for the day: two /64s of one /48 share it.
+    for i in 0..10 {
+        let from = format!("2001:db8:7:{}::1", i % 2);
+        email_start_at(&proxied, &format!("h{i}@example.org"), "v", Some(&from))
+            .await
+            .unwrap();
+        if i % 4 == 3 {
+            relay.later(61_000);
+        }
+    }
+    relay.later(61_000);
+    assert_eq!(
+        email_start_at(&proxied, "h10@example.org", "v", Some("2001:db8:7:9::1"))
+            .await
+            .err(),
+        Some((429, "emailLimit".into())),
+        "one /48"
+    );
+    email_start_at(&proxied, "h10@example.org", "v", Some("2001:db8:8::1"))
+        .await
+        .unwrap();
 
     let capped = Relay::with(|c| {
         if let Some(email) = c.identity.as_mut().and_then(|i| i.email.as_mut()) {
@@ -2163,7 +2194,7 @@ async fn client_and_relay_mail_caps() {
 /// The mail service refusing leaves nothing behind (asking again is not
 /// held against the address); no answer keeps the rows, as it may have sent.
 #[tokio::test]
-async fn a_refused_mail_leaves_nothing_and_a_lost_one_counts() {
+async fn a_refused_mail_leaves_nothing_and_an_unclear_one_waits() {
     let relay = Relay::new().await;
     relay.mock.mail_fails(Some(400), false);
     assert_eq!(
@@ -2174,23 +2205,26 @@ async fn a_refused_mail_leaves_nothing_and_a_lost_one_counts() {
         (relay.count("auth_flow"), relay.count("email_event")),
         (0, 0)
     );
+    // Nothing went, so asking again at once is fine.
     relay.mock.mail_fails(None, false);
     relay.email_start("hal@example.org", "v").await.unwrap();
-    // A throttle (429) is no definite refusal: the rows stay.
-    relay.later(61_000);
-    relay.mock.mail_fails(Some(429), false);
-    assert_eq!(
-        relay.email_start("hal@example.org", "v").await.err(),
-        Some((503, "mailUnavailable".into()))
-    );
-    assert_eq!(relay.events("mail"), 2, "a throttled mail counts");
-    relay.later(61_000);
-    relay.mock.mail_fails(None, true);
-    assert_eq!(
-        relay.email_start("hal@example.org", "v").await.err(),
-        Some((503, "mailUnavailable".into()))
-    );
-    assert_eq!(relay.events("mail"), 3, "the lost mail counts");
+    // A throttle, a 5xx and no answer may all have sent: the user gets the
+    // flow and waits for the mail, and the mail counts.
+    for (status, stall) in [(Some(429), false), (Some(500), false), (None, true)] {
+        relay.later(61_000);
+        relay.mock.mail_fails(status, stall);
+        let flow = relay
+            .email_start("hal@example.org", "v")
+            .await
+            .unwrap()
+            .flow;
+        if status == Some(500) {
+            // The mock kept this mail before failing, as SES may.
+            let code = relay.mock.code("hal@example.org");
+            relay.email_take(&flow, "v", &code).await.unwrap();
+        }
+    }
+    assert_eq!(relay.events("mail"), 4, "the unclear mails count");
 }
 
 /// An address with an account and one without get the same answer; an
@@ -2248,6 +2282,8 @@ async fn email_configuration_and_an_older_database() {
     assert!(plain.contains("https"), "{plain}");
     let named = start(|f| f["oidc"][0]["id"] = json!("email")).unwrap();
     assert!(named.contains("email"), "{named}");
+    let none = start(|f| f["email"]["dailyLimit"] = json!(0)).unwrap();
+    assert!(none.contains("dailyLimit"), "{none}");
     let _ = std::fs::remove_dir_all(dir);
 
     let relay = Relay::new().await;

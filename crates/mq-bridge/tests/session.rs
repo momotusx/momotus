@@ -958,6 +958,10 @@ async fn sign_in_relay(name: &str) -> (mock_oidc::Mock, String, std::path::PathB
         "key": "3".repeat(64),
         "publicUrl": server,
         "oidc": [{ "id": "mock", "issuer": mock.url, "clientId": "marquee", "clientSecret": "s" }],
+        "email": {
+            "accessKeyId": mock_oidc::MAIL_KEY_ID, "secretAccessKey": mock_oidc::MAIL_SECRET,
+            "from": "noreply@example.org", "endpoint": mock.url,
+        },
     }))
     .unwrap();
     let config = mq_sync_server::Config {
@@ -1335,7 +1339,7 @@ async fn sign_in_over_the_protocol() {
     let offered = ask(json!({"id": 20, "op": "relayInfo", "server": server})).await;
     assert_eq!(
         offered["result"],
-        json!({ "providers": ["mock"] }),
+        json!({ "providers": ["email", "mock"] }),
         "{offered}"
     );
     let started =
@@ -1827,4 +1831,48 @@ async fn title_visible_reaches_the_title_view() {
         )
         .await;
     assert_eq!(reply_to(&mut rx, 5).await["ok"], false);
+}
+
+/// Email sign-in over the protocol (plans/accounts-email.md): the code
+/// mailed, a wrong one keeps the flow, the right one gives `new`; an
+/// unknown flow and a malformed address answer their codes.
+#[tokio::test]
+async fn email_sign_in_over_the_protocol() {
+    let (mock, server, dir) = sign_in_relay("email").await;
+    let (tx, mut rx) = Output::channel();
+    let mut s = Session::new(Core::temporary("default").unwrap(), tx);
+    let mut ask = async |request: Value| {
+        let id = request["id"].as_u64().unwrap();
+        s.handle_text(&request.to_string()).await;
+        reply_to(&mut rx, id).await
+    };
+    let bad =
+        ask(json!({"id": 1, "op": "emailSignInStart", "server": server, "email": "nope"})).await;
+    assert_eq!(bad["code"], "badAddress", "{bad}");
+    let started = ask(
+        json!({"id": 2, "op": "emailSignInStart", "server": server, "email": "Zoe@Example.org"}),
+    )
+    .await;
+    let flow = started["result"]["flow"].clone();
+    assert!(
+        started["result"]["expiresMs"].as_u64().unwrap() > 0,
+        "{started}"
+    );
+    let code = mock.code("zoe@example.org");
+    let wrong = if code == "000000" { "111111" } else { "000000" };
+    let missed = ask(json!({"id": 3, "op": "emailSignIn", "flow": flow, "code": wrong})).await;
+    assert_eq!(missed["code"], "wrongCode", "{missed}");
+    let short = ask(json!({"id": 4, "op": "emailSignIn", "flow": flow, "code": "123"})).await;
+    assert_eq!(short["code"], "badCode", "{short}");
+    let spaced = format!("{} {}", &code[..3], &code[3..]);
+    let signed = ask(json!({"id": 5, "op": "emailSignIn", "flow": flow, "code": spaced})).await;
+    assert_eq!(signed["result"]["phase"], "new", "{signed}");
+    let again = ask(json!({"id": 6, "op": "emailSignIn", "flow": flow, "code": code})).await;
+    assert_eq!(again["code"], "wrongFlow", "used once: {again}");
+    let wait = ask(
+        json!({"id": 7, "op": "emailSignInStart", "server": server, "email": "zoe@example.org"}),
+    )
+    .await;
+    assert_eq!(wait["code"], "emailWait", "{wait}");
+    let _ = std::fs::remove_dir_all(dir);
 }

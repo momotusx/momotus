@@ -186,7 +186,11 @@ fn the_mail_file_is_optional_and_logs_never_name_the_address() {
     assert!(ask(port, "GET", "/v1/relay", "").contains("\"providers\":[\"email\"]"));
     let body = serde_json::json!({ "verifierHash": "00".repeat(32), "purpose": "signin", "email": "Secret.Person@example.org" });
     let answer = ask(port, "POST", "/v1/auth/email/start", &body.to_string());
-    assert!(answer.contains("mailUnavailable"), "{answer}");
+    // No answer from the mail service is unclear: the flow comes back (E9).
+    assert!(
+        answer.starts_with("HTTP/1.1 200") && answer.contains("\"flow\""),
+        "{answer}"
+    );
     let stderr = stop(on);
     let _ = std::fs::remove_dir_all(&dir);
     assert!(

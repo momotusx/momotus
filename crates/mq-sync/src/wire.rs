@@ -193,12 +193,20 @@ pub struct StartResponse {
 }
 
 /// Collects a brokered flow's result, once: the verifier and the one-time
-/// code from the return fragment.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+/// code from the return fragment (or the code an email flow mailed).
+#[derive(Clone, Serialize, Deserialize)]
 pub struct TakeRequest {
     pub flow: String,
     pub verifier: String,
     pub code: String,
+}
+
+impl std::fmt::Debug for TakeRequest {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("TakeRequest")
+            .field("flow", &self.flow)
+            .finish_non_exhaustive()
+    }
 }
 
 /// A native sheet's ID token for a flow.

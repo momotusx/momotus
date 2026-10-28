@@ -206,6 +206,20 @@ enum Request {
         #[serde(default, rename = "authorizationCode")]
         authorization_code: Option<String>,
     },
+    /// Mails a sign-in code to `email` (plans/accounts-email.md):
+    /// `{flow, expiresMs}`; the flow's verifier stays in the core.
+    EmailSignInStart {
+        id: u64,
+        server: String,
+        email: String,
+    },
+    /// The mailed code for `flow`: `found` or `new`. `wrongCode` and
+    /// `badCode` keep the flow for another try.
+    EmailSignIn {
+        id: u64,
+        flow: String,
+        code: String,
+    },
     /// The account's identity links: `{links, record}`.
     Identities {
         id: u64,
@@ -628,6 +642,8 @@ struct Shared {
     /// when they started: their verifiers stay here, in memory only, for as
     /// long as the relay takes the flow.
     native: HashMap<String, (std::time::Instant, mq_sync::identity::NativeFlow)>,
+    /// Email sign-in flows, the same way.
+    email: HashMap<String, (std::time::Instant, mq_sync::identity::EmailFlow)>,
 }
 
 /// A native flow lives this long at the relay; then the core drops it too.
@@ -738,6 +754,7 @@ impl Session {
             subs: HashMap::new(),
             state,
             native: HashMap::new(),
+            email: HashMap::new(),
         }));
         refresh_addons(&core);
         let watcher = tokio::spawn(watch_gone(
@@ -935,6 +952,42 @@ impl Session {
                     // the same token.
                     if matches!(&taken, Err(e) if e.transient()) {
                         lock(&shared).native.insert(flow, (started, native));
+                    }
+                    to_value(&SignInSnapshot::taken(taken?)).map_err(Failure::from)
+                });
+            }
+            Request::EmailSignInStart { id, server, email } => {
+                let shared = self.shared.clone();
+                self.spawn(id, async move {
+                    let flow = mq_sync::identity::start_email(core.http(), &server, &email).await?;
+                    let answer = json!({ "flow": flow.flow, "expiresMs": flow.expires_ms });
+                    let mut shared = lock(&shared);
+                    shared
+                        .email
+                        .retain(|_, (started, _)| started.elapsed() < NATIVE_FLOW_LIFE);
+                    shared
+                        .email
+                        .insert(flow.flow.clone(), (std::time::Instant::now(), flow));
+                    Ok::<_, mq_sync::SyncError>(answer)
+                });
+            }
+            Request::EmailSignIn { id, flow, code } => {
+                let Some((started, email)) = lock(&self.shared).email.remove(&flow) else {
+                    let refused = Failure::coded("wrongFlow", "this sign-in was not started here");
+                    send_answer(&self.out, json!(id), Err(refused));
+                    return;
+                };
+                let shared = self.shared.clone();
+                self.spawn(id, async move {
+                    let taken = email.finish(core.http(), &code).await;
+                    // Another try with the same flow: a wrong or short code,
+                    // or no definite answer.
+                    let again = matches!(
+                        &taken,
+                        Err(mq_sync::SyncError::WrongCode | mq_sync::SyncError::BadCode)
+                    ) || matches!(&taken, Err(e) if e.transient());
+                    if again {
+                        lock(&shared).email.insert(flow, (started, email));
                     }
                     to_value(&SignInSnapshot::taken(taken?)).map_err(Failure::from)
                 });

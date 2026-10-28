@@ -20,7 +20,7 @@ use hmac::{Hmac, KeyInit, Mac};
 use mq_http::{HttpError, RequestOptions};
 use mq_library::hlc::now_ms;
 use mq_sync::wire::{StartRequest, StartResponse, mailbox, normalize_email};
-use rusqlite::{Connection, OptionalExtension, params};
+use rusqlite::{Connection, params};
 use serde::Deserialize;
 use serde_json::json;
 use sha2::{Digest, Sha256};
@@ -71,6 +71,9 @@ impl EmailConfig {
                 .region
                 .bytes()
                 .all(|b| b.is_ascii_alphanumeric() || b == b'-');
+        if !(1..=1000).contains(&self.daily_limit) {
+            return Err("the email block's dailyLimit must be 1 to 1000".into());
+        }
         if !(plain(&self.access_key_id)
             && plain(&self.secret_access_key)
             && plain(&self.from)
@@ -326,7 +329,12 @@ async fn send(
             Err(NotSent::Unknown)
         }
         Err(HttpError::Status { status, .. }) if (400..500).contains(&status) => {
-            tracing::warn!("the mail service refused a code: {status}");
+            // A key that no longer works stops every mail: the owner must see it.
+            if status == 401 || status == 403 {
+                tracing::error!("the mail service refused the relay's key or sender: {status}");
+            } else {
+                tracing::warn!("the mail service refused a code: {status}");
+            }
             Err(NotSent::Refused)
         }
         Err(e) => {
@@ -361,22 +369,21 @@ pub(super) async fn start(
     let subject = id.subject("email", &to);
     let mailbox = id.subject("email limit", &mailbox(&to));
     let client = id.client_tag(&address);
+    let network = network(address);
     let (flow, code) = (fresh(), six_digits());
     let now = state.now_ms();
     let day = now.saturating_sub(EVENT_MS);
-    let rows = {
+    // E6: the database lock, then `limits`; checks, the budget, then writes.
+    let row = {
         let db = lock(state);
-        let checked = (|| -> rusqlite::Result<Result<[i64; 2], Response>> {
+        let checked = (|| -> rusqlite::Result<Result<(i64, i64), Response>> {
             sweep_flows(&db, now)?;
             expire_events(&db, now)?;
-            let last: Option<i64> = db
-                .query_row(
-                    "SELECT MAX(at_ms) FROM email_event WHERE kind = 'mail' AND key = ?1",
-                    params![mailbox],
-                    |r| r.get(0),
-                )
-                .optional()?
-                .flatten();
+            let last: Option<i64> = db.query_row(
+                "SELECT MAX(at_ms) FROM email_event WHERE kind = 'mail' AND key = ?1",
+                params![mailbox],
+                |r| r.get(0),
+            )?;
             if last.is_some_and(|at| (at as u64) + MAIL_GAP_MS > now) {
                 return Ok(Err(coded(
                     StatusCode::TOO_MANY_REQUESTS,
@@ -386,12 +393,12 @@ pub(super) async fn start(
             }
             if events(&db, "mail", &mailbox, day)? >= MAILS_PER_MAILBOX
                 || events(&db, "miss", &mailbox, day)? >= MISSES_PER_MAILBOX
-                || events(&db, "client", client.as_bytes(), day)? >= MAILS_PER_CLIENT
+                || mails_today(state, network, now) >= MAILS_PER_CLIENT
             {
                 return Ok(Err(limit()));
             }
             let relay: i64 = db.query_row(
-                "SELECT COUNT(*) FROM email_event WHERE kind = 'client' AND at_ms > ?1",
+                "SELECT COUNT(*) FROM email_event WHERE kind = 'mail' AND at_ms > ?1",
                 params![day as i64],
                 |r| r.get(0),
             )?;
@@ -430,34 +437,41 @@ pub(super) async fn start(
                     serde_json::to_string(&verified).expect("plain")
                 ],
             )?;
-            Ok(Ok([
-                event(&db, "mail", &mailbox, now)?,
-                event(&db, "client", client.as_bytes(), now)?,
-            ]))
+            Ok(Ok((event(&db, "mail", &mailbox, now)?, relay + 1)))
         })();
-        checked.map_err(|e| storage_error("email start", e))??
+        let (row, sent) = checked.map_err(|e| storage_error("email start", e))??;
+        count_mail(state, network, now, true);
+        // The owner hears of a spike or an attack; no address, no client.
+        if sent == (config.daily_limit + 1) / 2 || sent == config.daily_limit {
+            tracing::warn!(
+                "email sign-in sent {sent} of its {} codes in the last 24 hours",
+                config.daily_limit
+            );
+        }
+        row
     };
+    let answer = Json(StartResponse {
+        flow: flow.clone(),
+        expires_ms: now + FLOW_MS,
+        url: None,
+        nonce: None,
+    });
     match send(id, config, &to, &code, now).await {
-        Ok(()) => Ok(Json(StartResponse {
-            flow,
-            expires_ms: now + FLOW_MS,
-            url: None,
-            nonce: None,
-        })
-        .into_response()),
-        Err(NotSent::Unknown) => Err(unavailable()),
+        // Unclear: the mail may well arrive, so the user waits for it with
+        // the flow that takes its code; everything stays counted.
+        Ok(()) | Err(NotSent::Unknown) => Ok(answer.into_response()),
         Err(NotSent::Refused) => {
-            // Nothing went: the flow and its events go too, so asking again
-            // is not held against the address.
+            // Nothing went: the flow and its counts go too, so asking again
+            // is not held against the address. The row id is this start's
+            // own, deliberately: nothing else holds it within the day.
+            count_mail(state, network, now, false);
             let db = lock(state);
             let undone = (|| -> rusqlite::Result<()> {
                 db.execute(
                     "DELETE FROM auth_flow WHERE id_hash = ?1",
                     params![sha(&flow)],
                 )?;
-                for row in rows {
-                    db.execute("DELETE FROM email_event WHERE rowid = ?1", params![row])?;
-                }
+                db.execute("DELETE FROM email_event WHERE rowid = ?1", params![row])?;
                 Ok(())
             })();
             match undone {
@@ -466,6 +480,42 @@ pub(super) async fn start(
             }
         }
     }
+}
+
+/// A client's network for the daily count: the address, or its /48 for
+/// IPv6 (`client()` already cut it to a /64), which one customer often holds.
+fn network(address: IpAddr) -> IpAddr {
+    match address {
+        IpAddr::V6(v6) => IpAddr::V6((u128::from(v6) & !((1u128 << 80) - 1)).into()),
+        v4 => v4,
+    }
+}
+
+/// Codes mailed to anyone from `network` in its current 24-hour window,
+/// counted in memory only (E6).
+fn mails_today(state: &AppState, network: IpAddr, now: u64) -> i64 {
+    let limits = state.limits.lock().unwrap_or_else(|p| p.into_inner());
+    match limits.daily.get(&network) {
+        Some((start, n)) if now < start + EVENT_MS => i64::from(*n),
+        _ => 0,
+    }
+}
+
+/// One more mail from `network` (`add`), or one given back.
+fn count_mail(state: &AppState, network: IpAddr, now: u64, add: bool) {
+    let mut limits = state.limits.lock().unwrap_or_else(|p| p.into_inner());
+    if limits.daily.len() > 50_000 {
+        limits.daily.retain(|_, (start, _)| now < *start + EVENT_MS);
+    }
+    let slot = limits.daily.entry(network).or_insert((now, 0));
+    if now >= slot.0 + EVENT_MS {
+        *slot = (now, 0);
+    }
+    slot.1 = if add {
+        slot.1 + 1
+    } else {
+        slot.1.saturating_sub(1)
+    };
 }
 
 /// `take` of an email flow, under the lock: the flow's time, the mailbox's

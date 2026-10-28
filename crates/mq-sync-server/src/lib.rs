@@ -2153,6 +2153,9 @@ impl ClockWatch {
 pub(crate) struct Limits {
     per_client: HashMap<(usize, IpAddr), (u64, u32)>,
     global: [(u64, u32); 7],
+    /// Codes mailed per client today (IPv6 per /48), in memory only
+    /// (plans/accounts-email.md E6): (window start, mails).
+    daily: HashMap<IpAddr, (u64, u32)>,
 }
 
 const OPEN_PAIRING: (usize, u32, u32) = (0, 20, 2000);

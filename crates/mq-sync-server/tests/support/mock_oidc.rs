@@ -433,9 +433,13 @@ async fn mail_send(
     if stalls {
         std::future::pending::<()>().await;
     }
-    if let Some(status) = refuses {
+    let refused = |status: u16| {
         let status = StatusCode::from_u16(status).unwrap();
-        return (status, Json(json!({ "message": "refused by the mock" }))).into_response();
+        (status, Json(json!({ "message": "refused by the mock" }))).into_response()
+    };
+    // A 4xx sends nothing; a 5xx comes after the mail went, as it may at SES.
+    if let Some(status) = refuses.filter(|s| *s < 500) {
+        return refused(status);
     }
     let mail: Value = serde_json::from_slice(&body).unwrap_or_default();
     let simple = &mail["Content"]["Simple"];
@@ -457,6 +461,9 @@ async fn mail_send(
             (field(&simple["Subject"]), field(&simple["Body"]["Text"])),
         );
     });
+    if let Some(status) = refuses {
+        return refused(status);
+    }
     Json(json!({ "MessageId": random() })).into_response()
 }
 
