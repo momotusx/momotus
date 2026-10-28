@@ -162,7 +162,15 @@ private func snapshot(_ profiles: [ProfileInfo], locked: Bool = false) -> Profil
     // DECISION (Confirmation): with no destructive role the buttons take the tint, which is the key blue here.
     let file = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appending(path: "../Marquee/Profiles/ManageProfiles.swift")
     let editor = try String(contentsOf: file, encoding: .utf8)
-    let tint = try #require(editor.range(of: ".tint(Theme.Palette.key)"), "the editor lost its key tint")
-    let dialog = try #require(editor.range(of: ".confirmationDialog("))
-    #expect(tint.lowerBound < dialog.lowerBound, "the tint must wrap the dialogs")
+    let start = try #require(editor.range(of: "struct EditProfile"))
+    let page = String(editor[start.lowerBound...])
+    // A tint reaches only what it wraps: it follows both dialogs (`pinDialog` wraps `leaveGuard`) in the body.
+    let bodyText = try body(of: "var body: some View", in: page)
+    let dialogs = try #require(bodyText.range(of: "pinDialog("), "the PIN dialog left the body")
+    let tint = try #require(bodyText.range(of: ".tint(Theme.Palette.key)"), "the editor lost its key tint")
+    #expect(dialogs.lowerBound < tint.lowerBound, "the tint must wrap the dialogs, not sit inside them")
+    // Not on the line that builds them either: that would tint only the page inside.
+    let built = try #require(bodyText.split(separator: "\n").first { $0.contains("pinDialog(") })
+    #expect(!built.contains(".tint("), "the tint sits inside the dialogs again")
+    #expect(!page.replacingOccurrences(of: bodyText, with: "").contains(".tint("), "a tint inside the dialogs again")
 }

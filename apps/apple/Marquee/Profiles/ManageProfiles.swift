@@ -104,7 +104,13 @@ struct EditProfile: View {
     @Environment(\.scenePhase) private var phase
 
     var body: some View {
-        pinDialog(leaveGuard(ScrollViewReader { proxy in page(proxy) }))
+        let editor = pinDialog(leaveGuard(ScrollViewReader { proxy in page(proxy) }))
+        #if os(tvOS)
+        editor
+        #else
+        // Outermost, so both dialogs draw in the key blue, not the root's white tint (DECISION, Confirmation).
+        editor.tint(Theme.Palette.key)
+        #endif
     }
 
     /// The edit page: the form, the PIN section and Delete.
@@ -172,8 +178,6 @@ struct EditProfile: View {
         content
         #else
         content
-            // The dialogs below draw in the key blue, not the root's white tint (DECISION, Confirmation); not on TV.
-            .tint(Theme.Palette.key)
             // The system back (and its swipe) gives way to the Back below, which asks.
             #if os(iOS)
             // The Mac's is hidden in `BackOnlyWhenShown`, which reads `leaveAsk`.
