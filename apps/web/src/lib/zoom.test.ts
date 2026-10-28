@@ -29,6 +29,9 @@ test("browserZoom reads a real browser zoom and refuses what only looks like one
   expect(browserZoom(1440, 1080, 2)).toBe(1);
   // A docked DevTools on a plain display: the ratio 1.3 at DPR 1 is no display scale.
   expect(browserZoom(1440, 1108, 1)).toBe(1);
+  // 110 percent on a plain display; the same pixel ratio with a docked panel (ratio 1.2) matches no display scale.
+  expect(browserZoom(1440, 1309, 1.1)).toBeCloseTo(1.1, 5);
+  expect(browserZoom(1440, 1200, 1.1)).toBe(1);
   // The zoom is held to 5, and Safari's 115 and 185 percent steps count on WebKit only.
   expect(browserZoom(1440, 288, 5)).toBe(5);
   expect(browserZoom(1440, 1252, 1.15)).toBe(1);
