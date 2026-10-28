@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -128,8 +129,14 @@ fun PhoneShell(
         val sides = WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal)
         var bannerPx by remember { mutableIntStateOf(0) }
         val bannerDp = with(LocalDensity.current) { if (banner == null) 0.dp else bannerPx.toDp() }
+        // A page whose artwork runs under the status bar starts under the banner instead, which holds the
+        // status bar now: its art is not cut by it, and its own status bar padding is taken here.
+        val underBanner = banner != null && !statusStrip
+        val barTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
         Box(
-            (if (insetSides) Modifier.windowInsetsPadding(sides) else Modifier).padding(top = bannerDp),
+            (if (insetSides) Modifier.windowInsetsPadding(sides) else Modifier)
+                .padding(top = bannerDp + if (underBanner) barTop else 0.dp)
+                .then(if (underBanner) Modifier.consumeWindowInsets(WindowInsets.statusBars) else Modifier),
         ) {
             // One call site for the page, so moving onto or off a back-link page keeps its state and its fade.
             CompositionLocalProvider(LocalBarSpace provides space, LocalTopSpace provides top) { content() }
