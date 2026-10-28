@@ -9,7 +9,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
-import app.marquee.core.KeeperEvent
 import app.marquee.core.client.CoreLog
 import app.marquee.core.client.DeviceCapsParams
 import app.marquee.core.session.CoreSession
@@ -61,6 +60,10 @@ class MarqueeApp :
      */
     var pendingScan: Boolean by mutableStateOf(false)
     var scanAgain: Boolean by mutableStateOf(false)
+
+    /** No network, or none this app may use: every phone page says so (plans/offline-downloads.md 3.5). */
+    var offline: Boolean by mutableStateOf(false)
+        private set
     private lateinit var lifecycle: AppLifecycle
 
     /** Keeps downloads running while the user is away (plans/offline-downloads.md 5). */
@@ -131,14 +134,11 @@ class MarqueeApp :
                 if (active == null) trakt.end() else trakt.begin(active)
             }
         }
-        lifecycle = AppLifecycle(this, session, sync).also { it.register() }
+        lifecycle =
+            AppLifecycle(this, session, sync) { none ->
+                session.scope.launch(Dispatchers.Main) { offline = none }
+            }.also { it.register() }
         downloadKeeper = DownloadKeeper(this, session).also { it.start() }
-        // The keeper's view follows the session across a switch; the keeper hears whose it is (code review r3 M1).
-        session.scope.launch(Dispatchers.Main) {
-            snapshotFlow { profiles.snapshot?.active }.collect { id ->
-                if (id != null) downloadKeeper.on(KeeperEvent.Profile(id))
-            }
-        }
         val scan = session.scope.async(Dispatchers.Default) { DeviceCaps.scanCodecs() }
         deviceCaps = {
             runCatching {

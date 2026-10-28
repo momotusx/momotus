@@ -8,9 +8,12 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.Snapshot
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
@@ -28,6 +31,7 @@ import app.marquee.core.model.DownloadState
 import app.marquee.core.model.DownloadStorage
 import app.marquee.core.model.DownloadTitle
 import app.marquee.core.model.DownloadsSnapshot
+import app.marquee.core.route.Route
 import app.marquee.core.session.CoreSession
 import app.marquee.core.session.DownloadAction
 import app.marquee.core.session.DownloadTarget
@@ -289,12 +293,33 @@ class DownloadsScreenTest {
     }
 
     @Test
-    fun `offline, Home's banner says downloads still play and goes to them`() {
+    fun `offline with downloads, the banner says they still play, is announced, and goes to them`() {
         var went = false
-        compose.setContent { MarqueeTheme(Form.Phone) { OfflineBanner { went = true } } }
-        compose.onNodeWithText(DownloadCopy.OFFLINE).assertExists()
+        compose.setContent { MarqueeTheme(Form.Phone) { OfflineBanner(onDownloads = { went = true }) } }
+        compose
+            .onNode(SemanticsMatcher.expectValue(SemanticsProperties.LiveRegion, LiveRegionMode.Polite))
+            .assertTextContains(DownloadCopy.OFFLINE)
         compose.onNodeWithText(DownloadCopy.OFFLINE_ACTION).performClick()
         assertTrue(went)
+    }
+
+    /** Offline, every page but the player has the banner; the way to the downloads only where it leads somewhere. */
+    @Test
+    fun `the offline banner shows on every page but the player, leading to downloads only where it can`() {
+        assertEquals(null, offlineBanner(offline = false, anyDone = true, top = Route.Home))
+        assertEquals(null, offlineBanner(offline = true, anyDone = true, top = Route.Player("movie", "tt1", "tt1", "Sintel")))
+        assertEquals(true, offlineBanner(offline = true, anyDone = true, top = Route.Search))
+        assertEquals(false, offlineBanner(offline = true, anyDone = false, top = Route.Home))
+        assertEquals(false, offlineBanner(offline = true, anyDone = true, top = Route.Downloads))
+        assertEquals(false, offlineBanner(offline = true, anyDone = true, top = Route.DownloadedSeries("tt2")))
+    }
+
+    /** Nothing downloaded, or on the Downloads pages: the plain words, no way to the downloads (3.5). */
+    @Test
+    fun `offline with no way to downloads, the banner only says offline`() {
+        compose.setContent { MarqueeTheme(Form.Phone) { OfflineBanner(onDownloads = null) } }
+        compose.onNodeWithText(DownloadCopy.OFFLINE_ONLY).assertExists()
+        compose.onAllNodesWithText(DownloadCopy.OFFLINE_ACTION).assertCountEquals(0)
     }
 
     /** The first download asks for notifications once: not before a download, not again after an answer (3.3). */

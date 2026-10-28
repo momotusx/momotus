@@ -26,7 +26,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -451,18 +453,29 @@ internal fun DownloadsSettings(session: CoreSession) {
     }
 }
 
-/** Home's banner while offline with downloads (3.5): they still play, one press away. */
+/**
+ * The shell's line on every phone page while offline (3.5): said once as it appears, and, when this profile has
+ * downloads and the page is not theirs, one press from them.
+ */
 @Composable
-internal fun OfflineBanner(onDownloads: () -> Unit) {
-    Section {
-        Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.s)) {
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(Marquee.space.xs),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                MqIcon(Icons.WifiOff, tint = Marquee.colors.muted)
-                MqText(DownloadCopy.OFFLINE, role = TextRole.Callout)
-            }
+internal fun OfflineBanner(onDownloads: (() -> Unit)?) {
+    Row(
+        Modifier.fillMaxWidth().padding(horizontal = Marquee.safe.side, vertical = Marquee.space.xs),
+        horizontalArrangement = Arrangement.spacedBy(Marquee.space.s),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Row(
+            Modifier.weight(1f).semantics(mergeDescendants = true) { liveRegion = LiveRegionMode.Polite },
+            horizontalArrangement = Arrangement.spacedBy(Marquee.space.xs),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            MqIcon(Icons.WifiOff, tint = Marquee.colors.muted)
+            MqText(
+                if (onDownloads != null) DownloadCopy.OFFLINE else DownloadCopy.OFFLINE_ONLY,
+                role = TextRole.Callout,
+            )
+        }
+        if (onDownloads != null) {
             SecondaryButton(DownloadCopy.OFFLINE_ACTION, onDownloads, icon = Icons.ArrowDownToLine)
         }
     }

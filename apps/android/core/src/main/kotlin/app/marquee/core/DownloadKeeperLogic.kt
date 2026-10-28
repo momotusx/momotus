@@ -30,11 +30,6 @@ sealed interface KeeperEvent {
 
     /** Once a minute while downloads run; a refused job is asked for again. */
     data object Minute : KeeperEvent
-
-    /** The session's profile; a change forgets the last profile's names and notices (code review r3 M1). */
-    data class Profile(
-        val id: String,
-    ) : KeeperEvent
 }
 
 /** What the keeper does; the job, the service and the notifications only perform these. */
@@ -54,6 +49,8 @@ sealed interface KeeperEffect {
         val text: String,
         /** 0 to 1, null when no size is known yet. */
         val fraction: Float?,
+        /** Nothing moves: the bar stands still rather than animate (code review r4 n4). */
+        val waiting: Boolean = false,
     ) : KeeperEffect
 
     /** End the job or the service, and its notification. */
@@ -107,6 +104,8 @@ data class KeeperFacts(
     val unmetered: Boolean = false,
     /** A locked session's counts-only view: no names and nothing done or failed, so [done] and [failed] say nothing. */
     val locked: Boolean = false,
+    /** The profile the view is for: a change starts the news over (code review r4 m5). */
+    val profile: String = "",
 ) {
     companion object {
         fun of(snapshot: DownloadsSnapshot): KeeperFacts {
@@ -129,6 +128,7 @@ data class KeeperFacts(
                 neededBytes = snapshot.storage.neededBytes,
                 unmetered = snapshot.settings.wifiOnly && !snapshot.active.mobileData,
                 locked = snapshot.locked,
+                profile = snapshot.profile,
             )
         }
     }
@@ -187,10 +187,6 @@ class DownloadKeeperLogic {
                     add(KeeperEffect.HideProgress)
                 }
 
-                is KeeperEvent.Profile -> {
-                    profile(event.id)
-                }
-
                 KeeperEvent.Started -> {
                     held = true
                     // Started again with nothing left: it settles and lets go (code review r1 M1).
@@ -210,22 +206,18 @@ class DownloadKeeperLogic {
             allowed()
         }
 
-    /**
-     * Another profile: its failures and finishes are its own, so nothing of the last profile is news to it and its
-     * notices go; names and the batch's start are read again from its first snapshot (code review r3 M1).
-     */
-    private fun MutableList<KeeperEffect>.profile(id: String) {
-        val last = profile
-        profile = id
-        if (last == null || last == id) return
-        failedSeen = null
-        named = null
-        doneBefore = null
-        switched = true
-        add(KeeperEffect.ClearNotices)
-    }
-
     private fun MutableList<KeeperEffect>.facts(read: KeeperFacts) {
+        // Another profile: its failures and finishes are its own, so nothing of the last profile is news to it and its
+        // notices go; names and the batch's start are read again from this, its first snapshot. The profile comes in
+        // the snapshot, so the switch and the rows can never arrive out of order (code review r3 M1, r4 m5).
+        if (profile != null && read.profile != profile) {
+            failedSeen = null
+            named = null
+            doneBefore = null
+            switched = true
+            add(KeeperEffect.ClearNotices)
+        }
+        profile = read.profile
         val before = facts.takeUnless { switched }
         // Locked, the core lists nothing: what was done and failed stays as the last unlocked view said, so an unlock
         // raises no old failure and no batch counts everything ever done (code review r2 N1).
@@ -316,7 +308,7 @@ class DownloadKeeperLogic {
                 else -> "Downloading"
             }
         val text = listOfNotNull(now.title, fraction?.let { "${(it * 100).roundToInt()}%" }).joinToString(" · ")
-        return KeeperEffect.Progress(title, text, fraction)
+        return KeeperEffect.Progress(title, text, fraction, waiting = now.running == 0)
     }
 
     private fun finishedNotice(names: List<String>): KeeperEffect.Finished {

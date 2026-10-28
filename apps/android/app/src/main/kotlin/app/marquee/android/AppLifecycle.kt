@@ -23,6 +23,8 @@ class AppLifecycle(
     private val app: Application,
     private val session: CoreSession,
     private val sync: SyncController,
+    /** Whether the default network is gone, from the network callback's thread. */
+    private val onOffline: (Boolean) -> Unit = {},
 ) {
     fun register() {
         ProcessLifecycleOwner.get().lifecycle.addObserver(
@@ -70,7 +72,11 @@ class AppLifecycle(
 
     private fun watchNetwork() {
         val connectivity = app.getSystemService(ConnectivityManager::class.java) ?: return
-        val default = DefaultNetwork { type, metered -> session.ops.networkChanged(type, metered) }
+        val default =
+            DefaultNetwork { type, metered ->
+                session.ops.networkChanged(type, metered)
+                onOffline(type == null)
+            }
         try {
             connectivity.registerDefaultNetworkCallback(
                 object : ConnectivityManager.NetworkCallback() {

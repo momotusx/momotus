@@ -371,6 +371,7 @@ object DownloadCopy {
     const val EMPTY_TITLE = "Nothing downloaded yet"
     const val EMPTY_BODY = "Download movies and episodes to watch them without a connection."
     const val OFFLINE = "You're offline. Your downloads still play."
+    const val OFFLINE_ONLY = "You're offline."
     const val OFFLINE_ACTION = "Go to Downloads"
     const val TITLE_OFFLINE = "Showing what's downloaded"
     const val ADD_FAILED = "The download could not start. Try again."

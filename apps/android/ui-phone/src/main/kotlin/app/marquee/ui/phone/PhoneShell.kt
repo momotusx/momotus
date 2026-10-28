@@ -31,7 +31,10 @@ import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.compositionLocalOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -41,7 +44,9 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsPropertyKey
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -104,6 +109,11 @@ fun PhoneShell(
     onBack: (() -> Unit)? = null,
     /** The capsule's last tab, the active profile; null leaves its slot empty (no profile known yet). */
     profile: PhoneProfileTab? = null,
+    /**
+     * A line every page shows at its top while it is there (offline, plans/offline-downloads.md 3.5): under the
+     * status bar, with the page moved down by its height, so it covers nothing at rest and the page scrolls under it.
+     */
+    banner: (@Composable () -> Unit)? = null,
     content: @Composable () -> Unit,
 ) {
     val showBar = showTabs && !WindowInsets.isImeVisible
@@ -116,9 +126,24 @@ fun PhoneShell(
     Box(modifier.fillMaxSize()) {
         // In landscape the navigation bar and a camera cutout can sit at a side: pages keep clear of both.
         val sides = WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal)
-        Box(if (insetSides) Modifier.windowInsetsPadding(sides) else Modifier) {
+        var bannerPx by remember { mutableIntStateOf(0) }
+        val bannerDp = with(LocalDensity.current) { if (banner == null) 0.dp else bannerPx.toDp() }
+        Box(
+            (if (insetSides) Modifier.windowInsetsPadding(sides) else Modifier).padding(top = bannerDp),
+        ) {
             // One call site for the page, so moving onto or off a back-link page keeps its state and its fade.
             CompositionLocalProvider(LocalBarSpace provides space, LocalTopSpace provides top) { content() }
+        }
+        if (banner != null) {
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .background(Marquee.colors.bg)
+                    .windowInsetsPadding(WindowInsets.statusBars)
+                    .windowInsetsPadding(sides)
+                    .onSizeChanged { bannerPx = it.height }
+                    .testTag("shell-banner"),
+            ) { banner() }
         }
         // Pages start below the status bar but scroll under it: a strip of page color keeps the
         // text off the clock and icons. At rest it covers only the page's own background.

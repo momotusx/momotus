@@ -560,15 +560,6 @@ private fun AppNav(
                                 onRemove = { app.removal.remove(it, accessibility::actionWindow) },
                                 removing = app.removal.removing?.id,
                                 notice = notice,
-                                banner =
-                                    app.home.offline?.let {
-                                        {
-                                            OfflineBanner {
-                                                choose(Route.Library)
-                                                backStack.add(Route.Downloads)
-                                            }
-                                        }
-                                    },
                             )
                         }
                     }
@@ -892,6 +883,23 @@ private fun AppNav(
             insetSides = top !is Route.Player,
             onBack = if (top.hasBackLink) ({ systemBack?.onBackPressed() ?: pop() }) else null,
             profile = phoneProfile,
+            // Offline, every page but the player says so, one press from the downloads (plans/offline-downloads.md 3.5).
+            banner =
+                offlineBanner(marquee.offline, marquee.downloadKeeper.anyDone, top)?.let { toDownloads ->
+                    {
+                        OfflineBanner(
+                            onDownloads =
+                                if (toDownloads) {
+                                    {
+                                        choose(Route.Library)
+                                        backStack.add(Route.Downloads)
+                                    }
+                                } else {
+                                    null
+                                },
+                        )
+                    }
+                },
             content = content,
         )
     }
@@ -930,3 +938,17 @@ private fun AppState.firstRunStill(): FirstRunStill? {
     LaunchedEffect(this) { askStill() }
     return still
 }
+
+/**
+ * The shell's offline banner on page [top] (plans/offline-downloads.md 3.5): null for none (online, or the player),
+ * else whether it leads to the downloads (the profile has one, and this is not a Downloads page).
+ */
+internal fun offlineBanner(
+    offline: Boolean,
+    anyDone: Boolean,
+    top: Route,
+): Boolean? =
+    when {
+        !offline || top is Route.Player -> null
+        else -> anyDone && top != Route.Downloads && top !is Route.DownloadedSeries
+    }

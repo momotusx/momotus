@@ -19,6 +19,9 @@ import android.os.Build
 import android.os.IBinder
 import android.os.storage.StorageManager
 import androidx.annotation.RequiresApi
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
@@ -54,6 +57,10 @@ class DownloadKeeper(
     private var job: Pair<JobService, JobParameters>? = null
     private var allowed = true
 
+    /** This profile has a done download: offline, the banner offers the way to it (plans/offline-downloads.md 3.5). */
+    var anyDone: Boolean by mutableStateOf(false)
+        private set
+
     /** The failure notices up, so a profile change takes them down. */
     private val failures = mutableSetOf<Int>()
 
@@ -61,7 +68,12 @@ class DownloadKeeper(
         createChannel()
         session.scope.launch(Dispatchers.Main) {
             val view = session.downloads()
-            snapshotFlow { view.snapshot }.filterNotNull().collect { on(KeeperEvent.Facts(KeeperFacts.of(it))) }
+            snapshotFlow { view.snapshot }.filterNotNull().collect {
+                val facts = KeeperFacts.of(it)
+                // A locked view lists nothing: what the profile has stays as it last said.
+                if (!facts.locked) anyDone = facts.done.isNotEmpty()
+                on(KeeperEvent.Facts(facts))
+            }
         }
         session.scope.launch(Dispatchers.Main) {
             while (true) {
@@ -235,7 +247,7 @@ class DownloadKeeper(
             .setSmallIcon(R.drawable.ic_stat_download)
             .setContentTitle(now?.title ?: "Downloading")
             .setContentText(now?.text)
-            .setProgress(100, percent ?: 0, percent == null)
+            .setProgress(100, percent ?: 0, percent == null && now?.waiting != true)
             .setContentIntent(open())
             .setOngoing(true)
             .setSilent(true)

@@ -7,18 +7,26 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertHasClickAction
 import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.unit.dp
 import app.marquee.core.route.Route
 import app.marquee.design.Form
 import app.marquee.design.Marquee
@@ -111,5 +119,39 @@ class PhoneShellTest {
         val pill = page.copy(alpha = BACK_PILL_ALPHA).compositeOver(Color.White)
         val ratio = (key.luminance() + 0.05f) / (pill.luminance() + 0.05f)
         assertTrue("the key blue on the pill is $ratio to 1", ratio >= 4.5f)
+    }
+
+    /**
+     * Offline, the shell's banner sits at the top and the page starts under it: it covers nothing at rest
+     * (plans/offline-downloads.md 3.5).
+     */
+    @Test
+    fun `the banner takes its own height and the page starts under it`() {
+        compose.setContent {
+            MarqueeTheme(Form.Phone) {
+                PhoneShell(
+                    selected = Route.Home,
+                    showTabs = true,
+                    onSelect = {},
+                    banner = { Box(Modifier.fillMaxWidth().height(40.dp)) },
+                ) { Box(Modifier.fillMaxWidth().height(10.dp).testTag("page")) }
+            }
+        }
+        val banner = compose.onNodeWithTag("shell-banner").getUnclippedBoundsInRoot()
+        val page = compose.onNodeWithTag("page").getUnclippedBoundsInRoot()
+        assertEquals(40.dp, banner.bottom - banner.top)
+        assertEquals(banner.bottom, page.top)
+    }
+
+    @Test
+    fun `with no banner the page starts at the top`() {
+        compose.setContent {
+            MarqueeTheme(Form.Phone) {
+                PhoneShell(selected = Route.Home, showTabs = true, onSelect = {}) {
+                    Box(Modifier.fillMaxWidth().height(10.dp).testTag("page"))
+                }
+            }
+        }
+        assertEquals(0.dp, compose.onNodeWithTag("page").getUnclippedBoundsInRoot().top)
     }
 }

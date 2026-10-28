@@ -29,8 +29,21 @@ class DownloadKeeperLogicTest {
         unmetered: Boolean = false,
         locked: Boolean = false,
         running: Int = left,
+        profile: String = "owner",
     ) = KeeperEvent.Facts(
-        KeeperFacts(left, running, bytesDone, bytesTotal, "Severance", done, failed, needed, unmetered, locked = locked),
+        KeeperFacts(
+            left,
+            running,
+            bytesDone,
+            bytesTotal,
+            "Severance",
+            done,
+            failed,
+            needed,
+            unmetered,
+            locked = locked,
+            profile = profile,
+        ),
     )
 
     /** A locked session's view: counts and bytes, no names, nothing done or failed. */
@@ -39,7 +52,7 @@ class DownloadKeeperLogicTest {
         bytesDone: Long = 0,
         bytesTotal: Long = 0,
     ) = KeeperEvent.Facts(
-        KeeperFacts(left, left, bytesDone, bytesTotal, null, emptyMap(), emptyMap(), null, locked = true),
+        KeeperFacts(left, left, bytesDone, bytesTotal, null, emptyMap(), emptyMap(), null, locked = true, profile = "owner"),
     )
 
     private fun KeeperEffect.isProgress() = this is Progress
@@ -256,15 +269,34 @@ class DownloadKeeperLogicTest {
     fun `a profile switch clears the notices and raises nothing of either profile`() {
         val keeper = DownloadKeeperLogic()
         keeper.on(KeeperEvent.Visible(true))
-        assertEquals(emptyList(), keeper.on(KeeperEvent.Profile("owner")))
         val owner = mapOf("a" to "Sintel", "b" to "Severance S1:E4")
-        keeper.on(facts(0, failed = mapOf("a" to "Sintel")))
-        assertEquals(listOf<KeeperEffect>(Failed("b", "Severance S1:E4")), keeper.on(facts(0, failed = owner)))
-        assertEquals(emptyList(), keeper.on(KeeperEvent.Profile("owner")))
-        assertEquals(listOf<KeeperEffect>(ClearNotices), keeper.on(KeeperEvent.Profile("kid")))
         assertEquals(emptyList(), keeper.on(facts(0, failed = mapOf("a" to "Sintel"))))
-        assertEquals(listOf<KeeperEffect>(ClearNotices), keeper.on(KeeperEvent.Profile("owner")))
+        assertEquals(listOf<KeeperEffect>(Failed("b", "Severance S1:E4")), keeper.on(facts(0, failed = owner)))
         assertEquals(emptyList(), keeper.on(facts(0, failed = owner)))
+        assertEquals(
+            listOf<KeeperEffect>(ClearNotices),
+            keeper.on(facts(0, failed = mapOf("a" to "Sintel"), profile = "kid")),
+        )
+        assertEquals(listOf<KeeperEffect>(ClearNotices), keeper.on(facts(0, failed = owner)))
+        assertEquals(emptyList(), keeper.on(facts(0, failed = owner)))
+    }
+
+    /**
+     * The new profile's first snapshot carries failures the last profile never saw: they are its past, not news, so
+     * no "Couldn't download" goes up for them and the last profile's notices come down (code review r4 m5).
+     */
+    @Test
+    fun `the new profile's first snapshot raises none of its old failures`() {
+        val keeper = DownloadKeeperLogic()
+        keeper.on(KeeperEvent.Visible(true))
+        keeper.on(facts(0, profile = "kid"))
+        val owner = mapOf("a" to "Sintel", "b" to "Severance S1:E4")
+        assertEquals(listOf<KeeperEffect>(ClearNotices), keeper.on(facts(0, failed = owner)))
+        // A failure that comes after is news.
+        assertEquals(
+            listOf<KeeperEffect>(Failed("c", "Sintel")),
+            keeper.on(facts(0, failed = owner + ("c" to "Sintel"))),
+        )
     }
 
     /** A batch that begins after a switch counts from the new profile's done downloads, not the old one's. */
@@ -272,9 +304,7 @@ class DownloadKeeperLogicTest {
     fun `a batch after a switch counts only the new profile's own finishes`() {
         val keeper = DownloadKeeperLogic()
         keeper.on(KeeperEvent.Visible(true))
-        keeper.on(KeeperEvent.Profile("kid"))
-        keeper.on(facts(0))
-        keeper.on(KeeperEvent.Profile("owner"))
+        keeper.on(facts(0, profile = "kid"))
         val before = mapOf("a" to "Sintel", "b" to "Sintel")
         assertEquals(
             Progress("Downloading", "Severance · 0%", 0f),
@@ -301,7 +331,7 @@ class DownloadKeeperLogicTest {
         val keeper = DownloadKeeperLogic()
         keeper.on(KeeperEvent.Visible(true))
         assertEquals(
-            Progress("Waiting", "Severance", null),
+            Progress("Waiting", "Severance", null, waiting = true),
             keeper.on(facts(2, running = 0, unmetered = true))[1],
         )
         assertEquals(Progress("Downloading 1 of 2", "Severance", null), keeper.on(facts(2, running = 1)).last())
