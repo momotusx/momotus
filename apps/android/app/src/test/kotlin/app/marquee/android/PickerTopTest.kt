@@ -6,7 +6,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.getBoundsInRoot
-import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasScrollAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
@@ -107,9 +106,9 @@ class PickerTopTest {
     }
 
     @Test
-    fun `the picker's first line starts under the status bar and the back link`() {
+    fun `the picker's heading starts under the status bar and the back link`() {
         open { PickerScreen(gate, session, PickerMode.Switch, onBack = {}) }
-        assertStartsUnderTheLink("the first tile", hasContentDescription("Ana, current profile"))
+        assertStartsUnderTheLink("the heading", hasText("Who's watching?"))
     }
 
     @Test
