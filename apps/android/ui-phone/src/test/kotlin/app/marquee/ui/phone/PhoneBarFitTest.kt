@@ -127,6 +127,7 @@ class PhoneBarFitTest {
             val at = Density(base!!.density, text)
             val tab = tabs[0].getBoundsInRoot()
             val room = with(at) { (tab.right - tab.left - 4.dp).toPx() }
+
             fun widest(sp: Float) =
                 words.maxOf {
                     measurer!!
