@@ -965,7 +965,14 @@ fn apply_catalog(
         })
         .and_then(|response| match response {
             ResourceResponse::Metas { metas } => {
-                let metas: Vec<_> = metas.into_iter().take(ROW_TILES).collect();
+                // Each title once, where it first shows: a history catalog lists a
+                // series once per episode watched (Trakt History Series, DARK five times).
+                let mut seen = HashSet::new();
+                let metas: Vec<_> = metas
+                    .into_iter()
+                    .filter(|m| seen.insert(m.id.clone()))
+                    .take(ROW_TILES)
+                    .collect();
                 let covers = core.covers(metas.iter().map(|m| m.id.as_str()));
                 Ok(metas
                     .into_iter()

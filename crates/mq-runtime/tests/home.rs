@@ -1289,6 +1289,32 @@ async fn an_empty_answer_is_an_empty_row_and_an_error_object_fails_it() {
     ));
 }
 
+/// A history catalog lists a series once per episode watched (Trakt History
+/// Series showed DARK five times, 2026-10-28): the row shows each title
+/// once, where it first shows, and still fills from the titles after it.
+#[tokio::test]
+async fn a_title_a_catalog_repeats_shows_once_where_it_first_shows() {
+    const HISTORY: &str = r#"{"metas":[
+  {"id":"tt5753856","type":"series","name":"Dark"},
+  {"id":"tt5753856","type":"series","name":"Dark"},
+  {"id":"tt0903747","type":"series","name":"Breaking Bad"},
+  {"id":"tt5753856","type":"series","name":"Dark"},
+  {"id":"tt5753856","type":"series","name":"Dark"},
+  {"id":"tt5753856","type":"series","name":"Dark"},
+  {"id":"tt0944947","type":"series","name":"Game of Thrones"}
+]}"#;
+    let core = Core::temporary("p").unwrap();
+    let addon = named_catalog_addon("trakt", "History", Duration::ZERO, 200, HISTORY).await;
+    core.library()
+        .set_addons("p", &[addon], &core.hlc())
+        .unwrap();
+    let view = HomeView::open(&core);
+    let id = view.snapshot().rows[0].row_id.clone();
+    row_until(&view, &id, |r| r.state == RowState::Ready).await;
+    let ids: Vec<String> = row(&view, &id).tiles.into_iter().map(|t| t.id).collect();
+    assert_eq!(ids, ["tt5753856", "tt0903747", "tt0944947"]);
+}
+
 /// A catalog that gives its IMDb titles a landscape shape still shows each
 /// as RPDB's 2:3 cover with the ratings band, shape "poster", its own wide
 /// image kept as the fallback and its background untouched.
