@@ -144,6 +144,7 @@ private fun ButtonShell(
     busy: Boolean = false,
     spoken: String? = null,
     iconAfter: Boolean = false,
+    quiet: Boolean = false,
 ) {
     val tv = Marquee.form == Form.Tv
     var focused by remember { mutableStateOf(false) }
@@ -156,7 +157,7 @@ private fun ButtonShell(
     val shape = RoundedCornerShape(corner)
     // A white primary yields to a focused neighbour on TV (one white per screen).
     val buttons = LocalButtonFocus.current
-    val yields = tv && kind == ButtonKind.Primary && !focused && (buttons?.intValue ?: 0) > 0
+    val yields = kind == ButtonKind.Primary && (quiet || (tv && !focused && (buttons?.intValue ?: 0) > 0))
     ButtonFocused(focused && kind == ButtonKind.Secondary)
     val background =
         buttonFill(
@@ -211,7 +212,11 @@ private fun ButtonShell(
     }
 }
 
-/** The one primary action of a screen: the white pill. */
+/**
+ * The one primary action of a screen: the white pill.
+ * @param quiet another action holds the screen's white (a question's safe button): drawn as a secondary, on the same
+ * node, so a focus held here stays.
+ */
 @Composable
 fun PrimaryButton(
     label: String,
@@ -222,7 +227,20 @@ fun PrimaryButton(
     enabled: Boolean = true,
     focusRequester: FocusRequester? = null,
     onFocusChange: ((Boolean) -> Unit)? = null,
-) = ButtonShell(label, onClick, modifier, icon, ButtonKind.Primary, big, enabled, false, focusRequester, onFocusChange)
+    quiet: Boolean = false,
+) = ButtonShell(
+    label,
+    onClick,
+    modifier,
+    icon,
+    ButtonKind.Primary,
+    big,
+    enabled,
+    false,
+    focusRequester,
+    onFocusChange,
+    quiet = quiet,
+)
 
 /**
  * @param selected a toggle that is on (Watched, In Library): drawn in the selected grey.

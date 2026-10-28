@@ -899,9 +899,20 @@ fun EditProfileScreen(
     val dirty = name.trim() != p?.name.orEmpty() || glyph != stored.glyph
     var askDiscard by remember { mutableStateOf(false) }
     val keepEditing = remember { FocusRequester() }
+    val saveButton = remember { FocusRequester() }
+    // Closing the question moves focus to Save first: with the focused Keep editing gone, Android would hand it to the
+    // name field and open its keyboard.
+    var closingDiscard by remember { mutableStateOf(false) }
     var saving by remember { mutableStateOf(false) }
     // The PIN of someone else, or one this version cannot read, goes after a question: it reaches every device.
     var askPin by remember { mutableStateOf(false) }
+    // The PIN question and its trigger swap through a frame, as the delete question does, so focus never drops.
+    var pinSwapping by remember { mutableStateOf(false) }
+    val askKeep = remember { FocusRequester() }
+    val swapPin = { ask: Boolean ->
+        askPin = ask
+        pinSwapping = true
+    }
     var said by remember { mutableStateOf<Pair<String, Status>?>(null) }
     var flow by remember { mutableStateOf<PinFlow?>(null) }
     // The stored PIN came from a newer version: it can only be removed (the core lets its owner do
@@ -943,6 +954,13 @@ fun EditProfileScreen(
         // In the page's scope: clearing the flag restarts this effect, and a touch may interrupt it.
         if (confirmDelete) scope.launch { runCatching { deleteView.bringIntoView() } }
         swapping = false
+    }
+
+    LaunchedEffect(askPin, pinSwapping) {
+        if (!pinSwapping) return@LaunchedEffect
+        withFrameNanos { }
+        runCatching { if (askPin) askKeep.requestFocus() else removeUnreadable.requestFocus() }
+        pinSwapping = false
     }
 
     // The page leaves once: a delete from here also removes the profile from the snapshot.
@@ -1017,13 +1035,22 @@ fun EditProfileScreen(
     }
 
     val list = rememberLazyListState()
-    BackHandler(dirty && !left) { askDiscard = !askDiscard }
+    BackHandler(dirty && !left) { if (askDiscard) closingDiscard = true else askDiscard = true }
     LaunchedEffect(askDiscard) {
         if (!askDiscard) return@LaunchedEffect
         list.animateScrollToItem(0)
         withFrameNanos { }
         runCatching { keepEditing.requestFocus() }
     }
+    LaunchedEffect(closingDiscard) {
+        if (!closingDiscard) return@LaunchedEffect
+        withFrameNanos { }
+        runCatching { saveButton.requestFocus() }
+        askDiscard = false
+        closingDiscard = false
+    }
+    // While a question is open its safe button is the screen's one white: Save draws as a secondary.
+    val asking = askDiscard || askPin || confirmDelete
 
     LazyColumn(
         Modifier.fillMaxSize().focusRestorer(),
@@ -1051,7 +1078,7 @@ fun EditProfileScreen(
                     MqText(if (isNew) "Discard this profile?" else "Discard your changes?", role = TextRole.Body)
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(Marquee.space.xs)) {
                         // Keep is the primary, the destructive word the plain secondary (design/DECISION.md).
-                        PrimaryButton("Keep editing", { askDiscard = false }, focusRequester = keepEditing)
+                        PrimaryButton("Keep editing", { closingDiscard = true }, focusRequester = keepEditing)
                         SecondaryButton("Discard", { leave() })
                     }
                 }
@@ -1088,7 +1115,14 @@ fun EditProfileScreen(
                         }) { AvatarArt(g, color, ProfileCopy.initial(name.ifBlank { "?" }), pick) }
                     }
                 }
-                PrimaryButton(if (isNew) "Add profile" else "Save", ::save, icon = Icons.Check, enabled = !saving)
+                PrimaryButton(
+                    if (isNew) "Add profile" else "Save",
+                    ::save,
+                    icon = Icons.Check,
+                    enabled = !saving,
+                    focusRequester = saveButton,
+                    quiet = asking,
+                )
                 said?.let { (text, tone) -> StatusWord(text, tone) }
             }
         }
@@ -1106,11 +1140,15 @@ fun EditProfileScreen(
 
                         mine && unreadable -> {
                             Note(ProfileCopy.problem("pinUnreadable", ""), side = 0.dp)
-                            if (askPin) {
+                            if (!askPin || pinSwapping) {
+                                SecondaryButton("Remove PIN", { swapPin(true) }, focusRequester = removeUnreadable)
+                            }
+                            if (askPin || pinSwapping) {
                                 RemovePinAsk(
                                     "Remove this PIN? The profile opens for anyone until a new one is set.",
+                                    askKeep,
                                     onRemove = {
-                                        askPin = false
+                                        swapPin(false)
                                         scope.launch {
                                             said =
                                                 try {
@@ -1125,16 +1163,8 @@ fun EditProfileScreen(
                                                 }
                                         }
                                     },
-                                    onKeep = {
-                                        askPin = false
-                                        scope.launch {
-                                            withFrameNanos { }
-                                            runCatching { removeUnreadable.requestFocus() }
-                                        }
-                                    },
+                                    onKeep = { swapPin(false) },
                                 )
-                            } else {
-                                SecondaryButton("Remove PIN", { askPin = true }, focusRequester = removeUnreadable)
                             }
                         }
 
@@ -1150,11 +1180,19 @@ fun EditProfileScreen(
                         }
 
                         owner && p.hasPin -> {
-                            if (askPin) {
+                            if (!askPin || pinSwapping) {
+                                SecondaryButton(
+                                    "Remove ${p.name}'s PIN",
+                                    { swapPin(true) },
+                                    focusRequester = removeUnreadable,
+                                )
+                            }
+                            if (askPin || pinSwapping) {
                                 RemovePinAsk(
                                     "Remove ${p.name}'s PIN? Only ${p.name} can set a new one, from their own profile.",
+                                    askKeep,
                                     onRemove = {
-                                        askPin = false
+                                        swapPin(false)
                                         scope.launch {
                                             said =
                                                 try {
@@ -1168,19 +1206,7 @@ fun EditProfileScreen(
                                                 }
                                         }
                                     },
-                                    onKeep = {
-                                        askPin = false
-                                        scope.launch {
-                                            withFrameNanos { }
-                                            runCatching { removeUnreadable.requestFocus() }
-                                        }
-                                    },
-                                )
-                            } else {
-                                SecondaryButton(
-                                    "Remove ${p.name}'s PIN",
-                                    { askPin = true },
-                                    focusRequester = removeUnreadable,
+                                    onKeep = { swapPin(false) },
                                 )
                             }
                         }
@@ -1249,21 +1275,17 @@ fun EditProfileScreen(
 }
 
 /**
- * The question before a PIN goes without being typed: Keep is the primary and gets the focus, the destructive word
- * the plain secondary (design/DECISION.md, Destructive).
+ * The question before a PIN goes without being typed: Keep is the primary and gets the focus (the page asks for it
+ * through [keep]), the destructive word the plain secondary (design/DECISION.md, Destructive).
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun RemovePinAsk(
     question: String,
+    keep: FocusRequester,
     onRemove: () -> Unit,
     onKeep: () -> Unit,
 ) {
-    val keep = remember { FocusRequester() }
-    LaunchedEffect(Unit) {
-        withFrameNanos { }
-        runCatching { keep.requestFocus() }
-    }
     Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.s)) {
         MqText(question, role = TextRole.Body)
         FlowRow(horizontalArrangement = Arrangement.spacedBy(Marquee.space.xs)) {

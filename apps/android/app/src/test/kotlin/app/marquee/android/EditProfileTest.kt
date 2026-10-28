@@ -8,6 +8,7 @@ import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsFocused
+import androidx.compose.ui.test.assertIsNotFocused
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.junit4.StateRestorationTester
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
@@ -35,6 +36,7 @@ import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 import java.util.concurrent.CopyOnWriteArrayList
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 
 /**
  * The profile editor (design/DECISION.md, Profiles; plans/2026-10-28-ui-ux-audit.md, S8): one save at a time, a draft
@@ -169,6 +171,31 @@ class EditProfileTest {
         back()
         compose.waitForIdle()
         compose.onAllNodesWithText("Discard your changes?").assertCountEquals(0)
+        // No guard stands: a Back now goes to the system, which leaves the page.
+        assertFalse(compose.activity.onBackPressedDispatcher.hasEnabledCallbacks())
+    }
+
+    @Test
+    fun `Keep editing sends focus to Save, not to the name field and its keyboard`() {
+        edit("p1")
+        name().performTextInput("Ana Maria")
+        back()
+        compose.waitForIdle()
+        compose.onNodeWithText("Keep editing").assertIsFocused().performClick()
+        compose.waitForIdle()
+        compose.onAllNodesWithText("Discard your changes?").assertCountEquals(0)
+        compose.onNodeWithText("Save").assertIsFocused()
+        name().assertIsNotFocused()
+    }
+
+    @Test
+    fun `Keep on a PIN question gives focus back to the button that asked`() {
+        edit("p2")
+        compose.onNodeWithText("Remove Bo's PIN").performClick()
+        compose.onNodeWithText("Keep").assertIsFocused().performClick()
+        compose.waitForIdle()
+        compose.onAllNodesWithText("Keep").assertCountEquals(0)
+        compose.onNodeWithText("Remove Bo's PIN").assertIsFocused()
     }
 
     @Test
