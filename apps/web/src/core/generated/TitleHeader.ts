@@ -50,7 +50,8 @@ watched: boolean,
  * render, so a control that depends on it (TV's Remove from Continue
  * Watching) is drawn at once, never late.
  */
-continuing: boolean, };
+continuing: boolean, 
+/**
  * A movie's download on this device (plans/offline-downloads.md 3.1).
  */
 download: DownloadBadge | null, 
