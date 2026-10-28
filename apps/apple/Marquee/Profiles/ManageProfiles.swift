@@ -154,9 +154,9 @@ struct EditProfile: View {
         .onChange(of: confirmDelete) { _, open in
             if open { withAnimation(Theme.Motion.panel) { proxy.scrollTo("delete", anchor: .center) } }
         }
-        // The dialogs below draw in the key blue, not the root's white tint (DECISION, Confirmation).
-        .tint(Theme.Palette.key)
         #if !os(tvOS)
+        // The dialogs below draw in the key blue, not the root's white tint (DECISION, Confirmation); not on TV.
+        .tint(Theme.Palette.key)
         // Edits are not lost to a stray Back: the system back (and its swipe) gives way to one that asks.
         #if os(iOS)
         // The Mac's is hidden in `BackOnlyWhenShown`, which reads `leaveAsk`.
