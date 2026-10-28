@@ -16,18 +16,23 @@ enum AppTab: String, CaseIterable, Hashable {
         }
     }
 
-    /// Search and Settings sit after the divider in the top navigation.
-    var isTool: Bool { self == .search || self == .settings }
+    /// Search sits after the divider in the top navigation.
+    var isTool: Bool { self == .search }
 
-    /// The places the navigation shows. The iPhone's bar has five: Calendar is a row at the top
-    /// of Library there (D6).
+    /// The places the navigation shows, on every bar. Settings has none: the profile's menu at the bar's far right
+    /// opens it (plans/nav-profile.md). The iPhone's bar has four, then the profile: Calendar is a row at the top of
+    /// Library there (D6).
     static var bar: [AppTab] {
         #if os(iOS)
-        allCases.filter { $0 != .calendar }
+        allCases.filter { $0 != .calendar && $0 != .settings }
         #else
-        allCases
+        allCases.filter { $0 != .settings }
         #endif
     }
+
+    /// Where TV focus enters the top bar for this place (Up from its page, Menu, a place changed from elsewhere): its
+    /// link, or the profile at the bar's end for a place with no link (Settings).
+    var barFocus: AppTab? { AppTab.bar.contains(self) ? self : nil }
 
     /// The place the navigation lights for this one: on the iPhone, Library while Calendar is open.
     var lit: AppTab {

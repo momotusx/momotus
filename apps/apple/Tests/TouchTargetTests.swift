@@ -29,9 +29,18 @@ private func source(_ path: String) throws -> String {
     #expect(season.contains(".frame(minHeight: Theme.minTarget)"), "the season pull-down lost the minimum")
 }
 
-@Test func theMacToolbarGivesSearchAndTheProfileButtonAnItemEach() throws {
-    // Read from the sources: a toolbar is not laid out in a hosted view.
-    let tools = try body(of: "private struct TopTools: ToolbarContent", in: source("App/RootView.swift"))
-    #expect(!tools.contains("HStack"), "Search and the profile button share one toolbar item again")
-    #expect(tools.components(separatedBy: "ToolbarItem(placement: .primaryAction) { profile }").count - 1 == 2, "the profile button needs its own item on both macOS paths")
+@Test func theMacToolbarHoldsSearchAloneAndTheOrnamentEndsWithTheProfile() throws {
+    // Read from the sources: a toolbar is not laid out in a hosted view. The profile took Settings' place in the
+    // ornament (plans/nav-profile.md), so it shows once.
+    let root = try source("App/RootView.swift")
+    let tools = try body(of: "private struct TopTools: ToolbarContent", in: root)
+    #expect(tools.components(separatedBy: "ToolbarItem(placement: .primaryAction) { search }").count - 1 == 2, "Search keeps its item on both macOS paths")
+    #expect(!tools.contains("Profile"), "the profile is back in the toolbar")
+    #expect(root.contains("ProfileMenu(onSettings: { select(.settings) }, onPin: pin) { OrnamentProfile("), "the ornament lost the profile")
+}
+
+@Test func thePhonesProfileTabKeepsTheMinimum() throws {
+    let tab = try body(of: "private func profile(iconsOnly: Bool) -> some View", in: source("App/RootView.swift"))
+    #expect(tab.contains(".frame(minWidth: Theme.minTarget, minHeight: Theme.minTarget)"), "the profile tab lost the minimum")
+    #expect(tab.contains(".contentShape(Rectangle())"), "the frame alone does not widen the tap area")
 }

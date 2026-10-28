@@ -121,10 +121,9 @@ struct MainShell: View {
     @State private var homeTop = 0
     /// A genre or a name a title page's chip asked Discover or Search to open.
     @State private var links = LinkRequests()
-    #if !os(iOS)
-    /// The profile picker, from the avatar at the end of the pill.
+    /// The profile picker over the places: the profile's menu opens it on a profile's keypad (`pinFor`).
     @State private var showProfiles = false
-    #endif
+    @State private var pinFor: ProfileInfo?
     #if os(tvOS)
     /// Places whose root page has another page over it: Back pops that first.
     @State private var covered: Set<AppTab> = []
@@ -221,7 +220,7 @@ struct MainShell: View {
         .safeAreaInset(edge: .bottom, spacing: 0) {
             // Off while the keyboard is up, as a tab bar sits behind it.
             if !immersion.active && !typing {
-                TabBar(selection: tab, select: { select($0) }, bottomInset: bottomInset)
+                TabBar(selection: tab, select: { select($0) }, pin: pin, signInAnother: signInAnother, bottomInset: bottomInset)
             }
         }
         // The screen's own bottom inset (the home indicator), read outside the bar's inset.
@@ -257,6 +256,15 @@ struct MainShell: View {
             .environment(wipe)
             .environment(\.metrics, metrics)
         }
+        // The profile picker on a keypad the profile's menu chose; Done or Cancel leaves it as it was.
+        .modifier(FullScreen(isPresented: $showProfiles) {
+            NavigationStack {
+                ProfilePicker(mode: .push, core: core, pinFor: pinFor)
+                    .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Done") { showProfiles = false } } }
+            }
+            .environment(profiles)
+            .environment(\.metrics, metrics)
+        })
         // Never on a kids profile: Account and approving are not its own.
         .onChange(of: AppRouter.shared.scanRequests) { if profiles.snapshot?.current?.kids != true { showScanner = true } }
         // A phone camera on a TV's code opens /pair here: the scanner, never the code in the link (D6).
@@ -269,15 +277,18 @@ struct MainShell: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(Theme.Palette.bg)
             // The owner's variant 4: the places in a glass ornament at the window's foot; pages end above it.
-            .placeOrnament(tab, strong: ornamentStrong, shown: !immersion.active) { select($0) }
+            .placeOrnament(tab, strong: ornamentStrong, shown: !immersion.active, select: { select($0) }) {
+                ProfileMenu(onSettings: { select(.settings) }, onPin: pin) { OrnamentProfile(profile: $0, lit: tab == .settings) }
+                    .help("Profiles and Settings")
+            }
             // Content under the traffic lights and the top buttons gets a soft blurred edge once it scrolls there.
             .overlay(alignment: .top) { ScrollTopEdge().opacity(ornamentStrong && !immersion.active ? 1 : 0).animation(Theme.Motion.panel, value: ornamentStrong) }
-            .toolbar { TopTools(find: find, profiles: { showProfiles = true }) }
+            .toolbar { TopTools(find: find) }
             // No strip: the window's toolbar draws nothing of its own, and Home's art runs under it.
             .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
             .modifier(FullScreen(isPresented: $showProfiles, closesOnBack: true) {
                 NavigationStack {
-                    ProfilePicker(mode: .push, core: core)
+                    ProfilePicker(mode: .push, core: core, pinFor: pinFor)
                         // A sheet: Escape or Done leaves it as it was.
                         .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Done") { showProfiles = false } } }
                 }
@@ -292,7 +303,7 @@ struct MainShell: View {
             // Top-level places only, as on Android: a pushed page has no pill to wander into.
             if !immersion.active && !pageOver {
                 let away = TVTopBar.hidden(atHome: tab == .home, scrolledDown: homeScrolled)
-                TopNav(selection: tab, select: { select($0) }, enter: { resetFocus(in: placesScope) }, profiles: { showProfiles = true }, focused: $navFocus, avatar: $avatarFocus).padding(.bottom, Theme.Space.m)
+                TopNav(selection: tab, select: { select($0) }, enter: { resetFocus(in: placesScope) }, pin: pin, focused: $navFocus, avatar: $avatarFocus).padding(.bottom, Theme.Space.m)
                     .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { navHeight = $0 }
                     // Kept in the layout, so the page under it never jumps.
                     .offset(y: away ? -navHeight : 0)
@@ -302,7 +313,7 @@ struct MainShell: View {
             }
         }
         .modifier(FullScreen(isPresented: $showProfiles) {
-            NavigationStack { ProfilePicker(mode: .push, core: core) }
+            NavigationStack { ProfilePicker(mode: .push, core: core, pinFor: pinFor) }
                 .environment(profiles)
                 .environment(\.metrics, metrics)
         })
@@ -323,13 +334,27 @@ struct MainShell: View {
         // The player covering the places leaves no bar to go to: Menu there goes on as before.
         let inBar = navFocus != nil || avatarFocus || immersion.active
         switch TVBack.step(atHome: tab == .home, scrolledDown: homeScrolled, inBar: inBar) {
-        case .toBar: return { navFocus = tab }
+        case .toBar: return { if let link = tab.barFocus { navFocus = link } else { avatarFocus = true } }
         case .goHome: return { select(.home) }
         case .toTop: return { homeTop += 1 }
         case .exit: return nil
         }
     }
     #endif
+
+    #if os(iOS)
+    /// The profile menu's Sign in another device (plans/accounts.md 4.2): a phone or tablet in an account, never a
+    /// kids profile.
+    private var signInAnother: (() -> Void)? {
+        sync.joined && profiles.snapshot?.current?.kids != true ? { AppRouter.shared.requestScan() } : nil
+    }
+    #endif
+
+    /// The profile's menu chose a profile with a PIN: the picker opens over the places on its keypad.
+    private func pin(_ profile: ProfileInfo) {
+        pinFor = profile
+        showProfiles = true
+    }
 
     private func select(_ item: AppTab, link: Bool = false) {
         if item.opensAtRoot(from: tab, link: link) { popToRoot(item) }
@@ -395,7 +420,7 @@ struct MainShell: View {
         case .home:
             NavigationStack(path: $homePath) {
                 HomeScreen(model: home, topRequest: homeTop, scrolled: $homeScrolled)
-                    .environment(\.heroCovered, immersion.active || !homePath.isEmpty)
+                    .environment(\.heroCovered, immersion.active || !homePath.isEmpty || showProfiles)
                     .root(of: .home, covered: coveredBinding)
                     .withTitleRoutes(core: core)
                     #if os(iOS)
@@ -558,11 +583,15 @@ private struct Starting: View {
 
 #if os(iOS)
 /// The iPhone's floating glass capsule at the bottom (apple-tv.md, Frame and navigation): 62 pt
-/// tall, 21 pt from the sides and the bottom, five places with their icons over their words, the
-/// current one in the key blue on a darker inner capsule.
+/// tall, 21 pt from the sides and the bottom, four places with their icons over their words, then the profile
+/// (plans/nav-profile.md), the current one in the key blue on a darker inner capsule.
 private struct TabBar: View {
     let selection: AppTab
     let select: (AppTab) -> Void
+    /// The profile's menu chose a profile with a PIN.
+    let pin: (ProfileInfo) -> Void
+    /// The profile menu's Sign in another device, when this phone can approve.
+    let signInAnother: (() -> Void)?
     let bottomInset: CGFloat
     @Environment(\.dynamicTypeSize) private var type
     @State private var width = CGFloat.infinity
@@ -596,6 +625,7 @@ private struct TabBar: View {
                 // A long press at the accessibility sizes shows the name large, as the system bar does.
                 .accessibilityShowsLargeContentViewer { Label(item.title, glyph: item.symbol) }
             }
+            profile(iconsOnly: iconsOnly)
         }
         .padding(4)
         .frame(maxWidth: 560)
@@ -622,57 +652,76 @@ private struct TabBar: View {
         .padding(.bottom, max(0, -TabBarMetrics.drop(bottomInset: bottomInset)))
         .offset(y: max(0, TabBarMetrics.drop(bottomInset: bottomInset)))
     }
+
+    /// The last tab: the profile's avatar over "Profile", lit while Settings shows, opening the profile's menu.
+    private func profile(iconsOnly: Bool) -> some View {
+        let on = selection == .settings
+        return ProfileMenu(onSettings: { select(.settings) }, onPin: pin, signInAnother: signInAnother) { me in
+            VStack(spacing: 1) {
+                BarAvatar(profile: me, size: 26, lit: on)
+                if !iconsOnly {
+                    Text("Profile")
+                        .textFont(11, weight: .semibold, relativeTo: .caption2)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                }
+            }
+            .foregroundStyle(on ? Theme.Palette.key : .white)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .frame(minWidth: Theme.minTarget, minHeight: Theme.minTarget)
+            .background {
+                if on { Capsule().fill(Color(white: 0.04).opacity(0.92)) }
+            }
+            .contentShape(Rectangle())
+            .accessibilityAddTraits(on ? .isSelected : [])
+            .accessibilityShowsLargeContentViewer { Text("Profile: \(me.name)") }
+        }
+    }
 }
 #endif
 
 #if os(macOS)
-/// The window toolbar's only items, top right over the art: Search as a round glass button, then the profile.
+/// The window toolbar's only item, top right over the art: Search as a round glass button. The profile ends the
+/// ornament at the window's foot, in Settings' old place (plans/nav-profile.md).
 private struct TopTools: ToolbarContent {
     let find: () -> Void
-    let profiles: () -> Void
 
     var body: some ToolbarContent {
         // An empty centre: without one the toolbar packs its actions at the left, beside the traffic lights.
         if #available(macOS 26, *) {
             ToolbarItem(placement: .principal) { Color.clear.frame(width: 1, height: 1) }.sharedBackgroundVisibility(.hidden)
-            // One item each.
             ToolbarItem(placement: .primaryAction) { search }.sharedBackgroundVisibility(.hidden)
-            ToolbarItem(placement: .primaryAction) { profile }.sharedBackgroundVisibility(.hidden)
         } else {
             ToolbarItem(placement: .principal) { Color.clear.frame(width: 1, height: 1) }
             ToolbarItem(placement: .primaryAction) { search }
-            ToolbarItem(placement: .primaryAction) { profile }
         }
     }
 
-    /// The window's edge to the profile button's: the page's gutter, as tv.apple.com and the Apple TV app keep
-    /// their top right on the content's column (the owner, 2026-10-28: flush in the corner). The toolbar's own margin
-    /// makes up the last 4.5 pt (measured in the window on macOS 27).
+    /// The window's edge to the last button's (Search, now the profile is in the ornament): the page's gutter, as
+    /// tv.apple.com and the Apple TV app keep their top right on the content's column (the owner, 2026-10-28: flush in the
+    /// corner). The toolbar's own margin makes up the last 4.5 pt (measured in the window on macOS 27).
     static let edge = Metrics.regular.gutter - 4.5
-
-    private var profile: some View {
-        ProfileButton(size: 32, action: profiles).padding(.trailing, Self.edge)
-    }
 
     private var search: some View {
         Button(action: find) { Label("Search", glyph: "search", size: 17) }
             .buttonStyle(GlassCircleStyle())
             .help("Search")
+            .padding(.trailing, Self.edge)
     }
 }
 #endif
 
 #if os(tvOS)
 /// TV's floating glass pill: the wordmark, the four places, a divider, then
-/// Search and Settings with their icons. The current place sits in a
-/// lighter inner pill. tvOS keeps it as it is (D9).
+/// Search with its icon and the profile, whose menu opens Settings
+/// (plans/nav-profile.md). The current place sits in a lighter inner pill.
 private struct TopNav: View {
     let selection: AppTab
     let select: (AppTab) -> Void
     /// Select on the shown place's link: focus goes into the place, as the tvOS tab bar does.
     let enter: () -> Void
-    /// The active profile's avatar at the end, opening the picker.
-    var profiles: (() -> Void)?
+    /// The profile's menu chose a profile with a PIN.
+    let pin: (ProfileInfo) -> Void
     /// Which link has focus: Up from a page enters on the current place, not the nearest link. A link that
     /// keeps it for the settle shows its place, as the tvOS tab bar does; focus stays on it.
     var focused: FocusState<AppTab?>.Binding
@@ -684,17 +733,24 @@ private struct TopNav: View {
             BrandMark(size: Self.mark * 1.5)
                 .padding(.leading, Self.mark * 0.6)
                 .padding(.trailing, Self.mark * 0.4)
-            ForEach(AppTab.allCases.filter { !$0.isTool }, id: \.self) { link($0) }
+            ForEach(AppTab.bar.filter { !$0.isTool }, id: \.self) { link($0) }
             Capsule().fill(Theme.Palette.lineStrong).frame(width: 1.5, height: Self.mark).padding(.horizontal, 8)
-            ForEach(AppTab.allCases.filter(\.isTool), id: \.self) { link($0) }
-            if let profiles { ProfileButton(size: Self.mark + 8, action: profiles).focused(avatar).padding(.leading, 6) }
+            ForEach(AppTab.bar.filter(\.isTool), id: \.self) { link($0) }
+            // Settings has no link: the profile stands for it, lit while it shows.
+            ProfileMenu(onSettings: { selection == .settings ? enter() : select(.settings) }, onPin: pin) {
+                BarAvatar(profile: $0, size: Self.mark + 8)
+            }
+            .buttonStyle(NavLinkStyle(on: selection == .settings))
+            .focused(avatar)
+            .padding(.leading, 6)
         }
         .padding(Self.inset)
         .fixedSize()
         .glass(Capsule(), shadow: true)
         #if os(tvOS)
         .focusSection()
-        .defaultFocus(focused, selection, priority: .userInitiated)
+        .defaultFocus(focused, selection.barFocus, priority: .userInitiated)
+        .defaultFocus(avatar, selection.barFocus == nil, priority: .userInitiated)
         // 250 ms, the androidx.tv TabRow's debounce: a sweep across the bar opens no place on the way.
         .task(id: focused.wrappedValue) {
             guard let item = focused.wrappedValue, item != selection else { return }
@@ -705,7 +761,8 @@ private struct TopNav: View {
         // The place changed from elsewhere while focus sat on another link (Menu on the bar went Home): focus follows
         // it, so the settle never takes the viewer back. The bar's own switch finds focus on that link already.
         .onChange(of: selection) { _, now in
-            if let item = focused.wrappedValue, item != now { focused.wrappedValue = now }
+            guard let item = focused.wrappedValue, item != now else { return }
+            if let link = now.barFocus { focused.wrappedValue = link } else { avatar.wrappedValue = true }
         }
         #endif
     }

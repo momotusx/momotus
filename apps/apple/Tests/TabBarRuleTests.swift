@@ -112,3 +112,16 @@ import Testing
     #expect(SheetBack.close({}).isInSheet)
     #expect(SheetBack.off.isInSheet)
 }
+
+// Settings has no bar item on any platform: the profile's menu at the bar's far right opens it (plans/nav-profile.md).
+@Test func noBarHoldsSettings() {
+    #expect(!AppTab.bar.contains(.settings))
+    #expect(AppTab.bar.filter(\.isTool) == [.search])
+    // The Go menu keeps every place, Settings with its key.
+    #expect(AppTab.allCases.contains(.settings))
+}
+
+@Test func tvFocusEntersTheBarOnTheProfileForSettings() {
+    #expect(AppTab.settings.barFocus == nil)
+    for tab in AppTab.bar { #expect(tab.barFocus == tab) }
+}

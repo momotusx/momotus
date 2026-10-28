@@ -18,7 +18,6 @@ struct HomeScreen: View {
     @State private var onboarding = false
     /// The account card's Sign in and second-way-in nudge.
     @State private var showAccount = false
-    @State private var showProfiles = false
     /// Rows have scrolled under the status bar.
     @State private var underBar = false
     @State private var position = ScrollPosition(edge: .top)
@@ -38,15 +37,8 @@ struct HomeScreen: View {
             LazyVStack(alignment: .leading, spacing: metrics.rowSpacing) {
                 // Without catalogs, or with none answering, there is no art to show.
                 if !model.needsSetup && !model.allFailed {
+                    // The profile is the bar's (plans/nav-profile.md): the tab bar's last tab, the Mac's toolbar.
                     hero
-                        // Phone and tablet: the profile button, with Sign in another device
-                        // in its menu (4.2), sits at the header's top right.
-                        .overlay(alignment: .topTrailing) {
-                            if showsProfileButton {
-                                ProfileButton(signInAnother: signInAnother) { showProfiles = true }
-                                    .padding(.trailing, 14).padding(.top, 5)
-                            }
-                        }
                         #if !os(tvOS)
                         // The trailer's sound switch at the hero's bottom trailing corner, level with the dots, on
                         // every screen that plays trailers (the owner, 2026-10-26; plans/appletv-polish.md 18). From
@@ -116,7 +108,6 @@ struct HomeScreen: View {
             for row in model.rows { if case .failed = row.state { model.retry(row) } }
         }
         #endif
-        .navigationDestination(isPresented: $showProfiles) { ProfilePicker(mode: .push, core: core) }
         .navigationDestination(isPresented: $showAccount) { SyncScreen() }
         .navigationDestination(item: $playing) { route in
             PlayerScreen(route: route, versions: heroVersions, core: core)
@@ -145,25 +136,6 @@ struct HomeScreen: View {
             .environment(profiles)
             .environment(core)
         })
-    }
-
-    /// iPhone and iPad; a Mac and a TV carry it in their navigation.
-    private var showsProfileButton: Bool {
-        #if os(iOS)
-        true
-        #else
-        !metrics.wide
-        #endif
-    }
-
-    /// The profile menu's Sign in another device: a phone or tablet in an account,
-    /// never a kids profile (a Mac approves nothing).
-    private var signInAnother: (() -> Void)? {
-        #if os(iOS)
-        sync.joined && profiles.snapshot?.current?.kids != true ? { AppRouter.shared.requestScan() } : nil
-        #else
-        nil
-        #endif
     }
 
     @ViewBuilder private var content: some View {
@@ -214,9 +186,9 @@ struct HomeScreen: View {
             HeroView(hero: nil, height: heroHeight, play: playHero)
         } else {
             HeroCarousel(heroes: model.header.heroes, height: heroHeight, play: playHero)
-                // Home's own pages over the hero cover it too: profiles, the account, the hero's Versions and
+                // Home's own pages over the hero cover it too: the account, the hero's Versions and
                 // player, the recommended addons, first run (review r2, R2-4).
-                .environment(\.heroCovered, covered || showProfiles || showAccount || showHeroVersions || playing != nil || reviewing || onboarding)
+                .environment(\.heroCovered, covered || showAccount || showHeroVersions || playing != nil || reviewing || onboarding)
         }
         #endif
     }

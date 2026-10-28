@@ -83,6 +83,16 @@ enum ProfileRules {
         return formatAvatar(glyph: "letter", color: color)
     }
 
+    /// What choosing a profile does, from a picker tile or the bar's profile menu (plans/nav-profile.md): nothing for
+    /// one still syncing, close for the current one (unlocked), its keypad for one with a PIN, else the switch.
+    enum Choice: Equatable { case none, close, pin, switchTo }
+
+    static func choice(_ profile: ProfileInfo, in snapshot: ProfilesSnapshot) -> Choice {
+        if profile.syncing { return .none }
+        if profile.id == snapshot.active && !snapshot.locked { return .close }
+        return profile.hasPin ? .pin : .switchTo
+    }
+
     /// At a cold start: the picker when the session is locked or more than
     /// one profile exists, else Home.
     static func startsOnPicker(_ snapshot: ProfilesSnapshot) -> Bool {

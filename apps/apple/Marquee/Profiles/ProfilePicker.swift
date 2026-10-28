@@ -12,11 +12,18 @@ struct ProfilePicker: View {
 
     let mode: Mode
     let core: CoreClient
+    /// The profile with a PIN the bar's menu chose: the picker opens on its keypad (plans/nav-profile.md).
+    let pinFor: ProfileInfo?
     @Environment(ProfileSession.self) private var profiles
     @Environment(\.dismiss) private var dismiss
     @Environment(\.metrics) private var metrics
     /// The profile whose PIN is asked.
     @State private var keypad: ProfileInfo?
+
+    init(mode: Mode, core: CoreClient, pinFor: ProfileInfo? = nil) {
+        (self.mode, self.core, self.pinFor) = (mode, core, pinFor)
+        _keypad = State(initialValue: pinFor)
+    }
     @State private var said: String?
     @State private var showManage = false
     @State private var showAdd = false
@@ -176,9 +183,12 @@ struct ProfilePicker: View {
     }
 
     private func pick(_ profile: ProfileInfo, _ snapshot: ProfilesSnapshot) {
-        guard !profile.syncing else { return }
+        let choice = ProfileRules.choice(profile, in: snapshot)
+        guard choice != .none else { return }
         said = nil
-        if profile.id == snapshot.active && !snapshot.locked {
+        switch choice {
+        case .none: break
+        case .close:
             switch mode {
             case .push: dismiss()
             case .gate:
@@ -186,10 +196,8 @@ struct ProfilePicker: View {
                 if profiles.switching != nil { profiles.cancelSwitch() }
                 profiles.markChosen()
             }
-        } else if profile.hasPin {
-            keypad = profile
-        } else {
-            Task { await profiles.switchTo(profile.id, pin: nil) }
+        case .pin: keypad = profile
+        case .switchTo: Task { await profiles.switchTo(profile.id, pin: nil) }
         }
     }
 
@@ -207,6 +215,8 @@ struct ProfilePicker: View {
     }
 
     private func leaveKeypad(_ target: ProfileInfo) {
+        // Opened by the bar's menu on this keypad: Cancel leaves the picker, back where the menu was.
+        if mode == .push, target.id == pinFor?.id { return dismiss() }
         keypad = nil
         // A switch that failed is given up: the current profile opens again.
         if mode == .gate, profiles.switching != nil { profiles.cancelSwitch() }
@@ -252,46 +262,95 @@ struct ProfilePicker: View {
     #endif
 }
 
-/// The active profile's avatar, opening the picker: Home's header on the
-/// phone, the end of the TV's top bar.
-struct ProfileButton: View {
-    var size: CGFloat = 32
-    /// A phone in an account: the button is a menu with Sign in another device (plans/accounts.md 4.2).
+/// The bar's far-right item (plans/nav-profile.md): the active profile, drawn by each bar (`face`), opening a menu of
+/// the profiles, the current one checked, then Settings, and nothing account-like. A profile does what its picker
+/// tile does (`ProfileRules.choice`): the current one closes the menu, one with a PIN opens the picker on its keypad
+/// (`onPin`), any other switches. tvOS presents the same rows as a dialog, whose focus the system keeps.
+struct ProfileMenu<Face: View>: View {
+    let onSettings: () -> Void
+    let onPin: (ProfileInfo) -> Void
+    /// Sign in another device, between the profiles and Settings: phones and tablets in an account, never a kids
+    /// profile (pairing, the scanner a TV's code asks for: plans/accounts.md D6, 4.2).
     var signInAnother: (() -> Void)? = nil
-    let action: () -> Void
+    @ViewBuilder let face: (ProfileInfo) -> Face
     @Environment(ProfileSession.self) private var profiles
+    #if os(tvOS)
+    @State private var open = false
+    #endif
 
     var body: some View {
-        if let me = profiles.snapshot?.current {
-            if let signInAnother {
-                Menu {
-                    Button(AccountWords.shared.switchProfile, action: action)
-                    Button(AccountWords.shared.signInAnother, action: signInAnother)
-                } label: {
-                    avatar(me)
-                }
-                .buttonStyle(.plain)
+        if let snapshot = profiles.snapshot, let me = snapshot.current {
+            #if os(tvOS)
+            Button { open = true } label: { face(me) }
                 .accessibilityLabel("Profile: \(me.name)")
-            } else {
-                Button(action: action) { avatar(me) }
-                #if os(tvOS)
-                .buttonStyle(NavLinkStyle(on: false))
-                #else
-                .buttonStyle(.plain)
-                #endif
-                .accessibilityLabel("Profile: \(me.name), switch profile")
+                .confirmationDialog("Profiles", isPresented: $open, titleVisibility: .visible) {
+                    ForEach(snapshot.profiles) { profile in
+                        Button(title(profile, snapshot)) { choose(profile, snapshot) }
+                    }
+                    Button("Settings", action: onSettings)
+                }
+            #else
+            Menu {
+                // An inline picker: the system draws the current profile's check and says it is selected.
+                Picker("Profiles", selection: Binding { snapshot.active } set: { id in
+                    if let profile = snapshot.profiles.first(where: { $0.id == id }) { choose(profile, snapshot) }
+                }) {
+                    ForEach(snapshot.profiles) { profile in
+                        row(profile, snapshot).tag(profile.id)
+                    }
+                }
+                .pickerStyle(.inline)
+                Divider()
+                if let signInAnother { Button(AccountWords.shared.signInAnother, glyph: "qr-code", action: signInAnother) }
+                Button("Settings", glyph: "settings", action: onSettings)
+            } label: {
+                face(me)
             }
+            .menuStyle(.button)
+            .buttonStyle(.plain)
+            .menuIndicator(.hidden)
+            .accessibilityLabel("Profile: \(me.name)")
+            #endif
         }
     }
 
-    private func avatar(_ me: ProfileInfo) -> some View {
-        ProfileAvatar(me.avatar, name: me.name, size: size)
-            .overlay(Circle().strokeBorder(.white.opacity(0.3), lineWidth: 1))
-            #if os(iOS)
-            // A 44 pt target around the 32 pt avatar.
-            .frame(minWidth: 44, minHeight: 44)
-            .contentShape(Rectangle())
-            #endif
+    private func title(_ profile: ProfileInfo, _ snapshot: ProfilesSnapshot) -> String {
+        if profile.id == snapshot.active { return "\(profile.name), current" }
+        return profile.syncing ? "\(profile.name), syncing" : profile.name
+    }
+
+    #if !os(tvOS)
+    @ViewBuilder private func row(_ profile: ProfileInfo, _ snapshot: ProfilesSnapshot) -> some View {
+        let words = profile.syncing ? "\(profile.name), syncing" : profile.name
+        Group {
+            if profile.hasPin && !profile.syncing && profile.id != snapshot.active {
+                Label(words, image: "lock")
+            } else {
+                Text(words)
+            }
+        }
+        .accessibilityLabel(ProfileRules.spoken(profile, active: snapshot.active))
+    }
+    #endif
+
+    private func choose(_ profile: ProfileInfo, _ snapshot: ProfilesSnapshot) {
+        switch ProfileRules.choice(profile, in: snapshot) {
+        case .none, .close: break
+        case .pin: onPin(profile)
+        case .switchTo: Task { await profiles.switchTo(profile.id, pin: nil) }
+        }
+    }
+}
+
+/// The avatar a bar draws for `ProfileMenu`: a circle with a hairline, ringed white while Settings shows (`lit`).
+struct BarAvatar: View {
+    let profile: ProfileInfo
+    var size: CGFloat = 32
+    var lit = false
+
+    var body: some View {
+        ProfileAvatar(profile.avatar, name: profile.name, size: size)
+            .overlay(Circle().strokeBorder(.white.opacity(lit ? 0.92 : 0.3), lineWidth: lit ? 2 : 1))
     }
 }
 

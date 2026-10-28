@@ -225,3 +225,19 @@ private func snapshot(_ profiles: [ProfileInfo], locked: Bool = false) -> Profil
     #expect(!picker[add.lowerBound...].prefix(200).contains("strokeBorder(Theme.Palette.control)"), "the Add profile circle has an edge again")
 }
 
+
+@Test func aPickedProfileDoesWhatItsTileDoes() {
+    let main = profile("main", owner: true)
+    let kid = profile("kid")
+    let locked = profile("locked", pin: true)
+    let syncing = profile("syncing", syncing: true)
+    let open = snapshot([main, kid, locked, syncing])
+    #expect(ProfileRules.choice(main, in: open) == .close)
+    #expect(ProfileRules.choice(kid, in: open) == .switchTo)
+    #expect(ProfileRules.choice(locked, in: open) == .pin)
+    #expect(ProfileRules.choice(syncing, in: open) == .none)
+    // A locked session: its own profile asks for its PIN too, or switches when it has none.
+    let mainPin = profile("main", pin: true, owner: true)
+    #expect(ProfileRules.choice(mainPin, in: snapshot([mainPin, kid], locked: true)) == .pin)
+    #expect(ProfileRules.choice(main, in: snapshot([main, kid], locked: true)) == .switchTo)
+}

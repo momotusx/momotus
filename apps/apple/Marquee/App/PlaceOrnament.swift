@@ -2,10 +2,11 @@ import SwiftUI
 
 #if os(macOS)
 /// The Mac's navigation, the owner's variant 4 (plans/owner-picks.md, 2026-10-25): no toolbar strip, the
-/// five places in one glass capsule floating at the window's bottom centre, over every page.
+/// places in one glass capsule floating at the window's bottom centre, over every page.
 enum OrnamentLayout {
-    /// Search is the glass button at the top right, so the ornament holds the other five, with no wordmark.
-    static let places: [AppTab] = AppTab.allCases.filter { $0 != .search }
+    /// Search is the glass button at the top right, so the ornament holds the other places, with no wordmark, and
+    /// ends with the profile, whose menu opens Settings (plans/nav-profile.md).
+    static let places: [AppTab] = AppTab.bar.filter { $0 != .search }
     /// The capsule's edge to its items, and an item's height.
     static let inset: CGFloat = 5
     static let itemHeight: CGFloat = 34
@@ -14,12 +15,14 @@ enum OrnamentLayout {
     static var height: CGFloat { itemHeight + 2 * inset }
 }
 
-/// The capsule: each place as its icon and word, the current one on a white fill. `strong` darkens the glass
-/// once something other than Home's art lies behind it.
-struct PlaceOrnament: View {
+/// The capsule: each place as its icon and word, the current one on a white fill, then `profile` at its end (the
+/// profile's menu, which opens Settings: plans/nav-profile.md). `strong` darkens the glass once something other
+/// than Home's art lies behind it.
+struct PlaceOrnament<Profile: View>: View {
     let selection: AppTab
     var strong = false
     let select: (AppTab) -> Void
+    let profile: Profile
 
     var body: some View {
         HStack(spacing: 2) {
@@ -28,6 +31,7 @@ struct PlaceOrnament: View {
                     .buttonStyle(OrnamentItemStyle(on: item == selection))
                     .accessibilityAddTraits(item == selection ? .isSelected : [])
             }
+            profile
         }
         .padding(OrnamentLayout.inset)
         .fixedSize()
@@ -39,6 +43,26 @@ struct PlaceOrnament: View {
     }
 }
 
+extension PlaceOrnament where Profile == EmptyView {
+    init(selection: AppTab, strong: Bool = false, select: @escaping (AppTab) -> Void) {
+        self.init(selection: selection, strong: strong, select: select, profile: EmptyView())
+    }
+}
+
+/// The ornament's last item: the profile's avatar at a place's height, on the white fill while Settings shows.
+struct OrnamentProfile: View {
+    let profile: ProfileInfo
+    let lit: Bool
+
+    var body: some View {
+        BarAvatar(profile: profile, size: OrnamentLayout.itemHeight - 8)
+            .padding(.horizontal, 8)
+            .frame(height: OrnamentLayout.itemHeight)
+            .background { if lit { Capsule().fill(Theme.Palette.primary) } }
+            .contentShape(Capsule())
+    }
+}
+
 extension View {
     /// The ornament at the window's foot, as a bottom safe-area inset: a page's scrolling content runs under it
     /// and ends above it, so the last row is never hidden there. `shown` false (the player) leaves no room.
@@ -46,9 +70,17 @@ extension View {
     func placeOrnament(
         _ selection: AppTab, strong: Bool, shown: Bool, placed: ((CGRect) -> Void)? = nil, select: @escaping (AppTab) -> Void
     ) -> some View {
-        safeAreaInset(edge: .bottom, spacing: 0) {
+        placeOrnament(selection, strong: strong, shown: shown, placed: placed, select: select) { EmptyView() }
+    }
+
+    func placeOrnament<Profile: View>(
+        _ selection: AppTab, strong: Bool, shown: Bool, placed: ((CGRect) -> Void)? = nil, select: @escaping (AppTab) -> Void,
+        @ViewBuilder profile: () -> Profile
+    ) -> some View {
+        let end = profile()
+        return safeAreaInset(edge: .bottom, spacing: 0) {
             if shown {
-                PlaceOrnament(selection: selection, strong: strong, select: select)
+                PlaceOrnament(selection: selection, strong: strong, select: select, profile: end)
                     .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { placed?($0) }
                     .padding(.bottom, OrnamentLayout.gap)
                     .frame(maxWidth: .infinity)

@@ -11,13 +11,16 @@ import Testing
     var lastRow = CGRect.zero
 }
 
-@MainActor @Test func theOrnamentHoldsTheFivePlacesAndNoWordmark() {
-    #expect(OrnamentLayout.places == [.home, .discover, .library, .calendar, .settings])
+@MainActor @Test func theOrnamentHoldsThePlacesButSettingsAndNoWordmark() {
+    // Settings opens from the profile's menu at the top right (plans/nav-profile.md).
+    #expect(OrnamentLayout.places == [.home, .discover, .library, .calendar])
     #expect(OrnamentLayout.height == 44)
 }
 
 @MainActor @Test func theOrnamentFitsTheNarrowestWindow() {
-    let size = NSHostingView(rootView: PlaceOrnament(selection: .home) { _ in }).fittingSize
+    // With the profile at its end, as the shell draws it (a stand-in of the avatar item's size).
+    let profile = Color.clear.frame(width: OrnamentLayout.itemHeight + 8, height: OrnamentLayout.itemHeight)
+    let size = NSHostingView(rootView: PlaceOrnament(selection: .home, select: { _ in }, profile: profile)).fittingSize
     #expect(abs(size.height - OrnamentLayout.height) < 1, "the ornament is \(size)")
     // 16 pt clear of each side of the narrowest window the app allows.
     #expect(size.width + 32 <= BackdropStops.macMinWidth, "the ornament is \(size.width) wide")
