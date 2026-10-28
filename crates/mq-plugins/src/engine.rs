@@ -99,6 +99,8 @@ pub struct FetchRequest {
     /// At most 256 KiB (the host refuses over 16 KiB under any-site). Its
     /// `Content-Type`, if any, is in `headers`.
     pub body: Option<Vec<u8>>,
+    /// True: the host follows redirects itself, with 6.4's host rule on
+    /// every hop, and a refused hop answers `Failed("not allowed: {host}")`.
     /// False for `redirect: "manual"`: a 3xx is answered as itself.
     pub follow: bool,
     /// The decoded body's cap: `min(4 MiB, the call's remaining host bytes)`.
@@ -137,13 +139,16 @@ pub struct FetchResponse {
     pub status_text: String,
     /// The final URL after redirects.
     pub url: String,
-    /// Lowercase names; at most 64, each at most 8 KiB.
+    /// Lowercase names; at most 64, each at most 8 KiB; never `set-cookie`
+    /// or `set-cookie2` (a plugin holds no cookie jar).
     pub headers: Vec<(String, String)>,
     /// Decoded, at most the request's `max_bytes`.
     pub body: Vec<u8>,
 }
 
-/// One call on the channel and where its reply goes.
+/// One call on the channel and where its reply goes. When the call ends or
+/// is cancelled, the engine drops the receiver of every reply still pending,
+/// so the host can watch `reply.closed()` and abort that request at once.
 #[derive(Debug)]
 pub struct HostRequest {
     pub call: HostCall,
