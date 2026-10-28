@@ -157,3 +157,12 @@ private func snapshot(_ profiles: [ProfileInfo], locked: Bool = false) -> Profil
     let cancel = try #require(editor.range(of: "Button(\"Cancel\", role: .cancel) {}"))
     #expect(editor[cancel.upperBound...].prefix(200).contains(".keyboardShortcut(.defaultAction)"), "Cancel lost the default action")
 }
+
+@Test func theEditorsDialogsDrawInTheKeyBlue() throws {
+    // DECISION (Confirmation): with no destructive role the buttons take the tint, which is the key blue here.
+    let file = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appending(path: "../Marquee/Profiles/ManageProfiles.swift")
+    let editor = try String(contentsOf: file, encoding: .utf8)
+    let tint = try #require(editor.range(of: ".tint(Theme.Palette.key)"), "the editor lost its key tint")
+    let dialog = try #require(editor.range(of: ".confirmationDialog("))
+    #expect(tint.lowerBound < dialog.lowerBound, "the tint must wrap the dialogs")
+}
