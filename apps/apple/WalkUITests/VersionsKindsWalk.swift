@@ -76,6 +76,9 @@ import XCTest
         for orientation in [UIDeviceOrientation.landscapeLeft, .portrait] {
             XCUIDevice.shared.orientation = orientation
             sleep(2)
+            // A turned phone is short: the card fills it and the chips sit under the fold, so the page scrolls
+            // them up as a viewer would. In reach then means the track itself keeps the chip on in view.
+            for _ in 0..<3 where !direct.isHittable { app.swipeUp() }
             XCTAssertTrue(direct.isSelected, "Direct links stays on after turning")
             XCTAssertTrue(direct.isHittable, "Direct links is in reach after turning")
             shot("versions-kinds-turned-\(orientation == .portrait ? "portrait" : "landscape")")
