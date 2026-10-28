@@ -29,6 +29,12 @@ enum HeroTrailers {
         let height = max(frame.height, frame.width * 9 / 16) * overscan
         return CGSize(width: height * 16 / 9, height: height)
     }
+
+    /// Where a seek by `by` seconds from `t` lands in a `d` second trailer: never before its start, and never into
+    /// its last 2 s, where the player ends it (plans/trailer-inline.md 7).
+    static func seekTarget(_ t: Double, _ d: Double, by: Double) -> Double {
+        max(0, min(t + by, max(0, d - 2)))
+    }
 }
 
 /// What the device and the moment allow (decision 5); every one false blocks a preview.
@@ -98,7 +104,9 @@ extension TrailerSignals {
 }
 
 #if !os(tvOS)
-/// The one player of the app (decision 6 and the one-player rule): `play` stops whatever played first.
+/// A player of the app (decision 6 and the one-player rule): `play` stops whatever it played first. Home's hero
+/// plays on `shared`; a title page owns one for its header, then its full-screen trailer (plans/trailer-inline.md 8),
+/// and lets `shared` go before it plays, so one plays at a time.
 @MainActor
 final class TrailerPlayer: NSObject {
     static let shared = TrailerPlayer()
@@ -148,15 +156,45 @@ final class TrailerPlayer: NSObject {
         return web
     }
 
-    func play(_ id: String, into state: TrailerState, onEnd: @escaping (String) -> Void) {
+    /// Plays `id` into `state`, muted, capped at `cap` seconds (0: its own length, still ended a second early).
+    /// `full`: the full-screen trailer, its time read every 250 ms, its sound turned on once it plays when `loud`
+    /// (never in a walk).
+    func play(_ id: String, into state: TrailerState, cap: Int = HeroTrailers.capSeconds, full: Bool = false,
+              loud: Bool = false, onEnd: @escaping (String) -> Void) {
         stop()
         guard let id = HeroTrailers.checkedId(id) else { return onEnd("error") }
         generation += 1
         self.state = state
         self.onEnd = onEnd
         state.loading = true
+        state.buffering = true
+        state.paused = false
         _ = web
-        run("play('\(id)', \(HeroTrailers.capSeconds), \(generation))")
+        run("play('\(id)', \(cap), \(generation), \(full), \(loud && !Self.walk))")
+    }
+
+    /// Pauses a playing trailer, plays a paused one.
+    func toggle() {
+        if state != nil { run("toggle()") }
+    }
+
+    /// To `seconds` in the trailer.
+    func seek(_ seconds: Double) {
+        if state != nil { run("seek(\(seconds))") }
+    }
+
+    /// The full-screen trailer's own sound, never the session's (`TrailerState.shared.sound`); never in a walk.
+    func loud(_ on: Bool) {
+        if state != nil, !Self.walk { run(on ? "sound(true)" : "sound(false)") }
+    }
+
+    /// A walk build (`-MQMute YES`): no sound reaches any player.
+    private static var walk: Bool {
+        #if DEBUG
+        DebugHooks.mute
+        #else
+        false
+        #endif
     }
 
     func stop() {
@@ -173,9 +211,11 @@ final class TrailerPlayer: NSObject {
     }
 
     /// Stops and lets the web view and its content process go: Home off screen, under the player or another
-    /// page, or gone. The next `play` makes a fresh one.
+    /// page, or gone. The next `play` makes a fresh one. Whoever played hears it stopped.
     func release() {
+        let done = onEnd
         stop()
+        done?("stopped")
         guard let webView else { return }
         webView.configuration.userContentController.removeScriptMessageHandler(forName: "trailer")
         webView.removeFromSuperview()
@@ -186,9 +226,7 @@ final class TrailerPlayer: NSObject {
 
     /// Sound for this session only; never in a walk (`-MQMute YES`).
     func sound(_ on: Bool) {
-        #if DEBUG
-        if DebugHooks.mute { return }
-        #endif
+        if Self.walk { return }
         run(on ? "sound(true)" : "sound(false)")
     }
 
@@ -199,17 +237,28 @@ final class TrailerPlayer: NSObject {
               let state else { return }
         let event = message["event"] as? String
         // The walk's evidence that a trailer played (plans/appletv-polish.md 9): its state, never its id.
-        if event != "time" { coreLog.notice("trailer \(event ?? "?", privacy: .public) \(message["why"] as? String ?? "", privacy: .public)") }
+        if event == "seek" {
+            coreLog.notice("trailer seek from \(message["from"] as? Int ?? 0, privacy: .public) to \(message["to"] as? Int ?? 0, privacy: .public)")
+        } else if event != "time" {
+            coreLog.notice("trailer \(event ?? "?", privacy: .public) \(message["why"] as? String ?? "", privacy: .public)")
+        }
         switch event {
         case "playing":
             state.playing = true
+            state.buffering = false
             reveal = Task { [weak state] in
                 try? await Task.sleep(for: HeroTrailers.revealDelay)
                 if !Task.isCancelled { state?.shown = true }
             }
-            if TrailerState.shared.sound { sound(true) }
+            // A preview keeps the session's sound; the full-screen trailer brings its own (`loud`).
+            if message["full"] as? Bool != true, TrailerState.shared.sound { sound(true) }
         case "time":
             state.fraction = message["fraction"] as? Double ?? 0
+            state.seconds = message["t"] as? Double ?? 0
+            state.length = message["d"] as? Double ?? 0
+            let phase = message["state"] as? String
+            state.paused = phase == "paused"
+            state.buffering = phase == "buffering"
         case "end":
             let done = onEnd
             reveal?.cancel()
@@ -224,42 +273,47 @@ final class TrailerPlayer: NSObject {
         }
     }
 
-    /// The player's page: the official IFrame API, muted and read back before it plays (decision 6).
+    /// The player's page: the official IFrame API, muted and read back before it plays (decision 6). The same script
+    /// as the Android app's (HeroTrailer.kt), held to one behaviour by apps/web/e2e/trailer-page.spec.ts.
     private static let page = """
     <!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1">
     <style>html,body{margin:0;height:100%;background:transparent;overflow:hidden}
     #p{position:fixed;inset:0;pointer-events:none}
     #p iframe{width:100%;height:100%;border:0;display:block;pointer-events:none}</style></head>
     <body><div id="p"></div><script>
-    let player=null, timers=[], ended=true, playing=false, poll=null, api=null, gen=0;
-    const say=(o)=>window.webkit.messageHandlers.trailer.postMessage(JSON.stringify(Object.assign({gen},o)));
-    function load(){ if(api) return api; api=new Promise((ok)=>{ window.onYouTubeIframeAPIReady=()=>ok(window.YT);
-      const s=document.createElement("script"); s.src="https://www.youtube.com/iframe_api"; document.head.append(s); }); return api; }
+    let player=null, timers=[], ended=true, playing=false, poll=null, api=null, gen=0, full=false;
+    const say=(o)=>window.webkit.messageHandlers.trailer.postMessage(JSON.stringify(Object.assign({gen,full},o)));
+    function load(){ if(api) return api; api=new Promise((ok,no)=>{ window.onYouTubeIframeAPIReady=()=>ok(window.YT);
+      const s=document.createElement("script"); s.src="https://www.youtube.com/iframe_api"; s.onerror=()=>{ api=null; no(); }; document.head.append(s); }); return api; }
     function finish(why){ if(ended) return; ended=true; timers.forEach(clearTimeout); clearInterval(poll); timers=[];
-      const p=player; player=null; setTimeout(()=>{ try{p&&p.destroy()}catch(e){} document.getElementById("p").replaceChildren(); }, why==="cap"?650:0);
+      const p=player; player=null; setTimeout(()=>{ try{p&&p.destroy()}catch(e){} document.getElementById("p").replaceChildren(); }, why==="cap"||why==="ended"?650:0);
       say({event:"end",why}); }
     function captionsOff(){ try{ const t=player&&player.getOption("captions","track"); if(t&&Object.keys(t).length) player.setOption("captions","track",{}); player&&player.unloadModule("captions"); }catch(e){} }
     function halt(){ finish("stopped"); }
     function sound(on){ if(!player) return; if(on){player.unMute();player.setVolume(100);} else {player.mute();player.setVolume(0);} }
-    async function play(id, cap, g){
-      finish("stopped"); gen=g; ended=false; playing=false;
+    function toggle(){ if(!player) return; if(player.getPlayerState()===1) player.pauseVideo(); else player.playVideo(); }
+    function seek(s){ if(!player) return; const from=player.getCurrentTime(); player.seekTo(Math.max(0,s),true); say({event:"seek",from:Math.round(from),to:Math.round(s)}); }
+    async function play(id, cap, g, f, loud){
+      finish("stopped"); gen=g; full=f; ended=false; playing=false;
       const box=document.createElement("div"); document.getElementById("p").replaceChildren(box);
-      const YT=await load(); if(ended) return;
-      timers.push(setTimeout(()=>{ if(!playing) finish("timeout"); }, 9000));
-      player=new YT.Player(box,{host:"https://www.youtube-nocookie.com",videoId:id,width:"100%",height:"100%",
-        playerVars:{controls:0,playsinline:1,rel:0,enablejsapi:1,iv_load_policy:3,cc_load_policy:0,disablekb:1,fs:0,end:cap},
+      timers.push(setTimeout(()=>{ if(!playing) finish("timeout"); }, f?15000:9000));
+      let YT; try{ YT=await load(); }catch(e){ if(gen===g) finish("error"); return; }
+      if(ended||gen!==g) return;
+      const vars={controls:0,playsinline:1,rel:0,enablejsapi:1,iv_load_policy:3,cc_load_policy:0,disablekb:1,fs:0}; if(cap) vars.end=cap;
+      player=new YT.Player(box,{host:"https://www.youtube-nocookie.com",videoId:id,width:"100%",height:"100%",playerVars:vars,
         events:{
-          onReady:(e)=>{ const f=e.target.getIframe(); f.setAttribute("tabindex","-1"); f.inert=true;
+          onReady:(e)=>{ if(ended||gen!==g) return; const fr=e.target.getIframe(); fr.setAttribute("tabindex","-1"); fr.inert=true;
             e.target.mute(); e.target.setVolume(0); const until=Date.now()+1000;
-            const check=()=>{ if(ended) return; if(e.target.isMuted()&&e.target.getVolume()===0) e.target.playVideo();
+            const check=()=>{ if(ended||gen!==g) return; if(e.target.isMuted()&&e.target.getVolume()===0) e.target.playVideo();
               else if(Date.now()<until) timers.push(setTimeout(check,25)); else finish("error"); }; check(); },
           onApiChange:()=>captionsOff(),
-          onStateChange:(e)=>{ if(ended) return;
-            if(e.data===1&&!playing){ playing=true; say({event:"playing"}); captionsOff();
-              poll=setInterval(()=>{ if(!player) return; const t=player.getCurrentTime(); say({event:"time",fraction:Math.min(1,t/cap)});
-                captionsOff(); if(t>=cap-1) finish("cap"); },250); }
-            if(e.data===0) finish("cap"); },
-          onError:()=>finish("error") } }); }
+          onStateChange:(e)=>{ if(ended||gen!==g) return;
+            if(e.data===1&&!playing){ playing=true; say({event:"playing"}); captionsOff(); if(loud) sound(true);
+              poll=setInterval(()=>{ if(!player) return; const t=player.getCurrentTime(), len=cap||player.getDuration(), st=player.getPlayerState();
+                say({event:"time",fraction:len>0?Math.min(1,t/len):0,t,d:len,state:st===1?"playing":st===2?"paused":"buffering"});
+                captionsOff(); if(len>0&&t>=len-1) finish(cap?"cap":"ended"); }, 250); }
+            if(e.data===0) finish(cap?"cap":"ended"); },
+          onError:()=>{ if(gen===g) finish("error"); } } }); }
     </script></body></html>
     """
 }
@@ -292,10 +346,12 @@ private final class WeakHandler: NSObject, WKScriptMessageHandler {
 
 /// The player in the hero's frame, oversized to cover it and clipped by it; it takes no input.
 struct TrailerSurface: View {
+    var player: TrailerPlayer = .shared
+
     var body: some View {
         GeometryReader { geo in
             let size = HeroTrailers.coverSize(geo.size)
-            WebHost()
+            WebHost(player: player)
                 .frame(width: size.width, height: size.height)
                 .position(x: geo.size.width / 2, y: geo.size.height / 2)
                 .allowsHitTesting(false)
@@ -307,6 +363,8 @@ struct TrailerSurface: View {
 
 #if os(iOS)
 private struct WebHost: UIViewRepresentable {
+    let player: TrailerPlayer
+
     func makeUIView(context: Context) -> UIView {
         let host = UIView()
         host.isUserInteractionEnabled = false
@@ -318,7 +376,7 @@ private struct WebHost: UIViewRepresentable {
     func updateUIView(_ host: UIView, context: Context) { attach(to: host) }
 
     private func attach(to host: UIView) {
-        let web = TrailerPlayer.shared.web
+        let web = player.web
         guard web.superview !== host else { return }
         web.removeFromSuperview()
         web.frame = host.bounds
@@ -328,6 +386,8 @@ private struct WebHost: UIViewRepresentable {
 }
 #else
 private struct WebHost: NSViewRepresentable {
+    let player: TrailerPlayer
+
     func makeNSView(context: Context) -> NSView {
         let host = PassThroughView()
         attach(to: host)
@@ -337,7 +397,7 @@ private struct WebHost: NSViewRepresentable {
     func updateNSView(_ host: NSView, context: Context) { attach(to: host) }
 
     private func attach(to host: NSView) {
-        let web = TrailerPlayer.shared.web
+        let web = player.web
         guard web.superview !== host else { return }
         web.removeFromSuperview()
         web.frame = host.bounds

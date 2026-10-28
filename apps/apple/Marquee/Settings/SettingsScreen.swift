@@ -462,7 +462,7 @@ struct SettingsScreen: View {
     #if !os(tvOS)
     /// This device's own switch, never synced, as the web and Android have it (review r1, W4).
     private var trailerPreviews: some View {
-        ChipRow(label: "Trailer previews on Home", chips: [Chip(id: true, title: "On"), Chip(id: false, title: "Off")],
+        ChipRow(label: "Trailer previews", chips: [Chip(id: true, title: "On"), Chip(id: false, title: "Off")],
                 isSelected: { $0 == previewsOn }) { previewsOn = $0 }
     }
     #endif

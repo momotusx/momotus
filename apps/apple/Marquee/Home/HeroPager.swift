@@ -117,6 +117,11 @@ final class TrailerState {
     var playing = false
     var shown = false
     var fraction: Double = 0
+    /// A full-screen trailer's place and length in seconds (0 until known), and whether it is paused or waiting.
+    var seconds: Double = 0
+    var length: Double = 0
+    var paused = false
+    var buffering = true
     /// The sound switch's choice for the session: off at launch, on only by a press, kept by every later trailer
     /// and page; a film starting in the player turns it off, so coming back from it is never loud.
     var sound = false

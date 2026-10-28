@@ -41,7 +41,7 @@ private struct Row: View {
 
     var body: some View {
         WideActions(
-            trailer: URL(string: "https://www.youtube.com/watch?v=YoHD9XEInc0"),
+            trailer: {},
             marks: titleMarks(kind: kind, inLibrary: false, watched: false), toggle: { _ in },
             versionsReady: true, showVersions: {}
         ) {

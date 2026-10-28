@@ -246,12 +246,14 @@ private struct TrailerKey: Equatable {
 /// The sound switch, shown only while a trailer is on screen, never in a walk. Its choice is the session's
 /// (`TrailerState.sound`), so a redrawn switch or the next trailer keeps it.
 struct TrailerMute: View {
+    /// The player it speaks to: Home's, or a title page's header.
+    var player: TrailerPlayer = .shared
     private var state: TrailerState { .shared }
 
     var body: some View {
         Button {
             state.sound.toggle()
-            TrailerPlayer.shared.sound(state.sound)
+            player.sound(state.sound)
         } label: {
             Glyph(state.sound ? "volume-2" : "volume-x", size: 18)
                 .foregroundStyle(.white)

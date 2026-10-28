@@ -117,25 +117,35 @@ struct PlayBlock: View {
 /// The Mac hero's action row: the primary, Trailer, the marks capsule, Versions
 /// (plans/design-v3-phase3-apple.md 2.1).
 struct WideActions<Play: View>: View {
-    let trailer: URL?
+    /// Plays the trailer in the app, full screen; nil without one.
+    let trailer: (() -> Void)?
     let marks: [TitleMark]
     let toggle: (TitleMark) -> Void
     let versionsReady: Bool
     let showVersions: () -> Void
+    /// The header trailer's sound switch, last in the row so nothing moves when it comes and goes; nil while none plays.
+    var sound: (() -> Void)?
+    var soundOn = false
     @ViewBuilder let play: Play
-    @Environment(\.openURL) private var openURL
 
     var body: some View {
         FlowRow(spacing: 12) {
             play
             if let trailer {
-                Button { openURL(trailer) } label: { Label("Trailer", glyph: "film", size: HeroLayout.icon) }
+                Button(action: trailer) { Label("Trailer", glyph: "film", size: HeroLayout.icon) }
                     .buttonStyle(PillButtonStyle())
             }
             if !marks.isEmpty { MarkCapsule(marks: marks, toggle: toggle) }
             Button(action: showVersions) { Label("Versions", glyph: "layers", size: HeroLayout.icon) }
                 .buttonStyle(PillButtonStyle())
                 .disabled(!versionsReady)
+            if let sound {
+                Button(action: sound) { Label("Sound", glyph: soundOn ? "volume-2" : "volume-x", size: HeroLayout.icon) }
+                    .buttonStyle(PillButtonStyle())
+                    .accessibilityLabel("Trailer sound")
+                    .accessibilityAddTraits(.isToggle)
+                    .accessibilityValue(soundOn ? "On" : "Off")
+            }
         }
     }
 }

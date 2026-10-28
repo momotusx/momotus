@@ -6,7 +6,6 @@ struct TitleScreen: View {
     @State private var model: TitleModel
     let core: CoreClient
     @Environment(\.metrics) private var metrics
-    @Environment(\.openURL) private var openURL
     @Environment(\.tabShown) private var shown
     /// The place is on screen now: a start that settles later reads it.
     @State private var placeShown = true
@@ -45,6 +44,15 @@ struct TitleScreen: View {
     /// What opened the panel, which takes keyboard focus back when it closes.
     @State private var opener: PanelOpener?
     @FocusState private var openerFocus: PanelOpener?
+    #endif
+    #if !os(tvOS)
+    /// The title's own trailer player: its header's muted preview, then Trailer full screen (plans/trailer-inline.md).
+    @State private var trailerPlayer = TrailerPlayer()
+    @State private var headerTrailer = TrailerState()
+    @State private var fullTrailer = false
+    /// At least half the hero on screen: the header's trailer plays only then.
+    @State private var heroVisible = true
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     #endif
     /// A Calendar link opens the episodes once.
     @State private var openedFromLink = false
@@ -174,8 +182,9 @@ struct TitleScreen: View {
             .padding(.bottom, Theme.Space.xl)
         }
         .scrollIndicators(.hidden)
-        // Under the panel's scrim the page is out of reach (it covers the info below about 1020).
-        .inert(panelCovers)
+        // Under the panel's scrim the page is out of reach (it covers the info below about 1020); under the Mac's
+        // full-screen trailer too.
+        .inert(panelCovers || fullTrailer)
         .background(Theme.Palette.bg)
         .onScrollGeometryChange(for: Bool.self) { $0.contentOffset.y + $0.contentInsets.top > 8 } action: { underBar = $1 }
         // How far the page starts under the screen's top, where a cover's art starts.
@@ -199,7 +208,67 @@ struct TitleScreen: View {
         .sheet(isPresented: $reading) {
             SynopsisSheet(title: details?.name ?? model.route.name, text: details?.description ?? "")
         }
+        #if os(iOS)
+        .fullScreenCover(isPresented: $fullTrailer) { fullTrailerView }
+        #else
+        .overlay { if fullTrailer { fullTrailerView } }
+        #endif
+        // The header's trailer: the page in front, the hero half on screen, nothing over it (decision 3).
+        .task(id: HeaderTrailerKey(id: details?.trailers.first?.youtubeId, live: pageVisible && heroVisible && !fullTrailer)) {
+            await startHeaderTrailer()
+        }
+        // Covered (the player, Versions) or gone: its player and web view go too.
+        .onChange(of: pageVisible) { _, now in if !now { trailerPlayer.release() } }
+        .onDisappear { trailerPlayer.release() }
     }
+
+    private var fullTrailerView: some View {
+        FullTrailer(trailers: details?.trailers ?? [], player: trailerPlayer) { fullTrailer = false }
+    }
+
+    /// Trailer: full screen in the app; the header's preview stops and does not come back this session.
+    private func openTrailer(_ details: TitleDetails) {
+        HeaderTrailers.spent.insert(details.id)
+        fullTrailer = true
+    }
+
+    private func startHeaderTrailer() async {
+        if headerTrailer.loading { trailerPlayer.stop() }
+        guard !fullTrailer, pageVisible, heroVisible, let details,
+              let id = HeroTrailers.checkedId(details.trailers.first?.youtubeId),
+              !HeaderTrailers.spent.contains(details.id) else { return }
+        try? await Task.sleep(for: .milliseconds(300))
+        guard !Task.isCancelled,
+              TrailerSignals.now(visible: true, reducedMotion: reduceMotion, hasTrailer: true).allowed else { return }
+        // One player at a time: Home's lets go first.
+        TrailerPlayer.shared.release()
+        trailerPlayer.play(id, into: headerTrailer) { why in
+            if why != "stopped" { HeaderTrailers.spent.insert(details.id) }
+        }
+    }
+
+    /// The header trailer's sound switch shows while it plays, never in a walk unless the walk asks.
+    private var headerSoundShown: Bool {
+        #if DEBUG
+        headerTrailer.playing && (!DebugHooks.mute || DebugHooks.showSoundSwitch)
+        #else
+        headerTrailer.playing
+        #endif
+    }
+
+    private func toggleHeaderSound() {
+        TrailerState.shared.sound.toggle()
+        trailerPlayer.sound(TrailerState.shared.sound)
+    }
+
+    /// The header's trailer under the art, mounted only while one is due and nothing covers it (one web view, one
+    /// host: the full-screen trailer takes it).
+    @ViewBuilder private var headerSurface: some View {
+        if headerTrailer.loading && !fullTrailer { TrailerSurface(player: trailerPlayer) }
+    }
+
+    /// The art fades over a playing trailer once YouTube's start controls have gone, its ramps staying.
+    private var headerArtOpacity: Double { headerTrailer.shown ? 0 : 1 }
 
     private var v3HeroHeight: CGFloat {
         if metrics.wide { return WideLayout.titleHeroHeight(width: width, height: height, note: noteHeight) }
@@ -238,6 +307,15 @@ struct TitleScreen: View {
                 }
             }
             .heroFrame(height: v3HeroHeight, alignment: metrics.wide ? .bottomLeading : .bottom) { EmptyView() }
+            .onScrollVisibilityChange(threshold: 0.5) { heroVisible = $0 }
+            // The iPhone's header trailer sound, at the art's top trailing corner, where nothing else sits.
+            .overlay(alignment: .topTrailing) {
+                if !metrics.wide, headerSoundShown {
+                    TrailerMute(player: trailerPlayer)
+                        .padding(.trailing, 16)
+                        .padding(.top, safeTop + 4)
+                }
+            }
             .overlay(alignment: .bottomTrailing) {
                 if metrics.wide, !panelOpen {
                     let starring = WideLayout.starringFits(window: width, row: actionsWidth) && !facts.cast.isEmpty
@@ -263,13 +341,17 @@ struct TitleScreen: View {
                         // The iPhone shows the cover first, whole at its 2:3 from the screen's top, with no words
                         // over it: the status bar's wash at its top, and only its bottom edge fading into the page.
                         // A large cover that does not load gives way to the addon's poster, then to the name.
+                        headerSurface.frame(height: coverHeroHeight(width: width, height: windowHeight))
                         CoverArt(sources: coverArtSources(details), name: details.name, height: coverHeroHeight(width: width, height: windowHeight)) {
                             coverFailed = true
                         }
+                        .opacity(headerArtOpacity)
                     } else {
+                        headerSurface
                         ArtImage(url: details.background ?? details.poster, maxPixels: ArtSize.backdrop,
                                  alignment: details.background == nil ? .top : .center)
                             .accessibilityHidden(true)
+                            .opacity(headerArtOpacity)
                         HeroScrims(wide: metrics.wide, page: Theme.Palette.bg, wash: BackdropStops.titleWash)
                     }
                 }
@@ -397,11 +479,12 @@ struct TitleScreen: View {
     /// The Mac's action row: the primary, Trailer, the Library and Watched capsule, Versions.
     private func wideActions(_ details: TitleDetails) -> some View {
         WideActions(
-            trailer: details.trailers.first.flatMap { URL(string: $0.url) },
+            trailer: details.trailers.isEmpty ? nil : { openTrailer(details) },
             marks: titleMarks(
                 kind: details.kind, inLibrary: model.header?.inLibrary ?? false, watched: model.header?.watched ?? false,
                 librarySettable: model.header?.canSetLibrary == true),
-            toggle: { toggle($0, details) }, versionsReady: versions != nil, showVersions: { showVersions = true }
+            toggle: { toggle($0, details) }, versionsReady: versions != nil, showVersions: { showVersions = true },
+            sound: headerSoundShown ? toggleHeaderSound : nil, soundOn: TrailerState.shared.sound
         ) { playBlock(details) }
         // Starring keeps clear of the row as drawn (review P2-1).
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { actionsWidth = $0 }
@@ -437,8 +520,8 @@ struct TitleScreen: View {
     /// not fit. Watched sits beside Library, a small round toggle.
     private func phoneSecondaries(_ details: TitleDetails) -> some View {
         FlowRow(spacing: 8, centered: true) {
-            if let trailer = details.trailers.first, let url = URL(string: trailer.url) {
-                Button { openURL(url) } label: { Label("Trailer", glyph: "film") }
+            if !details.trailers.isEmpty {
+                Button { openTrailer(details) } label: { Label("Trailer", glyph: "film") }
                     .buttonStyle(PillButtonStyle())
             }
             Button { showVersions = true } label: { Label("Versions", glyph: "layers") }
@@ -699,14 +782,6 @@ struct TitleScreen: View {
             .buttonStyle(RoundButtonStyle())
             .disabled(versions == nil)
             .frame(maxWidth: column)
-            // Not on TV: it has no browser, and a YouTube link may open nothing.
-            #if !os(tvOS)
-            if let trailer = details.trailers.first, let url = URL(string: trailer.url) {
-                Button { openURL(url) } label: { Label("Trailer", glyph: "film") }
-                    .buttonStyle(RoundButtonStyle())
-                    .frame(maxWidth: column)
-            }
-            #endif
             #if os(tvOS)
             if settable {
                 Button { model.setInLibrary(!inLibrary); sync.schedule() } label: {
@@ -955,5 +1030,18 @@ private struct VersionNote: View {
         .foregroundStyle(Theme.Palette.muted)
         .fixedSize(horizontal: false, vertical: true)
     }
+}
+#endif
+
+#if !os(tvOS)
+/// Titles whose header trailer ended, failed or was opened full screen this session: it does not play again.
+@MainActor
+enum HeaderTrailers {
+    static var spent: Set<String> = []
+}
+
+private struct HeaderTrailerKey: Equatable {
+    let id: String?
+    let live: Bool
 }
 #endif
