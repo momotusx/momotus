@@ -283,6 +283,8 @@ fun PhoneTitle(
                     ) {
                         Info(title, versions, versionsFailed, onPlay, onVersions, onGenre) {
                             spentHeaders += details.id
+                            // Stopped here, before the full screen starts on the same player.
+                            if (headerTrailer.loading) trailers.stop()
                             fullTrailer = true
                         }
                     }

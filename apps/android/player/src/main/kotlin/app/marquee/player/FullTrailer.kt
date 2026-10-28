@@ -315,7 +315,8 @@ internal fun barKey(
     return when (event.type) {
         KeyEventType.KeyDown -> {
             if (length > 0f) {
-                val step = seekStepMs(event.nativeKeyEvent.repeatCount) / 1000f
+                // The film player's growing step, held to a tenth of a trailer: a held key never leaps to its end.
+                val step = minOf(seekStepMs(event.nativeKeyEvent.repeatCount) / 1000f, maxOf(SEEK_S, length / 10f))
                 set(trailerSeekTarget(target ?: seconds, length, direction * step))
             }
             true
@@ -347,8 +348,8 @@ private fun mediaKey(
         Key.MediaPlayPause -> if (first) onToggle()
         Key.MediaPlay -> if (first && paused) onToggle()
         Key.MediaPause -> if (first && !paused) onToggle()
-        Key.MediaRewind -> seekBy(-SEEK_S)
-        Key.MediaFastForward -> seekBy(SEEK_S)
+        Key.MediaRewind -> if (first) seekBy(-SEEK_S)
+        Key.MediaFastForward -> if (first) seekBy(SEEK_S)
         else -> return false
     }
     return true
