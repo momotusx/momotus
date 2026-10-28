@@ -8,6 +8,7 @@ import { Chips, Grid, SkeletonGrid } from "../components/grid";
 import { Why } from "../components/why";
 import { libraryView } from "../core/client";
 import { onProfileReset } from "../core/profiles";
+import { restoreSoon } from "../focus/dom";
 import { form } from "../form";
 import type { LibrarySort } from "../core/generated/LibrarySort";
 import "./browse.css";
@@ -27,9 +28,14 @@ onProfileReset(() => {
 export default function Library() {
   // Try again on a library that could not open: a new view, as the page anew.
   const [attempt, setAttempt] = createSignal(0);
+  // The pressed button goes with the old page: the focus waits for the new one's first control, not the lit tab.
+  const retry = () => {
+    setAttempt((n) => n + 1);
+    restoreSoon(false);
+  };
   return (
     <Show when={attempt() + 1} keyed>
-      <LibraryPage retry={() => setAttempt((n) => n + 1)} />
+      <LibraryPage retry={retry} />
     </Show>
   );
 }

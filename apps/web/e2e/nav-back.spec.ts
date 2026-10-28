@@ -47,6 +47,8 @@ for (const { form, viewport, minSide } of forms) {
     expect(b.height).toBeGreaterThanOrEqual(minSide - 0.5);
     expect(b.width).toBeGreaterThanOrEqual(minSide);
     const slot = page.locator(".logo-slot");
+    // The desktop title has its logo's slot (a phone's cover prints the title itself and has none).
+    if (form === "desktop") await expect(slot).toBeVisible();
     if (await slot.count()) {
       const s = (await slot.boundingBox()) as Box;
       expect(meets(b, s), `Back ${JSON.stringify(b)} against the logo slot ${JSON.stringify(s)}`).toBe(false);

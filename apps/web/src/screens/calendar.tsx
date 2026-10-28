@@ -10,6 +10,7 @@ import LoaderCircle from "lucide-solid/icons/loader-circle";
 import RefreshCw from "lucide-solid/icons/refresh-cw";
 import { createEffect, createSignal, For, onCleanup, onMount, Show } from "solid-js";
 import { liveView } from "../core/client";
+import { restoreSoon } from "../focus/dom";
 import { calendarIds } from "../lib/ids";
 import { Why } from "../components/why";
 import { cameBack } from "../history";
@@ -47,9 +48,14 @@ const itemKey = (it: CalendarItem) => `cal:${it.videoId}`;
 export default function CalendarScreen() {
   // Try again on a calendar that could not open: a new view, as the page anew (a view that failed to open drops its commands for good).
   const [attempt, setAttempt] = createSignal(0);
+  // The button that was pressed goes with the old page: the focus waits for the new one's first control, not the tab.
+  const retry = () => {
+    setAttempt((n) => n + 1);
+    restoreSoon(false);
+  };
   return (
     <Show when={attempt() + 1} keyed>
-      <CalendarPage retry={() => setAttempt((n) => n + 1)} />
+      <CalendarPage retry={retry} />
     </Show>
   );
 }

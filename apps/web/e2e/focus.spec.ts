@@ -277,7 +277,9 @@ test("TV: one white per action row, a white profile with a dark glyph, dark word
   // A round action below (Trailer) is another white: Resume yields to it as well, so the screen has one.
   await page.locator('[data-f="title:trailer"]').focus();
   await settle(page);
-  expect(await fill("title:trailer")).not.toBe("rgba(255, 255, 255, 0.16)");
+  // Its circle (the svg) inverts: the fill under the glyph is white, not the secondary step.
+  const circle = await page.locator('[data-f="title:trailer"] svg').evaluate((el) => getComputedStyle(el).backgroundColor);
+  expect(circle).toBe("rgba(255, 255, 255, 0.92)");
   expect(await fill("title:play")).toBe("rgba(255, 255, 255, 0.16)");
   // With focus elsewhere on the page (the synopsis, the tab bar) it stays white.
   await page.locator('[data-f="title:synopsis"]').focus();
