@@ -559,3 +559,24 @@ test("profiles: an Add whose Save was answered after Keep editing is an edit of 
     }
   }
 });
+
+test("profiles: unsaved edits are asked about by the browser before a reload or a closed tab, saved ones are not", async ({ page }) => {
+  await openEdit(page, "default");
+  const name = page.locator('[data-f="pedit:name"]');
+  const was = await name.inputValue();
+  const dialogs: string[] = [];
+  page.on("dialog", (d) => {
+    dialogs.push(d.type());
+    void d.dismiss();
+  });
+  await name.fill(`${was} edited`);
+  await page.close({ runBeforeUnload: true });
+  // Stayed: the browser asked, and the answer was to stay.
+  expect(dialogs).toEqual(["beforeunload"]);
+  expect(page.isClosed()).toBe(false);
+  // Back to what was stored: nothing to lose, nothing to ask.
+  await name.fill(was);
+  await page.close({ runBeforeUnload: true });
+  expect(dialogs).toEqual(["beforeunload"]);
+  expect(page.isClosed()).toBe(true);
+});

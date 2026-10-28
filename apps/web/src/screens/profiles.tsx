@@ -427,6 +427,14 @@ export function EditProfile() {
     if (flow()) setFlow(null);
     if (!asking()) setAsking({ go: (force) => e.retry(force), back });
   });
+  // A reload, a deep link or a closed tab leaves the document, which the router cannot ask about: the browser does.
+  const warn = (e: BeforeUnloadEvent) => {
+    if (free || !dirty()) return;
+    e.preventDefault();
+    e.returnValue = "";
+  };
+  window.addEventListener("beforeunload", warn);
+  onCleanup(() => window.removeEventListener("beforeunload", warn));
   // The TV rail does not open a tab on focus alone while edits are unsaved: only Select on a tab asks.
   createEffect(() => setLeaveGuarded(dirty()));
   onCleanup(() => setLeaveGuarded(false));
