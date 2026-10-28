@@ -67,7 +67,11 @@ class LinkSheetTest {
             val msg = CoreJson.parseToJsonElement(text).jsonObject
             sent += msg
             val id = msg["id"]?.jsonPrimitive?.longOrNull ?: return@attach
-            if (msg["op"]?.jsonPrimitive?.content == "previewAddon") previewId = id else client.onMessage("""{"id":$id,"ok":true,"result":{}}""")
+            if (msg["op"]?.jsonPrimitive?.content == "previewAddon") {
+                previewId = id
+            } else {
+                client.onMessage("""{"id":$id,"ok":true,"result":{}}""")
+            }
         }
         val link = LinkInstall(scope)
         var fieldInList by mutableStateOf(true)
@@ -86,7 +90,8 @@ class LinkSheetTest {
         fieldInList = false
         compose.waitForIdle()
         client.onMessage("""{"id":$previewId,"ok":true,"result":$addon}""")
-        compose.waitUntil(10_000) { compose.onAllNodes(hasText("Install Sheet Test?")).fetchSemanticsNodes().isNotEmpty() }
+        val sheet = hasText("Install Sheet Test?")
+        compose.waitUntil(10_000) { compose.onAllNodes(sheet).fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText("Adds subtitles for movies and series.").assertExists()
         assertEquals(0, sent.count { it["op"]?.jsonPrimitive?.content == "installAddon" })
     }

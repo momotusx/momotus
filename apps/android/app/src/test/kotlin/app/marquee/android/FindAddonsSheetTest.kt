@@ -79,7 +79,7 @@ class FindAddonsSheetTest {
     private fun installs() = sent.count { it["op"]?.jsonPrimitive?.content == "installListed" }
 
     @Test
-    fun `a card's Install opens the sheet and sends nothing; the sheet's Install sends it once`() {
+    fun `a card's Install opens the sheet and sends nothing, and the sheet's Install sends it once`() {
         show()
         val card = hasContentDescription("Install Example", substring = true)
         compose.waitUntil(10_000) { compose.onAllNodes(card).fetchSemanticsNodes().isNotEmpty() }

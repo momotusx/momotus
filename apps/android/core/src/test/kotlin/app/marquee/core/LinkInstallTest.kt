@@ -154,6 +154,7 @@ class LinkInstallTest {
         runTest {
             val link = LinkInstall(backgroundScope)
             val previews = mutableListOf<Pair<String, Boolean>>()
+
             suspend fun preview(
                 url: String,
                 ack: Boolean,
