@@ -635,20 +635,20 @@ private struct TopTools: ToolbarContent {
         // An empty centre: without one the toolbar packs its actions at the left, beside the traffic lights.
         if #available(macOS 26, *) {
             ToolbarItem(placement: .principal) { Color.clear.frame(width: 1, height: 1) }.sharedBackgroundVisibility(.hidden)
-            ToolbarItem(placement: .primaryAction) { tools }.sharedBackgroundVisibility(.hidden)
+            // One item each.
+            ToolbarItem(placement: .primaryAction) { search }.sharedBackgroundVisibility(.hidden)
+            ToolbarItem(placement: .primaryAction) { ProfileButton(size: 32, action: profiles) }.sharedBackgroundVisibility(.hidden)
         } else {
             ToolbarItem(placement: .principal) { Color.clear.frame(width: 1, height: 1) }
-            ToolbarItem(placement: .primaryAction) { tools }
+            ToolbarItem(placement: .primaryAction) { search }
+            ToolbarItem(placement: .primaryAction) { ProfileButton(size: 32, action: profiles) }
         }
     }
 
-    private var tools: some View {
-        HStack(spacing: 10) {
-            Button(action: find) { Label("Search", glyph: "search", size: 17) }
-                .buttonStyle(GlassCircleStyle())
-                .help("Search")
-            ProfileButton(size: 32, action: profiles)
-        }
+    private var search: some View {
+        Button(action: find) { Label("Search", glyph: "search", size: 17) }
+            .buttonStyle(GlassCircleStyle())
+            .help("Search")
     }
 }
 #endif

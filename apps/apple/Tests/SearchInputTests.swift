@@ -36,7 +36,7 @@ private func source(_ path: String) throws -> String {
     let root = try source("App/RootView.swift")
     let search = try source("Search/SearchScreen.swift")
     // Variant 4 (plans/owner-picks.md 2026-10-25): the window's top holds a round glass Search button, no field.
-    let tools = try body(of: "private var tools: some View", in: root)
+    let tools = try body(of: "private var search: some View", in: root)
     #expect(tools.contains("Button(action: find)") && tools.contains(".buttonStyle(GlassCircleStyle())"))
     #expect(!root.contains("HeaderSearchField") && !root.contains("headerSearchField"))
     // So the page always draws its field, on the one query.
