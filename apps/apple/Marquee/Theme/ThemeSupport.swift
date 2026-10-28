@@ -219,3 +219,9 @@ extension EnvironmentValues {
 final class Immersion {
     var active = false
 }
+
+extension Theme {
+    /// The smallest interactive frame on a touch screen (Apple's 44 pt); a control drawn smaller keeps
+    /// a frame this size around it.
+    static let minTarget: CGFloat = 44
+}

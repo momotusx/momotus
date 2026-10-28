@@ -1,0 +1,26 @@
+import Foundation
+import Testing
+
+// Touch controls keep a 44 pt frame: the player's pills, Picture in Picture, AirPlay and the season pull-down.
+
+private func source(_ path: String) throws -> String {
+    let app = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appending(path: "../Marquee")
+    return try String(contentsOf: app.appending(path: path), encoding: .utf8)
+}
+
+@Test func theMinimumTargetIsFortyFourPoints() {
+    #expect(Theme.minTarget == 44)
+}
+
+@Test func everyTouchControlTakesItsFrameFromTheMinimum() throws {
+    // Read from the sources: a Menu's label builds no frames in a hosted view outside a running app.
+    let controls = try source("Player/PlayerControls.swift")
+    let pill = try body(of: "private func action(", in: controls)
+    #expect(pill.contains(".frame(minHeight: Theme.minTarget)"), "the player's pills lost the minimum")
+    let top = try body(of: "private var top: some View", in: controls)
+    #expect(top.components(separatedBy: ".frame(width: Theme.minTarget, height: Theme.minTarget)").count - 1 >= 3,
+            "Back, Picture in Picture and AirPlay each keep the minimum")
+    let shelf = try source("Title/TitleEpisodes.swift")
+    let season = try body(of: "var body: some View", in: String(shelf[try #require(shelf.range(of: "struct SeasonShelf"))...]))
+    #expect(season.contains(".frame(minHeight: Theme.minTarget)"), "the season pull-down lost the minimum")
+}

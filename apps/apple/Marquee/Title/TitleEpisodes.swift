@@ -163,6 +163,9 @@ struct SeasonShelf: View {
                     Glyph(metrics.wide ? "chevron-down" : "chevrons-up-down", size: metrics.wide ? 14 : 15)
                         .foregroundStyle(metrics.wide ? Theme.Palette.key : Theme.Palette.text)
                 }
+                #if os(iOS)
+                .frame(minHeight: Theme.minTarget)
+                #endif
                 .contentShape(Rectangle())
             }
             .menuStyle(.button)

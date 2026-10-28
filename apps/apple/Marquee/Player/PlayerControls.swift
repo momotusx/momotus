@@ -156,7 +156,7 @@ struct PlayerControls: View {
                     .frame(width: 40, height: 40)
                     .glass(Circle())
                     // A 44 pt target around the 40 pt circle.
-                    .frame(width: 44, height: 44)
+                    .frame(width: Theme.minTarget, height: Theme.minTarget)
             }
             .buttonStyle(.round)
             .focused($focus, equals: .back)
@@ -185,14 +185,16 @@ struct PlayerControls: View {
                         .foregroundStyle(.white)
                         .frame(width: 40, height: 40)
                         .glass(Circle())
+                        .frame(width: Theme.minTarget, height: Theme.minTarget)
                 }
                 .buttonStyle(.round)
                 .accessibilityLabel("Picture in Picture")
             }
             if model.airPlayable {
                 AirPlayButton()
-                    .frame(width: 40, height: 40)
-                    .glass(Circle())
+                    .frame(width: Theme.minTarget, height: Theme.minTarget)
+                    // The picker view takes touches only inside its own bounds: the frame is the target, the circle 40 pt.
+                    .background { Color.clear.frame(width: 40, height: 40).glass(Circle()) }
                     .accessibilityLabel("AirPlay")
             }
             #endif
@@ -500,7 +502,8 @@ struct PlayerControls: View {
                         .fixedSize()
                     if shown { current }
                 }
-                .padding(.vertical, 6)
+                .frame(minHeight: Theme.minTarget)
+                .contentShape(Rectangle())
                 .accessibilityValue(shown ? "" : value)
             } else {
                 VStack(spacing: 3) {
