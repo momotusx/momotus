@@ -109,10 +109,34 @@ struct AccountWords: Decodable, Sendable {
     let wipeFailed: String
     let secondWayInText: String
     let notOwner: String
+    let continueWithEmail: String
+    let emailTitle: String
+    let emailLabel: String
+    let emailSend: String
+    let badAddress: String
+    let codeTitle: String
+    let codeSentTo: String
+    let codeLabel: String
+    let codeResent: String
+    let codeMissing: String
+    let codeResend: String
+    let codeResendIn: String
+    let codeOtherAddress: String
+    let wrongCode: String
+    let codeExpired: String
+    let codeExpiredActions: [String]
+    let emailWait: String
+    let emailLimit: String
+    let emailLimitActions: [String]
+    let mailUnavailable: String
+    let mailUnavailableActions: [String]
+    let deletionScheduledByEmail: String
+    let deletionCancelUnlinkEmail: String
 
     /// Every key the file holds but its "about".
     static let keys: Set<String> = [
         "announceDevice", "announceDeviceUnnamed", "announcePasskey", "announceKit", "announceRemoved", "announceRemovedUnnamed", "announceRemovedPasskey", "announceRemovedKit", "announceLeft", "announceLeftUnnamed", "announceDropped", "announceUnnamedDevice", "announceGoneDevice", "announceNotYou", "removePasskeyAsk", "announceOk", "providerAccount", "providerAccountOther", "providerName", "signInTitle", "continueWith", "otherWays", "usePasskey", "scanFromDevice", "useRecoveryKit", "useOwnServer", "notNow", "passkeyHere", "createAccount", "alreadyUse", "libraryAdded", "cantUseAny", "tvSignIn", "tvSignInHow", "tvWithoutAccount", "switchProfile", "signInAnother", "approveWarning", "scanAgainHere", "codeFound", "usePhoneToSignIn", "passkeyLabel", "recoveryKitName", "joinedWithPasskey", "lastUsed", "givingAway", "kitHere", "kitDropped", "tooManyKits", "kitTaken", "plainLink", "debridConnected", "traktConnected", "unlinkAnyway", "deleteAnyway", "accountGone", "accountGoneActions", "deletionScheduled", "deletionScheduledBy", "deletionCancel", "deletionCancelUnlink", "secondWayIn", "noSecondWayIn", "noSecondWayInActions", "removeLibraryAsk", "removeLibraryDebrid", "reportLostRemove", "unreachable", "unreachableActions", "noRedirect", "noRedirectActions", "passkeyCancelled", "passkeyCancelledActions", "kitUnknownPasskey", "kitUnknownPasskeyActions", "startOverWarning", "ticketExpired", "ticketExpiredActions", "signupLimit", "signupLimitActions", "linkedElsewhere", "linkedElsewhereActions", "busy", "otherRelay", "otherRelayCode", "otherRelayCodeActions", "signInRefused", "signInWindow", "popupBlocked", "returnClose", "ownServerLabel", "ownServerUse", "foundWeb", "startOver", "signedInWith", "linkAnother", "linkedOn", "unlink", "savePasskeyHere", "unlinkLast", "appleRevokeFailed", "wiping", "wipeFailed", "secondWayInText", "notOwner",
+        "continueWithEmail", "emailTitle", "emailLabel", "emailSend", "badAddress", "codeTitle", "codeSentTo", "codeLabel", "codeResent", "codeMissing", "codeResend", "codeResendIn", "codeOtherAddress", "wrongCode", "codeExpired", "codeExpiredActions", "emailWait", "emailLimit", "emailLimitActions", "mailUnavailable", "mailUnavailableActions", "deletionScheduledByEmail", "deletionCancelUnlinkEmail",
     ]
 
     /// The bundled file: the app's own bundle, or the test bundle that compiles this file.

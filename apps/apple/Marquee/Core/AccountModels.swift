@@ -364,3 +364,9 @@ struct NativeStart: Decodable, Hashable, Sendable {
     let nonce: String
     let expiresMs: Int64
 }
+
+/// `emailSignInStart`'s answer: the flow the typed code goes to, and the relay's deadline for it.
+struct EmailStart: Decodable, Hashable, Sendable {
+    let flow: String
+    let expiresMs: Int64
+}

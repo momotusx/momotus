@@ -23,6 +23,12 @@ struct SignedInWith: View {
     @State private var anyway: IdentityLink?
     /// A link refused as linked elsewhere: Use it for this account instead, with its ticket.
     @State private var elsewhere: (ticket: String, provider: String)?
+    /// The relay lists `email`: Continue with email, its own row (accounts-email.md E12).
+    @State private var offersEmail = false
+    #if !os(tvOS)
+    /// Link another by email: the email screen, ending in the link call.
+    @State private var emailLink: SignInFlow?
+    #endif
 
     private var words: AccountWords { .shared }
     private var owner: Bool { SyncRules.mayDeleteAccount(profiles.snapshot) }
@@ -33,7 +39,7 @@ struct SignedInWith: View {
             if let error { Said(tone: .bad, text: error) }
             ForEach(links ?? []) { link in row(link) }
             #if !os(tvOS)
-            if owner, !unlinked.isEmpty {
+            if owner, !unlinked.isEmpty || emailUnlinked {
                 Text(words.linkAnother)
                     .textFont(Theme.type.callout, weight: .semibold, relativeTo: .callout)
                     .foregroundStyle(Theme.Palette.muted)
@@ -44,6 +50,11 @@ struct SignedInWith: View {
                         }
                         .buttonStyle(PillButtonStyle())
                         .disabled(busy)
+                    }
+                    if emailUnlinked {
+                        Button { linkEmail() } label: { Label(words.continueWithEmail, glyph: "mail") }
+                            .buttonStyle(PillButtonStyle())
+                            .disabled(busy)
                     }
                 }
             }
@@ -61,6 +72,9 @@ struct SignedInWith: View {
         #if !os(tvOS)
         // A sign-in another account holds, met after a join by QR: offered here.
         .onChange(of: sync.heldLink, initial: true) { takeHeld() }
+        .navigationDestination(isPresented: Binding(get: { emailLink?.onEmail ?? false }, set: { shown in if !shown { emailLink = nil } })) {
+            if let emailLink { EmailSignIn(flow: emailLink) { self.emailLink = nil } }
+        }
         #endif
     }
 
@@ -70,12 +84,18 @@ struct SignedInWith: View {
         return providers.filter { !linked.contains($0) }
     }
 
+    /// The email row shows only while no email link exists: at most one Email row (E12).
+    private var emailUnlinked: Bool {
+        offersEmail && links?.contains { $0.provider == "email" } == false
+    }
+
     private func row(_ link: IdentityLink) -> some View {
         VStack(alignment: .leading, spacing: Theme.Space.xs) {
             HStack(alignment: .top, spacing: Theme.Space.s) {
                 Glyph("link-2").frame(width: 24)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(AccountRules.providerAccount(link.provider))
+                    // Email reads "Email": the relay never knows which address a link is (E12).
+                    Text(link.provider == "email" ? AccountRules.providerName("email") : AccountRules.providerAccount(link.provider))
                         .textFont(Theme.type.headline, weight: .semibold, relativeTo: .headline)
                     Text(AccountRules.fill(words.linkedOn, ["date": AccountRules.date(link.createdMs)]))
                         .textFont(Theme.type.callout, relativeTo: .callout)
@@ -114,7 +134,11 @@ struct SignedInWith: View {
     private func load() async {
         do {
             links = try await sync.identities()
-            if let server = AccountServerOf.joined { providers = AccountRules.orderedProviders((try? await sync.relayInfo(server: server)) ?? []) }
+            if let server = AccountServerOf.joined {
+                let listed = (try? await sync.relayInfo(server: server)) ?? []
+                providers = AccountRules.orderedProviders(listed)
+                offersEmail = listed.contains("email")
+            }
         } catch {
             self.error = SyncProblem(error, action: .devices).words
         }
@@ -160,17 +184,47 @@ struct SignedInWith: View {
         defer { busy = false }
         error = nil
         do {
-            let ticket = try await AccountTickets.ticket(provider: provider, server: server, sync: sync)
-            do {
-                try await sync.linkIdentity(ticket: ticket)
-                await load()
-            } catch let refusal as CoreError where refusal.code == "linkedElsewhere" {
-                elsewhere = (ticket, provider)
-                error = AccountRules.trouble("linkedElsewhere", provider: provider)?.text
-            }
+            try await use(AccountTickets.ticket(provider: provider, server: server, sync: sync), provider: provider)
         } catch {
             if case SignInSheets.Failure.cancelled = error { return }
             self.error = AccountRules.trouble((error as? CoreError)?.code ?? "", provider: provider)?.text ?? error.localizedDescription
+        }
+    }
+
+    /// A sign-in's ticket goes to this account; one another account holds
+    /// waits for "Use it for this account instead".
+    private func use(_ ticket: String, provider: String) async throws {
+        do {
+            try await sync.linkIdentity(ticket: ticket)
+            await load()
+        } catch let refusal as CoreError where refusal.code == "linkedElsewhere" {
+            elsewhere = (ticket, provider)
+            error = AccountRules.trouble("linkedElsewhere", provider: provider)?.text
+        }
+    }
+
+    /// Link another by email: the email screen; its `found` or `new` ticket is linked.
+    private func linkEmail() {
+        guard let server = AccountServerOf.joined else { return }
+        error = nil
+        let flow = SignInFlow(server: server, sync: sync) { answer in
+            emailLink = nil
+            switch answer {
+            case .found(let ticket, _), .new(let ticket): await linkEmailTicket(ticket)
+            default: break
+            }
+        }
+        flow.openEmail()
+        emailLink = flow
+    }
+
+    private func linkEmailTicket(_ ticket: String) async {
+        busy = true
+        defer { busy = false }
+        do {
+            try await use(ticket, provider: "email")
+        } catch {
+            self.error = AccountRules.trouble((error as? CoreError)?.code ?? "", provider: "email")?.text ?? error.localizedDescription
         }
     }
 

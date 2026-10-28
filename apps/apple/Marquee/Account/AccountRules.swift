@@ -31,10 +31,25 @@ enum AccountRules {
     }
 
     /// The sign-in buttons in order: Apple first on Apple platforms, then
-    /// Google, Facebook, then any other the relay lists, in its order.
+    /// Google, Facebook, then any other the relay lists, in its order. `email`
+    /// is never a button: it is its own "Continue with email" row (accounts-email.md 4).
     static func orderedProviders(_ ids: [String]) -> [String] {
         let known = ["apple", "google", "facebook"]
-        return known.filter(ids.contains) + ids.filter { !known.contains($0) }
+        return known.filter(ids.contains) + ids.filter { !known.contains($0) && $0 != "email" }
+    }
+
+    // MARK: Email codes (plans/accounts-email.md 4)
+
+    /// The code field keeps digits only, cut at 6: a pasted "123 456" or "123-456" works.
+    static func codeDigits(_ typed: String) -> String {
+        String(typed.filter { $0.isASCII && $0.isNumber }.prefix(6))
+    }
+
+    /// Seconds until Send a new code turns on: 60 after the last mail, counted
+    /// from its time, so time in the background counts.
+    static func resendIn(sentAt: Date?, now: Date) -> Int {
+        guard let sentAt else { return 0 }
+        return max(0, Int((60 - now.timeIntervalSince(sentAt)).rounded(.up)))
     }
 
     // MARK: Announcements
@@ -111,7 +126,13 @@ enum AccountRules {
     static func deletionText(_ deletion: ScheduledDeletion) -> String {
         let date = date(deletion.dueMs)
         guard let provider = deletion.provider else { return fill(words.deletionScheduled, ["date": date]) }
+        if provider == "email" { return fill(words.deletionScheduledByEmail, ["date": date]) }
         return fill(words.deletionScheduledBy, ["provider": providerName(provider), "date": date])
+    }
+
+    /// "Cancel and turn off <provider> sign-in", its own words for email.
+    static func deletionCancelUnlink(_ provider: String) -> String {
+        provider == "email" ? words.deletionCancelUnlinkEmail : fill(words.deletionCancelUnlink, ["provider": providerName(provider)])
     }
 
     /// Until a second way in exists (4.1.7): a recovery kit, a passkey that
@@ -146,6 +167,13 @@ enum AccountRules {
         case "signupLimit": return Trouble(text: fill(words.signupLimit, ["providerAccount": account]), actions: words.signupLimitActions)
         case "linkedElsewhere": return Trouble(text: fill(words.linkedElsewhere, ["providerAccount": account]), actions: words.linkedElsewhereActions)
         case "busy": return Trouble(text: words.busy, actions: [])
+        case "signInRefused": return Trouble(text: words.signInRefused, actions: [])
+        case "badAddress": return Trouble(text: words.badAddress, actions: [])
+        case "wrongCode", "badCode": return Trouble(text: words.wrongCode, actions: [])
+        case "codeExpired": return Trouble(text: words.codeExpired, actions: words.codeExpiredActions)
+        case "emailWait": return Trouble(text: words.emailWait, actions: [])
+        case "emailLimit": return Trouble(text: words.emailLimit, actions: words.emailLimitActions)
+        case "mailUnavailable": return Trouble(text: words.mailUnavailable, actions: words.mailUnavailableActions)
         case "otherRelay": return Trouble(text: words.otherRelay, actions: [])
         case "notOwner": return Trouble(text: words.notOwner, actions: [])
         case "kitHere": return Trouble(text: words.kitHere, actions: [])

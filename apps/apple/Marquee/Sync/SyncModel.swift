@@ -533,6 +533,17 @@ final class SyncModel {
         return try await core.call("nativeSignIn", fields, as: SignInSnapshot.self)
     }
 
+    /// An emailed code for the address: its flow (the verifier stays in the core,
+    /// in memory). `badAddress` is answered before any call (accounts-email.md 4).
+    func emailSignInStart(server: String, email: String) async throws -> EmailStart {
+        try await core.call("emailSignInStart", ["server": server, "email": email], as: EmailStart.self)
+    }
+
+    /// The typed code for that flow: `found` or `new`, as a provider sign-in ends.
+    func emailSignIn(flow: String, code: String) async throws -> SignInSnapshot {
+        try await core.call("emailSignIn", ["flow": flow, "code": code], as: SignInSnapshot.self)
+    }
+
     /// A relay's brokered sign-in (Google, Facebook, any other): the view to
     /// open in an auth session, ending in `found`, `new` or `failed`.
     func signInView(server: String, provider: String) -> LiveRecord<SignInSnapshot> {

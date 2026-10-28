@@ -52,7 +52,7 @@ struct AccountCard: View {
                 Button(words.deletionCancel) { run { try await sync.cancelDeletion(unlink: false) } }
                     .buttonStyle(PillButtonStyle(prominent: true))
                 if let provider = deletion.provider {
-                    Button(AccountRules.fill(words.deletionCancelUnlink, ["provider": AccountRules.providerName(provider)])) {
+                    Button(AccountRules.deletionCancelUnlink(provider)) {
                         run { try await sync.cancelDeletion(unlink: true) }
                     }
                     .buttonStyle(PillButtonStyle())

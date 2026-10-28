@@ -146,6 +146,47 @@ private func announcement(_ kind: String, member: String? = "m", by: String? = "
     #expect(AccountRules.trouble("notOwner")?.text == "Only the main profile can do that.")
 }
 
+// Sign in with email (plans/accounts-email.md 4).
+
+@Test func emailIsNeverAProviderButton() {
+    #expect(AccountRules.orderedProviders(["email", "google", "apple"]) == ["apple", "google"])
+    #expect(AccountRules.orderedProviders(["email"]).isEmpty, "the email row is the primary then, not a button")
+    #expect(AccountRules.providerName("email") == "Email")
+    #expect(AccountRules.providerAccount("email") == "email address")
+    #expect(AccountRules.trouble("signupLimit", provider: "email")?.text == "This email address has made several Momotus accounts lately. Try again later or use another way.")
+}
+
+@Test func theCodeFieldKeepsSixDigitsAndTheResendTimerCountsFromTheMail() {
+    #expect(AccountRules.codeDigits("123 456") == "123456")
+    #expect(AccountRules.codeDigits("123-4567") == "123456")
+    #expect(AccountRules.codeDigits("a1b2") == "12")
+    #expect(AccountRules.codeDigits("١٢٣") == "", "ASCII digits only")
+    let sent = Date(timeIntervalSince1970: 1_000)
+    #expect(AccountRules.resendIn(sentAt: nil, now: sent) == 0)
+    #expect(AccountRules.resendIn(sentAt: sent, now: sent) == 60)
+    #expect(AccountRules.resendIn(sentAt: sent, now: sent.addingTimeInterval(0.4)) == 60)
+    #expect(AccountRules.resendIn(sentAt: sent, now: sent.addingTimeInterval(59.5)) == 1)
+    // Time in the background counts: the label is worked out from the mail's time.
+    #expect(AccountRules.resendIn(sentAt: sent, now: sent.addingTimeInterval(600)) == 0)
+}
+
+@Test func eachEmailAnswerSaysItsWords() {
+    let words = AccountWords.shared
+    #expect(AccountRules.trouble("badAddress")?.text == words.badAddress)
+    #expect(AccountRules.trouble("wrongCode")?.text == words.wrongCode)
+    #expect(AccountRules.trouble("badCode")?.text == words.wrongCode, "a malformed code reads as a wrong one")
+    #expect(AccountRules.trouble("codeExpired")?.actions == ["Send a new code", "Use another address"])
+    #expect(AccountRules.trouble("emailWait")?.text == words.emailWait)
+    #expect(AccountRules.trouble("emailLimit")?.actions == ["Other ways to sign in"])
+    #expect(AccountRules.trouble("mailUnavailable")?.actions == ["Try again", "Other ways to sign in"])
+    #expect(AccountRules.trouble("signInRefused")?.text == "The sign-in did not work. Try again or use another way.")
+    // A deletion asked by email uses its own words, never "your Email account".
+    let byEmail = ScheduledDeletion(dueMs: 0, provider: "email")
+    #expect(AccountRules.deletionText(byEmail).hasPrefix("Someone signed in with your email address and asked to delete your Momotus account on "))
+    #expect(AccountRules.deletionCancelUnlink("email") == "Cancel and turn off email sign-in")
+    #expect(AccountRules.deletionCancelUnlink("google") == "Cancel and turn off Google sign-in")
+}
+
 @Test func passkeyLabelsAndLastUsedSayTheDevice() {
     #expect(AccountRules.passkeyLabel(device: "Robin's iPhone") == "Passkey, saved on Robin's iPhone")
     let phone = member("phone", name: "Pixel")

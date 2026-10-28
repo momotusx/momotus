@@ -42,6 +42,16 @@ final class SignInFlow {
         case joined
         /// Made a new account and its first way in, or Later: the first-run steps go on.
         case done
+        /// Sign in with email: the address (plans/accounts-email.md 4).
+        case email
+        /// Enter the code mailed to `sentTo`.
+        case code
+    }
+
+    /// The email calls: the core's, unless a test scripts them.
+    struct Mail {
+        var start: @MainActor (_ server: String, _ email: String) async throws -> EmailStart
+        var take: @MainActor (_ flow: String, _ code: String) async throws -> SignInSnapshot
     }
 
     private(set) var stage: Stage = .choose
@@ -58,16 +68,44 @@ final class SignInFlow {
     /// A sign-in linked once this device joined another way (the pairing door).
     private(set) var linkAfterJoin: HeldLink?
 
+    // Email, kept in memory only while this flow lives (E12).
+    /// The relay lists `email`: the "Continue with email" row.
+    private(set) var offersEmail = false
+    /// The address field, as typed.
+    var address = ""
+    /// The code field: digits only, cut at 6 (`typeCode`).
+    private(set) var code = ""
+    /// The address the newest code went to, and when: the resend timer counts from it.
+    private(set) var sentTo = ""
+    private(set) var sentAt: Date?
+    /// A resend worked: `codeResent` is said.
+    private(set) var resent = false
+    /// A start or a code is with the relay: the field read-only, the button busy.
+    private(set) var sending = false
+    /// The newest flow while its code may still work; nil once used, ended or refused.
+    private(set) var mailFlow: String?
+    /// On the address or the code stage.
+    var onEmail: Bool { stage == .email || stage == .code }
+
     let server: String
     @ObservationIgnored private let sync: SyncModel
     @ObservationIgnored private let sheets: SignInSheets.Calls
+    @ObservationIgnored private let mail: Mail
+    /// Account's Link another: the code's answer goes here instead of `signedIn`.
+    @ObservationIgnored private let finish: (@MainActor (SignInSnapshot) async -> Void)?
     @ObservationIgnored private var native: NativeStart?
     @ObservationIgnored private var brokered: LiveRecord<SignInSnapshot>?
+    /// Try again on the code stage repeats the last call: a send, else the code.
+    @ObservationIgnored private var lastWasSend = false
 
-    init(server: String, sync: SyncModel, sheets: SignInSheets.Calls = .init()) {
+    init(server: String, sync: SyncModel, sheets: SignInSheets.Calls = .init(), mail: Mail? = nil,
+         finish: (@MainActor (SignInSnapshot) async -> Void)? = nil) {
         self.server = server
         self.sync = sync
         self.sheets = sheets
+        self.mail = mail ?? Mail(start: { try await sync.emailSignInStart(server: $0, email: $1) },
+                                 take: { try await sync.emailSignIn(flow: $0, code: $1) })
+        self.finish = finish
     }
 
     // MARK: Opening
@@ -77,7 +115,9 @@ final class SignInFlow {
     /// screen's task runs: it ends when the screen closes.
     func open() async {
         do {
-            providers = AccountRules.orderedProviders(try await sync.relayInfo(server: server))
+            let listed = try await sync.relayInfo(server: server)
+            providers = AccountRules.orderedProviders(listed)
+            offersEmail = listed.contains("email")
             unreachable = false
         } catch {
             unreachable = true
@@ -166,6 +206,148 @@ final class SignInFlow {
             } else {
                 fail(error)
             }
+        }
+    }
+
+    /// A provider's sign-in, from its button or from the trouble line's
+    /// Continue after a held ticket ran out. Email there is the code stage
+    /// with the address still in memory and a new code (accounts-email.md 4.6).
+    func press(_ id: String, name: String) async {
+        switch id {
+        case "email": await emailAgain()
+        case "apple": await continueWithApple(name: name)
+        default: await continueWith(id, name: name)
+        }
+    }
+
+    // MARK: Email (plans/accounts-email.md 4)
+
+    /// Continue with email: the address stage, the address kept from before.
+    func openEmail() {
+        provider = "email"
+        trouble = nil
+        troubleCode = nil
+        stage = .email
+    }
+
+    /// Back from the code stage, or Use another address: the address stage, prefilled.
+    func toAddress() {
+        trouble = nil
+        troubleCode = nil
+        code = ""
+        stage = .email
+    }
+
+    /// Send code. The same address again while its code may still work goes
+    /// back to the code stage without a new mail.
+    func sendCode() async {
+        let typed = address.trimmingCharacters(in: .whitespacesAndNewlines)
+        if typed == sentTo, mailFlow != nil, let sentAt, Date.now.timeIntervalSince(sentAt) < 10 * 60 {
+            toCode()
+            return
+        }
+        await start(typed, resend: false)
+    }
+
+    /// Send a new code to the address the last one went to.
+    func resendCode() async {
+        await start(sentTo, resend: true)
+    }
+
+    /// Typed into the code field: digits only, cut at 6; the sixth digit submits once.
+    /// Read-only while sending, and once the code can no longer be used.
+    func typeCode(_ typed: String, name: String) {
+        guard !sending, mailFlow != nil else { return }
+        let before = code
+        code = AccountRules.codeDigits(typed)
+        if code.count == 6, code != before { Task { await submitCode(name: name) } }
+    }
+
+    /// The code to the relay, once at a time; its answer ends as a provider's does.
+    func submitCode(name: String) async {
+        guard !sending, stage == .code, code.count == 6, let flow = mailFlow else { return }
+        sending = true
+        defer { sending = false }
+        lastWasSend = false
+        trouble = nil
+        troubleCode = nil
+        let answer: SignInSnapshot
+        do {
+            answer = try await mail.take(flow, code)
+        } catch {
+            return codeFailed((error as? CoreError)?.code ?? "unreachable", error)
+        }
+        if case .failed(let refused) = answer { return codeFailed(refused, nil) }
+        mailFlow = nil
+        if let finish { await finish(answer) } else { await signedIn(answer, name: name) }
+    }
+
+    /// Try again on an email stage repeats that stage's own call, never the provider flow.
+    func tryAgain(name: String) async {
+        switch stage {
+        case .email: await sendCode()
+        case .code: if lastWasSend { await resendCode() } else { await submitCode(name: name) }
+        default: retry()
+        }
+    }
+
+    private func toCode() {
+        trouble = nil
+        troubleCode = nil
+        code = ""
+        stage = .code
+    }
+
+    private func start(_ typed: String, resend: Bool) async {
+        guard !sending else { return }
+        sending = true
+        defer { sending = false }
+        lastWasSend = true
+        trouble = nil
+        troubleCode = nil
+        resent = false
+        do {
+            let started = try await mail.start(server, typed)
+            mailFlow = started.flow
+            sentTo = typed
+            sentAt = .now
+            toCode()
+            resent = resend
+        } catch {
+            fail(error)
+        }
+    }
+
+    /// The held ticket ran out: a new code to the address in memory; with none
+    /// (the app was restarted), the address stage, empty.
+    private func emailAgain() async {
+        openEmail()
+        guard !sentTo.isEmpty else { return }
+        address = sentTo
+        mailFlow = nil
+        toCode()
+        await resendCode()
+    }
+
+    /// The code stage's answers table: the stage stays, its words and actions change.
+    private func codeFailed(_ refused: String, _ error: (any Error)?) {
+        switch refused {
+        case "wrongCode", "badCode":
+            say("wrongCode")
+            code = ""
+        case "ticketExpired", "wrongFlow":
+            say("codeExpired")
+            mailFlow = nil
+        case "signInRefused":
+            troubleCode = refused
+            trouble = AccountRules.Trouble(text: AccountRules.words.signInRefused, actions: AccountRules.words.codeExpiredActions)
+            mailFlow = nil
+        case "emailLimit":
+            say(refused)
+            mailFlow = nil
+        default:
+            say(refused)
+            if trouble == nil { trouble = AccountRules.Trouble(text: error?.localizedDescription ?? AccountRules.words.unreachable, actions: []) }
         }
     }
 
@@ -323,15 +505,17 @@ final class SignInFlow {
         trouble = AccountRules.trouble(code, provider: provider)
     }
 
+    /// A failed step in words. An email stage keeps its stage (accounts-email.md
+    /// 4.4); any other goes back to the sign-in buttons.
     private func fail(_ error: any Error) {
         if case SignInSheets.Failure.cancelled = error {
-            stage = .choose
+            if !onEmail { stage = .choose }
             return
         }
         let code = (error as? CoreError)?.code ?? "unreachable"
         say(code)
         if trouble == nil { trouble = AccountRules.Trouble(text: error.localizedDescription, actions: []) }
-        stage = .choose
+        if !onEmail { stage = .choose }
     }
 }
 #endif
