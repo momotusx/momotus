@@ -468,7 +468,7 @@ test("Subtitles: Continue waits for the language list, and a choice made before 
 test("Subtitles: a language list that fails says so, and Continue still goes on", async ({ browser }) => {
   const page = await device(browser, "desktop", { locale: "de-DE", languages: "fail" });
   await page.goto("/welcome?step=subs&form=desktop");
-  await expect(page.locator('section[aria-label="Subtitles"] .st.bad')).toContainText("Could not load the languages: the core is busy");
+  await expect(page.locator('section.framed .st.bad')).toContainText("Could not load the languages: the core is busy");
   await expect(page.locator('[data-f="welcome:sub:none"]')).toHaveAttribute("aria-checked", "true");
   await page.locator('[data-f="welcome:next"]').click();
   await expect(page).toHaveURL(/step=3/);
