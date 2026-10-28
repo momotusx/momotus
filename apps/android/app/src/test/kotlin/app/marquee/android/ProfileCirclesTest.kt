@@ -101,8 +101,11 @@ class ProfileCirclesTest {
     }
 
     /** The editor's picture on TV, 64 dp in its 76 dp choice; (38, 12) is inside the circle, above the glyph. */
-    private fun picture(focused: Boolean) {
-        tile(Form.Tv) {
+    private fun picture(
+        focused: Boolean,
+        form: Form = Form.Tv,
+    ) {
+        tile(form) {
             Choice(selected = false, label = "Popcorn", size = 64.dp, onClick = {}, forceFocus = focused) { lit ->
                 AvatarArt("popcorn", "ember", "M", 64.dp, lit = lit)
             }
@@ -115,6 +118,13 @@ class ProfileCirclesTest {
         picture(focused = true)
         val fill = pixels()[38, 12]
         assertTrue(fill.luminance() > 0.7f, "the focused picture is $fill, not white")
+    }
+
+    @Test
+    fun `a focused picture on a phone keeps its color`() {
+        picture(focused = true, form = Form.Phone)
+        val fill = pixels()[38, 12]
+        assertTrue(fill.luminance() < 0.5f, "the focused phone picture is $fill")
     }
 
     @Test
