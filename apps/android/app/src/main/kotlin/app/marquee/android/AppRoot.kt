@@ -47,6 +47,7 @@ import app.marquee.core.AccountRules
 import app.marquee.core.Format
 import app.marquee.core.PendingRemoval
 import app.marquee.core.TileCopy
+import app.marquee.core.model.FirstRunStill
 import app.marquee.core.model.HomeCatalog
 import app.marquee.core.model.Tile
 import app.marquee.core.model.playVideoId
@@ -379,6 +380,7 @@ private fun AppNav(
                             onDefaults = { backStack.add(Route.Defaults(DefaultsMode.FirstRun)) },
                             onImport = { backStack.add(Route.Import) },
                             onPair = if (created) null else ({ backStack.add(Route.Pairing) }),
+                            still = app.firstRunStill(),
                         )
                     }
                     entry<Route.SignIn> { route ->
@@ -433,7 +435,7 @@ private fun AppNav(
                         )
                     }
                     entry<Route.Defaults> { route ->
-                        DefaultsScreen(session, route.mode, onDone = {
+                        DefaultsScreen(session, route.mode, onBack = ::pop, onDone = {
                             when (route.mode) {
                                 // A first run asks the one question (plans/m13-stream-choice.md 4.5).
                                 DefaultsMode.FirstRun, DefaultsMode.AfterImport -> backStack.add(Route.StreamQuestion)
@@ -446,6 +448,8 @@ private fun AppNav(
                     entry<Route.StreamQuestion> {
                         StreamQuestionScreen(
                             session,
+                            still = app.firstRunStill(),
+                            onBack = ::pop,
                             onDone = {
                                 // A Back during the save took the question away: nothing to replace.
                                 if (backStack.lastOrNull() == Route.StreamQuestion) {
@@ -454,7 +458,9 @@ private fun AppNav(
                             },
                         )
                     }
-                    entry<Route.SubtitleLanguage> { SubtitleStepScreen(session, onDone = ::arrive) }
+                    entry<Route.SubtitleLanguage> {
+                        SubtitleStepScreen(session, still = app.firstRunStill(), onBack = ::pop, onDone = ::arrive)
+                    }
                     entry<Route.Home> {
                         // Fully drawn once the first rows show: the start's end for the system and the benchmarks.
                         ReportDrawnWhen { app.home.rows.isNotEmpty() }
@@ -862,4 +868,11 @@ private fun RemovalNote(removal: PendingRemoval) {
         )
         if (tile != null) SecondaryButton("Undo", removal::undo)
     }
+}
+
+/** The first run's still (B4): asked at the first framed step that shows, then kept for the others. */
+@Composable
+private fun AppState.firstRunStill(): FirstRunStill? {
+    LaunchedEffect(this) { askStill() }
+    return still
 }

@@ -13,6 +13,7 @@ import app.marquee.core.InstallCards
 import app.marquee.core.LinkInstall
 import app.marquee.core.PendingRemoval
 import app.marquee.core.client.CoreLog
+import app.marquee.core.model.FirstRunStill
 import app.marquee.core.session.CoreSession
 import app.marquee.core.startsFresh
 import app.marquee.core.views.HomeView
@@ -71,6 +72,30 @@ class AppState(
 
     /** Home's one-time recommended addons card: its answer is written on this scope, never the page's. */
     val defaultsCard = DefaultsCard(session.ops, viewModelScope)
+
+    /**
+     * The still first run frames its question steps with (`firstRunStill`, B4): asked once, at the first framed step,
+     * and kept for the others; null for none (the frame stays black).
+     */
+    var still: FirstRunStill? by mutableStateOf(null)
+        private set
+    private var stillAsked = false
+
+    fun askStill() {
+        if (stillAsked) return
+        stillAsked = true
+        viewModelScope.launch {
+            still =
+                try {
+                    session.ops.firstRunStill()
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    CoreLog.w("first-run still: ${CoreLog.describe(e)}")
+                    null
+                }
+        }
+    }
 
     private var homeView: HomeView? = null
 

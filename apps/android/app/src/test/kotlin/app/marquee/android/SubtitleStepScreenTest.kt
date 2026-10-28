@@ -18,6 +18,8 @@ import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.captureToImage
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -25,6 +27,7 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.unit.dp
 import app.marquee.core.SubtitleStep
 import app.marquee.core.client.CoreClient
@@ -177,7 +180,8 @@ class SubtitleStepScreenTest {
         until { shows("This device's language") && ready() }
         compose.onNodeWithText("Turkish").assertExists()
         shot("subtitle-step-phone")
-        compose.onNodeWithText(SubtitleStep.NONE).performClick()
+        // The frame sits over the list: No subtitles is further down.
+        compose.onNodeWithText(SubtitleStep.NONE).performScrollTo().performClick()
         compose.onNodeWithText("Continue").performClick()
         until { done == 1 }
         assertTrue(wrote("[]"), "No subtitles writes an empty list: $sent")
@@ -196,6 +200,7 @@ class SubtitleStepScreenTest {
             SubtitleStepPage(step) {}
         }
         until { shows("This device's language") && ready() }
+        compose.onNodeWithText(SubtitleStep.NONE).performScrollTo()
         val pixels = compose.onRoot().captureToImage().toPixelMap()
 
         // Just inside a row's left edge, where an outline would draw, and well inside it, at its middle.
@@ -298,6 +303,16 @@ class SubtitleStepScreenTest {
         until { done == 1 }
         compose.waitForIdle()
         assertEquals(1, done)
+    }
+
+    @Test
+    @Config(qualifiers = "w960dp-h540dp-xhdpi")
+    fun `the subtitles step is framed, its question in the frame, step 4 of 4`() {
+        val step = step("tr")
+        page(Form.Tv) { SubtitleStepPage(step) {} }
+        until { ready() }
+        compose.onNode(hasText(SubtitleStep.TITLE) and hasAnyAncestor(hasTestTag(FILM_FRAME))).assertExists()
+        compose.onNodeWithText("Step 4 of 4").assertExists()
     }
 
     @Test

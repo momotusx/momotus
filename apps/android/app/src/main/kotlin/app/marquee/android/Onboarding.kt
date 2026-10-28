@@ -1,11 +1,14 @@
 package app.marquee.android
 
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -17,12 +20,15 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBars
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
@@ -36,17 +42,31 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.BiasAlignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.isTraversalGroup
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -61,6 +81,7 @@ import app.marquee.core.SubtitleStep
 import app.marquee.core.model.DefaultAddonInfo
 import app.marquee.core.model.DefaultAddons
 import app.marquee.core.model.DefaultInstalled
+import app.marquee.core.model.FirstRunStill
 import app.marquee.core.model.Prefs
 import app.marquee.core.route.DefaultsMode
 import app.marquee.core.session.CoreSession
@@ -87,6 +108,8 @@ import app.marquee.design.focusPalette
 import app.marquee.design.focusSelectable
 import app.marquee.design.focusSoon
 import app.marquee.design.marqueeFocus
+import app.marquee.design.windowPx
+import coil3.compose.AsyncImage
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -103,81 +126,275 @@ fun OnboardingScreen(
     onDefaults: () -> Unit,
     onImport: (() -> Unit)? = null,
     onPair: (() -> Unit)? = null,
+    /** The frame's still (B4); null keeps it black. */
+    still: FirstRunStill? = null,
 ) {
     val tv = Marquee.form == Form.Tv
     val first = remember { FocusRequester() }
     AutoFocus(first)
+    FramedPage(
+        1,
+        "Browse first",
+        onDefaults,
+        null,
+        still,
+        "How would you like to begin?",
+        "No account needed. Everything stays on this device until you turn on sync.",
+    ) {
+        val doors: @Composable (Modifier) -> Unit = { door ->
+            onImport?.let {
+                Door(
+                    "I use Stremio",
+                    "Bring your addons, library and Continue Watching over with a code.",
+                    Icons.DoorOpen,
+                    it,
+                    door,
+                    first,
+                )
+            }
+            Door(
+                "Start fresh",
+                "Choose from the recommended addons, then start watching.",
+                Icons.Sparkles,
+                onDefaults,
+                door,
+                first.takeIf { onImport == null },
+            )
+            onPair?.let {
+                Door(
+                    "I already use Momotus",
+                    "Join your other device's sync account with a code. Library and addons follow.",
+                    Icons.QrCode,
+                    it,
+                    door,
+                    null,
+                )
+            }
+        }
+        Doors(tv, listOfNotNull(onImport, onDefaults, onPair).size, doors)
+    }
+}
 
+/** The doors in the bar under the frame: side by side on TV, each up to 520 wide; stacked on the phone. */
+@Composable
+private fun Doors(
+    tv: Boolean,
+    count: Int,
+    doors: @Composable (Modifier) -> Unit,
+) {
+    if (tv) {
+        // An exact width each, so the row's one height (the tallest door's) is measured at the width they get.
+        BoxWithConstraints(Modifier.fillMaxWidth()) {
+            val gap = Marquee.space.m
+            val width = minOf(DOOR_WIDTH, (maxWidth - gap * (count - 1)) / count)
+            Row(
+                Modifier.fillMaxWidth().height(IntrinsicSize.Min).semantics { isTraversalGroup = true },
+                horizontalArrangement = Arrangement.spacedBy(gap, Alignment.CenterHorizontally),
+            ) { doors(Modifier.width(width).fillMaxHeight()) }
+        }
+    } else {
+        Column(
+            Modifier.semantics { isTraversalGroup = true },
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) { doors(Modifier.fillMaxWidth()) }
+    }
+}
+
+/**
+ * A first-run question step (B4, the owner's pick of 2026-10-28): the step's header, then a film frame on black
+ * holding the still with the question as its subtitle, and the choices in the bar under it ([bar]); [foot] stays in
+ * sight under it all. On TV the frame and its bar sit in the middle of the space under the header.
+ */
+@Composable
+private fun FramedPage(
+    step: Int,
+    skip: String,
+    onSkip: () -> Unit,
+    onBack: (() -> Unit)?,
+    still: FirstRunStill?,
+    question: String,
+    lead: String,
+    foot: (@Composable () -> Unit)? = null,
+    bar: @Composable ColumnScope.() -> Unit,
+) {
+    val tv = Marquee.form == Form.Tv
     Column(
         Modifier
             .fillMaxSize()
+            .background(Color.Black)
             .windowInsetsPadding(WindowInsets.systemBars)
-            .padding(horizontal = Marquee.safe.side, vertical = Marquee.safe.top),
-        verticalArrangement = Arrangement.spacedBy(Marquee.space.l),
+            .padding(vertical = Marquee.safe.top),
     ) {
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.weight(1f)) { BrandLockup(if (Marquee.form == Form.Tv) 44.dp else 32.dp) }
-            SkipLink("Browse first", onDefaults)
-        }
-        // Scrolls when it does not fit (a small phone at a large font scale); centered when it does.
+        StepHeader(step, skip, onSkip, onBack, Modifier.padding(horizontal = Marquee.safe.side).testTag(STEP_HEADER))
+        // Scrolls when it does not fit (a small phone at a large font scale, More languages).
         BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
             Column(
-                Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).heightIn(min = maxHeight),
-                verticalArrangement = Arrangement.spacedBy(Marquee.space.m, Alignment.CenterVertically),
+                Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+                    .heightIn(min = maxHeight)
+                    .padding(vertical = Marquee.space.m),
+                verticalArrangement = if (tv) Arrangement.Center else Arrangement.Top,
+                horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                MqText("How would you like to begin?", role = if (tv) TextRole.Title1 else TextRole.Title2)
-                MqText(
-                    "No account needed. Everything stays on this device until you turn on sync.",
-                    role = TextRole.Body,
-                    color = Marquee.colors.muted,
-                    modifier = Modifier.widthIn(max = 720.dp),
+                FilmFrame(still, question, lead, Modifier.padding(horizontal = if (tv) Marquee.safe.side else 0.dp))
+                Column(
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = if (tv) Marquee.safe.side else 16.dp)
+                        .padding(top = if (tv) 48.dp else 20.dp)
+                        .testTag(FILM_BAR),
+                    verticalArrangement = Arrangement.spacedBy(Marquee.space.s),
+                    content = bar,
                 )
-                val doors: @Composable (Modifier) -> Unit = { door ->
-                    onImport?.let {
-                        Door(
-                            "I use Stremio",
-                            "Bring your addons, library and Continue Watching over with a code.",
-                            Icons.Link,
-                            it,
-                            door,
-                            first,
-                        )
-                    }
-                    Door(
-                        "Start fresh",
-                        "Choose from the recommended addons, then start watching.",
-                        Icons.Plus,
-                        onDefaults,
-                        door,
-                        first.takeIf { onImport == null },
+            }
+        }
+        foot?.let { Box(Modifier.fillMaxWidth().padding(horizontal = Marquee.safe.side)) { it() } }
+    }
+}
+
+/**
+ * The film frame: 2.39:1, no taller than 40 percent of the screen, centered (the phone's spans the width while it
+ * fits). The still fills it, faded in by opacity; with none it stays black. The question is its subtitle, one 60
+ * percent box per line, and a real heading; the lead line rides under it on TV and under the frame on the phone.
+ */
+@Composable
+internal fun FilmFrame(
+    still: FirstRunStill?,
+    question: String,
+    lead: String,
+    modifier: Modifier = Modifier,
+) {
+    val tv = Marquee.form == Form.Tv
+    val cap = with(LocalDensity.current) { windowPx().height.toDp() } * FILM_HEIGHT
+    Column(modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+        BoxWithConstraints(Modifier.fillMaxWidth(), contentAlignment = Alignment.TopCenter) {
+            val width = minOf(maxWidth, cap * FILM_RATIO)
+            val height = width / FILM_RATIO
+            Box(Modifier.size(width, height).background(Color.Black).testTag(FILM_FRAME)) {
+                still?.let { s ->
+                    var landed by remember(s.background) { mutableStateOf(false) }
+                    val alpha by animateFloatAsState(if (landed) 1f else 0f, tween(Marquee.panelMs), label = "still")
+                    AsyncImage(
+                        model = s.background,
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        alignment = BiasAlignment(0f, -0.2f),
+                        onSuccess = { landed = true },
+                        modifier = Modifier.matchParentSize().graphicsLayer { this.alpha = alpha },
                     )
-                    onPair?.let {
-                        Door(
-                            "I already use Momotus",
-                            "Join your other device's sync account with a code. Library and addons follow.",
-                            Icons.QrCode,
-                            it,
-                            door,
-                            null,
-                        )
-                    }
                 }
-                val single = onImport == null && onPair == null
-                if (tv) {
-                    // The doors share the width; a single one keeps the width of a card, not of the screen.
-                    Row(
-                        Modifier.height(IntrinsicSize.Min),
-                        horizontalArrangement = Arrangement.spacedBy(Marquee.space.l),
-                    ) {
-                        doors(if (single) Modifier.widthIn(max = 640.dp) else Modifier.weight(1f).fillMaxHeight())
-                    }
-                } else {
-                    Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.s)) {
-                        doors(Modifier.fillMaxWidth())
-                    }
+                Column(
+                    Modifier
+                        .align(Alignment.BottomCenter)
+                        .fillMaxWidth()
+                        .padding(horizontal = if (tv) width * 0.06f else 14.dp)
+                        .padding(bottom = height * if (tv) 0.09f else 0.12f),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Cue(
+                        question,
+                        if (tv) TextRole.Title3 else TextRole.Title2,
+                        FontWeight.SemiBold,
+                        Modifier.semantics { heading() },
+                    )
+                    if (tv) Cue(lead, TextRole.Headline, FontWeight.Medium)
                 }
             }
         }
+        if (!tv) {
+            MqText(
+                lead,
+                Modifier.padding(start = 24.dp, end = 24.dp, top = 16.dp),
+                role = TextRole.Callout,
+                color = Marquee.colors.dim,
+                textAlign = TextAlign.Center,
+            )
+        }
+    }
+}
+
+/** A line set as a film's subtitle: white, one box of the player's 60 percent scrim behind each line. */
+@Composable
+private fun Cue(
+    text: String,
+    role: TextRole,
+    weight: FontWeight,
+    modifier: Modifier = Modifier,
+) {
+    var layout by remember { mutableStateOf<TextLayoutResult?>(null) }
+    MqText(
+        text,
+        modifier.drawBehind {
+            val l = layout ?: return@drawBehind
+            val pad = l.size.height / l.lineCount.coerceAtLeast(1) * 0.22f
+            for (i in 0 until l.lineCount) {
+                val left = l.getLineLeft(i) - pad
+                val right = l.getLineRight(i) + pad
+                drawRect(
+                    FILM_SCRIM,
+                    Offset(left, l.getLineTop(i)),
+                    Size(
+                        right - left,
+                        l.getLineBottom(i) - l.getLineTop(i),
+                    ),
+                )
+            }
+        },
+        role = role,
+        color = Color.White,
+        weight = weight,
+        textAlign = TextAlign.Center,
+        onTextLayout = { layout = it },
+    )
+}
+
+/**
+ * A first-run step's header: the mark and name at the left; Back (from step 2), "Step N of 4" with its dots and the
+ * step's skip at the right. The phone reads the count without showing it.
+ */
+@Composable
+private fun StepHeader(
+    step: Int,
+    skip: String?,
+    onSkip: () -> Unit,
+    onBack: (() -> Unit)?,
+    modifier: Modifier = Modifier,
+) {
+    val tv = Marquee.form == Form.Tv
+    Row(
+        modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(if (tv) Marquee.space.m else 0.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(Modifier.weight(1f)) { BrandLockup(if (tv) 44.dp else 32.dp) }
+        onBack?.let { SkipLink("Back", it, back = true) }
+        StepCount(step)
+        skip?.let { SkipLink(it, onSkip) }
+    }
+}
+
+/** "Step N of 4": its dots and words on TV; the phone has no room for them and reads them only. */
+@Composable
+private fun StepCount(step: Int) {
+    val words = "Step $step of $FIRST_RUN_STEPS"
+    if (Marquee.form != Form.Tv) {
+        Box(Modifier.size(1.dp).semantics { contentDescription = words })
+        return
+    }
+    Row(horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.clearAndSetSemantics { }, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            for (i in 1..FIRST_RUN_STEPS) {
+                Box(
+                    Modifier
+                        .size(if (i == step) 28.dp else 10.dp, 10.dp)
+                        .clip(RoundedCornerShape(5.dp))
+                        .background(if (i == step) Color.White else Color.White.copy(alpha = 0.4f)),
+                )
+            }
+        }
+        MqText(words, role = TextRole.Caption, weight = FontWeight.SemiBold, color = Marquee.colors.dim)
     }
 }
 
@@ -196,6 +413,8 @@ class StreamQuestionHolder(
 @Composable
 fun StreamQuestionScreen(
     session: CoreSession,
+    still: FirstRunStill? = null,
+    onBack: (() -> Unit)? = null,
     onDone: () -> Unit,
 ) {
     val holder =
@@ -204,59 +423,39 @@ fun StreamQuestionScreen(
             factory = viewModelFactory { initializer { StreamQuestionHolder(session) } },
         )
     val page = holder.page
+    StreamQuestionPage(still, page.problem, onBack, onDone) { page.answer(it, onDone) }
+}
+
+/** The question's page: the frame, the two answers in its bar, and why a save failed ([problem]). */
+@Composable
+internal fun StreamQuestionPage(
+    still: FirstRunStill?,
+    problem: String?,
+    onBack: (() -> Unit)?,
+    onSkip: () -> Unit,
+    onAnswer: (StreamChoiceCopy.Answer) -> Unit,
+) {
     val tv = Marquee.form == Form.Tv
     val fast = remember { FocusRequester() }
     AutoFocus(fast)
-    Column(
-        Modifier
-            .fillMaxSize()
-            .windowInsetsPadding(WindowInsets.systemBars)
-            .padding(horizontal = Marquee.safe.side, vertical = Marquee.safe.top),
-        verticalArrangement = Arrangement.spacedBy(Marquee.space.l),
+    FramedPage(
+        3,
+        StreamChoiceCopy.SKIP,
+        onSkip,
+        onBack,
+        still,
+        StreamChoiceCopy.QUESTION_TITLE,
+        StreamChoiceCopy.QUESTION_LEAD,
     ) {
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.weight(1f)) { BrandLockup(if (Marquee.form == Form.Tv) 44.dp else 32.dp) }
-            SkipLink(StreamChoiceCopy.SKIP, onDone)
+        Doors(tv, 2) { door ->
+            Door(StreamChoiceCopy.FAST.label, StreamChoiceCopy.FAST.text, Icons.Zap, {
+                onAnswer(StreamChoiceCopy.FAST)
+            }, door, fast)
+            Door(StreamChoiceCopy.BEST.label, StreamChoiceCopy.BEST.text, Icons.Gem, {
+                onAnswer(StreamChoiceCopy.BEST)
+            }, door, null)
         }
-        // In the middle of the screen when it fits, as the first step; it scrolls when it does not.
-        BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
-            Column(
-                Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).heightIn(min = maxHeight),
-                verticalArrangement = Arrangement.spacedBy(Marquee.space.m, Alignment.CenterVertically),
-            ) {
-                MqText(StreamChoiceCopy.QUESTION_TITLE, role = if (tv) TextRole.Title1 else TextRole.Title2)
-                MqText(StreamChoiceCopy.QUESTION_LEAD, role = TextRole.Body, color = Marquee.colors.muted)
-                val doors: @Composable (Modifier) -> Unit = { door ->
-                    Door(
-                        StreamChoiceCopy.FAST.label,
-                        StreamChoiceCopy.FAST.text,
-                        Icons.Zap,
-                        { page.answer(StreamChoiceCopy.FAST, onDone) },
-                        door,
-                        fast,
-                    )
-                    Door(
-                        StreamChoiceCopy.BEST.label,
-                        StreamChoiceCopy.BEST.text,
-                        Icons.Gem,
-                        { page.answer(StreamChoiceCopy.BEST, onDone) },
-                        door,
-                        null,
-                    )
-                }
-                if (tv) {
-                    Row(
-                        Modifier.height(IntrinsicSize.Min),
-                        horizontalArrangement = Arrangement.spacedBy(Marquee.space.l),
-                    ) { doors(Modifier.weight(1f).fillMaxHeight()) }
-                } else {
-                    Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.s)) {
-                        doors(Modifier.fillMaxWidth())
-                    }
-                }
-                page.problem?.let { StatusWord("Could not save the choice: $it", Status.Bad) }
-            }
-        }
+        problem?.let { StatusWord("Could not save the choice: $it", Status.Bad) }
     }
 }
 
@@ -277,6 +476,8 @@ class SubtitleStepHolder(
 @Composable
 fun SubtitleStepScreen(
     session: CoreSession,
+    still: FirstRunStill? = null,
+    onBack: (() -> Unit)? = null,
     onDone: () -> Unit,
 ) {
     val device = DeviceCaps.languageCode(LocalConfiguration.current.locales[0])
@@ -285,7 +486,7 @@ fun SubtitleStepScreen(
             key = "subtitle-step",
             factory = viewModelFactory { initializer { SubtitleStepHolder(session, device) } },
         )
-    SubtitleStepGate({ prefsNow(session)?.subtitleLanguages.isNullOrEmpty() }, holder.step, onDone)
+    SubtitleStepGate({ prefsNow(session)?.subtitleLanguages.isNullOrEmpty() }, holder.step, still, onBack, onDone)
 }
 
 /** Asks [asks] once, before anything shows: the page when it says yes, else [onDone] at once. */
@@ -293,18 +494,22 @@ fun SubtitleStepScreen(
 internal fun SubtitleStepGate(
     asks: suspend () -> Boolean,
     step: SubtitleStep,
+    still: FirstRunStill? = null,
+    onBack: (() -> Unit)? = null,
     onDone: () -> Unit,
 ) {
     val leave by rememberUpdatedState(onDone)
     // Answered once: a step that passes by leaves once.
     val shows by produceState<Boolean?>(null) { value = asks().also { if (!it) leave() } }
-    if (shows == true) SubtitleStepPage(step, onDone)
+    if (shows == true) SubtitleStepPage(step, still, onBack, onDone)
 }
 
-/** The subtitles step's page over [step]: the rows, Continue and More languages. */
+/** The subtitles step's page over [step]: the frame, the languages in its bar, Continue and More languages. */
 @Composable
 internal fun SubtitleStepPage(
     step: SubtitleStep,
+    still: FirstRunStill? = null,
+    onBack: (() -> Unit)? = null,
     onDone: () -> Unit,
 ) {
     val tv = Marquee.form == Form.Tv
@@ -317,55 +522,86 @@ internal fun SubtitleStepPage(
         if (tv && step.loaded && KeyPresses.count == keys) focusSoon(go, 60)
     }
     var more by remember { mutableStateOf(false) }
-    Column(
-        Modifier
-            .fillMaxSize()
-            .windowInsetsPadding(WindowInsets.systemBars)
-            .padding(horizontal = Marquee.safe.side, vertical = Marquee.safe.top),
-        verticalArrangement = Arrangement.spacedBy(Marquee.space.m),
-        horizontalAlignment = Alignment.CenterHorizontally,
+    // Not while Continue saves: the step leaves once.
+    FramedPage(
+        4,
+        SubtitleStep.SKIP,
+        { if (!step.busy) onDone() },
+        onBack,
+        still,
+        SubtitleStep.TITLE,
+        SubtitleStep.LEAD,
+        foot = {
+            Row(
+                Modifier.fillMaxWidth().padding(top = Marquee.space.s),
+                horizontalArrangement =
+                    Arrangement.spacedBy(
+                        Marquee.space.xs,
+                        if (tv) Alignment.CenterHorizontally else Alignment.Start,
+                    ),
+            ) {
+                PrimaryButton(
+                    DefaultsCopy.CONTINUE,
+                    { step.save(onDone) },
+                    icon = Icons.Check,
+                    // Not before the language list: the device's language is unknown until then.
+                    enabled = !step.busy && step.loaded,
+                    focusRequester = go,
+                )
+                SecondaryButton(if (more) SubtitleStep.FEWER else SubtitleStep.MORE, { more = !more })
+            }
+        },
     ) {
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.weight(1f)) { BrandLockup(if (Marquee.form == Form.Tv) 44.dp else 32.dp) }
-            // Not while Continue saves: the step leaves once.
-            SkipLink(SubtitleStep.SKIP, { if (!step.busy) onDone() })
-        }
-        val width = Modifier.widthIn(max = 900.dp).fillMaxWidth()
-        Column(
-            width.weight(1f).verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(Marquee.space.xs),
-        ) {
-            MqText(SubtitleStep.TITLE, role = if (tv) TextRole.Title1 else TextRole.Title2)
-            MqText(SubtitleStep.LEAD, role = TextRole.Body, color = Marquee.colors.muted)
-            for (language in step.common) {
-                LanguageRow(
+        val rows =
+            step.common.map { language ->
+                Language(
                     language.name,
                     SubtitleStep.DEVICE.takeIf { language.code == step.mine },
                     step.chosen == language.code,
                 ) {
                     step.choose(language.code)
                 }
-            }
-            LanguageRow(SubtitleStep.NONE, SubtitleStep.NONE_LINE, step.chosen == null) { step.choose(null) }
-            if (more) {
-                Kicker(SubtitleStep.MORE, side = 0.dp)
-                for (language in step.rest) {
-                    LanguageRow(language.name, null, step.chosen == language.code) { step.choose(language.code) }
-                }
-            }
-            step.listProblem?.let { StatusWord("${SubtitleStep.LIST_FAILED}: $it", Status.Bad) }
-            step.problem?.let { StatusWord("${SubtitleStep.FAILED}: $it", Status.Bad) }
+            } + Language(SubtitleStep.NONE, SubtitleStep.NONE_LINE, step.chosen == null) { step.choose(null) }
+        LanguageRows(rows, tv)
+        if (more) {
+            Kicker(SubtitleStep.MORE, side = 0.dp)
+            LanguageRows(step.rest.map { Language(it.name, null, step.chosen == it.code) { step.choose(it.code) } }, tv)
         }
-        Row(width, horizontalArrangement = Arrangement.spacedBy(Marquee.space.xs)) {
-            PrimaryButton(
-                DefaultsCopy.CONTINUE,
-                { step.save(onDone) },
-                icon = Icons.Check,
-                // Not before the language list: the device's language is unknown until then.
-                enabled = !step.busy && step.loaded,
-                focusRequester = go,
-            )
-            SecondaryButton(if (more) SubtitleStep.FEWER else SubtitleStep.MORE, { more = !more })
+        step.listProblem?.let { StatusWord("${SubtitleStep.LIST_FAILED}: $it", Status.Bad) }
+        step.problem?.let { StatusWord("${SubtitleStep.FAILED}: $it", Status.Bad) }
+    }
+}
+
+/** One language of the subtitles step, as a row shows it. */
+private class Language(
+    val name: String,
+    val line: String?,
+    val chosen: Boolean,
+    val onClick: () -> Unit,
+)
+
+/** The languages: three columns on TV, one on the phone. */
+@Composable
+private fun LanguageRows(
+    rows: List<Language>,
+    tv: Boolean,
+) {
+    val columns = if (tv) 3 else 1
+    Column(verticalArrangement = Arrangement.spacedBy(if (tv) Marquee.space.s else Marquee.space.xs)) {
+        for (line in rows.chunked(columns)) {
+            Row(Modifier.height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(Marquee.space.l)) {
+                for (row in line) {
+                    LanguageRow(
+                        row.name,
+                        row.line,
+                        row.chosen,
+                        Modifier.weight(1f).fillMaxHeight(),
+                        row.onClick,
+                    )
+                }
+                // A short last line keeps its rows the width of the others.
+                repeat(columns - line.size) { Box(Modifier.weight(1f)) }
+            }
         }
     }
 }
@@ -379,6 +615,7 @@ private fun LanguageRow(
     name: String,
     line: String?,
     chosen: Boolean,
+    modifier: Modifier,
     onClick: () -> Unit,
 ) {
     var focused by remember { mutableStateOf(false) }
@@ -387,8 +624,7 @@ private fun LanguageRow(
     FocusInk(focusPalette(focused)) {
         val colors = Marquee.colors
         Row(
-            Modifier
-                .fillMaxWidth()
+            modifier
                 .marqueeFocus(Marquee.radius.l, Tokens.FOCUS_SCALE_TILE)
                 .onFocusChanged { focused = it.isFocused }
                 .clip(shape)
@@ -425,6 +661,8 @@ class DefaultsHolder(
 fun DefaultsScreen(
     session: CoreSession,
     mode: DefaultsMode,
+    /** Back, in the first run's header (step 2 of 4). */
+    onBack: (() -> Unit)? = null,
     onDone: () -> Unit,
 ) {
     val holder =
@@ -446,6 +684,8 @@ fun DefaultsScreen(
         verticalArrangement = Arrangement.spacedBy(Marquee.space.m),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
+        // The first run counts this step as its second, with no frame: the list is not a question.
+        if (mode == DefaultsMode.FirstRun || mode == DefaultsMode.AfterImport) StepHeader(2, null, {}, onBack)
         val width = Modifier.widthIn(max = 900.dp).fillMaxWidth()
         // More air between groups than between the rows of a group.
         Column(
@@ -614,7 +854,10 @@ internal fun RecommendedCard(
     }
 }
 
-/** One of the ways to begin: a card with an icon, a title and one line. */
+/**
+ * One of the ways to begin, in the bar under the frame: a pill filled white 12 percent, its icon in a circle, a title
+ * and one line. On TV the focused one turns white.
+ */
 @Composable
 private fun Door(
     title: String,
@@ -624,35 +867,52 @@ private fun Door(
     modifier: Modifier,
     focusRequester: FocusRequester?,
 ) {
+    val tv = Marquee.form == Form.Tv
     var focused by remember { mutableStateOf(false) }
-    val shape = RoundedCornerShape(Marquee.radius.l)
+    val shape = RoundedCornerShape(Marquee.radius.pill)
     // On TV the focused row turns white with dark words (focusPalette).
     FocusInk(focusPalette(focused)) {
         val colors = Marquee.colors
-        Column(
+        val lit = focused && tv
+        Row(
             modifier
                 .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
-                .marqueeFocus(Marquee.radius.l)
+                .marqueeFocus(Marquee.radius.pill)
                 .onFocusChanged { focused = it.isFocused }
                 .clip(shape)
-                .background(colors.surface)
-                .border(2.dp, colors.control, shape)
+                .background(if (lit) colors.surface else DOOR_FILL)
                 .focusClickable(onClick, Role.Button)
-                .padding(Marquee.space.m),
-            verticalArrangement = Arrangement.spacedBy(Marquee.space.xs),
+                .heightIn(min = if (tv) 120.dp else 72.dp)
+                .padding(
+                    start = if (tv) 20.dp else 14.dp,
+                    end = if (tv) 36.dp else 18.dp,
+                    top = if (tv) 18.dp else 12.dp,
+                    bottom = if (tv) 18.dp else 12.dp,
+                ),
+            horizontalArrangement = Arrangement.spacedBy(if (tv) Marquee.space.m else 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            MqIcon(icon)
-            MqText(title, role = TextRole.Title3, maxLines = 2)
-            MqText(body, role = TextRole.Callout, color = colors.muted)
+            Box(
+                Modifier
+                    .size(if (tv) 76.dp else 44.dp)
+                    .clip(CircleShape)
+                    .background(if (lit) Color.Black.copy(alpha = 0.08f) else DOOR_FILL),
+                contentAlignment = Alignment.Center,
+            ) { MqIcon(icon, size = if (tv) 36.dp else 20.dp) }
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(if (tv) 4.dp else 2.dp)) {
+                MqText(title, role = TextRole.Headline, weight = FontWeight.SemiBold, maxLines = 2)
+                MqText(body, role = if (tv) TextRole.Callout else TextRole.Caption, color = colors.dim)
+            }
         }
     }
 }
 
-/** A quiet text action in a screen's corner. */
+/** A quiet text action in a screen's corner; [back] puts its chevron first, pointing back. */
 @Composable
 private fun SkipLink(
     label: String,
     onClick: () -> Unit,
+    back: Boolean = false,
 ) {
     var focused by remember { mutableStateOf(false) }
     // On TV the focused link turns white with dark words (focusPalette).
@@ -669,7 +929,28 @@ private fun SkipLink(
         horizontalArrangement = Arrangement.spacedBy(Marquee.space.xs),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        if (back) MqIcon(Icons.ChevronLeft, tint = colors.muted)
         MqText(label, role = TextRole.Callout, weight = FontWeight.SemiBold, color = colors.muted)
-        MqIcon(Icons.ChevronRight, tint = colors.muted)
+        if (!back) MqIcon(Icons.ChevronRight, tint = colors.muted)
     }
 }
+
+/** The first run's steps that count: the doors, the recommended addons, the stream question and subtitles. */
+internal const val FIRST_RUN_STEPS = 4
+
+/** The film frame's shape and its share of the screen's height at most. */
+internal const val FILM_RATIO = 2.39f
+internal const val FILM_HEIGHT = 0.4f
+
+/** The player's subtitle scrim, behind each line of the frame's words: 5.7:1 for white over a white still. */
+internal val FILM_SCRIM = Color.Black.copy(alpha = 0.6f)
+
+/** A door's pill and its icon's circle. */
+private val DOOR_FILL = Color.White.copy(alpha = 0.12f)
+
+/** A door on TV at most: three share the bar under the frame. */
+private val DOOR_WIDTH = 520.dp
+
+internal const val FILM_FRAME = "film-frame"
+internal const val FILM_BAR = "film-bar"
+internal const val STEP_HEADER = "step-header"
