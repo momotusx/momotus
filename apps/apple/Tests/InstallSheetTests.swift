@@ -18,6 +18,7 @@ private struct Shared: Decodable {
     let resources: [String: String]
     let kinds: [String: String]
     let vectors: [Vector]
+    let titleVectors: [[String: String]]
 }
 
 private func shared() throws -> Shared {
@@ -30,6 +31,7 @@ private func shared() throws -> Shared {
     var previews: [(url: String, acknowledged: Bool)] = []
     var installs: [(url: String, acknowledged: Bool)] = []
     var runs = 0
+    var sent: [(op: String, target: String)] = []
 }
 
 private func addon(_ name: String = "Local") -> AddonInfo {
@@ -43,7 +45,7 @@ private let tokenRefusal = CoreError("this link carries a sign-in in its setting
 /// A link field over fakes of `previewAddon` and `installAddon`; a link
 /// with "token" in it is refused until acknowledged, as the core does.
 @MainActor private func field(_ calls: Calls, previewFails: (any Error)? = nil) -> LinkInstall {
-    LinkInstall(
+    let link = LinkInstall(
         preview: { url, acknowledged in
             calls.previews.append((url, acknowledged))
             if let previewFails { throw previewFails }
@@ -51,12 +53,15 @@ private let tokenRefusal = CoreError("this link carries a sign-in in its setting
             return addon()
         },
         install: { url, acknowledged in calls.installs.append((url, acknowledged)) })
+    // Armed at once: the 400 ms has its own test.
+    link.gate.armAfter = .zero
+    return link
 }
 
 @Suite @MainActor struct InstallSheetTests {
     @Test func theAddsLineFollowsEveryVector() throws {
         let vectors = try shared().vectors
-        #expect(vectors.count == 10)
+        #expect(vectors.count == 13)
         for v in vectors {
             #expect(R.addsLine(provides: v.provides, types: v.types) == (v.line.isEmpty ? nil : v.line), "\(v.provides) \(v.types)")
         }
@@ -79,31 +84,68 @@ private let tokenRefusal = CoreError("this link carries a sign-in in its setting
         #expect(bare.lines == ["From x.example", R.note])
     }
 
-    @Test func aCardsInstallAsksFirstCancelInstallsNothingInstallInstallsOnce() async {
+    @Test func aNameIsPlainTextInTheTitle() throws {
+        let vectors = try shared().titleVectors
+        #expect(vectors.count == 2)
+        for v in vectors {
+            let name = try #require(v["name"])
+            #expect(R.ask(name: name, host: "x.example", provides: [], types: []) {}.title == v["title"], "\(name)")
+        }
+    }
+
+    @Test func installDoesNothingUntilTheSheetHasShown400Ms() async throws {
+        let calls = Calls()
+        let gate = InstallGate()
+        gate.ask(R.ask(name: "X", host: "x.example", provides: [], types: []) { calls.runs += 1 })
+        // The Return or OK that opened it, held or pressed again.
+        gate.confirm()
+        #expect(calls.runs == 0)
+        #expect(gate.asking != nil)
+        try await Task.sleep(for: .milliseconds(450))
+        // The sheet showed late: it arms from then.
+        gate.presented()
+        gate.confirm()
+        #expect(calls.runs == 0)
+        try await Task.sleep(for: .milliseconds(450))
+        gate.confirm()
+        gate.confirm()
+        #expect(calls.runs == 1)
+        #expect(gate.asking == nil)
+    }
+
+    /// The card's own wiring (`FindAddonCard.perform` calls `FindAddonsPage.perform`), over a fake core op.
+    @Test func aCardsInstallAsksFirstCancelSendsNothingADoubleInstallSendsOnce() async {
         let core = RealCore()
         let page = FindAddonsPage(core: core.client)
+        page.gate.armAfter = .zero
         let calls = Calls()
+        page.send = { op, fields in calls.sent.append((op, fields["key"] as? String ?? fields["url"] as? String ?? "")) }
+        // A key of its own: other suites share the card store.
+        let key = "https://\(UUID().uuidString.lowercased()).example/manifest.json"
         let entry = ListedAddon(
-            key: "https://opensubtitles-v3.strem.io/manifest.json", id: "org.example", host: "opensubtitles-v3.strem.io",
+            key: key, id: "org.example", host: "opensubtitles-v3.strem.io",
             name: "OpenSubtitles v3", description: nil, types: ["movie", "series"], provides: ["subtitles"],
             configuration: .none, configureUrl: "https://opensubtitles-v3.strem.io/configure", installed: .absent, copyKey: nil)
-        page.press(entry, entry.action) { calls.runs += 1 }
-        #expect(calls.runs == 0)
+        page.perform(entry, entry.action)
+        #expect(calls.sent.isEmpty)
         #expect(page.gate.asking?.title == "Install OpenSubtitles v3?")
         #expect(page.gate.asking?.lines == ["From opensubtitles-v3.strem.io", "Adds subtitles for movies and series.", R.note])
         page.gate.cancel()
         #expect(page.gate.asking == nil)
-        #expect(calls.runs == 0)
-        // Install and Configure asks too.
-        page.press(entry, .install(configure: true)) { calls.runs += 1 }
+        #expect(calls.sent.isEmpty)
+        // Install and Configure asks too; Install pressed twice sends once.
+        page.perform(entry, .install(configure: true))
         page.gate.confirm()
         page.gate.confirm()
-        #expect(calls.runs == 1)
         #expect(page.gate.asking == nil)
+        #expect(await eventually { !calls.sent.isEmpty && !InstallCards.shared[key].busy })
+        #expect(calls.sent.map(\.op) == ["installListed"])
+        #expect(calls.sent.map(\.target) == [key])
         // Turn on: the addon is installed already, so no sheet.
-        page.press(entry, .turnOn(url: entry.key, word: "Off")) { calls.runs += 1 }
-        #expect(calls.runs == 2)
+        page.perform(entry, .turnOn(url: key, word: "Off"))
         #expect(page.gate.asking == nil)
+        #expect(await eventually { calls.sent.count == 2 })
+        #expect(calls.sent.map(\.op) == ["installListed", "setAddonEnabled"])
     }
 
     @Test func aPastedLinkIsReadThenAskedCancelKeepsItInstallInstallsOnce() async {

@@ -55,7 +55,7 @@ struct FindAddonsScreen: View {
         .background(Theme.Palette.bg)
         .topScrim()
         .task(id: page.catalog.taskId) { page.catalog.start() }
-        .installSheet(page.gate)
+        .installSheet(page.gate, closed: sheetClosed)
         .onAppear { page.appear() }
         .onChange(of: status) { old, new in
             if let words = new.announcement(after: old) { announce(words) }
@@ -261,7 +261,7 @@ struct FindAddonsScreen: View {
                 LazyVGrid(columns: columns, alignment: .leading, spacing: gap) {
                     // By key: two entries of a list can share a manifest id.
                     ForEach(visible, id: \.key) { entry in
-                        FindAddonCard(entry: entry, sameName: repeated.contains(entry.name), core: core, page: page, focus: $focus)
+                        FindAddonCard(entry: entry, sameName: repeated.contains(entry.name), page: page, focus: $focus)
                     }
                 }
                 #if os(tvOS)
@@ -312,6 +312,13 @@ struct FindAddonsScreen: View {
 
     private var gap: CGFloat { metrics.wide ? Theme.Space.m : Theme.Space.s }
 
+    /// The install sheet went: on TV focus goes back to the card that opened it.
+    private func sheetClosed() {
+        #if os(tvOS)
+        if let lastCard { focus = .card(lastCard) }
+        #endif
+    }
+
     /// Try again and Refresh (`FindAddonsPage.reload`).
     private func retry() {
         // The pressed button goes away while the list loads: focus waits on the list chip.
@@ -360,7 +367,6 @@ struct FindAddonsLink: View {
 private struct FindAddonCard: View {
     let entry: ListedAddon
     let sameName: Bool
-    let core: CoreClient
     let page: FindAddonsPage
     let focus: FocusState<FindFocus?>.Binding
     @Environment(\.metrics) private var metrics
@@ -546,38 +552,13 @@ private struct FindAddonCard: View {
         if let page = entry.configurePage { openURL(page) }
     }
 
-    /// Install (after the install sheet) or Turn on; a press while the card's
-    /// request runs does nothing. VoiceOver hears how it ended.
+    /// Configure opens its page; Install (after the install sheet) and Turn
+    /// on go through the page (`FindAddonsPage.perform`).
     private func perform() {
-        guard !card.busy else { return }
-        let (key, name, core, cards) = (entry.key, entry.name, core, cards)
-        let request: @MainActor () async throws -> Void
-        let done: String
-        switch act {
-        case .install:
-            request = { try await core.perform("installListed", ["key": key]) }
-            done = W.installed
-        case .turnOn(let url, _):
-            request = { try await core.perform("setAddonEnabled", ["url": url, "enabled": true]) }
-            // A configured copy turned on reads Set up, the listed link Installed.
-            done = url == key ? W.installed : W.setUp
-        case .configure:
-            #if !os(tvOS)
-            configure()
-            #endif
-            return
-        case .none:
-            return
-        }
-        let busyWord = busyWord
-        page.press(entry, act) {
-            // Said at once: the card's state line changes under the finger, not where VoiceOver reads.
-            announce("\(name), \(busyWord)")
-            Task {
-                guard let result = await cards.run(key, request) else { return }
-                announce(result.words ?? "\(name), \(done)")
-            }
-        }
+        guard act == .configure else { return page.perform(entry, act) }
+        #if !os(tvOS)
+        configure()
+        #endif
     }
 }
 

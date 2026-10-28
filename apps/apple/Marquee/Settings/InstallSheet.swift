@@ -33,6 +33,8 @@ enum InstallSheetRules {
     static func addsLine(provides: [String], types: [String]) -> String? {
         let what = unique(provides.compactMap { resources[$0] })
         guard !what.isEmpty else { return nil }
+        // A manifest's types as written: " Movie " is movies, an empty one nothing.
+        let types = types.map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }.filter { !$0.isEmpty }
         let kinds = unique(types.map(ListedAddon.kindWord))
         let words = adds.replacingOccurrences(of: "{what}", with: DefaultsRules.namesLine(what))
         // Addon lists are lists of addons, not of movies.
@@ -67,13 +69,24 @@ struct InstallAsk: Identifiable {
 @MainActor @Observable
 final class InstallGate {
     private(set) var asking: InstallAsk?
+    /// Install does nothing this long after the sheet shows, so the press
+    /// that opened it (a held or repeated Return, Enter or OK) never answers
+    /// it, as on the web.
+    @ObservationIgnored var armAfter: Duration = .milliseconds(400)
+    @ObservationIgnored private var shown = ContinuousClock.now
 
-    func ask(_ ask: InstallAsk) { asking = ask }
+    func ask(_ ask: InstallAsk) {
+        asking = ask
+        shown = .now
+    }
+
+    /// The sheet is on screen: Install arms `armAfter` from now.
+    func presented() { shown = .now }
 
     func confirm() {
-        let run = asking?.run
+        guard let run = asking?.run, ContinuousClock.now - shown >= armAfter else { return }
         asking = nil
-        run?()
+        run()
     }
 
     func cancel() { asking = nil }
@@ -81,25 +94,28 @@ final class InstallGate {
 
 extension View {
     /// The install sheet for `gate`'s question: a sheet on iOS and macOS, a
-    /// card over the dimmed page on tvOS.
-    func installSheet(_ gate: InstallGate) -> some View {
+    /// card over the dimmed page on tvOS. `closed` runs once it has gone
+    /// (focus back to what opened it).
+    func installSheet(_ gate: InstallGate, closed: (() -> Void)? = nil) -> some View {
         let shown = Binding(get: { gate.asking }, set: { if $0 == nil { gate.cancel() } })
         let sheet = { (ask: InstallAsk) in
             ConfirmSheet(title: ask.title, lines: ask.lines, action: InstallSheetRules.install, cancel: InstallSheetRules.cancel,
                          confirm: gate.confirm, dismiss: gate.cancel)
+                .onAppear { gate.presented() }
         }
         #if os(tvOS)
-        return fullScreenCover(item: shown, content: sheet)
+        return fullScreenCover(item: shown, onDismiss: closed, content: sheet)
         #else
-        return self.sheet(item: shown, content: sheet)
+        return self.sheet(item: shown, onDismiss: closed, content: sheet)
         #endif
     }
 }
 
 /// A question with two answers: a title, its lines, the action and Cancel.
 /// Generic, so the marketplace's consent sheet can use it too. Off the TV the
-/// action is the key-fill primary and Cancel the cancel action (Esc); on TV
-/// Cancel comes first, focused as the white primary (DECISION.md, Confirmation).
+/// action is the key-fill primary and Cancel the cancel action (Esc); Return
+/// presses neither, so a held one never installs. On TV Cancel comes first,
+/// focused as the white primary (DECISION.md, Confirmation).
 struct ConfirmSheet: View {
     let title: String
     let lines: [String]
@@ -111,31 +127,41 @@ struct ConfirmSheet: View {
     var body: some View {
         #if os(tvOS)
         tv
-        #else
-        VStack(alignment: .leading, spacing: Theme.Space.s) {
-            words
-            Spacer(minLength: Theme.Space.m)
-            buttons
+        #elseif os(iOS)
+        // The words scroll at large text sizes; the buttons stay pinned low,
+        // so Install is never cut at the medium detent.
+        ScrollView {
+            words.padding(Theme.Space.m)
         }
-        .padding(Theme.Space.m)
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .scrollBounceBehavior(.basedOnSize)
+        .safeAreaInset(edge: .bottom) {
+            buttons
+                .padding(.horizontal, Theme.Space.m)
+                .padding(.vertical, Theme.Space.s)
+                .background(Theme.Palette.bg)
+        }
         .background(Theme.Palette.bg)
         .accessibilityAddTraits(.isModal)
-        #if os(iOS)
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
         .presentationCornerRadius(10)
         #else
+        VStack(alignment: .leading, spacing: Theme.Space.m) {
+            words
+            buttons
+        }
+        .padding(Theme.Space.m)
         .frame(width: 460)
         .fixedSize(horizontal: false, vertical: true)
-        #endif
+        .background(Theme.Palette.bg)
+        .accessibilityAddTraits(.isModal)
         #endif
     }
 
     private var words: some View {
         VStack(alignment: .leading, spacing: Theme.Space.s) {
             Text(title)
-                .textFont(Theme.type.title3, weight: .bold, relativeTo: .title3)
+                .textFont(titleSize, weight: .bold, relativeTo: .title2)
                 .foregroundStyle(Theme.Palette.text)
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityAddTraits(.isHeader)
@@ -150,6 +176,8 @@ struct ConfirmSheet: View {
     }
 
     #if os(tvOS)
+    /// The TV's question in Title 2 (DECISION.md, Six digits).
+    private var titleSize: CGFloat { Theme.type.title2 }
     private enum Focus { case cancel, action }
     @FocusState private var focus: Focus?
 
@@ -167,6 +195,7 @@ struct ConfirmSheet: View {
         }
         .padding(Theme.Space.l)
         .frame(width: 1000)
+        // The confirmation card's radius (DECISION.md, Radii).
         .background(Theme.Palette.surface, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
         .accessibilityAddTraits(.isModal)
         .defaultFocus($focus, .cancel)
@@ -175,9 +204,11 @@ struct ConfirmSheet: View {
         .presentationBackground(Theme.Palette.scrim)
     }
     #else
+    private var titleSize: CGFloat { Theme.type.title3 }
+
     @ViewBuilder private var buttons: some View {
         #if os(iOS)
-        // The phone's page sheet: both pinned low, the action first.
+        // The phone's page sheet: the action first, both full width.
         VStack(spacing: Theme.Space.s) {
             Button(action: confirm) { Text(action).frame(maxWidth: .infinity) }
                 .buttonStyle(PillButtonStyle(key: true))
@@ -193,7 +224,6 @@ struct ConfirmSheet: View {
                 .keyboardShortcut(.cancelAction)
             Button(action, action: confirm)
                 .buttonStyle(PillButtonStyle(key: true))
-                .keyboardShortcut(.defaultAction)
         }
         #endif
     }

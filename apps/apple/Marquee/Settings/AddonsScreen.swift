@@ -116,6 +116,8 @@ struct InstallField: View {
     var primary = true
     @State private var install: LinkInstall
     @FocusState private var fieldFocused: Bool
+    /// Install, which keeps focus while it reads "Checking" and gets it back when the sheet goes (TV).
+    @FocusState private var installFocused: Bool
 
     init(core: CoreClient, focusRequest: Int = 0, primary: Bool = true) {
         self.focusRequest = focusRequest
@@ -147,20 +149,25 @@ struct InstallField: View {
                 Button(action: installLink) {
                     Label(buttonWord, glyph: "plus")
                 }
-                // The primary only once there is a link to install.
+                // The primary only once there is a link to install. Not disabled while it
+                // reads or installs (the model ignores a second press): focus stays on it.
                 .buttonStyle(PillButtonStyle(prominent: primary && !install.trimmed.isEmpty))
-                .disabled(install.trimmed.isEmpty || install.busy)
+                .disabled(install.trimmed.isEmpty)
+                .focused($installFocused)
             }
             if install.refused != nil {
                 StatusDot(tone: .warn, text: LinkInstall.tokenWarning)
-                Button(LinkInstall.tokenConfirm) { Task { await install.install(acknowledged: true) } }
-                    .buttonStyle(PillButtonStyle())
-                    .disabled(install.busy)
+                Button(LinkInstall.tokenConfirm) {
+                    // This button goes while the link is read: focus waits on Install.
+                    installFocused = true
+                    Task { await install.install(acknowledged: true) }
+                }
+                .buttonStyle(PillButtonStyle())
             } else if let problem = install.problem {
                 StatusDot(tone: .bad, text: problem)
             }
         }
-        .installSheet(install.gate)
+        .installSheet(install.gate, closed: sheetClosed)
     }
 
     private var buttonWord: String {
@@ -169,6 +176,13 @@ struct InstallField: View {
 
     private func installLink() {
         Task { await install.install() }
+    }
+
+    /// The sheet went: on TV focus goes back to Install, which opened it.
+    private func sheetClosed() {
+        #if os(tvOS)
+        installFocused = true
+        #endif
     }
 }
 

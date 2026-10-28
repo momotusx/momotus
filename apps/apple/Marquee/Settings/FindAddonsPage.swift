@@ -1,5 +1,8 @@
 import Foundation
 import Observation
+import SwiftUI
+
+private typealias W = FindAddonsWords
 
 /// Find addons' page: the catalog view, and the cards' results kept or
 /// forgotten as the page opens and reloads. A model, not view state, so the
@@ -9,11 +12,14 @@ final class FindAddonsPage {
     private(set) var catalog: LiveRecord<AddonCatalogSnapshot>
     /// The install sheet's question, while one is open.
     let gate = InstallGate()
+    /// A card's request to the core (`installListed`, `setAddonEnabled`): the seam tests use.
+    @ObservationIgnored var send: @MainActor (_ op: String, _ fields: [String: any Sendable]) async throws -> Void
     @ObservationIgnored private let core: CoreClient
     @ObservationIgnored private var opened = false
 
     init(core: CoreClient) {
         self.core = core
+        send = { try await core.perform($0, $1) }
         catalog = LiveRecord("addonCatalog", core: core)
     }
 
@@ -49,10 +55,41 @@ final class FindAddonsPage {
         InstallCards.shared.forgetAll(running: false)
     }
 
-    /// A card's press: Install asks first with the install sheet, whose
-    /// Install runs `run`; Turn on runs at once (the addon is installed).
-    func press(_ entry: ListedAddon, _ act: FindAction, run: @escaping @MainActor () -> Void) {
+    /// A card's Install or Turn on. Install asks first with the install
+    /// sheet, whose Install sends it; Turn on is sent at once (the addon is
+    /// installed). A press while the card's request runs does nothing;
+    /// VoiceOver hears how it ended.
+    func perform(_ entry: ListedAddon, _ act: FindAction) {
+        let cards = InstallCards.shared
+        guard !cards[entry.key].busy else { return }
+        let (key, name, send) = (entry.key, entry.name, self.send)
+        let request: @MainActor () async throws -> Void
+        let busy: String
+        let done: String
+        switch act {
+        case .install:
+            request = { try await send("installListed", ["key": key]) }
+            busy = W.installing
+            done = W.installed
+        case .turnOn(let url, _):
+            request = { try await send("setAddonEnabled", ["url": url, "enabled": true]) }
+            // A configured copy turned on reads Set up, the listed link Installed.
+            busy = W.turningOn
+            done = url == key ? W.installed : W.setUp
+        case .configure, .none:
+            return
+        }
+        let run: @MainActor () -> Void = {
+            // Said at once: the card's state line changes under the finger, not where VoiceOver reads.
+            announce("\(name), \(busy)")
+            Task {
+                guard let result = await cards.run(key, request) else { return }
+                announce(result.words ?? "\(name), \(done)")
+            }
+        }
         guard case .install = act else { return run() }
+        // One question at a time: a second press while the sheet is up does not present it again.
+        guard gate.asking == nil else { return }
         gate.ask(InstallSheetRules.ask(name: entry.name, host: entry.host, provides: entry.provides, types: entry.types, run: run))
     }
 
