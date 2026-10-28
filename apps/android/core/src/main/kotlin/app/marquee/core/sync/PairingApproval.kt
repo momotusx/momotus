@@ -89,7 +89,8 @@ class PairingApproval(
 
     /**
      * A code arrived: it replaces any other, and its wait. The sheet on screen stays until the new code is read
-     * (never [Step.Idle] between, which would open the scanner over it).
+     * (never [Step.Idle] between, which would open the scanner over it), busy, so its Sign in never sends the new
+     * code under the old screen's name.
      */
     fun offer(
         qr: String,
@@ -98,18 +99,20 @@ class PairingApproval(
         stop()
         code = qr
         this.scanned = scanned
+        busy = true
         work =
             scope.launch {
-                step =
-                    try {
-                        val read = read(qr)
-                        device = read.name ?: AccountCopy.APPROVE_UNNAMED
-                        Step.Sheet(ask(read), read.form)
-                    } catch (e: CancellationException) {
-                        throw e
-                    } catch (_: Exception) {
-                        Step.Failed(SyncCopy.NOT_A_CODE)
-                    }
+                try {
+                    val read = read(qr)
+                    device = read.name ?: AccountCopy.APPROVE_UNNAMED
+                    step = Step.Sheet(ask(read), read.form)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (_: Exception) {
+                    step = Step.Failed(SyncCopy.NOT_A_CODE)
+                } finally {
+                    if (isActive) busy = false
+                }
             }
     }
 
@@ -133,18 +136,19 @@ class PairingApproval(
         val m = member ?: return
         if (busy) return
         busy = true
-        scope.launch {
-            try {
-                remove(m)
-                step = Step.Removed
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                step = Step.Failed(SyncAccount.problemOf(e, SyncCopy.Action.Remove).words)
-            } finally {
-                busy = false
+        work =
+            scope.launch {
+                try {
+                    remove(m)
+                    step = Step.Removed
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    step = Step.Failed(SyncAccount.problemOf(e, SyncCopy.Action.Remove).words)
+                } finally {
+                    if (isActive) busy = false
+                }
             }
-        }
     }
 
     /** The sheet closed: nothing under way writes to it again, and no wait goes on. */

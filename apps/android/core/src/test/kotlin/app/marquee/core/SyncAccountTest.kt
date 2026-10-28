@@ -622,6 +622,25 @@ class SyncAccountTest {
             assertEquals(2, store.held.revision())
         }
 
+    /** The approve sheet cancels its approval on a new code or on close: the record must still be kept. */
+    @Test
+    fun `an approval whose sheet closed before the answer still stores its record`() =
+        runBlocking {
+            val store = Store(record(1))
+            val sync = account(store)
+            val answer = CompletableDeferred<Unit>()
+            answers["approvePairing"] = {
+                answer.await()
+                ok("""{"member":"m2","record":${record(2)}}""")
+            }
+            val sheet = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+            sheet.launch { sync.approvePairing("marquee:pair?v=2&s=x&p=1", scanned = true, unlocked = true) }
+            until("the core was asked") { asked.contains("approvePairing") }
+            sheet.cancel()
+            answer.complete(Unit)
+            until("stored") { store.held.revision() == 2 }
+        }
+
     @Test
     fun `stopping here on a page that closed while the core answered still forgets the account here`() =
         runBlocking {

@@ -1350,7 +1350,7 @@ fun AddDeviceScreen(
                     NeedsAccount(
                         sync,
                         onDone,
-                    ) { ApproveSteps(approval, step, lockSaid, { lockTries++ }, canScan, camera, ::scan, onDone) }
+                    ) { ApproveSteps(approval, step, lockSaid, { lockTries++ }, canScan, camera, onDone) }
                 }
             }
         }
@@ -1367,7 +1367,6 @@ private fun ApproveSteps(
     askLockAgain: () -> Unit,
     canScan: Boolean,
     camera: @Composable (onCode: (String) -> Unit) -> Unit,
-    scan: () -> Unit,
     onDone: () -> Unit,
 ) {
     when (step) {
@@ -1414,6 +1413,7 @@ private fun ApproveSteps(
         PairingApproval.Step.ScanHere -> {
             Said(AccountCopy.APPROVE_SCAN_HERE, Status.Warn)
             if (canScan) camera { approval.scannedHere(it) }
+            SecondaryButton(SyncCopy.CANCEL, onDone, focusRequester = stepFocus())
         }
 
         PairingApproval.Step.Unlock -> {
@@ -1465,10 +1465,8 @@ private fun ApproveSteps(
                 verticalArrangement = Arrangement.spacedBy(Marquee.space.xs),
             ) {
                 if (canScan) {
-                    PrimaryButton(SyncCopy.SCAN, {
-                        approval.close()
-                        scan()
-                    }, icon = Icons.Camera, focusRequester = stepFocus())
+                    // Idle opens the scanner (the step's effect above).
+                    PrimaryButton(SyncCopy.SCAN, approval::close, icon = Icons.Camera, focusRequester = stepFocus())
                 }
                 SecondaryButton(SyncCopy.DONE, onDone)
             }

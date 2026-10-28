@@ -9,6 +9,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -209,15 +210,26 @@ class PairingApprovalTest {
             )
             advanceUntilIdle()
             assertEquals(Step.Sheet("Sign in \"Hall\"?", "tv"), sheet.step)
-            // An approval cancelled by a new code never clears the next one's busy.
-            core.readMs = 0
+            // Sign in while the next code is read sends nothing: the sheet still names the old screen.
             core.approveMs = 1_000
-            sheet.signIn()
-            advanceTimeBy(100)
             sheet.offer(link, scanned = false)
             sheet.signIn()
             advanceTimeBy(100)
+            assertEquals(true, sheet.busy, "Sign in waits for the read")
+            assertEquals(emptyList(), core.approvals, "nothing sent under the old name")
+            advanceTimeBy(500)
+            assertEquals(Step.Sheet("Sign in \"Den\"?", "tv"), sheet.step)
+            assertEquals(false, sheet.busy)
+            // An approval cancelled by a new code never clears the next one's busy.
+            core.readMs = 0
+            sheet.signIn()
+            advanceTimeBy(100)
+            sheet.offer(hall, scanned = false)
+            runCurrent()
+            sheet.signIn()
+            advanceTimeBy(100)
             assertEquals(true, sheet.busy, "the second approval is still out")
+            assertEquals(2, core.approvals.size)
             sheet.close()
         }
 
