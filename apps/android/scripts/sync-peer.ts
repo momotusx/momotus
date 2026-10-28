@@ -16,6 +16,8 @@
  * GET  /devices                         the device list without the record
  * POST /lost {lost, keep?}              report a device lost; POST /preview {lost} shows what goes
  * POST /install {url}, GET /addons      an addon here, and the addons this device has
+ * POST /save {kind, id}                 the title to the library
+ * POST /watch {kind, id, name, positionMs, durationMs}   a progress report on the first version: Continue Watching
  */
 
 const [bridgePort, controlPort] = process.argv.slice(2).map(Number);
@@ -115,6 +117,42 @@ const routes: Record<string, (body: Json) => Promise<unknown>> = {
     return { done: true };
   },
   "POST /install": async (b) => request("installAddon", { url: b.url }),
+  "POST /save": async (b) => {
+    const title = await request("subscribe", { view: "title", params: { kind: b.kind, id: b.id } });
+    try {
+      for (let i = 0; ; i++) {
+        try {
+          return await request("command", { sub: title.sub, command: { type: "setInLibrary", value: true } });
+        } catch (e) {
+          if (i >= 30) throw e;
+          await Bun.sleep(1000);
+        }
+      }
+    } finally {
+      await request("unsubscribe", { sub: title.sub }).catch(() => undefined);
+    }
+  },
+  "POST /watch": async (b) => {
+    const versions = await request("subscribe", { view: "versions", params: { kind: b.kind, id: b.id, videoId: b.id } });
+    try {
+      let key: string | undefined;
+      for (let i = 0; i < 60 && !key; i++) {
+        key = (latest.get(versions.sub) ?? versions.snapshot)?.rows?.[0]?.key;
+        if (!key) await Bun.sleep(1000);
+      }
+      if (!key) throw new Error("no version listed");
+      const playback = await request("subscribe", {
+        view: "playback",
+        params: { versionsSub: versions.sub, key, kind: b.kind, itemId: b.id, videoId: b.id, name: b.name },
+      });
+      const progress = { type: "progress", positionMs: b.positionMs, durationMs: b.durationMs, paused: true };
+      await request("command", { sub: playback.sub, command: progress });
+      await request("unsubscribe", { sub: playback.sub }).catch(() => undefined);
+      return { key };
+    } finally {
+      await request("unsubscribe", { sub: versions.sub }).catch(() => undefined);
+    }
+  },
   "GET /addons": async () => {
     const view = await request("subscribe", { view: "addons", params: {} });
     await request("unsubscribe", { sub: view.sub }).catch(() => undefined);
