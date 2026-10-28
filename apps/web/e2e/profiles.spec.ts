@@ -270,7 +270,11 @@ test("profiles: unsaved edits ask before any way out, and Keep editing keeps the
 });
 
 test("profiles on TV: the rail's focus alone asks nothing, Select on a tab asks, and a Save after Keep editing opens the next page on its own first focus", async ({ page }) => {
-  await page.goto("/profiles/new?form=tv");
+  // Reached from Manage profiles, so there is history to go back through (a deep link has none).
+  await page.goto("/profiles/manage?form=tv");
+  await page.locator('[data-f="manage:add"]').focus();
+  await page.keyboard.press("Enter");
+  await expect(page).toHaveURL(/\/profiles\/new/);
   await page.locator('[data-f="pedit:name"]').fill("Rail Kid");
   // Up into the rail, onto a tab: the focus rests there longer than the settle, and nothing asks or opens.
   await page.locator('[data-f="nav:/library"]').focus();
@@ -282,17 +286,26 @@ test("profiles on TV: the rail's focus alone asks nothing, Select on a tab asks,
   await expect(dialog(page)).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(dialog(page)).toHaveCount(0);
-  // Back from the form asks too, and Keep editing then Save: the manage page shows its first focus, not a place restored.
-  await page.locator('[data-f="pedit:name"]').focus();
-  await page.keyboard.press("Escape");
-  await expect(dialog(page)).toBeVisible();
-  await page.locator('[data-f="pedit:leave:keep"]').press("Enter");
-  await expect(dialog(page)).toHaveCount(0);
   try {
+    // Back on the rail goes Home past this page: it asks, and Keep editing must leave no "then Home" behind.
+    await page.locator('[data-f="nav:/library"]').focus();
+    await page.keyboard.press("Escape");
+    await expect(dialog(page)).toBeVisible();
+    await page.locator('[data-f="pedit:leave:keep"]').press("Enter");
+    await expect(dialog(page)).toHaveCount(0);
+    // Back from the form asks too; Keep editing then Save: Manage shows its first focus, not a place restored, and
+    // not Home.
+    await page.locator('[data-f="pedit:name"]').focus();
+    await page.keyboard.press("Escape");
+    await expect(dialog(page)).toBeVisible();
+    await page.locator('[data-f="pedit:leave:keep"]').press("Enter");
+    await expect(dialog(page)).toHaveCount(0);
     await page.locator('[data-f="pedit:save"]').focus();
     await page.keyboard.press("Enter");
     await expect(page).toHaveURL(/\/profiles\/manage/);
     await expect.poll(() => focused(page)).toBe("manage:default");
+    await page.waitForTimeout(500);
+    await expect(page).toHaveURL(/\/profiles\/manage/);
   } finally {
     const c = new Client();
     try {

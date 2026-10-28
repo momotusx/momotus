@@ -14,7 +14,7 @@ import type { ProfilesSnapshot } from "../core/generated/ProfilesSnapshot";
 import { markChosen, profiles, switchProfile, unlockProfile } from "../core/profiles";
 import { autoFocusSoon, goBack } from "../focus/dom";
 import { holdModal } from "../focus/modal";
-import { markBack, setLeaveGuarded, takeBack } from "../history";
+import { markBack, setLeaveGuarded, takeAfterBack, takeBack } from "../history";
 import { type AvatarColor, formatAvatar, GLYPHS, type Glyph, nextAvatar, parseAvatar } from "../lib/avatar";
 import { profileProblem, waitText } from "../lib/profiles";
 import "./browse.css";
@@ -461,7 +461,13 @@ export function EditProfile() {
     e.preventDefault();
     if ((await commit()) && isNew()) leave("/profiles/manage");
   };
-  const keepEditing = () => setAsking(null);
+  // The router put the page back with a second popstate (which marked a Back again), and a Back from the TV rail left
+  // its "then Home" behind: staying clears both, or a later Save would open its page as a Back.
+  const keepEditing = () => {
+    setAsking(null);
+    takeBack();
+    takeAfterBack();
+  };
   const goOn = () => {
     const a = asking();
     if (!a) return;
@@ -474,7 +480,7 @@ export function EditProfile() {
     // A second press while the first is with the core waits for it: the question stays and the leave goes on after it.
     if (saving()) return;
     if (await commit()) goOn();
-    else setAsking(null);
+    else keepEditing();
   };
   const removePin = async (own: boolean) => {
     setConfirmPin(null);
