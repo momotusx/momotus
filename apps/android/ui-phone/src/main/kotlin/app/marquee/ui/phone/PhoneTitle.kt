@@ -848,10 +848,10 @@ private fun Info(
                             showLabel = words,
                         )
                     }
+                } else if (header.download?.state == DownloadState.Done) {
+                    // A kids profile: a plain badge, no control (plans/offline-downloads.md 3.2).
+                    DownloadedBadge(Modifier.weight(1f))
                 }
-            } else if (header.download?.state == DownloadState.Done) {
-                // A kids profile: a plain badge, no control (plans/offline-downloads.md 3.2).
-                DownloadedBadge(Modifier.weight(1f))
             }
         }
         Genres(header, details, onGenre)
