@@ -1014,7 +1014,7 @@ data class LanguageChoice(
 /** The picker's whole answer (plans/onboarding-language-picker.md): the suggested languages, where No subtitles goes, and the results. */
 @Serializable
 data class LanguageList(
-    /** The chosen languages, then the device's, then the common ones, at most six besides the chosen; empty while a query is typed. */
+    /** The chosen languages, then the device's, then the common ones: six in all, or every chosen one when there are more; empty while a query is typed. */
     val suggested: List<LanguageChoice> = emptyList(),
     /** Subtitles: No subtitles goes first and is the pre-chosen state (an English device, or one whose language the table lacks, with nothing chosen); else it goes last. Audio has no No subtitles. */
     val noneFirst: Boolean,
