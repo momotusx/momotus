@@ -310,7 +310,10 @@ class DownloadsScreenTest {
     @Test
     fun `the offline banner shows on every page but the player, leading to downloads only where it can`() {
         assertEquals(null, offlineBanner(offline = false, anyDone = true, top = Route.Home))
-        assertEquals(null, offlineBanner(offline = true, anyDone = true, top = Route.Player("movie", "tt1", "tt1", "Sintel")))
+        assertEquals(
+            null,
+            offlineBanner(offline = true, anyDone = true, top = Route.Player("movie", "tt1", "tt1", "Sintel")),
+        )
         assertEquals(true, offlineBanner(offline = true, anyDone = true, top = Route.Search))
         assertEquals(false, offlineBanner(offline = true, anyDone = false, top = Route.Home))
         assertEquals(false, offlineBanner(offline = true, anyDone = true, top = Route.Downloads))

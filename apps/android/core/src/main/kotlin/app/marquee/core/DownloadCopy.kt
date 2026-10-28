@@ -370,8 +370,10 @@ object DownloadCopy {
 
     const val EMPTY_TITLE = "Nothing downloaded yet"
     const val EMPTY_BODY = "Download movies and episodes to watch them without a connection."
+
     /** The offline banner's constant, the only words it announces (3.5). */
     const val OFFLINE_ONLY = "You're offline."
+
     /** Said after [OFFLINE_ONLY] when this profile has downloads; never announced. */
     const val OFFLINE_REST = "Your downloads still play."
     const val OFFLINE_ACTION = "Go to Downloads"

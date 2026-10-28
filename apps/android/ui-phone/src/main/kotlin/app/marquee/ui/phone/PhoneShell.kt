@@ -132,7 +132,7 @@ fun PhoneShell(
         // A page whose artwork runs under the status bar starts under the banner instead, which holds the
         // status bar now: its art is not cut by it, and its own status bar padding is taken here.
         val underBanner = banner != null && !statusStrip
-        val barTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+        val barTop = if (underBanner) WindowInsets.statusBars.asPaddingValues().calculateTopPadding() else 0.dp
         Box(
             (if (insetSides) Modifier.windowInsetsPadding(sides) else Modifier)
                 .padding(top = bannerDp + if (underBanner) barTop else 0.dp)

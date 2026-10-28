@@ -2336,7 +2336,9 @@ async fn forget_torrent(core: &Core, id: &str, t: TorrentRef) {
         return;
     }
     #[cfg(feature = "test-hooks")]
-    if let Some(slow) = lock(&SLOW_RELEASES).get(&t.hash).copied() {
+    let slow = lock(&SLOW_RELEASES).get(&t.hash).copied();
+    #[cfg(feature = "test-hooks")]
+    if let Some(slow) = slow {
         tokio::time::sleep(slow).await;
     }
     match core.torrent_engine().await {

@@ -136,7 +136,7 @@ pub(crate) const PROFILE_TABLES: [&str; 18] = [
 /// `imdb_ids`, cleared with it (its ids are titles the profile saw), and
 /// `archive_index`, a public film list.
 #[cfg(test)]
-pub(crate) const DEVICE_TABLES: [&str; 8] = [
+pub(crate) const DEVICE_TABLES: [&str; 9] = [
     "sync_state",
     "sync_outbox",
     "sync_roster",

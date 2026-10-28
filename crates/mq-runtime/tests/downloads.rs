@@ -1238,7 +1238,7 @@ async fn a_torrent_download_plays_offline() {
 /// A loopback swarm whose seeder an HTTP tracker names, and a stream of
 /// its film listing that tracker: every add finds the seeder, even after
 /// the torrent was let go. The tracker lives as long as its handle.
-#[cfg(feature = "torrent")]
+#[cfg(feature = "test-hooks")]
 async fn tracked_swarm() -> (support::Swarm, serde_json::Value, support::HttpTracker) {
     let (v4, v6) = (std::net::Ipv4Addr::LOCALHOST, std::net::Ipv6Addr::LOCALHOST);
     let s = support::swarm_scoped(v4.into(), &[v4.into()], &[v4.into(), v6.into()], true).await;
@@ -1265,7 +1265,7 @@ async fn tracked_swarm() -> (support::Swarm, serde_json::Value, support::HttpTra
 /// A torrent download removed and added again at once downloads whole:
 /// the new run waits for the old one's release of the same file, which
 /// would otherwise stop its fetch (code review r3 N2).
-#[cfg(feature = "torrent")]
+#[cfg(feature = "test-hooks")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn a_torrent_removed_and_added_again_downloads_whole() {
     let (s, stream, _tracker) = tracked_swarm().await;
@@ -1327,7 +1327,7 @@ async fn a_torrent_removed_and_added_again_downloads_whole() {
 /// A release that never ends holds a new run of its torrent only so long
 /// (10 s in test builds, a minute in the app): the run goes on and
 /// downloads, never Running with nothing coming (code review r5 R5-1).
-#[cfg(feature = "torrent")]
+#[cfg(feature = "test-hooks")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn a_stuck_release_holds_the_next_run_only_so_long() {
     let (s, stream, _tracker) = tracked_swarm().await;
@@ -1668,6 +1668,7 @@ async fn a_hand_picked_retry_keeps_its_subtitles_in_place() {
 
 /// A job that panics fails its row and frees its slot: two panics leave
 /// the queue running, and the next download finishes (code review r3 N6).
+#[cfg(feature = "test-hooks")]
 #[tokio::test]
 async fn a_job_that_panics_frees_its_slot() {
     let (url, _) = origin(video(1 << 20), How::default()).await;
