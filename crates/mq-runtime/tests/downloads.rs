@@ -1279,7 +1279,7 @@ async fn a_torrent_removed_and_added_again_downloads_whole() {
         tokio::time::sleep(Duration::from_millis(50)).await;
     }
     // Past the old release: the file is still kept, and plays offline.
-    tokio::time::sleep(Duration::from_millis(1500)).await;
+    tokio::time::sleep(Duration::from_millis(5500)).await;
     assert_eq!(
         s.leecher.kept_for_tests(&s.info_hash).len(),
         1,

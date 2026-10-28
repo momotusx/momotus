@@ -2335,7 +2335,7 @@ async fn forget_torrent(core: &Core, id: &str, t: TorrentRef) {
     }
     #[cfg(feature = "test-hooks")]
     if lock(&SLOW_RELEASES).contains(&t.hash) {
-        tokio::time::sleep(Duration::from_secs(1)).await;
+        tokio::time::sleep(Duration::from_secs(5)).await;
     }
     match core.torrent_engine().await {
         Ok(engine) => {
@@ -2435,13 +2435,13 @@ pub fn short_backoff_for_tests() {
     http::SHORT_BACKOFF.store(true, std::sync::atomic::Ordering::Relaxed);
 }
 
-/// Tests: torrents whose file a download lets go take a second to go, so
+/// Tests: torrents whose file a download lets go take 5 s to go, so
 /// a run of the same file that starts meanwhile shows whether it waits.
 #[cfg(feature = "test-hooks")]
 static SLOW_RELEASES: Mutex<std::collections::BTreeSet<String>> =
     Mutex::new(std::collections::BTreeSet::new());
 
-/// Tests: the release of torrent `hash`'s files waits a second.
+/// Tests: the release of torrent `hash`'s files waits 5 s.
 #[cfg(feature = "test-hooks")]
 #[doc(hidden)]
 pub fn slow_release_for_tests(hash: &str) {
