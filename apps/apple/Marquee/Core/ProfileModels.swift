@@ -43,10 +43,13 @@ enum ProfileRules {
     static let glyphs = ["letter", "popcorn", "clapperboard", "tv", "rocket", "ghost", "cat", "dog", "leaf", "moon", "flame", "headphones", "gamepad"]
     static let colors = ["ember", "amber", "moss", "teal", "sky", "plum", "rose", "graphite"]
 
-    /// The editor holds changes not saved yet: a typed name that differs from the stored one (a new
-    /// profile has none), or a picked picture.
-    static func isDirty(name: String, stored: String?, touched: Bool) -> Bool {
-        touched || name.trimmingCharacters(in: .whitespacesAndNewlines) != (stored ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+    /// The editor holds changes not saved yet: a typed name that differs from what was last saved
+    /// (`saved`, newer than the snapshot right after a Save) or stored (a new profile has none), or a
+    /// picked picture. A profile that is gone (removed on another device) has nothing left to save.
+    static func isDirty(name: String, stored: String?, saved: String? = nil, adding: Bool, touched: Bool) -> Bool {
+        if !adding, stored == nil { return false }
+        let baseline = (saved ?? stored ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        return touched || name.trimmingCharacters(in: .whitespacesAndNewlines) != baseline
     }
 
     struct Avatar: Equatable {

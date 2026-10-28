@@ -109,13 +109,18 @@ private func snapshot(_ profiles: [ProfileInfo], locked: Bool = false) -> Profil
 
 @Test func theEditorIsDirtyOnlyWithAChangeNotYetSaved() {
     // Editing: the stored name, however it is spaced, is no change; a different name or a picked picture is.
-    #expect(!ProfileRules.isDirty(name: "Ada", stored: "Ada", touched: false))
-    #expect(!ProfileRules.isDirty(name: " Ada ", stored: "Ada", touched: false))
-    #expect(ProfileRules.isDirty(name: "Ada L", stored: "Ada", touched: false))
-    #expect(ProfileRules.isDirty(name: "Ada", stored: "Ada", touched: true))
+    #expect(!ProfileRules.isDirty(name: "Ada", stored: "Ada", adding: false, touched: false))
+    #expect(!ProfileRules.isDirty(name: " Ada ", stored: "Ada", adding: false, touched: false))
+    #expect(ProfileRules.isDirty(name: "Ada L", stored: "Ada", adding: false, touched: false))
+    #expect(ProfileRules.isDirty(name: "Ada", stored: "Ada", adding: false, touched: true))
     // Adding: nothing typed and nothing picked is nothing to lose.
-    #expect(!ProfileRules.isDirty(name: "", stored: nil, touched: false))
-    #expect(ProfileRules.isDirty(name: "Kid", stored: nil, touched: false))
+    #expect(!ProfileRules.isDirty(name: "", stored: nil, adding: true, touched: false))
+    #expect(ProfileRules.isDirty(name: "Kid", stored: nil, adding: true, touched: false))
+    // Right after a Save the snapshot may still hold the old name: the saved one is the baseline.
+    #expect(!ProfileRules.isDirty(name: "Ada L", stored: "Ada", saved: "Ada L", adding: false, touched: false))
+    #expect(ProfileRules.isDirty(name: "Ada Lo", stored: "Ada", saved: "Ada L", adding: false, touched: false))
+    // A profile removed on another device has nothing left to save, whatever the fields hold.
+    #expect(!ProfileRules.isDirty(name: "Ada", stored: nil, adding: false, touched: true))
 }
 
 @Test func onlyAPinRemovalWithNoKeypadAsksFirst() {

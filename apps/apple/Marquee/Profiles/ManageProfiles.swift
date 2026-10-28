@@ -83,6 +83,9 @@ struct EditProfile: View {
     /// The user picked a picture: only then is `avatar` sent, so a
     /// newer app's avatar survives a rename.
     @State private var touched = false
+    /// The name the last Save sent: from then on the baseline for unsaved edits (the snapshot may not hold
+    /// it yet), so Back right after a Save asks nothing.
+    @State private var savedName: String?
     @State private var filled = false
     @State private var said: (text: String, ok: Bool)?
     @State private var busy = false
@@ -264,7 +267,7 @@ struct EditProfile: View {
 
     private var dirty: Bool {
         let stored = profileId.flatMap { id in profiles.snapshot?.profiles.first { $0.id == id }?.name }
-        return ProfileRules.isDirty(name: name, stored: stored, touched: touched)
+        return ProfileRules.isDirty(name: name, stored: stored, saved: savedName, adding: profileId == nil, touched: touched)
     }
 
     private func title(_ target: ProfileInfo?, _ active: ProfileInfo) -> String {
@@ -460,6 +463,7 @@ struct EditProfile: View {
                     if touched { fields["avatar"] = ProfileRules.formatAvatar(glyph: glyph, color: color) }
                     try await profiles.perform("updateProfile", fields)
                     touched = false
+                    savedName = trimmed
                     said = ("Saved", true)
                     if thenLeave { dismiss() }
                 } else {
