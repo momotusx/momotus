@@ -1,0 +1,1 @@
+{"date":"2026-10-28","check":"tv pairing QR read back (Android design QrReadTest)","change":"fix(android): approve sheet races, lock retry and the TV QR read test","code_chars":239,"ecc":"L","quiet_zone_modules":4,"modules":65,"drawn_px":600,"px_per_module":9,"after":"3x3 box blur, then 2x2 means (half size)","px_per_module_after":4.5,"decoder":"zxing readQr","read":true}
