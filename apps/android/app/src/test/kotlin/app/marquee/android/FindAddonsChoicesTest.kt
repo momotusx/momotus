@@ -4,10 +4,21 @@ import android.app.Application
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.ExperimentalComposeUiApi
+import androidx.compose.ui.input.InputMode
+import androidx.compose.ui.input.InputModeManager
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.platform.LocalInputModeManager
+import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performKeyInput
+import androidx.compose.ui.test.pressKey
+import androidx.compose.ui.test.requestFocus
 import app.marquee.design.Form
 import app.marquee.design.MarqueeTheme
 import org.junit.Rule
@@ -17,8 +28,10 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 /** Find addons' list chips (plans/plugins-and-marketplace.md 7.1): past four lists one row that scrolls. */
+@OptIn(ExperimentalTestApi::class, ExperimentalComposeUiApi::class)
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [36], application = Application::class, qualifiers = "w411dp-h891dp")
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -29,10 +42,12 @@ class FindAddonsChoicesTest {
     private fun show(
         form: Form,
         names: List<String>,
+        selected: String = names.first(),
         onPick: (String) -> Unit = {},
     ) {
-        var picked by mutableStateOf(names.first())
+        var picked by mutableStateOf(selected)
         compose.setContent {
+            inputModes = LocalInputModeManager.current
             MarqueeTheme(form) {
                 Choices("List", names.map { it to it }, picked, null, {}) {
                     picked = it
@@ -61,8 +76,48 @@ class FindAddonsChoicesTest {
     fun `a chip on the scrolled row still picks its list`() {
         val names = listOf("A", "B", "C", "D", "E", "F")
         var got = ""
-        show(Form.Phone, names) { got = it }
+        show(Form.Phone, names, onPick = { got = it })
         compose.onNodeWithText("F").performClick()
         compose.runOnIdle { assertEquals("F", got) }
+    }
+
+    private var inputModes: InputModeManager? = null
+
+    /** As after a remote's key press: keyboard input mode, where chips take focus as on a TV. */
+    private fun keyboard() {
+        compose.runOnIdle { inputModes!!.requestInputMode(InputMode.Keyboard) }
+    }
+
+    /** TV: the last chip of a row that scrolls takes focus whole on screen, and Right there goes nowhere. */
+    @Test
+    fun `on a TV the last chip comes into view with focus and the row ends there`() {
+        show(Form.Tv, six)
+        keyboard()
+        val first = compose.onNodeWithText(six.first())
+        first.requestFocus()
+        // As a remote does: Right to the last chip, one press at a time.
+        repeat(six.size - 1) {
+            compose.onRoot().performKeyInput { pressKey(Key.DirectionRight) }
+            compose.waitForIdle()
+        }
+        val last = compose.onNodeWithText(six.last())
+        last.assertIsFocused()
+        val root = compose.onRoot().getUnclippedBoundsInRoot()
+        val bounds = last.getUnclippedBoundsInRoot()
+        assertTrue(bounds.left >= root.left && bounds.right <= root.right, "$bounds in $root")
+        compose.onRoot().performKeyInput { pressKey(Key.DirectionRight) }
+        compose.waitForIdle()
+        last.assertIsFocused()
+    }
+
+    @Test
+    fun `on a TV Left on the first chip stays on it`() {
+        show(Form.Tv, six)
+        keyboard()
+        val first = compose.onNodeWithText(six.first())
+        first.requestFocus()
+        first.performKeyInput { pressKey(Key.DirectionLeft) }
+        compose.waitForIdle()
+        first.assertIsFocused()
     }
 }

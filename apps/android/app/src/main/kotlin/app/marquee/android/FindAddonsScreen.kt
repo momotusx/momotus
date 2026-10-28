@@ -34,6 +34,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
@@ -104,8 +105,11 @@ import app.marquee.design.Tokens
 import app.marquee.design.focusPalette
 import app.marquee.design.marqueeFocus
 import app.marquee.design.openLink
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlin.math.max
 
 // Find addons (plans/m12-addon-discovery.md 3.4 to 3.7): Cinemeta's Official and Community lists, then
@@ -309,13 +313,34 @@ fun FindAddonsScreen(
     val entries = current?.entries.orEmpty()
     val filter = holder.filter
     val query = holder.query
-    // Each entry's text folded once per list, the query once per change.
-    val searchTexts = remember(entries) { entries.map(FindAddons::searchText) }
+    // The query folded once per change; each entry's text folded once per list, and only once there is a
+    // query (never on a TV, which has no search).
     val words = remember(query) { FindAddons.queryWords(query) }
-    val visible =
-        remember(entries, filter, words) {
-            entries.filterIndexed { at, e -> FindAddons.shows(e, filter) && FindAddons.matches(searchTexts[at], words) }
+    val searching = words.isNotEmpty()
+    // Folding 2,000 entries takes about 275 ms on a Pixel 9 Pro: done off the main thread once a phone's list
+    // is in, so the first keystroke does not wait for it; a TV, which has no search, never folds.
+    val searchTexts by produceState<List<String>?>(null, entries, tv) {
+        value = null
+        if (!tv &&
+            entries.isNotEmpty()
+        ) {
+            value = withContext(Dispatchers.Default) { entries.map(FindAddons::searchText) }
         }
+    }
+    val visible =
+        remember(entries, filter, words, searchTexts) {
+            val texts = searchTexts
+            entries.filterIndexed { at, e ->
+                FindAddons.shows(e, filter) &&
+                    (!searching || FindAddons.matches(texts?.getOrNull(at) ?: FindAddons.searchText(e), words))
+            }
+        }
+    // The match count, said once typing settles (600 ms), not on every keystroke.
+    val settledCount by produceState<Int?>(null, words, visible.size) {
+        value = null
+        delay(600)
+        value = visible.size
+    }
     // A publisher's list (an addon the user installed) names where it comes from.
     val host = current?.host
     val context = LocalContext.current
@@ -488,9 +513,10 @@ fun FindAddonsScreen(
                                 ),
                         )
                         // How many match, said politely once typing settles.
-                        if (query.isNotBlank()) {
+                        val count = settledCount
+                        if (searching && count != null) {
                             MqText(
-                                FindAddonsCopy.matching(visible.size),
+                                FindAddonsCopy.matching(count),
                                 role = TextRole.Caption,
                                 color = Marquee.colors.muted,
                                 modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
