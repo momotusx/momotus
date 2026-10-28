@@ -115,8 +115,12 @@ export function playTrailer(opts: {
 }): TrailerControl {
   current?.stop("stopped");
   const id = youtubeId(opts.id);
+  // Each play in a wrapper of its own, removed whole when it ends: its frame goes even when the player never got ready.
   const box = document.createElement("div");
-  opts.host.replaceChildren(box);
+  const wrap = document.createElement("div");
+  wrap.style.cssText = "width:100%;height:100%";
+  wrap.append(box);
+  opts.host.replaceChildren(wrap);
   const timers: ReturnType<typeof setTimeout>[] = [];
   let poll: ReturnType<typeof setInterval> | undefined;
   let ended = false;
@@ -148,9 +152,9 @@ export function playTrailer(opts: {
         try {
           player?.destroy();
         } catch {
-          // Already gone with its iframe.
+          // Never ready, or already gone with its iframe: the wrapper takes it.
         }
-        box.remove();
+        wrap.remove();
       };
       // The art fades back in over 600 ms above a player that still plays, never over black.
       if (why === "cap" || why === "ended") setTimeout(gone, 650);

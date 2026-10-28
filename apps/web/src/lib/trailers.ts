@@ -83,6 +83,13 @@ export function seekTarget(t: number, d: number, by: number): number {
   return Math.min(Math.max(0, t + by), Math.max(0, d - 2));
 }
 
+/** One step of a held arrow on a `d` second trailer, after `repeat` repeats: the film player's growing step (10, 20,
+ * 30, then 60 s), held to a tenth of the trailer so a held key never leaps to its end (as Android's). */
+export function heldStep(repeat: number, d: number): number {
+  const grown = repeat < 3 ? 10 : repeat < 6 ? 20 : repeat < 10 ? 30 : 60;
+  return Math.min(grown, Math.max(10, d / 10));
+}
+
 /** A walk or an e2e run: no trailer plays by itself and none makes a sound, unless the run asked for trailers
  * (`mq.trailerPreviews` "e2e"). */
 export function walkNow(): boolean {

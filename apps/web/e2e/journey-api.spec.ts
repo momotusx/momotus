@@ -1109,6 +1109,27 @@ test("a TV plays the header trailer only above its memory floor, with its Sound 
   }
 });
 
+test("plays stopped before YouTube is ready leave no frame behind", async ({ browser }) => {
+  const { context, p } = await trailerRun(browser, { form: "desktop" });
+  const left = await p.evaluate(async (url) => {
+    (window as unknown as { ytHoldReady: boolean }).ytHoldReady = true;
+    const yt = (await import(/* @vite-ignore */ url)) as typeof import("../src/components/yt-player");
+    const host = document.createElement("div");
+    document.body.append(host);
+    for (let i = 0; i < 4; i++) {
+      yt.playTrailer({ host, id: "jrnyTrailr1", capS: 45, onPlaying: () => {}, onTime: () => {}, onEnd: () => {} });
+      // The player is made once the script has loaded: wait for it, then the next play stops it before it is ready.
+      await new Promise((r) => setTimeout(r, 300));
+    }
+    yt.stopTrailer();
+    await new Promise((r) => setTimeout(r, 50));
+    return host.querySelectorAll("iframe").length + host.children.length;
+  }, "/src/components/yt-player.ts");
+  expect(left).toBe(0);
+  expect((await ytLog(p)).filter((l) => l.startsWith("new")).length).toBe(4);
+  await context.close();
+});
+
 test("in a walk the header plays nothing", async ({ browser }) => {
   const { context, p } = await trailerRun(browser, { form: "desktop" });
   await p.waitForTimeout(1500);

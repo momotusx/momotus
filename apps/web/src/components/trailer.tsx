@@ -16,7 +16,7 @@ import { pushBack } from "../focus/back";
 import { focusEl } from "../focus/dom";
 import { form } from "../form";
 import { clock, pct } from "../lib/format";
-import { seekTarget, walkNow } from "../lib/trailers";
+import { heldStep, seekTarget, walkNow } from "../lib/trailers";
 import { playTrailer, type TrailerControl, type TrailerTime } from "./yt-player";
 
 const PLAY_KEYS = new Set(["MediaPlayPause", "MediaPlay", "MediaPause", "k", "K", " "]);
@@ -34,6 +34,8 @@ export function TrailerOverlay(props: { trailers: Trailer[]; onClose: () => void
   let host!: HTMLDivElement;
   let control: TrailerControl | null = null;
   let run = 0;
+  // Repeats of the held arrow, for its growing step.
+  let repeats = 0;
 
   const start = (i: number) => {
     const my = ++run;
@@ -55,8 +57,9 @@ export function TrailerOverlay(props: { trailers: Trailer[]; onClose: () => void
         control = null;
         // Its end, or stopped from outside (the tab hidden for good, a film starting): the overlay goes with it.
         if (why !== "error" && why !== "timeout") return props.onClose();
-        // Refused here (embedding off, gone) or never ready: the next trailer, then the quiet line.
-        if (i + 1 < props.trailers.length) return start(i + 1);
+        // Refused here (embedding off, gone): the next trailer, then the quiet line. Never ready (YouTube unreachable): the
+        // line at once, not another 15 s wait per trailer.
+        if (why === "error" && i + 1 < props.trailers.length) return start(i + 1);
         setFailed(true);
         queueMicrotask(() => {
           const close = document.querySelector<HTMLElement>('[data-f="trailer:close"]');
@@ -159,7 +162,8 @@ export function TrailerOverlay(props: { trailers: Trailer[]; onClose: () => void
               const by = e.key === "ArrowLeft" ? -SEEK_S : SEEK_S;
               // A held key moves the bar and seeks once, when it is let go: YouTube fetches one place, not thirty.
               const d = time().d;
-              if (e.repeat && d > 0) setHeld(seekTarget(held() ?? time().t, d, by));
+              repeats = e.repeat ? repeats + 1 : 0;
+              if (e.repeat && d > 0) setHeld(seekTarget(held() ?? time().t, d, Math.sign(by) * heldStep(repeats, d)));
               else seekBy(by);
             } else if (e.key === "Enter") {
               e.preventDefault();

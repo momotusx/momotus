@@ -248,7 +248,7 @@
 /* One width for the frame and its rows, held to the window's height less the rows, so Close stays on screen on a
  * short window. */
 .trailer { --trailer-w: min(1440px, 100%, calc((100dvh - 2 * var(--safe-top) - 200px) * 16 / 9)); }
-[data-form="phone"] .trailer { --trailer-w: min(100%, calc((100dvh - 32px - 150px) * 16 / 9)); }
+[data-form="phone"] .trailer { --trailer-w: min(100%, calc((100dvh - 32px - 200px) * 16 / 9)); }
 .trailer-frame, .trailer-tl, .trailer-bar { width: var(--trailer-w); }
 .trailer-frame { position: relative; }
 .trailer-player { position: absolute; inset: -6%; pointer-events: none; }

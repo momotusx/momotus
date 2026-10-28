@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { coverSize, seekTarget, type TrailerSignals, trailerAllowed, youtubeId } from "./trailers";
+import { coverSize, heldStep, seekTarget, type TrailerSignals, trailerAllowed, youtubeId } from "./trailers";
 
 const ok: TrailerSignals = { enabled: true, visible: true, reducedMotion: false, metered: false, walk: false, layout: "cover", capable: true, hasTrailer: true };
 
@@ -42,4 +42,10 @@ test("a seek lands inside the trailer, short of the last 2 s where it closes", (
   expect(seekTarget(145, 150, 10)).toBe(148);
   expect(seekTarget(500, 150, 0)).toBe(148);
   expect(seekTarget(0, 1, 10)).toBe(0);
+});
+
+test("a held arrow's step grows as the film player's, held to a tenth of the trailer", () => {
+  expect([0, 2, 3, 6, 10].map((r) => heldStep(r, 600))).toEqual([10, 10, 20, 30, 60]);
+  expect([0, 3, 6, 10].map((r) => heldStep(r, 150))).toEqual([10, 15, 15, 15]);
+  expect(heldStep(10, 40)).toBe(10);
 });
