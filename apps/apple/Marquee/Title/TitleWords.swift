@@ -266,3 +266,9 @@ func titleFallback(header: TitleState?, failure: String?) -> TitleFallback {
     if header == nil, let failure { return .failed(failure) }
     return .loading
 }
+
+/// The header while Try again reopens the page: a header that failed (no details) goes, so the page
+/// shows Loading and then the new answer, even when it is the same words; one with details stays.
+func headerAfterRetry(_ header: TitleHeader?) -> TitleHeader? {
+    header?.details == nil ? nil : header
+}

@@ -13,3 +13,15 @@ import Testing
     // A command that failed beside a header still loading is not the page's failure.
     #expect(titleFallback(header: .loading, failure: "Could not save") == .loading)
 }
+
+private func header(_ state: TitleState) -> TitleHeader {
+    TitleHeader(
+        state: state, details: nil, inLibrary: false, seasons: [], selectedSeason: nil, playTarget: nil, nextAirs: nil,
+        watched: false, librarySettable: nil, genresLinked: nil)
+}
+
+@Test func tryAgainDropsAHeaderThatFailedSoThePageShowsLoadingAgain() {
+    #expect(headerAfterRetry(header(.failed(reason: "No metadata"))) == nil)
+    #expect(headerAfterRetry(nil) == nil)
+    #expect(titleFallback(header: headerAfterRetry(header(.failed(reason: "No metadata"))).map(\.state), failure: nil) == .loading)
+}
