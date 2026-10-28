@@ -158,7 +158,7 @@ private fun ButtonShell(
     // A white primary yields to a focused neighbour on TV (one white per screen).
     val buttons = LocalButtonFocus.current
     val yields = kind == ButtonKind.Primary && (quiet || (tv && !focused && (buttons?.intValue ?: 0) > 0))
-    ButtonFocused(focused && kind == ButtonKind.Secondary)
+    ButtonFocused(focused && (kind == ButtonKind.Secondary || quiet))
     val background =
         buttonFill(
             kind == ButtonKind.Primary,

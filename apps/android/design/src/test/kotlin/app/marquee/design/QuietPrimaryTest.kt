@@ -3,6 +3,7 @@ package app.marquee.design
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.padding
+import androidx.compose.runtime.MutableIntState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -24,6 +25,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
+import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /** A quiet primary draws as a secondary (one white per screen) on the same node, so a focus held there stays. */
@@ -37,9 +39,12 @@ class QuietPrimaryTest {
     private var quiet by mutableStateOf(false)
     private val focus = FocusRequester()
 
-    private fun show() =
+    private var buttons: MutableIntState? = null
+
+    private fun show(form: Form = Form.Phone) =
         compose.setContent {
-            MarqueeTheme(Form.Phone) {
+            MarqueeTheme(form) {
+                buttons = LocalButtonFocus.current
                 Box(Modifier.background(Color.Black).padding(8.dp).testTag("frame")) {
                     PrimaryButton("Save", {}, focusRequester = focus, quiet = quiet)
                 }
@@ -72,5 +77,16 @@ class QuietPrimaryTest {
         quiet = false
         compose.waitForIdle()
         compose.onNodeWithText("Save").assertIsFocused()
+    }
+
+    @Test
+    fun `on TV a focused quiet primary counts as a focused button, a focused plain one does not`() {
+        show(Form.Tv)
+        compose.runOnIdle { focus.requestFocus() }
+        compose.runOnIdle { assertEquals(0, buttons!!.intValue) }
+        quiet = true
+        compose.waitForIdle()
+        // The page's white primary yields to it, so its own white is the one white.
+        compose.runOnIdle { assertEquals(1, buttons!!.intValue) }
     }
 }
