@@ -116,3 +116,32 @@ final class LiveRecord<Snapshot: Decodable & Sendable> {
         }
     }
 }
+
+/// What a list screen shows from its record: skeletons until the first snapshot, the
+/// failure as the page when there is none, above the kept snapshot when there is one.
+enum LiveStage: Equatable {
+    case loading
+    case ready
+    case failed(String)
+    case failedKept(String)
+
+    init(hasSnapshot: Bool, failure: String?) {
+        switch (hasSnapshot, failure) {
+        case (false, nil): self = .loading
+        case (true, nil): self = .ready
+        case (false, let failure?): self = .failed(failure)
+        case (true, let failure?): self = .failedKept(failure)
+        }
+    }
+
+    var failure: String? {
+        switch self {
+        case .failed(let words), .failedKept(let words): words
+        case .loading, .ready: nil
+        }
+    }
+}
+
+extension LiveRecord {
+    var stage: LiveStage { LiveStage(hasSnapshot: snapshot != nil, failure: failure) }
+}

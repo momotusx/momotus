@@ -19,6 +19,9 @@ struct LibraryScreen: View {
                 #if os(iOS)
                 CalendarRow()
                 #endif
+                if let failure = library.stage.failure {
+                    StateLine(symbol: "triangle-alert", text: failure, action: ("Try again", library.retry))
+                }
                 if let s = library.snapshot, total(s) == 0 {
                     // Nothing to filter or sort: the way in instead of chips that say "All 0".
                     EmptyLibrary()
@@ -41,8 +44,8 @@ struct LibraryScreen: View {
                         StateLine(symbol: "library-big", text: "Nothing of this type in your library.")
                     }
                     PosterGrid(tiles: s.items, caption: caption)
-                } else if let failure = library.failure {
-                    StateLine(symbol: "triangle-alert", text: failure, action: ("Try again", library.retry))
+                } else if library.stage == .loading {
+                    PosterGridSkeleton()
                 }
             }
             .padding(.horizontal, metrics.gutter)

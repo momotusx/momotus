@@ -117,6 +117,11 @@ struct ChipStyle: ButtonStyle {
     }
 }
 
+/// The grid every poster screen lays its covers in.
+private func posterColumns(_ metrics: Metrics) -> [GridItem] {
+    [GridItem(.adaptive(minimum: metrics.poster.width * 0.85), spacing: metrics.wide ? 20 : 12, alignment: .top)]
+}
+
 /// Posters in a grid that fills the width; each opens its title page.
 struct PosterGrid: View {
     let tiles: [Tile]
@@ -132,7 +137,7 @@ struct PosterGrid: View {
     var body: some View {
         // Columns at about the row poster width, posters stretched to fill them at 2:3.
         LazyVGrid(
-            columns: [GridItem(.adaptive(minimum: metrics.poster.width * 0.85), spacing: metrics.wide ? 20 : 12, alignment: .top)],
+            columns: posterColumns(metrics),
             alignment: .leading, spacing: metrics.wide ? 28 : 18
         ) {
             let keyed = tiles.keyed
@@ -156,6 +161,23 @@ struct PosterGrid: View {
                 .onAppear { if key == keyed.last?.key { onEnd?() } }
             }
         }
+    }
+}
+
+/// Covers still coming: blank posters in the grid's places, no words.
+struct PosterGridSkeleton: View {
+    @Environment(\.metrics) private var metrics
+
+    var body: some View {
+        LazyVGrid(columns: posterColumns(metrics), alignment: .leading, spacing: metrics.wide ? 28 : 18) {
+            ForEach(0..<12, id: \.self) { _ in
+                RoundedRectangle(cornerRadius: Theme.Tile.radius, style: .continuous)
+                    .fill(Theme.Palette.surface)
+                    .aspectRatio(2 / 3, contentMode: .fit)
+            }
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Loading")
     }
 }
 

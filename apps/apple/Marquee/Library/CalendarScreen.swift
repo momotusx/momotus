@@ -19,13 +19,16 @@ struct CalendarScreen: View {
             ScrollView(.vertical) {
                 LazyVStack(alignment: .leading, spacing: Theme.Space.m) {
                     ScreenTitle(text: "Calendar")
+                    if let failure = calendar.stage.failure {
+                        StateLine(symbol: "triangle-alert", text: failure, action: ("Try again", calendar.retry))
+                    }
                     if let s = calendar.snapshot {
                         notes(s)
                         ForEach(s.days, id: \.date) { day in
                             DaySection(day: day, today: s.today).id(day.date)
                         }
-                    } else if let failure = calendar.failure {
-                        StateLine(symbol: "triangle-alert", text: failure, action: ("Try again", calendar.retry))
+                    } else if calendar.stage == .loading {
+                        AgendaSkeleton()
                     }
                 }
                 .frame(maxWidth: 880, alignment: .leading)
@@ -155,5 +158,25 @@ private struct CalendarRow: View {
     private var episode: String {
         guard let season = item.season, let number = item.episode else { return item.title }
         return item.title.isEmpty ? "S\(season):E\(number)" : "S\(season):E\(number) \(item.title)"
+    }
+}
+
+/// The agenda still coming: a day's heading and its rows as blank shapes, no words.
+private struct AgendaSkeleton: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: Theme.Space.m) {
+            ForEach(0..<2, id: \.self) { _ in
+                RoundedRectangle(cornerRadius: Theme.Radius.s, style: .continuous)
+                    .fill(Theme.Palette.surface)
+                    .frame(width: 160, height: 22)
+                ForEach(0..<2, id: \.self) { _ in
+                    RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous)
+                        .fill(Theme.Palette.surface)
+                        .frame(height: 72 + 2 * Theme.Space.xs)
+                }
+            }
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Loading")
     }
 }
