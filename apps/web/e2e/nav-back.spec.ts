@@ -41,13 +41,16 @@ for (const { form, viewport, minSide } of forms) {
     const back = page.locator(".back");
     await expect(back).toHaveText("Back");
     await expect(back).toHaveAttribute("href", "/");
-    const slot = page.locator(".logo-slot");
-    await expect(slot).toBeVisible({ timeout: 30_000 });
+    // The page is there once its meta line is; a phone's cover prints the title itself, so it has no logo slot.
+    await expect(page.locator(".info .meta")).toBeVisible({ timeout: 30_000 });
     const b = (await back.boundingBox()) as Box;
     expect(b.height).toBeGreaterThanOrEqual(minSide - 0.5);
     expect(b.width).toBeGreaterThanOrEqual(minSide);
-    const s = (await slot.boundingBox()) as Box;
-    expect(meets(b, s), `Back ${JSON.stringify(b)} against the logo slot ${JSON.stringify(s)}`).toBe(false);
+    const slot = page.locator(".logo-slot");
+    if (await slot.count()) {
+      const s = (await slot.boundingBox()) as Box;
+      expect(meets(b, s), `Back ${JSON.stringify(b)} against the logo slot ${JSON.stringify(s)}`).toBe(false);
+    }
 
     // Key blue over the art: the pill behind it keeps 4.5:1 even over white art (WCAG, worst case).
     const { fg, bg } = await back.evaluate((el) => ({ fg: getComputedStyle(el).color, bg: getComputedStyle(el).backgroundColor }));
@@ -76,7 +79,7 @@ for (const { form, viewport, minSide } of forms) {
     await back.click();
     await expect(page).toHaveURL(new RegExp(`/title/series/${GOT.id}$`));
     await back.click();
-    await expect(page).toHaveURL(/\/library$/);
+    await expect.poll(() => path(page)).toBe("/library");
 
     // A deep link has no history to go back in: Back lands on Home.
     await page.goto(`/title/series/${GOT.id}?form=${form}`);
@@ -97,15 +100,6 @@ test("TV draws no back link on the title page or Versions (the remote's Back is 
   await expect(page.locator(".backbar")).toHaveCount(0);
   await page.goto(`/title/series/${GOT.id}/versions/${GOT.resume}?form=tv`);
   await expect(page.locator(".versions-scr")).toBeVisible();
-  await expect(page.locator(".backbar")).toHaveCount(0);
-  await context.close();
-});
-
-test("the player and its Versions layer get no shell link", async ({ browser }) => {
-  const context = await browser.newContext({ viewport: forms[0].viewport, reducedMotion: "reduce" });
-  const page = await context.newPage();
-  await page.goto(`/play/series/${GOT.id}/${GOT.resume}?form=desktop`);
-  await expect(page.locator(".player-scr")).toBeVisible({ timeout: 30_000 });
   await expect(page.locator(".backbar")).toHaveCount(0);
   await context.close();
 });

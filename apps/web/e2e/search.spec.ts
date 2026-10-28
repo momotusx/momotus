@@ -269,7 +269,9 @@ test("desktop: one status region carries Searching, the count and No matches, an
     expect(await inside()).toBe(true);
   }
   // Close gives the focus back to the control that opened it.
-  await page.locator('[data-f="search:close"]').click();
+  // By key: a mouse takes no focus back (a ring nobody asked for), a key does.
+  await page.locator('[data-f="search:close"]').focus();
+  await page.keyboard.press("Enter");
   await expect(page.locator(".palette-layer")).toHaveCount(0);
   await expect.poll(() => focused(page)).toBe("nav:/search");
   await context.close();

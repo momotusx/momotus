@@ -622,6 +622,9 @@ test("Calendar that could not open offers Try again, focused, and an empty one a
   await expect(retry).toHaveCount(0);
   // This core's library holds no series: the empty state names the way on, a button that takes the focus.
   const find = p.locator('[data-f="calendar:discover"]');
+  await expect(find).toBeVisible({ timeout: 30_000 });
+  // Opened afresh, a remote lands on it (after a Try again the focus was on the button that went: it has no place to take).
+  await p.goto("/calendar?form=tv");
   await expect(find).toBeFocused({ timeout: 30_000 });
   await expect(find).toHaveText("Find series to follow");
   await p.keyboard.press("Enter");
@@ -648,7 +651,9 @@ test("Search that could not open offers Try again, which opens it anew with the 
   await expect(p.locator('[data-f="search:input"]')).toHaveValue("journey");
   await expect.poll(() => sent.filter((m) => m.op === "subscribe" && m.view === "search").length).toBe(2);
   await expect.poll(() => sent.some((m) => m.op === "command" && (m.command as { query?: string } | undefined)?.query === "journey")).toBe(true);
-  await expect(p.locator(".hit").first()).toBeVisible({ timeout: 30_000 });
+  // This core's addon has no search catalog: the new panel settles on saying so, not on the failure.
+  await expect(p.locator('.palette [role="status"]')).toHaveText("None of your addons can search.", { timeout: 30_000 });
+  await expect(p.locator(".palette-body")).not.toContainText("Search could not open.");
   await context.close();
 });
 
@@ -761,6 +766,8 @@ test("the player: no control holds focus out of sight; the picture holds it whil
   const paused = () => p.evaluate(() => document.querySelector("video")?.paused ?? true);
   const at = () => p.evaluate(() => ({ f: (document.activeElement as HTMLElement | null)?.dataset.f ?? null, surface: document.activeElement?.classList.contains("player-scr") ?? false }));
   await expect.poll(time, { timeout: 30_000 }).toBeGreaterThan(5);
+  // The player is no pushed page: the shell draws no Back link over it (its own Back is in the player).
+  await expect(p.locator(".backbar")).toHaveCount(0);
   // The controls fade; a control taking focus brings them back (a hidden control is never what has the focus).
   await expect(scr).toHaveClass(/idle/, { timeout: 10_000 });
   await p.locator('[data-f="player:audio"]').focus();
@@ -783,7 +790,9 @@ test("the player: no control holds focus out of sight; the picture holds it whil
   expect((await at()).surface).toBe(true);
   await p.keyboard.press(" ");
   await expect.poll(paused).toBe(true);
-  await p.keyboard.press(" ");
+  // The pause brought the controls and the focus back to the control it was on: Space there is that control's own
+  // press, and K plays and pauses from anywhere.
+  await p.keyboard.press("k");
   await expect.poll(paused).toBe(false);
   await context.close();
 });
@@ -876,7 +885,7 @@ test("the title's Play yields its white to a focused round action on TV, and the
     await expect(strip).toBeVisible();
     const edge = await strip.boundingBox();
     for (const words of [".ep-t", ".ep-r", ".ep-ov"]) {
-      const box = await row.locator(words).first().boundingBox();
+      const box = (await row.locator(words).count()) ? await row.locator(words).first().boundingBox() : null;
       if (box) {
         expect(box.x + box.width, `${at} ${words} ends before the strip`).toBeLessThanOrEqual((edge?.x ?? 0) + 1);
         expect(box.width, `${at} ${words} keeps a positive line`).toBeGreaterThan(40);

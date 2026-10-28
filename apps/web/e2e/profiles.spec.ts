@@ -196,6 +196,21 @@ async function withKid<T>(name: string, run: (id: string) => Promise<T>): Promis
   }
 }
 
+/** A page on the app as Main, past the start picker that a second profile brings (it asks once for each tab). */
+async function enterAs(page: Page, form = "desktop") {
+  await page.goto(`/?form=${form}`);
+  await page.locator('[data-f="profile:default"]').click();
+  await expect(page.locator(".picker")).toHaveCount(0);
+}
+
+/** An edit page reached from Manage profiles by a press, so the router's history is under it: the browser's Back from
+ * here is the router's own (after a plain `goto` it would load the earlier document, which no page can ask about). */
+async function openEdit(page: Page, id: string, form = "desktop") {
+  await page.goto(`/profiles/manage?form=${form}`);
+  await page.locator(`[data-f="manage:${id}"]`).click();
+  await expect(page.locator('[data-f="pedit:name"]')).toBeVisible();
+}
+
 const dialog = (page: Page) => page.getByRole("alertdialog", { name: "Leave without saving?" });
 const names = async () => (await picker()).profiles.map((p) => p.name);
 
@@ -231,13 +246,13 @@ test("profiles: Add and Save answer one press once, and an empty name is said un
 
 test("profiles: unsaved edits ask before any way out, and Keep editing keeps them", async ({ page }) => {
   await withKid("Dirty Kid", async (kid) => {
-    await page.goto(`/library?form=desktop`);
-    await page.goto(`/profiles/edit/${kid}?form=desktop`);
+    await enterAs(page);
+    await openEdit(page, kid);
     const name = page.locator('[data-f="pedit:name"]');
     await expect(name).toHaveValue("Dirty Kid");
     // Nothing changed: nothing to ask. Back goes straight.
     await page.goBack();
-    await expect(page).toHaveURL(/\/library/);
+    await expect(page).toHaveURL(/\/profiles\/manage/);
     await page.goForward();
     await expect(name).toHaveValue("Dirty Kid");
 
@@ -259,7 +274,7 @@ test("profiles: unsaved edits ask before any way out, and Keep editing keeps the
     expect(await names()).toContain("Dirty Kid");
 
     // The browser's Back asks; Save stores the name and then leaves.
-    await page.goto(`/profiles/edit/${kid}?form=desktop`);
+    await openEdit(page, kid);
     await name.fill("Dirty Kid 3");
     await page.goBack();
     await expect(dialog(page)).toBeVisible();
@@ -339,7 +354,8 @@ test("profiles: the Delete key on an empty keypad only deletes, and a PIN taken 
     await c.req("switchProfile", { profile: kid });
     await c.req("setPin", { profile: kid, pin: PIN });
     await c.req("switchProfile", { profile: "default" });
-    await page.goto(`/profiles/edit/${kid}?form=desktop`);
+    await enterAs(page);
+    await openEdit(page, kid);
     await page.locator('[data-f="pedit:pin:clear"]').click();
     const ask = page.getByRole("alertdialog", { name: "Remove Pin Kid's PIN?" });
     await expect(ask).toBeVisible();
@@ -362,7 +378,7 @@ test("profiles: avatars are circles, the chosen picture is the grey fill, and th
   await expect(page.locator(".ptile .avatar").first()).toBeVisible();
   const style = (sel: string) => page.locator(sel).first().evaluate((el) => ({ radius: getComputedStyle(el).borderTopLeftRadius, shadow: getComputedStyle(el).boxShadow, fill: getComputedStyle(el).backgroundColor }));
   const tile = await style(".ptile .avatar");
-  expect(tile.radius).toBe("84px");
+  expect(tile.radius).toBe("50%");
   expect(tile.shadow).toBe("none");
   await page.goto("/profiles/new?form=desktop");
   await expect(page.locator('[data-f="pedit:name"]')).toBeVisible();
@@ -414,7 +430,8 @@ async function holdAnswers(page: Page, op: string) {
 test("profiles: a picture chosen while Save is with the core stays unsaved and still asks", async ({ page }) => {
   await withKid("Slow Kid", async (kid) => {
     const core = await holdAnswers(page, "updateProfile");
-    await page.goto(`/profiles/edit/${kid}?form=desktop`);
+    await enterAs(page);
+    await openEdit(page, kid);
     const name = page.locator('[data-f="pedit:name"]');
     await expect(name).toHaveValue("Slow Kid");
     await page.locator('[data-f="pedit:glyph:cat"]').click();
@@ -433,8 +450,8 @@ test("profiles: a picture chosen while Save is with the core stays unsaved and s
 test("profiles: Save in the leave question pressed twice sends once, stays open until the answer, then leaves", async ({ page }) => {
   await withKid("Twice Kid", async (kid) => {
     const core = await holdAnswers(page, "updateProfile");
-    await page.goto("/library?form=desktop");
-    await page.goto(`/profiles/edit/${kid}?form=desktop`);
+    await enterAs(page);
+    await openEdit(page, kid);
     await page.locator('[data-f="pedit:name"]').fill("Twice Kid 2");
     await page.locator('[data-f="nav:/library"]').click();
     await expect(dialog(page)).toBeVisible();
@@ -451,7 +468,8 @@ test("profiles on a phone: the leave question comes into view, whatever the page
   await withKid("Phone Kid", async (kid) => {
     const context = await browser.newContext({ viewport: { width: 390, height: 700 }, hasTouch: true, isMobile: true, reducedMotion: "reduce" });
     const page = await context.newPage();
-    await page.goto(`/profiles/edit/${kid}?form=phone`);
+    await enterAs(page, "phone");
+    await openEdit(page, kid, "phone");
     await page.locator('[data-f="pedit:name"]').fill("Phone Kid 2");
     // A tap on a tab, which brings no focus to the question (autofocus waits for keys).
     await page.locator('.tabs a[href="/library"]').tap();
@@ -468,8 +486,8 @@ test("profiles on a phone: the leave question comes into view, whatever the page
 test("profiles: Keep editing while a leave's Save is with the core means the Save does not leave, whatever it answers", async ({ page }) => {
   await withKid("Kid A", async (kid) => {
     const core = await holdAnswers(page, "updateProfile");
-    await page.goto("/library?form=desktop");
-    await page.goto(`/profiles/edit/${kid}?form=desktop`);
+    await enterAs(page);
+    await openEdit(page, kid);
     const name = page.locator('[data-f="pedit:name"]');
     await name.fill("Kid B");
     await page.locator('[data-f="nav:/library"]').click();
@@ -493,8 +511,7 @@ test("profiles: Keep editing while a leave's Save is with the core means the Sav
 });
 
 test("profiles: leaving with the PIN keypad open asks about unsaved edits too", async ({ page }) => {
-  await page.goto("/library?form=desktop");
-  await page.goto("/profiles/edit/default?form=desktop");
+  await openEdit(page, "default");
   const name = page.locator('[data-f="pedit:name"]');
   const was = await name.inputValue();
   await name.fill(`${was} edited`);
