@@ -46,6 +46,17 @@ pub(super) async fn fetch(
     else {
         return Ended::Move(DownloadReason::NoVersion);
     };
+    // A file of this torrent let go a moment ago (a retry, a remove and
+    // add again) is let go before this run adds it: the release may remove
+    // the torrent itself (code review r3 N2).
+    let hash = info_hash.to_ascii_lowercase();
+    let releases: Vec<_> = super::lock(&d.releasing)
+        .extract_if(|(h, _), _| *h == hash)
+        .map(|(_, release)| release)
+        .collect();
+    for release in releases {
+        let _ = release.await;
+    }
     let t = match engine.add_magnet(info_hash, trackers, &[]).await {
         Ok(t) => t,
         Err(e) => {
@@ -96,12 +107,6 @@ pub(super) async fn fetch(
             .and_then(|k| k.name.rsplit_once('.'))
             .map(|(_, e)| e.to_ascii_lowercase());
         row.version = serde_json::to_string(&version).ok();
-    }
-    // The same file let go a moment ago (a retry, a remove and add again)
-    // is let go before this run takes it (code review r3 N2).
-    let release = super::lock(&d.releasing).remove(&(info_hash.to_ascii_lowercase(), file));
-    if let Some(release) = release {
-        let _ = release.await;
     }
     row.bytes_total = Some(len as i64);
     save_run(core, row);

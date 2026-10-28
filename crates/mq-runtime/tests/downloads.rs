@@ -1241,22 +1241,24 @@ async fn a_torrent_download_plays_offline() {
 #[cfg(feature = "torrent")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn a_torrent_removed_and_added_again_downloads_whole() {
-    let s = support::swarm(true).await;
-    let t = s
-        .leecher
-        .add_magnet(&s.info_hash, &[], &[s.seeder_addr])
-        .await
-        .unwrap();
-    let file = s
-        .leecher
-        .files(t)
-        .unwrap()
-        .iter()
-        .position(|f| f.path.ends_with("movie.mkv"))
-        .unwrap();
+    let (v4, v6) = (std::net::Ipv4Addr::LOCALHOST, std::net::Ipv6Addr::LOCALHOST);
+    let s = support::swarm_scoped(v4.into(), &[v4.into()], &[v4.into(), v6.into()], true).await;
+    // A tracker that names the seeder: every add, the job's own included,
+    // finds it after its torrent was let go.
+    let mut body = b"d8:intervali60e5:peers6:".to_vec();
+    body.extend(v4.octets());
+    body.extend(s.seeder_addr.port().to_be_bytes());
+    body.extend(b"e");
+    let mut answer = format!(
+        "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+        body.len()
+    )
+    .into_bytes();
+    answer.extend(body);
+    let tracker = support::HttpTracker::start(answer, false);
     let stream = serde_json::json!({
         "name": "Fixture\n1080p", "title": "Sintel.2010.1080p.WEB.x264-GROUP",
-        "infoHash": s.info_hash, "fileIdx": file
+        "infoHash": s.info_hash, "sources": [format!("tracker:{}", tracker.url)]
     });
     let core = core_with(addon_listing(stream, Duration::ZERO).await).await;
     core.set_torrent_engine(s.leecher.clone());
@@ -1626,8 +1628,9 @@ async fn a_hand_picked_retry_keeps_its_subtitles_in_place() {
 #[tokio::test]
 async fn a_job_that_panics_frees_its_slot() {
     let (url, _) = origin(video(1 << 20), How::default()).await;
-    let stream = serde_json::json!({ "name": "Direct\n1080p", "title": "Show.S02.1080p.WEB-DL.mp4", "url": url });
-    let core = core_with(addon_listing(stream, Duration::ZERO).await).await;
+    // Sintel's release: the episodes panic before they pick, the film
+    // after them downloads it.
+    let core = core_with(addon(&url, Duration::ZERO).await).await;
     let season = AddRequest {
         kind: "series".into(),
         item_id: "tt9".into(),
