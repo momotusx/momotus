@@ -154,19 +154,16 @@ export function HeroCarousel(props: { heroes: Hero[]; waiting: boolean }) {
     shownId = list()[index()]?.tile.id ?? shownId;
   });
 
+  // Once anything on the screen has had the focus, a page's late Play no longer holds a first focus (data-focus-wait).
+  const [landed, setLanded] = createSignal(false);
+  onMount(() => {
+    const land = () => setLanded(true);
+    document.addEventListener("focusin", land, { once: true });
+    onCleanup(() => document.removeEventListener("focusin", land));
+  });
+
   // The clock: one progress value for the pill and the advance (decision 7), only while nothing holds it.
   let keyAt = -Infinity;
-  // The core gives a page its Play a moment after the page (a series reads its episodes first): a first focus that
-  // settled on Details for want of it moves on to Play, unless a key has moved the focus since.
-  createEffect(
-    on(
-      () => !!list()[index()]?.play,
-      (has) => {
-        const el = document.activeElement as HTMLElement | null;
-        if (has && keyAt < 0 && el?.dataset.f === "hero:details" && el.closest(".hero-page.on")) refocus("hero:play");
-      },
-    ),
-  );
   onMount(() => {
     let last = performance.now();
     let written = -1;
@@ -308,6 +305,11 @@ export function HeroCarousel(props: { heroes: Hero[]; waiting: boolean }) {
     });
 
   const many = () => list().length > 1;
+  const pageNearest = (e: MouseEvent & { currentTarget: HTMLElement }) => {
+    const dots = [...e.currentTarget.querySelectorAll<HTMLElement>("button.dot")];
+    const off = dots.map((d) => Math.abs(d.getBoundingClientRect().left + d.getBoundingClientRect().width / 2 - e.clientX));
+    page(off.indexOf(Math.min(...off)));
+  };
   // Every label Play says on these pages: its cell holds the widest of them too (an anime's "Resume S1:E1122").
   const labels = () => [...new Set(list().flatMap((h) => (h.play ? [h.play.label] : [])))];
   return (
@@ -316,7 +318,9 @@ export function HeroCarousel(props: { heroes: Hero[]; waiting: boolean }) {
       class="hero"
       classList={{ closed: !list().length && !props.waiting, "trailer-on": shown() }}
       data-reveal-top
-      data-focus-wait={!list().length && props.waiting ? "" : undefined}
+      // The first focus waits for the hero while it comes, and for the page's Play while the core reads it
+      // (focus/dom.ts): a stopgap focus meanwhile would land on Details and be moved to Play when it came.
+      data-focus-wait={(!list().length && props.waiting) || (!landed() && list()[index()]?.playPending && !list()[index()]?.play) ? "" : undefined}
       aria-label="Featured"
       aria-roledescription="carousel"
       onKeyDown={onKey}
@@ -374,7 +378,9 @@ export function HeroCarousel(props: { heroes: Hero[]; waiting: boolean }) {
       </Show>
       <TrailerMute />
       <Show when={many()}>
-        <div class="hero-dots" classList={{ platter: form() === "desktop" }}>
+        {/* Phone: one 44 px tall strip, as iOS's page control; a tap between the 16 px pitched dots goes to the nearest.
+            The dots stay buttons for the keyboard and a screen reader. */}
+        <div class="hero-dots" classList={{ platter: form() === "desktop" }} onClick={(e) => e.target === e.currentTarget && form() === "phone" && pageNearest(e)}>
           <For each={list()}>
             {(h, i) => {
               const label = () => `Page ${i() + 1} of ${list().length}, ${h.tile.name}`;
@@ -443,7 +449,9 @@ function HeroWords(props: { hero: Hero; active: boolean; labels: string[] }) {
           when={h().play}
           fallback={
             // Play's place while the core reads the page's episodes (`playPending`): Details never moves when it
-            // lands (review r4). Hidden, out of the focus order and of the accessibility tree.
+            // lands (review r4). Hidden, out of the focus order and of the accessibility tree. Meanwhile no button
+            // is the first focus: it waits for Play, so it lands once and never moves under the viewer's thumb
+            // (focus/dom.ts lands it on the first button after 4 s if Play is still out).
             <Show when={h().playPending}>
               <span class="btn primary slot" aria-hidden="true">
                 <Play aria-hidden class="fill" />
@@ -474,7 +482,7 @@ function HeroWords(props: { hero: Hero; active: boolean; labels: string[] }) {
               href={titlePath(h().tile.kind, h().tile.id)}
               data-f={key("hero:details")}
               aria-label={`Details for ${h().tile.name}`}
-              data-autofocus={props.active && !h().play ? "" : undefined}
+              data-autofocus={props.active && !h().play && !h().playPending ? "" : undefined}
             >
               <span class="ring">
                 <Info aria-hidden />
@@ -488,7 +496,7 @@ function HeroWords(props: { hero: Hero; active: boolean; labels: string[] }) {
             href={titlePath(h().tile.kind, h().tile.id)}
             data-f={key("hero:details")}
             aria-label={`Details for ${h().tile.name}`}
-            data-autofocus={props.active && !h().play ? "" : undefined}
+            data-autofocus={props.active && !h().play && !h().playPending ? "" : undefined}
           >
             <Info aria-hidden />
             Details

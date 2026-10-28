@@ -358,6 +358,8 @@ export function remember(group: string, key: string) {
 }
 
 let stopRestore: (() => void) | null = null;
+// An OK with nothing focused landed the first focus and is still held down.
+let okLanded = false;
 // How long Back waits for the remembered element before taking its place's.
 const NEAR_AFTER_MS = 800;
 
@@ -544,6 +546,9 @@ export function installFocus(onBack: () => void) {
     { capture: true },
   );
   document.addEventListener("pointerdown", cancelRestore, { capture: true });
+  window.addEventListener("keyup", (e) => {
+    if (e.key === "Enter") okLanded = false;
+  });
   window.addEventListener("keydown", (e) => {
     if (e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey) return;
     const dir = DIRS[e.key];
@@ -561,6 +566,20 @@ export function installFocus(onBack: () => void) {
       const card = e.target instanceof Element ? ownerOf(e.target) : null;
       if (card) focusEl(card);
       else onBack();
+      return;
+    }
+    // TV: OK with nothing focused (a first focus still waiting for its target) lands the first focus, as an arrow
+    // does, and opens nothing: neither does the same OK held down, whose repeats reach the focus it landed.
+    if (e.key === "Enter" && e.repeat && okLanded) {
+      e.preventDefault();
+      return;
+    }
+    if (e.key === "Enter" && (document.activeElement ?? document.body) === document.body && document.documentElement.dataset.form === "tv") {
+      e.preventDefault();
+      cancelRestore();
+      const first = initial();
+      if (first) focusEl(first);
+      okLanded = true;
       return;
     }
     // Buttons and links activate on Enter natively; other focusables click.

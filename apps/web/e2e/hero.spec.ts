@@ -4,7 +4,7 @@
  * plays, covering the hero's frame under the art until its controls fade, taking no input, and gone
  * on an error. */
 
-import { type BrowserContext, expect, type Page, test } from "@playwright/test";
+import { type Browser, type BrowserContext, expect, type Page, test } from "@playwright/test";
 
 const activePage = (page: Page) => page.evaluate(() => Number(document.querySelector<HTMLElement>(".hero-page.on")?.dataset.page ?? -1));
 const activeDot = (page: Page) => page.evaluate(() => [...document.querySelectorAll(".hero-dots .dot")].findIndex((d) => d.classList.contains("on")));
@@ -309,9 +309,9 @@ test("desktop: a series page plays the core's episode, its label as the title pa
   await context.close();
 });
 
-/** Holds every series page's Play as the core sends it while its meta is read (`play` null, `playPending`), until
- * `release` sends the core's own last header. */
-async function holdSeriesPlay(context: BrowserContext) {
+/** Holds every series page's Play (every page's, with `every`) as the core sends it while its meta is read (`play`
+ * null, `playPending`), until `release` sends the core's own last header. */
+async function holdSeriesPlay(context: BrowserContext, every = false) {
   const hold = { held: true, sub: -1, header: null as unknown, release: () => {} };
   await context.routeWebSocket(/\/ws$/, (ws) => {
     const server = ws.connectToServer();
@@ -330,7 +330,7 @@ async function holdSeriesPlay(context: BrowserContext) {
       for (const u of msg.updates ?? []) if (u.kind === "header") headers.push(u.header);
       for (const header of headers) {
         hold.header = structuredClone(header);
-        for (const h of header.heroes) if (h.tile.kind !== "movie") Object.assign(h, { play: null, playPending: true });
+        for (const h of header.heroes) if (every || h.tile.kind !== "movie") Object.assign(h, { play: null, playPending: true });
       }
       ws.send(JSON.stringify(msg));
     });
@@ -454,6 +454,80 @@ test("phone: a film played mutes the trailers again; Home after it is never loud
   await context.close();
 });
 
+/** TV Home with every page's Play held, each focus the page takes written down in order (its `data-f`). */
+async function heldTv(browser: Browser) {
+  const context = await browser.newContext({ viewport: { width: 1920, height: 1080 } });
+  const hold = await holdSeriesPlay(context, true);
+  const page = await context.newPage();
+  await page.addInitScript(() => {
+    const w = window as unknown as { focuses: string[] };
+    w.focuses = [];
+    document.addEventListener("focusin", (e) => w.focuses.push((e.target as HTMLElement).dataset.f ?? ""), true);
+  });
+  await page.goto("/?form=tv");
+  await expect(page.locator(".hero-page.on .acts .slot")).toHaveCount(1, { timeout: 30_000 });
+  const focuses = () => page.evaluate(() => (window as unknown as { focuses: string[] }).focuses);
+  // Waits up to `ms`, never past 3.5 s from the page's start: focus/dom.ts's late fallback lands at 4 s.
+  const settle = async (ms: number) => page.waitForTimeout(Math.max(0, Math.min(ms, 3500 - (await page.evaluate(() => performance.now())))));
+  return { context, page, hold, focuses, settle };
+}
+
+// The rule: the hero's first focus lands once and stays. A first focus on Details that moved on to Play when Play came
+// sat under the viewer's thumb: a quick OK opened Details, and the ring jumped.
+test("TV: the hero's first focus waits for a late Play and lands on it once", async ({ browser }) => {
+  const { context, page, hold, focuses, settle } = await heldTv(browser);
+  // While Play is read, no button takes the first focus.
+  await settle(1000);
+  expect(await focuses()).toEqual([]);
+  hold.release();
+  await expect.poll(focuses).toEqual(["hero:play"]);
+  await page.waitForTimeout(500);
+  expect(await focuses()).toEqual(["hero:play"]);
+  await context.close();
+});
+
+for (const key of ["ArrowDown", "Enter"]) {
+  test(`TV: ${key} while the first focus waits for Play lands it on the first button at once, and it stays`, async ({ browser }) => {
+    const { context, page, hold, focuses, settle } = await heldTv(browser);
+    await settle(500);
+    expect(await focuses()).toEqual([]);
+    await page.keyboard.press(key);
+    await expect.poll(focuses, { timeout: 1000 }).toEqual(["hero:details"]);
+    // OK only placed the focus: nothing opened.
+    expect(new URL(page.url()).pathname).toBe("/");
+    hold.release();
+    await expect(page.locator('.hero-page.on [data-f="hero:play"]')).toHaveCount(1);
+    await page.waitForTimeout(500);
+    expect(await focuses()).toEqual(["hero:details"]);
+    await context.close();
+  });
+}
+
+test("TV: OK held down while the first focus waits for Play lands it and opens nothing", async ({ browser }) => {
+  const { context, page, focuses, settle } = await heldTv(browser);
+  await settle(500);
+  expect(await focuses()).toEqual([]);
+  // A remote's held OK: Playwright sends the downs after the first with `repeat`, and they reach the Details link
+  // the first one focused.
+  for (let i = 0; i < 3; i++) await page.keyboard.down("Enter");
+  await page.keyboard.up("Enter");
+  await expect.poll(focuses, { timeout: 1000 }).toEqual(["hero:details"]);
+  await page.waitForTimeout(300);
+  expect(new URL(page.url()).pathname).toBe("/");
+  await context.close();
+});
+
+test("TV: a Play later than the first focus's wait leaves that focus where it landed", async ({ browser }) => {
+  const { context, page, hold, focuses } = await heldTv(browser);
+  // focus/dom.ts stops waiting after 4 s: the first focus lands on the hero's first button.
+  await expect.poll(focuses, { timeout: 10_000 }).toEqual(["hero:details"]);
+  hold.release();
+  await expect(page.locator('.hero-page.on [data-f="hero:play"]')).toHaveCount(1);
+  await page.waitForTimeout(500);
+  expect(await focuses()).toEqual(["hero:details"]);
+  await context.close();
+});
+
 test("TV: a series page the timer brings lands the focus on its Play", async ({ browser }) => {
   const context = await browser.newContext({ viewport: { width: 1920, height: 1080 } });
   const page = await home(context, "tv");
@@ -543,5 +617,25 @@ test("phone: the 8 s dwell never cuts a playing trailer", async ({ browser }) =>
   expect(await activePage(page)).toBe(base);
   await expect(page.locator(".hero.trailer-on")).toHaveCount(1);
   expect(await page.evaluate(() => (window as unknown as { ytLog: string[] }).ytLog.includes("destroy"))).toBe(false);
+  await context.close();
+});
+
+test("phone: the dots are one 44 px tall control, and a tap off a dot's own button goes to the nearest", async ({ browser }) => {
+  const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  const page = await home(context, "phone");
+  const strip = await page.locator(".hero-dots").boundingBox();
+  expect(strip!.height).toBeGreaterThanOrEqual(44);
+  expect(strip!.width).toBeGreaterThanOrEqual(44);
+  // Each dot's middle, where its button is.
+  const dot = (i: number) => page.locator(".hero-dots button.dot").nth(i).evaluate((el) => {
+    const r = el.getBoundingClientRect();
+    return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+  });
+  const base = await activePage(page);
+  const to = (base + 1) % (await page.locator(".hero-dots button.dot").count());
+  const at = await dot(to);
+  // 18 px under the dot's middle: past its 21 px button, inside the 44 px strip.
+  await page.mouse.click(at.x, at.y + 18);
+  await expect.poll(() => activePage(page)).toBe(to);
   await context.close();
 });

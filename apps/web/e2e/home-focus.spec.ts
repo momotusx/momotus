@@ -150,6 +150,8 @@ test("TV: a hero that lands after the row took the focus takes it back, with the
 test("TV: with no hero and none coming, Continue Watching takes the first focus at once", async ({ browser }) => {
   // Every row answers and no hero comes (a kids profile's Home, or posters only).
   const page = await held(browser, "hero", Infinity);
+  // "At once" counts from the rows' first paint, as the other Home specs wait for it, not from a cold page load.
+  await expect(page.locator(`[data-f="${cw(BBB_ID)}"]`)).toBeVisible({ timeout: 30_000 });
   await expect.poll(() => focused(page), { timeout: 2000 }).toBe(cw(BBB_ID));
   await expect(page.locator(".hero.closed")).toHaveCount(1);
   expect(await top(page)).toBe(0);
@@ -158,6 +160,7 @@ test("TV: with no hero and none coming, Continue Watching takes the first focus 
 
 test("TV: with every catalog failed, Continue Watching takes the first focus at once", async ({ browser }) => {
   const page = await held(browser, "failed", Infinity);
+  await expect(page.locator(`[data-f="${cw(BBB_ID)}"]`)).toBeVisible({ timeout: 30_000 });
   await expect.poll(() => focused(page), { timeout: 2000 }).toBe(cw(BBB_ID));
   await page.context().close();
 });
