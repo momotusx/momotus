@@ -21,7 +21,10 @@ struct QRCode: View {
                         .interpolation(.none)
                         .resizable()
                         .frame(width: side, height: side)
-                        .frame(width: box.size.width, height: box.size.height)
+                        .offset(
+                            x: Self.inset(box.size.width - side, scale: displayScale),
+                            y: Self.inset(box.size.height - side, scale: displayScale))
+                        .frame(width: box.size.width, height: box.size.height, alignment: .topLeading)
                 }
                 .background(Color.white)
                 .accessibilityElement()
@@ -36,6 +39,11 @@ struct QRCode: View {
                     .accessibilityLabel("QR code")
             }
         }
+    }
+
+    /// Half of `spare` points, rounded down to a whole pixel, so the centred code starts on a pixel boundary.
+    static func inset(_ spare: CGFloat, scale: CGFloat) -> CGFloat {
+        (spare * scale / 2).rounded(.down) / scale
     }
 
     /// The largest side, in points, at most `points`, at which each of `modules` is a whole number of pixels.

@@ -204,7 +204,6 @@ enum AccountRules {
         fill(words.passkeyLabel, ["device": device])
     }
 
-    /// A kit's row line: "Last used: <device>, <date>", that device's name when it is still a member.
     /// The pairing code a URL carries, whole, for the core to read: the link
     /// host's `/pair` link, or `momotus://pair#...`; nil for any other URL
     /// (`momotus://auth` is the sign-in's return). A link is never a scan
@@ -218,6 +217,13 @@ enum AccountRules {
         return nil
     }
 
+    /// What a scan request opens: the approve sheet once this device has an account, and on a kids
+    /// profile always (it says to ask a grown-up there); else the Account page to sign in first.
+    static func scanOpensApprove(joined: Bool, kids: Bool) -> Bool {
+        joined || kids
+    }
+
+    /// A kit's row line: "Last used: <device>, <date>", that device's name when it is still a member.
     static func lastUsed(_ kit: MemberInfo, members: [MemberInfo]) -> String? {
         guard let by = kit.lastUsedBy, let ms = kit.lastUsedMs else { return nil }
         return fill(words.lastUsed, ["device": byName(by, members), "date": date(ms)])

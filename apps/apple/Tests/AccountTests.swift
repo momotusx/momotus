@@ -203,6 +203,14 @@ private func announcement(_ kind: String, member: String? = "m", by: String? = "
     #expect(AccountRules.lastUsed(member("k2", kit: true), members: []) == nil)
 }
 
+@Test func aScanRequestOpensTheSheetWhenJoinedAndAlwaysOnAKidsProfile() {
+    // plans/tv-qr-login.md 5.6: a kids profile sees Ask a grown-up, never the Account page.
+    #expect(AccountRules.scanOpensApprove(joined: true, kids: false))
+    #expect(AccountRules.scanOpensApprove(joined: false, kids: true))
+    #expect(AccountRules.scanOpensApprove(joined: true, kids: true))
+    #expect(!AccountRules.scanOpensApprove(joined: false, kids: false))
+}
+
 @Test func aPairingCodeByLinkReachesTheSheetWholeAndNothingElseDoes() throws {
     // plans/tv-qr-login.md 5.6: the link host's /pair, or momotus://pair from its page; the code whole, for the core.
     let url = { (text: String) in try #require(URL(string: text)) }

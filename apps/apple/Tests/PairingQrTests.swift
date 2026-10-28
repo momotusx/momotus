@@ -22,6 +22,9 @@ private let code = "https://momotus.normalisdead.mom/pair#v=3&s=https%3A%2F%2Fmo
             #expect(cell == cell.rounded(), "scale \(scale): \(cell) px a module")
             #expect(side <= 440 && side > 440 - CGFloat(modules) / scale)
             #expect(cell >= 6, "scale \(scale): \(cell) px a module")
+            // Centred in a frame three pixels wider than the code: the corner still sits on a whole pixel.
+            let inset = QRCode.inset(3 / scale, scale: scale) * scale
+            #expect(inset == inset.rounded(), "scale \(scale): starts at \(inset) px")
         }
         // Four white modules on every side.
         let pixels = try luma(image)

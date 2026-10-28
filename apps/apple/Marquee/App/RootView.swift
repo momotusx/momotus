@@ -259,7 +259,7 @@ struct MainShell: View {
         // Sign in another device (plans/accounts.md 4.2): the scanner, or the Account page first.
         .sheet(isPresented: $showScanner) {
             NavigationStack {
-                if sync.joined { AddDeviceScreen() } else { SyncScreen() }
+                if AccountRules.scanOpensApprove(joined: sync.joined, kids: profiles.snapshot?.current?.kids == true) { AddDeviceScreen() } else { SyncScreen() }
             }
             .environment(sync)
             .environment(profiles)
