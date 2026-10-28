@@ -161,12 +161,15 @@ struct EditProfile: View {
             if dirty, shown {
                 ToolbarItem(placement: .navigation) {
                     Button(action: leave) label: { Label("Back", glyph: "chevron-left") }
-                        .labelStyle(.titleAndIcon)
+                        // The system back is a chevron alone; the control keeps its shape when the first edit swaps them.
+                        .labelStyle(.iconOnly)
                 }
             }
         }
-        .confirmationDialog("Discard your changes?", isPresented: $confirmLeave, titleVisibility: .visible) {
-            Button("Discard") { dismiss() }
+        .confirmationDialog("You have unsaved changes", isPresented: $confirmLeave, titleVisibility: .visible) {
+            // Saving leaves once it worked; a failure stays here with its line, nothing lost.
+            Button("Save changes") { save(thenLeave: true) }
+            Button("Discard changes") { dismiss() }
             Button("Keep editing", role: .cancel) {}
         }
         #endif
@@ -281,7 +284,7 @@ struct EditProfile: View {
                     .textFont(Theme.type.callout, relativeTo: .callout)
                     .foregroundStyle(said.ok ? Theme.Palette.muted : Theme.Palette.text)
             }
-            Button(profileId == nil ? "Add profile" : "Save", action: save)
+            Button(profileId == nil ? "Add profile" : "Save") { save() }
                 .buttonStyle(PillButtonStyle(prominent: true))
                 .disabled(busy)
         }
@@ -400,7 +403,7 @@ struct EditProfile: View {
         }
     }
 
-    private func save() {
+    private func save(thenLeave: Bool = false) {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard (1...30).contains(trimmed.count) else {
             said = (ProfileRules.problem("badName", fallback: ""), false)
@@ -416,6 +419,7 @@ struct EditProfile: View {
                     try await profiles.perform("updateProfile", fields)
                     touched = false
                     said = ("Saved", true)
+                    if thenLeave { dismiss() }
                 } else {
                     try await profiles.perform("createProfile", ["name": trimmed, "avatar": ProfileRules.formatAvatar(glyph: glyph, color: color)])
                     dismiss()

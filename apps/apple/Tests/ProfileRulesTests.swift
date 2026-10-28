@@ -141,3 +141,12 @@ private func snapshot(_ profiles: [ProfileInfo], locked: Bool = false) -> Profil
     }
     #expect(editor.contains("label($0.action, $0.target) + \"?\""), "the PIN dialog no longer names whose PIN")
 }
+
+@Test func leavingWithEditsOffersSaveDiscardAndKeepEditing() throws {
+    // STATE-41. Read from the sources: a dialog is a view.
+    let file = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appending(path: "../Marquee/Profiles/ManageProfiles.swift")
+    let editor = try String(contentsOf: file, encoding: .utf8)
+    for choice in ["Button(\"Save changes\") { save(thenLeave: true) }", "Button(\"Discard changes\")", "Button(\"Keep editing\", role: .cancel)"] {
+        #expect(editor.contains(choice), "the leave ask lost \(choice)")
+    }
+}
