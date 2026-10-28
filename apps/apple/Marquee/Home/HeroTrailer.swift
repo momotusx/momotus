@@ -117,14 +117,15 @@ final class TrailerPlayer: NSObject {
     private var state: TrailerState?
     private var onEnd: ((String) -> Void)?
     private var reveal: Task<Void, Never>?
-    /// The player's page has loaded: until then a call waits (the last one wins), since a call that reached the page
-    /// before its script would run nothing, or worse, the browser's own `stop()`, which cancels the page's load.
+    /// The player's page has loaded: until then calls wait, in order (a Sound press while it loads must not drop the
+    /// play itself), since a call that reached the page before its script would run nothing, or worse, the browser's
+    /// own `stop()`, which cancels the page's load.
     private var loaded = false
-    private var waiting: String?
+    private var waiting: [String] = []
 
     private func run(_ js: String) {
         guard let webView else { return }
-        if loaded { webView.evaluateJavaScript(js) } else { waiting = js }
+        if loaded { webView.evaluateJavaScript(js) } else { waiting.append(js) }
     }
 
     private func makeWeb() -> WKWebView {
@@ -215,7 +216,7 @@ final class TrailerPlayer: NSObject {
         webView.removeFromSuperview()
         self.webView = nil
         loaded = false
-        waiting = nil
+        waiting = []
     }
 
     /// Sound for this session only; never in a walk (`-MQMute YES`).
@@ -275,7 +276,7 @@ final class TrailerPlayer: NSObject {
     #p{position:fixed;inset:0;pointer-events:none}
     #p>*{position:absolute;inset:0;width:100%;height:100%;border:0;display:block;pointer-events:none}</style></head>
     <body><div id="p"></div><script>
-    let player=null, box=null, timers=[], ended=true, playing=false, poll=null, api=null, gen=0, full=false;
+    let player=null, box=null, timers=[], ended=true, playing=false, poll=null, api=null, gen=0, full=false, want=false;
     const say=(o)=>window.webkit.messageHandlers.trailer.postMessage(JSON.stringify(Object.assign({gen,full},o)));
     function load(){ if(api) return api; api=new Promise((ok,no)=>{ window.onYouTubeIframeAPIReady=()=>ok(window.YT);
       const s=document.createElement("script"); s.src="https://www.youtube.com/iframe_api"; s.onerror=()=>{ api=null; no(); }; document.head.append(s); }); return api; }
@@ -284,11 +285,11 @@ final class TrailerPlayer: NSObject {
       say({event:"end",why}); }
     function captionsOff(){ try{ const t=player&&player.getOption("captions","track"); if(t&&Object.keys(t).length) player.setOption("captions","track",{}); player&&player.unloadModule("captions"); }catch(e){} }
     function halt(){ finish("stopped"); }
-    function sound(on){ if(!player) return; if(on){player.unMute();player.setVolume(100);} else {player.mute();player.setVolume(0);} }
-    function toggle(){ if(!player) return; if(player.getPlayerState()===1) player.pauseVideo(); else player.playVideo(); }
-    function seek(s){ if(!player) return; const from=player.getCurrentTime(); player.seekTo(Math.max(0,s),true); say({event:"seek",from:Math.round(from),to:Math.round(s)}); }
+    function sound(on){ want=on; if(!player||!player.mute) return; if(on){player.unMute();player.setVolume(100);} else {player.mute();player.setVolume(0);} }
+    function toggle(){ if(!player||!player.getPlayerState) return; if(player.getPlayerState()===1) player.pauseVideo(); else player.playVideo(); }
+    function seek(s){ if(!player||!player.seekTo) return; const from=player.getCurrentTime(); player.seekTo(Math.max(0,s),true); say({event:"seek",from:Math.round(from),to:Math.round(s)}); }
     async function play(id, cap, g, f, loud){
-      finish("stopped"); gen=g; full=f; ended=false; playing=false;
+      finish("stopped"); gen=g; full=f; want=loud; ended=false; playing=false;
       box=document.createElement("div"); document.getElementById("p").append(box);
       timers.push(setTimeout(()=>{ if(!playing) finish("timeout"); }, f?15000:9000));
       let YT; try{ YT=await load(); }catch(e){ if(gen===g) finish("error"); return; }
@@ -302,7 +303,7 @@ final class TrailerPlayer: NSObject {
               else if(Date.now()<until) timers.push(setTimeout(check,25)); else finish("error"); }; check(); },
           onApiChange:()=>captionsOff(),
           onStateChange:(e)=>{ if(ended||gen!==g) return;
-            if(e.data===1&&!playing){ playing=true; say({event:"playing"}); captionsOff(); if(loud) sound(true);
+            if(e.data===1&&!playing){ playing=true; say({event:"playing"}); captionsOff(); if(want) sound(true);
               poll=setInterval(()=>{ if(!player) return; const t=player.getCurrentTime(), len=cap||player.getDuration(), st=player.getPlayerState();
                 say({event:"time",fraction:len>0?Math.min(1,t/len):0,t,d:len,state:st===1?"playing":st===2?"paused":"buffering"});
                 captionsOff(); if(len>0&&t>=len-1) finish(cap?"cap":"ended"); }, 250); }
@@ -315,10 +316,9 @@ final class TrailerPlayer: NSObject {
 extension TrailerPlayer: WKNavigationDelegate {
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         loaded = true
-        if let js = waiting {
-            waiting = nil
-            webView.evaluateJavaScript(js)
-        }
+        let calls = waiting
+        waiting = []
+        for js in calls { webView.evaluateJavaScript(js) }
     }
 
     /// Nothing navigates inside it: a link in YouTube's frame (its logo) goes nowhere; it takes no input anyway.

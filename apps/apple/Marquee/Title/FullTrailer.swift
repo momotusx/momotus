@@ -80,12 +80,13 @@ struct FullTrailer: View {
         .focusEffectDisabled()
         .focused($focus, equals: .page)
         .defaultFocus($focus, .page)
-        .onKeyPress(.space) {
+        // Once a press: a held key never flickers the trailer or runs it to its end.
+        .onKeyPress(.space, phases: .down) { _ in
             player.toggle()
             return .handled
         }
-        .onKeyPress(.leftArrow) { seek(by: -Self.seekStep) }
-        .onKeyPress(.rightArrow) { seek(by: Self.seekStep) }
+        .onKeyPress(.leftArrow, phases: .down) { _ in seek(by: -Self.seekStep) }
+        .onKeyPress(.rightArrow, phases: .down) { _ in seek(by: Self.seekStep) }
         .accessibilityAddTraits(.isModal)
         .task(id: index) { start() }
         .task(id: TrailerWait(buffering: state.buffering, failed: failed)) {

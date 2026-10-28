@@ -34,7 +34,7 @@ private func source(_ path: String) throws -> String {
     #expect(title.contains("TrailerSignals.now(visible: true, reducedMotion: reduceMotion, hasTrailer: true).allowed"))
     #expect(title.contains("live: pageVisible && heroVisible && !fullTrailer"))
     #expect(title.contains(".onChange(of: pageVisible) { _, now in if !now, !fullTrailer { trailerPlayer.release() } }"))
-    #expect(title.contains(".onDisappear { trailerPlayer.release() }"))
+    #expect(title.contains(".onDisappear { if !fullTrailer { trailerPlayer.release() } }"))
     // One player at a time: Home's goes before the title's plays.
     #expect(title.contains("TrailerPlayer.shared.release()"))
     // Full screen has its own sound: it never writes the session's.

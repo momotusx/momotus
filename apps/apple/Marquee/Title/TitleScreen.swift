@@ -219,7 +219,7 @@ struct TitleScreen: View {
         }
         // Covered (the player, Versions) or gone: its player and web view go too.
         .onChange(of: pageVisible) { _, now in if !now, !fullTrailer { trailerPlayer.release() } }
-        .onDisappear { trailerPlayer.release() }
+        .onDisappear { if !fullTrailer { trailerPlayer.release() } }
     }
 
     private var fullTrailerView: some View {

@@ -65,14 +65,14 @@ final class HeroPagerModel {
     }
 }
 
-/// Which of the player page's messages belong to the trailer asked for last (review r1, W6): each `play` has a new
-/// generation, the page echoes it, and an `end` of the one before, landing after the new `play`, is dropped.
 /// Where a seek by `by` seconds from `t` lands in a `d` second trailer: never before its start, and never into its
 /// last 2 s, where the player ends it (plans/trailer-inline.md 7).
 func trailerSeekTarget(_ t: Double, _ d: Double, by: Double) -> Double {
     max(0, min(t + by, max(0, d - 2)))
 }
 
+/// Which of the player page's messages belong to the trailer asked for last (review r1, W6): each `play` has a new
+/// generation, the page echoes it, and an `end` of the one before, landing after the new `play`, is dropped.
 enum TrailerMessages {
     static func accepts(_ message: [String: Any], generation: Int) -> Bool {
         (message["gen"] as? Int) == generation
