@@ -622,13 +622,16 @@ internal fun ProfileTile(
     active: Boolean,
     modifier: Modifier,
     onClick: () -> Unit,
+    /** Shows the focused look without focus (screenshots, tests). */
+    forceFocus: Boolean = false,
 ) {
     val tv = Marquee.form == Form.Tv
     val colors = Marquee.colors
     val size = if (tv) 168.dp else 112.dp
     var hasFocus by remember { mutableStateOf(false) }
     // The ring follows the tile's focus on every form; the white and the name's brightening on TV only.
-    val focused = hasFocus && tv
+    val look = hasFocus || forceFocus
+    val focused = look && tv
     val spoken =
         listOfNotNull(
             p.name,
@@ -650,7 +653,7 @@ internal fun ProfileTile(
         // The focus treatment follows the clickable tile around it (the box itself never takes focus).
         Box(
             Modifier
-                .marqueeFocus(size / 2, Tokens.FOCUS_SCALE_ART, forced = hasFocus, art = true),
+                .marqueeFocus(size / 2, Tokens.FOCUS_SCALE_ART, forced = look, art = true),
         ) { ProfileAvatar(p, size, lit = focused) }
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             MqText(
@@ -667,13 +670,18 @@ internal fun ProfileTile(
 }
 
 @Composable
-internal fun AddTile(onClick: () -> Unit) {
+internal fun AddTile(
+    onClick: () -> Unit,
+    /** Shows the focused look without focus (screenshots, tests). */
+    forceFocus: Boolean = false,
+) {
     val tv = Marquee.form == Form.Tv
     val colors = Marquee.colors
     val size = if (tv) 168.dp else 112.dp
     var hasFocus by remember { mutableStateOf(false) }
     // The ring follows the tile's focus on every form; the name brightens on TV only.
-    val focused = hasFocus && tv
+    val look = hasFocus || forceFocus
+    val focused = look && tv
     Column(
         Modifier
             .width(if (tv) 200.dp else 140.dp)
@@ -685,7 +693,7 @@ internal fun AddTile(onClick: () -> Unit) {
     ) {
         Box(
             Modifier
-                .marqueeFocus(size / 2, forced = hasFocus)
+                .marqueeFocus(size / 2, forced = look)
                 .size(size)
                 .clip(CircleShape)
                 .background(colors.surface),

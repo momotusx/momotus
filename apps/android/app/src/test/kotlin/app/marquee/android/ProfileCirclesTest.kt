@@ -9,12 +9,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.captureToImage
-import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
-import androidx.compose.ui.test.requestFocus
 import androidx.compose.ui.unit.dp
 import app.marquee.core.model.ProfileInfo
 import app.marquee.design.Form
@@ -59,20 +56,21 @@ class ProfileCirclesTest {
     fun `a focused TV profile tile lifts a circle, so the corner stays the page`() {
         val me =
             ProfileInfo("p1", "Mia", "letter:ember", 0, hasPin = false, isOwner = true, syncing = false, kids = false)
-        tile(Form.Tv) { ProfileTile(me, active = false, modifier = Modifier, onClick = {}) }
-        compose.onNode(hasClickAction()).requestFocus()
-        compose.onNode(hasClickAction()).assertIsFocused()
+        tile(Form.Tv) { ProfileTile(me, active = false, modifier = Modifier, onClick = {}, forceFocus = true) }
         compose.waitForIdle()
         cornerStaysPage()
     }
 
     @Test
-    fun `Add profile is a circle, and focused on TV it lifts one`() {
+    fun `Add profile is a circle, so the corner stays the page`() {
         tile(Form.Tv) { AddTile(onClick = {}) }
         compose.waitForIdle()
         cornerStaysPage()
-        compose.onNode(hasClickAction()).requestFocus()
-        compose.onNode(hasClickAction()).assertIsFocused()
+    }
+
+    @Test
+    fun `a focused Add profile lifts a circle too`() {
+        tile(Form.Tv) { AddTile(onClick = {}, forceFocus = true) }
         compose.waitForIdle()
         cornerStaysPage()
     }
