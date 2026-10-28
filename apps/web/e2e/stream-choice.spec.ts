@@ -159,7 +159,7 @@ test.describe("Settings > Stream choice", () => {
     await expect(page.locator('[data-fgroup="choice-ready"]')).toHaveCount(0);
     // The core's conditions: priors only, so nothing measured and no Measure again.
     // No speed is said until a playback has measured it: the network alone.
-    await expect(page.locator(".device-line .cond")).toHaveText(/^(4K|1080p|720p)( HDR)?, (Wi-Fi|Ethernet|mobile data|this network)(, \d+ GB free)?$/);
+    await expect(page.locator(".device-line .cond")).toHaveText(/^(4K|1080p|720p)( HDR)?, (Wi-Fi|Ethernet|mobile data|this network)(, \d+(\.\d)? [KMG]B free)?$/);
     await expect(page.locator('[data-f="choice:measure"]')).toHaveCount(0);
     expect(sent.some((m) => m.op === "streamConditions")).toBe(true);
 

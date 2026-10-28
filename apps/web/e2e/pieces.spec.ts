@@ -253,7 +253,8 @@ test("phone: the floating glass capsule, 348x62 and 21 from the edges, five tabs
 
 test("phone: Calendar is a row at the top of Library, and Library stays lit on it", async ({ browser }) => {
   const { context, page } = await open(browser, "phone", "/library");
-  const row = page.locator(".cal-row");
+  // Downloads, under it, is a row of the same kind.
+  const row = page.locator('.cal-row[href="/calendar"]');
   await expect(row).toHaveText("Calendar", { timeout: 30_000 });
   await row.tap();
   await expect(page).toHaveURL(/\/calendar/);
