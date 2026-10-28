@@ -202,3 +202,26 @@ private func snapshot(_ profiles: [ProfileInfo], locked: Bool = false) -> Profil
     let bare = try #require(label.range(of: ".labelStyle(.iconOnly)"))
     #expect(sheet.lowerBound < word.lowerBound && word.lowerBound < bare.lowerBound, "the word belongs to the sheet case")
 }
+
+@Test func profileAvatarsAreCircles() throws {
+    // DECISION (Profiles): circles. Read from the sources: they are views.
+    let dir = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appending(path: "../Marquee/Profiles")
+    for file in ["PinKeypad.swift", "ProfilePicker.swift", "ManageProfiles.swift"] {
+        let source = try String(contentsOf: dir.appending(path: file), encoding: .utf8)
+        #expect(!source.contains("cornerRadius: size * 0.22") && !source.contains("cornerRadius: tile * 0.22"), "a rounded-square avatar is back in \(file)")
+    }
+    let keypad = try String(contentsOf: dir.appending(path: "PinKeypad.swift"), encoding: .utf8)
+    let avatar = try body(of: "struct ProfileAvatar: View", in: keypad)
+    let shown = try body(of: "var body: some View", in: avatar)
+    #expect(shown.contains("Circle()\n            .fill(Self.color(avatar.color))"), "the avatar is not a circle")
+    // The picture choices follow it: ring and focus shape.
+    let editor = try String(contentsOf: dir.appending(path: "ManageProfiles.swift"), encoding: .utf8)
+    let choice = try body(of: "private func choice(selected: Bool", in: editor)
+    #expect(choice.contains(".overlay(Circle().strokeBorder(") && choice.contains("FocusPlainStyle(shape: Circle())"), "the picture choices are not round")
+    #expect(!choice.contains("RoundedRectangle"), "a rounded square is back around a picture choice")
+    // The Add profile circle is a fill, with no edge (DECISION: fills, not edges).
+    let picker = try String(contentsOf: dir.appending(path: "ProfilePicker.swift"), encoding: .utf8)
+    let add = try #require(picker.range(of: "Circle()\n                            .fill(Theme.Palette.raised)"), "the Add profile circle changed")
+    #expect(!picker[add.lowerBound...].prefix(200).contains("strokeBorder(Theme.Palette.control)"), "the Add profile circle has an edge again")
+}
+

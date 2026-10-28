@@ -379,9 +379,9 @@ struct EditProfile: View {
         Button(action: pick) {
             content()
                 .padding(3)
-                .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(selected ? Theme.Palette.text : .clear, lineWidth: 2))
+                .overlay(Circle().strokeBorder(selected ? Theme.Palette.text : .clear, lineWidth: 2))
         }
-        .buttonStyle(FocusPlainStyle(shape: RoundedRectangle(cornerRadius: 14, style: .continuous)))
+        .buttonStyle(FocusPlainStyle(shape: Circle()))
         .accessibilityLabel(label)
         .accessibilityAddTraits(selected ? .isSelected : [])
     }

@@ -28,7 +28,7 @@ struct ProfileAvatar: View {
     }
 
     var body: some View {
-        RoundedRectangle(cornerRadius: size * 0.22, style: .continuous)
+        Circle()
             .fill(Self.color(avatar.color))
             .overlay {
                 if avatar.glyph == "letter" {

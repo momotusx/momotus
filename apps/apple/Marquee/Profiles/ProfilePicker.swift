@@ -134,9 +134,8 @@ struct ProfilePicker: View {
             if addable {
                 Button { showAdd = true } label: {
                     VStack(spacing: 10) {
-                        RoundedRectangle(cornerRadius: tile * 0.22, style: .continuous)
+                        Circle()
                             .fill(Theme.Palette.raised)
-                            .overlay(RoundedRectangle(cornerRadius: tile * 0.22, style: .continuous).strokeBorder(Theme.Palette.control))
                             .overlay(Glyph("plus", size: tile * 0.3))
                             .frame(width: tile, height: tile)
                         Text("Add profile").textFont(Theme.type.headline, weight: .semibold, relativeTo: .headline)
@@ -287,7 +286,7 @@ struct ProfileButton: View {
 
     private func avatar(_ me: ProfileInfo) -> some View {
         ProfileAvatar(me.avatar, name: me.name, size: size)
-            .overlay(RoundedRectangle(cornerRadius: size * 0.22, style: .continuous).strokeBorder(.white.opacity(0.3), lineWidth: 1))
+            .overlay(Circle().strokeBorder(.white.opacity(0.3), lineWidth: 1))
             #if os(iOS)
             // A 44 pt target around the 32 pt avatar.
             .frame(minWidth: 44, minHeight: 44)
