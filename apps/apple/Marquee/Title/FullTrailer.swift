@@ -13,15 +13,17 @@ struct FullTrailer: View {
     @State private var state = TrailerState()
     @State private var index = 0
     @State private var failed = false
-    @State private var loud = true
+    /// On at open (the viewer asked for it), except in a walk build, which plays every trailer silent.
+    @State private var loud = !TrailerPlayer.walk
     /// Where a drag on the bar will land, until it is let go.
     @State private var held: Double?
+    @State private var dragging = false
     /// The wait shows only past 300 ms, so a quick start never flashes it.
     @State private var waiting = false
     @FocusState private var focus: Control?
     @Environment(\.scenePhase) private var scenePhase
 
-    private enum Control: Hashable { case toggle, close }
+    private enum Control: Hashable { case page, toggle, close }
     private static let seekStep: Double = 10
     private static let failedLine = "This trailer can't play here."
 
@@ -73,15 +75,18 @@ struct FullTrailer: View {
         }
         .padding(16)
         .background(Theme.Palette.bg)
-        .defaultFocus($focus, .toggle)
-        #if os(macOS)
+        // The page itself holds the keyboard's focus, so Space and the arrows work with Full Keyboard Access off.
+        .focusable()
+        .focusEffectDisabled()
+        .focused($focus, equals: .page)
+        .defaultFocus($focus, .page)
         .onKeyPress(.space) {
             player.toggle()
             return .handled
         }
         .onKeyPress(.leftArrow) { seek(by: -Self.seekStep) }
         .onKeyPress(.rightArrow) { seek(by: Self.seekStep) }
-        #endif
+        .accessibilityAddTraits(.isModal)
         .task(id: index) { start() }
         .task(id: TrailerWait(buffering: state.buffering, failed: failed)) {
             waiting = false
@@ -102,28 +107,36 @@ struct FullTrailer: View {
     private var bar: some View {
         let position = held ?? state.seconds
         return HStack(spacing: 12) {
-            Text(timecode(position)).monospacedDigit()
+            Text(timecode(position)).monospacedDigit().accessibilityHidden(true)
+            // A drag previews and seeks once let go; VoiceOver's adjust and the arrow keys seek at once.
             Slider(
-                value: Binding(get: { held ?? state.seconds }, set: { held = $0 }),
+                value: Binding(get: { held ?? state.seconds }, set: { value in
+                    if dragging { held = value } else { seek(to: value) }
+                }),
                 in: 0...max(1, state.length - 2)
             ) { editing in
+                dragging = editing
                 guard !editing, let to = held else { return }
                 held = nil
-                state.seconds = to
-                player.seek(to)
+                seek(to: to)
             }
             .disabled(failed || state.length <= 0)
             .accessibilityLabel("Position")
             .accessibilityValue("\(timecode(position)) of \(timecode(state.length))")
-            Text("-" + timecode(max(0, state.length - position))).monospacedDigit()
+            Text("-" + timecode(max(0, state.length - position))).monospacedDigit().accessibilityHidden(true)
         }
         .textFont(Theme.type.callout, relativeTo: .callout)
         .foregroundStyle(Theme.Palette.muted)
     }
 
     private func start() {
-        guard let trailer = trailers[safe: index] else { return }
+        guard let trailer = trailers[safe: index] else {
+            failed = true
+            return
+        }
         failed = false
+        // One player at a time: Home's lets go first.
+        TrailerPlayer.shared.release()
         player.play(trailer.youtubeId, into: state, cap: 0, full: true, loud: loud) { why in
             if why != "error", why != "timeout" {
                 close()
@@ -137,10 +150,14 @@ struct FullTrailer: View {
 
     private func seek(by: Double) -> KeyPress.Result {
         guard state.length > 0 else { return .ignored }
-        let to = HeroTrailers.seekTarget(state.seconds, state.length, by: by)
+        seek(to: state.seconds + by)
+        return .handled
+    }
+
+    private func seek(to: Double) {
+        let to = HeroTrailers.seekTarget(to, state.length, by: 0)
         state.seconds = to
         player.seek(to)
-        return .handled
     }
 
     private func timecode(_ seconds: Double) -> String {

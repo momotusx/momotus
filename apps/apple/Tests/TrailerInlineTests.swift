@@ -15,7 +15,8 @@ private func source(_ path: String) throws -> String {
     #expect(!files.isEmpty)
     for file in files {
         let text = try source("Title/\(file)")
-        #expect(!text.contains("openURL"), "\(file) opens a link")
+        #expect(!text.contains("openURL") && !text.contains("NSWorkspace.shared.open") && !text.contains("UIApplication.shared.open"),
+                "\(file) opens a link")
         #expect(!text.contains("trailer.url") && !text.contains("$0.url"), "\(file) reads a trailer's watch page")
     }
 }
@@ -32,11 +33,17 @@ private func source(_ path: String) throws -> String {
     let title = try source("Title/TitleScreen.swift")
     #expect(title.contains("TrailerSignals.now(visible: true, reducedMotion: reduceMotion, hasTrailer: true).allowed"))
     #expect(title.contains("live: pageVisible && heroVisible && !fullTrailer"))
-    #expect(title.contains(".onChange(of: pageVisible) { _, now in if !now { trailerPlayer.release() } }"))
+    #expect(title.contains(".onChange(of: pageVisible) { _, now in if !now, !fullTrailer { trailerPlayer.release() } }"))
     #expect(title.contains(".onDisappear { trailerPlayer.release() }"))
     // One player at a time: Home's goes before the title's plays.
     #expect(title.contains("TrailerPlayer.shared.release()"))
     // Full screen has its own sound: it never writes the session's.
     let full = try source("Title/FullTrailer.swift")
     #expect(!full.contains("TrailerState.shared"))
+}
+
+@MainActor @Test func aTrailerThatIsNoYouTubeIdEndsInAnErrorAtOnce() {
+    var ended: [String] = []
+    TrailerPlayer().play("https://www.youtube.com/watch?v=x", into: TrailerState()) { ended.append($0) }
+    #expect(ended == ["error"])
 }

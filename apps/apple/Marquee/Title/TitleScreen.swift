@@ -218,7 +218,7 @@ struct TitleScreen: View {
             await startHeaderTrailer()
         }
         // Covered (the player, Versions) or gone: its player and web view go too.
-        .onChange(of: pageVisible) { _, now in if !now { trailerPlayer.release() } }
+        .onChange(of: pageVisible) { _, now in if !now, !fullTrailer { trailerPlayer.release() } }
         .onDisappear { trailerPlayer.release() }
     }
 
@@ -229,6 +229,8 @@ struct TitleScreen: View {
     /// Trailer: full screen in the app; the header's preview stops and does not come back this session.
     private func openTrailer(_ details: TitleDetails) {
         HeaderTrailers.spent.insert(details.id)
+        // Stopped here, before the full screen starts on the same player: the header's task never stops that one.
+        trailerPlayer.stop()
         fullTrailer = true
     }
 

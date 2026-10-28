@@ -180,7 +180,7 @@ final class TrailerPlayer: NSObject {
 
     /// To `seconds` in the trailer.
     func seek(_ seconds: Double) {
-        if state != nil { run("seek(\(seconds))") }
+        if state != nil, seconds.isFinite { run("seek(\(seconds))") }
     }
 
     /// The full-screen trailer's own sound, never the session's (`TrailerState.shared.sound`); never in a walk.
@@ -189,7 +189,7 @@ final class TrailerPlayer: NSObject {
     }
 
     /// A walk build (`-MQMute YES`): no sound reaches any player.
-    private static var walk: Bool {
+    static var walk: Bool {
         #if DEBUG
         DebugHooks.mute
         #else
@@ -279,14 +279,14 @@ final class TrailerPlayer: NSObject {
     <!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1">
     <style>html,body{margin:0;height:100%;background:transparent;overflow:hidden}
     #p{position:fixed;inset:0;pointer-events:none}
-    #p iframe{width:100%;height:100%;border:0;display:block;pointer-events:none}</style></head>
+    #p>*{position:absolute;inset:0;width:100%;height:100%;border:0;display:block;pointer-events:none}</style></head>
     <body><div id="p"></div><script>
-    let player=null, timers=[], ended=true, playing=false, poll=null, api=null, gen=0, full=false;
+    let player=null, box=null, timers=[], ended=true, playing=false, poll=null, api=null, gen=0, full=false;
     const say=(o)=>window.webkit.messageHandlers.trailer.postMessage(JSON.stringify(Object.assign({gen,full},o)));
     function load(){ if(api) return api; api=new Promise((ok,no)=>{ window.onYouTubeIframeAPIReady=()=>ok(window.YT);
       const s=document.createElement("script"); s.src="https://www.youtube.com/iframe_api"; s.onerror=()=>{ api=null; no(); }; document.head.append(s); }); return api; }
     function finish(why){ if(ended) return; ended=true; timers.forEach(clearTimeout); clearInterval(poll); timers=[];
-      const p=player; player=null; setTimeout(()=>{ try{p&&p.destroy()}catch(e){} document.getElementById("p").replaceChildren(); }, why==="cap"||why==="ended"?650:0);
+      const p=player, b=box; player=null; setTimeout(()=>{ try{p&&p.destroy()}catch(e){} b&&b.remove(); }, why==="cap"||why==="ended"?650:0);
       say({event:"end",why}); }
     function captionsOff(){ try{ const t=player&&player.getOption("captions","track"); if(t&&Object.keys(t).length) player.setOption("captions","track",{}); player&&player.unloadModule("captions"); }catch(e){} }
     function halt(){ finish("stopped"); }
@@ -295,7 +295,7 @@ final class TrailerPlayer: NSObject {
     function seek(s){ if(!player) return; const from=player.getCurrentTime(); player.seekTo(Math.max(0,s),true); say({event:"seek",from:Math.round(from),to:Math.round(s)}); }
     async function play(id, cap, g, f, loud){
       finish("stopped"); gen=g; full=f; ended=false; playing=false;
-      const box=document.createElement("div"); document.getElementById("p").replaceChildren(box);
+      box=document.createElement("div"); document.getElementById("p").append(box);
       timers.push(setTimeout(()=>{ if(!playing) finish("timeout"); }, f?15000:9000));
       let YT; try{ YT=await load(); }catch(e){ if(gen===g) finish("error"); return; }
       if(ended||gen!==g) return;
