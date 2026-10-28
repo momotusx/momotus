@@ -176,7 +176,8 @@ struct KeeperLogic {
             if now.left > 0 { taps = 0 }
             if now.left > 0, (before?.left ?? 0) == 0, !task { doneBefore = before?.done ?? now.done }
             if task {
-                if now.left == 0, taps == 0 {
+                // A tap still waiting for its answer holds the task too (review r4 N11).
+                if now.left == 0, taps == 0, asking == 0 {
                     task = false
                     out.append(.end(success: true))
                 } else {

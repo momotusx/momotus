@@ -77,6 +77,8 @@ final class DownloadKeeper {
     func begin() {
         guard openedFor != core.generation else { return }
         openedFor = core.generation
+        // Another core's failure is not this one's (review r4 N13).
+        failure = nil
         logic.resend()
         let record = LiveRecord<DownloadsSnapshot>("downloads", core: core)
         record.onSnapshot = { [weak self] snapshot in

@@ -243,6 +243,9 @@ private func submits(_ effects: [KeeperEffect]) -> Int {
     let shown = counted.compactMap { if case .progress(let p) = $0 { p } else { nil } }.first
     #expect(shown?.title == "Downloading Severance")
     #expect(shown?.subtitle == "2 of 2 \u{B7} 50%")
+    // Both adds answered while the queue still runs (review r4 N11).
+    _ = keeper.on(.answered)
+    _ = keeper.on(.answered)
     // The queue empties: the task ends, once.
     #expect(keeper.on(.facts(facts(left: 0, done: ["a", "b"]))).contains(.end(success: true)))
     #expect(!keeper.on(.facts(facts(left: 0, done: ["a", "b"]))).contains(.end(success: true)))
@@ -260,6 +263,7 @@ private func submits(_ effects: [KeeperEffect]) -> Int {
     #expect(keeper.task)
     let counted = keeper.on(.facts(facts(left: 1)))
     #expect(counted.contains { if case .progress = $0 { true } else { false } })
+    _ = keeper.on(.answered)
     #expect(keeper.on(.facts(facts(left: 0, done: ["a"]))).contains(.end(success: true)))
     // A tap that adds nothing: the task goes at `settle`.
     #expect(submits(keeper.on(.userAction)) == 1)
@@ -449,6 +453,20 @@ private func submits(_ effects: [KeeperEffect]) -> Int {
     let source = try? String(contentsOf: URL(fileURLWithPath: #filePath).deletingLastPathComponent().appending(path: "../Marquee/Downloads/DownloadKeeper.swift"), encoding: .utf8)
     #expect(DownloadKeeper.settleLimit >= .seconds(30))
     #expect(source?.contains("self?.handle(.answered)") == true)
+}
+
+// A queue that empties while a tap waits for its answer keeps the task until the answer (review r4 N11).
+@Test func aTapWaitingForItsAnswerOutlivesTheQueue() {
+    var keeper = KeeperLogic(platform: .continued)
+    _ = keeper.on(.facts(facts(left: 0)))
+    _ = keeper.on(.userAction)
+    _ = keeper.on(.facts(facts(left: 1)))
+    _ = keeper.on(.answered)
+    _ = keeper.on(.userAction)
+    _ = keeper.on(.facts(facts(left: 1)))
+    #expect(!keeper.on(.facts(facts(left: 0))).contains(.end(success: true)))
+    #expect(keeper.task)
+    #expect(keeper.on(.answered).contains(.end(success: true)))
 }
 
 // A refused or expired task forgets its taps: the next tap counts from none (review r3 N8).
