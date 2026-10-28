@@ -166,6 +166,7 @@ class DownloadKeeperLogicTest {
             wifiOnly: Boolean = true,
         ) = DownloadsSnapshot(
             locked = false,
+            profile = "owner",
             storage = DownloadStorage(0),
             settings = DownloadSettings(wifiOnly = wifiOnly, smart = true),
             active = DownloadActivity(1, 1, 0, 0, waiting = waiting, mobileData = mobileData),

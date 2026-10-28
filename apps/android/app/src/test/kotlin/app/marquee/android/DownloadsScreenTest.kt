@@ -13,7 +13,7 @@ import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertCountEquals
-import androidx.compose.ui.test.assertTextContains
+import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
@@ -119,6 +119,7 @@ class DownloadsScreenTest {
             ),
     ) = DownloadsSnapshot(
         locked = false,
+        profile = "owner",
         storage = DownloadStorage(downloadsBytes = 2_000, freeBytes = 48_000_000_000),
         settings = DownloadSettings(wifiOnly = true, smart = true),
         active = DownloadActivity(1, 0, 500, 1_000, waiting = 0, mobileData = false, title = "Severance"),
@@ -296,9 +297,11 @@ class DownloadsScreenTest {
     fun `offline with downloads, the banner says they still play, is announced, and goes to them`() {
         var went = false
         compose.setContent { MarqueeTheme(Form.Phone) { OfflineBanner(onDownloads = { went = true }) } }
-        compose
-            .onNode(SemanticsMatcher.expectValue(SemanticsProperties.LiveRegion, LiveRegionMode.Polite))
-            .assertTextContains(DownloadCopy.OFFLINE)
+        // Only the constant is live: the words after it change and must not announce it again (code review r5 m6).
+        val live = SemanticsMatcher.expectValue(SemanticsProperties.LiveRegion, LiveRegionMode.Polite)
+        compose.onAllNodes(live, useUnmergedTree = true).assertCountEquals(1)
+        compose.onNode(live, useUnmergedTree = true).assertTextEquals(DownloadCopy.OFFLINE_ONLY)
+        compose.onNodeWithText(DownloadCopy.OFFLINE_REST).assertExists()
         compose.onNodeWithText(DownloadCopy.OFFLINE_ACTION).performClick()
         assertTrue(went)
     }

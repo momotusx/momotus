@@ -455,7 +455,9 @@ internal fun DownloadsSettings(session: CoreSession) {
 
 /**
  * The shell's line on every phone page while offline (3.5): said once as it appears, and, when this profile has
- * downloads and the page is not theirs, one press from them.
+ * downloads and the page is not theirs, one press from them. Only the constant "You're offline." is live: the words
+ * after it change as the downloads become known or the page changes, and must not announce it again (code review r5
+ * m6).
  */
 @Composable
 internal fun OfflineBanner(onDownloads: (() -> Unit)?) {
@@ -465,15 +467,19 @@ internal fun OfflineBanner(onDownloads: (() -> Unit)?) {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Row(
-            Modifier.weight(1f).semantics(mergeDescendants = true) { liveRegion = LiveRegionMode.Polite },
+            Modifier.weight(1f),
             horizontalArrangement = Arrangement.spacedBy(Marquee.space.xs),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             MqIcon(Icons.WifiOff, tint = Marquee.colors.muted)
             MqText(
-                if (onDownloads != null) DownloadCopy.OFFLINE else DownloadCopy.OFFLINE_ONLY,
+                DownloadCopy.OFFLINE_ONLY,
                 role = TextRole.Callout,
+                modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
             )
+            if (onDownloads != null) {
+                MqText(DownloadCopy.OFFLINE_REST, role = TextRole.Callout, modifier = Modifier.weight(1f, fill = false))
+            }
         }
         if (onDownloads != null) {
             SecondaryButton(DownloadCopy.OFFLINE_ACTION, onDownloads, icon = Icons.ArrowDownToLine)

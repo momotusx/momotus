@@ -552,7 +552,7 @@ data class DownloadsSnapshot(
     /** A locked session's view: the counts alone, with no row and no title, so a keeper takes nothing here for done or failed (code review r2, Android N1). */
     val locked: Boolean,
     /** The profile these rows are for: a keeper that sees it change starts its done and failed news over, whichever of the switch and this snapshot it hears first (code review r4, Android m5). */
-    val profile: String = "",
+    val profile: String,
     val storage: DownloadStorage,
     val settings: DownloadSettings,
     /** What the platform's keeper shows (a notification, the system's progress) and whether it keeps the app running. */
