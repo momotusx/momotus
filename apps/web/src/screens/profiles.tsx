@@ -418,6 +418,8 @@ export function EditProfile() {
     e.preventDefault();
     // The shell marked this leave as a Back before the router stopped it: that mark must not outlive it.
     const back = takeBack();
+    // A PIN keypad open over the form gives way to the question (it renders with the form).
+    if (flow()) setFlow(null);
     if (!asking()) setAsking({ go: (force) => e.retry(force), back });
   });
   // The TV rail does not open a tab on focus alone while edits are unsaved: only Select on a tab asks.
@@ -479,8 +481,15 @@ export function EditProfile() {
   const saveAndLeave = async () => {
     // A second press while the first is with the core waits for it: the question stays and the leave goes on after it.
     if (saving()) return;
-    if (await commit()) goOn();
-    else keepEditing();
+    const question = asking();
+    if (!question) return;
+    // What goes to the core now: the leave goes on only if it is still this question and nothing was typed since.
+    const sent = { name: name().trim(), picture: glyph() };
+    const saved = await commit();
+    if (asking() !== question) return;
+    if (!saved) keepEditing();
+    else if (name().trim() === sent.name && glyph() === sent.picture) goOn();
+    else setAsking(null);
   };
   const removePin = async (own: boolean) => {
     setConfirmPin(null);

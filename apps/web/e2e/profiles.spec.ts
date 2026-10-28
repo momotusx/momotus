@@ -458,13 +458,53 @@ test("profiles on a phone: the leave question comes into view, whatever the page
     await expect(dialog(page)).toBeVisible();
     const keep = page.locator('[data-f="pedit:leave:keep"]');
     await expect(keep).toBeInViewport({ ratio: 1 });
-    // The first thing under its centre is the button itself, not the tab bar over the page.
-    const covered = await keep.evaluate((el) => {
-      const r = el.getBoundingClientRect();
-      const top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
-      return !!top && !el.contains(top) && top !== el;
-    });
-    expect(covered).toBe(false);
+    // Clear of the tab bar over the page's foot, which is inert and so cannot be asked what is under a point.
+    const [button, bar] = await Promise.all([keep.boundingBox(), page.locator(".tabs").boundingBox()]);
+    expect((button?.y ?? 0) + (button?.height ?? 0)).toBeLessThanOrEqual(bar?.y ?? 0);
     await context.close();
   });
+});
+
+test("profiles: Keep editing while a leave's Save is with the core means the Save does not leave, whatever it answers", async ({ page }) => {
+  await withKid("Kid A", async (kid) => {
+    const core = await holdAnswers(page, "updateProfile");
+    await page.goto("/library?form=desktop");
+    await page.goto(`/profiles/edit/${kid}?form=desktop`);
+    const name = page.locator('[data-f="pedit:name"]');
+    await name.fill("Kid B");
+    await page.locator('[data-f="nav:/library"]').click();
+    await expect(dialog(page)).toBeVisible();
+    await page.locator('[data-f="pedit:leave:save"]').click();
+    await expect.poll(() => core.sent()).toBe(1);
+    // Keep editing while it is with the core, then a new edit and another way out.
+    await page.locator('[data-f="pedit:leave:keep"]').click();
+    await expect(dialog(page)).toHaveCount(0);
+    await name.fill("Kid C");
+    await page.locator('[data-f="nav:/discover"]').click();
+    await expect(dialog(page)).toBeVisible();
+    // The first Save is answered: B is stored, but C is not, and nothing leaves.
+    core.release();
+    await expect.poll(async () => (await names()).includes("Kid B")).toBe(true);
+    await page.waitForTimeout(500);
+    await expect(page).toHaveURL(new RegExp(`/profiles/edit/${kid}`));
+    await expect(dialog(page)).toBeVisible();
+    expect(await names()).not.toContain("Kid C");
+  });
+});
+
+test("profiles: leaving with the PIN keypad open asks about unsaved edits too", async ({ page }) => {
+  await page.goto("/library?form=desktop");
+  await page.goto("/profiles/edit/default?form=desktop");
+  const name = page.locator('[data-f="pedit:name"]');
+  const was = await name.inputValue();
+  await name.fill(`${was} edited`);
+  await page.locator('[data-f="pedit:pin:set"]').click();
+  await expect(page.locator(".keypad")).toBeVisible();
+  // The browser's Back: the keypad gives way, and the question shows with the edit still there.
+  await page.goBack();
+  await expect(dialog(page)).toBeVisible();
+  await expect(page.locator(".keypad")).toHaveCount(0);
+  await page.locator('[data-f="pedit:leave:keep"]').click();
+  await expect(name).toHaveValue(`${was} edited`);
+  await expect(page).toHaveURL(/\/profiles\/edit\/default/);
 });

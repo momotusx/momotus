@@ -57,6 +57,8 @@
 .glyph-pick.on { background: var(--selected-fill); }
 [data-form="tv"] .glyph-pick:focus { transform: scale(var(--focus-scale-card)); box-shadow: var(--focus-shadow); }
 .pedit-pin, .pedit-danger { display: grid; gap: 18px; margin-top: 48px; max-width: 1100px; }
+/* Scrolled into view, a question stops above the phone's floating tab bar. */
+[data-form="phone"] .confirm { scroll-margin-bottom: var(--tabs-space); }
 .confirm p { font: 400 var(--type-body) / 1.4 var(--font-text); max-width: 900px; margin-bottom: 20px; }
 
 [data-form="phone"] .profiles { padding: 48px 16px; align-items: start; }
