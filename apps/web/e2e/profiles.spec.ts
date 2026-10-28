@@ -364,3 +364,72 @@ test("profiles: avatars are circles, the chosen picture is the grey fill, and th
   await expect(add).toBeVisible();
   expect((await style(".ptile.add .add-art")).shadow).toBe("none");
 });
+
+/** Holds the core's answer to one operation until `release()`, on this page's own socket only; `sent()` counts the asks. */
+async function holdAnswers(page: Page, op: string) {
+  const held: string[] = [];
+  const waiting = new Set<number>();
+  let open = false;
+  let asked = 0;
+  let sendHeld = () => {};
+  await page.routeWebSocket(/\/ws$/, (ws) => {
+    const core = ws.connectToServer();
+    ws.onMessage((m) => {
+      const msg = JSON.parse(String(m)) as { id?: number; op?: string };
+      if (msg.op === op && msg.id !== undefined) {
+        asked++;
+        waiting.add(msg.id);
+      }
+      core.send(String(m));
+    });
+    core.onMessage((m) => {
+      const msg = JSON.parse(String(m)) as { id?: number };
+      if (!open && msg.id !== undefined && waiting.has(msg.id)) held.push(String(m));
+      else ws.send(String(m));
+    });
+    sendHeld = () => held.splice(0).forEach((m) => ws.send(m));
+  });
+  return {
+    sent: () => asked,
+    release: () => {
+      open = true;
+      sendHeld();
+    },
+  };
+}
+
+test("profiles: a picture chosen while Save is with the core stays unsaved and still asks", async ({ page }) => {
+  await withKid("Slow Kid", async (kid) => {
+    const core = await holdAnswers(page, "updateProfile");
+    await page.goto(`/profiles/edit/${kid}?form=desktop`);
+    const name = page.locator('[data-f="pedit:name"]');
+    await expect(name).toHaveValue("Slow Kid");
+    await page.locator('[data-f="pedit:glyph:cat"]').click();
+    await page.locator('[data-f="pedit:save"]').click();
+    await expect.poll(() => core.sent()).toBe(1);
+    // Another picture while the first is with the core.
+    await page.locator('[data-f="pedit:glyph:gamepad"]').click();
+    core.release();
+    await expect(page.locator(".pedit .st")).toContainText("Saved");
+    // The second picture was never sent: leaving still asks.
+    await name.press("Escape");
+    await expect(dialog(page)).toBeVisible();
+  });
+});
+
+test("profiles: Save in the leave question pressed twice sends once, stays open until the answer, then leaves", async ({ page }) => {
+  await withKid("Twice Kid", async (kid) => {
+    const core = await holdAnswers(page, "updateProfile");
+    await page.goto("/library?form=desktop");
+    await page.goto(`/profiles/edit/${kid}?form=desktop`);
+    await page.locator('[data-f="pedit:name"]').fill("Twice Kid 2");
+    await page.locator('[data-f="nav:/library"]').click();
+    await expect(dialog(page)).toBeVisible();
+    await page.locator('[data-f="pedit:leave:save"]').dblclick();
+    await expect.poll(() => core.sent()).toBe(1);
+    await expect(dialog(page)).toBeVisible();
+    core.release();
+    await expect(page).toHaveURL(/\/library/);
+    expect(await names()).toContain("Twice Kid 2");
+  });
+});

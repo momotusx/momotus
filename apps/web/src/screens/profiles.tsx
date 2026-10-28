@@ -436,6 +436,7 @@ export function EditProfile() {
       return false;
     }
     setNameError(null);
+    const picture = glyph();
     setSaving(true);
     try {
       if (isNew()) await op<ProfilesSnapshot>("createProfile", { name: n, avatar: formatAvatar({ glyph: glyph(), color: color() }) });
@@ -444,7 +445,8 @@ export function EditProfile() {
         if (touched()) fields.avatar = formatAvatar({ glyph: glyph(), color: color() });
         await op<ProfilesSnapshot>("updateProfile", fields);
         setBase(n);
-        setTouched(false);
+        // A picture chosen while this was with the core is still unsaved: only the one that was sent is clean.
+        if (glyph() === picture) setTouched(false);
         setSaid({ text: "Saved", bad: false });
       }
       return true;
@@ -469,6 +471,8 @@ export function EditProfile() {
     a.go(true);
   };
   const saveAndLeave = async () => {
+    // A second press while the first is with the core waits for it: the question stays and the leave goes on after it.
+    if (saving()) return;
     if (await commit()) goOn();
     else setAsking(null);
   };
