@@ -103,6 +103,17 @@ pub struct PlaybackSnapshot {
     /// Null otherwise. The user's own pick, or Off, always wins: send
     /// `subtitleChosen` (plans/m13-subtitle-languages.md 6).
     pub auto_subtitle: Option<String>,
+    /// The track (its `url`) the apps show as the second subtitle line
+    /// (plans/dual-subtitles.md 3.2), until the viewer picks one in this
+    /// play (`secondSubtitleChosen`): the profile's `secondSubtitle`
+    /// language, the spoken one for `"audio"`, never the first line's
+    /// language. A level, not a one-time start: it changes, or goes null,
+    /// when the first line changes. Draw it only while a first line is on.
+    pub auto_second_subtitle: Option<String>,
+    /// The tag the core reads the audio in (the probe's default audio track,
+    /// else the release name's first language), set with the start subtitle;
+    /// null when not known: the picker's "Spoken language" row names it.
+    pub spoken_language: Option<String>,
     /// Every track the start subtitle could turn on failed to read: each
     /// one that failed handed over to the next best (its language's next,
     /// then the next language, as `autoSubtitle` changes) and none was
@@ -726,9 +737,20 @@ struct State {
     /// is picked from the rest. An unreachable one stays listed (it may
     /// load when picked again), so the list alone cannot tell.
     start_tried: HashSet<String>,
-    /// The subtitle delay the title remembers for the playing version and
-    /// video: the track's origin (`SubtitleTrack::origin`) and its ms.
-    delay: Option<(String, i32)>,
+    /// The first line the viewer picked, its language; None for Off, for a
+    /// language the core does not know, or before any pick (then
+    /// `autoSubtitle`'s track is the first line).
+    first_picked: Option<String>,
+    /// This source's second line is decided early (a track in its language
+    /// listed) or at the end: a slower source never changes it.
+    second_settled: bool,
+    /// The viewer picked a second line, or Off, in this view:
+    /// `autoSecondSubtitle` stays null from then on.
+    second_picked: bool,
+    /// The subtitle delays the title remembers for the playing version and
+    /// video, newest first, at most two (one per subtitle line): each
+    /// track's origin (`SubtitleTrack::origin`) and its ms.
+    delay: Vec<(String, i32)>,
     /// The start's progress when the source starting now began, and when
     /// it began (`start`).
     start_base: f32,
@@ -805,6 +827,8 @@ impl State {
                 subtitles_pending: false,
                 subtitle_notes: Vec::new(),
                 auto_subtitle: None,
+                auto_second_subtitle: None,
+                spoken_language: None,
                 start_subtitle_failed: false,
                 audio_description: false,
                 next: None,
@@ -864,7 +888,10 @@ impl State {
             start_settled: false,
             start_wants: None,
             start_tried: HashSet::new(),
-            delay: None,
+            first_picked: None,
+            second_settled: false,
+            second_picked: false,
+            delay: Vec::new(),
             start_base: 0.0,
             source_since: tokio::time::Instant::now(),
             languages: Vec::new(),
@@ -1321,8 +1348,11 @@ impl PlaybackView {
             (None, None) => Some(OFF.to_owned()),
         };
         s.subtitle_picked = true;
+        s.first_picked = choice.clone().filter(|c| c != OFF);
         let failed = std::mem::take(&mut s.snapshot.start_subtitle_failed);
-        if s.snapshot.auto_subtitle.take().is_some() || failed {
+        let first = s.snapshot.auto_subtitle.take().is_some() || failed;
+        // The first line changed: the second follows it (never one language twice).
+        if decide_second(&mut s) || first {
             self.snapshot.set(s.snapshot.clone());
         }
         let binge_group = s.snapshot.binge_group.clone();
@@ -1340,6 +1370,47 @@ impl PlaybackView {
             }
         }
         self.remember(binge_group, |memory| memory["subtitle"] = choice.into());
+    }
+
+    /// The viewer picked the core's track `url` as the second subtitle line,
+    /// or turned it off (`None`), plans/dual-subtitles.md 3.1:
+    /// `autoSecondSubtitle` clears and stays null for this play. The
+    /// profile's `secondSubtitle` becomes `"audio"` when `spoken` (the
+    /// Spoken language row), else the track's language; Off clears it. A
+    /// kids profile's preferences stay as the owner left them: its pick
+    /// lasts this play.
+    pub fn second_subtitle_chosen(&self, url: Option<&str>, spoken: bool) {
+        use crate::languages::{is_known, primary};
+        let mut s = lock(&self.state);
+        // A URL that is none of the core's tracks changes nothing.
+        let language = match url {
+            Some(url) => match s.snapshot.subtitles.iter().find(|t| t.url == url) {
+                Some(t) => Some(t.language.clone()),
+                None => return,
+            },
+            None => None,
+        };
+        s.second_picked = true;
+        if s.snapshot.auto_second_subtitle.take().is_some() {
+            self.snapshot.set(s.snapshot.clone());
+        }
+        drop(s);
+        let wanted = match language {
+            None => None,
+            Some(_) if spoken => Some(AUDIO.to_owned()),
+            // A language the core does not know (`und`) is kept for this play only.
+            Some(tag) if !is_known(primary(&tag)) => return,
+            Some(tag) => Some(tag),
+        };
+        if self.core.policy().kids() || self.core.prefs().second_subtitle == wanted {
+            return;
+        }
+        if let Err(e) = self
+            .core
+            .set_prefs(&serde_json::json!({ "secondSubtitle": wanted }))
+        {
+            tracing::warn!("second subtitle line not kept: {e}");
+        }
     }
 
     /// The viewer settled the delay of the core's track `url` at `ms` (the
@@ -1362,15 +1433,20 @@ impl PlaybackView {
         let Some(key) = s.snapshot.key.clone() else {
             return;
         };
-        let ours = |d: &Option<(String, i32)>| d.as_ref().is_some_and(|(o, _)| *o == origin);
-        // 0 for another track (the app sends the active one's on close)
-        // forgets nothing.
-        let delay = match ms {
-            0 if ours(&s.delay) => None,
-            0 => s.delay.clone(),
-            ms => Some((origin.clone(), ms)),
-        };
-        // The same value again (the close resends it): no write, no sync.
+        // The track's own entry goes; a delay puts it first, the older of
+        // the other two out. 0 for another track (the app sends the active
+        // one's on close) forgets nothing.
+        let mut delay: Vec<(String, i32)> = s
+            .delay
+            .iter()
+            .filter(|(o, _)| *o != origin)
+            .cloned()
+            .collect();
+        if ms != 0 {
+            delay.insert(0, (origin.clone(), ms));
+            delay.truncate(2);
+        }
+        // The same values again (the close resends them): no write, no sync.
         if delay == s.delay {
             return;
         }
@@ -1386,17 +1462,22 @@ impl PlaybackView {
             let Some(memory) = memory.as_object_mut() else {
                 return;
             };
-            if ms == 0 {
-                if memory.get(DELAY).and_then(|d| d["origin"].as_str()) == Some(origin.as_str()) {
-                    memory.remove(DELAY);
+            // Both keys from the list: an entry for another version or
+            // video goes, as the list holds this play's only.
+            for (at, name) in [DELAY, DELAY_BEFORE].into_iter().enumerate() {
+                match delay.get(at) {
+                    // Nothing is baked into a track yet: its ratio is 1.
+                    Some((track, offset)) => {
+                        let entry = serde_json::json!({
+                            "key": key, "videoId": video_id, "origin": track,
+                            "ratio": 1.0, "offsetMs": offset,
+                        });
+                        memory.insert(name.into(), entry);
+                    }
+                    None => {
+                        memory.remove(name);
+                    }
                 }
-            } else {
-                // Nothing is baked into a track yet: its ratio is 1.
-                let entry = serde_json::json!({
-                    "key": key, "videoId": video_id, "origin": origin,
-                    "ratio": 1.0, "offsetMs": ms,
-                });
-                memory.insert(DELAY.into(), entry);
             }
         });
     }
@@ -1984,6 +2065,8 @@ fn release_all(s: &mut State) {
     s.snapshot.subtitles.clear();
     s.snapshot.subtitle_notes.clear();
     s.snapshot.auto_subtitle = None;
+    s.snapshot.auto_second_subtitle = None;
+    s.snapshot.spoken_language = None;
     s.snapshot.start_subtitle_failed = false;
     s.snapshot.audio_description = false;
     // A pick was of this source's tracks: the next one's settle may turn on
@@ -1992,6 +2075,9 @@ fn release_all(s: &mut State) {
     s.start_settled = false;
     s.start_wants = None;
     s.start_tried.clear();
+    s.first_picked = None;
+    s.second_settled = false;
+    s.second_picked = false;
     s.order.clear();
     s.lease = None;
     s.streaming = None;
@@ -2630,7 +2716,11 @@ async fn resolve_next(
                         // ponytail: looks at the list every 100 ms; a signal
                         // from each source if those 100 ms ever matter.
                         if wants.first().is_some() {
-                            while !settle_start(&state, &snapshot, run, &wants, false) {
+                            // Both lines: `&`, not `&&`, so both settle on every
+                            // look; the second never before the first.
+                            while !(settle_start(&state, &snapshot, run, &wants, false)
+                                & settle_second(&state, &snapshot, run, &wants, false))
+                            {
                                 tokio::time::sleep(Duration::from_millis(100)).await;
                             }
                         }
@@ -2647,6 +2737,7 @@ async fn resolve_next(
                         device.as_deref(),
                     );
                     settle_start(&state, &snapshot, run, &wants, true);
+                    settle_second(&state, &snapshot, run, &wants, true);
                 };
                 let next = async {
                     if let Some(next) = next_episode(&core, &target).await {
@@ -4267,6 +4358,7 @@ fn listen_for_trouble(
         // Unreadable or not answering, the start subtitle hands over.
         if current(&s, run)
             && (start_track_failed(&mut s, url, trouble == SubtitleTrouble::Unreadable)
+                || second_track_failed(&mut s, url, trouble == SubtitleTrouble::Unreadable)
                 || note_trouble(&mut s.snapshot, url, trouble))
         {
             snapshot.set(s.snapshot.clone());
@@ -4326,6 +4418,24 @@ fn start_track_failed(s: &mut State, url: &str, unreadable: bool) -> bool {
     });
     s.snapshot.start_subtitle_failed = next.is_none();
     s.snapshot.auto_subtitle = next;
+    // The first line moved: the second follows it.
+    decide_second(s);
+    true
+}
+
+/// The second line's start track failed as `start_track_failed` reads it: it
+/// is tried and the next best of its language takes its place, with no note
+/// (the first line's state is the one the viewer reads). False for any other
+/// track: a second line the viewer picked keeps its note.
+fn second_track_failed(s: &mut State, url: &str, unreadable: bool) -> bool {
+    if s.snapshot.auto_second_subtitle.as_deref() != Some(url) {
+        return false;
+    }
+    if unreadable {
+        s.snapshot.subtitles.retain(|t| t.url != url);
+    }
+    s.start_tried.insert(url.to_owned());
+    decide_second(s);
     true
 }
 
@@ -4830,14 +4940,26 @@ struct StartWants {
     remembered: Option<String>,
     explicit: Vec<String>,
     audio: Vec<String>,
+    /// The profile's second line: `AUDIO` or a tag (`Prefs::second_subtitle`).
+    second: Option<String>,
+    /// The audio's first language, the one `AUDIO` reads as.
+    spoken: Option<String>,
 }
 
 impl StartWants {
     fn read(core: &Core, target: &PlayTarget, audio: Vec<String>, device: Option<&str>) -> Self {
-        let explicit = subtitle_wants(&core.prefs().subtitle_languages, device);
+        let prefs = core.prefs();
         Self {
             remembered: remembered_subtitle(core, target),
-            explicit,
+            explicit: subtitle_wants(&prefs.subtitle_languages, device),
+            second: prefs.second_subtitle.map(|l| {
+                if l == AUDIO {
+                    l
+                } else {
+                    crate::languages::language(&l).tag
+                }
+            }),
+            spoken: audio.first().cloned(),
             audio,
         }
     }
@@ -4864,8 +4986,19 @@ fn settle_start(
         return true;
     }
     if s.start_settled || (s.subtitle_picked && !last) {
+        // The viewer's pick decided the first line: the second may follow it now.
+        if s.start_wants.is_none() {
+            s.start_wants = Some(wants.clone());
+            s.snapshot.spoken_language = wants.spoken.clone();
+            if !last {
+                snapshot.set(s.snapshot.clone());
+            }
+        }
         if last {
             s.snapshot.subtitles_pending = false;
+            if !s.second_settled {
+                decide_second(&mut s);
+            }
             snapshot.set(s.snapshot.clone());
         }
         return true;
@@ -4892,12 +5025,118 @@ fn settle_start(
     s.start_settled = true;
     s.start_wants = Some(wants.clone());
     s.snapshot.auto_subtitle = pick;
+    s.snapshot.spoken_language = wants.spoken.clone();
     if last {
         s.snapshot.subtitles_pending = false;
+        // One publish with both lines: the list settles with its second line
+        // in. A settled second line stays, whatever a later source listed.
+        if !s.second_settled {
+            decide_second(&mut s);
+        }
     }
     snapshot.set(s.snapshot.clone());
     true
 }
+
+/// Decides the second line as `settle_start` decides the first, never
+/// before it: early (`last` false) once a track in its language is listed,
+/// else with whatever is listed when every source has answered. A slower
+/// source never changes a settled second line; a change of the first line
+/// still does (`decide_second`). True once there is nothing left to decide
+/// early.
+fn settle_second(
+    state: &Mutex<State>,
+    snapshot: &SharedObservable<PlaybackSnapshot>,
+    run: u64,
+    wants: &StartWants,
+    last: bool,
+) -> bool {
+    let mut s = lock(state);
+    if !current(&s, run) || s.second_settled || s.second_picked || wants.second.is_none() {
+        return true;
+    }
+    // Never before the first line is decided: by its settle or the viewer.
+    if s.start_wants.is_none() {
+        return false;
+    }
+    let changed = decide_second(&mut s);
+    if changed {
+        snapshot.set(s.snapshot.clone());
+    }
+    if s.snapshot.auto_second_subtitle.is_none() && !last {
+        return false;
+    }
+    s.second_settled = true;
+    true
+}
+
+/// Sets `autoSecondSubtitle` from what the first line was decided with
+/// (`start_wants`) and the first line in effect: the viewer's pick, else
+/// `autoSubtitle`'s track. Nothing before the first decision, nothing once
+/// the viewer picked a second line. True when it changed.
+fn decide_second(s: &mut State) -> bool {
+    if s.second_picked {
+        return false;
+    }
+    let Some(wants) = &s.start_wants else {
+        return false;
+    };
+    let first = if s.subtitle_picked {
+        s.first_picked.clone()
+    } else {
+        let auto = s.snapshot.auto_subtitle.as_deref();
+        s.snapshot
+            .subtitles
+            .iter()
+            .find(|t| Some(t.url.as_str()) == auto)
+            .map(|t| t.language.clone())
+    };
+    let pick = auto_second_subtitle(
+        wants.second.as_deref(),
+        wants.spoken.as_deref(),
+        first.as_deref(),
+        &s.snapshot.subtitles,
+        &s.start_tried,
+    );
+    if pick == s.snapshot.auto_second_subtitle {
+        return false;
+    }
+    s.snapshot.auto_second_subtitle = pick;
+    true
+}
+
+/// The second line's track (plans/dual-subtitles.md 3.2): the wanted
+/// language (`AUDIO` reads as the spoken one); none when it is the first
+/// line's (by primary language); else its best track as `auto_subtitle`
+/// finds it, never a forced one or one already tried.
+fn auto_second_subtitle(
+    wanted: Option<&str>,
+    spoken: Option<&str>,
+    first: Option<&str>,
+    tracks: &[SubtitleTrack],
+    tried: &HashSet<String>,
+) -> Option<String> {
+    use crate::languages::primary;
+    let tag = match wanted? {
+        AUDIO => spoken?,
+        tag => tag,
+    };
+    if first.is_some_and(|f| primary(f) == primary(tag)) {
+        return None;
+    }
+    let plain = || {
+        tracks
+            .iter()
+            .filter(|t| !t.forced && !tried.contains(&t.url))
+    };
+    plain()
+        .find(|t| t.language == tag)
+        .or_else(|| plain().find(|t| primary(&t.language) == primary(tag)))
+        .map(|t| t.url.clone())
+}
+
+/// How the profile's second line names the spoken language.
+const AUDIO: &str = "audio";
 
 /// The language the start subtitle wants most: the title's remembered one,
 /// else the profile's first subtitle language the audio is not in; None for
@@ -4981,9 +5220,14 @@ fn remembered_subtitle(core: &Core, target: &PlayTarget) -> Option<String> {
         .map(str::to_owned)
 }
 
-/// Where a title's memory keeps the one subtitle delay it remembers:
-/// `{key, videoId, origin, ratio, offsetMs}` (plans/player-polish.md 2g).
+/// Where a title's memory keeps the newest subtitle delay it remembers:
+/// `{key, videoId, origin, ratio, offsetMs}` (plans/player-polish.md 2g),
+/// the one an older app reads.
 const DELAY: &str = "subtitleDelay";
+
+/// The one before it, for the other subtitle line (plans/dual-subtitles.md
+/// 3.3), in the same shape.
+const DELAY_BEFORE: &str = "subtitleDelayBefore";
 
 /// The stepper's reach either way.
 const MAX_DELAY_MS: i64 = 60_000;
@@ -4998,25 +5242,38 @@ fn stream_memory(core: &Core, target: &PlayTarget) -> Option<serde_json::Value> 
     serde_json::from_str(&memory).ok()
 }
 
-/// The subtitle delay the title remembers for the version `key` of this
-/// video: the track's origin and its ms.
-fn remembered_delay(core: &Core, target: &PlayTarget, key: &str) -> Option<(String, i32)> {
-    let memory = stream_memory(core, target)?;
-    let delay = &memory[DELAY];
-    if delay["key"].as_str() != Some(key) || delay["videoId"].as_str() != Some(&target.video_id) {
-        return None;
+/// The subtitle delays the title remembers for the version `key` of this
+/// video, newest first: each track's origin and its ms. An entry for
+/// another version or video counts for nothing; the older one is dropped
+/// when it names the newest's track (an older app rewrote the newest).
+fn remembered_delay(core: &Core, target: &PlayTarget, key: &str) -> Vec<(String, i32)> {
+    let Some(memory) = stream_memory(core, target) else {
+        return Vec::new();
+    };
+    let entry = |delay: &serde_json::Value| -> Option<(String, i32)> {
+        if delay["key"].as_str() != Some(key) || delay["videoId"].as_str() != Some(&target.video_id)
+        {
+            return None;
+        }
+        let ms = delay["offsetMs"]
+            .as_i64()?
+            .clamp(-MAX_DELAY_MS, MAX_DELAY_MS) as i32;
+        Some((delay["origin"].as_str()?.to_owned(), ms))
+    };
+    let mut delay: Vec<(String, i32)> = entry(&memory[DELAY]).into_iter().collect();
+    if let Some(before) = entry(&memory[DELAY_BEFORE])
+        && delay.first().is_none_or(|(o, _)| *o != before.0)
+    {
+        delay.push(before);
     }
-    let ms = delay["offsetMs"]
-        .as_i64()?
-        .clamp(-MAX_DELAY_MS, MAX_DELAY_MS) as i32;
-    Some((delay["origin"].as_str()?.to_owned(), ms))
+    delay
 }
 
-/// A track's remembered delay: `delay`'s when it names its origin.
-fn delay_of(delay: &Option<(String, i32)>, origin: &str) -> i32 {
+/// A track's remembered delay: the entry that names its origin, else 0.
+fn delay_of(delay: &[(String, i32)], origin: &str) -> i32 {
     delay
-        .as_ref()
-        .filter(|(o, _)| o == origin)
+        .iter()
+        .find(|(o, _)| o == origin)
         .map_or(0, |(_, ms)| *ms)
 }
 
@@ -5391,16 +5648,19 @@ fn remember_stream(
         });
     }
     let old = stream_memory(core, target).unwrap_or_default();
-    // The user's subtitle choice for the title stays, and the subtitle
-    // delay while the version and the video are the same.
+    // The user's subtitle choice for the title stays,
     if let Some(choice) = old.get("subtitle") {
         memory["subtitle"] = choice.clone();
     }
-    let delay = &old[DELAY];
-    if delay["key"].as_str() == Some(&stream.key)
-        && delay["videoId"].as_str() == Some(&target.video_id)
-    {
-        memory[DELAY] = delay.clone();
+    // and the subtitle delays (one per line) while the version and the
+    // video are the same.
+    for name in [DELAY, DELAY_BEFORE] {
+        let delay = &old[name];
+        if delay["key"].as_str() == Some(&stream.key)
+            && delay["videoId"].as_str() == Some(&target.video_id)
+        {
+            memory[name] = delay.clone();
+        }
     }
     if let Err(e) = core.library().set_stream_memory(
         core.profile(),
@@ -7509,6 +7769,82 @@ mod auto_subtitle_tests {
         assert_eq!(
             auto_subtitle(None, &tags(&["pt"]), &[], &regional).as_deref(),
             Some("br1")
+        );
+    }
+}
+
+#[cfg(test)]
+mod auto_second_subtitle_tests {
+    use super::*;
+
+    fn track(url: &str, lang: &str) -> SubtitleTrack {
+        SubtitleTrack::new(url.into(), lang, None, "Subs", None)
+    }
+
+    /// Plans/dual-subtitles.md 3.2, the table row for row: the profile's
+    /// second line, the spoken language and the first line in effect.
+    #[test]
+    fn the_second_line() {
+        let tracks = [
+            track("tr1", "tur"),
+            track("en1", "eng"),
+            track("en2", "eng"),
+            track("de1", "ger"),
+            track("br1", "pob"),
+        ];
+        let none = HashSet::new();
+        let pick = |wanted: Option<&str>, spoken: Option<&str>, first: Option<&str>| {
+            auto_second_subtitle(wanted, spoken, first, &tracks, &none)
+        };
+        // (secondSubtitle, spoken, first line) -> the second line.
+        type Case<'a> = (
+            Option<&'a str>,
+            Option<&'a str>,
+            Option<&'a str>,
+            Option<&'a str>,
+        );
+        let table: &[Case] = &[
+            (None, Some("en"), Some("tr"), None),
+            (Some(AUDIO), Some("en"), Some("tr"), Some("en1")),
+            (Some(AUDIO), None, Some("tr"), None),
+            (Some(AUDIO), Some("tr"), None, Some("tr1")),
+            (Some(AUDIO), Some("en"), Some("en"), None),
+            (Some("de"), Some("en"), Some("tr"), Some("de1")),
+            (Some("pt"), Some("en"), Some("tr"), Some("br1")),
+            // A first line in English (the region does not count) leaves no English second.
+            (Some(AUDIO), Some("en"), Some("en-GB"), None),
+            // A first line of no known language never matches.
+            (Some(AUDIO), Some("en"), Some("und"), Some("en1")),
+            // A language with no track: none.
+            (Some("ja"), Some("en"), Some("tr"), None),
+        ];
+        for (wanted, spoken, first, expected) in table {
+            assert_eq!(
+                pick(*wanted, *spoken, *first).as_deref(),
+                *expected,
+                "{wanted:?} {spoken:?} {first:?}"
+            );
+        }
+    }
+
+    /// A forced track never, nor one already tried: the next of the
+    /// language takes its place.
+    #[test]
+    fn a_forced_or_tried_track_is_passed_over() {
+        let forced = SubtitleTrack {
+            forced: true,
+            ..track("enf", "eng")
+        };
+        let tracks = [forced, track("en1", "eng"), track("en2", "eng")];
+        let tried: HashSet<String> = ["en1".to_owned()].into();
+        assert_eq!(
+            auto_second_subtitle(Some("en"), None, Some("tr"), &tracks, &tried).as_deref(),
+            Some("en2")
+        );
+        let all: HashSet<String> = ["en1".to_owned(), "en2".to_owned()].into();
+        assert_eq!(
+            auto_second_subtitle(Some("en"), None, Some("tr"), &tracks, &all),
+            None
         );
     }
 }

@@ -1,4 +1,4 @@
-use mq_runtime::views::settings::SubtitleSize;
+use mq_runtime::views::settings::{SubtitleLayout, SubtitleSize};
 use mq_runtime::{Core, SettingsView};
 use mq_streams::QualityPref;
 use serde_json::json;
@@ -51,6 +51,40 @@ async fn the_subtitle_size_is_a_preference() {
     assert!(core.set_prefs(&json!({"subtitleSize": "huge"})).is_err());
     let stored = core.library().settings("p").unwrap();
     assert!(stored.contains(&("subtitleSize".into(), "\"extraLarge\"".into())));
+}
+
+/// Plans/dual-subtitles.md 3.1: the second subtitle line's preferences.
+/// A profile written before them reads the defaults (no second line,
+/// stacked, always shown); null clears the line; a layout this version
+/// does not know is refused.
+#[tokio::test]
+async fn the_second_subtitle_line_is_a_preference() {
+    let core = Core::temporary("p").unwrap();
+    // An older profile row: only the fields it knew.
+    core.set_prefs(&json!({"subtitleSize": "large"})).unwrap();
+    let prefs = core.prefs();
+    assert_eq!(prefs.second_subtitle, None);
+    assert_eq!(prefs.subtitle_layout, SubtitleLayout::Stacked);
+    assert!(!prefs.second_on_pause);
+
+    let prefs = core
+        .set_prefs(
+            &json!({"secondSubtitle": "audio", "subtitleLayout": "oneBox", "secondOnPause": true}),
+        )
+        .unwrap();
+    assert_eq!(prefs.second_subtitle.as_deref(), Some("audio"));
+    assert_eq!(prefs.subtitle_layout, SubtitleLayout::OneBox);
+    assert!(prefs.second_on_pause);
+    assert_eq!(core.prefs(), prefs, "stored and read back");
+
+    let prefs = core.set_prefs(&json!({"secondSubtitle": null})).unwrap();
+    assert_eq!(prefs.second_subtitle, None, "null clears the line");
+    assert_eq!(core.prefs().second_subtitle, None);
+    assert!(
+        core.set_prefs(&json!({"subtitleLayout": "sideBySide"}))
+            .is_err()
+    );
+    assert_eq!(core.prefs().subtitle_layout, SubtitleLayout::OneBox);
 }
 
 #[tokio::test]

@@ -32,6 +32,14 @@ pub struct Prefs {
     /// How big subtitles show, on every device of the profile (journey
     /// reviews 2026-10-20). The delay stays per play, in the apps.
     pub subtitle_size: SubtitleSize,
+    /// The second subtitle line (plans/dual-subtitles.md 3.1): `"audio"`
+    /// for the spoken language, else a language tag ("en", "pt-BR"); null
+    /// for none.
+    pub second_subtitle: Option<String>,
+    /// How two subtitle lines draw.
+    pub subtitle_layout: SubtitleLayout,
+    /// The second line shows only while the video is paused.
+    pub second_on_pause: bool,
     /// Start the next episode when one ends.
     pub autoplay_next: bool,
     /// Which addon catalogs Home shows, and in what order.
@@ -88,6 +96,22 @@ pub enum SubtitleSize {
     ExtraLarge,
 }
 
+/// How the second subtitle line draws beside the first: above it in one
+/// block, at the top of the picture, or in one box with it.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(
+    feature = "ts",
+    derive(ts_rs::TS),
+    ts(export, export_to = "../../../apps/web/src/core/generated/")
+)]
+#[serde(rename_all = "camelCase")]
+pub enum SubtitleLayout {
+    #[default]
+    Stacked,
+    Split,
+    OneBox,
+}
+
 /// Home rows the user hid, showed or moved, by row id (`<addonId>:<type>:<catalogId>`).
 /// Rows in `order` come first in that order, then the rest in addon order.
 /// `shown` holds the twins the user turned on (a row titled as one before it
@@ -112,6 +136,9 @@ impl Default for Prefs {
             streams: StreamPrefs::default(),
             subtitle_languages: Vec::new(),
             subtitle_size: SubtitleSize::default(),
+            second_subtitle: None,
+            subtitle_layout: SubtitleLayout::default(),
+            second_on_pause: false,
             autoplay_next: true,
             home_rows: HomeRows::default(),
             defaults_seen: 0,

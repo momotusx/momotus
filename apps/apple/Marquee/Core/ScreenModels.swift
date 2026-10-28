@@ -600,6 +600,13 @@ struct Prefs: Decodable, Hashable, Sendable {
     let subtitleLanguages: [String]
     /// How big subtitles show, on every device of the profile; the delay stays per play.
     let subtitleSize: SubtitleSize
+    /// The second subtitle line (plans/dual-subtitles.md 3.1): "audio" for the spoken language, else a
+    /// language tag; nil for none, and from an older core.
+    let secondSubtitle: String?
+    /// How two subtitle lines draw; nil from an older core (read it as `.stacked`).
+    let subtitleLayout: SubtitleLayout?
+    /// The second line shows only while paused; nil from an older core (read it as false).
+    let secondOnPause: Bool?
     /// Start the next episode when one ends.
     let autoplayNext: Bool
     /// The default addons version this profile was last offered.
@@ -612,6 +619,11 @@ struct Prefs: Decodable, Hashable, Sendable {
 
 enum SubtitleSize: String, Codable, Hashable, Sendable, CaseIterable {
     case small, medium, large, extraLarge
+}
+
+/// How the second subtitle line draws beside the first (plans/dual-subtitles.md 4).
+enum SubtitleLayout: String, Codable, Hashable, Sendable, CaseIterable {
+    case stacked, split, oneBox
 }
 
 /// One entry of the `languages` op, for the language pickers: `code` goes into

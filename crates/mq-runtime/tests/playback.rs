@@ -2796,13 +2796,14 @@ async fn a_subtitle_delay_is_remembered_for_the_version_and_the_track() {
     let view = play("v.mkv");
     let s = settled_list(&view).await;
     assert_eq!(delays(&s), at([("a", 0), ("b", 1_300)]));
-    // The stepper stops at a minute either way.
+    // The stepper stops at a minute either way; b keeps its own (a delay
+    // per subtitle line, plans/dual-subtitles.md 3.3).
     view.subtitle_delay(&s.subtitles[0].url, -90_000);
-    assert_eq!(delays(&view.snapshot()), at([("a", -60_000), ("b", 0)]));
+    assert_eq!(delays(&view.snapshot()), at([("a", -60_000), ("b", 1_300)]));
     drop(view);
     let view = play("v.mkv");
     let s = settled_list(&view).await;
-    assert_eq!(delays(&s), at([("a", -60_000), ("b", 0)]));
+    assert_eq!(delays(&s), at([("a", -60_000), ("b", 1_300)]));
     drop(view);
 
     // Another version of the title starts at 0 and forgets it.
@@ -2825,6 +2826,344 @@ async fn a_subtitle_delay_is_remembered_for_the_version_and_the_track() {
     drop(view);
     let s = settled_list(&play("v.mkv")).await;
     assert_eq!(delays(&s), at([("a", 0), ("b", 0)]));
+}
+
+/// Plans/dual-subtitles.md 3.3: the title keeps the last two delays set,
+/// one per subtitle line; a third pushes out the older; 0 forgets one only.
+#[tokio::test]
+async fn two_subtitle_lines_keep_their_own_delays() {
+    let (video, _) = counted_origin().await;
+    let core = Core::temporary("p").unwrap();
+    let subs: Vec<_> = ["a", "b", "c"]
+        .iter()
+        .map(|id| serde_json::json!({"id": id, "lang": "eng", "url": format!("https://subs.test/{id}.srt"), "subtitleFileName": format!("{id}.srt")}))
+        .collect();
+    let streams = serde_json::json!({"streams": [{"url": format!("{video}/v.mkv"), "title": "Sintel.2010.1080p.WEB", "subtitles": subs}]})
+        .to_string();
+    let play = || PlaybackView::open(&core, setup(&core, &streams), target());
+    let delays =
+        |s: &PlaybackSnapshot| -> Vec<i32> { s.subtitles.iter().map(|t| t.delay_ms).collect() };
+
+    let view = play();
+    let s = settled_list(&view).await;
+    let url = |i: usize| s.subtitles[i].url.clone();
+    view.subtitle_delay(&url(0), 500);
+    view.subtitle_delay(&url(1), 900);
+    assert_eq!(delays(&view.snapshot()), [500, 900, 0]);
+    // The same values again (the close resends them): nothing changes.
+    view.subtitle_delay(&url(1), 900);
+    assert_eq!(delays(&view.snapshot()), [500, 900, 0]);
+    // A third track pushes out the older of the two.
+    view.subtitle_delay(&url(2), 300);
+    assert_eq!(delays(&view.snapshot()), [0, 900, 300]);
+    drop(view);
+    let view = play();
+    let s = settled_list(&view).await;
+    assert_eq!(delays(&s), [0, 900, 300], "both kept for the next play");
+    // 0 forgets that track's only.
+    view.subtitle_delay(&s.subtitles[1].url, 0);
+    assert_eq!(delays(&view.snapshot()), [0, 0, 300]);
+    drop(view);
+    let s = settled_list(&play()).await;
+    assert_eq!(delays(&s), [0, 0, 300]);
+    drop(s);
+
+    // The memory as an older app or another play leaves it: an older app
+    // writes `subtitleDelay` alone, and may rewrite it to the track
+    // `subtitleDelayBefore` names; another video's entry counts for nothing.
+    let memory = |delay: serde_json::Value, before: serde_json::Value| {
+        let row =
+            serde_json::json!({ "key": "", "subtitleDelay": delay, "subtitleDelayBefore": before });
+        core.library()
+            .set_stream_memory(
+                core.profile(),
+                &target().item_id,
+                None,
+                &row.to_string(),
+                core.clock(),
+            )
+            .unwrap();
+    };
+    // Each track's origin as the core writes it: set a delay, read it back.
+    let view = play();
+    let s = settled_list(&view).await;
+    let written = |url: &str| -> serde_json::Value {
+        view.subtitle_delay(url, 1);
+        let row = core
+            .library()
+            .stream_memory(core.profile(), &target().item_id)
+            .unwrap()
+            .unwrap();
+        serde_json::from_str::<serde_json::Value>(&row).unwrap()["subtitleDelay"].clone()
+    };
+    let origins: Vec<String> = (0..2)
+        .map(|i| {
+            written(&s.subtitles[i].url)["origin"]
+                .as_str()
+                .unwrap()
+                .to_owned()
+        })
+        .collect();
+    let key = s.key.clone().unwrap();
+    let entry = |i: usize, ms: i32, video: &str| serde_json::json!({"key": key, "videoId": video, "origin": origins[i], "ratio": 1.0, "offsetMs": ms});
+    drop(view);
+    let video = target().video_id;
+    memory(entry(0, 400, &video), serde_json::Value::Null);
+    assert_eq!(
+        delays(&settled_list(&play()).await),
+        [400, 0, 0],
+        "an older app's one entry reads"
+    );
+    memory(entry(0, 400, &video), entry(0, 100, &video));
+    assert_eq!(
+        delays(&settled_list(&play()).await),
+        [400, 0, 0],
+        "a duplicate origin: the newest counts"
+    );
+    memory(entry(0, 400, &video), entry(1, 200, "tt0000001"));
+    assert_eq!(
+        delays(&settled_list(&play()).await),
+        [400, 0, 0],
+        "another video's entry counts for nothing"
+    );
+}
+
+/// Plans/dual-subtitles.md 3.1 and 3.2: the second line follows the
+/// profile's `secondSubtitle` (the spoken language for "audio"), never the
+/// first line's language, and the viewer's pick writes the profile, unless
+/// the profile is a kid's.
+#[tokio::test]
+async fn a_second_line_follows_the_profile() {
+    let (video, _) = counted_origin().await;
+    let subs: Vec<_> = ["eng", "tur", "ger"]
+        .iter()
+        .map(|lang| serde_json::json!({"id": lang, "lang": lang, "url": format!("https://subs.test/{lang}.srt")}))
+        .collect();
+    // The release names its audio: English.
+    let stream = serde_json::json!({"streams": [{"url": format!("{video}/v.mkv"), "title": "Sintel.2010.ENGLISH.1080p.WEB", "subtitles": subs}]})
+        .to_string();
+    let open = |core: &Core| PlaybackView::open(core, setup(core, &stream), target());
+    let url = |s: &PlaybackSnapshot, lang: &str| {
+        s.subtitles
+            .iter()
+            .find(|t| t.lang == lang)
+            .unwrap()
+            .url
+            .clone()
+    };
+    let lang = |s: &PlaybackSnapshot| {
+        let url = s.auto_second_subtitle.as_ref();
+        s.subtitles
+            .iter()
+            .find(|t| Some(&t.url) == url)
+            .map(|t| t.lang.clone())
+    };
+    let on = |l: &str| Some(l.to_owned());
+
+    // Turkish first; no second line set: none, the spoken language named.
+    let core = Core::temporary("p").unwrap();
+    core.set_prefs(&serde_json::json!({ "subtitleLanguages": ["tur"] }))
+        .unwrap();
+    let s = settled_list(&open(&core)).await;
+    assert_eq!(s.auto_subtitle, Some(url(&s, "tur")));
+    assert_eq!(s.auto_second_subtitle, None);
+    assert_eq!(s.spoken_language.as_deref(), Some("en"));
+
+    // "audio": the English track beside the Turkish one.
+    core.set_prefs(&serde_json::json!({ "secondSubtitle": "audio" }))
+        .unwrap();
+    let view = open(&core);
+    let s = settled_list(&view).await;
+    assert_eq!(lang(&s), on("eng"));
+    // The viewer turns the first line to English: the second goes (never one language twice).
+    view.subtitle_chosen(Some(&url(&s, "eng")), None);
+    assert_eq!(view.snapshot().auto_second_subtitle, None);
+    // Back to Turkish: the English second comes back.
+    view.subtitle_chosen(Some(&url(&s, "tur")), None);
+    assert_eq!(lang(&view.snapshot()), on("eng"));
+    // The viewer picks German as the second line: it is theirs, and the profile's.
+    view.second_subtitle_chosen(Some(&url(&s, "ger")), false);
+    assert_eq!(view.snapshot().auto_second_subtitle, None);
+    assert_eq!(core.prefs().second_subtitle.as_deref(), Some("de"));
+    // A first line change no longer moves it.
+    view.subtitle_chosen(Some(&url(&s, "eng")), None);
+    assert_eq!(view.snapshot().auto_second_subtitle, None);
+    drop(view);
+    // The next play: the first line is the title's English now (remembered), German second.
+    let view = open(&core);
+    let s = settled_list(&view).await;
+    assert_eq!(s.auto_subtitle, Some(url(&s, "eng")));
+    assert_eq!(lang(&s), on("ger"));
+    // The Spoken language row writes "audio"; Off clears it and leaves the
+    // subtitle languages alone.
+    let before = core.prefs().subtitle_languages;
+    view.second_subtitle_chosen(Some(&url(&s, "eng")), true);
+    assert_eq!(core.prefs().second_subtitle.as_deref(), Some("audio"));
+    view.second_subtitle_chosen(None, false);
+    assert_eq!(core.prefs().second_subtitle, None);
+    assert_eq!(core.prefs().subtitle_languages, before);
+    drop(view);
+
+    // A kids profile's pick lasts the play: its preferences stay.
+    let owner = Core::temporary(mq_library::OWNER).unwrap();
+    owner
+        .set_pin(mq_library::OWNER, Some("1357"), None)
+        .await
+        .unwrap();
+    let kid = owner.for_profile(&owner.create_kids_profile("Kid", "fox").unwrap());
+    let row = mq_library::AllowedRow {
+        item_id: target().item_id,
+        kind: "movie".into(),
+        name: "Sintel".into(),
+        names: vec![],
+        poster: None,
+        allowed: true,
+        added_ms: 1,
+    };
+    kid.library()
+        .write_allowed(kid.profile(), &row, &kid.hlc())
+        .unwrap();
+    let view = open(&kid);
+    let s = settled_list(&view).await;
+    view.second_subtitle_chosen(Some(&url(&s, "ger")), false);
+    assert_eq!(view.snapshot().auto_second_subtitle, None);
+    assert_eq!(kid.prefs().second_subtitle, None);
+}
+
+/// Plans/dual-subtitles.md 3.2: the second line waits for its own
+/// language. A source that lists it after the first line settled still
+/// turns it on; it never shows before the first line is decided.
+#[tokio::test]
+async fn a_late_second_line_still_turns_on() {
+    let (video, _) = counted_origin().await;
+    let core = Core::temporary("p").unwrap();
+    core.set_prefs(&serde_json::json!({ "subtitleLanguages": ["eng"], "secondSubtitle": "de" }))
+        .unwrap();
+    let quick = subtitles_addon("quick", "eng", Duration::ZERO).await;
+    let slow = subtitles_addon("slow", "ger", Duration::from_secs(3)).await;
+    // A slower one still, so the German track comes while the list is pending.
+    let slowest = subtitles_addon("slowest", "fre", Duration::from_secs(8)).await;
+    install(
+        &core,
+        &[
+            row(LOCAL_ADDON, "local", "stream", true),
+            quick,
+            slow,
+            slowest,
+        ],
+    );
+    let streams = serde_json::json!({"streams": [{"url": format!("{video}/v.mkv"), "title": "Sintel.2010.1080p.WEB"}]})
+        .to_string();
+    let view = PlaybackView::open(
+        &core,
+        listed(LOCAL_ADDON, "local", "Local", &streams),
+        target(),
+    );
+    let first = until(&view, "the first line", |s| s.auto_subtitle.is_some()).await;
+    assert!(
+        first.subtitles_pending,
+        "decided before the slow source answered"
+    );
+    assert_eq!(first.auto_second_subtitle, None, "no German track yet");
+    let s = until(&view, "the late German track", |s| {
+        s.auto_second_subtitle.is_some()
+    })
+    .await;
+    assert!(
+        s.subtitles_pending,
+        "decided early, as soon as listed: the slowest source is still out"
+    );
+    let on = s
+        .subtitles
+        .iter()
+        .find(|t| Some(&t.url) == s.auto_second_subtitle.as_ref())
+        .unwrap();
+    assert_eq!(on.language, "de");
+}
+
+/// Plans/dual-subtitles.md 3.2, failure: a start second line whose file
+/// cannot be read hands over to the next of its language with no note;
+/// when the first line hands over into the second's language, the second
+/// line goes; a hand-picked second line keeps its note.
+#[tokio::test]
+async fn a_failing_second_line_hands_over_silently() {
+    let core = Core::temporary("p").unwrap();
+    core.set_prefs(&serde_json::json!({ "subtitleLanguages": ["tur"], "secondSubtitle": "en" }))
+        .unwrap();
+    let (view, s) = open_files(
+        &core,
+        &[
+            ["tur", "good.srt"],
+            ["eng", "bad1.srt"],
+            ["eng", "good2.srt"],
+        ],
+    )
+    .await;
+    let bad = s.auto_second_subtitle.clone().expect("a second line");
+    let second = s.subtitles.iter().find(|t| t.url == bad).unwrap();
+    assert_eq!(second.language, "en", "the English beside the Turkish");
+    let http = HttpClient::new(ClientConfig::default()).unwrap();
+    let local = RequestOptions {
+        allow_private: true,
+        ..Default::default()
+    };
+    let body = http.get(&bad, &local).await.unwrap().body;
+    assert_eq!(&body[..], b"WEBVTT\n\n");
+    let next = until(&view, "the next second line", |n| {
+        n.auto_second_subtitle.as_deref() != Some(bad.as_str())
+    })
+    .await;
+    assert!(
+        next.auto_second_subtitle.is_some(),
+        "the next English track: {next:?}"
+    );
+    assert!(
+        next.subtitle_notes.is_empty(),
+        "no note: {:?}",
+        next.subtitle_notes
+    );
+    assert!(!next.start_subtitle_failed);
+    assert_eq!(next.auto_subtitle, s.auto_subtitle, "the first line stays");
+
+    // The first line's Turkish file cannot be read and the next best is English: the second line goes.
+    let core = Core::temporary("p").unwrap();
+    core.set_prefs(
+        &serde_json::json!({ "subtitleLanguages": ["tur", "eng"], "secondSubtitle": "en" }),
+    )
+    .unwrap();
+    let (view, s) = open_files(&core, &[["tur", "bad1.srt"], ["eng", "good.srt"]]).await;
+    assert!(
+        s.auto_second_subtitle.is_some(),
+        "English second beside Turkish: {s:?}"
+    );
+    let (_, after) = load_start(&view, &s).await;
+    let first = after
+        .subtitles
+        .iter()
+        .find(|t| Some(&t.url) == after.auto_subtitle.as_ref())
+        .unwrap();
+    assert_eq!(first.language, "en");
+    assert_eq!(after.auto_second_subtitle, None, "never one language twice");
+
+    // A hand-picked second line that cannot be read keeps its note.
+    let core = Core::temporary("p").unwrap();
+    core.set_prefs(&serde_json::json!({ "subtitleLanguages": ["tur"] }))
+        .unwrap();
+    let (view, s) = open_files(&core, &[["tur", "good.srt"], ["eng", "bad2.srt"]]).await;
+    let picked = s
+        .subtitles
+        .iter()
+        .find(|t| t.lang == "eng")
+        .unwrap()
+        .url
+        .clone();
+    view.second_subtitle_chosen(Some(&picked), false);
+    let _ = http.get(&picked, &local).await.unwrap();
+    let after = until(&view, "the note", |n| !n.subtitle_notes.is_empty()).await;
+    assert_eq!(
+        after.subtitle_notes[0].problem,
+        SubtitleProblem::TrackFailed
+    );
 }
 
 /// Review of feat/subtitle-best P2-4: a pick is of one source's tracks.

@@ -3,6 +3,7 @@ import type { DiscoverPrefs } from "./DiscoverPrefs";
 import type { HomeRows } from "./HomeRows";
 import type { LearnedByClass } from "./LearnedByClass";
 import type { StreamPrefs } from "./StreamPrefs";
+import type { SubtitleLayout } from "./SubtitleLayout";
 import type { SubtitleSize } from "./SubtitleSize";
 
 export type Prefs = { streams: StreamPrefs, 
@@ -16,6 +17,20 @@ subtitleLanguages: Array<string>,
  * reviews 2026-10-20). The delay stays per play, in the apps.
  */
 subtitleSize: SubtitleSize, 
+/**
+ * The second subtitle line (plans/dual-subtitles.md 3.1): `"audio"`
+ * for the spoken language, else a language tag ("en", "pt-BR"); null
+ * for none.
+ */
+secondSubtitle: string | null, 
+/**
+ * How two subtitle lines draw.
+ */
+subtitleLayout: SubtitleLayout, 
+/**
+ * The second line shows only while the video is paused.
+ */
+secondOnPause: boolean, 
 /**
  * Start the next episode when one ends.
  */

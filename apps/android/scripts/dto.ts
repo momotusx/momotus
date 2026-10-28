@@ -101,6 +101,9 @@ const DEFAULTED = new Map([
   ["PlaybackSnapshot.startSubtitleFailed", "false"],
   // The playing file's audio description (core backlog C35): an older core never says so.
   ["PlaybackSnapshot.audioDescription", "false"],
+  // Dual subtitles (plans/dual-subtitles.md 3.1): an older core or recording has no second line.
+  ["Prefs.subtitleLayout", "SubtitleLayout.Stacked"],
+  ["Prefs.secondOnPause", "false"],
   // Discover's preview Library state (core backlog C44b): an older core says nothing.
   ["ItemDetails.inLibrary", "false"],
   // Whether Add to Library can be offered (false on a kids profile): an older core always took it.

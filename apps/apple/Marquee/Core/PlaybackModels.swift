@@ -242,6 +242,11 @@ struct PlaybackSnapshot: Decodable, Hashable, Sendable {
     /// The track the core turns on at start (plans/m13-subtitle-languages.md 6),
     /// once the list has settled; nil for none (optional for older cores).
     let autoSubtitle: String?
+    /// The second subtitle line's track (plans/dual-subtitles.md 3.2), followed until the viewer picks one;
+    /// drawn only while a first line is on; nil for none and from an older core.
+    let autoSecondSubtitle: String?
+    /// The tag the core reads the audio in, for the Spoken language row; nil when not known.
+    let spokenLanguage: String?
     /// Try again taken in this view, one more each time it is accepted: show
     /// "Trying again" from it, so a retry that fails again at once still reads
     /// as a new try (optional for older cores).

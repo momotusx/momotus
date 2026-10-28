@@ -1320,6 +1320,10 @@ data class PlaybackSnapshot(
     val subtitleNotes: List<SubtitleNote> = emptyList(),
     /** The track (its `url`) every app turns on at start, once, when the list has settled: the profile set subtitle languages and the audio is in none of them, or the user chose one for this title before. Null otherwise. The user's own pick, or Off, always wins: send `subtitleChosen` (plans/m13-subtitle-languages.md 6). */
     val autoSubtitle: String? = null,
+    /** The track (its `url`) the apps show as the second subtitle line (plans/dual-subtitles.md 3.2), until the viewer picks one in this play (`secondSubtitleChosen`): the profile's `secondSubtitle` language, the spoken one for `"audio"`, never the first line's language. A level, not a one-time start: it changes, or goes null, when the first line changes. Draw it only while a first line is on. */
+    val autoSecondSubtitle: String? = null,
+    /** The tag the core reads the audio in (the probe's default audio track, else the release name's first language), set with the start subtitle; null when not known: the picker's "Spoken language" row names it. */
+    val spokenLanguage: String? = null,
     /** Every track the start subtitle could turn on failed to read: each one that failed handed over to the next best (its language's next, then the next language, as `autoSubtitle` changes) and none was left. A neutral state with no source: the apps show `player.subtitlesFailed` from apps/shared/stream-choice-words.json. */
     val startSubtitleFailed: Boolean = false,
     /** The playing file has an audio track described for blind and low-vision viewers (its container flag or its name, read as the file opens): the player's AD mark (core backlog C35). */
@@ -1433,6 +1437,12 @@ data class Prefs(
     val subtitleLanguages: List<String> = emptyList(),
     /** How big subtitles show, on every device of the profile (journey reviews 2026-10-20). The delay stays per play, in the apps. */
     val subtitleSize: SubtitleSize = SubtitleSize.Medium,
+    /** The second subtitle line (plans/dual-subtitles.md 3.1): `"audio"` for the spoken language, else a language tag ("en", "pt-BR"); null for none. */
+    val secondSubtitle: String? = null,
+    /** How two subtitle lines draw. */
+    val subtitleLayout: SubtitleLayout = SubtitleLayout.Stacked,
+    /** The second line shows only while the video is paused. */
+    val secondOnPause: Boolean = false,
     /** Start the next episode when one ends. */
     val autoplayNext: Boolean,
     /** Which addon catalogs Home shows, and in what order. */
@@ -1964,6 +1974,22 @@ data class StreamPrefs(
     /** Learn from the user's picks (applied by the runtime). */
     val learn: Boolean,
 )
+
+/** How the second subtitle line draws beside the first: above it in one block, at the top of the picture, or in one box with it. */
+@Serializable(with = SubtitleLayout.Serializer::class)
+enum class SubtitleLayout(
+    val wire: String,
+) {
+    Stacked("stacked"),
+    Split("split"),
+    OneBox("oneBox"),
+
+    /** A value from a newer core that this app does not know yet. */
+    Unknown(""),
+    ;
+
+    object Serializer : FallbackEnumSerializer<SubtitleLayout>("SubtitleLayout", SubtitleLayout.entries, SubtitleLayout::wire, Unknown)
+}
 
 @Serializable
 data class SubtitleNote(

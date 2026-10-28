@@ -2556,6 +2556,14 @@ impl Session {
                 let language = command.get("language").and_then(Value::as_str);
                 playback.subtitle_chosen(url, language);
             }
+            (View::Playback(playback), "secondSubtitleChosen") => {
+                let url = command.get("url").and_then(Value::as_str);
+                let spoken = command
+                    .get("spoken")
+                    .and_then(Value::as_bool)
+                    .unwrap_or(false);
+                playback.second_subtitle_chosen(url, spoken);
+            }
             (View::Playback(playback), "subtitleDelay") => {
                 let ms = command
                     .get("ms")
