@@ -9,12 +9,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
-import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.test.requestFocus
 import androidx.compose.ui.unit.dp
 import app.marquee.core.model.ProfileInfo
 import app.marquee.design.Form
@@ -34,7 +34,7 @@ import kotlin.test.assertEquals
  */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
-@Config(sdk = [36], application = Application::class, qualifiers = "mdpi")
+@Config(sdk = [36], application = Application::class, qualifiers = "w1920dp-h1080dp-mdpi")
 class ProfileCirclesTest {
     @get:Rule
     val compose = createComposeRule()
@@ -60,7 +60,8 @@ class ProfileCirclesTest {
         val me =
             ProfileInfo("p1", "Mia", "letter:ember", 0, hasPin = false, isOwner = true, syncing = false, kids = false)
         tile(Form.Tv) { ProfileTile(me, active = false, modifier = Modifier, onClick = {}) }
-        compose.onNode(hasClickAction()).performSemanticsAction(SemanticsActions.RequestFocus)
+        compose.onNode(hasClickAction()).requestFocus()
+        compose.onNode(hasClickAction()).assertIsFocused()
         compose.waitForIdle()
         cornerStaysPage()
     }
@@ -70,7 +71,8 @@ class ProfileCirclesTest {
         tile(Form.Tv) { AddTile(onClick = {}) }
         compose.waitForIdle()
         cornerStaysPage()
-        compose.onNode(hasClickAction()).performSemanticsAction(SemanticsActions.RequestFocus)
+        compose.onNode(hasClickAction()).requestFocus()
+        compose.onNode(hasClickAction()).assertIsFocused()
         compose.waitForIdle()
         cornerStaysPage()
     }

@@ -11,6 +11,8 @@ import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertIsNotFocused
 import androidx.compose.ui.test.assertTextEquals
+import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.StateRestorationTester
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithContentDescription
@@ -46,7 +48,7 @@ import kotlin.test.assertFalse
  * that survives recreation, a question before a changed page is left or a PIN removed unseen, no Color row.
  */
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [36], application = Application::class)
+@Config(sdk = [36], application = Application::class, qualifiers = "w411dp-h2400dp")
 class EditProfileTest {
     @get:Rule
     val compose = createAndroidComposeRule<ComponentActivity>()
@@ -125,9 +127,9 @@ class EditProfileTest {
         var done = 0
         edit(null) { done++ }
         name().performTextInput("Cy")
-        compose.onNodeWithText("Add profile").performClick()
+        compose.onNode(hasText("Add profile") and hasClickAction()).performClick()
         until("the first create") { ops.contains("createProfile") }
-        compose.onNodeWithText("Add profile").performClick()
+        compose.onNode(hasText("Add profile") and hasClickAction()).performClick()
         compose.waitForIdle()
         held!!.invoke()
         until("the page left") { done == 1 }
@@ -154,7 +156,11 @@ class EditProfileTest {
             ).assertExists()
     }
 
-    private fun back() = compose.runOnUiThread { compose.activity.onBackPressedDispatcher.onBackPressed() }
+    private fun back() {
+        // The guard is armed by the recomposition after the typing: Back is pressed once that has run.
+        compose.waitForIdle()
+        compose.runOnUiThread { compose.activity.onBackPressedDispatcher.onBackPressed() }
+    }
 
     @Test
     fun `Back with a changed name asks first, Keep editing keeps it, Discard leaves`() {
