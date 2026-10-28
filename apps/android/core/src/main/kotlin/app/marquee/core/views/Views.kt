@@ -79,9 +79,9 @@ class HomeView(
         private set
 
     override fun touch() {
-        val (h, o, r) = Triple(hero, offline, rows.toList())
-        hero = null
-        hero = h
+        val (h, o, r) = Triple(heroes, offline, rows.toList())
+        heroes = emptyList()
+        heroes = h
         offline = null
         offline = o
         rows.clear()
