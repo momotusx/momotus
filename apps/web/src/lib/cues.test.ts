@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { type CueRects, cuePlace, cueSpot, FOOT, SAFE_LINE } from "./cues";
+import { type CueRects, cuePlace, cueSpot, cueTop, FOOT, SAFE_LINE } from "./cues";
 
 /** A 1920x1080 TV, the element filling it. */
 const tv = { top: 0, bottom: 1080, width: 1920, height: 1080 };
@@ -124,4 +124,46 @@ test("a cue its file placed stays where the file put it", () => {
   expect(cueSpot({ ...cue, line: 0, position: 90, size: 40 })?.left).toBe("60%");
   // End-aligned with no position: its box ends at the element's end.
   expect(cueSpot({ ...cue, line: 0, align: "right", size: 40 })).toEqual({ top: "0%", down: 0, left: "60%", width: "40%", align: "flex-end" });
+});
+
+/** Split's second line (plans/dual-subtitles.md 4 B): the mirror of the foot. */
+test("Split hangs the second line 8% of the picture under the picture's top, over the 5% line", () => {
+  const rects = { box: tv, video: wide, up: false, lines: two, signs: [] };
+  const pictureTop = (1080 - 803) / 2;
+  expect(cueTop(rects)).toBeCloseTo(pictureTop + 803 * FOOT, 5);
+  // A picture that fills the screen: 8% of it, never over the 5% line.
+  expect(cueTop({ ...rects, video: { width: 1920, height: 1080 } })).toBeCloseTo(1080 * FOOT, 5);
+  // An element under the page's top counts from its own top.
+  const desktop = { top: 100, bottom: 910, width: 1440, height: 810 };
+  const picture = 1440 / 2.39;
+  expect(cueTop({ ...rects, box: desktop, video: { width: 1920, height: 1920 / 2.39 } })).toBeCloseTo((810 - picture) / 2 + picture * FOOT, 5);
+});
+
+test("Split's second line goes under the top bar while the controls show, and under a sign in the top half", () => {
+  const rects = { box: tv, video: { width: 1920, height: 1080 }, lines: two, signs: [] };
+  expect(cueTop({ ...rects, up: true, top: { top: 40, bottom: 160 } })).toBeCloseTo(168, 5);
+  // Hidden controls: the bar does not count.
+  expect(cueTop({ ...rects, up: false, top: { top: 40, bottom: 160 } })).toBeCloseTo(1080 * FOOT, 5);
+  // A sign at the top pushes it under; one in the lower half does not.
+  expect(cueTop({ ...rects, up: false, signs: [{ top: 60, bottom: 200 }] })).toBeCloseTo(208, 5);
+  expect(cueTop({ ...rects, up: false, signs: [{ top: 700, bottom: 800 }] })).toBeCloseTo(1080 * FOOT, 5);
+  // An element under the page's top: the bar, the signs and the half are all counted from its own top.
+  const low = { ...rects, box: { top: 100, bottom: 1180, width: 1920, height: 1080 } };
+  expect(cueTop({ ...low, up: true, top: { top: 140, bottom: 260 } })).toBeCloseTo(168, 5);
+  expect(cueTop({ ...low, up: false, signs: [{ top: 160, bottom: 300 }] })).toBeCloseTo(208, 5);
+  // Under the element's half (the page's 640): not a top sign.
+  expect(cueTop({ ...low, up: false, signs: [{ top: 660, bottom: 760 }] })).toBeCloseTo(1080 * FOOT, 5);
+});
+
+test("Split on an upright phone takes the band over the picture when it holds the line", () => {
+  const phone = { top: 0, bottom: 844, width: 390, height: 844 };
+  const picture = (1080 * 390) / 1920;
+  const pictureTop = (844 - picture) / 2;
+  const one = 24 * 1.3;
+  expect(cueTop({ box: phone, video: { width: 1920, height: 1080 }, up: false, lines: one, signs: [] })).toBeCloseTo(pictureTop - one - 10, 5);
+  // A block the band cannot hold hangs inside the picture.
+  expect(cueTop({ box: phone, video: { width: 1920, height: 1080 }, up: false, lines: 400, signs: [] })).toBeCloseTo(pictureTop + picture * FOOT, 5);
+  // The same phone 50 px down the page: the same place in it.
+  const lower = { ...phone, top: 50, bottom: 894 };
+  expect(cueTop({ box: lower, video: { width: 1920, height: 1080 }, up: false, lines: one, signs: [] })).toBeCloseTo(pictureTop - one - 10, 5);
 });

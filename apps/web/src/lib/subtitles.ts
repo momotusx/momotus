@@ -59,6 +59,21 @@ export function pickerLanguages<F extends FileTrack>(tracks: SubtitleTrack[], fi
   return out;
 }
 
+/** Whether two language codes or tags name one language, by their base language ("en" and "en-GB", "eng"
+ * and "en"), file codes read as `pickerLanguages` reads them. Unknown or empty ones never match. */
+export function sameLanguage(a: string | null | undefined, b: string | null | undefined): boolean {
+  const base = (c: string) => languageTag(c).toLowerCase().split("-")[0] ?? "";
+  if (!a || !b) return false;
+  const x = base(a);
+  return x !== "" && x !== "und" && x === base(b);
+}
+
+/** The Second line tab's languages (plans/dual-subtitles.md 5.1): the core's own, in its order, no tracks in the
+ * file, the first line's language marked `disabled` (its row reads "On the first line"). */
+export function secondLanguages(tracks: SubtitleTrack[], first: string | null, nameOf: (lang: string) => string): (PickerLanguage & { disabled: boolean })[] {
+  return pickerLanguages(tracks, [], nameOf).map((l) => ({ ...l, disabled: sameLanguage(l.language, first) }));
+}
+
 /** Lower case with the accents gone, so "turkce" finds "Türkçe". */
 const fold = (s: string) => s.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
 /** Whether `query` starts a word of `text`. */

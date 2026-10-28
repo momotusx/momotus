@@ -234,22 +234,30 @@ html[data-engine="mpv"] .player-scr.started .player-bd { opacity: 0; }
  * profile's size (Prefs.subtitleSize: 0.8, 1, 1.25 and 1.5 times); 85% while
  * they would meet the transport. A side panel or the Up next card draws over them. */
 .cues { position: absolute; left: 12px; right: 12px; z-index: 1; display: flex; flex-direction: column; align-items: center; pointer-events: none; }
-.cue { padding: 0 6px; font: 500 44px / 1.3 var(--font-text); color: var(--text); background: var(--scrim); text-align: center; }
-[data-subsize="small"] .cue { font-size: 35px; }
-[data-subsize="large"] .cue { font-size: 55px; }
-[data-subsize="extraLarge"] .cue { font-size: 66px; }
-.cues.small .cue { font-size: 37.4px; }
-[data-subsize="small"] .cues.small .cue { font-size: 29.75px; }
-[data-subsize="large"] .cues.small .cue { font-size: 46.75px; }
-[data-subsize="extraLarge"] .cues.small .cue { font-size: 56.1px; }
-[data-form="phone"] .cue { font-size: 16px; }
-[data-form="phone"] [data-subsize="small"] .cue { font-size: 13px; }
-[data-form="phone"] [data-subsize="large"] .cue { font-size: 20px; }
-[data-form="phone"] [data-subsize="extraLarge"] .cue { font-size: 24px; }
-[data-form="phone"] .cues.small .cue { font-size: 13.6px; }
-[data-form="phone"] [data-subsize="small"] .cues.small .cue { font-size: 11px; }
-[data-form="phone"] [data-subsize="large"] .cues.small .cue { font-size: 17px; }
-[data-form="phone"] [data-subsize="extraLarge"] .cues.small .cue { font-size: 20.4px; }
+/* The caption box is the design's 60% black (--halo): 5.2:1 for white text over a white picture (owner, 2026-10-28). */
+.cue { --cue-size: 44px; padding: 0 6px; font: 500 var(--cue-size) / 1.3 var(--font-text); color: var(--text); background: var(--halo); text-align: center; }
+[data-subsize="small"] :is(.cue, .cue-box) { --cue-size: 35px; }
+[data-subsize="large"] :is(.cue, .cue-box) { --cue-size: 55px; }
+[data-subsize="extraLarge"] :is(.cue, .cue-box) { --cue-size: 66px; }
+.cues.small :is(.cue, .cue-box) { --cue-size: 37.4px; }
+[data-subsize="small"] .cues.small :is(.cue, .cue-box) { --cue-size: 29.75px; }
+[data-subsize="large"] .cues.small :is(.cue, .cue-box) { --cue-size: 46.75px; }
+[data-subsize="extraLarge"] .cues.small :is(.cue, .cue-box) { --cue-size: 56.1px; }
+[data-form="phone"] :is(.cue, .cue-box) { --cue-size: 16px; }
+[data-form="phone"] [data-subsize="small"] :is(.cue, .cue-box) { --cue-size: 13px; }
+[data-form="phone"] [data-subsize="large"] :is(.cue, .cue-box) { --cue-size: 20px; }
+[data-form="phone"] [data-subsize="extraLarge"] :is(.cue, .cue-box) { --cue-size: 24px; }
+[data-form="phone"] .cues.small :is(.cue, .cue-box) { --cue-size: 13.6px; }
+[data-form="phone"] [data-subsize="small"] .cues.small :is(.cue, .cue-box) { --cue-size: 11px; }
+[data-form="phone"] [data-subsize="large"] .cues.small :is(.cue, .cue-box) { --cue-size: 17px; }
+[data-form="phone"] [data-subsize="extraLarge"] .cues.small :is(.cue, .cue-box) { --cue-size: 20.4px; }
+/* The second subtitle line (plans/dual-subtitles.md 4): 85% of the first, over it, 0.25 em apart; One box keeps
+ * both in one box with the caption background behind both and the gap; Split hangs it from the top at full size. */
+.cue.cue2 { font-size: calc(var(--cue-size) * .85); }
+.cue2 + .cue:not(.cue2) { margin-top: .25em; }
+.cue-box { --cue-size: 44px; display: flex; flex-direction: column; align-items: center; padding: .3em .7em .35em; border-radius: .35em; background: var(--halo); font-size: var(--cue-size); }
+.cue-box .cue { background: none; padding: 0; }
+.cues.cues-top { justify-content: flex-start; }
 /* TV and desktop keep the lines inside the title-safe sides; a phone's are 12 px from its edges. */
 [data-form="tv"] .cues, [data-form="desktop"] .cues { left: var(--safe-side); right: var(--safe-side); }
 /* A cue its file placed (lib/cues.ts cueSpot): over the element, where the browser drew it. */
@@ -363,6 +371,39 @@ html[data-engine="mpv"] .player-scr.started .player-bd { opacity: 0; }
 /* The release wraps as one piece, and a line too long for its measure ends in an ellipsis. */
 .op-tx .rel { display: inline-block; max-width: calc(100% - 1em); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; }
 .subp-tune { display: grid; gap: 6px; padding: 12px 16px 0; box-shadow: inset 0 1px 0 var(--line); }
+/* The Second line tab's foot holds four rows: it scrolls with the options (a landscape phone cannot hold them). */
+.subp-opts .subp-tune { max-height: 50%; overflow-y: auto; }
+/* Only when paused: the web's switch (onboarding.css .switch: a ring when off, white with a dark knob when on);
+ * the phone's is the iOS one, green when on (design/DECISION.md). */
+.sub-switch { width: 100%; min-height: 56px; color: var(--text); text-align: left; border-radius: var(--radius-m); }
+.sub-switch .knob { position: relative; flex: none; width: 60px; height: 34px; border-radius: 17px; box-shadow: inset 0 0 0 2px var(--control); }
+.sub-switch .knob i { position: absolute; top: 7px; left: 7px; width: 20px; height: 20px; border-radius: 50%; background: var(--muted);
+  transition: transform var(--motion-focus) var(--ease), background-color var(--motion-focus) var(--ease); }
+.sub-switch[aria-checked="true"] .knob { background: var(--primary); box-shadow: none; }
+.sub-switch[aria-checked="true"] .knob i { transform: translateX(26px); background: var(--on-primary); }
+.sub-switch:focus-visible { background: color-mix(in srgb, var(--text) 12%, transparent); }
+[data-form="tv"] .subp .sub-switch:focus { outline: none; background: var(--primary); color: var(--on-primary); }
+[data-form="tv"] .subp .sub-switch:focus .knob { box-shadow: inset 0 0 0 2px var(--on-primary); }
+[data-form="tv"] .subp .sub-switch:focus[aria-checked="true"] .knob { background: var(--on-primary); }
+[data-form="tv"] .subp .sub-switch:focus > span:not(.knob) { color: var(--on-primary); }
+[data-form="tv"] .subp .sub-switch:focus .knob i { background: var(--on-primary); }
+[data-form="tv"] .subp .sub-switch:focus[aria-checked="true"] .knob i { background: var(--primary); }
+[data-form="phone"] .sub-switch .knob { width: 51px; height: 31px; border-radius: 16px; box-shadow: none; background: var(--control); }
+[data-form="phone"] .sub-switch .knob i { top: 2px; left: 2px; width: 27px; height: 27px; background: var(--on-key); }
+[data-form="phone"] .sub-switch[aria-checked="true"] .knob { background: var(--switch-on); }
+[data-form="phone"] .sub-switch[aria-checked="true"] .knob i { transform: translateX(20px); background: var(--on-key); }
+/* First line / Second line (plans/dual-subtitles.md 5.1): a two-part switch under the heading. */
+.subp-switch { display: flex; gap: 4px; margin: 0 0 10px; padding: 3px; border-radius: var(--radius-pill); background: var(--track); }
+.subp-switch .seg { flex: 1; min-height: 44px; border-radius: var(--radius-pill); font: 600 var(--type-caption) / 1.2 var(--font-text); color: var(--dim); }
+.subp-switch .seg.on { background: color-mix(in srgb, var(--text) 16%, transparent); color: var(--text); }
+/* A keyboard keeps the ring (app.css); a remote's focus inverts the segment, as the panel's rows do. */
+[data-form="tv"] .subp-switch .seg:focus { outline: none; background: var(--primary); color: var(--on-primary); }
+:is([data-form="tv"], [data-form="desktop"]) .subp-switch .seg { min-height: 54px; }
+/* The other line's language: its flag, name and count dim; the reason it cannot be picked stays readable. */
+.subp .opt:disabled { cursor: default; }
+.subp .opt:disabled :is(.flag, .nm, .ct) { opacity: .5; }
+[data-form="phone"] .subp-switch { margin: 4px 12px 6px; }
+[data-form="phone"] .subp-switch .seg { min-height: 38px; }
 .subp-tune .sub-delay, .subp-tune .sub-size { margin: 0; }
 [data-form="tv"] .subp { top: 96px; bottom: auto; width: 1160px; height: 736px; display: grid; grid-template-columns: 500px 660px; border-radius: 24px; }
 [data-form="tv"] .subp-col + .subp-col { box-shadow: inset 1px 0 0 var(--line); }
@@ -387,7 +428,7 @@ html[data-engine="mpv"] .player-scr.started .player-bd { opacity: 0; }
 [data-form="desktop"] .subp .ck svg { width: 24px; height: 24px; }
 [data-form="desktop"] .flag { width: 38px; height: 38px; }
 [data-form="desktop"] .flag-space { display: none; }
-@media (hover: hover) { [data-form="desktop"] .subp .opt:hover, [data-form="desktop"] .lr-open:hover { background: color-mix(in srgb, #fff 8%, transparent); } }
+@media (hover: hover) { [data-form="desktop"] .subp .opt:not(:disabled):hover, [data-form="desktop"] .lr-open:hover { background: color-mix(in srgb, #fff 8%, transparent); } }
 /* Phone: a full-height sheet over the dimmed player, as an iPhone sheet. */
 [data-form="phone"] .panel.subp { top: calc(12px + env(safe-area-inset-top)); bottom: calc(12px + env(safe-area-inset-bottom)); right: calc(12px + env(safe-area-inset-right));
   left: auto; z-index: 9; width: min(413px, calc(100% - 24px)); max-height: none; padding: 0; display: flex; border-radius: 26px; box-shadow: 0 0 0 100vmax var(--scrim); }

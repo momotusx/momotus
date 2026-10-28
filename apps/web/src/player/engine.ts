@@ -34,7 +34,7 @@ export interface EngineEvents {
   /** The file's length is known (after any resume seek); may repeat. */
   onLoaded(): void;
   /** A subtitle file did not load. */
-  onSubtitleError(lang: string): void;
+  onSubtitleError(lang: string, line: 1 | 2): void;
 }
 
 export interface Engine {
@@ -66,11 +66,14 @@ export interface Engine {
   seek(sec: number): void;
   setRate(rate: number): void;
   setVolume(percent: number): void;
-  /** One of the core's WebVTT tracks, or none. */
-  setSubtitle(sub: { url: string; lang: string } | null): void;
-  /** Shows the subtitle `sec` seconds later (earlier when negative), for
-   * this play and every track loaded after. */
-  setSubtitleDelay(sec: number): void;
+  /** One of the core's WebVTT tracks, or none, as subtitle line `line` (the first, the
+   * subtitle; the second, plans/dual-subtitles.md). */
+  setSubtitle(sub: { url: string; lang: string } | null, line?: 1 | 2): void;
+  /** Shows line `line`'s subtitle `sec` seconds later (earlier when negative), for
+   * this play and every track loaded after on that line. */
+  setSubtitleDelay(sec: number, line?: 1 | 2): void;
+  /** The hidden text track that holds line `line`'s cues, once it is in; null for none. */
+  cueTrack(line: 1 | 2): TextTrack | null;
   /** One of the engine's own tracks (`tracks`). */
   selectTrack(kind: Track["kind"], id: string): void;
   /** Leaving the player: stop and let go of the source. */

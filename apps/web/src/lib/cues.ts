@@ -23,6 +23,8 @@ export type CueRects = {
   video: { width: number; height: number };
   /** The controls' block, the scrubber and the transport, when they are in the page. */
   bar?: Span;
+  /** The top bar (the title block), for a second line hung from the top (Split, plans/dual-subtitles.md 4). */
+  top?: Span;
   scrubber?: Span;
   transport?: Span;
   /** The controls show. */
@@ -45,6 +47,22 @@ export function cuePlace({ box, video, bar, scrubber, transport, up, lines }: Cu
   let foot = Math.min(pictureFoot - picture * FOOT, safe);
   if (up && scrubber) foot = Math.min(foot, scrubber.top - 8);
   return { at: { bottom: box.bottom - foot }, shrink: up && !!transport && foot - lines < transport.bottom && foot > transport.top };
+}
+
+/** Where Split's second line hangs from the top (plans/dual-subtitles.md 4 B): its top edge, px from the element's
+ * top, the mirror of the foot. On a landscape screen 8% of the picture's height under the picture's top; on an
+ * upright one in the band over the picture when it holds the block (its lines and 10 px), never over the 5% line.
+ * Under the top bar while the controls show, and under the lowest sign the first line's file placed in the top
+ * half (`signs`), 8 px clear of each. */
+export function cueTop({ box, video, top, up, lines, signs }: CueRects & { signs: Span[] }): number {
+  const scale = video.width && video.height ? Math.min(box.width / video.width, box.height / video.height) : 0;
+  const picture = scale ? video.height * scale : box.height;
+  const pictureTop = box.top + (box.height - picture) / 2;
+  const safe = box.top + box.height * SAFE_LINE;
+  const inBand = Math.max(safe, pictureTop - lines - 10);
+  const start = box.height > box.width && pictureTop - safe >= lines + 10 ? inBand : Math.max(pictureTop + picture * FOOT, safe);
+  const sign = Math.max(0, ...signs.filter((s) => s.top < box.top + box.height / 2).map((s) => s.bottom + 8));
+  return Math.max(start, up && top ? top.bottom + 8 : 0, sign) - box.top;
 }
 
 /** The settings a WebVTT cue carries (VTTCue's own). */

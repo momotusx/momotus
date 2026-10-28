@@ -143,7 +143,7 @@ test("the profile's language turns on at start; Off wins and is remembered", asy
   const summary = page.locator('[data-f="player:subs"] small');
   // Turkish is the profile's subtitle language, the audio is not Turkish.
   await expect(summary).toHaveText("Turkish", { timeout: 30_000 });
-  await expect.poll(() => page.evaluate(() => document.querySelector("video")?.textTracks[0]?.mode)).toBe("hidden");
+  await expect.poll(() => page.evaluate(() => document.querySelector<HTMLTrackElement>('video track[data-line="1"]')?.track?.mode)).toBe("hidden");
   // The viewer turns it off: off now, and on the next play of the title.
   await page.locator('[data-f="player:subs"]').dispatchEvent("click");
   await page.locator('[data-f="sub:off"]').dispatchEvent("click");
@@ -494,7 +494,7 @@ test("the core's marks show in the detail line; timing goes to the core once it 
   await startIfPaused(page);
   await expect(page.locator('[data-f="player:subs"] small')).toHaveText("English", { timeout: 30_000 });
   const cue = () => page.evaluate(() => {
-    const c = document.querySelector("video")?.textTracks[0]?.cues?.[0];
+    const c = document.querySelector<HTMLTrackElement>('video track[data-line="1"]')?.track?.cues?.[0];
     return c ? [c.startTime, c.endTime] : null;
   });
   await expect.poll(cue, { timeout: 30_000 }).toEqual([1.3, 30.3]);
@@ -525,19 +525,22 @@ test("the core's marks show in the detail line; timing goes to the core once it 
     { type: "subtitleDelay", url: second, ms: 100 },
   ]);
   expect((commands.filter((c) => c.command?.type === "subtitleDelay").at(-1)?.at ?? 0) - last).toBeLessThan(600);
-  // The core keeps one track's delay per title, the last one set: on the next play OPENFILM
-  // starts at 0 and Many Subs there. Then back to 0 for the core, so a rerun starts clean.
+  // The core keeps the last two tracks' delays per title, one per subtitle line (plans/dual-subtitles.md 3.3):
+  // on the next play OPENFILM starts at +0.4 and Many Subs at +0.1. Then back to 0 for the core, so a rerun starts
+  // clean.
   await page.goto(`/play/movie/${BBB_ID}/${BBB_ID}?form=desktop`);
   await expect(page.locator('[data-f="player:toggle"]')).toBeVisible({ timeout: 30_000 });
   await expect(page.locator('[data-f="player:subs"] small')).toHaveText("English", { timeout: 30_000 });
   await openEnglish();
   await expect(opts.locator(".opt.on b")).toHaveText(/^OPENFILM, WEB\b/);
-  await expect(timing).toHaveText("0.0 s");
+  await expect(timing).toHaveText("+0.4 s");
+  await opts.locator('[data-f="sub:reset"]').dispatchEvent("click");
+  await expect.poll(() => delaysSent(commands).at(-1)?.ms).toBe(0);
   await other.dispatchEvent("click");
   await openEnglish();
   await expect(timing).toHaveText("+0.1 s");
   await opts.locator('[data-f="sub:reset"]').dispatchEvent("click");
-  await expect.poll(() => delaysSent(commands).at(-1)?.ms).toBe(0);
+  await expect.poll(() => delaysSent(commands).at(-1)).toEqual({ type: "subtitleDelay", url: expect.any(String), ms: 0 });
   await fitting.dispatchEvent("click");
   // Nothing goes to a view after the page closed it (the video's pause as the player leaves).
   expect(commands.filter((c, i) => c.command && commands.slice(0, i).some((d) => !d.command && d.conn === c.conn && d.sub === c.sub))).toEqual([]);

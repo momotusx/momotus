@@ -129,7 +129,16 @@
     "findingChosen": "Finding this version",
     "chooseAnother": "Choose another version",
     "chooseAnotherSaid": "Still loading. Choose another version is available",
-    "subtitlesFailed": "Subtitles could not be loaded"
+    "subtitlesFailed": "Subtitles could not be loaded",
+    "firstLine": "First line",
+    "secondLine": "Second line",
+    "spokenLanguage": "Spoken language",
+    "spokenNotKnown": "not known for this video",
+    "onFirstLine": "On the first line",
+    "onSecondLine": "On the second line",
+    "layout": "Layout",
+    "layouts": { "stacked": "Stacked", "split": "Split", "oneBox": "One box" },
+    "onlyWhenPaused": "Only when paused"
   },
   "learned": {
     "size": {

@@ -307,7 +307,7 @@ test("subtitle size is the profile's; timing steps, holds and resets, and moves 
   await expect(p.locator(".player-scr")).toHaveAttribute("data-subsize", "large");
   // English ("eng" in the profile) turns on at start.
   const cue = () => p.evaluate(() => {
-    const c = document.querySelector("video")?.textTracks[0]?.cues?.[0];
+    const c = document.querySelector<HTMLTrackElement>('video track[data-line="1"]')?.track?.cues?.[0];
     return c ? [c.startTime, c.endTime] : null;
   });
   await expect.poll(cue, { timeout: 30_000 }).toEqual([1, 30]);
@@ -1861,7 +1861,7 @@ test("phone player, portrait and landscape: transport centred, scrubber then opt
         const v = document.querySelector("video");
         if (v) v.currentTime = 2;
       });
-      await expect.poll(() => p.evaluate(() => document.querySelector("video")?.textTracks[0]?.activeCues?.length ?? 0), { timeout: 30_000 }).toBeGreaterThan(0);
+      await expect.poll(() => p.evaluate(() => document.querySelector<HTMLTrackElement>('video track[data-line="1"]')?.track?.activeCues?.length ?? 0), { timeout: 30_000 }).toBeGreaterThan(0);
       // The controls up, by a tap on the picture.
       await p.mouse.click(size.width / 2, size.height / 3);
       await expect(p.locator(".player-scr")).not.toHaveClass(/idle/);
@@ -1878,7 +1878,7 @@ test("phone player, portrait and landscape: transport centred, scrubber then opt
       expect(size.height - options.bottom).toBeLessThan(40);
       // A phone draws its lines itself (the track runs hidden): their box,
       // their size, and the picture they belong to.
-      expect(await p.evaluate(() => document.querySelector("video")?.textTracks[0]?.mode)).toBe("hidden");
+      expect(await p.evaluate(() => document.querySelector<HTMLTrackElement>('video track[data-line="1"]')?.track?.mode)).toBe("hidden");
       const cue = () =>
         p.evaluate(() => {
           const el = document.querySelector<HTMLElement>(".cues");
@@ -1960,8 +1960,8 @@ test("TV and desktop player: the page draws the lines, over the 5% line, clear o
         const v = document.querySelector("video");
         if (v) v.currentTime = 2;
       });
-      await expect.poll(() => p.evaluate(() => document.querySelector("video")?.textTracks[0]?.activeCues?.length ?? 0), { timeout: 30_000 }).toBeGreaterThan(0);
-      expect(await p.evaluate(() => document.querySelector("video")?.textTracks[0]?.mode)).toBe("hidden");
+      await expect.poll(() => p.evaluate(() => document.querySelector<HTMLTrackElement>('video track[data-line="1"]')?.track?.activeCues?.length ?? 0), { timeout: 30_000 }).toBeGreaterThan(0);
+      expect(await p.evaluate(() => document.querySelector<HTMLTrackElement>('video track[data-line="1"]')?.track?.mode)).toBe("hidden");
       const cue = () =>
         p.evaluate(() => {
           const el = document.querySelector<HTMLElement>(".cues");
@@ -2012,11 +2012,11 @@ test("TV: a cue its file placed stays there with its styling, and no line draws 
       const v = document.querySelector("video");
       if (v) v.currentTime = 2;
     });
-    await expect.poll(() => p.evaluate(() => document.querySelector("video")?.textTracks[0]?.activeCues?.length ?? 0), { timeout: 30_000 }).toBeGreaterThan(0);
+    await expect.poll(() => p.evaluate(() => document.querySelector<HTMLTrackElement>('video track[data-line="1"]')?.track?.activeCues?.length ?? 0), { timeout: 30_000 }).toBeGreaterThan(0);
     // Two more cues on the file's track, on screen now: a styled line at the foot and a sign the file placed.
     await p.evaluate(() => {
       const v = document.querySelector("video") as HTMLVideoElement;
-      const t = v.textTracks[0] as TextTrack;
+      const t = (document.querySelector<HTMLTrackElement>('video track[data-line="1"]')?.track as TextTrack);
       t.addCue(new VTTCue(v.currentTime, v.currentTime + 120, "<i>Sung</i> <c.yellow>words</c>"));
       const sign = new VTTCue(v.currentTime, v.currentTime + 120, "A SIGN");
       sign.snapToLines = false;

@@ -105,9 +105,9 @@ test("plays a direct source through the core's stream server", async ({ page }) 
   await page.keyboard.press("Enter");
   // Big Buck Bunny has almost no dialogue, so any cue proves the track loaded.
   await expect
-    .poll(() => page.evaluate(() => document.querySelector("video")?.textTracks[0]?.cues?.length ?? 0), { timeout: 30_000 })
+    .poll(() => page.evaluate(() => document.querySelector<HTMLTrackElement>('video track[data-line="1"]')?.track?.cues?.length ?? 0), { timeout: 30_000 })
     .toBeGreaterThan(0);
-  expect(await page.evaluate(() => document.querySelector("video")?.textTracks[0]?.mode)).toBe("hidden");
+  expect(await page.evaluate(() => document.querySelector<HTMLTrackElement>('video track[data-line="1"]')?.track?.mode)).toBe("hidden");
   await expect.poll(() => focused(page)).toBe("player:subs");
   await expect(page.locator('[data-f="player:subs"] small')).not.toContainText("Off");
 

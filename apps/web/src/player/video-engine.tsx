@@ -15,7 +15,10 @@ export function createVideoEngine(events: EngineEvents): Engine {
   const [started, setStarted] = createSignal(false);
   const [waiting, setWaiting] = createSignal(false);
   const [rate, setRate] = createSignal(1);
+  // The two subtitle lines' files (plans/dual-subtitles.md), each its own <track>, read by its element.
   const [subtitle, setSubtitle] = createSignal<{ url: string; lang: string } | null>(null);
+  const [second, setSecond] = createSignal<{ url: string; lang: string } | null>(null);
+  const lines: Record<1 | 2, HTMLTrackElement | undefined> = { 1: undefined, 2: undefined };
   // Audio tracks where the browser lists them (Safari; Chromium only behind a
   // flag); subtitles are the core's WebVTT list, kept by the player.
   const [tracks, setTracks] = createSignal<Track[]>([]);
@@ -30,11 +33,11 @@ export function createVideoEngine(events: EngineEvents): Engine {
     );
   };
 
-  // The subtitle delay moves each cue from the time its file gave it.
-  let delay = 0;
+  // Each line's delay moves its cues from the time their file gave them.
+  const delays: Record<1 | 2, number> = { 1: 0, 2: 0 };
   const given = new WeakMap<TextTrackCue, [number, number]>();
-  const shiftCues = () => {
-    const cues = video?.textTracks[0]?.cues;
+  const shiftCues = (line: 1 | 2) => {
+    const cues = lines[line]?.track.cues;
     if (!cues) return;
     for (const cue of Array.from(cues)) {
       let at = given.get(cue);
@@ -42,10 +45,23 @@ export function createVideoEngine(events: EngineEvents): Engine {
         at = [cue.startTime, cue.endTime];
         given.set(cue, at);
       }
-      cue.startTime = Math.max(0, at[0] + delay);
-      cue.endTime = Math.max(0, at[1] + delay);
+      cue.startTime = Math.max(0, at[0] + delays[line]);
+      cue.endTime = Math.max(0, at[1] + delays[line]);
     }
   };
+  // The page draws the lines itself (player.tsx): each track runs hidden (a disabled one loads no cues).
+  const hide = (line: 1 | 2) => queueMicrotask(() => lines[line] && (lines[line].track.mode = "hidden"));
+  const trackEl = (line: 1 | 2, t: { url: string; lang: string }) => (
+    <track
+      ref={(el) => (lines[line] = el)}
+      kind="subtitles"
+      data-line={line}
+      src={t.url}
+      srclang={t.lang}
+      onLoad={() => shiftCues(line)}
+      onError={() => events.onSubtitleError(t.lang, line)}
+    />
+  );
 
   const start = pendingStart();
   // The listener that applies the loading source's start; a source that
@@ -105,7 +121,10 @@ export function createVideoEngine(events: EngineEvents): Engine {
       }}
     >
       <Show when={subtitle()} keyed>
-        {(t) => <track kind="subtitles" src={t.url} srclang={t.lang} default onLoad={shiftCues} onError={() => events.onSubtitleError(t.lang)} />}
+        {(t) => trackEl(1, t)}
+      </Show>
+      <Show when={second()} keyed>
+        {(t) => trackEl(2, t)}
       </Show>
     </video>
   ) as HTMLVideoElement;
@@ -153,19 +172,17 @@ export function createVideoEngine(events: EngineEvents): Engine {
     setVolume(percent) {
       video.volume = Math.min(1, Math.max(0, percent / 100));
     },
-    setSubtitle(sub) {
-      setSubtitle(sub);
-      if (sub)
-        queueMicrotask(() => {
-          const tt = video.textTracks[0];
-          // The page draws the lines itself (player.tsx): the track runs hidden.
-          if (tt) tt.mode = "hidden";
-        });
+    setSubtitle(sub, line = 1) {
+      if (line === 1) setSubtitle(sub);
+      else setSecond(sub);
+      if (!sub) lines[line] = undefined;
+      else hide(line);
     },
-    setSubtitleDelay(sec) {
-      delay = sec;
-      shiftCues();
+    setSubtitleDelay(sec, line = 1) {
+      delays[line] = sec;
+      shiftCues(line);
     },
+    cueTrack: (line) => lines[line]?.track ?? null,
     selectTrack(kind, id) {
       const list = audioList();
       if (kind !== "audio" || !list) return;

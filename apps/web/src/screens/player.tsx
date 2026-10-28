@@ -43,9 +43,9 @@ import { createVideoEngine } from "../player/video-engine";
 import { loadedSource, type Retry, sourceStart, TRYING_AGAIN_MS, tryingAgain } from "../lib/failover";
 import { bytes, clock, decoded, startsText, episodeLabel, groupFailures, playPath, playState, seasonName, titlePath, versionsPath } from "../lib/format";
 import { DELAY_SETTLE_MS } from "../lib/delay";
-import { cuePlace, cueSpot, SAFE_LINE } from "../lib/cues";
+import { cuePlace, cueSpot, cueTop, SAFE_LINE } from "../lib/cues";
 import { bufferShare, loadingLines, STALL_AHEAD_S, startFill } from "../lib/loading";
-import { fileChoice, offSummary, pickerLanguages, startOption } from "../lib/subtitles";
+import { fileChoice, offSummary, pickerLanguages, sameLanguage, startOption } from "../lib/subtitles";
 import { choiceWords, emptyWords, languageName, nextVersion, qualityCell, qualityText, restartLine, subtitleNote } from "../lib/words";
 import { VersionsPage } from "./versions";
 import "./player.css";
@@ -314,6 +314,9 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
   createEffect(on(panel, (p) => p !== "subs" && setSubLanguage(null)));
   // The core's subtitle in use, if any.
   const [track, setTrack] = createSignal<{ url: string; lang: string } | null>(null);
+  // The second subtitle line's core track (plans/dual-subtitles.md), and which line the picker sets.
+  const [second, setSecond] = createSignal<{ url: string; lang: string } | null>(null);
+  const [subLine, setSubLine] = createSignal<1 | 2>(1);
   const [subError, setSubError] = createSignal<string | null>(null);
   // Every track the start subtitle could turn on failed to read (the core's `startSubtitleFailed`):
   // said once, quietly, with no source; a pick clears it.
@@ -338,19 +341,23 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
       if (props.startOver && (history.state as { startOver?: boolean } | null)?.startOver)
         history.replaceState({ ...(history.state as object), startOver: undefined }, "");
     },
-    onSubtitleError: (lang) => setSubError(`Could not load ${languageName(lang)} subtitles from the core`),
+    // A second line the core turned on fails quietly (the core hands it over, plans/dual-subtitles.md 3.2);
+    // one the viewer picked says so, as the first line does.
+    onSubtitleError: (lang, line) => (line === 1 || chose2) && setSubError(`Could not load ${languageName(lang)} subtitles from the core`),
   });
   const { time, duration, paused, buffered, started, waiting, rate } = engine;
   // Subtitle timing per track (the size is the profile's, synced): a core
   // track starts at the delay the core keeps for it (`delayMs`), and a change
   // goes back to the core once the stepper settles and when the play closes.
   const [delays, setDelays] = createSignal<Record<string, number>>({});
-  const subDelay = () => {
-    const url = track()?.url;
+  const delayOf = (url: string | undefined) => {
     if (!url) return 0;
     return delays()[url] ?? (snap()?.subtitles.find((t) => t.url === url)?.delayMs ?? 0) / 1000;
   };
+  const subDelay = () => delayOf(track()?.url);
+  const secondDelay = () => delayOf(second()?.url);
   createEffect(() => engine.setSubtitleDelay(subDelay()));
+  createEffect(() => engine.setSubtitleDelay(secondDelay(), 2));
   let unsent: { url: string; ms: number } | null = null;
   let settle: ReturnType<typeof setTimeout> | undefined;
   const sendDelay = () => {
@@ -358,8 +365,9 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
     if (unsent) void playback()?.command({ type: "subtitleDelay", ...unsent });
     unsent = null;
   };
-  const setSubDelay = (sec: number) => {
-    const url = untrack(track)?.url;
+  const setSubDelay = (sec: number) => setDelayFor(untrack(track)?.url, sec);
+  const setSecondDelay = (sec: number) => setDelayFor(untrack(second)?.url, sec);
+  const setDelayFor = (url: string | undefined, sec: number) => {
     if (!url) return;
     // Another track's change still waiting goes first.
     if (unsent && unsent.url !== url) sendDelay();
@@ -385,25 +393,56 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
   // The foot block's lines, and the cues the file placed itself (lib/cues.ts cueSpot), each line with its
   // own markup (<i>, <b>, <c.yellow>).
   const [lines, setLines] = createSignal<Node[][]>([]);
+  // The second line's lines: every cue of its file joins them, its own placement dropped (plans/dual-subtitles.md 2.7).
+  const [secondLines, setSecondLines] = createSignal<Node[][]>([]);
   const [placed, setPlaced] = createSignal<Placed[]>([]);
   const [shrink, setShrink] = createSignal(false);
   // Until placed, at the foot (never a frame at the top).
   const [cueAt, setCueAt] = createSignal<{ top?: number; bottom?: number }>({ bottom: 16 });
+  // Split's second line, from the top (lib/cues.ts cueTop); hidden until placed (never a frame over the 5% line).
+  const [topAt, setTopAt] = createSignal<number | null>(null);
   let cuesEl: HTMLDivElement | undefined;
+  let topEl: HTMLDivElement | undefined;
+  let titleEl: HTMLElement | undefined;
+  // The profile's two-line settings (plans/dual-subtitles.md 4): how they draw, and the second only when paused.
+  const layout = () => prefs.state.data?.subtitleLayout ?? "stacked";
+  const onPause = () => !!prefs.state.data?.secondOnPause;
+  // The file's own subtitle tracks the engine lists (mpv; the <video> engine has none).
+  const fileSubs = () => engine.tracks().filter((t) => t.kind === "sub");
+  // The first line's language as drawn: the core's track's, else the file's own code.
+  const firstLanguage = () => {
+    const t = track();
+    if (t) return snap()?.subtitles.find((x) => x.url === t.url)?.language ?? t.lang;
+    return fileSubs().find((f) => f.selected)?.lang ?? null;
+  };
+  const firstOn = () => !!track() || fileSubs().some((f) => f.selected);
+  const secondLanguage = () => {
+    const t = second();
+    return t ? (snap()?.subtitles.find((x) => x.url === t.url)?.language ?? t.lang) : null;
+  };
+  // Drawn only with a first line on, never in its language (a guard over the core's rule: a pick or a file line
+  // the core does not know of), and with Only when paused, only while paused.
+  const secondDrawn = createMemo(() => !!second() && firstOn() && !sameLanguage(firstLanguage(), secondLanguage()) && (!onPause() || paused()));
   const cuesShown = () => !(panel() && form() === "phone") && !ended() && !wait();
   const readCues = () => {
-    const video = engine.view as HTMLVideoElement;
-    const active = track() ? Array.from(video.textTracks[0]?.activeCues ?? []) : [];
+    const active = (line: 1 | 2) => Array.from(engine.cueTrack(line)?.activeCues ?? []) as VTTCue[];
     const foot: Node[][] = [];
     const at: Placed[] = [];
-    for (const c of active as VTTCue[]) {
+    for (const c of track() ? active(1) : []) {
       const spot = cueSpot(c);
       if (spot) at.push({ spot, lines: cueLines(c) });
       else foot.push(...cueLines(c));
     }
     setLines(foot);
     setPlaced(at);
+    const second = secondDrawn() ? active(2).flatMap(cueLines) : [];
+    setSecondLines(second);
+    // Split's block placed afresh when it next shows (never a frame at a spot from before).
+    if (!second.length) setTopAt(null);
   };
+  // A pause shows or hides an Only when paused second line at once, not at its next cue; so does a change of
+  // what is drawn.
+  createEffect(on([paused, secondDrawn, layout], () => readCues(), { defer: true }));
   const placeCues = () => {
     const video = engine.view as HTMLVideoElement;
     // The canvas is scaled on TV and desktop (.app, --k): rects in the page's own px, as the lines are placed.
@@ -417,6 +456,20 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
     const bar = rect(".osd");
     const scrubber = rect(".scrub");
     const up = osd() && !ended() && !!bar;
+    // Split's second line: the top bar and the first line's signs in the top half, in the page's px.
+    if (topEl?.isConnected) {
+      const signs = Array.from(document.querySelectorAll<HTMLElement>(".player-scr .cue-at"), (el) => local(el.getBoundingClientRect()));
+      setTopAt(
+        cueTop({
+          box: local(screen),
+          video: { width: video.videoWidth, height: video.videoHeight },
+          top: rect(".ptitle"),
+          up,
+          lines: topEl.getBoundingClientRect().height / k,
+          signs,
+        }),
+      );
+    }
     if (cuesEl?.isConnected) {
       const place = cuePlace({
         box: local(screen),
@@ -446,7 +499,7 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
       if (foot < r.bottom) el.style.transform = `translateY(${foot - r.bottom}px)`;
     }
   };
-  createEffect(on([lines, placed, cuesShown, osd, ended, panel, () => prefs.state.data?.subtitleSize], () => requestAnimationFrame(placeCues)));
+  createEffect(on([lines, secondLines, layout, placed, cuesShown, osd, ended, panel, () => prefs.state.data?.subtitleSize], () => requestAnimationFrame(placeCues)));
   onMount(() => {
     const video = engine.view as HTMLVideoElement;
     window.addEventListener("resize", placeCues);
@@ -454,7 +507,11 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
     video.addEventListener("resize", placeCues);
     // Non-bubbling, from the track element: caught on the way down.
     video.addEventListener("cuechange", readCues, true);
+    // The title block grows with a pause's synopsis or a late label: Split's top line moves under it.
+    const title = new ResizeObserver(() => placeCues());
+    if (titleEl) title.observe(titleEl);
     onCleanup(() => {
+      title.disconnect();
       window.removeEventListener("resize", placeCues);
       video.removeEventListener("loadedmetadata", placeCues);
       video.removeEventListener("resize", placeCues);
@@ -638,6 +695,38 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
     setPanel(null);
     showSubtitle(t);
   };
+  // The second line (plans/dual-subtitles.md 6.1): the core's track, or none.
+  const showSecond = (t: SubtitleTrack | null) => {
+    const sub = t ? { url: t.url, lang: t.lang } : null;
+    setSecond(sub);
+    engine.setSubtitle(sub, 2);
+    // The old file's lines never stay over a gap in the new one's dialogue.
+    setSecondLines([]);
+    setTopAt(null);
+  };
+  // The viewer's own second line, or Off, wins over the core's for the rest of this play; the core keeps it as
+  // the profile's (`spoken`: the Spoken language row, kept as the audio's language).
+  let chose2 = false;
+  // Whether the viewer's pick in this play is the Spoken language row (null before one): the row's check
+  // follows the pick, not the profile, which a kids profile does not write.
+  const [spokenPick, setSpokenPick] = createSignal<boolean | null>(null);
+  const chooseSecond = (t: SubtitleTrack | null, spoken = false) => {
+    chose2 = true;
+    setSpokenPick(spoken);
+    void playback()?.command({ type: "secondSubtitleChosen", url: t?.url ?? null, spoken });
+    setPanel(null);
+    showSecond(t);
+  };
+  // The Spoken language row with no track of it here: nothing shows now, and the profile keeps the choice
+  // for the next titles.
+  const keepSpoken = () => {
+    // While the list is still out the core's own pick may yet bring the spoken track: keep following it.
+    if (!snap()?.subtitlesPending) chose2 = true;
+    setSpokenPick(true);
+    void op("setPrefs", { patch: { secondSubtitle: "audio" } }).catch(() => undefined);
+    setPanel(null);
+    showSecond(null);
+  };
 
   // The viewer's own pick, or Off, wins over the core's start pick for the
   // rest of this play, and the core remembers it for the title.
@@ -661,12 +750,21 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
     const k = s?.key ?? null;
     if (k && version && k !== version) {
       chose = false;
+      chose2 = false;
+      setSpokenPick(null);
       notesSeen = 0;
       setSubError(null);
       setTrack(null);
       engine.setSubtitle(null);
+      showSecond(null);
     }
     if (k) version = k;
+    // The second line follows the core's as a level until the viewer picks one: a change of the first line may
+    // move it, or turn it off (null).
+    if (!chose2) {
+      const want = s?.subtitles.find((t) => t.url === s?.autoSecondSubtitle) ?? null;
+      if (untrack(second)?.url !== want?.url) showSecond(want);
+    }
     const auto = s?.autoSubtitle;
     if (!auto || chose) return;
     // Once the file has opened, its own track in that language (not forced)
@@ -693,6 +791,8 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
       setTrack(null);
       engine.setSubtitle(null);
     }
+    const two = untrack(second);
+    if (two && !listed.has(two.url)) showSecond(null);
   });
   createEffect(
     on(
@@ -865,7 +965,6 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
   // The engine's own tracks (player/engine.ts): mpv lists the file's audio
   // and subtitle tracks; the <video> engine at most the audio ones.
   const audioTracks = () => engine.tracks().filter((t) => t.kind === "audio");
-  const fileSubs = () => engine.tracks().filter((t) => t.kind === "sub");
   // Audio: the track the engine reports, else what the playing version says.
   const audioText = () => {
     const picked = audioTracks().find((t) => t.selected);
@@ -888,9 +987,23 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
   // The Subtitles button's value: the language on, else the count.
   const subsText = () => {
     const on = track() ? snap()?.subtitles.find((t) => t.url === track()?.url) : undefined;
-    if (track()) return on?.languageName ?? languageName(track()?.lang ?? "");
     const file = fileSubs().find((t) => t.selected);
-    return file?.lang ? languageName(file.lang) : subsOff().text;
+    const first = track() ? (on?.languageName ?? languageName(track()?.lang ?? "")) : file?.lang ? languageName(file.lang) : null;
+    if (!first) return subsOff().text;
+    // Two lines on: "Turkish + English".
+    const two = second() && firstOn() && !sameLanguage(firstLanguage(), secondLanguage()) ? snap()?.subtitles.find((t) => t.url === second()?.url) : undefined;
+    return two ? `${first} + ${two.languageName}` : first;
+  };
+  // The Layout stepper (plans/dual-subtitles.md 5.1): the profile's, in this order.
+  const LAYOUTS = ["stacked", "split", "oneBox"] as const;
+  const layoutTune = () => {
+    const at = Math.max(0, LAYOUTS.indexOf(layout()));
+    const set = (i: number) => void op("setPrefs", { patch: { subtitleLayout: LAYOUTS[i] } }).catch(() => undefined);
+    return {
+      text: choiceWords.player.layouts[layout()],
+      less: at > 0 ? () => set(at - 1) : undefined,
+      more: at < LAYOUTS.length - 1 ? () => set(at + 1) : undefined,
+    };
   };
   const sizeAt = () => Math.max(0, SIZES.findIndex((s) => s.size === (prefs.state.data?.subtitleSize ?? "medium")));
   const setSize = (i: number) => {
@@ -1065,7 +1178,9 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
       {engine.view}
       {/* Not under a phone's panel (its sheet covers the foot) nor a card, nor over the loading layer (a start, a
           re-buffer, a move to another version); a TV's or a desktop's side panel draws over them. */}
-      <Show when={lines().length > 0 && cuesShown()}>
+      {/* One foot block: Stacked and One box draw the second line over the first in it, at 85%; Split draws it
+          from the top at full size (plans/dual-subtitles.md 4). */}
+      <Show when={(lines().length > 0 || (layout() !== "split" && secondLines().length > 0)) && cuesShown()}>
         <div
           class="cues"
           classList={{ small: shrink() }}
@@ -1073,7 +1188,27 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
           aria-live="off"
           style={{ top: cueAt().top !== undefined ? `${cueAt().top}px` : undefined, bottom: cueAt().bottom !== undefined ? `${cueAt().bottom}px` : undefined }}
         >
-          <For each={lines()}>{(l) => <span class="cue">{l}</span>}</For>
+          <Show
+            when={layout() === "oneBox"}
+            fallback={
+              <>
+                <Show when={layout() !== "split"}>
+                  <For each={secondLines()}>{(l) => <span class="cue cue2" dir="auto">{l}</span>}</For>
+                </Show>
+                <For each={lines()}>{(l) => <span class="cue" dir="auto">{l}</span>}</For>
+              </>
+            }
+          >
+            <div class="cue-box">
+              <For each={secondLines()}>{(l) => <span class="cue cue2" dir="auto">{l}</span>}</For>
+              <For each={lines()}>{(l) => <span class="cue" dir="auto">{l}</span>}</For>
+            </div>
+          </Show>
+        </div>
+      </Show>
+      <Show when={layout() === "split" && secondLines().length > 0 && cuesShown()}>
+        <div class="cues cues-top" ref={topEl} aria-live="off" style={{ top: `${topAt() ?? 0}px`, visibility: topAt() === null ? "hidden" : undefined }}>
+          <For each={secondLines()}>{(l) => <span class="cue" dir="auto">{l}</span>}</For>
         </div>
       </Show>
       <Show when={placed().length > 0 && cuesShown()}>
@@ -1112,7 +1247,7 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
       <div class="osd-top" />
       <div class="osd-bot" />
 
-      <header class="ptitle">
+      <header class="ptitle" ref={titleEl}>
         {/* A remote has Back; a desktop and a phone have it here, in every state. */}
         <Show when={form() !== "tv"}>
           {/* Choose another version sits beside Back here (under the stage line on TV): Tab reaches it after Back. */}
@@ -1480,6 +1615,21 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
           open={subLanguage()}
           setOpen={setSubLanguage}
           timing={track() ? { value: subDelay(), set: setSubDelay, track: track()?.url ?? "" } : null}
+          line={firstOn() ? subLine() : 1}
+          setLine={setSubLine}
+          firstOn={firstOn()}
+          firstLanguage={firstOn() ? firstLanguage() : null}
+          second={{
+            on: second()?.url ?? null,
+            language: second() && firstOn() ? secondLanguage() : null,
+            spoken: snap()?.spokenLanguage ?? null,
+            spokenOn: spokenPick() ?? (!!second() && prefs.state.data?.secondSubtitle === "audio"),
+            timing: second() ? { value: secondDelay(), set: setSecondDelay, track: second()?.url ?? "" } : null,
+            layout: layoutTune(),
+            onPause: { on: onPause(), set: (on: boolean) => void op("setPrefs", { patch: { secondOnPause: on } }).catch(() => undefined) },
+            pick: chooseSecond,
+            keepSpoken,
+          }}
           size={{
             text: SIZES[sizeAt()]?.text ?? "100%",
             less: sizeAt() > 0 ? () => setSize(sizeAt() - 1) : undefined,

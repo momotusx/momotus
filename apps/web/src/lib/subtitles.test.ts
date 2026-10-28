@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import type { SubtitleTrack } from "../core/generated/SubtitleTrack";
-import { bestOption, byLanguage, FITS, fileChoice, flagFile, flagGlyph, MATCHES, matchesLanguage, middle, offSummary, optionCount, pickerLanguages, startOption, trackDetail } from "./subtitles";
+import { bestOption, byLanguage, FITS, fileChoice, flagFile, flagGlyph, MATCHES, matchesLanguage, middle, offSummary, optionCount, pickerLanguages, sameLanguage, secondLanguages, startOption, trackDetail } from "./subtitles";
 
 const track = (language: string, languageName: string, name: string, more: Partial<SubtitleTrack> = {}): SubtitleTrack => ({
   url: `http://127.0.0.1/sub/${language}/${name}`,
@@ -203,4 +203,27 @@ test("a pick inside the file tells the core its language, as the file names it",
 test("a language with no flag shows the glyph when it is a glyph language, else its letters", () => {
   for (const tag of ["zh-Hant", "zh", "ar", "ar-EG", "ps", "tok"]) expect([tag, flagGlyph(tag)]).toEqual([tag, true]);
   for (const tag of ["tlh", "zz", "pt-BR", "en"]) expect([tag, flagGlyph(tag)]).toEqual([tag, false]);
+});
+
+test("the Second line tab lists the core's languages in its order, the first line's disabled", () => {
+  const second = secondLanguages(tracks, "tr", nameOf);
+  expect(second.map((l) => [l.name, l.disabled])).toEqual([
+    ["Turkish", true],
+    ["English", false],
+    ["Portuguese (Brazil)", false],
+    ["German", false],
+  ]);
+  // No first line: none disabled; a file code reads as its tag.
+  expect(secondLanguages(tracks, null, nameOf).some((l) => l.disabled)).toBe(false);
+  expect(secondLanguages(tracks, "eng", nameOf).find((l) => l.language === "en")?.disabled).toBe(true);
+});
+
+test("one language is one language by its base, whatever the spelling", () => {
+  expect(sameLanguage("en", "en-GB")).toBe(true);
+  expect(sameLanguage("eng", "en")).toBe(true);
+  // An OpenSubtitles file code reads as its tag: "pob" is Brazilian Portuguese.
+  expect(sameLanguage("pt-BR", "pob")).toBe(true);
+  expect(sameLanguage("tr", "en")).toBe(false);
+  expect(sameLanguage("und", "und")).toBe(false);
+  expect(sameLanguage(null, "en")).toBe(false);
 });
