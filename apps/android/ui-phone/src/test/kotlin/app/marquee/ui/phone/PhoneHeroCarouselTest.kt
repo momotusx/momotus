@@ -211,8 +211,8 @@ class PhoneHeroCarouselTest {
         show(all.take(1))
         val update = CoreJson.encodeToString(HomeUpdate.serializer(), HomeUpdate.Header(HomeHeader(all)))
         client.onMessage("""{"sub":7,"updates":[$update]}""")
-        waitFor("the list grew to three dots") {
-            compose.onAllNodesWithContentDescription("Page 3 of 3, Page Three").fetchSemanticsNodes().isNotEmpty()
+        waitFor("the list grew to three pages") {
+            compose.onAllNodesWithContentDescription("Page 1 of 3, Page One").fetchSemanticsNodes().isNotEmpty()
         }
         waitFor("still on the first page") { settledOn("Page One") }
         compose.onNodeWithText("Page One").performTouchInput { swipeRight() }
