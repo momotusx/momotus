@@ -18,8 +18,12 @@ const SAVE_EVERY: Duration = Duration::from_secs(5);
 /// A swarm that gives nothing for this long, the job allowed to fetch the
 /// whole time, is given up for the pick's next source (4.3).
 const STALL: Duration = Duration::from_secs(600);
-/// The longest a run waits for an earlier release of its torrent.
+/// The longest a run waits for an earlier release of its torrent (10 s
+/// in test builds, so a test sees a stuck one let go).
+#[cfg(not(feature = "test-hooks"))]
 const RELEASE_WAIT: Duration = Duration::from_secs(60);
+#[cfg(feature = "test-hooks")]
+const RELEASE_WAIT: Duration = Duration::from_secs(10);
 
 /// Fetches `stream` (a torrent) for the job `row` with the engine.
 pub(super) async fn fetch(

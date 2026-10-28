@@ -1235,12 +1235,11 @@ async fn a_torrent_download_plays_offline() {
     );
 }
 
-/// A torrent download removed and added again at once downloads whole:
-/// the new run waits for the old one's release of the same file, which
-/// would otherwise stop its fetch (code review r3 N2).
+/// A loopback swarm whose seeder an HTTP tracker names, and a stream of
+/// its film listing that tracker: every add finds the seeder, even after
+/// the torrent was let go. The tracker lives as long as its handle.
 #[cfg(feature = "torrent")]
-#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn a_torrent_removed_and_added_again_downloads_whole() {
+async fn tracked_swarm() -> (support::Swarm, serde_json::Value, support::HttpTracker) {
     let (v4, v6) = (std::net::Ipv4Addr::LOCALHOST, std::net::Ipv6Addr::LOCALHOST);
     let s = support::swarm_scoped(v4.into(), &[v4.into()], &[v4.into(), v6.into()], true).await;
     // A tracker that names the seeder: every add, the job's own included,
@@ -1260,9 +1259,19 @@ async fn a_torrent_removed_and_added_again_downloads_whole() {
         "name": "Fixture\n1080p", "title": "Sintel.2010.1080p.WEB.x264-GROUP",
         "infoHash": s.info_hash, "sources": [format!("tracker:{}", tracker.url)]
     });
+    (s, stream, tracker)
+}
+
+/// A torrent download removed and added again at once downloads whole:
+/// the new run waits for the old one's release of the same file, which
+/// would otherwise stop its fetch (code review r3 N2).
+#[cfg(feature = "torrent")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_torrent_removed_and_added_again_downloads_whole() {
+    let (s, stream, _tracker) = tracked_swarm().await;
     let core = core_with(addon_listing(stream, Duration::ZERO).await).await;
     core.set_torrent_engine(s.leecher.clone());
-    mq_runtime::downloads::slow_release_for_tests(&s.info_hash, true);
+    mq_runtime::downloads::slow_release_for_tests(&s.info_hash, Some(Duration::from_secs(5)));
     let ids = mq_runtime::downloads::add(&core, movie()).await.unwrap();
     until(&core, &ids[0], "done", |r| r.state == DownloadState::Done).await;
     core.downloads()
@@ -1285,7 +1294,7 @@ async fn a_torrent_removed_and_added_again_downloads_whole() {
         1,
         "the old release let the new download's file go"
     );
-    mq_runtime::downloads::slow_release_for_tests(&s.info_hash, false);
+    mq_runtime::downloads::slow_release_for_tests(&s.info_hash, None);
     core.downloads().set_link(Link {
         offline: true,
         ..Link::default()
@@ -1313,6 +1322,34 @@ async fn a_torrent_removed_and_added_again_downloads_whole() {
         .await
         .unwrap();
     assert_eq!(got.body[..], s.movie[100_000..104_096]);
+}
+
+/// A release that never ends holds a new run of its torrent only so long
+/// (10 s in test builds, a minute in the app): the run goes on and
+/// downloads, never Running with nothing coming (code review r5 R5-1).
+#[cfg(feature = "torrent")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_stuck_release_holds_the_next_run_only_so_long() {
+    let (s, stream, _tracker) = tracked_swarm().await;
+    let core = core_with(addon_listing(stream, Duration::ZERO).await).await;
+    core.set_torrent_engine(s.leecher.clone());
+    let ids = mq_runtime::downloads::add(&core, movie()).await.unwrap();
+    until(&core, &ids[0], "done", |r| r.state == DownloadState::Done).await;
+    mq_runtime::downloads::slow_release_for_tests(&s.info_hash, Some(Duration::from_secs(600)));
+    core.downloads()
+        .act(&ids, mq_runtime::downloads::Action::Remove)
+        .unwrap();
+    let again = mq_runtime::downloads::add(&core, movie()).await.unwrap();
+    let deadline = std::time::Instant::now() + Duration::from_secs(30);
+    loop {
+        let row = row_of(&core, &again[0]);
+        if row.as_ref().is_some_and(|r| r.state == DownloadState::Done) {
+            break;
+        }
+        assert!(std::time::Instant::now() < deadline, "held: {row:?}");
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+    mq_runtime::downloads::slow_release_for_tests(&s.info_hash, None);
 }
 
 /// Online, a partial torrent download whose start is not on disk (its
