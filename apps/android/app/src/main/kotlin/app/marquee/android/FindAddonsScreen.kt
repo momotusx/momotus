@@ -81,12 +81,14 @@ import app.marquee.core.FindAddons.Action
 import app.marquee.core.FindAddonsCopy
 import app.marquee.core.FindAddonsPage
 import app.marquee.core.InstallCards
+import app.marquee.core.InstallSheetCopy
 import app.marquee.core.LinkInstall
 import app.marquee.core.model.ListState
 import app.marquee.core.model.ListedAddon
 import app.marquee.core.session.CoreSession
 import app.marquee.core.views.ViewStatus
 import app.marquee.design.Chip
+import app.marquee.design.ConfirmSheet
 import app.marquee.design.FocusInk
 import app.marquee.design.Form
 import app.marquee.design.Icons
@@ -651,8 +653,33 @@ fun FindAddonsScreen(
                 }
             }
         }
+        // Nothing installs from a card before this sheet's Install (plans/addon-install-sheet.md).
+        page.asking?.let { entry ->
+            InstallSheet(entry.name, entry.host, entry.provides, entry.types, page::confirm, page::cancel)
+        }
     }
 }
+
+/**
+ * The install sheet for an addon (plans/addon-install-sheet.md): "Install {name}?", where it comes from, what it
+ * adds and the third-party note, from a card's entry or a pasted link's preview. [onInstall] and [onCancel] close it.
+ */
+@Composable
+internal fun InstallSheet(
+    name: String,
+    host: String,
+    provides: List<String>,
+    types: List<String>,
+    onInstall: () -> Unit,
+    onCancel: () -> Unit,
+) = ConfirmSheet(
+    InstallSheetCopy.title(name),
+    InstallSheetCopy.lines(host, provides, types),
+    InstallSheetCopy.INSTALL,
+    InstallSheetCopy.CANCEL,
+    onConfirm = onInstall,
+    onCancel = onCancel,
+)
 
 /** Frames a focus landing tries for (about 1.5 s): the list may still be on its way. */
 private const val LAND_FRAMES = 90

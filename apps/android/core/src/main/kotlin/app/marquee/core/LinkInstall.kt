@@ -4,6 +4,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import app.marquee.core.client.CoreError
+import app.marquee.core.model.AddonInfo
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -36,6 +37,22 @@ class LinkInstall(
      */
     var offered: String? by mutableStateOf(null)
 
+    /**
+     * A link read by the core and waiting for the install sheet's answer (plans/addon-install-sheet.md):
+     * [confirm] installs it, [cancel] drops it. The link may hold keys: memory only, never shown or logged.
+     */
+    class Checked(
+        val url: String,
+        val addon: AddonInfo,
+        /** The user said a link with a sign-in is theirs: the install says so too. */
+        val acknowledged: Boolean,
+    ) {
+        override fun toString() = "Checked(${addon.name})"
+    }
+
+    var checked: Checked? by mutableStateOf(null)
+        private set
+
     val busy get() = said?.pending == true
 
     // Bumped for a new profile: a request from before must not land on the new profile's pages.
@@ -63,18 +80,66 @@ class LinkInstall(
                     Said("Added $name", failed = false)
                 } catch (e: CancellationException) {
                     throw e
-                } catch (e: CoreError) {
-                    if (e.code == TOKEN_IN_LINK && !acknowledgeToken) {
-                        Said(TOKEN_WARNING, failed = true, token = true)
-                    } else {
-                        Said("Adding the addon did not work: ${InstallCards.wordsOf(e)}", failed = true)
-                    }
                 } catch (e: Exception) {
-                    Said("Adding the addon did not work: ${InstallCards.wordsOf(e)}", failed = true)
+                    refused(e, acknowledgeToken)
                 }
             if (mine == generation) said = after
         }
     }
+
+    /**
+     * Reads [url] with [preview] before anything installs: "Checking" while it runs, then the sheet
+     * ([checked]), or the sign-in warning or the failure under the field as an add says them. The
+     * warning's confirm checks again with [acknowledgeToken]. Null while a request runs or a sheet is open.
+     */
+    fun check(
+        url: String,
+        acknowledgeToken: Boolean = false,
+        preview: suspend (url: String, acknowledgeToken: Boolean) -> AddonInfo,
+    ): Job? {
+        if (busy || checked != null) return null
+        val mine = generation
+        said = Said(InstallSheetCopy.CHECKING, failed = false, pending = true)
+        return scope.launch {
+            val after =
+                try {
+                    val addon = preview(url, acknowledgeToken)
+                    if (mine == generation) checked = Checked(url, addon, acknowledgeToken)
+                    null
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    refused(e, acknowledgeToken)
+                }
+            if (mine == generation) said = after
+        }
+    }
+
+    /** The sheet's Install: the checked link goes in with [install] (url, acknowledged), as [run] adds. */
+    fun confirm(
+        install: suspend (url: String, acknowledgeToken: Boolean) -> String,
+        added: () -> Unit = {},
+    ): Job? {
+        val sure = checked ?: return null
+        checked = null
+        return run({ ack -> install(sure.url, ack) }, added, sure.acknowledged)
+    }
+
+    /** The sheet's Cancel and Back: nothing installs, the field keeps its link. */
+    fun cancel() {
+        checked = null
+    }
+
+    /** A failed add or check, in the core's words; a sign-in not yet acknowledged is the warning. */
+    private fun refused(
+        e: Exception,
+        acknowledged: Boolean,
+    ): Said =
+        if (e is CoreError && e.code == TOKEN_IN_LINK && !acknowledged) {
+            Said(TOKEN_WARNING, failed = true, token = true)
+        } else {
+            Said("Adding the addon did not work: ${InstallCards.wordsOf(e)}", failed = true)
+        }
 
     /** The field changed after a sign-in warning: the warning was about the old link, so it goes. */
     fun edited() {
@@ -85,6 +150,7 @@ class LinkInstall(
     fun forget() {
         generation++
         said = null
+        checked = null
         offered = null
     }
 

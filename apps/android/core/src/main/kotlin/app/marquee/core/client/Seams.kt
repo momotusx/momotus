@@ -20,6 +20,7 @@ object CoreTimeouts {
     val network: Duration = 60.seconds
     private val networkOps =
         setOf(
+            "previewAddon",
             "installAddon",
             "installListed",
             "syncNow",

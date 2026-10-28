@@ -642,6 +642,9 @@ internal fun LinkField(
     compact: Boolean = false,
 ) {
     val said = link.said?.let { Said(Place.Install, it.words, it.failed, it.pending) }
+    // What clears the field once the sheet's Install added its link.
+    var clear by remember { mutableStateOf({}) }
+    val scope = rememberCoroutineScope()
     // A link whose settings carry a sign-in is refused first; the user's confirm sends the field's
     // link (an edit drops the warning, so it is the link warned about), acknowledged.
     InstallField(
@@ -654,10 +657,30 @@ internal fun LinkField(
         onEdit = link::edited,
         offered = link.offered,
         onTaken = { link.offered = null },
-    ) { url, acknowledged, clear ->
-        link.run({ ack -> session.ops.installAddon(url, acknowledgeToken = ack).name }, clear, acknowledged)
+    ) { url, acknowledged, clearField ->
+        clear = clearField
+        link.check(url, acknowledged, session.ops::previewAddon)
+    }
+    // Nothing installs from the link before this sheet's Install (plans/addon-install-sheet.md). Cancel keeps the
+    // link in the field and gives the focus back to Add, which "Checking" had turned off.
+    link.checked?.let { checked ->
+        val addon = checked.addon
+        InstallSheet(
+            addon.name,
+            addon.host,
+            addon.provides,
+            addon.types,
+            onInstall = { link.confirm({ url, ack -> session.ops.installAddon(url, ack).name }, clear) },
+            onCancel = {
+                link.cancel()
+                scope.launch { focusSoon(focus, CANCEL_FOCUS_FRAMES) }
+            },
+        )
     }
 }
+
+/** Frames Add is asked for the focus after a Cancel (about 0.5 s), while the sheet's window goes. */
+private const val CANCEL_FOCUS_FRAMES = 30
 
 /** A field for an addon link (https, http or stremio://) and the button that adds it. */
 @Composable

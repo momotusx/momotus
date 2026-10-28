@@ -1,6 +1,7 @@
 package app.marquee.core.session
 
 import app.marquee.core.client.CoreClient
+import app.marquee.core.model.AddonInfo
 import app.marquee.core.model.ApprovedPairing
 import app.marquee.core.model.DebridRecord
 import app.marquee.core.model.DebridTombstone
@@ -118,6 +119,23 @@ class CoreOps(
      */
     suspend fun languages(device: String? = null): List<LanguageChoice> =
         call("languages", device?.let { mapOf("device" to text(it)) } ?: emptyMap(), languageList)
+
+    /**
+     * What a pasted link would install, for the install sheet: its manifest read, nothing written. The
+     * same sign-in rule as [installAddon] comes first.
+     */
+    suspend fun previewAddon(
+        url: String,
+        acknowledgeToken: Boolean = false,
+    ): AddonInfo =
+        call(
+            "previewAddon",
+            buildMap {
+                put("url", text(url))
+                if (acknowledgeToken) put("acknowledgeToken", JsonPrimitive(true))
+            },
+            AddonInfo.serializer(),
+        )
 
     /**
      * A link whose settings carry a sign-in is refused with code `tokenInLink` before anything is

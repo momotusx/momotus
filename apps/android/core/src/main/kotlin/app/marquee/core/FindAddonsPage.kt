@@ -29,16 +29,44 @@ class FindAddonsPage(
         view = open(true)
     }
 
-    /** Installs a listed entry, or turns on the link its action names (a configured copy's for copyOff). */
+    /**
+     * The entry whose install sheet is open (plans/addon-install-sheet.md): nothing installs before its
+     * Install, [confirm].
+     */
+    var asking: ListedAddon? by mutableStateOf(null)
+        private set
+
+    /** Opens the install sheet for Install, or turns on the link its action names (a configured copy's for copyOff). */
     fun press(
         entry: ListedAddon,
         action: Action,
     ): Job? =
         when (action) {
-            is Action.Install -> cards.run(entry.key) { ops.installListed(entry.key) }
-            is Action.TurnOn -> cards.run(entry.key) { ops.setAddonEnabled(action.url, true) }
-            else -> null
+            is Action.Install -> {
+                asking = entry
+                null
+            }
+
+            is Action.TurnOn -> {
+                cards.run(entry.key) { ops.setAddonEnabled(action.url, true) }
+            }
+
+            else -> {
+                null
+            }
         }
+
+    /** The sheet's Install: the entry it was opened for goes in, once. */
+    fun confirm(): Job? {
+        val entry = asking ?: return null
+        asking = null
+        return cards.run(entry.key) { ops.installListed(entry.key) }
+    }
+
+    /** The sheet's Cancel and Back: nothing installs. */
+    fun cancel() {
+        asking = null
+    }
 
     override fun close() = view.close()
 }

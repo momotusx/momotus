@@ -85,7 +85,7 @@ import androidx.compose.ui.unit.sp
 import androidx.core.net.toUri
 import kotlinx.coroutines.flow.first
 
-private enum class ButtonKind { Primary, Secondary }
+private enum class ButtonKind { Primary, Secondary, Key }
 
 /**
  * A secondary's fill (design/DECISION.md, Secondary actions): white at 16 percent with a pure white
@@ -159,18 +159,24 @@ private fun ButtonShell(
     val buttons = LocalButtonFocus.current
     val yields = kind == ButtonKind.Primary && (quiet || (tv && !focused && (buttons?.intValue ?: 0) > 0))
     ButtonFocused(focused && (kind == ButtonKind.Secondary || quiet))
+    // A sheet's primary off the TV (design/DECISION.md, Key color): `keyFill` with a white label.
     val background =
-        buttonFill(
-            kind == ButtonKind.Primary,
-            selected,
-            tvFocused = tv && focused,
-            colors,
-            yields,
-            LocalOverPicture.current,
-        )
+        if (kind == ButtonKind.Key) {
+            colors.keyFill
+        } else {
+            buttonFill(
+                kind == ButtonKind.Primary,
+                selected,
+                tvFocused = tv && focused,
+                colors,
+                yields,
+                LocalOverPicture.current,
+            )
+        }
     // A secondary's label is pure white, never the 92 percent text, and dark on a TV focus's white.
     val content =
         when {
+            kind == ButtonKind.Key -> colors.onKey
             kind == ButtonKind.Primary && !yields -> colors.onPrimary
             tv && focused -> colors.text
             else -> Color.White
@@ -241,6 +247,15 @@ fun PrimaryButton(
     onFocusChange,
     quiet = quiet,
 )
+
+/** A sheet's primary on a phone or desktop, never on TV: the `keyFill` blue pill (Done on the six-digit sheet). */
+@Composable
+fun KeyButton(
+    label: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    focusRequester: FocusRequester? = null,
+) = ButtonShell(label, onClick, modifier, null, ButtonKind.Key, false, true, false, focusRequester, null)
 
 /**
  * @param selected a toggle that is on (Watched, In Library): drawn in the selected grey.

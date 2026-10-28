@@ -92,14 +92,33 @@ class FindAddonsPageTest {
         FindAddonsPage(CoreOps(client), cards) { fresh -> AddonCatalogView(client, scope, fresh).also { it.open() } }
 
     @Test
-    fun `a press installs the listed key, or turns on the link its action names`() =
+    fun `a press opens the install sheet, and only its Install installs the listed key, once`() =
         runBlocking {
             val page = page()
             val absent = entry()
-            page.press(absent, FindAddons.cardAction(absent, null))!!.join()
-            val install = sent.last { it.op == "installListed" }
-            assertEquals("https://a.example/manifest.json", install.getValue("key").jsonPrimitive.content)
+            // Install opens the sheet and sends nothing.
+            assertNull(page.press(absent, FindAddons.cardAction(absent, null)))
+            assertEquals(absent, page.asking)
+            // Cancel closes it, still nothing sent.
+            page.cancel()
+            assertNull(page.asking)
+            assertNull(page.confirm())
+            page.press(absent, FindAddons.cardAction(absent, null))
+            page.confirm()!!.join()
+            // A second Install on the closed sheet sends nothing more.
+            assertNull(page.confirm())
+            assertNull(page.asking)
+            val installs = sent.filter { it.op == "installListed" }
+            assertEquals(1, installs.size)
+            assertEquals("https://a.example/manifest.json", installs[0].getValue("key").jsonPrimitive.content)
+            page.close()
+        }
 
+    @Test
+    fun `a press turns on the link its action names, and does nothing for the others`() =
+        runBlocking {
+            val page = page()
+            val absent = entry()
             val copy =
                 entry(Installed.CopyOff, Configuration.Required, copyKey = "https://a.example/set/manifest.json")
             page.press(copy, FindAddons.cardAction(copy, null))!!.join()
