@@ -68,6 +68,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ViewModel
@@ -411,7 +412,7 @@ fun PillProfile(
         Modifier
             .padding(start = 8.dp)
             // In the bar, as the tabs: it scales and turns white, and does not rise out of the bar.
-            .marqueeFocus(14.dp, Tokens.FOCUS_SCALE_TILE, rise = false)
+            .marqueeFocus(23.dp, Tokens.FOCUS_SCALE_TILE, rise = false)
             .onFocusChanged { focused = it.isFocused }
             .padding(3.dp)
             .semantics(mergeDescendants = true) { contentDescription = "Profile: ${me.name}, switch profile" }
@@ -609,7 +610,7 @@ fun PickerScreen(
 }
 
 @Composable
-private fun ProfileTile(
+internal fun ProfileTile(
     p: ProfileInfo,
     active: Boolean,
     modifier: Modifier,
@@ -642,7 +643,7 @@ private fun ProfileTile(
         // The focus treatment follows the clickable tile around it (the box itself never takes focus).
         Box(
             Modifier
-                .marqueeFocus(size * 0.2f, Tokens.FOCUS_SCALE_ART, forced = hasFocus, art = true),
+                .marqueeFocus(size / 2, Tokens.FOCUS_SCALE_ART, forced = hasFocus, art = true),
         ) { ProfileAvatar(p, size, lit = focused) }
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             MqText(
@@ -659,7 +660,7 @@ private fun ProfileTile(
 }
 
 @Composable
-private fun AddTile(onClick: () -> Unit) {
+internal fun AddTile(onClick: () -> Unit) {
     val tv = Marquee.form == Form.Tv
     val colors = Marquee.colors
     val size = if (tv) 168.dp else 112.dp
@@ -675,13 +676,12 @@ private fun AddTile(onClick: () -> Unit) {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(if (tv) 16.dp else 10.dp),
     ) {
-        val shape = RoundedCornerShape(size * 0.2f)
         Box(
             Modifier
-                .marqueeFocus(size * 0.2f, forced = hasFocus)
+                .marqueeFocus(size / 2, forced = hasFocus)
                 .size(size)
-                .clip(shape)
-                .background(colors.raised),
+                .clip(CircleShape)
+                .background(colors.surface),
             contentAlignment = Alignment.Center,
         ) { MqIcon(Icons.Plus, tint = colors.muted, size = size * 0.4f) }
         MqText(
@@ -1081,23 +1081,11 @@ fun EditProfileScreen(
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
                     ProfileCopy.GLYPHS.forEach { g ->
-                        Choice(selected = glyph == g, label = ProfileCopy.glyphName(g), onClick = {
+                        val pick = if (Marquee.form == Form.Tv) 64.dp else 48.dp
+                        Choice(selected = glyph == g, label = ProfileCopy.glyphName(g), size = pick, onClick = {
                             glyph = g
                             touched = true
-                        }) {
-                            AvatarArt(
-                                g,
-                                color,
-                                ProfileCopy.initial(name.ifBlank { "?" }),
-                                if (Marquee.form ==
-                                    Form.Tv
-                                ) {
-                                    64.dp
-                                } else {
-                                    48.dp
-                                },
-                            )
-                        }
+                        }) { AvatarArt(g, color, ProfileCopy.initial(name.ifBlank { "?" }), pick) }
                     }
                 }
                 PrimaryButton(if (isNew) "Add profile" else "Save", ::save, icon = Icons.Check, enabled = !saving)
@@ -1285,22 +1273,23 @@ private fun RemovePinAsk(
     }
 }
 
-/** A picture choice: selected is the white ring; spoken by its name with its state. */
+private val CHOICE_PAD = 6.dp
+
+/** A picture choice: selected is a grey disc behind the picture; spoken by its name with its state. */
 @Composable
-private fun Choice(
+internal fun Choice(
     selected: Boolean,
     label: String,
+    size: Dp,
     onClick: () -> Unit,
     content: @Composable () -> Unit,
 ) {
-    val colors = Marquee.colors
-    val shape = RoundedCornerShape(16.dp)
     Box(
         Modifier
-            .marqueeFocus(16.dp)
-            .clip(shape)
-            .border(3.dp, if (selected) colors.text else Color.Transparent, shape)
-            .padding(4.dp)
+            .marqueeFocus((size + CHOICE_PAD * 2) / 2)
+            .clip(CircleShape)
+            .background(if (selected) Tokens.selectedFill else Color.Transparent)
+            .padding(CHOICE_PAD)
             .semantics(mergeDescendants = true) {
                 contentDescription = label
                 this.selected = selected
