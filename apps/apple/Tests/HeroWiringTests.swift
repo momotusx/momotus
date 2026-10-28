@@ -101,7 +101,7 @@ private func source(_ path: String) throws -> String {
     #expect(try source("Home/HeroPager.swift").components(separatedBy: "sound = true").count == 1)
 }
 
-@Test func aLatePlayKeepsItsPlaceAndTakesTheTVFocusOnlyIfTheViewerHasNotMoved() throws {
+@Test func aLatePlayKeepsItsPlaceAndNeverTakesTheTVFocus() throws {
     // Review r4: while the core reads a page's episodes, Play's place is held, hidden and out of reach, so Details
     // never moves when Play lands.
     let button = try body(of: "@ViewBuilder private func playButton(_ hero: Hero) -> some View", in: try source("Home/HeroView.swift"))
@@ -111,14 +111,11 @@ private func source(_ path: String) throws -> String {
     #expect(slot.contains(".disabled(true)"))
     #expect(slot.contains(".hidden()"))
     #expect(slot.contains(".accessibilityHidden(true)"))
-    // TV: the start focus moves to a Play that lands late, never after the viewer moved.
-    #expect(LatePlay.takesFocus(had: false, has: true, moved: false))
-    #expect(!LatePlay.takesFocus(had: false, has: true, moved: true))
-    #expect(!LatePlay.takesFocus(had: true, has: true, moved: false))
-    #expect(!LatePlay.takesFocus(had: true, has: false, moved: false))
+    // TV: the start focus lands once and stays. Home resets it only for Back to the top, never when Play lands.
     let home = try source("Home/HomeScreen.swift")
-    #expect(home.contains(".onMoveCommand { _ in moved = true }"))
-    #expect(home.contains("if start == .hero && LatePlay.takesFocus(had: had, has: has, moved: moved) { resetFocus(in: startScope) }"))
+    #expect(home.components(separatedBy: "resetFocus(in: startScope)").count == 2)
+    #expect(try body(of: ".onChange(of: topRequest)", in: home).contains("resetFocus(in: startScope)"))
+    #expect(!home.contains("hero?.play"))
 }
 
 @MainActor @Test func aFilmStartingInThePlayerTurnsTheTrailerSoundOff() throws {
@@ -132,4 +129,21 @@ private func source(_ path: String) throws -> String {
     // Every source of every title passes through the player's one load.
     let load = try body(of: "private func load(_ url: String, key: String?, attempt: Int64?, at start: Double)", in: try source("Player/PlayerModel.swift"))
     #expect(load.contains("TrailerState.shared.filmStarts()"))
+}
+
+@Test func theDotsAreOnePageControlOfAtLeast44PointsAndATapGoesToTheNearestDot() throws {
+    // HIG: a 44 pt target; the dots' 16 pt pitch is one control's, as iOS's page control.
+    #expect(PageDots.side >= 44)
+    // Three dots (56 pt) on page one: middles at 12, 36.5 and 52.5.
+    #expect(PageDots.nearest(0, count: 3, active: 0) == 0)
+    #expect(PageDots.nearest(30, count: 3, active: 0) == 1)
+    #expect(PageDots.nearest(60, count: 3, active: 0) == 2)
+    // Two dots (40 pt) sit 2 pt into the 44 pt control.
+    #expect(PageDots.nearest(38, count: 2, active: 0) == 1)
+    #expect(PageDots.nearest(0, count: 2, active: 1) == 0)
+    let dots = try body(of: "struct HeroDots: View", in: try source("Home/HeroCarousel.swift"))
+    #expect(!dots.contains("Button"))
+    #expect(dots.contains(".frame(minWidth: PageDots.side, minHeight: PageDots.side)"))
+    #expect(dots.contains(".accessibilityElement(children: .ignore)"))
+    #expect(dots.contains(".accessibilityAdjustableAction"))
 }

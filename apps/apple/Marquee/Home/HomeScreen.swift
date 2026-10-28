@@ -31,10 +31,6 @@ struct HomeScreen: View {
     /// The hero's Play is where focus goes back to.
     @Namespace private var startScope
     @Environment(\.resetFocus) private var resetFocus
-    #if os(tvOS)
-    /// The viewer moved the focus since Home opened: a late Play no longer takes it.
-    @State private var moved = false
-    #endif
     #endif
 
     var body: some View {
@@ -100,12 +96,9 @@ struct HomeScreen: View {
             withAnimation(Theme.Motion.panel) { position.scrollTo(edge: .top) }
             resetFocus(in: startScope)
         }
-        // The hero's Play comes from the core a moment after its page: the start focus, on Details meanwhile, goes
-        // to it when it lands, unless the viewer has moved (review r4; web and Android do the same).
-        .onMoveCommand { _ in moved = true }
-        .onChange(of: model.header.hero?.play != nil) { had, has in
-            if start == .hero && LatePlay.takesFocus(had: had, has: has, moved: moved) { resetFocus(in: startScope) }
-        }
+        // The hero's Play comes from the core a moment after its page. The start focus, on Details meanwhile, stays
+        // there when Play lands: a focus that moved then would sit under a viewer's quick press. (Web and Android
+        // hold the first focus until Play lands instead; the focus engine here always has one.)
         .focusScope(startScope)
         #endif
         .topScrim(underBar || model.needsSetup || model.allFailed)

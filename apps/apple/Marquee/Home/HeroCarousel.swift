@@ -267,8 +267,10 @@ struct TrailerMute: View {
 }
 #endif
 
+#if !os(tvOS)
 /// The page dots (the iPhone TV app's): dots on a fixed pitch, the active one a capsule whose white fill grows over
-/// the page's time; each a button off the TV.
+/// the page's time. One control, as iOS's page control: at least 44 by 44 pt (a dot of its own would be a 16 pt wide
+/// target), a tap goes to the dot nearest it, and VoiceOver adjusts it a page at a time.
 struct HeroDots: View {
     let count: Int
     let active: Int
@@ -279,28 +281,36 @@ struct HeroDots: View {
     @Environment(\.metrics) private var metrics
 
     var body: some View {
-        HStack(spacing: 9) {
+        HStack(spacing: PageDots.gap) {
             ForEach(0..<count, id: \.self) { i in
                 let on = i == active
-                Button { pick(i) } label: {
-                    Capsule()
-                        .fill(Color.white.opacity(on ? 0.35 : 0.6))
-                        .overlay(alignment: .leading) {
-                            if on {
-                                GeometryReader { geo in
-                                    Capsule().fill(.white).frame(width: geo.size.width * pager.progress)
-                                }
+                Capsule()
+                    .fill(Color.white.opacity(on ? 0.35 : 0.6))
+                    .overlay(alignment: .leading) {
+                        if on {
+                            GeometryReader { geo in
+                                Capsule().fill(.white).frame(width: geo.size.width * pager.progress)
                             }
                         }
-                        .frame(width: on ? 24 : 7, height: 7)
-                        .padding(.vertical, 7)
-                        .contentShape(Rectangle())
-                        .animation(Theme.Motion.panel, value: on)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Page \(i + 1) of \(count), \(names[safe: i] ?? "")")
-                .accessibilityAddTraits(on ? .isSelected : [])
+                    }
+                    .frame(width: on ? PageDots.pill : PageDots.dot, height: PageDots.dot)
+                    .animation(Theme.Motion.panel, value: on)
             }
         }
+        .frame(minWidth: PageDots.side, minHeight: PageDots.side)
+        .contentShape(Rectangle())
+        .onTapGesture { at in pick(PageDots.nearest(at.x, count: count, active: active)) }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Page \(active + 1) of \(count), \(names[safe: active] ?? "")")
+        .accessibilityAdjustableAction { direction in
+            switch direction {
+            case .increment: if active < count - 1 { pick(active + 1) }
+            case .decrement: if active > 0 { pick(active - 1) }
+            @unknown default: break
+            }
+        }
+        // The foot's layout keeps the dots' own 21 pt; the control, and its VoiceOver frame, reach past it.
+        .padding(.vertical, (HeroFoot.dotsHeight - PageDots.side) / 2)
     }
 }
+#endif

@@ -75,7 +75,7 @@ enum TrailerMessages {
 
 /// Where the hero's foot controls sit: the page dots, and the trailer's sound switch level with them.
 enum HeroFoot {
-    /// A dot's button: 7 pt tall with 7 pt above and under it.
+    /// The dots' place in the foot: 7 pt tall with 7 pt above and under them (the control reaches past it).
     static let dotsHeight: CGFloat = 21
     static let switchSize: CGFloat = 36
     static func dots(wide: Bool) -> CGFloat { wide ? 28 : 20 }
@@ -83,9 +83,27 @@ enum HeroFoot {
     static func soundSwitch(wide: Bool) -> CGFloat { dots(wide: wide) + dotsHeight / 2 - switchSize / 2 }
 }
 
-/// TV: a hero Play that lands after the start focus took Details takes the focus, unless the viewer moved meanwhile.
-enum LatePlay {
-    static func takesFocus(had: Bool, has: Bool, moved: Bool) -> Bool { !had && has && !moved }
+/// The page dots' layout (HeroDots): 7 pt dots, the active one a 24 pt pill, 9 pt apart, in one control of at least
+/// 44 by 44 pt.
+enum PageDots {
+    static let dot: CGFloat = 7
+    static let pill: CGFloat = 24
+    static let gap: CGFloat = 9
+    /// The platform's least touch target.
+    static let side: CGFloat = 44
+
+    /// The dot a tap `x` pt from the control's leading edge is nearest to; the dots sit in its middle.
+    static func nearest(_ x: CGFloat, count: Int, active: Int) -> Int {
+        var left = max(0, (side - (pill + CGFloat(count - 1) * (dot + gap))) / 2)
+        var best = 0
+        var distance = CGFloat.infinity
+        for i in 0..<count {
+            let width = i == active ? pill : dot
+            if abs(left + width / 2 - x) < distance { (best, distance) = (i, abs(left + width / 2 - x)) }
+            left += width + gap
+        }
+        return best
+    }
 }
 
 /// What the hero draws from the trailer: the clock follows `fraction` while `playing`; the art fades when `shown`.
