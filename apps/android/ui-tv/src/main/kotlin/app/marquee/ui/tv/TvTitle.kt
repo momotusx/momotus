@@ -30,6 +30,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -191,13 +192,16 @@ fun TvTitle(
         var fullTrailer by remember { mutableStateOf(false) }
         var trailerClosed by remember { mutableIntStateOf(0) }
         val trailerFocus = focus.requesterFor("trailer")
+        // The art is fixed under the page: once the lanes scroll up over it the trailer stops.
+        val list = rememberLazyListState()
+        val atTop by remember(list) { derivedStateOf { list.firstVisibleItemIndex == 0 } }
         if (details != null) {
             TitleHeaderTrailer(
                 trailers,
                 headerTrailer,
                 details.id,
                 details.trailers.firstOrNull()?.youtubeId,
-                !fullTrailer,
+                !fullTrailer && atTop,
                 tv = true,
             )
             if (fullTrailer) {
@@ -259,6 +263,7 @@ fun TvTitle(
 
             else -> {
                 LazyColumn(
+                    state = list,
                     modifier = Modifier.fillMaxSize(),
                     // The lanes run to the screen edge (their own padding is the side margin), so the
                     // focus ring and halo of the first tile are not clipped.

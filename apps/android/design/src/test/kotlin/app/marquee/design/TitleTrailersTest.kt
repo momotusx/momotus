@@ -20,8 +20,14 @@ class TitleTrailersTest {
     private fun device(
         totalMem: Long,
         lowRam: Boolean = false,
+        pressed: Boolean = false,
     ) {
-        shadowOf(am).setMemoryInfo(ActivityManager.MemoryInfo().apply { this.totalMem = totalMem })
+        shadowOf(am).setMemoryInfo(
+            ActivityManager.MemoryInfo().apply {
+                this.totalMem = totalMem
+                lowMemory = pressed
+            },
+        )
         shadowOf(am).setIsLowRamDevice(lowRam)
     }
 
@@ -36,6 +42,17 @@ class TitleTrailersTest {
         assertFalse(TrailerPreviews.headerOnTv(context))
         device(TitleTrailers.TV_FLOOR, lowRam = true)
         assertFalse(TrailerPreviews.headerOnTv(context))
+    }
+
+    private fun capable(floor: Long) =
+        TrailerPreviews.signals(context, true, false, tv = false, hasTrailer = true, minMemory = floor).capable
+
+    @Test
+    fun `under memory pressure right now no header plays`() {
+        device(TitleTrailers.TV_FLOOR, pressed = true)
+        assertFalse(capable(TitleTrailers.TV_FLOOR))
+        device(TitleTrailers.TV_FLOOR)
+        assertTrue(capable(TitleTrailers.TV_FLOOR))
     }
 
     @Test

@@ -123,7 +123,8 @@ object TrailerPreviews {
         val connectivity = context.getSystemService(ConnectivityManager::class.java)
         return TrailerSignals(
             enabled = on(context),
-            capable = am != null && !am.isLowRamDevice && memory.totalMem >= minMemory,
+            // Under memory pressure right now (lowMemory) none plays, whatever the device's size.
+            capable = am != null && !am.isLowRamDevice && !memory.lowMemory && memory.totalMem >= minMemory,
             visible = visible,
             reducedMotion = reducedMotion,
             metered = connectivity?.isActiveNetworkMetered ?: true,
@@ -320,7 +321,7 @@ class TrailerHost internal constructor(
                         view: WebView,
                         detail: RenderProcessGoneDetail,
                     ): Boolean {
-                        main.post { destroy() }
+                        main.post { destroy("error") }
                         return true
                     }
                 }
@@ -391,11 +392,15 @@ class TrailerHost internal constructor(
         if (web != null) run(if (on) "sound(true)" else "sound(false)")
     }
 
-    internal fun destroy() {
-        // Whoever plays hears it stopped: a full-screen trailer closes rather than stay black (review r1-A 5).
+    /**
+     * Lets the web view and its renderer go; the next play makes a fresh one. Whoever plays hears [why]: `stopped` (the
+     * app in the background: a full-screen trailer closes rather than stay black, review r1-A 5) or `error` (the
+     * renderer died: the full screen tries the next trailer or says it cannot play, a header does not play again).
+     */
+    fun destroy(why: String = "stopped") {
         val done = onEnd
         stop()
-        done?.invoke("stopped")
+        done?.invoke(why)
         web?.let {
             (it.parent as? ViewGroup)?.removeView(it)
             it.destroy()
@@ -464,23 +469,25 @@ class TrailerHost internal constructor(
             <!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1">
             <style>html,body{margin:0;height:100%;background:transparent;overflow:hidden}
             #p{position:fixed;inset:0;pointer-events:none}
-            #p>*{position:absolute;inset:0;width:100%;height:100%;border:0;display:block;pointer-events:none}</style></head>
+            #p>div{position:absolute;inset:0;pointer-events:none}
+            #p iframe{width:100%;height:100%;border:0;display:block;pointer-events:none}</style></head>
             <body><div id="p"></div><script>
-            let player=null, box=null, timers=[], ended=true, playing=false, poll=null, api=null, gen=0, full=false, want=false;
+            let player=null, wrap=null, timers=[], ended=true, playing=false, poll=null, api=null, gen=0, full=false, want=false;
             const say=(o)=>console.log("MQT "+JSON.stringify(Object.assign({gen,full},o)));
             function load(){ if(api) return api; api=new Promise((ok,no)=>{ window.onYouTubeIframeAPIReady=()=>ok(window.YT);
               const s=document.createElement("script"); s.src="https://www.youtube.com/iframe_api"; s.onerror=()=>{ api=null; no(); }; document.head.append(s); }); return api; }
             function finish(why){ if(ended) return; ended=true; timers.forEach(clearTimeout); clearInterval(poll); timers=[];
-              const p=player, b=box; player=null; setTimeout(()=>{ try{p&&p.destroy()}catch(e){} b&&b.remove(); }, why==="cap"||why==="ended"?650:0);
+              // Each play in a wrapper of its own, removed whole: its frame goes even when the player never got ready.
+              const p=player, w=wrap; player=null; setTimeout(()=>{ try{p&&p.getIframe&&p.getIframe().remove()}catch(e){} try{p&&p.destroy()}catch(e){} w&&w.remove(); }, why==="cap"||why==="ended"?650:0);
               say({event:"end",why}); }
             function captionsOff(){ try{ const t=player&&player.getOption("captions","track"); if(t&&Object.keys(t).length) player.setOption("captions","track",{}); player&&player.unloadModule("captions"); }catch(e){} }
             function halt(){ finish("stopped"); }
-            function sound(on){ want=on; if(!player||!player.mute) return; if(on){player.unMute();player.setVolume(100);} else {player.mute();player.setVolume(0);} }
+            function sound(on){ want=on; if(!playing||!player||!player.mute) return; if(on){player.unMute();player.setVolume(100);} else {player.mute();player.setVolume(0);} }
             function toggle(){ if(!player||!player.getPlayerState) return; if(player.getPlayerState()===1) player.pauseVideo(); else player.playVideo(); }
             function seek(s){ if(!player||!player.seekTo) return; const from=player.getCurrentTime(); player.seekTo(Math.max(0,s),true); say({event:"seek",from:Math.round(from),to:Math.round(s)}); }
             async function play(id, cap, g, f, loud){
               finish("stopped"); gen=g; full=f; want=loud; ended=false; playing=false;
-              box=document.createElement("div"); document.getElementById("p").append(box);
+              wrap=document.createElement("div"); const box=document.createElement("div"); wrap.append(box); document.getElementById("p").append(wrap);
               timers.push(setTimeout(()=>{ if(!playing) finish("timeout"); }, f?15000:9000));
               let YT; try{ YT=await load(); }catch(e){ if(gen===g) finish("error"); return; }
               if(ended||gen!==g) return;

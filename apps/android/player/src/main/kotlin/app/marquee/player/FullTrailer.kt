@@ -90,16 +90,19 @@ fun TrailerDialog(
         val trailer = trailers.getOrNull(index) ?: return@LaunchedEffect
         failed = false
         host.play(trailer.youtubeId, state, cap = 0, full = true, loud = loud) { why ->
+            // Refused (embedding off, gone): the next trailer, then the line. Never ready (YouTube unreachable): the line
+            // at once, not another 15 s per trailer.
             if (why != "error" && why != "timeout") {
                 close()
-            } else if (index + 1 < trailers.size) {
+            } else if (why == "error" && index + 1 < trailers.size) {
                 index += 1
             } else {
                 failed = true
             }
         }
     }
-    DisposableEffect(host) { onDispose { host.stop() } }
+    // Closed: the player and its renderer go too (the header does not play again this visit).
+    DisposableEffect(host) { onDispose { host.destroy() } }
     val density = LocalDensity.current
     Dialog(
         onDismissRequest = onClose,
