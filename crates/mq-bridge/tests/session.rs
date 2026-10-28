@@ -2042,7 +2042,8 @@ async fn a_screen_signed_in_by_qr_gets_the_whole_account() {
     lib.set_stream_memory("p", "tt1", Some("g"), "{\"key\":\"1\"}", clock)
         .unwrap();
 
-    // It signs in (here: makes the account) and its first sync sends it all.
+    // It signs in (here: makes the account) and its first sync sends it all;
+    // the second sends the recommended addons its first round gave it.
     let (tx_a, mut rx_a) = Output::channel();
     let mut a = Session::new(phone.clone(), tx_a);
     let made = ask(
@@ -2052,13 +2053,21 @@ async fn a_screen_signed_in_by_qr_gets_the_whole_account() {
     )
     .await;
     let record = made["result"].clone();
-    let sent = ask(
-        &mut a,
-        &mut rx_a,
-        json!({"id": 2, "op": "syncNow", "record": record}),
-    )
-    .await;
-    assert_eq!(sent["ok"], true, "{sent}");
+    for id in [2, 3] {
+        let sent = ask(
+            &mut a,
+            &mut rx_a,
+            json!({"id": id, "op": "syncNow", "record": record}),
+        )
+        .await;
+        assert_eq!(sent["ok"], true, "{sent}");
+    }
+    let all = |core: &Core| {
+        core.library()
+            .changed_since(&SyncCursor::default(), 100_000)
+            .unwrap()
+    };
+    let mine = all(&phone);
 
     // The TV shows its QR; the phone scans it and approves.
     let tv = Core::temporary("p").unwrap();
@@ -2102,12 +2111,7 @@ async fn a_screen_signed_in_by_qr_gets_the_whole_account() {
     .await;
     assert_eq!(pulled["ok"], true, "{pulled}");
 
-    let all = |core: &Core| {
-        core.library()
-            .changed_since(&SyncCursor::default(), 100_000)
-            .unwrap()
-    };
-    let (mine, theirs) = (all(&phone), all(&tv));
+    let theirs = all(&tv);
     let colls: std::collections::BTreeSet<u8> = mine.iter().map(|r| r.coll).collect();
     let every = [
         coll::PROFILES,
@@ -2128,20 +2132,24 @@ async fn a_screen_signed_in_by_qr_gets_the_whole_account() {
         every.iter().all(|c| colls.contains(c)),
         "the phone holds every collection: {colls:?}"
     );
+    // The same version of each register (a manifest refresh keeps its hlc).
     for r in &mine {
         assert!(
             theirs
                 .iter()
-                .any(|t| t.coll == r.coll && t.key == r.key && t.value == r.value),
+                .any(|t| t.coll == r.coll && t.key == r.key && t.hlc == r.hlc),
             "the TV lacks {r:?}"
         );
     }
     // And what the TV's screens read from it.
-    let tv_lib = tv.library();
-    assert_eq!(tv_lib.addons("p").unwrap().len(), 1);
-    let cw = tv_lib.continue_watching("p", 10).unwrap();
+    let urls = |core: &Core| -> Vec<String> {
+        let rows = core.library().addons("p").unwrap();
+        rows.into_iter().map(|a| a.transport_url).collect()
+    };
+    assert!(urls(&tv).contains(&"https://addon.example/manifest.json".to_string()));
+    assert_eq!(urls(&tv), urls(&phone), "the same addons in the same order");
+    let cw = tv.library().continue_watching("p", 10).unwrap();
     assert_eq!(cw.len(), 1, "tt1 only: tt3 was taken off");
-    assert!(tv_lib.profile("kid").unwrap().is_some_and(|k| k.kids()));
-    assert!(tv_lib.is_gone("guest").unwrap());
+    assert!(tv.library().is_gone("guest").unwrap());
     let _ = std::fs::remove_dir_all(&dir);
 }
