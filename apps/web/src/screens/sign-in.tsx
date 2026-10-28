@@ -164,7 +164,12 @@ function Frame(props: { label: string; children: JSX.Element }) {
 
 /** Home, the root, once this device joined; after the first pull, so Home opens with the account's addons. */
 async function homeAfterPull(navigate: (to: string, o?: { replace?: boolean }) => void) {
-  await sync.syncNow();
+  // A first round lost to a blip goes once more; Home opens after 15 s at most either way.
+  const pull = async () => {
+    await sync.syncNow();
+    if (sync.problem() && !sync.report()) await sync.syncNow();
+  };
+  await Promise.race([pull(), new Promise((done) => setTimeout(done, 15_000))]);
   resetHistoryBase();
   navigate("/", { replace: true });
 }
