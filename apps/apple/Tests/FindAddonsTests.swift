@@ -354,4 +354,11 @@ extension FindAddonsTests {
         #expect(ListedAddon.searchText(found).matches(ListedAddon.queryWords(v.query)) == v.match, "\(v.text) / \(v.query)")
     }
 }
+
+@Test func aPickedListThatWentFallsBackToOfficial() {
+    #expect(AddonList.shownList(["official", "community"], picked: "community") == "community")
+    #expect(AddonList.shownList(["official", "community"], picked: "addon-1:dir") == "official")
+    // Before the first snapshot nothing is gone yet.
+    #expect(AddonList.shownList([], picked: "addon-1:dir") == "addon-1:dir")
+}
 }

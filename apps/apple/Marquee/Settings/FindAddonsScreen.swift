@@ -61,8 +61,9 @@ struct FindAddonsScreen: View {
         }
         // The picked list went (its addon was turned off or removed): Official, never "Asking" for ever.
         .onChange(of: page.lists.map(\.id), initial: true) { _, ids in
-            if !ids.isEmpty, !ids.contains(list) {
-                list = "official"
+            let shown = AddonList.shownList(ids, picked: list)
+            if shown != list {
+                list = shown
                 query = ""
             }
         }
@@ -213,7 +214,9 @@ struct FindAddonsScreen: View {
 
     private var visible: [ListedAddon] {
         guard let current, current.state == .ready else { return [] }
+        // No query (always on a TV): nothing is folded.
         let words = ListedAddon.queryWords(query)
+        guard !words.isEmpty else { return current.entries.filter(filter.shows) }
         return current.entries.filter { filter.shows($0) && page.searchText(of: $0).matches(words) }
     }
 

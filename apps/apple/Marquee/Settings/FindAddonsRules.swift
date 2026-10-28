@@ -310,3 +310,12 @@ extension String {
     /// The search field's rule: every word of the query in this folded text.
     func matches(_ words: [Substring]) -> Bool { words.allSatisfy { contains($0) } }
 }
+
+extension AddonList {
+    /// The list the page shows: the one picked, or Official once the lists
+    /// are in and the picked one is gone (its addon was turned off or
+    /// removed), never "Asking" for ever.
+    static func shownList(_ ids: [String], picked: String) -> String {
+        !ids.isEmpty && !ids.contains(picked) ? "official" : picked
+    }
+}
