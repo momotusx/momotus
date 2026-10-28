@@ -31,7 +31,10 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
-/** The phone's tab bar is the iPhone's five places (D6): Calendar is a row in Library, which is lit there. */
+/**
+ * The phone's tab bar is the iPhone's five slots (D6): four places, then the profile, whose menu opens Settings
+ * (plans/nav-profile.md). Calendar is a row in Library, which is lit there.
+ */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [36])
 class PhoneShellTest {
@@ -39,11 +42,12 @@ class PhoneShellTest {
     val compose = createComposeRule()
 
     @Test
-    fun `the bar holds five places, and Library is lit while Calendar shows`() {
+    fun `the bar holds four places and the profile, and Library is lit while Calendar shows`() {
         compose.setContent {
             MarqueeTheme(Form.Phone) { PhoneShell(selected = Route.Calendar, showTabs = true, onSelect = {}) {} }
         }
-        compose.onAllNodes(SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Tab)).assertCountEquals(5)
+        compose.onAllNodes(SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Tab)).assertCountEquals(4)
+        compose.onAllNodesWithContentDescription("Settings").assertCountEquals(0)
         compose.onAllNodesWithContentDescription("Calendar").assertCountEquals(0)
         compose.onNodeWithContentDescription("Library").assertIsSelected()
     }

@@ -815,7 +815,13 @@ private fun AppNav(
         me?.let {
             PhoneProfileTab("Profile: ${it.name}", { profileMenu = true }) { ProfileAvatar(it, 26.dp) }
         }
-    if (profileMenu && !tv) ProfileMenu(gate, { profileMenu = false }, { choose(Route.Settings) }, ::pinFor)
+    // Sign in another device sits in it on a phone or tablet in an account, never a kids profile (D6).
+    val signInAnother: (() -> Unit)? = if (sync.joined && me?.kids != true) ({ marquee.pendingScan = true }) else null
+    if (profileMenu &&
+        !tv
+    ) {
+        ProfileMenu(gate, { profileMenu = false }, { choose(Route.Settings) }, ::pinFor, signInAnother)
+    }
     if (tv) {
         TvShell(
             selected = selected,

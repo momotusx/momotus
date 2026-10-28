@@ -154,6 +154,25 @@ class ProfileMenuTest {
     }
 
     @Test
+    fun `on a phone in an account, Sign in another device sits after the profiles, before Settings`() {
+        var scans = 0
+        open { ProfileMenu(gate, {}, {}, {}) { scans++ } }
+        val said =
+            compose
+                .onAllNodes(hasClickAction())
+                .fetchSemanticsNodes()
+                .map { n ->
+                    n.config
+                        .getOrElse(SemanticsProperties.ContentDescription) {
+                            n.config.getOrElse(SemanticsProperties.Text) { emptyList() }.map { it.text }
+                        }.joinToString()
+                }
+        assertEquals(listOf("Sign in another device", "Settings"), said.takeLast(2))
+        row("Sign in another device").performClick()
+        assertEquals(1, scans)
+    }
+
+    @Test
     fun `the picker the menu opens shows that profile's keypad, and Cancel leaves the picker`() {
         var left = 0
         gate.asked = "bo"
