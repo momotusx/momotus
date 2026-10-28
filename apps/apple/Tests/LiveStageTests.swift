@@ -48,3 +48,22 @@ import Testing
     let retry = try body(of: "func retry()", in: String(contentsOf: file, encoding: .utf8))
     #expect(retry.contains("failure = nil"), "the title's Try again keeps the old failure up")
 }
+
+@MainActor @Test func aBackgroundReopenKeepsTheFailureUpUntilItAnswers() async throws {
+    let core = RealCore()
+    #expect(await core.ready())
+    let record = LiveRecord<LibrarySnapshot>("no-such-view", core: core.client)
+    record.start()
+    #expect(await eventually { record.failure != nil })
+    // ProfileSession reopens its view every 2 s while it fails: the root keeps saying why.
+    record.reopen()
+    #expect(record.failure != nil)
+    #expect(record.stage != .loading)
+}
+
+@Test func profileSessionReopensInTheBackgroundNeverRetries() throws {
+    let file = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appending(path: "../Marquee/Profiles/ProfileSession.swift")
+    let session = try String(contentsOf: file, encoding: .utf8)
+    #expect(session.contains("self.view.reopen()"))
+    #expect(!session.contains("view.retry()"), "the background loop would clear the failure every 2 s")
+}

@@ -61,7 +61,7 @@ final class ProfileSession {
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(2))
                 guard let self else { return }
-                if self.view.failure != nil { self.view.retry() }
+                if self.view.failure != nil { self.view.reopen() }
             }
         }
     }

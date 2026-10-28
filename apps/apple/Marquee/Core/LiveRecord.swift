@@ -40,11 +40,17 @@ final class LiveRecord<Snapshot: Decodable & Sendable> {
     /// The owning view calls `start()` again when this changes (a reopened core).
     var taskId: Int { core.generation }
 
-    /// Opens the view again after it failed to open.
+    /// The user's Try again: the old failure goes at once, so the press is seen and a repeat failure is new.
     func retry() {
+        failure = nil
+        reopen()
+    }
+
+    /// Opens the view again after it failed to open, leaving the failure up until it answers (a
+    /// background retry that keeps the page saying why).
+    func reopen() {
         task?.cancel()
         task = nil
-        failure = nil
         start()
     }
 
