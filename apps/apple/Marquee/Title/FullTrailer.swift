@@ -112,7 +112,9 @@ struct FullTrailer: View {
             // A drag previews and seeks once let go; VoiceOver's adjust and the arrow keys seek at once.
             Slider(
                 value: Binding(get: { held ?? state.seconds }, set: { value in
-                    if dragging { held = value } else { seek(to: value) }
+                    let move = trailerSliderMove(value, dragging: dragging)
+                    held = move.held
+                    if let to = move.seek { seek(to: to) }
                 }),
                 in: 0...max(1, state.length - 2)
             ) { editing in
@@ -139,9 +141,11 @@ struct FullTrailer: View {
         // One player at a time: Home's lets go first.
         TrailerPlayer.shared.release()
         player.play(trailer.youtubeId, into: state, cap: 0, full: true, loud: loud) { why in
+            // Refused (embedding off, gone): the next trailer, then the line. Never ready (YouTube unreachable): the
+            // line at once, not another 15 s per trailer.
             if why != "error", why != "timeout" {
                 close()
-            } else if index + 1 < trailers.count {
+            } else if why == "error", index + 1 < trailers.count {
                 index += 1
             } else {
                 failed = true

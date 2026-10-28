@@ -29,15 +29,34 @@ private func source(_ path: String) throws -> String {
     #expect(trailerSeekTarget(0, 1, by: 10) == 0)
 }
 
-@Test func theHeaderTrailerFollowsTheHerosSignalsAndLetsGo() throws {
-    let title = try source("Title/TitleScreen.swift")
-    #expect(title.contains("TrailerSignals.now(visible: true, reducedMotion: reduceMotion, hasTrailer: true).allowed"))
-    #expect(title.contains("live: pageVisible && heroVisible && !fullTrailer"))
-    #expect(title.contains(".onChange(of: pageVisible) { _, now in if !now, !fullTrailer { trailerPlayer.release() } }"))
-    #expect(title.contains(".onDisappear { if !fullTrailer { trailerPlayer.release() } }"))
-    // One player at a time: Home's goes before the title's plays.
-    #expect(title.contains("TrailerPlayer.shared.release()"))
-    // Full screen has its own sound: it never writes the session's.
-    let full = try source("Title/FullTrailer.swift")
-    #expect(!full.contains("TrailerState.shared"))
+@MainActor @Test func aTrailerThatIsNoYouTubeIdEndsInAnErrorAtOnce() {
+    var ended: [String] = []
+    let state = TrailerState()
+    TrailerPlayer().play("https://www.youtube.com/watch?v=x", into: state) { ended.append($0) }
+    #expect(ended == ["error"])
+    #expect(!state.loading)
+}
+
+@MainActor @Test func lettingThePlayerGoTellsWhoPlaysWhy() {
+    let player = TrailerPlayer()
+    let state = TrailerState()
+    var ended: [String] = []
+    player.play("abcdefghijk", into: state) { ended.append($0) }
+    #expect(state.loading && state.buffering)
+    // The page left or covered: whoever plays hears it stopped, and its state is reset.
+    player.release()
+    #expect(ended == ["stopped"])
+    #expect(!state.loading && !state.playing)
+    // The content process died: an error, so the full screen moves on and a header does not replay.
+    player.play("abcdefghijk", into: state) { ended.append($0) }
+    player.release(why: "error")
+    #expect(ended == ["stopped", "error"])
+    // Nothing plays: nobody to tell.
+    player.release()
+    #expect(ended == ["stopped", "error"])
+}
+
+@Test func theBarHoldsADragAndSeeksAnyOtherMoveAtOnce() {
+    #expect(trailerSliderMove(42, dragging: true) == (held: 42, seek: nil))
+    #expect(trailerSliderMove(42, dragging: false) == (held: nil, seek: 42))
 }

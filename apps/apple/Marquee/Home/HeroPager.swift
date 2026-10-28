@@ -71,6 +71,12 @@ func trailerSeekTarget(_ t: Double, _ d: Double, by: Double) -> Double {
     max(0, min(t + by, max(0, d - 2)))
 }
 
+/// The full-screen bar's Slider (plans/trailer-inline.md 7): a drag holds its place until it is let go; any other
+/// move (VoiceOver's adjust, the arrow keys) seeks at once.
+func trailerSliderMove(_ value: Double, dragging: Bool) -> (held: Double?, seek: Double?) {
+    dragging ? (value, nil) : (nil, value)
+}
+
 /// Which of the player page's messages belong to the trailer asked for last (review r1, W6): each `play` has a new
 /// generation, the page echoes it, and an `end` of the one before, landing after the new `play`, is dropped.
 enum TrailerMessages {

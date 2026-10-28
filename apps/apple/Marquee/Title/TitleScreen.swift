@@ -220,6 +220,8 @@ struct TitleScreen: View {
         // Covered (the player, Versions) or gone: its player and web view go too.
         .onChange(of: pageVisible) { _, now in if !now, !fullTrailer { trailerPlayer.release() } }
         .onDisappear { if !fullTrailer { trailerPlayer.release() } }
+        // The full screen closed: its web view and content process go too (the header does not replay this visit).
+        .onChange(of: fullTrailer) { _, now in if !now { trailerPlayer.release() } }
     }
 
     private var fullTrailerView: some View {

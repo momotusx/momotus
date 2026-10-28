@@ -206,11 +206,12 @@ final class TrailerPlayer: NSObject {
     }
 
     /// Stops and lets the web view and its content process go: Home off screen, under the player or another
-    /// page, or gone. The next `play` makes a fresh one. Whoever played hears it stopped.
-    func release() {
+    /// page, or gone. The next `play` makes a fresh one. Whoever played hears `why`: `stopped`, or `error` when the
+    /// content process died (the full screen tries the next trailer or says it cannot play; a header does not replay).
+    func release(why: String = "stopped") {
         let done = onEnd
         stop()
-        done?("stopped")
+        done?(why)
         guard let webView else { return }
         webView.configuration.userContentController.removeScriptMessageHandler(forName: "trailer")
         webView.removeFromSuperview()
@@ -274,23 +275,25 @@ final class TrailerPlayer: NSObject {
     <!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1">
     <style>html,body{margin:0;height:100%;background:transparent;overflow:hidden}
     #p{position:fixed;inset:0;pointer-events:none}
-    #p>*{position:absolute;inset:0;width:100%;height:100%;border:0;display:block;pointer-events:none}</style></head>
+    #p>div{position:absolute;inset:0;pointer-events:none}
+    #p iframe{width:100%;height:100%;border:0;display:block;pointer-events:none}</style></head>
     <body><div id="p"></div><script>
-    let player=null, box=null, timers=[], ended=true, playing=false, poll=null, api=null, gen=0, full=false, want=false;
+    let player=null, wrap=null, timers=[], ended=true, playing=false, poll=null, api=null, gen=0, full=false, want=false;
     const say=(o)=>window.webkit.messageHandlers.trailer.postMessage(JSON.stringify(Object.assign({gen,full},o)));
     function load(){ if(api) return api; api=new Promise((ok,no)=>{ window.onYouTubeIframeAPIReady=()=>ok(window.YT);
       const s=document.createElement("script"); s.src="https://www.youtube.com/iframe_api"; s.onerror=()=>{ api=null; no(); }; document.head.append(s); }); return api; }
     function finish(why){ if(ended) return; ended=true; timers.forEach(clearTimeout); clearInterval(poll); timers=[];
-      const p=player, b=box; player=null; setTimeout(()=>{ try{p&&p.destroy()}catch(e){} b&&b.remove(); }, why==="cap"||why==="ended"?650:0);
+      // Each play in a wrapper of its own, removed whole: its frame goes even when the player never got ready.
+      const p=player, w=wrap; player=null; setTimeout(()=>{ try{p&&p.getIframe&&p.getIframe().remove()}catch(e){} try{p&&p.destroy()}catch(e){} w&&w.remove(); }, why==="cap"||why==="ended"?650:0);
       say({event:"end",why}); }
     function captionsOff(){ try{ const t=player&&player.getOption("captions","track"); if(t&&Object.keys(t).length) player.setOption("captions","track",{}); player&&player.unloadModule("captions"); }catch(e){} }
     function halt(){ finish("stopped"); }
-    function sound(on){ want=on; if(!player||!player.mute) return; if(on){player.unMute();player.setVolume(100);} else {player.mute();player.setVolume(0);} }
+    function sound(on){ want=on; if(!playing||!player||!player.mute) return; if(on){player.unMute();player.setVolume(100);} else {player.mute();player.setVolume(0);} }
     function toggle(){ if(!player||!player.getPlayerState) return; if(player.getPlayerState()===1) player.pauseVideo(); else player.playVideo(); }
     function seek(s){ if(!player||!player.seekTo) return; const from=player.getCurrentTime(); player.seekTo(Math.max(0,s),true); say({event:"seek",from:Math.round(from),to:Math.round(s)}); }
     async function play(id, cap, g, f, loud){
       finish("stopped"); gen=g; full=f; want=loud; ended=false; playing=false;
-      box=document.createElement("div"); document.getElementById("p").append(box);
+      wrap=document.createElement("div"); const box=document.createElement("div"); wrap.append(box); document.getElementById("p").append(wrap);
       timers.push(setTimeout(()=>{ if(!playing) finish("timeout"); }, f?15000:9000));
       let YT; try{ YT=await load(); }catch(e){ if(gen===g) finish("error"); return; }
       if(ended||gen!==g) return;
@@ -314,6 +317,11 @@ final class TrailerPlayer: NSObject {
 }
 
 extension TrailerPlayer: WKNavigationDelegate {
+    /// The content process died (memory): whoever plays hears an error, the next play makes a fresh one.
+    func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+        release(why: "error")
+    }
+
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         loaded = true
         let calls = waiting
