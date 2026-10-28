@@ -246,6 +246,8 @@ struct CardTitle: View {
 /// keeps 4.5:1 over art on the backdrop's ramp.
 struct PillButtonStyle: ButtonStyle {
     var prominent = false
+    /// A sheet's primary off the TV: `keyFill` blue with a white label (DECISION.md, Key color).
+    var key = false
     @Environment(\.isEnabled) private var enabled
 
     func makeBody(configuration: Configuration) -> some View {
@@ -257,11 +259,13 @@ struct PillButtonStyle: ButtonStyle {
                 configuration.label
                     .labelFont(Self.label)
                     .labelStyle(PillLabelStyle())
-                    .foregroundStyle(prominent ? Theme.Palette.onPrimary : .white)
+                    .foregroundStyle(key ? Theme.Palette.onKey : prominent ? Theme.Palette.onPrimary : .white)
                     .padding(.horizontal, Self.horizontal)
                     .padding(.vertical, Self.vertical)
                     .background {
-                        if prominent {
+                        if key {
+                            Capsule().fill(Theme.Palette.keyFill)
+                        } else if prominent {
                             Capsule().fill(Theme.Palette.primary).shadow(color: .black.opacity(0.28), radius: 8, y: 3)
                         } else {
                             SecondaryFill(shape: Capsule())

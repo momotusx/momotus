@@ -112,7 +112,8 @@ extension ListedAddon {
         return kinds.isEmpty ? "\(what) for \(last)" : "\(what) for \(kinds.joined(separator: ", ")) and \(last)"
     }
 
-    private static func kindWord(_ kind: String) -> String {
+    /// A manifest type in plain words (install-sheet.json `kinds` too).
+    static func kindWord(_ kind: String) -> String {
         switch kind {
         case "movie": "movies"
         case "series": "series"

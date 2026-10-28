@@ -55,6 +55,7 @@ struct FindAddonsScreen: View {
         .background(Theme.Palette.bg)
         .topScrim()
         .task(id: page.catalog.taskId) { page.catalog.start() }
+        .installSheet(page.gate)
         .onAppear { page.appear() }
         .onChange(of: status) { old, new in
             if let words = new.announcement(after: old) { announce(words) }
@@ -260,7 +261,7 @@ struct FindAddonsScreen: View {
                 LazyVGrid(columns: columns, alignment: .leading, spacing: gap) {
                     // By key: two entries of a list can share a manifest id.
                     ForEach(visible, id: \.key) { entry in
-                        FindAddonCard(entry: entry, sameName: repeated.contains(entry.name), core: core, focus: $focus)
+                        FindAddonCard(entry: entry, sameName: repeated.contains(entry.name), core: core, page: page, focus: $focus)
                     }
                 }
                 #if os(tvOS)
@@ -360,6 +361,7 @@ private struct FindAddonCard: View {
     let entry: ListedAddon
     let sameName: Bool
     let core: CoreClient
+    let page: FindAddonsPage
     let focus: FocusState<FindFocus?>.Binding
     @Environment(\.metrics) private var metrics
     @Environment(\.openURL) private var openURL
@@ -544,8 +546,8 @@ private struct FindAddonCard: View {
         if let page = entry.configurePage { openURL(page) }
     }
 
-    /// Install or Turn on; a press while the card's request runs does nothing.
-    /// VoiceOver hears how it ended.
+    /// Install (after the install sheet) or Turn on; a press while the card's
+    /// request runs does nothing. VoiceOver hears how it ended.
     private func perform() {
         guard !card.busy else { return }
         let (key, name, core, cards) = (entry.key, entry.name, core, cards)
@@ -567,11 +569,14 @@ private struct FindAddonCard: View {
         case .none:
             return
         }
-        // The press is said at once: the card's state line changes under the finger, not where VoiceOver reads.
-        announce("\(name), \(busyWord)")
-        Task {
-            guard let result = await cards.run(key, request) else { return }
-            announce(result.words ?? "\(name), \(done)")
+        let busyWord = busyWord
+        page.press(entry, act) {
+            // Said at once: the card's state line changes under the finger, not where VoiceOver reads.
+            announce("\(name), \(busyWord)")
+            Task {
+                guard let result = await cards.run(key, request) else { return }
+                announce(result.words ?? "\(name), \(done)")
+            }
         }
     }
 }

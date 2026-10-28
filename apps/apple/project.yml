@@ -301,6 +301,7 @@ targets:
       - path: Marquee/Trakt/TraktWords.swift
       - path: Marquee/Core/TraktModels.swift
       - path: Marquee/Settings/AddonSetup.swift
+      - path: Marquee/Settings/InstallSheet.swift
       - path: Marquee/Settings/Language.swift
       - path: Marquee/Onboarding/SubtitleStepRules.swift
     settings:

@@ -228,46 +228,85 @@ final class DefaultsOffer {
     }
 }
 
-/// The addon link field's install: a link whose settings carry a sign-in is
-/// refused by the core (`tokenInLink`) until the user says it is theirs.
+/// The addon link field's install: the link is read first (`previewAddon`)
+/// and installed only from the install sheet. A link whose settings carry a
+/// sign-in is refused by the core (`tokenInLink`) until the user says it is theirs.
 @MainActor @Observable
 final class LinkInstall {
     static let tokenWarning = "This link carries a sign-in: a token or a key. Whoever has it uses that account. Install it only if it is yours."
     static let tokenConfirm = "It is mine, install"
 
+    /// A link (may hold keys) and the user's word on its sign-in.
+    typealias Send<R> = @MainActor (_ url: String, _ acknowledged: Bool) async throws -> R
+
     /// Editing the link drops a refusal: the warning was about the old one.
     var link = "" {
         didSet { if link != oldValue { refused = nil } }
     }
+    /// Reading the link for the sheet ("Checking").
+    private(set) var checking = false
     private(set) var installing = false
     private(set) var problem: String?
     /// The refused link, waiting for the user's word. May hold keys: never show or log it.
     private(set) var refused: String?
-    @ObservationIgnored let core: CoreClient
+    /// The install sheet's question, while one is open.
+    let gate = InstallGate()
+    @ObservationIgnored private let previewOp: Send<AddonInfo>
+    @ObservationIgnored private let installOp: Send<Void>
 
-    init(core: CoreClient) {
-        self.core = core
+    convenience init(core: CoreClient) {
+        self.init(
+            preview: { try await core.call("previewAddon", Self.fields($0, $1), as: AddonInfo.self) },
+            install: { try await core.perform("installAddon", Self.fields($0, $1)) })
+    }
+
+    /// The seam tests use: the core's two ops.
+    init(preview: @escaping Send<AddonInfo>, install: @escaping Send<Void>) {
+        previewOp = preview
+        installOp = install
     }
 
     var trimmed: String { link.trimmingCharacters(in: .whitespaces) }
 
-    /// Installs the typed link; `acknowledged` sends the refused one again with the user's word.
+    var busy: Bool { checking || installing }
+
+    /// Install: reads the typed link and opens the sheet; `acknowledged`
+    /// reads the refused one again with the user's word. Nothing installs here.
     func install(acknowledged: Bool = false) async {
-        guard !installing, let url = acknowledged ? refused : (trimmed.isEmpty ? nil : trimmed) else { return }
-        installing = true
-        defer { installing = false }
+        guard !busy, let url = acknowledged ? refused : (trimmed.isEmpty ? nil : trimmed) else { return }
+        checking = true
+        defer { checking = false }
         refused = nil
         problem = nil
-        var fields: [String: any Sendable] = ["url": url]
-        if acknowledged { fields["acknowledgeToken"] = true }
         do {
-            try await core.perform("installAddon", fields)
-            if trimmed == url { link = "" }
+            let addon = try await previewOp(url, acknowledged)
+            gate.ask(InstallSheetRules.ask(name: addon.name, host: addon.host, provides: addon.provides, types: addon.types) { [weak self] in
+                Task { await self?.confirmed(url, acknowledged: acknowledged) }
+            })
         } catch let error as CoreError where error.code == "tokenInLink" && !acknowledged {
             refused = url
         } catch is CancellationError {
         } catch {
             problem = error.localizedDescription
         }
+    }
+
+    /// The sheet's Install: the link read, with the word given for it.
+    private func confirmed(_ url: String, acknowledged: Bool) async {
+        guard !installing else { return }
+        installing = true
+        defer { installing = false }
+        problem = nil
+        do {
+            try await installOp(url, acknowledged)
+            if trimmed == url { link = "" }
+        } catch is CancellationError {
+        } catch {
+            problem = error.localizedDescription
+        }
+    }
+
+    private nonisolated static func fields(_ url: String, _ acknowledged: Bool) -> [String: any Sendable] {
+        acknowledged ? ["url": url, "acknowledgeToken": true] : ["url": url]
     }
 }

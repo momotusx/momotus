@@ -145,21 +145,26 @@ struct InstallField: View {
                     .padding(.vertical, 12)
                     .fieldChrome(focused: fieldFocused)
                 Button(action: installLink) {
-                    Label(install.installing ? "Installing" : "Install", glyph: "plus")
+                    Label(buttonWord, glyph: "plus")
                 }
                 // The primary only once there is a link to install.
                 .buttonStyle(PillButtonStyle(prominent: primary && !install.trimmed.isEmpty))
-                .disabled(install.trimmed.isEmpty || install.installing)
+                .disabled(install.trimmed.isEmpty || install.busy)
             }
             if install.refused != nil {
                 StatusDot(tone: .warn, text: LinkInstall.tokenWarning)
                 Button(LinkInstall.tokenConfirm) { Task { await install.install(acknowledged: true) } }
                     .buttonStyle(PillButtonStyle())
-                    .disabled(install.installing)
+                    .disabled(install.busy)
             } else if let problem = install.problem {
                 StatusDot(tone: .bad, text: problem)
             }
         }
+        .installSheet(install.gate)
+    }
+
+    private var buttonWord: String {
+        install.checking ? InstallSheetRules.checking : install.installing ? "Installing" : InstallSheetRules.install
     }
 
     private func installLink() {

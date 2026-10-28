@@ -7,6 +7,8 @@ import Observation
 @MainActor @Observable
 final class FindAddonsPage {
     private(set) var catalog: LiveRecord<AddonCatalogSnapshot>
+    /// The install sheet's question, while one is open.
+    let gate = InstallGate()
     @ObservationIgnored private let core: CoreClient
     @ObservationIgnored private var opened = false
 
@@ -45,6 +47,13 @@ final class FindAddonsPage {
         guard !opened else { return }
         opened = true
         InstallCards.shared.forgetAll(running: false)
+    }
+
+    /// A card's press: Install asks first with the install sheet, whose
+    /// Install runs `run`; Turn on runs at once (the addon is installed).
+    func press(_ entry: ListedAddon, _ act: FindAction, run: @escaping @MainActor () -> Void) {
+        guard case .install = act else { return run() }
+        gate.ask(InstallSheetRules.ask(name: entry.name, host: entry.host, provides: entry.provides, types: entry.types, run: run))
     }
 
     /// Try again and Refresh: the view opens again with `fresh`, which waits
