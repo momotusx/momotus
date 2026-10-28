@@ -467,6 +467,34 @@ struct PillLabelStyle: LabelStyle {
     }
 }
 
+/// Every sideways strip of cards (Home's rows, More like this, episodes, cast). A swipe, a drag or a trackpad flick
+/// comes to rest with a card on the page's text column, `inset` in from the strip's edge, never between two cards
+/// (the owner, 2026-10-28), as the Apple TV app's shelves do. TV scrolls by focus and keeps its own behaviour.
+struct Shelf<Content: View>: View {
+    var spacing: CGFloat
+    /// The page's text column, from the strip's leading edge: the first card's place, and where each swipe ends.
+    var inset: CGFloat = 0
+    /// Room above and below for the lift and the focus ring, which the strip draws past its own frame.
+    var room: CGFloat = 0
+    @ViewBuilder let content: Content
+
+    var body: some View {
+        ScrollView(.horizontal) {
+            LazyHStack(alignment: .top, spacing: spacing) { content }
+                .scrollTargetLayout()
+                .padding(.vertical, room)
+        }
+        // A margin, not padding: the snap lines a card up with the margin, where padding would put it at the edge.
+        .contentMargins(.horizontal, inset, for: .scrollContent)
+        #if !os(tvOS)
+        .scrollTargetBehavior(.viewAligned)
+        #endif
+        .scrollIndicators(.hidden)
+        .scrollClipDisabled()
+        .padding(.vertical, -room)
+    }
+}
+
 /// Lays children out left to right, wrapping onto new lines when they do not fit.
 struct FlowRow: Layout {
     var spacing: CGFloat = 12

@@ -175,17 +175,11 @@ struct SeasonShelf: View {
             .focused(actions.focus, equals: .season)
             .accessibilityLabel("Season, \(seasonName(selected ?? 1))")
             .accessibilityHint("Chooses a season, or shows all episodes")
-            ScrollView(.horizontal) {
-                LazyHStack(alignment: .top, spacing: metrics.wide ? Theme.TileDesktop.gap : Theme.Tile.gap) {
-                    ForEach(episodes, id: \.videoId) { episode in
-                        EpisodeCard(episode: episode, minutes: minutes, actions: actions)
-                    }
+            Shelf(spacing: metrics.wide ? Theme.TileDesktop.gap : Theme.Tile.gap, room: 8) {
+                ForEach(episodes, id: \.videoId) { episode in
+                    EpisodeCard(episode: episode, minutes: minutes, actions: actions)
                 }
-                .padding(.vertical, 8)
             }
-            .scrollIndicators(.hidden)
-            .scrollClipDisabled()
-            .padding(.vertical, -8)
         }
     }
 
@@ -209,23 +203,20 @@ struct CastShelf: View {
                 .display(metrics.wide ? 17 : 20)
                 .foregroundStyle(Theme.Palette.text)
                 .accessibilityAddTraits(.isHeader)
-            ScrollView(.horizontal) {
-                HStack(alignment: .top, spacing: 20) {
-                    ForEach(cast, id: \.self) { name in
-                        // With no link (a kids profile, whose Search finds only its list) a person is a plain
-                        // view: no button, no hint of an action that is not there.
-                        if let open {
-                            Button { open(name) } label: { person(name, side: side) }
-                                .buttonStyle(FocusPlainStyle(shape: RoundedRectangle(cornerRadius: 12, style: .continuous), scale: 1))
-                                .accessibilityHint("Searches for their titles")
-                                .heroProbe(.link(name))
-                        } else {
-                            person(name, side: side)
-                        }
+            Shelf(spacing: 20) {
+                ForEach(cast, id: \.self) { name in
+                    // With no link (a kids profile, whose Search finds only its list) a person is a plain
+                    // view: no button, no hint of an action that is not there.
+                    if let open {
+                        Button { open(name) } label: { person(name, side: side) }
+                            .buttonStyle(FocusPlainStyle(shape: RoundedRectangle(cornerRadius: 12, style: .continuous), scale: 1))
+                            .accessibilityHint("Searches for their titles")
+                            .heroProbe(.link(name))
+                    } else {
+                        person(name, side: side)
                     }
                 }
             }
-            .scrollIndicators(.hidden)
         }
     }
 

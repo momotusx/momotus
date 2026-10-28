@@ -52,35 +52,28 @@ struct RowView: View {
     }
 
     private var strip: some View {
-        ScrollView(.horizontal) {
-            LazyHStack(alignment: .top, spacing: metrics.wide ? Theme.TileDesktop.gap : Theme.Tile.gap) {
-                let tiles = row.tiles.keyed
-                ForEach(tiles, id: \.key) { key, tile in
-                    NavigationLink(value: TitleRoute(tile)) {
-                        if row.rowId == "continue-watching" {
-                            ContinueCard(tile: tile)
-                        } else {
-                            PosterTile(tile: tile)
-                        }
+        Shelf(spacing: metrics.wide ? Theme.TileDesktop.gap : Theme.Tile.gap, inset: metrics.gutter, room: 12) {
+            let tiles = row.tiles.keyed
+            ForEach(tiles, id: \.key) { key, tile in
+                NavigationLink(value: TitleRoute(tile)) {
+                    if row.rowId == "continue-watching" {
+                        ContinueCard(tile: tile)
+                    } else {
+                        PosterTile(tile: tile)
                     }
-                    .buttonStyle(CardButtonStyle())
-                    // Continue Watching and Next Up: a title can leave the row (right click, long press,
-                    // a long press of select on TV) until it is played again, on every synced device.
-                    .contextMenu {
-                        if row.rowId == "continue-watching" {
-                            Button("Remove from Continue Watching", glyph: "x") { remove(tile) }
-                        }
-                    }
-                    // TV: Home's start row enters on its first tile.
-                    .modifier(StartFocus(scope: key == tiles.first?.key ? startScope : nil))
                 }
+                .buttonStyle(CardButtonStyle())
+                // Continue Watching and Next Up: a title can leave the row (right click, long press,
+                // a long press of select on TV) until it is played again, on every synced device.
+                .contextMenu {
+                    if row.rowId == "continue-watching" {
+                        Button("Remove from Continue Watching", glyph: "x") { remove(tile) }
+                    }
+                }
+                // TV: Home's start row enters on its first tile.
+                .modifier(StartFocus(scope: key == tiles.first?.key ? startScope : nil))
             }
-            .padding(.horizontal, metrics.gutter)
-            .padding(.vertical, 12)
         }
-        .scrollIndicators(.hidden)
-        .scrollClipDisabled()
-        .padding(.vertical, -12)
     }
 }
 
