@@ -642,3 +642,20 @@ fn the_walk_provider_finds_its_film() {
     assert_eq!(out, Outcome::Done(Vec::new()));
     assert!(seen.fetches.is_empty());
 }
+
+/// A plugin that relies on the app's TMDB key (6.2): the key is "", so it
+/// returns no rows and never builds a TMDB request.
+#[test]
+fn a_plugin_needing_the_apps_tmdb_key_gets_none() {
+    let script = r#"
+        async function getStreams(tmdbId, mediaType) {
+            if (!TMDB_API_KEY) return [];
+            const r = await fetch(`https://api.themoviedb.org/3/${mediaType}/${tmdbId}?api_key=${TMDB_API_KEY}`);
+            return [{ url: "https://a.example/" + (await r.json()).id }];
+        }
+        module.exports = { getStreams };
+    "#;
+    let (out, seen) = run_with(movie(script), ok("{\"id\": 603}"));
+    assert_eq!(out, Outcome::Done(Vec::new()));
+    assert!(seen.fetches.is_empty());
+}
