@@ -126,24 +126,34 @@ function OfflineBar() {
   const view = liveView<DownloadsSnapshot>("downloads");
   const hasDone = () => !!shownDownloads(view.state.data)?.titles.some((t) => t.rows.some((r) => r.state === "done"));
   const banner = () => offlineBanner(online(), form(), location.pathname, hasDone());
-  // The pages below start under the banner, whatever it wraps to (`--offline-h` on the shell).
+  // The pages below start under the banner, whatever it wraps to (`--offline-h` on the shell). The
+  // ref runs before the bar is in the page: its height goes on the shell once it is, before the
+  // first paint, then on every wrap (code review r5 m7).
   const measure = (el: HTMLElement) => {
-    const shell = el.parentElement;
-    if (!shell) return;
-    const set = () => shell.style.setProperty("--offline-h", `${el.offsetHeight}px`);
+    let shell: HTMLElement | null = null;
+    const set = () => shell?.style.setProperty("--offline-h", `${el.offsetHeight}px`);
     const watch = new ResizeObserver(set);
-    watch.observe(el);
+    queueMicrotask(() => {
+      shell = el.parentElement;
+      set();
+      watch.observe(el);
+    });
     onCleanup(() => {
       watch.disconnect();
-      shell.style.removeProperty("--offline-h");
+      shell?.style.removeProperty("--offline-h");
     });
   };
+  // Only the constant is live: the words after it change as the downloads become known or the page
+  // changes, and must not announce the banner again (code review r5 m6).
   return (
     <Show when={banner()}>
       {(b) => (
-        <section class="offline-bar" role="status" ref={measure} data-fgroup="offline-banner">
+        <section class="offline-bar" ref={measure} data-fgroup="offline-banner">
           <WifiOff aria-hidden />
-          <p>{b().words}</p>
+          <p>
+            <span role="status">{downloadWords.offlineAlone}</span>
+            <Show when={b().rest}> {downloadWords.offlineRest}</Show>
+          </p>
           <Show when={b().action}>
             <A class="btn" href="/library/downloads" data-f="offline:downloads">
               <ArrowDownToLine aria-hidden />

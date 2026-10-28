@@ -203,9 +203,9 @@ test("the shell's offline banner: none online, on TV or in the player; the way t
   expect(offlineBanner(true, "phone", "/", true)).toBeNull();
   expect(offlineBanner(false, "tv", "/", true)).toBeNull();
   expect(offlineBanner(false, "desktop", "/play/movie/tt1/tt1", true)).toBeNull();
-  expect(offlineBanner(false, "phone", "/discover", false)).toEqual({ words: "You're offline.", action: false });
-  expect(offlineBanner(false, "phone", "/discover", true)).toEqual({ words: "You're offline. Your downloads still play.", action: true });
-  expect(offlineBanner(false, "desktop", "/", true)).toEqual({ words: "You're offline. Your downloads still play.", action: true });
-  expect(offlineBanner(false, "phone", "/library/downloads", true)).toEqual({ words: "You're offline. Your downloads still play.", action: false });
+  expect(offlineBanner(false, "phone", "/discover", false)).toEqual({ rest: false, action: false });
+  expect(offlineBanner(false, "phone", "/discover", true)).toEqual({ rest: true, action: true });
+  expect(offlineBanner(false, "desktop", "/", true)).toEqual({ rest: true, action: true });
+  expect(offlineBanner(false, "phone", "/library/downloads", true)).toEqual({ rest: true, action: false });
   expect(offlineBanner(false, "desktop", "/library/downloads/tt9", true)?.action).toBe(false);
 });

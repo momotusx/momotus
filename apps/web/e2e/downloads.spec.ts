@@ -291,8 +291,10 @@ test("offline, every page says so, Home once, a download plays from Downloads, t
   await goOnline(page, false);
   // Home: one banner, the shell's, with the way to Downloads; it sits above the nav, not over it.
   await expect(banner(page)).toHaveText(/You're offline\. Your downloads still play\.\s*Go to Downloads/, { timeout: 30_000 });
-  await expect(page.getByText("You're offline.", { exact: false })).toHaveCount(1);
-  await expect(banner(page)).toHaveAttribute("role", "status");
+  await expect(banner(page)).toHaveCount(1);
+  // Only the constant is live (code review r5 m6).
+  await expect(banner(page).getByRole("status")).toHaveText("You're offline.");
+  await expect(page.getByRole("status").filter({ hasText: "still play" })).toHaveCount(0);
   const bar = await banner(page).boundingBox();
   const nav = await page.locator(".topnav").boundingBox();
   expect(bar && nav && bar.y + bar.height <= nav.y + 1).toBe(true);

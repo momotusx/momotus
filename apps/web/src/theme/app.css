@@ -55,6 +55,9 @@ h1, h2, h3 { font-family: var(--font-display); font-weight: var(--weight-heading
 [data-form="phone"] .app { inset: 0; width: auto; height: auto; transform: none; }
 /* `--offline-h`: the shell's offline banner, when it shows, sits above the pages and the nav. */
 .screen { position: absolute; inset: 0; top: var(--offline-h, 0px); }
+/* The phone's bar pads the notch already; each page pads its own, which then sits under the bar
+   instead of adding a second notch-high gap (code review r5 n5). */
+[data-form="phone"] .screen { top: max(0px, calc(var(--offline-h, 0px) - env(safe-area-inset-top))); }
 
 /* Scrollers we drive with focus never show bars on TV. */
 [data-vscroll], [data-hscroll] { scrollbar-width: none; overscroll-behavior: contain; }
