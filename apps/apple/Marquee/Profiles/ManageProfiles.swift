@@ -104,7 +104,11 @@ struct EditProfile: View {
     @Environment(\.scenePhase) private var phase
 
     var body: some View {
-        ScrollViewReader { proxy in
+        pinDialog(leaveGuard(ScrollViewReader { proxy in page(proxy) }))
+    }
+
+    /// The edit page: the form, the PIN section and Delete.
+    private func page(_ proxy: ScrollViewProxy) -> some View {
         ScrollView(.vertical) {
             VStack(alignment: .leading, spacing: Theme.Space.m) {
                 if let snapshot = profiles.snapshot, let active = snapshot.current {
@@ -144,7 +148,7 @@ struct EditProfile: View {
         .topScrim()
         #if os(macOS)
         // The Go menu's Back takes the same ask as the Back button.
-        .environment(\.leaveAsk, dirty ? leave : nil)
+        .environment(\.leaveAsk, leaveAsk)
         #endif
         .onAppear(perform: fill)
         // A half-done PIN change is given up when the app leaves the front:
@@ -154,44 +158,69 @@ struct EditProfile: View {
         .onChange(of: confirmDelete) { _, open in
             if open { withAnimation(Theme.Motion.panel) { proxy.scrollTo("delete", anchor: .center) } }
         }
-        #if !os(tvOS)
-        // The dialogs below draw in the key blue, not the root's white tint (DECISION, Confirmation); not on TV.
-        .tint(Theme.Palette.key)
-        // Edits are not lost to a stray Back: the system back (and its swipe) gives way to one that asks.
-        #if os(iOS)
-        // The Mac's is hidden in `BackOnlyWhenShown`, which reads `leaveAsk`.
-        .navigationBarBackButtonHidden(backButtonHidden(shown: shown, holdsEdits: dirty))
+    }
+
+    /// Back and the Go menu's Back ask while the page holds edits.
+    private var leaveAsk: (() -> Void)? {
+        guard dirty else { return nil }
+        return { leave() }
+    }
+
+    /// Edits are not lost to a stray Back, on every platform with a back (not TV).
+    @ViewBuilder private func leaveGuard(_ content: some View) -> some View {
+        #if os(tvOS)
+        content
+        #else
+        content
+            // The dialogs below draw in the key blue, not the root's white tint (DECISION, Confirmation); not on TV.
+            .tint(Theme.Palette.key)
+            // The system back (and its swipe) gives way to the Back below, which asks.
+            #if os(iOS)
+            // The Mac's is hidden in `BackOnlyWhenShown`, which reads `leaveAsk`.
+            .navigationBarBackButtonHidden(backButtonHidden(shown: shown, holdsEdits: dirty))
+            #endif
+            .toolbar { leaveBack }
+            .confirmationDialog("You have unsaved changes", isPresented: $confirmLeave, titleVisibility: .visible) {
+                // Saving leaves once it worked; a failure stays here with its line, nothing lost.
+                Button("Save changes") { save(thenLeave: true) }
+                Button("Discard changes") { dismiss() }
+                Button("Keep editing", role: .cancel) {}
+            }
         #endif
-        .toolbar {
-            if dirty, shown {
-                ToolbarItem(placement: .navigation) {
-                    Button(action: leave) { Label("Back", glyph: "chevron-left") }
-                        // The system back is a chevron alone; the control keeps its shape when the first edit swaps them.
-                        .labelStyle(.iconOnly)
-                }
+    }
+
+    #if !os(tvOS)
+    @ToolbarContentBuilder private var leaveBack: some ToolbarContent {
+        if dirty, shown {
+            ToolbarItem(placement: .navigation) {
+                Button(action: leave) { Label("Back", glyph: "chevron-left") }
+                    // The system back is a chevron alone; the control keeps its shape when the first edit swaps them.
+                    .labelStyle(.iconOnly)
             }
         }
-        .confirmationDialog("You have unsaved changes", isPresented: $confirmLeave, titleVisibility: .visible) {
-            // Saving leaves once it worked; a failure stays here with its line, nothing lost.
-            Button("Save changes") { save(thenLeave: true) }
-            Button("Discard changes") { dismiss() }
-            Button("Keep editing", role: .cancel) {}
-        }
-        #endif
-        .confirmationDialog(
-            removal.map { label($0.action, $0.target) + "?" } ?? "Remove PIN?", isPresented: Binding(get: { removal != nil }, set: { if !$0 { removal = nil } }),
-            titleVisibility: .visible, presenting: removal
-        ) { removal in
-            Button(label(removal.action, removal.target)) { removePin(removal.action, removal.target) }
-            Button("Cancel", role: .cancel) {}
-                #if !os(tvOS)
-                // Return never removes a PIN.
-                .keyboardShortcut(.defaultAction)
-                #endif
-        } message: { removal in
-            Text("Anyone can then open \(removal.action == .removeOther ? removal.target.name : "this profile") without it.")
-        }
-        }
+    }
+    #endif
+
+    private func pinDialog(_ content: some View) -> some View {
+        content
+            .confirmationDialog(pinTitle, isPresented: removing, titleVisibility: .visible, presenting: removal) { removal in
+                Button(label(removal.action, removal.target)) { removePin(removal.action, removal.target) }
+                Button("Cancel", role: .cancel) {}
+                    #if !os(tvOS)
+                    // Return never removes a PIN.
+                    .keyboardShortcut(.defaultAction)
+                    #endif
+            } message: { removal in
+                Text("Anyone can then open \(removal.action == .removeOther ? removal.target.name : "this profile") without it.")
+            }
+    }
+
+    private var pinTitle: String {
+        removal.map { label($0.action, $0.target) + "?" } ?? "Remove PIN?"
+    }
+
+    private var removing: Binding<Bool> {
+        Binding(get: { removal != nil }, set: { if !$0 { removal = nil } })
     }
 
     private func deleteConfirm(_ target: ProfileInfo) -> some View {
