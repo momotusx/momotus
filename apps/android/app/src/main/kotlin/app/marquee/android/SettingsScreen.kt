@@ -177,6 +177,7 @@ fun SettingsScreen(
     var said by remember { mutableStateOf<Said?>(null) }
     val requesters = remember { mutableStateMapOf<String, FocusRequester>() }
     val installFocus = remember { FocusRequester() }
+    LinkSheet(session, link, installFocus)
 
     fun run(
         what: String,
@@ -642,10 +643,6 @@ internal fun LinkField(
     compact: Boolean = false,
 ) {
     val said = link.said?.let { Said(Place.Install, it.words, it.failed, it.pending) }
-    // What clears the field once the sheet's Install added its link.
-    var clear by remember { mutableStateOf({}) }
-    // The sheet belongs to this field: when it leaves, a check still running lands nowhere and an open sheet goes.
-    DisposableEffect(link) { onDispose { link.left() } }
     // A link whose settings carry a sign-in is refused first; the user's confirm sends the field's
     // link (an edit drops the warning, so it is the link warned about), acknowledged.
     InstallField(
@@ -659,11 +656,24 @@ internal fun LinkField(
         offered = link.offered,
         onTaken = { link.offered = null },
     ) { url, acknowledged, clearField ->
-        clear = clearField
+        link.clearField = clearField
         link.check(url, acknowledged, session.ops::previewAddon)
     }
-    // Nothing installs from the link before this sheet's Install (plans/addon-install-sheet.md). Cancel keeps the
-    // link in the field; the focus goes back to Add.
+}
+
+/**
+ * The link field's install sheet, held by the page rather than by the field: the field sits in a scrolling
+ * list, and scrolled out of sight it leaves composition while its check runs on. Nothing installs from a link
+ * before this sheet's Install (plans/addon-install-sheet.md); Cancel keeps the link in the field and the focus
+ * goes back to Add. The page leaving drops a running check and an open sheet.
+ */
+@Composable
+internal fun LinkSheet(
+    session: CoreSession,
+    link: LinkInstall,
+    focus: FocusRequester,
+) {
+    DisposableEffect(link) { onDispose { link.left() } }
     link.checked?.let { checked ->
         val addon = checked.addon
         InstallSheet(
@@ -671,7 +681,7 @@ internal fun LinkField(
             addon.host,
             addon.provides,
             addon.types,
-            onInstall = { link.confirm({ url, ack -> session.ops.installAddon(url, ack).name }, clear) },
+            onInstall = { link.confirm({ url, ack -> session.ops.installAddon(url, ack).name }) },
             onCancel = link::cancel,
             opener = focus,
         )

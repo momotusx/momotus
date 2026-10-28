@@ -294,6 +294,9 @@ fun FindAddonsScreen(
         )
     val tv = Marquee.form == Form.Tv
     val page = holder.page
+    // The pasted link's sheet is the page's: the field scrolls out of the list while its check runs on.
+    val pasteFocus = remember { FocusRequester() }
+    LinkSheet(session, link, pasteFocus)
     val view = page.view
     val snapshot = view.snapshot
     // A result is about the state it was pressed in: a new installed state clears it.
@@ -467,7 +470,7 @@ fun FindAddonsScreen(
                         )
                     }
                 } else {
-                    PasteLink(session, link)
+                    PasteLink(session, link, pasteFocus)
                 }
             }
             item(key = "lists") {
@@ -779,8 +782,8 @@ private fun CommunityNote() {
 private fun PasteLink(
     session: CoreSession,
     link: LinkInstall,
+    focus: FocusRequester,
 ) {
-    val focus = remember { FocusRequester() }
     LinkField(session, link, focus, side = 0.dp, compact = true)
 }
 

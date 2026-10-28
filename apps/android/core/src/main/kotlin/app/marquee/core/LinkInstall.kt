@@ -53,6 +53,9 @@ class LinkInstall(
     var checked: Checked? by mutableStateOf(null)
         private set
 
+    /** What clears the field that asked, once the sheet's Install added its link. Plain memory, not state. */
+    var clearField: () -> Unit = {}
+
     val busy get() = said?.pending == true
 
     // Bumped for a new profile: a request from before must not land on the new profile's pages.
@@ -122,7 +125,7 @@ class LinkInstall(
     /** The sheet's Install: the checked link goes in with [install] (url, acknowledged), as [run] adds. */
     fun confirm(
         install: suspend (url: String, acknowledgeToken: Boolean) -> String,
-        added: () -> Unit = {},
+        added: () -> Unit = clearField,
     ): Job? {
         val sure = checked ?: return null
         checked = null
@@ -155,8 +158,9 @@ class LinkInstall(
     }
 
     /**
-     * The field that asked left its page: a running check lands nowhere and an open sheet closes, so the
-     * sheet never shows up on another page. An add already sent goes on.
+     * The page that asked left: a running check lands nowhere and an open sheet closes, so the sheet never
+     * shows up on another page. An add already sent goes on. A field scrolled out of its page is not a page
+     * leaving: its check goes on (the sheet is the page's, [LinkSheet] in the app).
      */
     fun left() {
         dropCheck()
