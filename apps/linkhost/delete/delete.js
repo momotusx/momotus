@@ -47,7 +47,7 @@ async function post(path, body) {
   return json;
 }
 
-const WORDS = {
+export const WORDS = {
   cancelled: "Sign-in was cancelled. Choose a sign-in to try again.",
   expired: "That sign-in took too long. Choose a sign-in to start again.",
   stranger: "This sign-in was not started on this page. Choose a sign-in to start again.",
@@ -72,6 +72,8 @@ export function mailWords(code) {
     wrongCode: WORDS.wrongCode,
     badCode: WORDS.wrongCode,
     ticketExpired: WORDS.codeExpired,
+    wrongFlow: WORDS.codeExpired,
+    signInRefused: WORDS.codeExpired,
     emailWait: WORDS.emailWait,
     emailLimit: WORDS.emailLimit,
     mailUnavailable: WORDS.mailUnavailable,
@@ -170,7 +172,7 @@ async function sendCode() {
     const verifier = newVerifier();
     const { flow } = await post("/v1/auth/email/start", { verifierHash: await verifierHash(verifier), purpose: "signin", email });
     mail = { flow, verifier };
-    $("sent").textContent = WORDS.sent.replace("{email}", email);
+    $("sent").textContent = WORDS.sent.replace("{email}", () => email);
     $("code").value = "";
     $("code-form").hidden = false;
     $("code").focus();
@@ -181,19 +183,24 @@ async function sendCode() {
 }
 
 async function takeCode() {
-  if (!mail) return say(WORDS.codeExpired, "bad");
+  const mine = mail;
+  if (!mine) return say(WORDS.codeExpired, "bad");
   say("");
   let taken;
   try {
-    taken = await post("/v1/auth/take", { flow: mail.flow, verifier: mail.verifier, code: codeDigits($("code").value) });
+    taken = await post("/v1/auth/take", { flow: mine.flow, verifier: mine.verifier, code: codeDigits($("code").value) });
   } catch (e) {
-    // A wrong code keeps the flow for another try; anything that ended it needs a new code.
-    if (!["wrongCode", "badCode", "busy", ""].includes(e.code ?? "")) mail = null;
-    $("code").value = "";
+    const code = e.code ?? "";
+    // No answer (a network error): the code stays for Continue again. A coded answer clears it;
+    // a wrong code or a busy relay keep the flow, anything else ended it (emailLimit included).
+    if (code) {
+      $("code").value = "";
+      if (!["wrongCode", "badCode", "busy"].includes(code) && mail === mine) mail = null;
+    }
     $("code").focus();
-    return say(mailWords(e.code), "bad");
+    return say(mailWords(code), "bad");
   }
-  mail = null;
+  if (mail === mine) mail = null;
   $("email-form").hidden = true;
   $("code-form").hidden = true;
   ask(taken);

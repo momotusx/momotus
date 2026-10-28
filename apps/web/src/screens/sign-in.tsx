@@ -378,6 +378,8 @@ export function createMail(server: () => string) {
   let flow: EmailFlow | null = null;
   let again: (() => void) | null = null;
   let hooks = unbound;
+  /** The newest call: an answer to an older one (left by Back, Use another address or Cancel) is dropped. */
+  let epoch = 0;
   const failed = (code: string) => {
     const onCode = hooks.stage() === "code";
     const line = emailFieldError(code);
@@ -392,18 +394,22 @@ export function createMail(server: () => string) {
       flow = null;
     }
   };
-  const call = (work: () => Promise<Taken | null>) => {
+  /** Runs one call at a time; `work` answers what its result does, applied only while it is the newest. */
+  const call = (work: () => Promise<() => void>) => {
     if (busy()) return;
     again = () => call(work);
+    const mine = ++epoch;
     setFailure(null);
     setFieldError(null);
     setBusy(true);
     work().then(
-      (end) => {
+      (apply) => {
+        if (mine !== epoch) return;
         setBusy(false);
-        if (end) hooks.taken(end);
+        apply();
       },
       (e: unknown) => {
+        if (mine !== epoch) return;
         setBusy(false);
         failed(codeOf(e));
       },
@@ -413,14 +419,16 @@ export function createMail(server: () => string) {
     const typed = resend ? sentTo() : address().trim();
     call(async () => {
       setResent(false);
-      flow = await emailStart(server(), typed);
-      setSentTo(typed);
-      setSentAt(Date.now());
-      setCode("");
-      setEnded(false);
-      setResent(resend);
-      hooks.sent();
-      return null;
+      const started = await emailStart(server(), typed);
+      return () => {
+        flow = started;
+        setSentTo(typed);
+        setSentAt(Date.now());
+        setCode("");
+        setEnded(false);
+        setResent(resend);
+        hooks.sent();
+      };
     });
   };
   const submit = () => {
@@ -429,8 +437,10 @@ export function createMail(server: () => string) {
     if (!f || busy() || ended() || typed.length !== 6) return;
     call(async () => {
       const end = await emailCode(f.flow, typed);
-      flow = null;
-      return end;
+      return () => {
+        flow = null;
+        hooks.taken(end);
+      };
     });
   };
   /** The address stage's start: no line, no code. */
@@ -453,6 +463,13 @@ export function createMail(server: () => string) {
     sentAt,
     reset,
     submit,
+    /** The code stage has something to show: an open flow, one that ended with its words, or a mail on its way. */
+    hasFlow: () => flow !== null || ended() || busy(),
+    /** Leaves the call under way: its answer, whatever it is, is dropped. */
+    cancel: () => {
+      epoch++;
+      setBusy(false);
+    },
     bind: (h: MailHooks | null) => {
       hooks = h ?? unbound;
     },
@@ -519,7 +536,18 @@ export function EmailStages(props: { mail: MailState; stage: MailStage; fkey: st
   const errorId = `${props.fkey.replace(/\W/g, "-")}-error`;
   let field: HTMLInputElement | undefined;
   // On a stage change and on a line under the field, focus goes to the stage's field.
-  createEffect(on(() => props.stage, () => queueMicrotask(() => field?.focus()), { defer: true }));
+  // The new stage's title is said once, as the focus lands in its field.
+  const [said, setSaid] = createSignal("");
+  createEffect(
+    on(
+      () => props.stage,
+      (s) => {
+        setSaid(s === "code" ? w.codeTitle : w.emailTitle);
+        queueMicrotask(() => field?.focus());
+      },
+      { defer: true },
+    ),
+  );
   createEffect(on(m.fieldError, (e) => e && field?.focus(), { defer: true }));
   const [now, setNow] = createSignal(Date.now());
   const tick = setInterval(() => setNow(Date.now()), 1000);
@@ -566,6 +594,7 @@ export function EmailStages(props: { mail: MailState; stage: MailStage; fkey: st
                   onInput={(e) => m.setAddress(e.currentTarget.value)}
                   readOnly={m.busy()}
                   aria-busy={m.busy() || undefined}
+                  enterkeyhint="send"
                   data-f={k("address")}
                   data-autofocus
                   aria-invalid={m.fieldError() ? true : undefined}
@@ -607,10 +636,11 @@ export function EmailStages(props: { mail: MailState; stage: MailStage; fkey: st
               }}
               readOnly={m.busy() || m.ended()}
               aria-busy={m.busy() || undefined}
+              enterkeyhint="go"
               data-f={k("code")}
               data-autofocus
               aria-invalid={m.fieldError() ? true : undefined}
-                  aria-describedby={m.fieldError() ? errorId : undefined}
+              aria-describedby={m.fieldError() ? errorId : undefined}
             />
           </label>
           {fieldLine()}
@@ -639,6 +669,9 @@ export function EmailStages(props: { mail: MailState; stage: MailStage; fkey: st
       </div>
       <p class="sr" aria-live="polite">
         {standing() && m.sentAt() && wait() === 0 ? w.codeResend : ""}
+      </p>
+      <p class="sr" aria-live="polite">
+        {said()}
       </p>
     </>
   );
@@ -671,14 +704,20 @@ export function EmailSignIn() {
       } else navigate(`/sign-in/${end.phase}${tail(from)}`);
     },
   });
-  onCleanup(() => m.bind(null));
+  onCleanup(() => {
+    m.cancel();
+    m.bind(null);
+  });
   createEffect(
     on(stage, (s) => {
-      if (s === "address") m.reset();
-      else if (!m.sentTo()) navigate(emailPath("address", from), { replace: true });
+      if (s === "address") {
+        m.cancel();
+        m.reset();
+      } else if (!m.hasFlow()) navigate(emailPath("address", from), { replace: true });
     }),
   );
   const toAddress = () => {
+    m.cancel();
     if (pushedCode) {
       pushedCode = false;
       navigate(-1);

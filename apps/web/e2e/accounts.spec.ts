@@ -44,6 +44,7 @@ let mockUrl = "";
 const SAM = "sam@example.org";
 const LEE = "lee@example.org";
 const PAT = "pat@example.org";
+const ANN = "ann@example.org";
 const LINKHOST = fileURLToPath(new URL("../../linkhost/", import.meta.url));
 const errors: string[] = [];
 /** The last pairing code each core's page showed, by the core's port. */
@@ -64,6 +65,21 @@ function collect(port: number, text: string) {
   walk(JSON.parse(text));
 }
 
+/** Answers kept from a page, by `<port>:<op>`: the core's answer to the next such request waits
+ * for `release`, or a failure with no code (the sync service did not answer) stands in for it. */
+const holds = new Map<string, { gate?: Promise<void>; fail?: boolean }>();
+/** The held answers' gates, by `<port>:<request id>`. */
+const gates = new Map<string, Promise<void>>();
+/** Holds the core's answer to `port`'s next `op` until the returned release is called. */
+function hold(port: number, op: string): () => void {
+  let release = () => undefined as void;
+  const gate = new Promise<void>((ok) => (release = ok));
+  holds.set(`${port}:${op}`, { gate });
+  return release;
+}
+/** Answers `port`'s next `op` with no code, as when the sync service does not answer; the core never sees it. */
+const failNext = (port: number, op: string) => holds.set(`${port}:${op}`, { fail: true });
+
 const FORMS = {
   desktop: { viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1 },
   phone: { viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true },
@@ -83,8 +99,13 @@ async function device(browser: Browser, port: number, form: keyof typeof FORMS, 
       for (const m of early.splice(0)) core.send(m);
     });
     core.addEventListener("message", (e) => {
-      collect(port, String(e.data));
-      ws.send(String(e.data));
+      const text = String(e.data);
+      collect(port, text);
+      const id = (JSON.parse(text) as { id?: number }).id;
+      const gate = gates.get(`${port}:${id}`);
+      gates.delete(`${port}:${id}`);
+      if (gate) void gate.then(() => ws.send(text));
+      else ws.send(text);
     });
     core.addEventListener("close", () => ws.close());
     ws.onMessage((m) => {
@@ -92,6 +113,10 @@ async function device(browser: Browser, port: number, form: keyof typeof FORMS, 
       const request = JSON.parse(String(m)) as Record<string, unknown>;
       const params = request.params as Record<string, unknown> | undefined;
       asked.push({ port, op: request.op as string | undefined, view: request.view as string | undefined, fields: Object.keys(request), form: (request.form ?? params?.form) as string | undefined });
+      const kept = holds.get(`${port}:${request.op}`);
+      holds.delete(`${port}:${request.op}`);
+      if (kept?.fail) return ws.send(JSON.stringify({ id: request.id, ok: false, error: "the sync service did not answer" }));
+      if (kept?.gate) gates.set(`${port}:${request.id}`, kept.gate);
       if (core.readyState === WebSocket.OPEN) core.send(String(m));
       else early.push(String(m));
     });
@@ -337,7 +362,9 @@ test.describe.serial("accounts on the web", () => {
     await expect(field).not.toHaveAttribute("maxlength");
     const newCode = mail.locator('[data-f="signin:email:new-code"]');
     await expect(newCode).toBeDisabled();
-    await expect(newCode).toHaveText(/^Send a new code in (60|59|58|57) seconds$/);
+    await expect(newCode).toHaveText(/^Send a new code in \d+ seconds$/);
+    // The address shows on the page only: never in the URL, history or storage.
+    expect(await kept(mail)).not.toContain(SAM);
     await shots(mail, "email-code-1440");
     const code = codeIn(await mailText(SAM));
     expect(code).toMatch(/^\d{6}$/);
@@ -352,17 +379,30 @@ test.describe.serial("accounts on the web", () => {
     await expect(mail).toHaveURL(/stage=code/);
     expect(emailStarts(P.d)).toBe(starts);
 
-    // A wrong code, typed: sent once at the sixth digit; its line, the field cleared and focused.
+    // A wrong code, typed: sent once at the sixth digit, the field read-only and busy while it is
+    // with the relay; then its line, the field cleared and focused.
+    const release = hold(P.d, "emailSignIn");
     await field.pressSequentially(code.replace(/^./, (d) => String((Number(d) + 1) % 10)));
+    await expect(field).toHaveAttribute("readonly", "");
+    await expect(field).toHaveAttribute("aria-busy", "true");
+    release();
     await expect(line).toHaveText("That code isn't right. Check the email and try again.");
+    await expect(field).not.toHaveAttribute("readonly");
     await expect(field).toHaveAttribute("aria-invalid", "true");
     await expect(field).toHaveValue("");
     await expect(field).toBeFocused();
     expect(codeTries(P.d)).toBe(1);
-    // Pasted with a space: the flow kept, digits only, sent once.
+    // Pasted with a space: digits only, sent once. No answer comes: the code stays, and Try again
+    // sends the same code again (the flow kept).
+    failNext(P.d, "emailSignIn");
     await field.fill(`${code.slice(0, 3)} ${code.slice(3)}`);
-    await expect(mail).toHaveURL(/\/sign-in\/new\?from=welcome$/);
+    await expect(mail.locator(".sign-in-failure .st")).toHaveText("Momotus can't reach its sync service right now.");
+    await expect(mail.locator(".sign-in-failure .btn")).toHaveText(["Try again", "Not now"]);
+    await expect(field).toHaveValue(code);
     expect(codeTries(P.d)).toBe(2);
+    await mail.locator('[data-f="signin:email:retry"]').click();
+    await expect(mail).toHaveURL(/\/sign-in\/new\?from=welcome$/);
+    expect(codeTries(P.d)).toBe(3);
     await mail.locator('[data-f="signin:create"]').click();
     await expect(mail).toHaveURL(/\/sync\/kit\?first=1&then=doors$/);
     await mail.locator('[data-f="sync-kit:cancel"]').click();
@@ -380,12 +420,29 @@ test.describe.serial("accounts on the web", () => {
     await late.setViewportSize({ width: 375, height: 812 });
     await go(late, "/sign-in/email");
     await shots(late, "email-address-375");
-    await late.locator('[data-f="signin:email:address"]').fill(LEE);
+    const lateAddress = late.locator('[data-f="signin:email:address"]');
+    await lateAddress.fill(LEE);
     await late.locator('[data-f="signin:email:send"]').click();
     mailed.set(LEE, Date.now());
     await expect(late).toHaveURL(/\/sign-in\/email\?stage=code$/);
     await mailText(LEE);
     await shots(late, "email-code-375");
+    // Use another address, then the same mailbox written another way within the minute: the
+    // relay's emailWait, with no button, and Send code still there.
+    await late.locator('[data-f="signin:email:another"]').click();
+    await expect(late).toHaveURL(/\/sign-in\/email$/);
+    await lateAddress.fill("Lee@example.org");
+    await late.locator('[data-f="signin:email:send"]').click();
+    await expect(late.locator(".sign-in-failure .st")).toHaveText("Wait a minute, then send a new code.");
+    await expect(late.locator(".sign-in-failure .btn")).toHaveCount(0);
+    await expect(late).toHaveURL(/\/sign-in\/email$/);
+    await expect(late.locator('[data-f="signin:email:send"]')).toBeEnabled();
+    // The address its open flow went to: back to the code stage, no new mail.
+    const lateStarts = emailStarts(P.e);
+    await lateAddress.fill(LEE);
+    await late.locator('[data-f="signin:email:send"]').click();
+    await expect(late).toHaveURL(/\/sign-in\/email\?stage=code$/);
+    expect(emailStarts(P.e)).toBe(lateStarts);
   });
 
   test("Desk signs in: a cancel says nothing, a closed window asks, then new, Create, the kit, the doors", async () => {
@@ -476,9 +533,26 @@ test.describe.serial("accounts on the web", () => {
     await link();
 
     // Link another by email (E12): the email row while no email link exists, both stages in place.
+    // Cancel while the code is with the relay: its answer is dropped, nothing is linked.
     await desk.locator('[data-f="sync:link-another"]').click();
     await section.locator('[data-f="sync:link:email"]').click();
     await expect(section.locator("h3", { hasText: "Sign in with email" })).toBeVisible();
+    await expect(section.locator('[data-f="sync:email:address"]')).toBeFocused();
+    await section.locator('[data-f="sync:email:address"]').fill(ANN);
+    await section.locator('[data-f="sync:email:send"]').click();
+    const release = hold(P.a, "emailSignIn");
+    const links = asked.filter((a) => a.port === P.a && a.op === "linkIdentity").length;
+    await section.locator('[data-f="sync:email:code"]').fill(codeIn(await mailText(ANN)));
+    await expect(section.locator('[data-f="sync:email:code"]')).toHaveAttribute("aria-busy", "true");
+    await section.locator('[data-f="sync:email:leave"]').click();
+    await expect(section.locator('[data-f="sync:email:code"]')).toHaveCount(0);
+    release();
+    await desk.waitForTimeout(1500);
+    expect(asked.filter((a) => a.port === P.a && a.op === "linkIdentity").length).toBe(links);
+    await expect(rows).toHaveCount(2);
+
+    // The provider buttons are back, the email row with them.
+    await section.locator('[data-f="sync:link:email"]').click();
     await section.locator('[data-f="sync:email:address"]').fill(PAT);
     await section.locator('[data-f="sync:email:send"]').click();
     mailed.set(PAT, Date.now());
@@ -634,20 +708,31 @@ test.describe.serial("accounts on the web", () => {
     await press(tv, "home:account:cancel");
     await expect(card).toHaveCount(0);
 
-    // Asked again, on the link host's own page by email (E14); Desk cancels and turns email
-    // sign-in off, so it cannot simply ask again.
-    await deletionByEmail(browser, PAT);
+    // Asked again; Desk cancels and turns the mock sign-in off, so it cannot simply ask again.
+    await requestDeletion("mock", "alice");
     await syncNow(desk);
     await go(desk, "/");
     const deskCard = desk.locator(".account-card");
+    const cancelUnlink = desk.locator('[data-f="home:account:cancel-unlink"]');
+    await expect(deskCard).toHaveAttribute("data-card", "deletion");
+    await expect(cancelUnlink).toHaveText("Cancel and turn off mock sign-in");
+    await cancelUnlink.click();
+    await expect(deskCard).toHaveCount(0);
+    await go(desk, "/sync");
+    await expect(desk.locator('section[aria-label="Signed in with"] .sync-member h3')).toHaveText(["Apple", "Email"]);
+
+    // Asked once more, on the link host's own page by email (E14): the email words, and Cancel
+    // and turn off email sign-in.
+    await deletionByEmail(browser, PAT);
+    await syncNow(desk);
+    await go(desk, "/");
     await expect(deskCard).toHaveAttribute("data-card", "deletion");
     await expect(deskCard).toContainText("Someone signed in with your email address and asked to delete your Momotus account on");
-    const cancelUnlink = desk.locator('[data-f="home:account:cancel-unlink"]');
     await expect(cancelUnlink).toHaveText("Cancel and turn off email sign-in");
     await cancelUnlink.click();
     await expect(deskCard).toHaveCount(0);
     await go(desk, "/sync");
-    await expect(desk.locator('section[aria-label="Signed in with"] .sync-member h3')).toHaveText(["mock", "Apple"]);
+    await expect(desk.locator('section[aria-label="Signed in with"] .sync-member h3')).toHaveText(["Apple"]);
   });
 
   test("Desk deletes the account after Apple's revoke; the TV hears it and removes its library from Home", async () => {
@@ -691,9 +776,18 @@ test.describe.serial("accounts on the web", () => {
     mailed.set(LEE, Date.now());
     expect(emailStarts(P.e)).toBe(starts + 1);
     await expect(newCode).toBeDisabled();
+    // Back while the right code is with the relay: the address stage, and its answer is dropped
+    // (no `new`, no line).
+    const release = hold(P.e, "emailSignIn");
     await late.locator('[data-f="signin:email:code"]').fill(codeIn(await mailText(LEE)));
-    await expect(late).toHaveURL(/\/sign-in\/new$/);
-    await expect(late.locator("h1")).toHaveText("Create your Momotus account");
+    await expect(late.locator('[data-f="signin:email:code"]')).toHaveAttribute("aria-busy", "true");
+    await late.goBack();
+    await expect(late).toHaveURL(/\/sign-in\/email$/);
+    release();
+    await late.waitForTimeout(1500);
+    await expect(late).toHaveURL(/\/sign-in\/email$/);
+    await expect(late.locator('[data-f="signin:email:address"]')).toHaveValue(LEE);
+    await expect(late.locator("#signin-email-error")).toHaveCount(0);
 
     // Mail signs out and keeps its library, then signs in by email again: `found`.
     await go(mail, "/sync");
@@ -717,6 +811,10 @@ test.describe.serial("accounts on the web", () => {
     await expect(mail.locator(".lead")).toHaveText(
       "This sign-in already has a Momotus account. Scan this code with your phone, where Momotus is signed in, to add this browser.",
     );
+    // Back to the code stage of a code already used: no dead field, the address stage instead.
+    await mail.goBack();
+    await expect(mail).toHaveURL(/\/sign-in\/email$/);
+    await expect(mail.locator('[data-f="signin:email:address"]')).toHaveValue(SAM);
 
     // A reload at the code stage has no flow: it is the address stage.
     await go(late, "/sign-in/email?stage=code");

@@ -598,15 +598,22 @@ function SignedInWith(props: { links: IdentityLink[] | undefined; providers: str
     },
   });
   /** At most one Email row: the email way shows only while no email link exists. */
-  const emailOffered = () => !!props.links && props.providers.includes(EMAIL) && !props.links.some((l) => l.provider === EMAIL);
+  // Never on a TV (E13).
+  const emailOffered = () => !tv() && !!props.links && props.providers.includes(EMAIL) && !props.links.some((l) => l.provider === EMAIL);
+  const leaveEmail = () => {
+    mail.cancel();
+    setEmailing(null);
+  };
+  onCleanup(() => mail.cancel());
   const emailAct = (a: Act) => {
     if (a === "retry") mail.retry();
     else if (a === "resend") mail.resend();
     else if (a === "otherAddress") {
+      mail.cancel();
       mail.reset();
       setEmailing("address");
     } else if (a === "cancel") mail.dismiss();
-    else setEmailing(null);
+    else leaveEmail();
   };
   const unlink = async (l: IdentityLink, receipt?: string) => {
     setFailure(null);
@@ -723,7 +730,7 @@ function SignedInWith(props: { links: IdentityLink[] | undefined; providers: str
             {(stage) => (
               <div class="sync-email" role="group" aria-label={aw.emailTitle}>
                 <EmailStages mail={mail} stage={stage()} fkey="sync:email" heading="h3" onAct={emailAct}>
-                  <button class="btn" data-f="sync:email:leave" onClick={() => setEmailing(null)}>
+                  <button class="btn" data-f="sync:email:leave" onClick={leaveEmail}>
                     {w.cancel}
                   </button>
                 </EmailStages>

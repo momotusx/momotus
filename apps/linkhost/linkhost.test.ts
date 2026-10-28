@@ -2,7 +2,8 @@
 import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { codeDigits, mailWords, newVerifier, purposeOf, readReturn, verifierHash } from "./delete/delete.js";
+import shared from "../shared/account-words.json";
+import { codeDigits, mailWords, newVerifier, purposeOf, readReturn, verifierHash, WORDS } from "./delete/delete.js";
 
 const here = import.meta.dir;
 const read = (path: string) => readFileSync(join(here, path), "utf8");
@@ -191,6 +192,8 @@ test("the email step's answers read as the apps word them, and a pasted code kee
   expect(mailWords("ticketExpired")).toBe("This code can't be used any more. Send a new code.");
   expect(mailWords("emailWait")).toBe("Wait a minute, then send a new code.");
   expect(mailWords("mailUnavailable")).toContain("couldn't be sent");
+  expect(mailWords("wrongFlow")).toBe(mailWords("ticketExpired"));
+  expect(mailWords("signInRefused")).toBe(mailWords("ticketExpired"));
   expect(mailWords("")).toBe("The sign-in did not work. Try again in a moment.");
   expect(codeDigits("123 456")).toBe("123456");
   expect(codeDigits("123-4567")).toBe("123456");
@@ -201,4 +204,12 @@ test("the privacy page says what email sign-in keeps and who carries the mail", 
   expect(html).toContain("a keyed hash of the address, never the address itself");
   expect(html).toContain("Amazon SES (Amazon Web Services, US East)");
   expect(html).toContain("kept for 24 hours");
+});
+
+test("the deletion page's email words are the apps' own, from apps/shared/account-words.json", () => {
+  for (const key of ["badAddress", "wrongCode", "codeExpired", "emailWait", "emailLimit", "mailUnavailable"] as const) expect(WORDS[key], key).toBe(shared[key]);
+  expect(WORDS.sent).toBe(shared.codeSentTo);
+  expect(WORDS.busy).toBe(shared.busy);
+  const html = read("delete/index.html");
+  for (const key of ["codeMissing", "continueWithEmail", "emailLabel", "emailSend", "codeLabel"] as const) expect(html, key).toContain(shared[key]);
 });
