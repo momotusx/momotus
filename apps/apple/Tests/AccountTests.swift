@@ -156,6 +156,13 @@ private func announcement(_ kind: String, member: String? = "m", by: String? = "
     #expect(AccountRules.trouble("signupLimit", provider: "email")?.text == "This email address has made several Momotus accounts lately. Try again later or use another way.")
 }
 
+@Test func linkAnotherShowsAtMostOneEmailRow() {
+    #expect(AccountRules.offersEmailLink(listed: true, linked: ["google"]))
+    #expect(!AccountRules.offersEmailLink(listed: true, linked: ["google", "email"]), "an Email link already: no second row")
+    #expect(!AccountRules.offersEmailLink(listed: false, linked: []), "a relay without email")
+    #expect(!AccountRules.offersEmailLink(listed: true, linked: nil), "nothing before the links are read")
+}
+
 @Test func theCodeFieldKeepsSixDigitsAndTheResendTimerCountsFromTheMail() {
     #expect(AccountRules.codeDigits("123 456") == "123456")
     #expect(AccountRules.codeDigits("123-4567") == "123456")

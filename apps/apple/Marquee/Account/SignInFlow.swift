@@ -97,6 +97,10 @@ final class SignInFlow {
     @ObservationIgnored private var brokered: LiveRecord<SignInSnapshot>?
     /// Try again on the code stage repeats the last call: a send, else the code.
     @ObservationIgnored private var lastWasSend = false
+    /// The email call with the relay now (`run`), cancelled by every way off its stage.
+    @ObservationIgnored private var inflight: Task<Void, Never>?
+    /// A held ticket's Continue waits for the address stage to arrive (`arrived`).
+    @ObservationIgnored private var resumeOnArrival = false
 
     init(server: String, sync: SyncModel, sheets: SignInSheets.Calls = .init(), mail: Mail? = nil,
          finish: (@MainActor (SignInSnapshot) async -> Void)? = nil) {
@@ -120,6 +124,9 @@ final class SignInFlow {
             offersEmail = listed.contains("email")
             unreachable = false
         } catch {
+            // Nothing from an earlier answer stays on screen.
+            providers = []
+            offersEmail = false
             unreachable = true
             return
         }
@@ -137,6 +144,7 @@ final class SignInFlow {
     }
 
     func back() {
+        cancelEmail()
         stage = .choose
         trouble = nil
         troubleCode = nil
@@ -214,7 +222,7 @@ final class SignInFlow {
     /// with the address still in memory and a new code (accounts-email.md 4.6).
     func press(_ id: String, name: String) async {
         switch id {
-        case "email": await emailAgain()
+        case "email": emailAgain()
         case "apple": await continueWithApple(name: name)
         default: await continueWith(id, name: name)
         }
@@ -224,34 +232,47 @@ final class SignInFlow {
 
     /// Continue with email: the address stage, the address kept from before.
     func openEmail() {
+        cancelEmail()
         provider = "email"
         trouble = nil
         troubleCode = nil
         stage = .email
     }
 
-    /// Back from the code stage, or Use another address: the address stage, prefilled.
+    /// Back from the code stage, or Use another address: the address stage,
+    /// prefilled. A send or a code still with the relay is dropped.
     func toAddress() {
+        cancelEmail()
         trouble = nil
         troubleCode = nil
         code = ""
         stage = .email
     }
 
+    /// Ends the email call in flight: its answer, when it comes, changes nothing.
+    /// Called by every way off an email stage (Back, Use another address, `back()`).
+    func cancelEmail() {
+        inflight?.cancel()
+        inflight = nil
+        sending = false
+        resumeOnArrival = false
+    }
+
     /// Send code. The same address again while its code may still work goes
     /// back to the code stage without a new mail.
-    func sendCode() async {
+    @discardableResult func sendCode() -> Task<Void, Never> {
         let typed = address.trimmingCharacters(in: .whitespacesAndNewlines)
-        if typed == sentTo, mailFlow != nil, let sentAt, Date.now.timeIntervalSince(sentAt) < 10 * 60 {
+        if !sending, typed == sentTo, mailFlow != nil, let sentAt, Date.now.timeIntervalSince(sentAt) < 10 * 60 {
             toCode()
-            return
+            return Task {}
         }
-        await start(typed, resend: false)
+        return run { await $0.start(typed, resend: false) }
     }
 
     /// Send a new code to the address the last one went to.
-    func resendCode() async {
-        await start(sentTo, resend: true)
+    @discardableResult func resendCode() -> Task<Void, Never> {
+        let to = sentTo
+        return run { await $0.start(to, resend: true) }
     }
 
     /// Typed into the code field: digits only, cut at 6; the sixth digit submits once.
@@ -260,35 +281,54 @@ final class SignInFlow {
         guard !sending, mailFlow != nil else { return }
         let before = code
         code = AccountRules.codeDigits(typed)
-        if code.count == 6, code != before { Task { await submitCode(name: name) } }
+        if code.count == 6, code != before { submitCode(name: name) }
     }
 
     /// The code to the relay, once at a time; its answer ends as a provider's does.
-    func submitCode(name: String) async {
-        guard !sending, stage == .code, code.count == 6, let flow = mailFlow else { return }
-        sending = true
-        defer { sending = false }
-        lastWasSend = false
-        trouble = nil
-        troubleCode = nil
-        let answer: SignInSnapshot
-        do {
-            answer = try await mail.take(flow, code)
-        } catch {
-            return codeFailed((error as? CoreError)?.code ?? "unreachable", error)
-        }
-        if case .failed(let refused) = answer { return codeFailed(refused, nil) }
-        mailFlow = nil
-        if let finish { await finish(answer) } else { await signedIn(answer, name: name) }
+    @discardableResult func submitCode(name: String) -> Task<Void, Never> {
+        guard stage == .code, code.count == 6, let flow = mailFlow else { return Task {} }
+        let typed = code
+        return run { await $0.take(flow, typed, name: name) }
     }
 
     /// Try again on an email stage repeats that stage's own call, never the provider flow.
-    func tryAgain(name: String) async {
+    @discardableResult func tryAgain(name: String) -> Task<Void, Never> {
         switch stage {
-        case .email: await sendCode()
-        case .code: if lastWasSend { await resendCode() } else { await submitCode(name: name) }
-        default: retry()
+        case .email: return sendCode()
+        case .code: return lastWasSend ? resendCode() : submitCode(name: name)
+        default:
+            retry()
+            return Task {}
         }
+    }
+
+    /// The address stage's push has settled. After a held ticket's Continue
+    /// (`press("email")`), the code stage comes now, with a new code: the
+    /// second push waits for the first, or SwiftUI may skip it.
+    @discardableResult func arrived() -> Task<Void, Never> {
+        guard resumeOnArrival, stage == .email else { return Task {} }
+        resumeOnArrival = false
+        toCode()
+        return resendCode()
+    }
+
+    /// One email call at a time, kept so a way off the stage can cancel it. A call
+    /// made while one is out gets that one: a double submit sends once.
+    private func run(_ work: @escaping @MainActor (SignInFlow) async -> Void) -> Task<Void, Never> {
+        if sending { return inflight ?? Task {} }
+        sending = true
+        trouble = nil
+        troubleCode = nil
+        let task = Task { [weak self] in
+            guard let self else { return }
+            await work(self)
+            // A cancelled call's flags belong to whatever runs now.
+            guard !Task.isCancelled else { return }
+            self.sending = false
+            self.inflight = nil
+        }
+        inflight = task
+        return task
     }
 
     private func toCode() {
@@ -299,34 +339,47 @@ final class SignInFlow {
     }
 
     private func start(_ typed: String, resend: Bool) async {
-        guard !sending else { return }
-        sending = true
-        defer { sending = false }
+        let from = stage
         lastWasSend = true
-        trouble = nil
-        troubleCode = nil
         resent = false
         do {
             let started = try await mail.start(server, typed)
+            guard !Task.isCancelled, stage == from else { return }
             mailFlow = started.flow
             sentTo = typed
             sentAt = .now
             toCode()
             resent = resend
         } catch {
+            guard !Task.isCancelled, stage == from else { return }
             fail(error)
         }
     }
 
-    /// The held ticket ran out: a new code to the address in memory; with none
-    /// (the app was restarted), the address stage, empty.
-    private func emailAgain() async {
+    private func take(_ flow: String, _ typed: String, name: String) async {
+        lastWasSend = false
+        let answer: SignInSnapshot
+        do {
+            answer = try await mail.take(flow, typed)
+        } catch {
+            guard !Task.isCancelled, stage == .code else { return }
+            return codeFailed((error as? CoreError)?.code ?? "unreachable", error)
+        }
+        guard !Task.isCancelled, stage == .code else { return }
+        if case .failed(let refused) = answer { return codeFailed(refused, nil) }
+        mailFlow = nil
+        if let finish { await finish(answer) } else { await signedIn(answer, name: name) }
+    }
+
+    /// The held ticket ran out: the address stage first, then (`arrived`) the
+    /// code stage with a new code to the address in memory; with none (the app
+    /// was restarted), the address stage, empty.
+    private func emailAgain() {
         openEmail()
         guard !sentTo.isEmpty else { return }
         address = sentTo
         mailFlow = nil
-        toCode()
-        await resendCode()
+        resumeOnArrival = true
     }
 
     /// The code stage's answers table: the stage stays, its words and actions change.

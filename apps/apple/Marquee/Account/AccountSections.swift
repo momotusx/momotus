@@ -72,8 +72,8 @@ struct SignedInWith: View {
         #if !os(tvOS)
         // A sign-in another account holds, met after a join by QR: offered here.
         .onChange(of: sync.heldLink, initial: true) { takeHeld() }
-        .navigationDestination(isPresented: Binding(get: { emailLink?.onEmail ?? false }, set: { shown in if !shown { emailLink = nil } })) {
-            if let emailLink { EmailSignIn(flow: emailLink) { self.emailLink = nil } }
+        .navigationDestination(isPresented: Binding(get: { emailLink?.onEmail ?? false }, set: { shown in if !shown { emailLink?.cancelEmail(); emailLink = nil } })) {
+            if let emailLink { EmailSignIn(flow: emailLink) { self.emailLink?.cancelEmail(); self.emailLink = nil } }
         }
         #endif
     }
@@ -84,9 +84,9 @@ struct SignedInWith: View {
         return providers.filter { !linked.contains($0) }
     }
 
-    /// The email row shows only while no email link exists: at most one Email row (E12).
+    /// The email row of Link another (E12).
     private var emailUnlinked: Bool {
-        offersEmail && links?.contains { $0.provider == "email" } == false
+        AccountRules.offersEmailLink(listed: offersEmail, linked: links?.map(\.provider))
     }
 
     private func row(_ link: IdentityLink) -> some View {

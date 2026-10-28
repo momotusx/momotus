@@ -17,6 +17,8 @@ struct SignInScreen: View {
     @State private var showPairing = false
     @State private var showKit = false
     @State private var showMakeKit = false
+    /// Other ways to sign in, asked for on an email stage: shown after its pop.
+    @State private var otherAfterPop = false
     @Environment(SyncModel.self) private var sync
     @Environment(ProfileSession.self) private var profiles
     @Environment(CoreClient.self) private var core
@@ -64,7 +66,13 @@ struct SignInScreen: View {
         .navigationDestination(isPresented: $showMakeKit) { RecoveryKitScreen() }
         // Sign in with email as a push, so the system Back and the edge swipe work (accounts-email.md 4.8).
         .navigationDestination(isPresented: Binding(get: { flow.onEmail }, set: { shown in if !shown, flow.onEmail { flow.back() } })) {
-            EmailSignIn(flow: flow) { flow.back(); showOther = true }
+            EmailSignIn(flow: flow) { otherAfterPop = true; flow.back() }
+        }
+        // Other ways from the email screen: pushed once its pop has settled, or iOS drops the push.
+        .task(id: flow.stage) {
+            guard otherAfterPop, flow.stage == .choose, await settled() else { return }
+            otherAfterPop = false
+            showOther = true
         }
     }
 
@@ -274,11 +282,10 @@ struct EmailSignIn: View {
                     #endif
                     .focused($focused)
                     .accessibilityFocused($heard)
-                    .accessibilityHint(flow.troubleCode == "badAddress" ? words.badAddress : "")
-                    .onSubmit { Task { await flow.sendCode() } }
+                    .onSubmit { flow.sendCode() }
             }
             EmailTrouble(flow: flow, otherWays: otherWays)
-            Button { Task { await flow.sendCode() } } label: { Label(words.emailSend, glyph: "mail") }
+            Button { flow.sendCode() } label: { Label(words.emailSend, glyph: "mail") }
                 .buttonStyle(PillButtonStyle(prominent: true))
                 .disabled(flow.sending)
         }
@@ -287,8 +294,13 @@ struct EmailSignIn: View {
         }
         // Each arrival at this stage (and back from the code): its field, its title said.
         .task(id: flow.stage) {
+            guard flow.stage == .email, await settled() else { return }
+            // A held ticket's Continue goes on to the code stage only now, its push after this one.
+            flow.arrived()
             guard flow.stage == .email else { return }
-            await arriveAtStage(words.emailTitle) { focused = true; heard = true }
+            focused = true
+            heard = true
+            AccessibilityNotification.Announcement(words.emailTitle).post()
         }
     }
 }
@@ -311,16 +323,26 @@ struct EmailCode: View {
                 .fixedSize(horizontal: false, vertical: true)
             if flow.resent { Said(tone: .ok, text: words.codeResent) }
             EmailFieldBox(label: words.codeLabel, focused: focused) {
-                TextField(words.codeLabel, text: Binding(get: { flow.code }, set: { flow.typeCode($0, name: DeviceName.current) }), prompt: Text(verbatim: ""))
-                    .textContentType(.oneTimeCode)
-                    #if os(iOS)
-                    .keyboardType(.numberPad)
-                    #endif
-                    .font(.mono(Theme.type.body))
-                    .focused($focused)
-                    .accessibilityFocused($heard)
-                    .accessibilityHint(flow.troubleCode == "wrongCode" ? words.wrongCode : "")
-                    .onSubmit { Task { await flow.submitCode(name: DeviceName.current) } }
+                if flow.mailFlow == nil {
+                    // The code can no longer be used: kept and readable, but no field to type
+                    // in, for touch, keyboard and VoiceOver alike.
+                    Text(verbatim: flow.code.isEmpty ? " " : flow.code)
+                        .font(.mono(Theme.type.body))
+                        .foregroundStyle(Theme.Palette.muted)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .accessibilityLabel(words.codeLabel)
+                        .accessibilityValue(flow.code)
+                } else {
+                    TextField(words.codeLabel, text: Binding(get: { flow.code }, set: { flow.typeCode($0, name: DeviceName.current) }), prompt: Text(verbatim: ""))
+                        .textContentType(.oneTimeCode)
+                        #if os(iOS)
+                        .keyboardType(.numberPad)
+                        #endif
+                        .font(.mono(Theme.type.body))
+                        .focused($focused)
+                        .accessibilityFocused($heard)
+                        .onSubmit { flow.submitCode(name: DeviceName.current) }
+                }
             }
             EmailTrouble(flow: flow, otherWays: otherWays)
             Text(words.codeMissing)
@@ -347,7 +369,7 @@ struct EmailCode: View {
     private var resend: some View {
         TimelineView(.periodic(from: .now, by: 1)) { context in
             let left = AccountRules.resendIn(sentAt: flow.sentAt, now: context.date)
-            Button { Task { await flow.resendCode() } } label: {
+            Button { flow.resendCode() } label: {
                 Label(left > 0 ? AccountRules.fill(words.codeResendIn, ["seconds": "\(left)"]) : words.codeResend, glyph: "refresh-cw")
             }
             .buttonStyle(PillButtonStyle())
@@ -371,21 +393,23 @@ private struct EmailTrouble: View {
                 FlowRow(spacing: Theme.Space.xs) {
                     switch flow.troubleCode {
                     case "codeExpired", "signInRefused":
-                        Button(words.codeExpiredActions[0]) { Task { await flow.resendCode() } }
+                        Button(words.codeExpiredActions[0]) { flow.resendCode() }
                             .buttonStyle(PillButtonStyle(prominent: true))
                         Button(words.codeExpiredActions[1]) { flow.toAddress() }
                             .buttonStyle(PillButtonStyle())
                     case "emailLimit":
                         Button(words.emailLimitActions[0], action: otherWays).buttonStyle(PillButtonStyle())
                     case "mailUnavailable":
-                        Button(words.mailUnavailableActions[0]) { Task { await flow.tryAgain(name: DeviceName.current) } }
+                        Button(words.mailUnavailableActions[0]) { flow.tryAgain(name: DeviceName.current) }
                             .buttonStyle(PillButtonStyle(prominent: true))
                         Button(words.mailUnavailableActions[1], action: otherWays).buttonStyle(PillButtonStyle())
-                    case "unreachable", "busy":
-                        Button(words.unreachableActions[0]) { Task { await flow.tryAgain(name: DeviceName.current) } }
-                            .buttonStyle(PillButtonStyle())
-                    default:
+                    case "wrongCode", "badAddress", "emailWait":
+                        // Fixed in the field, or by waiting: no button of its own.
                         EmptyView()
+                    default:
+                        // unreachable, busy and anything unforeseen: the stage's own call again.
+                        Button(words.unreachableActions[0]) { flow.tryAgain(name: DeviceName.current) }
+                            .buttonStyle(PillButtonStyle())
                     }
                 }
                 .disabled(flow.sending)
@@ -416,11 +440,17 @@ private struct EmailPage<Content: View>: View {
     }
 }
 
+/// Waits for a push or pop to settle; false when the waiting task was cancelled.
+@MainActor private func settled() async -> Bool {
+    // ponytail: a pushed field takes focus, and the next push or pop is kept, only after
+    // the animation; 0.4 s covers it.
+    try? await Task.sleep(for: .milliseconds(400))
+    return !Task.isCancelled
+}
+
 /// A stage arrived: its title said, then focus to its field once the push has settled.
 @MainActor private func arriveAtStage(_ title: String, focus: () -> Void) async {
-    // ponytail: a pushed field takes focus only after the push animation; 0.4 s covers it.
-    try? await Task.sleep(for: .milliseconds(400))
-    guard !Task.isCancelled else { return }
+    guard await settled() else { return }
     focus()
     AccessibilityNotification.Announcement(title).post()
 }

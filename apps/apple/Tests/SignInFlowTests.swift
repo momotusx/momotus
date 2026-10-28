@@ -154,7 +154,7 @@ private let nobody = "http://127.0.0.1:9"
     var takes: [String] = []
     var start: (String) throws -> Void = { _ in }
     var take: Result<SignInSnapshot, CoreError> = .failure(CoreError("wrong", code: "wrongCode"))
-    /// A take that waits, so a second submit meets the first one in flight.
+    /// A start or take that waits, so a second call or a Back meets it in flight.
     var slow = false
     /// What a Link another flow's `finish` was handed.
     var answer: SignInSnapshot?
@@ -162,6 +162,7 @@ private let nobody = "http://127.0.0.1:9"
     var calls: SignInFlow.Mail {
         SignInFlow.Mail(
             start: { [self] _, email in
+                if slow { try? await Task.sleep(for: .milliseconds(100)) }
                 try start(email)
                 starts.append(email)
                 return EmailStart(flow: "f\(starts.count)", expiresMs: 0)
@@ -190,7 +191,7 @@ private let nobody = "http://127.0.0.1:9"
     private func sent(_ flow: SignInFlow, _ address: String = "ada@example.com") async {
         flow.openEmail()
         flow.address = address
-        await flow.sendCode()
+        await flow.sendCode().value
     }
 
     @Test func theAddressThenTheCodeAndBackKeepsTheAddressWithoutANewMail() async throws {
@@ -199,18 +200,18 @@ private let nobody = "http://127.0.0.1:9"
         flow.openEmail()
         #expect(flow.stage == .email && flow.provider == "email")
         flow.address = "  ada@example.com "
-        await flow.sendCode()
+        await flow.sendCode().value
         #expect(flow.stage == .code && flow.sentTo == "ada@example.com" && flow.mailFlow == "f1" && flow.sentAt != nil)
         #expect(!flow.resent, "a first code is no resend")
         flow.toAddress()
         #expect(flow.stage == .email && flow.address == "  ada@example.com ")
         // The same address while its code may still work: the code stage again, no mail.
-        await flow.sendCode()
+        await flow.sendCode().value
         #expect(flow.stage == .code && mail.starts == ["ada@example.com"])
         // Another address: a new mail.
         flow.toAddress()
         flow.address = "bob@example.com"
-        await flow.sendCode()
+        await flow.sendCode().value
         #expect(mail.starts == ["ada@example.com", "bob@example.com"] && flow.sentTo == "bob@example.com")
         withExtendedLifetime(core) {}
     }
@@ -224,7 +225,7 @@ private let nobody = "http://127.0.0.1:9"
         let flow = SignInFlow(server: nobody, sync: sync, sheets: ScriptedSheets().calls)
         flow.openEmail()
         flow.address = "not an address"
-        await flow.sendCode()
+        await flow.sendCode().value
         #expect(flow.stage == .email && flow.troubleCode == "badAddress")
         #expect(flow.trouble?.text == AccountWords.shared.badAddress)
         withExtendedLifetime(core) {}
@@ -238,10 +239,10 @@ private let nobody = "http://127.0.0.1:9"
         await sent(flow)
         #expect(flow.stage == .email && flow.troubleCode == "emailWait", "fail() keeps the email stage")
         mail.start = { _ in throw CoreError("down", code: "mailUnavailable") }
-        await flow.tryAgain(name: "Mac")
+        await flow.tryAgain(name: "Mac").value
         #expect(flow.stage == .email && flow.trouble?.actions == ["Try again", "Other ways to sign in"])
         mail.start = { _ in }
-        await flow.tryAgain(name: "Mac")
+        await flow.tryAgain(name: "Mac").value
         #expect(flow.stage == .code && mail.starts == ["ada@example.com"])
         // Never the provider flow: no sheet was asked for.
         #expect(sheets.passkeys.isEmpty && flow.provider == "email")
@@ -254,14 +255,14 @@ private let nobody = "http://127.0.0.1:9"
         await sent(flow)
         flow.typeCode("123 45", name: "Mac")
         #expect(flow.code == "12345" && mail.takes.isEmpty)
-        await flow.submitCode(name: "Mac")
+        await flow.submitCode(name: "Mac").value
         #expect(mail.takes.isEmpty, "not 6 digits: nothing sent")
         flow.typeCode("123456", name: "Mac")
-        await flow.submitCode(name: "Mac")
+        await flow.submitCode(name: "Mac").value
         #expect(flow.stage == .code && flow.troubleCode == "wrongCode" && flow.code.isEmpty && flow.mailFlow == "f1")
         mail.take = .failure(CoreError("shape", code: "badCode"))
         flow.typeCode("654321", name: "Mac")
-        await flow.submitCode(name: "Mac")
+        await flow.submitCode(name: "Mac").value
         #expect(flow.stage == .code && flow.troubleCode == "wrongCode")
         withExtendedLifetime(core) {}
     }
@@ -273,7 +274,7 @@ private let nobody = "http://127.0.0.1:9"
             let (flow, core) = try await open(mail)
             await sent(flow)
             flow.typeCode("123456", name: "Mac")
-            await flow.submitCode(name: "Mac")
+            await flow.submitCode(name: "Mac").value
             #expect(flow.stage == .code && flow.troubleCode == "codeExpired", "\(refused)")
             #expect(flow.trouble?.text == AccountWords.shared.codeExpired)
             #expect(flow.trouble?.actions == ["Send a new code", "Use another address"])
@@ -281,7 +282,7 @@ private let nobody = "http://127.0.0.1:9"
             flow.typeCode("999999", name: "Mac")
             #expect(flow.code == "123456" && flow.mailFlow == nil)
             // Send a new code: a new flow, the field open again, codeResent said.
-            await flow.resendCode()
+            await flow.resendCode().value
             #expect(flow.mailFlow == "f2" && flow.code.isEmpty && flow.resent && flow.trouble == nil)
             withExtendedLifetime(core) {}
         }
@@ -293,7 +294,7 @@ private let nobody = "http://127.0.0.1:9"
         let (flow, core) = try await open(mail)
         await sent(flow)
         flow.typeCode("123456", name: "Mac")
-        await flow.submitCode(name: "Mac")
+        await flow.submitCode(name: "Mac").value
         #expect(flow.stage == .code && flow.troubleCode == "signInRefused")
         #expect(flow.trouble?.text == AccountWords.shared.signInRefused)
         #expect(flow.trouble?.actions == AccountWords.shared.codeExpiredActions)
@@ -307,17 +308,17 @@ private let nobody = "http://127.0.0.1:9"
         let (flow, core) = try await open(mail, sheets: sheets)
         await sent(flow)
         flow.typeCode("123456", name: "Mac")
-        await flow.submitCode(name: "Mac")
+        await flow.submitCode(name: "Mac").value
         #expect(flow.stage == .code && flow.troubleCode == "unreachable" && flow.code == "123456")
         mail.take = .failure(CoreError("busy", code: "busy"))
-        await flow.tryAgain(name: "Mac")
+        await flow.tryAgain(name: "Mac").value
         #expect(mail.takes == ["f1:123456", "f1:123456"] && flow.troubleCode == "busy" && flow.stage == .code)
         // A resend that fails on the code stage: Try again sends again, not the code.
         mail.start = { _ in throw CoreError("down", code: "mailUnavailable") }
-        await flow.resendCode()
+        await flow.resendCode().value
         #expect(flow.stage == .code && flow.troubleCode == "mailUnavailable")
         mail.start = { _ in }
-        await flow.tryAgain(name: "Mac")
+        await flow.tryAgain(name: "Mac").value
         #expect(mail.starts.count == 2 && mail.takes.count == 2 && flow.resent)
         #expect(sheets.passkeys.isEmpty, "never the provider flow")
         withExtendedLifetime(core) {}
@@ -330,7 +331,7 @@ private let nobody = "http://127.0.0.1:9"
         await sent(flow)
         flow.typeCode("123-456", name: "Mac")
         // Go pressed while the sixth digit's submit is with the relay: one call.
-        await flow.submitCode(name: "Mac")
+        await flow.submitCode(name: "Mac").value
         for _ in 0..<50 where flow.sending { try await Task.sleep(for: .milliseconds(20)) }
         #expect(mail.takes == ["f1:123456"])
         withExtendedLifetime(core) {}
@@ -350,7 +351,7 @@ private let nobody = "http://127.0.0.1:9"
         let (link, linkCore) = try await open(mail, finish: { linked.answer = $0 })
         await sent(link)
         link.typeCode("123456", name: "Mac")
-        await link.submitCode(name: "Mac")
+        await link.submitCode(name: "Mac").value
         for _ in 0..<50 where linked.answer == nil { try await Task.sleep(for: .milliseconds(20)) }
         #expect(linked.answer == .new(ticket: "t9"))
         withExtendedLifetime((core, linkCore)) {}
@@ -363,14 +364,96 @@ private let nobody = "http://127.0.0.1:9"
         // The ticket ran out later, back on Sign in: Continue from the trouble line.
         flow.back()
         await flow.press("email", name: "Mac")
+        // The address stage is pushed first; the code stage only once it has arrived.
+        #expect(flow.stage == .email && mail.starts == ["ada@example.com"])
+        await flow.arrived().value
         #expect(flow.stage == .code && mail.starts == ["ada@example.com", "ada@example.com"])
         #expect(flow.mailFlow == "f2" && flow.resent && flow.address == "ada@example.com")
+        await flow.arrived().value
+        #expect(mail.starts.count == 2, "an arrival without a held Continue sends nothing")
         withExtendedLifetime(core) {}
 
         // The address no longer in memory (a restart): the address stage, empty.
         let (fresh, freshCore) = try await open(ScriptedMail())
         await fresh.press("email", name: "Mac")
+        await fresh.arrived().value
         #expect(fresh.stage == .email && fresh.address.isEmpty)
         withExtendedLifetime(freshCore) {}
     }
+
+    @Test func tooManyWrongCodesTodaySaysEmailLimitOnTheCodeStage() async throws {
+        let mail = ScriptedMail()
+        mail.take = .failure(CoreError("limit", code: "emailLimit"))
+        let (flow, core) = try await open(mail)
+        await sent(flow)
+        flow.typeCode("123456", name: "Mac")
+        for _ in 0..<50 where flow.sending { try await Task.sleep(for: .milliseconds(20)) }
+        #expect(flow.stage == .code && flow.troubleCode == "emailLimit")
+        #expect(flow.trouble?.actions == ["Other ways to sign in"])
+        // Read-only: the code is kept and nothing more is taken.
+        flow.typeCode("999999", name: "Mac")
+        #expect(flow.code == "123456" && flow.mailFlow == nil && mail.takes.count == 1)
+        withExtendedLifetime(core) {}
+    }
+
+    @Test func theCodeFieldTakesNothingWhileItsCodeIsWithTheRelay() async throws {
+        let mail = ScriptedMail()
+        mail.slow = true
+        let (flow, core) = try await open(mail)
+        await sent(flow)
+        flow.typeCode("123456", name: "Mac")
+        #expect(flow.sending)
+        flow.typeCode("1", name: "Mac")
+        #expect(flow.code == "123456", "read-only while sending")
+        for _ in 0..<50 where flow.sending { try await Task.sleep(for: .milliseconds(20)) }
+        #expect(mail.takes == ["f1:123456"] && flow.code.isEmpty, "the wrong code cleared the field")
+        flow.typeCode("12a3", name: "Mac")
+        #expect(flow.code == "123")
+        withExtendedLifetime(core) {}
+    }
+
+    @Test func backDuringASendOrACodeChangesNothingWhenTheAnswerComes() async throws {
+        let mail = ScriptedMail()
+        mail.slow = true
+        let (flow, core) = try await open(mail)
+        // Back from the address stage while the send is with the relay.
+        flow.openEmail()
+        flow.address = "ada@example.com"
+        let send = flow.sendCode()
+        #expect(flow.sending)
+        flow.back()
+        #expect(!flow.sending)
+        await send.value
+        #expect(flow.stage == .choose && flow.mailFlow == nil && flow.sentTo.isEmpty, "the late answer pushes nothing")
+        withExtendedLifetime(core) {}
+
+        // Use another address while a right code is with the relay: no sign-in follows.
+        let sheets = ScriptedSheets()
+        let right = ScriptedMail()
+        right.take = .success(.new(ticket: "t1"))
+        let (signIn, signInCore) = try await open(right, sheets: sheets)
+        await sent(signIn)
+        right.slow = true
+        signIn.typeCode("123456", name: "Mac")
+        #expect(signIn.sending)
+        signIn.toAddress()
+        // Past the slow answer (100 ms).
+        try await Task.sleep(for: .milliseconds(300))
+        #expect(signIn.stage == .email && signIn.trouble == nil && sheets.passkeys.isEmpty)
+        withExtendedLifetime(signInCore) {}
+
+        // Account's Link another left while the code is out: nothing is linked.
+        let linked = ScriptedMail()
+        let (link, linkCore) = try await open(right, finish: { linked.answer = $0 })
+        right.slow = false
+        await sent(link)
+        right.slow = true
+        link.typeCode("123456", name: "Mac")
+        #expect(link.sending)
+        link.cancelEmail()
+        try await Task.sleep(for: .milliseconds(300))
+        #expect(linked.answer == nil)
+        withExtendedLifetime(linkCore) {}
+    }
 }
+

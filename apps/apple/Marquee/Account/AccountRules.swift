@@ -40,6 +40,14 @@ enum AccountRules {
 
     // MARK: Email codes (plans/accounts-email.md 4)
 
+    /// Account's Link another shows the email row only while the relay lists email and
+    /// no email link exists, so an account shows at most one Email row (E12). Before the
+    /// links are read, nothing.
+    static func offersEmailLink(listed: Bool, linked: [String]?) -> Bool {
+        guard listed, let linked else { return false }
+        return !linked.contains("email")
+    }
+
     /// The code field keeps digits only, cut at 6: a pasted "123 456" or "123-456" works.
     static func codeDigits(_ typed: String) -> String {
         String(typed.filter { $0.isASCII && $0.isNumber }.prefix(6))
