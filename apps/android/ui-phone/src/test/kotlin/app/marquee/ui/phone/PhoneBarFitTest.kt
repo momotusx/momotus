@@ -20,14 +20,16 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import org.robolectric.annotation.GraphicsMode
 import kotlin.test.assertTrue
 
 /**
  * The phone's tab bar on a 360 dp screen at a large text size: all five places fit the capsule, each touch target keeps
  * 48 dp, and a label is shown whole (smaller, down to its floor) or not at all, never cut (design/DECISION.md,
- * Navigation; ui-ux MOB-10).
+ * Navigation; ui-ux MOB-10). Native graphics: legacy ones measure text as one pixel a letter, which fits any label.
  */
 @RunWith(RobolectricTestRunner::class)
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = [36], qualifiers = "w360dp-h640dp-mdpi")
 class PhoneBarFitTest {
     @get:Rule
