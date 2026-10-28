@@ -106,3 +106,9 @@ import Testing
         #expect(!source.contains("closesOnBack"), "onboarding in \(file) closes on Back")
     }
 }
+
+@Test func onlyAPageInsideASheetsFlowIsInASheet() {
+    #expect(!SheetBack.none.isInSheet)
+    #expect(SheetBack.close({}).isInSheet)
+    #expect(SheetBack.off.isInSheet)
+}

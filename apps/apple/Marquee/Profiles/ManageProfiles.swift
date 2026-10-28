@@ -197,13 +197,25 @@ struct EditProfile: View {
     }
 
     #if !os(tvOS)
+    #if os(macOS)
+    @Environment(\.sheetBack) private var sheetBack
+    #endif
+
+    /// A sheet's toolbar draws no `.navigation` item (the dirty editor would have no way out, its system back
+    /// being hidden): there the Back takes the cancel placement, the cancel slot of the sheet's bottom bar.
+    private var leaveBackPlacement: ToolbarItemPlacement {
+        #if os(macOS)
+        sheetBack.isInSheet ? .cancellationAction : .navigation
+        #else
+        .navigation
+        #endif
+    }
+
     @ToolbarContentBuilder private var leaveBack: some ToolbarContent {
         if dirty, shown {
-            ToolbarItem(placement: .navigation) {
+            ToolbarItem(placement: leaveBackPlacement) {
                 Button(action: leave) {
-                    Label("Back", glyph: "chevron-left")
-                        // The system back is a chevron alone; the control keeps its shape when the first edit swaps them.
-                        .labelStyle(.iconOnly)
+                    leaveBackLabel
                         #if os(iOS)
                         // And its 44 pt target (the bar drew this one at 36).
                         .frame(minWidth: Theme.minTarget, minHeight: Theme.minTarget)
@@ -212,6 +224,20 @@ struct EditProfile: View {
                 }
             }
         }
+    }
+
+    /// The system back is a chevron alone, and the control keeps its shape when the first edit swaps them; in a
+    /// sheet, where nothing else names it, the chevron and the word (DECISION's back link).
+    @ViewBuilder private var leaveBackLabel: some View {
+        #if os(macOS)
+        if sheetBack.isInSheet {
+            Label("Back", glyph: "chevron-left").labelStyle(.titleAndIcon)
+        } else {
+            Label("Back", glyph: "chevron-left").labelStyle(.iconOnly)
+        }
+        #else
+        Label("Back", glyph: "chevron-left").labelStyle(.iconOnly)
+        #endif
     }
     #endif
 

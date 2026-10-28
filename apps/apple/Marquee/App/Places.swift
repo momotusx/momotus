@@ -80,6 +80,9 @@ enum SheetBack {
     case close(() -> Void)
     /// The flow keeps Back to itself (onboarding): its pages give none.
     case off
+
+    /// The page is inside a sheet's flow (where the toolbar draws only some placements).
+    var isInSheet: Bool { if case .none = self { false } else { true } }
 }
 
 /// What the Go menu's Back does on a page.

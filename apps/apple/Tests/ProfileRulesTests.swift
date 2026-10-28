@@ -179,3 +179,26 @@ private func snapshot(_ profiles: [ProfileInfo], locked: Bool = false) -> Profil
     #expect(!built.contains(".tint("), "the tint sits inside the dialogs again")
     #expect(!page.replacingOccurrences(of: bodyText, with: "").contains(".tint("), "a tint inside the dialogs again")
 }
+
+@Test func theDirtyEditorInASheetKeepsAVisibleBackOnTheCancelPlacement() throws {
+    // A sheet's toolbar draws no .navigation item and the system back is hidden while dirty: the Back would be gone.
+    // Read from the sources: a toolbar is not laid out in a hosted view.
+    let file = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appending(path: "../Marquee/Profiles/ManageProfiles.swift")
+    let editor = try String(contentsOf: file, encoding: .utf8)
+    let placement = try body(of: "private var leaveBackPlacement: ToolbarItemPlacement", in: editor)
+    #expect(placement.contains("sheetBack.isInSheet ? .cancellationAction : .navigation"), "a sheet's editor has no visible Back")
+    let back = try body(of: "private var leaveBack: some ToolbarContent", in: editor)
+    #expect(back.contains("ToolbarItem(placement: leaveBackPlacement)"), "the Back ignores the sheet placement")
+}
+
+@Test func theSheetsBackNamesItself() throws {
+    // Read from the sources: a toolbar is not laid out in a hosted view.
+    let file = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appending(path: "../Marquee/Profiles/ManageProfiles.swift")
+    let editor = try String(contentsOf: file, encoding: .utf8)
+    // In a sheet nothing else names the Back: chevron and word (DECISION's back link).
+    let label = try body(of: "private var leaveBackLabel: some View", in: editor)
+    let sheet = try #require(label.range(of: "if sheetBack.isInSheet {"))
+    let word = try #require(label.range(of: ".labelStyle(.titleAndIcon)"), "the sheet's Back lost its word")
+    let bare = try #require(label.range(of: ".labelStyle(.iconOnly)"))
+    #expect(sheet.lowerBound < word.lowerBound && word.lowerBound < bare.lowerBound, "the word belongs to the sheet case")
+}
