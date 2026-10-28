@@ -97,6 +97,7 @@ import app.marquee.design.focusClickable
 import app.marquee.design.focusPalette
 import app.marquee.design.focusSoon
 import app.marquee.design.marqueeFocus
+import app.marquee.ui.phone.pageTop
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.async
@@ -522,7 +523,13 @@ fun PickerScreen(
             .fillMaxSize()
             .background(colors.bg)
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = Marquee.safe.side, vertical = if (tv) 64.dp else 48.dp),
+            .padding(
+                start = Marquee.safe.side,
+                end = Marquee.safe.side,
+                // Under the status bar and the back link's row when the shell draws one, where the page scrolls.
+                top = maxOf(if (tv) 64.dp else 48.dp, pageTop()),
+                bottom = if (tv) 64.dp else 48.dp,
+            ),
         contentAlignment = Alignment.Center,
     ) {
         if (chosen != null) {
