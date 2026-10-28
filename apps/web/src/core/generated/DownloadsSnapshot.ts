@@ -11,7 +11,13 @@ export type DownloadsSnapshot = {
  * title, so a keeper takes nothing here for done or failed (code review
  * r2, Android N1).
  */
-locked: boolean, storage: DownloadStorage, settings: DownloadSettings, 
+locked: boolean, 
+/**
+ * The profile these rows are for: a keeper that sees it change starts
+ * its done and failed news over, whichever of the switch and this
+ * snapshot it hears first (code review r4, Android m5).
+ */
+profile: string, storage: DownloadStorage, settings: DownloadSettings, 
 /**
  * What the platform's keeper shows (a notification, the system's
  * progress) and whether it keeps the app running.
