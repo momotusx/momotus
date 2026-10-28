@@ -19,8 +19,8 @@ struct CalendarScreen: View {
             ScrollView(.vertical) {
                 LazyVStack(alignment: .leading, spacing: Theme.Space.m) {
                     ScreenTitle(text: "Calendar")
-                    if let failure = calendar.stage.failure {
-                        StateLine(symbol: "triangle-alert", text: failure, action: ("Try again", calendar.retry), spoken: true)
+                    if case .failed(let failure) = calendar.stage {
+                        failureLine(failure)
                     }
                     if let s = calendar.snapshot {
                         notes(s)
@@ -37,6 +37,16 @@ struct CalendarScreen: View {
                 .padding(.vertical, Theme.Space.l)
             }
             .scrollIndicators(.hidden)
+            // Over a kept snapshot the page has scrolled to today: the line is pinned where it is seen.
+            .safeAreaInset(edge: .top, spacing: 0) {
+                if case .failedKept(let failure) = calendar.stage {
+                    failureLine(failure)
+                        .padding(.horizontal, metrics.gutter)
+                        .padding(.vertical, Theme.Space.xs)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(Theme.Palette.bg)
+                }
+            }
             .onChange(of: calendar.snapshot?.startDay, initial: true) { _, day in
                 guard !scrolled, let day else { return }
                 scrolled = true
@@ -51,6 +61,10 @@ struct CalendarScreen: View {
         .onReceive(NotificationCenter.default.publisher(for: .NSCalendarDayChanged).receive(on: DispatchQueue.main)) { _ in
             setToday()
         }
+    }
+
+    private func failureLine(_ failure: String) -> some View {
+        StateLine(symbol: "triangle-alert", text: failure, action: ("Try again", calendar.retry), spoken: true)
     }
 
     /// Loading, failed and unscheduled series, in words.
