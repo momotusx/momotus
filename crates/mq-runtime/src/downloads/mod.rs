@@ -1360,10 +1360,21 @@ impl Downloads {
         }
     }
 
+    /// A removed download's folder goes off the caller's thread when a
+    /// runtime runs: a season's files take seconds on flash, and the
+    /// bridge's request loop and the queue call this (code review r3 N8).
+    /// Ids are random, so a new download never meets a folder still going.
     fn forget_files(&self, id: &str) {
         let dir = self.job_dir(id);
-        if dir.starts_with(&self.dir) && dir != self.dir {
+        if !dir.starts_with(&self.dir) || dir == self.dir {
+            return;
+        }
+        let remove = move || {
             let _ = std::fs::remove_dir_all(dir);
+        };
+        match tokio::runtime::Handle::try_current() {
+            Ok(handle) => drop(handle.spawn_blocking(remove)),
+            Err(_) => remove(),
         }
     }
 
@@ -2194,6 +2205,11 @@ async fn run_queue(me: std::sync::Weak<Downloads>) {
 /// One run of a job: picks its version when it has none, then fetches
 /// from where it stopped.
 async fn run_job(me: std::sync::Weak<Downloads>, core: Core, mut row: DownloadRecord) -> Outcome {
+    // Tests: a job added with `testPanic` panics, as a bug below would.
+    #[cfg(feature = "test-hooks")]
+    if row.request.contains("\"testPanic\":true") {
+        panic!("a test asked this job to panic");
+    }
     if row.version.is_none() {
         match pick_version(&core, &row).await {
             Some(chain) => {
@@ -2317,6 +2333,10 @@ async fn forget_torrent(core: &Core, id: &str, t: TorrentRef) {
     if shared {
         return;
     }
+    #[cfg(feature = "test-hooks")]
+    if lock(&SLOW_RELEASES).contains(&t.hash) {
+        tokio::time::sleep(Duration::from_secs(1)).await;
+    }
     match core.torrent_engine().await {
         Ok(engine) => {
             if let Err(e) = engine.delete_file(&t.hash, t.file).await {
@@ -2413,6 +2433,19 @@ async fn pick_version(core: &Core, row: &DownloadRecord) -> Option<Vec<ParsedStr
 #[doc(hidden)]
 pub fn short_backoff_for_tests() {
     http::SHORT_BACKOFF.store(true, std::sync::atomic::Ordering::Relaxed);
+}
+
+/// Tests: torrents whose file a download lets go take a second to go, so
+/// a run of the same file that starts meanwhile shows whether it waits.
+#[cfg(feature = "test-hooks")]
+static SLOW_RELEASES: Mutex<std::collections::BTreeSet<String>> =
+    Mutex::new(std::collections::BTreeSet::new());
+
+/// Tests: the release of torrent `hash`'s files waits a second.
+#[cfg(feature = "test-hooks")]
+#[doc(hidden)]
+pub fn slow_release_for_tests(hash: &str) {
+    lock(&SLOW_RELEASES).insert(hash.to_ascii_lowercase());
 }
 
 /// The downloads, for an op that changes them: a kids profile changes

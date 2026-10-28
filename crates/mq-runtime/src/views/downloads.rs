@@ -23,6 +23,10 @@ pub struct DownloadsSnapshot {
     /// title, so a keeper takes nothing here for done or failed (code review
     /// r2, Android N1).
     pub locked: bool,
+    /// The profile these rows are for: a keeper that sees it change starts
+    /// its done and failed news over, whichever of the switch and this
+    /// snapshot it hears first (code review r4, Android m5).
+    pub profile: String,
     pub storage: DownloadStorage,
     pub settings: DownloadSettings,
     /// What the platform's keeper shows (a notification, the system's
@@ -228,6 +232,7 @@ fn render(core: &Core, board: &Board, locked: bool) -> DownloadsSnapshot {
     });
     DownloadsSnapshot {
         locked,
+        profile: core.profile().to_owned(),
         storage: DownloadStorage {
             downloads_bytes: rows.iter().map(|r| r.bytes_done).sum(),
             free_bytes: core.downloads().free(core),

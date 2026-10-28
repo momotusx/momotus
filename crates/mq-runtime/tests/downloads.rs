@@ -843,6 +843,16 @@ fn bare() -> Core {
     core
 }
 
+/// Waits until `folder` is gone: a removed download's files go off the
+/// caller's thread.
+async fn gone(folder: &std::path::Path) {
+    let deadline = std::time::Instant::now() + Duration::from_secs(10);
+    while folder.exists() {
+        assert!(std::time::Instant::now() < deadline, "the file stayed");
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+}
+
 /// Writes `bytes` as job `id`'s file `name`.
 fn put(core: &Core, id: &str, name: &str, bytes: &[u8]) {
     let job = core.downloads().job_folder(id);
@@ -1225,6 +1235,78 @@ async fn a_torrent_download_plays_offline() {
     );
 }
 
+/// A torrent download removed and added again at once downloads whole:
+/// the new run waits for the old one's release of the same file, which
+/// would otherwise stop its fetch (code review r3 N2).
+#[cfg(feature = "torrent")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_torrent_removed_and_added_again_downloads_whole() {
+    let s = support::swarm(true).await;
+    let t = s
+        .leecher
+        .add_magnet(&s.info_hash, &[], &[s.seeder_addr])
+        .await
+        .unwrap();
+    let file = s
+        .leecher
+        .files(t)
+        .unwrap()
+        .iter()
+        .position(|f| f.path.ends_with("movie.mkv"))
+        .unwrap();
+    let stream = serde_json::json!({
+        "name": "Fixture\n1080p", "title": "Sintel.2010.1080p.WEB.x264-GROUP",
+        "infoHash": s.info_hash, "fileIdx": file
+    });
+    let core = core_with(addon_listing(stream, Duration::ZERO).await).await;
+    core.set_torrent_engine(s.leecher.clone());
+    mq_runtime::downloads::slow_release_for_tests(&s.info_hash);
+    let ids = mq_runtime::downloads::add(&core, movie()).await.unwrap();
+    until(&core, &ids[0], "done", |r| r.state == DownloadState::Done).await;
+    core.downloads()
+        .act(&ids, mq_runtime::downloads::Action::Remove)
+        .unwrap();
+    let again = mq_runtime::downloads::add(&core, movie()).await.unwrap();
+    let deadline = std::time::Instant::now() + Duration::from_secs(30);
+    loop {
+        let row = row_of(&core, &again[0]);
+        if row.as_ref().is_some_and(|r| r.state == DownloadState::Done) {
+            break;
+        }
+        assert!(std::time::Instant::now() < deadline, "stalled: {row:?}");
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+    // Past the old release: the file is still there, and plays offline.
+    tokio::time::sleep(Duration::from_millis(1500)).await;
+    core.downloads().set_link(Link {
+        offline: true,
+        ..Link::default()
+    });
+    let view = VersionsView::open(&core, params());
+    let pick = view.snapshot().recommended.expect("the download, at once");
+    let playback = PlaybackView::open_picked(&core, view.pick(&pick.key), target(), &view.plays());
+    let deadline = std::time::Instant::now() + Duration::from_secs(30);
+    while playback.snapshot().phase != PlaybackPhase::Ready {
+        assert!(
+            std::time::Instant::now() < deadline,
+            "{:?}",
+            playback.snapshot()
+        );
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    let http = mq_http::HttpClient::new(Default::default()).unwrap();
+    let opts = mq_http::RequestOptions {
+        allow_private: true,
+        max_bytes: 64 << 20,
+        ..Default::default()
+    };
+    let got = http
+        .get_range(&playback.snapshot().url.unwrap(), 100_000, 4096, &opts)
+        .await
+        .unwrap();
+    assert_eq!(got.body[..], s.movie[100_000..104_096]);
+}
+
 /// Online, a partial torrent download whose start is not on disk (its
 /// swarm may be dead) is no pick: the ranking places the versions the
 /// addons list (apps r2 P2-2).
@@ -1474,6 +1556,99 @@ async fn a_retry_keeps_the_poster_and_the_subtitles() {
     }
 }
 
+/// "Try again" on a version the user picked keeps it, and its subtitles in
+/// place: no source is asked for them again (code review r4).
+#[tokio::test]
+async fn a_hand_picked_retry_keeps_its_subtitles_in_place() {
+    let (url, _) = origin(video(1 << 20), How::default()).await;
+    let stream = serde_json::json!({ "name": "Direct\n1080p", "title": "Sintel.2010.1080p.WEB-DL.mp4", "url": url });
+    let extras = Extras {
+        subtitles: vec![("en1", "eng", false)],
+        ..Extras::default()
+    };
+    let source = addon_serving(stream, Duration::ZERO, extras).await;
+    let core = core_with(source.clone()).await;
+    core.set_prefs(&serde_json::json!({ "subtitleLanguages": ["en"] }))
+        .unwrap();
+    let view = VersionsView::open(&core, params());
+    let deadline = std::time::Instant::now() + Duration::from_secs(20);
+    while !(view.snapshot().done && view.snapshot().recommended.is_some()) {
+        assert!(std::time::Instant::now() < deadline);
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    let key = view.snapshot().recommended.unwrap().key;
+    let mut request = movie();
+    request.pick = Some(view.pick(&key).candidates);
+    drop(view);
+    let ids = mq_runtime::downloads::add(&core, request).await.unwrap();
+    let kept = |r: &DownloadRow| r.state == DownloadState::Done && r.subtitles == ["en"];
+    until(&core, &ids[0], "done with its subtitle", &kept).await;
+    let playback = play_when(&core, ITEM, ITEM, true).await;
+    playback.fail_over(None, Some("decode"), None, "no frame");
+    until(&core, &ids[0], "failed", |r| {
+        r.state == DownloadState::Failed
+    })
+    .await;
+    drop(playback);
+    // The online play's own asks are over.
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    let asked = asks(&source);
+    core.downloads()
+        .act(
+            std::slice::from_ref(&ids[0]),
+            mq_runtime::downloads::Action::Retry { mobile_data: false },
+        )
+        .unwrap();
+    until(&core, &ids[0], "done again", &kept).await;
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    assert_eq!(asks(&source), asked, "its subtitles were asked for again");
+    core.downloads().set_link(Link {
+        offline: true,
+        ..Link::default()
+    });
+    let view = VersionsView::open(&core, params());
+    let pick = view.snapshot().recommended.unwrap();
+    assert_eq!(pick.key, key);
+    let playback = PlaybackView::open_picked(&core, view.pick(&pick.key), target(), &view.plays());
+    let deadline = std::time::Instant::now() + Duration::from_secs(20);
+    loop {
+        let s = playback.snapshot();
+        if s.phase == PlaybackPhase::Ready && s.subtitles.len() == 1 {
+            break;
+        }
+        assert!(std::time::Instant::now() < deadline, "{:?}", s.subtitles);
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+}
+
+/// A job that panics fails its row and frees its slot: two panics leave
+/// the queue running, and the next download finishes (code review r3 N6).
+#[tokio::test]
+async fn a_job_that_panics_frees_its_slot() {
+    let (url, _) = origin(video(1 << 20), How::default()).await;
+    let stream = serde_json::json!({ "name": "Direct\n1080p", "title": "Show.S02.1080p.WEB-DL.mp4", "url": url });
+    let core = core_with(addon_listing(stream, Duration::ZERO).await).await;
+    let season = AddRequest {
+        kind: "series".into(),
+        item_id: "tt9".into(),
+        scope: Scope::Season,
+        video_id: None,
+        season: Some(2),
+        params: serde_json::json!({ "testPanic": true }),
+        pick: None,
+    };
+    let ids = mq_runtime::downloads::add(&core, season).await.unwrap();
+    assert_eq!(ids.len(), 2, "as many as the queue runs at once");
+    for id in &ids {
+        until(&core, id, "failed", |r| {
+            r.state == DownloadState::Failed && r.reason == Some(DownloadReason::Source)
+        })
+        .await;
+    }
+    let film = mq_runtime::downloads::add(&core, movie()).await.unwrap();
+    until(&core, &film[0], "done", |r| r.state == DownloadState::Done).await;
+}
+
 /// A kept file gone from the disk reads "Download again", and adding it
 /// again brings the subtitles back too (code review r3 N3, r4 R4-1).
 #[tokio::test]
@@ -1531,7 +1706,7 @@ async fn a_wipe_takes_the_downloaded_files() {
     let folder = core.downloads().job_folder(&ids[0]);
     assert!(folder.exists());
     core.wipe().unwrap();
-    assert!(!folder.exists(), "the file stayed");
+    gone(&folder).await;
 }
 
 /// A series with one stream at `url` (slow, so a deletion before e2 is
@@ -2023,7 +2198,7 @@ async fn every_op_does_its_part_and_none_is_a_kids_one() {
     assert!(mq_runtime::downloads::add(&kid, movie()).await.is_err());
     d.act(&ids, Action::Remove).unwrap();
     assert!(row_of(&core, &ids[0]).is_none());
-    assert!(!d.job_folder(&ids[0]).exists());
+    gone(&d.job_folder(&ids[0])).await;
 }
 
 /// Until the app has told the network once, no job runs: a launch on
