@@ -18,7 +18,7 @@
 @keyframes palette-in { from { opacity: 0; transform: translateY(16px) scale(.98); } }
 
 /* The pill input. */
-.palette .field { display: flex; align-items: center; gap: 18px; height: 84px; padding: 0 32px; border-radius: var(--radius-pill);
+.palette .field { flex: none; display: flex; align-items: center; gap: 18px; height: 84px; padding: 0 32px; border-radius: var(--radius-pill);
   background: var(--glass); box-shadow: inset 0 0 0 2px var(--control); }
 .palette .field svg { width: 34px; height: 34px; color: var(--muted); }
 .palette .field input { flex: 1; min-width: 0; height: 100%; font: 500 var(--type-headline) / 1 var(--font-text); outline: none; }
@@ -75,7 +75,7 @@
 
 /* Phone: a sheet near the top, thumb sized, the list scrolling inside. */
 [data-form="phone"] .palette-layer { position: fixed; z-index: 60; padding: calc(10px + env(safe-area-inset-top)) 10px calc(10px + env(safe-area-inset-bottom)); }
-[data-form="phone"] .search-page { position: static; padding: 12px 10px 104px; }
+[data-form="phone"] .search-page { position: static; padding: 12px 10px var(--tabs-space); }
 [data-form="phone"] .palette { padding: 14px; gap: 12px; border-radius: 22px; }
 [data-form="phone"] .palette .field { height: 48px; padding: 0 16px; gap: 10px; }
 [data-form="phone"] .palette .field svg { width: 20px; height: 20px; }

@@ -221,6 +221,16 @@ test("the phone shows the same controls in one column", async ({ browser }) => {
   await page.context().close();
 });
 
+test("the sort badge on a TV poster keeps the 23 point floor", async ({ browser }) => {
+  const page = await device(browser, "tv");
+  await page.locator(".dv-rail .svc-tile", { hasText: /^Netflix$/ }).click();
+  await pick(page, "sorts", /^IMDb rating/);
+  const corner = page.locator(".grid .tile .corner").first();
+  await expect(corner).toBeVisible({ timeout: 30_000 });
+  expect(await corner.evaluate((el) => Number.parseFloat(getComputedStyle(el).fontSize))).toBeGreaterThanOrEqual(23);
+  await page.context().close();
+});
+
 test("a TV walks it row by row with keys only", async ({ browser }) => {
   const page = await device(browser, "tv");
   const focused = () => page.evaluate(() => (document.activeElement as HTMLElement | null)?.dataset.f ?? "");

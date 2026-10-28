@@ -275,3 +275,14 @@ test("desktop: one status region carries Searching, the count and No matches, an
   await context.close();
 });
 
+test("tv: the search field keeps its height under a long list of results", async ({ browser }) => {
+  const { context, page } = await open(browser, "tv", "/search");
+  const field = page.locator(".palette .field");
+  await expect(field).toBeVisible({ timeout: 30_000 });
+  const before = (await field.boundingBox())?.height ?? 0;
+  await page.locator('[data-f="search:input"]').fill("thrones");
+  await expect(page.locator(".hit").nth(4)).toBeVisible({ timeout: 30_000 });
+  expect((await field.boundingBox())?.height).toBe(before);
+  expect(before).toBeGreaterThanOrEqual(84);
+  await context.close();
+});

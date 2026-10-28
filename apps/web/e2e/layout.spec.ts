@@ -456,3 +456,16 @@ test("desktop: Setup check on a page that does not exist opens the setup check, 
   await expect(page.locator('[data-f="welcome:stremio"]')).toHaveCount(0);
   await context.close();
 });
+
+test("phone: a tab root ends clear of the floating tab bar", async ({ browser }) => {
+  const { context, page, go } = await open(browser, "phone", "/library");
+  await go();
+  await expect(page.locator(".grid .tile").first()).toBeVisible({ timeout: 30_000 });
+  await page.evaluate(() => window.scrollTo(0, 1e6));
+  const [last, bar] = await page.evaluate(() => [
+    [...document.querySelectorAll(".grid .tile")].at(-1)?.getBoundingClientRect().bottom ?? 0,
+    document.querySelector(".tabs")?.getBoundingClientRect().top ?? 0,
+  ]);
+  expect(last).toBeLessThanOrEqual((bar as number) - 8);
+  await context.close();
+});

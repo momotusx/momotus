@@ -832,6 +832,35 @@ for (const { form, viewport, reach } of [
   });
 }
 
+test("the title's Play yields its white to a focused round action on TV, and the episode strip never covers the words", async ({ browser }) => {
+  const { context, page: p } = await page(browser, { width: 1920, height: 1080 });
+  await p.goto("/title/movie/mqjm?form=tv");
+  const play = p.locator('[data-f="title:play"]');
+  await expect(play).toBeVisible({ timeout: 30_000 });
+  await expect.poll(() => focusedKey(p)).toBe("title:play");
+  const fill = () => play.evaluate((el) => getComputedStyle(el).backgroundColor);
+  await expect.poll(fill).toBe("rgba(255, 255, 255, 0.92)");
+  await p.locator('[data-f="title:library"]').focus();
+  await expect.poll(fill).toBe("rgba(255, 255, 255, 0.16)");
+  // Episodes: with the row focused its strip shows, and the overview and the title end before it.
+  for (const form of ["tv", "desktop"] as const) {
+    await p.setViewportSize(form === "tv" ? { width: 1920, height: 1080 } : { width: 1440, height: 900 });
+    await p.goto(`/title/series/mqj2?form=${form}`);
+    const row = p.locator(".ep").first();
+    await expect(row).toBeVisible({ timeout: 30_000 });
+    if (form === "tv") await p.locator('[data-f="ep:mqj2:1:1"]').focus();
+    else await row.hover();
+    const strip = row.locator(".ep-acts");
+    await expect(strip).toBeVisible();
+    const edge = await strip.boundingBox();
+    for (const words of [".ep-t", ".ep-r", ".ep-ov"]) {
+      const box = await row.locator(words).first().boundingBox();
+      if (box) expect(box.x + box.width, `${form} ${words} ends before the strip`).toBeLessThanOrEqual((edge?.x ?? 0) + 1);
+    }
+  }
+  await context.close();
+});
+
 test("Start over beside Resume plays the same video from its beginning", async ({ browser }) => {
   await seedFilm(240_000);
   const { context, page: p } = await page(browser);

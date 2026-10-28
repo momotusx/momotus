@@ -197,7 +197,7 @@
 [data-form="desktop"] .row-msg { left: calc(40 * var(--px)); right: calc(40 * var(--px)); top: calc(8 * var(--px)); bottom: calc(8 * var(--px)); }
 
 /* Phone */
-[data-form="phone"] .home .page { position: static; padding-bottom: 112px; }
+[data-form="phone"] .home .page { position: static; padding-bottom: var(--tabs-space); }
 /* Phone: the iPhone TV app's hero (`phoneHome`; Android's PhoneHome.kt, Apple's HomeScreen.swift): full
  * bleed from the top of the page, 680 tall at 390 wide but at most the small viewport (stable while the
  * address bar hides) less 164, so the first shelf's header shows above the floating tab bar on a 360x640

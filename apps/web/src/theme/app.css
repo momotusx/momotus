@@ -12,7 +12,8 @@
   /* The segmented control's track, each choice on it (tv.apple.com). */
   --track: rgba(118, 118, 128, .24);
 }
-[data-form="phone"] { --nav-h: 64px; --content-top: 16px; }
+/* The phone's floating tab bar: its 62 pt, the 21 pt under it, the home indicator, and a breath. A tab root's page ends this far from its foot. */
+[data-form="phone"] { --nav-h: 64px; --content-top: 16px; --tabs-space: calc(104px + env(safe-area-inset-bottom)); }
 /* Desktop's header is 52 CSS px on the scaled canvas: `--px` is one CSS pixel in canvas units. */
 [data-form="desktop"] { --px: calc(1px / var(--k, 1)); --nav-top: 0px; --nav-h: calc(52 * var(--px)); }
 /* What focus scrolls into view lands below the floating navigation pill. */
@@ -310,6 +311,8 @@ h1, h2, h3 { font-family: var(--font-display); font-weight: var(--weight-heading
  * holds focus, the white primary takes the secondary fill, as tvOS draws an unfocused button.
  * With focus elsewhere on the page it stays white. */
 [data-form="tv"] :is(.play-row, .acts, .install, .dkey, .is-acts, .next-acts):focus-within .btn.primary:not(:focus) { background: var(--fill); color: #fff; }
+/* The title page's Play sits outside its round actions' row: it yields its white to a focused one all the same. */
+[data-form="tv"] .info:has(.acts :focus) .play .btn.primary:not(:focus) { background: var(--fill); color: #fff; }
 /* Art rises (the tile, calendar and profile rules lift the art box itself, so
  * a placeholder lifts too) and catches tvOS's specular sheen. */
 .tile .pic::after, .cal-art::after { content: ""; position: absolute; inset: 0; z-index: 2; border-radius: inherit; pointer-events: none;

@@ -65,7 +65,7 @@
 .browse .problem .acts { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 16px; }
 
 /* Phone */
-[data-form="phone"] .browse.page { position: static; padding: 12px 16px 96px; }
+[data-form="phone"] .browse.page { position: static; padding: 12px 16px var(--tabs-space); }
 [data-form="phone"] .browse h1 { margin: 8px 0 16px; }
 [data-form="phone"] .filters { gap: 10px; margin-bottom: 20px; }
 /* Library's Calendar row, an iOS grouped row: the icon, the word and the chevron at 40 percent. */
@@ -137,8 +137,8 @@
   border-radius: 6px; background: rgba(0, 0, 0, .78); color: var(--text); font: 600 12px / 16px var(--font-text); }
 .tile .pic .corner.banded { bottom: calc(10.5% + 4px); }
 .tile .pic .corner img { height: 11px; width: auto; }
-[data-form="tv"] .tile .pic .corner { font-size: 18px; line-height: 24px; padding: 3px 9px; border-radius: 8px; }
-[data-form="tv"] .tile .pic .corner img { height: 16px; }
+[data-form="tv"] .tile .pic .corner { font-size: 23px; line-height: 30px; padding: 3px 10px; border-radius: 8px; }
+[data-form="tv"] .tile .pic .corner img { height: 20px; }
 
 [data-form="phone"] .discover .dv-head { flex-direction: column; align-items: stretch; gap: 12px; margin: 8px 0 16px; }
 [data-form="phone"] .dv-kinds .chips-track { padding: 0; margin: 0; }
