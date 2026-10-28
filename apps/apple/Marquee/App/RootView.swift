@@ -290,7 +290,6 @@ struct MainShell: View {
             // The Go menu and its keys, off while the player covers the places.
             .focusedSceneValue(\.places, immersion.active ? nil : OpenTabAction { tab, _ in select(tab) })
             .focusedSceneValue(\.find, immersion.active ? nil : OpenTabAction { _, _ in find() })
-            .focusedSceneValue(\.goBack, canGoBack(depth: backDepth, playerUp: immersion.active) ? GoBackAction { goBack() } : nil)
         #else
         places.safeAreaInset(edge: .top, spacing: 0) {
             // Top-level places only, as on Android: a pushed page has no pill to wander into.
@@ -353,23 +352,6 @@ struct MainShell: View {
         searchInput.focus += 1
     }
     #endif
-
-    /// Pages pushed over the shown place's root.
-    private var backDepth: Int {
-        switch tab {
-        case .home: homePath.count
-        case .settings: settingsPath.count
-        default: titlePaths[tab]?.count ?? 0
-        }
-    }
-
-    private func goBack() {
-        switch tab {
-        case .home: homePath.removeLast()
-        case .settings: settingsPath.removeLast()
-        default: titlePaths[tab]?.removeLast()
-        }
-    }
 
     private func popToRoot(_ item: AppTab) {
         switch item {
@@ -835,11 +817,21 @@ extension View {
 #if os(macOS)
 /// The window toolbar is one for every place: a page of a place kept out of
 /// sight leaves no back button there, which would pop a page nobody sees.
+/// The page in front also gives the Go menu its Back (Cmd-[): it leaves that page, or asks first
+/// when the page holds edits (`leaveAsk`).
 private struct BackOnlyWhenShown: ViewModifier {
     @Environment(\.tabShown) private var shown
+    @Environment(\.isPresented) private var presented
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.leaveAsk) private var leaveAsk
+    @State private var inFront = false
 
     func body(content: Content) -> some View {
-        content.navigationBarBackButtonHidden(!shown)
+        content
+            .navigationBarBackButtonHidden(!shown)
+            .onAppear { inFront = true }
+            .onDisappear { inFront = false }
+            .focusedSceneValue(\.goBack, canGoBack(shown: shown, inFront: inFront, presented: presented) ? GoBackAction { (leaveAsk ?? { dismiss() })() } : nil)
     }
 }
 

@@ -72,8 +72,8 @@ struct TitleRoute: Hashable {
     }
 }
 
-/// Whether the Go menu's Back (Cmd-[) has a page to leave: one is pushed in the place, and the
-/// player is not covering the places.
-func canGoBack(depth: Int, playerUp: Bool) -> Bool {
-    depth > 0 && !playerUp
+/// Whether the page in front gives the Go menu its Back (Cmd-[): it is pushed (or presented), its
+/// place is the one shown, and nothing was pushed over it.
+func canGoBack(shown: Bool, inFront: Bool, presented: Bool) -> Bool {
+    shown && inFront && presented
 }

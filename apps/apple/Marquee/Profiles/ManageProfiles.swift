@@ -142,6 +142,10 @@ struct EditProfile: View {
         .scrollIndicators(.hidden)
         .background(Theme.Palette.bg)
         .topScrim()
+        #if os(macOS)
+        // The Go menu's Back takes the same ask as the Back button.
+        .environment(\.leaveAsk, dirty ? leave : nil)
+        #endif
         .onAppear(perform: fill)
         // A half-done PIN change is given up when the app leaves the front:
         // the steps forget the current and new PINs.
@@ -156,7 +160,7 @@ struct EditProfile: View {
         .toolbar {
             if dirty, shown {
                 ToolbarItem(placement: .navigation) {
-                    Button { confirmLeave = true } label: { Label("Back", glyph: "chevron-left") }
+                    Button(action: leave) label: { Label("Back", glyph: "chevron-left") }
                         .labelStyle(.titleAndIcon)
                 }
             }
@@ -210,6 +214,8 @@ struct EditProfile: View {
         #endif
         .onAppear { deleteFocus = .keep }
     }
+
+    private func leave() { confirmLeave = true }
 
     private var dirty: Bool {
         let stored = profileId.flatMap { id in profiles.snapshot?.profiles.first { $0.id == id }?.name }

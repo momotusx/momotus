@@ -21,8 +21,10 @@ import Testing
     #expect(tabBarIconsOnly(width: 1024, type: .accessibility5))
 }
 
-@Test func goBackNeedsAPushedPageAndNoPlayerOverThePlaces() {
-    #expect(canGoBack(depth: 1, playerUp: false))
-    #expect(!canGoBack(depth: 0, playerUp: false))
-    #expect(!canGoBack(depth: 2, playerUp: true))
+@Test func onlyThePushedPageInFrontOfTheShownPlaceGivesGoBack() {
+    #expect(canGoBack(shown: true, inFront: true, presented: true))
+    // A place kept out of sight, a page with another pushed over it, and a place's root give none.
+    #expect(!canGoBack(shown: false, inFront: true, presented: true))
+    #expect(!canGoBack(shown: true, inFront: false, presented: true))
+    #expect(!canGoBack(shown: true, inFront: true, presented: false))
 }

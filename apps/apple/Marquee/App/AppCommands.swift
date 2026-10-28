@@ -10,8 +10,13 @@ extension FocusedValues {
     @Entry var playerKeys: PlayerKeys?
     /// The title page in front, when Start Over can play it from the beginning (`startOverAvailable`).
     @Entry var startOver: StartOverAction?
-    /// The page in front of its place's root, when Back can leave it (`canGoBack`).
+    /// The page in front, when Back can leave it (`canGoBack`).
     @Entry var goBack: GoBackAction?
+}
+
+extension EnvironmentValues {
+    /// A page with unsaved edits: what Back runs instead of leaving (the Go menu's too).
+    @Entry var leaveAsk: (() -> Void)?
 }
 
 /// Plays the title in front from its beginning.
