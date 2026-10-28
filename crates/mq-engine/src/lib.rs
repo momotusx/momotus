@@ -2257,6 +2257,16 @@ impl Engine {
         }
     }
 
+    /// Tests: the files of `info_hash` kept for download.
+    #[cfg(feature = "test-hooks")]
+    #[doc(hidden)]
+    pub fn kept_for_tests(&self, info_hash: &str) -> std::collections::BTreeSet<usize> {
+        lock(&self.inner.kept)
+            .get(&info_hash.to_ascii_lowercase())
+            .cloned()
+            .unwrap_or_default()
+    }
+
     /// Lets go of downloaded `file` of `info_hash` and frees its bytes
     /// (plans/offline-downloads.md 4.6 step 9): a torrent not loaded is
     /// loaded from its details first; only the pieces wholly inside the
