@@ -245,8 +245,11 @@ class EditProfileTest {
             )
         }
 
+    private fun picture(index: Int) =
+        compose.onNodeWithContentDescription(ProfileCopy.glyphName(ProfileCopy.GLYPHS[index]))
+
     @Test
-    fun `on TV a keyboard that closes hands focus to Save, so the first Back reaches the guard`() {
+    fun `on TV a keyboard that closes on the name hands focus to the first picture, so Back reaches the guard`() {
         edit("p1", Form.Tv)
         compose.runOnUiThread { WindowCompat.setDecorFitsSystemWindows(compose.activity.window, false) }
         name().requestFocus()
@@ -256,8 +259,34 @@ class EditProfileTest {
         name().assertIsFocused()
         keyboard(visible = false)
         compose.waitForIdle()
-        compose.onNodeWithText("Save").assertIsFocused()
+        picture(0).assertIsFocused()
         name().assertIsNotFocused()
+    }
+
+    @Test
+    fun `on TV a keyboard that closes after focus left the name leaves focus where it is`() {
+        edit("p1", Form.Tv)
+        compose.runOnUiThread { WindowCompat.setDecorFitsSystemWindows(compose.activity.window, false) }
+        keyboard(visible = true)
+        picture(2).requestFocus()
+        compose.waitForIdle()
+        keyboard(visible = false)
+        compose.waitForIdle()
+        picture(2).assertIsFocused()
+    }
+
+    @Test
+    fun `on TV a keyboard that closes under an open question leaves focus on its safe button`() {
+        edit("p1", Form.Tv)
+        compose.runOnUiThread { WindowCompat.setDecorFitsSystemWindows(compose.activity.window, false) }
+        name().performTextInput("Ana Maria")
+        keyboard(visible = true)
+        back()
+        compose.waitForIdle()
+        compose.onNodeWithText("Keep editing").assertIsFocused()
+        keyboard(visible = false)
+        compose.waitForIdle()
+        compose.onNodeWithText("Keep editing").assertIsFocused()
     }
 
     @Test

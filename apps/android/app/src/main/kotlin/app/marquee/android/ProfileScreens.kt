@@ -1078,21 +1078,24 @@ fun EditProfileScreen(
         askDiscard = false
         closingDiscard = false
     }
+    // While a question is open its safe button is the screen's one white: Save draws as a secondary.
+    val asking = askDiscard || askPin || confirmDelete
     // On TV, a keyboard that closes leaves focus in the name field, and the first remote Back then goes to the field
-    // and not to the page's guard: focus moves to Save when the keyboard goes, so that Back reaches the page.
+    // and not to the page's guard. While the field still holds focus as the keyboard goes (and no question is open),
+    // focus moves to the first picture, the next stop after the name on this page (name, picture, Save).
     val keyboard = WindowInsets.isImeVisible
     var keyboardWasUp by remember { mutableStateOf(false) }
+    var nameFocused by remember { mutableStateOf(false) }
+    val firstPicture = remember { FocusRequester() }
     val onTv = Marquee.form == Form.Tv
     LaunchedEffect(keyboard) {
         if (keyboard) {
             keyboardWasUp = true
         } else if (keyboardWasUp) {
             keyboardWasUp = false
-            if (onTv) runCatching { saveButton.requestFocus() }
+            if (onTv && nameFocused && !asking) runCatching { firstPicture.requestFocus() }
         }
     }
-    // While a question is open its safe button is the screen's one white: Save draws as a secondary.
-    val asking = askDiscard || askPin || confirmDelete
 
     LazyColumn(
         Modifier.fillMaxSize().focusRestorer(),
@@ -1143,18 +1146,30 @@ fun EditProfileScreen(
                         112.dp
                     },
                 )
-                MqTextField(name, { name = it.take(30) }, label = "Name", placeholder = "Name")
+                MqTextField(
+                    name,
+                    { name = it.take(30) },
+                    label = "Name",
+                    placeholder = "Name",
+                    modifier = Modifier.onFocusChanged { nameFocused = it.hasFocus },
+                )
                 MqText("PICTURE", role = TextRole.Caption, color = colors.dim, weight = FontWeight.Bold)
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    ProfileCopy.GLYPHS.forEach { g ->
+                    ProfileCopy.GLYPHS.forEachIndexed { index, g ->
                         val pick = if (Marquee.form == Form.Tv) 64.dp else 48.dp
-                        Choice(selected = glyph == g, label = ProfileCopy.glyphName(g), size = pick, onClick = {
-                            glyph = g
-                            touched = true
-                        }) { AvatarArt(g, color, ProfileCopy.initial(name.ifBlank { "?" }), pick) }
+                        Choice(
+                            selected = glyph == g,
+                            label = ProfileCopy.glyphName(g),
+                            size = pick,
+                            onClick = {
+                                glyph = g
+                                touched = true
+                            },
+                            focusRequester = firstPicture.takeIf { index == 0 },
+                        ) { AvatarArt(g, color, ProfileCopy.initial(name.ifBlank { "?" }), pick) }
                     }
                 }
                 PrimaryButton(
@@ -1346,10 +1361,12 @@ internal fun Choice(
     label: String,
     size: Dp,
     onClick: () -> Unit,
+    focusRequester: FocusRequester? = null,
     content: @Composable () -> Unit,
 ) {
     Box(
         Modifier
+            .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
             .marqueeFocus((size + CHOICE_PAD * 2) / 2)
             .clip(CircleShape)
             .background(if (selected) Tokens.selectedFill else Color.Transparent)
