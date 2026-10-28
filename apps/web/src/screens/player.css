@@ -98,6 +98,8 @@ html[data-engine="mpv"] .player-scr.started .player-bd { opacity: 0; }
  * (design/DECISION.md, TV focus). The menus over the picture (.opt) keep the player's ring until they are rebuilt. */
 [data-form="tv"] .osd { --focus-ring: 0px; }
 [data-form="tv"] .osd :is(.round, .pa):focus { --text: var(--on-primary); --muted: rgba(0, 0, 0, .64); background: var(--primary); color: var(--on-primary); box-shadow: var(--lift-focus-edge); }
+/* One white per screen: while another control of the bar holds focus, the white play button takes the secondary fill. */
+[data-form="tv"] .osd:focus-within .round.main:not(:focus) { background: var(--fill); color: #fff; box-shadow: none; }
 [data-form="tv"] .osd .scrub:focus { outline: none; background: color-mix(in srgb, var(--text) 45%, transparent); }
 [data-form="tv"] .osd .scrub:focus .knob { box-shadow: var(--lift-focus-edge); }
 @media (hover: hover) { [data-form="desktop"] .pa:hover { background: color-mix(in srgb, var(--text) 8%, transparent); } }

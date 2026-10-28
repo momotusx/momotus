@@ -799,6 +799,11 @@ test("tv player: the controls bar draws focus as the white fill with no ring, th
     await p.locator(`[data-f="${key}"]`).focus();
     await expect.poll(() => look(key)).toEqual({ ring: "0px", fill: "rgba(255, 255, 255, 0.92)" });
   }
+  // One white at a time: with a round control focused, the play button takes the secondary fill.
+  await p.locator('[data-f="player:back10"]').focus();
+  await expect.poll(() => look("player:back10")).toEqual({ ring: "0px", fill: "rgba(255, 255, 255, 0.92)" });
+  await expect.poll(() => look("player:toggle")).toMatchObject({ fill: "rgba(255, 255, 255, 0.16)" });
+  await p.locator('[data-f="player:audio"]').focus();
   // The audio menu opens on its first row, which keeps the player's ring.
   await p.keyboard.press("Enter");
   await expect(p.locator(".panel .opt").first()).toBeVisible();
