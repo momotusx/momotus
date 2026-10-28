@@ -30,3 +30,21 @@ import Testing
     let pinned = try body(of: ".safeAreaInset(edge: .top, spacing: 0)", in: screen)
     #expect(pinned.contains(".failedKept"), "the failure over a kept snapshot left the pinned inset")
 }
+
+@MainActor @Test func tryAgainClearsTheFailureAtOnce() async throws {
+    let core = RealCore()
+    #expect(await core.ready())
+    let record = LiveRecord<LibrarySnapshot>("no-such-view", core: core.client)
+    record.start()
+    #expect(await eventually { record.failure != nil })
+    record.retry()
+    // Before the reopen answers: no old words left up, so a press is seen and a repeat failure is new.
+    #expect(record.failure == nil)
+    #expect(record.stage == .loading)
+}
+
+@Test func theTitlesTryAgainClearsItsFailureToo() throws {
+    let file = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appending(path: "../Marquee/Title/TitleModel.swift")
+    let retry = try body(of: "func retry()", in: String(contentsOf: file, encoding: .utf8))
+    #expect(retry.contains("failure = nil"), "the title's Try again keeps the old failure up")
+}

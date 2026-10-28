@@ -38,6 +38,8 @@ final class TitleModel {
     }
 
     func retry() {
+        // The same words left up would read as an ignored press, and a repeat failure would not be said again.
+        failure = nil
         open()
     }
 

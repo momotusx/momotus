@@ -44,6 +44,7 @@ final class LiveRecord<Snapshot: Decodable & Sendable> {
     func retry() {
         task?.cancel()
         task = nil
+        failure = nil
         start()
     }
 
