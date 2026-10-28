@@ -159,11 +159,11 @@
 .framed .acts { justify-self: center; margin-top: 32px; }
 [data-form="tv"] .framed .door:focus > svg:first-child { background: rgba(0, 0, 0, .08); }
 @media (hover: hover) { [data-form="desktop"] .framed .door:hover { background: rgba(255, 255, 255, .2); } }
-/* TV: the frame and its bar sit in the middle of the screen. */
-[data-form="tv"] .welcome.page:has(> .framed) { display: flex; flex-direction: column; }
-[data-form="tv"] .welcome.page > .framed { flex: 1; align-content: center; margin-top: 0; padding-bottom: 40px; }
+/* TV and desktop: the frame and its bar sit in the middle of the space under the header, the gaps above and below
+ * alike (the phone keeps its flow). */
+:is([data-form="tv"], [data-form="desktop"]) .welcome.page:has(> .framed) { display: flex; flex-direction: column; }
+:is([data-form="tv"], [data-form="desktop"]) .welcome.page > .framed { flex: 1 0 auto; align-content: center; margin-top: 0; padding-block: 24px; }
 /* Desktop: the gallery's 1440 frame in CSS pixels. */
-[data-form="desktop"] .step-body.framed { margin-top: calc(24 * var(--px)); }
 [data-form="desktop"] .framed .film h1 { font-size: calc(40 * var(--px)); }
 [data-form="desktop"] .framed .film .lead { font-size: calc(19 * var(--px)); }
 [data-form="desktop"] .framed :is(.doors, .langs) { margin-top: calc(28 * var(--px)); }

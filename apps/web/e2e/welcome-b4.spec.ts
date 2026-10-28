@@ -120,3 +120,27 @@ for (const form of ["tv", "desktop", "phone"] as const) {
     await context.close();
   });
 }
+
+for (const [form, size] of [["tv", [1920, 1080]], ["desktop", [1440, 900]], ["desktop", [1920, 1200]]] as const) {
+  test(`${form} ${size.join("x")}: the frame and its bar sit in the middle of the space under the header`, async ({ browser }) => {
+    const context = await device(browser, form, size as [number, number]);
+    for (const step of ["doors", "choice"]) {
+      const page = await open(context, form, step);
+      await expect(page.locator(".framed .door").first()).toBeVisible();
+      const gaps = await page.evaluate(() => {
+        const main = document.querySelector(".welcome.page") as HTMLElement;
+        const k = main.getBoundingClientRect().height / main.offsetHeight;
+        const bottom = main.getBoundingClientRect().bottom - parseFloat(getComputedStyle(main).paddingBottom) * k;
+        const head = (document.querySelector(".welcome-head") as HTMLElement).getBoundingClientRect().bottom;
+        const block = document.querySelector(".step-body.framed") as HTMLElement;
+        const top = (block.querySelector(".film") as HTMLElement).getBoundingClientRect().top;
+        const end = Math.max(...[...block.children].map((c) => c.getBoundingClientRect().bottom));
+        return { above: top - head, below: bottom - end };
+      });
+      expect(gaps.above, `${step} has room above`).toBeGreaterThan(40);
+      expect(Math.abs(gaps.above - gaps.below), `${step} ${JSON.stringify(gaps)}`).toBeLessThanOrEqual(4);
+      await page.close();
+    }
+    await context.close();
+  });
+}
