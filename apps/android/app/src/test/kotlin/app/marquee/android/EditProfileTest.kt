@@ -2,6 +2,7 @@ package app.marquee.android
 
 import android.app.Application
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.LocalOnBackPressedDispatcherOwner
 import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
@@ -21,9 +22,11 @@ import androidx.compose.ui.test.performTextInput
 import app.marquee.core.client.CoreJson
 import app.marquee.core.model.ProfileInfo
 import app.marquee.core.model.ProfilesSnapshot
+import app.marquee.core.route.Route
 import app.marquee.core.session.CoreSession
 import app.marquee.design.Form
 import app.marquee.design.MarqueeTheme
+import app.marquee.ui.phone.PhoneShell
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.longOrNull
@@ -163,6 +166,30 @@ class EditProfileTest {
         compose.waitForIdle()
         compose.onNodeWithText("Discard").performClick()
         assertEquals(1, done)
+    }
+
+    @Test
+    fun `the phone's back link goes through the dispatcher, so a changed page is asked first`() {
+        core()
+        var popped = 0
+        compose.setContent {
+            // As AppRoot wires it: the link is the system Back, and only an unhandled one pops.
+            val systemBack = LocalOnBackPressedDispatcherOwner.current?.onBackPressedDispatcher
+            MarqueeTheme(Form.Phone) {
+                PhoneShell(
+                    Route.Home,
+                    showTabs = false,
+                    onSelect = {},
+                    onBack = { systemBack?.onBackPressed() ?: popped++ },
+                ) { EditProfileScreen(gate, session, null, {}) }
+            }
+        }
+        until("the page") { compose.onAllNodesWithContentDescription("Name").fetchSemanticsNodes().isNotEmpty() }
+        name().performTextInput("Cy")
+        compose.onNodeWithText("Back").performClick()
+        compose.waitForIdle()
+        compose.onNodeWithText("Discard this profile?").assertExists()
+        assertEquals(0, popped)
     }
 
     @Test
