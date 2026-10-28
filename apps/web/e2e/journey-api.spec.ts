@@ -958,7 +958,7 @@ async function trailerRun(browser: Browser, opts: { form: "tv" | "desktop"; e2e?
     const w = window as unknown as { ytFailIds?: string[]; ytDuration?: number; open: (u?: string) => null; opened: string[] };
     if (o.e2e) localStorage.setItem("mq.trailerPreviews", "e2e");
     // The browser's data saver, as a phone on cellular reports it.
-    if (o.saveData) Object.defineProperty(navigator, "connection", { value: { saveData: true }, configurable: true });
+    if (o.saveData) Object.defineProperty(navigator, "connection", { value: { saveData: true, addEventListener() {}, removeEventListener() {} }, configurable: true });
     if (o.memory !== undefined) Object.defineProperty(navigator, "deviceMemory", { value: o.memory, configurable: true });
     w.ytFailIds = o.fail;
     w.ytDuration = o.duration;
