@@ -7,7 +7,7 @@
   "conditions": {
     "account": true,
     "engine": false,
-    "freeBytes": 1099511627776,
+    "freeBytes": null,
     "hdr": false,
     "http": {
       "mbps": 15.0,
