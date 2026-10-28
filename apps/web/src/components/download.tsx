@@ -12,7 +12,7 @@ import Play from "lucide-solid/icons/play";
 import RotateCw from "lucide-solid/icons/rotate-cw";
 import Smartphone from "lucide-solid/icons/smartphone";
 import Square from "lucide-solid/icons/square";
-import Trash2 from "lucide-solid/icons/trash";
+import Trash from "lucide-solid/icons/trash";
 import WifiOff from "lucide-solid/icons/wifi-off";
 import X from "lucide-solid/icons/x";
 import { useNavigate } from "@solidjs/router";
@@ -49,8 +49,8 @@ export const ITEM_ICON: Record<DownloadItem, Icon> = {
   resume: Play,
   play: Play,
   cancel: X,
-  delete: Trash2,
-  remove: Trash2,
+  delete: Trash,
+  remove: Trash,
   retry: RotateCw,
   mobileData: Smartphone,
 };

@@ -164,7 +164,7 @@ function TitlePage(props: { kind: string; id: string; retry: () => void }) {
       if (act === "deleteSeason")
         return () =>
           setMenu({
-            title: deleteSeason(season ?? 0, kept.map((e) => e.download), d()?.name ?? ""),
+            title: deleteSeason(season, kept.map((e) => e.download), d()?.name ?? ""),
             entries: [
               { key: "delete", label: "Delete", icon: ITEM_ICON.delete, run: () => downloadAct("downloadRemove", { ids }) },
               { key: "cancel", label: "Cancel", run: () => undefined },

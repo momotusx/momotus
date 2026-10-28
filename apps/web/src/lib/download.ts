@@ -262,11 +262,12 @@ export const episodeLine = (r: DownloadRow) => {
 
 export const deleteSeries = (count: number, name: string) => `Delete ${count === 1 ? "1 downloaded episode" : `${count} downloaded episodes`} of ${name}?`;
 
-/** A season's delete question: the episodes already downloaded, never the queued or running ones it
- * also cancels; with none done yet, the season's downloads by name. */
-export function deleteSeason(season: number, badges: readonly (DownloadBadge | null)[], name: string): string {
+/** A season's or a series' delete question (no season): the episodes already downloaded, never the
+ * queued or running ones it also cancels; with none done yet, the downloads by name. */
+export function deleteSeason(season: number | null, badges: readonly (DownloadBadge | null)[], name: string): string {
   const done = badges.filter((b) => b?.state === "done").length;
-  return done > 0 ? deleteSeries(done, name) : `Delete Season ${season} downloads of ${name}?`;
+  if (done > 0) return deleteSeries(done, name);
+  return `Delete ${season === null ? "the" : `Season ${season}`} downloads of ${name}?`;
 }
 export const deleteAll = (n: number) => `Delete all downloads on this device? ${bytes(n)}`;
 

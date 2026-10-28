@@ -15,7 +15,7 @@ import type { DownloadRow } from "../core/generated/DownloadRow";
 import type { DownloadsSnapshot } from "../core/generated/DownloadsSnapshot";
 import type { DownloadStorage } from "../core/generated/DownloadStorage";
 import { decoded, episodeLabel, playPath, seasonName, versionsPath } from "../lib/format";
-import { badgeOf, deleteSeries, downloadControl, type DownloadItem, downloadWords, episodeLine, episodeName, progressLine, shownDownloads, storageLine, subtitlesLine, titleLine } from "../lib/download";
+import { badgeOf, deleteSeason, downloadControl, type DownloadItem, downloadWords, episodeLine, episodeName, progressLine, shownDownloads, storageLine, subtitlesLine, titleLine } from "../lib/download";
 import "./browse.css";
 import "./settings.css";
 
@@ -235,6 +235,8 @@ export function DownloadedSeries() {
   const title = () => shown()?.titles.find((t) => t.itemId === itemId()) ?? null;
   const rows = () => [...(title()?.rows ?? []), ...(shown()?.downloading.filter((r) => r.itemId === itemId()) ?? [])];
   const name = () => title()?.name ?? rows()[0]?.name ?? "";
+  // Counts what is downloaded, not the queued and running ones it also cancels (code review r3 m4).
+  const ask = () => deleteSeason(null, rows().map(badgeOf), name());
   const seasons = () => {
     const by = new Map<number, DownloadRow[]>();
     for (const r of [...rows()].sort((a, b) => (a.season ?? 0) - (b.season ?? 0) || (a.episode ?? 0) - (b.episode ?? 0))) {
@@ -256,7 +258,7 @@ export function DownloadedSeries() {
       <main class="browse page settings-page column downloads-page" data-vscroll inert={!!menu() || undefined}>
         <h1>{name()}</h1>
         <Show when={!kids() && rows().length > 0}>
-          <div class="dl-confirm" role="group" aria-label={confirm() ? deleteSeries(rows().length, name()) : undefined}>
+          <div class="dl-confirm" role="group" aria-label={confirm() ? ask() : undefined}>
             <Show
               when={confirm()}
               fallback={
@@ -274,7 +276,7 @@ export function DownloadedSeries() {
               }
             >
               {/* DECISION's Confirmation pattern, inline: no destructive red, Cancel beside it. */}
-              <p>{deleteSeries(rows().length, name())}</p>
+              <p>{ask()}</p>
               <button
                 class="btn"
                 data-f="downloads:delete-all-confirm"

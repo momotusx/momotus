@@ -184,6 +184,9 @@ test("a season's delete counts the episodes already downloaded, never the queued
   expect(deleteSeason(2, [b("done"), b("running")], "Severance")).toBe("Delete 1 downloaded episode of Severance?");
   // Nothing done yet: the season's downloads, with no count that is not true.
   expect(deleteSeason(2, [b("queued"), b("running"), null], "Severance")).toBe("Delete Season 2 downloads of Severance?");
+  // A whole series (its Downloads page): the same count, and no season named.
+  expect(deleteSeason(null, [b("done"), ...Array.from({ length: 9 }, () => b("queued"))], "Severance")).toBe("Delete 1 downloaded episode of Severance?");
+  expect(deleteSeason(null, [b("queued")], "Severance")).toBe("Delete the downloads of Severance?");
 });
 
 test("a locked session's counts-only snapshot is never shown, so no screen reads it as empty", () => {
