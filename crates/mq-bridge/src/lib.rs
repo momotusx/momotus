@@ -95,6 +95,11 @@ enum Request {
     DefaultAddons {
         id: u64,
     },
+    /// The still first run frames its questions with (`Core::first_run_still`),
+    /// or null within 1.5 s. Replies `FirstRunStill` or null.
+    FirstRunStill {
+        id: u64,
+    },
     /// Installs the defaults with the user's switches (a key left out is
     /// installed on when absent and left as it is when present).
     InstallDefaults {
@@ -840,6 +845,9 @@ impl Session {
                     let defaults = core.default_addons().await.map_err(|e| e.to_string())?;
                     to_value(&defaults)
                 });
+            }
+            Request::FirstRunStill { id } => {
+                self.spawn_fenced(id, async move { to_value(&core.first_run_still().await) });
             }
             Request::InstallDefaults { id, choices } => {
                 let result = core.install_defaults(&choices);

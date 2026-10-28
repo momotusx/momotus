@@ -5,10 +5,12 @@
 
 use crate::Core;
 use crate::core::{CoreError, default_rows, put_addon};
+use mq_addons::InstalledAddon;
 use mq_library::DEFAULTS_GIVEN;
-use mq_protocol::Manifest;
+use mq_protocol::{Manifest, ResourcePath, ResourceResponse, decode_catalog};
 use serde::{Deserialize, Serialize};
 use std::sync::OnceLock;
+use std::time::Duration;
 
 /// Raised when the list gains entries, so an existing profile is offered
 /// the new ones once (`defaultsSeen`).
@@ -341,6 +343,65 @@ impl Core {
         }
         Ok(())
     }
+
+    /// The still the first-run question steps frame (`firstRunStill`): the
+    /// first title with a backdrop in the default catalog addon's first
+    /// catalog, asked from its bundled manifest without installing it (no
+    /// account, nothing written). None when no answer came within
+    /// `STILL_BUDGET` or it held no backdrop: the frame stays black.
+    pub async fn first_run_still(&self) -> Option<FirstRunStill> {
+        let d = list().iter().find(|d| d.group == "catalogs")?;
+        let catalog = d
+            .manifest
+            .catalogs
+            .iter()
+            .find(|c| c.is_extra_supported(&[]))?;
+        let addon = InstalledAddon {
+            transport_url: url::Url::parse(&d.url).ok()?,
+            manifest: d.manifest.clone(),
+        };
+        let path = ResourcePath {
+            resource: "catalog".into(),
+            r#type: catalog.r#type.clone(),
+            id: catalog.id.clone(),
+            extra: vec![],
+        };
+        let fetched = tokio::time::timeout(
+            STILL_BUDGET,
+            self.addons().fetch(&addon, &path, STILL_BUDGET),
+        )
+        .await
+        .ok()?
+        .ok()?;
+        let ResourceResponse::Metas { metas } = decode_catalog(&fetched.body).ok()? else {
+            return None;
+        };
+        metas.into_iter().find_map(|m| {
+            Some(FirstRunStill {
+                background: m.background?.to_string(),
+                logo: m.logo.map(|u| u.to_string()),
+                name: m.name,
+            })
+        })
+    }
+}
+
+/// How long first run waits for its still before it keeps the frame black.
+const STILL_BUDGET: Duration = Duration::from_millis(1500);
+
+/// The `firstRunStill` answer: a title's backdrop, its logo when it has
+/// one, and its name.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[cfg_attr(
+    feature = "ts",
+    derive(ts_rs::TS),
+    ts(export, export_to = "../../../apps/web/src/core/generated/")
+)]
+#[serde(rename_all = "camelCase")]
+pub struct FirstRunStill {
+    pub background: String,
+    pub logo: Option<String>,
+    pub name: String,
 }
 
 #[cfg(test)]

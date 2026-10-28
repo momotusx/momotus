@@ -1282,3 +1282,82 @@ async fn the_addon_directory_is_a_default_given_once() {
     let core = device.start();
     assert!(!urls(&core).iter().any(|(u, _)| u == &d.url));
 }
+
+/// A stand-in for every host off this machine (`set_dev_replay`): the
+/// default catalog's first page answers `body` after `delay`, anything else 404.
+async fn still_host(delay: std::time::Duration, body: &'static str) -> String {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    tokio::spawn(async move {
+        while let Ok((mut socket, _)) = listener.accept().await {
+            tokio::spawn(async move {
+                let mut buf = [0u8; 4096];
+                let n = socket.read(&mut buf).await.unwrap_or(0);
+                let head = String::from_utf8_lossy(&buf[..n]);
+                let resp = if head
+                    .starts_with("GET /https/v3-cinemeta.strem.io/catalog/movie/top.json ")
+                {
+                    tokio::time::sleep(delay).await;
+                    format!(
+                        "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{body}",
+                        body.len()
+                    )
+                } else {
+                    "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\n\r\n".to_owned()
+                };
+                let _ = socket.write_all(resp.as_bytes()).await;
+            });
+        }
+    });
+    format!("http://{addr}")
+}
+
+// One test for every case: the replay base is one switch for the whole process.
+#[tokio::test]
+async fn first_run_still_is_the_first_backdrop_of_the_default_catalog_or_nothing() {
+    use std::time::{Duration, Instant};
+    let metas = r#"{"metas":[
+        {"id":"tt1","type":"movie","name":"No Art"},
+        {"id":"tt2","type":"movie","name":"Second","background":"https://images.example/bg/tt2.jpg","logo":"https://images.example/logo/tt2.png"},
+        {"id":"tt3","type":"movie","name":"Third","background":"https://images.example/bg/tt3.jpg"}
+    ]}"#;
+    mq_http::set_dev_replay(&still_host(Duration::ZERO, metas).await);
+    let core = Core::temporary(OWNER).unwrap();
+    assert_eq!(
+        core.first_run_still().await,
+        Some(defaults::FirstRunStill {
+            background: "https://images.example/bg/tt2.jpg".into(),
+            logo: Some("https://images.example/logo/tt2.png".into()),
+            name: "Second".into(),
+        })
+    );
+    // Nothing is installed to ask it.
+    assert!(core.library().addons(OWNER).unwrap().is_empty());
+
+    // No title with a backdrop: nothing.
+    mq_http::set_dev_replay(
+        &still_host(
+            Duration::ZERO,
+            r#"{"metas":[{"id":"tt1","type":"movie","name":"No Art"}]}"#,
+        )
+        .await,
+    );
+    assert_eq!(
+        Core::temporary(OWNER).unwrap().first_run_still().await,
+        None
+    );
+
+    // A slow catalog: nothing, once the budget is spent.
+    mq_http::set_dev_replay(&still_host(Duration::from_secs(5), metas).await);
+    let started = Instant::now();
+    assert_eq!(
+        Core::temporary(OWNER).unwrap().first_run_still().await,
+        None
+    );
+    let waited = started.elapsed();
+    assert!(
+        waited >= Duration::from_millis(1400) && waited < Duration::from_millis(2500),
+        "waited {waited:?}"
+    );
+}
