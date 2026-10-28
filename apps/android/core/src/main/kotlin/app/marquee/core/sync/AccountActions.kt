@@ -41,6 +41,9 @@ class AccountActions(
     var emailOffered by mutableStateOf(false)
         private set
 
+    /** Link another shows Continue with email: the relay offers it and no email link exists yet (E12). */
+    val emailLinkable: Boolean get() = emailOffered && links.orEmpty().none { it.provider == AccountRules.EMAIL }
+
     /** Link another by email, while its screen is open (plans/accounts-email.md 4.7). */
     var emailLink: EmailCode? by mutableStateOf(null)
         private set
@@ -107,8 +110,9 @@ class AccountActions(
             }).also { it.open() }
     }
 
-    /** Leaves Link another by email; the address goes with it. */
+    /** Leaves Link another by email; the address goes with it, and a code still being checked links nothing. */
     fun closeEmail() {
+        emailLink?.close()
         emailLink = null
     }
 

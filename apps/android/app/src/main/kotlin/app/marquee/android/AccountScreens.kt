@@ -15,6 +15,7 @@ import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -472,7 +473,7 @@ internal fun AccountRows(
     LaunchedEffect(sync.joined) { if (sync.joined) actions.load() }
     val links = actions.links.orEmpty()
     Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.s)) {
-        if (actions.providers.isNotEmpty() || actions.emailOffered || links.isNotEmpty()) {
+        if (actions.providers.isNotEmpty() || (actions.emailOffered && !tv) || links.isNotEmpty()) {
             Kicker(AccountCopy.SIGNED_IN_WITH, side = 0.dp)
             for (link in links) {
                 LinkLine(
@@ -500,12 +501,14 @@ internal fun AccountRows(
             val linked = links.map { it.provider }.toSet()
             val more = actions.providers.filter { it !in linked }
             // E12, E13: one Email row at most, and none on a TV.
-            val email = !tv && actions.emailOffered && AccountRules.EMAIL !in linked
+            val email = !tv && actions.emailLinkable
             val emailLink = actions.emailLink
             if (rows.links && (more.isNotEmpty() || email)) {
                 MqText(AccountCopy.LINK_ANOTHER, role = TextRole.Callout)
                 if (emailLink != null) {
                     BackHandler { if (!emailLink.back()) actions.closeEmail() }
+                    // The address lives only while its screen does (E12).
+                    DisposableEffect(Unit) { onDispose(actions::closeEmail) }
                     EmailStages(emailLink) { a ->
                         when (a) {
                             Act.Retry -> emailLink.retry()
@@ -734,7 +737,7 @@ private fun EmailAddressStage(
 ) {
     val field = stepFocus()
     // A refused address gives the field the focus again, which reads the line it is described by.
-    LaunchedEffect(form.fieldError) { if (form.fieldError != null) runCatching { field.requestFocus() } }
+    LaunchedEffect(form.said) { if (form.said > 0) runCatching { field.requestFocus() } }
     Column(
         Modifier.semantics { paneTitle = AccountCopy.EMAIL_TITLE },
         verticalArrangement = Arrangement.spacedBy(Marquee.space.s),
@@ -774,7 +777,7 @@ private fun EmailCodeStage(
 ) {
     val field = stepFocus()
     // A wrong code clears the field and gives it the focus again.
-    LaunchedEffect(form.fieldError) { if (form.fieldError != null) runCatching { field.requestFocus() } }
+    LaunchedEffect(form.said) { if (form.said > 0) runCatching { field.requestFocus() } }
     // Send a new code counts down from the newest mail's time, so time in the background counts.
     var left by remember { mutableIntStateOf(form.resendIn()) }
     LaunchedEffect(form.sentAt) {

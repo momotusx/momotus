@@ -5,6 +5,7 @@ import app.marquee.core.ScriptedCore.Companion.ok
 import app.marquee.core.model.IdentityLink
 import app.marquee.core.sync.AccountActions
 import app.marquee.core.sync.BrokeredRun
+import app.marquee.core.sync.EmailCode
 import app.marquee.core.sync.GoogleSheet
 import app.marquee.core.sync.PasskeyResult
 import app.marquee.core.sync.SignInPlatform
@@ -291,5 +292,85 @@ class AccountActionsTest {
                 .jsonPrimitive.content
                 .toBoolean(),
         )
+    }
+
+    // Link another by email (plans/accounts-email.md 4.7, E12)
+
+    private fun emailRelay(linked: Boolean = false) {
+        core.answers["relayInfo"] = { ok("""{"providers":["apple","google","email"]}""") }
+        val email = if (linked) """,{"link":3,"provider":"email","createdMs":7}""" else ""
+        core.answers["identities"] = { ok("""{"links":[{"link":1,"provider":"apple","createdMs":5}$email]}""") }
+        core.answers["emailSignInStart"] = { ok("""{"flow":"F1","expiresMs":${Long.MAX_VALUE}}""") }
+        core.answers["emailSignIn"] = { ok("""{"phase":"new","ticket":"TE"}""") }
+    }
+
+    /** Link another, Continue with email, an address, Send code, the code. */
+    private fun linkByEmail() {
+        actions.linkEmail()
+        val form = actions.emailLink!!
+        form.address = "zoe@example.org"
+        form.send()
+        core.waitFor("code stage") { form.stage == EmailCode.Stage.Code && !form.busy }
+        form.type("123456")
+    }
+
+    @Test
+    fun `Link another offers email once, never as a provider button, and links its code's ticket`() {
+        emailRelay()
+        loaded()
+        assertEquals(listOf("google", "apple"), actions.providers)
+        assertTrue(actions.emailLinkable)
+        linkByEmail()
+        core.waitFor("linked") { "linkIdentity" in core.ops() }
+        assertEquals(
+            "TE",
+            core
+                .last("linkIdentity")
+                .getValue("ticket")
+                .jsonPrimitive.content,
+        )
+        assertNull(actions.emailLink, "the screen and its address are gone")
+        assertFalse("subscribe" in core.ops(), "no brokered flow")
+        emailRelay(linked = true)
+        actions.load()
+        core.waitFor("email linked") { actions.links.orEmpty().any { it.provider == "email" } }
+        assertFalse(actions.emailLinkable, "at most one Email row")
+    }
+
+    @Test
+    fun `an email linked elsewhere offers to move it`() {
+        emailRelay()
+        core.answers["linkIdentity"] = { m ->
+            if (m["move"] == null) fail("linkedElsewhere") else ok("""{"record":{"revision":2}}""")
+        }
+        loaded()
+        linkByEmail()
+        core.waitFor("asked") { actions.failure != null }
+        assertEquals("This email address already signs in to another Momotus account.", actions.failure!!.text)
+        actions.goOn()
+        core.waitFor("moved") { core.ops().count { it == "linkIdentity" } == 2 }
+        assertEquals(
+            "true",
+            core
+                .last("linkIdentity")
+                .getValue("move")
+                .jsonPrimitive.content,
+        )
+    }
+
+    @Test
+    fun `Cancel while a code is checked links nothing`() {
+        emailRelay()
+        core.answers["emailSignIn"] = {
+            kotlinx.coroutines.delay(300)
+            ok("""{"phase":"new","ticket":"TE"}""")
+        }
+        loaded()
+        linkByEmail()
+        core.waitFor("asked") { "emailSignIn" in core.ops() }
+        actions.closeEmail()
+        Thread.sleep(600)
+        assertFalse("linkIdentity" in core.ops())
+        assertNull(actions.emailLink)
     }
 }

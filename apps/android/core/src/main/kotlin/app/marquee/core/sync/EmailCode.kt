@@ -1,6 +1,7 @@
 package app.marquee.core.sync
 
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -64,11 +65,30 @@ class EmailCode(
     var sentAt by mutableLongStateOf(0L)
         private set
 
+    /** Counts the lines under the field, so the field takes the focus again on each, the same words included. */
+    var said by mutableIntStateOf(0)
+        private set
+
     private var flow: EmailStart? = null
     private var again: (() -> Unit)? = null
 
+    /**
+     * Moves on with each [open] and [close]: an answer to a call made before is not acted on, so Back or Cancel
+     * while a code is checked never signs in or links behind the user's back.
+     */
+    private var turn = 0
+
+    /** The screen left (Back from the address stage, Cancel, Other ways): an answer still on its way is dropped. */
+    fun close() {
+        turn++
+        busy = false
+    }
+
     /** The address stage, the address kept (Back, Use another address). */
     fun open() {
+        turn++
+        busy = false
+        resent = false
         stage = Stage.Address
         code = ""
         fieldError = null
@@ -82,6 +102,7 @@ class EmailCode(
         val open = flow?.takeIf { sentTo == address.trim() && it.expiresMs > now() }
         if (open != null) {
             failure = null
+            fieldError = null
             toCode()
         } else {
             mail(resent = false)
@@ -103,12 +124,17 @@ class EmailCode(
 
     private fun mail(resent: Boolean) {
         val typed = address.trim()
-        call {
-            flow = ops.emailSignInStart(server(), typed)
+        this.resent = false
+        call(submitting = false) { mine ->
+            val started = ops.emailSignInStart(server(), typed)
+            // The newest flow is kept even when the screen moved on: its code went out.
+            flow = started
             sentTo = typed
             sentAt = now()
-            this.resent = resent
-            toCode()
+            if (mine()) {
+                this.resent = resent
+                toCode()
+            }
             null
         }
     }
@@ -128,12 +154,14 @@ class EmailCode(
         if (digits.length == CODE_LENGTH) submit()
     }
 
-    /** The code, at the sixth digit or by Go; a call under way or a code short of six sends nothing. */
+    /** The code, at the sixth digit or by Go; a code short of six says `wrongCode`, a used flow `codeExpired`. */
     fun submit() {
-        val f = flow ?: return
-        if (busy || ended || code.length != CODE_LENGTH) return
+        if (busy || ended) return
+        resent = false
+        if (code.length != CODE_LENGTH) return failed("badCode", submitting = true)
+        val f = flow ?: return failed("wrongFlow", submitting = true)
         val typed = code
-        call { ops.emailSignIn(f.flow, typed).also { flow = null } }
+        call(submitting = true) { ops.emailSignIn(f.flow, typed).also { flow = null } }
     }
 
     /** Try again: the last call of this screen again, the same address or the same code. */
@@ -149,40 +177,63 @@ class EmailCode(
     }
 
     /** Seconds until Send a new code turns on. */
-    fun resendIn(): Int = ((sentAt + RESEND_MS - now()).coerceAtLeast(0) + 999).toInt() / 1000
+    fun resendIn(): Int = ((sentAt + RESEND_MS - now()).coerceIn(0, RESEND_MS) + 999).toInt() / 1000
 
-    private fun call(work: suspend () -> SignInSnapshot?) {
+    /**
+     * Runs [work] once at a time; its failure, and one from what [taken] does with its answer, stays on this stage.
+     * [work] is told whether its answer is still wanted ([turn]).
+     */
+    private fun call(
+        submitting: Boolean,
+        work: suspend (mine: () -> Boolean) -> SignInSnapshot?,
+    ) {
         if (busy) return
-        again = { call(work) }
+        again = { call(submitting, work) }
         failure = null
         fieldError = null
         busy = true
+        val at = turn
+        val mine = { turn == at }
         run {
             val got =
                 try {
-                    work()
+                    work(mine)
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
-                    failed((e as? CoreError)?.code)
+                    if (mine()) failed((e as? CoreError)?.code, submitting)
                     null
                 } finally {
-                    busy = false
+                    if (mine()) busy = false
                 }
-            got?.let { taken(it) }
+            if (got == null || !mine()) return@run
+            try {
+                taken(got)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // What came after the code failed: its words show here, and the owner comes back to this screen.
+                failed((e as? CoreError)?.code, submitting)
+                throw e
+            }
         }
     }
 
-    private fun failed(code: String?) {
+    private fun failed(
+        code: String?,
+        submitting: Boolean,
+    ) {
         CoreLog.w("email sign-in: ${code ?: "no answer"}")
         val line = AccountRules.emailFieldError(code)
         if (line != null) {
             fieldError = line
+            said++
             if (stage == Stage.Code) this.code = ""
             return
         }
         failure = AccountRules.emailFailure(code)
-        if (stage == Stage.Code && AccountRules.emailEnds(code)) {
+        // Only an answer to the code ends its flow: a refused Send a new code leaves the code mailed before.
+        if (submitting && stage == Stage.Code && AccountRules.emailEnds(code)) {
             ended = true
             flow = null
         }

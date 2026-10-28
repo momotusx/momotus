@@ -153,8 +153,15 @@ class AccountSignIn(
 
     /** Back on the email screen: the code stage to the address stage, the address stage to Sign in. */
     fun back() {
-        if (step != Step.Email || email.back()) return
+        if (step != Step.Email) return
         failure = null
+        if (!email.back()) leaveEmail()
+    }
+
+    /** Sign in again, out of the email screen: an answer still on its way is dropped, and Try again is not email's. */
+    private fun leaveEmail() {
+        email.close()
+        provider = null
         step = startStep()
     }
 
@@ -474,12 +481,13 @@ class AccountSignIn(
     fun act(a: Act) {
         failure = null
         when (a) {
-            // An email stage repeats its own call; a held ticket's Continue for email sends a new code; no
-            // provider chosen yet: the relay did not answer, so it is asked again.
+            // An email stage repeats its own call; after an email sign-in (a held ticket's Continue, a failed step
+            // after the code) the email screen again, with a new code when work waits for a ticket; no provider
+            // chosen yet: the relay did not answer, so it is asked again.
             Act.Retry -> {
                 when {
                     step == Step.Email -> email.retry()
-                    provider == EMAIL -> openEmail(again = true)
+                    provider == EMAIL -> openEmail(again = pending != null)
                     else -> provider?.let(::signIn) ?: start()
                 }
             }
@@ -494,7 +502,7 @@ class AccountSignIn(
 
             // Other ways to sign in, from the email screen: back to Sign in.
             Act.Other -> {
-                if (step == Step.Email) step = startStep()
+                if (step == Step.Email) leaveEmail()
             }
 
             Act.Move -> {
@@ -552,9 +560,12 @@ class AccountSignIn(
                         step = Step.Start(emptyList())
                         failure = AccountRules.signInFailure("unreachable")
                     } else {
-                        // An email sign-in goes back to the step it came from, never to the provider list.
+                        // An email sign-in goes back to the step it came from, never to the provider list; back on
+                        // the email screen, the words are under its field already.
                         if (step is Step.Working) step = if (provider == EMAIL && from.settled()) from else startStep()
-                        failure = AccountRules.signInFailure(code ?: "signInRefused", provider.orEmpty())
+                        if (step != Step.Email) {
+                            failure = AccountRules.signInFailure(code ?: "signInRefused", provider.orEmpty())
+                        }
                     }
                 }
             }

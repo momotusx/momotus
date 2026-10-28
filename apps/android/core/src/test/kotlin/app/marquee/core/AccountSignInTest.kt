@@ -23,6 +23,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
+import kotlin.test.assertNotEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -733,6 +734,8 @@ class AccountSignInTest {
         s.email.type("123456")
         core.waitFor("said") { s.email.failure != null }
         assertEquals(AccountCopy.SIGN_IN_REFUSED, s.email.failure!!.text)
+        assertTrue(s.email.ended, "read-only")
+        assertEquals("123456", s.email.code, "kept")
         assertEquals(
             listOf(Act.Resend, Act.OtherAddress),
             s.email.failure!!
@@ -893,5 +896,129 @@ class AccountSignInTest {
                 .jsonPrimitive.content,
         )
         noProviderFlow()
+    }
+
+    @Test
+    fun `leaving the email screen leaves email's Try again behind`() {
+        emailRelay()
+        platform.get = { PasskeyResult.Cancelled }
+        val s = atCode()
+        s.back()
+        s.back()
+        assertIs<Step.Start>(s.step)
+        s.usePasskey()
+        core.waitFor("cancelled") { s.failure != null }
+        assertEquals(AccountCopy.PASSKEY_CANCELLED, s.failure!!.text)
+        val asked = count("relayInfo")
+        s.act(Act.Retry)
+        core.waitFor("asked again") { count("relayInfo") == asked + 1 && s.step is Step.Start }
+        assertEquals(1, count("emailSignInStart"), "no mail to the old address")
+        assertNotEquals(Step.Email, s.step)
+    }
+
+    @Test
+    fun `a code stage emailLimit ends the flow, and Other ways goes back to Sign in`() {
+        emailRelay(takes = { fail("emailLimit") })
+        val s = atCode()
+        s.email.type("123456")
+        core.waitFor("said") { s.email.failure != null }
+        assertEquals(AccountCopy.EMAIL_LIMIT, s.email.failure!!.text)
+        assertEquals(
+            listOf(Act.Other),
+            s.email.failure!!
+                .actions
+                .map { it.act },
+        )
+        assertTrue(s.email.ended)
+        s.act(Act.Other)
+        assertIs<Step.Start>(s.step)
+    }
+
+    @Test
+    fun `a refused Send a new code keeps the code mailed before`() {
+        emailRelay()
+        val s = atCode()
+        core.answers["emailSignInStart"] = { fail("emailLimit") }
+        clock += 60_000
+        s.email.resend()
+        core.waitFor("said") { s.email.failure != null }
+        assertEquals(AccountCopy.EMAIL_LIMIT, s.email.failure!!.text)
+        assertFalse(s.email.ended, "the older code still works")
+        assertFalse(s.email.resent)
+        s.email.type("123456")
+        core.waitFor("new") { s.step == Step.New }
+        assertEquals(
+            "F1",
+            core
+                .last("emailSignIn")
+                .getValue("flow")
+                .jsonPrimitive.content,
+        )
+    }
+
+    @Test
+    fun `a failure after the code comes back to the code stage, whose used code says codeExpired`() {
+        emailRelay(takes = { ok("""{"phase":"found","ticket":"T1","account":"4143434f554e54"}""") })
+        platform.get = { PasskeyResult.Used("cred", "QUNDT1VOVA", "cHJm") }
+        core.answers["recover"] = { fail("busy") }
+        val s = atCode()
+        s.email.type("123456")
+        core.waitFor("back") { s.step == Step.Email && s.email.failure != null }
+        assertEquals(AccountCopy.BUSY, s.email.failure!!.text)
+        assertEquals(Stage.Code, s.email.stage)
+        assertNull(s.failure, "said once, under the field")
+        s.email.submit()
+        assertEquals(AccountCopy.CODE_EXPIRED, s.email.failure!!.text, "no dead end")
+        assertEquals(1, count("emailSignIn"))
+    }
+
+    @Test
+    fun `a held ticket's Continue with no address left opens the address stage, empty`() {
+        emailRelay(takes = { ok("""{"phase":"new","ticket":"OLD"}""") })
+        core.answers["createSyncAccount"] = { fail("ticketExpired") }
+        val s = atCode()
+        s.email.type("123456")
+        core.waitFor("new") { s.step == Step.New }
+        s.create()
+        core.waitFor("failure") { s.failure != null }
+        s.email.address = ""
+        s.act(Act.Retry)
+        assertEquals(Step.Email, s.step)
+        assertEquals(Stage.Address, s.email.stage)
+        assertEquals(1, count("emailSignInStart"))
+    }
+
+    @Test
+    fun `Back while a code is checked drops its answer`() {
+        emailRelay(takes = {
+            kotlinx.coroutines.delay(300)
+            ok("""{"phase":"new","ticket":"T"}""")
+        })
+        val s = atCode()
+        s.email.type("123456")
+        core.waitFor("asked") { "emailSignIn" in core.ops() }
+        s.back()
+        assertEquals(Stage.Address, s.email.stage)
+        assertFalse(s.email.busy)
+        Thread.sleep(600)
+        assertEquals(Step.Email, s.step, "not signed in behind the user's back")
+        assertNull(s.held)
+    }
+
+    @Test
+    fun `Go with fewer than six digits says wrongCode without a call, and a new code's line goes with the next try`() {
+        emailRelay(takes = { fail("wrongCode") })
+        val s = atCode()
+        s.email.type("123")
+        s.email.submit()
+        assertEquals(AccountCopy.WRONG_CODE, s.email.fieldError)
+        assertEquals(1, s.email.said)
+        assertFalse("emailSignIn" in core.ops())
+        clock += 60_000
+        s.email.resend()
+        core.waitFor("resent") { s.email.resent && !s.email.busy }
+        s.email.type("111111")
+        core.waitFor("said") { s.email.said == 2 }
+        assertFalse(s.email.resent)
     }
 }
