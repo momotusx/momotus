@@ -282,9 +282,12 @@ export default function SettingsScreen() {
   // Edit and Manage need the owner's PIN on a kids profile (DECISION kids rules): a kids profile shows neither.
   const canEdit = () => !!me() && !kids();
   const canManage = () => me()?.isOwner === true;
+  // Decided once Home's rows are in, so a hero's art never shows first and gives way to Continue Watching's.
   const art = () =>
-    home.rows.find((r) => r.rowId === CONTINUE_ROW)?.tiles.find((t) => t.background) ??
-    (kids() ? undefined : home.heroes.find((h) => h.tile.background)?.tile);
+    home.rows.length === 0
+      ? undefined
+      : (home.rows.find((r) => r.rowId === CONTINUE_ROW)?.tiles.find((t) => t.background) ??
+        (kids() ? undefined : home.heroes.find((h) => h.tile.background)?.tile));
   const logo = useTrimmedLogo(() => art()?.logo);
   // Warnings show here too, not only on the sync page: what failed or waits, then the time.
   const syncLine = () =>
@@ -317,14 +320,18 @@ export default function SettingsScreen() {
     frame = requestAnimationFrame(spy);
   };
   onCleanup(() => cancelAnimationFrame(frame));
-  // A menu entry brings its section to the top; the remote goes on into it, a keyboard lands on its heading.
+  // A menu entry brings its section to the top (Profiles, the header under the desktop bar, the page's top). The
+  // remote goes on into the section, and stays on the menu where it has nothing to press (About); a keyboard lands
+  // on its heading, or on the profile for the header.
   const jump = (e: MouseEvent, id: string) => {
     e.preventDefault();
     const sec = document.getElementById(`set-${id}`);
     if (!sec) return;
-    sec.scrollIntoView({ block: "start", behavior: reducedMotion() ? "auto" : "smooth" });
+    const behavior = reducedMotion() ? "auto" : "smooth";
+    if (id === "profiles") page.scrollTo({ top: 0, behavior });
+    else sec.scrollIntoView({ block: "start", behavior });
     setActive(id);
-    const to = form() === "tv" ? sec.querySelector<HTMLElement>("[data-f]") : sec.querySelector<HTMLElement>("h2");
+    const to = form() === "tv" || id === "profiles" ? sec.querySelector<HTMLElement>("[data-f]") : sec.querySelector<HTMLElement>("h2[tabindex]");
     if (to) form() === "tv" ? focusEl(to) : to.focus({ preventScroll: true });
   };
 
@@ -339,10 +346,10 @@ export default function SettingsScreen() {
           <div class="set-who-row">
             <A class="set-who" href="/profiles" data-f="settings:profiles">
               <AvatarArt avatar={m().avatar} name={m().name} size="l" />
-              <span class="set-name">
+              <div class="set-name">
                 <h2>{m().name}</h2>
                 <small>{(profiles()?.profiles.length ?? 1) > 1 ? accountWords.switchProfile : "Add a profile for someone else, or switch"}</small>
-              </span>
+              </div>
               <ChevronRight aria-hidden class="chev" />
             </A>
             <Show when={form() !== "phone" && canEdit()}>
@@ -362,7 +369,10 @@ export default function SettingsScreen() {
           </div>
         )}
       </Show>
-      <Show when={form() !== "phone" && logo()}>{(l) => <img class="set-logo" src={l().src} alt="" style={{ "--r": l().ratio.toFixed(3) }} />}</Show>
+      {/* The logo's box is kept from the start while its margins are cut, so the words beside it never move. */}
+      <Show when={form() !== "phone" && art()?.logo}>
+        <img class="set-logo" classList={{ pending: !logo() }} src={logo()?.src} alt="" />
+      </Show>
     </header>
   );
 

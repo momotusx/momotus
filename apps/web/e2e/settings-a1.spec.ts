@@ -48,7 +48,7 @@ for (const form of ["tv", "desktop"] as const) {
     for (const size of sizes) {
       const { context, page } = await open(browser, form, { size });
       const at = await page.evaluate(() => {
-        const menu = (document.querySelector(".set-menu") as HTMLElement).getBoundingClientRect();
+        const menu = (document.querySelector(".set-menu .snav") as HTMLElement).getBoundingClientRect();
         const list = (document.querySelector(".set-list .sgroup") as HTMLElement).getBoundingClientRect();
         const who = (document.querySelector(".set-who") as HTMLElement).getBoundingClientRect();
         return { left: menu.left, right: innerWidth - list.right, who: who.left, list: list.left, width: innerWidth };
@@ -95,14 +95,19 @@ for (const form of ["tv", "desktop", "phone"] as const) {
 }
 
 test("the backdrop is Continue Watching's, else the hero's; a kids profile takes its own Continue Watching only", async ({ browser }) => {
-  // Continue Watching without art: the hero's.
-  const hero = await open(browser, "desktop", { home: bareContinue });
-  await expect(hero.page.locator(".set-art img")).toHaveCount(1);
-  await hero.context.close();
+  const srcOf = async (opened: Promise<{ context: import("@playwright/test").BrowserContext; page: Page }>) => {
+    const { context, page } = await opened;
+    await expect(page.locator(".set-art img")).toHaveCount(1);
+    const src = await page.locator(".set-art img").getAttribute("src");
+    await context.close();
+    return src;
+  };
+  // Continue Watching's art first; without it, the hero's, another picture.
+  const cw = await srcOf(open(browser, "desktop"));
+  const hero = await srcOf(open(browser, "desktop", { home: bareContinue }));
+  expect(hero).not.toBe(cw);
   // A kids profile: its Continue Watching's art; none when it has none, whatever the hero has.
-  const kids = await open(browser, "desktop", { profiles: kidsProfiles });
-  await expect(kids.page.locator(".set-art img")).toHaveCount(1);
-  await kids.context.close();
+  expect(await srcOf(open(browser, "desktop", { profiles: kidsProfiles }))).toBe(cw);
   const kidsBare = await open(browser, "desktop", { profiles: kidsProfiles, home: bareContinue });
   await expect(kidsBare.page.locator(".set-who h2")).toBeVisible();
   await expect(kidsBare.page.locator(".set-art")).toHaveCount(0);
@@ -205,3 +210,38 @@ for (const form of ["tv", "desktop", "phone"] as const) {
     await context.close();
   });
 }
+
+test("desktop: every menu entry fills itself; Profiles takes the page back to its top and the keyboard to the profile", async ({ browser }) => {
+  const { context, page } = await open(browser, "desktop");
+  for (const id of ["sources", "account", "home", "playback", "device", "about", "profiles"]) {
+    await page.locator(`[data-f="settings-nav:${id}"]`).click();
+    await expect(page.locator('.set-menu [aria-current="true"]'), id).toHaveAttribute("data-f", `settings-nav:${id}`);
+  }
+  await expect.poll(() => page.evaluate(() => (document.querySelector(".settings-page") as HTMLElement).scrollTop)).toBe(0);
+  expect(await focused(page)).toBe("settings:profiles");
+  await context.close();
+});
+
+for (const form of ["tv", "desktop", "phone"] as const) {
+  test(`${form}: groups in one section keep their gap`, async ({ browser }) => {
+    const { context, page } = await open(browser, form);
+    await expect(page.locator("#set-playback .sgroup")).toHaveCount(2, { timeout: 30_000 });
+    const gap = await page.locator("#set-playback .sgroup").evaluateAll((g) => g[1]!.getBoundingClientRect().top - g[0]!.getBoundingClientRect().bottom);
+    expect(gap).toBeGreaterThanOrEqual(8);
+    await context.close();
+  });
+}
+
+test("desktop 844x390: the section menu stays inside a short window; its last entry scrolls into reach", async ({ browser }) => {
+  const { context, page } = await open(browser, "desktop", { size: [844, 390] });
+  // Down the page, where the menu holds its place under the bar.
+  await page.evaluate(() => (document.querySelector(".settings-page") as HTMLElement).scrollTo(0, 1200));
+  const box = await page.locator(".set-menu").evaluate((m) => {
+    m.scrollTop = m.scrollHeight;
+    const last = (m.querySelector('[data-f="settings-nav:about"]') as HTMLElement).getBoundingClientRect();
+    return { bottom: m.getBoundingClientRect().bottom, last: last.bottom, vh: innerHeight };
+  });
+  expect(box.bottom).toBeLessThanOrEqual(box.vh);
+  expect(box.last).toBeLessThanOrEqual(box.vh);
+  await context.close();
+});
