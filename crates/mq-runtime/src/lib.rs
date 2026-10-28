@@ -73,6 +73,5 @@ pub use views::title::{Episode, TitleHeader, TitleUpdate, TitleView};
 pub use views::versions::{
     BlockedReason, BlockedVersions, EmptyAction, EmptyKind, EmptyVersions, KindChip, Pick,
     PickHandle, RowOrigin, SectionQuality, SourceRows, TitleFacts, VersionRow, VersionSection,
-    VersionStatus,
-    VersionsConditions, VersionsParams, VersionsSnapshot, VersionsView,
+    VersionStatus, VersionsConditions, VersionsParams, VersionsSnapshot, VersionsView,
 };

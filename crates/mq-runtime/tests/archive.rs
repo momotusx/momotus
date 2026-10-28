@@ -5,7 +5,7 @@ use mq_library::{AddonRow, AllowedRow, ArchiveFilm, OWNER};
 use mq_runtime::archive::{index, norm};
 use mq_runtime::speed::Network;
 use mq_runtime::{Core, RowOrigin, TitleFacts, VersionsParams, VersionsView};
-use mq_streams::{DeviceCaps, StreamPrefs, Target};
+use mq_streams::{DeviceCaps, SourceKind, StreamPrefs, Target};
 use serde_json::{Value, json};
 use std::collections::HashMap;
 use std::net::IpAddr;
@@ -679,6 +679,55 @@ async fn addon_rows_keep_the_pick_and_their_own_sources() {
     };
     assert_eq!(by(&twin), Some(installed));
     assert_eq!(by(&archive_twin).as_deref(), Some(mq_server::ARCHIVE));
+}
+
+/// The kind chips count the Archive's rows, so the label and the list agree
+/// (plans/plugins-and-marketplace.md 4.2): under Debrid its section lists
+/// nothing, under Direct links it lists its rows, which play, and that chip
+/// stays on though no addon row is a direct link. The addon's torrent is
+/// cached on an account, so it lists without an engine.
+#[tokio::test]
+async fn the_kind_chips_count_and_filter_the_archive_rows() {
+    let fixture = Fixture::start();
+    let core = core_at(&fixture);
+    core.set_debrid_keys(&[(mq_runtime::StoreId::RealDebrid, "rd".into())]);
+    let body = json!({"streams": [
+        {"name": "Films\n1080p", "title": "Nosferatu.1922.1080p.BluRay.x264-GRP",
+         "infoHash": "a".repeat(40), "fileIdx": 0,
+         "behaviorHints": {"cached": true, "service": "realdebrid", "videoSize": 4_000_000_000u64}}
+    ]});
+    let addon = stream_addon(body.to_string()).await;
+    core.library()
+        .set_addons("p", &[addon], &core.hlc())
+        .unwrap();
+    let view = settled(&core, nosferatu_film()).await;
+    let counts = |view: &VersionsView| -> Vec<(SourceKind, u32)> {
+        (view.snapshot().kinds.iter())
+            .map(|k| (k.kind, k.count))
+            .collect()
+    };
+    assert_eq!(
+        counts(&view),
+        [(SourceKind::Direct, 3), (SourceKind::Debrid, 1)]
+    );
+    view.set_kind(Some(SourceKind::Debrid));
+    let s = view.snapshot();
+    assert_eq!(s.selected_kind, Some(SourceKind::Debrid));
+    assert!(s.archive.rows.is_empty(), "{:?}", archive_keys(&view));
+    view.set_kind(Some(SourceKind::Direct));
+    let s = view.snapshot();
+    assert_eq!(
+        s.selected_kind,
+        Some(SourceKind::Direct),
+        "the chip stays on"
+    );
+    assert!(s.recommended.is_none() && s.rows.is_empty());
+    assert_eq!(archive_keys(&view).len(), 3);
+    let first = &archive_keys(&view)[0];
+    assert_eq!(view.candidates(first).len(), 1, "{first} plays");
+    view.set_kind(None);
+    assert_eq!(archive_keys(&view).len(), 3);
+    assert!(view.snapshot().recommended.is_some());
 }
 
 /// `done` and the pick never wait for the Archive pass; `empty` waits while

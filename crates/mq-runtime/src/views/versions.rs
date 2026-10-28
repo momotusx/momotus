@@ -1340,7 +1340,8 @@ impl VersionsView {
     /// Lists one kind of version only (`setKind`, plans/plugins-and-marketplace.md
     /// 4.2), or every one again (`None`): the pick freezes, and that kind's
     /// streams rank in a pass of their own, which gives the card, the rows
-    /// and the sections. A kind with no rows lists everything.
+    /// and the sections. A kind no row holds, the Archive's included, lists
+    /// everything.
     pub fn set_kind(&self, kind: Option<SourceKind>) {
         let mut state = lock(&self.state);
         if state.recommended.is_some() {
@@ -2560,6 +2561,13 @@ fn kind_of(s: &State, st: &ParsedStream) -> SourceKind {
     kind(st, s.rank.debrid, s.rank.engine)
 }
 
+/// Whether row `r` holds a source of kind `k`, its own or one in its chain.
+fn holds_kind(s: &State, r: &RankedRow, k: SourceKind) -> bool {
+    std::iter::once(&r.stream)
+        .chain(&r.failover)
+        .any(|st| kind_of(s, st) == k)
+}
+
 /// The chosen kind's own pass (plans/plugins-and-marketplace.md 4.2): its
 /// streams ranked alone, so rows fold only among sources of that kind and
 /// each row's class and line are its own, never a re-led row's. Its card
@@ -2571,7 +2579,8 @@ fn rank_kind(s: &mut State, ranking: &Ranking) {
         .cloned()
         .collect();
     s.kind_ranked = rank(streams, &input(ranking, &s.rank));
-    if s.kind_ranked.rows.is_empty() {
+    let archived = (s.archive_ranked.rows.iter()).any(|r| holds_kind(s, r, k));
+    if s.kind_ranked.rows.is_empty() && !archived {
         s.kind = None;
         s.kind_pick = None;
         return;
@@ -2726,6 +2735,7 @@ fn render(s: &State) -> VersionsSnapshot {
         nobody_sharing: nobody_sharing(s),
         archive: SourceRows {
             rows: (s.archive_ranked.rows.iter())
+                .filter(|r| s.kind.is_none_or(|k| holds_kind(s, r, k)))
                 .map(|r| row_dto(r, kept, &s.rank))
                 .collect(),
             pending: s.archive_pending,
@@ -2743,12 +2753,14 @@ fn render(s: &State) -> VersionsSnapshot {
 
 /// Each kind the listed rows hold, in the chips' order (torrents, direct
 /// links, debrid), with the rows holding a source of it, from the pass of
-/// every kind: a row of a torrent and a direct link counts under both.
+/// every kind and the Archive's, so the label and the list agree: a row of a
+/// torrent and a direct link counts under both.
 fn kinds(s: &State) -> Vec<KindChip> {
     [SourceKind::Torrent, SourceKind::Direct, SourceKind::Debrid]
         .into_iter()
         .filter_map(|k| {
             let held: Vec<Vec<&ParsedStream>> = (s.ranked.rows.iter())
+                .chain(&s.archive_ranked.rows)
                 .map(|r| {
                     let all = std::iter::once(&r.stream).chain(&r.failover);
                     all.filter(|st| kind_of(s, st) == k).collect()
