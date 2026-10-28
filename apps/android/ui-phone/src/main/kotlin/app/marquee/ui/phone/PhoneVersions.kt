@@ -20,7 +20,6 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -212,9 +211,9 @@ fun PhoneVersions(
             modifier =
                 Modifier
                     .fillMaxSize()
-                    .windowInsetsPadding(WindowInsets.statusBars)
                     .then(if (sheet != null) Modifier.clearAndSetSemantics {} else Modifier),
-            contentPadding = PaddingValues(start = side, end = side, top = Marquee.space.m, bottom = Marquee.space.xl),
+            contentPadding =
+                PaddingValues(start = side, end = side, top = pageTop() + Marquee.space.m, bottom = Marquee.space.xl),
             verticalArrangement = Arrangement.spacedBy(Marquee.space.xs),
         ) {
             item(key = "head") {

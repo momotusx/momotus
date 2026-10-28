@@ -66,6 +66,16 @@ import app.marquee.design.windowDp
 val LocalBarSpace = compositionLocalOf { 0.dp }
 
 /**
+ * How much of the top the shell covers where it draws a back link (the status bar and the link's row), so a page
+ * keeps clear of both. Zero where it draws none; read it through [pageTop].
+ */
+private val LocalTopSpace = compositionLocalOf { 0.dp }
+
+/** Where a page's first line may start: under the status bar, or under the back link's row when there is one. */
+@Composable
+fun pageTop(): Dp = maxOf(WindowInsets.statusBars.asPaddingValues().calculateTopPadding(), LocalTopSpace.current)
+
+/**
  * The phone frame (design/DECISION.md, Navigation): the screen fills the window and the iPhone's
  * floating capsule with five places sits above the system navigation bar, 21 from the sides. The
  * bar shows on top-level places only and hides while the keyboard is up.
@@ -89,21 +99,14 @@ fun PhoneShell(
     val narrow = windowDp().width < 360.dp
     val inset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     val space: Dp = if (showBar) BAR_HEIGHT + BAR_MARGIN * 2 + inset else 0.dp
+    val linkRow = onBack != null && statusStrip
+    val top: Dp = if (linkRow) WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + BACK_HEIGHT else 0.dp
     Box(modifier.fillMaxSize()) {
         // In landscape the navigation bar and a camera cutout can sit at a side: pages keep clear of both.
         val sides = WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal)
         Box(if (insetSides) Modifier.windowInsetsPadding(sides) else Modifier) {
-            CompositionLocalProvider(LocalBarSpace provides space) {
-                if (onBack != null && statusStrip) {
-                    // The link's row takes the status bar's room, so the page under it does not pad for it again.
-                    Column(Modifier.windowInsetsPadding(WindowInsets.statusBars)) {
-                        BackLink(onBack)
-                        Box(Modifier.weight(1f).fillMaxWidth()) { content() }
-                    }
-                } else {
-                    content()
-                }
-            }
+            // One call site for the page, so moving onto or off a back-link page keeps its state and its fade.
+            CompositionLocalProvider(LocalBarSpace provides space, LocalTopSpace provides top) { content() }
         }
         // Pages start below the status bar but scroll under it: a strip of page color keeps the
         // text off the clock and icons. At rest it covers only the page's own background.
@@ -115,14 +118,25 @@ fun PhoneShell(
                     .background(Marquee.colors.bg),
             )
         }
-        // A page whose artwork runs under the status bar gets the link over it, on a dark pill that keeps the blue
-        // legible.
-        if (onBack != null && !statusStrip) {
-            BackLink(
-                onBack,
-                Modifier.windowInsetsPadding(WindowInsets.statusBars).windowInsetsPadding(sides),
-                floating = true,
-            )
+        if (onBack != null) {
+            if (statusStrip) {
+                // The link's row sits under the strip and over the page, which keeps clear of it through [pageTop].
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .windowInsetsPadding(WindowInsets.statusBars)
+                        .background(Marquee.colors.bg)
+                        .windowInsetsPadding(sides),
+                ) { BackLink(onBack) }
+            } else {
+                // A page whose artwork runs under the status bar gets the link over it, on a dark pill that keeps
+                // the blue legible.
+                BackLink(
+                    onBack,
+                    Modifier.windowInsetsPadding(WindowInsets.statusBars).windowInsetsPadding(sides),
+                    floating = true,
+                )
+            }
         }
         if (showBar) {
             PhoneBar(
@@ -155,7 +169,7 @@ private fun BackLink(
             .padding(start = if (floating) side - 4.dp else 0.dp, top = if (floating) 4.dp else 0.dp)
             .height(BACK_HEIGHT)
             .clip(shape)
-            .then(if (floating) Modifier.background(Marquee.colors.bg.copy(alpha = 0.8f)) else Modifier)
+            .then(if (floating) Modifier.background(Marquee.colors.bg.copy(alpha = BACK_PILL_ALPHA)) else Modifier)
             .focusClickable(onBack, Role.Button)
             .padding(start = if (floating) 8.dp else side - 4.dp, end = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -272,3 +286,6 @@ private val BAR_MARGIN = 12.dp
 
 /** A back link's height: Material's 48 dp target. */
 private val BACK_HEIGHT = 48.dp
+
+/** The floating link's pill over title art: at 0.9 the key blue keeps 4.5:1 even over pure white art. */
+internal const val BACK_PILL_ALPHA = 0.9f

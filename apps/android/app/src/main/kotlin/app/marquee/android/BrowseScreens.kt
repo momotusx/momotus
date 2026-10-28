@@ -10,14 +10,11 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -110,6 +107,7 @@ import app.marquee.design.laneHeight
 import app.marquee.design.liftRoom
 import app.marquee.design.marqueeFocus
 import app.marquee.ui.phone.LocalBarSpace
+import app.marquee.ui.phone.pageTop
 import app.marquee.ui.tv.FocusMemory
 import app.marquee.ui.tv.LocalTvNav
 import app.marquee.ui.tv.requesterFor
@@ -176,8 +174,7 @@ internal fun pagePadding(framed: Boolean = true): PaddingValues =
     if (Marquee.form == Form.Tv) {
         PaddingValues(top = if (framed) tvContentTop() else Marquee.safe.top, bottom = Marquee.safe.bottom)
     } else {
-        val status = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
-        PaddingValues(top = status + Marquee.space.m, bottom = Marquee.space.l + LocalBarSpace.current)
+        PaddingValues(top = pageTop() + Marquee.space.m, bottom = Marquee.space.l + LocalBarSpace.current)
     }
 
 /** The page title in display type, with no eyebrow over it (design/DECISION.md, Grids). */
