@@ -65,6 +65,14 @@ struct Shared {
     other_user: bool,
     /// Every `code_verifier` Facebook's exchange saw.
     verifiers: Vec<String>,
+    /// The last mail to each address: subject and text.
+    mails: HashMap<String, (String, String)>,
+    /// Every mail sent, in order: its sender and address.
+    sent: Vec<(String, String)>,
+    /// The mail API answers this status from now on.
+    mail_refuses: Option<u16>,
+    /// The mail API never answers from now on.
+    mail_stalls: bool,
 }
 
 #[derive(Clone)]
@@ -196,6 +204,8 @@ impl Mock {
             .route("/revoke", post(revoke))
             .route("/oauth/access_token", get(facebook_exchange))
             .route("/me", get(facebook_me))
+            .route("/v2/email/outbound-emails", post(mail_send))
+            .route("/mail", get(mail_read))
             .with_state(mock.clone());
         tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
         mock
@@ -328,6 +338,138 @@ impl Mock {
     /// Every `code_verifier` Facebook's exchange saw.
     pub fn verifiers(&self) -> Vec<String> {
         self.with(|s| s.verifiers.clone())
+    }
+
+    /// The last mail to `to`: its subject and text.
+    pub fn mail(&self, to: &str) -> Option<(String, String)> {
+        self.with(|s| s.mails.get(to).cloned())
+    }
+
+    /// The code in the last mail to `to`.
+    pub fn code(&self, to: &str) -> String {
+        let (_, text) = self.mail(to).expect("a mail to that address");
+        text.lines()
+            .find(|l| l.len() == 6 && l.bytes().all(|b| b.is_ascii_digit()))
+            .expect("a code line")
+            .to_owned()
+    }
+
+    /// How many mails went, to any address.
+    pub fn mails_sent(&self) -> usize {
+        self.with(|s| s.sent.len())
+    }
+
+    /// The sender of the last mail.
+    pub fn last_sender(&self) -> String {
+        self.with(|s| {
+            s.sent
+                .last()
+                .map(|(from, _)| from.clone())
+                .unwrap_or_default()
+        })
+    }
+
+    /// The mail API answers `refuse` or stalls (`stall`) from now on.
+    pub fn mail_fails(&self, refuse: Option<u16>, stall: bool) {
+        self.with(|s| (s.mail_refuses, s.mail_stalls) = (refuse, stall));
+    }
+}
+
+/// The SES key the mock takes (`accessKeyId`, `secretAccessKey`).
+pub const MAIL_KEY_ID: &str = "AKIDMOCK";
+pub const MAIL_SECRET: &str = "mock/secret/key";
+
+fn hmac(key: &[u8], data: &[u8]) -> Vec<u8> {
+    use hmac::{Hmac, KeyInit, Mac};
+    let mut mac = Hmac::<sha2::Sha256>::new_from_slice(key).unwrap();
+    mac.update(data);
+    mac.finalize().into_bytes().to_vec()
+}
+
+/// The `Authorization` SES would expect for this request (Signature
+/// Version 4 over content-type, host and x-amz-date), written apart from
+/// the relay's signer.
+fn expected_auth(headers: &axum::http::HeaderMap, body: &[u8]) -> Option<String> {
+    use sha2::Digest;
+    let get = |n: &str| headers.get(n)?.to_str().ok().map(str::to_owned);
+    let (ct, host, date) = (get("content-type")?, get("host")?, get("x-amz-date")?);
+    let hash = |b: &[u8]| hex::encode(sha2::Sha256::digest(b));
+    let canonical = format!(
+        "POST\n/v2/email/outbound-emails\n\ncontent-type:{ct}\nhost:{host}\nx-amz-date:{date}\n\ncontent-type;host;x-amz-date\n{}",
+        hash(body)
+    );
+    let scope = format!("{}/us-east-1/ses/aws4_request", date.get(..8)?);
+    let to_sign = format!(
+        "AWS4-HMAC-SHA256\n{date}\n{scope}\n{}",
+        hash(canonical.as_bytes())
+    );
+    let mut key = hmac(
+        format!("AWS4{MAIL_SECRET}").as_bytes(),
+        date.get(..8)?.as_bytes(),
+    );
+    for part in ["us-east-1", "ses", "aws4_request"] {
+        key = hmac(&key, part.as_bytes());
+    }
+    Some(format!(
+        "AWS4-HMAC-SHA256 Credential={MAIL_KEY_ID}/{scope}, SignedHeaders=content-type;host;x-amz-date, Signature={}",
+        hex::encode(hmac(&key, to_sign.as_bytes()))
+    ))
+}
+
+/// SES v2 `SendEmail`: the signature checked, the mail kept per recipient.
+async fn mail_send(
+    State(mock): State<Mock>,
+    headers: axum::http::HeaderMap,
+    body: axum::body::Bytes,
+) -> Response {
+    let auth = headers
+        .get(header::AUTHORIZATION)
+        .and_then(|v| v.to_str().ok());
+    if auth.is_none() || auth.map(str::to_owned) != expected_auth(&headers, &body) {
+        let refused = json!({ "message": "The request signature we calculated does not match" });
+        return (StatusCode::FORBIDDEN, Json(refused)).into_response();
+    }
+    let (refuses, stalls) = mock.with(|s| (s.mail_refuses, s.mail_stalls));
+    if stalls {
+        std::future::pending::<()>().await;
+    }
+    if let Some(status) = refuses {
+        let status = StatusCode::from_u16(status).unwrap();
+        return (status, Json(json!({ "message": "refused by the mock" }))).into_response();
+    }
+    let mail: Value = serde_json::from_slice(&body).unwrap_or_default();
+    let simple = &mail["Content"]["Simple"];
+    let field = |v: &Value| v["Data"].as_str().unwrap_or_default().to_owned();
+    let to = mail["Destination"]["ToAddresses"][0]
+        .as_str()
+        .unwrap_or_default()
+        .to_owned();
+    mock.with(|s| {
+        s.sent.push((
+            mail["FromEmailAddress"]
+                .as_str()
+                .unwrap_or_default()
+                .to_owned(),
+            to.clone(),
+        ));
+        s.mails.insert(
+            to,
+            (field(&simple["Subject"]), field(&simple["Body"]["Text"])),
+        );
+    });
+    Json(json!({ "MessageId": random() })).into_response()
+}
+
+#[derive(Deserialize)]
+struct MailQuery {
+    to: String,
+}
+
+/// The last mail to an address, for the web e2e and walks.
+async fn mail_read(State(mock): State<Mock>, Query(q): Query<MailQuery>) -> Response {
+    match mock.mail(&q.to) {
+        Some((subject, text)) => Json(json!({ "subject": subject, "text": text })).into_response(),
+        None => StatusCode::NOT_FOUND.into_response(),
     }
 }
 

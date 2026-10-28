@@ -448,6 +448,23 @@ pub enum SyncError {
     /// said it is a TV, a computer or the web.
     #[error("only a phone or tablet can sign in another device")]
     CannotApprove,
+    /// Not an email address (plans/accounts-email.md E2).
+    #[error("enter an email address like name@example.com")]
+    BadAddress,
+    /// A typed code that is not 6 digits.
+    #[error("a code is 6 digits")]
+    BadCode,
+    /// A code went to this address less than a minute ago.
+    #[error("wait a minute, then send a new code")]
+    EmailWait,
+    /// This address, or this network, asked for too many codes today.
+    #[error("too many codes for this address; try again tomorrow")]
+    EmailLimit,
+    /// The relay could not mail the code.
+    #[error("the code could not be sent")]
+    MailUnavailable,
+    #[error("that code is not right")]
+    WrongCode,
 }
 
 /// The relay's coded answers map in one place. Only the relay's own 410
@@ -471,6 +488,12 @@ impl From<HttpError> for SyncError {
             (429, Some("busy")) => SyncError::Busy,
             (404, Some("kitUnknown")) => SyncError::KitUnknown,
             (422, Some("kitTaken")) => SyncError::KitTaken,
+            (400, Some("badAddress")) => SyncError::BadAddress,
+            (400, Some("badCode")) => SyncError::BadCode,
+            (429, Some("emailWait")) => SyncError::EmailWait,
+            (429, Some("emailLimit")) => SyncError::EmailLimit,
+            (503, Some("mailUnavailable")) => SyncError::MailUnavailable,
+            (403, Some("wrongCode")) => SyncError::WrongCode,
             _ => SyncError::Http(e),
         }
     }
@@ -527,6 +550,12 @@ impl SyncError {
             SyncError::KitDropped => "kitDropped",
             SyncError::TooManyKits => "tooManyKits",
             SyncError::CannotApprove => "cannotApprove",
+            SyncError::BadAddress => "badAddress",
+            SyncError::BadCode => "badCode",
+            SyncError::EmailWait => "emailWait",
+            SyncError::EmailLimit => "emailLimit",
+            SyncError::MailUnavailable => "mailUnavailable",
+            SyncError::WrongCode => "wrongCode",
             _ => return None,
         })
     }

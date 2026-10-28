@@ -86,6 +86,7 @@ pub async fn start_brokered(
             purpose: if revoke { "revoke" } else { "signin" }.into(),
             return_to: Some(return_to.to_owned()),
             native: false,
+            email: None,
         },
     )
     .await?;
@@ -205,6 +206,7 @@ pub async fn start_native(
             purpose: if revoke { "revoke" } else { "signin" }.into(),
             return_to: None,
             native: true,
+            email: None,
         },
     )
     .await?;
@@ -239,6 +241,76 @@ impl NativeFlow {
         taken(
             http.post_json(
                 &format!("{}/v1/auth/token", self.server),
+                &request,
+                &options(&self.server, ""),
+            )
+            .await,
+        )
+    }
+}
+
+/// An email sign-in (plans/accounts-email.md): the relay mailed a code to
+/// the address; `finish` takes the flow's result with it.
+pub struct EmailFlow {
+    pub flow: String,
+    /// When the relay stops taking this flow (relay time).
+    pub expires_ms: u64,
+    verifier: String,
+    server: String,
+}
+
+impl std::fmt::Debug for EmailFlow {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("EmailFlow")
+            .field("flow", &self.flow)
+            .finish_non_exhaustive()
+    }
+}
+
+/// Asks `server` to mail a sign-in code to `address`.
+pub async fn start_email(
+    http: &HttpClient,
+    server: &str,
+    address: &str,
+) -> Result<EmailFlow, SyncError> {
+    let email = crate::wire::normalize_email(address).ok_or(SyncError::BadAddress)?;
+    let (verifier, verifier_hash) = verifier();
+    let started = start(
+        http,
+        server,
+        "email",
+        &StartRequest {
+            verifier_hash,
+            purpose: "signin".into(),
+            email: Some(email),
+            ..Default::default()
+        },
+    )
+    .await?;
+    Ok(EmailFlow {
+        flow: started.flow,
+        expires_ms: started.expires_ms,
+        verifier,
+        server: server.to_owned(),
+    })
+}
+
+impl EmailFlow {
+    /// The code from the mail: `found` or `new` as a ticket; `WrongCode`
+    /// leaves the flow open for another try.
+    pub async fn finish(&self, http: &HttpClient, code: &str) -> Result<Taken, SyncError> {
+        let digits: String = code.chars().filter(|c| !matches!(c, ' ' | '-')).collect();
+        if digits.len() != 6 || !digits.bytes().all(|b| b.is_ascii_digit()) {
+            return Err(SyncError::BadCode);
+        }
+        let request = TakeRequest {
+            flow: self.flow.clone(),
+            verifier: self.verifier.clone(),
+            code: digits,
+        };
+        taken(
+            http.post_json(
+                &format!("{}/v1/auth/take", self.server),
                 &request,
                 &options(&self.server, ""),
             )

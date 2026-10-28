@@ -74,6 +74,10 @@ fn identity_json(mock: &Mock, relay: &str, key: &str, apple_key: &str) -> Value 
         },
         "facebook": { "appId": "fb-app", "graph": mock.url, "dialog": format!("{}/authorize", mock.url), "issuer": mock.url },
         "oidc": [{ "id": "mock", "issuer": mock.url, "clientId": "marquee", "clientSecret": "ms" }],
+        "email": {
+            "accessKeyId": mock_oidc::MAIL_KEY_ID, "secretAccessKey": mock_oidc::MAIL_SECRET,
+            "region": "us-east-1", "from": "noreply@example.org", "endpoint": mock.url,
+        },
     })
 }
 
@@ -162,6 +166,7 @@ impl Relay {
                     purpose: "signin".into(),
                     return_to: None,
                     native: true,
+                    email: None,
                 },
                 &raw(vec![]),
             )
@@ -1518,7 +1523,7 @@ async fn no_identity_file_no_sign_in() {
         .unwrap();
     assert_eq!(
         with["providers"],
-        json!(["apple", "google", "facebook", "mock"])
+        json!(["apple", "google", "facebook", "email", "mock"])
     );
 }
 
@@ -1699,4 +1704,562 @@ async fn a_sign_in_in_progress_keeps_no_client_address() {
         "{clients:?}"
     );
     assert_eq!(clients[0], clients[1], "one address, one tag");
+}
+
+// ---- email (plans/accounts-email.md) ----
+
+/// A coded refusal's status and code.
+fn refusal(e: HttpError) -> (u16, String) {
+    match e {
+        HttpError::Status { status, body, .. } => {
+            let code = serde_json::from_slice::<Value>(&body)
+                .ok()
+                .and_then(|v| v.get("code").and_then(Value::as_str).map(str::to_owned));
+            (status, code.unwrap_or_default())
+        }
+        e => panic!("{e}"),
+    }
+}
+
+/// A raw email start at `url` (as `client`, through a trusting relay, when given).
+async fn email_start_at(
+    url: &str,
+    address: &str,
+    verifier: &str,
+    client: Option<&str>,
+) -> Result<StartResponse, (u16, String)> {
+    let headers = client
+        .map(|c| vec![("x-forwarded-for".to_owned(), c.to_owned())])
+        .unwrap_or_default();
+    http()
+        .post_json(
+            &format!("{url}/v1/auth/email/start"),
+            &StartRequest {
+                verifier_hash: hex::encode(sha2_hash(verifier)),
+                purpose: "signin".into(),
+                email: Some(address.into()),
+                ..Default::default()
+            },
+            &raw(headers),
+        )
+        .await
+        .map_err(refusal)
+        .map(|r| r.json().unwrap())
+}
+
+async fn email_take_at(
+    url: &str,
+    flow: &str,
+    verifier: &str,
+    code: &str,
+) -> Result<Taken, (u16, String)> {
+    http()
+        .post_json(
+            &format!("{url}/v1/auth/take"),
+            &json!({ "flow": flow, "verifier": verifier, "code": code }),
+            &raw(vec![]),
+        )
+        .await
+        .map_err(refusal)
+        .map(|r| r.json().unwrap())
+}
+
+impl Relay {
+    async fn email_start(
+        &self,
+        address: &str,
+        verifier: &str,
+    ) -> Result<StartResponse, (u16, String)> {
+        email_start_at(&self.url, address, verifier, None).await
+    }
+
+    async fn email_take(
+        &self,
+        flow: &str,
+        verifier: &str,
+        code: &str,
+    ) -> Result<Taken, (u16, String)> {
+        email_take_at(&self.url, flow, verifier, code).await
+    }
+
+    /// A whole email sign-in, the mail read at the mock; a minute later
+    /// (relay time), so the next one is not held to the 60 s rule.
+    async fn email(&self, address: &str) -> Taken {
+        let flow = mq_sync::identity::start_email(&http(), &self.url, address)
+            .await
+            .unwrap();
+        let to = mq_sync::wire::normalize_email(address).unwrap();
+        let taken = flow.finish(&http(), &self.mock.code(&to)).await.unwrap();
+        self.later(61_000);
+        taken
+    }
+
+    fn events(&self, kind: &str) -> i64 {
+        self.sql()
+            .query_row(
+                "SELECT COUNT(*) FROM email_event WHERE kind = ?1",
+                [kind],
+                |r| r.get(0),
+            )
+            .unwrap()
+    }
+
+    /// A relay on the same database behind a trusted proxy: requests name
+    /// their client in `X-Forwarded-For`.
+    async fn proxied(&self) -> String {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = format!("http://{}", listener.local_addr().unwrap());
+        let config = Config {
+            clock_offset_ms: self.offset.clone(),
+            public_host: Some("127.0.0.1".into()),
+            identity: Some(identity(&self.mock, &url, KEY, &self.apple_key)),
+            trust_proxy: true,
+            ..Config::default()
+        };
+        let app = router(&self.db, config).unwrap();
+        tokio::spawn(async move { mq_sync_server::serve(listener, app).await.unwrap() });
+        url
+    }
+
+    /// Every text and blob the database holds, as bytes.
+    fn every_value(&self) -> Vec<Vec<u8>> {
+        let db = self.sql();
+        let tables: Vec<String> = db
+            .prepare("SELECT name FROM sqlite_master WHERE type = 'table'")
+            .unwrap()
+            .query_map([], |r| r.get(0))
+            .unwrap()
+            .collect::<Result<_, _>>()
+            .unwrap();
+        let mut all = Vec::new();
+        for table in tables {
+            let mut stmt = db.prepare(&format!("SELECT * FROM {table}")).unwrap();
+            let n = stmt.column_count();
+            let mut rows = stmt.query([]).unwrap();
+            while let Some(row) = rows.next().unwrap() {
+                for i in 0..n {
+                    match row.get_ref(i).unwrap() {
+                        rusqlite::types::ValueRef::Text(t) | rusqlite::types::ValueRef::Blob(t) => {
+                            all.push(t.to_vec())
+                        }
+                        _ => {}
+                    }
+                }
+            }
+        }
+        all
+    }
+}
+
+fn holds(values: &[Vec<u8>], needle: &str) -> bool {
+    values
+        .iter()
+        .any(|v| v.windows(needle.len()).any(|w| w == needle.as_bytes()))
+}
+
+/// The code mailed, `new`, an account; the same address again is `found`.
+/// The database never holds the address or the code, and the mail has no link.
+#[tokio::test]
+async fn an_email_sign_in_makes_an_account_and_keeps_no_address() {
+    let relay = Relay::new().await;
+    let address = "Alice.Smith@Example.org";
+    let flow = mq_sync::identity::start_email(&http(), &relay.url, address)
+        .await
+        .unwrap();
+    let (subject, text) = relay.mock.mail("alice.smith@example.org").expect("mailed");
+    let code = relay.mock.code("alice.smith@example.org");
+    assert_eq!(
+        subject, "Your Momotus sign-in code",
+        "no code in the subject"
+    );
+    assert_eq!(relay.mock.last_sender(), "Momotus <noreply@example.org>");
+    assert!(!text.contains("http") && !subject.contains("http"));
+    // The kept code is keyed and bound to its flow.
+    let kept: Vec<u8> = relay
+        .sql()
+        .query_row("SELECT code_hash FROM auth_flow", [], |r| r.get(0))
+        .unwrap();
+    let mut mac =
+        <hmac::Hmac<sha2::Sha256> as hmac::KeyInit>::new_from_slice(&hex::decode(KEY).unwrap())
+            .unwrap();
+    hmac::Mac::update(
+        &mut mac,
+        format!("email code\0{}\0{code}", flow.flow).as_bytes(),
+    );
+    assert_eq!(kept, hmac::Mac::finalize(mac).into_bytes().to_vec());
+    let taken = flow
+        .finish(&http(), &format!("{} {}", &code[..3], &code[3..]))
+        .await
+        .unwrap();
+    assert_eq!(taken.account, None, "new");
+    let phone = Device::create(&relay, &taken, false).await.unwrap();
+    relay.later(61_000);
+    let again = relay.email(" alice.smith@EXAMPLE.org ").await;
+    assert_eq!(again.account, Some(phone.record.keys.account), "found");
+    assert_eq!(phone.links().await[0].provider, "email");
+    let values = relay.every_value();
+    for needle in ["alice.smith", "Alice.Smith", "example.org", code.as_str()] {
+        assert!(!holds(&values, needle), "the database holds {needle}");
+    }
+}
+
+/// Case and spaces are one identity; a `+tag` is another identity but the
+/// same mailbox for the limits, as are Gmail's dots; malformed addresses
+/// answer badAddress and mail nothing.
+#[tokio::test]
+async fn addresses_normalize_and_mailboxes_share_limits() {
+    let relay = Relay::new().await;
+    relay.email("bob@example.org").await;
+    let tagged = relay.email("bob+films@example.org").await;
+    assert_eq!(tagged.account, None, "a tag is another identity");
+    relay.email_start("bob@example.org", "v1").await.unwrap();
+    assert_eq!(
+        relay.email_start("Bob+x@Example.org", "v2").await.err(),
+        Some((429, "emailWait".into())),
+        "one mailbox"
+    );
+    relay.email_start("a.b@gmail.com", "v3").await.unwrap();
+    assert_eq!(
+        relay.email_start("ab+x@googlemail.com", "v4").await.err(),
+        Some((429, "emailWait".into()))
+    );
+    let sent = relay.mock.mails_sent();
+    for bad in [
+        "no-at.example.org",
+        "a@b@example.org",
+        "a@127.0.0.1",
+        "a@[::1]",
+        "<a>@example.org",
+        "a,b@example.org",
+        "a@example.org.",
+        "a@ex%61mple.org",
+        "a..b@example.org",
+        ".a@example.org",
+        "a b@example.org",
+        "a@localhost",
+        &format!("{}@example.org", "a".repeat(250)),
+    ] {
+        assert_eq!(
+            relay.email_start(bad, "v").await.err(),
+            Some((400, "badAddress".into())),
+            "{bad}"
+        );
+    }
+    assert_eq!(relay.mock.mails_sent(), sent, "nothing mailed");
+    assert_eq!(
+        mq_sync::identity::start_email(&http(), &relay.url, "nope")
+            .await
+            .err()
+            .map(|e| e.code()),
+        Some(Some("badAddress"))
+    );
+}
+
+/// Wrong codes: one try answers wrongCode and the right code still works;
+/// the fifth ends the flow; misses on an attacker's flow leave the victim's
+/// open; another verifier counts nothing; a short code counts nothing.
+#[tokio::test]
+async fn wrong_codes_end_a_flow_after_five() {
+    let relay = Relay::new().await;
+    let to = "carol@example.org";
+    let flow = relay.email_start(to, "victim").await.unwrap().flow;
+    let code = relay.mock.code(to);
+    let wrong = if code == "000000" { "111111" } else { "000000" };
+    assert_eq!(
+        relay.email_take(&flow, "victim", wrong).await.err(),
+        Some((403, "wrongCode".into()))
+    );
+    assert_eq!(
+        relay.email_take(&flow, "thief", &code).await.err(),
+        Some((404, String::new()))
+    );
+    assert_eq!(
+        relay.email_take(&flow, "victim", "12345").await.err(),
+        Some((400, "badCode".into()))
+    );
+    assert_eq!(
+        (relay.events("miss"), relay.events("flowmiss")),
+        (1, 1),
+        "only the verifier's miss counted"
+    );
+    relay.email_take(&flow, "victim", &code).await.unwrap();
+    assert_eq!(
+        relay.email_take(&flow, "victim", &code).await.err(),
+        Some((404, String::new())),
+        "once"
+    );
+
+    relay.later(61_000);
+    let mine = relay.email_start(to, "victim").await.unwrap().flow;
+    let code = relay.mock.code(to);
+    relay.later(61_000);
+    let theirs = relay.email_start(to, "attacker").await.unwrap().flow;
+    let wrong = if relay.mock.code(to) == "000000" {
+        "111111"
+    } else {
+        "000000"
+    };
+    for i in 1..=5 {
+        let answer = relay
+            .email_take(&theirs, "attacker", wrong)
+            .await
+            .err()
+            .unwrap();
+        let expected = if i < 5 { "wrongCode" } else { "ticketExpired" };
+        assert_eq!(answer, (403, expected.into()), "try {i}");
+    }
+    assert_eq!(
+        relay.email_take(&theirs, "attacker", wrong).await.err(),
+        Some((404, String::new())),
+        "gone"
+    );
+    relay.email_take(&mine, "victim", &code).await.unwrap();
+}
+
+/// A code lives 10 minutes; a mailbox gets a mail a minute and 10 a day; 20
+/// wrong codes a day stop both mail and take; all of it ages out in 24 hours.
+#[tokio::test]
+async fn mail_and_guess_limits_per_mailbox() {
+    let relay = Relay::new().await;
+    let to = "dan@example.org";
+    let flow = relay.email_start(to, "v").await.unwrap().flow;
+    let code = relay.mock.code(to);
+    relay.later(10 * 60_000 + 1);
+    assert_eq!(
+        relay.email_take(&flow, "v", &code).await.err(),
+        Some((403, "ticketExpired".into()))
+    );
+    for i in 1..10 {
+        relay
+            .email_start(&format!("dan+{i}@example.org"), "v")
+            .await
+            .unwrap();
+        relay.later(61_000);
+    }
+    assert_eq!(
+        relay.email_start(to, "v").await.err(),
+        Some((429, "emailLimit".into())),
+        "the eleventh"
+    );
+    relay.later(DAY_MS);
+    // Twenty wrong codes over four flows, then the right one is refused too.
+    for _ in 0..4 {
+        let flow = relay.email_start(to, "v").await.unwrap().flow;
+        let code = relay.mock.code(to);
+        let wrong = if code == "000000" { "111111" } else { "000000" };
+        for _ in 0..5 {
+            relay.email_take(&flow, "v", wrong).await.err().unwrap();
+        }
+        relay.later(61_000);
+    }
+    let flow = relay.email_start(to, "v").await.err();
+    assert_eq!(
+        flow,
+        Some((429, "emailLimit".into())),
+        "no mail after 20 misses"
+    );
+    relay.later(DAY_MS);
+    let flow = relay.email_start(to, "v").await.unwrap().flow;
+    let code = relay.mock.code(to);
+    relay.email_take(&flow, "v", &code).await.unwrap();
+}
+
+/// The twenty-first wrong code in a day: take answers emailLimit, even with
+/// the right code, and the flow goes.
+#[tokio::test]
+async fn take_stops_at_twenty_misses() {
+    let relay = Relay::new().await;
+    let to = "erin@example.org";
+    // The victim's flow first, then an attacker's four flows of five misses.
+    let mine = relay.email_start(to, "victim").await.unwrap().flow;
+    let code = relay.mock.code(to);
+    for _ in 0..4 {
+        relay.later(61_000);
+        let flow = relay.email_start(to, "attacker").await.unwrap().flow;
+        let wrong = if relay.mock.code(to) == "000000" {
+            "111111"
+        } else {
+            "000000"
+        };
+        for _ in 0..5 {
+            relay
+                .email_take(&flow, "attacker", wrong)
+                .await
+                .err()
+                .unwrap();
+        }
+    }
+    assert_eq!(
+        relay.email_take(&mine, "victim", &code).await.err(),
+        Some((429, "emailLimit".into()))
+    );
+    assert_eq!(
+        relay.email_take(&mine, "victim", &code).await.err(),
+        Some((404, String::new())),
+        "the flow went"
+    );
+}
+
+/// One client mails 10 mailboxes a day; `dailyLimit` caps the relay; the
+/// mail budget stops a sixth start in a minute from one client, not another's.
+#[tokio::test]
+async fn client_and_relay_mail_caps() {
+    let relay = Relay::new().await;
+    let proxied = relay.proxied().await;
+    for i in 0..5 {
+        email_start_at(
+            &proxied,
+            &format!("f{i}@example.org"),
+            "v",
+            Some("203.0.113.1"),
+        )
+        .await
+        .unwrap();
+    }
+    assert_eq!(
+        email_start_at(&proxied, "f5@example.org", "v", Some("203.0.113.1"))
+            .await
+            .err(),
+        Some((429, "busy".into())),
+        "the minute's budget"
+    );
+    email_start_at(&proxied, "f5@example.org", "v", Some("203.0.113.2"))
+        .await
+        .unwrap();
+    relay.later(61_000);
+    for i in 6..11 {
+        email_start_at(
+            &proxied,
+            &format!("f{i}@example.org"),
+            "v",
+            Some("203.0.113.1"),
+        )
+        .await
+        .unwrap();
+    }
+    relay.later(61_000);
+    assert_eq!(
+        email_start_at(&proxied, "f11@example.org", "v", Some("203.0.113.1"))
+            .await
+            .err(),
+        Some((429, "emailLimit".into())),
+        "ten a day per client"
+    );
+
+    let capped = Relay::with(|c| {
+        if let Some(email) = c.identity.as_mut().and_then(|i| i.email.as_mut()) {
+            email.daily_limit = 2;
+        }
+    })
+    .await;
+    capped.email_start("g1@example.org", "v").await.unwrap();
+    capped.email_start("g2@example.org", "v").await.unwrap();
+    assert_eq!(
+        capped.email_start("g3@example.org", "v").await.err(),
+        Some((503, "mailUnavailable".into()))
+    );
+}
+
+/// The mail service refusing leaves nothing behind (asking again is not
+/// held against the address); no answer keeps the rows, as it may have sent.
+#[tokio::test]
+async fn a_refused_mail_leaves_nothing_and_a_lost_one_counts() {
+    let relay = Relay::new().await;
+    relay.mock.mail_fails(Some(400), false);
+    assert_eq!(
+        relay.email_start("hal@example.org", "v").await.err(),
+        Some((503, "mailUnavailable".into()))
+    );
+    assert_eq!(
+        (relay.count("auth_flow"), relay.count("email_event")),
+        (0, 0)
+    );
+    relay.mock.mail_fails(None, false);
+    relay.email_start("hal@example.org", "v").await.unwrap();
+    // A throttle (429) is no definite refusal: the rows stay.
+    relay.later(61_000);
+    relay.mock.mail_fails(Some(429), false);
+    assert_eq!(
+        relay.email_start("hal@example.org", "v").await.err(),
+        Some((503, "mailUnavailable".into()))
+    );
+    assert_eq!(relay.events("mail"), 2, "a throttled mail counts");
+    relay.later(61_000);
+    relay.mock.mail_fails(None, true);
+    assert_eq!(
+        relay.email_start("hal@example.org", "v").await.err(),
+        Some((503, "mailUnavailable".into()))
+    );
+    assert_eq!(relay.events("mail"), 3, "the lost mail counts");
+}
+
+/// An address with an account and one without get the same answer; an
+/// email flow is never finished as a native token or by a callback.
+#[tokio::test]
+async fn email_start_says_nothing_about_membership() {
+    let relay = Relay::new().await;
+    Device::create(&relay, &relay.email("ivy@example.org").await, false)
+        .await
+        .unwrap();
+    let shape = |s: StartResponse| (s.url, s.nonce, s.expires_ms > 0);
+    let member = relay.email_start("ivy@example.org", "v").await.unwrap();
+    let stranger = relay.email_start("joe@example.org", "v").await.unwrap();
+    assert_eq!(shape(member.clone()), shape(stranger));
+    let native = http()
+        .post_json(
+            &format!("{}/v1/auth/token", relay.url),
+            &json!({ "flow": member.flow, "verifier": "v", "idToken": "x" }),
+            &raw(vec![]),
+        )
+        .await;
+    assert_eq!(status(native), 404);
+    let callback = http()
+        .get(
+            &format!(
+                "{}/v1/auth/email/callback?state={}&code=1",
+                relay.url, member.flow
+            ),
+            &raw(vec![]),
+        )
+        .await;
+    assert_eq!(status(callback), 400, "the closed page");
+}
+
+/// The email block: an http mail API off this machine's network is refused,
+/// and so is an OpenID entry named `email`. A database from before the
+/// email table opens and mails.
+#[tokio::test]
+async fn email_configuration_and_an_older_database() {
+    let mock = Mock::start(0).await;
+    let key = mock_oidc::apple_key_pem();
+    let dir = fresh_dir();
+    let db = dir.join("relay.sqlite");
+    let start = |change: fn(&mut Value)| {
+        let mut file = identity_json(&mock, "http://127.0.0.1:1", KEY, &key);
+        change(&mut file);
+        let config = Config {
+            public_host: Some("127.0.0.1".into()),
+            identity: Some(serde_json::from_value(file).unwrap()),
+            ..Config::default()
+        };
+        router(&db, config).err()
+    };
+    let plain = start(|f| f["email"]["endpoint"] = json!("http://email.example.com")).unwrap();
+    assert!(plain.contains("https"), "{plain}");
+    let named = start(|f| f["oidc"][0]["id"] = json!("email")).unwrap();
+    assert!(named.contains("email"), "{named}");
+    let _ = std::fs::remove_dir_all(dir);
+
+    let relay = Relay::new().await;
+    relay.email("kim@example.org").await;
+    relay.sql().execute_batch("DROP TABLE email_event").unwrap();
+    let again = Relay::on(
+        Mock::start(0).await,
+        relay.apple_key.clone(),
+        relay.db.clone(),
+        relay.offset.clone(),
+        |_| {},
+    )
+    .await;
+    again.email_start("kim@example.org", "v").await.unwrap();
 }

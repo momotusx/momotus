@@ -1,5 +1,6 @@
 //! `mq-sync-server --db PATH [--listen 127.0.0.1:8787] [--invite CODE] [--open]
-//! [--new-generation] [--trust-proxy] [--public-host HOST] [--identity FILE]`
+//! [--new-generation] [--trust-proxy] [--public-host HOST] [--identity FILE]
+//! [--mail FILE]`
 //!
 //! `--trust-proxy`: behind a reverse proxy (needed for TLS), rate limits go
 //! by the client address the proxy appends to `X-Forwarded-For`.
@@ -12,6 +13,11 @@
 //! (`identity.example.json` names every field). It needs `--public-host`
 //! (nonces and callbacks are bound to it) and refuses `--open`: sign-up
 //! then takes a sign-in, or the invite.
+//!
+//! `--mail`: sign-in by an emailed code (plans/accounts-email.md), from an
+//! Amazon SES credential file (`accessKeyId`, `secretAccessKey`, `region`,
+//! `from`). It needs `--identity`. A file that is not there leaves email
+//! sign-in off; one that does not parse refuses to start.
 
 use mq_sync_server::{Config, IdentityFile, router};
 use std::net::SocketAddr;
@@ -32,6 +38,7 @@ async fn main() {
     let mut config = Config::default();
     let mut open = false;
     let mut identity = None;
+    let mut mail = None;
     let mut args = std::env::args().skip(1);
     while let Some(flag) = args.next() {
         match flag.as_str() {
@@ -46,6 +53,7 @@ async fn main() {
                     "--invite" => config.invite = Some(value),
                     "--public-host" => config.public_host = Some(value),
                     "--identity" => identity = Some(PathBuf::from(value)),
+                    "--mail" => mail = Some(PathBuf::from(value)),
                     _ => usage(&flag),
                 }
             }
@@ -66,6 +74,25 @@ async fn main() {
             refuse(&format!("{} is not an identity file: {e}", path.display()))
         });
         config.identity = Some(file);
+    }
+    if let Some(path) = mail {
+        let Some(identity) = config.identity.as_mut() else {
+            refuse("--mail needs --identity: the mailed code signs in like a provider");
+        };
+        match std::fs::read_to_string(&path) {
+            Ok(text) => {
+                identity.email = Some(serde_json::from_str(&text).unwrap_or_else(|e| {
+                    refuse(&format!(
+                        "{} is not a mail credential file: {e}",
+                        path.display()
+                    ))
+                }));
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                tracing::info!("no mail credential file: email sign-in is off");
+            }
+            Err(e) => refuse(&format!("cannot read {}: {e}", path.display())),
+        }
     }
     // Reachable from other machines with no invite and no sign-in means
     // anyone can sign up.
@@ -91,6 +118,6 @@ fn refuse(why: &str) -> ! {
 
 fn usage(flag: &str) -> ! {
     refuse(&format!(
-        "bad argument {flag}; usage: mq-sync-server --db PATH [--listen ADDR] [--invite CODE] [--open] [--new-generation] [--trust-proxy] [--public-host HOST] [--identity FILE]"
+        "bad argument {flag}; usage: mq-sync-server --db PATH [--listen ADDR] [--invite CODE] [--open] [--new-generation] [--trust-proxy] [--public-host HOST] [--identity FILE] [--mail FILE]"
     ));
 }

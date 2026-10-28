@@ -130,7 +130,7 @@ pub struct DeleteRequest {
 }
 
 /// Opens a sign-in or revoke flow at `/v1/auth/{provider}/start`.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct StartRequest {
     /// Lowercase hex SHA-256 of the verifier the device keeps.
@@ -143,6 +143,20 @@ pub struct StartRequest {
     /// A native sheet signs in: the answer carries the nonce, no URL.
     #[serde(default)]
     pub native: bool,
+    /// The address an `email` flow mails its code to. Never logged.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub email: Option<String>,
+}
+
+impl std::fmt::Debug for StartRequest {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("StartRequest")
+            .field("purpose", &self.purpose)
+            .field("return_to", &self.return_to)
+            .field("native", &self.native)
+            .field("email", &self.email.as_ref().map(|_| "<redacted>"))
+            .finish_non_exhaustive()
+    }
 }
 
 /// A deletion of the account that waits (D14): every device shows it with
@@ -260,6 +274,53 @@ pub fn nonce_for(relay_nonce: &[u8], host: &str) -> String {
     ))
 }
 
+/// An email address as an identity (plans/accounts-email.md E2): trimmed,
+/// one `@`, a lowercased local part of RFC 5322 `atext` and single inner
+/// dots, a lowercased ASCII domain name (IDNA for a Unicode one) with a dot
+/// and no IP literal, at most 254 bytes. The same string is hashed and
+/// mailed. `None` for anything else.
+pub fn normalize_email(address: &str) -> Option<String> {
+    const ATEXT: &str = "!#$%&'*+-/=?^_{|}~";
+    let (local, domain) = address.trim().split_once('@')?;
+    let local_ok = (1..=64).contains(&local.len())
+        && local.split('.').all(|part| {
+            !part.is_empty()
+                && part
+                    .chars()
+                    .all(|c| c.is_ascii_alphanumeric() || ATEXT.contains(c))
+        });
+    // `Host::parse` decodes `%` and keeps a trailing dot: both refused first.
+    if !local_ok || domain.contains(['%', '@']) || domain.ends_with('.') {
+        return None;
+    }
+    let domain = match url::Host::parse(domain).ok()? {
+        url::Host::Domain(d) => d,
+        _ => return None,
+    };
+    let labels: Vec<&str> = domain.split('.').collect();
+    let domain_ok = labels.len() >= 2
+        && labels.iter().all(|l| {
+            (1..=63).contains(&l.len())
+                && !l.starts_with('-')
+                && !l.ends_with('-')
+                && l.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')
+        })
+        && !labels.last()?.chars().all(|c| c.is_ascii_digit());
+    let address = format!("{}@{domain}", local.to_ascii_lowercase());
+    (domain_ok && address.len() <= 254).then_some(address)
+}
+
+/// The mailbox a normalized address delivers to, for mail limits only
+/// (E3): no `+tag`, and Gmail's dots and `googlemail.com` folded.
+pub fn mailbox(address: &str) -> String {
+    let (local, domain) = address.split_once('@').unwrap_or((address, ""));
+    let local = local.split_once('+').map_or(local, |(base, _)| base);
+    match domain {
+        "gmail.com" | "googlemail.com" => format!("{}@gmail.com", local.replace('.', "")),
+        _ => format!("{local}@{domain}"),
+    }
+}
+
 /// What redeeming a kit gives: a pending token and the kit's member id.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -373,5 +434,39 @@ mod tests {
                 "{host}"
             );
         }
+    }
+
+    #[test]
+    fn email_addresses_normalize_and_fold_into_mailboxes() {
+        use super::{mailbox, normalize_email};
+        let n = |a: &str| normalize_email(a);
+        assert_eq!(
+            n("  Ann.Lee@Example.ORG ").as_deref(),
+            Some("ann.lee@example.org")
+        );
+        assert_eq!(n("a@b\u{fc}cher.de").as_deref(), Some("a@xn--bcher-kva.de"));
+        assert_eq!(
+            n("o'brien+tv@mail.example").as_deref(),
+            Some("o'brien+tv@mail.example")
+        );
+        for bad in [
+            "",
+            "a",
+            "@x.org",
+            "a@",
+            "a@x",
+            "a@@x.org",
+            "a@1.2.3.4",
+            "a@x.org.",
+            "a@x%2eorg",
+            "a.@x.org",
+            "a@-x.org",
+            "\u{e4}@x.org",
+            "a@x.123",
+        ] {
+            assert_eq!(n(bad), None, "{bad}");
+        }
+        assert_eq!(mailbox("a.b+c@googlemail.com"), "ab@gmail.com");
+        assert_eq!(mailbox("a.b+c@example.org"), "a.b@example.org");
     }
 }

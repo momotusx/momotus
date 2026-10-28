@@ -60,10 +60,10 @@ fi
 # The unit's sandbox, not its flags: no --trust-proxy (no Cloudflare in front of a loopback check).
 # systemd-run does not expand %d, so the command reads $CREDENTIALS_DIRECTORY itself.
 systemd-run --unit=momotus-preflight --quiet --collect -p User=momotus -p Group=momotus \
-  -p LoadCredential=identity.json:/etc/momotus/identity.json -p ProtectSystem=strict -p ProtectHome=yes \
+  -p LoadCredential=identity.json:/etc/momotus/identity.json -p LoadCredential=ses.json:/etc/momotus/ses.json -p ProtectSystem=strict -p ProtectHome=yes \
   -p PrivateTmp=yes -p NoNewPrivileges=yes -p ReadWritePaths=/var/lib/momotus-preflight \
   sh -c "exec /opt/momotus/bin/mq-sync-server-$COMMIT --db /var/lib/momotus-preflight/relay.sqlite --listen 127.0.0.1:8789 \
-    --public-host momotus.normalisdead.mom --identity \"\$CREDENTIALS_DIRECTORY/identity.json\""
+    --public-host momotus.normalisdead.mom --identity \"\$CREDENTIALS_DIRECTORY/identity.json\" --mail \"\$CREDENTIALS_DIRECTORY/ses.json\""
 if ! health http://127.0.0.1:8789 10; then
   echo "remote: the new binary did not start on a copy of the database; nothing switched:" >&2
   journalctl -u momotus-preflight -n 20 --no-pager >&2 || true

@@ -14,6 +14,8 @@
 // sign-in at a time), so boxing those answers would buy nothing.
 #![allow(clippy::result_large_err)]
 
+pub mod email;
+
 use crate::jwt::{self, Jwk, JwkSet, Jwt};
 use crate::{
     APPLE_NOTICES, AUTH, AppState, active, authorize, client, client_limited, error,
@@ -91,6 +93,9 @@ pub struct IdentityFile {
     /// Standard OpenID providers (the mock among them), by route id.
     #[serde(default)]
     pub oidc: Vec<OidcConfig>,
+    /// Sign-in by a code mailed through Resend (plans/accounts-email.md).
+    #[serde(default)]
+    pub email: Option<email::EmailConfig>,
 }
 
 impl std::fmt::Debug for IdentityFile {
@@ -240,6 +245,9 @@ struct Verified {
     subject: String,
     #[serde(default)]
     receipt: Option<String>,
+    /// An email flow's mailbox key (hex), for its limits.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    mailbox: Option<String>,
 }
 
 /// The relay's sign-in state: the configuration and the provider caches.
@@ -302,6 +310,13 @@ impl Identity {
         for (what, address) in addresses.into_iter().flatten().chain(oidc) {
             secure(what, address)?;
         }
+        if let Some(email) = &f.email {
+            email.check()?;
+        }
+        // `email` is the mailed code's route, never an OpenID entry's.
+        if f.oidc.iter().any(|o| o.id == "email") {
+            return Err("an OpenID provider may not be named email".into());
+        }
         Ok(Self {
             key,
             apple_key,
@@ -326,6 +341,7 @@ impl Identity {
             f.apple.as_ref().map(|_| "apple"),
             f.google.as_ref().map(|_| "google"),
             f.facebook.as_ref().map(|_| "facebook"),
+            f.email.as_ref().map(|_| "email"),
         ];
         fixed
             .into_iter()
@@ -1017,6 +1033,13 @@ async fn start_flow(
     if limited(state, address, AUTH) {
         return Err(busy());
     }
+    let verifier_hash = hex::decode(&request.verifier_hash)
+        .ok()
+        .filter(|h| h.len() == 32)
+        .ok_or_else(|| error(StatusCode::BAD_REQUEST, "verifierHash is 32 bytes of hex"))?;
+    if let (Some(config), "email") = (&id.file.email, provider) {
+        return email::start(state, id, config, address, request, verifier_hash).await;
+    }
     let kind = id
         .kind(provider)
         .ok_or_else(|| error(StatusCode::NOT_FOUND, "no such provider"))?;
@@ -1030,10 +1053,6 @@ async fn start_flow(
             ));
         }
     };
-    let verifier_hash = hex::decode(&request.verifier_hash)
-        .ok()
-        .filter(|h| h.len() == 32)
-        .ok_or_else(|| error(StatusCode::BAD_REQUEST, "verifierHash is 32 bytes of hex"))?;
     let return_to = match (request.native, request.return_to) {
         (true, None) if kind != Kind::Facebook => None,
         (true, _) => {
@@ -1223,6 +1242,7 @@ async fn callback(state: &AppState, provider: &str, back: Returned) -> Response 
             provider: name.clone(),
             subject: hex::encode(&subject),
             receipt: receipt.clone(),
+            mailbox: None,
         };
         // Two callbacks raced over the provider exchange: the first stores.
         let stored = db.execute(
@@ -1336,7 +1356,7 @@ pub(crate) async fn take(
     Json(request): Json<TakeRequest>,
 ) -> Response {
     let answer = (|| {
-        identity(&state)?;
+        let id = identity(&state)?;
         if limited(&state, client(&state, peer, &headers)?, AUTH) {
             return Err(busy());
         }
@@ -1345,6 +1365,14 @@ pub(crate) async fn take(
         let row = flow_row(&db, &request.flow)
             .map_err(|e| storage_error("take sign-in", e))?
             .ok_or_else(refused)?;
+        if row.provider == "email" {
+            let TakeRequest {
+                flow,
+                verifier,
+                code,
+            } = &request;
+            return email::take(&db, id, flow, verifier, code, &row, now);
+        }
         let mine = same(&row.verifier_hash, &sha(&request.verifier));
         if mine && !is_open(&row, now) {
             return Err(ticket_refused());
@@ -1396,8 +1424,11 @@ pub(crate) async fn native(
     }
     let now = state.now_ms();
     let row = match flow_row(&lock(&state), &request.flow) {
+        // An email flow has no return either: its code is taken, never a token.
         Ok(Some(row))
-            if row.return_to.is_none() && same(&row.verifier_hash, &sha(&request.verifier)) =>
+            if row.return_to.is_none()
+                && row.provider != "email"
+                && same(&row.verifier_hash, &sha(&request.verifier)) =>
         {
             row
         }
@@ -1965,6 +1996,7 @@ pub(crate) fn expire(db: &Connection, now: u64) -> rusqlite::Result<()> {
         "DELETE FROM signups WHERE at_ms <= ?1",
         params![now.saturating_sub(SIGNUP_WINDOW_MS) as i64],
     )?;
+    email::expire_events(db, now)?;
     Ok(())
 }
 

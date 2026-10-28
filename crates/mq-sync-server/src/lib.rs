@@ -30,6 +30,7 @@ mod identity;
 mod jwt;
 
 pub use identity::IdentityFile;
+pub use identity::email::EmailConfig;
 
 use axum::extract::Path as UrlPath;
 use axum::extract::{ConnectInfo, DefaultBodyLimit, Query, State};
@@ -446,6 +447,16 @@ CREATE TABLE IF NOT EXISTS deletion (
     due_ms   INTEGER NOT NULL,
     link     INTEGER
 );
+-- Email sign-in's limits (plans/accounts-email.md E6): keyed hashes only,
+-- 24 hours. New in schema 4 without a version change: an older relay never
+-- reads it.
+CREATE TABLE IF NOT EXISTS email_event (
+    kind   TEXT NOT NULL,
+    key    BLOB NOT NULL,
+    at_ms  INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS email_event_key ON email_event (kind, key, at_ms);
+CREATE INDEX IF NOT EXISTS email_event_at ON email_event (at_ms);
 ";
 
 type Opened = (Connection, String, u64, Id);
@@ -2141,7 +2152,7 @@ impl ClockWatch {
 #[derive(Default)]
 pub(crate) struct Limits {
     per_client: HashMap<(usize, IpAddr), (u64, u32)>,
-    global: [(u64, u32); 6],
+    global: [(u64, u32); 7],
 }
 
 const OPEN_PAIRING: (usize, u32, u32) = (0, 20, 2000);
@@ -2156,6 +2167,10 @@ const AUTH: (usize, u32, u32) = (4, 30, 3000);
 /// whose signature checked, so a flood from many addresses cannot crowd out
 /// Apple's own.
 pub(crate) const APPLE_NOTICES: (usize, u32, u32) = (5, 10, 60);
+/// Codes mailed (plans/accounts-email.md E6), spent only by an email start
+/// that passed its checks; relay-wide it stays under the mail service's
+/// 10 requests a second.
+pub(crate) const MAIL: (usize, u32, u32) = (6, 5, 60);
 
 /// The account's scheduled deletion, if one waits, with the provider of the
 /// identity that asked (none for a Start over, or once that link is gone),
