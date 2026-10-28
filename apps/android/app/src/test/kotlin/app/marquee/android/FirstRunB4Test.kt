@@ -54,9 +54,9 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /**
- * First run B4 (design/DECISION.md): the question steps as a film frame, 2.39:1 and no taller than 40 percent of the
- * screen, its question a heading over a 60 percent box, black with no still, centered on TV under the header with the
- * first choice focused. With MQ_SHOTS set, the render tests save theirs there.
+ * First run B4 (design/DECISION.md): the question steps as a 2.39:1 film frame as wide as the screen while the height
+ * the header and the bar leave allows, its question a heading over a 60 percent box, black with no still, the bar on
+ * the header's edge, centered on TV with the first choice focused. With MQ_SHOTS set, the render tests save theirs there.
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [36], application = Application::class)
@@ -142,40 +142,58 @@ class FirstRunB4Test {
         File(dir, "$name.png").outputStream().use { image.compress(Bitmap.CompressFormat.PNG, 100, it) }
     }
 
-    /** 2.39:1, no taller than 40 percent of the screen, and centered across it. */
+    /** 2.39:1 and centered across the screen. */
     private fun framed() {
         val f = bounds(FILM_FRAME)
         val screen = root()
         assertEquals(FILM_RATIO, f.width / f.height, 0.02f, "the frame is $f")
-        assertTrue(f.height <= screen.height * FILM_HEIGHT + 1f, "the frame $f is over 40 percent of $screen")
         assertEquals(f.left - screen.left, screen.right - f.right, 1.5f, "the frame $f is not centered in $screen")
+    }
+
+    /** The header and the bar under the frame keep one column edge. */
+    private fun oneEdge() {
+        val header = bounds(STEP_HEADER)
+        val bar = bounds(FILM_BAR)
+        assertEquals(header.left, bar.left, 1f, "header $header, bar $bar")
+        assertEquals(header.right, bar.right, 1f, "header $header, bar $bar")
     }
 
     @Test
     @Config(qualifiers = "w390dp-h844dp-xxhdpi")
-    fun `phone, the frame is 2_39 to 1 and spans the width`() {
+    fun `phone, the frame is 2_39 to 1 and as wide as the screen, the bar on the header's edge`() {
         doors(Form.Phone, null)
         compose.waitForIdle()
         framed()
         assertEquals(root().width, bounds(FILM_FRAME).width, 1f)
+        oneEdge()
     }
 
     @Test
     @Config(qualifiers = "w844dp-h390dp-xxhdpi")
-    fun `phone on its side, the frame keeps under 40 percent of the height`() {
+    fun `phone on its side, a bar taller than the rest leaves the frame its least height`() {
         doors(Form.Phone, null)
         compose.waitForIdle()
         framed()
-        assertTrue(bounds(FILM_FRAME).width < root().width, "the frame took the whole width")
+        assertEquals(root().height * FILM_FLOOR, bounds(FILM_FRAME).height, 2f)
     }
 
     @Test
     @Config(qualifiers = "w960dp-h540dp-xhdpi")
-    fun `TV, the frame is 2_39 to 1, 40 percent of the height, centered`() {
+    fun `TV, the frame takes the height the header and the bar leave, the bar on the header's edge`() {
         doors(Form.Tv, null)
         compose.waitForIdle()
         framed()
-        assertEquals(1080f * FILM_HEIGHT, bounds(FILM_FRAME).height, 1f)
+        // 24 above the frame and under the bar, over the 60 safe area at the foot of the 1080 canvas.
+        assertEquals(24f, bounds(FILM_FRAME).top - bounds(STEP_HEADER).bottom, 1f)
+        assertEquals(24f, root().bottom - 60f - bounds(FILM_BAR).bottom, 1f)
+        assertTrue(bounds(FILM_FRAME).height > 1080f * 0.4f, "the frame is small: ${bounds(FILM_FRAME)}")
+        oneEdge()
+        // The doors share the bar from edge to edge.
+        val bar = bounds(FILM_BAR)
+        val first = compose.onNodeWithText("I use Stremio").fetchSemanticsNode().boundsInRoot
+        val last = compose.onNodeWithText("I already use Momotus").fetchSemanticsNode().boundsInRoot
+        assertEquals(bar.left, first.left, 1f)
+        assertEquals(bar.right, last.right, 1f)
     }
 
     @Test
@@ -190,7 +208,6 @@ class FirstRunB4Test {
         val above = frame.top - header.bottom
         val below = root().bottom - 60f - bar.bottom
         assertTrue(abs(above - below) < 4f, "above $above, below $below")
-        assertTrue(above > 40f, "the frame sits at the top: $above")
     }
 
     /**

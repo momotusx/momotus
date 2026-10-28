@@ -55,6 +55,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.SubcomposeLayout
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
@@ -67,6 +68,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -175,7 +177,7 @@ fun OnboardingScreen(
     }
 }
 
-/** The doors in the bar under the frame: side by side on TV, each up to 520 wide; stacked on the phone. */
+/** The doors in the bar under the frame: side by side on TV, sharing the column's width; stacked on the phone. */
 @Composable
 private fun Doors(
     tv: Boolean,
@@ -186,10 +188,10 @@ private fun Doors(
         // An exact width each, so the row's one height (the tallest door's) is measured at the width they get.
         BoxWithConstraints(Modifier.fillMaxWidth()) {
             val gap = Marquee.space.m
-            val width = minOf(DOOR_WIDTH, (maxWidth - gap * (count - 1)) / count)
+            val width = (maxWidth - gap * (count - 1)) / count
             Row(
                 Modifier.fillMaxWidth().height(IntrinsicSize.Min).semantics { isTraversalGroup = true },
-                horizontalArrangement = Arrangement.spacedBy(gap, Alignment.CenterHorizontally),
+                horizontalArrangement = Arrangement.spacedBy(gap),
             ) { doors(Modifier.width(width).fillMaxHeight()) }
         }
     } else {
@@ -203,7 +205,9 @@ private fun Doors(
 /**
  * A first-run question step (B4, the owner's pick of 2026-10-28): the step's header, then a film frame on black
  * holding the still with the question as its subtitle, and the choices in the bar under it ([bar]); [foot] stays in
- * sight under it all. On TV the frame and its bar sit in the middle of the space under the header.
+ * sight under it all. The frame is as wide as the screen while the height the header and the bar leave allows, else
+ * that height at 2.39:1, centered; never under [FILM_FLOOR] of the screen, the page scrolling then. The header and
+ * the bar keep one column edge.
  */
 @Composable
 private fun FramedPage(
@@ -218,6 +222,7 @@ private fun FramedPage(
     bar: @Composable ColumnScope.() -> Unit,
 ) {
     val tv = Marquee.form == Form.Tv
+    val side = Marquee.safe.side
     Column(
         Modifier
             .fillMaxSize()
@@ -225,92 +230,106 @@ private fun FramedPage(
             .windowInsetsPadding(WindowInsets.systemBars)
             .padding(vertical = Marquee.safe.top),
     ) {
-        StepHeader(step, skip, onSkip, onBack, Modifier.padding(horizontal = Marquee.safe.side).testTag(STEP_HEADER))
-        // Scrolls when it does not fit (a small phone at a large font scale, More languages).
+        StepHeader(step, skip, onSkip, onBack, Modifier.padding(horizontal = side).testTag(STEP_HEADER))
+        val density = LocalDensity.current
+        val floor = with(density) { windowPx().height.toDp() } * FILM_FLOOR
+        val pad = Marquee.space.m
+        val gap = if (tv) 48.dp else 20.dp
+        val scroll = rememberScrollState()
         BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
-            Column(
-                Modifier
-                    .fillMaxWidth()
-                    .verticalScroll(rememberScrollState())
-                    .heightIn(min = maxHeight)
-                    .padding(vertical = Marquee.space.m),
-                verticalArrangement = if (tv) Arrangement.Center else Arrangement.Top,
-                horizontalAlignment = Alignment.CenterHorizontally,
-            ) {
-                FilmFrame(still, question, lead, Modifier.padding(horizontal = if (tv) Marquee.safe.side else 0.dp))
-                Column(
-                    Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = if (tv) Marquee.safe.side else 16.dp)
-                        .padding(top = if (tv) 48.dp else 20.dp)
-                        .testTag(FILM_BAR),
-                    verticalArrangement = Arrangement.spacedBy(Marquee.space.s),
-                    content = bar,
-                )
+            val room = maxHeight
+            SubcomposeLayout(Modifier.fillMaxWidth().verticalScroll(scroll)) { constraints ->
+                val width = constraints.maxWidth
+                val choices =
+                    subcompose("bar") {
+                        Column(
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = side)
+                                .padding(top = gap)
+                                .testTag(FILM_BAR),
+                            verticalArrangement = Arrangement.spacedBy(Marquee.space.s),
+                        ) {
+                            // The phone's lead line sits under the frame, over the choices.
+                            if (!tv) {
+                                MqText(
+                                    lead,
+                                    Modifier.fillMaxWidth(),
+                                    role = TextRole.Callout,
+                                    color = Marquee.colors.dim,
+                                    textAlign = TextAlign.Center,
+                                )
+                            }
+                            bar()
+                        }
+                    }.map { it.measure(Constraints(maxWidth = width)) }
+                val barHeight = choices.sumOf { it.height }
+                val edge = pad.roundToPx()
+                val left = room.roundToPx() - barHeight - 2 * edge
+                val height = minOf(width / FILM_RATIO, maxOf(left, floor.roundToPx()).toFloat())
+                val frameWidth = minOf(width, (height * FILM_RATIO).toInt())
+                val frameHeight = (frameWidth / FILM_RATIO).toInt()
+                val frame =
+                    subcompose("frame") { FilmFrame(still, question, lead) }
+                        .map { it.measure(Constraints.fixed(frameWidth, frameHeight)) }
+                val content = edge + frameHeight + barHeight + edge
+                val total = maxOf(content, room.roundToPx())
+                // What is left when the width binds goes above and below alike on TV, below the bar on the phone.
+                val top = edge + if (tv) (total - content) / 2 else 0
+                layout(width, total) {
+                    frame.forEach { it.place((width - frameWidth) / 2, top) }
+                    var y = top + frameHeight
+                    choices.forEach {
+                        it.place(0, y)
+                        y += it.height
+                    }
+                }
             }
         }
-        foot?.let { Box(Modifier.fillMaxWidth().padding(horizontal = Marquee.safe.side)) { it() } }
+        foot?.let { Box(Modifier.fillMaxWidth().padding(horizontal = side)) { it() } }
     }
 }
 
 /**
- * The film frame: 2.39:1, no taller than 40 percent of the screen, centered (the phone's spans the width while it
- * fits). The still fills it, faded in by opacity; with none it stays black. The question is its subtitle, one 60
- * percent box per line, and a real heading; the lead line rides under it on TV and under the frame on the phone.
+ * The film frame, at the size its page gives it: the still fills it, faded in by opacity; with none it stays black.
+ * The question is its subtitle, one 60 percent box per line, and a real heading; on TV the lead line rides under it.
  */
 @Composable
 internal fun FilmFrame(
     still: FirstRunStill?,
     question: String,
     lead: String,
-    modifier: Modifier = Modifier,
 ) {
     val tv = Marquee.form == Form.Tv
-    val cap = with(LocalDensity.current) { windowPx().height.toDp() } * FILM_HEIGHT
-    Column(modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
-        BoxWithConstraints(Modifier.fillMaxWidth(), contentAlignment = Alignment.TopCenter) {
-            val width = minOf(maxWidth, cap * FILM_RATIO)
-            val height = width / FILM_RATIO
-            Box(Modifier.size(width, height).background(Color.Black).testTag(FILM_FRAME)) {
-                still?.let { s ->
-                    var landed by remember(s.background) { mutableStateOf(false) }
-                    val alpha by animateFloatAsState(if (landed) 1f else 0f, tween(Marquee.panelMs), label = "still")
-                    AsyncImage(
-                        model = s.background,
-                        contentDescription = null,
-                        contentScale = ContentScale.Crop,
-                        alignment = BiasAlignment(0f, -0.2f),
-                        onSuccess = { landed = true },
-                        modifier = Modifier.matchParentSize().graphicsLayer { this.alpha = alpha },
-                    )
-                }
-                Column(
-                    Modifier
-                        .align(Alignment.BottomCenter)
-                        .fillMaxWidth()
-                        .padding(horizontal = if (tv) width * 0.06f else 14.dp)
-                        .padding(bottom = height * if (tv) 0.09f else 0.12f),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
-                ) {
-                    Cue(
-                        question,
-                        if (tv) TextRole.Title3 else TextRole.Title2,
-                        FontWeight.SemiBold,
-                        Modifier.semantics { heading() },
-                    )
-                    if (tv) Cue(lead, TextRole.Headline, FontWeight.Medium)
-                }
-            }
-        }
-        if (!tv) {
-            MqText(
-                lead,
-                Modifier.padding(start = 24.dp, end = 24.dp, top = 16.dp),
-                role = TextRole.Callout,
-                color = Marquee.colors.dim,
-                textAlign = TextAlign.Center,
+    BoxWithConstraints(Modifier.fillMaxSize().background(Color.Black).testTag(FILM_FRAME)) {
+        still?.let { s ->
+            var landed by remember(s.background) { mutableStateOf(false) }
+            val alpha by animateFloatAsState(if (landed) 1f else 0f, tween(Marquee.panelMs), label = "still")
+            AsyncImage(
+                model = s.background,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                alignment = BiasAlignment(0f, -0.2f),
+                onSuccess = { landed = true },
+                modifier = Modifier.matchParentSize().graphicsLayer { this.alpha = alpha },
             )
+        }
+        Column(
+            Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .padding(horizontal = if (tv) maxWidth * 0.06f else 14.dp)
+                .padding(bottom = maxHeight * if (tv) 0.09f else 0.12f),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Cue(
+                question,
+                if (tv) TextRole.Title3 else TextRole.Title2,
+                FontWeight.SemiBold,
+                Modifier.semantics { heading() },
+            )
+            if (tv) Cue(lead, TextRole.Headline, FontWeight.Medium)
         }
     }
 }
@@ -938,18 +957,15 @@ private fun SkipLink(
 /** The first run's steps that count: the doors, the recommended addons, the stream question and subtitles. */
 internal const val FIRST_RUN_STEPS = 4
 
-/** The film frame's shape and its share of the screen's height at most. */
+/** The film frame's shape, and its least share of the screen's height (a bar too tall for the rest scrolls). */
 internal const val FILM_RATIO = 2.39f
-internal const val FILM_HEIGHT = 0.4f
+internal const val FILM_FLOOR = 0.3f
 
 /** The player's subtitle scrim, behind each line of the frame's words: 5.7:1 for white over a white still. */
 internal val FILM_SCRIM = Color.Black.copy(alpha = 0.6f)
 
 /** A door's pill and its icon's circle. */
 private val DOOR_FILL = Color.White.copy(alpha = 0.12f)
-
-/** A door on TV at most: three share the bar under the frame. */
-private val DOOR_WIDTH = 520.dp
 
 internal const val FILM_FRAME = "film-frame"
 internal const val FILM_BAR = "film-bar"
