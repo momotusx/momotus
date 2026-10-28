@@ -97,6 +97,10 @@ struct EditProfile: View {
     /// The profile whose PIN a newer version stored: it can only be removed.
     @State private var unreadable: String?
     @FocusState private var removeFocused: Bool
+    /// A PIN removal waiting for its confirmation (`PinAction.confirms`).
+    @State private var removal: (action: PinAction, target: ProfileInfo)?
+    @State private var confirmLeave = false
+    @Environment(\.tabShown) private var shown
     @Environment(\.scenePhase) private var phase
 
     var body: some View {
@@ -146,6 +150,31 @@ struct EditProfile: View {
         .onChange(of: confirmDelete) { _, open in
             if open { withAnimation(Theme.Motion.panel) { proxy.scrollTo("delete", anchor: .center) } }
         }
+        #if !os(tvOS)
+        // Edits are not lost to a stray Back: the system back (and its swipe) gives way to one that asks.
+        .navigationBarBackButtonHidden(dirty || !shown)
+        .toolbar {
+            if dirty, shown {
+                ToolbarItem(placement: .navigation) {
+                    Button { confirmLeave = true } label: { Label("Back", glyph: "chevron-left") }
+                        .labelStyle(.titleAndIcon)
+                }
+            }
+        }
+        .confirmationDialog("Discard your changes?", isPresented: $confirmLeave, titleVisibility: .visible) {
+            Button("Discard", role: .destructive) { dismiss() }
+            Button("Keep editing", role: .cancel) {}
+        }
+        #endif
+        .confirmationDialog(
+            "Remove PIN?", isPresented: Binding(get: { removal != nil }, set: { if !$0 { removal = nil } }),
+            titleVisibility: .visible, presenting: removal
+        ) { removal in
+            Button(label(removal.action, removal.target), role: .destructive) { removePin(removal.action, removal.target) }
+            Button("Cancel", role: .cancel) {}
+        } message: { removal in
+            Text("Anyone can then open \(removal.action == .removeOther ? removal.target.name : "this profile") without it.")
+        }
         }
     }
 
@@ -180,6 +209,11 @@ struct EditProfile: View {
         .focusSection()
         #endif
         .onAppear { deleteFocus = .keep }
+    }
+
+    private var dirty: Bool {
+        let stored = profileId.flatMap { id in profiles.snapshot?.profiles.first { $0.id == id }?.name }
+        return ProfileRules.isDirty(name: name, stored: stored, touched: touched)
     }
 
     private func title(_ target: ProfileInfo?, _ active: ProfileInfo) -> String {
@@ -228,24 +262,6 @@ struct EditProfile: View {
                             touched = true
                         } content: {
                             ProfileAvatar(ProfileRules.Avatar(glyph: item, color: color), name: name, size: 48)
-                        }
-                    }
-                }
-                .padding(4)
-            }
-            .scrollIndicators(.hidden)
-            // The focus ring and the lift draw past the row; the scroll view must not cut them.
-            .scrollClipDisabled()
-            caps("Color")
-            ScrollView(.horizontal) {
-                HStack(spacing: 10) {
-                    ForEach(ProfileRules.colors, id: \.self) { item in
-                        choice(selected: item == color, label: item.prefix(1).uppercased() + item.dropFirst()) {
-                            color = item
-                            touched = true
-                        } content: {
-                            Circle().fill(ProfileAvatar.color(item)).frame(width: 40, height: 40)
-                                .overlay { if item == color { Glyph("check", size: 18).foregroundStyle(.white) } }
                         }
                     }
                 }
@@ -322,10 +338,15 @@ struct EditProfile: View {
 
     private func begin(_ action: PinAction, _ target: ProfileInfo) {
         said = nil
-        guard action == .removeOther || action == .removeUnreadable else {
+        guard action.confirms else {
             flow = PinFlow(action)
             return
         }
+        removal = (action, target)
+    }
+
+    /// The confirmed removal of a PIN the core takes without a keypad.
+    private func removePin(_ action: PinAction, _ target: ProfileInfo) {
         busy = true
         Task {
             defer { busy = false }
@@ -387,6 +408,7 @@ struct EditProfile: View {
                     var fields: [String: any Sendable] = ["profile": profileId, "name": trimmed]
                     if touched { fields["avatar"] = ProfileRules.formatAvatar(glyph: glyph, color: color) }
                     try await profiles.perform("updateProfile", fields)
+                    touched = false
                     said = ("Saved", true)
                 } else {
                     try await profiles.perform("createProfile", ["name": trimmed, "avatar": ProfileRules.formatAvatar(glyph: glyph, color: color)])

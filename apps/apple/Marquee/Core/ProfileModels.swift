@@ -43,6 +43,12 @@ enum ProfileRules {
     static let glyphs = ["letter", "popcorn", "clapperboard", "tv", "rocket", "ghost", "cat", "dog", "leaf", "moon", "flame", "headphones", "gamepad"]
     static let colors = ["ember", "amber", "moss", "teal", "sky", "plum", "rose", "graphite"]
 
+    /// The editor holds changes not saved yet: a typed name that differs from the stored one (a new
+    /// profile has none), or a picked picture.
+    static func isDirty(name: String, stored: String?, touched: Bool) -> Bool {
+        touched || name.trimmingCharacters(in: .whitespacesAndNewlines) != (stored ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     struct Avatar: Equatable {
         let glyph: String
         /// nil draws on `raised`.
@@ -150,6 +156,9 @@ enum PinAction: Equatable, Sendable {
         }
         return active.isOwner && target.hasPin ? [.removeOther] : []
     }
+
+    /// Removing a PIN with no keypad step in front of it asks first (`.remove` has the keypad).
+    var confirms: Bool { self == .removeOther || self == .removeUnreadable }
 }
 
 /// One PIN change on the keypad, step by step: which prompt shows, and the

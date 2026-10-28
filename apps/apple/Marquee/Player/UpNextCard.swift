@@ -121,7 +121,6 @@ struct EndCard: View {
                 Button("Back to \(title)", action: back).buttonStyle(PillButtonStyle())
             }
         } else {
-            kicker("Finished")
             heading(title)
             actions {
                 Button("Back to \(title)", action: back).buttonStyle(PillButtonStyle(prominent: true)).focused($focused)

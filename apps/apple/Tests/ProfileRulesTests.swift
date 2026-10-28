@@ -106,3 +106,28 @@ private func snapshot(_ profiles: [ProfileInfo], locked: Bool = false) -> Profil
     #expect(PinFlow.settle(mine, sent: mine, ok: false, code: "wrongPin")?.prompt == "Enter your current PIN")
     #expect(PinFlow.settle(mine, sent: mine, ok: false, code: "weakPin")?.prompt == "Enter the new PIN")
 }
+
+@Test func theEditorIsDirtyOnlyWithAChangeNotYetSaved() {
+    // Editing: the stored name, however it is spaced, is no change; a different name or a picked picture is.
+    #expect(!ProfileRules.isDirty(name: "Ada", stored: "Ada", touched: false))
+    #expect(!ProfileRules.isDirty(name: " Ada ", stored: "Ada", touched: false))
+    #expect(ProfileRules.isDirty(name: "Ada L", stored: "Ada", touched: false))
+    #expect(ProfileRules.isDirty(name: "Ada", stored: "Ada", touched: true))
+    // Adding: nothing typed and nothing picked is nothing to lose.
+    #expect(!ProfileRules.isDirty(name: "", stored: nil, touched: false))
+    #expect(ProfileRules.isDirty(name: "Kid", stored: nil, touched: false))
+}
+
+@Test func onlyAPinRemovalWithNoKeypadAsksFirst() {
+    #expect(PinAction.removeOther.confirms)
+    #expect(PinAction.removeUnreadable.confirms)
+    // Set, change and the own PIN's removal run through the keypad already.
+    #expect(![PinAction.set, .change, .remove].contains { $0.confirms })
+}
+
+@Test func theEditorHasNoColorRow() throws {
+    // DECISION (Profiles): the picture is the one choice. Read from the sources: the editor is a view.
+    let file = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appending(path: "../Marquee/Profiles/ManageProfiles.swift")
+    let editor = try String(contentsOf: file, encoding: .utf8)
+    #expect(!editor.contains("caps(\"Color\")"), "the Color row is back in the editor")
+}

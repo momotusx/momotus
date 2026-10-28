@@ -10,10 +10,17 @@ extension FocusedValues {
     @Entry var playerKeys: PlayerKeys?
     /// The title page in front, when Start Over can play it from the beginning (`startOverAvailable`).
     @Entry var startOver: StartOverAction?
+    /// The page in front of its place's root, when Back can leave it (`canGoBack`).
+    @Entry var goBack: GoBackAction?
 }
 
 /// Plays the title in front from its beginning.
 struct StartOverAction {
+    let run: @MainActor () -> Void
+}
+
+/// Leaves the page in front, as the toolbar's back button does.
+struct GoBackAction {
     let run: @MainActor () -> Void
 }
 
@@ -33,6 +40,7 @@ struct AppCommands: Commands {
     @FocusedValue(\.find) private var find
     @FocusedValue(\.playerKeys) private var player
     @FocusedValue(\.startOver) private var startOver
+    @FocusedValue(\.goBack) private var goBack
 
     var body: some Commands {
         CommandGroup(replacing: .newItem) {}
@@ -47,6 +55,10 @@ struct AppCommands: Commands {
                 .disabled(find == nil)
         }
         CommandMenu("Go") {
+            Button("Back") { goBack?.run() }
+                .keyboardShortcut("[")
+                .disabled(goBack == nil)
+            Divider()
             ForEach(Array(AppTab.allCases.enumerated()), id: \.element) { index, tab in
                 Button(tab.title) { places?(tab) }
                     .keyboardShortcut(KeyEquivalent(Character(String(index + 1))))

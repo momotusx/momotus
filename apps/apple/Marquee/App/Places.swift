@@ -71,3 +71,9 @@ struct TitleRoute: Hashable {
         self.init(kind: tile.kind, id: tile.id, name: tile.name)
     }
 }
+
+/// Whether the Go menu's Back (Cmd-[) has a page to leave: one is pushed in the place, and the
+/// player is not covering the places.
+func canGoBack(depth: Int, playerUp: Bool) -> Bool {
+    depth > 0 && !playerUp
+}

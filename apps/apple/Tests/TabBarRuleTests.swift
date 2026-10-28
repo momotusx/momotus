@@ -20,3 +20,9 @@ import Testing
     #expect(tabBarIconsOnly(width: 402, type: .accessibility1))
     #expect(tabBarIconsOnly(width: 1024, type: .accessibility5))
 }
+
+@Test func goBackNeedsAPushedPageAndNoPlayerOverThePlaces() {
+    #expect(canGoBack(depth: 1, playerUp: false))
+    #expect(!canGoBack(depth: 0, playerUp: false))
+    #expect(!canGoBack(depth: 2, playerUp: true))
+}

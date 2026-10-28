@@ -973,3 +973,9 @@ private func route(_ key: String, sub: UInt64 = 3) -> PlayRoute {
     #expect(try body(of: "func uncover(", in: text).contains("if backend == .aether { aether?.play() } else { player.play() }"))
     #expect(try body(of: "private func openOnEngine(", in: text).contains("let autoplay = !(holdPause || covered)"))
 }
+
+@Test func theEndCardHasNoEyebrow() throws {
+    // DECISION (Player): the end card is the title, Back and Play again. Read from the sources: it is a view.
+    let file = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appending(path: "../Marquee/Player/UpNextCard.swift")
+    #expect(!(try String(contentsOf: file, encoding: .utf8)).contains("kicker(\"Finished\")"), "the Finished eyebrow is back")
+}

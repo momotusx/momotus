@@ -290,6 +290,7 @@ struct MainShell: View {
             // The Go menu and its keys, off while the player covers the places.
             .focusedSceneValue(\.places, immersion.active ? nil : OpenTabAction { tab, _ in select(tab) })
             .focusedSceneValue(\.find, immersion.active ? nil : OpenTabAction { _, _ in find() })
+            .focusedSceneValue(\.goBack, canGoBack(depth: backDepth, playerUp: immersion.active) ? GoBackAction { goBack() } : nil)
         #else
         places.safeAreaInset(edge: .top, spacing: 0) {
             // Top-level places only, as on Android: a pushed page has no pill to wander into.
@@ -352,6 +353,23 @@ struct MainShell: View {
         searchInput.focus += 1
     }
     #endif
+
+    /// Pages pushed over the shown place's root.
+    private var backDepth: Int {
+        switch tab {
+        case .home: homePath.count
+        case .settings: settingsPath.count
+        default: titlePaths[tab]?.count ?? 0
+        }
+    }
+
+    private func goBack() {
+        switch tab {
+        case .home: homePath.removeLast()
+        case .settings: settingsPath.removeLast()
+        default: titlePaths[tab]?.removeLast()
+        }
+    }
 
     private func popToRoot(_ item: AppTab) {
         switch item {
