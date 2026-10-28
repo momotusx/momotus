@@ -179,13 +179,14 @@ val TOP_LEVEL: List<Route> =
 val Route.isTopLevel: Boolean get() = this in TOP_LEVEL
 
 /**
- * The pushed pages a phone gives the blue back link (design/DECISION.md, Navigation). The player, the first run and the
+ * The pushed pages a phone gives the blue back link (design/DECISION.md, Navigation), Calendar among them: the phone
+ * pushes it over Library (D6), and only TV has it as a tab, which draws no link. The player, the first run and the
  * Settings sub-pages keep the way out they have.
  */
 val Route.hasBackLink: Boolean
     get() =
         this is Route.Title || this is Route.Versions || this is Route.Profiles ||
-            this is Route.ManageProfiles || this is Route.EditProfile
+            this is Route.ManageProfiles || this is Route.EditProfile || this is Route.Calendar
 
 /**
  * The back stack after choosing a top-level destination: Home is the root, and the chosen place

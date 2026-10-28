@@ -61,10 +61,10 @@ class RouteTest {
     }
 
     @Test
-    fun `the back link is for the title, Versions and the profile pages only`() {
+    fun `the back link is for the title, Versions, Calendar and the profile pages only`() {
         val versions = Route.Versions("movie", "tt1", "tt1", "Sintel")
         val player = Route.Player("movie", "tt1", "tt1", "Sintel")
-        val pushed = listOf(title, versions, Route.Profiles, Route.ManageProfiles, Route.EditProfile())
+        val pushed = listOf(title, versions, Route.Calendar, Route.Profiles, Route.ManageProfiles, Route.EditProfile())
         assertTrue(pushed.all { it.hasBackLink })
         assertFalse(listOf(Route.Home, Route.Settings, Route.Onboarding, player, Route.Sync).any { it.hasBackLink })
     }
