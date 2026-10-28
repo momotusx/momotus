@@ -350,6 +350,9 @@ pub enum EmptyAction {
 /// How long `done` waits for the meta, for each cache check (4.2, r4 N4)
 /// and for the live counts once the rest is in: the apps play at `done`.
 const SIDE_WAIT: Duration = Duration::from_secs(3);
+/// How long Versions looks for the title page's TMDB answer: the page asks
+/// once it has shown for a second.
+const ORIGINAL_WAIT: Duration = Duration::from_secs(30);
 
 struct State {
     conditions: VersionsConditions,
@@ -1763,13 +1766,20 @@ async fn collect(
         ));
     }
     // The original language ranks above a dub only for a user who chose no
-    // audio languages: a choice wins.
+    // audio languages: a choice wins. `done` never waits for it: a kept
+    // answer is read now, and one that comes later ranks the rows again.
+    let mut late: JoinSet<Side> = JoinSet::new();
     if core.prefs().streams.languages.is_empty() && core.tmdb_ready() {
-        side.spawn(original(
-            core.clone(),
-            params.kind.clone(),
-            ranking.item_id.clone(),
-        ));
+        match core.original_language_held(&ranking.item_id, &params.kind) {
+            Some(original) => lock(&state).rank.original_language = original,
+            None => {
+                late.spawn(original(
+                    core.clone(),
+                    params.kind.clone(),
+                    ranking.item_id.clone(),
+                ));
+            }
+        }
     }
     let mut answered = addons.is_empty();
     loop {
@@ -1786,6 +1796,14 @@ async fn collect(
                 if let Ok(found) = joined {
                     found.apply(&mut s);
                 }
+                let counting = awaited(answered && side.is_empty(), &live, &mut hold, held_out);
+                settle(&core, &mut s, &ranking, answered && side.is_empty(), counting);
+                snapshot.set(render(&s));
+                continue;
+            }
+            Some(Ok(found)) = late.join_next() => {
+                let mut s = lock(&state);
+                found.apply(&mut s);
                 let counting = awaited(answered && side.is_empty(), &live, &mut hold, held_out);
                 settle(&core, &mut s, &ranking, answered && side.is_empty(), counting);
                 snapshot.set(render(&s));
@@ -1968,10 +1986,22 @@ impl Side {
     }
 }
 
-/// The title's original language from TMDB, within 3 s.
+/// The title's original language once the title page's TMDB answer is kept.
+/// Versions asks TMDB nothing itself: the page opens it in a hidden tab too,
+/// which asks nothing until it shows.
+// ponytail: looks every 250 ms for `ORIGINAL_WAIT`; a signal from the lookup
+// if a page shown later than that must still rank the original first.
 async fn original(core: Core, kind: String, item_id: String) -> Side {
-    let found = tokio::time::timeout(SIDE_WAIT, core.original_language(&item_id, &kind)).await;
-    Side::Original(found.ok().flatten())
+    let until = tokio::time::Instant::now() + ORIGINAL_WAIT;
+    loop {
+        if let Some(held) = core.original_language_held(&item_id, &kind) {
+            return Side::Original(held);
+        }
+        if tokio::time::Instant::now() >= until {
+            return Side::Original(None);
+        }
+        tokio::time::sleep(Duration::from_millis(250)).await;
+    }
 }
 
 /// The app sent no runtime or year, or for an episode no air date or

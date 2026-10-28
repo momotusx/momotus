@@ -181,6 +181,13 @@ fn kept<T>(
     }
 }
 
+/// A TMDB answer's original language as the core's tag, when the core
+/// knows it.
+fn known_language(found: tmdb::Found) -> Option<String> {
+    let code = found.original_language?;
+    crate::languages::is_known(&code).then(|| crate::languages::tag(&code))
+}
+
 impl Core {
     /// Points TMDB at another host and token (tests), or turns it off.
     #[doc(hidden)]
@@ -269,8 +276,23 @@ impl Core {
     /// TMDB's answer for it as `kind`; `None` as for `tmdb_find`, or when
     /// TMDB names a language the core does not know.
     pub(crate) async fn original_language(&self, imdb: &str, kind: &str) -> Option<String> {
-        let code = self.tmdb_find(imdb, Some(kind)).await?.original_language?;
-        crate::languages::is_known(&code).then(|| crate::languages::tag(&code))
+        known_language(self.tmdb_find(imdb, Some(kind)).await?)
+    }
+
+    /// `original_language` from an answer already kept (the title page's),
+    /// asking TMDB nothing: a page in a hidden tab asks nothing until it
+    /// shows, and the Versions it opens may not ask for it. `None` while no
+    /// answer is kept and one may come; `Some(None)` when none will name it.
+    pub(crate) fn original_language_held(&self, imdb: &str, kind: &str) -> Option<Option<String>> {
+        if kids(self) || self.no_tmdb() || !crate::segments::is_imdb(imdb) {
+            return Some(None);
+        }
+        let held = lock(&self.trakt().lookups).tmdb.held(imdb, Instant::now());
+        match held {
+            Held::Answer(finds) => Some(finds.of(Some(kind)).and_then(known_language)),
+            Held::Resting => Some(None),
+            Held::Nothing => None,
+        }
     }
 
     /// One TMDB answer kept a day under `key` in the map `pick` names:

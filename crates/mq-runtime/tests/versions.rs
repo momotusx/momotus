@@ -1,6 +1,8 @@
 use mq_library::AddonRow;
 use mq_runtime::{Core, VersionsParams, VersionsView};
 use mq_streams::{DeviceCaps, Reason, StreamPrefs, Target};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;
@@ -634,12 +636,16 @@ const DUB_AND_ORIGINAL: &str = r#"{"streams":[
  {"name":"Torrentio\n1080p","title":"Game.of.Thrones.S01E01.1080p.WEB.H264-ORIG\n👤 40 💾 2.1 GB","infoHash":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","fileIdx":0}
 ]}"#;
 
-/// A TMDB that names English as every title's original language.
-async fn tmdb_english() -> String {
+/// A TMDB that names English as every title's original language, and how
+/// many times it was asked.
+async fn tmdb_english() -> (String, Arc<AtomicUsize>) {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
+    let asked = Arc::new(AtomicUsize::new(0));
+    let count = asked.clone();
     tokio::spawn(async move {
         while let Ok((mut socket, _)) = listener.accept().await {
+            count.fetch_add(1, Ordering::SeqCst);
             tokio::spawn(async move {
                 let mut buf = [0u8; 2048];
                 let _ = socket.read(&mut buf).await;
@@ -652,16 +658,35 @@ async fn tmdb_english() -> String {
             });
         }
     });
-    format!("http://{addr}")
+    (format!("http://{addr}"), asked)
+}
+
+/// A play asks TMDB: its answer is kept for the title.
+async fn keep_tmdb_answer(core: &Core) {
+    let target = mq_runtime::PlayTarget {
+        kind: "series".into(),
+        item_id: "tt0944947".into(),
+        video_id: "tt0944947:1:1".into(),
+        ..Default::default()
+    };
+    let play = mq_runtime::PlaybackView::open(core, Vec::new(), target);
+    let deadline = std::time::Instant::now() + Duration::from_secs(30);
+    while play.snapshot().audio_languages != ["en"] {
+        assert!(std::time::Instant::now() < deadline, "TMDB never answered");
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
 }
 
 /// The owner, 2026-10-27: with no audio languages chosen, the original
-/// release leads a better seeded dub in the device's language once TMDB
-/// names the original; a choice the user made stands over it.
+/// release leads a better seeded dub in the device's language once TMDB's
+/// answer names the original; a choice the user made stands over it.
+/// Versions asks TMDB nothing itself (a title page in a hidden tab opens
+/// it): it reads the answer a play, or the page once shown, asked for, and
+/// `done` never waits for one.
 #[tokio::test]
 async fn the_original_leads_a_dub_unless_the_user_chose() {
     mq_relparse::warm_up();
-    let pick = |tmdb: Option<String>, chosen: bool| async move {
+    let pick = |tmdb: Option<String>, kept: bool, chosen: bool| async move {
         let core = opens_torrents();
         if let Some(url) = tmdb {
             core.set_tmdb_host(mq_runtime::TmdbHost {
@@ -669,6 +694,9 @@ async fn the_original_leads_a_dub_unless_the_user_chose() {
                 token: Some("test-token".into()),
                 local: true,
             });
+        }
+        if kept {
+            keep_tmdb_answer(&core).await;
         }
         if chosen {
             core.set_prefs(&serde_json::json!({ "streams": { "languages": ["fr"] } }))
@@ -683,17 +711,41 @@ async fn the_original_leads_a_dub_unless_the_user_chose() {
         params.prefs.languages = vec!["fr".into(), "en".into()];
         let view = VersionsView::open(&core, params);
         until(&view, "done", |s| s.done).await;
-        let best = view.snapshot().recommended.unwrap();
-        best.release_name
+        (core, view)
     };
-    let fw = |name: &str| name.contains("-FW");
-    assert!(fw(&pick(None, false).await), "no original known: the dub");
+    let fw = |view: &VersionsView| {
+        view.snapshot()
+            .recommended
+            .unwrap()
+            .release_name
+            .contains("-FW")
+    };
     assert!(
-        !fw(&pick(Some(tmdb_english().await), false).await),
-        "the original"
+        fw(&pick(None, false, false).await.1),
+        "no original known: the dub"
     );
+    let (url, asked) = tmdb_english().await;
+    let opened = std::time::Instant::now();
+    let (core, view) = pick(Some(url), false, false).await;
     assert!(
-        fw(&pick(Some(tmdb_english().await), true).await),
+        opened.elapsed() < Duration::from_secs(10),
+        "done waited for TMDB"
+    );
+    assert!(fw(&view), "nothing kept: the dub");
+    assert_eq!(asked.load(Ordering::SeqCst), 0, "Versions asked TMDB");
+    // The page shown later asks: its answer ranks the rows again.
+    keep_tmdb_answer(&core).await;
+    until(&view, "the original after the answer", |s| {
+        s.recommended
+            .as_ref()
+            .is_some_and(|r| !r.release_name.contains("-FW"))
+    })
+    .await;
+    let (url, _) = tmdb_english().await;
+    assert!(!fw(&pick(Some(url), true, false).await.1), "the original");
+    let (url, _) = tmdb_english().await;
+    assert!(
+        fw(&pick(Some(url), true, true).await.1),
         "the user's choice"
     );
 }
