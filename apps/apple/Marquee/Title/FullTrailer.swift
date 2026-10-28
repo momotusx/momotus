@@ -155,7 +155,7 @@ struct FullTrailer: View {
     }
 
     private func seek(to: Double) {
-        let to = HeroTrailers.seekTarget(to, state.length, by: 0)
+        let to = trailerSeekTarget(to, state.length, by: 0)
         state.seconds = to
         player.seek(to)
     }

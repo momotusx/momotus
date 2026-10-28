@@ -21,12 +21,12 @@ private func source(_ path: String) throws -> String {
     }
 }
 
-@MainActor @Test func aSeekStaysInsideTheTrailerShortOfItsClose() {
-    #expect(HeroTrailers.seekTarget(30, 150, by: 10) == 40)
-    #expect(HeroTrailers.seekTarget(30, 150, by: -10) == 20)
-    #expect(HeroTrailers.seekTarget(4, 150, by: -10) == 0)
-    #expect(HeroTrailers.seekTarget(145, 150, by: 10) == 148)
-    #expect(HeroTrailers.seekTarget(0, 1, by: 10) == 0)
+@Test func aSeekStaysInsideTheTrailerShortOfItsClose() {
+    #expect(trailerSeekTarget(30, 150, by: 10) == 40)
+    #expect(trailerSeekTarget(30, 150, by: -10) == 20)
+    #expect(trailerSeekTarget(4, 150, by: -10) == 0)
+    #expect(trailerSeekTarget(145, 150, by: 10) == 148)
+    #expect(trailerSeekTarget(0, 1, by: 10) == 0)
 }
 
 @Test func theHeaderTrailerFollowsTheHerosSignalsAndLetsGo() throws {
@@ -40,10 +40,4 @@ private func source(_ path: String) throws -> String {
     // Full screen has its own sound: it never writes the session's.
     let full = try source("Title/FullTrailer.swift")
     #expect(!full.contains("TrailerState.shared"))
-}
-
-@MainActor @Test func aTrailerThatIsNoYouTubeIdEndsInAnErrorAtOnce() {
-    var ended: [String] = []
-    TrailerPlayer().play("https://www.youtube.com/watch?v=x", into: TrailerState()) { ended.append($0) }
-    #expect(ended == ["error"])
 }

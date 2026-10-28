@@ -480,13 +480,15 @@ struct TitleScreen: View {
 
     /// The Mac's action row: the primary, Trailer, the Library and Watched capsule, Versions.
     private func wideActions(_ details: TitleDetails) -> some View {
-        WideActions(
-            trailer: details.trailers.isEmpty ? nil : { openTrailer(details) },
+        let trailer: (() -> Void)? = details.trailers.isEmpty ? nil : { openTrailer(details) }
+        let sound: (() -> Void)? = headerSoundShown ? { toggleHeaderSound() } : nil
+        return WideActions(
+            trailer: trailer,
             marks: titleMarks(
                 kind: details.kind, inLibrary: model.header?.inLibrary ?? false, watched: model.header?.watched ?? false,
                 librarySettable: model.header?.canSetLibrary == true),
             toggle: { toggle($0, details) }, versionsReady: versions != nil, showVersions: { showVersions = true },
-            sound: headerSoundShown ? toggleHeaderSound : nil, soundOn: TrailerState.shared.sound
+            sound: sound, soundOn: TrailerState.shared.sound
         ) { playBlock(details) }
         // Starring keeps clear of the row as drawn (review P2-1).
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { actionsWidth = $0 }

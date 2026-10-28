@@ -29,12 +29,6 @@ enum HeroTrailers {
         let height = max(frame.height, frame.width * 9 / 16) * overscan
         return CGSize(width: height * 16 / 9, height: height)
     }
-
-    /// Where a seek by `by` seconds from `t` lands in a `d` second trailer: never before its start, and never into
-    /// its last 2 s, where the player ends it (plans/trailer-inline.md 7).
-    static func seekTarget(_ t: Double, _ d: Double, by: Double) -> Double {
-        max(0, min(t + by, max(0, d - 2)))
-    }
 }
 
 /// What the device and the moment allow (decision 5); every one false blocks a preview.

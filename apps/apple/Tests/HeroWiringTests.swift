@@ -94,7 +94,8 @@ private func source(_ path: String) throws -> String {
     #expect(!mute.contains(".isSelected"))
     #expect(!mute.contains("@State"))
     let trailer = try source("Home/HeroTrailer.swift")
-    #expect(trailer.contains("if TrailerState.shared.sound { sound(true) }"))
+    // A preview keeps the session's sound; the full-screen trailer brings its own (plans/trailer-inline.md 7).
+    #expect(trailer.contains("if message[\"full\"] as? Bool != true, TrailerState.shared.sound { sound(true) }"))
     // Muted at launch; only a press turns it on.
     #expect(!TrailerState().sound)
     #expect(trailer.components(separatedBy: "sound = true").count == 1)
