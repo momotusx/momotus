@@ -20,7 +20,7 @@ import "./core/wipe";
 import { gateOpen, profiles, profilesFailed } from "./core/profiles";
 import { autoFocusSoon, focusRail, installFocus, move, railHasFocus, restoreSoon, viewerMoving } from "./focus/dom";
 import { form } from "./form";
-import { backThenReplace, entryOwner, historyBase, historyDepth, markBack, resetHistoryBase, stampEntriesWith, takeAfterBack, takeBack } from "./history";
+import { backThenReplace, entryOwner, historyBase, historyDepth, leaveGuarded, markBack, resetHistoryBase, stampEntriesWith, takeAfterBack, takeBack } from "./history";
 import Addons from "./screens/addons";
 import FindAddons from "./screens/find-addons";
 import CalendarScreen from "./screens/calendar";
@@ -108,7 +108,7 @@ function TopNav() {
   let settle: ReturnType<typeof setTimeout> | undefined;
   const rest = (path: string) => {
     clearTimeout(settle);
-    if (!tv() || section(location.pathname) === path) return;
+    if (!tv() || leaveGuarded() || section(location.pathname) === path) return;
     settle = setTimeout(() => navigate(path, { replace: true }), TAB_SETTLE_MS);
   };
   onCleanup(() => clearTimeout(settle));

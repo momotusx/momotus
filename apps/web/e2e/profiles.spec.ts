@@ -40,7 +40,7 @@ test("profiles: add, pick, PIN, switch both ways, locked start", async ({ page }
   await page.goto("/settings?form=tv");
   await expect(page.locator('[data-f="settings:profiles"]')).toContainText("Main");
 
-  // Add Kid with a cat on sky blue, from the picker's Add tile.
+  // Add Kid with a cat, from the picker's Add tile (the colour is the next grey step, never picked).
   await page.goto("/profiles?form=tv");
   await expect.poll(() => focused(page)).toBe("profile:default");
   await page.keyboard.press("ArrowRight");
@@ -49,7 +49,7 @@ test("profiles: add, pick, PIN, switch both ways, locked start", async ({ page }
   await expect(page).toHaveURL(/\/profiles\/new/);
   await page.locator('[data-f="pedit:name"]').fill("Kid");
   await page.locator('[data-f="pedit:glyph:cat"]').click();
-  await page.locator('[data-f="pedit:color:sky"]').click();
+  await expect(page.locator('[data-f^="pedit:color"]')).toHaveCount(0);
   await page.locator('[data-f="pedit:save"]').click();
   await expect(page).toHaveURL(/\/profiles\/manage/);
   await expect(page.locator(".prow", { hasText: "Kid" })).toBeVisible();
@@ -178,4 +178,189 @@ test("profiles: the browser's Forward never reopens another profile's pages", as
     if (kid) await c.req("deleteProfile", { profile: kid }).catch(() => undefined);
     c.close();
   }
+});
+
+/** A second profile for the tests below, made through the protocol and removed in `finally`. */
+async function withKid<T>(name: string, run: (id: string) => Promise<T>): Promise<T> {
+  const c = new Client();
+  let id = "";
+  try {
+    const s = await c.req<Snapshot>("createProfile", { name, avatar: "letter:sky" });
+    id = s.profiles.find((p) => p.name === name)?.id as string;
+    return await run(id);
+  } finally {
+    // Whatever its name became while the test ran.
+    const s = await c.subscribe<Snapshot>("profiles");
+    for (const p of s.now().profiles) if (p.id === id || p.name.startsWith(name)) await c.req("deleteProfile", { profile: p.id }).catch(() => undefined);
+    c.close();
+  }
+}
+
+const dialog = (page: Page) => page.getByRole("alertdialog", { name: "Leave without saving?" });
+const names = async () => (await picker()).profiles.map((p) => p.name);
+
+test("profiles: Add and Save answer one press once, and an empty name is said under its field", async ({ page }) => {
+  await page.goto("/profiles/new?form=desktop");
+  // An empty name is said under the field, which says it is invalid and is described by it.
+  await page.locator('[data-f="pedit:save"]').click();
+  const name = page.locator('[data-f="pedit:name"]');
+  const said = page.locator("#pedit-name-error");
+  await expect(said).toBeVisible();
+  await expect(name).toHaveAttribute("aria-invalid", "true");
+  await expect(name).toHaveAttribute("aria-describedby", "pedit-name-error");
+  await expect(name).toBeFocused();
+  const [field, line] = await Promise.all([name.boundingBox(), said.boundingBox()]);
+  expect((line?.y ?? 0) - ((field?.y ?? 0) + (field?.height ?? 0))).toBeLessThan(40);
+  await name.fill("T");
+  await expect(said).toHaveCount(0);
+  // Two quick presses are one profile.
+  await name.fill("Twin");
+  try {
+    await page.locator('[data-f="pedit:save"]').dblclick();
+    await expect(page).toHaveURL(/\/profiles\/manage/);
+    expect((await names()).filter((n) => n === "Twin")).toHaveLength(1);
+  } finally {
+    const c = new Client();
+    try {
+      for (const p of (await picker()).profiles) if (p.name === "Twin") await c.req("deleteProfile", { profile: p.id }).catch(() => undefined);
+    } finally {
+      c.close();
+    }
+  }
+});
+
+test("profiles: unsaved edits ask before any way out, and Keep editing keeps them", async ({ page }) => {
+  await withKid("Dirty Kid", async (kid) => {
+    await page.goto(`/library?form=desktop`);
+    await page.goto(`/profiles/edit/${kid}?form=desktop`);
+    const name = page.locator('[data-f="pedit:name"]');
+    await expect(name).toHaveValue("Dirty Kid");
+    // Nothing changed: nothing to ask. Back goes straight.
+    await page.goBack();
+    await expect(page).toHaveURL(/\/library/);
+    await page.goForward();
+    await expect(name).toHaveValue("Dirty Kid");
+
+    // Escape in the Name field asks; Keep editing comes back to the field with the text.
+    await name.fill("Dirty Kid 2");
+    await name.press("Escape");
+    await expect(dialog(page)).toBeVisible();
+    await expect.poll(() => focused(page)).toBe("pedit:leave:keep");
+    await page.keyboard.press("Escape");
+    await expect(dialog(page)).toHaveCount(0);
+    await expect(page).toHaveURL(new RegExp(`/profiles/edit/${kid}`));
+    await expect(name).toHaveValue("Dirty Kid 2");
+
+    // A tab link asks too; Discard goes on to where it was going and the stored name is untouched.
+    await page.locator('[data-f="nav:/library"]').click();
+    await expect(dialog(page)).toBeVisible();
+    await page.locator('[data-f="pedit:leave:discard"]').click();
+    await expect(page).toHaveURL(/\/library/);
+    expect(await names()).toContain("Dirty Kid");
+
+    // The browser's Back asks; Save stores the name and then leaves.
+    await page.goto(`/profiles/edit/${kid}?form=desktop`);
+    await name.fill("Dirty Kid 3");
+    await page.goBack();
+    await expect(dialog(page)).toBeVisible();
+    await page.locator('[data-f="pedit:leave:save"]').click();
+    await expect(page).not.toHaveURL(/\/profiles\/edit/);
+    expect(await names()).toContain("Dirty Kid 3");
+  });
+});
+
+test("profiles on TV: the rail's focus alone asks nothing, Select on a tab asks, and a Save after Keep editing opens the next page on its own first focus", async ({ page }) => {
+  await page.goto("/profiles/new?form=tv");
+  await page.locator('[data-f="pedit:name"]').fill("Rail Kid");
+  // Up into the rail, onto a tab: the focus rests there longer than the settle, and nothing asks or opens.
+  await page.locator('[data-f="nav:/library"]').focus();
+  await page.waitForTimeout(500);
+  await expect(dialog(page)).toHaveCount(0);
+  await expect(page).toHaveURL(/\/profiles\/new/);
+  // Select on it asks; Back keeps the edits.
+  await page.keyboard.press("Enter");
+  await expect(dialog(page)).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(dialog(page)).toHaveCount(0);
+  // Back from the form asks too, and Keep editing then Save: the manage page shows its first focus, not a place restored.
+  await page.locator('[data-f="pedit:name"]').focus();
+  await page.keyboard.press("Escape");
+  await expect(dialog(page)).toBeVisible();
+  await page.locator('[data-f="pedit:leave:keep"]').press("Enter");
+  await expect(dialog(page)).toHaveCount(0);
+  try {
+    await page.locator('[data-f="pedit:save"]').focus();
+    await page.keyboard.press("Enter");
+    await expect(page).toHaveURL(/\/profiles\/manage/);
+    await expect.poll(() => focused(page)).toBe("manage:default");
+  } finally {
+    const c = new Client();
+    try {
+      for (const p of (await picker()).profiles) if (p.name === "Rail Kid") await c.req("deleteProfile", { profile: p.id }).catch(() => undefined);
+    } finally {
+      c.close();
+    }
+  }
+});
+
+test("profiles: the Delete key on an empty keypad only deletes, and a PIN taken off with one tap is asked about", async ({ page }) => {
+  await page.goto("/profiles/edit/default?form=desktop");
+  await page.locator('[data-f="pedit:pin:set"]').click();
+  await expect(page.locator(".keypad h2")).toHaveText("Choose a PIN");
+  // Delete on nothing: the keypad stays. On a digit it takes it back.
+  await page.locator('[data-f="pin:del"]').click();
+  await expect(page.locator(".keypad h2")).toHaveText("Choose a PIN");
+  await page.locator('[data-f="pin:1"]').click();
+  await expect(page.locator(".pin-dots")).toHaveAttribute("aria-label", "1 of 4 digits entered");
+  await page.locator('[data-f="pin:del"]').click();
+  await expect(page.locator(".pin-dots")).toHaveAttribute("aria-label", "0 of 4 digits entered");
+  // Backspace and Back, with nothing to delete, still leave (a remote has no other key for it).
+  await page.keyboard.press("Escape");
+  await expect(page.locator(".keypad")).toHaveCount(0);
+
+  // Another profile's PIN, taken off by its owner: one tap asks first.
+  const c = new Client();
+  let kid = "";
+  try {
+    kid = (await c.req<Snapshot>("createProfile", { name: "Pin Kid", avatar: "letter:sky" })).profiles.find((p) => p.name === "Pin Kid")?.id as string;
+    await c.req("switchProfile", { profile: kid });
+    await c.req("setPin", { profile: kid, pin: PIN });
+    await c.req("switchProfile", { profile: "default" });
+    await page.goto(`/profiles/edit/${kid}?form=desktop`);
+    await page.locator('[data-f="pedit:pin:clear"]').click();
+    const ask = page.getByRole("alertdialog", { name: "Remove Pin Kid's PIN?" });
+    await expect(ask).toBeVisible();
+    await expect.poll(() => focused(page)).toBe("pedit:pin:no");
+    await page.locator('[data-f="pedit:pin:no"]').click();
+    expect((await picker()).profiles.find((p) => p.id === kid)?.hasPin).toBe(true);
+    await page.locator('[data-f="pedit:pin:clear"]').click();
+    await page.locator('[data-f="pedit:pin:yes"]').click();
+    await expect(page.locator(".pedit .st")).toContainText("PIN was removed");
+    expect((await picker()).profiles.find((p) => p.id === kid)?.hasPin).toBe(false);
+  } finally {
+    await c.req("switchProfile", { profile: "default" }).catch(() => undefined);
+    if (kid) await c.req("deleteProfile", { profile: kid }).catch(() => undefined);
+    c.close();
+  }
+});
+
+test("profiles: avatars are circles, the chosen picture is the grey fill, and the Add tile and the PIN keys have no edge", async ({ page }) => {
+  await page.goto("/profiles?form=desktop");
+  await expect(page.locator(".ptile .avatar").first()).toBeVisible();
+  const style = (sel: string) => page.locator(sel).first().evaluate((el) => ({ radius: getComputedStyle(el).borderTopLeftRadius, shadow: getComputedStyle(el).boxShadow, fill: getComputedStyle(el).backgroundColor }));
+  const tile = await style(".ptile .avatar");
+  expect(tile.radius).toBe("84px");
+  expect(tile.shadow).toBe("none");
+  await page.goto("/profiles/new?form=desktop");
+  await expect(page.locator('[data-f="pedit:name"]')).toBeVisible();
+  // No Color row: the colour is the next grey step.
+  await expect(page.locator('[role="radiogroup"][aria-label="Color"]')).toHaveCount(0);
+  const chosen = await page.locator(".glyph-pick.on").first().evaluate((el) => getComputedStyle(el).backgroundColor);
+  expect(chosen).toBe("rgb(99, 99, 102)");
+  expect(await style(".glyph-pick.on")).toMatchObject({ shadow: "none" });
+  await page.goto("/profiles?form=desktop");
+  // Add profile is on the picker only for the owner with room: it is there on a core with one profile.
+  const add = page.locator(".ptile.add .add-art");
+  await expect(add).toBeVisible();
+  expect((await style(".ptile.add .add-art")).shadow).toBe("none");
 });

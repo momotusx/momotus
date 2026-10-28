@@ -39,6 +39,9 @@ export function takeBack(): boolean {
   return was;
 }
 
+// A page holds unsaved edits and asks before it is left: the TV rail's focus alone then opens no tab (app.tsx).
+export const [leaveGuarded, setLeaveGuarded] = createSignal(false);
+
 export const historyDepth = () => (history.state as { _depth?: number } | null)?._depth ?? 0;
 
 // Kept for the tab, so a reload does not reopen the old profile's entries.

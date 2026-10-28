@@ -1,12 +1,11 @@
 /** Profiles (plans/m11-profiles.md, P1 apps and v2): the picker in its three
  * modes, the PIN keypad, Manage profiles and the edit page. */
 
-import { A, useNavigate, useParams } from "@solidjs/router";
-import Check from "lucide-solid/icons/check";
+import { A, useBeforeLeave, useNavigate, useParams } from "@solidjs/router";
 import Delete from "lucide-solid/icons/delete";
 import Lock from "lucide-solid/icons/lock";
 import Plus from "lucide-solid/icons/plus";
-import { createEffect, createSignal, For, on, onCleanup, onMount, Show } from "solid-js";
+import { createEffect, createSignal, For, type JSX, on, onCleanup, onMount, Show } from "solid-js";
 import { AvatarArt } from "../components/avatar";
 import { BridgeError } from "../core/bridge";
 import { op } from "../core/client";
@@ -15,7 +14,8 @@ import type { ProfilesSnapshot } from "../core/generated/ProfilesSnapshot";
 import { markChosen, profiles, switchProfile, unlockProfile } from "../core/profiles";
 import { autoFocusSoon, goBack } from "../focus/dom";
 import { holdModal } from "../focus/modal";
-import { type AvatarColor, COLORS, formatAvatar, GLYPHS, type Glyph, nextAvatar, parseAvatar } from "../lib/avatar";
+import { markBack, setLeaveGuarded, takeBack } from "../history";
+import { type AvatarColor, formatAvatar, GLYPHS, type Glyph, nextAvatar, parseAvatar } from "../lib/avatar";
 import { profileProblem, waitText } from "../lib/profiles";
 import "./browse.css";
 import "./settings.css";
@@ -101,9 +101,12 @@ export function Keypad(props: { title: string; note?: string; onSubmit: (pin: st
     setDigits(next);
     if (next.length === 4) void submit(next);
   };
+  // The Delete key on screen only deletes; Backspace and Back, which a remote and a keyboard have no other key for, leave
+  // when there is nothing left to delete.
+  const del = () => !busy() && setDigits(digits().slice(0, -1));
   const back = () => {
     if (busy()) return;
-    if (digits()) setDigits(digits().slice(0, -1));
+    if (digits()) del();
     else props.onCancel();
   };
   // The keypad owns digits, Delete and Back while it is open, wherever focus
@@ -150,7 +153,7 @@ export function Keypad(props: { title: string; note?: string; onSubmit: (pin: st
                 data-f={`pin:${k}`}
                 aria-label={k === "del" ? "Delete" : k}
                 aria-disabled={busy() || waiting()}
-                onClick={() => (k === "del" ? back() : press(k))}
+                onClick={() => (k === "del" ? del() : press(k))}
               >
                 {k === "del" ? <Delete aria-hidden /> : k}
               </button>
@@ -367,10 +370,17 @@ export function EditProfile() {
   const [color, setColor] = createSignal<AvatarColor>("ember");
   const [touched, setTouched] = createSignal(false);
   const [said, setSaid] = createSignal<{ text: string; bad: boolean } | null>(null);
+  // Under the Name field, where it is fixed.
+  const [nameError, setNameError] = createSignal<string | null>(null);
   const [flow, setFlow] = createSignal<PinFlow | null>(null);
   // The stored PIN came from a newer version: it can only be removed (the core lets its owner do that without it).
   const [unreadable, setUnreadable] = createSignal(false);
   const [confirmDelete, setConfirmDelete] = createSignal(false);
+  // A PIN taken off with one tap asks first: another profile's, or one this version cannot read.
+  const [confirmPin, setConfirmPin] = createSignal<"other" | "unreadable" | null>(null);
+  // The name the page was opened with (empty for a new profile), what unsaved edits are measured against.
+  const [base, setBase] = createSignal("");
+  let nameInput: HTMLInputElement | undefined;
   // Filled once from the stored profile (or a fresh avatar for a new one), never again on later pushes.
   let filled = false;
   createEffect(() => {
@@ -383,51 +393,91 @@ export function EditProfile() {
     } else if (p()) {
       const a = parseAvatar(p()!.avatar);
       setName(p()!.name);
+      setBase(p()!.name);
       setGlyph(a.glyph);
       setColor(a.color ?? "ember");
       filled = true;
     }
   });
   // Removed on another device while open.
+  // A leave this page makes itself (after Save, Delete, or a profile removed elsewhere) is not asked about.
+  let free = false;
+  const leave = (to: string) => {
+    free = true;
+    navigate(to, { replace: true });
+  };
   createEffect(() => {
-    if (!isNew() && filled && !p()) navigate("/profiles/manage", { replace: true });
+    if (!isNew() && filled && !p()) leave("/profiles/manage");
   });
 
-  const save = async (e: Event) => {
+  // Unsaved edits ask before any way out (a tab, Back, Escape, the browser's Back): Save, Discard or Keep editing.
+  const dirty = () => (isNew() ? owner() : mine() || owner()) && (touched() || name().trim() !== base());
+  const [asking, setAsking] = createSignal<{ go: (force: boolean) => void; back: boolean } | null>(null);
+  useBeforeLeave((e) => {
+    if (free || !(dirty() || asking())) return;
     e.preventDefault();
+    // The shell marked this leave as a Back before the router stopped it: that mark must not outlive it.
+    const back = takeBack();
+    if (!asking()) setAsking({ go: (force) => e.retry(force), back });
+  });
+  // The TV rail does not open a tab on focus alone while edits are unsaved: only Select on a tab asks.
+  createEffect(() => setLeaveGuarded(dirty()));
+  onCleanup(() => setLeaveGuarded(false));
+
+  // One save at a time: a second press while the first is with the core would create a second profile.
+  const [saving, setSaving] = createSignal(false);
+  /** Saves the name and the picture, true once the core has them. A new profile stays on its page: the caller goes on. */
+  const commit = async (): Promise<boolean> => {
+    if (saving()) return false;
     const n = name().trim();
     if (!n || n.length > 30) {
-      setSaid({ text: profileProblem("badName", ""), bad: true });
-      return;
+      setNameError(profileProblem("badName", ""));
+      nameInput?.focus();
+      return false;
     }
+    setNameError(null);
+    setSaving(true);
     try {
-      if (isNew()) {
-        await op<ProfilesSnapshot>("createProfile", { name: n, avatar: formatAvatar({ glyph: glyph(), color: color() }) });
-        navigate("/profiles/manage", { replace: true });
-        return;
+      if (isNew()) await op<ProfilesSnapshot>("createProfile", { name: n, avatar: formatAvatar({ glyph: glyph(), color: color() }) });
+      else {
+        const fields: Record<string, unknown> = { profile: p()!.id, name: n };
+        if (touched()) fields.avatar = formatAvatar({ glyph: glyph(), color: color() });
+        await op<ProfilesSnapshot>("updateProfile", fields);
+        setBase(n);
+        setTouched(false);
+        setSaid({ text: "Saved", bad: false });
       }
-      const fields: Record<string, unknown> = { profile: p()!.id, name: n };
-      if (touched()) fields.avatar = formatAvatar({ glyph: glyph(), color: color() });
-      await op<ProfilesSnapshot>("updateProfile", fields);
-      setSaid({ text: "Saved", bad: false });
+      return true;
     } catch (err) {
       setSaid({ text: tried(err).kind === "problem" ? (tried(err) as { text: string }).text : "That did not work.", bad: true });
+      return false;
+    } finally {
+      setSaving(false);
     }
   };
-  const removeOther = async () => {
-    try {
-      await op("setPin", { profile: p()!.id, pin: null });
-      setSaid({ text: `${p()!.name}'s PIN was removed.`, bad: false });
-    } catch (err) {
-      const t = tried(err);
-      setSaid({ text: t.kind === "problem" ? t.text : "That did not work.", bad: true });
-    }
+  const save = async (e: Event) => {
+    e.preventDefault();
+    if ((await commit()) && isNew()) leave("/profiles/manage");
   };
-  const removeUnreadable = async () => {
+  const keepEditing = () => setAsking(null);
+  const goOn = () => {
+    const a = asking();
+    if (!a) return;
+    free = true;
+    if (a.back) markBack();
+    setAsking(null);
+    a.go(true);
+  };
+  const saveAndLeave = async () => {
+    if (await commit()) goOn();
+    else setAsking(null);
+  };
+  const removePin = async (own: boolean) => {
+    setConfirmPin(null);
     try {
       await op("setPin", { profile: p()!.id, pin: null });
-      setUnreadable(false);
-      setSaid({ text: "PIN removed", bad: false });
+      if (own) setUnreadable(false);
+      setSaid({ text: own ? "PIN removed" : `${p()!.name}'s PIN was removed.`, bad: false });
     } catch (err) {
       const t = tried(err);
       setSaid({ text: t.kind === "problem" ? t.text : "That did not work.", bad: true });
@@ -440,7 +490,7 @@ export function EditProfile() {
     setDeleting(true);
     try {
       await op("deleteProfile", { profile: p()!.id });
-      navigate("/profiles/manage", { replace: true });
+      leave("/profiles/manage");
     } catch (err) {
       const t = tried(err);
       setSaid({ text: t.kind === "problem" ? t.text : "That did not work.", bad: true });
@@ -477,10 +527,34 @@ export function EditProfile() {
           <div class="pedit-preview">
             <AvatarArt avatar={formatAvatar({ glyph: glyph(), color: color() })} name={name() || "?"} size="l" />
           </div>
-          <label class="field-line">
-            <span class="kicker">Name</span>
-            <input type="text" maxLength={30} value={name()} onInput={(e) => setName(e.currentTarget.value)} data-f="pedit:name" data-autofocus autocomplete="off" />
-          </label>
+          <div class="pedit-name">
+            <label class="field-line">
+              <span class="kicker">Name</span>
+              <input
+                ref={nameInput}
+                type="text"
+                maxLength={30}
+                value={name()}
+                onInput={(e) => {
+                  setName(e.currentTarget.value);
+                  setNameError(null);
+                }}
+                data-f="pedit:name"
+                data-autofocus
+                autocomplete="off"
+                aria-invalid={nameError() ? "true" : undefined}
+                aria-describedby={nameError() ? "pedit-name-error" : undefined}
+              />
+            </label>
+            <Show when={nameError()}>
+              {(t) => (
+                <p class="st bad" id="pedit-name-error" role="status">
+                  <i class="dot" />
+                  {t()}
+                </p>
+              )}
+            </Show>
+          </div>
           <div class="chips-row wrap-row" role="radiogroup" aria-label="Picture" data-fgroup="pedit-glyph">
             <span class="kicker">Picture</span>
             <div class="glyphs">
@@ -505,35 +579,8 @@ export function EditProfile() {
               </For>
             </div>
           </div>
-          <div class="chips-row wrap-row" role="radiogroup" aria-label="Color" data-fgroup="pedit-color">
-            <span class="kicker">Color</span>
-            <div class="colors">
-              <For each={COLORS}>
-                {(c) => (
-                  <button
-                    type="button"
-                    class="color-pick"
-                    classList={{ on: color() === c }}
-                    role="radio"
-                    aria-checked={color() === c}
-                    aria-label={c.charAt(0).toUpperCase() + c.slice(1)}
-                    data-f={`pedit:color:${c}`}
-                    style={{ background: `var(--avatar-${c})` }}
-                    onClick={() => {
-                      setColor(c);
-                      setTouched(true);
-                    }}
-                  >
-                    <Show when={color() === c}>
-                      <Check aria-hidden />
-                    </Show>
-                  </button>
-                )}
-              </For>
-            </div>
-          </div>
           <div class="acts">
-            <button class="btn primary" type="submit" data-f="pedit:save">
+            <button class="btn primary" type="submit" data-f="pedit:save" aria-disabled={saving()}>
               {isNew() ? "Add profile" : "Save"}
             </button>
           </div>
@@ -556,11 +603,18 @@ export function EditProfile() {
               </Show>
               <Show when={!cur().syncing && mine() && unreadable()}>
                 <p class="note small">{profileProblem("pinUnreadable", "")}</p>
-                <div class="acts">
-                  <button class="btn" data-f="pedit:pin:unreadable" onClick={() => void removeUnreadable()}>
-                    Remove PIN
-                  </button>
-                </div>
+                <Show
+                  when={confirmPin() === "unreadable"}
+                  fallback={
+                    <div class="acts">
+                      <button class="btn" data-f="pedit:pin:unreadable" onClick={() => setConfirmPin("unreadable")}>
+                        Remove PIN
+                      </button>
+                    </div>
+                  }
+                >
+                  <PinConfirm label="Remove your PIN?" onYes={() => void removePin(true)} onNo={() => setConfirmPin(null)} />
+                </Show>
               </Show>
               <Show when={!cur().syncing && mine() && !unreadable()}>
                 <div class="acts">
@@ -583,9 +637,16 @@ export function EditProfile() {
               </Show>
               <Show when={!cur().syncing && !mine() && owner()}>
                 <Show when={cur().hasPin} fallback={<p class="note small">{cur().name} has no PIN. They can set one from their own profile.</p>}>
-                  <button class="btn" data-f="pedit:pin:clear" onClick={() => void removeOther()}>
-                    Remove {cur().name}'s PIN
-                  </button>
+                  <Show
+                    when={confirmPin() === "other"}
+                    fallback={
+                      <button class="btn" data-f="pedit:pin:clear" onClick={() => setConfirmPin("other")}>
+                        Remove {cur().name}'s PIN
+                      </button>
+                    }
+                  >
+                    <PinConfirm label={`Remove ${cur().name}'s PIN?`} onYes={() => void removePin(false)} onNo={() => setConfirmPin(null)} />
+                  </Show>
                 </Show>
               </Show>
             </section>
@@ -602,22 +663,48 @@ export function EditProfile() {
                 </button>
               }
             >
-              <DeleteConfirm name={p()!.name} busy={deleting()} onDelete={() => void remove()} onKeep={() => setConfirmDelete(false)} />
+              <Confirm label={`Delete ${p()!.name}?`} busy={deleting()} onKeep={() => setConfirmDelete(false)}>
+                <p>Delete {p()!.name}? Their library, progress and settings are removed from this device now and from your other devices when they next sync.</p>
+                <div class="acts">
+                  <button class="btn danger" data-f="pedit:delete:yes" aria-disabled={deleting()} onClick={() => !deleting() && void remove()}>
+                    Delete {p()!.name}
+                  </button>
+                  <button class="btn" data-f="pedit:delete:no" data-autofocus aria-disabled={deleting()} onClick={() => !deleting() && setConfirmDelete(false)}>
+                    Keep
+                  </button>
+                </div>
+              </Confirm>
             </Show>
           </section>
         </Show>
       </Show>
       </Show>
+      <Show when={asking()}>
+        <Confirm label="Leave without saving?" onKeep={keepEditing}>
+          <p>Your changes to this profile are not saved yet.</p>
+          <div class="acts">
+            <button class="btn primary" data-f="pedit:leave:save" aria-disabled={saving()} onClick={() => void saveAndLeave()}>
+              Save
+            </button>
+            <button class="btn" data-f="pedit:leave:discard" onClick={goOn}>
+              Discard
+            </button>
+            <button class="btn" data-f="pedit:leave:keep" data-autofocus onClick={keepEditing}>
+              Keep editing
+            </button>
+          </div>
+        </Confirm>
+      </Show>
     </main>
   );
 }
 
-/** Deleting a profile, asked as a modal: the rest of the app waits, Escape or Back keeps it. */
-function DeleteConfirm(props: { name: string; busy: boolean; onDelete: () => void; onKeep: () => void }) {
+/** A question asked as a modal: the rest of the app waits, Escape or Back keeps what is there (`onKeep`). */
+function Confirm(props: { label: string; busy?: boolean; onKeep: () => void; children: JSX.Element }) {
   let root!: HTMLDivElement;
   holdModal(() => root);
   // A held OK repeats: only the first press counts while it is open. Backspace,
-  // the app's Back, keeps the profile like Escape.
+  // the app's Back, keeps what is there like Escape.
   const onKey = (e: KeyboardEvent) => {
     if (e.repeat && (e.key === "Enter" || e.key === " ")) {
       e.preventDefault();
@@ -632,19 +719,26 @@ function DeleteConfirm(props: { name: string; busy: boolean; onDelete: () => voi
   window.addEventListener("keydown", onKey, { capture: true });
   onCleanup(() => window.removeEventListener("keydown", onKey, { capture: true }));
   return (
-              <div class="confirm" ref={root} role="alertdialog" aria-modal="true" aria-label={`Delete ${props.name}?`}>
-                <p>
-                  Delete {props.name}? Their library, progress and settings are removed from this device now and from your other devices when they next sync.
-                </p>
-                <div class="acts">
-                  <button class="btn danger" data-f="pedit:delete:yes" aria-disabled={props.busy} onClick={() => !props.busy && props.onDelete()}>
-                    Delete {props.name}
-                  </button>
-                  <button class="btn" data-f="pedit:delete:no" data-autofocus aria-disabled={props.busy} onClick={() => !props.busy && props.onKeep()}>
-                    Keep
-                  </button>
-                </div>
-              </div>
+    <div class="confirm" ref={root} role="alertdialog" aria-modal="true" aria-label={props.label}>
+      {props.children}
+    </div>
+  );
+}
+
+/** Taking a PIN off with one tap: asked first, as Delete profile is. */
+function PinConfirm(props: { label: string; onYes: () => void; onNo: () => void }) {
+  return (
+    <Confirm label={props.label} onKeep={props.onNo}>
+      <p>{props.label} Anyone who uses this device can then open this profile.</p>
+      <div class="acts">
+        <button class="btn danger" data-f="pedit:pin:yes" onClick={props.onYes}>
+          Remove PIN
+        </button>
+        <button class="btn" data-f="pedit:pin:no" data-autofocus onClick={props.onNo}>
+          Keep
+        </button>
+      </div>
+    </Confirm>
   );
 }
 
