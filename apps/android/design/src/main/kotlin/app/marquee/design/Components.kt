@@ -491,20 +491,27 @@ fun StateMessage(
     secondaryIcon: ImageVector? = null,
     /** Where the D-pad goes from the second button (a TV list beside the message). */
     secondaryModifier: Modifier = Modifier,
+    /** Read out once when it appears or changes (a failure or an empty result): off for a hint or a line in a list. */
+    spoken: Boolean = false,
 ) {
     val tv = Marquee.form == Form.Tv
     Column(
         modifier = modifier.padding(vertical = if (tv) 18.dp else 10.dp),
         verticalArrangement = Arrangement.spacedBy(if (tv) 18.dp else 10.dp),
     ) {
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(if (tv) 16.dp else 10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            if (icon != null) MqIcon(icon, tint = Marquee.colors.bad)
-            MqText(title, role = TextRole.Title3)
+        val words: @Composable () -> Unit = {
+            Column(verticalArrangement = Arrangement.spacedBy(if (tv) 18.dp else 10.dp)) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(if (tv) 16.dp else 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    if (icon != null) MqIcon(icon, tint = Marquee.colors.bad)
+                    MqText(title, role = TextRole.Title3)
+                }
+                MqText(body, role = TextRole.Callout, color = Marquee.colors.dim)
+            }
         }
-        MqText(body, role = TextRole.Callout, color = Marquee.colors.dim)
+        if (spoken) LiveSpoken("$title. $body", ON_ARRIVAL_MS, words) else words()
         // The fix is a secondary pill. Coming into the buttons from anywhere (Down from the TV
         // pill) lands on it, not on its nearest neighbour.
         val fix = actionFocus ?: remember { FocusRequester() }

@@ -88,10 +88,12 @@ import app.marquee.design.Form
 import app.marquee.design.Icons
 import app.marquee.design.KeepInView
 import app.marquee.design.KeyPresses
+import app.marquee.design.LiveSpoken
 import app.marquee.design.Marquee
 import app.marquee.design.MarqueeFonts
 import app.marquee.design.MqIcon
 import app.marquee.design.MqText
+import app.marquee.design.ON_ARRIVAL_MS
 import app.marquee.design.PosterTile
 import app.marquee.design.PullDown
 import app.marquee.design.RowHeader
@@ -263,15 +265,20 @@ internal fun Note(
     failed: Boolean = false,
     side: Dp = Marquee.safe.side,
     onRetry: (() -> Unit)? = null,
+    /** Read out once when it appears or changes (a failure or an empty result): off for a hint or a line in a list. */
+    spoken: Boolean = false,
 ) {
     Column(Modifier.padding(horizontal = side), verticalArrangement = Arrangement.spacedBy(Marquee.space.s)) {
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(Marquee.space.xs),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            if (failed) MqIcon(Icons.CircleAlert, tint = Marquee.colors.bad)
-            MqText(text, role = TextRole.Callout, color = Marquee.colors.muted)
+        val words: @Composable () -> Unit = {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(Marquee.space.xs),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                if (failed) MqIcon(Icons.CircleAlert, tint = Marquee.colors.bad)
+                MqText(text, role = TextRole.Callout, color = Marquee.colors.muted)
+            }
         }
+        if (spoken) LiveSpoken(text, ON_ARRIVAL_MS, words) else words()
         onRetry?.let { SecondaryButton("Try again", it, icon = Icons.RefreshCw) }
     }
 }
@@ -315,7 +322,9 @@ fun SearchScreen(
         when {
             view.status is ViewStatus.Failed -> {
                 val reason = (view.status as ViewStatus.Failed).reason
-                item(key = "failed") { Note("Search could not open: $reason", failed = true, onRetry = view::retry) }
+                item(key = "failed") {
+                    Note("Search could not open: $reason", failed = true, onRetry = view::retry, spoken = true)
+                }
             }
 
             !searching -> {
@@ -347,7 +356,7 @@ fun SearchScreen(
             snapshot != null && snapshot.query == holder.query && !loading && snapshot.rows.isEmpty() -> {
                 item(key = "none") {
                     Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.s)) {
-                        Note(SearchCopy.empty(holder.query, snapshot.searchable))
+                        Note(SearchCopy.empty(holder.query, snapshot.searchable), spoken = true)
                         // No addon can search: nothing could have matched, so the way on is one that does.
                         if (snapshot.searchable == 0) {
                             SecondaryButton(
@@ -1035,7 +1044,15 @@ fun LibraryScreen(
                 val reason = (view.status as ViewStatus.Failed).reason
                 full(
                     "failed",
-                ) { Note("Library could not open: $reason", failed = true, side = 0.dp, onRetry = view::retry) }
+                ) {
+                    Note(
+                        "Library could not open: $reason",
+                        failed = true,
+                        side = 0.dp,
+                        onRetry = view::retry,
+                        spoken = true,
+                    )
+                }
             }
 
             snapshot == null -> {
@@ -1065,7 +1082,7 @@ fun LibraryScreen(
                     ChipRow("Sort", sorts, snapshot.sort, 0.dp) { view.setSort(it) }
                 }
                 if (snapshot.items.isEmpty()) {
-                    full("none") { Note("Nothing of this type in your library.", side = 0.dp) }
+                    full("none") { Note("Nothing of this type in your library.", side = 0.dp, spoken = true) }
                 } else {
                     itemsIndexed(snapshot.items, key = { index, tile -> "${tile.id}#$index" }) { _, tile ->
                         Poster(tile, onOpen, caption = tile.releaseInfo ?: TileCopy.kind(tile.kind))
