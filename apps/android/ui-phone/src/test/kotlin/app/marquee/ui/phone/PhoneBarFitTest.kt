@@ -57,11 +57,13 @@ class PhoneBarFitTest {
         for (i in 0 until 5) {
             val tab = tabs[i].getBoundsInRoot()
             assertTrue(tab.left >= 21.dp - 0.5.dp && tab.right <= root.right - 21.dp + 0.5.dp, "tab $i is at $tab")
-            assertTrue(tab.width >= 48.dp && tab.height >= 48.dp, "tab $i is $tab")
+            val tabWidth = tab.right - tab.left
+            assertTrue(tabWidth >= 48.dp && tab.bottom - tab.top >= 48.dp, "tab $i is $tab")
             if (shown == 5) {
                 val label = labels[i].getBoundsInRoot()
                 // A cut label fills all the room it was given; a whole one leaves some.
-                assertTrue(label.width < tab.width - 4.dp, "label $i is ${label.width} in a tab of ${tab.width}")
+                val labelWidth = label.right - label.left
+                assertTrue(labelWidth < tabWidth - 4.dp, "label $i is $labelWidth in a tab of $tabWidth")
                 assertTrue(label.left >= tab.left && label.right <= tab.right, "label $i is at $label, tab $tab")
             }
         }

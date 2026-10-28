@@ -1082,12 +1082,13 @@ fun EditProfileScreen(
     // and not to the page's guard: focus moves to Save when the keyboard goes, so that Back reaches the page.
     val keyboard = WindowInsets.isImeVisible
     var keyboardWasUp by remember { mutableStateOf(false) }
+    val onTv = Marquee.form == Form.Tv
     LaunchedEffect(keyboard) {
         if (keyboard) {
             keyboardWasUp = true
         } else if (keyboardWasUp) {
             keyboardWasUp = false
-            if (Marquee.form == Form.Tv) runCatching { saveButton.requestFocus() }
+            if (onTv) runCatching { saveButton.requestFocus() }
         }
     }
     // While a question is open its safe button is the screen's one white: Save draws as a secondary.
