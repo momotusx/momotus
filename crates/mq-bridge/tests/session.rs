@@ -1991,7 +1991,9 @@ async fn a_screen_signed_in_by_qr_gets_the_whole_account() {
     let phone = Core::temporary("p").unwrap();
     let (lib, clock) = (phone.library(), phone.clock());
     lib.update_profile("p", "Ada", "fox", 0, clock).unwrap();
-    lib.set_pin_hash("p", Some("$argon2id$v=19$m=1,t=1,p=1$c2FsdA$aGFzaA"), clock)
+    // A kids profile needs the owner's PIN first.
+    let pin = "$argon2id$v=19$m=1,t=1,p=1$c2FsdA$aGFzaA";
+    lib.set_pin_hash(mq_library::OWNER, Some(pin), clock)
         .unwrap();
     lib.create_kids_profile("kid", "Kid", "owl", clock).unwrap();
     let allowed = AllowedRow {
