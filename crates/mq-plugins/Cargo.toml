@@ -1,0 +1,37 @@
+[package]
+name = "mq-plugins"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+# The plugin engine (plans/plugins-and-marketplace.md section 6). Phase D: the
+# spike that proves QuickJS-NG through rquickjs on every target, its limits,
+# the message boundary to the host, and an HTML parse that stops at its caps.
+
+[dependencies]
+# QuickJS's own allocator, never `rust-alloc`: under it the memory limit does nothing.
+rquickjs = { version = "=0.14.0", default-features = false, features = ["std", "futures"] }
+html5ever = "=0.40.1"
+serde.workspace = true
+tokio = { workspace = true, features = ["rt", "sync", "time", "macros"] }
+libc = "0.2"
+
+# rquickjs-sys 0.14.0 ships no generated bindings for Android or Apple's
+# mobile targets.
+[target.'cfg(any(target_os = "android", target_os = "ios", target_os = "tvos"))'.dependencies]
+rquickjs = { version = "=0.14.0", default-features = false, features = ["std", "futures", "bindgen"] }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "time"] }
+
+# Phase D's size probes (bench/plugins/d-spike.jsonl): the same std and tokio
+# with and without the engine and the parser, so the difference between the
+# two stripped libraries is what they add.
+[[example]]
+name = "probe"
+crate-type = ["cdylib"]
+
+[[example]]
+name = "probe_base"
+crate-type = ["cdylib"]
