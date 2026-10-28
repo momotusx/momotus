@@ -67,7 +67,7 @@ if grep -q '^ExecStart=.*--mail' /etc/systemd/system/momotus-relay.service; then
   MAIL_FLAG=" --mail \"\$CREDENTIALS_DIRECTORY/ses.json\""
 fi
 systemd-run --unit=momotus-preflight --quiet --collect -p User=momotus -p Group=momotus \
-  -p LoadCredential=identity.json:/etc/momotus/identity.json "${MAIL_CRED[@]}" -p ProtectSystem=strict -p ProtectHome=yes \
+  -p LoadCredential=identity.json:/etc/momotus/identity.json ${MAIL_CRED[@]+"${MAIL_CRED[@]}"} -p ProtectSystem=strict -p ProtectHome=yes \
   -p PrivateTmp=yes -p NoNewPrivileges=yes -p ReadWritePaths=/var/lib/momotus-preflight \
   sh -c "exec /opt/momotus/bin/mq-sync-server-$COMMIT --db /var/lib/momotus-preflight/relay.sqlite --listen 127.0.0.1:8789 \
     --public-host momotus.normalisdead.mom --identity \"\$CREDENTIALS_DIRECTORY/identity.json\"$MAIL_FLAG"
