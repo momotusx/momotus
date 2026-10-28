@@ -11,7 +11,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.input.InputMode
+import androidx.compose.ui.platform.LocalInputModeManager
 
 /**
  * Where focus was on one screen, by stable string keys (`tile:<rowId>:<tileId>`), never by list
@@ -182,14 +185,19 @@ internal fun aheadFraction(lowMemory: Boolean): Float = if (lowMemory) 0.5f else
  * the screen asked (on entry, or when [ask] changes, as on Try again): the viewer's move stands even
  * when the target came after it, as on the web (d8aa39f1).
  */
+@OptIn(ExperimentalComposeUiApi::class)
 @Composable
 fun FocusMemory.FirstFocus(
     target: String?,
     ask: Any? = null,
 ) {
     val asked = remember(this, ask) { interactions }
+    val input = LocalInputModeManager.current
     LaunchedEffect(this, target, asked) {
         if (target == null) return@LaunchedEffect
+        // A TV is always in keyboard mode. A phone or tablet running the TV form starts in touch mode, where a button
+        // takes no focus until the first key press: the first focus asks for the remote's mode.
+        input.requestInputMode(InputMode.Keyboard)
         // A remembered key that is no longer composed (a row that moved into the card) is not a target.
         val wanted = focusedKey?.takeIf { requester(it) != null } ?: target
         focusWhenReady(wanted, asked, waitMs = 10_000)

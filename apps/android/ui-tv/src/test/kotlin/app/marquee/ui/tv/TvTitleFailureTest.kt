@@ -5,6 +5,8 @@ import android.os.Looper
 import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertHasClickAction
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
@@ -85,5 +87,9 @@ class TvTitleFailureTest {
         }
         compose.onNodeWithText("The core did not open", useUnmergedTree = true).assertExists()
         compose.onNodeWithText("Try again").assertHasClickAction()
+        // The remote has a place to start: Try again has the focus before any key is pressed.
+        compose.waitUntil(10_000) {
+            compose.onAllNodes(hasText("Try again") and isFocused()).fetchSemanticsNodes().isNotEmpty()
+        }
     }
 }
