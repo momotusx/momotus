@@ -26,6 +26,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -69,6 +70,7 @@ import app.marquee.design.EpisodeCard
 import app.marquee.design.FactsTable
 import app.marquee.design.Icons
 import app.marquee.design.KeepInView
+import app.marquee.design.LocalButtonFocus
 import app.marquee.design.Logo
 import app.marquee.design.Marks
 import app.marquee.design.Marquee
@@ -701,41 +703,44 @@ private fun Episodes(
                 )
             }
         }
-        Row(
-            Modifier
-                .padding(horizontal = Marquee.safe.side)
-                .focusProperties { enter = { focus.requester(STRIP_PLAY) ?: FocusRequester.Default } }
-                .focusGroup(),
-            horizontalArrangement = Arrangement.spacedBy(Marquee.space.m),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            // Up goes back to the card the pills belong to, wherever the search would have put it.
-            val back = Modifier.focusProperties {
-                up = focus.requester("episode:${shown.videoId}") ?: FocusRequester.Default
+        // The strip has no primary: its pills stay out of the button count, so Play stays white while they hold focus.
+        CompositionLocalProvider(LocalButtonFocus provides null) {
+            Row(
+                Modifier
+                    .padding(horizontal = Marquee.safe.side)
+                    .focusProperties { enter = { focus.requester(STRIP_PLAY) ?: FocusRequester.Default } }
+                    .focusGroup(),
+                horizontalArrangement = Arrangement.spacedBy(Marquee.space.m),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                // Up goes back to the card the pills belong to, wherever the search would have put it.
+                val back = Modifier.focusProperties {
+                    up = focus.requester("episode:${shown.videoId}") ?: FocusRequester.Default
+                }
+                MqText(
+                    "${Format.episodeLabel(shown.season, shown.episode)} ${shown.title}".trim(),
+                    role = TextRole.Callout,
+                    color = Marquee.colors.muted,
+                    maxLines = 1,
+                    modifier = Modifier.widthIn(max = 360.dp),
+                )
+                SecondaryButton(
+                    "Choose a version",
+                    { onVersions(shown) },
+                    back,
+                    icon = Icons.Layers,
+                    focusRequester = focus.requesterFor(STRIP_PLAY),
+                    spoken = "Choose a version for ${TitleCopy.episode(shown).removePrefix("Watched, ")}",
+                )
+                SecondaryButton(
+                    if (shown.watched) "Mark as not watched" else "Mark as watched",
+                    { title.setWatched(shown.videoId, !shown.watched) },
+                    back,
+                    icon = if (shown.watched) Icons.EyeOff else Icons.Check,
+                    spoken = (if (shown.watched) "Mark as not watched: " else "Mark as watched: ") +
+                        TitleCopy.episode(shown).removePrefix("Watched, "),
+                )
             }
-            MqText(
-                "${Format.episodeLabel(shown.season, shown.episode)} ${shown.title}".trim(),
-                role = TextRole.Callout,
-                color = Marquee.colors.muted,
-                maxLines = 1,
-                modifier = Modifier.widthIn(max = 360.dp),
-            )
-            SecondaryButton(
-                "Choose a version",
-                { onVersions(shown) },
-                back,
-                icon = Icons.Layers,
-                focusRequester = focus.requesterFor(STRIP_PLAY),
-                spoken = "Choose a version for ${TitleCopy.episode(shown).removePrefix("Watched, ")}",
-            )
-            SecondaryButton(
-                if (shown.watched) "Mark as not watched" else "Mark as watched",
-                { title.setWatched(shown.videoId, !shown.watched) },
-                back,
-                icon = if (shown.watched) Icons.EyeOff else Icons.Check,
-                spoken = (if (shown.watched) "Mark as not watched: " else "Mark as watched: ") +
-                    TitleCopy.episode(shown).removePrefix("Watched, "),
-            )
         }
     }
 }

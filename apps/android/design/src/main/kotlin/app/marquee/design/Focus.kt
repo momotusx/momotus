@@ -241,7 +241,8 @@ val LocalButtonFocus = staticCompositionLocalOf<MutableIntState?> { null }
 /**
  * Counts this button in [LocalButtonFocus] while [focused]. ponytail: one count for the whole screen,
  * not per action row; a primary yields to a focused button anywhere, which no screen has apart from
- * its own row today. Scope it to the row (a provider per row) if one ever does.
+ * its own row today. Scope it to the row (a provider per row) if one ever does, as the title's episode strip
+ * does by providing null.
  */
 @Composable
 fun ButtonFocused(focused: Boolean) {

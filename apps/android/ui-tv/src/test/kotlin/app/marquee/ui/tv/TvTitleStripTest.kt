@@ -2,6 +2,8 @@ package app.marquee.ui.tv
 
 import android.os.Handler
 import android.os.Looper
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.semantics.SemanticsActions
@@ -32,6 +34,7 @@ import app.marquee.core.model.TitleState
 import app.marquee.core.model.Trailer
 import app.marquee.core.views.TitleView
 import app.marquee.design.Form
+import app.marquee.design.LocalButtonFocus
 import app.marquee.design.MarqueeTheme
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
@@ -114,6 +117,9 @@ class TvTitleStripTest {
 
     private val calls = mutableListOf<String>()
 
+    /** The page's count of focused buttons, which a white primary yields to. */
+    private val buttons = mutableIntStateOf(0)
+
     private fun show(
         continuing: Boolean = false,
         movie: Boolean = false,
@@ -133,17 +139,19 @@ class TvTitleStripTest {
         val view = TitleView(client, scope, "series", "tt1")
         compose.setContent {
             MarqueeTheme(Form.Tv) {
-                TvTitle(
-                    view,
-                    null,
-                    FocusMemory(),
-                    onPlay = { _, _ -> },
-                    onVersions = {},
-                    onEpisode = {},
-                    onEpisodeVersions = { calls += "versions ${it.videoId}" },
-                    onOpen = { calls += "open ${it.id}" },
-                    onUncontinue = { calls += "uncontinue" },
-                )
+                CompositionLocalProvider(LocalButtonFocus provides buttons) {
+                    TvTitle(
+                        view,
+                        null,
+                        FocusMemory(),
+                        onPlay = { _, _ -> },
+                        onVersions = {},
+                        onEpisode = {},
+                        onEpisodeVersions = { calls += "versions ${it.videoId}" },
+                        onOpen = { calls += "open ${it.id}" },
+                        onUncontinue = { calls += "uncontinue" },
+                    )
+                }
             }
         }
         compose.waitForIdle()
@@ -176,6 +184,18 @@ class TvTitleStripTest {
         assertEquals(listOf("versions ${second.videoId}"), calls)
         press(Key.DirectionDown)
         pill.assertIsNotFocused()
+    }
+
+    @Test
+    fun `a focused strip pill leaves Play white, and a focused action beside Play makes it yield`() {
+        show()
+        card(first).performSemanticsAction(SemanticsActions.RequestFocus)
+        press(Key.DirectionDown)
+        compose.onNode(hasContentDescription("Choose a version for ${TitleCopy.episode(first)}")).assertIsFocused()
+        compose.runOnIdle { assertEquals(0, buttons.intValue) }
+        // The control: a button in Play's own row counts.
+        compose.onNode(hasContentDescription("Trailer")).performSemanticsAction(SemanticsActions.RequestFocus)
+        compose.runOnIdle { assertEquals(1, buttons.intValue) }
     }
 
     @Test
