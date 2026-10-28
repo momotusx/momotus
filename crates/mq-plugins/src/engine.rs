@@ -5,13 +5,20 @@
 //! `HostCall` and `HostReply` messages: the engine thread holds no client and
 //! no key. Both are plain data, so the engine can move to another process
 //! with the same messages (6.2).
+//!
+//! The script runs as Nuvio runs it: wrapped in a function after
+//! `js/prelude.js` has made its world, then `getStreams(tmdbId, mediaType,
+//! season, episode, info)` from `module.exports` or the global object, its
+//! answer read by `streams`.
 
-use rquickjs::prelude::Func;
-use rquickjs::promise::{MaybePromise, Promised};
-use rquickjs::{AsyncContext, AsyncRuntime, CatchResultExt, CaughtError, Ctx, Exception, Function};
+use crate::natives;
+use crate::streams::Reader;
+use rquickjs::promise::MaybePromise;
+use rquickjs::{
+    AsyncContext, AsyncRuntime, CatchResultExt, CaughtError, Ctx, Function, Object, Value,
+};
 use serde::{Deserialize, Serialize};
-use std::cell::{Cell, RefCell};
-use std::future::Future;
+use std::cell::RefCell;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use std::time::{Duration, Instant};
@@ -42,18 +49,98 @@ impl Default for Limits {
 /// The engine thread's stack: host functions run on it too.
 const THREAD_STACK: usize = 4 * 1024 * 1024;
 
+/// What one call runs: the plugin's code and Nuvio's `getStreams` arguments.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Call {
+    /// The script as downloaded.
+    pub script: String,
+    /// `SCRAPER_ID`: the manifest entry's id.
+    pub plugin_id: String,
+    pub tmdb_id: String,
+    pub media: Media,
+    pub season: Option<u32>,
+    pub episode: Option<u32>,
+    /// Our additive fifth argument.
+    pub info: Info,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Media {
+    Movie,
+    Tv,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Info {
+    pub imdb_id: Option<String>,
+    pub title: String,
+    pub year: Option<u32>,
+}
+
 /// What a plugin asks of the host.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum HostCall {
-    Fetch { url: String },
+    /// Answered by `HostReply::Response` or `HostReply::Failed`.
+    Fetch(FetchRequest),
+    /// One `console` line, within the call's 4 KiB; needs no answer (the
+    /// reply's receiver is dropped).
+    Log { level: LogLevel, text: String },
 }
 
-/// The host's answer to one `HostCall`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct FetchRequest {
+    pub method: Method,
+    /// As the plugin gave it, at most 8 KiB; the host parses it and applies
+    /// 6.4's host rule.
+    pub url: String,
+    /// The plugin's headers, in order and unfiltered (the host's filter runs
+    /// on its final map), lowercase names; at most 32, each pair at most 8 KiB.
+    pub headers: Vec<(String, String)>,
+    /// At most 256 KiB (the host refuses over 16 KiB under any-site). Its
+    /// `Content-Type`, if any, is in `headers`.
+    pub body: Option<Vec<u8>>,
+    /// False for `redirect: "manual"`: a 3xx is answered as itself.
+    pub follow: bool,
+    /// The decoded body's cap: `min(4 MiB, the call's remaining host bytes)`.
+    pub max_bytes: usize,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Method {
+    Get,
+    Post,
+    Head,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum LogLevel {
+    Debug,
+    Info,
+    Warn,
+    Error,
+}
+
+/// The host's answer to one `HostCall::Fetch`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum HostReply {
-    Body(String),
-    /// What the plugin's promise rejects with.
+    /// Any status, non-2xx included (`ok: false`).
+    Response(FetchResponse),
+    /// The promise rejects with a `TypeError` of these words ("rate
+    /// limited", "network not ready", "could not reach {host}", "not
+    /// allowed: {host}").
     Failed(String),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct FetchResponse {
+    pub status: u16,
+    pub status_text: String,
+    /// The final URL after redirects.
+    pub url: String,
+    /// Lowercase names; at most 64, each at most 8 KiB.
+    pub headers: Vec<(String, String)>,
+    /// Decoded, at most the request's `max_bytes`.
+    pub body: Vec<u8>,
 }
 
 /// One call on the channel and where its reply goes.
@@ -63,16 +150,41 @@ pub struct HostRequest {
     pub reply: oneshot::Sender<HostReply>,
 }
 
-/// Requests one call may make (6.4); past it `fetch` throws and the host
-/// never hears of it.
+/// One stream as the plugin returned it (`streams`). Nothing is sanitized or
+/// checked as a URL yet: the host's adapter does that (6.3).
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PluginStream {
+    /// `url`, or `url.url`; at most 8 KiB, else the stream is dropped.
+    pub url: String,
+    /// Strings or numbers, each at most 1 KiB.
+    pub name: Option<String>,
+    pub title: Option<String>,
+    pub quality: Option<String>,
+    pub size: Option<String>,
+    pub language: Option<String>,
+    /// String values only; at most 16 pairs of 1 KiB.
+    pub headers: Vec<(String, String)>,
+    /// At most 16.
+    pub subtitles: Vec<PluginSubtitle>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PluginSubtitle {
+    pub url: String,
+    /// `language`, as Nuvio reads it.
+    pub lang: Option<String>,
+}
+
+/// Requests one call may make (6.4); past it `fetch` rejects at once and the
+/// host never hears of it.
 pub const MAX_REQUESTS: u32 = 30;
 
 /// How a call ended.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Outcome {
-    /// `getStreams`'s answer, as JSON.
-    Done(String),
-    /// The script threw, or `getStreams` was missing.
+    /// At most 100 streams, 256 KiB in all.
+    Done(Vec<PluginStream>),
+    /// The script threw, or no `getStreams` was found: at most 1 KiB of words.
     Threw(String),
     Memory,
     Cpu,
@@ -85,17 +197,58 @@ const CPU: u8 = 1;
 const WALL: u8 = 2;
 const CANCEL: u8 = 3;
 
+/// The call's budget, read by the interrupt and by host work (the HTML
+/// parse) between its steps.
+#[derive(Clone)]
+struct Budget {
+    cancel: Arc<AtomicBool>,
+    limits: Limits,
+    started: Instant,
+    cpu_start: Option<Duration>,
+}
+
+impl Budget {
+    /// Why the call must stop now, or NONE.
+    fn reason(&self) -> u8 {
+        if self.cancel.load(Ordering::Relaxed) {
+            CANCEL
+        } else if self
+            .cpu_start
+            .zip(thread_cpu())
+            .is_none_or(|(start, now)| now.saturating_sub(start) > self.limits.cpu)
+        {
+            CPU
+        } else if self.started.elapsed() > self.limits.wall {
+            WALL
+        } else {
+            NONE
+        }
+    }
+}
+
 thread_local! {
     /// The host of this thread's one call.
     static HOST: RefCell<Option<mpsc::UnboundedSender<HostRequest>>> = const { RefCell::new(None) };
-    /// Requests this thread's call has made.
-    static SENT: Cell<u32> = const { Cell::new(0) };
+    static BUDGET: RefCell<Option<Budget>> = const { RefCell::new(None) };
 }
 
-/// Runs `script` and its `getStreams()` on a new thread; the handle ends
-/// when the thread does. Fails only when the thread cannot be made.
+/// Sends one request to this thread's host.
+pub(crate) fn host(request: HostRequest) -> Result<(), ()> {
+    HOST.with_borrow(|h| match h {
+        Some(host) => host.send(request).map_err(drop),
+        None => Err(()),
+    })
+}
+
+/// Whether this thread's call is out of budget (CPU, wall or cancel).
+pub(crate) fn spent() -> bool {
+    BUDGET.with_borrow(|b| b.as_ref().is_some_and(|b| b.reason() != NONE))
+}
+
+/// Runs the call on a new thread; the handle ends when the thread does.
+/// Fails only when the thread cannot be made.
 pub fn call(
-    script: String,
+    call: Call,
     limits: Limits,
     cancel: Arc<AtomicBool>,
     host: mpsc::UnboundedSender<HostRequest>,
@@ -111,33 +264,30 @@ pub fn call(
             else {
                 return Outcome::Memory;
             };
-            rt.block_on(run(script, limits, cancel))
+            rt.block_on(run(call, limits, cancel))
         })
 }
 
-async fn run(script: String, limits: Limits, cancel: Arc<AtomicBool>) -> Outcome {
+async fn run(call: Call, limits: Limits, cancel: Arc<AtomicBool>) -> Outcome {
     let why = Arc::new(AtomicU8::new(NONE));
     let Ok(qjs) = AsyncRuntime::new() else {
         return Outcome::Memory;
     };
     qjs.set_memory_limit(limits.memory).await;
     qjs.set_max_stack_size(limits.stack).await;
-    let started = Instant::now();
-    let cpu_start = thread_cpu();
-    let (flag, said) = (cancel.clone(), why.clone());
+    let budget = Budget {
+        cancel: cancel.clone(),
+        limits,
+        started: Instant::now(),
+        cpu_start: thread_cpu(),
+    };
+    BUDGET.with(|b| *b.borrow_mut() = Some(budget.clone()));
+    let said = why.clone();
     qjs.set_interrupt_handler(Some(Box::new(move || {
-        let reason = if flag.load(Ordering::Relaxed) {
-            CANCEL
-        } else if cpu_start
-            .zip(thread_cpu())
-            .is_none_or(|(start, now)| now.saturating_sub(start) > limits.cpu)
-        {
-            CPU
-        } else if started.elapsed() > limits.wall {
-            WALL
-        } else {
+        let reason = budget.reason();
+        if reason == NONE {
             return false;
-        };
+        }
         said.store(reason, Ordering::Relaxed);
         true
     })))
@@ -145,7 +295,7 @@ async fn run(script: String, limits: Limits, cancel: Arc<AtomicBool>) -> Outcome
     let Ok(ctx) = AsyncContext::full(&qjs).await else {
         return Outcome::Memory;
     };
-    let work = ctx.async_with(async |ctx| evaluate(&ctx, &script).await);
+    let work = ctx.async_with(async |ctx| evaluate(&ctx, &call).await);
     let cancelled = async {
         while !cancel.load(Ordering::Relaxed) {
             tokio::time::sleep(Duration::from_millis(10)).await;
@@ -165,16 +315,13 @@ async fn run(script: String, limits: Limits, cancel: Arc<AtomicBool>) -> Outcome
         (_, WALL) => Outcome::Wall,
         (None, _) if cancel.load(Ordering::Relaxed) => Outcome::Cancelled,
         (None, _) => Outcome::Wall,
-        (Some(Ok(json)), _) => Outcome::Done(json),
+        (Some(Ok(streams)), _) => Outcome::Done(streams),
         (Some(Err(words)), _) if words == OUT_OF_MEMORY => Outcome::Memory,
         (Some(Err(words)), _) => Outcome::Threw(cut(words, MAX_WORDS)),
     }
 }
 
 const OUT_OF_MEMORY: &str = "out of memory";
-
-/// What `Done` may carry: the output cap of 6.2.
-pub const MAX_ANSWER: usize = 256 * 1024;
 
 /// What `Threw` keeps of the script's words.
 const MAX_WORDS: usize = 1024;
@@ -183,31 +330,10 @@ const MAX_WORDS: usize = 1024;
 pub const MAX_URL: usize = 8 * 1024;
 
 /// An array or array-like longer than this makes every `Array.prototype`
-/// method throw. QuickJS-NG walks generic array-likes in C loops that never
-/// read the interrupt (`Array.prototype.reverse.call({length: 2 ** 53 - 1})`
-/// ran forever, 2026-10-28), and no heap of 24 MiB holds an array this long.
+/// method throw (`js/prelude.js`); no heap of 24 MiB holds one this long.
 const MAX_ARRAY: u64 = 1 << 24;
 
-/// Runs before the script: the array guard above, and `fetch` over the
-/// native one, which the script never sees. The URL's length is checked here
-/// so that no long string is copied out of the heap.
-const PRELUDE: &str = r#"(native, maxArray, maxUrl) => {
-    const proto = Array.prototype, apply = Reflect.apply, define = Object.defineProperty;
-    for (const name of Object.getOwnPropertyNames(proto)) {
-        const method = proto[name];
-        if (typeof method !== "function" || name === "constructor") continue;
-        const guarded = { [name](...args) {
-            if (this != null && +this.length > maxArray) throw new RangeError("array too long");
-            return apply(method, this, args);
-        } }[name];
-        define(proto, name, { value: guarded, writable: true, configurable: true, enumerable: false });
-    }
-    globalThis.fetch = function fetch(url) {
-        url = String(url);
-        if (url.length > maxUrl) throw new TypeError("URL too long");
-        return native(url);
-    };
-}"#;
+const PRELUDE: &str = include_str!("../js/prelude.js");
 
 /// `words` cut to at most `max` bytes, at a char boundary.
 fn cut(mut words: String, max: usize) -> String {
@@ -221,10 +347,11 @@ fn cut(mut words: String, max: usize) -> String {
     words
 }
 
-/// The script, then `getStreams()` awaited, as JSON; or the words of what threw.
-async fn evaluate<'js>(ctx: &Ctx<'js>, script: &str) -> Result<String, String> {
+/// The prelude, the script, then `getStreams` awaited and its streams read;
+/// or the words of what threw.
+async fn evaluate<'js>(ctx: &Ctx<'js>, call: &Call) -> Result<Vec<PluginStream>, String> {
     let words = |e: CaughtError<'js>| match e {
-        CaughtError::Exception(e) => e.message().unwrap_or_default(),
+        CaughtError::Exception(e) => cut(e.message().unwrap_or_default(), MAX_WORDS),
         // At its heap limit QuickJS-NG cannot build its own "out of memory"
         // error either, and the call throws `null` (seen 2026-10-27: an
         // object bomb under a 24 MiB limit ended as a thrown null). A
@@ -240,54 +367,74 @@ async fn evaluate<'js>(ctx: &Ctx<'js>, script: &str) -> Result<String, String> {
     for name in ["SharedArrayBuffer", "Atomics", "WebAssembly"] {
         globals.remove(name).catch(ctx).map_err(words)?;
     }
-    let prelude: Function = ctx.eval(PRELUDE).catch(ctx).map_err(words)?;
-    prelude
-        .call::<_, ()>((Func::from(fetch), MAX_ARRAY as f64, MAX_URL as f64))
+    // Made before the plugin runs, so nothing it changes reaches the reads.
+    let mut reader = Reader::new(ctx.clone()).catch(ctx).map_err(words)?;
+    let config = Object::new(ctx.clone()).catch(ctx).map_err(words)?;
+    config
+        .set("pluginId", call.plugin_id.as_str())
         .catch(ctx)
         .map_err(words)?;
-    ctx.eval::<(), _>(script).catch(ctx).map_err(words)?;
-    let entry: Function = globals.get("getStreams").catch(ctx).map_err(words)?;
-    let answer: MaybePromise = entry.call(()).catch(ctx).map_err(words)?;
-    let value: rquickjs::Value = answer.into_future().await.catch(ctx).map_err(words)?;
-    let json = ctx.json_stringify(value).catch(ctx).map_err(words)?;
-    let json = match json {
-        Some(json) => json.to_string().catch(ctx).map_err(words)?,
-        None => "null".into(),
+    config
+        .set("maxArray", MAX_ARRAY as f64)
+        .catch(ctx)
+        .map_err(words)?;
+    config
+        .set("maxUrl", MAX_URL as f64)
+        .catch(ctx)
+        .map_err(words)?;
+    let natives = natives::natives(ctx).catch(ctx).map_err(words)?;
+    let prelude: Function = ctx.eval(PRELUDE).catch(ctx).map_err(words)?;
+    prelude
+        .call::<_, ()>((natives, config))
+        .catch(ctx)
+        .map_err(words)?;
+    // Nuvio's wrapper: the script's own declarations stay in its function.
+    let wrapped = format!("(function () {{\n{}\n}})();", call.script);
+    ctx.eval::<(), _>(wrapped).catch(ctx).map_err(words)?;
+    let entry = entry(ctx).catch(ctx).map_err(words)?;
+    let Some(entry) = entry else {
+        return Err("no getStreams".into());
     };
-    if json.len() > MAX_ANSWER {
-        return Err("the answer is over 256 KiB".into());
-    }
-    Ok(json)
+    let info = Object::new(ctx.clone()).catch(ctx).map_err(words)?;
+    info.set("imdbId", call.info.imdb_id.as_deref())
+        .catch(ctx)
+        .map_err(words)?;
+    info.set("title", call.info.title.as_str())
+        .catch(ctx)
+        .map_err(words)?;
+    info.set("year", call.info.year).catch(ctx).map_err(words)?;
+    let media = match call.media {
+        Media::Movie => "movie",
+        Media::Tv => "tv",
+    };
+    let answer: MaybePromise = entry
+        .call((
+            call.tmdb_id.as_str(),
+            media,
+            call.season,
+            call.episode,
+            info,
+        ))
+        .catch(ctx)
+        .map_err(words)?;
+    let value: Value = answer.into_future().await.catch(ctx).map_err(words)?;
+    Ok(reader.streams(value))
 }
 
-/// The native `fetch(url)`: a message to the host, and a promise of the
-/// body's text. Past the request cap it throws at once, so a loop of calls
-/// leaves nothing behind on the host side.
-fn fetch<'js>(
-    ctx: Ctx<'js>,
-    url: String,
-) -> rquickjs::Result<Promised<impl Future<Output = rquickjs::Result<String>> + 'js>> {
-    if SENT.get() >= MAX_REQUESTS {
-        return Err(Exception::throw_type(&ctx, "rate limited"));
+/// `module.exports.getStreams`, else the global one.
+fn entry<'js>(ctx: &Ctx<'js>) -> rquickjs::Result<Option<Function<'js>>> {
+    let globals = ctx.globals();
+    let exported = match globals.get::<_, Value>("module")?.into_object() {
+        Some(module) => match module.get::<_, Value>("exports")?.into_object() {
+            Some(exports) => exports.get::<_, Value>("getStreams")?.into_function(),
+            None => None,
+        },
+        None => None,
+    };
+    match exported {
+        Some(f) => Ok(Some(f)),
+        None => Ok(globals.get::<_, Value>("getStreams")?.into_function()),
     }
-    SENT.set(SENT.get() + 1);
-    let (reply, answer) = oneshot::channel();
-    let call = HostCall::Fetch { url };
-    let sent = HOST.with(|h| {
-        h.borrow()
-            .as_ref()
-            .map(|host| host.send(HostRequest { call, reply }))
-    });
-    if !matches!(sent, Some(Ok(()))) {
-        return Err(Exception::throw_message(&ctx, "the host is gone"));
-    }
-    Ok(Promised(async move {
-        match answer.await {
-            Ok(HostReply::Body(body)) => Ok(body),
-            Ok(HostReply::Failed(words)) => Err(Exception::throw_type(&ctx, &words)),
-            Err(_) => Err(Exception::throw_message(&ctx, "the host is gone")),
-        }
-    }))
 }
 
 /// This thread's CPU time; None if the clock cannot be read, which ends the

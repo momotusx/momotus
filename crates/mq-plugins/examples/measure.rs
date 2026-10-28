@@ -12,7 +12,7 @@
 //! QuickJS allocates with its own malloc, which only the RSS sees.
 
 use mq_plugins::dom::{self, Caps};
-use mq_plugins::engine::{self, HostReply, HostRequest, Limits, Outcome};
+use mq_plugins::engine::{self, Call, HostReply, HostRequest, Info, Limits, Media, Outcome};
 use std::alloc::{GlobalAlloc, Layout, System};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Instant;
@@ -73,10 +73,19 @@ fn run(script: &str) -> Outcome {
     let (tx, mut rx) = mpsc::unbounded_channel::<HostRequest>();
     let host = std::thread::spawn(move || {
         while let Some(request) = rx.blocking_recv() {
-            let _ = request.reply.send(HostReply::Body(String::new()));
+            let _ = request.reply.send(HostReply::Failed(String::new()));
         }
     });
-    let outcome = engine::call(script.into(), Limits::default(), Default::default(), tx)
+    let call = Call {
+        script: format!("{script}\nmodule.exports = {{ getStreams }};"),
+        plugin_id: String::new(),
+        tmdb_id: String::new(),
+        media: Media::Movie,
+        season: None,
+        episode: None,
+        info: Info::default(),
+    };
+    let outcome = engine::call(call, Limits::default(), Default::default(), tx)
         .expect("a thread")
         .join()
         .expect("the call's thread");
@@ -97,7 +106,7 @@ fn main() {
                 .map(|_| {
                     let started = Instant::now();
                     let out = run("function getStreams() { return []; }");
-                    assert_eq!(out, Outcome::Done("[]".into()));
+                    assert_eq!(out, Outcome::Done(Vec::new()));
                     started.elapsed().as_secs_f64() * 1e3
                 })
                 .collect();

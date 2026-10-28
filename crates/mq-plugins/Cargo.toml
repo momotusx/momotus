@@ -13,6 +13,13 @@ publish.workspace = true
 # QuickJS's own allocator, never `rust-alloc`: under it the memory limit does nothing.
 rquickjs = { version = "=0.14.0", default-features = false, features = ["std", "futures"] }
 html5ever = "=0.40.1"
+# Selectors and serialization for the cheerio subset, over the capped tree
+# (its html5ever is ours).
+scraper = { version = "=0.29.0", default-features = false }
+ego-tree = "0.11"
+url.workspace = true
+base64 = "0.22"
+getrandom = "0.3"
 serde.workspace = true
 tokio = { workspace = true, features = ["rt", "sync", "time", "macros"] }
 libc = "0.2"
@@ -23,7 +30,9 @@ libc = "0.2"
 rquickjs = { version = "=0.14.0", default-features = false, features = ["std", "futures", "bindgen"] }
 
 [dev-dependencies]
+hex = "0.4"
 serde_json.workspace = true
+sha2 = "0.11"
 tokio = { workspace = true, features = ["rt-multi-thread", "macros", "time"] }
 
 # Phase D's size probes (bench/plugins/d-spike.jsonl): the same std and tokio

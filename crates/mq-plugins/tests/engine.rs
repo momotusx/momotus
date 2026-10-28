@@ -3,7 +3,8 @@
 
 use mq_plugins::dom::{self, Caps, Kind, Stop};
 use mq_plugins::engine::{
-    HostCall, HostReply, HostRequest, Limits, MAX_ANSWER, MAX_REQUESTS, MAX_URL, Outcome, call,
+    Call, FetchResponse, HostCall, HostReply, HostRequest, Info, Limits, MAX_REQUESTS, MAX_URL,
+    Media, Outcome, PluginStream, call,
 };
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -20,20 +21,59 @@ fn quick() -> Limits {
     }
 }
 
-/// Runs `script` with a host that answers every fetch with `url` reversed,
-/// and says how many requests reached the host.
+/// A call of `script` as written, for The Matrix.
+fn raw(script: &str) -> Call {
+    Call {
+        script: script.into(),
+        plugin_id: "test".into(),
+        tmdb_id: "603".into(),
+        media: Media::Movie,
+        season: None,
+        episode: None,
+        info: Info {
+            imdb_id: Some("tt0133093".into()),
+            title: "The Matrix".into(),
+            year: Some(1999),
+        },
+    }
+}
+
+/// `script` declares `getStreams` and may answer `say(value)`: one stream
+/// whose name is the value as JSON, read back by `said`.
+fn plugin(script: &str) -> Call {
+    raw(&format!(
+        "const say = (v) => [{{ url: 'u', name: JSON.stringify(v) }}];\n{script}\nmodule.exports = {{ getStreams }};"
+    ))
+}
+
+fn said(out: &Outcome) -> String {
+    match out {
+        Outcome::Done(streams) => streams[0].name.clone().unwrap(),
+        other => panic!("{other:?}"),
+    }
+}
+
+/// Runs `script` with a host that answers every fetch with its URL
+/// reversed, and says how many requests reached the host.
 fn run_counted(script: &str, limits: Limits) -> (Outcome, usize) {
     let (tx, mut rx) = mpsc::unbounded_channel::<HostRequest>();
     let host = std::thread::spawn(move || {
         let mut seen = 0;
         while let Some(HostRequest { call, reply }) = rx.blocking_recv() {
-            let HostCall::Fetch { url } = call;
-            let _ = reply.send(HostReply::Body(url.chars().rev().collect()));
-            seen += 1;
+            if let HostCall::Fetch(request) = call {
+                let _ = reply.send(HostReply::Response(FetchResponse {
+                    status: 200,
+                    status_text: "OK".into(),
+                    url: request.url.clone(),
+                    headers: Vec::new(),
+                    body: request.url.chars().rev().collect::<String>().into_bytes(),
+                }));
+                seen += 1;
+            }
         }
         seen
     });
-    let outcome = call(script.into(), limits, Arc::default(), tx)
+    let outcome = call(plugin(script), limits, Arc::default(), tx)
         .unwrap()
         .join()
         .unwrap();
@@ -115,33 +155,31 @@ fn a_plugin_answers_through_get_streams() {
         r#"function getStreams() { return [{ url: "https://a.example/x.mp4" }]; }"#,
         quick(),
     );
-    assert_eq!(
-        out,
-        Outcome::Done(r#"[{"url":"https://a.example/x.mp4"}]"#.into())
-    );
+    let stream = PluginStream {
+        url: "https://a.example/x.mp4".into(),
+        ..Default::default()
+    };
+    assert_eq!(out, Outcome::Done(vec![stream]));
 }
 
 #[test]
 fn fetch_goes_to_the_host_as_a_message() {
     let out = run(
-        r#"async function getStreams() { const a = await fetch("abc"); return [a, await fetch("xy")]; }"#,
+        r#"async function getStreams() { const a = await (await fetch("abc")).text(); return say([a, await (await fetch("xy")).text()]); }"#,
         quick(),
     );
-    assert_eq!(out, Outcome::Done(r#"["cba","yx"]"#.into()));
+    assert_eq!(said(&out), r#"["cba","yx"]"#);
 }
 
 #[test]
 fn a_call_makes_at_most_its_requests() {
     let script = r#"async function getStreams() {
         for (let i = 0; i < 40; i++) {
-            try { await fetch("u" + i); } catch (e) { return [i, e.message]; }
+            try { await fetch("u" + i); } catch (e) { return say([i, e.message]); }
         }
     }"#;
     let (out, seen) = run_counted(script, quick());
-    assert_eq!(
-        out,
-        Outcome::Done(format!(r#"[{MAX_REQUESTS},"rate limited"]"#))
-    );
+    assert_eq!(said(&out), format!(r#"[{MAX_REQUESTS},"rate limited"]"#));
     assert_eq!(seen, MAX_REQUESTS as usize);
 }
 
@@ -150,7 +188,12 @@ fn a_throw_or_a_missing_entry_is_said() {
     assert!(
         matches!(run("function getStreams() { throw new Error('nope'); }", quick()), Outcome::Threw(w) if w.contains("nope"))
     );
-    assert!(matches!(run("var x = 1;", quick()), Outcome::Threw(_)));
+    let (tx, _rx) = mpsc::unbounded_channel::<HostRequest>();
+    let missing = call(raw("var x = 1;"), quick(), Arc::default(), tx).unwrap();
+    assert_eq!(
+        missing.join().unwrap(),
+        Outcome::Threw("no getStreams".into())
+    );
 }
 
 #[test]
@@ -178,8 +221,8 @@ fn a_memory_bomb_stops_at_the_heap_limit() {
     );
     // The engine is fine afterwards: a call right after answers.
     assert_eq!(
-        run("function getStreams() { return 1; }", quick()),
-        Outcome::Done("1".into())
+        said(&run("function getStreams() { return say(1); }", quick())),
+        "1"
     );
 }
 
@@ -238,12 +281,12 @@ fn deep_recursion_throws_instead_of_crashing() {
     );
 }
 
-/// A loop of calls past the cap throws at the first one over, so nothing
-/// piles up on the host side, and a long URL never leaves the heap.
+/// A loop of calls past the cap is refused before anything is sent, so
+/// nothing piles up on the host side, and a long URL never leaves the heap.
 #[test]
 fn fetch_refuses_at_once() {
     let (out, seen) = run_counted("function getStreams() { for (;;) fetch('x'); }", quick());
-    assert_eq!(out, Outcome::Threw("rate limited".into()));
+    assert!(out == Outcome::Cpu || out == Outcome::Memory, "{out:?}");
     assert_eq!(seen, MAX_REQUESTS as usize);
     let all = "async function getStreams() { return Promise.all(Array.from({ length: 40 }, (_, i) => fetch('u' + i))); }";
     let (out, seen) = run_counted(all, quick());
@@ -274,29 +317,15 @@ fn long_array_likes_are_refused() {
                 catch (e) { out[name] = e.name; if (e.name !== "RangeError") break; }
             }
         }
-        return out;
+        return say(out);
     }"#;
     let (tx, _rx) = mpsc::unbounded_channel::<HostRequest>();
-    let thread = call(script.into(), quick(), Arc::default(), tx).unwrap();
+    let thread = call(plugin(script), quick(), Arc::default(), tx).unwrap();
     let out = joined_within(thread, 20).expect("the call ends");
-    let Outcome::Done(json) = out else {
-        panic!("{out:?}")
-    };
+    let json = said(&out);
     let names: std::collections::BTreeMap<String, String> = serde_json::from_str(&json).unwrap();
     assert!(names.len() > 30, "{json}");
     assert!(names.values().all(|e| e == "RangeError"), "{json}");
-}
-
-#[test]
-fn an_answer_over_its_cap_is_refused() {
-    let big = format!(
-        "function getStreams() {{ return 'x'.repeat({}); }}",
-        MAX_ANSWER
-    );
-    assert_eq!(
-        run(&big, quick()),
-        Outcome::Threw("the answer is over 256 KiB".into())
-    );
 }
 
 #[test]
@@ -304,11 +333,11 @@ fn no_shared_memory_webassembly_or_modules() {
     let probe = r#"async function getStreams() {
         let modules;
         try { await import("os"); modules = "loaded"; } catch (e) { modules = "refused"; }
-        return [typeof SharedArrayBuffer, typeof Atomics, typeof WebAssembly, modules];
+        return say([typeof SharedArrayBuffer, typeof Atomics, typeof WebAssembly, modules]);
     }"#;
     assert_eq!(
-        run(probe, quick()),
-        Outcome::Done(r#"["undefined","undefined","undefined","refused"]"#.into())
+        said(&run(probe, quick())),
+        r#"["undefined","undefined","undefined","refused"]"#
     );
 }
 
@@ -327,7 +356,7 @@ fn cancel_ends_the_thread() {
             wall: Duration::from_secs(10),
             ..Limits::default()
         };
-        let thread = call(script.into(), limits, cancel.clone(), tx).unwrap();
+        let thread = call(plugin(script), limits, cancel.clone(), tx).unwrap();
         // The fetch is held once it reached the host; the loop is running.
         let _held = if script.contains("fetch") {
             Some(rx.blocking_recv().unwrap())

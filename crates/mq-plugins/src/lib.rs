@@ -9,5 +9,8 @@
 //! - `bytecode function expected`
 //! - `out of memory in regexp execution`
 
+pub mod cheerio;
 pub mod dom;
 pub mod engine;
+pub mod natives;
+pub mod streams;
