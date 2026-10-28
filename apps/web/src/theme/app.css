@@ -53,11 +53,10 @@ h1, h2, h3 { font-family: var(--font-display); font-weight: var(--weight-heading
 .app { position: fixed; left: var(--ox, 0); top: var(--oy, 0); width: var(--cw, 100vw); height: var(--ch, 100vh);
   transform: scale(var(--k, 1)); transform-origin: 0 0; overflow: clip; background: var(--bg); }
 [data-form="phone"] .app { inset: 0; width: auto; height: auto; transform: none; }
-/* `--offline-h`: the shell's offline banner, when it shows, sits above the pages and the nav. */
+/* `--offline-h`: the shell's offline banner, when it shows, sits above the pages and the nav. It pads
+   the notch itself and sets `--notch` to 0, so a page padding the notch adds no second gap and an
+   edge-to-edge hero starts whole under it (code review r5 n5, r6 n8). */
 .screen { position: absolute; inset: 0; top: var(--offline-h, 0px); }
-/* The phone's bar pads the notch already; each page pads its own, which then sits under the bar
-   instead of adding a second notch-high gap (code review r5 n5). */
-[data-form="phone"] .screen { top: max(0px, calc(var(--offline-h, 0px) - env(safe-area-inset-top))); }
 
 /* Scrollers we drive with focus never show bars on TV. */
 [data-vscroll], [data-hscroll] { scrollbar-width: none; overscroll-behavior: contain; }
@@ -291,10 +290,11 @@ h1, h2, h3 { font-family: var(--font-display); font-weight: var(--weight-heading
 [data-form="phone"] .dot { width: 9px; height: 9px; }
 [data-form="phone"] .st { gap: 8px; }
 [data-form="phone"] .problem { gap: 10px; }
-[data-form="phone"] .backbar { position: fixed; left: 8px; top: calc(4px + env(safe-area-inset-top)); }
+/* Under the shell's offline banner, the fixed back sits below it: the banner holds the notch and sets `--notch` to 0. */
+[data-form="phone"] .backbar { position: fixed; left: 8px; top: calc(4px + var(--offline-h, 0px) + var(--notch, env(safe-area-inset-top))); }
 [data-form="phone"] .back { height: 44px; padding: 0 14px 0 8px; font-size: 17px; }
 [data-form="phone"] .back svg { width: 24px; height: 24px; }
-[data-form="phone"] .backbar.bar { position: relative; left: auto; right: auto; top: auto; height: auto; padding: calc(4px + env(safe-area-inset-top)) 8px 0; background: none; }
+[data-form="phone"] .backbar.bar { position: relative; left: auto; right: auto; top: auto; height: auto; padding: calc(4px + var(--notch, env(safe-area-inset-top))) 8px 0; background: none; }
 
 /* TV focus, the white lift. A focused control or row turns white with dark
  * words and rises by focus.rise over its lift shadow (each rule keeps its own

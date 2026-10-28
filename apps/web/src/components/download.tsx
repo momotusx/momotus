@@ -114,10 +114,21 @@ export function DownloadStatus() {
  * once when it shows. The downloads view opens only while offline, to know whether any of this
  * profile's downloads is done. */
 export function OfflineBanner() {
+  const location = useLocation();
+  // The live region is always in the shell and only gets its words when the banner comes: a status
+  // inserted already holding text is skipped by some screen readers (code review r6 n8). Only the
+  // constant is live; the words after it change as the downloads become known or the page changes,
+  // and must not announce the banner again (code review r5 m6).
+  const live = () => (offlineBanner(online(), form(), location.pathname, false) ? downloadWords.offlineAlone : "");
   return (
-    <Show when={!online() && form() !== "tv"}>
-      <OfflineBar />
-    </Show>
+    <>
+      <span class="sr" role="status">
+        {live()}
+      </span>
+      <Show when={!online() && form() !== "tv"}>
+        <OfflineBar />
+      </Show>
+    </>
   );
 }
 
@@ -126,32 +137,36 @@ function OfflineBar() {
   const view = liveView<DownloadsSnapshot>("downloads");
   const hasDone = () => !!shownDownloads(view.state.data)?.titles.some((t) => t.rows.some((r) => r.state === "done"));
   const banner = () => offlineBanner(online(), form(), location.pathname, hasDone());
-  // The pages below start under the banner, whatever it wraps to (`--offline-h` on the shell). The
-  // ref runs before the bar is in the page: its height goes on the shell once it is, before the
-  // first paint, then on every wrap (code review r5 m7).
+  // The pages below start under the banner, whatever it wraps to (`--offline-h` on the shell), and
+  // the banner holds the notch, so the pages pad none (`--notch`). The ref runs before the bar is in
+  // the page: its height goes on the shell once it is, before the first paint, then on every wrap
+  // (code review r5 m7); a bar gone before that never sets it (code review r6 n7).
   const measure = (el: HTMLElement) => {
     let shell: HTMLElement | null = null;
+    let gone = false;
     const set = () => shell?.style.setProperty("--offline-h", `${el.offsetHeight}px`);
     const watch = new ResizeObserver(set);
     queueMicrotask(() => {
+      if (gone) return;
       shell = el.parentElement;
+      shell?.style.setProperty("--notch", "0px");
       set();
       watch.observe(el);
     });
     onCleanup(() => {
+      gone = true;
       watch.disconnect();
       shell?.style.removeProperty("--offline-h");
+      shell?.style.removeProperty("--notch");
     });
   };
-  // Only the constant is live: the words after it change as the downloads become known or the page
-  // changes, and must not announce the banner again (code review r5 m6).
   return (
     <Show when={banner()}>
       {(b) => (
         <section class="offline-bar" ref={measure} data-fgroup="offline-banner">
           <WifiOff aria-hidden />
           <p>
-            <span role="status">{downloadWords.offlineAlone}</span>
+            {downloadWords.offlineAlone}
             <Show when={b().rest}> {downloadWords.offlineRest}</Show>
           </p>
           <Show when={b().action}>
