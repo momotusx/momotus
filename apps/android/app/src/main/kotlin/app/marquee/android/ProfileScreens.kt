@@ -1169,7 +1169,7 @@ fun EditProfileScreen(
                                 touched = true
                             },
                             focusRequester = firstPicture.takeIf { index == 0 },
-                        ) { AvatarArt(g, color, ProfileCopy.initial(name.ifBlank { "?" }), pick) }
+                        ) { lit -> AvatarArt(g, color, ProfileCopy.initial(name.ifBlank { "?" }), pick, lit = lit) }
                     }
                 }
                 PrimaryButton(
@@ -1354,7 +1354,10 @@ private fun RemovePinAsk(
 
 private val CHOICE_PAD = 6.dp
 
-/** A picture choice: selected is a grey disc behind the picture; spoken by its name with its state. */
+/**
+ * A picture choice: selected is a grey disc behind the picture; spoken by its name with its state. Focused on TV,
+ * [content] is told to draw lit (white with a dark glyph), as a focused profile does.
+ */
 @Composable
 internal fun Choice(
     selected: Boolean,
@@ -1362,12 +1365,17 @@ internal fun Choice(
     size: Dp,
     onClick: () -> Unit,
     focusRequester: FocusRequester? = null,
-    content: @Composable () -> Unit,
+    /** Shows the focused look without focus (screenshots, tests). */
+    forceFocus: Boolean = false,
+    content: @Composable (lit: Boolean) -> Unit,
 ) {
+    var hasFocus by remember { mutableStateOf(false) }
+    val look = hasFocus || forceFocus
     Box(
         Modifier
             .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
-            .marqueeFocus((size + CHOICE_PAD * 2) / 2)
+            .onFocusChanged { hasFocus = it.isFocused }
+            .marqueeFocus((size + CHOICE_PAD * 2) / 2, forced = look)
             .clip(CircleShape)
             .background(if (selected) Tokens.selectedFill else Color.Transparent)
             .padding(CHOICE_PAD)
@@ -1375,7 +1383,7 @@ internal fun Choice(
                 contentDescription = label
                 this.selected = selected
             }.focusClickable(onClick, Role.RadioButton),
-    ) { content() }
+    ) { content(look && Marquee.form == Form.Tv) }
 }
 
 /**

@@ -15,6 +15,7 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.unit.dp
 import app.marquee.core.model.ProfileInfo
+import app.marquee.design.AvatarArt
 import app.marquee.design.Form
 import app.marquee.design.MarqueeTheme
 import app.marquee.design.Tokens
@@ -97,6 +98,30 @@ class ProfileCirclesTest {
         // The tile is 60 dp: 6 dp of disc around the 48 dp picture. (3, 30) is on the disc, (1, 1) is its corner.
         assertEquals(Tokens.selectedFill, pixels()[3, 30])
         assertEquals(Color.Black, pixels()[1, 1])
+    }
+
+    /** The editor's picture on TV, 64 dp in its 76 dp choice; (38, 12) is inside the circle, above the glyph. */
+    private fun picture(focused: Boolean) {
+        tile(Form.Tv) {
+            Choice(selected = false, label = "Popcorn", size = 64.dp, onClick = {}, forceFocus = focused) { lit ->
+                AvatarArt("popcorn", "ember", "M", 64.dp, lit = lit)
+            }
+        }
+        compose.waitForIdle()
+    }
+
+    @Test
+    fun `a focused picture on TV turns white, as a focused profile does`() {
+        picture(focused = true)
+        val fill = pixels()[38, 12]
+        assertTrue(fill.luminance() > 0.7f, "the focused picture is $fill, not white")
+    }
+
+    @Test
+    fun `a picture at rest on TV keeps its color`() {
+        picture(focused = false)
+        val fill = pixels()[38, 12]
+        assertTrue(fill.luminance() < 0.5f, "the picture at rest is $fill")
     }
 
     @Test
