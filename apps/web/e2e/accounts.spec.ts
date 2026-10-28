@@ -202,7 +202,7 @@ const codeIn = (text: string) => /^\d{6}$/m.exec(text)?.[0] ?? "";
 /** The relay mails an address once a minute: wait out what is left of that minute. */
 async function mailable(to: string) {
   const at = mailed.get(to);
-  if (at) await new Promise((ok) => setTimeout(ok, Math.max(0, at + 61_000 - Date.now())));
+  if (at) await new Promise((ok) => setTimeout(ok, Math.max(0, at + 62_000 - Date.now())));
 }
 const emailStarts = (port: number) => asked.filter((a) => a.port === port && a.op === "emailSignInStart").length;
 const codeTries = (port: number) => asked.filter((a) => a.port === port && a.op === "emailSignIn").length;
@@ -297,14 +297,7 @@ test.describe.serial("accounts on the web", () => {
     if (scratch) rmSync(scratch, { recursive: true, force: true });
   });
 
-  test("email: never on a TV; Mail signs in by email (Back, a wrong code, new, Create); Late asks a code", async () => {
-    // The TV has no email row, and the email route sends it to Sign in (E13).
-    await go(tv, "/sign-in");
-    await expect(tv.locator('[data-f="signin:mock"]')).toBeVisible();
-    await expect(tv.locator('[data-f="signin:email"]')).toHaveCount(0);
-    await go(tv, "/sign-in/email");
-    await expect(tv).toHaveURL(/\/sign-in$/);
-
+  test("email: Mail signs in by email (Back, a wrong code, new, Create); Late asks a code", async () => {
     // Its own row under the providers, never a provider button.
     await go(mail, "/welcome");
     await expect(mail.locator(".sign-in-providers .btn")).toHaveText(["Continue with Apple", "Continue with mock"]);
@@ -558,6 +551,13 @@ test.describe.serial("accounts on the web", () => {
   });
 
   test("the TV's first run is the code for a phone: Desk approves it, and the TV skips the doors", async () => {
+    // The TV has no email row, and the email route sends it to Sign in (E13).
+    await expect(tv.locator("html")).toHaveAttribute("data-form", "tv");
+    await go(tv, "/sign-in");
+    await expect(tv.locator('[data-f="signin:mock"]')).toBeVisible();
+    await expect(tv.locator('[data-f="signin:email"]')).toHaveCount(0);
+    await go(tv, "/sign-in/email");
+    await expect(tv).toHaveURL(/\/sign-in$/);
     await go(tv, "/welcome");
     await expect(tv.locator("h1")).toHaveText("Sign in with your phone");
     await expect(tv.getByText("On your phone, open Momotus and tap Sign in another device")).toBeVisible();

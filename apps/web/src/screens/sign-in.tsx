@@ -524,7 +524,10 @@ export function EmailStages(props: { mail: MailState; stage: MailStage; fkey: st
   const [now, setNow] = createSignal(Date.now());
   const tick = setInterval(() => setNow(Date.now()), 1000);
   onCleanup(() => clearInterval(tick));
-  const wait = () => resendIn(m.sentAt(), now());
+  // The tick may be older than the mail: never count from before it.
+  const wait = () => resendIn(m.sentAt(), Math.max(now(), m.sentAt()));
+  // The failure's own Send a new code stands in for the row's while it shows.
+  const standing = () => props.stage === "code" && !m.failure()?.actions.some((a) => a.act === "resend");
   const fieldLine = () => (
     <Show when={m.fieldError()}>
       {(e) => (
@@ -623,7 +626,7 @@ export function EmailStages(props: { mail: MailState; stage: MailStage; fkey: st
       </Show>
       <Show when={m.failure()}>{(f) => <FailureNote failure={f()} fkey={props.fkey} onAct={props.onAct} />}</Show>
       <div class="acts">
-        <Show when={props.stage === "code" && !m.ended()}>
+        <Show when={standing()}>
           {/* Not a live region: the count is read once, and the line below says when it turns on. */}
           <button class="btn" data-f={k("new-code")} disabled={wait() > 0 || m.busy()} onClick={() => m.resend()}>
             {wait() > 0 ? fill(w.codeResendIn, { seconds: wait() }) : w.codeResend}
@@ -635,7 +638,7 @@ export function EmailStages(props: { mail: MailState; stage: MailStage; fkey: st
         {props.children}
       </div>
       <p class="sr" aria-live="polite">
-        {props.stage === "code" && !m.ended() && m.sentAt() && wait() === 0 ? w.codeResend : ""}
+        {standing() && m.sentAt() && wait() === 0 ? w.codeResend : ""}
       </p>
     </>
   );

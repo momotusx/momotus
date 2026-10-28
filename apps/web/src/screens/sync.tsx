@@ -564,8 +564,9 @@ function SignedInWith(props: { links: IdentityLink[] | undefined; providers: str
   const [failure, setFailure] = createSignal<Failure | null>(null);
   let ticket = "";
   let target: IdentityLink | null = null;
-  /** The provider the ticket came from, for its failure's words. */
+  /** The provider the ticket came from, for its failure's words, and why its link failed. */
   let via = "";
+  let linkFailed = "";
   const link = async (move: boolean, provider: string) => {
     setFailure(null);
     try {
@@ -573,7 +574,8 @@ function SignedInWith(props: { links: IdentityLink[] | undefined; providers: str
       setPicking(false);
       props.refetch();
     } catch (e) {
-      setFailure(signInFailure(codeOf(e) ?? "", provider));
+      linkFailed = codeOf(e) ?? "";
+      setFailure(signInFailure(linkFailed, provider));
     }
   };
   const linking = useSignIn(server, (end, provider) => {
@@ -596,7 +598,7 @@ function SignedInWith(props: { links: IdentityLink[] | undefined; providers: str
     },
   });
   /** At most one Email row: the email way shows only while no email link exists. */
-  const emailOffered = () => props.providers.includes(EMAIL) && !(props.links ?? []).some((l) => l.provider === EMAIL);
+  const emailOffered = () => !!props.links && props.providers.includes(EMAIL) && !props.links.some((l) => l.provider === EMAIL);
   const emailAct = (a: Act) => {
     if (a === "retry") mail.retry();
     else if (a === "resend") mail.resend();
@@ -635,7 +637,12 @@ function SignedInWith(props: { links: IdentityLink[] | undefined; providers: str
       revoking.stop();
       void unlink(target);
     }
-    else if (a === "retry") linking.again();
+    // An email ticket is never retried through a provider's window: the same link again, or a new code.
+    else if (a === "retry" && via === EMAIL) {
+      setFailure(null);
+      if (linkFailed === "ticketExpired") setEmailing(mail.reopen());
+      else void link(false, EMAIL);
+    } else if (a === "retry") linking.again();
     else {
       setFailure(null);
       linking.setFailure(null);
@@ -702,6 +709,8 @@ function SignedInWith(props: { links: IdentityLink[] | undefined; providers: str
                       setFailure(null);
                       mail.reset();
                       setEmailing("address");
+                      // The button that was pressed is gone: the field takes the focus.
+                      queueMicrotask(() => document.querySelector<HTMLElement>('[data-f="sync:email:address"]')?.focus());
                     }}
                   >
                     <Mail aria-hidden />

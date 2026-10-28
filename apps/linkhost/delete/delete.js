@@ -121,11 +121,13 @@ async function finish(back) {
 
 /** A sign-in's ticket: ask before the deletion, or say there is no account. */
 function ask(taken) {
+  const confirm = document.getElementById("confirm");
+  confirm.hidden = true;
   if (!taken.account) return say(WORDS.noAccount);
   say(WORDS.ask);
-  const confirm = document.getElementById("confirm");
   confirm.hidden = false;
-  confirm.addEventListener("click", async () => {
+  // One handler, for this ticket only: a later sign-in on the page replaces it.
+  confirm.onclick = async () => {
     confirm.disabled = true;
     try {
       const { dueMs } = await post("/v1/account/delete-request", { ticket: taken.ticket });
@@ -135,7 +137,7 @@ function ask(taken) {
       confirm.disabled = false;
       say(e.code === "ticketExpired" ? WORDS.expired : WORDS.failed, "bad");
     }
-  });
+  };
 }
 
 /** Continue with email's flow: in this page's memory only, never in sessionStorage (E14). */
@@ -156,6 +158,7 @@ async function busy(button, work) {
 
 function showEmail() {
   say("");
+  $("confirm").hidden = true;
   $("email-form").hidden = false;
   $("email").focus();
 }
