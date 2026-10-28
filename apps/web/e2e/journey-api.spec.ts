@@ -1210,6 +1210,39 @@ test("TV: Back after the remembered title left the list lands in its place, not 
   await context.close();
 });
 
+test("Up Next: Cancel keeps this episode from going on by itself, Play now still does, and the next play counts down again", async ({ browser }) => {
+  const c = new Client(`ws://127.0.0.1:${JOURNEY_PORT}/ws`);
+  await c.req("setPrefs", { patch: { autoplayNext: true } }).finally(() => c.close());
+  const { context, page: p } = await page(browser);
+  const nearEnd = (seconds: number) =>
+    p.evaluate((s) => {
+      const v = document.querySelector("video");
+      if (v) v.currentTime = v.duration - s;
+    }, seconds);
+  const open = async () => {
+    await p.goto("/play/series/mqj2/mqj2:1:1?form=desktop");
+    await expect(p.locator('[data-f="player:toggle"]')).toBeVisible({ timeout: 30_000 });
+    await startIfPaused(p);
+    await nearEnd(12);
+    await expect(p.locator(".next .num")).toContainText(/\d/, { timeout: 30_000 });
+  };
+  // Cancel: the card goes, the episode plays on, and at its end the end card shows instead of the next episode.
+  await open();
+  await p.locator('[data-f="next:cancel"]').click();
+  await expect(p.locator(".next")).toHaveCount(0);
+  await expect(p.locator('[data-f="player:toggle"]')).toBeFocused();
+  await nearEnd(0.5);
+  await expect(p.locator(".endcard")).toBeVisible({ timeout: 30_000 });
+  await p.waitForTimeout(1500);
+  await expect(p).toHaveURL(/mqj2:1:1/);
+  // The next play (a fresh page) counts down again, and Play now goes on at once.
+  await open();
+  await expect(p.locator('[data-f="next:cancel"]')).toBeVisible();
+  await p.locator('[data-f="next:play"]').click();
+  await expect(p).toHaveURL(/mqj2:1:2/);
+  await context.close();
+});
+
 test("one title entry in history after autoplay too: Episodes and Versions from the next episode", async ({ browser }) => {
   const c = new Client(`ws://127.0.0.1:${JOURNEY_PORT}/ws`);
   await c.req("setPrefs", { patch: { autoplayNext: true } }).finally(() => c.close());

@@ -745,7 +745,7 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
   // Manual only: the viewer presses Skip; the player never jumps by itself.
   const skip = (s: Segment) => {
     if (creditsToEnd(s)) {
-      if (next()) setSkippedAt(s.startMs);
+      if (next() && !stopped()) setSkippedAt(s.startMs);
       else engine.seek(Math.max(0, duration() - 0.05));
     } else {
       engine.seek(s.endMs / 1000);
@@ -754,11 +754,18 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
   };
 
   const next = () => snap()?.next ?? null;
+  // Cancel on Up Next: this play does not go on to the next episode by itself. It keeps playing, and its end card
+  // shows at the end. The page is keyed per play, so the next play starts without it.
+  const [stopped, setStopped] = createSignal(false);
+  const stopAutoplay = () => {
+    setStopped(true);
+    autoFocusSoon(() => document.querySelector<HTMLElement>('[data-f="player:toggle"]'));
+  };
   // Up Next: from the release-matched credits start when the core knows it,
   // else the last NEXT_AT seconds, or at once after Skip credits.
   const showNext = () => {
     // A panel open (Subtitles during the credits): Up Next waits, as Skip does.
-    if (!next() || duration() <= 60 || ended() || panel()) return false;
+    if (!next() || stopped() || duration() <= 60 || ended() || panel()) return false;
     const skipped = skippedAt();
     if (skipped !== null && time() * 1000 >= skipped) return true;
     const at = snap()?.nextAtMs;
@@ -833,7 +840,7 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
   const onEnded = () => {
     report();
     const href = nextHref();
-    if (href && prefs.state.data?.autoplayNext) navigate(href, { replace: true, state: carried() });
+    if (href && prefs.state.data?.autoplayNext && !stopped()) navigate(href, { replace: true, state: carried() });
     else {
       setOsd(false);
       setEnded(true);
@@ -1477,10 +1484,17 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
                   <p class="num">{startsText(remaining())}</p>
                 </Match>
               </Switch>
-              <A class="btn primary" href={nextHref() ?? "#"} replace state={carried()} data-f="next:play">
-                <SkipForward aria-hidden />
-                Play now
-              </A>
+              <div class="next-acts">
+                <A class="btn primary" href={nextHref() ?? "#"} replace state={carried()} data-f="next:play">
+                  <SkipForward aria-hidden />
+                  Play now
+                </A>
+                <Show when={prefs.state.data?.autoplayNext}>
+                  <button class="btn" data-f="next:cancel" onClick={stopAutoplay}>
+                    Cancel
+                  </button>
+                </Show>
+              </div>
             </div>
           </aside>
         )}

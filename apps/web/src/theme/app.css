@@ -303,7 +303,7 @@ h1, h2, h3 { font-family: var(--font-display); font-weight: var(--weight-heading
 /* One white per screen (design/DECISION.md, TV focus): while another control in its action row
  * holds focus, the white primary takes the secondary fill, as tvOS draws an unfocused button.
  * With focus elsewhere on the page it stays white. */
-[data-form="tv"] :is(.play-row, .acts, .install, .dkey, .is-acts):focus-within .btn.primary:not(:focus) { background: var(--fill); color: #fff; }
+[data-form="tv"] :is(.play-row, .acts, .install, .dkey, .is-acts, .next-acts):focus-within .btn.primary:not(:focus) { background: var(--fill); color: #fff; }
 /* Art rises (the tile, calendar and profile rules lift the art box itself, so
  * a placeholder lifts too) and catches tvOS's specular sheen. */
 .tile .pic::after, .cal-art::after { content: ""; position: absolute; inset: 0; z-index: 2; border-radius: inherit; pointer-events: none;
