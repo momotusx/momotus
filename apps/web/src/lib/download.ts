@@ -275,6 +275,7 @@ export const downloadWords = {
   emptyTitle: "Nothing downloaded yet",
   emptyBody: "Download movies and episodes to watch them without a connection.",
   offline: "You're offline. Your downloads still play.",
+  offlineAlone: "You're offline.",
   offlineAction: "Go to Downloads",
   titleOffline: "Showing what's downloaded",
   smart: "Smart downloads",
@@ -288,3 +289,12 @@ export const downloadWords = {
  * lock lands reads it as still opening: no "Nothing downloaded yet", no series page that thinks its
  * last episode went. */
 export const shownDownloads = <S extends object>(s: S | null | undefined): S | null => (s && !(s as { locked?: boolean }).locked ? s : null);
+
+/** The shell's offline banner (plans/offline-downloads.md 3.5), on every screen but TV's and the
+ * player's: its words, and whether it offers the way to Downloads, which it does only when this
+ * profile has a done download and the page is not Downloads itself. Null online. */
+export function offlineBanner(online: boolean, form: string, path: string, hasDone: boolean): { words: string; action: boolean } | null {
+  if (online || form === "tv" || path.startsWith("/play/")) return null;
+  if (!hasDone) return { words: downloadWords.offlineAlone, action: false };
+  return { words: downloadWords.offline, action: !path.startsWith("/library/downloads") };
+}

@@ -11,7 +11,7 @@ import Settings from "lucide-solid/icons/settings";
 import { type Component, createEffect, createMemo, createSignal, For, on, onCleanup, Show, untrack } from "solid-js";
 import { ProfileMenu } from "./components/avatar";
 import Brand from "./components/brand";
-import { DownloadStatus } from "./components/download";
+import { DownloadStatus, OfflineBanner } from "./components/download";
 import { bridgeUrl, link } from "./core/client";
 // The debrid accounts follow the core from the start, whatever screen is open.
 import "./core/debrid";
@@ -343,6 +343,8 @@ function Shell(props: RouteSectionProps) {
         >
           <Show when={gateOpen()} fallback={<Picker mode={profiles()?.locked ? "locked" : "start"} />}>
             <Show when={!foreign()}>
+            {/* Offline, on every page but TV's and the player's (plans/offline-downloads.md 3.5). */}
+            <OfflineBanner />
             <Show when={nav() && form() !== "phone"}>
               <div class="nav-scrim" classList={{ on: scrolled() }} aria-hidden="true" />
               <TopNav />

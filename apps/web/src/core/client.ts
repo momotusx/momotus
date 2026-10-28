@@ -70,9 +70,14 @@ document.addEventListener("visibilitychange", () => (document.hidden ? lifecycle
 // Leaving the page: the core pauses what it scrobbles (Trakt) before the tab goes.
 window.addEventListener("pagehide", () => lifecycle("background"));
 // The network as downloads read it (plans/offline-downloads.md 4.13): `none` while the browser is
-// offline, so downloads wait and Home says the downloads still play. A browser has no cost flag:
+// offline, so downloads wait and the shell's banner says so (3.5). A browser has no cost flag:
 // `metered` and `lowData` are always false (Download on Wi-Fi only is not offered here).
-const networkChanged = () => lifecycle("networkChanged", { network: navigator.onLine ? networkType() : "none", metered: false, lowData: false });
+const [online, setOnline] = createSignal(navigator.onLine);
+export { online };
+const networkChanged = () => {
+  setOnline(navigator.onLine);
+  lifecycle("networkChanged", { network: navigator.onLine ? networkType() : "none", metered: false, lowData: false });
+};
 window.addEventListener("online", networkChanged);
 window.addEventListener("offline", networkChanged);
 connection?.addEventListener("change", networkChanged);

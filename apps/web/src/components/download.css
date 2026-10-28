@@ -145,3 +145,11 @@
 /* The subtitles kept with a download, a quiet third line. */
 .dlrow-text .dlrow-subs { color: var(--dim); font-size: var(--type-caption); }
 [data-form="phone"] .dlrow-text .dlrow-subs { font-size: 12px; }
+
+/* The shell's offline banner (plans/offline-downloads.md 3.5): solid `raised` with a white glyph
+ * (design/DECISION.md, States), the full width over the shell; the pages start under it. */
+.offline-bar { position: absolute; left: 0; right: 0; top: 0; z-index: 55; display: flex; align-items: center; gap: 16px;
+  padding: 12px var(--safe-side); background: var(--raised); font: 500 var(--type-callout) / 1.3 var(--font-text); }
+.offline-bar > svg { flex: none; width: 24px; height: 24px; color: #fff; }
+.offline-bar p { flex: 1; margin: 0; }
+[data-form="phone"] .offline-bar { flex-wrap: wrap; gap: 10px 12px; padding: calc(10px + env(safe-area-inset-top)) 16px 10px; }

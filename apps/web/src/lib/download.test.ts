@@ -17,6 +17,7 @@ import {
   itemOp,
   kidsOf,
   left,
+  offlineBanner,
   ofTotal,
   progressLine,
   seriesControl,
@@ -196,4 +197,15 @@ test("a locked session's counts-only snapshot is never shown, so no screen reads
   expect(shownDownloads(null)).toBeNull();
   // A core from before the field: shown as it always was.
   expect(shownDownloads({ downloading: [], titles: [] })).toEqual({ downloading: [], titles: [] });
+});
+
+test("the shell's offline banner: none online, on TV or in the player; the way to Downloads only with a done download, off its pages", () => {
+  expect(offlineBanner(true, "phone", "/", true)).toBeNull();
+  expect(offlineBanner(false, "tv", "/", true)).toBeNull();
+  expect(offlineBanner(false, "desktop", "/play/movie/tt1/tt1", true)).toBeNull();
+  expect(offlineBanner(false, "phone", "/discover", false)).toEqual({ words: "You're offline.", action: false });
+  expect(offlineBanner(false, "phone", "/discover", true)).toEqual({ words: "You're offline. Your downloads still play.", action: true });
+  expect(offlineBanner(false, "desktop", "/", true)).toEqual({ words: "You're offline. Your downloads still play.", action: true });
+  expect(offlineBanner(false, "phone", "/library/downloads", true)).toEqual({ words: "You're offline. Your downloads still play.", action: false });
+  expect(offlineBanner(false, "desktop", "/library/downloads/tt9", true)?.action).toBe(false);
 });

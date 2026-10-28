@@ -2,10 +2,6 @@ import { A, useNavigate } from "@solidjs/router";
 import CircleAlert from "lucide-solid/icons/circle-alert";
 import Puzzle from "lucide-solid/icons/puzzle";
 import Wrench from "lucide-solid/icons/wrench";
-import ArrowDownToLine from "lucide-solid/icons/arrow-down-to-line";
-import WifiOff from "lucide-solid/icons/wifi-off";
-import { downloadsHere } from "../components/download";
-import { downloadWords } from "../lib/download";
 import RefreshCw from "lucide-solid/icons/refresh-cw";
 import Sparkle from "lucide-solid/icons/sparkle";
 import ShieldAlert from "lucide-solid/icons/shield-alert";
@@ -280,23 +276,6 @@ export default function Home() {
     <div class="home">
       <main class="page" data-vscroll ref={attach} onScroll={(e) => (pageScroll.top = e.currentTarget.scrollTop)}>
         <HeroCarousel heroes={home.heroes} waiting={waiting()} />
-
-        {/* Offline with downloads that play (plans/offline-downloads.md 3.5): one line and the way to them,
-            above the rows, which keep their own "did not load". Never on TV, which downloads nothing. */}
-        <Show when={downloadsHere() && home.offline}>
-          <section class="defaults-card dl-banner" role="status" aria-label={downloadWords.offline} data-fgroup="offline-banner">
-            <WifiOff aria-hidden class="dc-icon" />
-            <div class="dc-text">
-              <p>{downloadWords.offline}</p>
-            </div>
-            <div class="acts">
-              <A class="btn" href="/library/downloads" data-f="home:downloads">
-                <ArrowDownToLine aria-hidden />
-                {downloadWords.offlineAction}
-              </A>
-            </div>
-          </section>
-        </Show>
 
         {/* With no row to follow, the account's notices sit under the hero. */}
         <Show when={home.rows.length === 0}>

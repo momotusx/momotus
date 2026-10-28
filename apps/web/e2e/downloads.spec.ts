@@ -157,7 +157,14 @@ async function openPage(browser: Browser, path: string, options: BrowserContextO
 
 const control = (page: Page) => page.locator('[data-f="title:download"]');
 const item = (page: Page, name: string) => page.getByRole("menuitem", { name, exact: true });
-const banner = (page: Page) => page.locator(".dl-banner");
+const banner = (page: Page) => page.locator(".offline-bar");
+/** The browser's own offline or online event, without Playwright's offline (which also cuts the page
+ * from the core's loopback stream server): the app tells the core and shows or hides its banner. */
+const goOnline = (page: Page, on: boolean) =>
+  page.evaluate((on) => {
+    Object.defineProperty(navigator, "onLine", { configurable: true, get: () => on });
+    window.dispatchEvent(new Event(on ? "online" : "offline"));
+  }, on);
 /** One request to the spec's core, as the app or the platform sends it. */
 async function ask<T = unknown>(op: string, fields: Record<string, unknown>): Promise<T> {
   const c = new Client(`ws://127.0.0.1:${DOWNLOADS_PORT}/ws`);
@@ -258,8 +265,8 @@ test("the TV form shows no control, no Downloads entry, no section and no offlin
     await page.goto(path);
     await expect(page, path).toHaveURL(/\/$/);
   }
-  // Offline with a film kept: the desktop says so on Home (the browser's own offline event tells the
-  // core), the TV does not.
+  // Offline with a film kept: the desktop's shell says so (the browser's own offline event), the TV's
+  // does not.
   const desk = await openPage(browser, "/?form=desktop");
   await page.goto("/");
   await expect(page.locator('[data-f="nav:/"]')).toBeVisible();
@@ -274,24 +281,36 @@ test("the TV form shows no control, no Downloads entry, no section and no offlin
   await desk.context.close();
 });
 
-test("offline, Home says the downloads play, one plays from Downloads, then it is deleted", async ({ browser }) => {
-  // The origin and the addon are gone. Playwright's offline also cuts the page from the core's loopback
-  // stream server, which a browser without a network still reaches, so the bridge is told `none` here,
-  // as the app tells it on the browser's offline event (the previous test). The page tells its network at
-  // load, so the core hears `none` once the page is up, and the page then moves within the app.
+test("offline, every page says so, Home once, a download plays from Downloads, then it is deleted", async ({ browser }) => {
+  // The origin and the addon are gone. The page goes offline with the browser's own event (`goOnline`),
+  // which tells the core `none` as the app does, and moves within the app.
   down = true;
   for (const s of sockets) s.destroy();
   const { context, page, errors } = await openPage(browser, "/?form=desktop");
   await expect(page.locator('[data-f="nav:/"]')).toBeVisible({ timeout: 30_000 });
-  await network("none");
-  await expect(banner(page)).toContainText("You're offline. Your downloads still play.", { timeout: 30_000 });
+  await goOnline(page, false);
+  // Home: one banner, the shell's, with the way to Downloads; it sits above the nav, not over it.
+  await expect(banner(page)).toHaveText(/You're offline\. Your downloads still play\.\s*Go to Downloads/, { timeout: 30_000 });
+  await expect(page.getByText("You're offline.", { exact: false })).toHaveCount(1);
+  await expect(banner(page)).toHaveAttribute("role", "status");
+  const bar = await banner(page).boundingBox();
+  const nav = await page.locator(".topnav").boundingBox();
+  expect(bar && nav && bar.y + bar.height <= nav.y + 1).toBe(true);
+  // Another page shows it too.
+  await page.locator('[data-f="nav:/discover"]').click();
+  await expect(page).toHaveURL(/\/discover/);
+  await expect(banner(page)).toContainText("You're offline. Your downloads still play.");
   await banner(page).getByRole("link", { name: "Go to Downloads" }).click();
   await expect(page).toHaveURL(/\/library\/downloads$/);
+  // On Downloads it says so with no way to where it is.
+  await expect(banner(page)).toContainText("You're offline. Your downloads still play.");
+  await expect(banner(page).getByRole("link")).toHaveCount(0);
 
-  // Played from Downloads: the normal play path, from disk.
+  // Played from Downloads: the normal play path, from disk; the player has no banner.
   const started = Date.now();
   await page.locator(".dlrow-main", { hasText: "Big Buck Bunny" }).click();
   await expect(page).toHaveURL(new RegExp(`/play/movie/${BBB_ID}/${BBB_ID}`));
+  await expect(banner(page)).toHaveCount(0);
   await page.evaluate(() => {
     const v = document.querySelector("video");
     if (v) v.muted = true;
@@ -307,13 +326,16 @@ test("offline, Home says the downloads play, one plays from Downloads, then it i
   await expect(page.locator(".cues .cue")).toHaveText("A kept line", { timeout: 15_000 });
   await page.goBack();
 
-  // Deleted with the row's trash button: the empty state, and Home has no banner left.
+  // Deleted with the row's trash button: the empty state, and the banner says only that it is offline.
   await expect(page).toHaveURL(/\/library\/downloads$/);
   await page.getByRole("button", { name: "Delete Big Buck Bunny" }).click();
   await expect(page.getByRole("heading", { name: "Nothing downloaded yet" })).toBeVisible();
   await expect(page.getByText("Download movies and episodes to watch them without a connection.")).toBeVisible();
   await expect(page.locator(".dlrow")).toHaveCount(0);
   await page.locator('[data-f="nav:/"]').click();
+  await expect(banner(page)).toHaveText("You're offline.");
+  // Back online, it goes.
+  await goOnline(page, true);
   await expect(banner(page)).toHaveCount(0);
   expect(errors).toEqual([]);
   await context.close();

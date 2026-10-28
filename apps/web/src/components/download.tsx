@@ -15,16 +15,17 @@ import Square from "lucide-solid/icons/square";
 import Trash from "lucide-solid/icons/trash";
 import WifiOff from "lucide-solid/icons/wifi-off";
 import X from "lucide-solid/icons/x";
-import { useNavigate } from "@solidjs/router";
+import { A, useLocation, useNavigate } from "@solidjs/router";
 import { type Component, createEffect, For, type JSX, onCleanup, onMount, Show } from "solid-js";
 import { Dynamic } from "solid-js/web";
-import { displayCaps, op } from "../core/client";
+import { displayCaps, liveView, online, op } from "../core/client";
 import type { DownloadBadge } from "../core/generated/DownloadBadge";
+import type { DownloadsSnapshot } from "../core/generated/DownloadsSnapshot";
 import { profiles } from "../core/profiles";
 import { pushBack } from "../focus/back";
 import { focusEl } from "../focus/dom";
 import { form } from "../form";
-import { controlName, type DownloadControl, type DownloadGlyph, type DownloadItem, ITEM_LABEL, itemOp, kidsOf } from "../lib/download";
+import { controlName, type DownloadControl, type DownloadGlyph, type DownloadItem, downloadWords, ITEM_LABEL, itemOp, kidsOf, offlineBanner, shownDownloads } from "../lib/download";
 import { downloadProblem, downloadWordsFailed, reported } from "../lib/download-status";
 import "./download.css";
 
@@ -103,6 +104,53 @@ export function DownloadStatus() {
           <i class="dot" />
           {words()}
         </p>
+      )}
+    </Show>
+  );
+}
+
+/** The shell's offline banner (plans/offline-downloads.md 3.5): above every page but TV's and the
+ * player's while the browser is offline, in its own height (the shell's pages start under it), said
+ * once when it shows. The downloads view opens only while offline, to know whether any of this
+ * profile's downloads is done. */
+export function OfflineBanner() {
+  return (
+    <Show when={!online() && form() !== "tv"}>
+      <OfflineBar />
+    </Show>
+  );
+}
+
+function OfflineBar() {
+  const location = useLocation();
+  const view = liveView<DownloadsSnapshot>("downloads");
+  const hasDone = () => !!shownDownloads(view.state.data)?.titles.some((t) => t.rows.some((r) => r.state === "done"));
+  const banner = () => offlineBanner(online(), form(), location.pathname, hasDone());
+  // The pages below start under the banner, whatever it wraps to (`--offline-h` on the shell).
+  const measure = (el: HTMLElement) => {
+    const shell = el.parentElement;
+    if (!shell) return;
+    const set = () => shell.style.setProperty("--offline-h", `${el.offsetHeight}px`);
+    const watch = new ResizeObserver(set);
+    watch.observe(el);
+    onCleanup(() => {
+      watch.disconnect();
+      shell.style.removeProperty("--offline-h");
+    });
+  };
+  return (
+    <Show when={banner()}>
+      {(b) => (
+        <section class="offline-bar" role="status" ref={measure} data-fgroup="offline-banner">
+          <WifiOff aria-hidden />
+          <p>{b().words}</p>
+          <Show when={b().action}>
+            <A class="btn" href="/library/downloads" data-f="offline:downloads">
+              <ArrowDownToLine aria-hidden />
+              {downloadWords.offlineAction}
+            </A>
+          </Show>
+        </section>
       )}
     </Show>
   );

@@ -53,7 +53,8 @@ h1, h2, h3 { font-family: var(--font-display); font-weight: var(--weight-heading
 .app { position: fixed; left: var(--ox, 0); top: var(--oy, 0); width: var(--cw, 100vw); height: var(--ch, 100vh);
   transform: scale(var(--k, 1)); transform-origin: 0 0; overflow: clip; background: var(--bg); }
 [data-form="phone"] .app { inset: 0; width: auto; height: auto; transform: none; }
-.screen { position: absolute; inset: 0; }
+/* `--offline-h`: the shell's offline banner, when it shows, sits above the pages and the nav. */
+.screen { position: absolute; inset: 0; top: var(--offline-h, 0px); }
 
 /* Scrollers we drive with focus never show bars on TV. */
 [data-vscroll], [data-hscroll] { scrollbar-width: none; overscroll-behavior: contain; }
@@ -157,7 +158,7 @@ h1, h2, h3 { font-family: var(--font-display); font-weight: var(--weight-heading
 /* Navigation, TV (design/DECISION.md): the wordmark at the left, on the bar's middle line, and a
  * solid `surface` tab bar centered at the top, 68 tall at 46; every tab has its word, the active
  * one in a white 20 percent pill, the rest at 64 percent; the profile at its end. */
-.topnav { position: absolute; left: 0; right: 0; top: 0; z-index: 10; height: calc(var(--nav-top) + var(--nav-h)); pointer-events: none; }
+.topnav { position: absolute; left: 0; right: 0; top: var(--offline-h, 0px); z-index: 10; height: calc(var(--nav-top) + var(--nav-h)); pointer-events: none; }
 .topnav > * { pointer-events: auto; }
 /* The mark (components/brand.tsx), sized by its font size: the bird 1.45 em, the name 0.45 of the bird. */
 .brand { font: var(--weight-display) 38px / 1 var(--font-display); display: inline-flex; align-items: center; gap: .29em; }
@@ -211,7 +212,7 @@ h1, h2, h3 { font-family: var(--font-display); font-weight: var(--weight-heading
 
 /* Behind the pill once the page scrolls: a scrim of the page color, so what
  * slides under the navigation never runs into it. */
-.nav-scrim { position: absolute; left: 0; right: 0; top: 0; z-index: 9; height: calc(var(--nav-top) + var(--nav-h) + 56px); pointer-events: none;
+.nav-scrim { position: absolute; left: 0; right: 0; top: var(--offline-h, 0px); z-index: 9; height: calc(var(--nav-top) + var(--nav-h) + 56px); pointer-events: none;
   background: linear-gradient(180deg, var(--bg) calc(var(--nav-top) + var(--nav-h)), transparent);
   opacity: 0; transition: opacity var(--motion-panel) var(--ease); }
 .nav-scrim.on { opacity: 1; }
