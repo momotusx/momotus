@@ -4,6 +4,7 @@ import android.app.Application
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.LocalOnBackPressedDispatcherOwner
 import androidx.compose.runtime.snapshots.Snapshot
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsMatcher
@@ -20,8 +21,10 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.requestFocus
+import androidx.compose.ui.text.AnnotatedString
 import androidx.core.graphics.Insets
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
@@ -281,7 +284,8 @@ class EditProfileTest {
         edit("p1", Form.Tv)
         compose.runOnUiThread { WindowCompat.setDecorFitsSystemWindows(compose.activity.window, false) }
         name().requestFocus()
-        name().performTextInput("Ana Maria")
+        // On TV the field is a button that opens the keyboard: its text is set through its semantics.
+        name().performSemanticsAction(SemanticsActions.SetText) { it(AnnotatedString("Ana Maria")) }
         keyboard(visible = true)
         back()
         compose.waitForIdle()
