@@ -280,6 +280,7 @@ class EditProfileTest {
     fun `on TV a keyboard that closes under an open question leaves focus on its safe button`() {
         edit("p1", Form.Tv)
         compose.runOnUiThread { WindowCompat.setDecorFitsSystemWindows(compose.activity.window, false) }
+        name().requestFocus()
         name().performTextInput("Ana Maria")
         keyboard(visible = true)
         back()
