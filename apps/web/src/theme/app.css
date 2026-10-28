@@ -73,8 +73,8 @@ h1, h2, h3 { font-family: var(--font-display); font-weight: var(--weight-heading
 [data-form="tv"], [data-form="tv"] [data-scheme="dark"] { --key: var(--accent); }
 /* No ring and no halo on TV: the lift's own shadow is the only one (the frames draw no halo). */
 [data-form="tv"] { --focus-ring: 0px; --focus-shadow: 0 0 0 0 transparent; }
-/* ponytail: the player keeps its white ring on TV until phase 5 gives its
- * controls the lift (plans/player-polish.md owns player.css until then). */
+/* The player's menus (.opt, the subtitle picker) keep a white ring on TV until they are rebuilt; its controls bar
+ * opts out of it in player.css and draws the white fill and the lift as every other control does. */
 [data-form="tv"] .player-scr { --focus-ring: 4px; }
 [data-f] { outline: 0 solid transparent; position: relative;
   transition: transform var(--motion-focus) var(--ease), box-shadow var(--motion-focus) var(--ease),

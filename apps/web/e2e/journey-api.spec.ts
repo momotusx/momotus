@@ -629,16 +629,18 @@ test("Calendar that could not open offers Try again, focused, and an empty one a
 
 test("Search that could not open offers Try again, which opens it anew with the query kept", async ({ browser }) => {
   let refused = 0;
-  const { context, page: p, sent } = await page(browser, { width: 1440, height: 900 }, (m) => {
+  const { context, page: p, sent } = await page(browser, { width: 1920, height: 1080 }, (m) => {
     if (m.op !== "subscribe" || m.view !== "search" || refused > 0) return undefined;
     refused++;
     return { ok: false, error: "the core did not answer" };
   });
-  await p.goto("/search?q=journey&form=desktop");
+  await p.goto("/search?q=journey&form=tv");
   const retry = p.locator('[data-f="search:retry"]');
   await expect(retry).toBeVisible({ timeout: 30_000 });
   await expect(p.locator(".palette-body")).toContainText("Search could not open.");
-  await retry.click();
+  // A remote lands on it, and Enter opens the search anew.
+  await expect(retry).toBeFocused();
+  await p.keyboard.press("Enter");
   await expect(retry).toHaveCount(0);
   // The panel is new, its field holds what was typed, and the query went to the new view.
   await expect(p.locator('[data-f="search:input"]')).toHaveValue("journey");

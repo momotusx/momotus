@@ -76,7 +76,7 @@ export function parentOf(path: string): string | null {
 
 /** Where a pushed page draws its back link (phone and desktop; TV has the remote's Back): over the title's art, or as a
  * bar of its own above Versions and the profile switcher (design/DECISION.md, Navigation). */
-export function backAt(path: string): "art" | "bar" | null {
+function backAt(path: string): "art" | "bar" | null {
   const parts = path.split("/").filter(Boolean);
   if (parts[0] === "title" && parts.length === 3) return "art";
   if (parts[0] === "title" && parts[3] === "versions") return "bar";

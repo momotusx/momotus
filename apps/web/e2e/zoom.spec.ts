@@ -30,14 +30,20 @@ async function sizeAt(browser: import("@playwright/test").Browser, zoom: number)
   return size;
 }
 
-test("desktop: the page's text grows with the browser zoom: 125 percent is 1.25 times, 200 percent at least 1.9", async ({ browser }) => {
+test("the page's text grows with the browser zoom: 1.25 and 1.75 on the desktop form, then the phone form from 200 percent", async ({ browser }) => {
+  // 1440 CSS px at 200 percent is 720: the phone form, whose text is in CSS px and 1.6 times the desktop's at 100.
   const base = await sizeAt(browser, 1);
   const at125 = await sizeAt(browser, 1.25);
+  const at175 = await sizeAt(browser, 1.75);
   const at200 = await sizeAt(browser, 2);
-  console.log(`zoom: synopsis ${base.toFixed(2)} px at 100, ${at125.toFixed(2)} at 125, ${at200.toFixed(2)} at 200`);
+  const at250 = await sizeAt(browser, 2.5);
+  console.log(`zoom: synopsis ${[base, at125, at175, at200, at250].map((n) => n.toFixed(2)).join(", ")} px at 100, 125, 175, 200, 250`);
   expect(at125 / base).toBeGreaterThan(1.2);
   expect(at125 / base).toBeLessThan(1.3);
-  expect(at200 / base).toBeGreaterThan(1.9);
+  expect(at175 / base).toBeGreaterThan(1.65);
+  expect(at175 / base).toBeLessThan(1.85);
+  expect(at200 / base).toBeGreaterThanOrEqual(1.6);
+  expect(at250 / base).toBeGreaterThanOrEqual(2);
 });
 
 test("desktop: tabs and the Search field never meet, at any width of the form", async ({ browser }) => {
@@ -73,11 +79,11 @@ test("a touch screen in the desktop form sees each episode's actions without a h
   await context.close();
 });
 
-test("a saved site zoom is seen from the first load: text grows 1.25 and 2 times in a Chrome profile", async () => {
+test("a saved site zoom is seen from the first load: text grows at 125, 175, 200 and 250 percent in a Chrome profile", async () => {
   // Chrome's per-host zoom level is the zoom's logarithm to base 1.2 (the headless shell Playwright bundles ignores it).
   const level = (zoom: number) => Math.log(zoom) / Math.log(1.2);
   const measured: { zoom: number; dpr: number; inner: number; outer: number; form: string; size: number }[] = [];
-  for (const zoom of [1, 1.25, 2]) {
+  for (const zoom of [1, 1.25, 1.75, 2, 2.5]) {
     const dir = mkdtempSync(join(tmpdir(), "mq-zoom-"));
     try {
       mkdirSync(join(dir, "Default"), { recursive: true });
@@ -98,8 +104,11 @@ test("a saved site zoom is seen from the first load: text grows 1.25 and 2 times
     }
   }
   console.log(`zoom profile: ${JSON.stringify(measured)}`);
-  const [base, z125, z200] = measured.map((m) => m.size);
-  expect((z125 ?? 0) / (base ?? 1)).toBeGreaterThan(1.2);
-  expect((z125 ?? 0) / (base ?? 1)).toBeLessThan(1.3);
-  expect((z200 ?? 0) / (base ?? 1)).toBeGreaterThan(1.9);
+  const size = (zoom: number) => measured.find((m) => m.zoom === zoom)?.size ?? 0;
+  expect(size(1.25) / size(1)).toBeGreaterThan(1.2);
+  expect(size(1.25) / size(1)).toBeLessThan(1.3);
+  expect(size(1.75) / size(1)).toBeGreaterThan(1.65);
+  expect(size(1.75) / size(1)).toBeLessThan(1.85);
+  expect(size(2) / size(1)).toBeGreaterThanOrEqual(1.6);
+  expect(size(2.5) / size(1)).toBeGreaterThanOrEqual(2);
 });

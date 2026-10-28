@@ -14,9 +14,10 @@ export const isWebKit = (ua: string) => /^((?!chrome|chromium|android|crios|fxio
  * `outerWidth` unzoomed and `innerWidth` in CSS px, so their ratio is the zoom, and `devicePixelRatio` is the display's
  * scale times it. A ratio counts only when the two agree: DPR over the ratio lands on a display scale (a border or a
  * scroll bar moves it a little) and DPR over that scale is a step the browsers offer. A side panel or docked DevTools
- * widens `outerWidth` and leaves DPR alone, so it fails and the page stays at 1. One case the guard cannot tell apart:
- * Windows at 125 percent display scaling with a side panel of about a fifth of the window reads as 125 percent zoom; the
- * text only gets bigger then, which is harmless. Firefox scales `outerWidth` with the
+ * widens `outerWidth` and leaves DPR alone, so it usually fails and the page stays at 1, but not always: on a 2x Mac a
+ * DevTools docked at half the window leaves a ratio of 2, which with DPR 2 reads as 200 percent zoom on a 1x scale, and
+ * Windows at 125 percent display scaling with a side panel of about a fifth of the window reads as 125 percent. Text only
+ * gets bigger then, which is harmless. Firefox scales `outerWidth` with the
  * zoom, so it reads 1 there: `desktopScale`'s clamp and the phone form at 720 CSS px are what grow its text. */
 export function browserZoom(outer: number, inner: number, dpr: number, webkit = false): number {
   if (!outer || !inner || !dpr || outer / inner < 1.05) return 1;

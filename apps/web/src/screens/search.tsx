@@ -12,7 +12,7 @@ import RefreshCw from "lucide-solid/icons/refresh-cw";
 import History from "lucide-solid/icons/rotate-ccw-clock";
 import SearchIcon from "lucide-solid/icons/search";
 import X from "lucide-solid/icons/x";
-import { createEffect, createMemo, createSignal, For, Match, onCleanup, onMount, Show, Switch } from "solid-js";
+import { createEffect, createMemo, createSignal, For, Match, on, onCleanup, onMount, Show, Switch } from "solid-js";
 import { Poster } from "../components/art";
 import { Ratings } from "../components/ratings";
 import { Why } from "../components/why";
@@ -23,7 +23,7 @@ import type { SearchSnapshot } from "../core/generated/SearchSnapshot";
 import type { Tile } from "../core/generated/Tile";
 import { onProfileReset } from "../core/profiles";
 import { pushBack } from "../focus/back";
-import { focusEl, mayAutoFocus } from "../focus/dom";
+import { autoFocusSoon, focusEl, mayAutoFocus } from "../focus/dom";
 import { historyDepth } from "../history";
 import { ratingParts, titlePath } from "../lib/format";
 import { rowWords } from "../lib/rows";
@@ -212,6 +212,10 @@ function Panel(props: { dialog?: boolean; retry: () => void }) {
     to.focus();
   };
 
+  // A search that could not open puts a remote on its Try again: the field has nothing to search with.
+  const failed = () => view.state.status.state === "failed";
+  createEffect(on(failed, (f) => f && autoFocusSoon(() => document.querySelector<HTMLElement>('[data-f="search:retry"]')), { defer: true }));
+
   let input!: HTMLInputElement;
   onMount(() => {
     // Opened again by Back: the shell restores the result that was opened.
@@ -236,7 +240,7 @@ function Panel(props: { dialog?: boolean; retry: () => void }) {
           spellcheck={false}
           enterkeyhint="search"
           data-f="search:input"
-          data-autofocus
+          data-autofocus={failed() ? undefined : ""}
           onInput={(e) => send(e.currentTarget.value)}
         />
       </label>
@@ -267,7 +271,7 @@ function Panel(props: { dialog?: boolean; retry: () => void }) {
                 Search could not open.
               </p>
               <Why class="palette-note" reason={(view.state.status as { reason: string }).reason} />
-              <button class="btn" data-f="search:retry" onClick={() => props.retry()}>
+              <button class="btn" data-f="search:retry" data-autofocus onClick={() => props.retry()}>
                 <RefreshCw aria-hidden />
                 Try again
               </button>
