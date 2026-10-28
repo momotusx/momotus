@@ -597,7 +597,7 @@ class AccountSignInTest {
 
     private fun emailRelay(
         providers: String = "\"mock\",\"google\",\"email\"",
-        takes: (String) -> String = { ok("""{"phase":"new","ticket":"T-$it"}""") },
+        takes: suspend (String) -> String = { ok("""{"phase":"new","ticket":"T-$it"}""") },
     ) {
         core.answers["relayInfo"] = { ok("""{"providers":[$providers]}""") }
         var flows = 0
