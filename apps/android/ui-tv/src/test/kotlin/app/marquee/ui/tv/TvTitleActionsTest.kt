@@ -8,11 +8,16 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import app.marquee.core.client.CoreClient
@@ -28,11 +33,13 @@ import app.marquee.core.model.TitleDetails
 import app.marquee.core.model.TitleHeader
 import app.marquee.core.model.TitleSnapshot
 import app.marquee.core.model.TitleState
+import app.marquee.core.model.Trailer
 import app.marquee.core.model.VersionsConditions
 import app.marquee.core.model.VersionsSnapshot
 import app.marquee.core.views.TitleView
 import app.marquee.design.Form
 import app.marquee.design.MarqueeTheme
+import app.marquee.player.FULL_TRAILER_TAG
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
@@ -46,10 +53,13 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.RuntimeEnvironment
+import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import java.util.concurrent.Executors
 import kotlin.coroutines.CoroutineContext
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 
 /**
  * The TV title page's button when nothing can play (plans/play-every-version.md, the shared table): each new
@@ -239,6 +249,23 @@ class TvTitleActionsTest {
                 .isNotEmpty()
         }
         compose.onNodeWithText("Play").assertIsNotEnabled()
+    }
+
+    @Test
+    fun `Trailer plays in the app full screen, never in another app, and Back gives the focus back to it`() {
+        val trailer = Trailer("Sintel", "eRsGyueVLvQ", "https://www.youtube.com/watch?v=eRsGyueVLvQ")
+        show(
+            versions(EmptyKind.Unreachable, EmptyAction.PlayFromDevice, key = "kept"),
+            title.copy(header = title.header.copy(details = title.header.details!!.copy(trailers = listOf(trailer)))),
+        )
+        compose.onNode(hasContentDescription("Trailer").and(hasClickAction())).performClick()
+        compose.waitForIdle()
+        compose.onNodeWithTag(FULL_TRAILER_TAG).assertExists()
+        assertNull(shadowOf(RuntimeEnvironment.getApplication()).nextStartedActivity)
+        compose.onNode(hasText("Close").and(hasClickAction())).performClick()
+        compose.waitForIdle()
+        compose.onAllNodesWithTag(FULL_TRAILER_TAG).assertCountEquals(0)
+        compose.onNode(hasContentDescription("Trailer").and(hasClickAction())).assertIsFocused()
     }
 
     @Test

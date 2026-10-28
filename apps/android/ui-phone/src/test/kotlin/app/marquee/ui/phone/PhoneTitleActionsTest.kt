@@ -21,6 +21,7 @@ import androidx.compose.ui.test.getBoundsInRoot
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasScrollAction
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isHeading
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
@@ -45,6 +46,7 @@ import app.marquee.core.model.TitleDetails
 import app.marquee.core.model.TitleHeader
 import app.marquee.core.model.TitleSnapshot
 import app.marquee.core.model.TitleState
+import app.marquee.core.model.Trailer
 import app.marquee.core.model.VersionsConditions
 import app.marquee.core.model.VersionsSnapshot
 import app.marquee.core.route.Route
@@ -54,6 +56,7 @@ import app.marquee.design.Marquee
 import app.marquee.design.MarqueeTheme
 import app.marquee.design.RemoteImage
 import app.marquee.design.roundLabelsFit
+import app.marquee.player.FULL_TRAILER_TAG
 import coil3.ImageLoader
 import coil3.SingletonImageLoader
 import coil3.Uri
@@ -79,11 +82,13 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
+import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import java.util.concurrent.Executors
 import kotlin.coroutines.CoroutineContext
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
@@ -360,6 +365,21 @@ class PhoneTitleActionsTest {
     }
 
     private fun bounds(tag: String) = compose.onNodeWithTag(tag).fetchSemanticsNode().boundsInRoot
+
+    @Test
+    fun `Trailer plays in the app full screen and never hands the watch page to another app`() {
+        val trailer = Trailer("Sintel", "eRsGyueVLvQ", "https://www.youtube.com/watch?v=eRsGyueVLvQ")
+        draw(title.copy(header = title.header.copy(details = title.header.details!!.copy(trailers = listOf(trailer)))))
+        compose.onNode(hasContentDescription("Trailer").and(hasClickAction())).performClick()
+        compose.waitForIdle()
+        compose.onNodeWithTag(FULL_TRAILER_TAG).assertExists()
+        assertNull(shadowOf(RuntimeEnvironment.getApplication()).nextStartedActivity)
+        // Close takes it away, the page stays.
+        compose.onNode(hasText("Close").and(hasClickAction())).performClick()
+        compose.waitForIdle()
+        compose.onAllNodesWithTag(FULL_TRAILER_TAG).assertCountEquals(0)
+        compose.onNodeWithText("Play").assertExists()
+    }
 
     private fun withArt(
         poster: String? = null,

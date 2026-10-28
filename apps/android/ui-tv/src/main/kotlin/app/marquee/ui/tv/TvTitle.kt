@@ -29,10 +29,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
@@ -46,7 +48,6 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
@@ -97,8 +98,9 @@ import app.marquee.design.episodeLaneHeight
 import app.marquee.design.laneHeight
 import app.marquee.design.liftRoom
 import app.marquee.design.marqueeFocus
-import app.marquee.design.openLink
+import app.marquee.design.rememberTrailerHost
 import app.marquee.design.scrollByKey
+import app.marquee.player.TrailerDialog
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -421,7 +423,23 @@ private fun Info(
     val colors = Marquee.colors
     val target = header.playTarget
     val primary = TitleCopy.primary(target, versions, details.runtime)
-    val context = LocalContext.current
+    // Trailer plays here, full screen in a window of its own (plans/trailer-inline.md 7); no header trailer on TV
+    // (decision 4). Closing gives the focus back to Trailer.
+    val trailers = rememberTrailerHost()
+    var fullTrailer by remember { mutableStateOf(false) }
+    var trailerClosed by remember { mutableIntStateOf(0) }
+    val trailerFocus = focus.requesterFor("trailer")
+    if (fullTrailer) {
+        TrailerDialog(details.trailers, trailers) {
+            fullTrailer = false
+            trailerClosed += 1
+        }
+    }
+    LaunchedEffect(trailerClosed) {
+        if (trailerClosed == 0) return@LaunchedEffect
+        withFrameNanos { }
+        runCatching { trailerFocus.requestFocus() }
+    }
     Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.s)) {
         Logo(details.logo, details.name, height = 160.dp, maxWidth = 480.dp)
         TitleRatingLine(
@@ -458,13 +476,13 @@ private fun Info(
                 focusRequester = if (TitleCopy.live(primary, target)) focus.requesterFor(PLAY) else null,
                 onFocusChange = focus.watch(ACTIONS, PLAY),
             )
-            details.trailers.firstOrNull()?.let { trailer ->
+            if (details.trailers.isNotEmpty()) {
                 RoundButton(
                     icon = Icons.Film,
                     label = "Trailer",
-                    onClick = { openLink(context, trailer.url) },
+                    onClick = { fullTrailer = true },
                     showLabel = true,
-                    focusRequester = focus.requesterFor("trailer"),
+                    focusRequester = trailerFocus,
                     onFocusChange = focus.watch(ACTIONS, "trailer"),
                 )
             }
