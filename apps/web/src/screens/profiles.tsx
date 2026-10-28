@@ -746,8 +746,12 @@ export function EditProfile() {
 function Confirm(props: { label: string; busy?: boolean; onKeep: () => void; children: JSX.Element }) {
   let root!: HTMLDivElement;
   holdModal(() => root);
-  // A pointer or a touch brings no focus to it (autofocus waits for keys), so it comes into view by itself.
-  onMount(() => root.scrollIntoView({ block: "nearest" }));
+  // A dialog takes the focus when it opens (WEB-05), whoever opened it: a pointer or a touch brings none to it (the
+  // app's autofocus waits for keys), and the control that had it is now inert. It comes into view by itself too.
+  onMount(() => {
+    root.scrollIntoView({ block: "nearest" });
+    root.querySelector<HTMLElement>("[data-autofocus]")?.focus({ preventScroll: true });
+  });
   // A held OK repeats: only the first press counts while it is open. Backspace,
   // the app's Back, keeps what is there like Escape.
   const onKey = (e: KeyboardEvent) => {

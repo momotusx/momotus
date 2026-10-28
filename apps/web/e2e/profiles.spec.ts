@@ -476,6 +476,8 @@ test("profiles on a phone: the leave question comes into view, whatever the page
     await expect(dialog(page)).toBeVisible();
     const keep = page.locator('[data-f="pedit:leave:keep"]');
     await expect(keep).toBeInViewport({ ratio: 1 });
+    // And it has the focus, though a touch brought none.
+    await expect(keep).toBeFocused();
     // Clear of the tab bar over the page's foot, which is inert and so cannot be asked what is under a point.
     const [button, bar] = await Promise.all([keep.boundingBox(), page.locator(".tabs").boundingBox()]);
     expect((button?.y ?? 0) + (button?.height ?? 0)).toBeLessThanOrEqual(bar?.y ?? 0);
