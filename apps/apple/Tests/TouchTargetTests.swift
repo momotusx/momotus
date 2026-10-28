@@ -21,6 +21,7 @@ private func source(_ path: String) throws -> String {
     #expect(top.components(separatedBy: ".frame(width: Theme.minTarget, height: Theme.minTarget)").count - 1 >= 3,
             "Back, Picture in Picture and AirPlay each keep the minimum")
     let shelf = try source("Title/TitleEpisodes.swift")
-    let season = try body(of: "var body: some View", in: String(shelf[try #require(shelf.range(of: "struct SeasonShelf"))...]))
+    let start = try #require(shelf.range(of: "struct SeasonShelf")).lowerBound
+    let season = try body(of: "var body: some View", in: String(shelf[start...]))
     #expect(season.contains(".frame(minHeight: Theme.minTarget)"), "the season pull-down lost the minimum")
 }
