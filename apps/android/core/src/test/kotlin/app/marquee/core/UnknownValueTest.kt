@@ -27,7 +27,8 @@ class UnknownValueTest {
             """"key":"url:http://127.0.0.1:7780/hls/master.m3u8","languages":[],"quality":"1080p",""" +
             """"reasons":["playsDirectly","fastestSeeders"],"releaseName":"Sintel.2010.1080p.local.AES.m3u8",""" +
             """"line":{"kind":"ready","service":null,"sizeBytes":null},"sourceClass":"ready","bitrateMbps":null,""" +
-            """"score":{"binge":false,"effectiveHeight":1080,"language":true,"legit":true,"original":true,"playability":"native",""" +
+            """"score":{"binge":false,"effectiveHeight":1080,"language":true,"legit":true,"original":true,""" +
+            """"playability":"native",""" +
             """"sizeOk":true,"start":4,"sustains":true,"viable":true,"within":535,"yearOk":true},""" +
             """"sizeBytes":null,"status":{"kind":"direct"},"via":"Local Test"},"rows":[],"slowAddons":[]}"""
 
