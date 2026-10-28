@@ -1,0 +1,68 @@
+package app.marquee.design
+
+import android.app.ActivityManager
+import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.RuntimeEnvironment
+import org.robolectric.Shadows.shadowOf
+import org.robolectric.annotation.Config
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
+
+/** A TV form plays the title header's trailer only above its measured memory floor (plans/trailer-inline.md 4). */
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [36])
+class TitleTrailersTest {
+    private val context = RuntimeEnvironment.getApplication()
+    private val am = context.getSystemService(ActivityManager::class.java)
+
+    private fun device(
+        totalMem: Long,
+        lowRam: Boolean = false,
+    ) {
+        shadowOf(am).setMemoryInfo(ActivityManager.MemoryInfo().apply { this.totalMem = totalMem })
+        shadowOf(am).setIsLowRamDevice(lowRam)
+    }
+
+    @Test
+    fun `a TV at its floor plays the header, one under it and a low-RAM one do not`() {
+        device(TitleTrailers.TV_FLOOR)
+        assertTrue(TrailerPreviews.headerOnTv(context))
+        device(TitleTrailers.TV_FLOOR - 1)
+        assertFalse(TrailerPreviews.headerOnTv(context))
+        // A Fire TV stick: 2 GB, and the system calls it low on RAM.
+        device(2_000_000_000L, lowRam = true)
+        assertFalse(TrailerPreviews.headerOnTv(context))
+        device(TitleTrailers.TV_FLOOR, lowRam = true)
+        assertFalse(TrailerPreviews.headerOnTv(context))
+    }
+
+    @Test
+    fun `the header's signals use the floor they are given`() {
+        device(TitleTrailers.TV_FLOOR)
+        assertTrue(
+            TrailerPreviews
+                .signals(
+                    context,
+                    true,
+                    false,
+                    tv = false,
+                    hasTrailer = true,
+                    minMemory = TitleTrailers.TV_FLOOR,
+                ).capable,
+        )
+        assertFalse(
+            TrailerPreviews
+                .signals(
+                    context,
+                    true,
+                    false,
+                    tv = false,
+                    hasTrailer = true,
+                    minMemory =
+                        TitleTrailers.TV_FLOOR + 1,
+                ).capable,
+        )
+    }
+}

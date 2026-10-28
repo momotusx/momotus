@@ -2,6 +2,8 @@
 
 package app.marquee.ui.tv
 
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.focusable
@@ -69,6 +71,7 @@ import app.marquee.design.Chip
 import app.marquee.design.ChosenVersion
 import app.marquee.design.EpisodeCard
 import app.marquee.design.FactsTable
+import app.marquee.design.HeroTrailers
 import app.marquee.design.Icons
 import app.marquee.design.KeepInView
 import app.marquee.design.LocalButtonFocus
@@ -92,7 +95,12 @@ import app.marquee.design.StateMessage
 import app.marquee.design.Status
 import app.marquee.design.StatusNote
 import app.marquee.design.TextRole
+import app.marquee.design.TitleHeaderTrailer
 import app.marquee.design.TitleRatingLine
+import app.marquee.design.TitleTrailers
+import app.marquee.design.Tokens
+import app.marquee.design.TrailerState
+import app.marquee.design.TrailerSurface
 import app.marquee.design.endFade
 import app.marquee.design.episodeLaneHeight
 import app.marquee.design.laneHeight
@@ -176,8 +184,53 @@ fun TvTitle(
             false
         },
     ) {
+        // The header's muted trailer on a TV that passes its memory floor, and Trailer full screen, on one player for
+        // the page (plans/trailer-inline.md 3, 4, 7). Closing the full screen gives the focus back to Trailer.
+        val trailers = rememberTrailerHost()
+        val headerTrailer = remember { TrailerState() }
+        var fullTrailer by remember { mutableStateOf(false) }
+        var trailerClosed by remember { mutableIntStateOf(0) }
+        val trailerFocus = focus.requesterFor("trailer")
+        if (details != null) {
+            TitleHeaderTrailer(
+                trailers,
+                headerTrailer,
+                details.id,
+                details.trailers.firstOrNull()?.youtubeId,
+                !fullTrailer,
+                tv = true,
+            )
+            if (fullTrailer) {
+                TrailerDialog(details.trailers, trailers) {
+                    fullTrailer = false
+                    trailerClosed += 1
+                }
+            }
+        }
+        LaunchedEffect(trailerClosed) {
+            if (trailerClosed == 0) return@LaunchedEffect
+            withFrameNanos { }
+            runCatching { trailerFocus.requestFocus() }
+        }
+        val art by animateFloatAsState(
+            if (headerTrailer.shown) 0f else 1f,
+            tween(600, easing = Tokens.ease),
+            label = "titleArt",
+        )
         // The text column sits on the left half: the art stays clear on the right, and fades into the page below.
-        Backdrop(details?.background ?: details?.poster, Modifier.fillMaxSize(), Scrims.titleSide, Scrims.titleFoot)
+        Backdrop(
+            details?.background ?: details?.poster,
+            Modifier.fillMaxSize(),
+            Scrims.titleSide,
+            Scrims.titleFoot,
+            artAlpha = { art },
+            trailer =
+                if (headerTrailer.loading && !fullTrailer) {
+                    { TrailerSurface(trailers, Modifier.matchParentSize()) }
+                } else {
+                    null
+                },
+        )
 
         when {
             failure != null -> {
@@ -228,6 +281,19 @@ fun TvTitle(
                                     onVersions,
                                     onGenre,
                                     onUncontinue,
+                                    onTrailer = {
+                                        TitleTrailers.spent += details.id
+                                        if (headerTrailer.loading) trailers.stop()
+                                        fullTrailer = true
+                                    },
+                                    // The header trailer's sound, last in the row while it plays (never in a walk
+                                    // unless the walk asks).
+                                    sound =
+                                        if (headerTrailer.playing && (!HeroTrailers.walk || HeroTrailers.walkSwitch)) {
+                                            { trailers.sound(!HeroTrailers.sound) }
+                                        } else {
+                                            null
+                                        },
                                 )
                             }
                             // The cover sits beside the facts and the people, which keep their full 560: the
@@ -417,28 +483,23 @@ private fun Info(
     onVersions: (String) -> Unit,
     onGenre: (String, String) -> Unit,
     onUncontinue: (suspend () -> Unit)?,
+    onTrailer: () -> Unit,
+    sound: (() -> Unit)?,
 ) {
     val header = checkNotNull(title.header)
     val details = checkNotNull(header.details)
     val colors = Marquee.colors
     val target = header.playTarget
     val primary = TitleCopy.primary(target, versions, details.runtime)
-    // Trailer plays here, full screen in a window of its own (plans/trailer-inline.md 7); no header trailer on TV
-    // (decision 4). Closing gives the focus back to Trailer.
-    val trailers = rememberTrailerHost()
-    var fullTrailer by remember { mutableStateOf(false) }
-    var trailerClosed by remember { mutableIntStateOf(0) }
     val trailerFocus = focus.requesterFor("trailer")
-    if (fullTrailer) {
-        TrailerDialog(details.trailers, trailers) {
-            fullTrailer = false
-            trailerClosed += 1
+    // The sound switch goes when its trailer ends: a focus on it moves to Trailer.
+    var soundFocused by remember { mutableStateOf(false) }
+    LaunchedEffect(sound == null) {
+        if (sound == null && soundFocused) {
+            soundFocused = false
+            withFrameNanos { }
+            runCatching { trailerFocus.requestFocus() }
         }
-    }
-    LaunchedEffect(trailerClosed) {
-        if (trailerClosed == 0) return@LaunchedEffect
-        withFrameNanos { }
-        runCatching { trailerFocus.requestFocus() }
     }
     Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.s)) {
         Logo(details.logo, details.name, height = 160.dp, maxWidth = 480.dp)
@@ -480,7 +541,7 @@ private fun Info(
                 RoundButton(
                     icon = Icons.Film,
                     label = "Trailer",
-                    onClick = { fullTrailer = true },
+                    onClick = onTrailer,
                     showLabel = true,
                     focusRequester = trailerFocus,
                     onFocusChange = focus.watch(ACTIONS, "trailer"),
@@ -524,6 +585,22 @@ private fun Info(
             // TV has no remove on its tiles: the page carries it while the title is in Continue Watching (the header
             // says so from its first render, so the row never grows after it is drawn).
             if (header.continuing && onUncontinue != null) Uncontinue(onUncontinue, focus)
+            if (sound != null) {
+                RoundButton(
+                    icon = if (HeroTrailers.sound) Icons.Volume2 else Icons.VolumeX,
+                    label = "Sound",
+                    onClick = sound,
+                    selected = HeroTrailers.sound,
+                    showLabel = true,
+                    spoken = "Trailer sound",
+                    toggle = true,
+                    focusRequester = focus.requesterFor("sound"),
+                    onFocusChange = { focused ->
+                        soundFocused = focused
+                        focus.watch(ACTIONS, "sound")(focused)
+                    },
+                )
+            }
         }
         if (target == null) {
             StatusNote(TitleCopy.nothingToPlay(header.nextAirs), Modifier.widthIn(max = 640.dp))

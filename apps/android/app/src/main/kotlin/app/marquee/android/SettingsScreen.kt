@@ -224,6 +224,7 @@ fun SettingsScreen(
     val holder = settingsHolder(session)
     val runner = rememberRunner()
     val tv = Marquee.form == Form.Tv
+    val context = LocalContext.current
     val snapshot = gate.snapshot
     val me = snapshot?.profiles?.firstOrNull { it.id == snapshot.active }
     // Edit and Manage need the owner's PIN on a kids profile (DECISION kids rules): a kids profile shows neither.
@@ -307,8 +308,9 @@ fun SettingsScreen(
                     }
                 },
             )
-            // This device only, never synced (plans/appletv-polish.md decision 13); TV forms show none yet.
-            if (!tv) add(SettingsPart(SettingsSection.Device) { DevicePrefs() })
+            // This device only, never synced (plans/appletv-polish.md decision 13): on a TV where its title pages may
+            // play the header trailer (plans/trailer-inline.md 4a).
+            if (!tv || TrailerPreviews.headerOnTv(context)) add(SettingsPart(SettingsSection.Device) { DevicePrefs() })
             add(SettingsPart(SettingsSection.About) { About() })
         }
     if (tv) {
@@ -910,14 +912,17 @@ private fun Playback(
     }
 }
 
-/** This device: what this device keeps for itself, never synced (plans/appletv-polish.md decision 13); none on TV yet. */
+/**
+ * This device: what this device keeps for itself, never synced (plans/appletv-polish.md decision 13). A TV has it where
+ * its title pages may play the header trailer (plans/trailer-inline.md 4a); its Home has none.
+ */
 @Composable
 private fun DevicePrefs() {
     val context = LocalContext.current
     var previews by remember { mutableStateOf(TrailerPreviews.on(context)) }
     Section(0.dp, groupRadius()) {
         Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.s)) {
-            MqText("Trailer previews on Home", role = TextRole.Headline, weight = FontWeight.Bold)
+            MqText("Trailer previews", role = TextRole.Headline, weight = FontWeight.Bold)
             Chip(
                 if (previews) "On" else "Off",
                 selected = previews,
@@ -928,7 +933,11 @@ private fun DevicePrefs() {
                 switch = true,
             )
             MqText(
-                "Plays trailers muted, from YouTube, when the connection is not metered.",
+                if (Marquee.form == Form.Tv) {
+                    "Plays trailers muted on title pages, from YouTube, when the connection is not metered."
+                } else {
+                    "Plays trailers muted on Home and title pages, from YouTube, when the connection is not metered."
+                },
                 role = TextRole.Caption,
                 color = Marquee.colors.dim,
             )

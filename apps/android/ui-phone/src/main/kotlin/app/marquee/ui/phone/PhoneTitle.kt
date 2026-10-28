@@ -28,7 +28,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -52,9 +51,6 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.compose.LocalLifecycleOwner
-import androidx.lifecycle.compose.currentStateAsState
 import app.marquee.core.Format
 import app.marquee.core.Mark
 import app.marquee.core.PlayTo
@@ -76,7 +72,6 @@ import app.marquee.design.HeroTrailers
 import app.marquee.design.Icons
 import app.marquee.design.KeepInView
 import app.marquee.design.LightStatusBarIcons
-import app.marquee.design.LocalReducedMotion
 import app.marquee.design.Logo
 import app.marquee.design.Marks
 import app.marquee.design.Marquee
@@ -99,10 +94,10 @@ import app.marquee.design.StateMessage
 import app.marquee.design.Status
 import app.marquee.design.StatusNote
 import app.marquee.design.TextRole
+import app.marquee.design.TitleHeaderTrailer
 import app.marquee.design.TitleRatingLine
+import app.marquee.design.TitleTrailers
 import app.marquee.design.Tokens
-import app.marquee.design.TrailerHost
-import app.marquee.design.TrailerPreviews
 import app.marquee.design.TrailerState
 import app.marquee.design.TrailerSurface
 import app.marquee.design.focusClickable
@@ -110,10 +105,8 @@ import app.marquee.design.liftRoom
 import app.marquee.design.openLink
 import app.marquee.design.rememberTrailerHost
 import app.marquee.design.roundLabelsFit
-import app.marquee.design.trailerAllowed
 import app.marquee.design.windowDp
 import app.marquee.player.TrailerDialog
-import kotlinx.coroutines.delay
 
 /** How many lines of the synopsis show before "More". */
 private const val SYNOPSIS_LINES = 3
@@ -223,7 +216,14 @@ fun PhoneTitle(
                     item != null && item.size > 0 && (item.size + minOf(0, item.offset)) * 2 >= item.size
                 }
             }
-            HeaderTrailer(trailers, headerTrailer, details, playing = artVisible && !fullTrailer)
+            TitleHeaderTrailer(
+                trailers,
+                headerTrailer,
+                details.id,
+                details.trailers.firstOrNull()?.youtubeId,
+                artVisible && !fullTrailer,
+                tv = false,
+            )
             val art by animateFloatAsState(
                 if (headerTrailer.shown) 0f else 1f,
                 tween(600, easing = Tokens.ease),
@@ -282,7 +282,7 @@ fun PhoneTitle(
                         key = "info",
                     ) {
                         Info(title, versions, versionsFailed, onPlay, onVersions, onGenre) {
-                            spentHeaders += details.id
+                            TitleTrailers.spent += details.id
                             // Stopped here, before the full screen starts on the same player.
                             if (headerTrailer.loading) trailers.stop()
                             fullTrailer = true
@@ -363,46 +363,6 @@ private const val HERO_RATIO = 1.45f
 
 /** The title's artwork, for tests. */
 internal const val TITLE_ART_TAG = "title-art"
-
-/** Titles whose header trailer ended, failed or was opened full screen this session: it does not play again. */
-private val spentHeaders = mutableSetOf<String>()
-
-/**
- * Plays the title's first trailer muted in [state] while [playing] (the header half on screen, nothing over it) and
- * the app is in front, 300 ms after it settles, when every signal of the hero's allows it (decision 5): never on the TV
- * form, never twice in a session.
- */
-@Composable
-private fun HeaderTrailer(
-    trailers: TrailerHost,
-    state: TrailerState,
-    details: TitleDetails,
-    playing: Boolean,
-) {
-    val context = LocalContext.current
-    val reduced = LocalReducedMotion.current
-    val resumed by LocalLifecycleOwner.current.lifecycle.currentStateAsState()
-    val active = resumed.isAtLeast(Lifecycle.State.RESUMED)
-    val id = HeroTrailers.checkedId(details.trailers.firstOrNull()?.youtubeId)
-    LaunchedEffect(id, active, playing) {
-        // Only the header's own: the full-screen trailer on the same player stops it by starting.
-        if (state.loading) trailers.stop()
-        if (id == null || !active || !playing || details.id in spentHeaders) return@LaunchedEffect
-        delay(HEADER_DELAY_MS)
-        val signals =
-            TrailerPreviews.signals(
-                context,
-                visible = true,
-                reducedMotion = reduced,
-                tv = false,
-                hasTrailer = true,
-            )
-        if (!trailerAllowed(signals)) return@LaunchedEffect
-        trailers.play(id, state) { why -> if (why != "stopped") spentHeaders += details.id }
-    }
-}
-
-private const val HEADER_DELAY_MS = 300L
 
 /** The rated cover's width on a phone: the band's digits stay legible from 200 dp up. */
 private val COVER_WIDTH = 200.dp

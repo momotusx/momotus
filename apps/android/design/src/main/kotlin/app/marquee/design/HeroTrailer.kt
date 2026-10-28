@@ -19,6 +19,7 @@ import android.widget.FrameLayout
 import androidx.compose.foundation.layout.Box
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -33,6 +34,8 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.compose.currentStateAsState
+import kotlinx.coroutines.delay
 import org.json.JSONObject
 import kotlin.math.max
 import kotlin.math.roundToInt
@@ -106,20 +109,21 @@ object TrailerPreviews {
         .putBoolean("on", on)
         .apply()
 
-    /** The device's side of decision 5, read when a trailer is due. */
+    /** The device's side of decision 5, read when a trailer is due; [minMemory] is the memory it needs. */
     fun signals(
         context: Context,
         visible: Boolean,
         reducedMotion: Boolean,
         tv: Boolean,
         hasTrailer: Boolean,
+        minMemory: Long = SIX_GB,
     ): TrailerSignals {
         val am = context.getSystemService(ActivityManager::class.java)
         val memory = ActivityManager.MemoryInfo().also { am?.getMemoryInfo(it) }
         val connectivity = context.getSystemService(ConnectivityManager::class.java)
         return TrailerSignals(
             enabled = on(context),
-            capable = am != null && !am.isLowRamDevice && memory.totalMem >= SIX_GB,
+            capable = am != null && !am.isLowRamDevice && memory.totalMem >= minMemory,
             visible = visible,
             reducedMotion = reducedMotion,
             metered = connectivity?.isActiveNetworkMetered ?: true,
@@ -134,8 +138,60 @@ object TrailerPreviews {
         )
     }
 
+    /** Whether a TV form's title pages may play their header trailer: its memory floor (plans/trailer-inline.md 4). */
+    fun headerOnTv(context: Context): Boolean {
+        val am = context.getSystemService(ActivityManager::class.java) ?: return false
+        val memory = ActivityManager.MemoryInfo().also { am.getMemoryInfo(it) }
+        return !am.isLowRamDevice && memory.totalMem >= TitleTrailers.TV_FLOOR
+    }
+
     // totalMem reads a little under the marketed size (the kernel keeps some), so 6 GB phones read about 5.5.
-    private const val SIX_GB = 5_400_000_000L
+    internal const val SIX_GB = 5_400_000_000L
+}
+
+/** A title page's header trailer (plans/trailer-inline.md 3, 4). */
+object TitleTrailers {
+    /** Titles whose header trailer ended, failed or was opened full screen this session: it does not play again. */
+    val spent = mutableSetOf<String>()
+
+    /**
+     * The memory a TV form needs for the header trailer, from the Pixel's TV-form measurement (plans/trailer-inline.md 4,
+     * bench/trailer-inline): below it, a TV shows the art and plays Trailer full screen only.
+     */
+    const val TV_FLOOR = TrailerPreviews.SIX_GB
+
+    const val DELAY_MS = 300L
+}
+
+/**
+ * Plays a title's first trailer ([youtubeId]) muted in [state] while [playing] (the header on screen, nothing over it)
+ * and the app is in front, [TitleTrailers.DELAY_MS] after it settles, when the hero's signals allow it (decision 5)
+ * with the TV form's own memory floor; never twice in a session.
+ */
+@Composable
+fun TitleHeaderTrailer(
+    trailers: TrailerHost,
+    state: TrailerState,
+    titleId: String,
+    youtubeId: String?,
+    playing: Boolean,
+    tv: Boolean,
+) {
+    val context = LocalContext.current
+    val reduced = LocalReducedMotion.current
+    val resumed by LocalLifecycleOwner.current.lifecycle.currentStateAsState()
+    val active = resumed.isAtLeast(Lifecycle.State.RESUMED)
+    val id = HeroTrailers.checkedId(youtubeId)
+    LaunchedEffect(id, active, playing) {
+        // Only the header's own: the full-screen trailer on the same player stops it by starting.
+        if (state.loading) trailers.stop()
+        if (id == null || !active || !playing || titleId in TitleTrailers.spent) return@LaunchedEffect
+        delay(TitleTrailers.DELAY_MS)
+        val floor = if (tv) TitleTrailers.TV_FLOOR else TrailerPreviews.SIX_GB
+        val signals = TrailerPreviews.signals(context, true, reduced, tv = false, hasTrailer = true, minMemory = floor)
+        if (!trailerAllowed(signals)) return@LaunchedEffect
+        trailers.play(id, state) { why -> if (why != "stopped") TitleTrailers.spent += titleId }
+    }
 }
 
 /**
