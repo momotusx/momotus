@@ -1,6 +1,9 @@
 package app.marquee.ui.phone
 
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsProperties
@@ -10,10 +13,17 @@ import androidx.compose.ui.test.getBoundsInRoot
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.text.TextMeasurer
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import app.marquee.core.route.Route
 import app.marquee.design.Form
+import app.marquee.design.Marquee
+import app.marquee.design.MarqueeFonts
 import app.marquee.design.MarqueeTheme
 import org.junit.Rule
 import org.junit.Test
@@ -87,5 +97,59 @@ class PhoneBarFitTest {
     fun `at twice the text size no label is cut, and the places keep their size`() {
         show(fontScale = 2.0f)
         assertFits(labelsShown = null)
+    }
+
+    /**
+     * The label size the bar settles at is the largest step that fits its widest word, at each text size: a step
+     * bigger would not fit, and none shown means not even the floor fits.
+     */
+    @Test
+    fun `the labels settle at the largest step that fits, at every text size`() {
+        var scale by mutableStateOf(1.0f)
+        var measurer: TextMeasurer? = null
+        var base: Density? = null
+        var caption = 0f
+        compose.setContent {
+            val density = LocalDensity.current
+            base = density
+            measurer = rememberTextMeasurer()
+            CompositionLocalProvider(LocalDensity provides Density(density.density, scale)) {
+                MarqueeTheme(Form.Phone) {
+                    caption = Marquee.type.caption.value
+                    PhoneShell(selected = Route.Home, showTabs = true, onSelect = {}) {}
+                }
+            }
+        }
+        val words = listOf("Home", "Discover", "Library", "Search", "Settings")
+        for (text in listOf(1.0f, 1.15f, 1.3f, 1.4f, 1.5f, 1.7f, 2.0f)) {
+            scale = text
+            compose.waitForIdle()
+            val at = Density(base!!.density, text)
+            val tab = tabs[0].getBoundsInRoot()
+            val room = with(at) { (tab.right - tab.left - 4.dp).toPx() }
+            fun widest(sp: Float) =
+                words.maxOf {
+                    measurer!!
+                        .measure(
+                            it,
+                            TextStyle(
+                                fontSize = sp.sp,
+                                fontFamily = MarqueeFonts.text,
+                                fontWeight = FontWeight.SemiBold,
+                            ),
+                            softWrap = false,
+                            maxLines = 1,
+                            density = at,
+                        ).size.width
+                }
+            val shown = labels.fetchSemanticsNodes()
+            if (shown.isEmpty()) {
+                assertTrue(widest(10f) > room, "at $text times icons only, but 10 sp fits: ${widest(10f)} in $room")
+            } else {
+                val size = shown[0].config[LabelSizeKey]
+                assertTrue(widest(size) <= room, "at $text times $size sp is cut: ${widest(size)} in $room")
+                if (size < caption) assertTrue(widest(size / 0.92f) > room, "at $text times a step above $size sp fits")
+            }
+        }
     }
 }

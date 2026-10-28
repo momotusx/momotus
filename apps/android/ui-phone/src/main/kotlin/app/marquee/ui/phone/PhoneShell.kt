@@ -5,6 +5,7 @@ package app.marquee.ui.phone
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.Row
@@ -28,10 +29,7 @@ import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.compositionLocalOf
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -43,14 +41,18 @@ import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.SemanticsPropertyKey
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.testTag
+import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.marquee.core.route.Route
@@ -215,84 +217,102 @@ private fun PhoneBar(
     val colors = Marquee.colors
     val lit = if (selected == Route.Calendar) Route.Library else selected
     val caption = Marquee.type.caption
-    // The labels fit by layout, not by a guess at their width: a word that overflows its slot takes the whole
-    // bar down a step (8 percent) to the floor, and under the floor the bar keeps the icons alone, each place
-    // keeping its label as its spoken name. A new text size or window width starts again from the caption.
-    val fontScale = LocalDensity.current.fontScale
-    val width = windowDp().width
-    var labelSize by remember(fontScale, width) { mutableStateOf(caption) }
-    var compact by remember(fontScale, width) { mutableStateOf(false) }
+    val measurer = rememberTextMeasurer()
+    val density = LocalDensity.current
     val shape = RoundedCornerShape(Marquee.radius.pill)
-    Row(
-        modifier
-            .fillMaxWidth()
-            .height(BAR_HEIGHT)
-            .dropShadow(shape) {
-                radius = 30.dp.toPx()
-                offset = Offset(0f, 10.dp.toPx())
-                color = Color.Black
-                alpha = 0.45f
-            }.clip(shape)
-            // Opaque: Android blurs no content behind a node, so the capsule's translucent fill is laid on the
-            // page color, or the text under the bar would show through it (seen on the emulator).
-            .background(colors.glassStrong.compositeOver(colors.bg))
-            // The frame's inner top highlight, so the capsule's edge reads on the black page.
-            .drawBehind {
-                val line = 1.dp.toPx()
-                drawLine(colors.lineStrong, Offset(0f, line / 2), Offset(size.width, line / 2), line)
-            }.padding(horizontal = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        for (route in order) {
-            val place = places.getValue(route)
-            val isSelected = route == lit
-            // The selected place in the key blue on a darker inner capsule; the rest white.
-            val ink = if (isSelected) colors.key else Color.White
-            Column(
-                Modifier
-                    .weight(1f)
-                    .height(TAB_HEIGHT)
-                    // A keyboard on a phone or a tablet sees where it is, apart from the selected place.
-                    .marqueeFocus(TAB_HEIGHT / 2, scale = 1f)
-                    .clip(shape)
-                    .background(if (isSelected) TAB_ON else Color.Transparent)
-                    .semantics { contentDescription = place.label }
-                    .focusSelectable(isSelected, { onSelect(route) }, Role.Tab),
-                verticalArrangement = Arrangement.spacedBy(1.dp, Alignment.CenterVertically),
-                horizontalAlignment = Alignment.CenterHorizontally,
-            ) {
-                MqIcon(place.icon, tint = ink)
-                if (!compact) {
-                    BasicText(
-                        place.label,
-                        modifier =
-                            Modifier
-                                .padding(horizontal = LABEL_PAD)
-                                .clearAndSetSemantics { testTag = TAB_LABEL_TAG },
-                        style =
-                            TextStyle(
-                                color = ink,
-                                fontSize = labelSize,
-                                fontFamily = MarqueeFonts.text,
-                                fontWeight = FontWeight.SemiBold,
-                                lineHeight = labelSize * 1.4f,
-                            ),
-                        maxLines = 1,
-                        softWrap = false,
-                        overflow = TextOverflow.Clip,
-                        onTextLayout = {
-                            if (it.didOverflowWidth) {
-                                if (labelSize.value > LABEL_FLOOR_SP) {
-                                    labelSize = maxOf(labelSize.value * LABEL_STEP, LABEL_FLOOR_SP).sp
-                                } else {
-                                    compact = true
-                                }
-                            }
-                        },
-                    )
+    // The bar's own width is the room, so the labels are fitted before the first frame draws: the widest word at the
+    // largest size (the caption, then 8 percent smaller a step, down to a floor) that fits its slot, else the icons
+    // alone, each place keeping its label as its spoken name.
+    BoxWithConstraints(modifier) {
+        val room = with(density) { ((maxWidth - 8.dp) / order.size - LABEL_PAD * 2).toPx() }
+        val labelSize =
+            remember(measurer, caption, density.density, density.fontScale, room) {
+                fitLabels(measurer, caption, room)
+            }
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .height(BAR_HEIGHT)
+                .dropShadow(shape) {
+                    radius = 30.dp.toPx()
+                    offset = Offset(0f, 10.dp.toPx())
+                    color = Color.Black
+                    alpha = 0.45f
+                }.clip(shape)
+                // Opaque: Android blurs no content behind a node, so the capsule's translucent fill is laid on the
+                // page color, or the text under the bar would show through it (seen on the emulator).
+                .background(colors.glassStrong.compositeOver(colors.bg))
+                // The frame's inner top highlight, so the capsule's edge reads on the black page.
+                .drawBehind {
+                    val line = 1.dp.toPx()
+                    drawLine(colors.lineStrong, Offset(0f, line / 2), Offset(size.width, line / 2), line)
+                }.padding(horizontal = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            for (route in order) {
+                val place = places.getValue(route)
+                val isSelected = route == lit
+                // The selected place in the key blue on a darker inner capsule; the rest white.
+                val ink = if (isSelected) colors.key else Color.White
+                Column(
+                    Modifier
+                        .weight(1f)
+                        .height(TAB_HEIGHT)
+                        // A keyboard on a phone or a tablet sees where it is, apart from the selected place.
+                        .marqueeFocus(TAB_HEIGHT / 2, scale = 1f)
+                        .clip(shape)
+                        .background(if (isSelected) TAB_ON else Color.Transparent)
+                        .semantics { contentDescription = place.label }
+                        .focusSelectable(isSelected, { onSelect(route) }, Role.Tab),
+                    verticalArrangement = Arrangement.spacedBy(1.dp, Alignment.CenterVertically),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    MqIcon(place.icon, tint = ink)
+                    if (labelSize != null) {
+                        BasicText(
+                            place.label,
+                            modifier =
+                                Modifier
+                                    .padding(horizontal = LABEL_PAD)
+                                    .clearAndSetSemantics {
+                                        testTag = TAB_LABEL_TAG
+                                        this[LabelSizeKey] = labelSize.value
+                                    },
+                            style =
+                                TextStyle(
+                                    color = ink,
+                                    fontSize = labelSize,
+                                    fontFamily = MarqueeFonts.text,
+                                    fontWeight = FontWeight.SemiBold,
+                                    lineHeight = labelSize * 1.4f,
+                                ),
+                            maxLines = 1,
+                            softWrap = false,
+                            overflow = TextOverflow.Clip,
+                        )
+                    }
                 }
             }
         }
+    }
+}
+
+/** The largest label size, from [caption] down to the floor, at which the widest label fits [room] px; null if none. */
+private fun fitLabels(
+    measurer: TextMeasurer,
+    caption: TextUnit,
+    room: Float,
+): TextUnit? {
+    var size = caption
+    while (true) {
+        val style = TextStyle(fontSize = size, fontFamily = MarqueeFonts.text, fontWeight = FontWeight.SemiBold)
+        val widest =
+            order.maxOf {
+                measurer.measure(places.getValue(it).label, style, softWrap = false, maxLines = 1).size.width
+            }
+        if (widest <= room) return size
+        if (size.value <= LABEL_FLOOR_SP) return null
+        size = maxOf(size.value * LABEL_STEP, LABEL_FLOOR_SP).sp
     }
 }
 
@@ -308,8 +328,9 @@ private const val LABEL_FLOOR_SP = 10f
 private const val LABEL_STEP = 0.92f
 private val LABEL_PAD = 2.dp
 
-/** The semantics tag of a tab's label (tests read its size). */
+/** The semantics tag of a tab's label, and the size (sp) it was drawn at, which the tests read. */
 internal const val TAB_LABEL_TAG = "tab-label"
+internal val LabelSizeKey = SemanticsPropertyKey<Float>("LabelSize")
 
 /** A back link's height: Material's 48 dp target. */
 internal val BACK_HEIGHT = 48.dp
