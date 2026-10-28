@@ -32,10 +32,7 @@ import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.compositionLocalOf
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -45,7 +42,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
@@ -127,59 +124,81 @@ fun PhoneShell(
     Box(modifier.fillMaxSize()) {
         // In landscape the navigation bar and a camera cutout can sit at a side: pages keep clear of both.
         val sides = WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal)
-        var bannerPx by remember { mutableIntStateOf(0) }
-        val bannerDp = with(LocalDensity.current) { if (banner == null) 0.dp else bannerPx.toDp() }
         // A page whose artwork runs under the status bar starts under the banner instead, which holds the
         // status bar now: its art is not cut by it, and its own status bar padding is taken here.
         val underBanner = banner != null && !statusStrip
-        val barTop = if (underBanner) WindowInsets.statusBars.asPaddingValues().calculateTopPadding() else 0.dp
-        Box(
-            (if (insetSides) Modifier.windowInsetsPadding(sides) else Modifier)
-                .padding(top = bannerDp + if (underBanner) barTop else 0.dp)
-                .then(if (underBanner) Modifier.consumeWindowInsets(WindowInsets.statusBars) else Modifier),
-        ) {
-            // One call site for the page, so moving onto or off a back-link page keeps its state and its fade.
-            CompositionLocalProvider(LocalBarSpace provides space, LocalTopSpace provides top) { content() }
-        }
-        if (banner != null) {
-            Box(
-                Modifier
-                    .fillMaxWidth()
-                    .background(Marquee.colors.bg)
-                    .windowInsetsPadding(WindowInsets.statusBars)
-                    .windowInsetsPadding(sides)
-                    .onSizeChanged { bannerPx = it.height }
-                    .testTag("shell-banner"),
-            ) { banner() }
-        }
-        // Pages start below the status bar but scroll under it: a strip of page color keeps the
-        // text off the clock and icons. At rest it covers only the page's own background.
-        if (statusStrip) {
-            Box(
-                Modifier
-                    .fillMaxWidth()
-                    .windowInsetsTopHeight(WindowInsets.statusBars)
-                    .background(Marquee.colors.bg),
-            )
-        }
-        if (onBack != null) {
-            if (statusStrip) {
-                // The link's row sits under the strip and over the page, which keeps clear of it through [pageTop].
-                Box(
-                    Modifier
-                        .fillMaxWidth()
-                        .windowInsetsPadding(WindowInsets.statusBars)
-                        .background(Marquee.colors.bg)
-                        .windowInsetsPadding(sides),
-                ) { BackLink(onBack) }
-            } else {
-                // A page whose artwork runs under the status bar gets the link over it, on a dark pill that keeps
-                // the blue legible.
-                BackLink(
-                    onBack,
-                    Modifier.windowInsetsPadding(WindowInsets.statusBars).windowInsetsPadding(sides),
-                    floating = true,
+        val barTop = if (banner != null) WindowInsets.statusBars.getTop(LocalDensity.current) else 0
+        // The banner is measured first and the page placed under it in the same pass, so no frame shows the
+        // page under the banner (code review r6 m8). The status strip and the back link move with the page, so
+        // the banner never covers Back.
+        Layout(
+            content = {
+                Box(if (underBanner) Modifier.consumeWindowInsets(WindowInsets.statusBars) else Modifier) {
+                    Box(if (insetSides) Modifier.windowInsetsPadding(sides) else Modifier) {
+                        // One call site for the page, so moving onto or off a back-link page keeps its state and its
+                        // fade.
+                        CompositionLocalProvider(LocalBarSpace provides space, LocalTopSpace provides top) { content() }
+                    }
+                    // Pages start below the status bar but scroll under it: a strip of page color keeps the
+                    // text off the clock and icons. At rest it covers only the page's own background.
+                    if (statusStrip) {
+                        Box(
+                            Modifier
+                                .fillMaxWidth()
+                                .windowInsetsTopHeight(WindowInsets.statusBars)
+                                .background(Marquee.colors.bg),
+                        )
+                    }
+                    if (onBack != null) {
+                        if (statusStrip) {
+                            // The link's row sits under the strip and over the page, which keeps clear of it through
+                            // [pageTop].
+                            Box(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .windowInsetsPadding(WindowInsets.statusBars)
+                                    .background(Marquee.colors.bg)
+                                    .windowInsetsPadding(sides),
+                            ) { BackLink(onBack) }
+                        } else {
+                            // A page whose artwork runs under the status bar gets the link over it, on a dark pill
+                            // that keeps the blue legible.
+                            BackLink(
+                                onBack,
+                                Modifier.windowInsetsPadding(WindowInsets.statusBars).windowInsetsPadding(sides),
+                                floating = true,
+                            )
+                        }
+                    }
+                }
+                if (banner != null) {
+                    Box(
+                        Modifier
+                            .fillMaxWidth()
+                            .background(Marquee.colors.bg)
+                            .windowInsetsPadding(WindowInsets.statusBars)
+                            .windowInsetsPadding(sides)
+                            .testTag("shell-banner"),
+                    ) { banner() }
+                }
+            },
+            modifier = Modifier.fillMaxSize(),
+        ) { measurables, constraints ->
+            val bannerPlaced = measurables.getOrNull(1)?.measure(constraints.copy(minHeight = 0))
+            // Under the banner's words, the page scrolling under its status bar strip as under the shell's own;
+            // under all of it for a page whose art runs under the status bar.
+            val below =
+                bannerPlaced?.let { if (underBanner) it.height else (it.height - barTop).coerceAtLeast(0) } ?: 0
+            val page =
+                measurables[0].measure(
+                    constraints.copy(
+                        minHeight = (constraints.minHeight - below).coerceAtLeast(0),
+                        maxHeight = (constraints.maxHeight - below).coerceAtLeast(0),
+                    ),
                 )
+            layout(constraints.maxWidth, constraints.maxHeight) {
+                page.place(0, below)
+                bannerPlaced?.place(0, 0)
             }
         }
         if (showBar) {

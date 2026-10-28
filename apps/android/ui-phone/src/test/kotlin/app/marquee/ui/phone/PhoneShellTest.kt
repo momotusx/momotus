@@ -11,6 +11,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsProperties
@@ -141,6 +143,27 @@ class PhoneShellTest {
         val page = compose.onNodeWithTag("page").getUnclippedBoundsInRoot()
         assertEquals(40.dp, banner.bottom - banner.top)
         assertEquals(banner.bottom, page.top)
+    }
+
+    /** The page is placed under the banner from its first frame, never under it for one (code review r6 m8). */
+    @Test
+    fun `the page is under the banner from its first placement`() {
+        val tops = mutableListOf<Float>()
+        compose.setContent {
+            MarqueeTheme(Form.Phone) {
+                PhoneShell(
+                    selected = Route.Home,
+                    showTabs = true,
+                    onSelect = {},
+                    banner = { Box(Modifier.fillMaxWidth().height(40.dp)) },
+                ) {
+                    Box(Modifier.fillMaxWidth().height(10.dp).onGloballyPositioned { tops += it.positionInRoot().y })
+                }
+            }
+        }
+        compose.waitForIdle()
+        val bannerBottom = compose.onNodeWithTag("shell-banner").getUnclippedBoundsInRoot().bottom
+        assertEquals(bannerBottom.value, tops.first() / compose.density.density, 0.5f)
     }
 
     @Test
