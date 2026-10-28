@@ -551,14 +551,20 @@ struct StateLine: View {
     /// user would otherwise never hear). Off by default: most lines sit on a page the user just opened.
     var spoken = false
     @State private var lastSpoken: String?
+    @Environment(\.tabShown) private var tabShown
+    /// On screen now: a line under a pushed page or the player, or in a place out of sight, stays silent.
+    @State private var onScreen = false
 
     var body: some View {
         ViewThatFits(in: .horizontal) {
             HStack(spacing: Theme.Space.s) { reason; fix }
             VStack(alignment: .leading, spacing: Theme.Space.s) { reason; fix }
         }
-        .onAppear(perform: speak)
+        .onAppear { onScreen = true; speak() }
+        .onDisappear { onScreen = false }
         .onChange(of: text) { speak() }
+        // What came in while away is said once on return (`spokenLine` keeps a repeat quiet).
+        .onChange(of: tabShown) { speak() }
     }
 
     private var reason: some View {
@@ -569,7 +575,7 @@ struct StateLine: View {
     }
 
     private func speak() {
-        guard spoken, let words = spokenLine(last: lastSpoken, current: text) else { return }
+        guard spoken, let words = spokenLine(last: lastSpoken, current: text, audible: tabShown && onScreen) else { return }
         lastSpoken = words
         announce(words)
     }
@@ -591,8 +597,8 @@ func announce(_ words: String) {
     #endif
 }
 
-/// What a spoken `StateLine` says: its words when they are new, nothing for a redraw of the
-/// words it already said.
-func spokenLine(last: String?, current: String) -> String? {
-    current.isEmpty || current == last ? nil : current
+/// What a spoken `StateLine` says: its words when they are new and it is on screen, nothing for a
+/// redraw of the words it already said or for a line out of sight.
+func spokenLine(last: String?, current: String, audible: Bool = true) -> String? {
+    audible && !current.isEmpty && current != last ? current : nil
 }

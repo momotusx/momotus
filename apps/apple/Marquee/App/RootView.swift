@@ -28,9 +28,6 @@ extension EnvironmentValues {
     @Entry var openTab = OpenTabAction { _, _ in }
     @Entry var openTitle = OpenTitleAction { _ in }
     @Entry var linkRequests: LinkRequests? = nil
-    /// The tab this view is in is the one on screen. On a phone every opened
-    /// tab stays alive behind the shown one, so its pages never disappear.
-    @Entry var tabShown = true
     /// Something is over Home's first page (a pushed page, the player): its hero holds its pages and its trailer.
     @Entry var heroCovered = false
 }

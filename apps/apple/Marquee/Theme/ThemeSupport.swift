@@ -212,6 +212,9 @@ extension Metrics {
 
 extension EnvironmentValues {
     @Entry var metrics = Metrics.regular
+    /// The tab this view is in is the one on screen. On a phone every opened
+    /// tab stays alive behind the shown one, so its pages never disappear.
+    @Entry var tabShown = true
 }
 
 /// The player asks for the whole window (the navigation hides) while it is up.
