@@ -271,6 +271,14 @@ class FirstRunB4Test {
 
     @Test
     @Config(qualifiers = "w390dp-h844dp-xxhdpi")
+    fun `phone, a step change is announced by its question, the step's pane title`() {
+        question(Form.Phone, null)
+        compose.waitForIdle()
+        compose.onNode(SemanticsMatcher.expectValue(SemanticsProperties.PaneTitle, StreamChoiceCopy.QUESTION_TITLE)).assertExists()
+    }
+
+    @Test
+    @Config(qualifiers = "w390dp-h844dp-xxhdpi")
     fun `phone, the step count is read, not shown, and the first step has no Back`() {
         doors(Form.Phone, null)
         compose.waitForIdle()

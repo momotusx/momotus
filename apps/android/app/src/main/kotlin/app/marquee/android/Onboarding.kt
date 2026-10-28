@@ -64,6 +64,7 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.isTraversalGroup
+import androidx.compose.ui.semantics.paneTitle
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.font.FontWeight
@@ -227,6 +228,8 @@ private fun FramedPage(
         Modifier
             .fillMaxSize()
             .background(Color.Black)
+            // A step change is announced by its question (TalkBack reads a new pane by its title).
+            .semantics { paneTitle = question }
             .windowInsetsPadding(WindowInsets.systemBars)
             .padding(vertical = Marquee.safe.top),
     ) {
@@ -694,10 +697,12 @@ fun DefaultsScreen(
     val step = holder.step
     val answer = step.answer
     if (answer != null) AutoFocus(go)
+    val title = if (mode == DefaultsMode.Review) DefaultsCopy.REVIEW_TITLE else DefaultsCopy.TITLE
     val rows = DefaultsCopy.rows(answer?.addons.orEmpty(), mode)
     Column(
         Modifier
             .fillMaxSize()
+            .semantics { paneTitle = title }
             .windowInsetsPadding(WindowInsets.systemBars)
             .padding(horizontal = Marquee.safe.side, vertical = Marquee.safe.top),
         verticalArrangement = Arrangement.spacedBy(Marquee.space.m),
@@ -713,7 +718,7 @@ fun DefaultsScreen(
         ) {
             Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.xs)) {
                 MqText(
-                    if (mode == DefaultsMode.Review) DefaultsCopy.REVIEW_TITLE else DefaultsCopy.TITLE,
+                    title,
                     role = if (tv) TextRole.Title1 else TextRole.Title2,
                 )
                 MqText(
@@ -959,7 +964,7 @@ internal const val FIRST_RUN_STEPS = 4
 
 /** The film frame's shape, and its least share of the screen's height (a bar too tall for the rest scrolls). */
 internal const val FILM_RATIO = 2.39f
-internal const val FILM_FLOOR = 0.3f
+internal const val FILM_FLOOR = 0.4f
 
 /** The player's subtitle scrim, behind each line of the frame's words: 5.7:1 for white over a white still. */
 internal val FILM_SCRIM = Color.Black.copy(alpha = 0.6f)
