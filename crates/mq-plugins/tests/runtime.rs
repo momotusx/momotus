@@ -569,3 +569,37 @@ fn cancel_closes_pending_replies() {
     assert_eq!(thread.join().unwrap(), Outcome::Cancelled);
     assert!(held.iter().all(|r| r.reply.is_closed()));
 }
+
+/// The fixture repository's plugin (tests/fixtures/repo, plan 7.9), with
+/// archive.org's metadata answer recorded: one row for Big Buck Bunny, and
+/// none for a title it does not know.
+#[test]
+fn the_fixture_plugin_finds_its_film() {
+    let script = include_str!("fixtures/repo/open-films.js");
+    let meta = include_str!("fixtures/archive-BigBuckBunny_124.json");
+    let mut bunny = movie(script);
+    bunny.info = Info {
+        imdb_id: Some("tt1254207".into()),
+        title: "Big Buck Bunny".into(),
+        year: Some(2008),
+    };
+    let (out, seen) = run_with(bunny, ok(meta));
+    assert_eq!(
+        seen.fetches[0].url,
+        "https://archive.org/metadata/BigBuckBunny_124"
+    );
+    assert_eq!(
+        out,
+        Outcome::Done(vec![PluginStream {
+            url: "https://archive.org/download/BigBuckBunny_124/Content/big_buck_bunny_720p_surround.mp4".into(),
+            name: Some("Open films".into()),
+            title: Some("Big Buck Bunny (360p)".into()),
+            quality: Some("360p".into()),
+            size: Some("59 MB".into()),
+            ..Default::default()
+        }])
+    );
+    let (out, seen) = run_with(movie(script), ok(meta));
+    assert_eq!(out, Outcome::Done(Vec::new()));
+    assert!(seen.fetches.is_empty());
+}
