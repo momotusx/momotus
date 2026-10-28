@@ -15,6 +15,7 @@ internal class PlayingPlayer : SimpleBasePlayer(Looper.getMainLooper()) {
     private var wants = true
     private var ready = false
     private var firstFrame = false
+    private var finished = false
 
     /** A source was set and prepared before the file opens: Media3 buffers it. */
     private var prepared = false
@@ -53,8 +54,14 @@ internal class PlayingPlayer : SimpleBasePlayer(Looper.getMainLooper()) {
                         .setTracks(tracks)
                         .build(),
                 ),
-            ).setPlaybackState(Player.STATE_READY)
+            ).setPlaybackState(if (finished) Player.STATE_ENDED else Player.STATE_READY)
             .build()
+    }
+
+    /** The file played to its end. */
+    fun finish() {
+        finished = true
+        invalidateState()
     }
 
     /** The file is open: Media3 says it is ready, and the first frame is drawn. */
@@ -90,6 +97,7 @@ internal class PlayingPlayer : SimpleBasePlayer(Looper.getMainLooper()) {
         seekCommand: Int,
     ): ListenableFuture<*> {
         at = positionMs
+        finished = false
         return Futures.immediateVoidFuture()
     }
 

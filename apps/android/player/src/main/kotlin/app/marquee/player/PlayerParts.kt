@@ -745,7 +745,10 @@ fun PlayerStatus(
     }
 }
 
-/** The card that offers the next episode near the end: its picture, name, and a countdown when it starts by itself. */
+/**
+ * The card that offers the next episode near the end: its picture, name, and a countdown when it starts by itself,
+ * with [onCancel] beside Play now to stop that (the countdown's only way out short of leaving the player).
+ */
 @Composable
 fun UpNextCard(
     next: NextEpisode,
@@ -753,6 +756,7 @@ fun UpNextCard(
     onPlay: () -> Unit,
     modifier: Modifier = Modifier,
     focus: FocusRequester? = null,
+    onCancel: (() -> Unit)? = null,
 ) {
     val colors = Marquee.colors
     val tv = Marquee.form == Form.Tv
@@ -785,7 +789,10 @@ fun UpNextCard(
                 modifier = Modifier.widthIn(max = if (tv) 420.dp else 200.dp),
             )
             if (countdown != null) MqText("Starts in $countdown s", role = TextRole.Callout, color = colors.muted)
-            PrimaryButton("Play now", onPlay, icon = Icons.SkipForward, focusRequester = focus)
+            Row(horizontalArrangement = Arrangement.spacedBy(if (tv) 16.dp else 8.dp)) {
+                PrimaryButton("Play now", onPlay, icon = Icons.SkipForward, focusRequester = focus)
+                if (countdown != null && onCancel != null) SecondaryButton("Cancel", onCancel)
+            }
         }
     }
 }

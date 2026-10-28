@@ -162,7 +162,10 @@ fun TvPlayer(
     val chooseShown = (opening || stalled) && controller.chooseAnother
     val chooseFocus = remember { FocusRequester() }
     var chooseFocused by remember { mutableStateOf(false) }
-    val showEnd = ended && !(autoplayNext && controller.next != null)
+    // Cancel on Up Next stops the next episode from starting by itself, for this playback: the end card shows instead.
+    var upNextCancelled by remember(controller) { mutableStateOf(false) }
+    val autoplay = autoplayNext && !upNextCancelled
+    val showEnd = ended && !(autoplay && controller.next != null)
 
     val root = remember { FocusRequester() }
     val play = remember { FocusRequester() }
@@ -178,13 +181,14 @@ fun TvPlayer(
     val next = controller.next
     val showNext by remember(controller) {
         derivedStateOf {
-            upNextDue(
-                controller.next != null,
-                controller.nextAtMs,
-                controller.positionMs,
-                controller.durationMs,
-                controller.skippedAtMs,
-            )
+            !upNextCancelled &&
+                upNextDue(
+                    controller.next != null,
+                    controller.nextAtMs,
+                    controller.positionMs,
+                    controller.durationMs,
+                    controller.skippedAtMs,
+                )
         }
     }
     // The skippable part under the playhead (an intro, a recap), unless Up Next has taken the corner.
@@ -262,7 +266,7 @@ fun TvPlayer(
     }
     // The end of an episode starts the next one when the viewer wants that.
     LaunchedEffect(stage) {
-        if (stage == Stage.Ended && autoplayNext && next != null) onNext(next, controller.bingeGroup)
+        if (stage == Stage.Ended && autoplay && next != null) onNext(next, controller.bingeGroup)
         if (stage == Stage.Ended) osd = true
     }
 
@@ -528,7 +532,10 @@ fun TvPlayer(
                 title = controller.title,
                 next = next,
                 onNext = { next?.let { onNext(it, controller.bingeGroup) } },
-                onAgain = controller::play,
+                onAgain = {
+                    upNextCancelled = false
+                    controller.play()
+                },
                 onBack = onBack,
                 focus = endFocus,
                 modifier = Modifier.fillMaxSize(),
@@ -553,8 +560,9 @@ fun TvPlayer(
         if (showNext && !ended && next != null) {
             UpNextCard(
                 next = next,
-                countdown = secondsLeft.takeIf { autoplayNext },
+                countdown = secondsLeft.takeIf { autoplay },
                 onPlay = { onNext(next, controller.bingeGroup) },
+                onCancel = { upNextCancelled = true },
                 focus = nextFocus,
                 modifier = Modifier.align(Alignment.BottomEnd).padding(end = safe.side, bottom = 330.dp),
             )

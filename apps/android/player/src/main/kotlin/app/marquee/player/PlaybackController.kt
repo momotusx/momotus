@@ -168,8 +168,8 @@ class PlaybackController(
     /** Under the subtitle list: the pending line, then the notes. */
     val subtitlePanelNote: String? get() = subtitlePanelNote(subtitlesPending, subtitleNotes)
 
+    @set:VisibleForTesting(otherwise = VisibleForTesting.PRIVATE)
     var next: NextEpisode? by mutableStateOf(null)
-        private set
 
     /** Pass to Versions of the next episode so the same release line is picked. */
     var bingeGroup: String? = null
