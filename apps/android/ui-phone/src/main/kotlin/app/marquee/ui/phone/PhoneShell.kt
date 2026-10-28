@@ -24,10 +24,14 @@ import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.windowInsetsTopHeight
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.compositionLocalOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -42,11 +46,13 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.testTag
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import app.marquee.core.route.Route
 import app.marquee.design.Icons
 import app.marquee.design.Marquee
@@ -208,20 +214,14 @@ private fun PhoneBar(
 ) {
     val colors = Marquee.colors
     val lit = if (selected == Route.Calendar) Route.Library else selected
-    // The labels show only when the widest fits its slot at the current text size; otherwise the bar
-    // keeps the icons (each keeps its label as its spoken name), never a cut word.
-    val measurer = rememberTextMeasurer()
-    val density = LocalDensity.current
     val caption = Marquee.type.caption
-    val widest =
-        remember(measurer, caption, density.fontScale) {
-            val style = TextStyle(fontSize = caption, fontFamily = MarqueeFonts.text, fontWeight = FontWeight.SemiBold)
-            order.maxOf { measurer.measure(places.getValue(it).label, style, maxLines = 1).size.width }
-        }
+    // The labels fit by layout, not by a guess at their width: a word that overflows its slot takes the whole
+    // bar down a step (8 percent) to the floor, and under the floor the bar keeps the icons alone, each place
+    // keeping its label as its spoken name. A new text size or window width starts again from the caption.
+    val fontScale = LocalDensity.current.fontScale
     val width = windowDp().width
-    // The bar's widest margins and its inner padding (4 dp a side).
-    val slot = (width - BAR_SIDE * 2 - 8.dp) / order.size
-    val compact = with(density) { widest.toDp() } > slot - 4.dp
+    var labelSize by remember(fontScale, width) { mutableStateOf(caption) }
+    var compact by remember(fontScale, width) { mutableStateOf(false) }
     val shape = RoundedCornerShape(Marquee.radius.pill)
     Row(
         modifier
@@ -263,13 +263,32 @@ private fun PhoneBar(
             ) {
                 MqIcon(place.icon, tint = ink)
                 if (!compact) {
-                    MqText(
+                    BasicText(
                         place.label,
-                        modifier = Modifier.clearAndSetSemantics { },
-                        role = TextRole.Caption,
-                        color = ink,
-                        weight = FontWeight.SemiBold,
+                        modifier =
+                            Modifier
+                                .padding(horizontal = LABEL_PAD)
+                                .clearAndSetSemantics { testTag = TAB_LABEL_TAG },
+                        style =
+                            TextStyle(
+                                color = ink,
+                                fontSize = labelSize,
+                                fontFamily = MarqueeFonts.text,
+                                fontWeight = FontWeight.SemiBold,
+                                lineHeight = labelSize * 1.4f,
+                            ),
                         maxLines = 1,
+                        softWrap = false,
+                        overflow = TextOverflow.Clip,
+                        onTextLayout = {
+                            if (it.didOverflowWidth) {
+                                if (labelSize.value > LABEL_FLOOR_SP) {
+                                    labelSize = maxOf(labelSize.value * LABEL_STEP, LABEL_FLOOR_SP).sp
+                                } else {
+                                    compact = true
+                                }
+                            }
+                        },
                     )
                 }
             }
@@ -283,6 +302,14 @@ private val BAR_HEIGHT = 62.dp
 private val TAB_HEIGHT = 54.dp
 private val BAR_SIDE = 21.dp
 private val BAR_MARGIN = 12.dp
+
+/** The tab labels' floor (sp, so it still follows the user's text size), the step down to it, and their side room. */
+private const val LABEL_FLOOR_SP = 10f
+private const val LABEL_STEP = 0.92f
+private val LABEL_PAD = 2.dp
+
+/** The semantics tag of a tab's label (tests read its size). */
+internal const val TAB_LABEL_TAG = "tab-label"
 
 /** A back link's height: Material's 48 dp target. */
 internal val BACK_HEIGHT = 48.dp
