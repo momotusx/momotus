@@ -221,6 +221,31 @@ object Scrims {
     val phoneTitleTop = listOf(ScrimStop(0f, 0.5f), ScrimStop(0.25f, 0f))
     val phoneTitleFoot = listOf(ScrimStop(0f, 0.6f), ScrimStop(0.5f, 0f))
 
+    /**
+     * Settings' header on TV (A1, the web's `settings` ramp): the profile's words at the bottom left, so the art is
+     * held down from the leading edge and the foot; SettingsHeaderTest measures every word over white art.
+     */
+    val settingsSide =
+        listOf(ScrimStop(0f, 0.85f), ScrimStop(0.35f, 0.72f), ScrimStop(0.6f, 0.25f), ScrimStop(0.8f, 0f))
+    val settingsFoot =
+        listOf(
+            ScrimStop(0f, 1f),
+            ScrimStop(0.12f, 0.92f),
+            ScrimStop(0.45f, 0.62f),
+            ScrimStop(0.75f, 0.15f),
+            ScrimStop(1f, 0f),
+        )
+
+    /** Settings' header on the phone: the large title and the profile card sit on the art's lower half. */
+    val settingsPhoneFoot =
+        listOf(
+            ScrimStop(0f, 1f),
+            ScrimStop(0.25f, 0.9f),
+            ScrimStop(0.55f, 0.7f),
+            ScrimStop(0.8f, 0.45f),
+            ScrimStop(1f, 0.3f),
+        )
+
     /** How much page color covers the art at [t] along [stops], linear between them. */
     fun alpha(
         stops: List<ScrimStop>,
@@ -251,6 +276,10 @@ fun Backdrop(
     alignment: Alignment = Alignment.Center,
     /** The picture did not load (a cover the page gives up for its backdrop). */
     onError: (() -> Unit)? = null,
+    /** The picture landed (a header that fades its art in). */
+    onSuccess: (() -> Unit)? = null,
+    /** What shows until the picture lands: `surface`, or the page itself where a grey box would read as art. */
+    ground: Color = Marquee.colors.surface,
     /** Drawn under the picture until it lands (an image already in the cache: a large cover's small poster), so
      * the box never shows blank. */
     under: String? = null,
@@ -281,7 +310,7 @@ fun Backdrop(
     // A lagging picture is scaled past its box: the box clips it, so two pages meet at a hard edge.
     Box(
         modifier
-            .background(Marquee.colors.surface)
+            .background(ground)
             .then(if (lag != null) Modifier.clipToBounds() else Modifier)
             .then(scrims),
     ) {
@@ -323,6 +352,7 @@ fun Backdrop(
                         }
                     },
                 onError = { onError?.invoke() },
+                onSuccess = { onSuccess?.invoke() },
             )
         }
     }

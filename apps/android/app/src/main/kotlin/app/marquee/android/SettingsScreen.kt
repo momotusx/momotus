@@ -54,7 +54,6 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
-import app.marquee.core.AccountCopy
 import app.marquee.core.AddonsCopy
 import app.marquee.core.DebridCopy
 import app.marquee.core.DefaultsCopy
@@ -69,6 +68,7 @@ import app.marquee.core.client.CoreLog
 import app.marquee.core.model.AddonInfo
 import app.marquee.core.model.LanguageChoice
 import app.marquee.core.model.SubtitleSize
+import app.marquee.core.model.Tile
 import app.marquee.core.session.CoreSession
 import app.marquee.core.views.AddonsView
 import app.marquee.core.views.SettingsView
@@ -98,6 +98,7 @@ import app.marquee.design.focusPalette
 import app.marquee.design.focusSoon
 import app.marquee.design.marqueeFocus
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonArray
@@ -105,8 +106,8 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 
-// Settings (plans/android-design-v2.md 5.5): addons, playback and about, as sections on glass.
-// Profiles, sync and debrid sign-in arrive with their own slices.
+// Settings (A1, SettingsA1.kt): the profile on a film's backdrop, then Sources, Account, Home, Playback, This device and
+// About as grouped lists. Addons and "Add a source" are a page of their own (AddonsScreen).
 
 class SettingsHolder(
     val session: CoreSession,
@@ -143,41 +144,17 @@ private fun SaidLine(
     }
 }
 
-@Composable
-fun SettingsScreen(
-    session: CoreSession,
-    gate: ProfileGate,
-    onProfiles: () -> Unit,
-    onEditProfile: (String) -> Unit,
-    onManageProfiles: () -> Unit,
-    sync: SyncController,
-    onImport: () -> Unit,
-    onSync: () -> Unit,
-    onDebrid: () -> Unit,
-    onTrakt: () -> Unit,
-    onHomeRows: () -> Unit,
-    onFindAddons: () -> Unit,
-    /** Settings > Stream choice; null where it is not offered (the sources page). */
-    onStreamChoice: (() -> Unit)? = null,
-    /** The recommended addons step with every switch; null where it is not offered (the sources page). */
-    onDefaults: (() -> Unit)? = null,
-    /** Opened from "Add a source": the link field first and only the source addons, as on Apple. */
-    sourcesOnly: Boolean = false,
-    link: LinkInstall,
+/**
+ * One operation at a time; what it ends with stays on screen in plain words, under the part of the page it came
+ * from (the top of the page is out of sight from the install field).
+ */
+internal class Runner(
+    private val scope: CoroutineScope,
 ) {
-    val holder =
-        viewModel<SettingsHolder>(
-            key = "settings",
-            factory = viewModelFactory { initializer { SettingsHolder(session) } },
-        )
-    val scope = rememberCoroutineScope()
-    // One operation at a time; what it ends with stays on screen in plain words, under the part of
-    // the page it came from (the top of the page is out of sight from the install field).
-    var busy by remember { mutableStateOf<String?>(null) }
-    var said by remember { mutableStateOf<Said?>(null) }
-    val requesters = remember { mutableStateMapOf<String, FocusRequester>() }
-    val installFocus = remember { FocusRequester() }
-    LinkSheet(session, link, installFocus)
+    var busy by mutableStateOf<String?>(null)
+        private set
+    var said by mutableStateOf<Said?>(null)
+        private set
 
     fun run(
         what: String,
@@ -208,7 +185,276 @@ fun SettingsScreen(
             }
         }
     }
+}
 
+@Composable
+private fun rememberRunner(): Runner {
+    val scope = rememberCoroutineScope()
+    return remember(scope) { Runner(scope) }
+}
+
+@Composable
+private fun settingsHolder(session: CoreSession) =
+    viewModel<SettingsHolder>(
+        key = "settings",
+        factory = viewModelFactory { initializer { SettingsHolder(session) } },
+    )
+
+@Composable
+fun SettingsScreen(
+    session: CoreSession,
+    gate: ProfileGate,
+    /** The header's film ([settingsArt]); null leaves the header on the page color. */
+    art: Tile?,
+    onProfiles: () -> Unit,
+    onEditProfile: (String) -> Unit,
+    onManageProfiles: () -> Unit,
+    sync: SyncController,
+    onAddons: () -> Unit,
+    onImport: () -> Unit,
+    onSync: () -> Unit,
+    onDebrid: () -> Unit,
+    onTrakt: () -> Unit,
+    onHomeRows: () -> Unit,
+    onFindAddons: () -> Unit,
+    onStreamChoice: () -> Unit,
+    /** The recommended addons step with every switch. */
+    onDefaults: () -> Unit,
+) {
+    val holder = settingsHolder(session)
+    val runner = rememberRunner()
+    val tv = Marquee.form == Form.Tv
+    val snapshot = gate.snapshot
+    val me = snapshot?.profiles?.firstOrNull { it.id == snapshot.active }
+    // Edit and Manage need the owner's PIN on a kids profile (DECISION kids rules): a kids profile shows neither.
+    val kids = me?.kids == true || snapshot?.kids == true
+    val editable = editableProfile(me, kids)
+    val canManage = editable?.isOwner == true
+    val line = profileLine((snapshot?.profiles?.size ?: 1) > 1)
+    val parts =
+        buildList {
+            // The phone's header holds the profile alone; its edits are a group of their own. TV has them on the art.
+            if (!tv && editable != null) {
+                add(
+                    SettingsPart(SettingsSection.Profiles) {
+                        SettingsGroup(
+                            {
+                                SettingsRow(
+                                    Icons.UserPen,
+                                    Tone.Blue,
+                                    "Edit profile",
+                                    "Name, picture and PIN.",
+                                    { onEditProfile(editable.id) },
+                                )
+                            },
+                            if (canManage) {
+                                {
+                                    SettingsRow(
+                                        Icons.Users,
+                                        Tone.Sky,
+                                        "Manage profiles",
+                                        "Add, edit and remove profiles on this account.",
+                                        onManageProfiles,
+                                    )
+                                }
+                            } else {
+                                null
+                            },
+                        )
+                    },
+                )
+            }
+            add(
+                SettingsPart(SettingsSection.Sources) {
+                    Sources(holder, session, kids, onDefaults, onFindAddons, onAddons, onDebrid, onTrakt, onImport)
+                },
+            )
+            add(
+                SettingsPart(SettingsSection.Account) {
+                    SettingsGroup(
+                        { SettingsRow(Icons.MonitorSmartphone, Tone.Sky, SyncCopy.TITLE, syncWords(sync), onSync) },
+                    )
+                },
+            )
+            add(
+                SettingsPart(SettingsSection.Home) {
+                    SettingsGroup({
+                        SettingsRow(
+                            Icons.Rows3,
+                            Tone.Mint,
+                            "Home rows",
+                            "Which catalogs Home shows after Continue Watching, and in what order.",
+                            onHomeRows,
+                        )
+                    })
+                },
+            )
+            add(
+                SettingsPart(SettingsSection.Playback) {
+                    Column(verticalArrangement = Arrangement.spacedBy(if (tv) 20.dp else 16.dp)) {
+                        val streams = holder.prefs.snapshot?.streams
+                        SettingsGroup({
+                            SettingsRow(
+                                Icons.SlidersHorizontal,
+                                Tone.Teal,
+                                StreamChoiceCopy.TITLE,
+                                streams?.let(StreamChoiceCopy::summary) ?: StreamChoiceCopy.LEDE,
+                                onStreamChoice,
+                            )
+                        })
+                        Playback(holder, runner.busy != null) { what, op -> runner.run(what, Place.Playback, op = op) }
+                        runner.said?.takeIf { it.place == Place.Playback }?.let { SaidLine(it, side = 0.dp) }
+                    }
+                },
+            )
+            // This device only, never synced (plans/appletv-polish.md decision 13); TV forms show none yet.
+            if (!tv) add(SettingsPart(SettingsSection.Device) { DevicePrefs() })
+            add(SettingsPart(SettingsSection.About) { About() })
+        }
+    if (tv) {
+        TvSettings(
+            me,
+            line,
+            art,
+            editable != null,
+            canManage,
+            onProfiles,
+            { me?.let { onEditProfile(it.id) } },
+            onManageProfiles,
+            parts,
+        )
+    } else {
+        PhoneSettings(me, line, art, onProfiles, parts)
+    }
+}
+
+/** The account's state in a line: what is wrong or still waits first, never "Synced" over a round that failed or waits. */
+private fun syncWords(sync: SyncController): String {
+    val last = sync.lastSynced
+    return if (sync.syncing && sync.joined && sync.problem == null) {
+        SyncCopy.SYNCING
+    } else {
+        SyncCopy.summary(
+            joined = sync.joined,
+            problem = sync.problem?.words,
+            failed = SyncCopy.failedSince(sync.failed.refused, sync.failed.unreadable, sync.failed.newer),
+            report = sync.lastReport,
+            time =
+                last?.let {
+                    java.text.DateFormat
+                        .getTimeInstance(
+                            java.text.DateFormat.SHORT,
+                        ).format(java.util.Date(it))
+                },
+        )
+    }
+}
+
+/** Sources: the recommended addons, Find addons, the addons page, debrid, Trakt and the Stremio import. */
+@Composable
+private fun Sources(
+    holder: SettingsHolder,
+    session: CoreSession,
+    kids: Boolean,
+    onDefaults: () -> Unit,
+    onFindAddons: () -> Unit,
+    onAddons: () -> Unit,
+    onDebrid: () -> Unit,
+    onTrakt: () -> Unit,
+    onImport: () -> Unit,
+) {
+    val addons = holder.addons
+    val addonsLine =
+        when {
+            addons.status is ViewStatus.Failed -> "Addons could not load"
+            else -> addons.snapshot?.addons?.let(AddonsCopy::summary) ?: ""
+        }
+    val debrid =
+        session.debrid.snapshot
+            ?.accounts
+            ?.size ?: 0
+    val trakt = (LocalContext.current.applicationContext as MarqueeApp).trakt
+    SettingsGroup(
+        // A kids profile reads the owner's addons: the defaults are not its to change.
+        if (kids) {
+            null
+        } else {
+            {
+                SettingsRow(
+                    Icons.Sparkles,
+                    Tone.Green,
+                    DefaultsCopy.SETTINGS_ROW,
+                    DefaultsCopy.SETTINGS_ROW_LINE,
+                    onDefaults,
+                )
+            }
+        },
+        {
+            SettingsRow(
+                Icons.PackageSearch,
+                Tone.Teal,
+                FindAddonsCopy.TITLE,
+                FindAddonsCopy.LEDE,
+                onFindAddons,
+                lines = Int.MAX_VALUE,
+            )
+        },
+        { SettingsRow(Icons.Puzzle, Tone.Mint, "Addons", addonsLine, onAddons) },
+        {
+            SettingsRow(
+                Icons.KeyRound,
+                Tone.Sky,
+                "Debrid services",
+                if (debrid ==
+                    0
+                ) {
+                    "Play torrents as fast direct links with a debrid account."
+                } else {
+                    DebridCopy.inUse(debrid)
+                },
+                onDebrid,
+            )
+        },
+        // The state is said whole, never cut short.
+        {
+            SettingsRow(
+                Icons.Radio,
+                Tone.Blue,
+                TraktCopy.TITLE,
+                TraktCopy.row(trakt.status, ::clockTime),
+                onTrakt,
+                lines = 4,
+            )
+        },
+        {
+            SettingsRow(
+                Icons.Download,
+                Tone.Sea,
+                "Import from Stremio",
+                "Addons, library and progress, with a code. No password typed here.",
+                onImport,
+            )
+        },
+    )
+}
+
+/**
+ * Settings > Addons, and "Add a source" from a title ([sourcesOnly]: the link field first and only the source addons,
+ * as on Apple): every installed addon with its switch, order and removal, the link field and Find addons.
+ */
+@Composable
+fun AddonsScreen(
+    session: CoreSession,
+    link: LinkInstall,
+    onFindAddons: () -> Unit,
+    sourcesOnly: Boolean,
+) {
+    val holder = settingsHolder(session)
+    val runner = rememberRunner()
+    val busy = runner.busy != null
+    val requesters = remember { mutableStateMapOf<String, FocusRequester>() }
+    val installFocus = remember { FocusRequester() }
+    LinkSheet(session, link, installFocus)
     val addons =
         holder.addons.snapshot
             ?.addons
@@ -222,88 +468,26 @@ fun SettingsScreen(
             focusSoon(installFocus)
         }
     }
+    val find: @Composable () -> Unit = {
+        LinkRow(Icons.PackageSearch, FindAddonsCopy.TITLE, FindAddonsCopy.LEDE, onFindAddons, lines = Int.MAX_VALUE)
+    }
     LazyColumn(
         // Down from the TV pill comes back to what had focus (plans 2.1).
         Modifier.fillMaxSize().focusRestorer(),
         contentPadding = pagePadding(),
         verticalArrangement = Arrangement.spacedBy(Marquee.space.m),
     ) {
+        item(key = "head") { BrowseHeader(if (sourcesOnly) "Add a source" else "Addons") }
         if (sourcesOnly) {
-            item(key = "head") { BrowseHeader("Add a source") }
             item(key = "sources-why") {
                 Note(
                     "A source is an addon that finds a playable stream for a title. " +
                         "$linkVerb a source addon's link to add one.",
                 )
             }
-            item(key = "install") {
-                LinkField(session, link, installFocus)
-            }
-            item(key = "find") {
-                LinkRow(
-                    Icons.PackageSearch,
-                    FindAddonsCopy.TITLE,
-                    FindAddonsCopy.LEDE,
-                    onFindAddons,
-                    lines = Int.MAX_VALUE,
-                )
-            }
-        } else {
-            item(key = "head") { BrowseHeader("Your Momotus") }
-        }
-        if (!sourcesOnly) {
-            gate.snapshot?.let { s ->
-                val me = s.profiles.firstOrNull { it.id == s.active }
-                if (me != null) {
-                    item(key = "profiles-head") { Kicker("Profiles") }
-                    item(key = "profiles") {
-                        Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.s)) {
-                            ProfileLinkRow(
-                                me,
-                                if (s.profiles.size > 1) {
-                                    AccountCopy.SWITCH_PROFILE
-                                } else {
-                                    "Add a profile for someone else, or switch"
-                                },
-                                onProfiles,
-                            )
-                            LinkRow(
-                                Icons.UserPen,
-                                "Edit profile",
-                                "Name, picture and PIN.",
-                                onClick = { onEditProfile(me.id) },
-                            )
-                            if (me.isOwner) {
-                                LinkRow(
-                                    Icons.Users,
-                                    "Manage profiles",
-                                    "Add, edit and remove profiles on this account.",
-                                    onManageProfiles,
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        item(key = "addons-head") { Kicker(if (sourcesOnly) "Your sources" else "Addons") }
-        // Find addons leads the section, as on the web.
-        if (!sourcesOnly) {
-            item(key = "find") {
-                LinkRow(
-                    Icons.PackageSearch,
-                    FindAddonsCopy.TITLE,
-                    FindAddonsCopy.LEDE,
-                    onFindAddons,
-                    lines = Int.MAX_VALUE,
-                )
-            }
-            // A kids profile reads the owner's addons: the defaults are not its to change.
-            if (onDefaults != null && gate.snapshot?.kids == false) {
-                item(key = "defaults") {
-                    LinkRow(Icons.ListChecks, DefaultsCopy.SETTINGS_ROW, DefaultsCopy.SETTINGS_ROW_LINE, onDefaults)
-                }
-            }
+            item(key = "install") { LinkField(session, link, installFocus) }
+            item(key = "find") { find() }
+            item(key = "addons-head") { Kicker("Your sources") }
         }
         when {
             holder.addons.status is ViewStatus.Failed -> {
@@ -328,20 +512,23 @@ fun SettingsScreen(
                 addon = addon,
                 first = index == 0,
                 last = index == addons.lastIndex,
-                busy = busy != null,
+                busy = busy,
                 focusRequester = requester,
                 onToggle = {
-                    run(if (addon.enabled) "Turning ${addon.name} off" else "Turning ${addon.name} on", Place.Addons) {
+                    runner.run(
+                        if (addon.enabled) "Turning ${addon.name} off" else "Turning ${addon.name} on",
+                        Place.Addons,
+                    ) {
                         session.ops.setAddonEnabled(addon.url, !addon.enabled)
                     }
                 },
                 onMove = { by ->
-                    run("Moving ${addon.name}", Place.Addons) { session.ops.moveAddon(addon.url, index + by) }
+                    runner.run("Moving ${addon.name}", Place.Addons) { session.ops.moveAddon(addon.url, index + by) }
                 },
                 onRemove = {
                     // Focus falls to the next addon, or to the link field when this was the last.
                     val next = addons.getOrNull(index + 1) ?: addons.getOrNull(index - 1)
-                    run(
+                    runner.run(
                         "Removing ${addon.name}",
                         Place.Addons,
                         then = {
@@ -352,92 +539,11 @@ fun SettingsScreen(
                 },
             )
         }
-        said?.takeIf { it.place == Place.Addons }?.let { item(key = "addons-said") { SaidLine(it) } }
-        if (sourcesOnly) return@LazyColumn
-        item(key = "install") {
-            LinkField(session, link, installFocus)
+        runner.said?.takeIf { it.place == Place.Addons }?.let { item(key = "addons-said") { SaidLine(it) } }
+        if (!sourcesOnly) {
+            item(key = "install") { LinkField(session, link, installFocus) }
+            item(key = "find") { find() }
         }
-        item(key = "import") {
-            LinkRow(
-                Icons.Download,
-                "Import from Stremio",
-                "Addons, library and progress, with a code. No password typed here.",
-                onImport,
-            )
-        }
-        item(key = "debrid") {
-            val count =
-                session.debrid.snapshot
-                    ?.accounts
-                    ?.size ?: 0
-            LinkRow(
-                Icons.KeyRound,
-                "Debrid services",
-                if (count ==
-                    0
-                ) {
-                    "Play torrents as fast direct links with a debrid account."
-                } else {
-                    DebridCopy.inUse(count)
-                },
-                onDebrid,
-            )
-        }
-        item(key = "trakt") {
-            val trakt = (LocalContext.current.applicationContext as MarqueeApp).trakt
-            // The state is said whole, never cut short.
-            LinkRow(Icons.ListChecks, TraktCopy.TITLE, TraktCopy.row(trakt.status, ::clockTime), onTrakt, lines = 4)
-        }
-        item(key = "devices-head") { Kicker("Account") }
-        item(key = "devices") {
-            // One page for the account: its state when joined, else the ways to join one (the web's line).
-            // What is wrong or still waits first, never "Synced" over a round that failed or waits (the web's words).
-            val last = sync.lastSynced
-            val words =
-                if (sync.syncing && sync.joined && sync.problem == null) {
-                    SyncCopy.SYNCING
-                } else {
-                    SyncCopy.summary(
-                        joined = sync.joined,
-                        problem = sync.problem?.words,
-                        failed = SyncCopy.failedSince(sync.failed.refused, sync.failed.unreadable, sync.failed.newer),
-                        report = sync.lastReport,
-                        time =
-                            last?.let {
-                                java.text.DateFormat
-                                    .getTimeInstance(
-                                        java.text.DateFormat.SHORT,
-                                    ).format(java.util.Date(it))
-                            },
-                    )
-                }
-            LinkRow(Icons.MonitorSmartphone, SyncCopy.TITLE, words, onSync)
-        }
-        item(key = "home-head") { Kicker("Home") }
-        item(key = "home-rows") {
-            LinkRow(
-                Icons.Rows3,
-                "Home rows",
-                "Which catalogs Home shows after Continue Watching, and in what order.",
-                onHomeRows,
-            )
-        }
-        item(key = "playback-head") { Kicker("Playback") }
-        onStreamChoice?.let { open ->
-            item(key = "stream-choice") {
-                val streams = holder.prefs.snapshot?.streams
-                LinkRow(
-                    Icons.SlidersHorizontal,
-                    StreamChoiceCopy.TITLE,
-                    streams?.let(StreamChoiceCopy::summary) ?: StreamChoiceCopy.LEDE,
-                    open,
-                )
-            }
-        }
-        item(key = "playback") { Playback(holder, busy != null) { what, op -> run(what, Place.Playback, op = op) } }
-        said?.takeIf { it.place == Place.Playback }?.let { item(key = "playback-said") { SaidLine(it) } }
-        item(key = "about-head") { Kicker("About") }
-        item(key = "about") { About() }
     }
 }
 
@@ -445,9 +551,10 @@ fun SettingsScreen(
 @Composable
 internal fun Section(
     side: Dp = Marquee.safe.side,
+    radius: Dp = Marquee.radius.l,
     content: @Composable () -> Unit,
 ) {
-    val shape = RoundedCornerShape(Marquee.radius.l)
+    val shape = RoundedCornerShape(radius)
     Box(
         Modifier
             .padding(horizontal = side)
@@ -456,42 +563,6 @@ internal fun Section(
             .background(Marquee.colors.surface)
             .padding(if (Marquee.form == Form.Tv) 24.dp else 16.dp),
     ) { content() }
-}
-
-/** The active profile's row: its avatar in place of an icon. */
-@Composable
-private fun ProfileLinkRow(
-    p: app.marquee.core.model.ProfileInfo,
-    text: String,
-    onClick: () -> Unit,
-) {
-    var focused by remember { mutableStateOf(false) }
-    val shape = RoundedCornerShape(Marquee.radius.l)
-    // On TV the focused row turns white with dark words (focusPalette).
-    FocusInk(focusPalette(focused)) {
-        val colors = Marquee.colors
-        Row(
-            Modifier
-                .padding(horizontal = Marquee.safe.side)
-                .fillMaxWidth()
-                .marqueeFocus(Marquee.radius.l, Tokens.FOCUS_SCALE_TILE)
-                .onFocusChanged { focused = it.isFocused }
-                .clip(shape)
-                .background(colors.surface)
-                .semantics(mergeDescendants = true) {}
-                .focusClickable(onClick, Role.Button)
-                .padding(if (Marquee.form == Form.Tv) 24.dp else 16.dp),
-            horizontalArrangement = Arrangement.spacedBy(Marquee.space.s),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            ProfileAvatar(p, if (Marquee.form == Form.Tv) 40.dp else 28.dp)
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                MqText(p.name, role = TextRole.Headline, weight = FontWeight.Bold, maxLines = 1)
-                MqText(text, role = TextRole.Caption, color = colors.muted, maxLines = 2)
-            }
-            MqIcon(Icons.ChevronRight, tint = colors.muted)
-        }
-    }
 }
 
 /** A row that opens another page: its icon, name and what it does, and a chevron (the web's LinkRow); no edge. */
@@ -791,7 +862,7 @@ private fun Playback(
 ) {
     val prefs = holder.prefs.snapshot ?: return
     val ops = holder.session.ops
-    Section {
+    Section(0.dp, groupRadius()) {
         Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.s)) {
             // The core marks the device's language as it lists it ("nb" reads as "no").
             val device = DeviceCaps.languageCode(LocalConfiguration.current.locales[0])
@@ -835,26 +906,32 @@ private fun Playback(
                 },
                 switch = true,
             )
-            // This device only, never synced (plans/appletv-polish.md decision 13); TV forms show none yet.
-            if (Marquee.form != Form.Tv) {
-                val context = LocalContext.current
-                var previews by remember { mutableStateOf(TrailerPreviews.on(context)) }
-                MqText("Trailer previews on Home", role = TextRole.Headline, weight = FontWeight.Bold)
-                Chip(
-                    if (previews) "On" else "Off",
-                    selected = previews,
-                    onClick = {
-                        previews = !previews
-                        TrailerPreviews.set(context, previews)
-                    },
-                    switch = true,
-                )
-                MqText(
-                    "Plays trailers muted, from YouTube, when the connection is not metered.",
-                    role = TextRole.Caption,
-                    color = Marquee.colors.dim,
-                )
-            }
+        }
+    }
+}
+
+/** This device: what this device keeps for itself, never synced (plans/appletv-polish.md decision 13); none on TV yet. */
+@Composable
+private fun DevicePrefs() {
+    val context = LocalContext.current
+    var previews by remember { mutableStateOf(TrailerPreviews.on(context)) }
+    Section(0.dp, groupRadius()) {
+        Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.s)) {
+            MqText("Trailer previews on Home", role = TextRole.Headline, weight = FontWeight.Bold)
+            Chip(
+                if (previews) "On" else "Off",
+                selected = previews,
+                onClick = {
+                    previews = !previews
+                    TrailerPreviews.set(context, previews)
+                },
+                switch = true,
+            )
+            MqText(
+                "Plays trailers muted, from YouTube, when the connection is not metered.",
+                role = TextRole.Caption,
+                color = Marquee.colors.dim,
+            )
         }
     }
 }
@@ -987,7 +1064,7 @@ private fun About() {
         remember {
             runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull()
         }
-    Section {
+    Section(0.dp, groupRadius()) {
         Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.xs)) {
             // The headline under it says the name.
             BrandLockup(

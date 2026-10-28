@@ -26,6 +26,22 @@ class AddonsCopyTest {
     }
 
     @Test
+    fun `Settings' Addons row counts the addons and the ones on that find streams, naming none`() {
+        val row = CoreJson.decodeFromString(AddonInfo.serializer(), "$json}")
+        val streams = row.copy(name = "Streamer", provides = listOf("stream"))
+        assertEquals("None installed yet.", AddonsCopy.summary(emptyList()))
+        assertEquals("1 installed. None of them finds streams yet.", AddonsCopy.summary(listOf(row)))
+        // One that is off finds nothing.
+        assertEquals(
+            "3 installed. 1 finds streams.",
+            AddonsCopy.summary(listOf(row, streams, streams.copy(enabled = false))),
+        )
+        val many = AddonsCopy.summary(listOf(streams, streams, row))
+        assertEquals("3 installed. 2 find streams.", many)
+        assertFalse("Streamer" in many)
+    }
+
+    @Test
     fun `About credits TurkceAltyazi as the plan words it`() {
         assertEquals(
             "Turkish subtitles from TurkceAltyazi.org, fetched by this device when you play.",

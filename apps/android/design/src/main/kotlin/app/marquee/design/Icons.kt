@@ -154,6 +154,14 @@ object Icons {
         )
     }
 
+    val CirclePlay: ImageVector by lazy {
+        strokeIcon(
+            "circle-play",
+        "M9 9.003a1 1 0 0 1 1.517-.859l4.997 2.997a1 1 0 0 1 0 1.718l-4.997 2.997A1 1 0 0 1 9 14.996z",
+        "M2 12a10 10 0 1 0 20 0a10 10 0 1 0 -20 0z",
+        )
+    }
+
     val CircleQuestionMark: ImageVector by lazy {
         strokeIcon(
             "circle-question-mark",
@@ -212,6 +220,17 @@ object Icons {
         "M10 5a2 2 0 0 0-1.344.519l-6.328 5.74a1 1 0 0 0 0 1.481l6.328 5.741A2 2 0 0 0 10 19h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2z",
         "m12 9 6 6",
         "m18 9-6 6",
+        )
+    }
+
+    val DoorOpen: ImageVector by lazy {
+        strokeIcon(
+            "door-open",
+        "M10 21H2",
+        "M10 3H7a2 2 0 00-2 2v16",
+        "M14 12h.01",
+        "M19 21V5a2 2 0 00-1.675-1.974l-6.163-1.013A1 1 0 0010 3v18a1 1 0 001.124.992z",
+        "M22 21h-3",
         )
     }
 
@@ -581,6 +600,17 @@ object Icons {
         )
     }
 
+    val Radio: ImageVector by lazy {
+        strokeIcon(
+            "radio",
+        "M16.247 7.761a6 6 0 0 1 0 8.478",
+        "M19.075 4.933a10 10 0 0 1 0 14.134",
+        "M4.925 19.067a10 10 0 0 1 0-14.134",
+        "M7.753 16.239a6 6 0 0 1 0-8.478",
+        "M10 12a2 2 0 1 0 4 0a2 2 0 1 0 -4 0z",
+        )
+    }
+
     val RefreshCw: ImageVector by lazy {
         strokeIcon(
             "refresh-cw",
@@ -778,6 +808,14 @@ object Icons {
         "M2 8L5 8",
         "M16 19L16 22",
         "M19 16L22 16",
+        )
+    }
+
+    val User: ImageVector by lazy {
+        strokeIcon(
+            "user",
+        "M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2",
+        "M8 7a4 4 0 1 0 8 0a4 4 0 1 0 -8 0z",
         )
     }
 

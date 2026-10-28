@@ -602,42 +602,45 @@ private fun AppNav(
                         SettingsScreen(
                             session,
                             gate,
+                            art = settingsArt(app.home.rows, app.home.heroes, kids = gate.snapshot?.kids == true),
                             onProfiles = { backStack.add(Route.Profiles) },
                             onEditProfile = { backStack.add(Route.EditProfile(it)) },
                             onManageProfiles = { backStack.add(Route.ManageProfiles) },
                             sync,
+                            onAddons = { backStack.add(Route.Addons) },
                             onImport = { backStack.add(Route.Import) },
                             onSync = { backStack.add(Route.Sync) },
                             onDebrid = { backStack.add(Route.Debrid) },
                             onTrakt = { backStack.add(Route.Trakt) },
                             onHomeRows = { backStack.add(Route.HomeRows) },
                             onFindAddons = { backStack.add(Route.FindAddons) },
-                            onDefaults = { backStack.add(Route.Defaults(DefaultsMode.Settings)) },
                             onStreamChoice = { backStack.add(Route.StreamChoice) },
-                            link = app.linkInstall,
+                            onDefaults = { backStack.add(Route.Defaults(DefaultsMode.Settings)) },
+                        )
+                    }
+                    entry<Route.Addons> {
+                        AddonsScreen(
+                            session,
+                            app.linkInstall,
+                            onFindAddons = { backStack.add(Route.FindAddons) },
+                            sourcesOnly = false,
                         )
                     }
                     entry<Route.Sources> {
-                        SettingsScreen(
+                        AddonsScreen(
                             session,
-                            gate,
-                            onProfiles = {},
-                            onEditProfile = {},
-                            onManageProfiles = {},
-                            sync,
-                            onImport = {},
-                            onSync = {},
-                            onDebrid = {},
-                            onTrakt = {},
-                            onHomeRows = {},
+                            app.linkInstall,
                             onFindAddons = { backStack.add(Route.FindAddons) },
                             sourcesOnly = true,
-                            link = app.linkInstall,
                         )
                     }
                     entry<Route.FindAddons> {
                         // TV's Paste a link: the page with the link field, back to it when Find addons came from there.
-                        val fromSources = routes.getOrNull(routes.lastIndex - 1) == Route.Sources
+                        val fromSources =
+                            routes.getOrNull(routes.lastIndex - 1).let {
+                                it == Route.Sources ||
+                                    it == Route.Addons
+                            }
                         FindAddonsScreen(session, app.installCards, app.linkInstall, onPasteLink = {
                             if (fromSources) pop() else backStack.add(Route.Sources)
                         })

@@ -117,6 +117,10 @@ sealed interface Route : NavKey {
     @Serializable
     data object Sources : Route
 
+    /** Settings > Addons: every installed addon with its switch, order and removal, and the link field. */
+    @Serializable
+    data object Addons : Route
+
     /** Find addons: Cinemeta's Official and Community lists, each installed in one press. */
     @Serializable
     data object FindAddons : Route
