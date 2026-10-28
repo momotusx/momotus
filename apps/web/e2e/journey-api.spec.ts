@@ -980,6 +980,7 @@ test("a trailer plays in the app: pause and play, seeks by the bar and the remot
   // TV: the position bar has the focus, where Left and Right seek.
   await expect.poll(() => p.evaluate(() => (document.activeElement as HTMLElement | null)?.dataset.f)).toBe("trailer:scrub");
   const toggle = p.locator('[data-f="trailer:toggle"]');
+  await expect(p.locator(".trailer")).toHaveAttribute("data-state", "playing");
   await expect(toggle).toHaveText("Pause");
   // In a walk it plays muted: no unMute ever.
   expect(await ytLog(p)).not.toContain("unMute");
@@ -1018,7 +1019,7 @@ test("a trailer YouTube refuses gives way to the next one, then to a quiet line,
   const { context, p, leftApp } = await trailerRun(browser, { form: "desktop", fail: ["jrnyTrailr1"] });
   await p.locator('[data-f="title:trailer"]').click();
   await expect.poll(() => ytLog(p)).toContain("new jrnyTeaser1 https://www.youtube-nocookie.com");
-  await expect(p.locator('[data-f="trailer:toggle"]')).toHaveText("Pause");
+  await expect(p.locator(".trailer")).toHaveAttribute("data-state", "playing");
   await expect(p.locator(".trailer-fail")).toHaveCount(0);
   await p.locator('[data-f="trailer:close"]').click();
   // Both refused: the line, announced, and Close to leave by.

@@ -188,8 +188,9 @@ export function playTrailer(opts: {
     return control;
   }
   const cap = opts.capS;
-  // Nothing playing this long after the start, the script's load included: it gives up (YouTube unreachable).
-  timers.push(setTimeout(() => !playingNow && self.stop("timeout"), full ? 15_000 : 9_000));
+  // Full screen: nothing playing 15 s after the press, the script's load included, gives up (YouTube unreachable). A
+  // preview keeps its art meanwhile and times out from its play (below).
+  if (full) timers.push(setTimeout(() => !playingNow && self.stop("timeout"), 15_000));
   loadApi().then(
     (YT) => {
       if (ended) return;

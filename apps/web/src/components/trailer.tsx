@@ -125,7 +125,7 @@ export function TrailerOverlay(props: { trailers: Trailer[]; onClose: () => void
   });
   const waiting = () => !failed() && time().state === "buffering";
   return (
-    <div class="trailer" role="dialog" aria-modal="true" aria-label={`Trailer: ${current()?.title ?? ""}`}>
+    <div class="trailer" role="dialog" aria-modal="true" aria-label={`Trailer: ${current()?.title ?? ""}`} data-state={failed() ? "failed" : time().state}>
       <div class="trailer-frame">
         <div class="trailer-player" aria-hidden="true">
           <div ref={host} />
