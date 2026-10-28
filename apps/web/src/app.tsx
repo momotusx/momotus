@@ -5,6 +5,7 @@ import CircleAlert from "lucide-solid/icons/circle-alert";
 import Compass from "lucide-solid/icons/compass";
 import House from "lucide-solid/icons/house";
 import LibraryBig from "lucide-solid/icons/library-big";
+import RefreshCw from "lucide-solid/icons/refresh-cw";
 import SearchIcon from "lucide-solid/icons/search";
 import Settings from "lucide-solid/icons/settings";
 import { type Component, createEffect, createMemo, createSignal, For, on, onCleanup, Show, untrack } from "solid-js";
@@ -17,7 +18,7 @@ import "./core/trakt";
 // A sign-out with removal that a reload cut short goes on (D13).
 import "./core/wipe";
 import { gateOpen, profiles, profilesFailed } from "./core/profiles";
-import { focusRail, installFocus, move, railHasFocus, restoreSoon, viewerMoving } from "./focus/dom";
+import { autoFocusSoon, focusRail, installFocus, move, railHasFocus, restoreSoon, viewerMoving } from "./focus/dom";
 import { form } from "./form";
 import { backThenReplace, entryOwner, historyBase, historyDepth, markBack, resetHistoryBase, stampEntriesWith, takeAfterBack, takeBack } from "./history";
 import Addons from "./screens/addons";
@@ -181,6 +182,17 @@ function Tabs() {
   );
 }
 
+/** The one way on from a lost core or a profile list that did not come: nothing else on screen can act, so a remote
+ * needs the focus here from the start. */
+function Reload() {
+  return (
+    <button class="btn" data-f="banner:reload" ref={(el) => autoFocusSoon(() => el)} onClick={() => location.reload()}>
+      <RefreshCw aria-hidden />
+      Reload
+    </button>
+  );
+}
+
 let focusInstalled = false;
 
 function Shell(props: RouteSectionProps) {
@@ -303,7 +315,12 @@ function Shell(props: RouteSectionProps) {
                   <Brand fill />
                 </div>
               }>
-              {(r) => <p class="banner bad">{r()}</p>}
+              {(r) => (
+                <p class="banner bad" role="status">
+                  {r()}
+                  <Reload />
+                </p>
+              )}
             </Show>
           }
         >
@@ -348,6 +365,7 @@ function Shell(props: RouteSectionProps) {
         <p class="banner bad" role="status">
           <CircleAlert aria-hidden />
           Lost connection to the core at {bridgeUrl}. Restart it, then reload.
+          <Reload />
         </p>
       </Show>
     </div>

@@ -5,7 +5,9 @@
 
 import { A } from "@solidjs/router";
 import Check from "lucide-solid/icons/check";
+import Compass from "lucide-solid/icons/compass";
 import LoaderCircle from "lucide-solid/icons/loader-circle";
+import RefreshCw from "lucide-solid/icons/refresh-cw";
 import { createEffect, createSignal, For, onCleanup, onMount, Show } from "solid-js";
 import { liveView } from "../core/client";
 import { calendarIds } from "../lib/ids";
@@ -43,6 +45,16 @@ const itemHref = (it: CalendarItem) => `${titlePath("series", it.itemId)}${it.se
 const itemKey = (it: CalendarItem) => `cal:${it.videoId}`;
 
 export default function CalendarScreen() {
+  // Try again on a calendar that could not open: a new view, as the page anew (a view that failed to open drops its commands for good).
+  const [attempt, setAttempt] = createSignal(0);
+  return (
+    <Show when={attempt() + 1} keyed>
+      <CalendarPage retry={() => setAttempt((n) => n + 1)} />
+    </Show>
+  );
+}
+
+function CalendarPage(props: { retry: () => void }) {
   let sent = localDay();
   const view = liveView<CalendarSnapshot>("calendar", { today: sent }, false, "id", calendarIds);
   const s = () => view.state.data;
@@ -120,15 +132,6 @@ export default function CalendarScreen() {
             Loading the schedule of {s()?.pending} series
           </p>
         </Show>
-        <Show when={view.state.status.state === "failed"}>
-          <div class="cal-problem" role="status">
-            <p class="st bad">
-              <i class="dot" />
-              The calendar could not open.
-            </p>
-            <Why class="cal-note" reason={(view.state.status as { reason: string }).reason} />
-          </div>
-        </Show>
         {/* The series by name; what each addon answered stays behind Details. */}
         <Show when={s()?.failed.length}>
           <p class="st bad cal-note">
@@ -147,11 +150,26 @@ export default function CalendarScreen() {
         </Show>
       </header>
 
+      <Show when={view.state.status.state === "failed"}>
+        <section class="problem">
+          <h2>The calendar could not open</h2>
+          <Why reason={(view.state.status as { reason: string }).reason} />
+          <button class="btn primary" data-f="calendar:retry" data-autofocus onClick={() => props.retry()}>
+            <RefreshCw aria-hidden />
+            Try again
+          </button>
+        </section>
+      </Show>
+
       <Show when={empty()}>
-        <p class="note">
-          {s()?.series ? "Nothing airs in these weeks for the series in your library." : "No series in your library yet. Series you add show their episodes here."}{" "}
-          <A href="/discover">Find series to follow</A>.
-        </p>
+        <section class="problem">
+          <h2>{s()?.series ? "Nothing airs in these weeks" : "No series in your library yet"}</h2>
+          <p>{s()?.series ? "None of the series in your library has an episode in this time." : "Series you add show their episodes here."}</p>
+          <A class="btn primary" href="/discover" data-f="calendar:discover" data-autofocus>
+            <Compass aria-hidden />
+            Find series to follow
+          </A>
+        </section>
       </Show>
 
       {/* Nothing has arrived yet: the shape of the agenda, not a blank page. */}

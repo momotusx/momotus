@@ -101,5 +101,5 @@
 [data-form="phone"] .palette-note { padding: 2px 6px; font-size: 15px; }
 [data-form="phone"] .palette .recent { gap: 10px; padding: 0 6px; }
 
-/* No addon can search: the sentence, then the way to one. */
+/* No addon can search, or the search could not open: the sentence, then the way on. */
 .none-search { display: grid; justify-items: start; gap: 16px; }

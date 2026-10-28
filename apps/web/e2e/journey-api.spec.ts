@@ -603,6 +603,93 @@ test("a screen that could not open offers Try again, focused, which opens it ane
   await context.close();
 });
 
+test("Calendar that could not open offers Try again, focused, and an empty one a way to find series", async ({ browser }) => {
+  let refused = false;
+  const { context, page: p } = await page(browser, { width: 1920, height: 1080 }, (m) => {
+    if (m.op !== "subscribe" || m.view !== "calendar" || refused) return undefined;
+    refused = true;
+    return { ok: false, error: "the core did not answer" };
+  });
+  await p.goto("/calendar?form=tv");
+  const retry = p.locator('[data-f="calendar:retry"]');
+  await expect(retry).toBeFocused({ timeout: 30_000 });
+  await expect(p.locator(".problem h2")).toHaveText("The calendar could not open");
+  await p.keyboard.press("Enter");
+  await expect(retry).toHaveCount(0);
+  // This core's library holds no series: the empty state names the way on, a button that takes the focus.
+  const find = p.locator('[data-f="calendar:discover"]');
+  await expect(find).toBeFocused({ timeout: 30_000 });
+  await expect(find).toHaveText("Find series to follow");
+  await p.keyboard.press("Enter");
+  await expect(p).toHaveURL(/\/discover/);
+  await context.close();
+});
+
+test("Search that could not open offers Try again, which opens it anew with the query kept", async ({ browser }) => {
+  let refused = 0;
+  const { context, page: p, sent } = await page(browser, { width: 1440, height: 900 }, (m) => {
+    if (m.op !== "subscribe" || m.view !== "search" || refused > 0) return undefined;
+    refused++;
+    return { ok: false, error: "the core did not answer" };
+  });
+  await p.goto("/search?q=journey&form=desktop");
+  const retry = p.locator('[data-f="search:retry"]');
+  await expect(retry).toBeVisible({ timeout: 30_000 });
+  await expect(p.locator(".palette-body")).toContainText("Search could not open.");
+  await retry.click();
+  await expect(retry).toHaveCount(0);
+  // The panel is new, its field holds what was typed, and the query went to the new view.
+  await expect(p.locator('[data-f="search:input"]')).toHaveValue("journey");
+  await expect.poll(() => sent.filter((m) => m.op === "subscribe" && m.view === "search").length).toBe(2);
+  await expect.poll(() => sent.some((m) => m.op === "command" && (m.command as { query?: string } | undefined)?.query === "journey")).toBe(true);
+  await expect(p.locator(".hit").first()).toBeVisible({ timeout: 30_000 });
+  await context.close();
+});
+
+test("a library filtered to a type with nothing says so and offers Show all", async ({ browser }) => {
+  const { context, page: p, sent, view } = await page(browser);
+  await p.goto("/library?form=desktop");
+  await expect.poll(() => view("library").latest, { timeout: 30_000 }).toBeTruthy();
+  const latest = view("library").latest as { kinds: unknown[]; items: unknown[] };
+  expect(latest).toBeTruthy();
+  // The core reports a filter on a type whose last title left.
+  view("library").push({ ...latest, kind: "movie", kinds: [{ kind: "series", label: "Series", count: 2 }], items: [] });
+  await expect(p.locator(".problem h2")).toHaveText("Nothing of this type in your library");
+  await p.locator('[data-f="library:all"]').click();
+  await expect.poll(() => sent.some((m) => m.op === "command" && (m.command as { type?: string; kind?: unknown } | undefined)?.type === "setFilter" && (m.command as { kind?: unknown }).kind === null)).toBe(true);
+  await context.close();
+});
+
+test("a lost core and a profile list that did not come each show a focused Reload that starts the app anew", async ({ browser }) => {
+  for (const mode of ["lost", "profiles"] as const) {
+    let broken = true;
+    const context = await browser.newContext({ viewport: { width: 1920, height: 1080 }, colorScheme: "dark", baseURL: `http://127.0.0.1:${PORTS.vite}` });
+    // Only this page's own socket is cut or refused, never the shared core.
+    await context.routeWebSocket(/\/ws$/, (ws) => {
+      if (mode === "lost" && broken) return void ws.close();
+      const core = ws.connectToServer();
+      if (mode === "profiles" && broken) {
+        ws.onMessage((m) => {
+          const msg = JSON.parse(String(m)) as Sent;
+          if (msg.op === "subscribe" && msg.view === "profiles") ws.send(JSON.stringify({ id: msg.id, ok: false, error: "the core did not answer" }));
+          else core.send(String(m));
+        });
+      }
+    });
+    const p = await context.newPage();
+    await p.goto("/?form=tv");
+    const reload = p.locator('[data-f="banner:reload"]');
+    await expect(reload).toBeFocused({ timeout: 30_000 });
+    await expect(p.locator(".banner")).toBeVisible();
+    // The way on works: the cause is gone, Enter reloads, and Home opens.
+    broken = false;
+    await Promise.all([p.waitForEvent("load"), p.keyboard.press("Enter")]);
+    await expect(p.locator('[data-f="nav:/"]')).toBeVisible({ timeout: 30_000 });
+    await expect(reload).toHaveCount(0);
+    await context.close();
+  }
+});
+
 test("Layout: Automatic follows the device; a chosen form is kept", async ({ browser }) => {
   const { context, page: p } = await page(browser);
   await p.goto("/settings?form=tv");
@@ -999,8 +1086,8 @@ test("the player, Calendar and Search say why they could not open in plain words
   await expect(card.locator(".end-detail")).toHaveText(plain);
   await expect(card.locator(".why-raw code")).toHaveText(raw);
   await p.goto("/calendar?form=desktop");
-  await expect(p.locator(".cal-problem")).toContainText("The calendar could not open.", { timeout: 30_000 });
-  await expect(p.locator(".cal-problem")).toContainText(plain);
+  await expect(p.locator(".problem")).toContainText("The calendar could not open", { timeout: 30_000 });
+  await expect(p.locator(".problem")).toContainText(plain);
   await p.goto("/search?form=desktop");
   await expect(p.locator(".palette-body")).toContainText("Search could not open.", { timeout: 30_000 });
   await expect(p.locator(".palette-body")).toContainText(plain);

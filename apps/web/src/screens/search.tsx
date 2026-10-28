@@ -8,6 +8,7 @@ import { A, useSearchParams } from "@solidjs/router";
 import ChevronRight from "lucide-solid/icons/chevron-right";
 import Film from "lucide-solid/icons/film";
 import ListFilter from "lucide-solid/icons/list-filter";
+import RefreshCw from "lucide-solid/icons/refresh-cw";
 import History from "lucide-solid/icons/rotate-ccw-clock";
 import SearchIcon from "lucide-solid/icons/search";
 import X from "lucide-solid/icons/x";
@@ -137,6 +138,17 @@ export default function Search() {
 }
 
 function SearchPanel(props: { dialog?: boolean }) {
+  // Try again on a search that could not open: a new panel, so a new view (one that failed to open drops its commands
+  // for good). The query typed so far is `lastQuery`, sent again on mount.
+  const [attempt, setAttempt] = createSignal(0);
+  return (
+    <Show when={attempt() + 1} keyed>
+      <Panel dialog={props.dialog} retry={() => setAttempt((n) => n + 1)} />
+    </Show>
+  );
+}
+
+function Panel(props: { dialog?: boolean; retry: () => void }) {
   const view = liveView<SearchSnapshot>("search", {}, false, "id", searchIds);
   const [text, setText] = createSignal(lastQuery);
   const [scope, setScope] = createSignal<string | null>(null);
@@ -224,11 +236,17 @@ function SearchPanel(props: { dialog?: boolean }) {
       <div class="palette-body" data-vscroll data-fgroup="hits">
         <Switch>
           <Match when={view.state.status.state === "failed"}>
-            <p class="st bad palette-note">
-              <i class="dot" />
-              Search could not open.
-            </p>
-            <Why class="palette-note" reason={(view.state.status as { reason: string }).reason} />
+            <div class="none-search">
+              <p class="st bad palette-note">
+                <i class="dot" />
+                Search could not open.
+              </p>
+              <Why class="palette-note" reason={(view.state.status as { reason: string }).reason} />
+              <button class="btn" data-f="search:retry" onClick={() => props.retry()}>
+                <RefreshCw aria-hidden />
+                Try again
+              </button>
+            </div>
           </Match>
           <Match when={!searching()}>
             <Show when={s()?.recent.length} fallback={<p class="palette-note">Type a title. Results come from every addon with a search catalog.</p>}>

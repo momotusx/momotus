@@ -88,7 +88,16 @@ function LibraryPage(props: { retry: () => void }) {
                 />
                 <Chips label="Sort" group="lib-sort" items={sorts} selected={s().sort} onSelect={(sort) => void view.command({ type: "setSort", sort })} />
               </div>
-              <Grid items={s().items} scope="library" />
+              <Show when={s().kind === null || s().items.length} fallback={
+                <section class="problem">
+                  <h2>Nothing of this type in your library</h2>
+                  <button class="btn primary" data-f="library:all" onClick={() => void view.command({ type: "setFilter", kind: null })}>
+                    Show all
+                  </button>
+                </section>
+              }>
+                <Grid items={s().items} scope="library" />
+              </Show>
             </>
           )}
         </Match>
