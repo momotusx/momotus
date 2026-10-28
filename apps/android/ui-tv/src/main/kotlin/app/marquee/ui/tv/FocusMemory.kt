@@ -195,9 +195,10 @@ fun FocusMemory.FirstFocus(
     val input = LocalInputModeManager.current
     LaunchedEffect(this, target, asked) {
         if (target == null) return@LaunchedEffect
-        // A TV is always in keyboard mode. A phone or tablet running the TV form starts in touch mode, where a button
-        // takes no focus until the first key press: the first focus asks for the remote's mode.
-        input.requestInputMode(InputMode.Keyboard)
+        // This matters for the TV form on a touch device (the debug walks on a phone): it starts in touch mode, where
+        // a button takes no focus until the first key press, so the first focus asks for the remote's mode. A real TV
+        // is always in keyboard mode and this does nothing there. Not after the viewer has pressed a key.
+        if (interactions == asked) input.requestInputMode(InputMode.Keyboard)
         // A remembered key that is no longer composed (a row that moved into the card) is not a target.
         val wanted = focusedKey?.takeIf { requester(it) != null } ?: target
         focusWhenReady(wanted, asked, waitMs = 10_000)

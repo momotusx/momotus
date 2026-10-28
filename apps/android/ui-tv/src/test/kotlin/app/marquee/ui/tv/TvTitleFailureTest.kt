@@ -2,7 +2,9 @@ package app.marquee.ui.tv
 
 import android.os.Handler
 import android.os.Looper
+import android.view.View
 import androidx.compose.runtime.snapshots.Snapshot
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertHasClickAction
 import androidx.compose.ui.test.hasText
@@ -27,6 +29,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import java.util.concurrent.Executors
 import kotlin.coroutines.CoroutineContext
+import kotlin.test.assertTrue
 
 /** A title whose subscription fails before any header arrived says so with Try again, never skeletons for good. */
 @RunWith(RobolectricTestRunner::class)
@@ -61,7 +64,9 @@ class TvTitleFailureTest {
     fun `a view that failed with no header shows the failure and Try again`() {
         client.attachFailed("The core did not open")
         val view = TitleView(client, scope, "movie", "tt1")
+        var window: View? = null
         compose.setContent {
+            window = LocalView.current
             MarqueeTheme(Form.Tv) {
                 TvTitle(
                     view,
@@ -75,6 +80,9 @@ class TvTitleFailureTest {
             }
         }
         compose.onAllNodesWithText("This title could not load", useUnmergedTree = true).assertCountEquals(0)
+        // A touch device running the TV form (the debug walks): no focus is taken until the remote's mode is asked for.
+        compose.runOnUiThread { enterTouchMode(window!!) }
+        assertTrue(window!!.isInTouchMode, "the window is in touch mode")
         view.open()
         val deadline = System.currentTimeMillis() + 120_000
         // The words sit under a live region, which is read by TalkBack and hides them from the merged tree.
@@ -91,5 +99,13 @@ class TvTitleFailureTest {
         compose.waitUntil(10_000) {
             compose.onAllNodes(hasText("Try again") and isFocused()).fetchSemanticsNodes().isNotEmpty()
         }
+    }
+
+    /** Puts the window in touch mode, as a phone starts: the platform's own call, through reflection. */
+    private fun enterTouchMode(view: View) {
+        val root = View::class.java.getMethod("getViewRootImpl").invoke(view)
+        val ensure = root.javaClass.getDeclaredMethod("ensureTouchMode", Boolean::class.javaPrimitiveType)
+        ensure.isAccessible = true
+        ensure.invoke(root, true)
     }
 }
