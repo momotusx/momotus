@@ -68,7 +68,7 @@ struct ProfileRow: View {
     }
 }
 
-/// Add a profile, or edit one: the name, the picture and its color, the PIN
+/// Add a profile, or edit one: the name, the picture, the PIN
 /// changes the core allows, and Delete for the owner on another profile.
 struct EditProfile: View {
     /// nil adds a profile.
@@ -80,7 +80,7 @@ struct EditProfile: View {
     @FocusState private var nameFocused: Bool
     @State private var glyph = "letter"
     @State private var color = "ember"
-    /// The user picked a picture or a color: only then is `avatar` sent, so a
+    /// The user picked a picture: only then is `avatar` sent, so a
     /// newer app's avatar survives a rename.
     @State private var touched = false
     @State private var filled = false
@@ -166,15 +166,15 @@ struct EditProfile: View {
             }
         }
         .confirmationDialog("Discard your changes?", isPresented: $confirmLeave, titleVisibility: .visible) {
-            Button("Discard", role: .destructive) { dismiss() }
+            Button("Discard") { dismiss() }
             Button("Keep editing", role: .cancel) {}
         }
         #endif
         .confirmationDialog(
-            "Remove PIN?", isPresented: Binding(get: { removal != nil }, set: { if !$0 { removal = nil } }),
+            removal.map { label($0.action, $0.target) + "?" } ?? "Remove PIN?", isPresented: Binding(get: { removal != nil }, set: { if !$0 { removal = nil } }),
             titleVisibility: .visible, presenting: removal
         ) { removal in
-            Button(label(removal.action, removal.target), role: .destructive) { removePin(removal.action, removal.target) }
+            Button(label(removal.action, removal.target)) { removePin(removal.action, removal.target) }
             Button("Cancel", role: .cancel) {}
         } message: { removal in
             Text("Anyone can then open \(removal.action == .removeOther ? removal.target.name : "this profile") without it.")

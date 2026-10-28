@@ -131,3 +131,13 @@ private func snapshot(_ profiles: [ProfileInfo], locked: Bool = false) -> Profil
     let editor = try String(contentsOf: file, encoding: .utf8)
     #expect(!editor.contains("caps(\"Color\")"), "the Color row is back in the editor")
 }
+
+@Test func theEditorsConfirmationsTakeNoDestructiveRole() throws {
+    // DECISION (Confirmation): Apple's dialogs carry the meaning in the word, with no red role.
+    let file = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appending(path: "../Marquee/Profiles/ManageProfiles.swift")
+    let editor = try String(contentsOf: file, encoding: .utf8)
+    for line in editor.split(separator: "\n") where line.contains("Discard") || line.contains("removePin(") {
+        #expect(!line.contains(".destructive"), "a dialog button took the destructive role: \(line)")
+    }
+    #expect(editor.contains("label($0.action, $0.target) + \"?\""), "the PIN dialog no longer names whose PIN")
+}
