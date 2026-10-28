@@ -52,7 +52,18 @@ class DownloadKeeperLogicTest {
         bytesDone: Long = 0,
         bytesTotal: Long = 0,
     ) = KeeperEvent.Facts(
-        KeeperFacts(left, left, bytesDone, bytesTotal, null, emptyMap(), emptyMap(), null, locked = true, profile = "owner"),
+        KeeperFacts(
+            left,
+            left,
+            bytesDone,
+            bytesTotal,
+            null,
+            emptyMap(),
+            emptyMap(),
+            null,
+            locked = true,
+            profile = "owner",
+        ),
     )
 
     private fun KeeperEffect.isProgress() = this is Progress

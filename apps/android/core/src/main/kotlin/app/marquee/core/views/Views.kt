@@ -74,6 +74,7 @@ class HomeView(
 
     /** The first page: what the TV's start focus and the app's checks ask about. */
     val hero: Hero? get() = heroes.firstOrNull()
+
     /** No network and downloads that play (plans/offline-downloads.md 3.5); null otherwise. */
     var offline: HomeOffline? by mutableStateOf(null)
         private set
