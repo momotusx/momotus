@@ -1,0 +1,34 @@
+/* The addon install sheet (components/install-sheet.tsx): DECISION.md's confirmation card on TV
+   (radius 24, Cancel the focused white primary), a centered card on desktop with Install in the
+   key fill, and a page sheet on the phone (grabber, radius 10 top corners, buttons pinned low). */
+.is-layer { position: fixed; inset: 0; z-index: 40; display: grid; place-items: center; padding: var(--safe-top, 0) var(--safe-side) var(--safe-bottom); }
+.is-scrim { position: absolute; inset: 0; background: var(--scrim); }
+.is-card { position: relative; width: 900px; max-width: 100%; max-height: 100%; overflow-y: auto; padding: 48px 56px; border-radius: 24px;
+  background: var(--surface); display: grid; gap: 16px; }
+.is-card h2 { font: var(--weight-heading) var(--type-title3) / 1.2 var(--font-display); letter-spacing: var(--tracking-heading); overflow-wrap: anywhere; }
+.is-from, .is-adds { font: 400 var(--type-body) / 1.4 var(--font-text); overflow-wrap: anywhere; }
+.is-from, .is-note { color: var(--muted); }
+.is-note { font: 400 var(--type-callout) / 1.4 var(--font-text); }
+.is-acts { display: flex; gap: 20px; margin-top: 16px; }
+.btn.keyfill { background: var(--key-fill); color: var(--on-key); }
+
+[data-form="desktop"] .is-card { width: calc(440 * var(--px)); padding: calc(24 * var(--px)) calc(28 * var(--px)); gap: calc(8 * var(--px)); border-radius: calc(14 * var(--px)); }
+[data-form="desktop"] .is-card h2 { font-size: calc(20 * var(--px)); }
+[data-form="desktop"] .is-from, [data-form="desktop"] .is-adds { font-size: calc(15 * var(--px)); }
+[data-form="desktop"] .is-note { font-size: calc(13 * var(--px)); }
+[data-form="desktop"] .is-acts { justify-content: flex-end; gap: calc(10 * var(--px)); margin-top: calc(12 * var(--px)); }
+[data-form="desktop"] .is-acts .btn { height: calc(36 * var(--px)); padding: 0 calc(20 * var(--px)); font-size: calc(14 * var(--px)); }
+@media (hover: hover) {
+  [data-form="desktop"] .btn.keyfill:hover { background: color-mix(in srgb, var(--key-fill) 88%, #fff); }
+}
+
+/* Phone: a page sheet from the bottom edge; the buttons stay low, full width, Install first. */
+[data-form="phone"] .is-layer { align-items: end; padding: 0; }
+[data-form="phone"] .is-scrim { touch-action: none; }
+[data-form="phone"] .is-card { width: 100%; padding: 8px 20px calc(20px + env(safe-area-inset-bottom)); gap: 10px; border-radius: 10px 10px 0 0; overscroll-behavior: contain; }
+[data-form="phone"] .is-grabber { justify-self: center; width: 36px; height: 5px; border-radius: 3px; background: rgba(255, 255, 255, .3); margin-bottom: 8px; }
+[data-form="phone"] .is-card h2 { font-size: 20px; }
+[data-form="phone"] .is-from, [data-form="phone"] .is-adds { font-size: 15px; }
+[data-form="phone"] .is-note { font-size: 13px; }
+[data-form="phone"] .is-acts { flex-direction: column; gap: 10px; margin-top: 12px; }
+[data-form="phone"] .is-acts .btn { justify-content: center; height: 50px; }

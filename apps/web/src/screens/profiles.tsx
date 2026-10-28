@@ -14,6 +14,7 @@ import type { ProfileInfo } from "../core/generated/ProfileInfo";
 import type { ProfilesSnapshot } from "../core/generated/ProfilesSnapshot";
 import { markChosen, profiles, switchProfile, unlockProfile } from "../core/profiles";
 import { autoFocusSoon, goBack } from "../focus/dom";
+import { holdModal } from "../focus/modal";
 import { type AvatarColor, COLORS, formatAvatar, GLYPHS, type Glyph, nextAvatar, parseAvatar } from "../lib/avatar";
 import { profileProblem, waitText } from "../lib/profiles";
 import "./browse.css";
@@ -22,41 +23,6 @@ import "./profiles.css";
 
 const BACK_CODES = new Set([10009, 461]);
 const isBack = (e: KeyboardEvent) => e.key === "Escape" || e.key === "GoBack" || e.key === "BrowserBack" || BACK_CODES.has(e.keyCode);
-
-/** While a modal is open, everything outside it is inert (no focus, no clicks, hidden from
- * screen readers); focus goes back where it was when it closes. Without `inside`, the modal is
- * the page's main and only the navigation goes inert. */
-function holdModal(inside?: () => HTMLElement) {
-  const before = document.activeElement as HTMLElement | null;
-  // The opener is often rebuilt when the dialog closes: it is found again by its key.
-  const key = before?.dataset.f;
-  const held: HTMLElement[] = [];
-  onMount(() => {
-    const keep = inside?.();
-    const outside = keep ? siblingsUpTo(keep) : [...document.querySelectorAll<HTMLElement>(".app > nav")];
-    for (const el of outside) {
-      if (el.inert) continue;
-      el.inert = true;
-      held.push(el);
-    }
-  });
-  onCleanup(() => {
-    for (const el of held) el.inert = false;
-    queueMicrotask(() => {
-      const back = before?.isConnected ? before : key ? document.querySelector<HTMLElement>(`[data-f="${key}"]`) : null;
-      back?.focus();
-    });
-  });
-}
-
-/** Every element beside `el` and beside each of its ancestors, up to the body. */
-function siblingsUpTo(el: HTMLElement): HTMLElement[] {
-  const out: HTMLElement[] = [];
-  for (let node: HTMLElement | null = el; node && node !== document.body; node = node.parentElement) {
-    for (const sib of node.parentElement?.children ?? []) if (sib !== node && sib instanceof HTMLElement) out.push(sib);
-  }
-  return out;
-}
 
 /** How long a PIN try waits for the core before the keypad offers a reload. */
 const PIN_WAIT_MS = 20_000;

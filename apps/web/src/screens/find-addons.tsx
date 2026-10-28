@@ -8,6 +8,7 @@ import Power from "lucide-solid/icons/power";
 import RotateCw from "lucide-solid/icons/rotate-cw";
 import { createEffect, createMemo, createSignal, For, Match, on, onCleanup, Show, Switch } from "solid-js";
 import { Chips } from "../components/grid";
+import { InstallSheet } from "../components/install-sheet";
 import { liveView, op, reasonOf } from "../core/client";
 import type { AddonCatalogSnapshot } from "../core/generated/AddonCatalogSnapshot";
 import type { ListedAddon } from "../core/generated/ListedAddon";
@@ -40,7 +41,7 @@ function savedPicks(): Picks {
   return { list: p?.list ?? "official", filter: p?.filter ?? "all", shown: p?.shown ?? PAGE, query: p?.query ?? "" };
 }
 
-function Card(props: { entry: ListedAddon; fkey: string; sameName: boolean }) {
+function Card(props: { entry: ListedAddon; fkey: string; sameName: boolean; onAsk: (key: string) => void }) {
   const e = () => props.entry;
   const tv = () => form() === "tv";
   const state = () => cards[e().key];
@@ -61,7 +62,8 @@ function Card(props: { entry: ListedAddon; fkey: string; sameName: boolean }) {
   const perform = () => {
     const a = act();
     if (busy()) return;
-    if (a.kind === "install") void install(e());
+    // An install asks first (plans/addon-install-sheet.md); Turn on is an addon already installed.
+    if (a.kind === "install") props.onAsk(e().key);
     if (a.kind === "turnOn") void turnOn(e(), a.url);
   };
   const pressable = () => act().kind === "install" || act().kind === "turnOn";
@@ -177,6 +179,18 @@ function Lists(props: { fresh: boolean; picks: Picks; onPicks: (p: Partial<Picks
   // A publisher's list (an addon the user installed) names where it comes from.
   const host = () => current()?.host ?? null;
   const repeated = createMemo(() => repeatedNames(current()?.entries ?? []));
+  // The card whose Install asked, by key: one sheet for the page, held across the list's pushes,
+  // which rebuild the cards.
+  const [asking, setAsking] = createSignal<string | null>(null);
+  const asked = createMemo(() => {
+    const key = asking();
+    return key ? (current()?.entries.find((x) => x.key === key) ?? null) : null;
+  });
+  const confirm = (entry: ListedAddon) => {
+    setAsking(null);
+    // Installed meanwhile (another device, another card): nothing to do.
+    if (cardAction(entry, cards[entry.key]?.code).kind === "install") void install(entry);
+  };
   const failure = () => {
     const status = view.state.status;
     if (status.state === "failed") return status.reason;
@@ -301,7 +315,7 @@ function Lists(props: { fresh: boolean; picks: Picks; onPicks: (p: Partial<Picks
           </Show>
           <ul class="fa-grid" onKeyDown={back}>
             <For each={visible().slice(0, props.picks.shown)}>
-              {(item) => <Card entry={item.entry} fkey={`fa:${props.picks.list}:${item.at}`} sameName={repeated().has(item.entry.name)} />}
+              {(item) => <Card entry={item.entry} fkey={`fa:${props.picks.list}:${item.at}`} sameName={repeated().has(item.entry.name)} onAsk={setAsking} />}
             </For>
           </ul>
           <Show when={visible().length > props.picks.shown}>
@@ -309,6 +323,7 @@ function Lists(props: { fresh: boolean; picks: Picks; onPicks: (p: Partial<Picks
           </Show>
         </Match>
       </Switch>
+      <Show when={asked()}>{(entry) => <InstallSheet addon={entry()} onCancel={() => setAsking(null)} onInstall={() => confirm(entry())} />}</Show>
     </>
   );
 }

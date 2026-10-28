@@ -354,7 +354,7 @@ test("a pasted link that carries a sign-in is confirmed first, then sent again a
   await shot(page, "addons-token", "desktop");
   await ack.click();
   await expect
-    .poll(() => sent.filter((m) => m.op === "installAddon").map((m) => m.acknowledgeToken === true))
+    .poll(() => sent.filter((m) => m.op === "previewAddon").map((m) => m.acknowledgeToken === true))
     .toEqual([false, true]);
   // Acknowledged, the core tries the made-up host and says why it failed.
   await expect(page.locator(".install-state")).toContainText("Could not install");

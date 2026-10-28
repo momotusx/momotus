@@ -9,14 +9,17 @@ import { A } from "@solidjs/router";
 import { createSignal, For, Match, Show, Switch } from "solid-js";
 import { isTokenInLink, liveView, op, reasonOf } from "../core/client";
 import type { AddonInfo } from "../core/generated/AddonInfo";
+import { InstallSheet } from "../components/install-sheet";
 import type { AddonsSnapshot } from "../core/generated/AddonsSnapshot";
 import { form } from "../form";
 import { autoFocus } from "../focus/dom";
+import { sheetWords } from "../lib/install-sheet";
 import { addonHost, findAddons, kindLabel, providesText, tokenInLink } from "../lib/words";
 import "./browse.css";
 import "./settings.css";
 
-/** Installs an addon by URL with a status line under the field. */
+/** Installs an addon by URL with a status line under the field: the link is read first and the
+ * install sheet shows what it is (plans/addon-install-sheet.md); only its Install installs. */
 /** `onDraft` hears the link as it is typed: a screen with its own primary
  * action gives up the white pill while there is a link to install. */
 export function InstallField(props: { autofocus?: boolean; fkey?: string; onDraft?: (url: string) => void }) {
@@ -28,17 +31,24 @@ export function InstallField(props: { autofocus?: boolean; fkey?: string; onDraf
   const [state, setState] = createSignal<{ tone: string; text: string } | null>(null);
   // A link the core refused because it carries a sign-in, waiting for "It is mine".
   const [risky, setRisky] = createSignal<string | null>(null);
-  const install = async (e?: Event, acknowledged = false) => {
+  // The link read and waiting on the sheet, with whether its sign-in was acknowledged.
+  const [asking, setAsking] = createSignal<{ info: AddonInfo; url: string; acknowledged: boolean } | null>(null);
+  let checking = false;
+  const fields = (u: string, acknowledged: boolean) => (acknowledged ? { url: u, acknowledgeToken: true } : { url: u });
+  const check = async (e?: Event, acknowledged = false) => {
     e?.preventDefault();
     const u = acknowledged ? (risky() ?? "") : url().trim();
-    if (!u) return;
+    if (!u || checking) return;
+    checking = true;
+    // "It is mine" goes while the link is read: focus moves to Install first, so the sheet gives it
+    // back there when it closes.
+    if (acknowledged) document.querySelector<HTMLElement>(`[data-f="${key}:go"]`)?.focus();
     setRisky(null);
-    setState({ tone: "warn live", text: "Installing" });
+    setState({ tone: "warn live", text: sheetWords.checking });
     try {
-      const fields = acknowledged ? { url: u, acknowledgeToken: true } : { url: u };
-      const name = await op<{ id: string; name: string }>("installAddon", fields).then((r) => r.name);
-      setState({ tone: "ok", text: `Installed ${name}` });
-      setUrl("");
+      const info = await op<AddonInfo>("previewAddon", fields(u, acknowledged));
+      setState(null);
+      setAsking({ info, url: u, acknowledged });
     } catch (err) {
       if (isTokenInLink(err)) {
         setRisky(u);
@@ -46,11 +56,24 @@ export function InstallField(props: { autofocus?: boolean; fkey?: string; onDraf
         return;
       }
       setState({ tone: "bad", text: `Could not install: ${reasonOf(err)}` });
+    } finally {
+      checking = false;
+    }
+  };
+  const install = async (asked: { url: string; acknowledged: boolean }) => {
+    setAsking(null);
+    setState({ tone: "warn live", text: "Installing" });
+    try {
+      const name = await op<{ id: string; name: string }>("installAddon", fields(asked.url, asked.acknowledged)).then((r) => r.name);
+      setState({ tone: "ok", text: `Installed ${name}` });
+      setUrl("");
+    } catch (err) {
+      setState({ tone: "bad", text: `Could not install: ${reasonOf(err)}` });
     }
   };
   const key = props.fkey ?? "install";
   return (
-    <form class="install" onSubmit={install}>
+    <form class="install" onSubmit={check}>
       <label class="field-line">
         <span class="kicker">Addon link</span>
         <input
@@ -86,9 +109,12 @@ export function InstallField(props: { autofocus?: boolean; fkey?: string; onDraf
       </Show>
       <Show when={risky()}>
         {/* A risky choice, not the screen's primary: glass with the warning's edge. */}
-        <button class="btn caution" type="button" data-f={`${key}:ack`} onClick={() => void install(undefined, true)}>
+        <button class="btn caution" type="button" data-f={`${key}:ack`} onClick={() => void check(undefined, true)}>
           {tokenInLink.confirm}
         </button>
+      </Show>
+      <Show when={asking()}>
+        {(asked) => <InstallSheet addon={asked().info} onCancel={() => setAsking(null)} onInstall={() => void install(asked())} />}
       </Show>
     </form>
   );
