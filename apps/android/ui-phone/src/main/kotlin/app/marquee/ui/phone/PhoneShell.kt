@@ -285,7 +285,7 @@ private val BAR_SIDE = 21.dp
 private val BAR_MARGIN = 12.dp
 
 /** A back link's height: Material's 48 dp target. */
-private val BACK_HEIGHT = 48.dp
+internal val BACK_HEIGHT = 48.dp
 
 /** The floating link's pill over title art: at 0.9 the key blue keeps 4.5:1 even over pure white art. */
 internal const val BACK_PILL_ALPHA = 0.9f

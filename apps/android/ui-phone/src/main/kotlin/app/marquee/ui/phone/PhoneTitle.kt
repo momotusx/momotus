@@ -451,7 +451,9 @@ private fun Hero(
                 Modifier
                     .windowInsetsPadding(
                         WindowInsets.statusBars,
-                    ).padding(horizontal = side, vertical = Marquee.space.s),
+                    )
+                    // Under the floating back link, which the shell draws over this corner.
+                    .padding(start = side, end = side, top = Marquee.space.s + BACK_HEIGHT, bottom = Marquee.space.s),
         )
         return
     }

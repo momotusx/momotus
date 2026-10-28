@@ -17,6 +17,7 @@ import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.captureToImage
+import androidx.compose.ui.test.getBoundsInRoot
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasScrollAction
@@ -46,6 +47,7 @@ import app.marquee.core.model.TitleSnapshot
 import app.marquee.core.model.TitleState
 import app.marquee.core.model.VersionsConditions
 import app.marquee.core.model.VersionsSnapshot
+import app.marquee.core.route.Route
 import app.marquee.core.views.TitleView
 import app.marquee.design.Form
 import app.marquee.design.Marquee
@@ -725,5 +727,47 @@ class PhoneTitleActionsTest {
             Thread.sleep(50)
         }
         assertTrue(posterAsks.get() >= 2, "the poster's own fetch was asked: ${posterAsks.get()}")
+    }
+
+    @Test
+    fun `a title with no art starts under the floating back link`() {
+        client.attach { text ->
+            val msg = CoreJson.parseToJsonElement(text).jsonObject
+            val id = msg["id"]?.jsonPrimitive?.longOrNull ?: return@attach
+            val result =
+                if (msg["op"]?.jsonPrimitive?.content == "subscribe") {
+                    """{"sub":7,"snapshot":${CoreJson.encodeToString(TitleSnapshot.serializer(), title)}}"""
+                } else {
+                    "{}"
+                }
+            client.onMessage("""{"id":$id,"ok":true,"result":$result}""")
+        }
+        val view = TitleView(client, scope, "movie", "tt1")
+        compose.setContent {
+            MarqueeTheme(Form.Phone) {
+                PhoneShell(Route.Home, showTabs = false, onSelect = {}, statusStrip = false, onBack = {}) {
+                    PhoneTitle(
+                        view,
+                        null,
+                        onPlay = { _, _ -> },
+                        onVersions = {},
+                        onEpisode = {},
+                        onEpisodeVersions = {},
+                    )
+                }
+            }
+        }
+        compose.waitForIdle()
+        view.open()
+        val deadline = System.currentTimeMillis() + 120_000
+        while (compose.onAllNodesWithText("Sintel").fetchSemanticsNodes().isEmpty()) {
+            check(System.currentTimeMillis() < deadline) { "the title never drew" }
+            Snapshot.sendApplyNotifications()
+            compose.waitForIdle()
+            Thread.sleep(10)
+        }
+        val name = compose.onAllNodesWithText("Sintel").onFirst().getBoundsInRoot()
+        val back = compose.onNodeWithText("Back").getBoundsInRoot()
+        assertTrue(name.top >= back.bottom, "the name starts at ${name.top}, the link ends at ${back.bottom}")
     }
 }
