@@ -876,6 +876,17 @@ test("the title's Play yields its white to a focused round action on TV, and the
   await context.close();
 });
 
+test("phone: Back stays clear of the name of a title that has no art or logo", async ({ browser }) => {
+  const { context, page: p } = await page(browser, { width: 390, height: 844 });
+  await p.goto("/title/series/mqj2?form=phone");
+  const name = p.locator(".logo-slot");
+  await expect(name).toBeVisible({ timeout: 30_000 });
+  await expect(p.locator(".title-scr")).toHaveClass(/noart/);
+  const [back, words] = await Promise.all([p.locator(".back").boundingBox(), name.boundingBox()]);
+  expect((back?.y ?? 0) + (back?.height ?? 0)).toBeLessThanOrEqual(words?.y ?? 0);
+  await context.close();
+});
+
 test("Start over beside Resume plays the same video from its beginning", async ({ browser }) => {
   await seedFilm(240_000);
   const { context, page: p } = await page(browser);
