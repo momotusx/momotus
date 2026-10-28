@@ -141,6 +141,12 @@
 [data-form="tv"] .ep-act:focus { transform: scale(var(--focus-scale-card)); }
 .ep:focus-within .ep-acts { display: flex; }
 .ep-act[aria-pressed="true"] { color: var(--text); background: var(--selected-fill); }
+/* A touch screen in the desktop form (a tablet) has no hover and no focus to bring them: they sit beside the card, as
+ * the phone draws them, never over its words. */
+@media (hover: none) {
+  [data-form="desktop"] .ep { align-items: center; }
+  [data-form="desktop"] .ep-acts { display: flex; position: static; padding: 0; background: none; }
+}
 @media (hover: hover) {
   [data-form="desktop"] .ep:hover .ep-acts { display: flex; }
   [data-form="desktop"] .ep-main:hover { background: var(--glass-strong); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .4); }

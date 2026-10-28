@@ -6,6 +6,7 @@
  * detection and is remembered on this device. */
 
 import { createSignal } from "solid-js";
+import { browserZoom, desktopScale } from "./lib/zoom";
 import { pageColor } from "./theme/page";
 
 export type Form = "tv" | "desktop" | "phone";
@@ -34,6 +35,8 @@ function forced(): Form | null {
   return stored();
 }
 
+// Safari (and every iOS browser) offers 115 and 185 percent among its zoom steps; Chromium does not.
+const WEBKIT = /^((?!chrome|android|crios|fxios).)*(safari|applewebkit)/i;
 const TV_UA = /SMART-TV|SmartTV|Tizen|Web0S|webOS|Android TV|AFT[A-Z]|BRAVIA|CrKey|HbbTV/i;
 
 function detect(): Form {
@@ -66,9 +69,6 @@ export function chooseForm(next: Form | null) {
   fit();
 }
 
-/** Desktop canvas scale: TV points at arm's length (about 0.63 at 1440 wide). */
-export const desktopScale = (width: number) => Math.min(0.8, Math.max(0.5, width / 2300));
-
 export function fit() {
   const root = document.documentElement;
   const current = pin ?? detect();
@@ -87,7 +87,7 @@ export function fit() {
     cw = 1920;
     ch = 1080;
   } else if (current === "desktop") {
-    k = desktopScale(w);
+    k = desktopScale(w, browserZoom(window.outerWidth, w, window.devicePixelRatio, WEBKIT.test(navigator.userAgent)));
     cw = w / k;
     ch = h / k;
   }

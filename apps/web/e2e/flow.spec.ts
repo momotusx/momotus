@@ -170,6 +170,8 @@ async function skipCredits(page: Page, time: () => Promise<number>, seekTo: (s: 
   // the button stays on screen with the controls hidden.
   await expect(page.locator(".player-scr")).toHaveClass(/idle/, { timeout: 10_000 });
   await expect(skip).toBeVisible();
+  // Skip stays on screen with the controls hidden, and keeps the focus there.
+  expect(await focused(page)).toBe("player:skip");
   const t = await time();
   expect(t).toBeGreaterThan(494);
   expect(t).toBeLessThan(510);

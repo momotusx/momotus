@@ -747,6 +747,41 @@ test("the player: Left and Right skip with the controls hidden, Space and K play
   await context.close();
 });
 
+test("the player: no control holds focus out of sight; the picture holds it while the controls are hidden", async ({ browser }) => {
+  const { context, page: p } = await page(browser);
+  await openPlayer(p);
+  const scr = p.locator(".player-scr");
+  const time = () => p.evaluate(() => document.querySelector("video")?.currentTime ?? 0);
+  const paused = () => p.evaluate(() => document.querySelector("video")?.paused ?? true);
+  const at = () => p.evaluate(() => ({ f: (document.activeElement as HTMLElement | null)?.dataset.f ?? null, surface: document.activeElement?.classList.contains("player-scr") ?? false }));
+  await expect.poll(time, { timeout: 30_000 }).toBeGreaterThan(5);
+  // The controls fade; a control taking focus brings them back (a hidden control is never what has the focus).
+  await expect(scr).toHaveClass(/idle/, { timeout: 10_000 });
+  await p.locator('[data-f="player:audio"]').focus();
+  await expect(scr).not.toHaveClass(/idle/);
+  expect((await at()).f).toBe("player:audio");
+  // Past the delay they hide again, and the focus is on the picture, never on the hidden control.
+  await expect(scr).toHaveClass(/idle/, { timeout: 10_000 });
+  expect(await at()).toEqual({ f: null, surface: true });
+  // Up only wakes: the control the focus left comes back with it.
+  await p.keyboard.press("ArrowUp");
+  await expect(scr).not.toHaveClass(/idle/);
+  await expect.poll(async () => (await at()).f).toBe("player:audio");
+  // Right while hidden skips 10 s and wakes; Space plays and pauses from the picture.
+  await expect(scr).toHaveClass(/idle/, { timeout: 10_000 });
+  const before = await time();
+  await p.keyboard.press("ArrowRight");
+  await expect(scr).not.toHaveClass(/idle/);
+  expect(await time()).toBeGreaterThan(before + 8);
+  await expect(scr).toHaveClass(/idle/, { timeout: 10_000 });
+  expect((await at()).surface).toBe(true);
+  await p.keyboard.press(" ");
+  await expect.poll(paused).toBe(true);
+  await p.keyboard.press(" ");
+  await expect.poll(paused).toBe(false);
+  await context.close();
+});
+
 test("Start over beside Resume plays the same video from its beginning", async ({ browser }) => {
   await seedFilm(240_000);
   const { context, page: p } = await page(browser);

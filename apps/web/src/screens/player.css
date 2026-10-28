@@ -27,6 +27,8 @@ html[data-engine="mpv"] .player-scr.started .player-bd { opacity: 0; }
 .psyn { max-width: 1100px; margin-top: 18px; font: 400 var(--type-body) / 1.4 var(--font-text); color: var(--text);
   display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; }
 .player-scr.idle { cursor: none; }
+/* The picture holds the focus while the controls are hidden: it has no ring, the picture itself is what is focused. */
+.player-scr:focus-visible { outline: none; }
 .player-scr.idle .osd-top, .player-scr.idle .osd-bot, .player-scr.idle .ptitle, .player-scr.idle .clock, .player-scr.idle .osd { opacity: 0; pointer-events: none; }
 /* An offer to choose another version stays in sight with the controls hidden (a stalled frame, desktop and
  * phone): Back and the offer only. */

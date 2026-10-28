@@ -780,8 +780,12 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
       (now, was) => {
         if (now && now !== was) {
           autoFocusSoon(() => document.querySelector<HTMLElement>('[data-f="player:skip"]'));
-        } else if (!now && was && !document.activeElement?.closest(".player-scr [data-f]")) {
-          autoFocusSoon(() => document.querySelector<HTMLElement>('[data-f="player:toggle"]'));
+        } else if (!now && was && document.activeElement !== surface && !document.activeElement?.closest(".player-scr [data-f]")) {
+          // With the controls hidden the play button is not on screen: the focus rests on the picture until they return.
+          if (idle()) {
+            parked = "player:toggle";
+            autoFocusSoon(() => surface);
+          } else autoFocusSoon(() => document.querySelector<HTMLElement>('[data-f="player:toggle"]'));
         }
       },
     ),
@@ -982,6 +986,32 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
   // stalled frame it may not move on from; under the stage line, laid out from the start but hidden and
   // inert, so nothing moves and nothing can focus it; never focused by itself; said once when it appears.
   const another = () => !!snap()?.chooseAnother && (wait() === "start" || wait() === "stall");
+  // The controls are faded out (not while the loading screen waits: Back, its one control, stays).
+  const idle = () => !osd() && !!url() && wait() !== "start";
+  // A control holding focus must stay visible (A11Y-04): when the controls fade the focus goes to the picture and
+  // the control is remembered, and the controls coming back give it to it again. Skip and Up Next stay on screen
+  // with the controls hidden and keep their focus; so does the Back row while another version is offered.
+  let surface: HTMLDivElement | undefined;
+  let parked: string | null = null;
+  createEffect(
+    on(
+      idle,
+      (now) => {
+        const at = document.activeElement as HTMLElement | null;
+        if (now) {
+          if (at?.closest(".osd, .ptitle") && !(another() && at.closest(".pback-row"))) {
+            parked = at.dataset.f ?? null;
+            surface?.focus({ preventScroll: true });
+          }
+        } else if (parked) {
+          const key = parked;
+          parked = null;
+          if (at === surface) document.querySelector<HTMLElement>(`[data-f="${key}"]`)?.focus({ preventScroll: true });
+        }
+      },
+      { defer: true },
+    ),
+  );
   // A wait for data mid-play, told to the core as it starts and ends (the core judges seeks and pauses).
   const midStall = createMemo(() => started() && waiting() && !paused() && !ended());
   createEffect(
@@ -999,12 +1029,15 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
     <>
     <div
       class="player-scr"
+      ref={surface}
+      tabindex="-1"
       inert={layer() || undefined}
       data-scheme="dark"
       data-subsize={prefs.state.data?.subtitleSize ?? "medium"}
-      // Not idle while the loading screen waits: Back, its one control, stays.
-      classList={{ idle: !osd() && !!url() && wait() !== "start", started: started(), paused: pausedNow(), loading: wait() === "start", stalling: wait() === "stall", offering: another() }}
+      classList={{ idle: idle(), started: started(), paused: pausedNow(), loading: wait() === "start", stalling: wait() === "stall", offering: another() }}
       onPointerMove={wake}
+      // A control taking focus (a Tab, a click) brings the controls up, so it is never focused out of sight.
+      on:focusin={(e) => (e.target as Element).closest(".osd, .ptitle") && wake()}
       onPointerDown={(e) => {
         // While the controls are hidden, a click only brings them back.
         woke = !osd();
