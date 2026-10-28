@@ -40,7 +40,9 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalContext
@@ -79,6 +81,7 @@ import app.marquee.design.PrimaryButton
 import app.marquee.design.RatedCover
 import app.marquee.design.RoundButton
 import app.marquee.design.RowHeader
+import app.marquee.design.SecondaryButton
 import app.marquee.design.Score
 import app.marquee.design.Scrims
 import app.marquee.design.Skeleton
@@ -94,6 +97,9 @@ import app.marquee.design.liftRoom
 import app.marquee.design.marqueeFocus
 import app.marquee.design.openLink
 import app.marquee.design.scrollByKey
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 private const val PLAY = "play"
 private const val EPISODES = "episodes"
@@ -101,6 +107,9 @@ private const val SEASONS = "seasons"
 private const val ACTIONS = "actions"
 private const val RETRY = "retry"
 private const val SIMILAR = "similar"
+
+/** The first pill of the strip under the episodes: where Down from an episode card lands. */
+private const val STRIP_PLAY = "episode-actions"
 
 /**
  * A title on TV: artwork behind the facts, then the primary action (Play, always, with the version it
@@ -133,6 +142,8 @@ fun TvTitle(
     onOpen: (Tile) -> Unit = {},
     /** A person's name: Search for them. */
     onPerson: (String) -> Unit = {},
+    /** Remove from Continue Watching, on every synced device; null where the page has no such button. */
+    onUncontinue: (suspend () -> Unit)? = null,
 ) {
     val safe = Marquee.safe
     val header = title.header
@@ -212,6 +223,7 @@ fun TvTitle(
                                     onPlay,
                                     onVersions,
                                     onGenre,
+                                    onUncontinue,
                                 )
                             }
                             // The cover sits beside the facts and the people, which keep their full 560: the
@@ -400,6 +412,7 @@ private fun Info(
     onPlay: (String?, String) -> Unit,
     onVersions: (String) -> Unit,
     onGenre: (String, String) -> Unit,
+    onUncontinue: (suspend () -> Unit)?,
 ) {
     val header = checkNotNull(title.header)
     val details = checkNotNull(header.details)
@@ -496,6 +509,57 @@ private fun Info(
     }
 }
 
+/**
+ * Remove from Continue Watching reaches every synced device, so it asks once ("Press again to remove", for four
+ * seconds) and says when the core refused. Once it went, focus moves to Play before the button leaves with the header.
+ */
+@Composable
+private fun Uncontinue(
+    remove: suspend () -> Unit,
+    focus: FocusMemory,
+) {
+    var ask by remember { mutableStateOf(Ask.Idle) }
+    val scope = rememberCoroutineScope()
+    LaunchedEffect(ask) {
+        if (ask == Ask.Idle) return@LaunchedEffect
+        delay(ASK_MS)
+        ask = Ask.Idle
+    }
+    RoundButton(
+        icon = Icons.CircleX,
+        label =
+            when (ask) {
+                Ask.Idle -> "Remove from Continue Watching"
+                Ask.Confirm -> "Press again to remove"
+                Ask.Failed -> "Not removed, try again"
+            },
+        onClick = {
+            if (ask != Ask.Confirm) {
+                ask = Ask.Confirm
+            } else {
+                ask = Ask.Idle
+                scope.launch {
+                    try {
+                        remove()
+                        focus.requester(PLAY)?.requestFocus()
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        ask = Ask.Failed
+                    }
+                }
+            }
+        },
+        showLabel = true,
+        focusRequester = focus.requesterFor("uncontinue"),
+        onFocusChange = focus.watch(ACTIONS, "uncontinue"),
+    )
+}
+
+private enum class Ask { Idle, Confirm, Failed }
+
+private const val ASK_MS = 4_000L
+
 /** The line under the primary action: a wait, the chosen version, or why nothing plays. */
 @Composable
 private fun VersionStatus(
@@ -589,6 +653,10 @@ private fun Episodes(
             onDismiss = { menuFor = null },
         )
     }
+    // The strip under the lane acts on the episode focus last stood on (the first before it stood on any); Down from
+    // a card enters it, as holding select on the card opens the same two actions.
+    var picked by remember { mutableStateOf<String?>(null) }
+    val shown = title.episodes.firstOrNull { it.videoId == picked } ?: title.episodes.first()
     Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.xs)) {
         LazyRow(
             modifier =
@@ -601,6 +669,7 @@ private fun Episodes(
         ) {
             items(title.episodes, key = { it.videoId }) { episode ->
                 val key = "episode:${episode.videoId}"
+                val watch = focus.watch(EPISODES, key)
                 EpisodeCard(
                     number = "E${episode.episode}",
                     title = episode.title.ifBlank { Format.episodeLabel(episode.season, episode.episode) },
@@ -611,19 +680,58 @@ private fun Episodes(
                     progress = episode.progress,
                     spoken = TitleCopy.episode(episode),
                     onClick = { onEpisode(episode) },
-                    modifier = Modifier.padding(top = metrics.pad),
+                    modifier =
+                        Modifier
+                            .padding(top = metrics.pad)
+                            .onPreviewKeyEvent {
+                                val down = it.type == KeyEventType.KeyDown && it.key == Key.DirectionDown
+                                down && focus.requester(STRIP_PLAY)?.requestFocus() == true
+                            },
                     focusRequester = focus.requesterFor(key),
-                    onFocusChange = focus.watch(EPISODES, key),
+                    onFocusChange = {
+                        watch(it)
+                        if (it) picked = episode.videoId
+                    },
                     onLongClick = { menuFor = episode },
                     longClickLabel = "More options",
                 )
             }
         }
-        MqText(
-            "Hold select on an episode to choose a version or mark it watched.",
-            role = TextRole.Callout,
-            color = Marquee.colors.muted,
-            modifier = Modifier.padding(horizontal = Marquee.safe.side),
-        )
+        Row(
+            Modifier
+                .padding(horizontal = Marquee.safe.side)
+                .focusProperties { enter = { focus.requester(STRIP_PLAY) ?: FocusRequester.Default } }
+                .focusGroup(),
+            horizontalArrangement = Arrangement.spacedBy(Marquee.space.m),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            // Up goes back to the card the pills belong to, wherever the search would have put it.
+            val back = Modifier.focusProperties {
+                up = focus.requester("episode:${shown.videoId}") ?: FocusRequester.Default
+            }
+            MqText(
+                "${Format.episodeLabel(shown.season, shown.episode)} ${shown.title}".trim(),
+                role = TextRole.Callout,
+                color = Marquee.colors.muted,
+                maxLines = 1,
+                modifier = Modifier.widthIn(max = 360.dp),
+            )
+            SecondaryButton(
+                "Choose a version",
+                { onVersions(shown) },
+                back,
+                icon = Icons.Layers,
+                focusRequester = focus.requesterFor(STRIP_PLAY),
+                spoken = "Choose a version for ${TitleCopy.episode(shown).removePrefix("Watched, ")}",
+            )
+            SecondaryButton(
+                if (shown.watched) "Mark as not watched" else "Mark as watched",
+                { title.setWatched(shown.videoId, !shown.watched) },
+                back,
+                icon = if (shown.watched) Icons.EyeOff else Icons.Check,
+                spoken = (if (shown.watched) "Mark as not watched: " else "Mark as watched: ") +
+                    TitleCopy.episode(shown).removePrefix("Watched, "),
+            )
+        }
     }
 }

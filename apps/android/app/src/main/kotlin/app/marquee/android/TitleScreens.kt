@@ -176,6 +176,7 @@ fun TitleScreen(
                 onGenre = onGenre,
                 onOpen = onOpen,
                 onPerson = onPerson,
+                onUncontinue = { session.ops.removeFromContinue(route.id) },
             )
         } else {
             PhoneTitle(
