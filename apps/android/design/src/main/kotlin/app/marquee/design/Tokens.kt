@@ -54,6 +54,13 @@ data class Palette(
     val bgDesktop: Color,
     val barDesktop: Color,
     val bandDesktop: Color,
+    val tileBlue: Color,
+    val tileSky: Color,
+    val tileSea: Color,
+    val tileTeal: Color,
+    val tileMint: Color,
+    val tileGreen: Color,
+    val tileGrey: Color,
 )
 
 /** Text sizes: TV points on the 1920x1080 canvas, or phone sp. */
@@ -181,6 +188,13 @@ object Tokens {
             bgDesktop = Color(0xFF1F1F1F),
             barDesktop = Color(0xFF000000),
             bandDesktop = Color(0xFF2B2B2B),
+            tileBlue = Color(0xFF0A84FF),
+            tileSky = Color(0xFF2F86D6),
+            tileSea = Color(0xFF1A78A0),
+            tileTeal = Color(0xFF0E98A8),
+            tileMint = Color(0xFF16A085),
+            tileGreen = Color(0xFF28A745),
+            tileGrey = Color(0xFF636366),
         )
 
     val light = Palette(
@@ -226,6 +240,13 @@ object Tokens {
             bgDesktop = Color(0xFF1F1F1F),
             barDesktop = Color(0xFF000000),
             bandDesktop = Color(0xFF2B2B2B),
+            tileBlue = Color(0xFF0A84FF),
+            tileSky = Color(0xFF2F86D6),
+            tileSea = Color(0xFF1A78A0),
+            tileTeal = Color(0xFF0E98A8),
+            tileMint = Color(0xFF16A085),
+            tileGreen = Color(0xFF28A745),
+            tileGrey = Color(0xFF636366),
         )
 
     val tvType = TypeScale(

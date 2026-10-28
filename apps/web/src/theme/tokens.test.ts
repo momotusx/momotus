@@ -77,3 +77,15 @@ test("a selected chip's note reads on the selected fill", () => {
   const [r, g, b, a] = rgba(c.text);
   expect(contrast(`rgba(${r}, ${g}, ${b}, ${a * opacity})`, tokens.selected.fill, c.bg)).toBeGreaterThanOrEqual(4.5);
 });
+
+test("Settings' icon tiles keep 3:1 for their white glyph, green the lowest (design/DECISION.md, Settings A1)", () => {
+  const tokens = JSON.parse(readFileSync(tokensPath, "utf8"));
+  const lin = (v: number) => (v / 255 <= 0.04045 ? v / 255 / 12.92 : ((v / 255 + 0.055) / 1.055) ** 2.4);
+  const lum = (hex: string) => [1, 3, 5].map((i) => lin(parseInt(hex.slice(i, i + 2), 16))).reduce((s, v, i) => s + v * [0.2126, 0.7152, 0.0722][i]!, 0);
+  const tiles = Object.entries(tokens.color.dark as Record<string, string>).filter(([k]) => k.startsWith("tile"));
+  expect(tiles.map(([k]) => k)).toEqual(["tileBlue", "tileSky", "tileSea", "tileTeal", "tileMint", "tileGreen", "tileGrey"]);
+  const ratios = Object.fromEntries(tiles.map(([k, hex]) => [k, Math.round((1.05 / (lum(hex) + 0.05)) * 100) / 100]));
+  for (const [k, r] of Object.entries(ratios)) expect(r, k).toBeGreaterThanOrEqual(3);
+  expect(Math.min(...Object.values(ratios))).toBe(ratios.tileGreen as number);
+  expect(ratios.tileGreen).toBe(3.13);
+});

@@ -550,7 +550,7 @@ test("the built-in TurkceAltyazi.org row says where it runs instead of a host", 
   await shot(page, "addons-built-in", "desktop");
   // Settings credits the site once, under About.
   await page.goto("/settings?form=desktop");
-  await expect(page.locator("section.set", { hasText: "About" })).toContainText(
+  await expect(page.locator("#set-about")).toContainText(
     "Turkish subtitles from TurkceAltyazi.org, fetched by this device when you play.",
   );
 });

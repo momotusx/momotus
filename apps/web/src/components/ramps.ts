@@ -38,6 +38,14 @@ export const ramps = {
   ],
   /** The phone title: the art over the logo, fading into the page under it. */
   titlePhone: [{ deg: 0, stops: [[0.04, 1], [0.5, 0.45], [0.78, 0.1]] }],
+  /** Settings' header (A1) on TV and desktop: the profile's words at the bottom left, so the art is held down from
+   * the foot and the leading edge; every word and pill keeps 4.5:1 over white art (e2e/settings-a1.spec.ts). */
+  settings: [
+    { deg: 90, stops: [[0, 0.85], [0.35, 0.72], [0.6, 0.25], [0.8, 0]] },
+    { deg: 0, stops: [[0, 1], [0.12, 0.92], [0.45, 0.62], [0.75, 0.15], [1, 0]] },
+  ],
+  /** Settings' header on the phone: the large title and the profile card sit on the art's lower half. */
+  settingsPhone: [{ deg: 0, stops: [[0, 1], [0.25, 0.9], [0.55, 0.7], [0.8, 0.45], [1, 0.3]] }],
   /** The phone title's cover: only its bottom edge fades into the page, where the meta line starts. */
   titleCover: [{ deg: 0, stops: [[0, 1], [0.08, 0.6], [0.18, 0]] }],
 } satisfies Record<string, readonly Layer[]>;

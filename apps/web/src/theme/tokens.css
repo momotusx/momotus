@@ -44,6 +44,13 @@
   --bg-desktop: #1F1F1F;
   --bar-desktop: #000000;
   --band-desktop: #2B2B2B;
+  --tile-blue: #0A84FF;
+  --tile-sky: #2F86D6;
+  --tile-sea: #1A78A0;
+  --tile-teal: #0E98A8;
+  --tile-mint: #16A085;
+  --tile-green: #28A745;
+  --tile-grey: #636366;
   --font-display: "Inter Variable", Inter, system-ui, sans-serif;
   --font-text: "Inter Variable", Inter, system-ui, sans-serif;
   --font-mono: "IBM Plex Mono", ui-monospace, monospace;
@@ -172,6 +179,13 @@
   --bg-desktop: #1F1F1F;
   --bar-desktop: #000000;
   --band-desktop: #2B2B2B;
+  --tile-blue: #0A84FF;
+  --tile-sky: #2F86D6;
+  --tile-sea: #1A78A0;
+  --tile-teal: #0E98A8;
+  --tile-mint: #16A085;
+  --tile-green: #28A745;
+  --tile-grey: #636366;
   --focus-halo: 30px;
   --focus-shadow: 0 0 0 var(--focus-ring) var(--bg), 0 0 var(--focus-halo) calc(var(--focus-ring) * 2) var(--halo);
 }

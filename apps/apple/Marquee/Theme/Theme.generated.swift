@@ -68,6 +68,13 @@ enum Theme {
         static let bgDesktop = Color(RGBA(0.1216, 0.1216, 0.1216, 1))
         static let barDesktop = Color(RGBA(0.0000, 0.0000, 0.0000, 1))
         static let bandDesktop = Color(RGBA(0.1686, 0.1686, 0.1686, 1))
+        static let tileBlue = Color(RGBA(0.0392, 0.5176, 1.0000, 1))
+        static let tileSky = Color(RGBA(0.1843, 0.5255, 0.8392, 1))
+        static let tileSea = Color(RGBA(0.1020, 0.4706, 0.6275, 1))
+        static let tileTeal = Color(RGBA(0.0549, 0.5961, 0.6588, 1))
+        static let tileMint = Color(RGBA(0.0863, 0.6275, 0.5216, 1))
+        static let tileGreen = Color(RGBA(0.1569, 0.6549, 0.2706, 1))
+        static let tileGrey = Color(RGBA(0.3882, 0.3882, 0.4000, 1))
         /// A selected segment or chip: one grey step up (`selected.fill`).
         static let selectedFill = Color(RGBA(0.3882, 0.3882, 0.4000, 1))
     }

@@ -43,7 +43,6 @@ for (const form of ["tv", "desktop"] as const) {
   test(`${form}: settings pages are one centered column, no empty right third`, async ({ browser }) => {
     const { context, page } = await open(browser, form, "/settings");
     for (const [path, block] of [
-      ["/settings", ".link-row"],
       ["/addons", ".addon"],
       ["/recommended-addons", "button.drow"],
       ["/profiles/manage", ".prow"],
