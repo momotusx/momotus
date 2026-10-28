@@ -30,7 +30,7 @@ import type { VersionsSnapshot } from "../core/generated/VersionsSnapshot";
 import { focusEl, reducedMotion, remember } from "../focus/dom";
 import { form, viewport } from "../form";
 import { airDate, clock, decoded, episodeLabel, offersLibrary, parseVideo, pct, playPath, playState, runtimeMinutes, seasonName, versionsPath } from "../lib/format";
-import { capableNow, coverSize, meteredNow, previewsOn, REVEAL_MS, TRAILER_LAYOUT, trailerAllowed, walkNow } from "../lib/trailers";
+import { capableNow, coverSize, headerOnTvNow, meteredNow, previewsOn, REVEAL_MS, trailerAllowed, walkNow } from "../lib/trailers";
 import { blockedWords, choiceWords, problemWords } from "../lib/words";
 import { firstFocus } from "./title-focus";
 import "./home.css";
@@ -145,8 +145,9 @@ function TitlePage(props: { kind: string; id: string; retry: () => void }) {
       reducedMotion: reducedMotion(),
       metered: meteredNow(),
       walk: walkNow(),
-      layout: TRAILER_LAYOUT[form()],
-      capable: capableNow(),
+      // The header covers its art on every form; a TV plays it above its own memory floor (plans/trailer-inline.md 4).
+      layout: "cover",
+      capable: form() === "tv" ? headerOnTvNow() : capableNow(),
       hasTrailer: true,
     });
     if (!allowed) return;

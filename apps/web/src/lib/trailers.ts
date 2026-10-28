@@ -93,6 +93,17 @@ export function walkNow(): boolean {
   }
 }
 
+/** A TV form's memory floor for a title header's trailer, in GB as `navigator.deviceMemory` reports it, from the
+ * Pixel's TV-form measurement (plans/trailer-inline.md 4). */
+export const TV_HEADER_GB = 6;
+
+/** A TV browser plays a title header's trailer only where it says it has the floor: one that does not tell, as many TV
+ * browsers do not, is taken as unable (the Trailer action still plays full screen). */
+export function headerOnTvNow(): boolean {
+  const gb = (navigator as Navigator & { deviceMemory?: number }).deviceMemory;
+  return gb !== undefined && gb >= TV_HEADER_GB;
+}
+
 /** A YouTube video id as YouTube writes it, or none: it goes into a player's URL. */
 export function youtubeId(raw: string | null | undefined): string | null {
   return raw && /^[A-Za-z0-9_-]{11}$/.test(raw) ? raw : null;
