@@ -1278,8 +1278,13 @@ impl Core {
         // The downloaded files go with their rows, not at the next launch
         // (code review r3 N9).
         let downloads: Vec<String> = library.downloads()?.into_iter().map(|r| r.id).collect();
-        self.downloads()
-            .act(&downloads, crate::downloads::Action::Remove)?;
+        // A failure here leaves the folders to the next launch's sweep.
+        if let Err(e) = self
+            .downloads()
+            .act(&downloads, crate::downloads::Action::Remove)
+        {
+            tracing::warn!("wipe downloads: {e}");
+        }
         library.wipe()?;
         // Their Trakt rounds stop and their tokens leave memory: the new
         // owner is `default` again and must not go on with the old one's.

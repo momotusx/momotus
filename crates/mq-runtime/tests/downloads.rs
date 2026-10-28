@@ -1474,6 +1474,52 @@ async fn a_retry_keeps_the_poster_and_the_subtitles() {
     }
 }
 
+/// A kept file gone from the disk reads "Download again", and adding it
+/// again brings the subtitles back too (code review r3 N3, r4 R4-1).
+#[tokio::test]
+async fn a_gone_file_reads_download_again_and_comes_back_whole() {
+    let (url, _) = origin(video(1 << 20), How::default()).await;
+    let stream = serde_json::json!({ "name": "Direct\n1080p", "title": "Sintel.2010.1080p.WEB-DL.mp4", "url": url });
+    let extras = Extras {
+        subtitles: vec![("en1", "eng", false)],
+        ..Extras::default()
+    };
+    let core = core_with(addon_serving(stream, Duration::ZERO, extras).await).await;
+    core.set_prefs(&serde_json::json!({ "subtitleLanguages": ["en"] }))
+        .unwrap();
+    let ids = mq_runtime::downloads::add(&core, movie()).await.unwrap();
+    let kept = |r: &DownloadRow| r.state == DownloadState::Done && r.subtitles == ["en"];
+    until(&core, &ids[0], "done with its subtitle", &kept).await;
+    let playback = play_when(&core, ITEM, ITEM, true).await;
+    // The system purged the folder while it played.
+    std::fs::remove_dir_all(core.downloads().job_folder(&ids[0])).unwrap();
+    playback.fail_over(None, Some("unreadable"), None, "no such file");
+    until(&core, &ids[0], "missing", |r| {
+        r.state == DownloadState::Missing
+    })
+    .await;
+    drop(playback);
+    let again = mq_runtime::downloads::add(&core, movie()).await.unwrap();
+    assert_eq!(again, ids);
+    until(&core, &ids[0], "done again with its subtitle", &kept).await;
+    core.downloads().set_link(Link {
+        offline: true,
+        ..Link::default()
+    });
+    let view = VersionsView::open(&core, params());
+    let pick = view.snapshot().recommended.unwrap();
+    let playback = PlaybackView::open_picked(&core, view.pick(&pick.key), target(), &view.plays());
+    let deadline = std::time::Instant::now() + Duration::from_secs(20);
+    loop {
+        let s = playback.snapshot();
+        if s.phase == PlaybackPhase::Ready && s.subtitles.len() == 1 {
+            break;
+        }
+        assert!(std::time::Instant::now() < deadline, "{:?}", s.subtitles);
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+}
+
 /// A wipe takes the downloaded files with their rows, not at the next
 /// launch (code review r3 N9).
 #[tokio::test]

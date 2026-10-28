@@ -955,7 +955,10 @@ impl Downloads {
                 if record.version.is_some() {
                     self.release_torrent(&core, &stored);
                 }
-                self.forget_video(&stored.id, record.version.is_some());
+                // A new pick, or a purged folder, keeps no subtitle (code
+                // review r4 R4-1).
+                let fresh = record.version.is_some() || state == DownloadState::Missing;
+                self.forget_video(&stored.id, fresh);
                 self.update(&core, &stored.id, |r| {
                     if !matches!(
                         DownloadState::read(&r.state),
@@ -970,6 +973,8 @@ impl Downloads {
                     if record.version.is_some() {
                         r.version = record.version.clone();
                         r.hand_picked = true;
+                    }
+                    if fresh {
                         r.subtitles = "[]".into();
                         r.subtitles_state = "pending".into();
                     }
@@ -1999,7 +2004,15 @@ impl Downloads {
                 d.finish(
                     &core,
                     &id,
-                    outcome.unwrap_or(Outcome::Fail(DownloadReason::Source)),
+                    outcome.unwrap_or_else(|panic| {
+                        let what = panic
+                            .downcast_ref::<&str>()
+                            .map(|s| (*s).to_owned())
+                            .or_else(|| panic.downcast_ref::<String>().cloned())
+                            .unwrap_or_default();
+                        tracing::error!("download {id}: its job panicked: {what}");
+                        Outcome::Fail(DownloadReason::Source)
+                    }),
                 );
             }
             // A cancelled run was stopped by whoever cancelled it, which
