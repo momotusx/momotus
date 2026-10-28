@@ -28,3 +28,10 @@ import Testing
     #expect(!canGoBack(shown: true, inFront: false, presented: true))
     #expect(!canGoBack(shown: true, inFront: true, presented: false))
 }
+
+@Test func theSystemBackIsHiddenOutOfSightAndWhileThePageHoldsEdits() {
+    #expect(!backButtonHidden(shown: true, holdsEdits: false))
+    #expect(backButtonHidden(shown: false, holdsEdits: false))
+    // The page's own Back asks first: no system back beside it that leaves without asking.
+    #expect(backButtonHidden(shown: true, holdsEdits: true))
+}

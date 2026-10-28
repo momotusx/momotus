@@ -825,7 +825,7 @@ private struct BackOnlyWhenShown: ViewModifier {
 
     func body(content: Content) -> some View {
         content
-            .navigationBarBackButtonHidden(!shown)
+            .navigationBarBackButtonHidden(backButtonHidden(shown: shown, holdsEdits: leaveAsk != nil))
             .onAppear { inFront = true }
             .onDisappear { inFront = false }
             .focusedSceneValue(\.goBack, canGoBack(shown: shown, inFront: inFront, presented: presented) ? GoBackAction { (leaveAsk ?? { dismiss() })() } : nil)

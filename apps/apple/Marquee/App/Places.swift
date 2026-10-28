@@ -77,3 +77,9 @@ struct TitleRoute: Hashable {
 func canGoBack(shown: Bool, inFront: Bool, presented: Bool) -> Bool {
     shown && inFront && presented
 }
+
+/// The system back is hidden for a place out of sight (it would pop a page nobody sees) and while the
+/// page holds edits (its own Back asks first).
+func backButtonHidden(shown: Bool, holdsEdits: Bool) -> Bool {
+    !shown || holdsEdits
+}
