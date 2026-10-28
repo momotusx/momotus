@@ -446,3 +446,25 @@ test("profiles: Save in the leave question pressed twice sends once, stays open 
     expect(await names()).toContain("Twice Kid 2");
   });
 });
+
+test("profiles on a phone: the leave question comes into view, whatever the page's length, and is not under the tab bar", async ({ browser }) => {
+  await withKid("Phone Kid", async (kid) => {
+    const context = await browser.newContext({ viewport: { width: 390, height: 700 }, hasTouch: true, isMobile: true, reducedMotion: "reduce" });
+    const page = await context.newPage();
+    await page.goto(`/profiles/edit/${kid}?form=phone`);
+    await page.locator('[data-f="pedit:name"]').fill("Phone Kid 2");
+    // A tap on a tab, which brings no focus to the question (autofocus waits for keys).
+    await page.locator('.tabs a[href="/library"]').tap();
+    await expect(dialog(page)).toBeVisible();
+    const keep = page.locator('[data-f="pedit:leave:keep"]');
+    await expect(keep).toBeInViewport({ ratio: 1 });
+    // The first thing under its centre is the button itself, not the tab bar over the page.
+    const covered = await keep.evaluate((el) => {
+      const r = el.getBoundingClientRect();
+      const top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+      return !!top && !el.contains(top) && top !== el;
+    });
+    expect(covered).toBe(false);
+    await context.close();
+  });
+});

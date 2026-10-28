@@ -604,6 +604,24 @@ export function EditProfile() {
           </Show>
         </form>
 
+        {/* Under the Save row, where the press was made: the page is long, and the question must be in view. */}
+        <Show when={asking()}>
+          <Confirm label="Leave without saving?" onKeep={keepEditing}>
+            <p>Your changes to this profile are not saved yet.</p>
+            <div class="acts">
+              <button class="btn primary" data-f="pedit:leave:save" aria-disabled={saving()} onClick={() => void saveAndLeave()}>
+                Save
+              </button>
+              <button class="btn" data-f="pedit:leave:discard" onClick={goOn}>
+                Discard
+              </button>
+              <button class="btn" data-f="pedit:leave:keep" data-autofocus onClick={keepEditing}>
+                Keep editing
+              </button>
+            </div>
+          </Confirm>
+        </Show>
+
         <Show when={!isNew() && p()}>
           {(cur) => (
             <section class="pedit-pin" aria-label="PIN">
@@ -689,22 +707,6 @@ export function EditProfile() {
         </Show>
       </Show>
       </Show>
-      <Show when={asking()}>
-        <Confirm label="Leave without saving?" onKeep={keepEditing}>
-          <p>Your changes to this profile are not saved yet.</p>
-          <div class="acts">
-            <button class="btn primary" data-f="pedit:leave:save" aria-disabled={saving()} onClick={() => void saveAndLeave()}>
-              Save
-            </button>
-            <button class="btn" data-f="pedit:leave:discard" onClick={goOn}>
-              Discard
-            </button>
-            <button class="btn" data-f="pedit:leave:keep" data-autofocus onClick={keepEditing}>
-              Keep editing
-            </button>
-          </div>
-        </Confirm>
-      </Show>
     </main>
   );
 }
@@ -713,6 +715,8 @@ export function EditProfile() {
 function Confirm(props: { label: string; busy?: boolean; onKeep: () => void; children: JSX.Element }) {
   let root!: HTMLDivElement;
   holdModal(() => root);
+  // A pointer or a touch brings no focus to it (autofocus waits for keys), so it comes into view by itself.
+  onMount(() => root.scrollIntoView({ block: "nearest" }));
   // A held OK repeats: only the first press counts while it is open. Backspace,
   // the app's Back, keeps what is there like Escape.
   const onKey = (e: KeyboardEvent) => {
