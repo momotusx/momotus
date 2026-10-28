@@ -632,7 +632,8 @@ private fun TvHero(
             ) {
                 if (play != null || hero.playPending) {
                     // Play's place is as wide as the widest words it can say, measured in the font drawn, so Details
-                    // never moves whichever label lands, or when a late Play does (review r4).
+                    // never moves whichever label lands, or when a late Play does (review r4). The pill fills it, its
+                    // words in the middle, as the web's: Details sits one button gap after it, never a wider one.
                     Box(contentAlignment = Alignment.CenterStart) {
                         Box(
                             Modifier.alpha(0f).clearAndSetSemantics {
@@ -646,7 +647,7 @@ private fun TvHero(
                                 label = play.label,
                                 icon = PlayFilled,
                                 onClick = { onPlay(tile.copy(videoId = play.videoId)) },
-                                modifier = Modifier.describe("${play.label} ${tile.name}"),
+                                modifier = Modifier.matchParentSize().describe("${play.label} ${tile.name}"),
                                 focusRequester = playRequester,
                                 onFocusChange =
                                     state.focus.watch(HERO_ROW, HERO_PLAY).let { watch ->

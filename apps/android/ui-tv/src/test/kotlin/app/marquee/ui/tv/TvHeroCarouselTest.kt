@@ -13,6 +13,7 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.pressKey
 import app.marquee.core.client.CoreClient
@@ -28,6 +29,7 @@ import app.marquee.core.model.Tile
 import app.marquee.core.views.HomeView
 import app.marquee.design.Form
 import app.marquee.design.MarqueeTheme
+import app.marquee.design.tvScale
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
@@ -333,6 +335,18 @@ class TvHeroCarouselTest {
                 details()
             }
         assertEquals(1, lefts.distinct().size, "Details moved with Play's words: $lefts")
+    }
+
+    @Test
+    fun `Play's pill fills its place, so Details sits one button gap after it`() {
+        // The ui-ux audit's Android TV walk: a short "Play" left about three button gaps before Details.
+        show(listOf(hero("tt1", "First Movie", "movie")))
+        val play = compose.onNode(hasContentDescription("Play First Movie")).fetchSemanticsNode().boundsInRoot
+        val details = compose.onNodeWithText("Details").fetchSemanticsNode().boundsInRoot
+        // TvCanvas: one dp is one point of the 1920 by 1080 canvas, whatever the test screen's density.
+        val root = compose.onRoot().fetchSemanticsNode().size
+        val gap = 40 * tvScale(root.width, root.height)
+        assertEquals(gap, details.left - play.right, 1f, "the gap between Play and Details")
     }
 
     @Test
