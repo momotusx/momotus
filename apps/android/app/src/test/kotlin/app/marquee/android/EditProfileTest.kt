@@ -17,6 +17,7 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
+import app.marquee.core.client.CoreJson
 import app.marquee.core.model.ProfileInfo
 import app.marquee.core.model.ProfilesSnapshot
 import app.marquee.core.session.CoreSession
@@ -25,7 +26,6 @@ import app.marquee.design.MarqueeTheme
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.longOrNull
-import app.marquee.core.client.CoreJson
 import org.junit.After
 import org.junit.Rule
 import org.junit.Test
