@@ -607,15 +607,15 @@ fn the_fixture_provider_runs() {
     );
 }
 
-/// The acceptance walk's provider (tests/fixtures/walk-repo): the walks play
+/// The acceptance walk's provider (tests/fixtures/repo, served by apps/web/scripts/plugin-walk.ts): the walks play
 /// a real legal stream, Big Buck Bunny (Blender Foundation, CC BY 3.0) from
 /// archive.org. Here archive.org's metadata answer is recorded, so the test
 /// stays off the network: one row for Big Buck Bunny, and no request for a
 /// title it does not know.
 #[test]
 fn the_walk_provider_finds_its_film() {
-    let script = include_str!("fixtures/walk-repo/open-films.js");
-    let meta = include_str!("fixtures/walk-repo/archive-metadata.json");
+    let script = include_str!("fixtures/repo/open-films.js");
+    let meta = include_str!("fixtures/archive-BigBuckBunny_124.json");
     let mut bunny = movie(script);
     bunny.info = Info {
         imdb_id: Some("tt1254207".into()),
