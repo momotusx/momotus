@@ -57,7 +57,6 @@ import app.marquee.core.model.Episode
 import app.marquee.core.model.Tile
 import app.marquee.core.model.TitleDetails
 import app.marquee.core.model.TitleHeader
-import app.marquee.core.model.TitleState
 import app.marquee.core.model.VersionsSnapshot
 import app.marquee.core.views.TitleView
 import app.marquee.design.ActionMenu
@@ -138,7 +137,8 @@ fun TvTitle(
     val safe = Marquee.safe
     val header = title.header
     val details = header?.details
-    val failed = header?.state is TitleState.Failed
+    val failure = title.failure
+    val failed = failure != null
     // Focus goes to Play once the page has loaded (or to Try again when it could not), not before:
     // the buttons do not exist while the skeleton shows. Try again asks again. An inert or disabled Play
     // takes no focus: it starts on the next action, Versions, or Add to Library when there is no video.
@@ -164,15 +164,15 @@ fun TvTitle(
         // The text column sits on the left half: the art stays clear on the right, and fades into the page below.
         Backdrop(details?.background ?: details?.poster, Modifier.fillMaxSize(), Scrims.titleSide, Scrims.titleFoot)
 
-        val state = header?.state
         when {
-            state is TitleState.Failed -> {
+            failure != null -> {
                 StateMessage(
                     title = "This title could not load",
-                    body = state.reason,
+                    body = failure,
                     icon = Icons.CircleAlert,
                     actionLabel = "Try again",
                     onAction = title::retry,
+                    spoken = true,
                     actionFocus = focus.requesterFor(RETRY),
                     modifier = Modifier.padding(start = safe.side, top = safe.top),
                 )

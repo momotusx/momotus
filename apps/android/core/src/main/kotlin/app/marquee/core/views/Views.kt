@@ -33,6 +33,7 @@ import app.marquee.core.model.SignInSnapshot
 import app.marquee.core.model.Tile
 import app.marquee.core.model.TitleHeader
 import app.marquee.core.model.TitleSnapshot
+import app.marquee.core.model.TitleState
 import app.marquee.core.model.TitleUpdate
 import app.marquee.core.model.TraktLoginSnapshot
 import app.marquee.core.model.TraktStatus
@@ -130,6 +131,12 @@ class TitleView(
     /** "More like this": empty until it lands, and for a kids profile. */
     var similar: List<Tile> by mutableStateOf(emptyList())
         private set
+
+    /** Why the page cannot show: the title's own failure, or the view's before any header came ([retry] asks again). */
+    val failure: String?
+        get() =
+            (header?.state as? TitleState.Failed)?.reason
+                ?: (status as? ViewStatus.Failed)?.reason?.takeIf { header == null }
 
     override fun applySnapshot(snapshot: TitleSnapshot) {
         header = snapshot.header

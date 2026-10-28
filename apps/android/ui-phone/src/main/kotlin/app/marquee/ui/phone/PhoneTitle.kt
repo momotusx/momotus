@@ -58,7 +58,6 @@ import app.marquee.core.model.Episode
 import app.marquee.core.model.Tile
 import app.marquee.core.model.TitleDetails
 import app.marquee.core.model.TitleHeader
-import app.marquee.core.model.TitleState
 import app.marquee.core.model.VersionsSnapshot
 import app.marquee.core.views.TitleView
 import app.marquee.design.ActionMenu
@@ -133,16 +132,17 @@ fun PhoneTitle(
 ) {
     val header = title.header
     val details = header?.details
-    val state = header?.state
+    val failure = title.failure
     val side = Marquee.safe.side
     when {
-        state is TitleState.Failed -> {
+        failure != null -> {
             StateMessage(
                 title = "This title could not load",
-                body = state.reason,
+                body = failure,
                 icon = Icons.CircleAlert,
                 actionLabel = "Try again",
                 onAction = title::retry,
+                spoken = true,
                 modifier =
                     modifier
                         .windowInsetsPadding(
