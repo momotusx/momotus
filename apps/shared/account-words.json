@@ -1,5 +1,5 @@
 {
-  "about": "Account words (plans/accounts.md 3.1, 3.2, 4.1 to 4.3, 5, D13), shared by the web, Android and Apple apps; each platform's reader test checks every key (phase 2). Announcements (SyncReport.announcements) take one key each: kind device is announceDevice, or announceDeviceUnnamed when name is null; passkey is announcePasskey; kit is announceKit; removed is announceLeft when by equals member (announceLeftUnnamed without a name), else announceRemovedPasskey when passkey, else announceRemovedKit when kit, else announceRemoved (announceRemovedUnnamed without a name); dropped is announceDropped. {name} is the announcement's name. {device} is the name of the member by, from syncDevices: announceUnnamedDevice when that member has no name, announceGoneDevice when it is no longer a member. announcePasskey carries announceNotYou. Kinds device, passkey, kit and dropped are security notices: every profile but a kids profile shows them, and only the owner profile shows announceOk on them (the core answers notOwner to another profile's acknowledgement); removed shows OK on every profile. accountGoneActions' Remove from this device shows on the owner profile only (D13). passkeyLabel is the label savePasskey writes into the roster, the same on every platform: {device} is the saving device's own name, and no date (Last used carries it). {provider} is providerName's entry for apple, google or facebook, else the id the sync server gives another OpenID provider, as it is. {providerAccount} is providerAccount's entry for apple, google or facebook, else providerAccountOther. {date} is the medium date in the device's locale. removeLibraryDebrid is the checkbox under removeLibraryAsk, ticked by default (D13); the core answers debridConnected while one is left. An actions list is the buttons in order, the first the primary. The default path never shows the words Kit (alone), PRF, roster, ticket or sync server.",
+  "about": "Account words (plans/accounts.md 3.1, 3.2, 4.1 to 4.3, 5, D13), shared by the web, Android and Apple apps; each platform's reader test checks every key (phase 2). Announcements (SyncReport.announcements) take one key each: kind device is announceDevice, or announceDeviceUnnamed when name is null; passkey is announcePasskey; kit is announceKit; removed is announceLeft when by equals member (announceLeftUnnamed without a name), else announceRemovedPasskey when passkey, else announceRemovedKit when kit, else announceRemoved (announceRemovedUnnamed without a name); dropped is announceDropped. {name} is the announcement's name. {device} is the name of the member by, from syncDevices: announceUnnamedDevice when that member has no name, announceGoneDevice when it is no longer a member. announcePasskey carries announceNotYou. Kinds device, passkey, kit and dropped are security notices: every profile but a kids profile shows them, and only the owner profile shows announceOk on them (the core answers notOwner to another profile's acknowledgement); removed shows OK on every profile. accountGoneActions' Remove from this device shows on the owner profile only (D13). passkeyLabel is the label savePasskey writes into the roster, the same on every platform: {device} is the saving device's own name, and no date (Last used carries it). {provider} is providerName's entry for apple, google or facebook, else the id the sync server gives another OpenID provider, as it is. {providerAccount} is providerAccount's entry for apple, google or facebook, else providerAccountOther. {date} is the medium date in the device's locale. removeLibraryDebrid is the checkbox under removeLibraryAsk, ticked by default (D13); the core answers debridConnected while one is left. An actions list is the buttons in order, the first the primary. The default path never shows the words Kit (alone), PRF, roster, ticket or sync server. Email sign-in (plans/accounts-email.md): continueWithEmail is its own row under the provider buttons, never continueWith, and email is never a provider button; codeSentTo's {email} is the address as typed, kept in memory only; codeResendIn's {seconds} counts down from 60 after each mail; codeMissing shows at normal weight on the code stage always; the deletion card uses deletionScheduledByEmail and deletionCancelUnlinkEmail when provider is email.",
   "announceDevice": "A new device joined: {name}.",
   "announceDeviceUnnamed": "A new device joined.",
   "announcePasskey": "A passkey was added on {device}.",
@@ -19,13 +19,15 @@
   "providerAccount": {
     "apple": "Apple Account",
     "google": "Google account",
-    "facebook": "Facebook account"
+    "facebook": "Facebook account",
+    "email": "email address"
   },
   "providerAccountOther": "{provider} sign-in",
   "providerName": {
     "apple": "Apple",
     "google": "Google",
-    "facebook": "Facebook"
+    "facebook": "Facebook",
+    "email": "Email"
   },
   "signInTitle": "Sign in",
   "continueWith": "Continue with {provider}",
@@ -112,5 +114,28 @@
   "wiping": "Removing your profiles and library",
   "wipeFailed": "Signed out, but your profiles and library are still on this device. Try again.",
   "secondWayInText": "Make a recovery kit or sign in on a second device, so losing this one never locks you out.",
-  "notOwner": "Only the main profile can do that."
+  "notOwner": "Only the main profile can do that.",
+  "continueWithEmail": "Continue with email",
+  "emailTitle": "Sign in with email",
+  "emailLabel": "Email address",
+  "emailSend": "Send code",
+  "badAddress": "Enter an email address like name@example.com.",
+  "codeTitle": "Enter the code",
+  "codeSentTo": "We sent a 6-digit code to {email}. It works for 10 minutes.",
+  "codeLabel": "6-digit code",
+  "codeResent": "We sent a new code. Use the newest email: older codes stop working.",
+  "codeMissing": "It can take a minute. Look for a mail from Momotus, and check your spam folder.",
+  "codeResend": "Send a new code",
+  "codeResendIn": "Send a new code in {seconds} seconds",
+  "codeOtherAddress": "Use another address",
+  "wrongCode": "That code isn't right. Check the email and try again.",
+  "codeExpired": "This code can't be used any more. Send a new code.",
+  "codeExpiredActions": ["Send a new code", "Use another address"],
+  "emailWait": "Wait a minute, then send a new code.",
+  "emailLimit": "Too many codes were asked for just now. Try again tomorrow, or use another way to sign in.",
+  "emailLimitActions": ["Other ways to sign in"],
+  "mailUnavailable": "The code couldn't be sent right now. Try again later, or use another way to sign in.",
+  "mailUnavailableActions": ["Try again", "Other ways to sign in"],
+  "deletionScheduledByEmail": "Someone signed in with your email address and asked to delete your Momotus account on {date}. Not you? Cancel, and turn off email sign-in.",
+  "deletionCancelUnlinkEmail": "Cancel and turn off email sign-in"
 }
