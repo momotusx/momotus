@@ -179,6 +179,10 @@ struct EditProfile: View {
         ) { removal in
             Button(label(removal.action, removal.target)) { removePin(removal.action, removal.target) }
             Button("Cancel", role: .cancel) {}
+                #if !os(tvOS)
+                // Return never removes a PIN.
+                .keyboardShortcut(.defaultAction)
+                #endif
         } message: { removal in
             Text("Anyone can then open \(removal.action == .removeOther ? removal.target.name : "this profile") without it.")
         }

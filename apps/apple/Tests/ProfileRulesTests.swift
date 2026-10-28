@@ -150,3 +150,10 @@ private func snapshot(_ profiles: [ProfileInfo], locked: Bool = false) -> Profil
         #expect(editor.contains(choice), "the leave ask lost \(choice)")
     }
 }
+
+@Test func returnNeverRemovesAPin() throws {
+    let file = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appending(path: "../Marquee/Profiles/ManageProfiles.swift")
+    let editor = try String(contentsOf: file, encoding: .utf8)
+    let cancel = try #require(editor.range(of: "Button(\"Cancel\", role: .cancel) {}"))
+    #expect(editor[cancel.upperBound...].prefix(200).contains(".keyboardShortcut(.defaultAction)"), "Cancel lost the default action")
+}
