@@ -1,16 +1,16 @@
 package app.marquee.ui.phone
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.luminance
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.testTag
@@ -25,9 +25,9 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
-import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.unit.dp
 import app.marquee.core.route.Route
 import app.marquee.design.Form
@@ -165,6 +165,34 @@ class PhoneShellTest {
         val bannerBottom = compose.onNodeWithTag("shell-banner").getUnclippedBoundsInRoot().bottom
         assertEquals(bannerBottom.value, tops.first() / compose.density.density, 0.5f)
     }
+
+    /** Offline, a pushed page's Back sits under the banner, never under its cover (the iPhone's r5 M1, on Android). */
+    private fun backUnderBanner(strip: Boolean) {
+        var backs = 0
+        compose.setContent {
+            MarqueeTheme(Form.Phone) {
+                PhoneShell(
+                    Route.Home,
+                    showTabs = false,
+                    onSelect = {},
+                    statusStrip = strip,
+                    onBack = { backs++ },
+                    banner = { Box(Modifier.fillMaxWidth().height(40.dp)) },
+                ) {}
+            }
+        }
+        val banner = compose.onNodeWithTag("shell-banner").getUnclippedBoundsInRoot()
+        val back = compose.onNodeWithText("Back").getUnclippedBoundsInRoot()
+        assertTrue("Back at ${back.top}, the banner ends at ${banner.bottom}", back.top >= banner.bottom)
+        compose.onNodeWithText("Back").performClick()
+        compose.runOnIdle { assertEquals(1, backs) }
+    }
+
+    @Test
+    fun `offline, the back link row sits under the banner`() = backUnderBanner(strip = true)
+
+    @Test
+    fun `offline, the floating back link over art sits under the banner`() = backUnderBanner(strip = false)
 
     @Test
     fun `with no banner the page starts at the top`() {
