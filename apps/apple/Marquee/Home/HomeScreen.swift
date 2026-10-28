@@ -88,6 +88,11 @@ struct HomeScreen: View {
             try? await Task.sleep(for: .seconds(6))
             position.scrollTo(y: DebugHooks.homeScrollY)
         }
+        .task {
+            guard DebugHooks.scrollWalk else { return }
+            try? await Task.sleep(for: .seconds(12))
+            await ScrollWalk.run()
+        }
         #endif
         #endif
         #if os(tvOS)

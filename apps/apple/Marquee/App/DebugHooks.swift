@@ -174,6 +174,11 @@ enum DebugHooks {
     }
 
     #if os(macOS)
+    /// `-MQScrollWalk YES`: 12 s after Home shows, Home scrolls itself to its foot and back three times at a trackpad
+    /// flick's speed, one step per screen refresh through AppKit, and logs each pass's frame times (`metric scroll`): the Mac's
+    /// scroll measured with no pointer or key sent to the window.
+    static var scrollWalk: Bool { UserDefaults.standard.bool(forKey: "MQScrollWalk") }
+
     /// `notifyutil -p app.momotus.snapshot` writes each window to
     /// $TMPDIR/marquee-window-<n>.png, drawn by AppKit (no screen recording).
     static func listenForSnapshots() {
@@ -198,4 +203,94 @@ enum DebugHooks {
     }
     #endif
 }
+
+#if os(macOS)
+import QuartzCore
+
+/// The scroll walk (`DebugHooks.scrollWalk`): moves the window's tallest scroll view one step per screen refresh,
+/// through AppKit as a trackpad does (no SwiftUI state is written), and measures each refresh's interval. A frame
+/// the main thread could not make in time shows as an interval longer than the screen's own.
+@MainActor final class ScrollWalk: NSObject {
+    /// A brisk trackpad flick.
+    private static let speed = 2400.0
+    private static let passes = 3
+    private let scroll: NSScrollView
+    private let room: Double
+    private var finished: CheckedContinuation<Void, Never>?
+    private var start: CFTimeInterval?
+    private var last: CFTimeInterval?
+    private var intervals: [Double] = []
+    private var frame = 0.0
+    /// The main thread's CPU time at the pass's start: what the pass cost, whatever else the Mac is running.
+    private var cpu: UInt64 = 0
+    private var pass = 0
+
+    private init(scroll: NSScrollView) {
+        self.scroll = scroll
+        room = (scroll.documentView?.frame.height ?? 0) - scroll.contentView.bounds.height
+    }
+
+    /// Scrolls the main window's tallest scroll view to its foot and back, `passes` times, logging one line a pass.
+    static func run() async {
+        guard let window = NSApp.windows.max(by: { $0.frame.height < $1.frame.height }),
+              let scroll = scrollViews(in: window.contentView).max(by: { ($0.documentView?.frame.height ?? 0) < ($1.documentView?.frame.height ?? 0) }),
+              let screen = window.screen ?? NSScreen.main else { return }
+        let walk = ScrollWalk(scroll: scroll)
+        guard walk.room > 0 else { return }
+        await withCheckedContinuation { done in
+            walk.finished = done
+            screen.displayLink(target: walk, selector: #selector(tick)).add(to: .main, forMode: .common)
+        }
+    }
+
+    private static func scrollViews(in view: NSView?) -> [NSScrollView] {
+        guard let view else { return [] }
+        // The outermost only: a shelf inside the page is a scroll view of its own.
+        if let scroll = view as? NSScrollView { return [scroll] }
+        return view.subviews.flatMap { scrollViews(in: $0) }
+    }
+
+    private func move(to y: Double) {
+        let flipped = scroll.documentView?.isFlipped ?? true
+        scroll.contentView.scroll(to: NSPoint(x: scroll.contentView.bounds.minX, y: flipped ? y : room - y))
+        scroll.reflectScrolledClipView(scroll.contentView)
+    }
+
+    @objc private func tick(_ link: CADisplayLink) {
+        let now = link.timestamp
+        if let last { intervals.append(now - last) }
+        last = now
+        frame = link.targetTimestamp - link.timestamp
+        if start == nil { cpu = clock_gettime_nsec_np(CLOCK_THREAD_CPUTIME_ID) }
+        let start = start ?? now
+        self.start = start
+        let travelled = (now - start) * Self.speed
+        guard travelled < 2 * room else { return end(pass: now - start, link: link) }
+        move(to: travelled < room ? travelled : 2 * room - travelled)
+    }
+
+    private func end(pass seconds: Double, link: CADisplayLink) {
+        let ms = intervals.map { $0 * 1000 }.sorted()
+        let frameMs = frame * 1000
+        // Apple's hitch time: what each late frame overran its slot by, per second of scrolling.
+        let late = ms.filter { $0 > frameMs * 1.5 }
+        let hitch = late.reduce(0) { $0 + $1 - frameMs }
+        let at = { (q: Double) in ms.isEmpty ? 0 : ms[min(ms.count - 1, Int(Double(ms.count) * q))] }
+        let line = String(
+            format: "pass=%d frames=%d frame_ms=%.2f p50_ms=%.2f p95_ms=%.2f p99_ms=%.2f max_ms=%.2f late=%d hitch_ms_per_s=%.1f main_cpu_ms_per_s=%.0f room=%.0f view=%@",
+            pass + 1, ms.count, frameMs, at(0.5), at(0.95), at(0.99), ms.last ?? 0, late.count, hitch / seconds,
+            Double(clock_gettime_nsec_np(CLOCK_THREAD_CPUTIME_ID) - cpu) / 1e6 / seconds, room,
+            String(describing: type(of: scroll)))
+        coreLog.notice("metric scroll \(line, privacy: .public)")
+        pass += 1
+        (start, last, intervals) = (nil, nil, [])
+        move(to: 0)
+        if pass == Self.passes {
+            link.invalidate()
+            finished?.resume()
+            finished = nil
+        }
+    }
+}
+#endif
 #endif
