@@ -165,7 +165,7 @@ struct EditProfile: View {
         .toolbar {
             if dirty, shown {
                 ToolbarItem(placement: .navigation) {
-                    Button(action: leave) label: { Label("Back", glyph: "chevron-left") }
+                    Button(action: leave) { Label("Back", glyph: "chevron-left") }
                         // The system back is a chevron alone; the control keeps its shape when the first edit swaps them.
                         .labelStyle(.iconOnly)
                 }
