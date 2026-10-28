@@ -275,7 +275,7 @@ struct MainShell: View {
             .toolbar { TopTools(find: find, profiles: { showProfiles = true }) }
             // No strip: the window's toolbar draws nothing of its own, and Home's art runs under it.
             .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
-            .modifier(FullScreen(isPresented: $showProfiles) {
+            .modifier(FullScreen(isPresented: $showProfiles, closesOnBack: true) {
                 NavigationStack {
                     ProfilePicker(mode: .push, core: core)
                         // A sheet: Escape or Done leaves it as it was.
@@ -821,6 +821,8 @@ private struct BackOnlyWhenShown: ViewModifier {
     @Environment(\.isPresented) private var presented
     @Environment(\.dismiss) private var dismiss
     @Environment(\.leaveAsk) private var leaveAsk
+    @Environment(\.sheetOver) private var sheetOver
+    @Environment(\.sheetBack) private var sheetBack
     @State private var inFront = false
 
     func body(content: Content) -> some View {
@@ -828,7 +830,22 @@ private struct BackOnlyWhenShown: ViewModifier {
             .navigationBarBackButtonHidden(backButtonHidden(shown: shown, holdsEdits: leaveAsk != nil))
             .onAppear { inFront = true }
             .onDisappear { inFront = false }
-            .focusedSceneValue(\.goBack, canGoBack(shown: shown, inFront: inFront, presented: presented) ? GoBackAction { (leaveAsk ?? { dismiss() })() } : nil)
+            .focusedSceneValue(\.goBack, goBack)
+    }
+
+    private var route: BackRoute { backRoute(presented: presented, sheet: sheetBack) }
+
+    private var goBack: GoBackAction? {
+        guard canGoBack(shown: shown, inFront: inFront, presented: !route.isNone, sheetOver: sheetOver) else { return nil }
+        return GoBackAction {
+            if let leaveAsk {
+                leaveAsk()
+            } else if case .close(let close) = route {
+                close()
+            } else {
+                dismiss()
+            }
+        }
     }
 }
 
@@ -880,15 +897,32 @@ private struct TopScrim: ViewModifier {
 /// no navigation pill), a sheet on macOS.
 struct FullScreen<Flow: View>: ViewModifier {
     @Binding var isPresented: Bool
+    /// Cmd-[ (the Go menu's Back) closes this sheet, on the Mac: only the profile picker, which is a place to
+    /// leave. A flow with its own steps (onboarding) keeps Back to itself: its pages give the Go menu none.
+    var closesOnBack = false
     @ViewBuilder let flow: () -> Flow
     /// A place kept alive out of sight presents nothing until it shows again:
     /// on TV it is disabled, and a flow it presented would be disabled too.
     @Environment(\.tabShown) private var shown
+    #if os(macOS)
+    /// A sheet this one is nested in.
+    @Environment(\.sheetOver) private var outerSheetOver
+    #endif
+
+    #if os(macOS)
+    private var sheetBack: SheetBack { closesOnBack ? .close({ isPresented = false }) : .off }
+    #endif
 
     func body(content: Content) -> some View {
         let presented = Binding { isPresented && shown } set: { isPresented = $0 }
         #if os(macOS)
-        content.sheet(isPresented: presented) { flow().frame(minWidth: 760, minHeight: 640) }
+        // The pages under a sheet give no Back (Cmd-[ would pop one nobody sees), and the sheet's own page closes
+        // it. Written on the content, inside the sheet's modifier: the sheet's flow keeps the default.
+        content
+            .environment(\.sheetOver, sheetCovers(outer: outerSheetOver, own: presented.wrappedValue))
+            .sheet(isPresented: presented) {
+                flow().frame(minWidth: 760, minHeight: 640).environment(\.sheetBack, sheetBack)
+            }
         #else
         content.fullScreenCover(isPresented: presented, content: flow)
         #endif

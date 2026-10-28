@@ -72,10 +72,47 @@ struct TitleRoute: Hashable {
     }
 }
 
+/// What a sheet's flow does with the Go menu's Back, written by `FullScreen` for the pages inside it.
+enum SheetBack {
+    /// Not in a sheet flow: a pushed page leaves, a root gives none.
+    case none
+    /// The flow's root closes the sheet (a stack's root in a sheet may not read as presented).
+    case close(() -> Void)
+    /// The flow keeps Back to itself (onboarding): its pages give none.
+    case off
+}
+
+/// What the Go menu's Back does on a page.
+enum BackRoute {
+    case none
+    /// Leaves the page: a pushed page pops, a sheet's root closes its sheet.
+    case dismiss
+    case close(() -> Void)
+
+    var isNone: Bool { if case .none = self { true } else { false } }
+    var closes: Bool { if case .close = self { true } else { false } }
+}
+
+func backRoute(presented: Bool, sheet: SheetBack) -> BackRoute {
+    switch sheet {
+    case .off: .none
+    case .close(let action): presented ? .dismiss : .close(action)
+    case .none: presented ? .dismiss : .none
+    }
+}
+
+/// Whether a sheet is over the pages beneath it: this one, or one it is nested in (a writer that only
+/// set its own value would clear the outer one).
+func sheetCovers(outer: Bool, own: Bool) -> Bool {
+    outer || own
+}
+
 /// Whether the page in front gives the Go menu its Back (Cmd-[): it is pushed (or presented), its
-/// place is the one shown, and nothing was pushed over it.
-func canGoBack(shown: Bool, inFront: Bool, presented: Bool) -> Bool {
-    shown && inFront && presented
+/// place is the one shown, nothing was pushed over it, and no sheet is over the places (the sheet's own
+/// page answers Back then, so the title under it is never popped). `presented` is whether `backRoute` found
+/// something to do.
+func canGoBack(shown: Bool, inFront: Bool, presented: Bool, sheetOver: Bool = false) -> Bool {
+    shown && inFront && presented && !sheetOver
 }
 
 /// The system back is hidden for a place out of sight (it would pop a page nobody sees) and while the

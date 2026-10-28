@@ -17,6 +17,10 @@ extension FocusedValues {
 extension EnvironmentValues {
     /// A page with unsaved edits: what Back runs instead of leaving (the Go menu's too).
     @Entry var leaveAsk: (() -> Void)?
+    /// Some sheet (any `FullScreen` flow) is over the pages beneath it: they give no Back.
+    @Entry var sheetOver = false
+    /// What Back does for the pages inside a sheet's flow.
+    @Entry var sheetBack = SheetBack.none
 }
 
 /// Plays the title in front from its beginning.

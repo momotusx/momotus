@@ -91,6 +91,11 @@ struct TitleScreen: View {
         .onChange(of: pageVisible, initial: true) { _, now in model.setVisible(now) }
         // At rest too: on a short or wide window the words can start under the bar before any scroll.
         .topScrim(underBar, atRest: true)
+        #if os(macOS)
+        // With the synopsis sheet open, Cmd-[ closes the sheet instead of popping the title under it (the page
+        // still gives Back, so a sheet over the whole shell can switch it off through `sheetOver`).
+        .environment(\.leaveAsk, synopsisClose)
+        #endif
         .defaultFocus($primaryFocused, true)
         #if os(macOS)
         // Start Over in the Playback menu, for this title only while it is the page in front.
@@ -476,6 +481,12 @@ struct TitleScreen: View {
     #endif
 
     private var details: TitleDetails? { model.header?.details }
+    #if os(macOS)
+    private var synopsisClose: (() -> Void)? {
+        guard reading else { return nil }
+        return { reading = false }
+    }
+    #endif
     private var fallback: TitleFallback { titleFallback(header: model.header?.state, failure: model.failure) }
 
     private var pageVisible: Bool {
