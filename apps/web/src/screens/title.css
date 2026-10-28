@@ -121,8 +121,10 @@
 .meter { position: absolute; left: 0; right: 0; bottom: 0; height: 5px; background: rgba(0, 0, 0, .55); }
 .meter i { display: block; height: 100%; background: #fff; }
 .ep-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; padding-top: 4px; }
-/* The actions strip lies over the card's right end when the row has focus or the pointer: the words stop before it. */
-:is([data-form="tv"], [data-form="desktop"]) .ep-text { padding-right: 340px; }
+/* The actions strip lies over the card's right end while the row has focus or the pointer: the words stop before it,
+ * only then (an unfocused row reads in its whole width). A touch screen's strip is beside the card, below. */
+[data-form="tv"] .ep:focus-within .ep-text { padding-right: 340px; }
+@media (hover: hover) { [data-form="desktop"] .ep:is(:hover, :focus-within) .ep-text { padding-right: 340px; } }
 .ep-t { font: 700 var(--type-body) / 1.2 var(--font-text); letter-spacing: var(--tracking-label); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ep-r { font: 500 var(--type-caption) / 1.2 var(--font-text); color: var(--dim); }
 .ep-ov { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; font: 400 var(--type-caption) / 1.38 var(--font-text); color: var(--muted); }
@@ -148,8 +150,17 @@
 @media (hover: none) {
   [data-form="desktop"] .ep { align-items: center; }
   [data-form="desktop"] .ep-acts { display: flex; position: static; padding: 0; background: none; }
-  [data-form="desktop"] .ep-text { padding-right: 0; }
 }
+/* A narrow desktop window (under about 960 CSS px, 1920 canvas units): the episode column gets more of the width, the
+ * still shrinks, and the strip is icons in circles, so the words keep a readable line beside it. */
+@media (max-width: 960px) {
+  [data-form="desktop"] .title-scr:not(.movie) .info { width: 560px; }
+  [data-form="desktop"] .eps { left: 700px; }
+  [data-form="desktop"] .ep-still { width: 140px; height: 79px; }
+  [data-form="desktop"] .ep-act { width: 52px; padding: 0; justify-content: center; border-radius: 50%; }
+  [data-form="desktop"] .ep-act span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+}
+@media (max-width: 960px) and (hover: hover) { [data-form="desktop"] .ep:is(:hover, :focus-within) .ep-text { padding-right: 132px; } }
 @media (hover: hover) {
   [data-form="desktop"] .ep:hover .ep-acts { display: flex; }
   [data-form="desktop"] .ep-main:hover { background: var(--glass-strong); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .4); }

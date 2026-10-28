@@ -842,12 +842,23 @@ test("the title's Play yields its white to a focused round action on TV, and the
   await expect.poll(fill).toBe("rgba(255, 255, 255, 0.92)");
   await p.locator('[data-f="title:library"]').focus();
   await expect.poll(fill).toBe("rgba(255, 255, 255, 0.16)");
-  // Episodes: with the row focused its strip shows, and the overview and the title end before it.
-  for (const form of ["tv", "desktop"] as const) {
-    await p.setViewportSize(form === "tv" ? { width: 1920, height: 1080 } : { width: 1440, height: 900 });
+  // Episodes: an unfocused row reads in its whole width; with the row focused or pointed at its strip shows, and the
+  // overview and the title end before it, on a TV, a desktop and a narrow desktop window.
+  for (const [form, size] of [["tv", { width: 1920, height: 1080 }], ["desktop", { width: 1440, height: 900 }], ["desktop", { width: 768, height: 900 }]] as const) {
+    await p.setViewportSize(size);
     await p.goto(`/title/series/mqj2?form=${form}`);
     const row = p.locator(".ep").first();
     await expect(row).toBeVisible({ timeout: 30_000 });
+    const at = `${form} ${size.width}`;
+    // The line the words have, in CSS px: the text column's width without the room kept for the strip.
+    const width = () =>
+      row.locator(".ep-text").evaluate((el) => {
+        const scale = el.getBoundingClientRect().width / (el as HTMLElement).offsetWidth;
+        return ((el as HTMLElement).offsetWidth - Number.parseFloat(getComputedStyle(el).paddingRight)) * scale;
+      });
+    const whole = await width();
+    expect(whole, `${at}: an unfocused row has a readable line`).toBeGreaterThan(size.width <= 768 ? 90 : 250);
+    expect((await row.locator(".ep-text").evaluate((el) => getComputedStyle(el).paddingRight)), `${at}: nothing reserved while unfocused`).toBe("0px");
     if (form === "tv") await p.locator('[data-f="ep:mqj2:1:1"]').focus();
     else await row.hover();
     const strip = row.locator(".ep-acts");
@@ -855,8 +866,12 @@ test("the title's Play yields its white to a focused round action on TV, and the
     const edge = await strip.boundingBox();
     for (const words of [".ep-t", ".ep-r", ".ep-ov"]) {
       const box = await row.locator(words).first().boundingBox();
-      if (box) expect(box.x + box.width, `${form} ${words} ends before the strip`).toBeLessThanOrEqual((edge?.x ?? 0) + 1);
+      if (box) {
+        expect(box.x + box.width, `${at} ${words} ends before the strip`).toBeLessThanOrEqual((edge?.x ?? 0) + 1);
+        expect(box.width, `${at} ${words} keeps a positive line`).toBeGreaterThan(40);
+      }
     }
+    expect(await width(), `${at}: the focused row's text is positive`).toBeGreaterThan(60);
   }
   await context.close();
 });
