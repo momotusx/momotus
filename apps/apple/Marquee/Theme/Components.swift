@@ -537,6 +537,22 @@ struct ProgressLine: View {
     }
 }
 
+/// Says something to VoiceOver now (an install's result, a list that came in).
+func announce(_ words: String) {
+    AccessibilityNotification.Announcement(words).post()
+    #if DEBUG
+    // Every announcement goes through here: a walk reads them from the log
+    // where no screen reader runs (the simulator has none).
+    coreLog.notice("debug: announce \(words, privacy: .public)")
+    #endif
+}
+
+/// What a spoken `StateLine` says: its words when they are new and it is on screen, nothing for a
+/// redraw of the words it already said or for a line out of sight.
+func spokenLine(last: String?, current: String, audible: Bool = true) -> String? {
+    audible && !current.isEmpty && current != last ? current : nil
+}
+
 /// A short explanation for an empty or failed state, as text on the page at
 /// 64 percent (design/DECISION.md, States), with an optional fix as a secondary
 /// pill. It wraps rather than cut a reason off, and the fix moves under the
@@ -585,20 +601,4 @@ struct StateLine: View {
             Button(action.title, action: action.run).buttonStyle(PillButtonStyle(prominent: primary))
         }
     }
-}
-
-/// Says something to VoiceOver now (an install's result, a list that came in).
-func announce(_ words: String) {
-    AccessibilityNotification.Announcement(words).post()
-    #if DEBUG
-    // Every announcement goes through here: a walk reads them from the log
-    // where no screen reader runs (the simulator has none).
-    coreLog.notice("debug: announce \(words, privacy: .public)")
-    #endif
-}
-
-/// What a spoken `StateLine` says: its words when they are new and it is on screen, nothing for a
-/// redraw of the words it already said or for a line out of sight.
-func spokenLine(last: String?, current: String, audible: Bool = true) -> String? {
-    audible && !current.isEmpty && current != last ? current : nil
 }
