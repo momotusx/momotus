@@ -2810,6 +2810,7 @@ dependencies = [
  "libc",
  "rquickjs",
  "serde",
+ "serde_json",
  "tokio",
 ]
 

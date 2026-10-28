@@ -6,11 +6,12 @@
 //! no key. Both are plain data, so the engine can move to another process
 //! with the same messages (6.2).
 
-use rquickjs::prelude::{Async, Func};
-use rquickjs::promise::MaybePromise;
+use rquickjs::prelude::Func;
+use rquickjs::promise::{MaybePromise, Promised};
 use rquickjs::{AsyncContext, AsyncRuntime, CatchResultExt, CaughtError, Ctx, Exception, Function};
 use serde::{Deserialize, Serialize};
 use std::cell::{Cell, RefCell};
+use std::future::Future;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use std::time::{Duration, Instant};
@@ -92,25 +93,26 @@ thread_local! {
 }
 
 /// Runs `script` and its `getStreams()` on a new thread; the handle ends
-/// when the thread does.
+/// when the thread does. Fails only when the thread cannot be made.
 pub fn call(
     script: String,
     limits: Limits,
     cancel: Arc<AtomicBool>,
     host: mpsc::UnboundedSender<HostRequest>,
-) -> std::thread::JoinHandle<Outcome> {
+) -> std::io::Result<std::thread::JoinHandle<Outcome>> {
     std::thread::Builder::new()
         .name("mq-plugin".into())
         .stack_size(THREAD_STACK)
         .spawn(move || {
             HOST.with(|h| *h.borrow_mut() = Some(host));
-            let rt = tokio::runtime::Builder::new_current_thread()
+            let Ok(rt) = tokio::runtime::Builder::new_current_thread()
                 .enable_time()
                 .build()
-                .expect("a runtime");
+            else {
+                return Outcome::Memory;
+            };
             rt.block_on(run(script, limits, cancel))
         })
-        .expect("a plugin thread")
 }
 
 async fn run(script: String, limits: Limits, cancel: Arc<AtomicBool>) -> Outcome {
@@ -126,7 +128,10 @@ async fn run(script: String, limits: Limits, cancel: Arc<AtomicBool>) -> Outcome
     qjs.set_interrupt_handler(Some(Box::new(move || {
         let reason = if flag.load(Ordering::Relaxed) {
             CANCEL
-        } else if thread_cpu().saturating_sub(cpu_start) > limits.cpu {
+        } else if cpu_start
+            .zip(thread_cpu())
+            .is_none_or(|(start, now)| now.saturating_sub(start) > limits.cpu)
+        {
             CPU
         } else if started.elapsed() > limits.wall {
             WALL
@@ -146,19 +151,74 @@ async fn run(script: String, limits: Limits, cancel: Arc<AtomicBool>) -> Outcome
             tokio::time::sleep(Duration::from_millis(10)).await;
         }
     };
+    // The work first: an answer that is ready wins over a timer that is too.
     let ended = tokio::select! {
-        result = work => result,
-        _ = tokio::time::sleep(limits.wall) => return Outcome::Wall,
-        _ = cancelled => return Outcome::Cancelled,
+        biased;
+        result = work => Some(result),
+        _ = tokio::time::sleep(limits.wall) => None,
+        _ = cancelled => None,
     };
+    // What the interrupt said comes before anything the script made of it.
     match (ended, why.load(Ordering::Relaxed)) {
         (_, CANCEL) => Outcome::Cancelled,
         (_, CPU) => Outcome::Cpu,
         (_, WALL) => Outcome::Wall,
-        (Ok(json), _) => Outcome::Done(json),
-        (Err(words), _) if words.contains("out of memory") => Outcome::Memory,
-        (Err(words), _) => Outcome::Threw(words),
+        (None, _) if cancel.load(Ordering::Relaxed) => Outcome::Cancelled,
+        (None, _) => Outcome::Wall,
+        (Some(Ok(json)), _) => Outcome::Done(json),
+        (Some(Err(words)), _) if words == OUT_OF_MEMORY => Outcome::Memory,
+        (Some(Err(words)), _) => Outcome::Threw(cut(words, MAX_WORDS)),
     }
+}
+
+const OUT_OF_MEMORY: &str = "out of memory";
+
+/// What `Done` may carry: the output cap of 6.2.
+pub const MAX_ANSWER: usize = 256 * 1024;
+
+/// What `Threw` keeps of the script's words.
+const MAX_WORDS: usize = 1024;
+
+/// The longest URL `fetch` takes, in UTF-16 units as JS counts them.
+pub const MAX_URL: usize = 8 * 1024;
+
+/// An array or array-like longer than this makes every `Array.prototype`
+/// method throw. QuickJS-NG walks generic array-likes in C loops that never
+/// read the interrupt (`Array.prototype.reverse.call({length: 2 ** 53 - 1})`
+/// ran forever, 2026-10-28), and no heap of 24 MiB holds an array this long.
+const MAX_ARRAY: u64 = 1 << 24;
+
+/// Runs before the script: the array guard above, and `fetch` over the
+/// native one, which the script never sees. The URL's length is checked here
+/// so that no long string is copied out of the heap.
+const PRELUDE: &str = r#"(native, maxArray, maxUrl) => {
+    const proto = Array.prototype, apply = Reflect.apply, define = Object.defineProperty;
+    for (const name of Object.getOwnPropertyNames(proto)) {
+        const method = proto[name];
+        if (typeof method !== "function" || name === "constructor") continue;
+        const guarded = { [name](...args) {
+            if (this != null && +this.length > maxArray) throw new RangeError("array too long");
+            return apply(method, this, args);
+        } }[name];
+        define(proto, name, { value: guarded, writable: true, configurable: true, enumerable: false });
+    }
+    globalThis.fetch = function fetch(url) {
+        url = String(url);
+        if (url.length > maxUrl) throw new TypeError("URL too long");
+        return native(url);
+    };
+}"#;
+
+/// `words` cut to at most `max` bytes, at a char boundary.
+fn cut(mut words: String, max: usize) -> String {
+    if words.len() > max {
+        let mut at = max;
+        while !words.is_char_boundary(at) {
+            at -= 1;
+        }
+        words.truncate(at);
+    }
+    words
 }
 
 /// The script, then `getStreams()` awaited, as JSON; or the words of what threw.
@@ -169,8 +229,9 @@ async fn evaluate<'js>(ctx: &Ctx<'js>, script: &str) -> Result<String, String> {
         // error either, and the call throws `null` (seen 2026-10-27: an
         // object bomb under a 24 MiB limit ended as a thrown null). A
         // plugin's own `throw null` reads as memory too, which is harmless.
-        CaughtError::Value(v) if v.is_null() => "out of memory".into(),
-        CaughtError::Value(v) => format!("{v:?}"),
+        CaughtError::Value(v) if v.is_null() => OUT_OF_MEMORY.into(),
+        CaughtError::Value(v) => cut(format!("{v:?}"), MAX_WORDS),
+        CaughtError::Error(rquickjs::Error::Allocation) => OUT_OF_MEMORY.into(),
         CaughtError::Error(e) => e.to_string(),
     };
     let globals = ctx.globals();
@@ -179,8 +240,9 @@ async fn evaluate<'js>(ctx: &Ctx<'js>, script: &str) -> Result<String, String> {
     for name in ["SharedArrayBuffer", "Atomics", "WebAssembly"] {
         globals.remove(name).catch(ctx).map_err(words)?;
     }
-    globals
-        .set("fetch", Func::from(Async(fetch)))
+    let prelude: Function = ctx.eval(PRELUDE).catch(ctx).map_err(words)?;
+    prelude
+        .call::<_, ()>((Func::from(fetch), MAX_ARRAY as f64, MAX_URL as f64))
         .catch(ctx)
         .map_err(words)?;
     ctx.eval::<(), _>(script).catch(ctx).map_err(words)?;
@@ -188,13 +250,23 @@ async fn evaluate<'js>(ctx: &Ctx<'js>, script: &str) -> Result<String, String> {
     let answer: MaybePromise = entry.call(()).catch(ctx).map_err(words)?;
     let value: rquickjs::Value = answer.into_future().await.catch(ctx).map_err(words)?;
     let json = ctx.json_stringify(value).catch(ctx).map_err(words)?;
-    Ok(json
-        .and_then(|s| s.to_string().ok())
-        .unwrap_or_else(|| "null".into()))
+    let json = match json {
+        Some(json) => json.to_string().catch(ctx).map_err(words)?,
+        None => "null".into(),
+    };
+    if json.len() > MAX_ANSWER {
+        return Err("the answer is over 256 KiB".into());
+    }
+    Ok(json)
 }
 
-/// `fetch(url)` resolving to the body's text: a message to the host and its answer.
-async fn fetch<'js>(ctx: Ctx<'js>, url: String) -> rquickjs::Result<String> {
+/// The native `fetch(url)`: a message to the host, and a promise of the
+/// body's text. Past the request cap it throws at once, so a loop of calls
+/// leaves nothing behind on the host side.
+fn fetch<'js>(
+    ctx: Ctx<'js>,
+    url: String,
+) -> rquickjs::Result<Promised<impl Future<Output = rquickjs::Result<String>> + 'js>> {
     if SENT.get() >= MAX_REQUESTS {
         return Err(Exception::throw_type(&ctx, "rate limited"));
     }
@@ -209,21 +281,24 @@ async fn fetch<'js>(ctx: Ctx<'js>, url: String) -> rquickjs::Result<String> {
     if !matches!(sent, Some(Ok(()))) {
         return Err(Exception::throw_message(&ctx, "the host is gone"));
     }
-    match answer.await {
-        Ok(HostReply::Body(body)) => Ok(body),
-        Ok(HostReply::Failed(words)) => Err(Exception::throw_type(&ctx, &words)),
-        Err(_) => Err(Exception::throw_message(&ctx, "the host is gone")),
-    }
+    Ok(Promised(async move {
+        match answer.await {
+            Ok(HostReply::Body(body)) => Ok(body),
+            Ok(HostReply::Failed(words)) => Err(Exception::throw_type(&ctx, &words)),
+            Err(_) => Err(Exception::throw_message(&ctx, "the host is gone")),
+        }
+    }))
 }
 
-/// This thread's CPU time.
+/// This thread's CPU time; None if the clock cannot be read, which ends the
+/// call as over its CPU limit.
 #[cfg(unix)]
-fn thread_cpu() -> Duration {
+fn thread_cpu() -> Option<Duration> {
     let mut t = libc::timespec {
         tv_sec: 0,
         tv_nsec: 0,
     };
     // SAFETY: a valid pointer to a timespec the call fills.
-    unsafe { libc::clock_gettime(libc::CLOCK_THREAD_CPUTIME_ID, &mut t) };
-    Duration::new(t.tv_sec as u64, t.tv_nsec as u32)
+    let rc = unsafe { libc::clock_gettime(libc::CLOCK_THREAD_CPUTIME_ID, &mut t) };
+    (rc == 0).then(|| Duration::new(t.tv_sec as u64, t.tv_nsec as u32))
 }

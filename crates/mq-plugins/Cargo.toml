@@ -23,6 +23,7 @@ libc = "0.2"
 rquickjs = { version = "=0.14.0", default-features = false, features = ["std", "futures", "bindgen"] }
 
 [dev-dependencies]
+serde_json.workspace = true
 tokio = { workspace = true, features = ["rt-multi-thread", "macros", "time"] }
 
 # Phase D's size probes (bench/plugins/d-spike.jsonl): the same std and tokio

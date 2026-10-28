@@ -33,6 +33,16 @@ unsafe impl GlobalAlloc for Counting {
         }
         p
     }
+    unsafe fn realloc(&self, p: *mut u8, layout: Layout, size: usize) -> *mut u8 {
+        // SAFETY: as for `System`.
+        let q = unsafe { System.realloc(p, layout, size) };
+        if !q.is_null() {
+            let now = NOW.fetch_add(size, Ordering::Relaxed) + size;
+            PEAK.fetch_max(now, Ordering::Relaxed);
+            NOW.fetch_sub(layout.size(), Ordering::Relaxed);
+        }
+        q
+    }
     unsafe fn dealloc(&self, p: *mut u8, layout: Layout) {
         // SAFETY: as for `System`.
         unsafe { System.dealloc(p, layout) };
@@ -67,6 +77,7 @@ fn run(script: &str) -> Outcome {
         }
     });
     let outcome = engine::call(script.into(), Limits::default(), Default::default(), tx)
+        .expect("a thread")
         .join()
         .expect("the call's thread");
     host.join().expect("the host thread");

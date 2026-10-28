@@ -52,6 +52,7 @@ esac
 
 out=$T/$triple/release/examples
 tmp=$(mktemp -d)
+trap 'rm -rf "${tmp:?}" "${T:?}/${triple:?}"' EXIT
 for lib in probe probe_base; do
   if [ "$ext" = so ]; then
     "${strip[@]}" -o "$tmp/$lib.$ext" "$out/lib$lib.$ext"
@@ -64,16 +65,18 @@ size() { stat -f %z "$1"; }
 found() {
   local m list=()
   for m in "${MARKERS[@]}"; do
-    if grep -aqF "$m" "$1"; then list+=("\"$m\""); fi
+    if grep -aF "$m" "$1" >/dev/null; then list+=("\"$m\""); fi
   done
-  (IFS=,; echo "[${list[*]}]")
+  (IFS=,; echo "[${list[*]-}]")
 }
 syms() {
   local s list=()
   for s in "${SYMBOLS[@]}"; do
-    if "${nm[@]}" "$1" 2>/dev/null | grep -qE "[ _]$s\$"; then list+=("\"$s\""); fi
+    # Not `grep -q`: it exits at the first match, nm dies of SIGPIPE, and
+    # under pipefail a symbol that is there reads as missing.
+    if "${nm[@]}" "$1" 2>/dev/null | grep -E "[ _]$s\$" >/dev/null; then list+=("\"$s\""); fi
   done
-  (IFS=,; echo "[${list[*]}]")
+  (IFS=,; echo "[${list[*]-}]")
 }
 probe=$(size "$tmp/probe.$ext")
 base=$(size "$tmp/probe_base.$ext")
@@ -82,4 +85,3 @@ printf '{"date":"%s","target":"%s","triple":"%s","trunk":"%s","change":"feat(plu
   "$(echo "scale=3; ($probe - $base) / 1048576" | bc)" \
   "$(found "$tmp/probe.$ext")" "$(found "$tmp/probe_base.$ext")" \
   "$(syms "$out/libprobe.$ext")" "$(syms "$out/libprobe_base.$ext")"
-rm -rf "${tmp:?}" "${T:?}/${triple:?}"

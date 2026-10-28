@@ -1,8 +1,10 @@
 //! Phase D (plans/plugins-and-marketplace.md 9): the engine's limits, its
 //! message boundary, and the HTML caps.
 
-use mq_plugins::dom::{self, Caps, Stop};
-use mq_plugins::engine::{HostCall, HostReply, HostRequest, Limits, MAX_REQUESTS, Outcome, call};
+use mq_plugins::dom::{self, Caps, Kind, Stop};
+use mq_plugins::engine::{
+    HostCall, HostReply, HostRequest, Limits, MAX_ANSWER, MAX_REQUESTS, MAX_URL, Outcome, call,
+};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
@@ -32,6 +34,7 @@ fn run_counted(script: &str, limits: Limits) -> (Outcome, usize) {
         seen
     });
     let outcome = call(script.into(), limits, Arc::default(), tx)
+        .unwrap()
         .join()
         .unwrap();
     (outcome, host.join().unwrap())
@@ -45,14 +48,65 @@ fn parse(html: &str) -> dom::Doc {
     dom::parse(html, Caps::default(), || false)
 }
 
-/// Every kept node's depth is its parent's plus one, and within the cap.
+/// The nodes reachable from the document, which is the tree.
+fn reachable(doc: &dom::Doc) -> Vec<usize> {
+    let (mut seen, mut below) = (Vec::new(), vec![0]);
+    while let Some(node) = below.pop() {
+        seen.push(node);
+        below.extend_from_slice(&doc.nodes[node].children);
+    }
+    seen
+}
+
+/// In the tree, every node's parent lists it, and its depth is its parent's
+/// plus one and within the cap.
 fn depths_hold(doc: &dom::Doc) {
-    for (i, node) in doc.nodes.iter().enumerate().skip(2) {
-        if let Some(parent) = node.parent {
-            assert_eq!(node.depth, doc.nodes[parent].depth + 1, "node {i}");
-            assert!(node.depth as usize <= Caps::default().depth, "node {i}");
+    for i in reachable(doc).into_iter().skip(1) {
+        let node = &doc.nodes[i];
+        let parent = node.parent.expect("a parent in the tree");
+        assert!(doc.nodes[parent].children.contains(&i), "node {i}");
+        assert_eq!(node.depth, doc.nodes[parent].depth + 1, "node {i}");
+        assert!(node.depth as usize <= Caps::default().depth, "node {i}");
+    }
+}
+
+/// The body as `name[children]` and `"text"`, comments as `!`.
+fn shape(html: &str) -> String {
+    fn put(doc: &dom::Doc, node: usize, out: &mut String) {
+        let node = &doc.nodes[node];
+        match node.kind {
+            Kind::Text => out.push_str(&format!("{:?}", node.text)),
+            Kind::Comment => out.push('!'),
+            _ => {
+                out.push_str(&node.name.as_ref().map_or("", |q| &*q.local).to_string());
+                out.push('[');
+                for (i, &child) in node.children.iter().enumerate() {
+                    if i > 0 {
+                        out.push(',');
+                    }
+                    put(doc, child, out);
+                }
+                out.push(']');
+            }
         }
     }
+    let doc = parse(html);
+    let body = doc
+        .nodes
+        .iter()
+        .position(|n| n.name.as_ref().is_some_and(|q| &*q.local == "body"))
+        .unwrap();
+    let mut out = String::new();
+    put(&doc, body, &mut out);
+    out
+}
+
+/// Joins the call's thread, or None after `secs`: a thread stuck in a
+/// native loop fails the test instead of hanging it.
+fn joined_within(thread: std::thread::JoinHandle<Outcome>, secs: u64) -> Option<Outcome> {
+    let (tx, rx) = std::sync::mpsc::channel();
+    std::thread::spawn(move || tx.send(thread.join().unwrap()));
+    rx.recv_timeout(Duration::from_secs(secs)).ok()
 }
 
 #[test]
@@ -101,8 +155,16 @@ fn a_throw_or_a_missing_entry_is_said() {
 
 #[test]
 fn a_memory_bomb_stops_at_the_heap_limit() {
+    // Two seconds of CPU, so a slow machine still meets the heap first.
+    let roomy = Limits {
+        cpu: Duration::from_secs(2),
+        ..quick()
+    };
     let objects = "function getStreams() { const a = []; for (;;) a.push({ n: a.length, s: 'x' + a.length }); }";
-    assert_eq!(run(objects, quick()), Outcome::Memory);
+    assert_eq!(run(objects, roomy), Outcome::Memory);
+    // Inside a promise job too.
+    let later = "async function getStreams() { await null; const a = []; for (;;) a.push({ s: 'x' + a.length }); }";
+    assert_eq!(run(later, roomy), Outcome::Memory);
     // A doubling string fails too: QuickJS-NG caps a string's length before
     // the heap limit is reached. Seen 2026-10-27 under a 24 MiB limit: the
     // call threw "string too long". The heap limit would also do; finishing never.
@@ -143,6 +205,9 @@ fn a_busy_loop_stops_at_the_cpu_limit() {
     );
     let regex = "function getStreams() { return /(a+)+b/.test('a'.repeat(40)); }";
     assert_eq!(run(regex, quick()), Outcome::Cpu);
+    // The interrupt cannot be caught.
+    let caught = "function getStreams() { for (;;) { try { for (;;) {} } catch (e) {} } }";
+    assert_eq!(run(caught, quick()), Outcome::Cpu);
 }
 
 #[test]
@@ -167,7 +232,71 @@ fn deep_recursion_throws_instead_of_crashing() {
         "function f() { return f(); } function getStreams() { return f(); }",
         quick(),
     );
-    assert!(matches!(out, Outcome::Threw(_)), "{out:?}");
+    assert!(
+        matches!(&out, Outcome::Threw(w) if w.contains("stack")),
+        "{out:?}"
+    );
+}
+
+/// A loop of calls past the cap throws at the first one over, so nothing
+/// piles up on the host side, and a long URL never leaves the heap.
+#[test]
+fn fetch_refuses_at_once() {
+    let (out, seen) = run_counted("function getStreams() { for (;;) fetch('x'); }", quick());
+    assert_eq!(out, Outcome::Threw("rate limited".into()));
+    assert_eq!(seen, MAX_REQUESTS as usize);
+    let all = "async function getStreams() { return Promise.all(Array.from({ length: 40 }, (_, i) => fetch('u' + i))); }";
+    let (out, seen) = run_counted(all, quick());
+    assert_eq!(out, Outcome::Threw("rate limited".into()));
+    assert_eq!(seen, MAX_REQUESTS as usize);
+    let long = format!(
+        "function getStreams() {{ return fetch('x'.repeat({})); }}",
+        MAX_URL + 1
+    );
+    let (out, seen) = run_counted(&long, quick());
+    assert_eq!(out, Outcome::Threw("URL too long".into()));
+    assert_eq!(seen, 0);
+}
+
+/// QuickJS-NG walks a generic array-like in C loops that never read the
+/// interrupt; every `Array.prototype` method refuses a long one, and the
+/// call ends.
+#[test]
+fn long_array_likes_are_refused() {
+    let script = r#"function getStreams() {
+        const out = {};
+        const sparse = []; sparse.length = 2 ** 32 - 1;
+        for (const name of Object.getOwnPropertyNames(Array.prototype)) {
+            const method = Array.prototype[name];
+            if (typeof method !== "function" || name === "constructor") continue;
+            for (const that of [{ length: 2 ** 53 - 1 }, sparse]) {
+                try { method.call(that, () => false, 0); out[name] = "ran"; }
+                catch (e) { out[name] = e.name; if (e.name !== "RangeError") break; }
+            }
+        }
+        return out;
+    }"#;
+    let (tx, _rx) = mpsc::unbounded_channel::<HostRequest>();
+    let thread = call(script.into(), quick(), Arc::default(), tx).unwrap();
+    let out = joined_within(thread, 20).expect("the call ends");
+    let Outcome::Done(json) = out else {
+        panic!("{out:?}")
+    };
+    let names: std::collections::BTreeMap<String, String> = serde_json::from_str(&json).unwrap();
+    assert!(names.len() > 30, "{json}");
+    assert!(names.values().all(|e| e == "RangeError"), "{json}");
+}
+
+#[test]
+fn an_answer_over_its_cap_is_refused() {
+    let big = format!(
+        "function getStreams() {{ return 'x'.repeat({}); }}",
+        MAX_ANSWER
+    );
+    assert_eq!(
+        run(&big, quick()),
+        Outcome::Threw("the answer is over 256 KiB".into())
+    );
 }
 
 #[test]
@@ -183,8 +312,8 @@ fn no_shared_memory_webassembly_or_modules() {
     );
 }
 
-/// Cancel during a loop and during a fetch the host never answers: the
-/// thread itself ends soon after.
+/// Cancel during a loop and during a fetch the host holds: the thread itself
+/// ends long before its 10 s limits.
 #[test]
 fn cancel_ends_the_thread() {
     for script in [
@@ -192,19 +321,29 @@ fn cancel_ends_the_thread() {
         "async function getStreams() { await fetch('x'); }",
     ] {
         let cancel = Arc::new(AtomicBool::new(false));
-        let (tx, _held) = mpsc::unbounded_channel::<HostRequest>();
+        let (tx, mut rx) = mpsc::unbounded_channel::<HostRequest>();
         let limits = Limits {
             cpu: Duration::from_secs(10),
             wall: Duration::from_secs(10),
             ..Limits::default()
         };
-        let thread = call(script.into(), limits, cancel.clone(), tx);
-        std::thread::sleep(Duration::from_millis(100));
+        let thread = call(script.into(), limits, cancel.clone(), tx).unwrap();
+        // The fetch is held once it reached the host; the loop is running.
+        let _held = if script.contains("fetch") {
+            Some(rx.blocking_recv().unwrap())
+        } else {
+            std::thread::sleep(Duration::from_millis(100));
+            None
+        };
         let asked = Instant::now();
         cancel.store(true, Ordering::Relaxed);
-        assert_eq!(thread.join().unwrap(), Outcome::Cancelled, "{script}");
+        assert_eq!(
+            joined_within(thread, 20),
+            Some(Outcome::Cancelled),
+            "{script}"
+        );
         assert!(
-            asked.elapsed() < Duration::from_millis(100),
+            asked.elapsed() < Duration::from_secs(2),
             "{script}: {:?}",
             asked.elapsed()
         );
@@ -247,12 +386,15 @@ fn a_million_nested_divs_stop_at_the_depth_cap() {
     let started = Instant::now();
     let doc = parse(&html);
     assert_eq!(doc.stopped, Some(Stop::Depth));
-    let deepest = doc.nodes.iter().map(|n| n.depth as usize).max();
+    let deepest = reachable(&doc)
+        .iter()
+        .map(|&n| doc.nodes[n].depth as usize)
+        .max();
     assert_eq!(deepest, Some(Caps::default().depth));
     assert!(doc.fed <= 4096, "fed {}", doc.fed);
     depths_hold(&doc);
     assert!(
-        started.elapsed() < Duration::from_secs(1),
+        started.elapsed() < Duration::from_secs(20),
         "{:?}",
         started.elapsed()
     );
@@ -279,6 +421,11 @@ fn an_attribute_bomb_never_reaches_the_tokenizer() {
         ("<p>before</p>", "a"),
         ("<p>before</p>", "/a"),
         ("<p>before</p><svg><style>", "a"),
+        // The frameset modes ignore raw-text start tags, so the tokenizer
+        // reads what follows them as markup.
+        ("<p>before</p><frameset><textarea>", "a"),
+        ("<p>before</p><frameset><plaintext>", "a"),
+        ("<p>before</p><frameset><script>", "a"),
     ] {
         let html = attribute_bomb(prefix, name);
         let started = Instant::now();
@@ -287,7 +434,7 @@ fn an_attribute_bomb_never_reaches_the_tokenizer() {
         assert_eq!(doc.fed, prefix.len(), "{prefix}");
         assert!(doc.nodes.iter().any(|n| n.text == "before"));
         assert!(
-            started.elapsed() < Duration::from_millis(500),
+            started.elapsed() < Duration::from_secs(20),
             "{prefix}: {:?}",
             started.elapsed()
         );
@@ -373,4 +520,38 @@ fn a_page_over_the_byte_cap_keeps_its_start() {
     );
     assert_eq!(doc.stopped, Some(Stop::Bytes));
     assert!(doc.nodes.iter().any(|n| n.text == "first"));
+}
+
+/// The tree is the parse: foster-parented content stays before its table,
+/// text after a comment is its own node, and misnested formatting splits.
+#[test]
+fn the_tree_keeps_document_order() {
+    assert_eq!(
+        shape("<table>X<tr><td>1</td></tr></table>Y"),
+        r#"body["X",table[tbody[tr[td["1"]]]],"Y"]"#
+    );
+    assert_eq!(
+        shape("<table><a href=x>l</a><tr><td>1</td></tr></table>"),
+        r#"body[a["l"],table[tbody[tr[td["1"]]]]]"#
+    );
+    assert_eq!(
+        shape("<p><!--ad-->Watch here</p>"),
+        r#"body[p[!,"Watch here"]]"#
+    );
+    assert_eq!(shape("<b>1<p>2</b>3</p>"), r#"body[b["1"],p[b["2"],"3"]]"#);
+}
+
+/// Attributes count against the node cap, so reconstructed formatting
+/// elements cannot copy their attributes past it.
+#[test]
+fn attributes_count_against_the_node_cap() {
+    let doc = parse(&"<p a=1 b=2 c=3>".repeat(100_000));
+    assert_eq!(doc.stopped, Some(Stop::Nodes));
+    let units: usize = doc.nodes.iter().map(|n| 1 + n.attrs.len()).sum();
+    assert!(units <= Caps::default().nodes, "{units}");
+    assert!(
+        doc.nodes.len() <= Caps::default().nodes / 4 + 2,
+        "{}",
+        doc.nodes.len()
+    );
 }

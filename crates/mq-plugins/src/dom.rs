@@ -23,6 +23,7 @@ use std::cell::{Cell, Ref, RefCell};
 #[derive(Debug, Clone, Copy)]
 pub struct Caps {
     pub bytes: usize,
+    /// Nodes plus their attributes: an attribute costs what a node does.
     pub nodes: usize,
     pub depth: usize,
     pub attrs: usize,
@@ -54,11 +55,23 @@ pub enum Stop {
     Budget,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Kind {
+    Document,
+    Element,
+    Text,
+    /// Comments and processing instructions; their text is not kept.
+    Comment,
+}
+
+/// A node. Only nodes reachable from the document (0) are in the tree: one
+/// past a cap, or moved below the depth cap, is left with no parent.
 #[derive(Debug)]
 pub struct Node {
+    pub kind: Kind,
     pub parent: Option<usize>,
-    pub depth: u16,
-    /// None for the document, text and comments.
+    pub depth: u32,
+    /// Some for elements only.
     pub name: Option<QualName>,
     pub attrs: Vec<Attribute>,
     pub text: String,
@@ -134,8 +147,10 @@ const RAW: [&[u8]; 10] = [
 /// comments, and the raw text elements above, which it skips as text. Where it
 /// cannot know what the tree builder will do it reads markup as tags, which
 /// can only count more: inside `<svg>` or `<math>` nothing is skipped (the
-/// tree builder reads `<style>` there as markup), and a script's escaped
-/// `<!--` sections end at the first `</script`.
+/// tree builder reads `<style>` there as markup), a script's escaped `<!--`
+/// sections end at the first `</script`, and after a `<frameset>` nothing is
+/// skipped (the frameset modes ignore `<textarea>`, `<xmp>` and the rest, so
+/// the tokenizer reads what follows them as markup).
 fn first_over(html: &[u8], caps: &Caps) -> Option<(usize, Stop)> {
     let n = html.len();
     let at_ci = |at: usize, word: &[u8]| {
@@ -146,7 +161,7 @@ fn first_over(html: &[u8], caps: &Caps) -> Option<(usize, Stop)> {
         (from..n.saturating_sub(word.len() - 1)).find(|&at| &html[at..at + word.len()] == word)
     };
     let space = |b: u8| matches!(b, b'\t' | b'\n' | b'\x0c' | b'\r' | b' ');
-    let (mut i, mut svg, mut math) = (0, 0usize, 0usize);
+    let (mut i, mut svg, mut math, mut frameset) = (0, 0usize, 0usize, false);
     while let Some(lt) = html[i..].iter().position(|&b| b == b'<') {
         let start = i + lt;
         if at_ci(start, b"<!--") {
@@ -254,7 +269,9 @@ fn first_over(html: &[u8], caps: &Caps) -> Option<(usize, Stop)> {
             svg += !closed as usize;
         } else if is(b"math") {
             math += !closed as usize;
-        } else if svg == 0 && math == 0 && RAW.iter().any(|raw| is(raw)) {
+        } else if is(b"frameset") {
+            frameset = true;
+        } else if svg == 0 && math == 0 && !frameset && RAW.iter().any(|raw| is(raw)) {
             if is(b"plaintext") {
                 return None;
             }
@@ -288,12 +305,23 @@ fn ceil_char(s: &str, mut at: usize) -> usize {
 struct Sink {
     caps: Caps,
     nodes: RefCell<Vec<Node>>,
+    /// Nodes and attributes made, which the node cap counts.
+    units: Cell<usize>,
+    /// Nodes whose depth was set again under a moved subtree.
+    walked: Cell<usize>,
     stopped: std::rc::Rc<Cell<Option<Stop>>>,
 }
 
+/// Depth updates under moved subtrees, per unit of the node cap. Misnested
+/// formatting moves subtrees (the adoption agency) and each move walks the
+/// subtree, so a page built for it could make one chunk cost the cap times
+/// the depth; past this many walks the parse stops as at the node cap.
+const WALKS_PER_UNIT: usize = 4;
+
 impl Sink {
     fn new(caps: Caps) -> Self {
-        let node = |name: Option<QualName>| Node {
+        let node = |kind, name| Node {
+            kind,
             parent: None,
             depth: 0,
             name,
@@ -304,7 +332,12 @@ impl Sink {
         let dropped = QualName::new(None, html5ever::ns!(html), html5ever::local_name!("div"));
         Self {
             caps,
-            nodes: RefCell::new(vec![node(None), node(Some(dropped))]),
+            nodes: RefCell::new(vec![
+                node(Kind::Document, None),
+                node(Kind::Element, Some(dropped)),
+            ]),
+            units: Cell::new(2),
+            walked: Cell::new(0),
             stopped: Default::default(),
         }
     }
@@ -315,13 +348,23 @@ impl Sink {
         }
     }
 
+    fn live(&self) -> bool {
+        self.stopped.get().is_none()
+    }
+
     /// A new node, or `DROPPED` once a cap is met.
-    fn add(&self, name: Option<QualName>, attrs: Vec<Attribute>, text: String) -> usize {
-        if self.stopped.get().is_some() {
+    fn add(
+        &self,
+        kind: Kind,
+        name: Option<QualName>,
+        attrs: Vec<Attribute>,
+        text: String,
+    ) -> usize {
+        if !self.live() {
             return DROPPED;
         }
-        let mut nodes = self.nodes.borrow_mut();
-        if nodes.len() >= self.caps.nodes {
+        let units = self.units.get() + 1 + attrs.len();
+        if units > self.caps.nodes {
             self.stop(Stop::Nodes);
             return DROPPED;
         }
@@ -329,7 +372,10 @@ impl Sink {
             self.stop(Stop::Attrs);
             return DROPPED;
         }
+        self.units.set(units);
+        let mut nodes = self.nodes.borrow_mut();
         nodes.push(Node {
+            kind,
             parent: None,
             depth: 0,
             name,
@@ -340,8 +386,10 @@ impl Sink {
         nodes.len() - 1
     }
 
-    fn attach(&self, parent: usize, child: usize) {
-        if parent == DROPPED || child == DROPPED {
+    /// `child` under `parent`, before `before` if that is one of its
+    /// children, else last. Once a cap is met the tree no longer changes.
+    fn attach(&self, parent: usize, child: usize, before: Option<usize>) {
+        if parent == DROPPED || child == DROPPED || !self.live() {
             return;
         }
         let mut nodes = self.nodes.borrow_mut();
@@ -351,36 +399,65 @@ impl Sink {
             return;
         }
         nodes[child].parent = Some(parent);
-        nodes[child].depth = depth as u16;
-        nodes[parent].children.push(child);
+        nodes[child].depth = depth as u32;
+        let siblings = &mut nodes[parent].children;
+        let at = before
+            .and_then(|b| siblings.iter().rposition(|&c| c == b))
+            .unwrap_or(siblings.len());
+        siblings.insert(at, child);
         // A moved subtree (the adoption agency, foster parenting) takes its new
-        // depth all the way down, so the cap holds for every node. A walk, not
-        // recursion: the tree's depth is what is in question.
+        // depth all the way down, so the cap holds for every node; one past it
+        // leaves the tree. A walk, not recursion: the tree's depth is what is
+        // in question.
         let mut below = nodes[child].children.clone();
+        let mut walked = self.walked.get();
         while let Some(node) = below.pop() {
-            let depth = nodes[nodes[node].parent.expect("a child's parent")].depth as usize + 1;
+            walked += 1;
+            let parent = nodes[node].parent.expect("a child's parent");
+            let depth = nodes[parent].depth as usize + 1;
             if depth > self.caps.depth {
                 self.stop(Stop::Depth);
+                nodes[parent].children.retain(|&c| c != node);
+                nodes[node].parent = None;
+                continue;
             }
-            nodes[node].depth = depth.min(u16::MAX as usize) as u16;
+            nodes[node].depth = depth as u32;
             below.extend_from_slice(&nodes[node].children);
+        }
+        self.walked.set(walked);
+        // Read after the walk, so every depth in the tree stays true.
+        if walked > self.caps.nodes * WALKS_PER_UNIT {
+            self.stop(Stop::Nodes);
         }
     }
 
-    fn text(&self, parent: usize, text: &str) {
-        if parent == DROPPED || self.stopped.get().is_some() {
+    fn text(&self, parent: usize, text: &str, before: Option<usize>) {
+        if parent == DROPPED || !self.live() {
             return;
         }
         // Text next to text joins it, as the tree builder expects.
-        let last = self.nodes.borrow()[parent].children.last().copied();
-        if let Some(last) = last
-            && self.nodes.borrow()[last].name.is_none()
         {
-            self.nodes.borrow_mut()[last].text.push_str(text);
-            return;
+            let mut nodes = self.nodes.borrow_mut();
+            let siblings = &nodes[parent].children;
+            let at = before
+                .and_then(|b| siblings.iter().rposition(|&c| c == b))
+                .unwrap_or(siblings.len());
+            if let Some(&prev) = at.checked_sub(1).and_then(|i| siblings.get(i))
+                && nodes[prev].kind == Kind::Text
+            {
+                nodes[prev].text.push_str(text);
+                return;
+            }
         }
-        let node = self.add(None, Vec::new(), text.to_owned());
-        self.attach(parent, node);
+        let node = self.add(Kind::Text, None, Vec::new(), text.to_owned());
+        self.attach(parent, node, before);
+    }
+
+    fn put(&self, parent: usize, child: NodeOrText<usize>, before: Option<usize>) {
+        match child {
+            NodeOrText::AppendNode(node) => self.attach(parent, node, before),
+            NodeOrText::AppendText(text) => self.text(parent, &text, before),
+        }
     }
 }
 
@@ -415,22 +492,19 @@ impl TreeSink for Sink {
     }
 
     fn create_element(&self, name: QualName, attrs: Vec<Attribute>, _flags: ElementFlags) -> usize {
-        self.add(Some(name), attrs, String::new())
+        self.add(Kind::Element, Some(name), attrs, String::new())
     }
 
     fn create_comment(&self, _text: StrTendril) -> usize {
-        self.add(None, Vec::new(), String::new())
+        self.add(Kind::Comment, None, Vec::new(), String::new())
     }
 
     fn create_pi(&self, _target: StrTendril, _data: StrTendril) -> usize {
-        self.add(None, Vec::new(), String::new())
+        self.add(Kind::Comment, None, Vec::new(), String::new())
     }
 
     fn append(&self, parent: &usize, child: NodeOrText<usize>) {
-        match child {
-            NodeOrText::AppendNode(node) => self.attach(*parent, node),
-            NodeOrText::AppendText(text) => self.text(*parent, &text),
-        }
+        self.put(*parent, child, None);
     }
 
     fn append_based_on_parent_node(&self, element: &usize, prev: &usize, child: NodeOrText<usize>) {
@@ -449,6 +523,8 @@ impl TreeSink for Sink {
     ) {
     }
 
+    // ponytail: a template's contents are its own children, not a separate
+    // fragment, so `template > li` matches here where cheerio's would not.
     fn get_template_contents(&self, target: &usize) -> usize {
         *target
     }
@@ -460,47 +536,49 @@ impl TreeSink for Sink {
     fn set_quirks_mode(&self, _mode: QuirksMode) {}
 
     fn append_before_sibling(&self, sibling: &usize, child: NodeOrText<usize>) {
-        // ponytail: misnested markup lands at its parent's end, not before the
-        // sibling; order among siblings is not something a scraper reads here.
         let parent = self.nodes.borrow()[*sibling].parent;
         if let Some(parent) = parent {
-            self.append(&parent, child);
+            self.put(parent, child, Some(*sibling));
         }
     }
 
     fn add_attrs_if_missing(&self, target: &usize, attrs: Vec<Attribute>) {
-        if *target == DROPPED {
+        if *target == DROPPED || !self.live() {
             return;
         }
         let mut nodes = self.nodes.borrow_mut();
         let node = &mut nodes[*target];
         for attr in attrs {
-            if node.attrs.len() >= self.caps.attrs {
+            if node.attrs.len() >= self.caps.attrs || self.units.get() >= self.caps.nodes {
                 break;
             }
             if !node.attrs.iter().any(|a| a.name == attr.name) {
                 node.attrs.push(attr);
+                self.units.set(self.units.get() + 1);
             }
         }
     }
 
     fn remove_from_parent(&self, target: &usize) {
-        if *target == DROPPED {
+        if *target == DROPPED || !self.live() {
             return;
         }
         let mut nodes = self.nodes.borrow_mut();
         if let Some(parent) = nodes[*target].parent.take() {
-            nodes[parent].children.retain(|c| c != target);
+            let siblings = &mut nodes[parent].children;
+            if let Some(at) = siblings.iter().rposition(|c| c == target) {
+                siblings.remove(at);
+            }
         }
     }
 
     fn reparent_children(&self, node: &usize, new_parent: &usize) {
-        if *node == DROPPED || *new_parent == DROPPED {
+        if *node == DROPPED || *new_parent == DROPPED || !self.live() {
             return;
         }
         let children = std::mem::take(&mut self.nodes.borrow_mut()[*node].children);
         for child in children {
-            self.attach(*new_parent, child);
+            self.attach(*new_parent, child, None);
         }
     }
 }

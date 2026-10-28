@@ -20,7 +20,7 @@ pub unsafe extern "C" fn mq_probe(script: *const c_char, html: *const c_char) ->
         }
     });
     let script = script.to_string_lossy().into_owned();
-    let out = engine::call(script, Default::default(), Default::default(), tx).join();
+    let out = engine::call(script, Default::default(), Default::default(), tx).map(|t| t.join());
     let doc = dom::parse(&html.to_string_lossy(), Caps::default(), || false);
     format!("{out:?} {:?}", doc.stopped).len() + doc.nodes.len()
 }
