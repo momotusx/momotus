@@ -456,17 +456,6 @@ private fun Info(
                 focusRequester = if (TitleCopy.live(primary, target)) focus.requesterFor(PLAY) else null,
                 onFocusChange = focus.watch(ACTIONS, PLAY),
             )
-            // Always there once there is something to play, so focus on it is never pulled out from under the viewer.
-            if (target != null) {
-                RoundButton(
-                    icon = Icons.Layers,
-                    label = "Versions",
-                    onClick = { onVersions(target.videoId) },
-                    showLabel = true,
-                    focusRequester = focus.requesterFor("versions"),
-                    onFocusChange = focus.watch(ACTIONS, "versions"),
-                )
-            }
             details.trailers.firstOrNull()?.let { trailer ->
                 RoundButton(
                     icon = Icons.Film,
@@ -500,6 +489,21 @@ private fun Info(
                     onFocusChange = focus.watch(ACTIONS, "watched"),
                 )
             }
+            // After Watched, as DECISION orders the title page. Always there once there is something to play, so
+            // focus on it is never pulled out from under the viewer.
+            if (target != null) {
+                RoundButton(
+                    icon = Icons.Layers,
+                    label = "Versions",
+                    onClick = { onVersions(target.videoId) },
+                    showLabel = true,
+                    focusRequester = focus.requesterFor("versions"),
+                    onFocusChange = focus.watch(ACTIONS, "versions"),
+                )
+            }
+            // TV has no remove on its tiles: the page carries it while the title is in Continue Watching (the header
+            // says so from its first render, so the row never grows after it is drawn).
+            if (header.continuing && onUncontinue != null) Uncontinue(onUncontinue, focus)
         }
         if (target == null) {
             StatusNote(TitleCopy.nothingToPlay(header.nextAirs), Modifier.widthIn(max = 640.dp))

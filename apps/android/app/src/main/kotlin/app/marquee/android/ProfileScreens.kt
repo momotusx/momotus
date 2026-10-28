@@ -25,6 +25,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.relocation.bringIntoViewRequester
@@ -91,7 +92,6 @@ import app.marquee.design.Status
 import app.marquee.design.StatusWord
 import app.marquee.design.TextRole
 import app.marquee.design.Tokens
-import app.marquee.design.avatarColor
 import app.marquee.design.focusClickable
 import app.marquee.design.focusPalette
 import app.marquee.design.focusSoon
@@ -884,14 +884,24 @@ fun EditProfileScreen(
     val mine = p != null && p.id == s.active
     val owner = s.profiles.firstOrNull { it.id == s.active }?.isOwner == true
     val scope = rememberCoroutineScope()
-    val trakt = (LocalContext.current.applicationContext as MarqueeApp).trakt
+    val context = LocalContext.current
     val colors = Marquee.colors
     val start =
         remember(id) { ProfileCopy.parseAvatar(p?.avatar ?: ProfileCopy.nextAvatar(s.profiles.map { it.avatar })) }
-    var name by remember(id) { mutableStateOf(p?.name.orEmpty()) }
-    var glyph by remember(id) { mutableStateOf(start.glyph) }
-    var color by remember(id) { mutableStateOf(start.color ?: "ember") }
-    var touched by remember(id) { mutableStateOf(false) }
+    // The draft survives a rotation or the process dying behind the page; the PIN steps hold no digit of it.
+    var name by rememberSaveable(id) { mutableStateOf(p?.name.orEmpty()) }
+    var glyph by rememberSaveable(id) { mutableStateOf(start.glyph) }
+    // No color to choose (design/DECISION.md, Profiles): a profile keeps the grey step it was given.
+    val color = start.color ?: "ember"
+    var touched by rememberSaveable(id) { mutableStateOf(false) }
+    // Back with a changed name or picture asks first; what is stored now is the baseline, so a save makes it clean.
+    val stored = p?.let { ProfileCopy.parseAvatar(it.avatar) } ?: start
+    val dirty = name.trim() != p?.name.orEmpty() || glyph != stored.glyph
+    var askDiscard by remember { mutableStateOf(false) }
+    val keepEditing = remember { FocusRequester() }
+    var saving by remember { mutableStateOf(false) }
+    // The PIN of someone else, or one this version cannot read, goes after a question: it reaches every device.
+    var askPin by remember { mutableStateOf(false) }
     var said by remember { mutableStateOf<Pair<String, Status>?>(null) }
     var flow by remember { mutableStateOf<PinFlow?>(null) }
     // The stored PIN came from a newer version: it can only be removed (the core lets its owner do
@@ -978,6 +988,9 @@ fun EditProfileScreen(
             said = ProfileCopy.problem("badName", "") to Status.Bad
             return
         }
+        // One save at a time: a second tap while the core has the first would add the profile twice.
+        if (saving) return
+        saving = true
         scope.launch {
             said =
                 try {
@@ -997,12 +1010,24 @@ fun EditProfileScreen(
                     throw e
                 } catch (e: Exception) {
                     ((tried(e) as? Tried.Problem)?.text ?: "That did not work.") to Status.Bad
+                } finally {
+                    saving = false
                 }
         }
     }
 
+    val list = rememberLazyListState()
+    BackHandler(dirty && !left) { askDiscard = !askDiscard }
+    LaunchedEffect(askDiscard) {
+        if (!askDiscard) return@LaunchedEffect
+        list.animateScrollToItem(0)
+        withFrameNanos { }
+        runCatching { keepEditing.requestFocus() }
+    }
+
     LazyColumn(
         Modifier.fillMaxSize().focusRestorer(),
+        state = list,
         contentPadding = pagePadding(framed = false),
         verticalArrangement = Arrangement.spacedBy(Marquee.space.m),
     ) {
@@ -1016,6 +1041,21 @@ fun EditProfileScreen(
                     "Edit ${p!!.name}"
                 },
             )
+        }
+        if (askDiscard) {
+            item(key = "discard") {
+                Column(
+                    Modifier.padding(horizontal = Marquee.safe.side),
+                    verticalArrangement = Arrangement.spacedBy(Marquee.space.s),
+                ) {
+                    MqText(if (isNew) "Discard this profile?" else "Discard your changes?", role = TextRole.Body)
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(Marquee.space.xs)) {
+                        // Keep is the primary, the destructive word the plain secondary (design/DECISION.md).
+                        PrimaryButton("Keep editing", { askDiscard = false }, focusRequester = keepEditing)
+                        SecondaryButton("Discard", { leave() })
+                    }
+                }
+            }
         }
         item(key = "form") {
             Column(
@@ -1060,27 +1100,7 @@ fun EditProfileScreen(
                         }
                     }
                 }
-                MqText("COLOR", role = TextRole.Caption, color = colors.dim, weight = FontWeight.Bold)
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    ProfileCopy.COLORS.forEach { c ->
-                        Choice(selected = color == c, label = c.replaceFirstChar { it.uppercase() }, onClick = {
-                            color = c
-                            touched = true
-                        }) {
-                            Box(
-                                Modifier
-                                    .size(if (Marquee.form == Form.Tv) 64.dp else 48.dp)
-                                    .clip(CircleShape)
-                                    .background(avatarColor(c) ?: colors.raised),
-                                contentAlignment = Alignment.Center,
-                            ) { if (color == c) MqIcon(Icons.Check, tint = Color.White) }
-                        }
-                    }
-                }
-                PrimaryButton(if (isNew) "Add profile" else "Save", ::save, icon = Icons.Check)
+                PrimaryButton(if (isNew) "Add profile" else "Save", ::save, icon = Icons.Check, enabled = !saving)
                 said?.let { (text, tone) -> StatusWord(text, tone) }
             }
         }
@@ -1098,20 +1118,36 @@ fun EditProfileScreen(
 
                         mine && unreadable -> {
                             Note(ProfileCopy.problem("pinUnreadable", ""), side = 0.dp)
-                            SecondaryButton("Remove PIN", focusRequester = removeUnreadable, onClick = {
-                                scope.launch {
-                                    said =
-                                        try {
-                                            session.ops.setPin(p.id, null)
-                                            unreadable = false
-                                            "PIN removed" to Status.Ok
-                                        } catch (e: CancellationException) {
-                                            throw e
-                                        } catch (e: Exception) {
-                                            ((tried(e) as? Tried.Problem)?.text ?: "That did not work.") to Status.Bad
+                            if (askPin) {
+                                RemovePinAsk(
+                                    "Remove this PIN? The profile opens for anyone until a new one is set.",
+                                    onRemove = {
+                                        askPin = false
+                                        scope.launch {
+                                            said =
+                                                try {
+                                                    session.ops.setPin(p.id, null)
+                                                    unreadable = false
+                                                    "PIN removed" to Status.Ok
+                                                } catch (e: CancellationException) {
+                                                    throw e
+                                                } catch (e: Exception) {
+                                                    ((tried(e) as? Tried.Problem)?.text ?: "That did not work.") to
+                                                        Status.Bad
+                                                }
                                         }
-                                }
-                            })
+                                    },
+                                    onKeep = {
+                                        askPin = false
+                                        scope.launch {
+                                            withFrameNanos { }
+                                            runCatching { removeUnreadable.requestFocus() }
+                                        }
+                                    },
+                                )
+                            } else {
+                                SecondaryButton("Remove PIN", { askPin = true }, focusRequester = removeUnreadable)
+                            }
                         }
 
                         mine && !p.hasPin -> {
@@ -1126,19 +1162,39 @@ fun EditProfileScreen(
                         }
 
                         owner && p.hasPin -> {
-                            SecondaryButton("Remove ${p.name}'s PIN", {
-                                scope.launch {
-                                    said =
-                                        try {
-                                            session.ops.setPin(p.id, null)
-                                            "${p.name}'s PIN was removed." to Status.Ok
-                                        } catch (e: CancellationException) {
-                                            throw e
-                                        } catch (e: Exception) {
-                                            ((tried(e) as? Tried.Problem)?.text ?: "That did not work.") to Status.Bad
+                            if (askPin) {
+                                RemovePinAsk(
+                                    "Remove ${p.name}'s PIN? Only ${p.name} can set a new one, from their own profile.",
+                                    onRemove = {
+                                        askPin = false
+                                        scope.launch {
+                                            said =
+                                                try {
+                                                    session.ops.setPin(p.id, null)
+                                                    "${p.name}'s PIN was removed." to Status.Ok
+                                                } catch (e: CancellationException) {
+                                                    throw e
+                                                } catch (e: Exception) {
+                                                    ((tried(e) as? Tried.Problem)?.text ?: "That did not work.") to
+                                                        Status.Bad
+                                                }
                                         }
-                                }
-                            })
+                                    },
+                                    onKeep = {
+                                        askPin = false
+                                        scope.launch {
+                                            withFrameNanos { }
+                                            runCatching { removeUnreadable.requestFocus() }
+                                        }
+                                    },
+                                )
+                            } else {
+                                SecondaryButton(
+                                    "Remove ${p.name}'s PIN",
+                                    { askPin = true },
+                                    focusRequester = removeUnreadable,
+                                )
+                            }
                         }
 
                         owner -> {
@@ -1173,14 +1229,14 @@ fun EditProfileScreen(
                         )
                         FlowRow(horizontalArrangement = Arrangement.spacedBy(Marquee.space.xs)) {
                             // One delete at a time: while it is with the core, neither Delete nor Keep acts.
-                            PrimaryButton("Delete ${p.name}", {
+                            SecondaryButton("Delete ${p.name}", {
                                 if (!deleting) {
                                     deleting = true
                                     scope.launch {
                                         try {
                                             session.ops.deleteProfile(p.id)
                                             // Its Trakt sign-in leaves the keystore (the core's gone push does it too).
-                                            trakt.forget(p.id)
+                                            (context.applicationContext as MarqueeApp).trakt.forget(p.id)
                                             leave()
                                         } catch (e: CancellationException) {
                                             throw e
@@ -1195,7 +1251,7 @@ fun EditProfileScreen(
                                     }
                                 }
                             }, icon = Icons.Trash, enabled = !deleting)
-                            SecondaryButton("Keep", { swapDelete(false) }, focusRequester = keep, enabled = !deleting)
+                            PrimaryButton("Keep", { swapDelete(false) }, focusRequester = keep, enabled = !deleting)
                         }
                     }
                 }
@@ -1204,7 +1260,32 @@ fun EditProfileScreen(
     }
 }
 
-/** A picture or color choice: selected is the white ring; spoken by its name with its state. */
+/**
+ * The question before a PIN goes without being typed: Keep is the primary and gets the focus, the destructive word
+ * the plain secondary (design/DECISION.md, Destructive).
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun RemovePinAsk(
+    question: String,
+    onRemove: () -> Unit,
+    onKeep: () -> Unit,
+) {
+    val keep = remember { FocusRequester() }
+    LaunchedEffect(Unit) {
+        withFrameNanos { }
+        runCatching { keep.requestFocus() }
+    }
+    Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.s)) {
+        MqText(question, role = TextRole.Body)
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(Marquee.space.xs)) {
+            PrimaryButton("Keep", onKeep, focusRequester = keep)
+            SecondaryButton("Remove PIN", onRemove)
+        }
+    }
+}
+
+/** A picture choice: selected is the white ring; spoken by its name with its state. */
 @Composable
 private fun Choice(
     selected: Boolean,

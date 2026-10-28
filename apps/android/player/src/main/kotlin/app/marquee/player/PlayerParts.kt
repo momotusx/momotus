@@ -89,7 +89,6 @@ import app.marquee.core.model.Segment
 import app.marquee.core.model.SubtitleSize
 import app.marquee.core.model.TraktPlayback
 import app.marquee.design.ButtonFocused
-import app.marquee.design.CapsLabel
 import app.marquee.design.FocusInk
 import app.marquee.design.Form
 import app.marquee.design.Icons
@@ -839,8 +838,6 @@ fun EndCard(
     val tv = Marquee.form == Form.Tv
     Box(modifier.background(Color.Black.copy(alpha = 0.72f)), contentAlignment = Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            // What ended, as on the web: a capitals kicker over the name.
-            CapsLabel("Finished", color = colors.muted)
             MqText(title, role = TextRole.Title1, maxLines = 2, textAlign = TextAlign.Center)
             if (next != null) {
                 MqText(

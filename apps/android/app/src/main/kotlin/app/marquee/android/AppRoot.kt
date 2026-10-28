@@ -570,6 +570,7 @@ private fun AppNav(
                             session,
                             ::open,
                             onCalendar = if (tv) null else ({ backStack.add(Route.Calendar) }),
+                            onDiscover = { choose(Route.Discover) },
                         )
                     }
                     entry<Route.Calendar> {

@@ -1,10 +1,9 @@
 package app.marquee.design
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -17,13 +16,12 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.dp
 
 /**
  * A profile's avatar (plans/m11-profiles.md, P1 apps D): a glyph or the name's [letter], white on
- * one of the avatar color tokens, in a rounded square. [glyph] and [color] are ids already parsed
- * (an unknown glyph is "letter", an unknown color null, drawn on `raised`). It is decoration: the
- * name beside it is what a screen reader reads.
+ * one of the avatar color tokens, in a circle (design/DECISION.md, Profiles). [glyph] and [color] are ids
+ * already parsed (an unknown glyph is "letter", an unknown color null, drawn on `raised`). It is decoration:
+ * the name beside it is what a screen reader reads.
  */
 @Composable
 fun AvatarArt(
@@ -36,14 +34,12 @@ fun AvatarArt(
     lit: Boolean = false,
 ) {
     val colors = Marquee.colors
-    val shape = RoundedCornerShape(size * 0.2f)
     val ink = if (lit) colors.onPrimary else Color.White
     Box(
         modifier
             .size(size)
-            .clip(shape)
+            .clip(CircleShape)
             .background(if (lit) colors.primary else avatarColor(color) ?: colors.raised)
-            .border(1.dp, Color.White.copy(alpha = 0.08f), shape)
             .clearAndSetSemantics { },
         contentAlignment = Alignment.Center,
     ) {

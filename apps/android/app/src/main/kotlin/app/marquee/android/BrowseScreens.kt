@@ -1010,6 +1010,8 @@ fun LibraryScreen(
     onOpen: (Tile) -> Unit,
     /** The phone's Calendar row at the top, where the TV has a Calendar tab; null shows none. */
     onCalendar: (() -> Unit)? = null,
+    /** An empty library's way on: Discover. */
+    onDiscover: (() -> Unit)? = null,
 ) {
     val holder =
         viewModel<LibraryHolder>(
@@ -1061,7 +1063,10 @@ fun LibraryScreen(
 
             snapshot.items.isEmpty() && snapshot.kind == null -> {
                 full("empty") {
-                    Note("Your library is empty. Add a title from its page and it shows here.", side = 0.dp)
+                    Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.s)) {
+                        Note("Your library is empty. Add a title from its page and it shows here.", side = 0.dp)
+                        onDiscover?.let { SecondaryButton("Discover", it, icon = Icons.Compass) }
+                    }
                 }
             }
 
