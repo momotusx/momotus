@@ -461,10 +461,10 @@ pub struct Downloads {
     /// Each row's version as last parsed, with the text it came from: the
     /// queue reads every row twice a second (code review r1 m9).
     versions: Mutex<HashMap<String, (String, Arc<Version>)>>,
-    /// Torrent files being let go, by hash and file: a run of the same
-    /// file waits for its release (code review r3 N2).
+    /// Torrent files being let go, by hash: a run of the same torrent
+    /// waits for every release of it (code review r3 N2, r5 R5-2).
     #[cfg(feature = "torrent")]
-    releasing: Mutex<HashMap<(String, usize), tokio::task::JoinHandle<()>>>,
+    releasing: Mutex<Vec<(String, tokio::task::JoinHandle<()>)>>,
 }
 
 /// A smart download's step, kept on the episode it finished (4.14).
@@ -1136,11 +1136,13 @@ impl Downloads {
 
     #[cfg(feature = "torrent")]
     fn delete_torrent_file(&self, core: &Core, id: &str, t: TorrentRef) {
-        let (core, id, key) = (core.clone(), id.to_owned(), (t.hash.clone(), t.file));
-        let task = tokio::spawn(async move { forget_torrent(&core, &id, t).await });
+        let (core, id, hash) = (core.clone(), id.to_owned(), t.hash.clone());
+        // Listed under the lock it is spawned in: a run that looks for it
+        // meanwhile finds it (code review r5 R5-3).
         let mut releasing = lock(&self.releasing);
-        releasing.retain(|_, task| !task.is_finished());
-        releasing.insert(key, task);
+        releasing.retain(|(_, task)| !task.is_finished());
+        let task = tokio::spawn(async move { forget_torrent(&core, &id, t).await });
+        releasing.push((hash, task));
     }
 
     /// The kept file of `video_id` of `item_id` could not be played (its
@@ -2441,11 +2443,17 @@ pub fn short_backoff_for_tests() {
 static SLOW_RELEASES: Mutex<std::collections::BTreeSet<String>> =
     Mutex::new(std::collections::BTreeSet::new());
 
-/// Tests: the release of torrent `hash`'s files waits 5 s.
+/// Tests: the release of torrent `hash`'s files waits 5 s while `slow`.
 #[cfg(feature = "test-hooks")]
 #[doc(hidden)]
-pub fn slow_release_for_tests(hash: &str) {
-    lock(&SLOW_RELEASES).insert(hash.to_ascii_lowercase());
+pub fn slow_release_for_tests(hash: &str, slow: bool) {
+    let hash = hash.to_ascii_lowercase();
+    let mut slows = lock(&SLOW_RELEASES);
+    if slow {
+        slows.insert(hash);
+    } else {
+        slows.remove(&hash);
+    }
 }
 
 /// The downloads, for an op that changes them: a kids profile changes

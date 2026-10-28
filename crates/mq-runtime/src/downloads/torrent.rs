@@ -18,6 +18,8 @@ const SAVE_EVERY: Duration = Duration::from_secs(5);
 /// A swarm that gives nothing for this long, the job allowed to fetch the
 /// whole time, is given up for the pick's next source (4.3).
 const STALL: Duration = Duration::from_secs(600);
+/// The longest a run waits for an earlier release of its torrent.
+const RELEASE_WAIT: Duration = Duration::from_secs(60);
 
 /// Fetches `stream` (a torrent) for the job `row` with the engine.
 pub(super) async fn fetch(
@@ -48,14 +50,17 @@ pub(super) async fn fetch(
     };
     // A file of this torrent let go a moment ago (a retry, a remove and
     // add again) is let go before this run adds it: the release may remove
-    // the torrent itself (code review r3 N2).
+    // the torrent itself (code review r3 N2). A release stuck past a minute
+    // is left behind (code review r5 R5-1).
     let hash = info_hash.to_ascii_lowercase();
     let releases: Vec<_> = super::lock(&d.releasing)
-        .extract_if(|(h, _), _| *h == hash)
+        .extract_if(.., |(h, _)| *h == hash)
         .map(|(_, release)| release)
         .collect();
     for release in releases {
-        let _ = release.await;
+        if tokio::time::timeout(RELEASE_WAIT, release).await.is_err() {
+            tracing::warn!("download {}: a release of its torrent is stuck", row.id);
+        }
     }
     let t = match engine.add_magnet(info_hash, trackers, &[]).await {
         Ok(t) => t,

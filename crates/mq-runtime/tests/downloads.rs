@@ -1262,7 +1262,7 @@ async fn a_torrent_removed_and_added_again_downloads_whole() {
     });
     let core = core_with(addon_listing(stream, Duration::ZERO).await).await;
     core.set_torrent_engine(s.leecher.clone());
-    mq_runtime::downloads::slow_release_for_tests(&s.info_hash);
+    mq_runtime::downloads::slow_release_for_tests(&s.info_hash, true);
     let ids = mq_runtime::downloads::add(&core, movie()).await.unwrap();
     until(&core, &ids[0], "done", |r| r.state == DownloadState::Done).await;
     core.downloads()
@@ -1285,6 +1285,7 @@ async fn a_torrent_removed_and_added_again_downloads_whole() {
         1,
         "the old release let the new download's file go"
     );
+    mq_runtime::downloads::slow_release_for_tests(&s.info_hash, false);
     core.downloads().set_link(Link {
         offline: true,
         ..Link::default()
