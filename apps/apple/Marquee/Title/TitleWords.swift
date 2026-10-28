@@ -253,3 +253,16 @@ enum TitlePlay: Equatable {
         return backOnly.contains(empty.kind) ? .inert : .versions
     }
 }
+
+/// What the title page shows while it has no details: Loading, or the reason it failed
+/// (the header's own failure, else the failed open, which leaves no header at all).
+enum TitleFallback: Equatable {
+    case loading
+    case failed(String)
+}
+
+func titleFallback(header: TitleState?, failure: String?) -> TitleFallback {
+    if case .failed(let reason) = header { return .failed(reason) }
+    if header == nil, let failure { return .failed(failure) }
+    return .loading
+}

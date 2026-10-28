@@ -129,7 +129,7 @@ struct TitleScreen: View {
         ScrollView(.vertical) {
             VStack(alignment: .leading, spacing: Theme.Space.l) {
                 hero
-                if let failure = model.failure {
+                if let failure = model.failure, fallback != .failed(failure) {
                     StateLine(symbol: "triangle-alert", text: failure)
                         .padding(.horizontal, metrics.gutter)
                 }
@@ -151,7 +151,7 @@ struct TitleScreen: View {
                     if !metrics.wide, let details { phoneWords(details) }
                     // Why Resume cannot start, under the hero, never over the art.
                     VersionNote(target: model.header?.playTarget, versions: versions?.snapshot, failure: versions?.failure)
-                    if let failure = model.failure {
+                    if let failure = model.failure, fallback != .failed(failure) {
                         StateLine(symbol: "triangle-alert", text: failure)
                     }
                 }
@@ -266,7 +266,7 @@ struct TitleScreen: View {
                 }
                 .ignoresSafeArea(edges: metrics.wide ? [] : .top)
             }
-        } else if case .failed(let reason) = model.header?.state {
+        } else if case .failed(let reason) = fallback {
             StateLine(symbol: "triangle-alert", text: reason, action: ("Try again", model.retry))
                 .padding(.horizontal, metrics.gutter)
                 .padding(.top, Theme.Space.xl)
@@ -476,6 +476,7 @@ struct TitleScreen: View {
     #endif
 
     private var details: TitleDetails? { model.header?.details }
+    private var fallback: TitleFallback { titleFallback(header: model.header?.state, failure: model.failure) }
 
     private var pageVisible: Bool {
         titlePageShows(inFront: inFront, placed: placeShown, active: scenePhase == .active,
@@ -652,7 +653,7 @@ struct TitleScreen: View {
                     runtime: details.runtime, versions: versions?.snapshot, failure: versions?.failure, wide: metrics.wide,
                     play: { play(fromStart: $0) }, focus: $primaryFocused)
                 actions(details)
-            } else if case .failed(let reason) = model.header?.state {
+            } else if case .failed(let reason) = fallback {
                 StateLine(symbol: "triangle-alert", text: reason, action: ("Try again", model.retry))
             } else {
                 Text("Loading details")
