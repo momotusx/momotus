@@ -637,12 +637,21 @@ private struct TopTools: ToolbarContent {
             ToolbarItem(placement: .principal) { Color.clear.frame(width: 1, height: 1) }.sharedBackgroundVisibility(.hidden)
             // One item each.
             ToolbarItem(placement: .primaryAction) { search }.sharedBackgroundVisibility(.hidden)
-            ToolbarItem(placement: .primaryAction) { ProfileButton(size: 32, action: profiles) }.sharedBackgroundVisibility(.hidden)
+            ToolbarItem(placement: .primaryAction) { profile }.sharedBackgroundVisibility(.hidden)
         } else {
             ToolbarItem(placement: .principal) { Color.clear.frame(width: 1, height: 1) }
             ToolbarItem(placement: .primaryAction) { search }
-            ToolbarItem(placement: .primaryAction) { ProfileButton(size: 32, action: profiles) }
+            ToolbarItem(placement: .primaryAction) { profile }
         }
+    }
+
+    /// The window's edge to the profile button's: the page's gutter, as tv.apple.com and the Apple TV app keep
+    /// their top right on the content's column (the owner, 2026-10-28: flush in the corner). The toolbar's own margin
+    /// makes up the last 4.5 pt (measured in the window on macOS 27).
+    static let edge = Metrics.regular.gutter - 4.5
+
+    private var profile: some View {
+        ProfileButton(size: 32, action: profiles).padding(.trailing, Self.edge)
     }
 
     private var search: some View {

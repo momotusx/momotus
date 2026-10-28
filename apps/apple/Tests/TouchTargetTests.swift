@@ -33,5 +33,5 @@ private func source(_ path: String) throws -> String {
     // Read from the sources: a toolbar is not laid out in a hosted view.
     let tools = try body(of: "private struct TopTools: ToolbarContent", in: source("App/RootView.swift"))
     #expect(!tools.contains("HStack"), "Search and the profile button share one toolbar item again")
-    #expect(tools.components(separatedBy: "ProfileButton(size: 32, action: profiles)").count - 1 == 2, "the profile button needs its own item on both macOS paths")
+    #expect(tools.components(separatedBy: "ToolbarItem(placement: .primaryAction) { profile }").count - 1 == 2, "the profile button needs its own item on both macOS paths")
 }
