@@ -169,3 +169,39 @@ for (const form of ["tv", "desktop", "phone"] as const) {
     await context.close();
   });
 }
+
+/** Every avatar on the page that shows, and whether each is a circle (and the editor's picks with their rings). */
+const avatarShapes = (page: Page) =>
+  page.evaluate(() =>
+    [...document.querySelectorAll<HTMLElement>(".avatar, .glyph-pick")]
+      .filter((el) => el.offsetWidth > 0)
+      .map((el) => {
+        const r = getComputedStyle(el).borderTopLeftRadius;
+        const round = r.endsWith("%") ? parseFloat(r) >= 50 : parseFloat(r) >= Math.min(el.offsetWidth, el.offsetHeight) / 2 - 0.5;
+        return { what: `${el.className} ${r}`, round };
+      }),
+  );
+
+for (const form of ["tv", "desktop", "phone"] as const) {
+  test(`${form}: every profile avatar is a circle (the owner's rule)`, async ({ browser }) => {
+    const { context, page } = await open(browser, form);
+    const edit = (await page.locator('[data-f="settings:profile-edit"]').getAttribute("href")) as string;
+    const seen: string[] = [];
+    for (const [path, ready] of [
+      ["/settings", ".set-who .avatar"],
+      ["/", form === "phone" ? ".ph-top .avatar" : ".pavatar .avatar"],
+      ["/profiles", ".ptile .avatar"],
+      ["/profiles/manage", ".prow .avatar"],
+      [edit, ".glyph-pick .avatar"],
+    ] as const) {
+      await page.goto(`${path}?form=${form}`);
+      await expect(page.locator(ready).first()).toBeVisible({ timeout: 30_000 });
+      for (const a of await avatarShapes(page)) {
+        seen.push(path);
+        expect(a.round, `${path}: ${a.what}`).toBe(true);
+      }
+    }
+    expect(new Set(seen).size).toBe(5);
+    await context.close();
+  });
+}

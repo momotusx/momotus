@@ -206,7 +206,7 @@ h1, h2, h3 { font-family: var(--font-display); font-weight: var(--weight-heading
   [data-form="desktop"] .nav-field svg { width: calc(16 * var(--px)); height: calc(16 * var(--px)); }
 }
 [data-form="desktop"] .nav.pavatar { height: auto; margin: 0; padding: 0; }
-[data-form="desktop"] .nav.pavatar .avatar-s { width: calc(28 * var(--px)); height: calc(28 * var(--px)); border-radius: 50%; font-size: calc(13 * var(--px)); }
+[data-form="desktop"] .nav.pavatar .avatar-s { width: calc(28 * var(--px)); height: calc(28 * var(--px)); font-size: calc(13 * var(--px)); }
 @media (hover: hover) { [data-form="desktop"] .nav:hover { color: var(--text); } }
 
 /* Behind the pill once the page scrolls: a scrim of the page color, so what

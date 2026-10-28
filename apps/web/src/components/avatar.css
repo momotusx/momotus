@@ -1,4 +1,4 @@
-/* Profile avatars: white glyph or letter on a solid avatar token, no gradients. */
+/* Profile avatars: circles (the owner's rule), a white glyph or letter on a solid avatar token, no gradients. */
 /* The fill comes in a property (AvatarArt), so a focus rule can still turn it white and lay a sheen on it. */
 /* A circle, filled, with no edge (design/DECISION.md, Profiles). */
 .avatar { display: inline-grid; place-items: center; flex: none; color: #fff; background-color: var(--avatar-fill, var(--raised)); border-radius: 50%; }
