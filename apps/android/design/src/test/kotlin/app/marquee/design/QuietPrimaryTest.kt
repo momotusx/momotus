@@ -8,16 +8,17 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.toPixelMap
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.unit.dp
 import org.junit.Rule
 import org.junit.Test
@@ -37,7 +38,6 @@ class QuietPrimaryTest {
     val compose = createComposeRule()
 
     private var quiet by mutableStateOf(false)
-    private val focus = FocusRequester()
 
     private var buttons: MutableIntState? = null
 
@@ -46,7 +46,7 @@ class QuietPrimaryTest {
             MarqueeTheme(form) {
                 buttons = LocalButtonFocus.current
                 Box(Modifier.background(Color.Black).padding(8.dp).testTag("frame")) {
-                    PrimaryButton("Save", {}, focusRequester = focus, quiet = quiet)
+                    PrimaryButton("Save", {}, quiet = quiet)
                 }
             }
         }
@@ -69,7 +69,7 @@ class QuietPrimaryTest {
     @Test
     fun `a focus held on the button stays when it turns quiet and back`() {
         show()
-        compose.runOnIdle { focus.requestFocus() }
+        compose.onNodeWithText("Save").performSemanticsAction(SemanticsActions.RequestFocus)
         compose.onNodeWithText("Save").assertIsFocused()
         quiet = true
         compose.waitForIdle()
@@ -82,7 +82,7 @@ class QuietPrimaryTest {
     @Test
     fun `on TV a focused quiet primary counts as a focused button, a focused plain one does not`() {
         show(Form.Tv)
-        compose.runOnIdle { focus.requestFocus() }
+        compose.onNodeWithText("Save").performSemanticsAction(SemanticsActions.RequestFocus)
         compose.runOnIdle { assertEquals(0, buttons!!.intValue) }
         quiet = true
         compose.waitForIdle()

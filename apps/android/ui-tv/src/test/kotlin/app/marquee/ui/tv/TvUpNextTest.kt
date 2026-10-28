@@ -60,6 +60,8 @@ class TvUpNextTest {
     /** Playing with autoplay on and a next episode, in the last seconds of a ten-minute file: the card shows. */
     private fun nearTheEnd() {
         controller.next = NextEpisode("tt1:1:2", "The Second", 1, 2)
+        // No source is loaded here, so the tick that reads the length never runs: the ten minutes are set.
+        controller.durationMs = 600_000
         compose.setContent {
             MarqueeTheme(Form.Tv) {
                 TvPlayer(controller, true, {}, null, { next, _ -> started += next.videoId }, {})

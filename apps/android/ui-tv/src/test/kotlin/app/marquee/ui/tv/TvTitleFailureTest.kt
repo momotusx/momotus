@@ -72,16 +72,18 @@ class TvTitleFailureTest {
                 )
             }
         }
-        compose.onAllNodesWithText("This title could not load").assertCountEquals(0)
+        compose.onAllNodesWithText("This title could not load", useUnmergedTree = true).assertCountEquals(0)
         view.open()
         val deadline = System.currentTimeMillis() + 120_000
-        while (compose.onAllNodesWithText("This title could not load").fetchSemanticsNodes().isEmpty()) {
+        // The words sit under a live region, which is read by TalkBack and hides them from the merged tree.
+        val drawn = { compose.onAllNodesWithText("This title could not load", useUnmergedTree = true) }
+        while (drawn().fetchSemanticsNodes().isEmpty()) {
             check(System.currentTimeMillis() < deadline) { "the failure never drew" }
             Snapshot.sendApplyNotifications()
             compose.waitForIdle()
             Thread.sleep(10)
         }
-        compose.onNodeWithText("The core did not open").assertExists()
+        compose.onNodeWithText("The core did not open", useUnmergedTree = true).assertExists()
         compose.onNodeWithText("Try again").assertHasClickAction()
     }
 }

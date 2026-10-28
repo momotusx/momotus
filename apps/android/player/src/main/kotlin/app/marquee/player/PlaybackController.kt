@@ -143,8 +143,8 @@ class PlaybackController(
     var positionMs by mutableLongStateOf(0L)
         private set
 
+    @set:VisibleForTesting(otherwise = VisibleForTesting.PRIVATE)
     var durationMs by mutableLongStateOf(0L)
-        private set
 
     var bufferedMs by mutableLongStateOf(0L)
         private set

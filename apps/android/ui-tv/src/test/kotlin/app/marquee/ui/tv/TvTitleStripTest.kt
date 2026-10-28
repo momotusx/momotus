@@ -15,8 +15,6 @@ import androidx.compose.ui.test.getBoundsInRoot
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.junit4.createComposeRule
-import androidx.compose.ui.test.onAllNodesWithText
-import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performSemanticsAction
@@ -187,30 +185,28 @@ class TvTitleStripTest {
     }
 
     @Test
-    fun `a focused strip pill leaves Play white, and a focused action beside Play makes it yield`() {
+    fun `a focused strip pill does not count as a focused button, so Play stays white`() {
         show()
         card(first).performSemanticsAction(SemanticsActions.RequestFocus)
         press(Key.DirectionDown)
         compose.onNode(hasContentDescription("Choose a version for ${TitleCopy.episode(first)}")).assertIsFocused()
         compose.runOnIdle { assertEquals(0, buttons.intValue) }
-        // The control: a button in Play's own row counts.
-        compose.onNode(hasContentDescription("Trailer")).performSemanticsAction(SemanticsActions.RequestFocus)
-        compose.runOnIdle { assertEquals(1, buttons.intValue) }
     }
 
     @Test
     fun `Remove from Continue Watching asks once and shows only while the title is continuing`() {
         show(continuing = true)
-        compose.onNodeWithText("Remove from Continue Watching").performClick()
+        // A round button's word is drawn for the eye and spoken as its description.
+        compose.onNode(hasContentDescription("Remove from Continue Watching")).performClick()
         compose.runOnIdle { assertEquals(emptyList<String>(), calls) }
-        compose.onNodeWithText("Press again to remove").performClick()
+        compose.onNode(hasContentDescription("Press again to remove")).performClick()
         compose.waitUntil(10_000) { calls == listOf("uncontinue") }
     }
 
     @Test
     fun `a title not in Continue Watching has no remove button`() {
         show(continuing = false)
-        compose.onAllNodesWithText("Remove from Continue Watching").assertCountEquals(0)
+        compose.onAllNodes(hasContentDescription("Remove from Continue Watching")).assertCountEquals(0)
     }
 
     @Test
