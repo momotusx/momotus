@@ -1,5 +1,7 @@
 import { type BrowserContext, expect, type Page, test } from "@playwright/test";
 import { drawnContrast, WHITE_PNG } from "./contrast";
+import { PORTS } from "./core";
+import { patchedContext } from "./patch";
 
 /** First run B4 (design/DECISION.md, the owner's pick of 2026-10-28): the question steps are a 2.39:1 film frame
  * holding a still with the question as its subtitle, the choices in the bar under it. */
@@ -13,8 +15,14 @@ async function open(context: BrowserContext, form: Form, step: string) {
   await expect(page.locator(".welcome h1").first()).toBeVisible({ timeout: 30_000 });
   return page;
 }
-const device = (browser: import("@playwright/test").Browser, form: Form, size = SIZE[form]) =>
-  browser.newContext({ viewport: { width: size[0], height: size[1] }, isMobile: form === "phone", hasTouch: form === "phone", reducedMotion: "reduce" });
+/** A device whose profile has no subtitle language yet, whatever other specs set on the shared core: the subtitles
+ * step shows instead of passing by. `raw`: the core's messages as they are, for a spec that routes them itself. */
+const device = async (browser: import("@playwright/test").Browser, form: Form, size = SIZE[form], raw = false) => {
+  const options = { viewport: { width: size[0], height: size[1] }, isMobile: form === "phone", hasTouch: form === "phone", reducedMotion: "reduce" as const };
+  if (raw) return browser.newContext(options);
+  const { context } = await patchedContext(browser, PORTS.bridge, options, (view, snapshot) => (view === "settings" ? { ...snapshot, subtitleLanguages: [] } : snapshot));
+  return context;
+};
 const focused = (page: Page) => page.evaluate(() => (document.activeElement as HTMLElement | null)?.dataset.f ?? null);
 /** The core answers `firstRunStill` with nothing (offline, past its budget). */
 const noStill = (context: BrowserContext) =>
@@ -82,7 +90,7 @@ test("desktop: a step change puts the focus on the step's heading", async ({ bro
 });
 
 test("no still: the frame stays black with its question", async ({ browser }) => {
-  const context = await device(browser, "desktop");
+  const context = await device(browser, "desktop", SIZE.desktop, true);
   await noStill(context);
   const page = await open(context, "desktop", "doors");
   await expect(page.locator(".film h1")).toHaveText("How would you like to begin?");
