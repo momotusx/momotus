@@ -17,9 +17,11 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -1075,6 +1077,18 @@ fun EditProfileScreen(
         runCatching { saveButton.requestFocus() }
         askDiscard = false
         closingDiscard = false
+    }
+    // On TV, a keyboard that closes leaves focus in the name field, and the first remote Back then goes to the field
+    // and not to the page's guard: focus moves to Save when the keyboard goes, so that Back reaches the page.
+    val keyboard = WindowInsets.isImeVisible
+    var keyboardWasUp by remember { mutableStateOf(false) }
+    LaunchedEffect(keyboard) {
+        if (keyboard) {
+            keyboardWasUp = true
+        } else if (keyboardWasUp) {
+            keyboardWasUp = false
+            if (Marquee.form == Form.Tv) runCatching { saveButton.requestFocus() }
+        }
     }
     // While a question is open its safe button is the screen's one white: Save draws as a secondary.
     val asking = askDiscard || askPin || confirmDelete

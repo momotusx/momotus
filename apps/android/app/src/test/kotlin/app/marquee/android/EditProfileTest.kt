@@ -21,6 +21,11 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.requestFocus
+import androidx.core.graphics.Insets
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
 import app.marquee.core.client.CoreJson
 import app.marquee.core.model.ProfileInfo
 import app.marquee.core.model.ProfilesSnapshot
@@ -112,10 +117,11 @@ class EditProfileTest {
 
     private fun edit(
         id: String?,
+        form: Form = Form.Phone,
         onDone: () -> Unit = {},
     ) {
         core()
-        compose.setContent { MarqueeTheme(Form.Phone) { EditProfileScreen(gate, session, id, onDone) } }
+        compose.setContent { MarqueeTheme(form) { EditProfileScreen(gate, session, id, onDone) } }
         until("the page") { compose.onAllNodesWithContentDescription("Name").fetchSemanticsNodes().isNotEmpty() }
     }
 
@@ -225,6 +231,45 @@ class EditProfileTest {
         compose.onAllNodesWithText("Discard your changes?").assertCountEquals(0)
         compose.onNodeWithText("Save").assertIsFocused()
         name().assertIsNotFocused()
+    }
+
+    private fun keyboard(visible: Boolean) =
+        compose.runOnIdle {
+            ViewCompat.dispatchApplyWindowInsets(
+                compose.activity.window.decorView,
+                WindowInsetsCompat
+                    .Builder()
+                    .setInsets(WindowInsetsCompat.Type.ime(), Insets.of(0, 0, 0, if (visible) 300 else 0))
+                    .setVisible(WindowInsetsCompat.Type.ime(), visible)
+                    .build(),
+            )
+        }
+
+    @Test
+    fun `on TV a keyboard that closes hands focus to Save, so the first Back reaches the guard`() {
+        edit("p1", Form.Tv)
+        compose.runOnUiThread { WindowCompat.setDecorFitsSystemWindows(compose.activity.window, false) }
+        name().requestFocus()
+        name().assertIsFocused()
+        keyboard(visible = true)
+        compose.waitForIdle()
+        name().assertIsFocused()
+        keyboard(visible = false)
+        compose.waitForIdle()
+        compose.onNodeWithText("Save").assertIsFocused()
+        name().assertIsNotFocused()
+    }
+
+    @Test
+    fun `on the phone a keyboard that closes leaves focus where it was`() {
+        edit("p1")
+        compose.runOnUiThread { WindowCompat.setDecorFitsSystemWindows(compose.activity.window, false) }
+        name().requestFocus()
+        keyboard(visible = true)
+        compose.waitForIdle()
+        keyboard(visible = false)
+        compose.waitForIdle()
+        name().assertIsFocused()
     }
 
     @Test
