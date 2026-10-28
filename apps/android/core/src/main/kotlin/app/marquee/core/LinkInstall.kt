@@ -58,6 +58,9 @@ class LinkInstall(
     // Bumped for a new profile: a request from before must not land on the new profile's pages.
     private var generation = 0
 
+    // Bumped when the field that asked for a check goes or changes: that check's answer lands nowhere.
+    private var asked = 0
+
     /**
      * Adds the addon [install] names (it returns the addon's name; its argument says whether the
      * user confirmed a link that carries a sign-in); [added] runs on success, for the field to clear.
@@ -99,19 +102,20 @@ class LinkInstall(
     ): Job? {
         if (busy || checked != null) return null
         val mine = generation
+        val ask = ++asked
         said = Said(InstallSheetCopy.CHECKING, failed = false, pending = true)
         return scope.launch {
             val after =
                 try {
                     val addon = preview(url, acknowledgeToken)
-                    if (mine == generation) checked = Checked(url, addon, acknowledgeToken)
+                    if (mine == generation && ask == asked) checked = Checked(url, addon, acknowledgeToken)
                     null
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
                     refused(e, acknowledgeToken)
                 }
-            if (mine == generation) said = after
+            if (mine == generation && ask == asked) said = after
         }
     }
 
@@ -141,9 +145,27 @@ class LinkInstall(
             Said("Adding the addon did not work: ${InstallCards.wordsOf(e)}", failed = true)
         }
 
-    /** The field changed after a sign-in warning: the warning was about the old link, so it goes. */
+    /**
+     * The field changed: a sign-in warning was about the old link, so it goes, and so does a check still
+     * running for it (its sheet would show a link the field no longer holds).
+     */
     fun edited() {
         if (said?.token == true) said = null
+        dropCheck()
+    }
+
+    /**
+     * The field that asked left its page: a running check lands nowhere and an open sheet closes, so the
+     * sheet never shows up on another page. An add already sent goes on.
+     */
+    fun left() {
+        dropCheck()
+        checked = null
+    }
+
+    private fun dropCheck() {
+        asked++
+        if (said?.pending == true && said?.words == InstallSheetCopy.CHECKING) said = null
     }
 
     /** A new profile: nothing of the last one's add shows, and one still running lands nowhere. */

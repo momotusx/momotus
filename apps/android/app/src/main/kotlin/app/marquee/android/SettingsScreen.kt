@@ -644,7 +644,8 @@ internal fun LinkField(
     val said = link.said?.let { Said(Place.Install, it.words, it.failed, it.pending) }
     // What clears the field once the sheet's Install added its link.
     var clear by remember { mutableStateOf({}) }
-    val scope = rememberCoroutineScope()
+    // The sheet belongs to this field: when it leaves, a check still running lands nowhere and an open sheet goes.
+    DisposableEffect(link) { onDispose { link.left() } }
     // A link whose settings carry a sign-in is refused first; the user's confirm sends the field's
     // link (an edit drops the warning, so it is the link warned about), acknowledged.
     InstallField(
@@ -662,7 +663,7 @@ internal fun LinkField(
         link.check(url, acknowledged, session.ops::previewAddon)
     }
     // Nothing installs from the link before this sheet's Install (plans/addon-install-sheet.md). Cancel keeps the
-    // link in the field and gives the focus back to Add, which "Checking" had turned off.
+    // link in the field; the focus goes back to Add.
     link.checked?.let { checked ->
         val addon = checked.addon
         InstallSheet(
@@ -671,16 +672,11 @@ internal fun LinkField(
             addon.provides,
             addon.types,
             onInstall = { link.confirm({ url, ack -> session.ops.installAddon(url, ack).name }, clear) },
-            onCancel = {
-                link.cancel()
-                scope.launch { focusSoon(focus, CANCEL_FOCUS_FRAMES) }
-            },
+            onCancel = link::cancel,
+            opener = focus,
         )
     }
 }
-
-/** Frames Add is asked for the focus after a Cancel (about 0.5 s), while the sheet's window goes. */
-private const val CANCEL_FOCUS_FRAMES = 30
 
 /** A field for an addon link (https, http or stremio://) and the button that adds it. */
 @Composable
@@ -717,7 +713,9 @@ internal fun InstallField(
     val add = {
         if (!busy && text.isNotBlank()) {
             keyboard?.hide()
-            onInstall(text.trim(), false) { text = "" }
+            val url = text.trim()
+            // Cleared only when it still holds the link that went in.
+            onInstall(url, false) { if (text.trim() == url) text = "" }
         }
     }
     val field: @Composable (Modifier) -> Unit = { modifier ->
@@ -764,7 +762,10 @@ internal fun InstallField(
             if (warned) {
                 SecondaryButton(
                     LinkInstall.TOKEN_CONFIRM,
-                    { if (!busy) onInstall(text.trim(), true) { text = "" } },
+                    {
+                        val url = text.trim()
+                        if (!busy) onInstall(url, true) { if (text.trim() == url) text = "" }
+                    },
                     icon = Icons.ShieldAlert,
                 )
             }

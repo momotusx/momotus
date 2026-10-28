@@ -36,13 +36,15 @@ object InstallSheetCopy {
             "anime" to "anime",
         )
 
+    // String.replace is literal: a "$'" or "{host}" in a name stays plain text.
     fun title(name: String) = TITLE.replace("{name}", name)
 
     fun from(host: String) = FROM.replace("{host}", host)
 
     /**
      * "Adds sources and subtitles for movies and series.", each word once in manifest order; empty when
-     * no resource is one of [RESOURCES]. Only addon lists, or no types, says no kinds.
+     * no resource is one of [RESOURCES]. Types are trimmed and lowercased first; only addon lists, or no types,
+     * says no kinds.
      */
     fun adds(
         provides: List<String>,
@@ -50,7 +52,12 @@ object InstallSheetCopy {
     ): String {
         val what = provides.mapNotNull { RESOURCES[it] }.distinct()
         if (what.isEmpty()) return ""
-        val kinds = types.map { KINDS[it] ?: it.lowercase(Locale.ROOT) }.distinct()
+        val kinds =
+            types
+                .map { it.trim().lowercase(Locale.ROOT) }
+                .filter { it.isNotEmpty() }
+                .map { KINDS[it] ?: it }
+                .distinct()
         if (kinds.isEmpty() || what == listOf(RESOURCES.getValue("addon_catalog"))) {
             return ADDS.replace("{what}", joined(what))
         }

@@ -653,9 +653,19 @@ fun FindAddonsScreen(
                 }
             }
         }
-        // Nothing installs from a card before this sheet's Install (plans/addon-install-sheet.md).
+        // Nothing installs from a card before this sheet's Install (plans/addon-install-sheet.md). The
+        // question goes with the screen: back on it later, no old sheet comes up.
+        DisposableEffect(page) { onDispose { page.cancel() } }
         page.asking?.let { entry ->
-            InstallSheet(entry.name, entry.host, entry.provides, entry.types, page::confirm, page::cancel)
+            InstallSheet(
+                entry.name,
+                entry.host,
+                entry.provides,
+                entry.types,
+                page::confirm,
+                page::cancel,
+                opener = cardFocus[entry.key],
+            )
         }
     }
 }
@@ -672,6 +682,8 @@ internal fun InstallSheet(
     types: List<String>,
     onInstall: () -> Unit,
     onCancel: () -> Unit,
+    /** What takes the focus back when it closes: the card or the field's Add. */
+    opener: FocusRequester? = null,
 ) = ConfirmSheet(
     InstallSheetCopy.title(name),
     InstallSheetCopy.lines(host, provides, types),
@@ -679,6 +691,7 @@ internal fun InstallSheet(
     InstallSheetCopy.CANCEL,
     onConfirm = onInstall,
     onCancel = onCancel,
+    opener = opener,
 )
 
 /** Frames a focus landing tries for (about 1.5 s): the list may still be on its way. */
@@ -785,7 +798,7 @@ private fun Card(
     memory: CardMemory,
     sameName: Boolean,
     state: InstallCards.State?,
-    /** TV: each card's requester by entry key, while it is composed. */
+    /** Each card's stop (TV) or button (phone) by entry key, while it is composed. */
     focus: HashMap<String, FocusRequester>,
     onFocus: () -> Unit,
     onPress: (Action) -> Unit,
@@ -851,11 +864,13 @@ private fun Card(
             memory.landed = false
         }
     }
-    if (tv) {
-        DisposableEffect(entry.key, requester) {
-            focus[entry.key] = requester
-            onDispose { if (focus[entry.key] === requester) focus.remove(entry.key) }
-        }
+    // The card's one stop on TV, its Install or Turn on button on a phone: TV landings go there, and the install
+    // sheet gives the focus back to it.
+    val button = remember { FocusRequester() }
+    val stop = if (tv) requester else button
+    DisposableEffect(entry.key, stop) {
+        focus[entry.key] = stop
+        onDispose { if (focus[entry.key] === stop) focus.remove(entry.key) }
     }
     FocusInk(colors) {
         Column(
@@ -1011,6 +1026,7 @@ private fun Card(
                             icon = if (action is Action.TurnOn) Icons.Power else Icons.Plus,
                             busy = busy,
                             spoken = pressWords,
+                            focusRequester = button,
                             onFocusChange = { owned.changed(it, buttonGone) },
                         )
                     }

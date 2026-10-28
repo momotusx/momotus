@@ -176,6 +176,31 @@ class LinkInstallTest {
         }
 
     @Test
+    fun `a check for a link the field no longer holds, or from a field that left, opens no sheet`() =
+        runTest {
+            val link = LinkInstall(backgroundScope)
+            val reply = CompletableDeferred<AddonInfo>()
+            link.check("https://a.example/manifest.json") { _, _ -> reply.await() }
+            runCurrent()
+            // The field changed while Checking: that answer lands nowhere.
+            link.edited()
+            assertNull(link.said)
+            assertTrue(!link.busy)
+            reply.complete(info("Old"))
+            runCurrent()
+            assertNull(link.checked)
+            assertNull(link.said)
+
+            // The field left its page with the sheet open: the sheet goes, nothing installs.
+            link.check("https://b.example/manifest.json") { _, _ -> info("B") }
+            runCurrent()
+            assertEquals("B", link.checked?.addon?.name)
+            link.left()
+            assertNull(link.checked)
+            assertNull(link.confirm({ _, _ -> "never" }))
+        }
+
+    @Test
     fun `a link the core cannot read stays under the field with no sheet`() =
         runTest {
             val link = LinkInstall(backgroundScope)

@@ -8,6 +8,7 @@ import kotlinx.serialization.json.jsonPrimitive
 import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 /** The install sheet's words and Adds line against the shared file the web and Apple read too. */
 class InstallSheetCopyTest {
@@ -43,12 +44,22 @@ class InstallSheetCopyTest {
     @Test
     fun `the Adds line follows every shared vector`() {
         val vectors = shared.getValue("vectors").jsonArray.map { it.jsonObject }
-        assertEquals(10, vectors.size)
+        assertTrue(vectors.size >= 13, "${vectors.size} vectors")
         for (v in vectors) {
             val provides = strings(v, "provides")
             val types = strings(v, "types")
             val line = v.getValue("line").jsonPrimitive.content
             assertEquals(line, InstallSheetCopy.adds(provides, types), "$provides $types")
+        }
+    }
+
+    @Test
+    fun `a name goes into the title as plain text`() {
+        val vectors = shared.getValue("titleVectors").jsonArray.map { it.jsonObject }
+        assertTrue(vectors.isNotEmpty())
+        for (v in vectors) {
+            val name = v.getValue("name").jsonPrimitive.content
+            assertEquals(v.getValue("title").jsonPrimitive.content, InstallSheetCopy.title(name), name)
         }
     }
 
