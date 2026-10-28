@@ -52,7 +52,8 @@ fn pin(name: &str, snapshot: &impl Serialize) {
 }
 
 /// This run's own values read as fixed ones: a loopback port as 1, a
-/// 64-hex token as zeros, a clock time as 0.
+/// 64-hex token as zeros, a clock time as 0, this machine's free space as
+/// unknown (every build reads it, plans/offline-downloads.md 4.9).
 fn steady(value: &mut Value) {
     match value {
         Value::String(s) => *s = steady_text(s),
@@ -61,6 +62,8 @@ fn steady(value: &mut Value) {
             for (key, field) in fields.iter_mut() {
                 if CLOCK.contains(&key.as_str()) && field.is_number() {
                     *field = 0.into();
+                } else if key == "freeBytes" {
+                    *field = Value::Null;
                 } else {
                     steady(field);
                 }
