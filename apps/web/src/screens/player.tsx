@@ -1225,7 +1225,6 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
               when={next()}
               fallback={
                 <>
-                  <p class="kicker">Finished</p>
                   <h2>{ctx.details()?.name}</h2>
                   <div class="acts">
                     {/* Back goes where the viewer came from: it names the title

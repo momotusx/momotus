@@ -782,6 +782,56 @@ test("the player: no control holds focus out of sight; the picture holds it whil
   await context.close();
 });
 
+test("tv player: the controls bar draws focus as the white fill with no ring, the menus over the picture keep theirs", async ({ browser }) => {
+  const { context, page: p } = await page(browser, { width: 1920, height: 1080 });
+  await p.goto("/play/movie/mqjm/mqjm?form=tv");
+  await expect(p.locator('[data-f="player:toggle"]')).toBeVisible({ timeout: 30_000 });
+  await startIfPaused(p);
+  const look = (key: string) =>
+    p.locator(`[data-f="${key}"]`).evaluate((el) => {
+      const s = getComputedStyle(el);
+      return { ring: s.outlineStyle === "none" ? "0px" : s.outlineWidth, fill: s.backgroundColor };
+    });
+  // Play and pause, and a pill: white with no ring.
+  for (const key of ["player:toggle", "player:audio"]) {
+    await p.locator(`[data-f="${key}"]`).focus();
+    await expect.poll(() => look(key)).toEqual({ ring: "0px", fill: "rgba(255, 255, 255, 0.92)" });
+  }
+  // The audio menu opens on its first row, which keeps the player's ring.
+  await p.keyboard.press("Enter");
+  await expect(p.locator(".panel .opt").first()).toBeVisible();
+  await expect.poll(() => p.evaluate(() => document.activeElement?.classList.contains("opt") ?? false)).toBe(true);
+  const row = await p.evaluate(() => {
+    const s = getComputedStyle(document.activeElement as Element);
+    return { ring: s.outlineStyle === "none" ? "0px" : s.outlineWidth };
+  });
+  expect(row.ring).toBe("4px");
+  await context.close();
+});
+
+for (const { form, viewport, reach } of [
+  { form: "desktop", viewport: { width: 1440, height: 900 }, reach: 9 },
+  { form: "phone", viewport: { width: 390, height: 844 }, reach: 18 },
+] as const) {
+  test(`${form}: the scrubber's hit area reaches past the thin bar (${form === "desktop" ? 24 : 44} CSS px)`, async ({ browser }) => {
+    const { context, page: p } = await page(browser, viewport);
+    await p.goto(`/play/movie/mqjm/mqjm?form=${form}`);
+    await expect(p.locator('[data-f="player:toggle"]')).toBeVisible({ timeout: 30_000 });
+    await startIfPaused(p);
+    await p.evaluate(() => document.querySelector("video")?.pause());
+    const bar = await p.locator(".scrub").boundingBox();
+    if (!bar) throw new Error("no progress bar");
+    // The bar is a few CSS px tall; the press lands well outside it and still seeks, to where it is along the bar.
+    expect(bar.height).toBeLessThan(10);
+    const total = await p.evaluate(() => document.querySelector("video")?.duration ?? 0);
+    await p.mouse.move(bar.x + bar.width * 0.8, bar.y + bar.height / 2 + reach);
+    await p.mouse.down();
+    await p.mouse.up();
+    await expect.poll(async () => Math.abs((await p.evaluate(() => document.querySelector("video")?.currentTime ?? 0)) - total * 0.8)).toBeLessThan(total * 0.04);
+    await context.close();
+  });
+}
+
 test("Start over beside Resume plays the same video from its beginning", async ({ browser }) => {
   await seedFilm(240_000);
   const { context, page: p } = await page(browser);

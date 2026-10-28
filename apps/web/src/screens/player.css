@@ -55,6 +55,10 @@ html[data-engine="mpv"] .player-scr.started .player-bd { opacity: 0; }
 .scrub .pos { background: var(--text); }
 .scrub .knob { position: absolute; top: 50%; width: 22px; height: 22px; margin: -11px 0 0 -11px; border-radius: 50%; background: var(--text); }
 .scrub:focus-visible, [data-form="tv"] .scrub:focus { outline-offset: 10px; border-radius: 4px; }
+/* The bar is 5 CSS px thin: the hit area around it is 24 CSS px on a desktop and 44 on a phone (WCAG 2.5.8), drawn nothing. */
+.scrub::before { content: ""; position: absolute; left: 0; right: 0; top: 50%; height: max(100%, calc(24 * var(--px, 1px))); translate: 0 -50%; }
+[data-form="phone"] .scrub::before { height: 44px; }
+.scrub:focus-visible .knob, [data-form="tv"] .scrub:focus .knob { width: 30px; height: 30px; margin: -15px 0 0 -15px; }
 .ctl { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; margin-top: 34px; }
 .transport { grid-column: 2; display: flex; gap: 26px; align-items: center; }
 /* Desktop only: mute, level and full screen at the row's start. */
@@ -90,6 +94,13 @@ html[data-engine="mpv"] .player-scr.started .player-bd { opacity: 0; }
 /* The core still asks for subtitles: a small spinner after the count. */
 .pa small svg.mark { width: 1em; height: 1em; margin-left: .35em; vertical-align: -.15em; }
 .pa:focus-visible, [data-form="tv"] .pa:focus { background: color-mix(in srgb, var(--text) 12%, transparent); transform: scale(var(--focus-scale-card)); }
+/* TV: the controls bar draws focus as every other control does, the white fill with dark words and the lift, never a ring
+ * (design/DECISION.md, TV focus). The menus over the picture (.opt) keep the player's ring until they are rebuilt. */
+[data-form="tv"] .osd { --focus-ring: 0px; }
+[data-form="tv"] .osd :is(.round, .pa):focus { --text: var(--on-primary); --muted: rgba(0, 0, 0, .64); background: var(--primary); color: var(--on-primary); box-shadow: var(--lift-focus-edge); }
+[data-form="tv"] .osd .scrub:focus { outline: none; background: color-mix(in srgb, var(--text) 45%, transparent); }
+[data-form="tv"] .osd .scrub:focus .knob { box-shadow: var(--lift-focus-edge); }
+@media (hover: hover) { [data-form="desktop"] .pa:hover { background: color-mix(in srgb, var(--text) 8%, transparent); } }
 
 .panel { position: absolute; z-index: 2; right: var(--safe-side); bottom: 300px; width: 640px; max-height: 620px; display: flex; flex-direction: column;
   padding: 28px 24px; border-radius: var(--radius-l); }
