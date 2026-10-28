@@ -562,23 +562,22 @@ test("profiles: an Add whose Save was answered after Keep editing is an edit of 
   }
 });
 
-test("profiles: unsaved edits are asked about by the browser before a reload or a closed tab, saved ones are not", async ({ page }) => {
+test("profiles: the unload handler asks while edits are unsaved and stays quiet when they are not", async ({ page }) => {
   await openEdit(page, "default");
   const name = page.locator('[data-f="pedit:name"]');
   const was = await name.inputValue();
-  const dialogs: string[] = [];
-  page.on("dialog", (d) => {
-    dialogs.push(d.type());
-    void d.dismiss();
-  });
+  // The browser's own prompt needs a user gesture a test cannot give it; the handler's contract is what the page owns: a
+  // cancelable beforeunload is cancelled (which is what makes the browser ask) only while the editor holds unsaved edits.
+  const asks = () =>
+    page.evaluate(() => {
+      const e = new Event("beforeunload", { cancelable: true });
+      window.dispatchEvent(e);
+      return e.defaultPrevented;
+    });
+  expect(await asks()).toBe(false);
   await name.fill(`${was} edited`);
-  await page.close({ runBeforeUnload: true });
-  // Stayed: the browser asked, and the answer was to stay.
-  expect(dialogs).toEqual(["beforeunload"]);
-  expect(page.isClosed()).toBe(false);
+  expect(await asks()).toBe(true);
   // Back to what was stored: nothing to lose, nothing to ask.
   await name.fill(was);
-  await page.close({ runBeforeUnload: true });
-  expect(dialogs).toEqual(["beforeunload"]);
-  expect(page.isClosed()).toBe(true);
+  expect(await asks()).toBe(false);
 });

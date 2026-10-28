@@ -227,7 +227,7 @@ test("the sort badge on a TV poster keeps the 23 point floor", async ({ browser 
   await pick(page, "sorts", /^IMDb rating/);
   const corner = page.locator(".grid .tile .corner").first();
   await expect(corner).toBeVisible({ timeout: 30_000 });
-  expect(await corner.evaluate((el) => Number.parseFloat(getComputedStyle(el).fontSize))).toBeGreaterThanOrEqual(23);
+  await expect.poll(() => corner.evaluate((el) => Number.parseFloat(getComputedStyle(el).fontSize))).toBeGreaterThanOrEqual(23);
   await page.context().close();
 });
 
