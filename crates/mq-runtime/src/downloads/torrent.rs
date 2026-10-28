@@ -97,6 +97,12 @@ pub(super) async fn fetch(
             .map(|(_, e)| e.to_ascii_lowercase());
         row.version = serde_json::to_string(&version).ok();
     }
+    // The same file let go a moment ago (a retry, a remove and add again)
+    // is let go before this run takes it (code review r3 N2).
+    let release = super::lock(&d.releasing).remove(&(info_hash.to_ascii_lowercase(), file));
+    if let Some(release) = release {
+        let _ = release.await;
+    }
     row.bytes_total = Some(len as i64);
     save_run(core, row);
     let held = row.bytes_done.max(0) as u64;

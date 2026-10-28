@@ -1271,9 +1271,11 @@ impl PlaybackView {
         // downloads.md 4.8, code review r1 m4). After good playback a
         // hiccup leaves the file as it is (code review r2 N2).
         if local && matches!(kind, Some("unreadable" | "decode")) {
-            self.core
-                .downloads()
-                .bad_file(&self.target.item_id, &self.target.video_id);
+            self.core.downloads().bad_file(
+                &self.target.item_id,
+                &self.target.video_id,
+                kind == Some("unreadable"),
+            );
         }
         // Written and reported outside the playback's lock.
         if let Some(stream) = &failed {

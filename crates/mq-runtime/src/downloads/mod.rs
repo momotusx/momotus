@@ -114,6 +114,12 @@ impl DownloadState {
     fn read(word: &str) -> Self {
         serde_json::from_value(serde_json::Value::String(word.to_owned())).unwrap_or(Self::Queued)
     }
+
+    /// A download in this state may hold part of its file to play: not
+    /// done yet, and neither failed nor gone (code review r3 N4).
+    pub(crate) fn holds_part(self) -> bool {
+        !matches!(self, Self::Done | Self::Failed | Self::Missing)
+    }
 }
 
 impl DownloadReason {
@@ -455,6 +461,10 @@ pub struct Downloads {
     /// Each row's version as last parsed, with the text it came from: the
     /// queue reads every row twice a second (code review r1 m9).
     versions: Mutex<HashMap<String, (String, Arc<Version>)>>,
+    /// Torrent files being let go, by hash and file: a run of the same
+    /// file waits for its release (code review r3 N2).
+    #[cfg(feature = "torrent")]
+    releasing: Mutex<HashMap<(String, usize), tokio::task::JoinHandle<()>>>,
 }
 
 /// A smart download's step, kept on the episode it finished (4.14).
@@ -562,6 +572,8 @@ impl Downloads {
             pending: Mutex::default(),
             smart_waits: Mutex::default(),
             versions: Mutex::default(),
+            #[cfg(feature = "torrent")]
+            releasing: Mutex::default(),
         })
     }
 
@@ -943,7 +955,7 @@ impl Downloads {
                 if record.version.is_some() {
                     self.release_torrent(&core, &stored);
                 }
-                self.forget_files(&stored.id);
+                self.forget_video(&stored.id, record.version.is_some());
                 self.update(&core, &stored.id, |r| {
                     if !matches!(
                         DownloadState::read(&r.state),
@@ -958,6 +970,8 @@ impl Downloads {
                     if record.version.is_some() {
                         r.version = record.version.clone();
                         r.hand_picked = true;
+                        r.subtitles = "[]".into();
+                        r.subtitles_state = "pending".into();
                     }
                     true
                 });
@@ -1045,7 +1059,12 @@ impl Downloads {
                             )
                         });
                     if let Some(row) = &again {
-                        self.forget_files(id);
+                        // A new pick, or a purged folder, keeps no subtitle.
+                        let missing = DownloadState::read(&row.state) == DownloadState::Missing;
+                        self.forget_video(id, !row.hand_picked || missing);
+                        // A purged folder took the poster and still too.
+                        let facts = serde_json::from_str(&row.facts).unwrap_or_default();
+                        self.fetch_images(&core, &[(id.clone(), facts)]);
                         // A new pick may take another torrent file: this one
                         // is no longer kept (code review r1 m1).
                         if !row.hand_picked {
@@ -1063,6 +1082,10 @@ impl Downloads {
                             if !r.hand_picked {
                                 r.version = None;
                                 r.bytes_total = None;
+                            }
+                            if !r.hand_picked || state == DownloadState::Missing {
+                                r.subtitles = "[]".into();
+                                r.subtitles_state = "pending".into();
                             }
                             changed = true;
                         }
@@ -1108,25 +1131,31 @@ impl Downloads {
 
     #[cfg(feature = "torrent")]
     fn delete_torrent_file(&self, core: &Core, id: &str, t: TorrentRef) {
-        let (core, id) = (core.clone(), id.to_owned());
-        tokio::spawn(async move { forget_torrent(&core, &id, t).await });
+        let (core, id, key) = (core.clone(), id.to_owned(), (t.hash.clone(), t.file));
+        let task = tokio::spawn(async move { forget_torrent(&core, &id, t).await });
+        let mut releasing = lock(&self.releasing);
+        releasing.retain(|_, task| !task.is_finished());
+        releasing.insert(key, task);
     }
 
     /// The kept file of `video_id` of `item_id` could not be played (its
     /// container or its video): a done download reads "Couldn't download"
-    /// with "Try again" (4.8).
-    pub(crate) fn bad_file(&self, item_id: &str, video_id: &str) {
+    /// with "Try again" (4.8), and a file gone from the disk "Download
+    /// again" (code review r3 N3). An unreadable whole file still fails:
+    /// the players say "unreadable" for a container they cannot parse too,
+    /// which its length does not show.
+    pub(crate) fn bad_file(&self, item_id: &str, video_id: &str, unreadable: bool) {
         let Some(core) = self.core() else { return };
         let Ok(Some(row)) = core.library().download_of(item_id, video_id) else {
             return;
         };
-        let failed = self.shift(
-            &core,
-            &row.id,
-            DownloadState::Done,
-            DownloadState::Failed,
-            Some(DownloadReason::Source),
-        );
+        let gone = unreadable && !self.file_of(&row).is_some_and(|f| f.exists());
+        let (to, reason) = if gone {
+            (DownloadState::Missing, None)
+        } else {
+            (DownloadState::Failed, Some(DownloadReason::Source))
+        };
+        let failed = self.shift(&core, &row.id, DownloadState::Done, to, reason);
         if failed.is_some() {
             self.changed();
         }
@@ -1182,7 +1211,7 @@ impl Downloads {
             .filter(|r| {
                 r.item_id == item_id
                     && r.bytes_done > 0
-                    && !matches!(r.state, DownloadState::Failed | DownloadState::Missing)
+                    && (r.state == DownloadState::Done || r.state.holds_part())
             })
             .collect();
         let first = rows.first()?;
@@ -1333,6 +1362,24 @@ impl Downloads {
         }
     }
 
+    /// A download started over: its video goes, its poster and still stay,
+    /// and its kept subtitles too unless `subtitles` (its version may
+    /// change, and kept subtitles belong to a version) (code review r3 N1).
+    fn forget_video(&self, id: &str, subtitles: bool) {
+        let Ok(entries) = std::fs::read_dir(self.job_dir(id)) else {
+            return;
+        };
+        for entry in entries.flatten() {
+            let name = entry.file_name();
+            let name = name.to_string_lossy();
+            if name.starts_with("video.") {
+                let _ = std::fs::remove_file(entry.path());
+            } else if subtitles && name == "subs" {
+                let _ = std::fs::remove_dir_all(entry.path());
+            }
+        }
+    }
+
     /// The download of `video_id` of `item_id` that can play now (4.12):
     /// its file, whole, or still being written with what it holds.
     pub(crate) fn local(&self, item_id: &str, video_id: &str) -> Option<(String, Local)> {
@@ -1349,7 +1396,7 @@ impl Downloads {
         let held = if state == DownloadState::Done {
             None
         } else {
-            if row.bytes_done <= 0 {
+            if row.bytes_done <= 0 || !state.holds_part() {
                 return None;
             }
             let running = lock(&self.running);
@@ -1941,12 +1988,19 @@ impl Downloads {
         let core = core.clone();
         tokio::spawn(async move {
             let id = row.id.clone();
+            let job = std::panic::AssertUnwindSafe(run_job(me.clone(), core.clone(), row));
             let outcome = cancel
-                .run_until_cancelled(run_job(me.clone(), core.clone(), row))
+                .run_until_cancelled(futures_util::FutureExt::catch_unwind(job))
                 .await;
             let Some(d) = me.upgrade() else { return };
             if let Some(outcome) = outcome {
-                d.finish(&core, &id, outcome);
+                // A job that panicked fails its row and frees its slot
+                // (code review r3 N6).
+                d.finish(
+                    &core,
+                    &id,
+                    outcome.unwrap_or(Outcome::Fail(DownloadReason::Source)),
+                );
             }
             // A cancelled run was stopped by whoever cancelled it, which
             // wrote its row.
@@ -2209,7 +2263,7 @@ async fn run_job(me: std::sync::Weak<Downloads>, core: Core, mut row: DownloadRe
                 moved.torrent = None;
                 row.version = serde_json::to_string(&moved).ok();
                 if let Some(d) = me.upgrade() {
-                    d.forget_files(&row.id);
+                    d.forget_video(&row.id, false);
                 }
                 save_run(&core, &row);
             }

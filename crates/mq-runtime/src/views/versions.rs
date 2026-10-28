@@ -2287,7 +2287,7 @@ fn rerank(s: &mut State, ranking: &Ranking) {
 fn downloaded(core: &Core, s: &State, ranking: &Ranking) -> Option<RankedRow> {
     let downloads = core.downloads();
     let (stream, row) = downloads.kept(&ranking.item_id, &ranking.params.video_id)?;
-    let partial = row.bytes_done > 0 && row.state != crate::downloads::DownloadState::Done;
+    let partial = row.bytes_done > 0 && row.state.holds_part();
     // Online, a partial torrent plays at once when its start is on disk and
     // its swarm answers now (its reader fetches the rest first); a dead
     // swarm's never beats a ready version (apps r2 P2-2, code review r1

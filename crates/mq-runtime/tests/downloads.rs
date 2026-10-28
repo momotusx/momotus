@@ -1397,6 +1397,97 @@ async fn a_downloads_poster_is_kept_and_served() {
     assert_eq!(&http.get(&poster, &opts).await.unwrap().body[..], POSTER);
 }
 
+/// "Try again" downloads the video again and keeps the rest: the poster
+/// stays, and the subtitles come back with the new pick and play offline
+/// (code review r3 N1).
+#[tokio::test]
+async fn a_retry_keeps_the_poster_and_the_subtitles() {
+    let (url, _) = origin(video(1 << 20), How::default()).await;
+    let stream = serde_json::json!({ "name": "Direct\n1080p", "title": "Sintel.2010.1080p.WEB-DL.mp4", "url": url });
+    let extras = Extras {
+        subtitles: vec![("en1", "eng", false)],
+        public_name: Some("retry.downloads.test"),
+        ..Extras::default()
+    };
+    let core = core_with(addon_serving(stream, Duration::ZERO, extras).await).await;
+    core.set_prefs(&serde_json::json!({ "subtitleLanguages": ["en"] }))
+        .unwrap();
+    let ids = mq_runtime::downloads::add(&core, movie()).await.unwrap();
+    let kept = |r: &DownloadRow| {
+        r.state == DownloadState::Done
+            && r.subtitles == ["en"]
+            && r.poster
+                .as_deref()
+                .is_some_and(|p| p.starts_with("http://127.0.0.1"))
+    };
+    until(&core, &ids[0], "done with its subtitle and poster", &kept).await;
+    // The kept file does not play: "Try again".
+    let playback = play_when(&core, ITEM, ITEM, true).await;
+    playback.fail_over(None, Some("decode"), None, "no frame");
+    until(&core, &ids[0], "failed", |r| {
+        r.state == DownloadState::Failed
+    })
+    .await;
+    drop(playback);
+    // Offline, the file that did not play is not offered (code review r3
+    // N4).
+    core.downloads().set_link(Link {
+        offline: true,
+        ..Link::default()
+    });
+    let view = VersionsView::open(&core, params());
+    tokio::time::sleep(Duration::from_millis(500)).await;
+    let offered = view.snapshot().recommended.and_then(|r| r.on_device);
+    assert_ne!(offered.as_deref(), Some("Downloaded"));
+    drop(view);
+    core.downloads().set_link(Link::default());
+    core.downloads()
+        .act(
+            std::slice::from_ref(&ids[0]),
+            mq_runtime::downloads::Action::Retry { mobile_data: false },
+        )
+        .unwrap();
+    until(&core, &ids[0], "done again with both", &kept).await;
+    let poster = row_of(&core, &ids[0]).unwrap().poster.unwrap();
+    let http = mq_http::HttpClient::new(Default::default()).unwrap();
+    let opts = mq_http::RequestOptions {
+        allow_private: true,
+        ..Default::default()
+    };
+    assert_eq!(&http.get(&poster, &opts).await.unwrap().body[..], POSTER);
+    // Offline, the subtitle plays from its file.
+    core.downloads().set_link(Link {
+        offline: true,
+        ..Link::default()
+    });
+    let view = VersionsView::open(&core, params());
+    let pick = view.snapshot().recommended.unwrap();
+    let playback = PlaybackView::open_picked(&core, view.pick(&pick.key), target(), &view.plays());
+    let deadline = std::time::Instant::now() + Duration::from_secs(20);
+    loop {
+        let s = playback.snapshot();
+        if s.phase == PlaybackPhase::Ready && s.subtitles.len() == 1 {
+            break;
+        }
+        assert!(std::time::Instant::now() < deadline, "{:?}", s.subtitles);
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+}
+
+/// A wipe takes the downloaded files with their rows, not at the next
+/// launch (code review r3 N9).
+#[tokio::test]
+async fn a_wipe_takes_the_downloaded_files() {
+    let (url, _) = origin(video(1 << 20), How::default()).await;
+    let core = core_with(addon(&url, Duration::ZERO).await).await;
+    let ids = mq_runtime::downloads::add(&core, movie()).await.unwrap();
+    until(&core, &ids[0], "done", |r| r.state == DownloadState::Done).await;
+    let folder = core.downloads().job_folder(&ids[0]);
+    assert!(folder.exists());
+    core.wipe().unwrap();
+    assert!(!folder.exists(), "the file stayed");
+}
+
 /// A series with one stream at `url` (slow, so a deletion before e2 is
 /// whole would show), e1 downloaded.
 async fn series_with_e1(slow_bytes: usize) -> (Core, String) {
