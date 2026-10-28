@@ -361,8 +361,11 @@ export function EditProfile() {
   const params = useParams();
   const navigate = useNavigate();
   const s = () => profiles();
-  const isNew = () => !params.id;
-  const p = () => (params.id ? s()?.profiles.find((x) => x.id === params.id) : undefined);
+  // The profile an Add made on this page, once the core has it: later saves on the page update it, never add another.
+  const [created, setCreated] = createSignal<string | null>(null);
+  const id = () => params.id ?? created();
+  const isNew = () => !id();
+  const p = () => (id() ? s()?.profiles.find((x) => x.id === id()) : undefined);
   const mine = () => !!p() && p()?.id === s()?.active;
   const owner = () => s()?.profiles.find((x) => x.id === s()?.active)?.isOwner === true;
   const [name, setName] = createSignal("");
@@ -406,8 +409,10 @@ export function EditProfile() {
     free = true;
     navigate(to, { replace: true });
   };
+  let seen = false;
   createEffect(() => {
-    if (!isNew() && filled && !p()) leave("/profiles/manage");
+    if (p()) seen = true;
+    else if (!isNew() && filled && seen) leave("/profiles/manage");
   });
 
   // Unsaved edits ask before any way out (a tab, Back, Escape, the browser's Back): Save, Discard or Keep editing.
@@ -441,9 +446,15 @@ export function EditProfile() {
     const picture = glyph();
     setSaving(true);
     try {
-      if (isNew()) await op<ProfilesSnapshot>("createProfile", { name: n, avatar: formatAvatar({ glyph: glyph(), color: color() }) });
-      else {
-        const fields: Record<string, unknown> = { profile: p()!.id, name: n };
+      if (isNew()) {
+        const before = new Set(s()?.profiles.map((x) => x.id));
+        const after = await op<ProfilesSnapshot>("createProfile", { name: n, avatar: formatAvatar({ glyph: glyph(), color: color() }) });
+        // The page is now an edit of what it made, with that as its saved state.
+        setCreated(after.profiles.find((x) => !before.has(x.id) && x.name === n)?.id ?? after.profiles.find((x) => !before.has(x.id))?.id ?? null);
+        setBase(n);
+        if (glyph() === picture) setTouched(false);
+      } else {
+        const fields: Record<string, unknown> = { profile: id()!, name: n };
         if (touched()) fields.avatar = formatAvatar({ glyph: glyph(), color: color() });
         await op<ProfilesSnapshot>("updateProfile", fields);
         setBase(n);
@@ -461,7 +472,8 @@ export function EditProfile() {
   };
   const save = async (e: Event) => {
     e.preventDefault();
-    if ((await commit()) && isNew()) leave("/profiles/manage");
+    const adding = isNew();
+    if ((await commit()) && adding) leave("/profiles/manage");
   };
   // The router put the page back with a second popstate (which marked a Back again), and a Back from the TV rail left
   // its "then Home" behind: staying clears both, or a later Save would open its page as a Back.
@@ -469,6 +481,8 @@ export function EditProfile() {
     setAsking(null);
     takeBack();
     takeAfterBack();
+    // What had the focus (a keypad key, the tab) may be gone: the Name field takes it, once the question has returned it.
+    setTimeout(() => (!document.activeElement || document.activeElement === document.body) && nameInput?.focus());
   };
   const goOn = () => {
     const a = asking();

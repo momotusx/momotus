@@ -506,5 +506,39 @@ test("profiles: leaving with the PIN keypad open asks about unsaved edits too", 
   await expect(page.locator(".keypad")).toHaveCount(0);
   await page.locator('[data-f="pedit:leave:keep"]').click();
   await expect(name).toHaveValue(`${was} edited`);
+  // The focus does not fall to the page: the keypad key that had it is gone, so the Name field takes it.
+  await expect(name).toBeFocused();
   await expect(page).toHaveURL(/\/profiles\/edit\/default/);
+});
+
+test("profiles: an Add whose Save was answered after Keep editing is an edit of that profile, never a second Add", async ({ page }) => {
+  const core = await holdAnswers(page, "createProfile");
+  await page.goto("/library?form=desktop");
+  await page.goto("/profiles/new?form=desktop");
+  const name = page.locator('[data-f="pedit:name"]');
+  try {
+    await name.fill("Created Kid");
+    await page.locator('[data-f="nav:/library"]').click();
+    await expect(dialog(page)).toBeVisible();
+    await page.locator('[data-f="pedit:leave:save"]').click();
+    await expect.poll(() => core.sent()).toBe(1);
+    await page.locator('[data-f="pedit:leave:keep"]').click();
+    core.release();
+    await expect.poll(async () => (await names()).filter((n) => n === "Created Kid").length).toBe(1);
+    // A new name and Save: the same profile is renamed, no second one is made.
+    await expect(page.locator("h1")).toHaveText("Edit Created Kid");
+    await name.fill("Created Kid 2");
+    await page.locator('[data-f="pedit:save"]').click();
+    await expect(page.locator(".pedit .st")).toContainText("Saved");
+    const all = (await names()).filter((n) => n.startsWith("Created Kid"));
+    expect(all).toEqual(["Created Kid 2"]);
+    expect(core.sent()).toBe(1);
+  } finally {
+    const c = new Client();
+    try {
+      for (const p of (await picker()).profiles) if (p.name.startsWith("Created Kid")) await c.req("deleteProfile", { profile: p.id }).catch(() => undefined);
+    } finally {
+      c.close();
+    }
+  }
 });
