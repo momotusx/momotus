@@ -21,6 +21,8 @@ struct TitleScreen: View {
     @State private var underBar = false
     /// The page's top content inset, nil until measured (0 is a real answer: a window with no status bar).
     @State private var insetTop: CGFloat?
+    /// The screen's top safe area (status bar and navigation bar), read outside the full-bleed.
+    @State private var safeTop: CGFloat = 0
     /// The window's full height, for the cover (it runs from the screen's top): `fullWindowHeight`.
     @State private var windowHeight: CGFloat = 0
     /// Neither the large cover nor the addon's poster loaded: the backdrop band with the logo.
@@ -83,6 +85,8 @@ struct TitleScreen: View {
         }
         #endif
         .fullBleedTop()
+        // Read outside the full-bleed: inside it the top inset is ignored and reads 0.
+        .onGeometryChange(for: CGFloat.self) { $0.safeAreaInsets.top } action: { safeTop = $0 }
         .onChange(of: shown, initial: true) { _, now in placeShown = now }
         // TMDB and Trakt are asked only while the page shows (`titleVisible`): not under the player or
         // Versions, not in another tab, not with the app in the background.
@@ -274,7 +278,8 @@ struct TitleScreen: View {
         } else if case .failed(let reason) = fallback {
             StateLine(symbol: "triangle-alert", text: reason, action: ("Try again", model.retry), spoken: true)
                 .padding(.horizontal, metrics.gutter)
-                .padding(.top, Theme.Space.xl)
+                // The page runs under the status bar and the floating Back: the line starts below them.
+                .padding(.top, failureTop(safeTop: safeTop))
         } else {
             Text("Loading details")
                 .textFont(Theme.type.callout, relativeTo: .callout)

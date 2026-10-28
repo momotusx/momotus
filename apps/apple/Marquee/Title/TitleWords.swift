@@ -272,3 +272,10 @@ func titleFallback(header: TitleState?, failure: String?) -> TitleFallback {
 func headerAfterRetry(_ header: TitleHeader?) -> TitleHeader? {
     header?.details == nil ? nil : header
 }
+
+/// Where the title page's failure line starts: below the screen's top safe area (the status bar and the
+/// navigation bar with its floating Back, which the full-bleed page runs under) and a gap, and never
+/// higher than the usual top gap (a window with no bar above it).
+func failureTop(safeTop: CGFloat) -> CGFloat {
+    max(safeTop + Theme.Space.m, Theme.Space.xl)
+}

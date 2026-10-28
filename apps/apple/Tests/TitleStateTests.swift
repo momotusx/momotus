@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 
 // What the title page shows while it has no details.
@@ -24,4 +25,13 @@ private func header(_ state: TitleState) -> TitleHeader {
     #expect(headerAfterRetry(header(.failed(reason: "No metadata"))) == nil)
     #expect(headerAfterRetry(nil) == nil)
     #expect(titleFallback(header: headerAfterRetry(header(.failed(reason: "No metadata"))).map(\.state), failure: nil) == .loading)
+}
+
+@Test func theFailureLineStartsBelowTheStatusBarAndTheBackCircle() {
+    // 91 pt of safe area on an iPhone 13 Pro (status bar and navigation bar): the line starts below it.
+    let top: CGFloat = failureTop(safeTop: 91)
+    #expect(top - Theme.Space.m == 91)
+    // A window with no bar above it keeps the usual top gap, never less.
+    #expect(failureTop(safeTop: 0) == Theme.Space.xl)
+    #expect(failureTop(safeTop: 20) >= Theme.Space.xl)
 }
