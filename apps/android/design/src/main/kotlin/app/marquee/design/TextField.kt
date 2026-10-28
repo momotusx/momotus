@@ -20,6 +20,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.autofill.ContentType
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -32,7 +33,9 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.contentType
 import androidx.compose.ui.semantics.editableText
+import androidx.compose.ui.semantics.error
 import androidx.compose.ui.semantics.isEditable
 import androidx.compose.ui.semantics.password
 import androidx.compose.ui.semantics.semantics
@@ -46,7 +49,8 @@ import androidx.compose.ui.unit.dp
 /**
  * A one-line field on a raised pill whose edge turns accent with focus (design/DECISION.md v2).
  * [label] is its spoken name, [placeholder] shows while it is empty; Up and Down leave it on a remote, and
- * select opens the keyboard there ([FieldInput]).
+ * select opens the keyboard there ([FieldInput]). [readOnly] keeps the focus where [enabled] would drop it;
+ * [contentType] is what autofill offers, [error] the line under the field that the field is described by.
  */
 @Composable
 fun MqTextField(
@@ -58,6 +62,9 @@ fun MqTextField(
     keyboardOptions: KeyboardOptions = KeyboardOptions.Default,
     keyboardActions: KeyboardActions = KeyboardActions.Default,
     visualTransformation: VisualTransformation = VisualTransformation.None,
+    readOnly: Boolean = false,
+    contentType: ContentType? = null,
+    error: String? = null,
 ) {
     val tv = Marquee.form == Form.Tv
     var focused by remember { mutableStateOf(false) }
@@ -89,6 +96,9 @@ fun MqTextField(
                 keyboardOptions = keyboardOptions,
                 keyboardActions = keyboardActions,
                 visualTransformation = visualTransformation,
+                readOnly = readOnly,
+                contentType = contentType,
+                error = error,
             )
         }
     }
@@ -114,6 +124,9 @@ fun FieldInput(
     keyboardOptions: KeyboardOptions = KeyboardOptions.Default,
     keyboardActions: KeyboardActions = KeyboardActions.Default,
     visualTransformation: VisualTransformation = VisualTransformation.None,
+    readOnly: Boolean = false,
+    contentType: ContentType? = null,
+    error: String? = null,
 ) {
     val colors = Marquee.colors
     val tv = Marquee.form == Form.Tv
@@ -184,10 +197,14 @@ fun FieldInput(
             keyboardOptions = keyboardOptions,
             keyboardActions = keyboardActions,
             visualTransformation = visualTransformation,
+            readOnly = readOnly,
             modifier =
                 Modifier
                     .fillMaxWidth()
-                    .focusRequester(input)
+                    .semantics {
+                        contentType?.let { this.contentType = it }
+                        error?.let { this.error(it) }
+                    }.focusRequester(input)
                     .onPreviewKeyEvent {
                         // On a TV, Back in the editor (a Fire TV keyboard closes on it and lets it through) makes
                         // the field a button again with the focus kept on it; unhandled, Compose would move the

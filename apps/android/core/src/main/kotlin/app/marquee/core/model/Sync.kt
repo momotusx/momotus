@@ -56,6 +56,15 @@ data class NativeStart(
     override fun toString() = "NativeStart(flow=hidden, expiresMs=$expiresMs)"
 }
 
+/** Reply of `emailSignInStart`: the relay handed a code to its mail service; it takes [flow] until [expiresMs]. */
+@Serializable
+data class EmailStart(
+    val flow: String,
+    val expiresMs: Long,
+) {
+    override fun toString() = "EmailStart(flow=hidden, expiresMs=$expiresMs)"
+}
+
 /** Reply of `recover`: store [record]; [via] is `kit` or `passkey` (only `kit` asks for a new kit). */
 @Serializable
 data class Recovered(

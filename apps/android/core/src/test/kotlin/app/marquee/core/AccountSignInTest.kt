@@ -6,6 +6,7 @@ import app.marquee.core.ScriptedCore.Companion.ok
 import app.marquee.core.sync.AccountSignIn
 import app.marquee.core.sync.AccountSignIn.Step
 import app.marquee.core.sync.BrokeredRun
+import app.marquee.core.sync.EmailCode.Stage
 import app.marquee.core.sync.GoogleAnswer
 import app.marquee.core.sync.GoogleSheet
 import app.marquee.core.sync.PasskeyResult
@@ -58,6 +59,10 @@ class AccountSignInTest {
     }
 
     private val platform = Platform()
+
+    /** The sign-in's clock, for the email screen's 60 s timer. */
+    @Volatile
+    private var clock = 1_000L
     private val sync = SyncAccount(core.ops, MemoryStore(), core.scope)
 
     private fun signIn(nativeGoogle: Boolean = false) =
@@ -76,6 +81,7 @@ class AccountSignInTest {
                 }
             },
             nativeGoogle = nativeGoogle,
+            now = { clock },
         )
 
     init {
@@ -584,5 +590,308 @@ class AccountSignInTest {
             "an Auth Tab run takes its return from the tab only",
         )
         assertTrue(run.returned("momotus://auth#flow=f&code=c&relay=sync.example.org"))
+    }
+
+    // Email (plans/accounts-email.md 4)
+
+    private fun emailRelay(
+        providers: String = "\"mock\",\"google\",\"email\"",
+        takes: (String) -> String = { ok("""{"phase":"new","ticket":"T-$it"}""") },
+    ) {
+        core.answers["relayInfo"] = { ok("""{"providers":[$providers]}""") }
+        var flows = 0
+        core.answers["emailSignInStart"] = { ok("""{"flow":"F${++flows}","expiresMs":${Long.MAX_VALUE}}""") }
+        core.answers["emailSignIn"] = { m -> takes(m.getValue("flow").jsonPrimitive.content) }
+    }
+
+    /** Sign in, Continue with email, an address, Send code: the code stage. */
+    private fun atCode(s: AccountSignIn = signIn()): AccountSignIn {
+        ready(s)
+        s.choose("email")
+        assertEquals(Step.Email, s.step)
+        assertEquals(Stage.Address, s.email.stage)
+        s.email.address = " Zoe@Example.org "
+        s.email.send()
+        core.waitFor("the code stage") { s.email.stage == Stage.Code && !s.email.busy }
+        return s
+    }
+
+    private fun count(op: String) = core.ops().count { it == op }
+
+    private fun noProviderFlow() {
+        assertFalse("subscribe" in core.ops(), "no brokered flow")
+        assertFalse("nativeSignInStart" in core.ops(), "no native flow")
+    }
+
+    @Test
+    fun `email is its own row, not a provider button, and the only way still opens Sign in`() {
+        emailRelay()
+        val s = signIn()
+        ready(s)
+        assertEquals(Step.Start(listOf("google", "mock"), email = true), s.step)
+        emailRelay(providers = "\"email\"")
+        val only = signIn()
+        ready(only)
+        assertEquals(Step.Start(emptyList(), email = true), only.step)
+        core.answers["relayInfo"] = { ok("""{"providers":["mock"]}""") }
+        val none = signIn()
+        ready(none)
+        assertEquals(Step.Start(listOf("mock"), email = false), none.step)
+    }
+
+    @Test
+    fun `the address gets a code, and six digits sign in once, as a provider's found or new`() {
+        emailRelay()
+        val s = atCode()
+        val start = core.last("emailSignInStart")
+        assertEquals(server, start.getValue("server").jsonPrimitive.content)
+        assertEquals("Zoe@Example.org", start.getValue("email").jsonPrimitive.content)
+        assertEquals("Zoe@Example.org", s.email.sentTo)
+        s.email.type("12a 45")
+        assertEquals("1245", s.email.code, "digits only")
+        assertFalse("emailSignIn" in core.ops())
+        s.email.type("123-4567")
+        assertEquals("123456", s.email.code, "cut at six")
+        s.email.submit()
+        core.waitFor("new") { s.step == Step.New }
+        assertEquals(1, count("emailSignIn"), "sent once, Go or not")
+        val take = core.last("emailSignIn")
+        assertEquals("F1", take.getValue("flow").jsonPrimitive.content)
+        assertEquals("123456", take.getValue("code").jsonPrimitive.content)
+        assertEquals("email", s.held!!.provider)
+        noProviderFlow()
+    }
+
+    @Test
+    fun `a malformed address says so under the field and stays on the address stage`() {
+        emailRelay()
+        core.answers["emailSignInStart"] = { fail("badAddress") }
+        val s = signIn()
+        ready(s)
+        s.choose("email")
+        s.email.address = "nope"
+        s.email.send()
+        core.waitFor("said") { s.email.fieldError != null }
+        assertEquals(AccountCopy.BAD_ADDRESS, s.email.fieldError)
+        assertNull(s.email.failure)
+        assertEquals(Step.Email, s.step)
+        assertEquals(Stage.Address, s.email.stage)
+        assertEquals("nope", s.email.address, "the address is kept")
+    }
+
+    @Test
+    fun `a wrong code keeps the code stage and clears the field`() {
+        for (answer in listOf("wrongCode", "badCode")) {
+            emailRelay(takes = { fail(answer) })
+            val s = atCode()
+            s.email.type("111111")
+            core.waitFor("said") { s.email.fieldError != null }
+            assertEquals(AccountCopy.WRONG_CODE, s.email.fieldError, answer)
+            assertEquals("", s.email.code, "the field is cleared")
+            assertEquals(Step.Email, s.step)
+            assertEquals(Stage.Code, s.email.stage)
+            assertFalse(s.email.ended, "the flow stays: ask again")
+            assertNull(s.email.failure)
+        }
+    }
+
+    @Test
+    fun `a used-up code shows codeExpired with its actions, and Send a new code mails one`() {
+        for (answer in listOf("ticketExpired", "wrongFlow")) {
+            emailRelay(takes = { fail(answer) })
+            val s = atCode()
+            s.email.type("123456")
+            core.waitFor("said") { s.email.failure != null }
+            assertEquals(AccountCopy.CODE_EXPIRED, s.email.failure!!.text, answer)
+            assertEquals(
+                listOf(Act.Resend, Act.OtherAddress),
+                s.email.failure!!
+                    .actions
+                    .map { it.act },
+            )
+            assertTrue(s.email.ended, "read-only")
+            assertEquals("123456", s.email.code, "kept")
+            s.email.type("654321")
+            assertEquals("123456", s.email.code, "read-only")
+            val mails = count("emailSignInStart")
+            s.act(Act.Resend)
+            core.waitFor("a new code") { count("emailSignInStart") == mails + 1 && !s.email.busy }
+            assertTrue(s.email.resent)
+            assertFalse(s.email.ended)
+            assertEquals("", s.email.code)
+            assertEquals(Stage.Code, s.email.stage)
+            s.act(Act.OtherAddress)
+            assertEquals(Stage.Address, s.email.stage)
+            assertEquals(" Zoe@Example.org ", s.email.address, "prefilled")
+        }
+    }
+
+    @Test
+    fun `signInRefused keeps its own words with the code stage's actions`() {
+        emailRelay(takes = { fail("signInRefused") })
+        val s = atCode()
+        s.email.type("123456")
+        core.waitFor("said") { s.email.failure != null }
+        assertEquals(AccountCopy.SIGN_IN_REFUSED, s.email.failure!!.text)
+        assertEquals(
+            listOf(Act.Resend, Act.OtherAddress),
+            s.email.failure!!
+                .actions
+                .map { it.act },
+        )
+        assertEquals(Stage.Code, s.email.stage)
+    }
+
+    @Test
+    fun `no answer on the code stage stays there, and Try again sends the same code, never a provider flow`() {
+        var takes = 0
+        emailRelay(takes = {
+            takes++
+            when (takes) {
+                1 -> fail(null, "offline")
+                2 -> fail("busy")
+                else -> ok("""{"phase":"new","ticket":"T"}""")
+            }
+        })
+        val s = atCode()
+        s.email.type("246802")
+        core.waitFor("said") { s.email.failure != null }
+        assertEquals(AccountCopy.UNREACHABLE, s.email.failure!!.text)
+        assertEquals(Step.Email, s.step, "never the provider list")
+        assertEquals(Stage.Code, s.email.stage)
+        assertEquals("246802", s.email.code, "kept")
+        s.act(Act.Retry)
+        core.waitFor("busy") { takes == 2 && s.email.failure != null }
+        assertEquals(AccountCopy.BUSY, s.email.failure!!.text)
+        s.act(Act.Retry)
+        core.waitFor("new") { s.step == Step.New }
+        assertEquals(3, count("emailSignIn"))
+        assertEquals(
+            "246802",
+            core
+                .last("emailSignIn")
+                .getValue("code")
+                .jsonPrimitive.content,
+        )
+        assertEquals(1, count("emailSignInStart"), "no new mail")
+        noProviderFlow()
+    }
+
+    @Test
+    fun `the address stage's failures, Try again sends again, and Other ways goes back to Sign in`() {
+        emailRelay()
+        var mails = 0
+        core.answers["emailSignInStart"] = {
+            mails++
+            fail(
+                if (mails == 3) {
+                    "emailWait"
+                } else if (mails == 4) {
+                    "emailLimit"
+                } else {
+                    "mailUnavailable"
+                },
+            )
+        }
+        val s = signIn()
+        ready(s)
+        s.choose("email")
+        s.email.address = "zoe@example.org"
+        s.email.send()
+        core.waitFor("said") { s.email.failure != null }
+        assertEquals(AccountCopy.MAIL_UNAVAILABLE, s.email.failure!!.text)
+        assertEquals(
+            listOf(Act.Retry, Act.Other),
+            s.email.failure!!
+                .actions
+                .map { it.act },
+        )
+        s.act(Act.Retry)
+        core.waitFor("sent again") { mails == 2 && s.email.failure != null }
+        assertEquals(Stage.Address, s.email.stage)
+        s.act(Act.Retry)
+        core.waitFor("wait") { mails == 3 && s.email.failure != null }
+        assertEquals(AccountCopy.EMAIL_WAIT, s.email.failure!!.text)
+        s.email.send()
+        core.waitFor("limit") { mails == 4 && s.email.failure != null }
+        assertEquals(
+            listOf(Act.Other),
+            s.email.failure!!
+                .actions
+                .map { it.act },
+        )
+        s.act(Act.Other)
+        assertIs<Step.Start>(s.step)
+        noProviderFlow()
+    }
+
+    @Test
+    fun `Back goes from the code to the address to Sign in, and the same address reopens its flow without a mail`() {
+        emailRelay()
+        val s = atCode()
+        s.back()
+        assertEquals(Step.Email, s.step)
+        assertEquals(Stage.Address, s.email.stage)
+        s.email.send()
+        assertEquals(Stage.Code, s.email.stage)
+        assertEquals(1, count("emailSignInStart"), "the open flow, no new mail")
+        s.back()
+        s.email.address = "other@example.org"
+        s.email.send()
+        core.waitFor("another mail") { count("emailSignInStart") == 2 && !s.email.busy }
+        s.back()
+        s.back()
+        assertIs<Step.Start>(s.step)
+    }
+
+    @Test
+    fun `Send a new code waits 60 seconds from the newest mail, and a resend says so`() {
+        emailRelay()
+        val s = atCode()
+        assertEquals(60, s.email.resendIn())
+        assertFalse(s.email.resent)
+        clock += 59_001
+        assertEquals(1, s.email.resendIn())
+        clock += 999
+        assertEquals(0, s.email.resendIn())
+        s.email.resend()
+        core.waitFor("resent") { s.email.resent && !s.email.busy }
+        assertEquals(60, s.email.resendIn())
+        assertEquals(2, count("emailSignInStart"))
+    }
+
+    @Test
+    fun `a held email ticket that ran out sends a new code to the address in memory, then creates with it`() {
+        emailRelay(takes = { flow -> ok("""{"phase":"new","ticket":"${if (flow == "F1") "OLD" else "NEW"}"}""") })
+        core.answers["createSyncAccount"] = { m ->
+            if (m.getValue("ticket").jsonPrimitive.content == "OLD") fail("ticketExpired") else ok("""{"revision":1}""")
+        }
+        val s = atCode()
+        s.email.type("123456")
+        core.waitFor("new") { s.step == Step.New }
+        s.create()
+        core.waitFor("failure") { s.failure != null }
+        assertEquals(AccountCopy.TICKET_EXPIRED, s.failure!!.text)
+        s.act(Act.Retry)
+        assertEquals(Step.Email, s.step)
+        core.waitFor("a new code") { count("emailSignInStart") == 2 && !s.email.busy }
+        assertEquals(Stage.Code, s.email.stage)
+        assertEquals(
+            "Zoe@Example.org",
+            core
+                .last("emailSignInStart")
+                .getValue("email")
+                .jsonPrimitive.content,
+        )
+        s.email.type("654321")
+        core.waitFor("created") { count("createSyncAccount") == 2 }
+        assertEquals(
+            "NEW",
+            core
+                .last("createSyncAccount")
+                .getValue("ticket")
+                .jsonPrimitive.content,
+        )
+        noProviderFlow()
     }
 }

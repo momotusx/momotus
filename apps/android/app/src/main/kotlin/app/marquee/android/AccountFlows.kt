@@ -136,17 +136,15 @@ class AccountFlows(
         removal.resume(s.wipePending, AccountRules.activeProfile(s)?.isOwner == true, profileIds())
     }
 
-    /** The providers [server] offers, none when it cannot say. */
+    /** The sign-in ways [server] offers (email included), none when it cannot say. */
     suspend fun providers(server: String): List<String> =
         if (server.isEmpty()) {
             emptyList()
         } else {
             runCatching {
-                AccountRules.providerOrder(
-                    app.session.ops
-                        .relayInfo(server)
-                        .providers,
-                )
+                app.session.ops
+                    .relayInfo(server)
+                    .providers
             }.getOrDefault(emptyList())
         }
 

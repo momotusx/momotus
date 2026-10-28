@@ -79,6 +79,51 @@ class AccountRulesTest {
     }
 
     @Test
+    fun `email is never a provider button, and its words are the email ones`() {
+        assertEquals(listOf("google", "mock"), AccountRules.providerOrder(listOf("email", "mock", "google")))
+        assertEquals(emptyList<String>(), AccountRules.providerOrder(listOf("email")))
+        assertEquals("Email", AccountRules.providerName("email"))
+        assertEquals(
+            "This email address has made several Momotus accounts lately. Try again later or use another way.",
+            AccountRules.signInFailure("signupLimit", "email")!!.text,
+        )
+        assertEquals("Cancel and turn off email sign-in", AccountRules.cancelUnlink("email"))
+        assertEquals("Cancel and turn off Google sign-in", AccountRules.cancelUnlink("google"))
+        val d = assertIs<Card.Deletion>(card(ScheduledDeletion(5, "email")))
+        assertEquals(
+            "Someone signed in with your email address and asked to delete your Momotus account on D5. " +
+                "Not you? Cancel, and turn off email sign-in.",
+            d.text,
+        )
+    }
+
+    @Test
+    fun `the email stages' answers, as the answers table`() {
+        assertEquals(AccountCopy.BAD_ADDRESS, AccountRules.emailFieldError("badAddress"))
+        assertEquals(AccountCopy.WRONG_CODE, AccountRules.emailFieldError("wrongCode"))
+        assertEquals(AccountCopy.WRONG_CODE, AccountRules.emailFieldError("badCode"))
+        assertNull(AccountRules.emailFieldError("ticketExpired"))
+        for (code in listOf("ticketExpired", "wrongFlow")) {
+            val f = AccountRules.emailFailure(code)
+            assertEquals(AccountCopy.CODE_EXPIRED, f.text, code)
+            assertEquals(AccountCopy.CODE_EXPIRED_ACTIONS, f.actions.map { it.label })
+            assertEquals(listOf(Act.Resend, Act.OtherAddress), f.actions.map { it.act })
+        }
+        val refused = AccountRules.emailFailure("signInRefused")
+        assertEquals(AccountCopy.SIGN_IN_REFUSED, refused.text, "keeps its own words")
+        assertEquals(listOf(Act.Resend, Act.OtherAddress), refused.actions.map { it.act })
+        assertEquals(listOf(Act.Other), AccountRules.emailFailure("emailLimit").actions.map { it.act })
+        assertEquals(AccountCopy.EMAIL_WAIT, AccountRules.emailFailure("emailWait").text)
+        assertTrue(AccountRules.emailFailure("emailWait").actions.isEmpty())
+        assertEquals(listOf(Act.Retry, Act.Other), AccountRules.emailFailure("mailUnavailable").actions.map { it.act })
+        assertEquals(AccountCopy.BUSY, AccountRules.emailFailure("busy").text)
+        assertEquals(listOf(Act.Retry), AccountRules.emailFailure("busy").actions.map { it.act })
+        assertEquals(AccountCopy.UNREACHABLE, AccountRules.emailFailure(null).text, "no answer came")
+        assertTrue(AccountRules.emailEnds("ticketExpired") && AccountRules.emailEnds("emailLimit"))
+        assertFalse(AccountRules.emailEnds("busy") || AccountRules.emailEnds(null))
+    }
+
+    @Test
     fun `section 5's failures and their buttons`() {
         assertNull(AccountRules.signInFailure("cancelled"))
         val expired = AccountRules.signInFailure("ticketExpired")!!

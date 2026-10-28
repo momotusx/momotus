@@ -8,6 +8,7 @@ import app.marquee.core.model.DebridTombstone
 import app.marquee.core.model.DefaultAddons
 import app.marquee.core.model.DefaultChoice
 import app.marquee.core.model.Devices
+import app.marquee.core.model.EmailStart
 import app.marquee.core.model.FirstRunStill
 import app.marquee.core.model.ForkPreview
 import app.marquee.core.model.HomeCatalog
@@ -404,6 +405,20 @@ class CoreOps(
         idToken: String,
     ): SignInSnapshot =
         call("nativeSignIn", mapOf("flow" to text(flow), "idToken" to text(idToken)), SignInSnapshot.serializer())
+
+    /** Mails a 6-digit sign-in code to [email] (plans/accounts-email.md); the flow's verifier stays in the core. */
+    suspend fun emailSignInStart(
+        server: String,
+        email: String,
+    ): EmailStart =
+        call("emailSignInStart", mapOf("server" to text(server), "email" to text(email)), EmailStart.serializer())
+
+    /** The mailed [code] for [flow]: `found` or `new` (a [SignInSnapshot]). */
+    suspend fun emailSignIn(
+        flow: String,
+        code: String,
+    ): SignInSnapshot =
+        call("emailSignIn", mapOf("flow" to text(flow), "code" to text(code)), SignInSnapshot.serializer())
 
     /** The account's sign-in links; a returned record must be stored. Any profile. */
     suspend fun identities(record: SyncRecord): Identities =

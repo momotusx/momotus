@@ -222,6 +222,7 @@ private fun ButtonShell(
  * The one primary action of a screen: the white pill.
  * @param quiet another action holds the screen's white (a question's safe button): drawn as a secondary, on the same
  * node, so a focus held here stays.
+ * @param busy its request runs: a spinner in place of the icon; the button stays, so focus does too.
  */
 @Composable
 fun PrimaryButton(
@@ -234,6 +235,7 @@ fun PrimaryButton(
     focusRequester: FocusRequester? = null,
     onFocusChange: ((Boolean) -> Unit)? = null,
     quiet: Boolean = false,
+    busy: Boolean = false,
 ) = ButtonShell(
     label,
     onClick,
@@ -245,6 +247,7 @@ fun PrimaryButton(
     false,
     focusRequester,
     onFocusChange,
+    busy = busy,
     quiet = quiet,
 )
 

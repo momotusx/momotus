@@ -5,6 +5,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import app.marquee.core.AccountRules
 import app.marquee.core.AccountRules.Act
+import app.marquee.core.AccountRules.EMAIL
 import app.marquee.core.client.CoreError
 import app.marquee.core.client.CoreLog
 import app.marquee.core.model.NativeStart
@@ -21,7 +22,8 @@ import kotlinx.coroutines.launch
  * Manager sheet with the account passkey in it, the others through the relay's brokered flow, then `found` or
  * `new`. A found account opens with a passkey whose `user.id` is that account, else the pairing QR, a recovery
  * kit or Start over; a new one is created with the ticket and gets a passkey, or the step that says why one
- * matters. The ticket stays in memory only.
+ * matters. Email (plans/accounts-email.md 4) is its own row and screen, [email], whose code ends in the same
+ * `found` or `new`. The ticket stays in memory only.
  */
 class AccountSignIn(
     private val ops: CoreOps,
@@ -43,10 +45,17 @@ class AccountSignIn(
     sealed interface Step {
         data object Loading : Step
 
-        /** The sign-in screen: Continue with each provider (none: today's doors), Other ways, Not now. */
+        /**
+         * The sign-in screen: Continue with each provider, Continue with email when the relay offers it (primary
+         * when it is the only way), Other ways, Not now; with neither, today's doors.
+         */
         data class Start(
             val providers: List<String>,
+            val email: Boolean = false,
         ) : Step
+
+        /** The email screen: [email]'s address and code stages. */
+        data object Email : Step
 
         data class Working(
             val provider: String?,
@@ -98,6 +107,10 @@ class AccountSignIn(
 
     private var native: NativeStart? = null
     private var provider: String? = null
+    private var emailOffered = false
+
+    /** The email screen's stages; the address stays here, in memory, for a held ticket's Continue. */
+    val email = EmailCode(ops, { server }, { work -> launch(work) }, { end(EMAIL, it) }, now)
 
     /** What to do again once a new ticket came (`ticketExpired`'s Continue). */
     private var pending: (suspend (Held) -> Unit)? = null
@@ -108,8 +121,10 @@ class AccountSignIn(
         // A new step each time, so Try again after an unreachable relay is seen as one.
         step = Step.Loading
         launch {
-            providers = AccountRules.providerOrder(ops.relayInfo(server).providers)
-            step = Step.Start(providers)
+            val offered = ops.relayInfo(server).providers
+            providers = AccountRules.providerOrder(offered)
+            emailOffered = EMAIL in offered
+            step = startStep()
             if ("google" in providers && useNative("google")) runCatching { nativeFlow() }
         }
     }
@@ -122,10 +137,25 @@ class AccountSignIn(
         return ops.nativeSignInStart(server, "google").also { native = it }
     }
 
-    /** Continue with [p]. */
+    /** Continue with [p], or with email. */
     fun choose(p: String) {
         pending = null
-        signIn(p)
+        if (p == EMAIL) openEmail(again = false) else signIn(p)
+    }
+
+    /** The email screen; [again] (a held ticket's Continue) at the code stage with a new code. */
+    private fun openEmail(again: Boolean) {
+        provider = EMAIL
+        failure = null
+        step = Step.Email
+        if (again) email.reopen() else email.open()
+    }
+
+    /** Back on the email screen: the code stage to the address stage, the address stage to Sign in. */
+    fun back() {
+        if (step != Step.Email || email.back()) return
+        failure = null
+        step = startStep()
     }
 
     private fun signIn(p: String) {
@@ -225,7 +255,7 @@ class AccountSignIn(
         }
     }
 
-    private fun startStep(): Step = Step.Start(providers)
+    private fun startStep(): Step = Step.Start(providers, emailOffered)
 
     private var providers: List<String> = emptyList()
 
@@ -444,9 +474,27 @@ class AccountSignIn(
     fun act(a: Act) {
         failure = null
         when (a) {
-            // No provider chosen yet: the relay did not answer, so it is asked again.
+            // An email stage repeats its own call; a held ticket's Continue for email sends a new code; no
+            // provider chosen yet: the relay did not answer, so it is asked again.
             Act.Retry -> {
-                provider?.let(::signIn) ?: start()
+                when {
+                    step == Step.Email -> email.retry()
+                    provider == EMAIL -> openEmail(again = true)
+                    else -> provider?.let(::signIn) ?: start()
+                }
+            }
+
+            Act.Resend -> {
+                email.resend()
+            }
+
+            Act.OtherAddress -> {
+                email.open()
+            }
+
+            // Other ways to sign in, from the email screen: back to Sign in.
+            Act.Other -> {
+                if (step == Step.Email) step = startStep()
             }
 
             Act.Move -> {
@@ -466,7 +514,7 @@ class AccountSignIn(
                 }
             }
 
-            Act.Other, Act.NotNow, Act.Anyway, Act.Scan, Act.Kit -> {
+            Act.NotNow, Act.Anyway, Act.Scan, Act.Kit -> {
                 Unit
             }
         }
@@ -490,6 +538,7 @@ class AccountSignIn(
         }
 
     private fun launch(block: suspend () -> Unit) {
+        val from = step
         job =
             scope.launch {
                 try {
@@ -503,12 +552,15 @@ class AccountSignIn(
                         step = Step.Start(emptyList())
                         failure = AccountRules.signInFailure("unreachable")
                     } else {
-                        if (step is Step.Working) step = startStep()
+                        // An email sign-in goes back to the step it came from, never to the provider list.
+                        if (step is Step.Working) step = if (provider == EMAIL && from.settled()) from else startStep()
                         failure = AccountRules.signInFailure(code ?: "signInRefused", provider.orEmpty())
                     }
                 }
             }
     }
+
+    private fun Step.settled() = this !is Step.Loading && this !is Step.Working
 
     private companion object {
         /** Back in front this long with no return: "Didn't finish signing in?" (the web's 1.5 s). */

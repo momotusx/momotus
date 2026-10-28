@@ -1,26 +1,40 @@
 package app.marquee.android
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.autofill.ContentType
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.paneTitle
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
@@ -38,8 +52,10 @@ import app.marquee.core.model.PairingSnapshot
 import app.marquee.core.session.CoreSession
 import app.marquee.core.sync.AccountSignIn
 import app.marquee.core.sync.AccountSignIn.Step
+import app.marquee.core.sync.EmailCode
 import app.marquee.design.Form
 import app.marquee.design.Icons
+import app.marquee.design.LiveSpoken
 import app.marquee.design.Marquee
 import app.marquee.design.MqText
 import app.marquee.design.MqTextField
@@ -50,6 +66,7 @@ import app.marquee.design.Status
 import app.marquee.design.SwitchRow
 import app.marquee.design.TextRole
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.text.DateFormat
 import java.util.Date
@@ -66,9 +83,15 @@ internal fun accountDate(ms: Long): String = DateFormat.getDateInstance(DateForm
 internal fun FailureNote(
     failure: AccountRules.Failure,
     onAct: (Act) -> Unit,
+    /** Read out when it appears (a failure with no button to take the focus). */
+    spoken: Boolean = false,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.s)) {
-        Callout(Icons.CircleAlert, failure.text)
+        if (spoken) {
+            LiveSpoken(failure.text) { Callout(Icons.CircleAlert, failure.text) }
+        } else {
+            Callout(Icons.CircleAlert, failure.text)
+        }
         FlowRow(
             horizontalArrangement = Arrangement.spacedBy(Marquee.space.xs),
             verticalArrangement = Arrangement.spacedBy(Marquee.space.xs),
@@ -156,11 +179,13 @@ fun SignInScreen(
         onNotNow()
     }
     val step = signIn.step
+    // Back on the email screen: the code stage to the address stage, the address stage to Sign in.
+    BackHandler(enabled = step == Step.Email) { signIn.back() }
     LaunchedEffect(step) {
         when (step) {
-            // A relay with no provider: the sign-in screen is today's doors (4.1.1).
+            // A relay with no way to sign in: the sign-in screen is today's doors (4.1.1).
             is Step.Start -> {
-                if (step.providers.isEmpty() && signIn.failure == null) notNow()
+                if (step.providers.isEmpty() && !step.email && signIn.failure == null) notNow()
             }
 
             is Step.Done -> {
@@ -176,16 +201,27 @@ fun SignInScreen(
     }
     val act: (Act) -> Unit = { a ->
         when (a) {
-            Act.NotNow -> notNow()
+            Act.NotNow -> {
+                notNow()
+            }
 
-            Act.Kit -> onKit()
+            Act.Kit -> {
+                onKit()
+            }
 
             // On `found` the code is on this screen already.
-            Act.Scan -> if (step !is Step.Found) onScan()
+            Act.Scan -> {
+                if (step !is Step.Found) onScan()
+            }
 
-            Act.Other -> own = false
+            Act.Other -> {
+                own = false
+                signIn.act(a)
+            }
 
-            else -> signIn.act(a)
+            else -> {
+                signIn.act(a)
+            }
         }
     }
     LazyColumn(
@@ -216,9 +252,30 @@ fun SignInScreen(
                     }
                 } else {
                     providers(step.providers, signIn::choose)
+                    // Email is its own row under the providers, the primary one when it is the only way (D6: never
+                    // on a TV, whose sign-in is the QR).
+                    if (step.email && Marquee.form != Form.Tv) {
+                        block("email-row") {
+                            val choose = { signIn.choose(AccountRules.EMAIL) }
+                            if (step.providers.isEmpty()) {
+                                PrimaryButton(
+                                    AccountCopy.CONTINUE_WITH_EMAIL,
+                                    choose,
+                                    icon = Icons.Mail,
+                                    focusRequester = stepFocus(),
+                                )
+                            } else {
+                                SecondaryButton(AccountCopy.CONTINUE_WITH_EMAIL, choose, icon = Icons.Mail)
+                            }
+                        }
+                    }
                     otherWays(flows.passkeys, signIn::usePasskey, onScan, onKit, onOwnServer = { own = true })
                     block("not-now") { SecondaryButton(AccountCopy.NOT_NOW, notNow) }
                 }
+            }
+
+            Step.Email -> {
+                block("email") { EmailStages(signIn.email, act) }
             }
 
             // The words and buttons are the failure's: "Scan this code with a device that's signed in."
@@ -414,7 +471,7 @@ internal fun AccountRows(
     LaunchedEffect(sync.joined) { if (sync.joined) actions.load() }
     val links = actions.links.orEmpty()
     Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.s)) {
-        if (actions.providers.isNotEmpty() || links.isNotEmpty()) {
+        if (actions.providers.isNotEmpty() || actions.emailOffered || links.isNotEmpty()) {
             Kicker(AccountCopy.SIGNED_IN_WITH, side = 0.dp)
             for (link in links) {
                 LinkLine(
@@ -441,14 +498,33 @@ internal fun AccountRows(
             }
             val linked = links.map { it.provider }.toSet()
             val more = actions.providers.filter { it !in linked }
-            if (rows.links && more.isNotEmpty()) {
+            // E12, E13: one Email row at most, and none on a TV.
+            val email = !tv && actions.emailOffered && AccountRules.EMAIL !in linked
+            val emailLink = actions.emailLink
+            if (rows.links && (more.isNotEmpty() || email)) {
                 MqText(AccountCopy.LINK_ANOTHER, role = TextRole.Callout)
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(Marquee.space.xs),
-                    verticalArrangement = Arrangement.spacedBy(Marquee.space.xs),
-                ) {
-                    for (p in more) {
-                        SecondaryButton(AccountRules.continueWith(p), { actions.link(p) }, icon = Icons.Link)
+                if (emailLink != null) {
+                    BackHandler { if (!emailLink.back()) actions.closeEmail() }
+                    EmailStages(emailLink) { a ->
+                        when (a) {
+                            Act.Retry -> emailLink.retry()
+                            Act.Resend -> emailLink.resend()
+                            Act.OtherAddress -> emailLink.open()
+                            else -> actions.closeEmail()
+                        }
+                    }
+                    SecondaryButton(SyncCopy.CANCEL, actions::closeEmail)
+                } else {
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(Marquee.space.xs),
+                        verticalArrangement = Arrangement.spacedBy(Marquee.space.xs),
+                    ) {
+                        for (p in more) {
+                            SecondaryButton(AccountRules.continueWith(p), { actions.link(p) }, icon = Icons.Link)
+                        }
+                        if (email) {
+                            SecondaryButton(AccountCopy.CONTINUE_WITH_EMAIL, actions::linkEmail, icon = Icons.Mail)
+                        }
                     }
                 }
             }
@@ -564,13 +640,7 @@ internal fun AccountCard(
                 is Card.Deletion -> {
                     PrimaryButton(AccountCopy.DELETION_CANCEL, { go { sync.cancelDeletion() } })
                     card.provider?.let { p ->
-                        SecondaryButton(
-                            AccountRules.fill(
-                                AccountCopy.DELETION_CANCEL_UNLINK,
-                                mapOf("provider" to AccountRules.providerName(p)),
-                            ),
-                            { go { sync.cancelDeletion(unlink = true) } },
-                        )
+                        SecondaryButton(AccountRules.cancelUnlink(p), { go { sync.cancelDeletion(unlink = true) } })
                     }
                 }
 
@@ -638,4 +708,134 @@ internal fun AccountCard(
         flows.removal.problem?.let { Said(it, Status.Bad) }
         error?.let { Said(it, Status.Bad) }
     }
+}
+
+/**
+ * The email screen (plans/accounts-email.md 4): the address, then the 6-digit code. A failure stays on the stage
+ * it came from, under its field; each stage's title names the pane, so TalkBack says it as the focus moves to
+ * the new stage's field. The address and the code live in [form], in memory only (E12).
+ */
+@Composable
+internal fun EmailStages(
+    form: EmailCode,
+    onAct: (Act) -> Unit,
+) {
+    when (form.stage) {
+        EmailCode.Stage.Address -> EmailAddressStage(form, onAct)
+        EmailCode.Stage.Code -> EmailCodeStage(form, onAct)
+    }
+}
+
+@Composable
+private fun EmailAddressStage(
+    form: EmailCode,
+    onAct: (Act) -> Unit,
+) {
+    val field = stepFocus()
+    // A refused address gives the field the focus again, which reads the line it is described by.
+    LaunchedEffect(form.fieldError) { if (form.fieldError != null) runCatching { field.requestFocus() } }
+    Column(
+        Modifier.semantics { paneTitle = AccountCopy.EMAIL_TITLE },
+        verticalArrangement = Arrangement.spacedBy(Marquee.space.s),
+    ) {
+        StageTitle(AccountCopy.EMAIL_TITLE)
+        FieldLabel(AccountCopy.EMAIL_LABEL)
+        MqTextField(
+            form.address,
+            { form.address = it },
+            label = AccountCopy.EMAIL_LABEL,
+            placeholder = "",
+            modifier = Modifier.focusRequester(field),
+            keyboardOptions =
+                KeyboardOptions(
+                    capitalization = KeyboardCapitalization.None,
+                    autoCorrectEnabled = false,
+                    keyboardType = KeyboardType.Email,
+                    imeAction = ImeAction.Send,
+                ),
+            keyboardActions = KeyboardActions(onSend = { form.send() }),
+            // Read-only, not disabled, while the code is asked for: the focus stays.
+            readOnly = form.busy,
+            contentType = ContentType.EmailAddress,
+            error = form.fieldError,
+        )
+        form.fieldError?.let { Said(it, Status.Bad) }
+        form.failure?.let { FailureNote(it, onAct, spoken = it.actions.isEmpty()) }
+        PrimaryButton(AccountCopy.EMAIL_SEND, form::send, icon = Icons.Mail, busy = form.busy)
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun EmailCodeStage(
+    form: EmailCode,
+    onAct: (Act) -> Unit,
+) {
+    val field = stepFocus()
+    // A wrong code clears the field and gives it the focus again.
+    LaunchedEffect(form.fieldError) { if (form.fieldError != null) runCatching { field.requestFocus() } }
+    // Send a new code counts down from the newest mail's time, so time in the background counts.
+    var left by remember { mutableIntStateOf(form.resendIn()) }
+    LaunchedEffect(form.sentAt) {
+        while (true) {
+            left = form.resendIn()
+            if (left == 0) break
+            delay(1_000)
+        }
+    }
+    val ready = left == 0
+    val resend =
+        if (ready) AccountCopy.CODE_RESEND else AccountRules.fill(AccountCopy.CODE_RESEND_IN, mapOf("seconds" to left))
+    Column(
+        Modifier.semantics { paneTitle = AccountCopy.CODE_TITLE },
+        verticalArrangement = Arrangement.spacedBy(Marquee.space.s),
+    ) {
+        StageTitle(AccountCopy.CODE_TITLE)
+        MqText(AccountRules.fill(AccountCopy.CODE_SENT_TO, mapOf("email" to form.sentTo)), role = TextRole.Callout)
+        FieldLabel(AccountCopy.CODE_LABEL)
+        MqTextField(
+            form.code,
+            form::type,
+            label = AccountCopy.CODE_LABEL,
+            placeholder = "",
+            modifier = Modifier.focusRequester(field),
+            keyboardOptions =
+                KeyboardOptions(
+                    autoCorrectEnabled = false,
+                    keyboardType = KeyboardType.Number,
+                    imeAction = ImeAction.Go,
+                ),
+            keyboardActions = KeyboardActions(onGo = { form.submit() }),
+            readOnly = form.busy || form.ended,
+            // Fills from an SMS only: a typed or pasted code is the main path.
+            contentType = ContentType.SmsOtpCode,
+            error = form.fieldError,
+        )
+        form.fieldError?.let { Said(it, Status.Bad) }
+        if (form.busy) Spinner()
+        if (form.resent && form.failure == null) Note(AccountCopy.CODE_RESENT, side = 0.dp, spoken = true)
+        form.failure?.let { FailureNote(it, onAct, spoken = it.actions.isEmpty()) }
+        // Always shown, at normal weight: the mail may land in spam (plans/accounts-email.md 3).
+        MqText(AccountCopy.CODE_MISSING, role = TextRole.Callout, color = Marquee.colors.muted)
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(Marquee.space.xs),
+            verticalArrangement = Arrangement.spacedBy(Marquee.space.xs),
+        ) {
+            // The countdown is read once with the button, not on each tick; the button turning on is said once.
+            LiveSpoken(if (ready) AccountCopy.CODE_RESEND else "") { Box(Modifier.size(1.dp)) }
+            SecondaryButton(resend, form::resend, icon = Icons.Mail, enabled = ready && !form.busy)
+            SecondaryButton(AccountCopy.CODE_OTHER_ADDRESS, form::open)
+        }
+    }
+}
+
+@Composable
+private fun StageTitle(text: String) {
+    MqText(text, Modifier.semantics { heading() }, role = TextRole.Title3)
+}
+
+/** A field's visible label (the field says its own name to TalkBack, so this one is not read twice). */
+@Composable
+private fun FieldLabel(text: String) {
+    MqText(text, Modifier.clearAndSetSemantics { }, role = TextRole.Callout, weight = FontWeight.SemiBold)
 }

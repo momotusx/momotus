@@ -28,9 +28,10 @@ object AccountCopy {
             "apple" to "Apple Account",
             "google" to "Google account",
             "facebook" to "Facebook account",
+            "email" to "email address",
         )
     const val PROVIDER_ACCOUNT_OTHER = "{provider} sign-in"
-    val PROVIDER_NAME = mapOf("apple" to "Apple", "google" to "Google", "facebook" to "Facebook")
+    val PROVIDER_NAME = mapOf("apple" to "Apple", "google" to "Google", "facebook" to "Facebook", "email" to "Email")
     const val SIGN_IN_TITLE = "Sign in"
     const val CONTINUE_WITH = "Continue with {provider}"
     const val OTHER_WAYS = "Other ways to sign in"
@@ -133,6 +134,33 @@ object AccountCopy {
     const val SECOND_WAY_IN_TEXT =
         "Make a recovery kit or sign in on a second device, so losing this one never locks you out."
     const val NOT_OWNER = "Only the main profile can do that."
+    const val CONTINUE_WITH_EMAIL = "Continue with email"
+    const val EMAIL_TITLE = "Sign in with email"
+    const val EMAIL_LABEL = "Email address"
+    const val EMAIL_SEND = "Send code"
+    const val BAD_ADDRESS = "Enter an email address like name@example.com."
+    const val CODE_TITLE = "Enter the code"
+    const val CODE_SENT_TO = "We sent a 6-digit code to {email}. It works for 10 minutes."
+    const val CODE_LABEL = "6-digit code"
+    const val CODE_RESENT = "We sent a new code. Use the newest email: older codes stop working."
+    const val CODE_MISSING = "It can take a minute. Look for a mail from Momotus, and check your spam folder."
+    const val CODE_RESEND = "Send a new code"
+    const val CODE_RESEND_IN = "Send a new code in {seconds} seconds"
+    const val CODE_OTHER_ADDRESS = "Use another address"
+    const val WRONG_CODE = "That code isn't right. Check the email and try again."
+    const val CODE_EXPIRED = "This code can't be used any more. Send a new code."
+    val CODE_EXPIRED_ACTIONS = listOf("Send a new code", "Use another address")
+    const val EMAIL_WAIT = "Wait a minute, then send a new code."
+    const val EMAIL_LIMIT =
+        "Too many codes were asked for just now. Try again tomorrow, or use another way to sign in."
+    val EMAIL_LIMIT_ACTIONS = listOf("Other ways to sign in")
+    const val MAIL_UNAVAILABLE =
+        "The code couldn't be sent right now. Try again later, or use another way to sign in."
+    val MAIL_UNAVAILABLE_ACTIONS = listOf("Try again", "Other ways to sign in")
+    const val DELETION_SCHEDULED_BY_EMAIL =
+        "Someone signed in with your email address and asked to delete your Momotus account on {date}. " +
+            "Not you? Cancel, and turn off email sign-in."
+    const val DELETION_CANCEL_UNLINK_EMAIL = "Cancel and turn off email sign-in"
 
     /** Every key of the shared file with its words, for the reader test. */
     val all: Map<String, Any> =
@@ -242,5 +270,28 @@ object AccountCopy {
             "wipeFailed" to WIPE_FAILED,
             "secondWayInText" to SECOND_WAY_IN_TEXT,
             "notOwner" to NOT_OWNER,
+            "continueWithEmail" to CONTINUE_WITH_EMAIL,
+            "emailTitle" to EMAIL_TITLE,
+            "emailLabel" to EMAIL_LABEL,
+            "emailSend" to EMAIL_SEND,
+            "badAddress" to BAD_ADDRESS,
+            "codeTitle" to CODE_TITLE,
+            "codeSentTo" to CODE_SENT_TO,
+            "codeLabel" to CODE_LABEL,
+            "codeResent" to CODE_RESENT,
+            "codeMissing" to CODE_MISSING,
+            "codeResend" to CODE_RESEND,
+            "codeResendIn" to CODE_RESEND_IN,
+            "codeOtherAddress" to CODE_OTHER_ADDRESS,
+            "wrongCode" to WRONG_CODE,
+            "codeExpired" to CODE_EXPIRED,
+            "codeExpiredActions" to CODE_EXPIRED_ACTIONS,
+            "emailWait" to EMAIL_WAIT,
+            "emailLimit" to EMAIL_LIMIT,
+            "emailLimitActions" to EMAIL_LIMIT_ACTIONS,
+            "mailUnavailable" to MAIL_UNAVAILABLE,
+            "mailUnavailableActions" to MAIL_UNAVAILABLE_ACTIONS,
+            "deletionScheduledByEmail" to DELETION_SCHEDULED_BY_EMAIL,
+            "deletionCancelUnlinkEmail" to DELETION_CANCEL_UNLINK_EMAIL,
         )
 }

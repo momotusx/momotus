@@ -37,6 +37,14 @@ class AccountActions(
     var providers: List<String> by mutableStateOf(emptyList())
         private set
 
+    /** The relay offers email: Link another shows Continue with email while no email link exists (E12). */
+    var emailOffered by mutableStateOf(false)
+        private set
+
+    /** Link another by email, while its screen is open (plans/accounts-email.md 4.7). */
+    var emailLink: EmailCode? by mutableStateOf(null)
+        private set
+
     var busy by mutableStateOf(false)
         private set
 
@@ -67,7 +75,9 @@ class AccountActions(
     /** The links, and a sign-in another account holds from a join another way: "Use it for this account instead". */
     fun load() =
         go {
-            providers = AccountRules.providerOrder(ops.relayInfo(server()).providers)
+            val offered = ops.relayInfo(server()).providers
+            providers = AccountRules.providerOrder(offered)
+            emailOffered = AccountRules.EMAIL in offered
             links = sync.identities()
             sync.heldLink?.let { held ->
                 sync.heldLink = null
@@ -84,25 +94,44 @@ class AccountActions(
     }
 
     /** Link another: the provider's sign-in, then its identity is linked here; one linked elsewhere offers to move it. */
-    fun link(provider: String) =
-        go {
-            val end = brokeredRun(provider, revoke = false)
-            val ticket =
-                when (end) {
-                    is SignInSnapshot.Found -> end.ticket
-                    is SignInSnapshot.New -> end.ticket
-                    is SignInSnapshot.Failed -> return@go fail(end.code, provider)
-                    else -> return@go
-                }
-            try {
-                sync.linkIdentity(ticket)
-            } catch (e: CoreError) {
-                if (e.code != "linkedElsewhere") throw e
-                offerMove(provider, ticket)
-                return@go
+    fun link(provider: String) = go { linkWith(provider, brokeredRun(provider, revoke = false)) }
+
+    /** Link another by email: its screen, whose code's ticket is linked as a provider's is. */
+    fun linkEmail() {
+        asked = null
+        said = null
+        emailLink =
+            EmailCode(ops, server, { work -> go(block = work) }, { end ->
+                emailLink = null
+                linkWith(AccountRules.EMAIL, end)
+            }).also { it.open() }
+    }
+
+    /** Leaves Link another by email; the address goes with it. */
+    fun closeEmail() {
+        emailLink = null
+    }
+
+    private suspend fun linkWith(
+        provider: String,
+        end: SignInSnapshot,
+    ) {
+        val ticket =
+            when (end) {
+                is SignInSnapshot.Found -> end.ticket
+                is SignInSnapshot.New -> end.ticket
+                is SignInSnapshot.Failed -> return fail(end.code, provider)
+                else -> return
             }
-            links = sync.identities()
+        try {
+            sync.linkIdentity(ticket)
+        } catch (e: CoreError) {
+            if (e.code != "linkedElsewhere") throw e
+            offerMove(provider, ticket)
+            return
         }
+        links = sync.identities()
+    }
 
     /**
      * Unlinks [link]; an Apple link runs Apple's revoke first and sends its receipt, and without one goes on only

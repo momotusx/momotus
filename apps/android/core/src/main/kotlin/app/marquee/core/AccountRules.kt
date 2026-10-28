@@ -33,11 +33,14 @@ object AccountRules {
     /** Android's order (4.1.1): Google first, then Apple and Facebook, then any other in the relay's order. */
     private val ORDER = listOf("google", "apple", "facebook")
 
+    /** Email is never a provider button: it is its own "Continue with email" row (plans/accounts-email.md 4). */
     fun providerOrder(ids: List<String>): List<String> =
-        ids.filter { it in ORDER }.sortedBy { ORDER.indexOf(it) } + ids.filter { it !in ORDER }
+        ids.filter { it in ORDER }.sortedBy { ORDER.indexOf(it) } + ids.filter { it !in ORDER && it != EMAIL }
 
-    /** What a button under a failure does. */
-    enum class Act { Retry, Other, NotNow, Move, Anyway, Cancel, Scan, Kit, CantUse }
+    const val EMAIL = "email"
+
+    /** What a button under a failure does; [Resend] and [OtherAddress] are the email code stage's. */
+    enum class Act { Retry, Other, NotNow, Move, Anyway, Cancel, Scan, Kit, CantUse, Resend, OtherAddress }
 
     data class Action(
         val label: String,
@@ -128,6 +131,63 @@ object AccountRules {
             }
         }
     }
+
+    /**
+     * An email stage's failure with its buttons (plans/accounts-email.md 4, the answers table); `badAddress`,
+     * `wrongCode` and `badCode` are lines under the field instead ([emailFieldError]). Null [code]: no answer came.
+     */
+    fun emailFailure(code: String?): Failure {
+        val expired = listOf(Act.Resend, Act.OtherAddress)
+        return when (code) {
+            "ticketExpired", "wrongFlow" -> {
+                Failure(AccountCopy.CODE_EXPIRED, acts(AccountCopy.CODE_EXPIRED_ACTIONS, expired))
+            }
+
+            // Its own words, with the code stage's way on.
+            "signInRefused" -> {
+                Failure(AccountCopy.SIGN_IN_REFUSED, acts(AccountCopy.CODE_EXPIRED_ACTIONS, expired))
+            }
+
+            "emailWait" -> {
+                Failure(AccountCopy.EMAIL_WAIT, emptyList())
+            }
+
+            "emailLimit" -> {
+                Failure(AccountCopy.EMAIL_LIMIT, acts(AccountCopy.EMAIL_LIMIT_ACTIONS, listOf(Act.Other)))
+            }
+
+            "mailUnavailable" -> {
+                Failure(
+                    AccountCopy.MAIL_UNAVAILABLE,
+                    acts(AccountCopy.MAIL_UNAVAILABLE_ACTIONS, listOf(Act.Retry, Act.Other)),
+                )
+            }
+
+            // busy, unreachable and the rest: today's words.
+            else -> {
+                signInFailure(code ?: "unreachable", EMAIL) ?: Failure(AccountCopy.SIGN_IN_REFUSED, emptyList())
+            }
+        }
+    }
+
+    /** The line under an email stage's field, or null when the answer is a [emailFailure]. */
+    fun emailFieldError(code: String?): String? =
+        when (code) {
+            "badAddress" -> AccountCopy.BAD_ADDRESS
+            "wrongCode", "badCode" -> AccountCopy.WRONG_CODE
+            else -> null
+        }
+
+    /** A code stage answer that ends its flow: the field stays, read-only, until a new code or another address. */
+    fun emailEnds(code: String?): Boolean = code in setOf("ticketExpired", "wrongFlow", "signInRefused", "emailLimit")
+
+    /** The deletion card's Cancel and turn off <provider> sign-in. */
+    fun cancelUnlink(provider: String): String =
+        if (provider == EMAIL) {
+            AccountCopy.DELETION_CANCEL_UNLINK_EMAIL
+        } else {
+            fill(AccountCopy.DELETION_CANCEL_UNLINK, mapOf("provider" to providerName(provider)))
+        }
 
     /** Apple's revoke ended in no receipt: the unlink or deletion may go on without it; a cancel says nothing. */
     fun revokeFailure(
@@ -347,7 +407,9 @@ object AccountRules {
             val date = s.date(d.dueMs)
             val provider = d.provider
             return Card.Deletion(
-                if (provider != null) {
+                if (provider == EMAIL) {
+                    fill(AccountCopy.DELETION_SCHEDULED_BY_EMAIL, mapOf("date" to date))
+                } else if (provider != null) {
                     fill(AccountCopy.DELETION_SCHEDULED_BY, mapOf("provider" to providerName(provider), "date" to date))
                 } else {
                     fill(AccountCopy.DELETION_SCHEDULED, mapOf("date" to date))

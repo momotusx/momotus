@@ -479,6 +479,14 @@ object Icons {
         )
     }
 
+    val Mail: ImageVector by lazy {
+        strokeIcon(
+            "mail",
+        "m22 7-8.991 5.727a2 2 0 0 1-2.009 0L2 7",
+        "M4 4h16a2 2 0 0 1 2 2v12a2 2 0 0 1 -2 2h-16a2 2 0 0 1 -2 -2v-12a2 2 0 0 1 2 -2z",
+        )
+    }
+
     val Monitor: ImageVector by lazy {
         strokeIcon(
             "monitor",

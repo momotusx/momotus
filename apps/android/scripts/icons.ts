@@ -65,6 +65,7 @@ export const ICONS = [
   "list-video",
   "lock",
   "log-out",
+  "mail",
   "monitor",
   "monitor-smartphone",
   "moon",
