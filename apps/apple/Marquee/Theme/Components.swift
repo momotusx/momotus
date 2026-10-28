@@ -634,3 +634,12 @@ struct StateLine: View {
         }
     }
 }
+
+extension View {
+    /// A card on the page: a flat `surface` with no edge (design/DECISION.md, Surfaces).
+    func flatCard() -> some View {
+        padding(Theme.Space.m)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(RoundedRectangle(cornerRadius: Theme.Radius.l, style: .continuous).fill(Theme.Palette.surface))
+    }
+}

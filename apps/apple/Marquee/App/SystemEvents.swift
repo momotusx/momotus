@@ -1,14 +1,16 @@
 import Network
 import SwiftUI
 
-/// Forwards memory pressure and network changes to the core.
-@MainActor
+/// Forwards memory pressure and network changes to the core, and says whether the device is offline (the
+/// shell's banner, plans/offline-downloads.md 3.5).
+@MainActor @Observable
 final class SystemEvents {
-    private let memory = DispatchSource.makeMemoryPressureSource(eventMask: [.warning, .critical], queue: .main)
-    private let network = NWPathMonitor()
-    private let core: CoreClient
+    private(set) var offline = false
+    @ObservationIgnored private let memory = DispatchSource.makeMemoryPressureSource(eventMask: [.warning, .critical], queue: .main)
+    @ObservationIgnored private let network = NWPathMonitor()
+    @ObservationIgnored private let core: CoreClient
     /// The last path as told to the core, for a core opened again (`resend`).
-    private var last: NetworkReport?
+    @ObservationIgnored private var last: NetworkReport?
 
     init(core: CoreClient) {
         self.core = core
@@ -27,6 +29,7 @@ final class SystemEvents {
                 // The first update too: a launch with no network, or on a metered one, holds downloads
                 // from the start (plans/offline-downloads.md 4.13).
                 self?.last = report
+                self?.offline = report.network == "none"
                 core.lifecycle("networkChanged", report.fields)
             }
         }

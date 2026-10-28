@@ -94,6 +94,7 @@ struct MarqueeApp: App {
                 .frame(minWidth: BackdropStops.macMinWidth)
                 #endif
                 .environment(core)
+                .environment(system)
                 .environment(sync)
                 .environment(profiles)
                 #if os(tvOS)

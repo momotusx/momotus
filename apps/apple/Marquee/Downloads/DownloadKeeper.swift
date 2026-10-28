@@ -2,6 +2,7 @@
 #if !os(tvOS)
 import Foundation
 import Observation
+import SwiftUI
 #if os(iOS)
 import BackgroundTasks
 #else
@@ -38,6 +39,8 @@ final class DownloadKeeper {
     /// controls shows it (`downloadProblem`); the next op or the user's Dismiss clears it, never a success of
     /// another op or a timer (review r3 N1).
     private(set) var failure: String?
+    /// Downloads pages on screen: the shell's offline banner leaves Go to Downloads out while one is.
+    var downloadsPages = 0
 
     @ObservationIgnored private let core: CoreClient
     @ObservationIgnored private var logic: KeeperLogic
@@ -45,6 +48,8 @@ final class DownloadKeeper {
     /// The core generation the view was opened for: every window runs `begin()`, one view serves them all
     /// (review r3 N3).
     @ObservationIgnored private var openedFor: Int?
+    /// The profile the last snapshot was for: another profile's failure line is not this one's (review r4 N13).
+    @ObservationIgnored private var profile: String?
     #if os(iOS)
     /// The continued task once the system started it, and the identifier of the one submitted.
     @ObservationIgnored private var task: AnyObject?
@@ -83,6 +88,7 @@ final class DownloadKeeper {
         let record = LiveRecord<DownloadsSnapshot>("downloads", core: core)
         record.onSnapshot = { [weak self] snapshot in
             guard let self else { return }
+            noteProfile(snapshot.profile)
             handle(.facts(KeeperFacts.of(snapshot, previous: logic.current)))
         }
         record.start()
@@ -195,12 +201,21 @@ final class DownloadKeeper {
 
     func dismissFailure() { failure = nil }
 
+    /// A snapshot of another profile clears the failure line: it was the other profile's op.
+    func noteProfile(_ now: String?) {
+        if let now, let profile, now != profile { failure = nil }
+        if let now { profile = now }
+    }
+
     private func send(_ op: String, _ fields: [String: any Sendable], answered: (@MainActor @Sendable (CoreError?) -> Void)? = nil) {
         failure = nil
         core.sendNow(op, fields) { [weak self] error in
             if let error {
                 coreLog.notice("downloads: \(op, privacy: .public) failed: \(error.localizedDescription, privacy: .public)")
-                self?.failure = op == "downloadAdd" ? DownloadCopy.addFailed : DownloadCopy.actFailed
+                let words = op == "downloadAdd" ? DownloadCopy.addFailed : DownloadCopy.actFailed
+                self?.failure = words
+                // Said once, here: every page showing the line is still mounted under the top one (review r4 N12).
+                AccessibilityNotification.Announcement(words).post()
             }
             answered?(error)
         }

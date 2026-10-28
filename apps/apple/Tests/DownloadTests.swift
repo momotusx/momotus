@@ -1,5 +1,6 @@
 import AppKit
 import Foundation
+import SwiftUI
 import Testing
 
 // Offline downloads on Apple (plans/offline-downloads.md 3.1 to 3.9, 4.13, 5, 6.3): the control's words, equal to
@@ -744,4 +745,74 @@ private func submits(_ effects: [KeeperEffect]) -> Int {
     keeper.begin()
     #expect(keeper.view === first)
     #expect(await eventually { keeper.snapshot != nil })
+}
+
+// MARK: The offline banner in the shell (plans/offline-downloads.md 3.5, review r4)
+
+private func offlineSnapshot(_ states: [String]) throws -> DownloadsSnapshot {
+    let rows = states.enumerated().map { i, state in
+        #"{"id": "r\#(i)", "kind": "movie", "itemId": "tt1", "videoId": "tt1", "season": null, "episode": null, "name": "Sintel", "episodeTitle": null, "poster": null, "still": null, "runtime": null, "released": null, "state": "\#(state)", "reason": null, "mobileData": false, "bytesDone": 1, "bytesTotal": 1, "speedBps": null, "etaSecs": null, "quality": null, "subtitles": []}"#
+    }
+    let titles = rows.isEmpty ? "" : #"{"itemId": "tt1", "kind": "movie", "name": "Sintel", "poster": null, "count": \#(rows.count), "bytes": 1, "rows": [\#(rows.joined(separator: ","))]}"#
+    let json = #"""
+    {"storage": {"downloadsBytes": 0, "freeBytes": null, "neededBytes": null}, "settings": {"wifiOnly": true, "smart": true},
+     "active": {"running": 0, "queued": 0, "waiting": 0, "mobileData": false, "bytesDone": 0, "bytesTotal": 0, "title": null},
+     "downloading": [], "titles": [\#(titles)], "profile": "default"}
+    """#
+    return try JSONDecoder().decode(DownloadsSnapshot.self, from: Data(json.utf8))
+}
+
+// Offline on every screen but TV and the player; Go to Downloads only with a done download of this profile and
+// away from the Downloads pages.
+@Test func theOfflineBannerSaysWhatStillPlays() throws {
+    #expect(OfflineBannerRule.shows(offline: true, tv: false, immersed: false))
+    #expect(!OfflineBannerRule.shows(offline: false, tv: false, immersed: false))
+    #expect(!OfflineBannerRule.shows(offline: true, tv: true, immersed: false))
+    #expect(!OfflineBannerRule.shows(offline: true, tv: false, immersed: true))
+    let done = try offlineSnapshot(["done"])
+    #expect(done.profile == "default")
+    #expect(OfflineBannerRule.offersDownloads(done, onDownloads: false))
+    #expect(!OfflineBannerRule.offersDownloads(done, onDownloads: true))
+    #expect(!OfflineBannerRule.offersDownloads(try offlineSnapshot(["failed", "missing"]), onDownloads: false))
+    #expect(!OfflineBannerRule.offersDownloads(try offlineSnapshot([]), onDownloads: false))
+    #expect(!OfflineBannerRule.offersDownloads(nil, onDownloads: false))
+    #expect(OfflineBannerRule.words(offersDownloads: true) == "You're offline. Your downloads still play.")
+    #expect(OfflineBannerRule.words(offersDownloads: false) == "You're offline.")
+}
+
+// The banner belongs to the shell: it takes its own height over any page (here a plain one, not Home), and the
+// shell puts it over every place on iPhone, iPad and the Mac; Home draws none of its own.
+@MainActor @Test func theShellShowsTheOfflineBannerOverAnyPage() throws {
+    let page = { (shown: Bool) in
+        NSHostingView(rootView: Text("Search").frame(width: 390, height: 200)
+            .modifier(OfflineShell(shown: shown, gutter: 20, open: nil)).fixedSize()).fittingSize.height
+    }
+    #expect(page(true) > page(false))
+    let app = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appending(path: "../Marquee")
+    let shell = try String(contentsOf: app.appending(path: "App/RootView.swift"), encoding: .utf8)
+    #expect(shell.components(separatedBy: "places\n        .modifier(offline)").count == 2, "iOS")
+    #expect(shell.contains("places\n            .modifier(offline)"), "macOS")
+    let home = try String(contentsOf: app.appending(path: "Home/HomeScreen.swift"), encoding: .utf8)
+    #expect(!home.contains("OfflineBanner"))
+}
+
+// A failed op is said once, by the keeper, not by every page that shows the line (review r4 N12); another
+// profile's snapshot clears the line (r4 N13).
+@MainActor @Test func aFailureIsSaidOnceAndStaysWithItsProfile() async throws {
+    let app = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appending(path: "../Marquee")
+    let screens = try String(contentsOf: app.appending(path: "Downloads/DownloadsScreen.swift"), encoding: .utf8)
+    let keeperText = try String(contentsOf: app.appending(path: "Downloads/DownloadKeeper.swift"), encoding: .utf8)
+    #expect(!screens.contains("Announcement("))
+    #expect(keeperText.contains("AccessibilityNotification.Announcement(words).post()"))
+    let core = RealCore()
+    #expect(await core.ready())
+    let keeper = DownloadKeeper(core: core.client)
+    keeper.begin()
+    #expect(await eventually { keeper.snapshot?.profile != nil })
+    keeper.add(kind: "movie", itemId: "tt0000001", scope: "video", videoId: "tt0000001")
+    #expect(await eventually(10) { keeper.failure != nil })
+    keeper.noteProfile(keeper.snapshot?.profile)
+    #expect(keeper.failure != nil, "the same profile keeps it")
+    keeper.noteProfile("another")
+    #expect(keeper.failure == nil)
 }

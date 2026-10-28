@@ -96,6 +96,7 @@ struct DownloadsScreen: View {
             keeper.act(.remove, .title($0.itemId))
         }
         .downloadProblem(keeper)
+        .downloadsPage(keeper)
     }
 
     private var actions: RowActions {
@@ -206,6 +207,7 @@ struct DownloadsSeriesPage: View {
         }
         .modifier(player.destinations(core: core, keeper: keeper))
         .downloadProblem(keeper)
+        .downloadsPage(keeper)
     }
 
     private var title: DownloadTitle? { keeper.snapshot?.titles.first { $0.itemId == itemId } }
@@ -353,6 +355,12 @@ private struct Storage: View {
 }
 
 extension View {
+    /// A Downloads page on screen: the shell's offline banner offers no way to where the user already is.
+    func downloadsPage(_ keeper: DownloadKeeper) -> some View {
+        onAppear { keeper.downloadsPages += 1 }
+            .onDisappear { keeper.downloadsPages -= 1 }
+    }
+
     /// A download op the core refused, over the page's bottom edge until the next op or Dismiss (review r3 N1).
     func downloadProblem(_ keeper: DownloadKeeper?) -> some View {
         safeAreaInset(edge: .bottom) {
@@ -363,9 +371,6 @@ extension View {
                     .padding(.bottom, Theme.Space.s)
                     .accessibilityElement(children: .contain)
             }
-        }
-        .onChange(of: keeper?.failure) { _, now in
-            if let now { AccessibilityNotification.Announcement(now).post() }
         }
     }
 }
@@ -545,31 +550,4 @@ private struct ListRowChrome: ViewModifier {
     }
 }
 
-/// Home with no network and downloads kept (3.5): the line and the way to them, on a flat card.
-struct OfflineBanner: View {
-    let open: () -> Void
-
-    var body: some View {
-        ViewThatFits(in: .horizontal) {
-            HStack(spacing: Theme.Space.s) { words; Spacer(minLength: 0); button }
-            VStack(alignment: .leading, spacing: Theme.Space.s) { words; button }
-        }
-        .flatCard()
-        .accessibilityElement(children: .contain)
-    }
-
-    private var words: some View {
-        Label(DownloadCopy.offline, glyph: "wifi-off")
-            .labelStyle(PillLabelStyle())
-            .textFont(Theme.type.body, weight: .semibold, relativeTo: .body)
-            .foregroundStyle(Theme.Palette.text)
-            .fixedSize(horizontal: false, vertical: true)
-    }
-
-    private var button: some View {
-        Button(action: open) { Label(DownloadCopy.offlineAction, glyph: "arrow-down-to-line") }
-            .buttonStyle(PillButtonStyle())
-            .fixedSize()
-    }
-}
 #endif

@@ -212,4 +212,57 @@ extension View {
             title: { _ in title }, delete: { _ in delete() })
     }
 }
+
+/// The offline banner (plans/offline-downloads.md 3.5): the words, and Go to Downloads when `open` is given.
+struct OfflineBanner: View {
+    let open: (() -> Void)?
+
+    var body: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: Theme.Space.s) { words; Spacer(minLength: 0); button }
+            VStack(alignment: .leading, spacing: Theme.Space.s) { words; button }
+        }
+        .flatCard()
+        .accessibilityElement(children: .contain)
+    }
+
+    private var words: some View {
+        Label(OfflineBannerRule.words(offersDownloads: open != nil), glyph: "wifi-off")
+            .labelStyle(PillLabelStyle())
+            .textFont(Theme.type.body, weight: .semibold, relativeTo: .body)
+            .foregroundStyle(Theme.Palette.text)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+
+    @ViewBuilder private var button: some View {
+        if let open {
+            Button(action: open) { Label(DownloadCopy.offlineAction, glyph: "arrow-down-to-line") }
+                .buttonStyle(PillButtonStyle())
+                .fixedSize()
+        }
+    }
+}
+
+/// The shell's offline banner over every page, in its own height at the top (it covers nothing), said once
+/// when it appears; it goes when the network comes back and cannot be dismissed.
+struct OfflineShell: ViewModifier {
+    let shown: Bool
+    let gutter: CGFloat
+    let open: (() -> Void)?
+
+    func body(content: Content) -> some View {
+        content
+            .safeAreaInset(edge: .top, spacing: 0) {
+                if shown {
+                    OfflineBanner(open: open)
+                        .padding(.horizontal, gutter)
+                        .padding(.vertical, Theme.Space.s)
+                        .background(Theme.Palette.bg)
+                }
+            }
+            .onChange(of: shown, initial: true) { _, now in
+                if now { AccessibilityNotification.Announcement(OfflineBannerRule.words(offersDownloads: open != nil)).post() }
+            }
+    }
+}
 #endif

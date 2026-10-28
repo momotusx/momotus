@@ -121,6 +121,19 @@ enum DownloadGate {
     }
 }
 
+/// The shell's offline banner (plans/offline-downloads.md 3.5, ui-ux audit STATE-10): on every screen while
+/// offline, never on TV or over the player; Go to Downloads when this profile has a done download and the
+/// Downloads pages are not the ones on screen.
+enum OfflineBannerRule {
+    static func shows(offline: Bool, tv: Bool, immersed: Bool) -> Bool { offline && !tv && !immersed }
+
+    static func offersDownloads(_ snapshot: DownloadsSnapshot?, onDownloads: Bool) -> Bool {
+        !onDownloads && (snapshot?.titles.contains { $0.rows.contains { $0.state == .done } } ?? false)
+    }
+
+    static func words(offersDownloads: Bool) -> String { offersDownloads ? DownloadCopy.offline : DownloadCopy.offlineAlone }
+}
+
 /// The words of downloads, equal to Android's DownloadCopy.kt and the web's lib/download.ts.
 enum DownloadCopy {
     static let menuHint = "Shows download options"
@@ -342,6 +355,8 @@ enum DownloadCopy {
     static let emptyTitle = "Nothing downloaded yet"
     static let emptyBody = "Download movies and episodes to watch them without a connection."
     static let offline = "You're offline. Your downloads still play."
+    /// Offline with nothing downloaded for this profile.
+    static let offlineAlone = "You're offline."
     static let offlineAction = "Go to Downloads"
     static let titleOffline = "Showing what's downloaded"
     static let wifiOnly = "Download on Wi-Fi only"

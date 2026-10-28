@@ -75,7 +75,7 @@ struct LibraryScreen: View {
         .navigationDestination(isPresented: $showDownloads) {
             if let keeper { DownloadsScreen(keeper: keeper, core: core) }
         }
-        // Home's offline banner: Downloads, once Library can show it.
+        // The offline banner: Downloads, once Library can show it.
         .onChange(of: links?.library, initial: true) { _, route in
             guard route == .downloads else { return }
             links?.library = nil

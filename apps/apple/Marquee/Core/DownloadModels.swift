@@ -120,6 +120,8 @@ struct DownloadsSnapshot: Decodable, Hashable, Sendable {
     let titles: [DownloadTitle]
     /// A locked session's counts-only view: no titles, nothing done or failed to read (nil from an older core).
     var locked: Bool? = nil
+    /// The profile these rows are for (nil from an older core).
+    var profile: String? = nil
 }
 
 /// Home with no network and downloads to play (3.5).

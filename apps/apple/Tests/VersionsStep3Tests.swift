@@ -379,7 +379,8 @@ private func row(_ json: String) throws -> VersionRow {
     // No glass and no edge on the cards, the failure card included; no column table.
     #expect(!page.contains(".glass("))
     #expect(!page.contains("ColumnHeadings") && !page.contains("Text(caps:"))
-    #expect(try body(of: "func flatCard()", in: page).contains(".fill(Theme.Palette.surface)"))
+    let components = try String(contentsOf: app.appending(path: "Theme/Components.swift"), encoding: .utf8)
+    #expect(try body(of: "func flatCard()", in: components).contains(".fill(Theme.Palette.surface)"))
     #expect(try body(of: "private func card(", in: player).contains(".fill(Theme.Palette.surface)"))
     #expect(!(try body(of: "private func card(", in: player)).contains(".glass("))
     // A dimmed row's badges take the muted tone with its words, never a faded row.

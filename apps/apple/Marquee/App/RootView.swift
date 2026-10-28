@@ -23,7 +23,7 @@ struct OpenTitleAction {
 @MainActor @Observable final class LinkRequests {
     var discover: DiscoverRequest?
     #if !os(tvOS)
-    /// A page of Library to open (Home's offline banner asks for Downloads); Library clears it.
+    /// A page of Library to open (the offline banner asks for Downloads); Library clears it.
     var library: LibraryRoute?
     #endif
 }
@@ -157,6 +157,10 @@ struct MainShell: View {
     @Environment(SyncModel.self) private var sync
     @Environment(AccountWipe.self) private var wipe
     #endif
+    #if !os(tvOS)
+    @Environment(SystemEvents.self) private var system: SystemEvents?
+    @Environment(DownloadKeeper.self) private var keeper: DownloadKeeper?
+    #endif
 
     init(core: CoreClient) {
         _home = State(initialValue: HomeModel(core: core))
@@ -217,6 +221,7 @@ struct MainShell: View {
     @ViewBuilder private var content: some View {
         #if os(iOS)
         places
+        .modifier(offline)
         // The bar's inset below does not reach scroll views inside the tabs'
         // navigation stacks (a page's end stayed under the bar): every page,
         // pushed or not, keeps the bar's height free at its end.
@@ -278,6 +283,7 @@ struct MainShell: View {
         }
         #elseif os(macOS)
         places
+            .modifier(offline)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(Theme.Palette.bg)
             // The owner's variant 4: the places in a glass ornament at the window's foot; pages end above it.
@@ -329,6 +335,20 @@ struct MainShell: View {
         .onExitCommand(perform: back)
         #endif
     }
+
+    #if !os(tvOS)
+    /// The offline banner over every place (plans/offline-downloads.md 3.5): Go to Downloads opens Library's
+    /// Downloads page unless one is on screen.
+    private var offline: OfflineShell {
+        let shown = OfflineBannerRule.shows(offline: system?.offline == true, tv: false, immersed: immersion.active)
+        let onDownloads = tab == .library && (keeper?.downloadsPages ?? 0) > 0
+        let offers = OfflineBannerRule.offersDownloads(keeper?.snapshot, onDownloads: onDownloads)
+        return OfflineShell(shown: shown, gutter: metrics.gutter, open: offers ? {
+            links.library = .downloads
+            select(.library, link: true)
+        } : nil)
+    }
+    #endif
 
     #if os(tvOS)
     /// A page is over this place's root. Home's path counts too: a page put
