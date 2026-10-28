@@ -138,8 +138,8 @@ test("Start fresh: nothing installed before Continue, two switches turned off st
   await expect(page).toHaveURL(/\/welcome/);
   await page.locator('[data-f="welcome:fresh"]').click();
   await expect(page.locator("h1")).toHaveText("Recommended addons");
-  await expect(page.locator("button.drow")).toHaveCount(10);
-  await expect(page.locator('button.drow[aria-checked="true"]')).toHaveCount(10);
+  await expect(page.locator("button.drow")).toHaveCount(11);
+  await expect(page.locator('button.drow[aria-checked="true"]')).toHaveCount(11);
   await shot(page, "defaults-step", "desktop");
   for (const key of ["torrentio", "trakt"]) await page.locator(`[data-f="welcome:default:${key}"]`).click();
   await expect(page.locator('[data-f="welcome:default:torrentio"]')).toHaveAttribute("aria-checked", "false");
@@ -164,7 +164,7 @@ test("Start fresh: nothing installed before Continue, two switches turned off st
   expect((await client.req<Prefs>("setPrefs", { patch: {} })).streams).toMatchObject({ sizeLimitBytes: null, minSeeders: 20 });
   expect((await client.req<Prefs>("setPrefs", { patch: {} })).subtitleLanguages).toEqual([]);
   const choices = sent.find((m) => m.op === "installDefaults")?.choices as { key: string; on: boolean }[];
-  expect(choices).toHaveLength(10);
+  expect(choices).toHaveLength(11);
   expect(choices.filter((c) => !c.on).map((c) => c.key)).toEqual(["torrentio", "trakt"]);
   expect(await states()).toMatchObject({ cinemeta: "on", torrentio: "off", trakt: "off", kitsu: "on", opensubtitles: "on" });
   // Torrentio is off, so the setup check offers it through the core's defaults.
@@ -198,7 +198,7 @@ test("Browse first passes the switches, then opens Home as the root", async ({ b
   await expect(page).toHaveURL(/\/welcome/);
   await page.locator('[data-f="welcome:skip"]').click();
   await expect(page).toHaveURL(/step=2&then=home/);
-  await expect(page.locator("button.drow")).toHaveCount(10);
+  await expect(page.locator("button.drow")).toHaveCount(11);
   expect(await allAbsent()).toBe(true);
   await page.waitForTimeout(500);
   await page.screenshot({ path: `${OUT}/defaults-step-phone.jpg`, type: "jpeg", quality: 80, fullPage: true });
@@ -293,7 +293,7 @@ test("a finished import leads to the step, and a restart before Continue gets th
   await page.locator('[data-f="import:next"]').click();
   await expect(page).toHaveURL(/step=2&from=import/);
   await expect(page.locator(".drow.fixed", { hasText: "Cinemeta" })).toContainText("From Stremio");
-  await expect(page.locator("button.drow")).toHaveCount(9);
+  await expect(page.locator("button.drow")).toHaveCount(10);
   await shot(page, "defaults-after-import", "desktop");
 
   // The app restarts before Continue: the profile has a list now, so Home
@@ -308,7 +308,7 @@ test("a finished import leads to the step, and a restart before Continue gets th
   await shot(page, "defaults-card", "desktop");
   await page.locator('[data-f="home:defaults:review"]').click();
   await expect(page).toHaveURL(/step=2&review=1/);
-  await expect(page.locator("button.drow")).toHaveCount(9);
+  await expect(page.locator("button.drow")).toHaveCount(10);
   await expect(page.locator(".drow.fixed")).toHaveCount(0);
   await page.locator('[data-f="welcome:next"]').click();
   await expect(page).toHaveURL(/127\.0\.0\.1:\d+\/(\?.*)?$/);
@@ -553,4 +553,20 @@ test("the built-in TurkceAltyazi.org row says where it runs instead of a host", 
   await expect(page.locator("section.set", { hasText: "About" })).toContainText(
     "Turkish subtitles from TurkceAltyazi.org, fetched by this device when you play.",
   );
+});
+
+test("the addon directory is a default: Find addons lists it out of the box", async ({ browser }) => {
+  // The owner's decision of 2026-10-28 (plans/plugins-and-marketplace.md 7.1): installed like any
+  // default, from its bundled manifest; its list comes from stremio-addons.net as recorded.
+  await client.req("installDefaults", { choices: [{ key: "cinemeta", on: true }, { key: "stremioaddons", on: true }] });
+  await client.req("setPrefs", { patch: { defaultsSeen: 1 } });
+  const page = await device(browser, "desktop");
+  await page.goto("/find-addons?form=desktop");
+  const chip = page.getByRole("radio", { name: /^stremio-addons\.net/ });
+  await expect(chip).toBeVisible({ timeout: 20_000 });
+  await chip.click();
+  await expect(page.locator(".fa-from a")).toHaveText("From stremio-addons.net");
+  await expect(page.locator(".fa-card:not(.skel)").first()).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByRole("button", { name: /^Install / }).first()).toBeVisible();
+  await shot(page, "find-addons-directory-default", "desktop");
 });

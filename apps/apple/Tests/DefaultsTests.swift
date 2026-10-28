@@ -123,7 +123,7 @@ private func on(_ choices: [DefaultChoice]) -> [String: Bool] {
         return Dictionary(uniqueKeysWithValues: list.addons.map { ($0.key, $0.installed) })
     }
 
-    /// A profile from an older device: the ten installed, never offered (the core counts installDefaults as seen).
+    /// A profile from an older device: every default installed, never offered (the core counts installDefaults as seen).
     private func older(_ core: CoreClient) async throws {
         let list = try await core.call("defaultAddons", as: DefaultAddons.self)
         try await core.perform("installDefaults", ["choices": list.addons.map { DefaultChoice(key: $0.key, on: true).fields }])
@@ -145,14 +145,14 @@ private func on(_ choices: [DefaultChoice]) -> [String: Bool] {
         #expect(offer.names(kids: false) == nil)
         let step = DefaultsStep(core: core.client, scope: .all)
         await step.load()
-        #expect(step.rows.count == 10)
+        #expect(step.rows.count == 11)
         #expect(step.rows.allSatisfy { DefaultsRules.hasSwitch($0) && step.isOn($0) })
         for row in step.rows where ["torrentio", "trakt"].contains(row.key) { step.flip(row) }
         #expect(await step.install())
         let state = try await installed(core.client)
-        #expect(state.count == 10)
+        #expect(state.count == 11)
         #expect(state.filter { $0.value == .off }.keys.sorted() == ["torrentio", "trakt"])
-        #expect(state.filter { $0.value == .on }.count == 8)
+        #expect(state.filter { $0.value == .on }.count == 9)
         #expect(await eventually { !offer.fresh })
         // The profile has seen this list: a default removed later brings no card.
         #expect(await eventually { offer.prefs.snapshot?.defaultsSeen == 1 })
@@ -162,7 +162,7 @@ private func on(_ choices: [DefaultChoice]) -> [String: Bool] {
         #expect(offer.names(kids: false) == nil)
     }
 
-    @Test func continueBeforeTheListIsReadStillNamesAllTen() async throws {
+    @Test func continueBeforeTheListIsReadStillNamesEveryDefault() async throws {
         let core = RealCore()
         #expect(await core.ready())
         // Continue pressed before the list arrived.
@@ -180,7 +180,7 @@ private func on(_ choices: [DefaultChoice]) -> [String: Bool] {
         let cinemeta = try #require(await url("Cinemeta", offer))
         try await core.client.perform("removeAddon", ["url": torrentio])
         try await core.client.perform("setAddonEnabled", ["url": cinemeta, "enabled": false])
-        #expect(await eventually { offer.addons.snapshot?.addons.count == 9 && offer.prefs.snapshot != nil })
+        #expect(await eventually { offer.addons.snapshot?.addons.count == 10 && offer.prefs.snapshot != nil })
         await offer.refresh()
         #expect(offer.names(kids: false) == ["Torrentio"])
         #expect(offer.names(kids: true) == nil)
@@ -202,7 +202,7 @@ private func on(_ choices: [DefaultChoice]) -> [String: Bool] {
         offer.start()
         try await older(core.client)
         try await core.client.perform("removeAddon", ["url": try #require(await url("Trakt Tv", offer))])
-        #expect(await eventually { offer.addons.snapshot?.addons.count == 9 && offer.prefs.snapshot != nil })
+        #expect(await eventually { offer.addons.snapshot?.addons.count == 10 && offer.prefs.snapshot != nil })
         await offer.refresh()
         #expect(offer.names(kids: false) == ["Trakt"])
         // Answered once: the card stays away, here and (synced) on every device.
@@ -234,7 +234,7 @@ private func on(_ choices: [DefaultChoice]) -> [String: Bool] {
         state = try await installed(core.client)
         #expect(state["torrentio"] == .on)
         #expect(state["opensubtitles"] == .off)
-        #expect(state.filter { $0.value == .on }.count == 9)
+        #expect(state.filter { $0.value == .on }.count == 10)
         // Settings switches one where it is, and reads the list again.
         #expect(await fixer.set("trakt", on: false))
         #expect(fixer.list?.addons.first { $0.key == "trakt" }?.installed == .off)

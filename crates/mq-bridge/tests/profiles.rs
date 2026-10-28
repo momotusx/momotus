@@ -1039,7 +1039,7 @@ async fn in_a_sync_account_new_defaults_wait_for_the_runs_first_pull() {
     assert_eq!(count(), 6);
     let mut c = Client::new(core.clone());
     c.ok(json!({"op": "syncNow", "record": record})).await;
-    assert_eq!(count(), 10, "the four it never had, after the pull");
+    assert_eq!(count(), 11, "the five it never had, after the pull");
     drop(c);
     drop(core);
     let _ = std::fs::remove_dir_all(&data);
@@ -1075,7 +1075,7 @@ async fn a_device_signed_out_of_its_account_gets_new_defaults_again() {
     drop(core);
 
     let core = open();
-    assert_eq!(core.library().addons("default").unwrap().len(), 10);
+    assert_eq!(core.library().addons("default").unwrap().len(), 11);
     drop(core);
     let _ = std::fs::remove_dir_all(&data);
     let _ = std::fs::remove_dir_all(&relay_dir);

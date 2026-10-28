@@ -1996,5 +1996,36 @@
     "configurable": true
    }
   }
+ },
+ {
+  "key": "stremioaddons",
+  "url": "https://stremio-addons.net/api/manifest.json",
+  "name": "stremio-addons.net",
+  "line": "A directory of community addons, listed in Find addons.",
+  "group": "lists",
+  "manifest": {
+   "id": "community.stremio.stremio-addons-dot-net",
+   "logo": "https://stremio-addons.net/img/web-app-manifest-192x192.png",
+   "version": "1.0.1",
+   "name": "stremio-addons.net",
+   "description": "Provides the Community Stremio Addons catalog from stremio-addons.net.",
+   "types": [
+    "movie",
+    "series",
+    "channel",
+    "tv"
+   ],
+   "resources": [
+    "addon_catalog"
+   ],
+   "catalogs": [],
+   "addonCatalogs": [
+    {
+     "type": "all",
+     "id": "stremio-addons.net",
+     "name": "stremio-addons.net"
+    }
+   ]
+  }
  }
 ]

@@ -77,6 +77,11 @@ pub(crate) static LOGOS: &[mq_server::Logo] = &[
         "image/png",
         include_bytes!("../assets/defaults/streamingcatalogs.png"),
     ),
+    logo(
+        "stremioaddons",
+        "image/png",
+        include_bytes!("../assets/defaults/stremioaddons.png"),
+    ),
 ];
 
 const fn logo(key: &'static str, mime: &'static str, bytes: &'static [u8]) -> mq_server::Logo {
@@ -145,7 +150,7 @@ pub struct DefaultChoice {
     pub on: bool,
 }
 
-/// The ten defaults, in order.
+/// The defaults, in order.
 pub fn list() -> &'static [DefaultAddon] {
     static LIST: OnceLock<Vec<DefaultAddon>> = OnceLock::new();
     LIST.get_or_init(|| {
@@ -160,14 +165,17 @@ pub fn by_id(id: &str) -> Option<&'static DefaultAddon> {
 }
 
 /// The defaults the owner's rulings of 2026-10-22 bring to existing
-/// profiles (Streaming Catalogs the later one). A profile with a list from
-/// before the profiles kept what they had counts every other default as
-/// had: it gets these four once, and an older one it removed stays removed.
-const BROUGHT: [&str; 4] = [
+/// profiles (Streaming Catalogs the later one), and the stremio-addons.net
+/// directory of 2026-10-28 (an `addon_catalog` addon only: its list shows in
+/// Find addons, plans/plugins-and-marketplace.md 7.1). A profile with a list
+/// from before the profiles kept what they had counts every other default
+/// as had: it gets these once, and an older one it removed stays removed.
+const BROUGHT: [&str; 5] = [
     "trakt",
     "rottentomatoes",
     "torrentcatalogs",
     "streamingcatalogs",
+    "stremioaddons",
 ];
 
 /// Settings keys under this prefix, one per key in `MOVED`, record that the
@@ -386,7 +394,7 @@ mod tests {
     }
 
     #[test]
-    fn the_bundled_defaults_are_ten_installable_addons() {
+    fn the_bundled_defaults_are_installable_addons() {
         let list = list();
         let keys: Vec<&str> = list.iter().map(|d| d.key.as_str()).collect();
         assert_eq!(
@@ -401,7 +409,8 @@ mod tests {
                 "rottentomatoes",
                 "torrentcatalogs",
                 "kitsu",
-                "streamingcatalogs"
+                "streamingcatalogs",
+                "stremioaddons"
             ]
         );
         let ids: HashSet<&str> = list.iter().map(|d| d.manifest.id.as_str()).collect();
