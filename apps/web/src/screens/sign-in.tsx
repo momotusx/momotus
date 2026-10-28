@@ -959,6 +959,9 @@ export function Found() {
   );
 }
 
+/** A TV's first screen shows the QR: a sign-in service is known and this device may pair. */
+export const tvQrShows = () => !!signInServer() && sync.settled() && sync.mayPair();
+
 /** A TV's first run (plans/tv-qr-login.md 5.5): the QR and "Scan with your phone's camera", a new
  * code in place as each ends; the welcome header's Browse first is the one focus stop (a recovery
  * kit is reachable from Settings after it). A TV that joined opens Home after its first pull. */
@@ -966,7 +969,7 @@ export function TvSignIn(props: { doors: () => JSX.Element }) {
   const navigate = useNavigate();
   const server = signInServer();
   return (
-    <Show when={server && sync.settled() && sync.mayPair()} fallback={props.doors()}>
+    <Show when={tvQrShows()} fallback={props.doors()}>
       <section class="step-body tv-sign-in" aria-label={w.tvSignIn}>
         <h1>{w.tvSignIn}</h1>
         <Session server={server} name={sync.defaultDeviceName()} onJoined={() => void homeAfterPull(navigate)} />

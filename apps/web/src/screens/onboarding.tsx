@@ -34,7 +34,7 @@ import { choiceWords, findAddons, languageName, type Tone } from "../lib/words";
 import * as sync from "../core/sync";
 import { InstallField } from "./addons";
 import { allLanguages, QUICK } from "./settings";
-import { SignInStart, TvSignIn } from "./sign-in";
+import { SignInStart, TvSignIn, tvQrShows } from "./sign-in";
 import "./browse.css";
 import Brand from "../components/brand";
 import "./settings.css";
@@ -142,8 +142,8 @@ export default function Onboarding() {
             replace={!fresh()}
             onClick={() => !fresh() && resetHistoryBase()}
             data-f="welcome:skip"
-            // On a TV's sign-in screen it is the one focus stop (plans/tv-qr-login.md 5.5).
-            data-autofocus={form() === "tv" && step() === 1 ? "" : undefined}
+            // On a TV's sign-in screen it is the one focus stop (plans/tv-qr-login.md 5.5); over the doors, Stremio is.
+            data-autofocus={form() === "tv" && step() === 1 && !sync.joined() && !sync.locked() && tvQrShows() ? "" : undefined}
           >
             {accountWords.browseFirst}
             <ChevronRight aria-hidden />
