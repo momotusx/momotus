@@ -9,6 +9,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
+import app.marquee.core.KeeperEvent
 import app.marquee.core.client.CoreLog
 import app.marquee.core.client.DeviceCapsParams
 import app.marquee.core.session.CoreSession
@@ -132,6 +133,12 @@ class MarqueeApp :
         }
         lifecycle = AppLifecycle(this, session, sync).also { it.register() }
         downloadKeeper = DownloadKeeper(this, session).also { it.start() }
+        // The keeper's view follows the session across a switch; the keeper hears whose it is (code review r3 M1).
+        session.scope.launch(Dispatchers.Main) {
+            snapshotFlow { profiles.snapshot?.active }.collect { id ->
+                if (id != null) downloadKeeper.on(KeeperEvent.Profile(id))
+            }
+        }
         val scan = session.scope.async(Dispatchers.Default) { DeviceCaps.scanCodecs() }
         deviceCaps = {
             runCatching {

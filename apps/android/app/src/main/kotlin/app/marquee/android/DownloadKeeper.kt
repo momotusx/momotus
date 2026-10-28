@@ -54,6 +54,9 @@ class DownloadKeeper(
     private var job: Pair<JobService, JobParameters>? = null
     private var allowed = true
 
+    /** The failure notices up, so a profile change takes them down. */
+    private val failures = mutableSetOf<Int>()
+
     fun start() {
         createChannel()
         session.scope.launch(Dispatchers.Main) {
@@ -91,6 +94,17 @@ class DownloadKeeper(
                 release()
             }
 
+            KeeperEffect.HideProgress -> {
+                if (job == null) NotificationManagerCompat.from(app).cancel(PROGRESS_ID)
+            }
+
+            KeeperEffect.ClearNotices -> {
+                val shade = NotificationManagerCompat.from(app)
+                shade.cancel(FINISHED_ID)
+                failures.forEach(shade::cancel)
+                failures.clear()
+            }
+
             KeeperEffect.SettleLater -> {
                 session.scope.launch(Dispatchers.Main) {
                     delay(SETTLE_MS)
@@ -103,7 +117,9 @@ class DownloadKeeper(
             }
 
             is KeeperEffect.Failed -> {
-                notice(effect.id.hashCode(), "Couldn't download ${effect.title}", null)
+                val id = effect.id.hashCode()
+                failures += id
+                notice(id, "Couldn't download ${effect.title}", null)
             }
 
             is KeeperEffect.Allowed -> {

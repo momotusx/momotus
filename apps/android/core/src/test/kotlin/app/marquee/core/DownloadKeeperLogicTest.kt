@@ -2,8 +2,10 @@ package app.marquee.core
 
 import app.marquee.core.KeeperEffect.Allocate
 import app.marquee.core.KeeperEffect.Allowed
+import app.marquee.core.KeeperEffect.ClearNotices
 import app.marquee.core.KeeperEffect.Failed
 import app.marquee.core.KeeperEffect.Finished
+import app.marquee.core.KeeperEffect.HideProgress
 import app.marquee.core.KeeperEffect.Keep
 import app.marquee.core.KeeperEffect.Progress
 import app.marquee.core.KeeperEffect.Release
@@ -26,8 +28,9 @@ class DownloadKeeperLogicTest {
         needed: Long? = null,
         unmetered: Boolean = false,
         locked: Boolean = false,
+        running: Int = left,
     ) = KeeperEvent.Facts(
-        KeeperFacts(left, bytesDone, bytesTotal, "Severance", done, failed, needed, unmetered, locked = locked),
+        KeeperFacts(left, running, bytesDone, bytesTotal, "Severance", done, failed, needed, unmetered, locked = locked),
     )
 
     /** A locked session's view: counts and bytes, no names, nothing done or failed. */
@@ -35,7 +38,9 @@ class DownloadKeeperLogicTest {
         left: Int,
         bytesDone: Long = 0,
         bytesTotal: Long = 0,
-    ) = KeeperEvent.Facts(KeeperFacts(left, bytesDone, bytesTotal, null, emptyMap(), emptyMap(), null, locked = true))
+    ) = KeeperEvent.Facts(
+        KeeperFacts(left, left, bytesDone, bytesTotal, null, emptyMap(), emptyMap(), null, locked = true),
+    )
 
     private fun KeeperEffect.isProgress() = this is Progress
 
@@ -73,7 +78,7 @@ class DownloadKeeperLogicTest {
         assertEquals(Allowed(true), front.last())
         // The system stopped the job out of sight: downloads wait for the app until it starts it again.
         keeper.on(KeeperEvent.Visible(false))
-        assertEquals(listOf<KeeperEffect>(Allowed(false)), keeper.on(KeeperEvent.Stopped))
+        assertEquals(listOf(HideProgress, Allowed(false)), keeper.on(KeeperEvent.Stopped))
         assertEquals(listOf<KeeperEffect>(Allowed(true)), keeper.on(KeeperEvent.Started))
     }
 
@@ -241,5 +246,64 @@ class DownloadKeeperLogicTest {
         assertTrue(keeper.on(facts(1)).none { it is Keep })
         assertTrue(keeper.on(KeeperEvent.Minute).any { it is Keep })
         assertTrue(keeper.on(facts(1)).none { it is Keep })
+    }
+
+    /**
+     * A switch with no lock (owner to kids) takes the owner's finished and failure notices down, and the next
+     * profile's failures and finishes are not news to it, nor the owner's again on the way back (code review r3 M1).
+     */
+    @Test
+    fun `a profile switch clears the notices and raises nothing of either profile`() {
+        val keeper = DownloadKeeperLogic()
+        keeper.on(KeeperEvent.Visible(true))
+        assertEquals(emptyList(), keeper.on(KeeperEvent.Profile("owner")))
+        val owner = mapOf("a" to "Sintel", "b" to "Severance S1:E4")
+        keeper.on(facts(0, failed = mapOf("a" to "Sintel")))
+        assertEquals(listOf<KeeperEffect>(Failed("b", "Severance S1:E4")), keeper.on(facts(0, failed = owner)))
+        assertEquals(emptyList(), keeper.on(KeeperEvent.Profile("owner")))
+        assertEquals(listOf<KeeperEffect>(ClearNotices), keeper.on(KeeperEvent.Profile("kid")))
+        assertEquals(emptyList(), keeper.on(facts(0, failed = mapOf("a" to "Sintel"))))
+        assertEquals(listOf<KeeperEffect>(ClearNotices), keeper.on(KeeperEvent.Profile("owner")))
+        assertEquals(emptyList(), keeper.on(facts(0, failed = owner)))
+    }
+
+    /** A batch that begins after a switch counts from the new profile's done downloads, not the old one's. */
+    @Test
+    fun `a batch after a switch counts only the new profile's own finishes`() {
+        val keeper = DownloadKeeperLogic()
+        keeper.on(KeeperEvent.Visible(true))
+        keeper.on(KeeperEvent.Profile("kid"))
+        keeper.on(facts(0))
+        keeper.on(KeeperEvent.Profile("owner"))
+        val before = mapOf("a" to "Sintel", "b" to "Sintel")
+        assertEquals(
+            Progress("Downloading", "Severance · 0%", 0f),
+            keeper.on(facts(1, done = before, bytesTotal = 1_000)).last(),
+        )
+        keeper.on(facts(0, done = before + ("c" to "Severance")))
+        assertEquals(listOf(Release, Finished("Downloads finished", "Severance")), keeper.on(KeeperEvent.Settled))
+    }
+
+    /** A refusal as the app leaves is asked again at the next front, not a minute later (code review r3 m1). */
+    @Test
+    fun `a refused job is asked again when the app comes back`() {
+        val keeper = DownloadKeeperLogic()
+        keeper.on(KeeperEvent.Visible(true))
+        keeper.on(facts(1))
+        keeper.on(KeeperEvent.Visible(false))
+        assertEquals(listOf(HideProgress, Allowed(false)), keeper.on(KeeperEvent.Refused))
+        assertTrue(keeper.on(KeeperEvent.Visible(true)).any { it is Keep })
+    }
+
+    /** Every download waits (Wi-Fi, a connection, room): the notification says so, never "Downloading" (r3 m2). */
+    @Test
+    fun `downloads that only wait read as waiting`() {
+        val keeper = DownloadKeeperLogic()
+        keeper.on(KeeperEvent.Visible(true))
+        assertEquals(
+            Progress("Waiting", "Severance", null),
+            keeper.on(facts(2, running = 0, unmetered = true))[1],
+        )
+        assertEquals(Progress("Downloading 1 of 2", "Severance", null), keeper.on(facts(2, running = 1)).last())
     }
 }
