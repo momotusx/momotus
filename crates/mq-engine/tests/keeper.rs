@@ -864,10 +864,27 @@ async fn a_sustained_write_takes_the_readahead_farthest_first() {
     let mut buf = vec![0u8; 50 * MIB as usize];
     within(60, range.read_exact(&mut buf)).await.unwrap();
     assert!(buf == w.movie(0, 50 * MIB));
-    // The readahead fills: 96 MiB past the playback window.
-    tokio::time::sleep(Duration::from_secs(3)).await;
-    let before = w.stats().await.held_bytes.unwrap();
-    assert!(before > 120 * MIB, "the window filled: {before}");
+    // The readahead fills: 96 MiB past the playback window. Waited for, not
+    // slept on: under load the fill takes longer than any fixed time.
+    let held = || async { w.stats().await.held_bytes.unwrap_or(0) };
+    until("the window filled past 120 MiB", || async {
+        held().await > 120 * MIB
+    })
+    .await;
+    // Then until it stops growing, so `before` is the full window.
+    let (mut before, filling) = (held().await, Instant::now());
+    loop {
+        tokio::time::sleep(Duration::from_millis(500)).await;
+        let now = held().await;
+        if now == before {
+            break;
+        }
+        assert!(
+            filling.elapsed() < Duration::from_secs(30),
+            "the window settled"
+        );
+        before = now;
+    }
     let min_free = Arc::new(AtomicU64::new(u64::MAX));
     let watch = tokio::spawn({
         let (engine, min) = (w.engine.clone(), min_free.clone());
@@ -880,18 +897,22 @@ async fn a_sustained_write_takes_the_readahead_farthest_first() {
     });
     let mut at = 50 * MIB;
     let mut chunk = vec![0u8; 256 * 1024];
-    let started = Instant::now();
-    for tick in 1..=120u64 {
-        // The other app: 1 MiB every 100 ms.
+    for _ in 0..120 {
+        // The other app: 1 MiB, then 100 ms. A pause after each step, never
+        // a catch-up burst after a slow read, so it never writes faster
+        // than 10 MiB/s however loaded the machine is.
         base -= MIB;
         test_hooks::set_free_base(&w.engine, Some(base));
         within(30, range.read_exact(&mut chunk)).await.unwrap();
         assert!(chunk == w.movie(at, at + 256 * 1024));
         at += 256 * 1024;
-        let next = started + Duration::from_millis(100 * tick);
-        tokio::time::sleep_until(next.into()).await;
+        tokio::time::sleep(Duration::from_millis(100)).await;
     }
-    tokio::time::sleep(Duration::from_secs(2)).await;
+    // The keeper's last rounds land: waited for on what it holds.
+    until("the readahead given back", || async {
+        held().await + 80 * MIB <= before
+    })
+    .await;
     watch.abort();
     let min = min_free.load(Ordering::Relaxed);
     let s = w.stats().await;
