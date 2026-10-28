@@ -1971,3 +1971,177 @@ async fn the_code_renews_itself_and_still_signs_the_screen_in() {
     assert_eq!(dropped["code"], "dropped", "{dropped}");
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// What a phone signed in with puts in front of a TV signed in by its QR: the
+/// TV's first pull holds every register of every synced collection (profiles,
+/// kids and locks, addons and their order, the library, Continue Watching,
+/// watched marks, settings, remembered streams), the same as on the phone.
+#[tokio::test]
+async fn a_screen_signed_in_by_qr_gets_the_whole_account() {
+    use mq_library::{AddonRow, AllowedRow, LibraryItemRow, ProgressRow, SyncCursor, coll};
+    use mq_runtime::views::pairing::{PairingSnapshot, PairingView};
+    let dir = std::env::temp_dir().join(format!("mq-bridge-whole-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let app = mq_sync_server::router(&dir.join("relay.sqlite"), Default::default()).unwrap();
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let server = format!("http://{}", listener.local_addr().unwrap());
+    tokio::spawn(async move { mq_sync_server::serve(listener, app).await.unwrap() });
+
+    // The phone's own data, from before it signed in.
+    let phone = Core::temporary("p").unwrap();
+    let (lib, clock) = (phone.library(), phone.clock());
+    lib.update_profile("p", "Ada", "fox", 0, clock).unwrap();
+    lib.set_pin_hash("p", Some("$argon2id$v=19$m=1,t=1,p=1$c2FsdA$aGFzaA"), clock)
+        .unwrap();
+    lib.create_kids_profile("kid", "Kid", "owl", clock).unwrap();
+    let allowed = AllowedRow {
+        item_id: "tt9".into(),
+        kind: "movie".into(),
+        name: "Allowed".into(),
+        names: vec![],
+        poster: None,
+        allowed: true,
+        added_ms: 1,
+    };
+    assert!(lib.write_allowed("kid", &allowed, &phone.hlc()).unwrap());
+    lib.create_profile("guest", "Guest", "cat", clock).unwrap();
+    lib.delete_profile("guest", clock).unwrap();
+    lib.edit_addons("p", clock, |rows: &mut Vec<AddonRow>| {
+        rows.push(AddonRow {
+            transport_url: "https://addon.example/manifest.json".into(),
+            manifest_json: "{\"id\":\"org.example\"}".into(),
+            position: 0,
+            enabled: true,
+            allow_private: false,
+        });
+        Ok::<_, mq_library::LibraryError>(())
+    })
+    .unwrap();
+    let item = LibraryItemRow {
+        item_id: "tt1".into(),
+        kind: "movie".into(),
+        name: "Saved".into(),
+        poster: None,
+        poster_shape: None,
+        added_ms: 1,
+    };
+    lib.upsert_item("p", &item, true, clock).unwrap();
+    let progress = |video_id| ProgressRow {
+        video_id,
+        item_id: video_id,
+        position_ms: 600_000,
+        duration_ms: 6_000_000,
+        updated_ms: 1,
+    };
+    lib.set_progress("p", progress("tt1"), clock).unwrap();
+    lib.set_progress("p", progress("tt3"), clock).unwrap();
+    lib.dismiss("p", "tt3", clock).unwrap();
+    lib.set_watched("p", "tt2", "tt2", true, clock).unwrap();
+    lib.set_setting("p", "subtitleLanguages", "[\"tur\"]", clock)
+        .unwrap();
+    lib.set_stream_memory("p", "tt1", Some("g"), "{\"key\":\"1\"}", clock)
+        .unwrap();
+
+    // It signs in (here: makes the account) and its first sync sends it all.
+    let (tx_a, mut rx_a) = Output::channel();
+    let mut a = Session::new(phone.clone(), tx_a);
+    let made = ask(
+        &mut a,
+        &mut rx_a,
+        json!({"id": 1, "op": "createSyncAccount", "server": server, "name": "Phone"}),
+    )
+    .await;
+    let record = made["result"].clone();
+    let sent = ask(
+        &mut a,
+        &mut rx_a,
+        json!({"id": 2, "op": "syncNow", "record": record}),
+    )
+    .await;
+    assert_eq!(sent["ok"], true, "{sent}");
+
+    // The TV shows its QR; the phone scans it and approves.
+    let tv = Core::temporary("p").unwrap();
+    let pairing = PairingView::open(&tv, &server, "Living room TV", Some("tv"));
+    let qr = tokio::time::timeout(Duration::from_secs(10), async {
+        loop {
+            if let PairingSnapshot::Waiting { qr, .. } = pairing.snapshot() {
+                return qr;
+            }
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+    })
+    .await
+    .expect("the TV shows a code");
+    let approved = ask(
+        &mut a,
+        &mut rx_a,
+        json!({"id": 3, "op": "approvePairing", "record": record, "qr": qr, "via": "scan", "unlocked": true}),
+    )
+    .await;
+    assert_eq!(approved["ok"], true, "{approved}");
+    let tv_record = tokio::time::timeout(Duration::from_secs(20), async {
+        loop {
+            if let PairingSnapshot::Joined { record, .. } = pairing.snapshot() {
+                return record;
+            }
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+    })
+    .await
+    .expect("the TV joined");
+
+    // Its first pull.
+    let (tx_b, mut rx_b) = Output::channel();
+    let mut b = Session::new(tv.clone(), tx_b);
+    let pulled = ask(
+        &mut b,
+        &mut rx_b,
+        json!({"id": 1, "op": "syncNow", "record": tv_record}),
+    )
+    .await;
+    assert_eq!(pulled["ok"], true, "{pulled}");
+
+    let all = |core: &Core| {
+        core.library()
+            .changed_since(&SyncCursor::default(), 100_000)
+            .unwrap()
+    };
+    let (mine, theirs) = (all(&phone), all(&tv));
+    let colls: std::collections::BTreeSet<u8> = mine.iter().map(|r| r.coll).collect();
+    let every = [
+        coll::PROFILES,
+        coll::ITEMS,
+        coll::PROGRESS,
+        coll::WATCHED,
+        coll::SETTINGS,
+        coll::STREAM_MEMORY,
+        coll::PROFILE_LOCK,
+        coll::PROFILE_GONE,
+        coll::PROFILE_ACCESS,
+        coll::ALLOWED,
+        coll::DISMISSED,
+        coll::ADDON,
+        coll::ADDON_ORDER,
+    ];
+    assert!(
+        every.iter().all(|c| colls.contains(c)),
+        "the phone holds every collection: {colls:?}"
+    );
+    for r in &mine {
+        assert!(
+            theirs
+                .iter()
+                .any(|t| t.coll == r.coll && t.key == r.key && t.value == r.value),
+            "the TV lacks {r:?}"
+        );
+    }
+    // And what the TV's screens read from it.
+    let tv_lib = tv.library();
+    assert_eq!(tv_lib.addons("p").unwrap().len(), 1);
+    let cw = tv_lib.continue_watching("p", 10).unwrap();
+    assert_eq!(cw.len(), 1, "tt1 only: tt3 was taken off");
+    assert!(tv_lib.profile("kid").unwrap().is_some_and(|k| k.kids()));
+    assert!(tv_lib.is_gone("guest").unwrap());
+    let _ = std::fs::remove_dir_all(&dir);
+}
