@@ -197,16 +197,20 @@ class FirstRunB4Test {
     }
 
     @Test
-    @Config(qualifiers = "w960dp-h540dp-xhdpi")
-    fun `TV, the frame and its bar sit in the middle of the space under the header`() {
+    @Config(qualifiers = "w720dp-h540dp-xhdpi")
+    fun `TV at 4 to 3, the full-width frame and its bar sit in the middle under the header`() {
         question(Form.Tv, null)
         compose.waitForIdle()
         val header = bounds(STEP_HEADER)
         val frame = bounds(FILM_FRAME)
         val bar = bounds(FILM_BAR)
-        // Under the header and over the safe area at the foot (60 on the 1080 canvas).
+        // A 4:3 TV is 1920 by 1440 on the canvas: the width binds and the height left over is shared.
+        val scale = root().width / 1920f
+        assertEquals(root().width, frame.width, 1f)
+        // Under the header and over the safe area at the foot (60 on the canvas).
         val above = frame.top - header.bottom
-        val below = root().bottom - 60f - bar.bottom
+        val below = root().bottom - 60f * scale - bar.bottom
+        assertTrue(above > 24f * scale + 20f, "nothing was left over: $above")
         assertTrue(abs(above - below) < 4f, "above $above, below $below")
     }
 
