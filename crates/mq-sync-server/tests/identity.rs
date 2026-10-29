@@ -2352,3 +2352,27 @@ async fn a_fourth_email_sign_up_in_30_days_is_refused() {
         .unwrap();
     assert!(matches!(fourth, SyncError::SignupLimit), "{fourth:?}");
 }
+
+/// The real sign-in budget: the 31st call in a minute from one client
+/// answers 429 `busy`; a relay started with a larger budget (the web e2e's
+/// `--sign-in-budget`) does not.
+#[tokio::test]
+async fn the_sign_in_budget_is_30_a_minute_unless_started_with_more() {
+    let take = |url: String| async move {
+        let body = json!({ "flow": "none", "verifier": "v", "code": "123456" });
+        status(
+            http()
+                .post_json(&format!("{url}/v1/auth/take"), &body, &raw(vec![]))
+                .await,
+        )
+    };
+    let relay = Relay::new().await;
+    for i in 0..30 {
+        assert_eq!(take(relay.url.clone()).await, 404, "call {i}");
+    }
+    assert_eq!(take(relay.url.clone()).await, 429, "the 31st");
+    let roomy = Relay::with(|c| c.sign_in_budget = 1000).await;
+    for _ in 0..40 {
+        assert_eq!(take(roomy.url.clone()).await, 404);
+    }
+}

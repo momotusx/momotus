@@ -1,6 +1,6 @@
 //! `mq-sync-server --db PATH [--listen 127.0.0.1:8787] [--invite CODE] [--open]
 //! [--new-generation] [--trust-proxy] [--public-host HOST] [--identity FILE]
-//! [--mail FILE]`
+//! [--mail FILE] [--sign-in-budget N] [--mail-gap-ms MS]`
 //!
 //! `--trust-proxy`: behind a reverse proxy (needed for TLS), rate limits go
 //! by the client address the proxy appends to `X-Forwarded-For`.
@@ -18,6 +18,10 @@
 //! Amazon SES credential file (`accessKeyId`, `secretAccessKey`, `region`,
 //! `from`). It needs `--identity`. A file that is not there leaves email
 //! sign-in off; one that does not parse refuses to start.
+//!
+//! `--sign-in-budget` (sign-in calls per client a minute, 30) and
+//! `--mail-gap-ms` (between two codes to one mailbox, 60000) are for tests
+//! that run many clients from one address; production keeps the defaults.
 
 use mq_sync_server::{Config, IdentityFile, router};
 use std::net::SocketAddr;
@@ -54,6 +58,13 @@ async fn main() {
                     "--public-host" => config.public_host = Some(value),
                     "--identity" => identity = Some(PathBuf::from(value)),
                     "--mail" => mail = Some(PathBuf::from(value)),
+                    // Tests only (the web e2e): never in the relay's unit.
+                    "--sign-in-budget" => {
+                        config.sign_in_budget = value.parse().unwrap_or_else(|_| usage(&flag))
+                    }
+                    "--mail-gap-ms" => {
+                        config.mail_gap_ms = value.parse().unwrap_or_else(|_| usage(&flag))
+                    }
                     _ => usage(&flag),
                 }
             }

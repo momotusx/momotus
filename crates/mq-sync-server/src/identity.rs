@@ -18,7 +18,7 @@ pub mod email;
 
 use crate::jwt::{self, Jwk, JwkSet, Jwt};
 use crate::{
-    APPLE_NOTICES, AUTH, AppState, active, authorize, client, client_limited, error,
+    APPLE_NOTICES, AppState, active, auth, authorize, client, client_limited, error,
     journal_deletion, limited, lock, random, relay_limited, same, storage_error, token_hash,
 };
 use axum::extract::Path as UrlPath;
@@ -1030,7 +1030,7 @@ async fn start_flow(
 ) -> Result<Response, Response> {
     let id = identity(state)?;
     let address = client(state, peer, headers)?;
-    if limited(state, address, AUTH) {
+    if limited(state, address, auth(state)) {
         return Err(busy());
     }
     let verifier_hash = hex::decode(&request.verifier_hash)
@@ -1357,7 +1357,7 @@ pub(crate) async fn take(
 ) -> Response {
     let answer = (|| {
         let id = identity(&state)?;
-        if limited(&state, client(&state, peer, &headers)?, AUTH) {
+        if limited(&state, client(&state, peer, &headers)?, auth(&state)) {
             return Err(busy());
         }
         let now = state.now_ms();
@@ -1419,7 +1419,7 @@ pub(crate) async fn native(
         Ok(address) => address,
         Err(refused) => return refused,
     };
-    if limited(&state, address, AUTH) {
+    if limited(&state, address, auth(&state)) {
         return busy();
     }
     let now = state.now_ms();
@@ -1769,7 +1769,7 @@ pub(crate) async fn delete_request(
 ) -> Response {
     let answer = (|| {
         identity(&state)?;
-        if limited(&state, client(&state, peer, &headers)?, AUTH) {
+        if limited(&state, client(&state, peer, &headers)?, auth(&state)) {
             return Err(busy());
         }
         let now = state.now_ms();

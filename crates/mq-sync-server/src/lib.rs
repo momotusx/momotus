@@ -106,6 +106,12 @@ pub struct Config {
     /// How often due deletions run and expired sign-in rows go (an hour;
     /// tests shorten it).
     pub housekeeping_every: std::time::Duration,
+    /// Sign-in calls one client may make a minute (30). Tests only: the web
+    /// e2e runs many browsers from one address (`--sign-in-budget`).
+    pub sign_in_budget: u32,
+    /// The wait between two codes to one mailbox (60 s). Tests only
+    /// (`--mail-gap-ms`).
+    pub mail_gap_ms: u64,
 }
 
 impl Default for Config {
@@ -119,6 +125,8 @@ impl Default for Config {
             public_host: None,
             identity: None,
             housekeeping_every: std::time::Duration::from_secs(3600),
+            sign_in_budget: AUTH.1,
+            mail_gap_ms: 60 * 1000,
         }
     }
 }
@@ -2165,6 +2173,11 @@ const TOKENS: (usize, u32, u32) = (3, 20, 2000);
 /// Sign-in `start`, `take`, `token` and the deletion page's request, apart
 /// from pairings (a TV polls pairing `take` every 2 s, unlimited).
 const AUTH: (usize, u32, u32) = (4, 30, 3000);
+
+/// `AUTH` with the client part this relay was started with.
+pub(crate) fn auth(state: &AppState) -> (usize, u32, u32) {
+    (AUTH.0, state.config.sign_in_budget, AUTH.2)
+}
 /// Apple's server-to-server notifications: Apple sends a few a day. The
 /// per-address budget applies first; the relay-wide one counts only notices
 /// whose signature checked, so a flood from many addresses cannot crowd out

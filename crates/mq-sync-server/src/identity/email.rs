@@ -30,7 +30,6 @@ use std::time::Duration;
 
 /// Mail limits look this far back; their rows go after it.
 pub(crate) const EVENT_MS: u64 = 24 * 60 * 60 * 1000;
-const MAIL_GAP_MS: u64 = 60 * 1000;
 const MAILS_PER_MAILBOX: i64 = 10;
 const MISSES_PER_MAILBOX: i64 = 20;
 const MAILS_PER_CLIENT: i64 = 10;
@@ -411,7 +410,7 @@ pub(super) async fn start(
                 params![mailbox],
                 |r| r.get(0),
             )?;
-            if last.is_some_and(|at| (at as u64) + MAIL_GAP_MS > now) {
+            if last.is_some_and(|at| (at as u64) + state.config.mail_gap_ms > now) {
                 return Ok(Err(coded(
                     StatusCode::TOO_MANY_REQUESTS,
                     "emailWait",
