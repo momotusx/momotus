@@ -25,6 +25,7 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
@@ -52,8 +53,11 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import app.marquee.core.Format
 import app.marquee.core.Mark
@@ -61,6 +65,7 @@ import app.marquee.core.PlayTo
 import app.marquee.core.TitleCopy
 import app.marquee.core.VersionLine
 import app.marquee.core.VersionsCopy
+import app.marquee.core.model.CastMember
 import app.marquee.core.model.Episode
 import app.marquee.core.model.Tile
 import app.marquee.core.model.TitleDetails
@@ -87,6 +92,7 @@ import app.marquee.design.PlayFilled
 import app.marquee.design.PosterTile
 import app.marquee.design.PrimaryButton
 import app.marquee.design.RatedCover
+import app.marquee.design.RemoteImage
 import app.marquee.design.RoundButton
 import app.marquee.design.RowHeader
 import app.marquee.design.Score
@@ -105,6 +111,7 @@ import app.marquee.design.TrailerState
 import app.marquee.design.TrailerSurface
 import app.marquee.design.endFade
 import app.marquee.design.episodeLaneHeight
+import app.marquee.design.focusClickable
 import app.marquee.design.laneHeight
 import app.marquee.design.liftRoom
 import app.marquee.design.marqueeFocus
@@ -325,9 +332,16 @@ fun TvTitle(
                                     details.ratedPoster?.let { RatedCover(it, COVER_WIDTH) }
                                     Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.m)) {
                                         FactsTable(TitleCopy.facts(details, TitleCopy.seasonCount(header.seasons)))
-                                        // Each name opens Search for that person, a few of each.
+                                        // Each person opens Search for them, a few of each.
                                         // A kids profile's Search finds only its list: the names are words there.
-                                        People(TitleCopy.people(details), onPerson, linked = header.genresLinked)
+                                        if (details.cast.isNotEmpty()) {
+                                            TvStarring(details.cast, onPerson, linked = header.genresLinked)
+                                        }
+                                        People(
+                                            TitleCopy.people(details, cast = false),
+                                            onPerson,
+                                            linked = header.genresLinked,
+                                        )
                                     }
                                 }
                             }
@@ -339,6 +353,75 @@ fun TvTitle(
                     }
                     if (title.similar.isNotEmpty()) {
                         item(key = "similar") { MoreLikeThis(title.similar, focus, onOpen) }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** A headshot's side on TV. */
+private val TV_HEADSHOT = 88.dp
+
+/**
+ * Starring on TV (plans/batch-2.md R5): up to four round TMDB headshots in a row, the name and the role under each,
+ * the initials while there is no photo or it cannot load. A row the D-pad walks with Left and Right, each person
+ * opening Search for them; plain on a kids profile ([linked] false). Down goes on to the directors and writers.
+ */
+@Composable
+private fun TvStarring(
+    cast: List<CastMember>,
+    onPerson: (String) -> Unit,
+    linked: Boolean,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.xs)) {
+        MqText(
+            "Starring",
+            role = TextRole.Caption,
+            color = Marquee.colors.dim,
+            weight = FontWeight.SemiBold,
+            maxLines = 1,
+        )
+        Row(Modifier.focusGroup(), horizontalArrangement = Arrangement.spacedBy(Marquee.space.xs)) {
+            cast.distinctBy { it.name }.take(4).forEach { person ->
+                val press =
+                    if (linked) {
+                        Modifier
+                            .marqueeFocus(Marquee.radius.m, scale = Tokens.FOCUS_SCALE_TILE)
+                            .focusClickable({ onPerson(person.name) }, clickLabel = "Searches for their titles")
+                    } else {
+                        Modifier
+                    }
+                Column(
+                    press
+                        .width(TV_HEADSHOT + Marquee.space.l)
+                        .semantics(mergeDescendants = true) {}
+                        .padding(vertical = Marquee.space.xs),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                ) {
+                    RemoteImage(
+                        person.photo,
+                        TV_HEADSHOT,
+                        TV_HEADSHOT,
+                        fallbackText = TitleCopy.initials(person.name),
+                        modifier = Modifier.clip(CircleShape).clearAndSetSemantics {},
+                    )
+                    MqText(
+                        person.name,
+                        role = TextRole.Caption,
+                        maxLines = 1,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.padding(top = Marquee.space.xs),
+                    )
+                    person.character?.let {
+                        MqText(
+                            it,
+                            role = TextRole.Caption,
+                            color = Marquee.colors.dim,
+                            maxLines = 1,
+                            textAlign = TextAlign.Center,
+                        )
                     }
                 }
             }

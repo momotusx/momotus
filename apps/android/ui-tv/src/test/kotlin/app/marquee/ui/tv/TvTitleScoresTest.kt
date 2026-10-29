@@ -10,6 +10,7 @@ import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.ExperimentalTestApi
@@ -275,13 +276,20 @@ class TvTitleScoresTest {
                 .maxBy { it.left }
         assertTrue(value.right - value.left > 0.dp, "the Released value is ${value.right - value.left} wide")
         assertTrue(value.left >= card.right, "the value $value sits over the card $card")
-        // Four of the cast, two directors and two writers, every name its own: the lowest one ends inside the safe area.
+        // Four of the cast as headshots side by side (plans/batch-2.md R5), then two directors and two writers, every
+        // name its own: the row stays inside the column and the lowest name ends inside the safe area.
         val names =
             (1..4).map { "Actor Number $it" } +
                 listOf("Frank Darabont", "Second Director", "Stephen King", "Second Writer")
         compose.onAllNodesWithText("Actor Number", substring = true).assertCountEquals(4)
         compose.onAllNodesWithText("Third Director").assertCountEquals(0)
         compose.onAllNodesWithText("Third Writer").assertCountEquals(0)
+        val cast = (1..4).map { compose.onNodeWithText("Actor Number $it").getUnclippedBoundsInRoot() }
+        assertEquals(1, cast.map { it.top }.distinct().size, "the headshots are not one row: $cast")
+        assertTrue(cast.zipWithNext().all { (a, b) -> a.right <= b.left }, "the headshots overlap: $cast")
+        assertTrue(cast.last().right <= 1920.dp - 80.dp, "the row ends at ${cast.last().right}, past the safe side")
+        val crew = compose.onNodeWithText("Frank Darabont").getUnclippedBoundsInRoot()
+        assertTrue(crew.top >= cast.maxOf { it.bottom }, "the directors sit over the headshots")
         val foot = names.maxOf { compose.onNodeWithText(it).getUnclippedBoundsInRoot().bottom }
         assertTrue(foot <= 1080.dp - 60.dp, "the people end at $foot, past the safe bottom")
     }
@@ -332,6 +340,13 @@ class TvTitleScoresTest {
         }
     }
 
+    private fun clickLabel(text: String): String? =
+        compose
+            .onNode(hasText(text) and hasClickAction())
+            .fetchSemanticsNode()
+            .config[SemanticsActions.OnClick]
+            .label
+
     private fun press(key: Key): String {
         compose.onNode(isFocused()).performKeyInput { pressKey(key) }
         compose.waitForIdle()
@@ -339,7 +354,7 @@ class TvTitleScoresTest {
     }
 
     @Test
-    fun `a genre opens Discover, a name opens Search, and the names are a list the D-pad walks in order`() {
+    fun `a genre opens Discover, a person opens Search, the headshots are a row and the crew a list`() {
         val genres = mutableListOf<Pair<String, String>>()
         val people = mutableListOf<String>()
         show(page(cover = null)) { view ->
@@ -357,31 +372,30 @@ class TvTitleScoresTest {
         compose.onNode(hasText("Actor Number 1") and hasClickAction()).performClick()
         assertEquals(listOf("movie" to "Drama"), genres)
         assertEquals(listOf("Actor Number 1"), people)
-        val names =
-            (1..4).map { "Actor Number $it" } +
-                listOf("Frank Darabont", "Second Director", "Stephen King", "Second Writer")
+        assertEquals("Searches for their titles", clickLabel("Actor Number 1"))
+        val cast = (1..4).map { "Actor Number $it" }
+        val crew = listOf("Frank Darabont", "Second Director", "Stephen King", "Second Writer")
         compose.onNode(hasText("Actor Number 1") and hasClickAction()).requestFocus()
         compose.waitForIdle()
-        // Nothing above the first name: Up stays on it.
+        // Nothing above the headshots: Up stays on the first.
         assertEquals("Actor Number 1", press(Key.DirectionUp))
-        // Down walks the names in reading order, then leaves the column (no trap).
-        val walked = mutableListOf("Actor Number 1")
+        // Right walks the headshots in order and stops at the last (the screen's edge).
+        assertEquals(cast.drop(1), List(3) { press(Key.DirectionRight) })
+        assertEquals("Actor Number 4", press(Key.DirectionRight))
+        // Down leaves the row for the crew, which Down walks in reading order, then leaves the column (no trap).
+        val walked = mutableListOf(press(Key.DirectionDown))
+        assertTrue(walked.single() in crew, "Down from the headshots reached ${walked.single()}")
         var next = press(Key.DirectionDown)
-        while (next in names && next != walked.last()) {
+        while (next in crew && next != walked.last()) {
             walked += next
             next = press(Key.DirectionDown)
         }
-        assertTrue(next !in names, "Down got stuck on ${walked.last()}")
-        assertTrue(walked.size >= 4, "Down reached only $walked")
-        assertEquals(
-            walked.map { names.indexOf(it) }.sorted(),
-            walked.map { names.indexOf(it) },
-            "out of order: $walked",
-        )
-        // Left from a name goes back to the page's left column.
+        assertTrue(next !in crew + cast, "Down got stuck on ${walked.last()}")
+        assertEquals(walked.map { crew.indexOf(it) }.sorted(), walked.map { crew.indexOf(it) }, "out of order: $walked")
+        // Left from the first headshot goes back to the page's left column.
         compose.onNode(hasText("Actor Number 1") and hasClickAction()).requestFocus()
         compose.waitForIdle()
-        assertTrue(press(Key.DirectionLeft) !in names, "Left stays in the names")
+        assertTrue(press(Key.DirectionLeft) !in cast + crew, "Left stays in the people")
     }
 
     @Test
