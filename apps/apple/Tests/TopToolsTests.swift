@@ -2,8 +2,8 @@ import Foundation
 import Testing
 
 // The Mac window's top right: Search (the profile is in the ornament, plans/nav-profile.md) sits the page's gutter in
-// from the window's edge, as the page's content does from the left (the owner, 2026-10-28: flush in the corner). Measured in the walk build's window; these
-// pin the lines that place them.
+// from the window's edge, as the page's content does from the left (the owner, 2026-10-28: flush in the corner).
+// Measured in the walk build's window; these pin the lines that place them.
 
 @Test func theMacsTopToolsKeepThePagesGutterFromTheWindowsEdge() throws {
     let app = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appending(path: "../Marquee")
