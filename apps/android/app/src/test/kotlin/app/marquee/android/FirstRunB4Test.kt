@@ -48,6 +48,7 @@ import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import java.io.File
+import androidx.compose.ui.unit.dp
 import kotlin.math.abs
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -166,6 +167,21 @@ class FirstRunB4Test {
         framed()
         assertEquals(root().width, bounds(FILM_FRAME).width, 1f)
         oneEdge()
+    }
+
+    @Test
+    @Config(qualifiers = "w390dp-h844dp-xxhdpi")
+    fun `phone, the frame and its doors sit in the middle under the header, no empty band below`() {
+        doors(Form.Phone, null)
+        compose.waitForIdle()
+        val frame = bounds(FILM_FRAME)
+        val bar = bounds(FILM_BAR)
+        // The page keeps the phone's 12 dp safe margin at its foot.
+        val foot = root().bottom - with(compose.density) { 12.dp.toPx() }
+        val above = frame.top - bounds(STEP_HEADER).bottom
+        val below = foot - bar.bottom
+        assertTrue(above > 100f, "nothing was left over: $above")
+        assertTrue(abs(above - below) < 4f, "above $above, below $below")
     }
 
     @Test

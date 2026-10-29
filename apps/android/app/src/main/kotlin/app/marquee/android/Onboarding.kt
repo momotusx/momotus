@@ -277,8 +277,8 @@ private fun FramedPage(
                         .map { it.measure(Constraints.fixed(frameWidth, frameHeight)) }
                 val content = edge + frameHeight + barHeight + edge
                 val total = maxOf(content, room.roundToPx())
-                // What is left when the width binds goes above and below alike on TV, below the bar on the phone.
-                val top = edge + if (tv) (total - content) / 2 else 0
+                // What is left goes above and below alike, so the frame and its doors sit in the middle under the header.
+                val top = edge + (total - content) / 2
                 layout(width, total) {
                     frame.forEach { it.place((width - frameWidth) / 2, top) }
                     var y = top + frameHeight
