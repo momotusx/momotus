@@ -248,7 +248,8 @@
     #href;
     #params = null;
     constructor(input, base) {
-      this.#href = N.urlParse(String(input), base === undefined ? undefined : String(base));
+      // An explicit undefined is not a missing argument to the host function.
+      this.#href = base === undefined ? N.urlParse(String(input)) : N.urlParse(String(input), String(base));
     }
     static canParse(input, base) {
       try {

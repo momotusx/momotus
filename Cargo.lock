@@ -4035,6 +4035,7 @@ dependencies = [
  "cssparser",
  "ego-tree",
  "html5ever",
+ "indexmap 2.14.2",
  "precomputed-hash",
  "selectors",
 ]

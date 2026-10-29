@@ -579,7 +579,8 @@ fn attributes_count_against_the_node_cap() {
     let units: usize = doc.nodes.iter().map(|n| 1 + n.attrs.len()).sum();
     assert!(units <= Caps::default().nodes, "{units}");
     assert!(
-        doc.nodes.len() <= Caps::default().nodes / 4 + 2,
+        // html, head and body come before the first p.
+        doc.nodes.len() <= Caps::default().nodes / 4 + 3,
         "{}",
         doc.nodes.len()
     );

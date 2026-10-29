@@ -121,7 +121,7 @@ fn the_entry_and_its_arguments() {
     let mut episode = movie(&format!("{echo}\nglobalThis.getStreams = getStreams;"));
     (episode.media, episode.season, episode.episode) = (Media::Tv, Some(1), Some(2));
     assert_eq!(
-        said(&run(episode))[0..4],
+        said(&run(episode)).as_array().unwrap()[0..4],
         serde_json::json!(["603", "tv", 1, 2]).as_array().unwrap()[..]
     );
     // Declared but not exported: not found, as on Nuvio.

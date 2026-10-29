@@ -152,7 +152,7 @@ fn no_app_secret_reaches_a_plugin() {
     let answer: serde_json::Value =
         serde_json::from_str(streams[0].name.as_deref().unwrap()).unwrap();
     assert_eq!(
-        answer[0..4],
+        answer.as_array().unwrap()[0..4],
         serde_json::json!(["undefined", "undefined", "undefined", ""])
             .as_array()
             .unwrap()[..]

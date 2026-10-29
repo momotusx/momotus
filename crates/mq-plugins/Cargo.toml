@@ -15,7 +15,7 @@ rquickjs = { version = "=0.14.0", default-features = false, features = ["std", "
 html5ever = "=0.40.1"
 # Selectors and serialization for the cheerio subset, over the capped tree
 # (its html5ever is ours).
-scraper = { version = "=0.29.0", default-features = false }
+scraper = { version = "=0.29.0", default-features = false, features = ["deterministic"] }
 ego-tree = "0.11"
 url.workspace = true
 base64 = "0.22"
