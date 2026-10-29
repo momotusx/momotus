@@ -23,6 +23,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.test.requestFocus
+import androidx.test.platform.app.InstrumentationRegistry
 import app.marquee.core.InstallSheetCopy
 import app.marquee.design.ARM_MS
 import app.marquee.design.Form
@@ -88,6 +89,8 @@ class InstallSheetTest {
             }
         }
         if (keyboard) {
+            // A TV display is never in touch mode, so a new window (the sheet's) starts out of it too.
+            InstrumentationRegistry.getInstrumentation().setInTouchMode(false)
             compose.runOnIdle { inputModes!!.requestInputMode(InputMode.Keyboard) }
             compose.onNodeWithText("Open").requestFocus()
         }

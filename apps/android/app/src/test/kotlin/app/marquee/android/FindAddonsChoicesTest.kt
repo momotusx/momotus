@@ -5,11 +5,14 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.ExperimentalComposeUiApi
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.input.InputMode
 import androidx.compose.ui.input.InputModeManager
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.platform.LocalInputModeManager
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -19,6 +22,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.test.requestFocus
+import androidx.compose.ui.unit.toSize
 import app.marquee.design.Form
 import app.marquee.design.MarqueeTheme
 import org.junit.Rule
@@ -88,22 +92,31 @@ class FindAddonsChoicesTest {
         compose.runOnIdle { inputModes!!.requestInputMode(InputMode.Keyboard) }
     }
 
-    /** TV: the last chip of a row that scrolls takes focus whole on screen, and Right there goes nowhere. */
+    /** Lists whose chips run past the 1920 dp TV canvas. */
+    private val long = (1..6).map { "A list with a long name, number $it" }
+
+    /**
+     * TV: the last chip of a row that scrolls takes focus whole on screen, and Right there goes nowhere. In a 16:9
+     * window, measured in pixels, unclipped: a chip's dp are the TV canvas's, the root's the window's.
+     */
     @Test
+    @Config(qualifiers = "w960dp-h540dp")
     fun `on a TV the last chip comes into view with focus and the row ends there`() {
-        show(Form.Tv, six)
+        show(Form.Tv, long)
         keyboard()
-        val first = compose.onNodeWithText(six.first())
+        val range = compose.onNode(SemanticsMatcher.keyIsDefined(SemanticsProperties.HorizontalScrollAxisRange))
+        assertTrue(range.fetchSemanticsNode().config[SemanticsProperties.HorizontalScrollAxisRange].maxValue() > 0f)
+        val first = compose.onNodeWithText(long.first())
         first.requestFocus()
         // As a remote does: Right to the last chip, one press at a time.
-        repeat(six.size - 1) {
+        repeat(long.size - 1) {
             compose.onRoot().performKeyInput { pressKey(Key.DirectionRight) }
             compose.waitForIdle()
         }
-        val last = compose.onNodeWithText(six.last())
+        val last = compose.onNodeWithText(long.last())
         last.assertIsFocused()
-        val root = compose.onRoot().getUnclippedBoundsInRoot()
-        val bounds = last.getUnclippedBoundsInRoot()
+        val root = compose.onRoot().fetchSemanticsNode().boundsInRoot
+        val bounds = last.fetchSemanticsNode().let { Rect(it.positionInRoot, it.size.toSize()) }
         assertTrue(bounds.left >= root.left && bounds.right <= root.right, "$bounds in $root")
         compose.onRoot().performKeyInput { pressKey(Key.DirectionRight) }
         compose.waitForIdle()
