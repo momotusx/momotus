@@ -135,8 +135,12 @@ export function TrailerOverlay(props: { trailers: Trailer[]; onClose: () => void
           <div ref={host} />
         </div>
         <Show when={waiting()}>
-          <LoaderCircle class="spin trailer-wait" role="img" aria-label="Loading trailer" />
+          <LoaderCircle class="spin trailer-wait" aria-hidden />
         </Show>
+        {/* Said once, when it starts waiting. */}
+        <p class="sr" role="status">
+          {waiting() ? "Loading trailer" : ""}
+        </p>
         <Show when={failed()}>
           <p class="trailer-fail" role="alert">
             This trailer can't play here.

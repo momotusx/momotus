@@ -148,11 +148,11 @@ for (const [platform, { file, shim }] of Object.entries(SOURCES)) {
     // Asked quiet, then Sound on before it plays: it unmutes once it plays, not before (the read-back holds).
     await go(false, 2);
     await expect.poll(async () => (await ytLog(page)).filter((l) => l.startsWith("playVideo")).length).toBe(2);
-    await page.evaluate(() => {
-      const w = window as unknown as { sound: (on: boolean) => void; ytRelease: () => void };
-      w.sound(true);
-      w.ytRelease();
-    });
+    // Pressed while it is ready but not playing: nothing yet (the read-back must not see sound).
+    await page.evaluate(() => (window as unknown as { sound: (on: boolean) => void }).sound(true));
+    await page.waitForTimeout(300);
+    expect(await ytLog(page)).not.toContain("unMute");
+    await page.evaluate(() => (window as unknown as { ytRelease: () => void }).ytRelease());
     await expect.poll(() => ytLog(page)).toContain("unMute");
     const log = await ytLog(page);
     expect(log.indexOf("unMute")).toBeGreaterThan(log.lastIndexOf(log.filter((l) => l.startsWith("playVideo")).at(-1) ?? ""));

@@ -194,7 +194,11 @@ function TitlePage(props: { kind: string; id: string; retry: () => void }) {
         headerVisible = now;
         clearTimeout(timer);
         if (now) timer = setTimeout(startHeader, HEADER_DELAY_MS);
-        else stopHeader();
+        else {
+          // Scrolled away while it played: cut by the viewer, it does not come back this session.
+          if (headerPlay) headerSpent.add(props.id);
+          stopHeader();
+        }
       },
       { threshold: [0, 0.5, 1] },
     );

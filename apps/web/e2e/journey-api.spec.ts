@@ -944,7 +944,7 @@ test("a raw reason reads in plain words, the core's text behind Details", async 
 });
 
 /** A trailer run on the stand-in API (yt-fake.ts): what opened, with no way out to YouTube. */
-async function trailerRun(browser: Browser, opts: { form: "tv" | "desktop"; e2e?: boolean; fail?: string[]; duration?: number; saveData?: boolean; memory?: number }) {
+async function trailerRun(browser: Browser, opts: { form: "tv" | "desktop"; e2e?: boolean; fail?: string[]; duration?: number; saveData?: boolean; memory?: number | null }) {
   const { context, page: p } = await page(browser, opts.form === "tv" ? { width: 1920, height: 1080 } : { width: 1440, height: 900 });
   await fakeYouTube(context);
   // Any watch page, popup or window.open is a way out of the app: none may happen.
@@ -959,7 +959,7 @@ async function trailerRun(browser: Browser, opts: { form: "tv" | "desktop"; e2e?
     if (o.e2e) localStorage.setItem("mq.trailerPreviews", "e2e");
     // The browser's data saver, as a phone on cellular reports it.
     if (o.saveData) Object.defineProperty(navigator, "connection", { value: { saveData: true, addEventListener() {}, removeEventListener() {} }, configurable: true });
-    if (o.memory !== undefined) Object.defineProperty(navigator, "deviceMemory", { value: o.memory, configurable: true });
+    if (o.memory !== undefined) Object.defineProperty(navigator, "deviceMemory", { value: o.memory ?? undefined, configurable: true });
     w.ytFailIds = o.fail;
     w.ytDuration = o.duration;
     w.opened = [];
@@ -1095,7 +1095,8 @@ test("on a metered connection the header plays nothing, and Trailer still plays"
 });
 
 test("a TV plays the header trailer only above its memory floor, with its Sound last in the row", async ({ browser }) => {
-  for (const [gb, plays] of [[2, false], [8, true]] as const) {
+  // 4 GB is under the floor; a browser that does not say (null here) counts as under it too.
+  for (const [gb, plays] of [[2, false], [4, false], [null, false], [8, true]] as const) {
     const { context, p } = await trailerRun(browser, { form: "tv", e2e: true, memory: gb });
     if (plays) {
       await expect.poll(() => ytLog(p)).toContain("new jrnyTrailr1 https://www.youtube-nocookie.com");
