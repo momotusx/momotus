@@ -37,9 +37,10 @@ android {
         // party and the App Link host for /pair) and the Google web client id Credential Manager asks for. Each is
         // the owner's (gradle properties marquee.syncServer, marquee.linkHost, marquee.googleWebClientId); unset,
         // the first run shows today's doors, no passkey is offered and Google goes through the relay's own flow.
+        // The Google web client id falls back to GOOGLE_WEB_CLIENT_ID in the repository's .env.accounts.local.
         buildConfigField("String", "SYNC_SERVER", "\"${hosted("marquee.syncServer", release = false)}\"")
         buildConfigField("String", "LINK_HOST", "\"${hosted("marquee.linkHost", release = false)}\"")
-        buildConfigField("String", "GOOGLE_WEB_CLIENT_ID", "\"${property("marquee.googleWebClientId")}\"")
+        buildConfigField("String", "GOOGLE_WEB_CLIENT_ID", "\"${googleWebClientId()}\"")
         // Which core this build packages, as scripts/build-core.sh wrote it: "own" (the torrent engine on arm64-v8a)
         // or "store" (none, STORE=1), "none" before the script has run; and the ABIs whose core carries the engine.
         val coreBuild =
@@ -249,4 +250,24 @@ fun hosted(
             name == "marquee.syncServer" -> "https://momotus.normalisdead.mom"
             else -> "momotus.normalisdead.mom"
         }
+    }
+
+/**
+ * The Google web client id (public: Google's sheet sends it with every request): the gradle property when set, else
+ * GOOGLE_WEB_CLIENT_ID from the gitignored `.env.accounts.local` at the repository root, else empty (no Google sheet,
+ * Google through the relay's page). Only that one line is read; the file's secrets never reach the build.
+ */
+fun googleWebClientId(): String =
+    property("marquee.googleWebClientId").toString().ifEmpty {
+        providers
+            .fileContents(rootProject.layout.projectDirectory.file("../../.env.accounts.local"))
+            .asText
+            .orNull
+            ?.lineSequence()
+            ?.map { it.trim().removePrefix("export ") }
+            ?.firstOrNull { it.startsWith("GOOGLE_WEB_CLIENT_ID=") }
+            ?.substringAfter('=')
+            ?.trim()
+            ?.trim('"', '\'')
+            .orEmpty()
     }
