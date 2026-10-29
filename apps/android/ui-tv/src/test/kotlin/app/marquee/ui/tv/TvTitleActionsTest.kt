@@ -6,13 +6,12 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.Snapshot
+import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertCountEquals
-import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
-import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
@@ -20,6 +19,8 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performKeyInput
+import androidx.compose.ui.test.pressKey
 import app.marquee.core.client.CoreClient
 import app.marquee.core.client.CoreJson
 import app.marquee.core.model.EmptyAction
@@ -262,10 +263,13 @@ class TvTitleActionsTest {
         compose.waitForIdle()
         compose.onNodeWithTag(FULL_TRAILER_TAG).assertExists()
         assertNull(shadowOf(RuntimeEnvironment.getApplication()).nextStartedActivity)
-        compose.onNode(hasText("Close").and(hasClickAction())).performClick()
-        compose.waitForIdle()
-        compose.onAllNodesWithTag(FULL_TRAILER_TAG).assertCountEquals(0)
-        compose.onNode(hasContentDescription("Trailer").and(hasClickAction())).assertIsFocused()
+        // The remote's Back closes it, and the focus comes back to Trailer.
+        compose.waitUntil(5_000) { compose.onAllNodes(isFocused()).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNode(isFocused()).performKeyInput { pressKey(Key.Back) }
+        compose.waitUntil(5_000) { compose.onAllNodesWithTag(FULL_TRAILER_TAG).fetchSemanticsNodes().isEmpty() }
+        compose.waitUntil(5_000) {
+            compose.onAllNodes(hasContentDescription("Trailer").and(isFocused())).fetchSemanticsNodes().isNotEmpty()
+        }
     }
 
     @Test

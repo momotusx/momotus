@@ -118,7 +118,7 @@ class TvTrailerTest {
     @Test
     fun `a trailer that cannot play says so and leaves only Close`() {
         show(failed = true)
-        compose.onNodeWithText("This trailer can't play here.").assertExists()
+        compose.onNodeWithText("This trailer can't play here.", useUnmergedTree = true).assertExists()
         compose.onNode(hasText("Close").and(hasClickAction())).assertIsFocused()
         compose.onNode(hasText("Pause").and(hasClickAction())).assertIsNotEnabled()
     }
