@@ -245,5 +245,9 @@ class TvTabsTest {
         press(Key.DirectionUp)
         compose.onNodeWithContentDescription("profile lit").assertIsFocused()
         assertEquals(emptyList(), opened)
+        // Back on the profile is the bar's, as on a tab: the bar does not take it, so the app's Back pops to Home.
+        assertEquals(true, nav.held)
+        assertEquals(false, compose.runOnIdle { nav.backToBar() })
+        compose.onNodeWithContentDescription("profile lit").assertIsFocused()
     }
 }
