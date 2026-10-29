@@ -440,6 +440,7 @@ fun TvSignInScreen(
             holder.start(server, name)
         }
     }
+    val joined = holder.view?.current() is PairingSnapshot.Joined
     val browse = remember { FocusRequester() }
     // Browse first is the one focus stop, and has it (plans/tv-qr-login.md 5.5).
     LaunchedEffect(Unit) { focusSoon(browse) }
@@ -457,7 +458,7 @@ fun TvSignInScreen(
             }
         }
         // A recovery kit is reachable from the doors (Settings, Account), for a person who cannot scan.
-        if (holder.view?.snapshot !is PairingSnapshot.Joined) {
+        if (!joined) {
             item(key = "browse") {
                 Box(Modifier.padding(horizontal = Marquee.safe.side)) {
                     SkipLink(AccountCopy.BROWSE_FIRST, onDoors, browse)
