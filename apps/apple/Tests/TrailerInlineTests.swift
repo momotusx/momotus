@@ -47,13 +47,13 @@ private func source(_ path: String) throws -> String {
     player.release()
     #expect(ended == ["stopped"])
     #expect(!state.loading && !state.playing)
-    // The content process died: an error, so the full screen moves on and a header does not replay.
+    // The content process died: lost, so the full screen shows its line and a header does not replay.
     player.play("abcdefghijk", into: state) { ended.append($0) }
-    player.release(why: "error")
-    #expect(ended == ["stopped", "error"])
+    player.release(why: "lost")
+    #expect(ended == ["stopped", "lost"])
     // Nothing plays: nobody to tell.
     player.release()
-    #expect(ended == ["stopped", "error"])
+    #expect(ended == ["stopped", "lost"])
 }
 
 @Test func theBarHoldsADragAndSeeksAnyOtherMoveAtOnce() {

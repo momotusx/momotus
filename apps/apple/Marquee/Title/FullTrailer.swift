@@ -143,7 +143,7 @@ struct FullTrailer: View {
         player.play(trailer.youtubeId, into: state, cap: 0, full: true, loud: loud) { why in
             // Refused (embedding off, gone): the next trailer, then the line. Never ready (YouTube unreachable): the
             // line at once, not another 15 s per trailer.
-            if why != "error", why != "timeout" {
+            if why != "error", why != "timeout", why != "lost" {
                 close()
             } else if why == "error", index + 1 < trailers.count {
                 index += 1

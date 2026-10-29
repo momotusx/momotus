@@ -206,8 +206,8 @@ final class TrailerPlayer: NSObject {
     }
 
     /// Stops and lets the web view and its content process go: Home off screen, under the player or another
-    /// page, or gone. The next `play` makes a fresh one. Whoever played hears `why`: `stopped`, or `error` when the
-    /// content process died (the full screen tries the next trailer or says it cannot play; a header does not replay).
+    /// page, or gone. The next `play` makes a fresh one. Whoever played hears `why`: `stopped`, or `lost` when the
+    /// content process died (the full screen says it cannot play; a header does not replay this session).
     func release(why: String = "stopped") {
         let done = onEnd
         stop()
@@ -319,7 +319,7 @@ final class TrailerPlayer: NSObject {
 extension TrailerPlayer: WKNavigationDelegate {
     /// The content process died (memory): whoever plays hears an error, the next play makes a fresh one.
     func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
-        release(why: "error")
+        release(why: "lost")
     }
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
