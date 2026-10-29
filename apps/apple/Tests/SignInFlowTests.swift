@@ -440,6 +440,10 @@ private let nobody = "http://127.0.0.1:9"
         // Past the slow answer (100 ms).
         try await Task.sleep(for: .milliseconds(300))
         #expect(signIn.stage == .email && signIn.trouble == nil && sheets.passkeys.isEmpty)
+        // That code may have spent its flow: the same address gets a new code, not the old stage.
+        right.slow = false
+        await signIn.sendCode().value
+        #expect(right.starts.count == 2 && signIn.mailFlow == "f2" && signIn.stage == .code)
         withExtendedLifetime(signInCore) {}
 
         // Account's Link another left while the code is out: nothing is linked.

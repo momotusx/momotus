@@ -242,6 +242,9 @@ final class SignInFlow {
     /// Back from the code stage, or Use another address: the address stage,
     /// prefilled. A send or a code still with the relay is dropped.
     func toAddress() {
+        // A code still with the relay may have spent its flow: the same address then gets a
+        // new code, never the code stage of a flow that may be used up.
+        if sending, !lastWasSend { mailFlow = nil }
         cancelEmail()
         trouble = nil
         troubleCode = nil
@@ -266,13 +269,13 @@ final class SignInFlow {
             toCode()
             return Task {}
         }
-        return run { await $0.start(typed, resend: false) }
+        return run(send: true) { await $0.start(typed, resend: false) }
     }
 
     /// Send a new code to the address the last one went to.
     @discardableResult func resendCode() -> Task<Void, Never> {
         let to = sentTo
-        return run { await $0.start(to, resend: true) }
+        return run(send: true) { await $0.start(to, resend: true) }
     }
 
     /// Typed into the code field: digits only, cut at 6; the sixth digit submits once.
@@ -288,7 +291,7 @@ final class SignInFlow {
     @discardableResult func submitCode(name: String) -> Task<Void, Never> {
         guard stage == .code, code.count == 6, let flow = mailFlow else { return Task {} }
         let typed = code
-        return run { await $0.take(flow, typed, name: name) }
+        return run(send: false) { await $0.take(flow, typed, name: name) }
     }
 
     /// Try again on an email stage repeats that stage's own call, never the provider flow.
@@ -314,9 +317,10 @@ final class SignInFlow {
 
     /// One email call at a time, kept so a way off the stage can cancel it. A call
     /// made while one is out gets that one: a double submit sends once.
-    private func run(_ work: @escaping @MainActor (SignInFlow) async -> Void) -> Task<Void, Never> {
+    private func run(send: Bool, _ work: @escaping @MainActor (SignInFlow) async -> Void) -> Task<Void, Never> {
         if sending { return inflight ?? Task {} }
         sending = true
+        lastWasSend = send
         trouble = nil
         troubleCode = nil
         let task = Task { [weak self] in
@@ -340,7 +344,6 @@ final class SignInFlow {
 
     private func start(_ typed: String, resend: Bool) async {
         let from = stage
-        lastWasSend = true
         resent = false
         do {
             let started = try await mail.start(server, typed)
@@ -357,7 +360,6 @@ final class SignInFlow {
     }
 
     private func take(_ flow: String, _ typed: String, name: String) async {
-        lastWasSend = false
         let answer: SignInSnapshot
         do {
             answer = try await mail.take(flow, typed)

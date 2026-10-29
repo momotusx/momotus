@@ -70,8 +70,10 @@ struct SignInScreen: View {
         }
         // Other ways from the email screen: pushed once its pop has settled, or iOS drops the push.
         .task(id: flow.stage) {
-            guard otherAfterPop, flow.stage == .choose, await settled() else { return }
+            guard otherAfterPop, flow.stage == .choose else { return }
+            // Taken before the wait: a cancelled wait never leaves it set for a later return.
             otherAfterPop = false
+            guard await settled() else { return }
             showOther = true
         }
     }
@@ -361,6 +363,8 @@ struct EmailCode: View {
         }
         // A wrong code clears the field: focus goes back to it.
         .onChange(of: flow.troubleCode) { _, code in if code == "wrongCode" { focused = true } }
+        // Send a new code gives the field back on the same stage: focus goes to it.
+        .onChange(of: flow.mailFlow) { _, now in if now != nil { focused = true } }
         .onChange(of: flow.resent) { _, now in if now { AccessibilityNotification.Announcement(words.codeResent).post() } }
     }
 
