@@ -27,6 +27,7 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onFirst
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
@@ -791,7 +792,8 @@ class PhoneTitleActionsTest {
             Thread.sleep(10)
         }
         val name = compose.onAllNodesWithText("Sintel").onFirst().getBoundsInRoot()
-        val back = compose.onNodeWithText("Back").getBoundsInRoot()
+        // Over art, Back is the round button, spoken "Back".
+        val back = compose.onNodeWithContentDescription("Back").getBoundsInRoot()
         assertTrue(name.top >= back.bottom, "the name starts at ${name.top}, the link ends at ${back.bottom}")
     }
 }
