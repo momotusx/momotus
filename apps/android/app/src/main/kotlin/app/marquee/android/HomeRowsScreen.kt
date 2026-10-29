@@ -4,6 +4,7 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -21,6 +22,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.input.key.Key
@@ -46,7 +48,6 @@ import app.marquee.core.client.CoreLog
 import app.marquee.core.model.HomeCatalog
 import app.marquee.core.session.CoreOps
 import app.marquee.core.session.CoreSession
-import app.marquee.design.Chip
 import app.marquee.design.FocusInk
 import app.marquee.design.Form
 import app.marquee.design.Icons
@@ -54,6 +55,7 @@ import app.marquee.design.KeepInView
 import app.marquee.design.Marquee
 import app.marquee.design.MqText
 import app.marquee.design.RoundButton
+import app.marquee.design.SwitchRow
 import app.marquee.design.TextRole
 import app.marquee.design.Tokens
 import app.marquee.design.focusClickable
@@ -268,13 +270,16 @@ private fun CatalogRow(
                             }.focusClickable(onPick, Role.Button)
                             .padding(Marquee.space.xs),
                     ) { FocusInk(focusPalette(focused)) { text() } }
-                    Chip(
-                        if (row.hidden) "Hidden" else "Shown",
-                        selected = !row.hidden,
-                        onClick = onToggle,
-                        modifier = Modifier.semantics { contentDescription = row.title },
-                        switch = true,
-                    )
+                    // Shown or hidden is a switch, as every on-off setting: the shared row, its state said in a word.
+                    SwitchRow(
+                        !row.hidden,
+                        onToggle,
+                        Modifier
+                            .semantics { contentDescription = row.title }
+                            .marqueeFocus(Marquee.radius.m, Tokens.FOCUS_SCALE_CARD)
+                            .clip(shape),
+                        PaddingValues(horizontal = Marquee.space.s, vertical = Marquee.space.xs),
+                    ) {}
                 } else {
                     // One line, as on iOS: the eye is white while the row shows; each button says its row.
                     Row(Modifier.weight(1f)) { text() }

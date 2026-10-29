@@ -7,10 +7,12 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -620,6 +622,36 @@ internal fun Section(
     ) { content() }
 }
 
+/**
+ * A setting that is on or off: its name and line at the left, the shared switch at the right, one switch for TalkBack
+ * with its state (as the web and Apple). On TV the row takes the focus and turns white.
+ */
+@Composable
+internal fun SettingSwitch(
+    title: String,
+    line: String?,
+    on: Boolean,
+    onToggle: () -> Unit,
+) {
+    val tv = Marquee.form == Form.Tv
+    SwitchRow(
+        on,
+        onToggle,
+        Modifier
+            .fillMaxWidth()
+            .heightIn(min = 48.dp)
+            .marqueeFocus(Marquee.radius.m, Tokens.FOCUS_SCALE_TILE)
+            .clip(RoundedCornerShape(Marquee.radius.m)),
+        if (tv) PaddingValues(horizontal = 16.dp, vertical = 12.dp) else PaddingValues(),
+    ) {
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            MqText(title, role = TextRole.Headline, weight = FontWeight.SemiBold)
+            // Read here: a TV focus turns the row white, and its words dark.
+            line?.let { MqText(it, role = TextRole.Caption, color = Marquee.colors.dim) }
+        }
+    }
+}
+
 /** A row that opens another page: its icon, name and what it does, and a chevron (the web's LinkRow); no edge. */
 @Composable
 internal fun LinkRow(
@@ -948,19 +980,17 @@ private fun Playback(
                     )
                 }
             }
-            MqText("Next episode", role = TextRole.Headline, weight = FontWeight.Bold)
-            Chip(
+            SettingSwitch(
+                "Next episode",
                 if (prefs.autoplayNext) "Plays on its own" else "Waits for you",
-                selected = prefs.autoplayNext,
-                onClick = {
-                    if (!busy) {
-                        run("Changing autoplay") {
-                            ops.setPrefs(buildJsonObject { put("autoplayNext", JsonPrimitive(!prefs.autoplayNext)) })
-                        }
+                prefs.autoplayNext,
+            ) {
+                if (!busy) {
+                    run("Changing autoplay") {
+                        ops.setPrefs(buildJsonObject { put("autoplayNext", JsonPrimitive(!prefs.autoplayNext)) })
                     }
-                },
-                switch = true,
-            )
+                }
+            }
         }
     }
 }
@@ -970,30 +1000,23 @@ private fun Playback(
  * its title pages may play the header trailer (plans/trailer-inline.md 4a); its Home has none.
  */
 @Composable
-private fun DevicePrefs() {
+internal fun DevicePrefs() {
     val context = LocalContext.current
     var previews by remember { mutableStateOf(TrailerPreviews.on(context)) }
     Section(0.dp, groupRadius()) {
         Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.s)) {
-            MqText("Trailer previews", role = TextRole.Headline, weight = FontWeight.Bold)
-            Chip(
-                if (previews) "On" else "Off",
-                selected = previews,
-                onClick = {
-                    previews = !previews
-                    TrailerPreviews.set(context, previews)
-                },
-                switch = true,
-            )
-            MqText(
+            SettingSwitch(
+                "Trailer previews",
                 if (Marquee.form == Form.Tv) {
                     "Plays trailers muted on title pages, from YouTube, when the connection is not metered."
                 } else {
                     "Plays trailers muted on Home and title pages, from YouTube, when the connection is not metered."
                 },
-                role = TextRole.Caption,
-                color = Marquee.colors.dim,
-            )
+                previews,
+            ) {
+                previews = !previews
+                TrailerPreviews.set(context, previews)
+            }
         }
     }
 }

@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -59,7 +58,6 @@ import app.marquee.design.Spinner
 import app.marquee.design.StateMessage
 import app.marquee.design.Status
 import app.marquee.design.StatusNote
-import app.marquee.design.SwitchRow
 import app.marquee.design.TextRole
 import app.marquee.design.focusClickable
 import app.marquee.ui.phone.DownloadButton
@@ -444,26 +442,6 @@ internal fun DownloadsSettings(session: CoreSession) {
                     }
                 }
             }
-        }
-    }
-}
-
-/** A Downloads setting: its name and line at the left, its switch at the right; TalkBack reads one switch. */
-@Composable
-private fun SettingSwitch(
-    title: String,
-    line: String?,
-    on: Boolean,
-    onToggle: () -> Unit,
-) {
-    SwitchRow(
-        on,
-        onToggle,
-        Modifier.fillMaxWidth().heightIn(min = 48.dp).clip(RoundedCornerShape(Marquee.radius.m)),
-    ) {
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            MqText(title, role = TextRole.Headline, weight = FontWeight.SemiBold)
-            line?.let { MqText(it, role = TextRole.Caption, color = Marquee.colors.muted) }
         }
     }
 }
