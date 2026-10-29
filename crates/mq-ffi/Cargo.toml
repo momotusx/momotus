@@ -16,8 +16,10 @@ required-features = ["bindgen"]
 
 [features]
 bindgen = ["uniffi/cli"]
+# Nuvio plugins: full builds only, with the engine.
+plugins = ["mq-runtime/plugins"]
 # Built-in torrent engine: `full` (sideload) builds only, never store builds.
-torrent = ["mq-runtime/torrent", "mq-runtime/plugins"]
+torrent = ["mq-runtime/torrent", "plugins"]
 
 [dependencies]
 mq-runtime = { path = "../mq-runtime" }

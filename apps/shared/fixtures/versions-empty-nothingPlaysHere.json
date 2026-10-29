@@ -142,6 +142,10 @@
   "nobodySharing": false,
   "note": null,
   "pendingAddons": [],
+  "plugins": {
+    "pending": false,
+    "rows": []
+  },
   "recommended": null,
   "rows": [],
   "sections": [],

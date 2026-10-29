@@ -105,7 +105,7 @@ fn dev_defaults() -> Option<Vec<PluginDefault>> {
     #[cfg(debug_assertions)]
     {
         let links = std::env::var("MQ_DEV_PLUGINS").ok()?;
-        let links = (links != "off").then_some(links).unwrap_or_default();
+        let links = if links == "off" { String::new() } else { links };
         Some(
             (links.split(',').filter(|l| !l.is_empty()).enumerate())
                 .map(|(i, url)| PluginDefault {
