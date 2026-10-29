@@ -74,6 +74,14 @@ impl Tmdb {
         self.get("/3/watch/providers/movie").await
     }
 
+    /// A movie's images that carry no language (first run's still,
+    /// plans/batch-2.md R2): textless backdrops, frames with no title
+    /// printed on them.
+    pub async fn movie_images(&self, id: u64) -> Answer {
+        self.get(&format!("/3/movie/{id}/images?include_image_language=null"))
+            .await
+    }
+
     async fn get(&self, path: &str) -> Answer {
         let url = format!("{}{path}", self.host);
         let opts = RequestOptions {
@@ -95,6 +103,9 @@ impl Tmdb {
 
 /// Where TMDB serves a logo of `size` ("w154") at `path` ("/abc.png").
 pub const IMAGES: &str = "https://image.tmdb.org/t/p";
+
+/// The size first run asks its still at: a phone's or a TV's full width.
+pub const STILL_SIZE: &str = "w1280";
 
 /// An image path TMDB gave ("/abc.png"), only as a plain file name: nothing
 /// an answer could turn into a query or another host.
@@ -155,6 +166,31 @@ pub fn credits(body: &Value) -> Vec<Credit> {
             })
         })
         .collect()
+}
+
+/// The best textless backdrop of a `movie_images` answer, as its path: a
+/// landscape frame at least 1280 wide with no language (no title or words
+/// printed on it), the best voted first, the first listed on a tie.
+pub fn textless_backdrop(body: &Value) -> Option<String> {
+    let mut best: Option<(&str, f64, u64)> = None;
+    for b in body["backdrops"].as_array()? {
+        let wide = b["width"].as_u64().is_some_and(|w| w >= 1280)
+            && b["aspect_ratio"].as_f64().is_some_and(|r| r >= 1.5);
+        let Some(path) = image_path(&b["file_path"]) else {
+            continue;
+        };
+        if !b["iso_639_1"].is_null() || !wide {
+            continue;
+        }
+        let votes = (
+            b["vote_average"].as_f64().unwrap_or(0.0),
+            b["vote_count"].as_u64().unwrap_or(0),
+        );
+        if best.is_none_or(|(_, a, n)| votes.0 > a || (votes.0 == a && votes.1 > n)) {
+            best = Some((path, votes.0, votes.1));
+        }
+    }
+    best.map(|(path, ..)| path.to_owned())
 }
 
 /// What `find` says of an IMDb id.
@@ -289,6 +325,32 @@ mod credit_tests {
         assert_eq!(cast[0].character.as_deref(), Some("Walter White"));
         assert_eq!(cast[1].character, None);
         assert_eq!(cast[1].photo, None);
+    }
+}
+
+#[cfg(test)]
+mod still_tests {
+    use super::textless_backdrop;
+
+    /// Only a textless (no language), wide, large frame is taken, the best
+    /// voted; a path that is not a plain file name never is.
+    #[test]
+    fn the_still_is_the_best_voted_textless_wide_backdrop() {
+        let body = serde_json::json!({"backdrops": [
+            {"file_path": "/titled.jpg", "iso_639_1": "en", "width": 3840, "aspect_ratio": 1.778, "vote_average": 9.0, "vote_count": 50},
+            {"file_path": "/small.jpg", "iso_639_1": null, "width": 780, "aspect_ratio": 1.778, "vote_average": 8.0, "vote_count": 50},
+            {"file_path": "/tall.jpg", "iso_639_1": null, "width": 2000, "aspect_ratio": 0.667, "vote_average": 8.0, "vote_count": 50},
+            {"file_path": "//evil.host/x.jpg", "iso_639_1": null, "width": 3840, "aspect_ratio": 1.778, "vote_average": 9.9, "vote_count": 99},
+            {"file_path": "/scene.jpg", "iso_639_1": null, "width": 1920, "aspect_ratio": 1.778, "vote_average": 5.4, "vote_count": 4},
+            {"file_path": "/best.jpg", "iso_639_1": null, "width": 3840, "aspect_ratio": 1.778, "vote_average": 5.6, "vote_count": 2},
+            {"file_path": "/tie.jpg", "iso_639_1": null, "width": 3840, "aspect_ratio": 1.778, "vote_average": 5.6, "vote_count": 2}
+        ]});
+        assert_eq!(textless_backdrop(&body).as_deref(), Some("/best.jpg"));
+        let titled = serde_json::json!({"backdrops": [
+            {"file_path": "/titled.jpg", "iso_639_1": "en", "width": 3840, "aspect_ratio": 1.778}
+        ]});
+        assert_eq!(textless_backdrop(&titled), None);
+        assert_eq!(textless_backdrop(&serde_json::json!({"posters": []})), None);
     }
 }
 

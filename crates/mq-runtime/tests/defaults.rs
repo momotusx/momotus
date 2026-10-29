@@ -1371,4 +1371,65 @@ async fn first_run_still_is_the_first_backdrop_of_the_default_catalog_or_nothing
         waited >= Duration::from_millis(1400) && waited < Duration::from_millis(2500),
         "waited {waited:?}"
     );
+
+    // With TMDB: the first top title TMDB holds a textless backdrop for, never the catalog's own (key art). Second
+    // has only titled backdrops, so Third's scene frame is taken, with Third's name.
+    mq_http::set_dev_replay(&still_host(Duration::ZERO, 200, metas).await);
+    let tmdb = fake_tmdb(&[
+        ("/3/find/tt2?", r#"{"movie_results":[{"id":2,"vote_average":7.1,"vote_count":90}],"tv_results":[]}"#),
+        ("/3/find/tt3?", r#"{"movie_results":[{"id":3,"vote_average":6.4,"vote_count":40}],"tv_results":[]}"#),
+        (
+            "/3/movie/2/images?include_image_language=null ",
+            r#"{"backdrops":[{"file_path":"/keyart.jpg","iso_639_1":"en","width":3840,"aspect_ratio":1.778}]}"#,
+        ),
+        (
+            "/3/movie/3/images?include_image_language=null ",
+            r#"{"backdrops":[{"file_path":"/scene.jpg","iso_639_1":null,"width":1920,"aspect_ratio":1.778,"vote_average":5.3,"vote_count":3}]}"#,
+        ),
+    ])
+    .await;
+    let core = Core::temporary(OWNER).unwrap();
+    core.set_tmdb_host(mq_runtime::TmdbHost {
+        url: tmdb,
+        token: Some("test".into()),
+        local: true,
+    });
+    assert_eq!(
+        core.first_run_still().await,
+        Some(defaults::FirstRunStill {
+            background: "https://image.tmdb.org/t/p/w1280/scene.jpg".into(),
+            logo: None,
+            name: "Third".into(),
+        })
+    );
+}
+
+/// A TMDB fake: each request line starting `GET <prefix>` gets its body; anything else a 404.
+async fn fake_tmdb(answers: &[(&str, &'static str)]) -> String {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    let answers: Vec<(String, &'static str)> = answers
+        .iter()
+        .map(|(p, b)| (format!("GET {p}"), *b))
+        .collect();
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    tokio::spawn(async move {
+        while let Ok((mut socket, _)) = listener.accept().await {
+            let answers = answers.clone();
+            tokio::spawn(async move {
+                let mut buf = [0u8; 4096];
+                let n = socket.read(&mut buf).await.unwrap_or(0);
+                let head = String::from_utf8_lossy(&buf[..n]);
+                let resp = match answers.iter().find(|(p, _)| head.starts_with(p.as_str())) {
+                    Some((_, body)) => format!(
+                        "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{body}",
+                        body.len()
+                    ),
+                    None => "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\n\r\n".to_owned(),
+                };
+                let _ = socket.write_all(resp.as_bytes()).await;
+            });
+        }
+    });
+    format!("http://{addr}")
 }

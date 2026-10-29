@@ -347,11 +347,18 @@ impl Core {
         Ok(())
     }
 
-    /// The still the first-run question steps frame (`firstRunStill`): the
-    /// first title with a backdrop in the default catalog addon's first
-    /// catalog, asked from its bundled manifest without installing it (no
-    /// account, nothing written). None when no answer came within
-    /// `STILL_BUDGET` or it held no backdrop: the frame stays black.
+    /// The still the first-run question steps frame (`firstRunStill`), from
+    /// the default catalog addon's first catalog, asked from its bundled
+    /// manifest without installing it (no account, nothing written).
+    ///
+    /// With TMDB (the owner's builds): the first of its top `STILL_TRIES`
+    /// titles TMDB holds a textless backdrop for, a scene frame with nothing
+    /// printed on it, never the key art a catalog's own backdrop often is
+    /// (the owner, 2026-10-30, plans/batch-2.md R2); TMDB's answers are kept
+    /// a day. Without TMDB (no token, a throwaway core): the first title with
+    /// a backdrop. None when the catalog gave no answer within
+    /// `STILL_BUDGET`, TMDB none within another, or nothing fits: the frame
+    /// stays black.
     pub async fn first_run_still(&self) -> Option<FirstRunStill> {
         let d = list().iter().find(|d| d.group == "catalogs")?;
         let catalog = d
@@ -382,6 +389,24 @@ impl Core {
         let ResourceResponse::Metas { metas } = decode_catalog(&fetched.body).ok()? else {
             return None;
         };
+        if self.tmdb_ready() {
+            let textless = async {
+                for m in metas.iter().take(STILL_TRIES) {
+                    if let Some(background) = self.tmdb_textless_backdrop(&m.id).await {
+                        return Some(FirstRunStill {
+                            background,
+                            logo: m.logo.as_ref().map(|u| u.to_string()),
+                            name: m.name.clone(),
+                        });
+                    }
+                }
+                None
+            };
+            return tokio::time::timeout(STILL_BUDGET, textless)
+                .await
+                .ok()
+                .flatten();
+        }
         metas.into_iter().find_map(|m| {
             Some(FirstRunStill {
                 background: m.background?.to_string(),
@@ -392,8 +417,12 @@ impl Core {
     }
 }
 
-/// How long first run waits for its still before it keeps the frame black.
+/// How long first run waits for its still before it keeps the frame black:
+/// for the catalog, then for TMDB.
 const STILL_BUDGET: Duration = Duration::from_millis(1500);
+
+/// How many of the catalog's top titles TMDB is asked for a textless still.
+const STILL_TRIES: usize = 5;
 
 /// The `firstRunStill` answer: a title's backdrop, its logo when it has
 /// one, and its name.

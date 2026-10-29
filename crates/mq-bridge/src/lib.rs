@@ -98,7 +98,7 @@ enum Request {
         id: u64,
     },
     /// The still first run frames its questions with (`Core::first_run_still`),
-    /// or null within 1.5 s. Replies `FirstRunStill` or null.
+    /// or null within 3 s. Replies `FirstRunStill` or null.
     FirstRunStill {
         id: u64,
     },

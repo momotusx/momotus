@@ -71,7 +71,7 @@ struct FilmLayout: Layout {
 }
 
 /// The still every framed step shows (`firstRunStill`), asked once per app run: the core's "none" (offline, past
-/// its 1.5 s budget) is kept; an ask that failed (the core not ready yet) is asked again by the next step.
+/// its budget) is kept; an ask that failed (the core not ready yet) is asked again by the next step.
 @MainActor final class StillOnce {
     static let shared = StillOnce()
     private var asked: Task<FirstRunStill?, any Error>?
