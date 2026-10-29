@@ -25,6 +25,7 @@ import { separators } from "../components/separators";
 import { TrailerOverlay } from "../components/trailer";
 import { muted, playTrailer, setMuted, type TrailerControl, trailerPlaying } from "../components/yt-player";
 import { type LiveView, type TitleView, titleView, versionsView } from "../core/client";
+import type { CastMember } from "../core/generated/CastMember";
 import type { DownloadBadge } from "../core/generated/DownloadBadge";
 import type { EmptyKind } from "../core/generated/EmptyKind";
 import type { HomeRow } from "../core/generated/HomeRow";
@@ -32,7 +33,7 @@ import type { Episode } from "../core/generated/Episode";
 import type { VersionsSnapshot } from "../core/generated/VersionsSnapshot";
 import { focusEl, reducedMotion, remember } from "../focus/dom";
 import { form, viewport } from "../form";
-import { airDate, clock, decoded, episodeLabel, offersLibrary, parseVideo, pct, playPath, playState, runtimeMinutes, seasonName, versionsPath } from "../lib/format";
+import { airDate, clock, decoded, episodeLabel, initials, offersLibrary, parseVideo, pct, playPath, playState, runtimeMinutes, seasonName, versionsPath } from "../lib/format";
 import { capableNow, coverSize, headerOnTvNow, meteredNow, previewsOn, REVEAL_MS, trailerAllowed, walkNow } from "../lib/trailers";
 import { blockedWords, choiceWords, problemWords } from "../lib/words";
 import { deleteSeason, type DownloadItem, downloadControl, downloadWords, seriesControl, seriesMenu } from "../lib/download";
@@ -610,8 +611,8 @@ function TitlePage(props: { kind: string; id: string; retry: () => void }) {
                   <Similar view={view} />
                   <RatedCover src={x().ratedPoster} />
                 </Show>
+                <Cast cast={x().cast} />
                 <dl class="facts">
-                  <Fact label="Starring" value={x().cast.slice(0, 3).join(", ")} />
                   <Fact label="Directed by" value={x().directors.slice(0, 2).join(", ")} />
                   <Fact label="Runtime" value={x().runtime ? `${x().runtime}${series() ? " an episode" : ""}` : ""} />
                 </dl>
@@ -686,6 +687,38 @@ function failure(view: TitleView): string {
   if (s.state === "failed") return s.reason;
   const h = view.state.header?.state;
   return h?.state === "failed" ? h.reason : "";
+}
+
+/** Starring (plans/batch-2.md R5): a row of round TMDB headshots with each name and role under it, the initials on
+ * a plain circle while there is no photo or it cannot load. */
+function Cast(props: { cast: CastMember[] }): JSX.Element {
+  return (
+    <Show when={props.cast.length}>
+      <section class="cast">
+        <h2 class="kicker">Starring</h2>
+        <ul>
+          <For each={props.cast}>
+            {(person) => {
+              const [broken, setBroken] = createSignal(false);
+              return (
+                <li>
+                  <span class="face" aria-hidden="true">
+                    <Show when={person.photo && !broken()} fallback={initials(person.name)}>
+                      <img src={person.photo ?? undefined} alt="" decoding="async" loading="lazy" onError={() => setBroken(true)} />
+                    </Show>
+                  </span>
+                  <span class="who">{person.name}</span>
+                  <Show when={person.character}>
+                    <span class="role">{person.character}</span>
+                  </Show>
+                </li>
+              );
+            }}
+          </For>
+        </ul>
+      </section>
+    </Show>
+  );
 }
 
 function Fact(props: { label: string; value: string }): JSX.Element {

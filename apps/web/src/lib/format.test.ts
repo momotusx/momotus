@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { airDate, bytes, clock, startsText, episodeLabel, groupFailures, offersLibrary, parseVideo, playPath, posterLabel, ratingParts, releaseParts, runtimeMinutes } from "./format";
+import { airDate, bytes, clock, startsText, episodeLabel, groupFailures, initials, offersLibrary, parseVideo, playPath, posterLabel, ratingParts, releaseParts, runtimeMinutes } from "./format";
 
 test("Add to Library shows only when the core says the Library can be set", () => {
   expect(offersLibrary({ librarySettable: true })).toBe(true);
@@ -91,4 +91,11 @@ test("the IMDb score is plain text, and a missing score has no slot", () => {
   expect(posterLabel(["Inception", "2010"], { imdb: "8.8" })).toBe("Inception, 2010, IMDb 8.8");
   expect(posterLabel(["Inception", null], { imdb: null })).toBe("Inception");
   expect(posterLabel(["Inception"], null)).toBe("Inception");
+});
+
+test("initials stand in for a headshot", () => {
+  expect(initials("Tim Robbins")).toBe("TR");
+  expect(initials("édouard  Baer Hugo")).toBe("ÉB");
+  expect(initials("Cher")).toBe("C");
+  expect(initials("")).toBe("");
 });

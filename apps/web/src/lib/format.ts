@@ -136,3 +136,12 @@ export const airDate = (released: string) =>
 /** When the next episode starts on its own: at the end of this one, then
  * counted down over the last 15 s ("Starts in 12 s"). */
 export const startsText = (leftSec: number) => (leftSec > 15 ? "Starts when this ends" : `Starts in ${Math.max(0, Math.ceil(leftSec))} s`);
+
+/** A person's initials, for a headshot TMDB has none of: the first letter of each of the first two words. */
+export const initials = (name: string) =>
+  name
+    .split(" ")
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((w) => [...w][0]?.toUpperCase())
+    .join("");
