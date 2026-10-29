@@ -106,9 +106,10 @@ pub struct Config {
     /// How often due deletions run and expired sign-in rows go (an hour;
     /// tests shorten it).
     pub housekeeping_every: std::time::Duration,
-    /// Sign-in calls one client may make a minute (30). Tests only: the web
-    /// e2e runs many browsers from one address (`--sign-in-budget`).
-    pub sign_in_budget: u32,
+    /// How many clients one address stands for (1): every per-client
+    /// sign-in and mail budget is multiplied by it. Tests only: the web e2e
+    /// runs many browsers from one address (`--clients-per-address`).
+    pub clients_per_address: u32,
     /// The wait between two codes to one mailbox (60 s). Tests only
     /// (`--mail-gap-ms`).
     pub mail_gap_ms: u64,
@@ -125,7 +126,7 @@ impl Default for Config {
             public_host: None,
             identity: None,
             housekeeping_every: std::time::Duration::from_secs(3600),
-            sign_in_budget: AUTH.1,
+            clients_per_address: 1,
             mail_gap_ms: 60 * 1000,
         }
     }
@@ -2174,9 +2175,21 @@ const TOKENS: (usize, u32, u32) = (3, 20, 2000);
 /// from pairings (a TV polls pairing `take` every 2 s, unlimited).
 const AUTH: (usize, u32, u32) = (4, 30, 3000);
 
-/// `AUTH` with the client part this relay was started with.
+/// A per-client budget for this relay: `slot`'s client part times
+/// `clients_per_address`.
+pub(crate) fn per_address(
+    state: &AppState,
+    (which, per_client, global): (usize, u32, u32),
+) -> (usize, u32, u32) {
+    (
+        which,
+        per_client.saturating_mul(state.config.clients_per_address),
+        global,
+    )
+}
+
 pub(crate) fn auth(state: &AppState) -> (usize, u32, u32) {
-    (AUTH.0, state.config.sign_in_budget, AUTH.2)
+    per_address(state, AUTH)
 }
 /// Apple's server-to-server notifications: Apple sends a few a day. The
 /// per-address budget applies first; the relay-wide one counts only notices

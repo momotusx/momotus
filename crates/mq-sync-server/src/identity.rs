@@ -1100,7 +1100,9 @@ async fn start_flow(
         Ok((all, mine))
     })()
     .map_err(|e| storage_error("start sign-in", e))?;
-    if open.0 >= MAX_FLOWS || open.1 >= FLOWS_PER_CLIENT {
+    if open.0 >= MAX_FLOWS
+        || open.1 >= FLOWS_PER_CLIENT * i64::from(state.config.clients_per_address)
+    {
         return Err(busy());
     }
     db.execute(

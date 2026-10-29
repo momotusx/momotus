@@ -12,7 +12,7 @@ use super::{
     FLOW_MS, FLOWS_PER_CLIENT, FlowRow, Identity, MAX_FLOWS, Verified, busy, coded, fresh, is_open,
     mint_ticket, refused, sha, sweep_flows, ticket_refused,
 };
-use crate::{AppState, MAIL, error, limited, lock, random, same, storage_error};
+use crate::{AppState, MAIL, error, limited, lock, per_address, random, same, storage_error};
 use axum::Json;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
@@ -419,7 +419,8 @@ pub(super) async fn start(
             }
             if count_events(&db, "mail", &mailbox, day)? >= MAILS_PER_MAILBOX
                 || count_events(&db, "miss", &mailbox, day)? >= MISSES_PER_MAILBOX
-                || mails_today(state, network, now) >= MAILS_PER_CLIENT
+                || mails_today(state, network, now)
+                    >= MAILS_PER_CLIENT * i64::from(state.config.clients_per_address)
             {
                 return Ok(Err(limit()));
             }
@@ -442,7 +443,10 @@ pub(super) async fn start(
                 |r| r.get(0),
             )?;
             // The mail budget is spent only by a start that would send.
-            if all >= MAX_FLOWS || mine >= FLOWS_PER_CLIENT || limited(state, address, MAIL) {
+            if all >= MAX_FLOWS
+                || mine >= FLOWS_PER_CLIENT * i64::from(state.config.clients_per_address)
+                || limited(state, address, per_address(state, MAIL))
+            {
                 return Ok(Err(busy()));
             }
             let verified = Verified {
