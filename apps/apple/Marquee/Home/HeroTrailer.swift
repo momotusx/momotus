@@ -40,14 +40,36 @@ struct TrailerSignals: Equatable {
     var reducedMotion: Bool
     /// Expensive or Low Data network.
     var metered: Bool
+    /// Low Power Mode: read for the log only, it blocks nothing (owner, 2026-10-30: the preview is muted and short).
     var lowPower: Bool
     var screenReader: Bool
     /// iOS's own Auto-Play Video Previews.
     var systemAutoplay: Bool
     var hasTrailer: Bool
 
-    var allowed: Bool {
-        enabled && capable && visible && !reducedMotion && !metered && !lowPower && !screenReader && systemAutoplay && hasTrailer
+    /// What holds a preview back, by name; empty when it may play.
+    var blocks: [String] {
+        var out: [String] = []
+        if !enabled { out.append("previews off") }
+        if !capable { out.append("memory") }
+        if !visible { out.append("not visible") }
+        if reducedMotion { out.append("reduced motion") }
+        if metered { out.append("metered") }
+        if screenReader { out.append("screen reader") }
+        if !systemAutoplay { out.append("system autoplay off") }
+        if !hasTrailer { out.append("no trailer") }
+        return out
+    }
+
+    var allowed: Bool { blocks.isEmpty }
+
+    /// `allowed`, logging what held it back, so a walk reads why nothing played.
+    func allowedLogged() -> Bool {
+        let held = blocks
+        if !held.isEmpty {
+            coreLog.notice("trailer held: \(held.joined(separator: ", "), privacy: .public) (low power \(lowPower, privacy: .public))")
+        }
+        return held.isEmpty
     }
 }
 
@@ -295,7 +317,7 @@ final class TrailerPlayer: NSObject {
       finish("stopped"); gen=g; full=f; want=loud; ended=false; playing=false;
       wrap=document.createElement("div"); const box=document.createElement("div"); wrap.append(box); document.getElementById("p").append(wrap);
       timers.push(setTimeout(()=>{ if(!playing) finish("timeout"); }, f?15000:9000));
-      let YT; try{ YT=await load(); }catch(e){ if(gen===g) finish("error"); return; }
+      let YT; try{ YT=await load(); }catch(e){ if(gen===g){ say({event:"refused",why:"api unreachable"}); finish("error"); } return; }
       if(ended||gen!==g) return;
       const vars={controls:0,playsinline:1,rel:0,enablejsapi:1,iv_load_policy:3,cc_load_policy:0,disablekb:1,fs:0}; if(cap) vars.end=cap;
       player=new YT.Player(box,{host:"https://www.youtube-nocookie.com",videoId:id,width:"100%",height:"100%",playerVars:vars,
@@ -311,7 +333,7 @@ final class TrailerPlayer: NSObject {
                 say({event:"time",fraction:len>0?Math.min(1,t/len):0,t,d:len,state:st===1?"playing":st===2?"paused":"buffering"});
                 captionsOff(); if(len>0&&t>=len-1) finish(cap?"cap":"ended"); }, 250); }
             if(e.data===0) finish(cap?"cap":"ended"); },
-          onError:()=>{ if(gen===g) finish("error"); } } }); }
+          onError:(e)=>{ if(gen===g){ say({event:"refused",why:"youtube "+e.data}); finish("error"); } } } }); }
     </script></body></html>
     """
 }

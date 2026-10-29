@@ -99,3 +99,23 @@ import Testing
     #expect(!TrailerMessages.accepts(["event": "end", "why": "stopped", "gen": 3], generation: 4))
     #expect(!TrailerMessages.accepts(["event": "playing"], generation: 4))
 }
+
+@Test func aPreviewPlaysOnlyWhenEveryConditionHoldsAndLowPowerIsNoneOfThem() {
+    let ok = TrailerSignals(enabled: true, capable: true, visible: true, reducedMotion: false, metered: false,
+                            lowPower: false, screenReader: false, systemAutoplay: true, hasTrailer: true)
+    #expect(ok.allowed)
+    var saver = ok
+    saver.lowPower = true
+    #expect(saver.allowed)
+    #expect(saver.blocks.isEmpty)
+    let blocked: [WritableKeyPath<TrailerSignals, Bool>: Bool] = [
+        \.enabled: false, \.capable: false, \.visible: false, \.reducedMotion: true, \.metered: true,
+        \.screenReader: true, \.systemAutoplay: false, \.hasTrailer: false,
+    ]
+    for (key, value) in blocked {
+        var signals = ok
+        signals[keyPath: key] = value
+        #expect(!signals.allowed)
+        #expect(signals.blocks.count == 1)
+    }
+}

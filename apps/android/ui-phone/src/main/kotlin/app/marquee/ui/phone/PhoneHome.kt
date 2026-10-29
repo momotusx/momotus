@@ -109,7 +109,7 @@ import app.marquee.design.laneHeight
 import app.marquee.design.rememberScreenReader
 import app.marquee.design.rememberTrailerHost
 import app.marquee.design.stopOnDrag
-import app.marquee.design.trailerAllowed
+import app.marquee.design.trailerAllowedLogged
 import app.marquee.design.windowDp
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -347,7 +347,7 @@ private fun PhoneHeroCarousel(
         if (!active || !visible() || id == null) return@LaunchedEffect
         delay(TRAILER_DELAY_MS)
         val allowed =
-            trailerAllowed(
+            trailerAllowedLogged(
                 TrailerPreviews.signals(
                     context,
                     visible = true,

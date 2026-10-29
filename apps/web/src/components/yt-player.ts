@@ -270,11 +270,17 @@ export function playTrailer(opts: {
             if (e.data === YT.PlayerState.ENDED) self.stop(cap ? "cap" : "ended");
           },
           onApiChange: () => captionsOff(),
-          onError: () => self.stop("error"),
+          onError: (e: { data: number }) => {
+            console.warn(`MarqueeTrailer: trailer refused youtube ${e.data}`);
+            self.stop("error");
+          },
         },
       });
     },
-    () => self.stop("error"),
+    () => {
+      console.warn("MarqueeTrailer: trailer refused api unreachable");
+      self.stop("error");
+    },
   );
   return control;
 }

@@ -85,6 +85,7 @@ data class TrailerSignals(
     val visible: Boolean,
     val reducedMotion: Boolean,
     val metered: Boolean,
+    /** Battery saver: read for the log only, it blocks nothing (owner, 2026-10-30: the preview is muted and short). */
     val powerSave: Boolean,
     val screenReader: Boolean,
     /** The TV form shows none until a real TV is measured. */
@@ -92,9 +93,32 @@ data class TrailerSignals(
     val hasTrailer: Boolean,
 )
 
-fun trailerAllowed(s: TrailerSignals): Boolean =
-    s.enabled && s.capable && s.visible && !s.reducedMotion && !s.metered && !s.powerSave && !s.screenReader && !s.tv &&
-        s.hasTrailer
+/** What holds a preview back, by name; empty when it may play. */
+fun trailerBlocks(s: TrailerSignals): List<String> =
+    buildList {
+        if (!s.enabled) add("previews off")
+        if (!s.capable) add("memory")
+        if (!s.visible) add("not visible")
+        if (s.reducedMotion) add("reduced motion")
+        if (s.metered) add("metered")
+        if (s.screenReader) add("screen reader")
+        if (s.tv) add("tv")
+        if (!s.hasTrailer) add("no trailer")
+    }
+
+fun trailerAllowed(s: TrailerSignals): Boolean = trailerBlocks(s).isEmpty()
+
+/** [trailerAllowed], logging what held it back under MarqueeTrailer, so a walk reads why nothing played. */
+fun trailerAllowedLogged(s: TrailerSignals): Boolean {
+    val blocks = trailerBlocks(s)
+    if (blocks.isNotEmpty()) {
+        Log.i(
+            "MarqueeTrailer",
+            "trailer held: ${blocks.joinToString()} (battery saver ${s.powerSave})",
+        )
+    }
+    return blocks.isEmpty()
+}
 
 /** The device's own switch (never synced), default on; Settings > Playback. */
 object TrailerPreviews {
@@ -222,7 +246,7 @@ fun TitleHeaderTrailer(
         delay(TitleTrailers.DELAY_MS)
         val floor = if (tv) TitleTrailers.TV_FLOOR else TrailerPreviews.SIX_GB
         val signals = TrailerPreviews.signals(context, true, reduced, tv = false, hasTrailer = true, minMemory = floor)
-        if (!trailerAllowed(signals)) return@LaunchedEffect
+        if (!trailerAllowedLogged(signals)) return@LaunchedEffect
         trailers.play(id, state) { why -> if (why != "stopped") TitleTrailers.spent += titleId }
     }
 }
@@ -522,7 +546,7 @@ class TrailerHost internal constructor(
               finish("stopped"); gen=g; full=f; want=loud; ended=false; playing=false;
               wrap=document.createElement("div"); const box=document.createElement("div"); wrap.append(box); document.getElementById("p").append(wrap);
               timers.push(setTimeout(()=>{ if(!playing) finish("timeout"); }, f?15000:9000));
-              let YT; try{ YT=await load(); }catch(e){ if(gen===g) finish("error"); return; }
+              let YT; try{ YT=await load(); }catch(e){ if(gen===g){ say({event:"refused",why:"api unreachable"}); finish("error"); } return; }
               if(ended||gen!==g) return;
               const vars={controls:0,playsinline:1,rel:0,enablejsapi:1,iv_load_policy:3,cc_load_policy:0,disablekb:1,fs:0}; if(cap) vars.end=cap;
               player=new YT.Player(box,{host:"https://www.youtube-nocookie.com",videoId:id,width:"100%",height:"100%",playerVars:vars,
@@ -538,7 +562,7 @@ class TrailerHost internal constructor(
                         say({event:"time",fraction:len>0?Math.min(1,t/len):0,t,d:len,state:st===1?"playing":st===2?"paused":"buffering"});
                         captionsOff(); if(len>0&&t>=len-1) finish(cap?"cap":"ended"); }, f?250:1000); }
                     if(e.data===0) finish(cap?"cap":"ended"); },
-                  onError:()=>{ if(gen===g) finish("error"); } } }); }
+                  onError:(e)=>{ if(gen===g){ say({event:"refused",why:"youtube "+e.data}); finish("error"); } } } }); }
             </script></body></html>
             """.trimIndent()
     }

@@ -276,7 +276,7 @@ struct TitleScreen: View {
               !HeaderTrailers.spent.contains(details.id) else { return }
         try? await Task.sleep(for: .milliseconds(300))
         guard !Task.isCancelled,
-              TrailerSignals.now(visible: true, reducedMotion: reduceMotion, hasTrailer: true).allowed else { return }
+              TrailerSignals.now(visible: true, reducedMotion: reduceMotion, hasTrailer: true).allowedLogged() else { return }
         // One player at a time: Home's lets go first.
         TrailerPlayer.shared.release()
         trailerPlayer.play(id, into: headerTrailer) { why in

@@ -189,13 +189,31 @@ class HeroClockTest {
             ok.copy(visible = false),
             ok.copy(reducedMotion = true),
             ok.copy(metered = true),
-            ok.copy(powerSave = true),
             ok.copy(screenReader = true),
             ok.copy(tv = true),
             ok.copy(hasTrailer = false),
         )) {
             assertFalse(blocked.toString(), trailerAllowed(blocked))
+            assertEquals(blocked.toString(), 1, trailerBlocks(blocked).size)
         }
+    }
+
+    @Test
+    fun batterySaverNeverHoldsTheMutedPreviewBack() {
+        val saver =
+            TrailerSignals(
+                enabled = true,
+                capable = true,
+                visible = true,
+                reducedMotion = false,
+                metered = false,
+                powerSave = true,
+                screenReader = false,
+                tv = false,
+                hasTrailer = true,
+            )
+        assertTrue(trailerAllowed(saver))
+        assertEquals(emptyList<String>(), trailerBlocks(saver))
     }
 
     @Test

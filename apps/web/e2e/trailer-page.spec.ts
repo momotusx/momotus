@@ -66,6 +66,8 @@ for (const [platform, { file, shim }] of Object.entries(SOURCES)) {
       (window as unknown as { play: (...a: unknown[]) => void }).play("bcdefghijkl", 45, 2, false, false);
     });
     await expect.poll(async () => (await msgs(page)).find((m) => m.event === "end" && m.gen === 2)).toMatchObject({ why: "error" });
+    // The log says why: YouTube's own code.
+    expect((await msgs(page)).find((m) => m.event === "refused")).toMatchObject({ gen: 2, why: "youtube 150" });
   });
 
   test(`${platform}: every message carries its play's generation, so a late stop never reaches the next`, async ({ page }) => {
@@ -162,5 +164,6 @@ for (const [platform, { file, shim }] of Object.entries(SOURCES)) {
     await open(page, { noApi: true });
     await page.evaluate(() => (window as unknown as { play: (...a: unknown[]) => void }).play("abcdefghijk", 0, 1, true, false));
     await expect.poll(async () => (await msgs(page)).find((m) => m.event === "end")).toMatchObject({ gen: 1, why: "error" });
+    expect((await msgs(page)).find((m) => m.event === "refused")).toMatchObject({ gen: 1, why: "api unreachable" });
   });
 }

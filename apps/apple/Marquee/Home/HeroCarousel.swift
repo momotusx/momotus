@@ -228,7 +228,7 @@ struct HeroCarousel: View {
         try? await Task.sleep(for: .milliseconds(700))
         guard !Task.isCancelled else { return }
         let signals = TrailerSignals.now(visible: live, reducedMotion: reduceMotion, hasTrailer: !spent.contains(hero.tile.id))
-        guard signals.allowed else { return }
+        guard signals.allowedLogged() else { return }
         TrailerPlayer.shared.play(id, into: trailer) { why in
             if why != "stopped" { spent.insert(hero.tile.id) }
             // Played to its cap: the art fades back, and the same clock pages on 600 ms later.
