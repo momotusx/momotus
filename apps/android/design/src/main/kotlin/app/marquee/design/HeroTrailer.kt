@@ -2,7 +2,9 @@ package app.marquee.design
 
 import android.annotation.SuppressLint
 import android.app.ActivityManager
+import android.content.ComponentCallbacks2
 import android.content.Context
+import android.content.res.Configuration
 import android.net.ConnectivityManager
 import android.os.PowerManager
 import android.util.Log
@@ -123,8 +125,9 @@ object TrailerPreviews {
         val connectivity = context.getSystemService(ConnectivityManager::class.java)
         return TrailerSignals(
             enabled = on(context),
-            // Under memory pressure right now (lowMemory) none plays, whatever the device's size.
-            capable = am != null && !am.isLowRamDevice && !memory.lowMemory && memory.totalMem >= minMemory,
+            capable =
+                am != null &&
+                    trailerCapable(memory.totalMem, memory.availMem, am.isLowRamDevice, memory.lowMemory, minMemory),
             visible = visible,
             reducedMotion = reducedMotion,
             metered = connectivity?.isActiveNetworkMetered ?: true,
@@ -143,12 +146,29 @@ object TrailerPreviews {
     fun headerOnTv(context: Context): Boolean {
         val am = context.getSystemService(ActivityManager::class.java) ?: return false
         val memory = ActivityManager.MemoryInfo().also { am.getMemoryInfo(it) }
+        // The device's size only: whether it has room right now is read when a trailer is due.
         return !am.isLowRamDevice && memory.totalMem >= TitleTrailers.TV_FLOOR
     }
 
     // totalMem reads a little under the marketed size (the kernel keeps some), so 6 GB phones read about 5.5.
     internal const val SIX_GB = 5_400_000_000L
 }
+
+/**
+ * Whether a device may play a muted preview now (plans/trailer-inline.md 4): its size against [floor] (`totalMem`
+ * bytes), not a low-RAM device, not under memory pressure right now, and with room for the player's cost free right
+ * now. A 16 GB Pixel cannot prove a 2 GB stick, so the static floor has this runtime guard beside it.
+ */
+fun trailerCapable(
+    totalMem: Long,
+    availMem: Long,
+    lowRam: Boolean,
+    lowMemory: Boolean,
+    floor: Long,
+): Boolean = !lowRam && !lowMemory && totalMem >= floor && availMem >= TitleTrailers.ROOM
+
+/** The end of a play whose renderer died or whose memory the system took back: shown as the quiet line, never retried. */
+const val LOST = "lost"
 
 /** A title page's header trailer (plans/trailer-inline.md 3, 4). */
 object TitleTrailers {
@@ -160,6 +180,12 @@ object TitleTrailers {
      * bench/trailer-inline): below it, a TV shows the art and plays Trailer full screen only.
      */
     const val TV_FLOOR = TrailerPreviews.SIX_GB
+
+    /**
+     * The memory a preview needs free when it starts: twice the player's cost (Phase 0's +197 MB on the Pixel,
+     * plans/appletv-polish.md 4.2), until the TV-form measurement replaces it (plans/trailer-inline.md 5).
+     */
+    const val ROOM = 400_000_000L
 
     const val DELAY_MS = 300L
 }
@@ -321,7 +347,7 @@ class TrailerHost internal constructor(
                         view: WebView,
                         detail: RenderProcessGoneDetail,
                     ): Boolean {
-                        main.post { destroy("error") }
+                        main.post { destroy(LOST) }
                         return true
                     }
                 }
@@ -394,8 +420,9 @@ class TrailerHost internal constructor(
 
     /**
      * Lets the web view and its renderer go; the next play makes a fresh one. Whoever plays hears [why]: `stopped` (the
-     * app in the background: a full-screen trailer closes rather than stay black, review r1-A 5) or `error` (the
-     * renderer died: the full screen tries the next trailer or says it cannot play, a header does not play again).
+     * app in the background: a full-screen trailer closes rather than stay black, review r1-A 5) or [LOST] (the
+     * renderer died, or the system asked for memory back: the full screen says it cannot play, a header does not play
+     * again this session).
      */
     fun destroy(why: String = "stopped") {
         val done = onEnd
@@ -521,8 +548,27 @@ fun rememberTrailerHost(): TrailerHost {
     DisposableEffect(host, lifecycle) {
         val stopped = LifecycleEventObserver { _, event -> if (event == Lifecycle.Event.ON_STOP) host.destroy() }
         lifecycle.addObserver(stopped)
+        // The system asks for memory back while the app is in front: the player goes, whoever plays hears it lost.
+        val trim =
+            object : ComponentCallbacks2 {
+                override fun onTrimMemory(level: Int) {
+                    @Suppress("DEPRECATION")
+                    if (level >= ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW &&
+                        level < ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN
+                    ) {
+                        host.destroy(LOST)
+                    }
+                }
+
+                override fun onConfigurationChanged(newConfig: Configuration) = Unit
+
+                @Deprecated("Deprecated in Java")
+                override fun onLowMemory() = host.destroy(LOST)
+            }
+        context.applicationContext.registerComponentCallbacks(trim)
         onDispose {
             lifecycle.removeObserver(stopped)
+            context.applicationContext.unregisterComponentCallbacks(trim)
             host.destroy()
         }
     }

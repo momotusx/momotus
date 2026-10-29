@@ -7,6 +7,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
+import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
@@ -25,10 +26,51 @@ class TitleTrailersTest {
         shadowOf(am).setMemoryInfo(
             ActivityManager.MemoryInfo().apply {
                 this.totalMem = totalMem
+                availMem = totalMem / 2
                 lowMemory = pressed
             },
         )
         shadowOf(am).setIsLowRamDevice(lowRam)
+    }
+
+    @Test
+    fun `the floor, the device's flag, the pressure and the free room each decide`() {
+        val gb = 1_000_000_000L
+        // Sizes as totalMem reads them (a little under the label): 1.5, 2, 3, 4 and 6 GB devices.
+        val sizes = listOf(1_400_000_000L, 1_850_000_000L, 2_800_000_000L, 3_700_000_000L, 5_500_000_000L)
+        val passes =
+            sizes.map {
+                trailerCapable(
+                    it,
+                    gb,
+                    lowRam = false,
+                    lowMemory = false,
+                    floor = TitleTrailers.TV_FLOOR,
+                )
+            }
+        assertEquals(sizes.map { it >= TitleTrailers.TV_FLOOR }, passes)
+        val big = 12 * gb
+        assertTrue(trailerCapable(big, gb, lowRam = false, lowMemory = false, floor = TitleTrailers.TV_FLOOR))
+        assertFalse(trailerCapable(big, gb, lowRam = true, lowMemory = false, floor = TitleTrailers.TV_FLOOR))
+        assertFalse(trailerCapable(big, gb, lowRam = false, lowMemory = true, floor = TitleTrailers.TV_FLOOR))
+        assertFalse(
+            trailerCapable(
+                big,
+                TitleTrailers.ROOM - 1,
+                lowRam = false,
+                lowMemory = false,
+                floor = TitleTrailers.TV_FLOOR,
+            ),
+        )
+        assertFalse(
+            trailerCapable(
+                TitleTrailers.TV_FLOOR - 1,
+                gb,
+                lowRam = false,
+                lowMemory = false,
+                floor = TitleTrailers.TV_FLOOR,
+            ),
+        )
     }
 
     @Test

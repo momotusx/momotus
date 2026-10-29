@@ -192,9 +192,14 @@ fun TvTitle(
         var fullTrailer by remember { mutableStateOf(false) }
         var trailerClosed by remember { mutableIntStateOf(0) }
         val trailerFocus = focus.requesterFor("trailer")
-        // The art is fixed under the page: once the lanes scroll up over it the trailer stops.
+        // The art is fixed under the page: any scroll of the lanes over it stops the trailer.
         val list = rememberLazyListState()
-        val atTop by remember(list) { derivedStateOf { list.firstVisibleItemIndex == 0 } }
+        val atTop by remember(list) {
+            derivedStateOf {
+                list.firstVisibleItemIndex == 0 &&
+                    list.firstVisibleItemScrollOffset == 0
+            }
+        }
         if (details != null) {
             TitleHeaderTrailer(
                 trailers,

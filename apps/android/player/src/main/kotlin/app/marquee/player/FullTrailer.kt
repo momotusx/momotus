@@ -55,6 +55,7 @@ import app.marquee.core.model.Trailer
 import app.marquee.design.Form
 import app.marquee.design.HeroTrailers
 import app.marquee.design.Icons
+import app.marquee.design.LOST
 import app.marquee.design.LiveSpoken
 import app.marquee.design.Marquee
 import app.marquee.design.MqText
@@ -92,7 +93,7 @@ fun TrailerDialog(
         host.play(trailer.youtubeId, state, cap = 0, full = true, loud = loud) { why ->
             // Refused (embedding off, gone): the next trailer, then the line. Never ready (YouTube unreachable): the line
             // at once, not another 15 s per trailer.
-            if (why != "error" && why != "timeout") {
+            if (why != "error" && why != "timeout" && why != LOST) {
                 close()
             } else if (why == "error" && index + 1 < trailers.size) {
                 index += 1
