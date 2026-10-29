@@ -271,9 +271,6 @@ struct ProfilePicker: View {
 struct ProfileMenu<Face: View>: View {
     let onSettings: () -> Void
     let onPin: (ProfileInfo) -> Void
-    /// Sign in another device, between the profiles and Settings: phones and tablets in an account, never a kids
-    /// profile (pairing, the scanner a TV's code asks for: plans/accounts.md D6, 4.2).
-    var signInAnother: (() -> Void)? = nil
     #if os(tvOS)
     /// The bar's focus on the avatar, set on the button itself (Menu on the avatar goes Home; Up enters on it for Settings).
     var focus: FocusState<Bool>.Binding? = nil
@@ -310,7 +307,6 @@ struct ProfileMenu<Face: View>: View {
                 }
                 .pickerStyle(.inline)
                 Divider()
-                if let signInAnother { Button(AccountWords.shared.signInAnother, glyph: "qr-code", action: signInAnother) }
                 Button("Settings", glyph: "settings", action: onSettings)
             } label: {
                 face(me)

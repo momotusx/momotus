@@ -27,13 +27,15 @@ private func source(_ path: String) throws -> String {
     #expect(root.contains("ProfileMenu(onSettings: settings, onPin: pin, focus: avatar)"), "the avatar's focus left the button")
 }
 
-@Test func signInAnotherDeviceIsInTheMenuOnPhonesInAnAccountOnly() throws {
-    let root = try source("App/RootView.swift")
-    #expect(root.contains("sync.joined && profiles.snapshot?.current?.kids != true ? { AppRouter.shared.requestScan() } : nil"))
+@Test func theMenuHoldsTheProfilesThenSettingsAndNothingAccountLike() throws {
+    // The owner's rule (plans/owner-picks.md, 2026-10-29): account actions, Sign in another device among them, stay
+    // inside Settings.
     let picker = try source("Profiles/ProfilePicker.swift")
-    let menu = try #require(picker.range(of: "struct ProfileMenu<Face: View>")).lowerBound
-    let tail = String(picker[menu...])
-    let scan = try #require(tail.range(of: "Button(AccountWords.shared.signInAnother")).lowerBound
-    let settings = try #require(tail.range(of: "Button(\"Settings\", glyph: \"settings\"")).lowerBound
-    #expect(scan < settings, "Sign in another device comes before Settings")
+    let start = try #require(picker.range(of: "struct ProfileMenu<Face: View>")).lowerBound
+    let end = try #require(picker.range(of: "struct BarAvatar")).lowerBound
+    let menu = String(picker[start..<end])
+    for account in ["AccountWords", "signInAnother", "requestScan", "Sign in"] {
+        #expect(!menu.contains(account), "the profile menu holds an account action: \(account)")
+    }
+    #expect(menu.contains("Button(\"Settings\", glyph: \"settings\", action: onSettings)"))
 }

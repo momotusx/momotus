@@ -183,12 +183,14 @@ class ProfileMenuTest {
     }
 
     @Test
-    fun `on a phone in an account, Sign in another device sits after the profiles, before Settings`() {
-        var scans = 0
-        open { ProfileMenu(gate, {}, {}, {}) { scans++ } }
-        assertEquals(listOf("Sign in another device", "Settings"), menuRows().takeLast(2))
-        row("Sign in another device").performClick()
-        assertEquals(1, scans)
+    fun `the phone's menu holds the profiles, then Settings, and nothing account-like`() {
+        // The owner's rule (plans/owner-picks.md, 2026-10-29): account actions, Sign in another device among them,
+        // stay inside Settings.
+        open { ProfileMenu(gate, {}, {}, {}) }
+        assertEquals(
+            listOf("Ana, current profile", "Kid", "Bo, locked with a PIN", "Cy, still syncing", "Settings"),
+            menuRows(),
+        )
     }
 
     @Test

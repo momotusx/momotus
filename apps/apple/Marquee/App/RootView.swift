@@ -148,7 +148,7 @@ struct MainShell: View {
     /// The screen's bottom safe-area inset, as the tab bar reads it, for the pages' end margin.
     @State private var bottomInset: CGFloat = 0
     @Environment(FloatingPlayer.self) private var floating
-    /// Sign in another device, from the quick action, the /pair link or the profile menu.
+    /// Sign in another device, from the quick action or the /pair link (Account has its own row).
     @State private var showScanner = false
     @Environment(SyncModel.self) private var sync
     @Environment(AccountWipe.self) private var wipe
@@ -220,7 +220,7 @@ struct MainShell: View {
         .safeAreaInset(edge: .bottom, spacing: 0) {
             // Off while the keyboard is up, as a tab bar sits behind it.
             if !immersion.active && !typing {
-                TabBar(selection: tab, select: { select($0) }, pin: pin, signInAnother: signInAnother, bottomInset: bottomInset)
+                TabBar(selection: tab, select: { select($0) }, pin: pin, bottomInset: bottomInset)
             }
         }
         // The screen's own bottom inset (the home indicator), read outside the bar's inset.
@@ -343,14 +343,6 @@ struct MainShell: View {
         case .toTop: return { homeTop += 1 }
         case .exit: return nil
         }
-    }
-    #endif
-
-    #if os(iOS)
-    /// The profile menu's Sign in another device (plans/accounts.md 4.2): a phone or tablet in an account, never a
-    /// kids profile.
-    private var signInAnother: (() -> Void)? {
-        sync.joined && profiles.snapshot?.current?.kids != true ? { AppRouter.shared.requestScan() } : nil
     }
     #endif
 
@@ -594,8 +586,6 @@ private struct TabBar: View {
     let select: (AppTab) -> Void
     /// The profile's menu chose a profile with a PIN.
     let pin: (ProfileInfo) -> Void
-    /// The profile menu's Sign in another device, when this phone can approve.
-    let signInAnother: (() -> Void)?
     let bottomInset: CGFloat
     @Environment(\.dynamicTypeSize) private var type
     @State private var width = CGFloat.infinity
@@ -660,7 +650,7 @@ private struct TabBar: View {
     /// The last tab: the profile's avatar over "Profile", lit while Settings shows, opening the profile's menu.
     private func profile(iconsOnly: Bool) -> some View {
         let on = selection == .settings
-        return ProfileMenu(onSettings: { select(.settings) }, onPin: pin, signInAnother: signInAnother) { me in
+        return ProfileMenu(onSettings: { select(.settings) }, onPin: pin) { me in
             VStack(spacing: 1) {
                 BarAvatar(profile: me, size: 26, lit: on)
                 if !iconsOnly {

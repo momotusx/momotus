@@ -77,7 +77,6 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
-import app.marquee.core.AccountCopy
 import app.marquee.core.ProfileCopy
 import app.marquee.core.client.CoreError
 import app.marquee.core.model.ProfileInfo
@@ -462,9 +461,6 @@ fun ProfileMenu(
     onDismiss: () -> Unit,
     onSettings: () -> Unit,
     onPin: (String) -> Unit,
-    /** Sign in another device, before Settings: phones and tablets in an account, never a kids profile (pairing, the
-     * scanner a TV's code asks for: plans/accounts.md D6, 4.2). */
-    onSignInAnother: (() -> Unit)? = null,
 ) {
     val s = gate.snapshot ?: return
     val rows =
@@ -499,11 +495,7 @@ fun ProfileMenu(
                     }
                 }
             }
-        } +
-            listOfNotNull(
-                onSignInAnother?.let { MenuAction(AccountCopy.SIGN_IN_ANOTHER, Icons.QrCode, onClick = it) },
-            ) +
-            MenuAction("Settings", Icons.Settings, onClick = onSettings)
+        } + MenuAction("Settings", Icons.Settings, onClick = onSettings)
     ActionMenu("Profiles", rows, onDismiss, start = s.profiles.indexOfFirst { it.id == s.active }.coerceAtLeast(0))
 }
 
