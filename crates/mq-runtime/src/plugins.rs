@@ -84,6 +84,8 @@ pub(crate) struct Plugins {
     pool: tokio::sync::Semaphore,
     results: Mutex<HashMap<String, (Instant, Vec<ParsedStream>)>>,
     defaults: Vec<PluginDefault>,
+    /// The directory page's links and the manifests read from it, each kept a day (`directory`).
+    pub(crate) listed: crate::plugin_directory::Kept,
 }
 
 impl Plugins {
@@ -91,6 +93,7 @@ impl Plugins {
         Self {
             pool: tokio::sync::Semaphore::new(POOL),
             results: Mutex::default(),
+            listed: crate::plugin_directory::Kept::default(),
             defaults: defaults
                 .or_else(dev_defaults)
                 .unwrap_or_else(builtin_defaults),
@@ -127,7 +130,7 @@ fn lock<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
 
 /// One provider of a repository, as its manifest lists it.
 #[derive(Debug, Clone, PartialEq)]
-pub(crate) struct Provider {
+pub struct Provider {
     pub id: String,
     pub name: String,
     pub version: String,
@@ -142,7 +145,7 @@ pub(crate) struct Provider {
 
 /// A repository's manifest, read and checked.
 #[derive(Debug, Clone, PartialEq)]
-pub(crate) struct Repo {
+pub struct Repo {
     pub name: String,
     pub description: String,
     pub providers: Vec<Provider>,
@@ -261,7 +264,7 @@ pub fn normalize_url(input: &str) -> Result<Url, CoreError> {
     Ok(url)
 }
 
-fn host_of(url: &str) -> String {
+pub(crate) fn host_of(url: &str) -> String {
     Url::parse(url)
         .ok()
         .and_then(|u| u.host_str().map(str::to_owned))
@@ -355,7 +358,7 @@ fn public(core: &Core) -> mq_http::HttpClient {
     core.http().scoped(&[])
 }
 
-async fn fetch_manifest(core: &Core, url: &Url) -> Result<(Repo, String), String> {
+pub(crate) async fn fetch_manifest(core: &Core, url: &Url) -> Result<(Repo, String), String> {
     let opts = mq_http::RequestOptions {
         timeout: ASK_WAIT,
         max_bytes: MANIFEST_BYTES,

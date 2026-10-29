@@ -33,7 +33,10 @@ fn reply(status: u16, kind: &str, body: &str) -> Vec<u8> {
 impl Fixture {
     fn start() -> Fixture {
         let loopback: IpAddr = "127.0.0.1".parse().unwrap();
-        mq_http::test_dns::set_public(HOST, &[loopback]);
+        // The directory and the manifest host it may list, on this fixture too.
+        for name in [HOST, "nuvioplugins.com", "raw.githubusercontent.com"] {
+            mq_http::test_dns::set_public(name, &[loopback]);
+        }
         let asked: Arc<Mutex<Vec<String>>> = Arc::default();
         let log = asked.clone();
         let base: Arc<Mutex<String>> = Arc::default();
@@ -42,7 +45,21 @@ impl Fixture {
             log.lock().unwrap().push(r.path.clone());
             let base = at.lock().unwrap().clone();
             match r.path.as_str() {
-                "/repo/manifest.json" => reply(200, "application/json", MANIFEST),
+                "/repo/manifest.json" | "/momotus/fixture/main/manifest.json" => {
+                    reply(200, "application/json", MANIFEST)
+                }
+                // The directory page: our repository on the one host it may list, twice, and a
+                // link elsewhere it refuses.
+                "/dir" => {
+                    let port = base.rsplit(':').next().unwrap_or_default();
+                    let ours = format!(
+                        "https://raw.githubusercontent.com:{port}/momotus/fixture/main/manifest.json"
+                    );
+                    let page = format!(
+                        "<a href=\"{ours}\">ours</a> <code>{ours}</code> <a href=\"https://{HOST}:{port}/repo/manifest.json\">elsewhere</a>"
+                    );
+                    reply(200, "text/html", &page)
+                }
                 "/repo/test-film.js" => {
                     reply(200, "text/javascript", &SCRIPT.replace("{{BASE}}", &base))
                 }
@@ -276,4 +293,41 @@ async fn the_default_repositories_come_on_once() {
     assert!(kid.install_defaults(&[choice("nuvio-tr", true)]).is_err());
     drop((core, kid));
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// R8: Find addons lists the repositories a directory page names, on raw.githubusercontent.com
+/// only, each read with its providers, languages and kinds; one added shows as installed; a kids
+/// profile sees none; a page that cannot be read gives the shipped snapshot.
+#[tokio::test]
+async fn the_directory_lists_its_repositories() {
+    let fixture = Fixture::start();
+    let port = fixture.base.rsplit(':').next().unwrap().to_owned();
+    let page =
+        |path: &str| url::Url::parse(&format!("https://nuvioplugins.com:{port}{path}")).unwrap();
+    let core = core();
+    core.use_plugin_directory_at(page("/dir"));
+    let listed = core.plugin_directory().await;
+    assert_eq!(listed.source, "nuvioplugins.com");
+    assert!(!listed.from_snapshot);
+    assert_eq!(listed.repos.len(), 1, "{:?}", fixture.asked());
+    let repo = &listed.repos[0];
+    assert_eq!(repo.name, "Momotus test plugins");
+    assert_eq!(repo.host, "raw.githubusercontent.com");
+    assert_eq!(repo.providers, ["Test film"]);
+    assert_eq!(repo.languages, ["en"]);
+    assert_eq!(repo.types, ["movie", "series"]);
+    assert!(!repo.installed);
+    core.add_plugin_repo(&repo.url).await.unwrap();
+    assert!(core.plugin_directory().await.repos[0].installed);
+    // Kept a day: the page was read once.
+    assert_eq!(fixture.asked().iter().filter(|p| *p == "/dir").count(), 1);
+
+    let owner = self::core();
+    owner.set_pin(OWNER, Some("1357"), None).await.unwrap();
+    let kid = owner.for_profile(&owner.create_kids_profile("Kid", "owl").unwrap());
+    assert!(kid.plugin_directory().await.repos.is_empty());
+
+    let lost = self::core();
+    lost.use_plugin_directory_at(page("/gone"));
+    assert!(lost.plugin_directory().await.from_snapshot);
 }

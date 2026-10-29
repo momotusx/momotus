@@ -12,7 +12,7 @@
 //! "cancelPairing" | "readPairingCode" |
 //! "forkPreview" | "useServerRoster" | "createProfile" | "allowTitle" | "updateProfile" | "deleteProfile" |
 //! "setPin" | "switchProfile" | "unlockProfile" | "lockSession" | "removeFromContinue" |
-//! "languages" | "plugins" | "previewPluginRepo" | "addPluginRepo" | "removePluginRepo" |
+//! "languages" | "plugins" | "pluginDirectory" | "previewPluginRepo" | "addPluginRepo" | "removePluginRepo" |
 //! "setPluginRepoEnabled" | "setPluginEnabled",
 //! ...}`.
 //! Views: home, search, discover, library, title, versions, playback, addons, addonCatalog,
@@ -121,6 +121,11 @@ enum Request {
     /// The profile's Nuvio plugin repositories and their providers
     /// (`PluginsAnswer`); stale manifests are read again first.
     Plugins {
+        id: u64,
+    },
+    /// The Nuvio repositories nuvioplugins.com lists, for Find addons (R8). Replies
+    /// `PluginDirectory`.
+    PluginDirectory {
         id: u64,
     },
     /// What a pasted repository link would add, for the consent sheet;
@@ -1090,6 +1095,9 @@ impl Session {
                     let answer = core.plugin_repos().await.map_err(|e| e.to_string())?;
                     to_value(&answer)
                 });
+            }
+            Request::PluginDirectory { id } => {
+                self.spawn_fenced(id, async move { to_value(&core.plugin_directory().await) });
             }
             Request::PreviewPluginRepo { id, url } => {
                 self.spawn_fenced(id, async move {
