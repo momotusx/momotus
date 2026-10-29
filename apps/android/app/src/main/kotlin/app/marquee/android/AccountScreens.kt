@@ -461,7 +461,7 @@ fun TvSignInScreen(
         if (!joined) {
             item(key = "browse") {
                 Box(Modifier.padding(horizontal = Marquee.safe.side)) {
-                    SkipLink(AccountCopy.BROWSE_FIRST, onDoors, browse)
+                    SkipLink(AccountCopy.BROWSE_FIRST, onDoors, focusRequester = browse)
                 }
             }
         }

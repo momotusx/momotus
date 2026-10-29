@@ -462,6 +462,7 @@ fun AddonsScreen(
     val requesters = remember { mutableStateMapOf<String, FocusRequester>() }
     val installFocus = remember { FocusRequester() }
     LinkSheet(session, link, installFocus)
+    val addonsSnapshot = holder.addons.current()
     val addons =
         addonsSnapshot
             ?.addons

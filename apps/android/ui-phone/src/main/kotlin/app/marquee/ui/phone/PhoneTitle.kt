@@ -231,7 +231,10 @@ fun PhoneTitle(
                 headerTrailer,
                 details.id,
                 // Offline the page plays no trailer (plans/offline-downloads.md 4.18).
-                details.trailers.firstOrNull()?.youtubeId?.takeIf { !header.offline },
+                details.trailers
+                    .firstOrNull()
+                    ?.youtubeId
+                    ?.takeIf { !header.offline },
                 artVisible && !fullTrailer,
                 tv = false,
             )

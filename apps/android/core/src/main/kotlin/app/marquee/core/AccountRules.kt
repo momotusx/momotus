@@ -32,7 +32,7 @@ object AccountRules {
                 out.append(text, at, close + 1)
             } else {
                 val name = text.substring(open + 1, close)
-                val word = name.isNotEmpty() && name.all { it.isLetterOrDigit() && it.code < 128 || it == '_' }
+                val word = name.isNotEmpty() && name.all { (it.isLetterOrDigit() && it.code < 128) || it == '_' }
                 val value = fields[name]?.takeIf { word }
                 out.append(text, at, open).append(value?.toString() ?: text.substring(open, close + 1))
             }

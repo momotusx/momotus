@@ -23,18 +23,23 @@ class RegexPortabilityTest {
 
     @Test
     fun `every pattern literal in the app escapes its closing braces`() {
-        val sources = File("..").walkTopDown()
-            .filter { it.isFile && it.extension == "kt" && "/src/main/" in it.path && "/build/" !in it.path }
-            .toList()
+        val sources =
+            File("..")
+                .walkTopDown()
+                .filter { it.isFile && it.extension == "kt" && "/src/main/" in it.path && "/build/" !in it.path }
+                .toList()
         assertTrue(sources.size > 50, "the app's sources were not found from ${File("..").absolutePath}")
         val literal = Regex("""(?:Regex|toRegex|Pattern\.compile)\(\s*("{3}(.*?)"{3}|"((?:[^"\\]|\\.)*)")""")
-        val bad = sources.flatMap { file ->
-            literal.findAll(file.readText()).mapNotNull { m ->
-                // A raw string as written; a plain one with Kotlin's escapes undone.
-                val pattern = m.groups[2]?.value ?: m.groupValues[3].replace("\\\\", "\\")
-                if (strayBrace(pattern)) "${file.path}: $pattern" else null
-            }.toList()
-        }
+        val bad =
+            sources.flatMap { file ->
+                literal
+                    .findAll(file.readText())
+                    .mapNotNull { m ->
+                        // A raw string as written; a plain one with Kotlin's escapes undone.
+                        val pattern = m.groups[2]?.value ?: m.groupValues[3].replace("\\\\", "\\")
+                        if (strayBrace(pattern)) "${file.path}: $pattern" else null
+                    }.toList()
+            }
         assertEquals(emptyList(), bad, "patterns with an unescaped } (ICU refuses them)")
     }
 
@@ -53,9 +58,18 @@ class RegexPortabilityTest {
                         i = pattern.indexOf('}', i).takeIf { it > 0 } ?: return true
                     }
                 }
-                '{' -> count = Regex("""\{\d+(,\d*)?\}""").find(pattern, i)?.range?.first == i
-                '}' -> if (!count) return true else count = false
-                else -> if (count && !c.isDigit() && c != ',') count = false
+
+                '{' -> {
+                    count = Regex("""\{\d+(,\d*)?\}""").find(pattern, i)?.range?.first == i
+                }
+
+                '}' -> {
+                    if (!count) return true else count = false
+                }
+
+                else -> {
+                    if (count && !c.isDigit() && c != ',') count = false
+                }
             }
             i++
         }
