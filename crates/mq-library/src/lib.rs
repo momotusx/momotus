@@ -8,6 +8,7 @@
 mod archive;
 mod downloads;
 pub mod hlc;
+mod plugins;
 mod policy;
 mod profiles;
 mod schema;
@@ -19,6 +20,7 @@ pub use archive::ArchiveFilm;
 pub use downloads::DownloadRecord;
 pub use hlc::{Hlc, HlcClock};
 
+pub use plugins::{MAX_REPOS, PluginCode, PluginRepoRow};
 pub use policy::{AllowedList, AllowedRow, Authorization, MAX_ALLOWED, Policy};
 pub use profiles::{DEFAULTS_GIVEN, ProfileRow};
 pub use store::{

@@ -18,6 +18,7 @@ pub(crate) fn migrations() -> Migrations<'static> {
         M::up(V14),
         M::up(V15),
         M::up(V16),
+        M::up(V17),
     ])
 }
 
@@ -470,6 +471,32 @@ CREATE TABLE downloads (
     UNIQUE (item_id, video_id)
 );
 CREATE INDEX downloads_queue ON downloads (state, position);
+"#;
+
+/// Nuvio plugin repositories per profile and their providers' scripts
+/// (plans/plugins-and-marketplace.md 7.2), never synced. A removed
+/// repository keeps its row with `removed` set, so a default the user took
+/// out is never given again. `off_json` lists the providers turned off.
+/// `plugin_code` is device-wide: one script per link, the same for every
+/// profile.
+const V17: &str = r#"
+CREATE TABLE plugin_repos (
+    profile_id     TEXT NOT NULL,
+    url            TEXT NOT NULL,
+    position       INTEGER NOT NULL,
+    enabled        INTEGER NOT NULL DEFAULT 1,
+    removed        INTEGER NOT NULL DEFAULT 0,
+    manifest_json  TEXT,
+    fetched_at     INTEGER NOT NULL DEFAULT 0,
+    off_json       TEXT NOT NULL DEFAULT '[]',
+    PRIMARY KEY (profile_id, url)
+) WITHOUT ROWID;
+CREATE TABLE plugin_code (
+    url         TEXT PRIMARY KEY,
+    version     TEXT NOT NULL,
+    body        TEXT NOT NULL,
+    fetched_at  INTEGER NOT NULL
+) WITHOUT ROWID;
 "#;
 
 #[cfg(test)]

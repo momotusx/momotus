@@ -109,7 +109,7 @@ pub(crate) fn refuse_gone(c: &Connection, profile: &str) -> rusqlite::Result<()>
 }
 
 /// Every row a profile has on this device, except its gone register.
-pub(crate) const PROFILE_TABLES: [&str; 18] = [
+pub(crate) const PROFILE_TABLES: [&str; 19] = [
     "profile_lock",
     "profile_access",
     "allowed",
@@ -128,6 +128,7 @@ pub(crate) const PROFILE_TABLES: [&str; 18] = [
     "tracker_state",
     "pin_attempts",
     "import_raw",
+    "plugin_repos",
 ];
 
 /// Tables that hold no profile's rows: sync's own state, the device's, the
@@ -136,7 +137,7 @@ pub(crate) const PROFILE_TABLES: [&str; 18] = [
 /// `imdb_ids`, cleared with it (its ids are titles the profile saw), and
 /// `archive_index`, a public film list.
 #[cfg(test)]
-pub(crate) const DEVICE_TABLES: [&str; 9] = [
+pub(crate) const DEVICE_TABLES: [&str; 10] = [
     "sync_state",
     "sync_outbox",
     "sync_roster",
@@ -147,6 +148,8 @@ pub(crate) const DEVICE_TABLES: [&str; 9] = [
     "archive_index",
     // The device's files: every standard profile shares them.
     "downloads",
+    // Plugin scripts by link: the same for every profile.
+    "plugin_code",
 ];
 
 /// Deletes every row of a gone profile.
