@@ -28,7 +28,7 @@ import type { SubtitleSize } from "../core/generated/SubtitleSize";
 import { chooseForm, type Form, form, pinned } from "../form";
 import { previewsOn, setPreviewsOn } from "../lib/trailers";
 import { defaultsWords } from "../lib/defaults";
-import { choiceSummary, choiceWords, findAddons, languageName, syncSummary, syncWords, tmdbCredit, turkceAltyaziCredit } from "../lib/words";
+import { addonsSummary, choiceSummary, choiceWords, findAddons, languageName, syncSummary, syncWords, tmdbCredit, turkceAltyaziCredit } from "../lib/words";
 import * as sync from "../core/sync";
 import { traktLink, traktLockedHere, traktStatus, traktStorage } from "../core/trakt";
 import { rowLine, traktWords } from "../lib/trakt";
@@ -275,8 +275,6 @@ export default function SettingsScreen() {
     setError(null);
     op<Prefs>("setPrefs", { patch: x }).catch((e) => setError(reasonOf(e)));
   };
-  const count = () => addons.state.data?.addons.length ?? 0;
-  const sources = () => addons.state.data?.addons.filter((a) => a.enabled && a.provides.includes("stream")).map((a) => a.name) ?? [];
   const me = () => profiles()?.profiles.find((x) => x.id === profiles()?.active);
   const kids = () => me()?.kids === true;
   // Edit and Manage need the owner's PIN on a kids profile (DECISION kids rules): a kids profile shows neither.
@@ -444,7 +442,7 @@ export default function SettingsScreen() {
                 tone="mint"
                 icon={<Puzzle />}
                 title="Addons"
-                text={count() ? `${count()} installed. ${sources().length ? `Streams from ${sources().join(", ")}.` : "None of them finds streams yet."}` : "None installed yet."}
+                text={addonsSummary(addons.state.data?.addons ?? [])}
               />
               <Row
                 href="/debrid"

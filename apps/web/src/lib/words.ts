@@ -159,6 +159,15 @@ export function plainAddress(url: string): boolean {
  * built-in source itself (`AddonInfo.builtIn`). */
 export const addonHost = (a: { builtIn: boolean; host: string }) => (a.builtIn ? "Built into Momotus, runs on this device" : a.host);
 
+/** Settings' Addons row: how many are installed and how many of the ones on find streams. No addon is named where a
+ * viewer browses, so the line counts and never lists names. */
+export function addonsSummary(addons: { enabled: boolean; provides: string[] }[]): string {
+  if (!addons.length) return "None installed yet.";
+  const streams = addons.filter((a) => a.enabled && a.provides.includes("stream")).length;
+  const finds = streams === 0 ? "None of them finds streams yet." : streams === 1 ? "1 finds streams." : `${streams} find streams.`;
+  return `${addons.length} installed. ${finds}`;
+}
+
 /** Settings, About: the built-in source's credit (plans/m13-turkcealtyazi.md 7). */
 export const turkceAltyaziCredit = "Turkish subtitles from TurkceAltyazi.org, fetched by this device when you play.";
 /** TMDB's required credit, beside its logo (themoviedb.org/about/logos-attribution). */

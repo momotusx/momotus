@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { addonHost, nextVersion, qualityCell, sheetDetails, languageName, pairingProblem, plainAddress, problemWords, restartLine, serverHost, statusText, subtitleNote, lowerFirst } from "./words";
+import { addonHost, addonsSummary, nextVersion, qualityCell, sheetDetails, languageName, pairingProblem, plainAddress, problemWords, restartLine, serverHost, statusText, subtitleNote, lowerFirst } from "./words";
 import shared from "../../../shared/stream-choice-words.json";
 import type { EmptyAction } from "../core/generated/EmptyAction";
 import type { EmptyKind } from "../core/generated/EmptyKind";
@@ -293,4 +293,13 @@ test("after the colon a word in capitals stays in capitals", () => {
   expect(lowerFirst("HDR file, screen without HDR")).toBe("HDR file, screen without HDR");
   expect(lowerFirst("Shared by 3 people")).toBe("shared by 3 people");
   expect(lowerFirst(lineWords({ kind: "copy", quality: "CAM" } as ReasonLine).details)).toBe("CAM copy");
+});
+
+test("Settings' Addons line counts and never names an addon", () => {
+  const a = (enabled: boolean, provides: string[]) => ({ name: "Torrentio", enabled, provides });
+  expect(addonsSummary([])).toBe("None installed yet.");
+  expect(addonsSummary([a(true, ["catalog"])])).toBe("1 installed. None of them finds streams yet.");
+  expect(addonsSummary([a(true, ["stream"]), a(false, ["stream"])])).toBe("2 installed. 1 finds streams.");
+  expect(addonsSummary([a(true, ["stream"]), a(true, ["stream", "meta"]), a(true, ["subtitles"])])).toBe("3 installed. 2 find streams.");
+  expect(addonsSummary([a(true, ["stream"])])).not.toContain("Torrentio");
 });
