@@ -14,11 +14,31 @@ import java.net.URI
  * follows the same `about` of `apps/shared/account-words.json`; the words are [AccountCopy]'s.
  */
 object AccountRules {
-    /** `{name}` fields filled; a field with no value stays as written. */
+    /**
+     * `{name}` fields filled; a field with no value stays as written. A plain scan, no regex: Android's ICU
+     * patterns differ from the JVM's (an unescaped `}` crashed the code screen there while every test passed).
+     */
     fun fill(
         text: String,
         fields: Map<String, Any>,
-    ): String = Regex("""\{(\w+)}""").replace(text) { m -> fields[m.groupValues[1]]?.toString() ?: m.value }
+    ): String {
+        val out = StringBuilder()
+        var at = 0
+        while (true) {
+            val close = text.indexOf('}', at)
+            if (close < 0) return out.append(text, at, text.length).toString()
+            val open = text.lastIndexOf('{', close)
+            if (open < at) {
+                out.append(text, at, close + 1)
+            } else {
+                val name = text.substring(open + 1, close)
+                val word = name.isNotEmpty() && name.all { it.isLetterOrDigit() && it.code < 128 || it == '_' }
+                val value = fields[name]?.takeIf { word }
+                out.append(text, at, open).append(value?.toString() ?: text.substring(open, close + 1))
+            }
+            at = close + 1
+        }
+    }
 
     /** A provider as people read it: Apple, Google, Facebook, or another OpenID provider's id as it is. */
     fun providerName(id: String): String = AccountCopy.PROVIDER_NAME[id] ?: id
