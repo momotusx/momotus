@@ -178,12 +178,6 @@ class ProfileGate(
     }
 
     /**
-     * Shuts the gate, waits for the app to drop the old profile, then switches, waiting while views
-     * finish closing (`viewsOpen`). A refusal leaves the gate shut, with the root picker showing
-     * [switchProblem] on [profile]'s keypad; [cancelSwitch] goes back to the current profile. One
-     * switch at a time; it runs in the gate's own scope, so the picker that asked can leave.
-     */
-    /**
      * A switch asked from a place that may leave at once (the bar's menu, plans/nav-profile.md): it runs on the session's
      * scope, which outlives the old profile's screens, so nothing the menu does as it closes can cut it short.
      */
@@ -191,6 +185,12 @@ class ProfileGate(
         session.scope.launch(Dispatchers.Main) { switchTo(profile, null) }
     }
 
+    /**
+     * Shuts the gate, waits for the app to drop the old profile, then switches, waiting while views
+     * finish closing (`viewsOpen`). A refusal leaves the gate shut, with the root picker showing
+     * [switchProblem] on [profile]'s keypad; [cancelSwitch] goes back to the current profile. One
+     * switch at a time; it runs in the gate's own scope, so the picker that asked can leave.
+     */
     suspend fun switchTo(
         profile: String,
         pin: String?,
