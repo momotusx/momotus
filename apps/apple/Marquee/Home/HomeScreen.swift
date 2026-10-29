@@ -136,7 +136,7 @@ struct HomeScreen: View {
         // A restarted core builds Home again: onboarding opens again if it was showing.
         .onAppear { if profiles.resumeOnboarding { onboarding = true } }
         .onChange(of: onboarding) { _, open in profiles.resumeOnboarding = open }
-        .modifier(FullScreen(isPresented: $onboarding) {
+        .modifier(FullScreen(isPresented: $onboarding, fillsWindow: true) {
             NavigationStack {
                 OnboardingScreen(core: core) { onboarding = false }
             }

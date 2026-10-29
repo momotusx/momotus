@@ -74,6 +74,18 @@ import Testing
     #expect((1.05) / (lin(back) + 0.05) >= 4.5)
 }
 
+@Test func theMacFirstRunFillsTheWindow() throws {
+    // The sheet takes the window's size (a 1440 by 900 window: the letterbox runs edge to edge), never under its floor.
+    #expect(FilmRules.macSheet(window: CGSize(width: 1440, height: 900)) == CGSize(width: 1440, height: 900))
+    #expect(FilmRules.macSheet(window: CGSize(width: 720, height: 500)) == FilmRules.sheetFloor)
+    // Both places that open first run ask for it.
+    let app = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appending(path: "../Marquee")
+    for page in ["Home/HomeScreen.swift", "Discover/DiscoverScreen.swift"] {
+        let source = try String(contentsOf: app.appending(path: page), encoding: .utf8)
+        #expect(source.contains("FullScreen(isPresented: $onboarding, fillsWindow: true)"), "\(page) opens first run in a small sheet")
+    }
+}
+
 @Test func theHeaderCountsFourStepsAndBackShowsFromTheSecond() {
     #expect(FilmRules.count(.doors) == 1)
     #expect(FilmRules.count(.defaults) == 2)

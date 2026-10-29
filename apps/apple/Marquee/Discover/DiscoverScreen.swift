@@ -61,7 +61,7 @@ struct DiscoverScreen: View {
             .onChange(of: previewAsk, initial: true) { _, ask in
                 if let ask { discover.command(["type": "preview", "id": ask.id]) }
             }
-            .modifier(FullScreen(isPresented: $onboarding) {
+            .modifier(FullScreen(isPresented: $onboarding, fillsWindow: true) {
                 NavigationStack {
                     OnboardingScreen(core: core) { onboarding = false }
                 }

@@ -252,7 +252,8 @@ struct FilmChoices<Content: View>: View {
             ViewThatFits(in: .horizontal) {
                 HStack(alignment: .top, spacing: tvForm ? 24 : 16) {
                     Group(subviews: content) { choices in
-                        ForEach(choices) { $0.frame(minWidth: tvForm ? 400 : 300, maxWidth: tvForm ? 520 : 410) }
+                        // The ideal is the narrowest a choice may be, so three sit side by side wherever they fit.
+                        ForEach(choices) { $0.frame(minWidth: tvForm ? 400 : 300, idealWidth: tvForm ? 400 : 300, maxWidth: tvForm ? 520 : 410) }
                     }
                 }
                 .fixedSize(horizontal: false, vertical: true)

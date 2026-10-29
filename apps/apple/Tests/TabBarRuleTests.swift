@@ -102,7 +102,7 @@ import Testing
     #expect(root.contains("FullScreen(isPresented: $showProfiles, closesOnBack: true)"), "the profile sheet lost its close on Back")
     for file in ["Home/HomeScreen.swift", "Discover/DiscoverScreen.swift"] {
         let source = try String(contentsOf: dir.appending(path: file), encoding: .utf8)
-        #expect(source.contains("FullScreen(isPresented: $onboarding)"), "\(file) presents onboarding another way")
+        #expect(source.contains("FullScreen(isPresented: $onboarding, fillsWindow: true)"), "\(file) presents onboarding another way")
         #expect(!source.contains("closesOnBack"), "onboarding in \(file) closes on Back")
     }
 }

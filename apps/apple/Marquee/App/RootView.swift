@@ -909,6 +909,8 @@ struct FullScreen<Flow: View>: ViewModifier {
     /// Cmd-[ (the Go menu's Back) closes this sheet, on the Mac: only the profile picker, which is a place to
     /// leave. A flow with its own steps (onboarding) keeps Back to itself: its pages give the Go menu none.
     var closesOnBack = false
+    /// The Mac's sheet takes the whole window (first run's letterbox), not the sheet's own small size.
+    var fillsWindow = false
     @ViewBuilder let flow: () -> Flow
     /// A place kept alive out of sight presents nothing until it shows again:
     /// on TV it is disabled, and a flow it presented would be disabled too.
@@ -916,6 +918,8 @@ struct FullScreen<Flow: View>: ViewModifier {
     #if os(macOS)
     /// A sheet this one is nested in.
     @Environment(\.sheetOver) private var outerSheetOver
+    /// The window's content, title bar included, for a sheet that fills it.
+    @State private var window = CGSize.zero
     #endif
 
     #if os(macOS)
@@ -929,8 +933,13 @@ struct FullScreen<Flow: View>: ViewModifier {
         // it. Written on the content, inside the sheet's modifier: the sheet's flow keeps the default.
         content
             .environment(\.sheetOver, sheetCovers(outer: outerSheetOver, own: presented.wrappedValue))
+            .onGeometryChange(for: CGSize.self) { CGSize(width: $0.size.width, height: $0.size.height + $0.safeAreaInsets.top) } action: { window = $0 }
             .sheet(isPresented: presented) {
-                flow().frame(minWidth: 760, minHeight: 640).environment(\.sheetBack, sheetBack)
+                let size = fillsWindow ? FilmRules.macSheet(window: window) : FilmRules.sheetFloor
+                flow()
+                    .frame(minWidth: FilmRules.sheetFloor.width, minHeight: FilmRules.sheetFloor.height)
+                    .frame(width: fillsWindow ? size.width : nil, height: fillsWindow ? size.height : nil)
+                    .environment(\.sheetBack, sheetBack)
             }
         #else
         content.fullScreenCover(isPresented: presented, content: flow)

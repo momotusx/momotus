@@ -33,6 +33,14 @@ enum FilmRules {
 
     /// Back shows from step 2.
     static func hasBack(_ count: Int?) -> Bool { (count ?? 0) >= 2 }
+
+    /// The Mac's first run fills the window (B4 is the full-width letterbox): its sheet is the window's size, never
+    /// under the sheet's floor.
+    static let sheetFloor = CGSize(width: 760, height: 640)
+
+    static func macSheet(window: CGSize) -> CGSize {
+        CGSize(width: max(window.width, sheetFloor.width), height: max(window.height, sheetFloor.height))
+    }
 }
 
 /// The frame (the first subview) and its bar (the second), laid out by `FilmRules` in a space `room` tall.
