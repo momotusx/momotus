@@ -38,13 +38,21 @@ class RegexPortabilityTest {
         assertEquals(emptyList(), bad, "patterns with an unescaped } (ICU refuses them)")
     }
 
-    /** A `}` that is neither escaped nor the end of a `{n}`, `{n,}` or `{n,m}` count. */
+    /**
+     * A `}` that is neither escaped, nor the end of a `{n}`, `{n,}` or `{n,m}` count, nor the end of an escape's
+     * own braces (`\p{M}`, `\x{2028}`).
+     */
     private fun strayBrace(pattern: String): Boolean {
         var i = 0
         var count = false
         while (i < pattern.length) {
             when (val c = pattern[i]) {
-                '\\' -> i++
+                '\\' -> {
+                    i++
+                    if (pattern.getOrNull(i) in listOf('p', 'P', 'x', 'N') && pattern.getOrNull(i + 1) == '{') {
+                        i = pattern.indexOf('}', i).takeIf { it > 0 } ?: return true
+                    }
+                }
                 '{' -> count = Regex("""\{\d+(,\d*)?\}""").find(pattern, i)?.range?.first == i
                 '}' -> if (!count) return true else count = false
                 else -> if (count && !c.isDigit() && c != ',') count = false
