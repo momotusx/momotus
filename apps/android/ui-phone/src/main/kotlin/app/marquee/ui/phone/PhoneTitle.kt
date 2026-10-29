@@ -20,12 +20,14 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.windowInsetsTopHeight
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.derivedStateOf
@@ -49,6 +51,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import app.marquee.core.DownloadCopy
@@ -60,6 +63,7 @@ import app.marquee.core.PlayTo
 import app.marquee.core.TitleCopy
 import app.marquee.core.VersionLine
 import app.marquee.core.VersionsCopy
+import app.marquee.core.model.CastMember
 import app.marquee.core.model.DownloadBadge
 import app.marquee.core.model.DownloadState
 import app.marquee.core.model.Episode
@@ -380,7 +384,10 @@ fun PhoneTitle(
                     if (title.similar.isNotEmpty()) {
                         item(key = "similar") { MoreLikeThis(title.similar, onOpen) }
                     }
-                    val people = TitleCopy.people(details)
+                    if (details.cast.isNotEmpty()) {
+                        item(key = "cast") { Starring(details.cast, onPerson, linked = header.genresLinked) }
+                    }
+                    val people = TitleCopy.people(details, cast = false)
                     if (people.isNotEmpty()) {
                         item(key = "people") {
                             // A kids profile's Search finds only its list: the names are words there.
@@ -460,6 +467,76 @@ internal fun Genres(
                 onClick = { onGenre(details.kind, genre) },
                 clickLabel = "Opens Discover",
             )
+        }
+    }
+}
+
+/** A headshot's side on the phone. */
+private val HEADSHOT = 72.dp
+
+/**
+ * Starring (plans/batch-2.md R5): a row of round TMDB headshots, the name and the role under each, the name's initials
+ * while there is no photo or it cannot load. Each opens Search for that person; on a kids profile (not [linked]) they
+ * are plain.
+ */
+@Composable
+private fun Starring(
+    cast: List<CastMember>,
+    onPerson: (String) -> Unit,
+    linked: Boolean,
+) {
+    val side = Marquee.safe.side
+    Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.xs)) {
+        MqText(
+            "Starring",
+            role = TextRole.Caption,
+            color = Marquee.colors.dim,
+            weight = FontWeight.SemiBold,
+            maxLines = 1,
+            modifier = Modifier.padding(horizontal = side).semantics { heading() },
+        )
+        LazyRow(
+            contentPadding = PaddingValues(horizontal = side),
+            horizontalArrangement = Arrangement.spacedBy(Marquee.space.s),
+        ) {
+            items(cast.distinctBy { it.name }, key = { it.name }) { person ->
+                val press =
+                    if (linked) {
+                        Modifier.focusClickable({ onPerson(person.name) }, clickLabel = "Searches for their titles")
+                    } else {
+                        Modifier
+                    }
+                Column(
+                    press.width(HEADSHOT + Marquee.space.s).semantics(mergeDescendants = true) {},
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                ) {
+                    RemoteImage(
+                        person.photo,
+                        HEADSHOT,
+                        HEADSHOT,
+                        fallbackText = TitleCopy.initials(person.name),
+                        modifier = Modifier.clip(CircleShape).clearAndSetSemantics {},
+                    )
+                    MqText(
+                        person.name,
+                        role = TextRole.Caption,
+                        color = Marquee.colors.text,
+                        maxLines = 2,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.padding(top = Marquee.space.xs),
+                    )
+                    person.character?.let {
+                        MqText(
+                            it,
+                            role = TextRole.Caption,
+                            color = Marquee.colors.dim,
+                            maxLines = 2,
+                            textAlign = TextAlign.Center,
+                        )
+                    }
+                }
+            }
         }
     }
 }

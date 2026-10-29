@@ -35,6 +35,7 @@ import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.unit.dp
 import app.marquee.core.client.CoreClient
 import app.marquee.core.client.CoreJson
+import app.marquee.core.model.CastMember
 import app.marquee.core.model.EmptyAction
 import app.marquee.core.model.EmptyKind
 import app.marquee.core.model.EmptyVersions
@@ -548,7 +549,7 @@ class PhoneTitleActionsTest {
                     wordy.header.copy(
                         details =
                             wordy.header.details!!.copy(
-                                cast = (1..8).map { "Actor Number $it" },
+                                cast = (1..8).map { CastMember("Actor Number $it") },
                                 directors = listOf("A Director"),
                                 writers = listOf("A Writer", "Another Writer"),
                             ),

@@ -101,14 +101,26 @@ object TitleCopy {
 
     /**
      * The people on the title page, each name a link to Search: at most four of the cast and two directors and
-     * writers, so the TV column stays inside the safe area (plans/title-page-ratings-genres-similar.md, 4).
+     * writers, so the TV column stays inside the safe area (plans/title-page-ratings-genres-similar.md, 4). Without
+     * [cast] (the phone, which shows Starring as headshots of its own): the directors and writers only.
      */
-    fun people(details: TitleDetails): List<Pair<String, List<String>>> =
+    fun people(
+        details: TitleDetails,
+        cast: Boolean = true,
+    ): List<Pair<String, List<String>>> =
         listOf(
-            "Starring" to details.cast.take(4),
+            "Starring" to if (cast) details.cast.take(4).map { it.name } else emptyList(),
             "Directed by" to details.directors.take(2),
             "Written by" to details.writers.take(2),
         ).filter { it.second.isNotEmpty() }
+
+    /** A person's initials, for a headshot TMDB has none of: the first letter of each of the first two words. */
+    fun initials(name: String): String =
+        name
+            .split(' ')
+            .filter { it.isNotEmpty() }
+            .take(2)
+            .joinToString("") { it.substring(0, it.offsetByCodePoints(0, 1)).uppercase() }
 
     private const val NBSP = ' '
 

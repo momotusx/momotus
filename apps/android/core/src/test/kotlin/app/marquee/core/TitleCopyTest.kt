@@ -1,5 +1,6 @@
 package app.marquee.core
 
+import app.marquee.core.model.CastMember
 import app.marquee.core.model.EmptyAction
 import app.marquee.core.model.EmptyKind
 import app.marquee.core.model.EmptyVersions
@@ -46,7 +47,7 @@ class TitleCopyTest {
         runtime = runtime,
         rating = rating,
         genres = genres,
-        cast = listOf("A", "B", "C", "D"),
+        cast = listOf("A", "B", "C", "D").map(::CastMember),
         directors = listOf("X", "Y", "Z"),
         source = "Cinemeta",
         trailers = emptyList(),
@@ -105,7 +106,9 @@ class TitleCopyTest {
                 "Directed by" to listOf("X", "Y"),
                 "Written by" to listOf("W"),
             ),
-            TitleCopy.people(details().copy(cast = listOf("A", "B", "C", "D", "E"), writers = listOf("W"))),
+            TitleCopy.people(
+                details().copy(cast = listOf("A", "B", "C", "D", "E").map(::CastMember), writers = listOf("W")),
+            ),
         )
         assertEquals(
             listOf("Aired" to "2011-2019", "Seasons" to "8"),
@@ -134,6 +137,14 @@ class TitleCopyTest {
                     ),
             ),
         )
+    }
+
+    @Test
+    fun `initials stand in for a headshot`() {
+        assertEquals("TR", TitleCopy.initials("Tim Robbins"))
+        assertEquals("ÉB", TitleCopy.initials("édouard  Baer Hugo"))
+        assertEquals("C", TitleCopy.initials("Cher"))
+        assertEquals("", TitleCopy.initials(""))
     }
 
     @Test

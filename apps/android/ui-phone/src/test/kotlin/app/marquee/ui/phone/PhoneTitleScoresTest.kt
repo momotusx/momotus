@@ -9,6 +9,7 @@ import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertHasClickAction
 import androidx.compose.ui.test.assertHasNoClickAction
+import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -22,6 +23,7 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import app.marquee.core.client.CoreClient
 import app.marquee.core.client.CoreJson
+import app.marquee.core.model.CastMember
 import app.marquee.core.model.PlayTarget
 import app.marquee.core.model.Ratings
 import app.marquee.core.model.Slot
@@ -105,7 +107,15 @@ class PhoneTitleScoresTest {
                 releaseInfo = "1994",
                 runtime = "142 min",
                 genres = listOf("Drama", "Crime"),
-                cast = listOf("Tim Robbins", "Morgan Freeman"),
+                cast =
+                    listOf(
+                        CastMember("Tim Robbins"),
+                        CastMember(
+                            "Morgan Freeman",
+                            "Ellis Boyd 'Red' Redding",
+                            "https://image.tmdb.org/t/p/w185/freeman.jpg",
+                        ),
+                    ),
                 writers = listOf("Frank Darabont"),
                 ratings = Ratings(imdb = "9.3"),
                 imdbUrl = "https://www.imdb.com/title/tt0111161/".takeIf { linked },
@@ -249,6 +259,23 @@ class PhoneTitleScoresTest {
         compose.onNodeWithText("Frank Darabont").performClick()
         assertEquals(listOf("Morgan Freeman", "Frank Darabont"), people)
         assertEquals("Searches for their titles", clickLabel("Morgan Freeman"))
+    }
+
+    @Test
+    fun `Starring is a row of headshots with each role, initials where there is no photo`() {
+        val view = open(TitleSnapshot(header(TitleScores(Slot.None, Slot.None))))
+        compose.setContent { MarqueeTheme(Form.Phone) { PhoneTitle(view, null, { _, _ -> }, {}, {}, {}) } }
+        compose.waitForIdle()
+        view.open()
+        waitFor("Play")
+        waitFor("Starring")
+        // One stop per person: the name and the role read together, the picture says nothing of its own.
+        compose.onNodeWithText("Morgan Freeman").assertTextEquals("Morgan Freeman", "Ellis Boyd 'Red' Redding")
+        compose.onNodeWithText("Tim Robbins").assertTextEquals("Tim Robbins")
+        // No photo: the initials stand in, drawn but not spoken.
+        compose.onNodeWithText("TR", useUnmergedTree = true).assertExists()
+        compose.onNodeWithText("TR").assertDoesNotExist()
+        assertEquals(1, compose.onAllNodesWithText("Starring").fetchSemanticsNodes().size)
     }
 
     @Test

@@ -30,6 +30,7 @@ import androidx.compose.ui.test.requestFocus
 import androidx.compose.ui.unit.dp
 import app.marquee.core.client.CoreClient
 import app.marquee.core.client.CoreJson
+import app.marquee.core.model.CastMember
 import app.marquee.core.model.PlayTarget
 import app.marquee.core.model.Ratings
 import app.marquee.core.model.Slot
@@ -122,7 +123,7 @@ class TvTitleScoresTest {
                     releaseInfo = "1994",
                     genres = listOf("Drama", "Crime"),
                     // The longest cast: the column shows four of it.
-                    cast = (1..12).map { "Actor Number $it" },
+                    cast = (1..12).map { CastMember("Actor Number $it") },
                     directors = listOf("Frank Darabont", "Second Director", "Third Director"),
                     writers = listOf("Stephen King", "Second Writer", "Third Writer"),
                     ratings = Ratings(imdb = "9.3"),
