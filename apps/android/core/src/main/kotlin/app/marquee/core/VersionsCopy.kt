@@ -5,6 +5,7 @@ import app.marquee.core.model.EmptyKind
 import app.marquee.core.model.EmptyVersions
 import app.marquee.core.model.Group
 import app.marquee.core.model.Reason
+import app.marquee.core.model.RowOrigin
 import app.marquee.core.model.SectionQuality
 import app.marquee.core.model.VersionRow
 import app.marquee.core.model.VersionStatus
@@ -211,6 +212,8 @@ object VersionsCopy {
         val size = row.sizeBytes?.let(Format::bytes)
         if (row.onDevice != null) return sized(size, row.onDevice)
         if (line.tone != Tone.Ok) return null
+        // A plugin's row names its provider and the host it plays from (4.4).
+        if (row.origin == RowOrigin.Plugin) return sized(size, PluginCopy.rowLine(row))
         val source =
             when (val s = row.status) {
                 is VersionStatus.Ready -> {
@@ -366,6 +369,16 @@ object VersionsCopy {
         // The rows those sections do not cover (all of them from an older core) follow under today's groups.
         val covered = core.flatMap { section -> section.rows.map { it.key } }.toSet()
         val groups = rows.filter { it.key !in covered }.groupBy { it.group }
+        // "From plugins" (plans/plugins-and-marketplace.md 4.4, 7.8): their own pass after the addons' rows, never
+        // the pick.
+        val plugins =
+            snapshot
+                ?.plugins
+                ?.rows
+                .orEmpty()
+                .takeIf { it.isNotEmpty() }
+                ?.let { listOf(Section("plugins", PluginCopy.SECTION, it)) }
+                .orEmpty()
         return core +
             Group.entries.mapNotNull { g ->
                 groups[g]?.let {
@@ -375,7 +388,7 @@ object VersionsCopy {
                         it,
                     )
                 }
-            }
+            } + plugins
     }
 
     /**

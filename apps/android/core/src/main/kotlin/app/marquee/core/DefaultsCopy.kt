@@ -38,6 +38,7 @@ object DefaultsCopy {
             "streams" -> "Streams"
             "subtitles" -> "Subtitles"
             "lists" -> "Lists"
+            "plugins" -> "Plugins"
             else -> key.replaceFirstChar { it.uppercase() }
         }
 

@@ -9,7 +9,9 @@ import app.marquee.core.model.Group
 import app.marquee.core.model.HiddenSummary
 import app.marquee.core.model.Reason
 import app.marquee.core.model.ReasonLine
+import app.marquee.core.model.RowOrigin
 import app.marquee.core.model.SectionQuality
+import app.marquee.core.model.SourceRows
 import app.marquee.core.model.VersionRow
 import app.marquee.core.model.VersionSection
 import app.marquee.core.model.VersionStatus
@@ -311,6 +313,26 @@ class VersionsCopyTest {
         // An older core sends no sections: the groups as before.
         val older = VersionsCopy.sections(shown.copy(sections = emptyList()), shown.rows)
         assertEquals(listOf("Best quality"), older.map { it.title })
+        // The plugins' rows come last, under From plugins, each naming its provider and host.
+        val found =
+            row().copy(
+                key = "plugin:r/p:h1",
+                status = VersionStatus.Direct,
+                sizeBytes = null,
+                origin = RowOrigin.Plugin,
+                sourceName = "Dizibox",
+                host = "cdn.example.com",
+            )
+        val withPlugins =
+            VersionsCopy.sections(
+                shown.copy(plugins = SourceRows(listOf(found), pending = false)),
+                shown.rows,
+            )
+        assertEquals(
+            PluginCopy.SECTION to listOf(found.key),
+            withPlugins.last().title to withPlugins.last().rows.map(VersionRow::key),
+        )
+        assertEquals("Dizibox, plays from cdn.example.com", VersionsCopy.quiet(found))
     }
 
     @Test

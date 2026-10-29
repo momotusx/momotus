@@ -22,6 +22,8 @@ import app.marquee.core.model.LostPreview
 import app.marquee.core.model.NativeStart
 import app.marquee.core.model.Network
 import app.marquee.core.model.PairingCode
+import app.marquee.core.model.PluginRepoPreview
+import app.marquee.core.model.PluginsAnswer
 import app.marquee.core.model.Prefs
 import app.marquee.core.model.ProfilesSnapshot
 import app.marquee.core.model.RecordReply
@@ -303,6 +305,43 @@ class CoreOps(
 
     suspend fun removeAddon(url: String) {
         client.request("removeAddon", mapOf("url" to text(url)))
+    }
+
+    /** The profile's Nuvio plugin repositories and their providers; stale manifests are read again first. */
+    suspend fun plugins(): PluginsAnswer = call("plugins", emptyMap(), PluginsAnswer.serializer())
+
+    /** What a pasted repository link would add, for the consent sheet; writes nothing. */
+    suspend fun previewPluginRepo(url: String): PluginRepoPreview =
+        call("previewPluginRepo", mapOf("url" to text(url)), PluginRepoPreview.serializer())
+
+    /** Adds a repository the user agreed to on the sheet. */
+    suspend fun addPluginRepo(url: String): PluginsAnswer =
+        call("addPluginRepo", mapOf("url" to text(url)), PluginsAnswer.serializer())
+
+    suspend fun removePluginRepo(url: String) {
+        client.request("removePluginRepo", mapOf("url" to text(url)))
+    }
+
+    suspend fun setPluginRepoEnabled(
+        url: String,
+        enabled: Boolean,
+    ) {
+        client.request("setPluginRepoEnabled", mapOf("url" to text(url), "enabled" to JsonPrimitive(enabled)))
+    }
+
+    suspend fun setPluginEnabled(
+        url: String,
+        plugin: String,
+        enabled: Boolean,
+    ) {
+        client.request(
+            "setPluginEnabled",
+            mapOf(
+                "url" to text(url),
+                "plugin" to text(plugin),
+                "enabled" to JsonPrimitive(enabled),
+            ),
+        )
     }
 
     suspend fun moveAddon(

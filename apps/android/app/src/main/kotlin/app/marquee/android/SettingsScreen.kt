@@ -64,6 +64,7 @@ import app.marquee.core.DefaultsCopy
 import app.marquee.core.FindAddonsCopy
 import app.marquee.core.LanguagePicks
 import app.marquee.core.LinkInstall
+import app.marquee.core.PluginCopy
 import app.marquee.core.StreamChoiceCopy
 import app.marquee.core.SyncCopy
 import app.marquee.core.TraktCopy
@@ -71,6 +72,7 @@ import app.marquee.core.client.CoreError
 import app.marquee.core.client.CoreLog
 import app.marquee.core.model.AddonInfo
 import app.marquee.core.model.LanguageChoice
+import app.marquee.core.model.PluginsAnswer
 import app.marquee.core.model.SubtitleSize
 import app.marquee.core.model.Tile
 import app.marquee.core.session.CoreSession
@@ -138,7 +140,7 @@ internal class Said(
 )
 
 @Composable
-private fun SaidLine(
+internal fun SaidLine(
     said: Said,
     side: Dp = Marquee.safe.side,
 ) {
@@ -227,6 +229,8 @@ fun SettingsScreen(
     onStreamChoice: () -> Unit,
     /** The recommended addons step with every switch. */
     onDefaults: () -> Unit,
+    /** Settings > Sources > Plugins. */
+    onPlugins: () -> Unit = {},
 ) {
     val holder = settingsHolder(session)
     val runner = rememberRunner()
@@ -286,7 +290,18 @@ fun SettingsScreen(
             }
             add(
                 SettingsPart(SettingsSection.Sources) {
-                    Sources(holder, session, kids, onDefaults, onFindAddons, onAddons, onDebrid, onTrakt, onImport)
+                    Sources(
+                        holder,
+                        session,
+                        kids,
+                        onDefaults,
+                        onFindAddons,
+                        onAddons,
+                        onDebrid,
+                        onTrakt,
+                        onImport,
+                        onPlugins,
+                    )
                 },
             )
             add(
@@ -417,7 +432,14 @@ private fun Sources(
     onDebrid: () -> Unit,
     onTrakt: () -> Unit,
     onImport: () -> Unit,
+    onPlugins: () -> Unit,
 ) {
+    // Nuvio plugin repositories (R7): the row only where plugins run (full builds, not kids).
+    val plugins by produceState<PluginsAnswer?>(null, kids) {
+        value =
+            if (kids) null else runCatching { session.ops.plugins() }.getOrNull()
+    }
+    val shownPlugins = plugins?.takeIf { it.available }
     val addons = holder.addons
     val addonsLine =
         when {
@@ -456,6 +478,11 @@ private fun Sources(
             )
         },
         { SettingsRow(Icons.Puzzle, Tone.Mint, "Addons", addonsLine, onAddons) },
+        if (shownPlugins == null) {
+            null
+        } else {
+            { SettingsRow(Icons.Power, Tone.Teal, PluginCopy.TITLE, PluginCopy.summary(shownPlugins.repos), onPlugins) }
+        },
         {
             SettingsRow(
                 Icons.KeyRound,

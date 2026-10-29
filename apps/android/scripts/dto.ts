@@ -91,6 +91,9 @@ const DEFAULTED = new Map([
   ["Prefs.archiveNoticeSeen", "false"],
   ["VersionRow.origin", "RowOrigin.Addon"],
   ["VersionsSnapshot.archive", "SourceRows(pending = false)"],
+  // Nuvio plugins (4.4, 7.8): an older core runs none.
+  ["VersionsSnapshot.plugins", "SourceRows(pending = false)"],
+  ["PluginsAnswer.available", "false"],
   ["PlaybackSnapshot.retries", "0"],
   // plans/play-every-version.md 2e: an older core never offers another version mid-start.
   ["PlaybackSnapshot.chooseAnother", "false"],

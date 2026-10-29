@@ -1337,6 +1337,55 @@ data class PlayTarget(
     val leftMs: Long? = null,
 )
 
+/** One provider as the apps show it, with its switch. */
+@Serializable
+data class PluginInfo(
+    val id: String,
+    val name: String,
+    val version: String,
+    val description: String,
+    val languages: List<String> = emptyList(),
+    /** "movie", "series". */
+    val types: List<String> = emptyList(),
+    val enabled: Boolean,
+)
+
+/** A repository as the apps show it (`plugins`). */
+@Serializable
+data class PluginRepoInfo(
+    val url: String,
+    /** The host it is read from, in punycode. */
+    val host: String,
+    /** The manifest's name; null before the first read. */
+    val name: String? = null,
+    val description: String,
+    val enabled: Boolean,
+    /** The default this is (`defaultAddons` key), if one. */
+    val defaultKey: String? = null,
+    /** Why the last read failed, when no manifest was ever read. */
+    val problem: String? = null,
+    val providers: List<PluginInfo> = emptyList(),
+)
+
+/** What a link would add, for the consent sheet (`previewPluginRepo`). */
+@Serializable
+data class PluginRepoPreview(
+    /** The link as it will be kept. */
+    val url: String,
+    val host: String,
+    val name: String,
+    val description: String,
+    val providers: List<String> = emptyList(),
+)
+
+/** The `plugins` answer. */
+@Serializable
+data class PluginsAnswer(
+    /** This build runs plugins (full builds only) and the profile is not a kids profile. */
+    val available: Boolean = false,
+    val repos: List<PluginRepoInfo> = emptyList(),
+)
+
 @Serializable
 data class Prefs(
     val streams: StreamPrefs,
@@ -1581,6 +1630,7 @@ enum class RowOrigin(
 ) {
     Addon("addon"),
     Archive("archive"),
+    Plugin("plugin"),
 
     /** A value from a newer core that this app does not know yet. */
     Unknown(""),
@@ -2376,6 +2426,8 @@ data class VersionsSnapshot(
     val nobodySharing: Boolean,
     /** "From the Internet Archive" (plans/plugins-and-marketplace.md 4.4, 5): its own pass, after the addons' rows, never the pick, never a failover; `done` never waits for it. */
     val archive: SourceRows = SourceRows(pending = false),
+    /** "From plugins" (plans/plugins-and-marketplace.md 4.4, 7.8): the Nuvio providers' rows, a pass of their own like the Archive's. */
+    val plugins: SourceRows = SourceRows(pending = false),
 )
 
 @Serializable

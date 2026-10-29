@@ -670,6 +670,7 @@ private fun AppNav(
                             onFindAddons = { backStack.add(Route.FindAddons) },
                             onStreamChoice = { backStack.add(Route.StreamChoice) },
                             onDefaults = { backStack.add(Route.Defaults(DefaultsMode.Settings)) },
+                            onPlugins = { backStack.add(Route.Plugins) },
                         )
                     }
                     entry<Route.Addons> {
@@ -700,6 +701,7 @@ private fun AppNav(
                         })
                     }
                     entry<Route.Debrid> { DebridScreen(session) }
+                    entry<Route.Plugins> { PluginsScreen(session) }
                     entry<Route.Trakt> {
                         TraktScreen(
                             session,
