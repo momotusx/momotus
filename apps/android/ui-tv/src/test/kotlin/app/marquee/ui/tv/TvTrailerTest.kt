@@ -131,7 +131,9 @@ class TvTrailerTest {
         val item = FocusRequester()
         compose.setContent {
             MarqueeTheme(Form.Tv) {
+                // Play first, as on the page: a focus that falls back to the first item would land there, not on Trailer.
                 Row {
+                    RoundButton(Icons.Play, "Play", {}, showLabel = true)
                     RoundButton(Icons.Film, "Trailer", {}, showLabel = true, focusRequester = back)
                     TrailerSoundItem(sound, on = false, requester = item, back = back)
                 }
@@ -147,6 +149,6 @@ class TvTrailerTest {
         compose.runOnIdle { sound = null }
         compose.waitForIdle()
         compose.onNode(hasContentDescription("Trailer sound")).assertDoesNotExist()
-        compose.onNode(hasText("Trailer").and(hasClickAction())).assertIsFocused()
+        compose.onNode(hasContentDescription("Trailer").and(hasClickAction())).assertIsFocused()
     }
 }

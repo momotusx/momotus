@@ -9,6 +9,7 @@ import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
@@ -16,11 +17,11 @@ import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
-import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.pressKey
+import androidx.compose.ui.test.requestFocus
 import app.marquee.core.client.CoreClient
 import app.marquee.core.client.CoreJson
 import app.marquee.core.model.EmptyAction
@@ -259,13 +260,20 @@ class TvTitleActionsTest {
             versions(EmptyKind.Unreachable, EmptyAction.PlayFromDevice, key = "kept"),
             title.copy(header = title.header.copy(details = title.header.details!!.copy(trailers = listOf(trailer)))),
         )
-        compose.onNode(hasContentDescription("Trailer").and(hasClickAction())).performClick()
-        compose.waitForIdle()
-        compose.onNodeWithTag(FULL_TRAILER_TAG).assertExists()
+        // By the remote, as a TV is used: focus to Trailer, select.
+        val trailerButton = compose.onNode(hasContentDescription("Trailer").and(hasClickAction()))
+        compose.runOnIdle { trailerButton.fetchSemanticsNode() }
+        trailerButton.requestFocus()
+        trailerButton.assertIsFocused()
+        trailerButton.performKeyInput { pressKey(Key.DirectionCenter) }
+        compose.waitUntil(5_000) { compose.onAllNodesWithTag(FULL_TRAILER_TAG).fetchSemanticsNodes().isNotEmpty() }
         assertNull(shadowOf(RuntimeEnvironment.getApplication()).nextStartedActivity)
         // The remote's Back closes it, and the focus comes back to Trailer.
-        compose.waitUntil(5_000) { compose.onAllNodes(isFocused()).fetchSemanticsNodes().isNotEmpty() }
-        compose.onNode(isFocused()).performKeyInput { pressKey(Key.Back) }
+        // The dialog's bar has the focus (the page under it keeps its own, on Play).
+        compose.waitUntil(5_000) {
+            compose.onAllNodes(hasContentDescription("Position").and(isFocused())).fetchSemanticsNodes().isNotEmpty()
+        }
+        compose.onNode(hasContentDescription("Position").and(isFocused())).performKeyInput { pressKey(Key.Back) }
         compose.waitUntil(5_000) { compose.onAllNodesWithTag(FULL_TRAILER_TAG).fetchSemanticsNodes().isEmpty() }
         compose.waitUntil(5_000) {
             compose.onAllNodes(hasContentDescription("Trailer").and(isFocused())).fetchSemanticsNodes().isNotEmpty()

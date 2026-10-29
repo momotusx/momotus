@@ -184,8 +184,15 @@ fun FullTrailer(
             .fillMaxSize()
             .background(Marquee.colors.bg)
             .testTag(FULL_TRAILER_TAG)
-            .onPreviewKeyEvent { mediaKey(it, state.paused, onToggle, seekBy) }
-            .windowInsetsPadding(WindowInsets.safeDrawing)
+            // Back closes it here too, not only through the window's back dispatch: a remote's key reaches the page first.
+            .onPreviewKeyEvent {
+                if (it.key == Key.Back) {
+                    if (it.type == KeyEventType.KeyUp) onClose()
+                    true
+                } else {
+                    mediaKey(it, state.paused, onToggle, seekBy)
+                }
+            }.windowInsetsPadding(WindowInsets.safeDrawing)
             .padding(horizontal = if (tv) 96.dp else 16.dp, vertical = if (tv) 48.dp else 16.dp),
         verticalArrangement = Arrangement.spacedBy(if (tv) 28.dp else 14.dp, Alignment.CenterVertically),
         horizontalAlignment = Alignment.CenterHorizontally,
