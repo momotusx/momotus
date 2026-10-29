@@ -46,6 +46,8 @@ struct OnboardingScreen: View {
     @State private var showImport = false
     @State private var showPairing = false
     @State private var showTVKit = false
+    /// The still the framed steps show (B4), asked once as first run opens.
+    @State private var still: FirstRunStill?
     /// TV: the doors step enters on the first door, not on Browse first.
     @FocusState private var firstDoor: Bool
     /// TV: the addons step enters on Continue, so one press keeps them all.
@@ -67,9 +69,9 @@ struct OnboardingScreen: View {
         #else
         let walk: String? = nil
         #endif
-        // `-MQOnboardingStep subtitles` opens a first run on the subtitles step, for a walk.
+        // `-MQOnboardingStep subtitles` (or `question`) opens a first run on that step, for a walk.
         let opened: Step? = start != .doors ? nil
-            : DefaultsRules.walkOpensDefaults(walk, debug: true) ? .defaults : walk == "subtitles" ? .subtitles : nil
+            : DefaultsRules.walkOpensDefaults(walk, debug: true) ? .defaults : walk == "subtitles" ? .subtitles : walk == "question" ? .question : nil
         _step = State(initialValue: opened ?? Self.first(start))
         _addons = State(initialValue: LiveRecord("addons", core: core))
         _prefs = State(initialValue: LiveRecord("settings", core: core))
@@ -117,26 +119,20 @@ struct OnboardingScreen: View {
                       ])
     }
 
+    /// The question steps are framed (B4) and fill the screen; the addons, sign-in and the check keep a column.
     private var steps: some View {
-        ScrollView(.vertical) {
-            VStack(alignment: .leading, spacing: Theme.Space.l) {
-                switch step {
-                case .signIn: signInStep
-                case .tvSignIn: doorsStep
-                case .doors: doorsStep
-                case .defaults: defaultsStep
-                case .question: questionStep
-                case .subtitles: subtitlesStep
-                case .check: checkStep
-                }
+        Group {
+            switch step {
+            case .signIn: signInStep
+            case .tvSignIn, .doors: doorsStep
+            case .defaults: column { defaultsStep }
+            case .question: questionStep
+            case .subtitles: subtitlesStep
+            case .check: column { checkStep }
             }
-            .frame(maxWidth: DefaultsRules.column(wide: metrics.wide, tv: onTV) ?? .infinity, alignment: .leading)
-            .frame(maxWidth: .infinity)
-            .padding(.horizontal, metrics.gutter)
-            .padding(.vertical, Theme.Space.l)
         }
-        .scrollIndicators(.hidden)
-        .topScrim()
+        // The still is asked as first run opens, so the frame rarely waits for it.
+        .task { still = await StillOnce.shared.get { [core] in try await core.call("firstRunStill", as: FirstRunStill?.self) } }
         .navigationDestination(isPresented: $showImport) {
             ImportScreen(core: core) {
                 showImport = false
@@ -167,6 +163,32 @@ struct OnboardingScreen: View {
         .task { await watchNetwork() }
     }
 
+    private func column<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
+        ScrollView(.vertical) {
+            VStack(alignment: .leading, spacing: Theme.Space.l) { content() }
+                .frame(maxWidth: DefaultsRules.column(wide: metrics.wide, tv: onTV) ?? .infinity, alignment: .leading)
+                .frame(maxWidth: .infinity)
+                .padding(.horizontal, metrics.gutter)
+                .padding(.vertical, Theme.Space.l)
+        }
+        .scrollIndicators(.hidden)
+        .topScrim()
+    }
+
+    /// The step's header: its count, Back to the step before, and its skip.
+    private func header(_ place: FilmRules.Place, skip: String? = nil, skipDisabled: Bool = false, onSkip: @escaping () -> Void = {}) -> StepHeader {
+        StepHeader(count: FilmRules.count(place), back: back(place), skip: skip, skipDisabled: skipDisabled || busy != nil, onSkip: onSkip)
+    }
+
+    private func back(_ place: FilmRules.Place) -> (() -> Void)? {
+        switch place {
+        case .defaults: { step = .doors }
+        case .question: { step = .defaults }
+        case .subtitles: { step = .question }
+        case .doors, .other: nil
+        }
+    }
+
     // MARK: steps
 
     /// "How should Marquee pick what to play?": Start fast (focused) or Best
@@ -174,31 +196,18 @@ struct OnboardingScreen: View {
     /// Skip writes nothing: the defaults are Start fast's.
     private var questionStep: some View {
         let q = StreamChoice.words.question
-        return VStack(alignment: .leading, spacing: Theme.Space.m) {
-            HStack(alignment: .firstTextBaseline) {
-                Wordmark(size: 22)
-                Spacer()
-                Button(q.skip.label) { afterQuestion() }
-                    .buttonStyle(.textLink)
-                    .textFont(Theme.type.callout, weight: .semibold, relativeTo: .callout)
-                    .foregroundStyle(Theme.Palette.text)
-            }
-            stepHeading(q.title, q.lead)
-            let answers = Group {
-                Button { Task { await answer(q.fast) } } label: { Door(symbol: "zap", title: q.fast.label, text: q.fast.text) }
-                    .focused($onFast)
-                Button { Task { await answer(q.best) } } label: { Door(symbol: "gem", title: q.best.label, text: q.best.text) }
-            }
-            .buttonStyle(.row)
-            .disabled(busy != nil)
-            if metrics.wide {
-                HStack(alignment: .top, spacing: Theme.Space.s) { answers }
-                    .fixedSize(horizontal: false, vertical: true)
-            } else {
-                VStack(spacing: 12) { answers }
-            }
-            if let note, !note.ok {
-                StatusDot(tone: .bad, text: note.text)
+        return FramedStep(header: header(.question, skip: q.skip.label) { afterQuestion() }, still: still, question: q.title, lead: q.lead) {
+            VStack(spacing: Theme.Space.s) {
+                FilmChoices {
+                    Button { Task { await answer(q.fast) } } label: { FilmChoice(symbol: "zap", title: q.fast.label, text: q.fast.text) }
+                        .focused($onFast)
+                    Button { Task { await answer(q.best) } } label: { FilmChoice(symbol: "gem", title: q.best.label, text: q.best.text) }
+                }
+                .buttonStyle(.filmChoice)
+                .disabled(busy != nil)
+                if let note, !note.ok {
+                    StatusDot(tone: .bad, text: note.text)
+                }
             }
         }
         .defaultFocus($onFast, true)
@@ -243,18 +252,18 @@ struct OnboardingScreen: View {
     /// languages. Continue writes it; Skip writes nothing.
     private var subtitlesStep: some View {
         let columns = Array(repeating: GridItem(.flexible(), spacing: Theme.Space.s, alignment: .top), count: metrics.wide ? 3 : 1)
-        return VStack(alignment: .leading, spacing: Theme.Space.m) {
-            HStack(alignment: .firstTextBaseline) {
-                Wordmark(size: 22)
-                Spacer()
-                // Not while Continue saves: the step leaves once.
-                Button("Skip") { afterSubtitles() }
-                    .buttonStyle(.textLink)
-                    .textFont(Theme.type.callout, weight: .semibold, relativeTo: .callout)
-                    .foregroundStyle(Theme.Palette.text)
-                    .disabled(busy != nil)
-            }
-            stepHeading(SubtitleStepRules.title, SubtitleStepRules.lead)
+        // Skip is off while Continue saves: the step leaves once.
+        return FramedStep(header: header(.subtitles, skip: "Skip") { afterSubtitles() }, still: still,
+                          question: SubtitleStepRules.title, lead: SubtitleStepRules.lead) {
+            subtitleChoices(columns)
+        }
+        .defaultFocus($onSubtitles, true)
+        // A disabled Continue cannot take the focus: TV gives it once the list is in.
+        .onChange(of: languagesLoaded) { _, loaded in if loaded { onSubtitles = true } }
+    }
+
+    private func subtitleChoices(_ columns: [GridItem]) -> some View {
+        VStack(alignment: .leading, spacing: Theme.Space.m) {
             LazyVGrid(columns: columns, alignment: .leading, spacing: Theme.Space.xs) {
                 let mine = SubtitleStepRules.listed(languages)
                 ForEach(SubtitleStepRules.common(languages, device: mine), id: \.code) { language in
@@ -283,9 +292,6 @@ struct OnboardingScreen: View {
                 }
             }
         }
-        .defaultFocus($onSubtitles, true)
-        // A disabled Continue cannot take the focus: TV gives it once the list is in.
-        .onChange(of: languagesLoaded) { _, loaded in if loaded { onSubtitles = true } }
     }
 
     /// One language: its name, a line when it has one, a check when chosen.
@@ -342,10 +348,12 @@ struct OnboardingScreen: View {
         doorsStep
         #else
         if let server = AccountServer.default {
-            SignInScreen(server: server, sync: sync,
-                         notNow: { step = .doors },
-                         joined: { if let close { close() } else { step = .doors } },
-                         created: { step = .doors })
+            column {
+                SignInScreen(server: server, sync: sync,
+                             notNow: { step = .doors },
+                             joined: { if let close { close() } else { step = .doors } },
+                             created: { step = .doors })
+            }
         } else {
             doorsStep
         }
@@ -353,51 +361,30 @@ struct OnboardingScreen: View {
     }
 
     private var doorsStep: some View {
-        VStack(alignment: .leading, spacing: Theme.Space.m) {
-            HStack(alignment: .firstTextBaseline) {
-                Wordmark(size: 22)
-                Spacer()
-                if let close {
-                    Button("Browse first") { browseFirst(close) }
-                        .buttonStyle(.textLink)
-                        .textFont(Theme.type.callout, weight: .semibold, relativeTo: .callout)
-                        .foregroundStyle(Theme.Palette.text)
-                }
-            }
-            Text("How would you like to begin?")
-                .display(metrics.wide ? 44 : Theme.type.title1 + 4)
-                .foregroundStyle(Theme.Palette.text)
-                .accessibilityAddTraits(.isHeader)
-            // Said to someone without an account only: after Create it is not so.
-            if !sync.joined {
-                Text("No account needed. Everything stays on this device until you turn on sync.")
-                    .textFont(Theme.type.body)
-                    .foregroundStyle(Theme.Palette.muted)
-            }
-            let doors = Group {
-                Button { showImport = true } label: {
-                    Door(symbol: "door-open", title: "I use Stremio", text: "Bring your addons, library and Continue Watching over with a code.")
-                }
-                .focused($firstDoor)
-                Button { openDefaults() } label: {
-                    Door(symbol: "sparkle", title: "Start fresh", text: "Pick from the recommended addons, then browse and play.")
-                }
-                if !sync.joined {
-                    Button { showPairing = true } label: {
-                        Door(symbol: "qr-code", title: "I already use Momotus", text: "Join your other device's sync account with a code. Library and addons follow.")
+        let skip = close.map { close in { browseFirst(close) } }
+        // The lead is said to someone without an account only: after Create it is not so.
+        return FramedStep(header: header(.doors, skip: skip == nil ? nil : "Browse first") { skip?() }, still: still,
+                          question: "How would you like to begin?",
+                          lead: sync.joined ? nil : "No account needed. Everything stays on this device until you turn on sync.") {
+            VStack(spacing: Theme.Space.s) {
+                FilmChoices {
+                    Button { showImport = true } label: {
+                        FilmChoice(symbol: "door-open", title: "I use Stremio", text: "Bring your addons, library and Continue Watching over with a code.")
+                    }
+                    .focused($firstDoor)
+                    Button { openDefaults() } label: {
+                        FilmChoice(symbol: "sparkle", title: "Start fresh", text: "Pick from the recommended addons, then browse and play.")
+                    }
+                    if !sync.joined {
+                        Button { showPairing = true } label: {
+                            FilmChoice(symbol: "qr-code", title: "I already use Momotus", text: "Join your other device's sync account with a code. Library and addons follow.")
+                        }
                     }
                 }
-            }
-            .buttonStyle(.row)
-            if metrics.wide {
-                // On one row the doors share one height.
-                HStack(alignment: .top, spacing: Theme.Space.s) { doors }
-                    .fixedSize(horizontal: false, vertical: true)
-            } else {
-                VStack(spacing: 12) { doors }
-            }
-            if let note, !note.ok {
-                StatusDot(tone: .bad, text: note.text)
+                .buttonStyle(.filmChoice)
+                if let note, !note.ok {
+                    StatusDot(tone: .bad, text: note.text)
+                }
             }
         }
         .defaultFocus($firstDoor, true)
@@ -405,6 +392,7 @@ struct OnboardingScreen: View {
 
     private var defaultsStep: some View {
         VStack(alignment: .leading, spacing: Theme.Space.m) {
+            header(.defaults)
             stepHeading(DefaultsRules.title, DefaultsRules.lead)
             RecommendedAddons(model: defaults, imported: imported, hasCatalog: !names("catalog").isEmpty)
             #if !os(tvOS)
@@ -421,7 +409,6 @@ struct OnboardingScreen: View {
             .padding(.top, Theme.Space.s)
             #endif
             HStack {
-                Button("Back") { step = .doors }.buttonStyle(PillButtonStyle())
                 Spacer()
                 Button(defaults.busy ? "Adding" : "Continue") {
                     Task {
@@ -750,54 +737,6 @@ struct RecommendedAddonsPage: View {
         .topScrim()
         .defaultFocus($onContinue, true)
         .task { await model.load() }
-    }
-}
-
-/// A big choice: icon, a title in the display face, one line, chevron.
-private struct Door: View {
-    let symbol: String
-    let title: String
-    let text: String
-    @State private var hovered = false
-    @Environment(\.metrics) private var metrics
-
-    var body: some View {
-        // Side by side on a row the doors are narrow: the icon and chevron go above the words.
-        let layout = metrics.wide
-            ? AnyLayout(VStackLayout(alignment: .leading, spacing: Theme.Space.s))
-            : AnyLayout(HStackLayout(spacing: Theme.Space.s))
-        layout {
-            if metrics.wide {
-                HStack {
-                    Glyph(symbol, size: 26)
-                    Spacer(minLength: 0)
-                    Glyph("chevron-right").foregroundStyle(Theme.Palette.muted)
-                }
-            } else {
-                Glyph(symbol, size: 26).frame(width: 36)
-            }
-            VStack(alignment: .leading, spacing: 4) {
-                Text(title).display(Theme.type.title3)
-                Text(text)
-                    .textFont(Theme.type.callout, relativeTo: .callout)
-                    .foregroundStyle(Theme.Palette.muted)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            if !metrics.wide {
-                Spacer(minLength: 0)
-                Glyph("chevron-right").foregroundStyle(Theme.Palette.muted)
-            }
-        }
-        .frame(maxHeight: .infinity, alignment: .top)
-        .foregroundStyle(Theme.Palette.text)
-        .padding(Theme.Space.s + 4)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-        .glass(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
-        .brightness(hovered ? 0.04 : 0)
-        .contentShape(Rectangle())
-        #if !os(tvOS)
-        .onHover { hovered = $0 }
-        #endif
     }
 }
 

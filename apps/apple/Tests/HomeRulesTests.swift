@@ -105,6 +105,7 @@ private func row(_ state: RowState, _ tiles: String...) -> HomeRow {
     #expect(AddonsSnapshot(addons: [cinemeta, torrentio], fresh: false).summary == "2 installed. 1 finds streams.")
     let more = [cinemeta, torrentio, addon("Comet", streams: true), addon("Off", streams: true, enabled: false)]
     #expect(AddonsSnapshot(addons: more, fresh: false).summary == "4 installed. 2 find streams.")
+    #expect(AddonsSnapshot(addons: [], fresh: true).summary == "None installed yet.")
 }
 
 @Test func oneFailedRowsTryAgainAsksForThatRowOnly() {

@@ -9,15 +9,16 @@ import { join } from "node:path";
 const VERSION = "1.58.0";
 const ICONS = [
   "arrow-down", "arrow-up", "ban", "bookmark-check", "bookmark-plus", "calendar", "calendar-x", "camera", "captions", "cat",
-  "check", "chevron-down", "chevrons-up-down", "chevron-left", "chevron-right", "circle-alert", "circle-check", "circle-dashed",
-  "circle-minus", "circle-slash", "circle-x", "clapperboard", "clock", "clock-alert", "compass", "copy", "delete",
+  "check", "chevron-down", "chevron-left", "chevron-right", "chevrons-up-down", "circle-alert", "circle-check", "circle-dashed",
+  "circle-minus", "circle-play", "circle-slash", "circle-x", "clapperboard", "clock", "clock-alert", "compass", "copy", "delete",
   "dog", "door-open", "download", "ellipsis", "external-link", "eye", "eye-off", "film", "flame", "gamepad-2", "gauge", "gem",
-  "ghost", "headphones", "history", "house", "inbox", "info", "key-round", "layers", "leaf", "library-big", "life-buoy", "link-2",
-  "list", "list-checks", "list-filter", "list-video", "loader-circle", "lock", "log-out", "minus", "monitor-check",
-  "monitor-smartphone", "moon", "package-search", "pause", "pause-fill", "pencil", "play", "play-fill", "plus", "popcorn",
-  "power", "puzzle", "qr-code", "refresh-cw", "rocket", "rotate-ccw", "rotate-cw", "search", "settings",
-  "shield-alert", "skip-forward", "sparkle", "star-fill", "sun", "text-align-start", "trash", "triangle-alert", "tv", "undo-2", "users",
-  "volume-1", "volume-2", "volume-x", "wrench", "x", "zap",
+  "ghost", "headphones", "history", "house", "inbox", "info", "key-round", "layers", "leaf", "library-big", "life-buoy",
+  "link-2", "list", "list-checks", "list-filter", "list-video", "loader-circle", "lock", "log-out", "minus", "monitor",
+  "monitor-check", "monitor-smartphone", "moon", "package-search", "pause", "pause-fill", "pencil", "play", "play-fill", "plus",
+  "popcorn", "power", "puzzle", "qr-code", "radio", "refresh-cw", "rocket", "rotate-ccw", "rotate-cw", "rows-3", "search",
+  "settings", "shield-alert", "skip-forward", "sliders-horizontal", "sparkle", "sparkles", "star-fill", "sun",
+  "text-align-start", "trash", "triangle-alert", "tv", "undo-2", "user", "user-pen", "users", "volume-1", "volume-2", "volume-x",
+  "wrench", "x", "zap",
 ];
 
 const source = process.argv[2];

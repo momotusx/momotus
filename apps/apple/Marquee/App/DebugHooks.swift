@@ -21,6 +21,12 @@ enum DebugHooks {
     /// scrolled state with no pointer or key sent to the window.
     static var homeScrollY: Double { UserDefaults.standard.double(forKey: "MQHomeScrollY") }
 
+    /// `-MQSettingsSection playback`: Settings jumps to that section once its page has laid out, as its menu entry
+    /// does, for a walk's shot of the scrolled page with no pointer or key sent to the window.
+    static var settingsSection: SettingsSection? {
+        UserDefaults.standard.string(forKey: "MQSettingsSection").flatMap(SettingsSection.init(rawValue:))
+    }
+
     /// `-MQShowSoundSwitch YES`: a muted walk still draws the trailer's sound switch, for its shot; it stays silent.
     static var showSoundSwitch: Bool { UserDefaults.standard.bool(forKey: "MQShowSoundSwitch") }
 

@@ -213,7 +213,7 @@ private func snapshot(_ profiles: [ProfileInfo], locked: Bool = false) -> Profil
     let keypad = try String(contentsOf: dir.appending(path: "PinKeypad.swift"), encoding: .utf8)
     let avatar = try body(of: "struct ProfileAvatar: View", in: keypad)
     let shown = try body(of: "var body: some View", in: avatar)
-    #expect(shown.contains("Circle()\n            .fill(Self.color(avatar.color))"), "the avatar is not a circle")
+    #expect(shown.contains("Circle()\n            .fill(lit ? Theme.Palette.primary : Self.color(avatar.color))"), "the avatar is not a circle")
     // The picture choices follow it: ring and focus shape.
     let editor = try String(contentsOf: dir.appending(path: "ManageProfiles.swift"), encoding: .utf8)
     let choice = try body(of: "private func choice(selected: Bool", in: editor)

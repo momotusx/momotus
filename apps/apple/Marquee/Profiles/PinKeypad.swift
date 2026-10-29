@@ -14,11 +14,14 @@ struct ProfileAvatar: View {
     let avatar: ProfileRules.Avatar
     let name: String
     var size: CGFloat = 44
+    /// Under TV focus: white with a dark glyph (design/DECISION.md, Profiles).
+    var lit = false
 
-    init(_ stored: String, name: String, size: CGFloat = 44) {
+    init(_ stored: String, name: String, size: CGFloat = 44, lit: Bool = false) {
         avatar = ProfileRules.parseAvatar(stored)
         self.name = name
         self.size = size
+        self.lit = lit
     }
 
     init(_ avatar: ProfileRules.Avatar, name: String, size: CGFloat = 44) {
@@ -29,7 +32,7 @@ struct ProfileAvatar: View {
 
     var body: some View {
         Circle()
-            .fill(Self.color(avatar.color))
+            .fill(lit ? Theme.Palette.primary : Self.color(avatar.color))
             .overlay {
                 if avatar.glyph == "letter" {
                     Text(ProfileRules.initial(name))
@@ -42,7 +45,7 @@ struct ProfileAvatar: View {
                         .frame(width: size * 0.5, height: size * 0.5)
                 }
             }
-            .foregroundStyle(.white)
+            .foregroundStyle(lit ? Theme.Palette.onPrimary : .white)
             .frame(width: size, height: size)
             .accessibilityHidden(true)
     }

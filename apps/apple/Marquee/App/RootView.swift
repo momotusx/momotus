@@ -431,7 +431,7 @@ struct MainShell: View {
                     #endif
             }
         case .settings:
-            NavigationStack(path: $settingsPath) { SettingsScreen(core: core).root(of: .settings, covered: coveredBinding) }
+            NavigationStack(path: $settingsPath) { SettingsScreen(core: core, home: home).root(of: .settings, covered: coveredBinding) }
         }
     }
 

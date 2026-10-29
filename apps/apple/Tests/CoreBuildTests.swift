@@ -18,7 +18,7 @@ import Testing
     func read(_ path: String) throws -> String { try String(contentsOf: app.appending(path: path), encoding: .utf8) }
     #expect(try read("App/MarqueeApp.swift").contains("CoreBuild.check()"))
     let settings = try read("Settings/SettingsScreen.swift")
-    #expect(settings.contains("if CoreBuild.missingEngine(field: CoreBuild.field, hasEngine: hasEngine()) {\n                    Text(CoreBuild.aboutLine)"))
+    #expect(settings.contains("if CoreBuild.missingEngine(field: CoreBuild.field, hasEngine: hasEngine()) {\n                Text(CoreBuild.aboutLine)"))
     let check = try read("App/CoreBuild.swift")
     #expect(check.contains("coreLog.error(") && check.contains("assertionFailure(aboutLine)"))
     // The player shows no words of its own about it: the core's account state is the viewer's.

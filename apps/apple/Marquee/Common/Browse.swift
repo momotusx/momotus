@@ -52,6 +52,8 @@ struct ChipRow<ID: Hashable>: View {
         Text(label)
             .textFont(Theme.type.callout, weight: .semibold, relativeTo: .callout)
             .foregroundStyle(Theme.Palette.dim)
+            // A long label wraps in its column, never cut short ("Subtitle language").
+            .fixedSize(horizontal: false, vertical: true)
     }
 
     @ViewBuilder private var buttons: some View {

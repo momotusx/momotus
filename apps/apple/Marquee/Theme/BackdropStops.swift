@@ -91,6 +91,14 @@ enum BackdropStops {
         [Stop(at: 0, alpha: wide ? 0 : 0.6), Stop(at: 0.25, alpha: 0), Stop(at: 0.5, alpha: 0.62), Stop(at: 0.82, alpha: 0.88), Stop(at: 1, alpha: 1)]
     }
 
+    /// Settings' header (A1) on TV and wide screens: the profile's words at the bottom leading corner, so the
+    /// art is held down from the leading edge and from the foot (the web's `settings` ramp); every word and
+    /// pill keeps 4.5:1 over white art (SettingsA1Tests).
+    static let settingsSide = [Stop(at: 0, alpha: 0.85), Stop(at: 0.35, alpha: 0.72), Stop(at: 0.6, alpha: 0.25), Stop(at: 0.8, alpha: 0)]
+    static let settingsFoot = [Stop(at: 0, alpha: 1), Stop(at: 0.12, alpha: 0.92), Stop(at: 0.45, alpha: 0.62), Stop(at: 0.75, alpha: 0.15), Stop(at: 1, alpha: 0)]
+    /// Settings' header on the phone: the large title and the profile card sit on the art's lower half.
+    static let settingsPhone = [Stop(at: 0, alpha: 1), Stop(at: 0.25, alpha: 0.9), Stop(at: 0.55, alpha: 0.7), Stop(at: 0.8, alpha: 0.45), Stop(at: 1, alpha: 0.3)]
+
     /// How much page color covers the art at `t`, linear between stops.
     static func alpha(_ stops: [Stop], at t: Double) -> Double {
         guard let first = stops.first, let last = stops.last else { return 0 }
