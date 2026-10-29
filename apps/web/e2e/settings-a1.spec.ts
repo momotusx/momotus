@@ -196,7 +196,7 @@ for (const form of ["tv", "desktop", "phone"] as const) {
     const seen: string[] = [];
     for (const [path, ready] of [
       ["/settings", ".set-who .avatar"],
-      ["/", form === "phone" ? ".ph-top .avatar" : ".pavatar .avatar"],
+      ["/", form === "phone" ? ".ptab .avatar" : ".pavatar .avatar"],
       ["/profiles", ".ptile .avatar"],
       ["/profiles/manage", ".prow .avatar"],
       [edit, ".glyph-pick .avatar"],
