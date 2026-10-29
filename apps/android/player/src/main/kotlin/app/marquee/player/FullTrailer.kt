@@ -205,7 +205,10 @@ fun FullTrailer(
                     ) { MqText(FAILED_LINE, role = TextRole.Callout, color = Marquee.colors.muted) }
                 }
             } else if (waiting) {
-                Spinner(Modifier.align(Alignment.Center).semantics { contentDescription = "Loading trailer" })
+                // Said once when it shows, as the line is.
+                Box(Modifier.align(Alignment.Center)) {
+                    LiveSpoken(LOADING) { Spinner(Modifier.semantics { contentDescription = LOADING }) }
+                }
             }
         }
         Row(
@@ -261,12 +264,18 @@ fun FullTrailer(
             )
             MqText("-" + clockText(ms((state.length - (target ?: state.seconds)).coerceAtLeast(0f))), role = role)
         }
+        // A phone gives the name its own line (beside three buttons it kept four letters, the Pixel walk of 2026-10-29).
+        if (!tv) MqText(title, Modifier.fillMaxWidth(), role = TextRole.Headline, maxLines = 1)
         Row(
             Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(if (tv) 20.dp else 8.dp),
+            horizontalArrangement =
+                Arrangement.spacedBy(
+                    if (tv) 20.dp else 8.dp,
+                    if (tv) Alignment.Start else Alignment.End,
+                ),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            MqText(title, Modifier.weight(1f), role = TextRole.Headline, maxLines = 1)
+            if (tv) MqText(title, Modifier.weight(1f), role = TextRole.Headline, maxLines = 1)
             SecondaryButton(
                 if (state.paused) "Play" else "Pause",
                 onToggle,
@@ -361,6 +370,7 @@ private fun mediaKey(
 
 private const val SEEK_S = 10f
 private const val FAILED_LINE = "This trailer can't play here."
+private const val LOADING = "Loading trailer"
 private val SELECT_KEYS = setOf(Key.DirectionCenter, Key.Enter, Key.NumPadEnter)
 private val MEDIA_KEYS = setOf(Key.MediaPlayPause, Key.MediaPlay, Key.MediaPause, Key.MediaRewind, Key.MediaFastForward)
 

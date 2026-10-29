@@ -1,10 +1,20 @@
 package app.marquee.ui.tv
 
+import androidx.compose.foundation.layout.Row
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -13,7 +23,9 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.pressKey
 import app.marquee.design.Form
+import app.marquee.design.Icons
 import app.marquee.design.MarqueeTheme
+import app.marquee.design.RoundButton
 import app.marquee.design.TrailerState
 import app.marquee.player.FullTrailer
 import org.junit.Rule
@@ -109,5 +121,32 @@ class TvTrailerTest {
         compose.onNodeWithText("This trailer can't play here.").assertExists()
         compose.onNode(hasText("Close").and(hasClickAction())).assertIsFocused()
         compose.onNode(hasText("Pause").and(hasClickAction())).assertIsNotEnabled()
+    }
+
+    @Test
+    fun `the Sound item says it is off, and when it goes with the focus on it the focus moves to Trailer`() {
+        var presses = 0
+        var sound by mutableStateOf<(() -> Unit)?>({ presses += 1 })
+        val back = FocusRequester()
+        val item = FocusRequester()
+        compose.setContent {
+            MarqueeTheme(Form.Tv) {
+                Row {
+                    RoundButton(Icons.Film, "Trailer", {}, showLabel = true, focusRequester = back)
+                    TrailerSoundItem(sound, on = false, requester = item, back = back)
+                }
+            }
+        }
+        compose.runOnIdle { item.requestFocus() }
+        val node = compose.onNode(hasContentDescription("Trailer sound").and(hasClickAction()))
+        node.assertIsFocused()
+        node.assert(SemanticsMatcher.expectValue(SemanticsProperties.ToggleableState, ToggleableState.Off))
+        compose.onNode(isFocused()).performKeyInput { pressKey(Key.DirectionCenter) }
+        compose.runOnIdle { assertEquals(1, presses) }
+        // Its trailer ends: the item goes, and the focus lands on Trailer, not nowhere.
+        compose.runOnIdle { sound = null }
+        compose.waitForIdle()
+        compose.onNode(hasContentDescription("Trailer sound")).assertDoesNotExist()
+        compose.onNode(hasText("Trailer").and(hasClickAction())).assertIsFocused()
     }
 }

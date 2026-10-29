@@ -176,16 +176,15 @@ object TitleTrailers {
     val spent = mutableSetOf<String>()
 
     /**
-     * The memory a TV form needs for the header trailer, from the Pixel's TV-form measurement (plans/trailer-inline.md 4,
-     * bench/trailer-inline): below it, a TV shows the art and plays Trailer full screen only.
+     * The memory a TV form needs for the header trailer (plans/trailer-inline.md 4a, bench/trailer-inline): 20 times the
+     * playing header's cost C, measured on the Pixel in TV form on 2026-10-29 (app plus renderer PSS, playing minus
+     * idle, median of 3 runs: 292,277 kB, about 299 MB), rounded up to the next 0.25 GB. A 6 GB device reads about
+     * 5.5e9 and stays under it; below it a TV shows the art and plays Trailer full screen only.
      */
-    const val TV_FLOOR = TrailerPreviews.SIX_GB
+    const val TV_FLOOR = 6_000_000_000L
 
-    /**
-     * The memory a preview needs free when it starts: twice the player's cost (Phase 0's +197 MB on the Pixel,
-     * plans/appletv-polish.md 4.2), until the TV-form measurement replaces it (plans/trailer-inline.md 5).
-     */
-    const val ROOM = 400_000_000L
+    /** The memory a preview needs free when it starts: twice the measured cost C, rounded up to the next 50 MB. */
+    const val ROOM = 600_000_000L
 
     const val DELAY_MS = 300L
 }
@@ -210,8 +209,13 @@ fun TitleHeaderTrailer(
     val active = resumed.isAtLeast(Lifecycle.State.RESUMED)
     val id = HeroTrailers.checkedId(youtubeId)
     LaunchedEffect(id, active, playing) {
-        // Only the header's own: the full-screen trailer on the same player stops it by starting.
-        if (state.loading) trailers.stop()
+        // Only the header's own: the full-screen trailer on the same player stops it by starting. Cut by the viewer (the
+        // page scrolled or covered while it played) it does not come back this session; the app in the background is
+        // not a cut.
+        if (state.loading) {
+            trailers.stop()
+            if (!playing) TitleTrailers.spent += titleId
+        }
         if (id == null || !active || !playing || titleId in TitleTrailers.spent) return@LaunchedEffect
         delay(TitleTrailers.DELAY_MS)
         val floor = if (tv) TitleTrailers.TV_FLOOR else TrailerPreviews.SIX_GB

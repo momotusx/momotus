@@ -36,6 +36,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
@@ -502,15 +503,6 @@ private fun Info(
     val target = header.playTarget
     val primary = TitleCopy.primary(target, versions, details.runtime)
     val trailerFocus = focus.requesterFor("trailer")
-    // The sound switch goes when its trailer ends: a focus on it moves to Trailer.
-    var soundFocused by remember { mutableStateOf(false) }
-    LaunchedEffect(sound == null) {
-        if (sound == null && soundFocused) {
-            soundFocused = false
-            withFrameNanos { }
-            runCatching { trailerFocus.requestFocus() }
-        }
-    }
     Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.s)) {
         Logo(details.logo, details.name, height = 160.dp, maxWidth = 480.dp)
         TitleRatingLine(
@@ -595,22 +587,13 @@ private fun Info(
             // TV has no remove on its tiles: the page carries it while the title is in Continue Watching (the header
             // says so from its first render, so the row never grows after it is drawn).
             if (header.continuing && onUncontinue != null) Uncontinue(onUncontinue, focus)
-            if (sound != null) {
-                RoundButton(
-                    icon = if (HeroTrailers.sound) Icons.Volume2 else Icons.VolumeX,
-                    label = "Sound",
-                    onClick = sound,
-                    selected = HeroTrailers.sound,
-                    showLabel = true,
-                    spoken = "Trailer sound",
-                    toggle = true,
-                    focusRequester = focus.requesterFor("sound"),
-                    onFocusChange = { focused ->
-                        soundFocused = focused
-                        focus.watch(ACTIONS, "sound")(focused)
-                    },
-                )
-            }
+            TrailerSoundItem(
+                sound,
+                HeroTrailers.sound,
+                focus.requesterFor("sound"),
+                trailerFocus,
+                focus.watch(ACTIONS, "sound"),
+            )
         }
         if (target == null) {
             StatusNote(TitleCopy.nothingToPlay(header.nextAirs), Modifier.widthIn(max = 640.dp))
@@ -850,4 +833,47 @@ private fun Episodes(
             }
         }
     }
+}
+
+/**
+ * The header trailer's sound, last in the TV action row while it plays ([sound] null otherwise), its state [on]. When it
+ * goes with the focus on it (the trailer ended or stopped) the focus moves to Trailer ([back]), never to nowhere.
+ */
+@Composable
+internal fun TrailerSoundItem(
+    sound: (() -> Unit)?,
+    on: Boolean,
+    requester: FocusRequester,
+    back: FocusRequester,
+    onFocusChange: (Boolean) -> Unit = {},
+) {
+    var focused by remember { mutableStateOf(false) }
+    val current = rememberUpdatedState(sound)
+    LaunchedEffect(sound == null) {
+        if (sound == null && focused) {
+            focused = false
+            withFrameNanos { }
+            runCatching { back.requestFocus() }
+        }
+    }
+    if (sound == null) return
+    RoundButton(
+        icon = if (on) Icons.Volume2 else Icons.VolumeX,
+        label = "Sound",
+        onClick = sound,
+        selected = on,
+        showLabel = true,
+        spoken = "Trailer sound",
+        toggle = true,
+        focusRequester = requester,
+        onFocusChange = { gained ->
+            // A loss because the item itself goes keeps the mark, so focus moves to Trailer; a move elsewhere clears it.
+            if (gained) {
+                focused = true
+            } else if (current.value != null) {
+                focused = false
+            }
+            onFocusChange(gained)
+        },
+    )
 }
