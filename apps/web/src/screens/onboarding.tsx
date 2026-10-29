@@ -227,31 +227,24 @@ const firstStill = () =>
     return null;
   }));
 
-/** B4, the letterbox (the owner's pick of 2026-10-28): a 2.39:1 frame holding a film's still with the step's
- * question set as its subtitle; no still (offline, slow), the frame stays black with the question. The lead
- * line rides under the question on TV and desktop, under the frame on the phone. Both are decorative art and
- * a real heading. */
+/** V1, Full Bleed (the pick of 2026-10-30, design/exploration/onboarding-v2): one film still fills the screen behind
+ * the step, its question and lead and the choices on a dark ramp at the foot (phone) or in a column at the lower left
+ * (TV and desktop), in thumb reach. The still is the core's scene frame (`firstRunStill`); with none (offline, slow)
+ * the screen stays black. The still is decorative; the question is the step's real heading. */
 function Film(props: { title: string; lead?: string }) {
   const [art, setArt] = createSignal<string | null>(null);
   onMount(() => void firstStill().then((s) => setArt(s?.background ?? null)));
   return (
     <>
-      <div class="film">
+      <div class="still" aria-hidden="true">
         <Show when={art()} keyed>
           {(src) => <img src={src} alt="" decoding="async" class="fade" onLoad={(e) => e.currentTarget.classList.add("in")} />}
         </Show>
-        <div class="film-cue">
-          <h1 id="welcome-q" tabindex="-1">
-            <span>{props.title}</span>
-          </h1>
-          <Show when={props.lead && form() !== "phone"}>
-            <p class="lead">
-              <span>{props.lead}</span>
-            </p>
-          </Show>
-        </div>
       </div>
-      <Show when={props.lead && form() === "phone"}>
+      <h1 id="welcome-q" tabindex="-1">
+        {props.title}
+      </h1>
+      <Show when={props.lead}>
         <p class="lead">{props.lead}</p>
       </Show>
     </>

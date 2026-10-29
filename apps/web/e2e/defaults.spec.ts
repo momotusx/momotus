@@ -213,7 +213,7 @@ test("Browse first passes the switches, then opens Home as the root", async ({ b
 
 test("a TV's first press on Welcome is never undone by the screen's late first focus", async ({ browser }) => {
   const page = await device(browser, "tv");
-  // The viewer presses Right the moment the first door has the focus: before
+  // The viewer presses Down (the doors stack, V1) the moment the first door has the focus: before
   // the screen's own first focus, asked for when the route changed and run a
   // frame later, has run. Under load that frame is late (the flake this
   // replaces: focus jumped back to I use Stremio).
@@ -224,7 +224,7 @@ test("a TV's first press on Welcome is never undone by the screen's late first f
       (e) => {
         if (pressed || (e.target as HTMLElement).dataset?.f !== "welcome:stremio") return;
         pressed = true;
-        window.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }));
+        window.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }));
       },
       true,
     );
@@ -242,7 +242,8 @@ test("a TV does it with keys only: Continue first, a row toggles with select", a
   await page.goto("/?form=tv");
   await expect(page).toHaveURL(/\/welcome/);
   await expect.poll(() => focused(page)).toBe("welcome:stremio");
-  await page.keyboard.press("ArrowRight");
+  // The doors stack in a column (V1): the next one is down.
+  await page.keyboard.press("ArrowDown");
   await expect.poll(() => focused(page)).toBe("welcome:fresh");
   await page.keyboard.press("Enter");
   await expect(page).toHaveURL(/step=2/);
@@ -262,14 +263,16 @@ test("a TV does it with keys only: Continue first, a row toggles with select", a
   // Start fast is focused: one press takes it.
   await expect(page).toHaveURL(/step=choice/);
   await expect.poll(() => focused(page)).toBe("welcome:fast");
-  // On a TV the frame and the two answers under it sit in the middle of the screen, not its top half.
-  const mid = await page.locator(".framed").evaluate((s) => {
-    const top = (s.querySelector(".film") as HTMLElement).getBoundingClientRect().top;
-    const bottom = (s.querySelector(".doors.two") as HTMLElement).getBoundingClientRect().bottom;
-    return (top + bottom) / 2 / innerHeight;
+  // On a TV the question and its two answers sit in a column at the lower left, over the still (V1).
+  const at = await page.locator(".framed").evaluate((s) => {
+    const h1 = (s.querySelector("h1") as HTMLElement).getBoundingClientRect();
+    const doors = (s.querySelector(".doors.two") as HTMLElement).getBoundingClientRect();
+    return { top: h1.top / innerHeight, bottom: doors.bottom / innerHeight, right: doors.right / innerWidth };
   });
-  expect(mid).toBeGreaterThan(0.45);
-  expect(mid).toBeLessThan(0.6);
+  expect(at.top).toBeGreaterThan(0.3);
+  expect(at.bottom).toBeGreaterThan(0.8);
+  expect(at.bottom).toBeLessThanOrEqual(1);
+  expect(at.right).toBeLessThan(0.62);
   await shot(page, "stream-choice-question", "tv");
   await page.keyboard.press("Enter");
   // The subtitle language: one press keeps this TV's.

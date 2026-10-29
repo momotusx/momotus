@@ -259,7 +259,8 @@ test("onboarding: one decision per step, Back walks the steps", async ({ page })
   await expect(page.locator(".door")).toHaveCount(3);
   await expect(page.locator(".check")).toHaveCount(0);
   await expect(page.locator('[data-f="welcome:skip"]')).toHaveText("Browse first");
-  await page.keyboard.press("ArrowRight");
+  // The doors stack in a column (V1): the next one is down.
+  await page.keyboard.press("ArrowDown");
   await expect.poll(() => focused(page)).toBe("welcome:fresh");
   await page.keyboard.press("Enter");
   await expect(page).toHaveURL(/step=2/);
