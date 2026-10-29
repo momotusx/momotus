@@ -418,8 +418,13 @@ fun PillProfile(
     onSettings: () -> Unit,
     onPin: (String) -> Unit,
 ) {
-    val s = gate.snapshot ?: return
-    val me = s.profiles.firstOrNull { it.id == s.active } ?: return
+    val me = gate.snapshot?.let { s -> s.profiles.firstOrNull { it.id == s.active } }
+    if (me == null) {
+        // No profile known for a moment: the slot still holds the bar's entry while Settings shows, so Up and Back
+        // find a target.
+        Box(modifier.padding(start = 8.dp).size(PILL_TARGET).focusable())
+        return
+    }
     var focused by remember { mutableStateOf(false) }
     var open by remember { mutableStateOf(false) }
     Box(

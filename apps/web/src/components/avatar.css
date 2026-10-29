@@ -32,7 +32,9 @@
 [data-form="desktop"] .nav.pavatar.on .avatar { box-shadow: 0 0 0 calc(2 * var(--px)) var(--bg), 0 0 0 calc(4 * var(--px)) var(--text); }
 /* Desktop: a 48 px target around the small avatar, without moving the header. */
 [data-form="desktop"] .pmenu .nav.pavatar { padding: calc(10 * var(--px)); margin: calc(-10 * var(--px)); }
-[data-form="desktop"] .pmenu-list { top: calc(100% + 24px); min-width: calc(320 * var(--px)); padding: calc(6 * var(--px)); border-radius: calc(12 * var(--px)); }
+[data-form="desktop"] .pmenu-list { top: calc(100% + 14 * var(--px)); gap: calc(2 * var(--px)); min-width: calc(320 * var(--px)); max-width: calc(480 * var(--px));
+  padding: calc(6 * var(--px)); border-radius: calc(12 * var(--px)); }
+[data-form="desktop"] .pmenu-line { height: calc(1 * var(--px)); margin: calc(6 * var(--px)) calc(12 * var(--px)); }
 [data-form="desktop"] .pmenu-row { min-height: calc(48 * var(--px)); gap: calc(8 * var(--px)); padding: calc(10 * var(--px)) calc(14 * var(--px)) calc(10 * var(--px)) calc(40 * var(--px));
   border-radius: calc(8 * var(--px)); font-size: calc(16 * var(--px)); }
 [data-form="desktop"] .pmenu-row span { font-size: calc(13 * var(--px)); }
@@ -44,6 +46,8 @@
   font: 600 11px / 13px var(--font-text); color: #fff; }
 .ptab.on { color: var(--key); background: rgba(10, 10, 10, .92); }
 .ptab .avatar-s { width: 28px; height: 28px; border-radius: 50%; font-size: 13px; }
+/* The capsule sizes its icons (.tabs svg); a glyph inside the avatar keeps its share of the circle. */
+.tabs .ptab .avatar > svg { width: 52%; height: 52%; }
 .ptab.on .avatar-s { box-shadow: 0 0 0 1.5px var(--key); }
 [data-form="phone"] .pmenu-list { top: auto; bottom: calc(100% + 14px); min-width: 240px; max-width: calc(100vw - 42px); padding: 6px; border-radius: 14px; }
 [data-form="phone"] .pmenu-row { gap: 8px; padding: 12px 14px 12px 40px; border-radius: 10px; font-size: 16px; }

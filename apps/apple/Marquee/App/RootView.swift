@@ -281,7 +281,8 @@ struct MainShell: View {
                 ProfileMenu(onSettings: { select(.settings) }, onPin: pin) { me in
                     OrnamentProfile(lit: tab == .settings) { BarAvatar(profile: me, size: OrnamentLayout.itemHeight - 8) }
                 }
-                    .help("Profiles and Settings")
+                .help("Profiles and Settings")
+                .accessibilityAddTraits(tab == .settings ? .isSelected : [])
             }
             // Content under the traffic lights and the top buttons gets a soft blurred edge once it scrolls there.
             .overlay(alignment: .top) { ScrollTopEdge().opacity(ornamentStrong && !immersion.active ? 1 : 0).animation(Theme.Motion.panel, value: ornamentStrong) }
@@ -675,9 +676,10 @@ private struct TabBar: View {
                 if on { Capsule().fill(Color(white: 0.04).opacity(0.92)) }
             }
             .contentShape(Rectangle())
-            .accessibilityAddTraits(on ? .isSelected : [])
-            .accessibilityShowsLargeContentViewer { Text("Profile: \(me.name)") }
         }
+        // On the menu's own button, as the places carry them on theirs.
+        .accessibilityAddTraits(on ? .isSelected : [])
+        .accessibilityShowsLargeContentViewer { Text("Profile") }
     }
 }
 #endif
@@ -739,11 +741,11 @@ private struct TopNav: View {
             Capsule().fill(Theme.Palette.lineStrong).frame(width: 1.5, height: Self.mark).padding(.horizontal, 8)
             ForEach(AppTab.bar.filter(\.isTool), id: \.self) { link($0) }
             // Settings has no link: the profile stands for it, lit while it shows.
-            ProfileMenu(onSettings: { selection == .settings ? enter() : select(.settings) }, onPin: pin) {
+            // Settings, chosen while it shows, leaves focus on the avatar: the dialog hands focus back to it as it closes.
+            ProfileMenu(onSettings: { select(.settings) }, onPin: pin, focus: avatar) {
                 BarAvatar(profile: $0, size: Self.mark + 8)
             }
             .buttonStyle(NavLinkStyle(on: selection == .settings))
-            .focused(avatar)
             .padding(.leading, 6)
         }
         .padding(Self.inset)

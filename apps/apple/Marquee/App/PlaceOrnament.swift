@@ -49,17 +49,24 @@ extension PlaceOrnament where Profile == EmptyView {
     }
 }
 
-/// The ornament's last item: the profile's avatar at a place's height, on the white fill while Settings shows.
+/// The ornament's last item: the profile's avatar at a place's height, on the white fill while Settings shows, a faint
+/// fill under the pointer and the key ring for keyboard focus, as the places have.
 struct OrnamentProfile<Avatar: View>: View {
     let lit: Bool
     @ViewBuilder let avatar: Avatar
+    @KeyboardFocused private var focused
+    @State private var hovered = false
 
     var body: some View {
         avatar
             .padding(.horizontal, 8)
             .frame(height: OrnamentLayout.itemHeight)
-            .background { if lit { Capsule().fill(Theme.Palette.primary) } }
+            .background {
+                if lit { Capsule().fill(Theme.Palette.primary) } else if hovered { Capsule().fill(.white.opacity(0.12)) }
+            }
             .contentShape(Capsule())
+            .modifier(FocusRing(shape: Capsule(), active: focused))
+            .onHover { hovered = $0 }
     }
 }
 

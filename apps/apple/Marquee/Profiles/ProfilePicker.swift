@@ -274,16 +274,23 @@ struct ProfileMenu<Face: View>: View {
     /// Sign in another device, between the profiles and Settings: phones and tablets in an account, never a kids
     /// profile (pairing, the scanner a TV's code asks for: plans/accounts.md D6, 4.2).
     var signInAnother: (() -> Void)? = nil
+    #if os(tvOS)
+    /// The bar's focus on the avatar, set on the button itself (Menu on the avatar goes Home; Up enters on it for Settings).
+    var focus: FocusState<Bool>.Binding? = nil
+    #endif
     @ViewBuilder let face: (ProfileInfo) -> Face
     @Environment(ProfileSession.self) private var profiles
     #if os(tvOS)
     @State private var open = false
+    /// Stands in when the bar passes no focus binding.
+    @FocusState private var unfocused: Bool
     #endif
 
     var body: some View {
         if let snapshot = profiles.snapshot, let me = snapshot.current {
             #if os(tvOS)
             Button { open = true } label: { face(me) }
+                .focused(focus ?? $unfocused)
                 .accessibilityLabel("Profile: \(me.name)")
                 .confirmationDialog("Profiles", isPresented: $open, titleVisibility: .visible) {
                     ForEach(snapshot.profiles) { profile in
@@ -298,7 +305,7 @@ struct ProfileMenu<Face: View>: View {
                     if let profile = snapshot.profiles.first(where: { $0.id == id }) { choose(profile, snapshot) }
                 }) {
                     ForEach(snapshot.profiles) { profile in
-                        row(profile, snapshot).tag(profile.id)
+                        row(profile, snapshot).tag(profile.id).disabled(profile.syncing)
                     }
                 }
                 .pickerStyle(.inline)
@@ -318,7 +325,8 @@ struct ProfileMenu<Face: View>: View {
 
     private func title(_ profile: ProfileInfo, _ snapshot: ProfilesSnapshot) -> String {
         if profile.id == snapshot.active { return "\(profile.name), current" }
-        return profile.syncing ? "\(profile.name), syncing" : profile.name
+        if profile.syncing { return "\(profile.name), syncing" }
+        return profile.hasPin ? "\(profile.name), locked" : profile.name
     }
 
     #if !os(tvOS)

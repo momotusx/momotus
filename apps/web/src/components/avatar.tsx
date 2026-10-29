@@ -90,6 +90,12 @@ export function ProfileMenu(props: { lit: boolean; tab?: boolean; onSettings: ()
     document.addEventListener("pointerdown", outside, true);
     onCleanup(() => document.removeEventListener("pointerdown", outside, true));
   });
+  // Tab out of the menu closes it. Only a focus that went to a real element outside: a click does not focus a button
+  // in Safari (the blur then names no element), and a press outside is the pointer listener's.
+  const tabbedOut = (e: FocusEvent) => {
+    const to = e.relatedTarget as Node | null;
+    if (open() && to && !wrap.contains(to)) close(false);
+  };
   // The list keeps the arrows, as a pull-down does: Up and Down stop at its ends, the page under it does not move.
   const keys = (e: KeyboardEvent) => {
     const rows = [...(list?.querySelectorAll<HTMLElement>("[role^=menuitem]") ?? [])];
@@ -111,7 +117,7 @@ export function ProfileMenu(props: { lit: boolean; tab?: boolean; onSettings: ()
   return (
     <Show when={me()}>
       {(p) => (
-        <div class="pmenu" ref={wrap} on:focusout={(e) => open() && !wrap.contains(e.relatedTarget as Node | null) && close(false)}>
+        <div class="pmenu" ref={wrap} on:focusout={tabbedOut}>
           <button
             class={props.tab ? "ptab" : "nav pavatar"}
             classList={{ on: props.lit }}

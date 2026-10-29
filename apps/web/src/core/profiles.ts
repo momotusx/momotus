@@ -60,15 +60,17 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 // A profile the bar's menu chose (components/avatar.tsx): the picker it opens picks it, once. Not in the history
 // entry, so a reload or Forward onto the picker never picks again.
-let picking: string | null = null;
+// It holds only for the picker the menu opens there and then: one that opens later (a lock came between) picks nothing.
+let picking: { id: string; at: number } | null = null;
+const PICK_FRESH_MS = 2000;
 export const pickOnOpen = (id: string) => {
-  picking = id;
+  picking = { id, at: Date.now() };
 };
 /** The picker, as it opens: the profile to pick, once. */
 export function takePick(): string | null {
-  const id = picking;
+  const p = picking;
   picking = null;
-  return id;
+  return p && Date.now() - p.at < PICK_FRESH_MS ? p.id : null;
 }
 
 let switching = false;
