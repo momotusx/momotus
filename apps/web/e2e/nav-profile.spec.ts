@@ -173,9 +173,12 @@ test("TV: the profile ends the bar, takes Up from Settings, and its menu keeps t
   await page.keyboard.press("Enter");
   await expect(page).toHaveURL(/\/settings/);
   await expect(button(page)).toHaveClass(/\bon\b/);
-  // Focus stays on the profile, as it stays on a tab whose place Select showed.
-  await page.waitForTimeout(600);
-  expect(await focused(page)).toBe("nav:/profiles");
+  // Focus stays on the profile, as it stays on a tab whose place Select showed: checked across 1.5 s, past the
+  // page's own first focus.
+  for (let t = 0; t < 15; t++) {
+    expect(await focused(page)).toBe("nav:/profiles");
+    await page.waitForTimeout(100);
+  }
   // Into the page and Up again: the bar takes it on the profile; Back there goes to the bar, then Home.
   await page.keyboard.press("ArrowDown");
   await expect.poll(() => focused(page)).toMatch(/^settings:/);

@@ -3,16 +3,26 @@ package app.marquee.android
 import android.app.Application
 import androidx.activity.ComponentActivity
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isDialog
+import androidx.compose.ui.test.junit4.StateRestorationTester
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import app.marquee.core.client.CoreJson
@@ -57,7 +67,11 @@ class ProfileMenuTest {
         syncing: Boolean = false,
     ) = ProfileInfo(id, name, "letter:ember", 0, hasPin = pin, isOwner = id == "ana", syncing = syncing, kids = false)
 
-    private fun open(content: @Composable () -> Unit) {
+    private fun open(content: @Composable () -> Unit) =
+        openWith { compose.setContent { MarqueeTheme(Form.Tv) { content() } } }
+
+    /** The core answers with four profiles; [setContent] composes the screen under test. */
+    private fun openWith(setContent: () -> Unit) {
         val all =
             listOf(
                 profile("ana", "Ana"),
@@ -76,7 +90,7 @@ class ProfileMenuTest {
         }
         session.opened(running = true)
         gate.start()
-        compose.setContent { MarqueeTheme(Form.Tv) { content() } }
+        setContent()
         val deadline = System.currentTimeMillis() + 60_000
         while (gate.snapshot == null) {
             check(System.currentTimeMillis() < deadline) { "no profiles snapshot" }
@@ -175,13 +189,54 @@ class ProfileMenuTest {
     @Test
     fun `the picker the menu opens shows that profile's keypad, and Cancel leaves the picker`() {
         var left = 0
+        var round by mutableIntStateOf(0)
         gate.asked = "bo"
-        open { PickerScreen(gate, session, PickerMode.Switch, onBack = { left++ }) }
+        open { key(round) { PickerScreen(gate, session, PickerMode.Switch, onBack = { left++ }) } }
         compose.onNodeWithText("Enter the PIN for Bo").assertExists()
-        // Asked once: a picker opened later starts on the tiles.
         assertEquals(null, gate.asked)
         compose.onNodeWithText("Cancel").performClick()
         compose.waitForIdle()
         assertEquals(1, left)
+        // Asked once: a picker opened later starts on the tiles.
+        round++
+        compose.waitForIdle()
+        compose.onNodeWithText("Who's watching?").assertExists()
+        compose.onNodeWithText("Enter the PIN for Bo").assertDoesNotExist()
+    }
+
+    @Test
+    fun `the keypad the menu asked for survives a restored state, asked once`() {
+        val restoration = StateRestorationTester(compose)
+        gate.asked = "bo"
+        openWith { restoration.setContent { MarqueeTheme(Form.Tv) { PickerScreen(gate, session, PickerMode.Switch) } } }
+        compose.onNodeWithText("Enter the PIN for Bo").assertExists()
+        restoration.emulateSavedInstanceStateRestore()
+        compose.waitForIdle()
+        compose.onNodeWithText("Enter the PIN for Bo").assertExists()
+        compose.onNodeWithText("Cancel").assertExists()
+        assertEquals(null, gate.asked)
+    }
+
+    @Test
+    fun `the lit avatar says Settings shows, and the unlit one does not`() {
+        var lit by mutableStateOf(false)
+        open { PillProfile(gate, lit, Modifier, {}, {}) }
+        val avatar = compose.onNodeWithContentDescription("Profile: Ana")
+        avatar.assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.StateDescription))
+        lit = true
+        compose.waitForIdle()
+        avatar.assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, SETTINGS_SHOWN))
+    }
+
+    @Test
+    fun `with no profile known, the bar's slot takes focus only while Settings shows`() {
+        var lit by mutableStateOf(true)
+        // No core answer: the gate has no snapshot.
+        compose.setContent { MarqueeTheme(Form.Tv) { PillProfile(gate, lit, Modifier.testTag("slot"), {}, {}) } }
+        val focusable = SemanticsMatcher.keyIsDefined(SemanticsProperties.Focused)
+        compose.onNodeWithTag("slot").assert(focusable)
+        lit = false
+        compose.waitForIdle()
+        compose.onNodeWithTag("slot").assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.Focused))
     }
 }

@@ -420,9 +420,9 @@ fun PillProfile(
 ) {
     val me = gate.snapshot?.let { s -> s.profiles.firstOrNull { it.id == s.active } }
     if (me == null) {
-        // No profile known for a moment: the slot still holds the bar's entry while Settings shows, so Up and Back
-        // find a target.
-        Box(modifier.padding(start = 8.dp).size(PILL_TARGET).focusable())
+        // No profile known for a moment: while Settings shows the slot still holds the bar's entry, so Up and Back find
+        // a target; otherwise it takes no focus.
+        Box(modifier.padding(start = 8.dp).size(PILL_TARGET).then(if (lit) Modifier.focusable() else Modifier))
         return
     }
     var focused by remember { mutableStateOf(false) }
@@ -436,11 +436,17 @@ fun PillProfile(
             .clip(CircleShape)
             .background(if (lit && !focused) PILL_LIT else Color.Transparent)
             .padding(4.dp)
-            .semantics(mergeDescendants = true) { contentDescription = "Profile: ${me.name}" }
-            .focusClickable({ open = true }, Role.Button),
+            .semantics(mergeDescendants = true) {
+                contentDescription = "Profile: ${me.name}"
+                // The lit pill said aloud: Settings, which has no tab, is the place shown.
+                if (lit) stateDescription = SETTINGS_SHOWN
+            }.focusClickable({ open = true }, Role.Button),
     ) { ProfileAvatar(me, PILL_TARGET - 8.dp, lit = focused && Marquee.form == Form.Tv) }
     if (open) ProfileMenu(gate, { open = false }, onSettings, onPin)
 }
+
+/** What the lit avatar says beside its name. */
+internal const val SETTINGS_SHOWN = "Settings shown"
 
 /** The TV avatar's target, over Material's 48; the lit pill is the tabs' white at 20 percent. */
 private val PILL_TARGET = 52.dp

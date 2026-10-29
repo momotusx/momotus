@@ -24,7 +24,7 @@ private func source(_ path: String) throws -> String {
     #expect(root.contains(".defaultFocus(focused, selection.barFocus, priority: .userInitiated)"))
     #expect(root.contains(".defaultFocus(avatar, selection.barFocus == nil, priority: .userInitiated)"))
     #expect(root.contains("if let link = now.barFocus { focused.wrappedValue = link } else { avatar.wrappedValue = true }"))
-    #expect(root.contains("ProfileMenu(onSettings: { select(.settings) }, onPin: pin, focus: avatar)"), "the avatar's focus left the button")
+    #expect(root.contains("ProfileMenu(onSettings: settings, onPin: pin, focus: avatar)"), "the avatar's focus left the button")
 }
 
 @Test func signInAnotherDeviceIsInTheMenuOnPhonesInAnAccountOnly() throws {

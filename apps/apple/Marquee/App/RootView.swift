@@ -278,7 +278,8 @@ struct MainShell: View {
             .background(Theme.Palette.bg)
             // The owner's variant 4: the places in a glass ornament at the window's foot; pages end above it.
             .placeOrnament(tab, strong: ornamentStrong, shown: !immersion.active, select: { select($0) }) {
-                ProfileMenu(onSettings: { select(.settings) }, onPin: pin) { me in
+                // Settings' first page, from any of its pages too (a link opens a place at its root).
+                ProfileMenu(onSettings: { select(.settings, link: true) }, onPin: pin) { me in
                     OrnamentProfile(lit: tab == .settings) { BarAvatar(profile: me, size: OrnamentLayout.itemHeight - 8) }
                 }
                 .help("Profiles and Settings")
@@ -306,7 +307,7 @@ struct MainShell: View {
             // Top-level places only, as on Android: a pushed page has no pill to wander into.
             if !immersion.active && !pageOver {
                 let away = TVTopBar.hidden(atHome: tab == .home, scrolledDown: homeScrolled)
-                TopNav(selection: tab, select: { select($0) }, enter: { resetFocus(in: placesScope) }, pin: pin, focused: $navFocus, avatar: $avatarFocus).padding(.bottom, Theme.Space.m)
+                TopNav(selection: tab, select: { select($0) }, enter: { resetFocus(in: placesScope) }, settings: { select(.settings, link: true) }, pin: pin, focused: $navFocus, avatar: $avatarFocus).padding(.bottom, Theme.Space.m)
                     .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { navHeight = $0 }
                     // Kept in the layout, so the page under it never jumps.
                     .offset(y: away ? -navHeight : 0)
@@ -724,6 +725,8 @@ private struct TopNav: View {
     let select: (AppTab) -> Void
     /// Select on the shown place's link: focus goes into the place, as the tvOS tab bar does.
     let enter: () -> Void
+    /// The profile menu's Settings: Settings' first page.
+    let settings: () -> Void
     /// The profile's menu chose a profile with a PIN.
     let pin: (ProfileInfo) -> Void
     /// Which link has focus: Up from a page enters on the current place, not the nearest link. A link that
@@ -742,7 +745,7 @@ private struct TopNav: View {
             ForEach(AppTab.bar.filter(\.isTool), id: \.self) { link($0) }
             // Settings has no link: the profile stands for it, lit while it shows.
             // Settings, chosen while it shows, leaves focus on the avatar: the dialog hands focus back to it as it closes.
-            ProfileMenu(onSettings: { select(.settings) }, onPin: pin, focus: avatar) {
+            ProfileMenu(onSettings: settings, onPin: pin, focus: avatar) {
                 BarAvatar(profile: $0, size: Self.mark + 8)
             }
             .buttonStyle(NavLinkStyle(on: selection == .settings))
