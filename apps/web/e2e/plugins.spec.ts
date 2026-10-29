@@ -9,7 +9,7 @@ import { expect, type Page, test } from "@playwright/test";
 import type { ChildProcess } from "node:child_process";
 import type { DefaultAddons } from "../src/core/generated/DefaultAddons";
 import { Client, cleanup, PLUGINS_PORT, PORTS, SHOTS, startBridge } from "./core";
-import { PLUGIN_HOST } from "./replay";
+import { LISTED_REPO, PLUGIN_HOST } from "./replay";
 import { BBB_ID } from "./source";
 
 const REPO = `https://${PLUGIN_HOST}/repo/manifest.json`;
@@ -84,5 +84,34 @@ test("a repository added from the sheet runs in Versions under From plugins", as
   await expect(section.locator(".vrow")).toHaveCount(1);
   await expect(section.locator(".vrow")).toContainText(`Test film, plays from ${PLUGIN_HOST}`);
   await p.screenshot({ path: `${SHOTS}/plugins-versions-desktop.png` });
+  await p.context().close();
+});
+
+test("Find addons lists the directory's repositories, searched on the device, added from the sheet", async ({ browser }) => {
+  const p = await page(browser);
+  await p.goto("/find-addons");
+  const section = p.locator(".fa-plugins");
+  await expect(section.getByRole("heading", { name: "Nuvio plugins" })).toBeVisible();
+  // Only the manifest on raw.githubusercontent.com: the other link on the page is refused.
+  const card = section.locator(".fa-pcard");
+  await expect(card).toHaveCount(1);
+  await expect(card).toContainText("Momotus test plugins");
+  await expect(card).toContainText("From nuvioplugins.com");
+  await expect(card).toContainText("1 provider for films and series. Languages: en.");
+  await section.locator('[data-f="fa-plugins:search"]').fill("nothing like it");
+  await expect(section.getByText("No repository matches.")).toBeVisible();
+  await section.locator('[data-f="fa-plugins:search"]').fill("test FILM");
+  await expect(card).toHaveCount(1);
+  await card.getByRole("button", { name: "Add Momotus test plugins" }).click();
+  const sheet = p.getByRole("dialog");
+  await expect(sheet.getByRole("heading")).toHaveText("Add Momotus test plugins?");
+  await expect(sheet).toContainText("From raw.githubusercontent.com.");
+  await expect(sheet).toHaveAttribute("data-armed", "");
+  await p.screenshot({ path: `${SHOTS}/plugins-directory-sheet-desktop.png` });
+  await sheet.locator('[data-f="sheet:install"]').click();
+  await expect(card).toContainText("Installed");
+  const repos = (await client.req<{ repos: { url: string }[] }>("plugins")).repos.map((r) => r.url);
+  expect(repos).toContain(LISTED_REPO);
+  await p.screenshot({ path: `${SHOTS}/plugins-directory-desktop.png` });
   await p.context().close();
 });

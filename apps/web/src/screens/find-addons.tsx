@@ -22,6 +22,7 @@ import { InstallField } from "./addons";
 import "./browse.css";
 import "./settings.css";
 import "./find-addons.css";
+import { PluginDirectorySection } from "../components/plugin-directory";
 
 // A card's state belongs to the profile that pressed it.
 onProfileReset(forgetAllCards);
@@ -373,6 +374,7 @@ export default function FindAddons() {
       <Show when={opens() + 1} keyed>
         {(n) => <Lists fresh={n > 1} picks={picks()} onPicks={update} onRetry={retry} />}
       </Show>
+      <PluginDirectorySection />
     </main>
   );
 }

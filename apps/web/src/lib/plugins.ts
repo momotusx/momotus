@@ -2,6 +2,7 @@
  * apps/shared/plugin-words.json, which every app reads. */
 
 import words from "../../../shared/plugin-words.json";
+import type { ListedRepo } from "../core/generated/ListedRepo";
 import type { PluginRepoInfo } from "../core/generated/PluginRepoInfo";
 import type { VersionRow } from "../core/generated/VersionRow";
 
@@ -30,4 +31,26 @@ export function pluginsSummary(repos: PluginRepoInfo[]): string {
   const on = repos.filter((r) => r.enabled).reduce((n, r) => n + r.providers.filter((p) => p.enabled).length, 0);
   const n = repos.length;
   return `${n} ${n === 1 ? "repository" : "repositories"}, ${on} ${on === 1 ? "provider" : "providers"} on`;
+}
+
+const kindWords: Record<string, string> = { movie: "films", series: "series" };
+
+/** "8 providers for films and series. Languages: tr, en." for a listed repository's card. */
+export function directoryLine(r: ListedRepo): string {
+  const n = r.providers.length;
+  const kinds = r.types.map((t) => kindWords[t] ?? t);
+  const head = `${n} ${n === 1 ? "provider" : "providers"}${kinds.length ? ` ${fill(words.forKinds, { kinds: kinds.join(" and ") })}` : ""}.`;
+  return r.languages.length ? `${head} ${fill(words.languages, { languages: r.languages.join(", ") })}` : head;
+}
+
+/** Lower case, accents dropped: "Türkçe" finds "turkce". */
+const fold = (s: string) => s.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
+
+/** Whether every word of `query` is in the repository's name, its providers' names or its languages. */
+export function matchesRepo(r: ListedRepo, query: string): boolean {
+  const text = fold([r.name, ...r.providers, ...r.languages].join(" "));
+  return fold(query)
+    .split(/\s+/)
+    .filter(Boolean)
+    .every((q) => text.includes(q));
 }

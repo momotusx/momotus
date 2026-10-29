@@ -26,5 +26,12 @@
   "loading": "Reading repositories",
   "kids": "Kids profiles never run plugins.",
   "notAvailable": "Plugins are not available in this version.",
-  "summaryNone": "Add Nuvio repositories for direct links."
+  "summaryNone": "Add Nuvio repositories for direct links.",
+  "directoryTitle": "Nuvio plugins",
+  "directoryFrom": "From {source}",
+  "directorySearch": "Search plugins",
+  "installed": "Installed",
+  "directoryNoMatch": "No repository matches.",
+  "forKinds": "for {kinds}",
+  "languages": "Languages: {languages}."
 }

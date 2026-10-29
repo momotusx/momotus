@@ -69,9 +69,25 @@ export function standIn(url: string, sent: Buffer | undefined): Kept | null {
  * (crates/mq-plugins/tests/fixtures/plugin-repo) on a made-up public name, answered here and never
  * recorded. Its one provider asks `/lookup/...` and offers the suite's test film. */
 export const PLUGIN_HOST = "plugins.e2e.test";
+const DIRECTORY_HOST = "nuvioplugins.com";
+/** The fixture repository as the directory page lists it. */
+export const LISTED_REPO = "https://raw.githubusercontent.com/momotus-e2e/fixture-plugins/main/manifest.json";
 const pluginRepo = fileURLToPath(new URL("../../../crates/mq-plugins/tests/fixtures/plugin-repo", import.meta.url));
 export function pluginFixture(url: string): Kept | null {
   const asked = new URL(url);
+  // Find addons' directory (R8) is never asked live: its page here lists our fixture repository,
+  // on the one host the core accepts a listed manifest from.
+  if (asked.hostname === DIRECTORY_HOST)
+    return {
+      url,
+      status: 200,
+      headers: { "content-type": "text/html" },
+      body: Buffer.from(`<html><body><a href="${LISTED_REPO}">Momotus test plugins</a> <a href="https://${PLUGIN_HOST}/repo/manifest.json">elsewhere</a></body></html>`).toString("base64"),
+    };
+  if (asked.hostname === "raw.githubusercontent.com" && asked.pathname.startsWith("/momotus-e2e/fixture-plugins/main/")) {
+    const file = asked.pathname.slice("/momotus-e2e/fixture-plugins/main".length);
+    return pluginFixture(`https://${PLUGIN_HOST}/repo${file}`);
+  }
   if (asked.hostname !== PLUGIN_HOST) return null;
   const answer = (type: string, body: Buffer | string): Kept => ({ url, status: 200, headers: { "content-type": type }, body: Buffer.from(body).toString("base64") });
   if (asked.pathname === "/repo/manifest.json") return answer("application/json", readFileSync(join(pluginRepo, "manifest.json")));
