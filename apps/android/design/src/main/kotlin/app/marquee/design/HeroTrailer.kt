@@ -176,14 +176,16 @@ object TitleTrailers {
     val spent = mutableSetOf<String>()
 
     /**
-     * The memory a TV form needs for the header trailer (plans/trailer-inline.md 4a, bench/trailer-inline): 20 times the
-     * playing header's cost C, measured on the Pixel in TV form on 2026-10-29 (app plus renderer PSS, playing minus
-     * idle, median of 3 runs: 292,277 kB, about 299 MB), rounded up to the next 0.25 GB. A 6 GB device reads about
-     * 5.5e9 and stays under it; below it a TV shows the art and plays Trailer full screen only.
+     * The size a TV form needs for the header trailer (plans/trailer-inline.md 4a): the 4 GB class (Google TV Streamer,
+     * newer Shields), so 1.5 to 3 GB sticks show the art and play Trailer full screen only. A judgment, not a margin:
+     * the safety is the runtime guard beside it ([ROOM], memory pressure, a trim, a lost renderer).
      */
-    const val TV_FLOOR = 6_000_000_000L
+    const val TV_FLOOR = 3_500_000_000L
 
-    /** The memory a preview needs free when it starts: twice the measured cost C, rounded up to the next 50 MB. */
+    /**
+     * The memory a preview needs free when it starts: twice its cost C as measured on the Pixel in TV form on 2026-10-29
+     * (app plus renderer PSS, playing minus idle, median of 3 runs: 292,277 kB, about 299 MB), rounded up to 50 MB.
+     */
     const val ROOM = 600_000_000L
 
     const val DELAY_MS = 300L
