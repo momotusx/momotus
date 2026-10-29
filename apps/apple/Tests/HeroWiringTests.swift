@@ -31,10 +31,11 @@ private func source(_ path: String) throws -> String {
 
 @Test func theShellAndHomeSayWhatCoversTheHero() throws {
     let root = try source("App/RootView.swift")
-    #expect(root.contains(".environment(\\.heroCovered, immersion.active || !homePath.isEmpty)"))
+    // The profile picker the bar's menu opens over the places covers it too (plans/nav-profile.md).
+    #expect(root.contains(".environment(\\.heroCovered, immersion.active || !homePath.isEmpty || showProfiles)"))
     #expect(root.contains(".environment(\\.tabShown, item == tab)"))
     let home = try source("Home/HomeScreen.swift")
-    #expect(home.contains(".environment(\\.heroCovered, covered || showProfiles || showAccount || showHeroVersions || playing != nil || reviewing || onboarding)"))
+    #expect(home.contains(".environment(\\.heroCovered, covered || showAccount || showHeroVersions || playing != nil || reviewing || onboarding)"))
 }
 
 @Test func theSettingsSwitchWritesTheKeyTheTrailerReads() throws {
