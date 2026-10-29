@@ -2072,7 +2072,14 @@ async fn a_screen_signed_in_by_qr_gets_the_whole_account() {
     let mine = all(&phone);
 
     // The TV shows its QR; the phone scans it and approves.
-    let tv = Core::temporary("p").unwrap();
+    // A device of its own (temporary cores all share device 1): per-device
+    // registers such as `sync.member.<device>` stay apart, as on real devices.
+    let tv = Core::open(mq_runtime::CoreConfig {
+        data_dir: dir.join("tv"),
+        profile_id: "p".into(),
+        device_id: 2,
+    })
+    .unwrap();
     let pairing = PairingView::open(&tv, &server, "Living room TV", Some("tv"));
     let qr = tokio::time::timeout(Duration::from_secs(10), async {
         loop {
@@ -2134,12 +2141,13 @@ async fn a_screen_signed_in_by_qr_gets_the_whole_account() {
         every.iter().all(|c| colls.contains(c)),
         "the phone holds every collection: {colls:?}"
     );
-    // The same version of each register (a manifest refresh keeps its hlc).
+    // Each register as the same version (a manifest refresh keeps its hlc),
+    // or with the same value (what both made untouched, at their own zero).
     for r in &mine {
         assert!(
-            theirs
-                .iter()
-                .any(|t| t.coll == r.coll && t.key == r.key && t.hlc == r.hlc),
+            theirs.iter().any(|t| t.coll == r.coll
+                && t.key == r.key
+                && (t.hlc == r.hlc || t.value == r.value)),
             "the TV lacks {r:?}"
         );
     }
