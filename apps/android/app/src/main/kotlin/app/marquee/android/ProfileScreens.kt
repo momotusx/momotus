@@ -104,7 +104,6 @@ import app.marquee.design.focusSoon
 import app.marquee.design.marqueeFocus
 import app.marquee.ui.phone.pageTop
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
@@ -468,9 +467,6 @@ fun ProfileMenu(
     onSignInAnother: (() -> Unit)? = null,
 ) {
     val s = gate.snapshot ?: return
-    // The menu leaves with its first choice: the switch starts at once (undispatched), and its work runs on the
-    // session's scope ([ProfileGate.switchTo]), so this scope ending only stops the wait.
-    val scope = rememberCoroutineScope()
     val rows =
         s.profiles.map { p ->
             val current = p.id == s.active
@@ -497,8 +493,9 @@ fun ProfileMenu(
                         onPin(p.id)
                     }
 
+                    // The menu leaves with this choice: the switch runs on the session's scope, not the menu's.
                     else -> {
-                        scope.launch(start = CoroutineStart.UNDISPATCHED) { gate.switchTo(p.id, null) }
+                        gate.startSwitch(p.id)
                     }
                 }
             }

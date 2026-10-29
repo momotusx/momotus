@@ -163,17 +163,23 @@ class ProfileMenuTest {
     }
 
     @Test
-    fun `a profile without a PIN switches, the gate shutting as the picker's tile does`() {
-        showButton()
+    fun `a profile without a PIN switches, though the menu and the bar leave at once`() {
+        var shown by mutableStateOf(true)
+        open { if (shown) PillProfile(gate, false, Modifier, {}, {}) }
         compose.onNodeWithContentDescription("Profile: Ana").performClick()
-        // The row's press, and the gate read in the same main-thread turn: the switch has begun before anything else runs
-        // (a dispatched launch would wait for a later turn, by which the menu, and its scope, may have left).
+        // The row's press, and the whole bar gone in the same main-thread turn, as the gate shutting takes the old
+        // profile's screens away: the switch runs on the session's scope, so it goes on.
         val press = row("Kid").fetchSemanticsNode().config[SemanticsActions.OnClick].action!!
         compose.runOnUiThread {
             press()
-            assertEquals("kid", gate.switching)
+            shown = false
         }
+        compose.waitForIdle()
         compose.onNode(isDialog()).assertDoesNotExist()
+        compose.onNodeWithContentDescription("Profile: Ana").assertDoesNotExist()
+        // Under way: the gate is shut on Kid and waits for the old screens' reset, as the picker's tile leaves it.
+        assertEquals("kid", gate.switching)
+        assertEquals(true, gate.inFlight)
     }
 
     @Test
