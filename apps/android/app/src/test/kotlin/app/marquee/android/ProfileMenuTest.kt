@@ -11,6 +11,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
@@ -161,10 +162,14 @@ class ProfileMenuTest {
     fun `a profile without a PIN switches, the gate shutting as the picker's tile does`() {
         showButton()
         compose.onNodeWithContentDescription("Profile: Ana").performClick()
-        row("Kid").performClick()
+        // The row's press, and the gate read in the same main-thread turn: the switch has begun before anything else runs
+        // (a dispatched launch would wait for a later turn, by which the menu, and its scope, may have left).
+        val press = row("Kid").fetchSemanticsNode().config[SemanticsActions.OnClick].action!!
+        compose.runOnUiThread {
+            press()
+            assertEquals("kid", gate.switching)
+        }
         compose.onNode(isDialog()).assertDoesNotExist()
-        // The switch began though the menu left at once.
-        assertEquals("kid", gate.switching)
     }
 
     @Test
