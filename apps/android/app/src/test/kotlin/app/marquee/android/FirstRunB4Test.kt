@@ -26,6 +26,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.unit.dp
 import app.marquee.core.StreamChoiceCopy
 import app.marquee.core.model.FirstRunStill
 import app.marquee.design.Form
@@ -48,7 +49,6 @@ import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import java.io.File
-import androidx.compose.ui.unit.dp
 import kotlin.math.abs
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -290,7 +290,10 @@ class FirstRunB4Test {
     fun `phone, a step change is announced by its question, the step's pane title`() {
         question(Form.Phone, null)
         compose.waitForIdle()
-        compose.onNode(SemanticsMatcher.expectValue(SemanticsProperties.PaneTitle, StreamChoiceCopy.QUESTION_TITLE)).assertExists()
+        compose
+            .onNode(
+                SemanticsMatcher.expectValue(SemanticsProperties.PaneTitle, StreamChoiceCopy.QUESTION_TITLE),
+            ).assertExists()
     }
 
     @Test
