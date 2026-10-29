@@ -23,7 +23,7 @@ import { Dynamic } from "solid-js/web";
 import type { ProfileInfo } from "../core/generated/ProfileInfo";
 import { pickOnOpen, profiles } from "../core/profiles";
 import { pushBack } from "../focus/back";
-import { focusEl } from "../focus/dom";
+import { focusByViewer, focusEl } from "../focus/dom";
 import { type Glyph, initial, parseAvatar } from "../lib/avatar";
 import "./avatar.css";
 
@@ -71,7 +71,9 @@ export function ProfileMenu(props: { lit: boolean; tab?: boolean; onSettings: ()
   const me = () => profiles()?.profiles.find((p) => p.id === profiles()?.active);
   const close = (refocus = true) => {
     setOpen(false);
-    if (refocus) focusEl(button);
+    // The viewer closed it (a choice, Back): the focus they get back is theirs, so a place shown from the menu leaves it
+    // on the bar, as one shown from a tab does.
+    if (refocus) focusByViewer(button);
   };
   // Opened: focus on the current profile's row. Back closes it, ahead of the app's own Back (the rail's Home).
   createEffect(

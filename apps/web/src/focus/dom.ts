@@ -267,6 +267,16 @@ let viewerMove = false;
 let railByViewer = false;
 /** True while a viewer's move (an arrow, or Back to the bar) is placing the focus: a focus event now is theirs. */
 export const viewerMoving = () => viewerMove;
+/** Puts the focus where a viewer's own action sends it (a menu they closed hands it back to its button): on the bar,
+ * the place that shows next keeps it there, as after an arrow. */
+export function focusByViewer(el: HTMLElement) {
+  viewerMove = true;
+  try {
+    focusEl(el);
+  } finally {
+    viewerMove = false;
+  }
+}
 
 export function move(dir: Direction): boolean {
   viewerMove = true;
