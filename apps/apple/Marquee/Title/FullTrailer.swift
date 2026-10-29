@@ -95,6 +95,9 @@ struct FullTrailer: View {
             try? await Task.sleep(for: .milliseconds(300))
             if !Task.isCancelled { waiting = true }
         }
+        .onChange(of: waiting) { _, now in
+            if now, !failed { AccessibilityNotification.Announcement("Loading trailer").post() }
+        }
         .onChange(of: failed) { _, now in
             guard now else { return }
             focus = .close

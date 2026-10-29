@@ -319,6 +319,8 @@ final class TrailerPlayer: NSObject {
 extension TrailerPlayer: WKNavigationDelegate {
     /// The content process died (memory): whoever plays hears an error, the next play makes a fresh one.
     func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+        // Only the current one: a let-go web view that ends late never stops the next play.
+        guard webView === self.webView else { return }
         release(why: "lost")
     }
 

@@ -248,6 +248,8 @@ private struct TrailerKey: Equatable {
 struct TrailerMute: View {
     /// The player it speaks to: Home's, or a title page's header.
     var player: TrailerPlayer = .shared
+    /// The hero's 36 pt at its foot; a title header's switch takes the 44 pt touch size (it stands alone).
+    var size: CGFloat = HeroFoot.switchSize
     private var state: TrailerState { .shared }
 
     var body: some View {
@@ -257,7 +259,7 @@ struct TrailerMute: View {
         } label: {
             Glyph(state.sound ? "volume-2" : "volume-x", size: 18)
                 .foregroundStyle(.white)
-                .frame(width: HeroFoot.switchSize, height: HeroFoot.switchSize)
+                .frame(width: size, height: size)
                 .background(SecondaryFill(shape: Circle()))
         }
         .buttonStyle(FocusPlainStyle(shape: Circle(), scale: Theme.Focus.scaleCard))

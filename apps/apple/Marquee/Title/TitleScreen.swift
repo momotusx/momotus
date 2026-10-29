@@ -237,7 +237,12 @@ struct TitleScreen: View {
     }
 
     private func startHeaderTrailer() async {
-        if headerTrailer.loading { trailerPlayer.stop() }
+        if headerTrailer.loading {
+            trailerPlayer.stop()
+            // Scrolled away while it played: cut by the viewer, it does not come back this session (the app in the
+            // background is not a cut).
+            if !heroVisible, let id = details?.id { HeaderTrailers.spent.insert(id) }
+        }
         guard !fullTrailer, pageVisible, heroVisible, let details,
               let id = HeroTrailers.checkedId(details.trailers.first?.youtubeId),
               !HeaderTrailers.spent.contains(details.id) else { return }
@@ -315,7 +320,7 @@ struct TitleScreen: View {
             // The iPhone's header trailer sound, at the art's top trailing corner, where nothing else sits.
             .overlay(alignment: .topTrailing) {
                 if !metrics.wide, headerSoundShown {
-                    TrailerMute(player: trailerPlayer)
+                    TrailerMute(player: trailerPlayer, size: 44)
                         .padding(.trailing, 16)
                         .padding(.top, safeTop + 4)
                 }

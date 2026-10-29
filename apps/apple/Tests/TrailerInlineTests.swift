@@ -60,3 +60,8 @@ private func source(_ path: String) throws -> String {
     #expect(trailerSliderMove(42, dragging: true) == (held: 42, seek: nil))
     #expect(trailerSliderMove(42, dragging: false) == (held: nil, seek: 42))
 }
+
+@Test func theFullScreenTrailerNeverTouchesTheSessionsSound() throws {
+    // A guard beside the behaviour tests (the full screen keeps its own `loud`): no mutation is counted by it.
+    #expect(!(try source("Title/FullTrailer.swift")).contains("TrailerState.shared"))
+}
