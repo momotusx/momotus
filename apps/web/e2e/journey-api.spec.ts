@@ -1095,8 +1095,8 @@ test("on a metered connection the header plays nothing, and Trailer still plays"
 });
 
 test("a TV plays the header trailer only above its memory floor, with its Sound last in the row", async ({ browser }) => {
-  // 4 GB is under the floor; a browser that does not say (null here) counts as under it too.
-  for (const [gb, plays] of [[2, false], [4, false], [null, false], [8, true]] as const) {
+  // 2 GB is under the floor (the 4 GB class); a browser that does not say (null here) counts as under it too.
+  for (const [gb, plays] of [[2, false], [null, false], [4, true]] as const) {
     const { context, p } = await trailerRun(browser, { form: "tv", e2e: true, memory: gb });
     if (plays) {
       await expect.poll(() => ytLog(p)).toContain("new jrnyTrailr1 https://www.youtube-nocookie.com");

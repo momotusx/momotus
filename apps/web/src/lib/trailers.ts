@@ -100,9 +100,9 @@ export function walkNow(): boolean {
   }
 }
 
-/** A TV form's memory floor for a title header's trailer, in GB as `navigator.deviceMemory` reports it: the measured
- * floor (6.0e9 bytes, plans/trailer-inline.md 4a) rounded up to the browser's next step. */
-export const TV_HEADER_GB = 8;
+/** A TV form's size floor for a title header's trailer, in GB as `navigator.deviceMemory` reports it: the 4 GB class
+ * (plans/trailer-inline.md 4a; a judgment, the browser's own memory handling is the safety). */
+export const TV_HEADER_GB = 4;
 
 /** A TV browser plays a title header's trailer only where it says it has the floor: one that does not tell, as many TV
  * browsers do not, is taken as unable (the Trailer action still plays full screen). */
