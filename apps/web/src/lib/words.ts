@@ -168,8 +168,6 @@ export function addonsSummary(addons: { enabled: boolean; provides: string[] }[]
   return `${addons.length} installed. ${finds}`;
 }
 
-/** Settings, About: the built-in source's credit (plans/m13-turkcealtyazi.md 7). */
-export const turkceAltyaziCredit = "Turkish subtitles from TurkceAltyazi.org, fetched by this device when you play.";
 /** TMDB's required credit, beside its logo (themoviedb.org/about/logos-attribution). */
 export const tmdbCredit = "This product uses the TMDB API but is not endorsed or certified by TMDB.";
 

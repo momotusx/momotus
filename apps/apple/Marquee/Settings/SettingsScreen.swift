@@ -442,7 +442,6 @@ struct SettingsScreen: View {
                 Text(CoreBuild.aboutLine).modifier(Note())
             }
             // The licences ship in the app: LICENSE-lucide.txt and each font's OFL.txt.
-            Text("Turkish subtitles from TurkceAltyazi.org, fetched by this device when you play.").modifier(Note())
             // TMDB's terms: its logo and this line wherever its data shows.
             HStack(spacing: Theme.Space.xs) {
                 // Decorative: the line beside it names TMDB.

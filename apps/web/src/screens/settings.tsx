@@ -38,7 +38,7 @@ import type { SubtitleSize } from "../core/generated/SubtitleSize";
 import { chooseForm, type Form, form, pinned } from "../form";
 import { headerOnTvNow, previewsOn, setPreviewsOn } from "../lib/trailers";
 import { defaultsWords } from "../lib/defaults";
-import { addonsSummary, choiceSummary, choiceWords, findAddons, languageName, syncSummary, syncWords, tmdbCredit, turkceAltyaziCredit } from "../lib/words";
+import { addonsSummary, choiceSummary, choiceWords, findAddons, languageName, syncSummary, syncWords, tmdbCredit } from "../lib/words";
 import * as sync from "../core/sync";
 import { traktLink, traktLockedHere, traktStatus, traktStorage } from "../core/trakt";
 import { rowLine, traktWords } from "../lib/trakt";
@@ -617,7 +617,6 @@ export default function SettingsScreen() {
             </h2>
             <div class="sgroup notes">
               <p class="note">The name is drawn from Unbounded, SIL Open Font License 1.1.</p>
-              <p class="note">{turkceAltyaziCredit}</p>
               <p class="note credit">
                 <img class="credit-mark" src={markSrc("tmdb")} alt="" />
                 {tmdbCredit}

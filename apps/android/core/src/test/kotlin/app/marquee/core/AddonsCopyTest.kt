@@ -40,12 +40,4 @@ class AddonsCopyTest {
         assertEquals("3 installed. 2 find streams.", many)
         assertFalse("Streamer" in many)
     }
-
-    @Test
-    fun `About credits TurkceAltyazi as the plan words it`() {
-        assertEquals(
-            "Turkish subtitles from TurkceAltyazi.org, fetched by this device when you play.",
-            AddonsCopy.TURKCEALTYAZI_CREDIT,
-        )
-    }
 }

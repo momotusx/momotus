@@ -1142,7 +1142,6 @@ private fun About() {
                 role = TextRole.Caption,
                 color = Marquee.colors.muted,
             )
-            MqText(AddonsCopy.TURKCEALTYAZI_CREDIT, role = TextRole.Caption, color = Marquee.colors.muted)
             // TMDB's terms: its logo and this line wherever its data shows.
             Row(
                 horizontalArrangement = Arrangement.spacedBy(Marquee.space.xs),
