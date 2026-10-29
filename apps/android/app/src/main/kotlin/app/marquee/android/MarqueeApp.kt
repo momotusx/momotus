@@ -64,6 +64,19 @@ class MarqueeApp :
     /** No network, or none this app may use: every phone page says so (plans/offline-downloads.md 3.5). */
     var offline: Boolean by mutableStateOf(false)
         private set
+
+    /** The network's own word: none (a lost or blocked default network). */
+    private var noNetwork = false
+
+    /**
+     * A debug walk's `offline` launch extra (DebugEntry, debug builds only): the app reads as offline whatever the
+     * network says, until a launch without it. Nothing in a release build sets it. Main thread only.
+     */
+    var walkOffline = false
+        set(value) {
+            field = value
+            offline = value || noNetwork
+        }
     private lateinit var lifecycle: AppLifecycle
 
     /** Keeps downloads running while the user is away (plans/offline-downloads.md 5). */
@@ -136,7 +149,10 @@ class MarqueeApp :
         }
         lifecycle =
             AppLifecycle(this, session, sync) { none ->
-                session.scope.launch(Dispatchers.Main) { offline = none }
+                session.scope.launch(Dispatchers.Main) {
+                    noNetwork = none
+                    offline = none || walkOffline
+                }
             }.also { it.register() }
         downloadKeeper = DownloadKeeper(this, session).also { it.start() }
         val scan = session.scope.async(Dispatchers.Default) { DeviceCaps.scanCodecs() }

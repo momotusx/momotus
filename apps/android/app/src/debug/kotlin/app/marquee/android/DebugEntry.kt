@@ -66,9 +66,14 @@ object DebugEntry {
      * `legacy_debrid=<service>:<key>` stores a debrid key the way builds before records did; the next
      * core open moves it to a record. `prefs_patch=<json>` merges a `setPrefs` patch at launch: what the
      * picks taught (`{"learned":{"fhd":{"size":2}}}`), so a walk reaches a learned note in one pick.
+     * `offline=true` (`--ez offline true`) holds the app offline whatever the network says, so a walk sees the
+     * offline banner and pages without touching the device's settings; a launch without it lets the network decide.
      */
     fun launched(activity: ComponentActivity) {
-        val session = (activity.application as MarqueeApp).session
+        val app = activity.application as MarqueeApp
+        app.walkOffline = activity.intent.getBooleanExtra("offline", false)
+        if (app.walkOffline) CoreLog.d("debug: held offline")
+        val session = app.session
         val legacy = activity.intent.getStringExtra("legacy_debrid")?.split(":", limit = 2)
         if (legacy?.size == 2) {
             val (service, key) = legacy
