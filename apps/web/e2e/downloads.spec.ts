@@ -392,7 +392,7 @@ test("on touch, a tap on Download offers the version too, since no secondary pre
   await expect(item(page, "Choose a version to download")).toBeVisible();
   await item(page, "Download").tap();
   await expect(control(page)).toHaveAttribute("aria-label", "Downloaded, Big Buck Bunny", { timeout: 30_000 });
-  // Offline on the phone, the title's edge-to-edge art starts whole under the banner (code review r6 n8).
+  // Offline on the phone, the title's edge-to-edge art and its Back start whole under the banner (code review r6 n8).
   // The core is shared by the spec: it goes back online whatever this finds.
   await goOnline(page, false);
   try {
@@ -402,6 +402,9 @@ test("on touch, a tap on Download offers the version too, since no secondary pre
     const bar = await banner(page).boundingBox();
     const art = await page.locator(".title-bd").boundingBox();
     expect(art?.y, JSON.stringify({ bar, art })).toBeGreaterThanOrEqual((bar?.y ?? 0) + (bar?.height ?? 0) - 1);
+    // The fixed Back sits under the banner too, never under its cover (the iPhone's r5 M1, on the web).
+    const back = await page.locator(".backbar .back").boundingBox();
+    expect(back?.y, JSON.stringify({ bar, back })).toBeGreaterThanOrEqual((bar?.y ?? 0) + (bar?.height ?? 0) - 1);
     await page.screenshot({ path: `${SHOTS}/offline-title-phone.jpg`, type: "jpeg", quality: 80 });
   } finally {
     await goOnline(page, true);
