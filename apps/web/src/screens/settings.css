@@ -73,6 +73,13 @@
 .addon-text .st { margin-top: 10px; font-size: var(--type-caption); }
 .addon-acts { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 12px; max-width: 640px; }
 .addon-acts .btn { height: 60px; padding: 0 22px; font-size: var(--type-callout); gap: 10px; }
+/* A plugin repository's providers, a switch each (Settings > Plugins). */
+.plugin-providers { list-style: none; margin-top: 16px; display: grid; gap: 8px; }
+.plugin-providers li { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 8px 0; border-top: 1px solid var(--line); }
+.plugin-providers li.off .pname { opacity: .6; }
+.plugin-providers .pname { font: 500 var(--type-callout) / 1.3 var(--font-text); min-width: 0; overflow-wrap: anywhere; }
+.plugin-providers .pname small { color: var(--muted); font-size: var(--type-caption); }
+.plugin-providers .btn { height: 48px; padding: 0 18px; font-size: var(--type-caption); gap: 8px; flex: none; }
 .addon-acts .btn svg { width: 26px; height: 26px; }
 /* `.btn.danger` and `.btn.caution` stay the plain secondary: no red and no
  * warning hue (design/DECISION.md); the words carry the meaning, and the

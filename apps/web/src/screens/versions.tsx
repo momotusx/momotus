@@ -27,6 +27,7 @@ import { focusEl, goBack } from "../focus/dom";
 import { form } from "../form";
 import { bytes, decoded, playPath, playState, releaseParts, titlePath } from "../lib/format";
 import { downloadWords } from "../lib/download";
+import { pluginRowLine, pluginWords } from "../lib/plugins";
 import { entryFrom, ownState } from "../history";
 import { onProfileReset } from "../core/profiles";
 import {
@@ -358,6 +359,8 @@ export function VersionsPage(props: { kind: string; id: string; videoId: string;
     const e = empty();
     if (e) return emptyWords(e).text;
     // Until a row or the core's answer (once every addon is done, it may still check a kept source).
+    // Only rows of the plugins' own pass: never picked, so the viewer chooses (4.4).
+    if (s?.done && !s.recommended && !s.rows.length && s.plugins.rows.length) return pluginWords.choose;
     if (!s || (!s.recommended && !s.rows.length)) return versionsWords.finding;
     if (s.pendingAddons.length || s.slowAddons.length) return versionsWords.slow;
     return "";
@@ -415,12 +418,14 @@ export function VersionsPage(props: { kind: string; id: string; videoId: string;
                   <Show
                     when={empty()}
                     fallback={
+                      <Show when={!(snap()?.done && snap()?.plugins.rows.length)} fallback={<p class="best">{pluginWords.choose}</p>}>
                       <div class="pick-wait" aria-busy="true">
                         <p class="best">{best()}</p>
                         <div class="skel" />
                         <div class="skel" />
                         <div class="skel" />
                       </div>
+                      </Show>
                     }
                   >
                     {(e) => {
@@ -594,6 +599,39 @@ export function VersionsPage(props: { kind: string; id: string; videoId: string;
                     );
                   }}
                 </For>
+                {/* "From plugins" (plans/plugins-and-marketplace.md 4.4, 7.8): their own pass, after the
+                    addons' rows, never the pick; a row plays only when chosen and says where it plays from. */}
+                <Show when={!dimmed() && ((snap()?.plugins.rows.length ?? 0) > 0 || snap()?.plugins.pending)}>
+                  <section class="vgroup" data-row data-group="plugins">
+                    <div class="vghead">
+                      <h3 id="vg-plugins">
+                        {pluginWords.section}
+                        <span class="num">{snap()?.plugins.rows.length ?? 0}</span>
+                      </h3>
+                    </div>
+                    <div id="vl-plugins" role="list" aria-labelledby="vg-plugins">
+                      <For each={snap()?.plugins.rows ?? []}>
+                        {(r) => (
+                          <div class="vslot" role="listitem">
+                            <button class="vrow" data-f={`v:${r.key}`} onClick={() => play(r.key)}>
+                              <Badges row={r} />
+                              <span class="st line">
+                                <span class="lt" dir="auto">
+                                  <bdi>{pluginRowLine(r)}</bdi>
+                                </span>
+                              </span>
+                            </button>
+                          </div>
+                        )}
+                      </For>
+                    </div>
+                    <Show when={snap()?.plugins.pending}>
+                      <p class="vstatus" role="status">
+                        {pluginWords.looking}
+                      </p>
+                    </Show>
+                  </section>
+                </Show>
                 <Show when={snap() && !snap()?.done && listed().length === 0}>
                   <div class="alist-wait" aria-hidden="true">
                     <For each={[0, 1, 2, 3, 4]}>{() => <div class="skel" />}</For>

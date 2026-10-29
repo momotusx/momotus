@@ -11,6 +11,7 @@ export const groupTitles: Record<string, string> = {
   streams: "Streams",
   subtitles: "Subtitles",
   lists: "Lists",
+  plugins: "Plugins",
 };
 
 export const defaultsWords = {

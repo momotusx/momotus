@@ -23,6 +23,7 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import { createServer as createSecureServer } from "node:https";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 const ROOT = join(homedir(), ".cache", "marquee-e2e");
 const DIR = process.env.MQ_E2E_REPLAY_DIR ?? join(ROOT, "replay");
@@ -62,6 +63,22 @@ export function standIn(url: string, sent: Buffer | undefined): Kept | null {
   if (asked.pathname !== "/api/cache/check") return { url, status: 504, headers: {}, body: "" };
   const answer = { status: "success", response: asked.searchParams.getAll("items[]").map(() => false) };
   return { url, status: 200, headers: { "content-type": "application/json" }, body: Buffer.from(JSON.stringify(answer)).toString("base64") };
+}
+
+/** The plugin e2e's repository (plugins.spec.ts): our own inert fixture
+ * (crates/mq-plugins/tests/fixtures/plugin-repo) on a made-up public name, answered here and never
+ * recorded. Its one provider asks `/lookup/...` and offers the suite's test film. */
+export const PLUGIN_HOST = "plugins.e2e.test";
+const pluginRepo = fileURLToPath(new URL("../../../crates/mq-plugins/tests/fixtures/plugin-repo", import.meta.url));
+export function pluginFixture(url: string): Kept | null {
+  const asked = new URL(url);
+  if (asked.hostname !== PLUGIN_HOST) return null;
+  const answer = (type: string, body: Buffer | string): Kept => ({ url, status: 200, headers: { "content-type": type }, body: Buffer.from(body).toString("base64") });
+  if (asked.pathname === "/repo/manifest.json") return answer("application/json", readFileSync(join(pluginRepo, "manifest.json")));
+  if (asked.pathname === "/repo/test-film.js")
+    return answer("text/javascript", readFileSync(join(pluginRepo, "test-film.js"), "utf8").replaceAll("{{BASE}}", `https://${PLUGIN_HOST}`));
+  if (asked.pathname.startsWith("/lookup/")) return answer("application/json", JSON.stringify({ title: "Fixture film" }));
+  return { url, status: 404, headers: {}, body: "" };
 }
 
 /** What an unrecorded answer becomes offline: a grey image when an image was asked for. */
@@ -109,7 +126,7 @@ export async function replay(req: IncomingMessage, res: ServerResponse, rest: st
   const sent = await body(req);
   const key = createHash("sha256").update(`${req.method} ${url} ${req.headers.range ?? ""} `).update(sent ?? Buffer.alloc(0)).digest("hex").slice(0, 40);
   const file = join(DIR, host, `${key}.json`);
-  let kept: Kept | null = standIn(url, sent) ?? (!RECORD && existsSync(file) ? (JSON.parse(readFileSync(file, "utf8")) as Kept) : null);
+  let kept: Kept | null = standIn(url, sent) ?? pluginFixture(url) ?? (!RECORD && existsSync(file) ? (JSON.parse(readFileSync(file, "utf8")) as Kept) : null);
   if (!kept && !OFFLINE) {
     replayed.asked++;
     kept = await ask(url, req, sent);

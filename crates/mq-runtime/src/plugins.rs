@@ -91,9 +91,34 @@ impl Plugins {
         Self {
             pool: tokio::sync::Semaphore::new(POOL),
             results: Mutex::default(),
-            defaults: defaults.unwrap_or_else(builtin_defaults),
+            defaults: defaults
+                .or_else(dev_defaults)
+                .unwrap_or_else(builtin_defaults),
         }
     }
+}
+
+/// Development builds only: `MQ_DEV_PLUGINS=off` gives no repository as a
+/// default, and `MQ_DEV_PLUGINS=<link>[,<link>]` gives these instead, so
+/// the web e2e never asks a real repository and can offer its fixture.
+fn dev_defaults() -> Option<Vec<PluginDefault>> {
+    #[cfg(debug_assertions)]
+    {
+        let links = std::env::var("MQ_DEV_PLUGINS").ok()?;
+        let links = (links != "off").then_some(links).unwrap_or_default();
+        Some(
+            (links.split(',').filter(|l| !l.is_empty()).enumerate())
+                .map(|(i, url)| PluginDefault {
+                    key: format!("dev-plugins-{i}"),
+                    url: url.to_owned(),
+                    name: "Test plugins".into(),
+                    line: "Direct links from the test repository.".into(),
+                })
+                .collect(),
+        )
+    }
+    #[cfg(not(debug_assertions))]
+    None
 }
 
 fn lock<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {

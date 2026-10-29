@@ -24,6 +24,7 @@ import { form } from "./form";
 import { backThenReplace, entryOwner, historyBase, historyDepth, leaveGuarded, markBack, resetHistoryBase, stampEntriesWith, takeAfterBack, takeBack } from "./history";
 import Addons from "./screens/addons";
 import FindAddons from "./screens/find-addons";
+import Plugins from "./screens/plugins";
 import CalendarScreen from "./screens/calendar";
 import Debrid from "./screens/debrid";
 import Discover from "./screens/discover";
@@ -56,7 +57,7 @@ const destinations: Destination[] = [
   { path: "/settings", label: "Settings", icon: Settings, tool: true },
 ];
 // Settings sub-pages keep the rail and light up Settings.
-const settingsPages = ["/settings", "/addons", "/recommended-addons", "/find-addons", "/import", "/pair", "/home-rows", "/stream-choice", "/debrid", "/sync", "/trakt"];
+const settingsPages = ["/settings", "/addons", "/recommended-addons", "/find-addons", "/plugins", "/import", "/pair", "/home-rows", "/stream-choice", "/debrid", "/sync", "/trakt"];
 const isSettingsPage = (path: string) => settingsPages.includes(path) || path.startsWith("/profiles/") || path.startsWith("/sync/");
 // Downloads live under Library and keep it lit (plans/offline-downloads.md 3.4).
 const section = (path: string) => (isSettingsPage(path) ? "/settings" : path.startsWith("/library/") ? "/library" : path);
@@ -419,6 +420,7 @@ export function App() {
       <Route path="/addons" component={Addons} />
       <Route path="/recommended-addons" component={RecommendedAddons} />
       <Route path="/find-addons" component={FindAddons} />
+      <Route path="/plugins" component={Plugins} />
       <Route path="/import" component={Import} />
       <Route path="/pair" component={Pairing} />
       <Route path="/sync" component={SyncScreen} />

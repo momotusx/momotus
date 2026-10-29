@@ -16,11 +16,14 @@ export type SheetAddon = { name: string; host: string; provides: string[]; types
 
 const ARM_MS = 400;
 
-export function InstallSheet(props: { addon: SheetAddon; onInstall: () => void; onCancel: () => void }) {
+/** `words` replaces the addon words for another kind of install (a plugin repository). */
+export type SheetWords = { title: string; from: string; adds: string; note: string; install: string };
+
+export function InstallSheet(props: { addon: SheetAddon; onInstall: () => void; onCancel: () => void; words?: SheetWords }) {
   let root!: HTMLDivElement;
   const id = createUniqueId();
   const tv = () => form() === "tv";
-  const adds = () => addsLine(props.addon.provides, props.addon.types);
+  const adds = () => props.words?.adds ?? addsLine(props.addon.provides, props.addon.types);
   // One answer per sheet: a double click installs once. Install is armed a moment after the
   // sheet opens, so the press that opened it (a double tap, a held Enter) never answers it.
   let answered = false;
@@ -52,7 +55,7 @@ export function InstallSheet(props: { addon: SheetAddon; onInstall: () => void; 
   );
   const install = (
     <button type="button" class="btn" classList={{ keyfill: !tv() }} data-f="sheet:install" onClick={() => press(true)}>
-      {sheetWords.install}
+      {props.words?.install ?? sheetWords.install}
     </button>
   );
   return (
@@ -79,14 +82,14 @@ export function InstallSheet(props: { addon: SheetAddon; onInstall: () => void; 
             <i class="is-grabber" aria-hidden="true" />
           </Show>
           <h2 id={`${id}-title`} dir="auto">
-            {sheetTitle(props.addon.name)}
+            {props.words?.title ?? sheetTitle(props.addon.name)}
           </h2>
-          <p class="is-from" id={`${id}-from`}>{sheetFrom(props.addon.host)}</p>
+          <p class="is-from" id={`${id}-from`}>{props.words?.from ?? sheetFrom(props.addon.host)}</p>
           <Show when={adds()}>
             <p class="is-adds" id={`${id}-adds`}>{adds()}</p>
           </Show>
           <p class="is-note" id={`${id}-note`}>
-            {sheetWords.note}
+            {props.words?.note ?? sheetWords.note}
           </p>
           <div class="is-acts">{tv() ? [cancel, install] : form() === "phone" ? [install, cancel] : [cancel, install]}</div>
         </section>

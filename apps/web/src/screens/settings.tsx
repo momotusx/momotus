@@ -4,6 +4,7 @@ import ChevronRight from "lucide-solid/icons/chevron-right";
 import Download from "lucide-solid/icons/download";
 import KeyRound from "lucide-solid/icons/key-round";
 import PackageSearch from "lucide-solid/icons/package-search";
+import Plug from "lucide-solid/icons/plug";
 import Puzzle from "lucide-solid/icons/puzzle";
 import MonitorSmartphone from "lucide-solid/icons/monitor-smartphone";
 import Radio from "lucide-solid/icons/radio";
@@ -23,6 +24,8 @@ import Wrench from "lucide-solid/icons/wrench";
 import { createResource, createSignal, For, type JSX, onCleanup, onMount, Show } from "solid-js";
 import { relayProviders, signInServer } from "../core/sign-in";
 import { mayDeleteAccount } from "../lib/sync";
+import type { PluginsAnswer } from "../core/generated/PluginsAnswer";
+import { pluginWords, pluginsSummary } from "../lib/plugins";
 import { deviceLanguage, homeView, liveView, op, prefsView, reasonOf } from "../core/client";
 import { Backdrop, useTrimmedLogo } from "../components/art";
 import { CONTINUE_ROW } from "../components/row";
@@ -280,6 +283,8 @@ export default function SettingsScreen() {
   const [previews, setPreviews] = createSignal(previewsOn());
   const prefs = prefsView();
   const addons = liveView<AddonsSnapshot>("addons");
+  // Nuvio plugin repositories (R7): the row shows only where plugins run (full builds, not kids).
+  const [plugins] = createResource(() => op<PluginsAnswer>("plugins").catch(() => null));
   const home = homeView();
   const p = () => prefs.state.data;
   const [error, setError] = createSignal<string | null>(null);
@@ -466,6 +471,9 @@ export default function SettingsScreen() {
                 title="Addons"
                 text={addonsSummary(addons.state.data?.addons ?? [])}
               />
+              <Show when={plugins()?.available}>
+                <Row href="/plugins" fkey="settings:plugins" tone="teal" icon={<Plug />} title={pluginWords.title} text={pluginsSummary(plugins()?.repos ?? [])} />
+              </Show>
               <Row
                 href="/debrid"
                 fkey="settings:debrid"
