@@ -12,7 +12,7 @@ private func details(scores: [String: Any]?, ratedPoster: String? = nil) throws 
         "id": "tt0111161", "kind": "movie", "name": "The Shawshank Redemption",
         "description": "Over the course of several years, two convicts form a friendship, seeking consolation and, eventually, redemption through basic compassion.",
         "poster": NSNull(), "background": NSNull(), "logo": NSNull(), "releaseInfo": "1994", "runtime": "142 min",
-        "genres": ["Drama", "Crime"], "cast": ["Tim Robbins", "Morgan Freeman"], "directors": ["Frank Darabont"],
+        "genres": ["Drama", "Crime"], "cast": [{"name": "Tim Robbins", "character": null, "photo": null}, {"name": "Morgan Freeman", "character": null, "photo": null}], "directors": ["Frank Darabont"],
         "rating": "9.3", "ratings": ["imdb": "9.3"], "imdbUrl": "https://www.imdb.com/title/tt0111161/",
         "source": "Cinemeta", "trailers": [], "ratedPoster": ratedPoster ?? NSNull(),
     ]
@@ -147,7 +147,7 @@ private var landed: [String: Any] { [
 @MainActor private func castPeople(linked: Bool) -> (drawn: Int, links: Int) {
     let parts = Parts()
     let names = ["Tim Robbins", "Morgan Freeman"]
-    let host = NSHostingView(rootView: CastShelf(cast: names, open: linked ? { _ in } : nil)
+    let host = NSHostingView(rootView: CastShelf(cast: names.map { CastMember(name: $0) }, open: linked ? { _ in } : nil)
         .frame(width: 600, alignment: .leading)
         .environment(\.metrics, .regular)
         .environment(\.heroProbe, HeroProbeSink { part, frame in parts.frames[part] = frame }))

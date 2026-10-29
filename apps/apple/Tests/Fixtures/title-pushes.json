@@ -6,11 +6,7 @@
     "header": {
      "details": {
       "background": "https://images.metahub.space/background/medium/tt0903747/img",
-      "cast": [
-       "Bryan Cranston",
-       "Aaron Paul",
-       "Anna Gunn"
-      ],
+      "cast": [{"name": "Bryan Cranston", "character": null, "photo": null}, {"name": "Aaron Paul", "character": null, "photo": null}, {"name": "Anna Gunn", "character": null, "photo": null}],
       "description": "A chemistry teacher diagnosed with inoperable lung cancer turns to manufacturing and selling methamphetamine with a former student to secure his family's future.",
       "directors": [],
       "genres": [
@@ -309,11 +305,7 @@
     "header": {
      "details": {
       "background": "https://images.metahub.space/background/medium/tt0903747/img",
-      "cast": [
-       "Bryan Cranston",
-       "Aaron Paul",
-       "Anna Gunn"
-      ],
+      "cast": [{"name": "Bryan Cranston", "character": null, "photo": null}, {"name": "Aaron Paul", "character": null, "photo": null}, {"name": "Anna Gunn", "character": null, "photo": null}],
       "description": "A chemistry teacher diagnosed with inoperable lung cancer turns to manufacturing and selling methamphetamine with a former student to secure his family's future.",
       "directors": [],
       "genres": [
@@ -525,11 +517,7 @@
     "header": {
      "details": {
       "background": "https://images.metahub.space/background/medium/tt0903747/img",
-      "cast": [
-       "Bryan Cranston",
-       "Aaron Paul",
-       "Anna Gunn"
-      ],
+      "cast": [{"name": "Bryan Cranston", "character": null, "photo": null}, {"name": "Aaron Paul", "character": null, "photo": null}, {"name": "Anna Gunn", "character": null, "photo": null}],
       "description": "A chemistry teacher diagnosed with inoperable lung cancer turns to manufacturing and selling methamphetamine with a former student to secure his family's future.",
       "directors": [],
       "genres": [

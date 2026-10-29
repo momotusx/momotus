@@ -270,7 +270,8 @@ struct TitleDetails: Decodable, Hashable, Sendable {
     let releaseInfo: String?
     let runtime: String?
     let genres: [String]
-    let cast: [String]
+    /// From the meta's Cast links, each with TMDB's headshot and role once its credits land.
+    let cast: [CastMember]
     let directors: [String]
     /// From the meta's Writers links; an older core sends none.
     let writers: [String]?
@@ -310,6 +311,15 @@ enum Slot: Decodable, Hashable, Sendable {
 struct TitleScores: Decodable, Hashable, Sendable {
     let tmdb: Slot
     let trakt: Slot
+}
+
+/// One of the title's cast.
+struct CastMember: Decodable, Hashable, Sendable {
+    let name: String
+    /// The role TMDB names; nil until its credits land, or when it names none.
+    var character: String? = nil
+    /// TMDB's headshot (185 px wide); nil until its credits land, or when it has none: draw the initials.
+    var photo: String? = nil
 }
 
 struct Trailer: Decodable, Hashable, Sendable {

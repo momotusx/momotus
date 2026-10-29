@@ -31,7 +31,7 @@ struct Credits: View {
 
     private var facts: [(key: String, value: String)] {
         var rows: [(key: String, value: String)] = []
-        if !details.cast.isEmpty { rows.append(("Starring", details.cast.prefix(4).joined(separator: ", "))) }
+        if !details.cast.isEmpty { rows.append(("Starring", details.cast.prefix(4).map(\.name).joined(separator: ", "))) }
         if !details.directors.isEmpty { rows.append(("Directed by", details.directors.joined(separator: ", "))) }
         if let runtime = details.runtime { rows.append(("Runtime", series ? "\(runtime) an episode" : runtime)) }
         return rows

@@ -191,7 +191,7 @@ struct TitleHeroFacts {
         self.linksGenres = linksGenres
         imdbLink = details.ratings?.imdb == nil ? nil : details.imdbUrl.flatMap(URL.init(string:))
         synopsis = details.description
-        cast = details.cast
+        cast = details.cast.map(\.name)
     }
 }
 

@@ -238,9 +238,10 @@ struct SeasonShelf: View {
 
 func seasonName(_ season: Int) -> String { season == 0 ? "Specials" : "Season \(season)" }
 
-/// The cast as grey monogram circles with their names (no roles: the core sends names only, C39).
+/// The cast as round TMDB headshots with each name and role (plans/batch-2.md R5), over grey monogram circles that
+/// show while there is no photo or it cannot load.
 struct CastShelf: View {
-    let cast: [String]
+    let cast: [CastMember]
     /// A person: Search for them.
     var open: ((String) -> Void)? = nil
     @Environment(\.metrics) private var metrics
@@ -253,43 +254,64 @@ struct CastShelf: View {
                 .foregroundStyle(Theme.Palette.text)
                 .accessibilityAddTraits(.isHeader)
             Shelf(spacing: 20) {
-                ForEach(cast, id: \.self) { name in
+                ForEach(cast, id: \.name) { member in
                     // With no link (a kids profile, whose Search finds only its list) a person is a plain
                     // view: no button, no hint of an action that is not there.
                     if let open {
-                        Button { open(name) } label: { person(name, side: side) }
+                        Button { open(member.name) } label: { person(member, side: side) }
                             .buttonStyle(FocusPlainStyle(shape: RoundedRectangle(cornerRadius: 12, style: .continuous), scale: 1))
                             .accessibilityHint("Searches for their titles")
-                            .heroProbe(.link(name))
+                            .heroProbe(.link(member.name))
                     } else {
-                        person(name, side: side)
+                        person(member, side: side)
                     }
                 }
             }
         }
     }
 
-    private func person(_ name: String, side: CGFloat) -> some View {
+    private func person(_ member: CastMember, side: CGFloat) -> some View {
         VStack(spacing: 8) {
-            Text(initials(name))
-                .display(metrics.wide ? 32 : 34)
-                .foregroundStyle(Theme.Palette.text)
-                .frame(width: side, height: side)
-                .background(Circle().fill(Theme.Palette.raised))
-                .accessibilityHidden(true)
-            Text(name)
-                .textFont(12, relativeTo: .caption)
-                .foregroundStyle(Theme.Palette.text)
-                .multilineTextAlignment(.center)
-                .lineLimit(2)
-                .frame(width: side)
+            Headshot(member: member, side: side, monogram: metrics.wide ? 32 : 34)
+            VStack(spacing: 2) {
+                Text(member.name)
+                    .textFont(12, relativeTo: .caption)
+                    .foregroundStyle(Theme.Palette.text)
+                if let character = member.character {
+                    Text(character)
+                        .textFont(12, relativeTo: .caption)
+                        .foregroundStyle(Theme.Palette.dim)
+                }
+            }
+            .multilineTextAlignment(.center)
+            .lineLimit(2)
+            .frame(width: side)
         }
         .accessibilityElement(children: .combine)
-        .heroProbe(.chip(name))
+        .heroProbe(.chip(member.name))
     }
+}
 
-    private func initials(_ name: String) -> String {
-        name.split(separator: " ").prefix(2).compactMap(\.first).map(String.init).joined()
+/// A person's round headshot over their monogram, which stays when there is no photo or it cannot load.
+private struct Headshot: View {
+    let member: CastMember
+    let side: CGFloat
+    let monogram: CGFloat
+    @State private var missing = false
+
+    var body: some View {
+        Text(member.name.split(separator: " ").prefix(2).compactMap(\.first).map { $0.uppercased() }.joined())
+            .display(monogram)
+            .foregroundStyle(Theme.Palette.text)
+            .frame(width: side, height: side)
+            .background(Circle().fill(Theme.Palette.raised))
+            .overlay {
+                if let photo = member.photo, !missing {
+                    ArtImage(url: photo, maxPixels: Int(side * 3), onMissing: { missing = true })
+                        .clipShape(Circle())
+                }
+            }
+            .accessibilityHidden(true)
     }
 }
 
