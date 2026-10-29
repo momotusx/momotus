@@ -957,7 +957,7 @@ private fun RemovalNote(removal: PendingRemoval) {
     }
 }
 
-/** The first run's still (B4): asked at the first framed step that shows, then kept for the others. */
+/** The first run's still (V1): asked at the first framed step that shows, then kept for the others. */
 @Composable
 private fun AppState.firstRunStill(): FirstRunStill? {
     LaunchedEffect(this) { askStill() }

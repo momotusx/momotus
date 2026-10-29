@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.test.assert
@@ -180,7 +181,7 @@ class SubtitleStepScreenTest {
         until { shows("This device's language") && ready() }
         compose.onNodeWithText("Turkish").assertExists()
         shot("subtitle-step-phone")
-        // The frame sits over the list: No subtitles is further down.
+        // The question and its line sit over the list: No subtitles may be further down.
         compose.onNodeWithText(SubtitleStep.NONE).performScrollTo().performClick()
         compose.onNodeWithText("Continue").performClick()
         until { done == 1 }
@@ -190,15 +191,9 @@ class SubtitleStepScreenTest {
     @Test
     @GraphicsMode(GraphicsMode.Mode.NATIVE)
     @Config(qualifiers = "w412dp-h915dp-xxhdpi")
-    fun `the chosen language is a raised fill with no edge, the others the plain surface`() {
+    fun `the chosen language is a brighter fill with no edge than the others`() {
         val step = step("tr")
-        var raised = Color.Unspecified
-        var surface = Color.Unspecified
-        page(Form.Phone) {
-            raised = Marquee.colors.raised
-            surface = Marquee.colors.surface
-            SubtitleStepPage(step) {}
-        }
+        page(Form.Phone) { SubtitleStepPage(step) {} }
         until { shows("This device's language") && ready() }
         compose.onNodeWithText(SubtitleStep.NONE).performScrollTo()
         val pixels = compose.onRoot().captureToImage().toPixelMap()
@@ -210,11 +205,14 @@ class SubtitleStepScreenTest {
             return pixels[row.left.toInt() + 2, y] to pixels[row.left.toInt() + 20, y]
         }
         val (chosenEdge, chosenInside) = at("Turkish")
-        assertEquals(raised.toArgb(), chosenInside.toArgb(), "the chosen row is raised")
         assertEquals(chosenInside.toArgb(), chosenEdge.toArgb(), "the chosen row has no edge")
         val (otherEdge, otherInside) = at(SubtitleStep.NONE)
-        assertEquals(surface.toArgb(), otherInside.toArgb(), "a row not chosen is the surface")
         assertEquals(otherInside.toArgb(), otherEdge.toArgb(), "a row not chosen has no edge")
+        // White 24 percent under the chosen row, 12 under the rest, both over the ramp's black.
+        assertTrue(
+            chosenInside.luminance() > otherInside.luminance() + 0.01f,
+            "chosen $chosenInside, other $otherInside",
+        )
     }
 
     @Test
