@@ -118,6 +118,30 @@ pub(crate) struct Memory {
     related: Kept<Vec<Found>>,
     /// TMDB's watch provider logos by provider id (Discover's rail), kept a day.
     logos: Kept<HashMap<u64, String>>,
+    /// TMDB's cast by `kind:id`, kept a day.
+    credits: Kept<Vec<tmdb::Credit>>,
+}
+
+/// The cast kept per title: an addon names the top-billed few, and a
+/// long-running show lists hundreds.
+const CAST_KEPT: usize = 50;
+
+/// A 429 quiets TMDB for its `Retry-After`; a token TMDB refuses (revoked)
+/// is refused for every title, so TMDB quiets as long as a 429 may: a call
+/// per quarter hour, not one per title opened.
+fn quiet_tmdb(memory: &mut Memory, answer: &Answer, now: Instant) {
+    if answer.throttled() {
+        memory.tmdb_quiet = Some(now + super::search::quiet_for(retry_after(answer)));
+    }
+    if matches!(
+        answer,
+        Answer::Refused {
+            status: 401 | 403,
+            ..
+        }
+    ) {
+        memory.tmdb_quiet = Some(now + super::search::QUIET_AT_MOST);
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -229,21 +253,7 @@ impl Core {
         let answer = client.find(imdb).await;
         let mut memory = lock(&trakt.lookups);
         let now = Instant::now();
-        if answer.throttled() {
-            memory.tmdb_quiet = Some(now + super::search::quiet_for(retry_after(&answer)));
-        }
-        // A token TMDB refuses (revoked) is refused for every title: TMDB
-        // quiets as long as a 429 may, so it costs a call per quarter hour,
-        // not one per title opened.
-        if matches!(
-            answer,
-            Answer::Refused {
-                status: 401 | 403,
-                ..
-            }
-        ) {
-            memory.tmdb_quiet = Some(now + super::search::QUIET_AT_MOST);
-        }
+        quiet_tmdb(&mut memory, &answer, now);
         let got = kept(&answer, tmdb::finds, tmdb::Finds::default())?;
         let found = match &got {
             Got::Answer(finds) => finds.of(kind),
@@ -253,21 +263,27 @@ impl Core {
         found
     }
 
-    /// TMDB's watch provider logos, as paths by provider id: asked once a
-    /// day (a failure rests a minute, a 429 quiets TMDB), `None` with no
-    /// token or on a kids profile. Discover's rail turns them into image
-    /// links (plans/discover-v2.md 6.6, the owner, 2026-10-26).
-    pub(crate) async fn tmdb_provider_logos(&self) -> Option<HashMap<u64, String>> {
-        const KEY: &str = "movie";
+    /// One TMDB answer kept a day under `key` in the map `pick` names:
+    /// asked with `ask` and read with `read` (a 404 reads as `empty`) unless
+    /// held. `None` with no token, on a kids profile, while TMDB is quiet or
+    /// the key rests (a failure rests it a minute), or on a failure.
+    async fn tmdb_kept<T: Clone, F: Future<Output = Answer>>(
+        &self,
+        pick: fn(&mut Memory) -> &mut Kept<T>,
+        key: String,
+        ask: impl FnOnce(Tmdb) -> F,
+        read: impl FnOnce(&serde_json::Value) -> T,
+        empty: T,
+    ) -> Option<T> {
         if kids(self) || self.no_tmdb() {
             return None;
         }
         let trakt = self.trakt();
         let client = {
-            let memory = lock(&trakt.lookups);
+            let mut memory = lock(&trakt.lookups);
             let now = Instant::now();
-            match memory.logos.held(KEY, now) {
-                Held::Answer(logos) => return Some(logos),
+            match pick(&mut memory).held(&key, now) {
+                Held::Answer(value) => return Some(value),
                 Held::Resting => return None,
                 Held::Nothing => {}
             }
@@ -282,19 +298,50 @@ impl Core {
                 host.local,
             )
         };
-        let answer = client.watch_providers().await;
+        let answer = ask(client).await;
         let mut memory = lock(&trakt.lookups);
         let now = Instant::now();
-        if answer.throttled() {
-            memory.tmdb_quiet = Some(now + super::search::quiet_for(retry_after(&answer)));
-        }
-        let got = kept(&answer, tmdb::provider_logos, HashMap::new())?;
-        let logos = match &got {
-            Got::Answer(logos) => Some(logos.clone()),
+        quiet_tmdb(&mut memory, &answer, now);
+        let got = kept(&answer, read, empty)?;
+        let value = match &got {
+            Got::Answer(value) => Some(value.clone()),
             Got::Rest => None,
         };
-        memory.logos.put(KEY.to_owned(), got, now);
-        logos
+        pick(&mut memory).put(key, got, now);
+        value
+    }
+
+    /// TMDB's watch provider logos, as paths by provider id: asked once a
+    /// day, `None` as for `tmdb_kept`. Discover's rail turns them into
+    /// image links (plans/discover-v2.md 6.6, the owner, 2026-10-26).
+    pub(crate) async fn tmdb_provider_logos(&self) -> Option<HashMap<u64, String>> {
+        self.tmdb_kept(
+            |m| &mut m.logos,
+            "movie".to_owned(),
+            |tmdb| async move { tmdb.watch_providers().await },
+            tmdb::provider_logos,
+            HashMap::new(),
+        )
+        .await
+    }
+
+    /// The cast of the title TMDB `found`, in billing order, the first
+    /// `CAST_KEPT` only: asked once a day, `None` as for `tmdb_kept`. The
+    /// title page puts its headshots on the addon's names.
+    pub(crate) async fn tmdb_credits(&self, found: &tmdb::Found) -> Option<Vec<tmdb::Credit>> {
+        let (kind, id) = (found.kind, found.id);
+        self.tmdb_kept(
+            |m| &mut m.credits,
+            format!("{kind}:{id}"),
+            move |tmdb| async move { tmdb.credits(kind, id).await },
+            |body| {
+                let mut cast = tmdb::credits(body);
+                cast.truncate(CAST_KEPT);
+                cast
+            },
+            Vec::new(),
+        )
+        .await
     }
 
     /// Trakt's score (rating 0 to 10, votes) for a title of `kind` (`movie`

@@ -55,7 +55,9 @@ pub struct TitleDetails {
     pub release_info: Option<String>,
     pub runtime: Option<String>,
     pub genres: Vec<String>,
-    pub cast: Vec<String>,
+    /// From the meta's `Cast` links, in its order, each with TMDB's
+    /// headshot and role once its credits land (asked with `scores`).
+    pub cast: Vec<CastMember>,
     pub directors: Vec<String>,
     /// From the meta's `Writers` links, as `cast` and `directors`.
     pub writers: Vec<String>,
@@ -72,6 +74,24 @@ pub struct TitleDetails {
     pub source: String,
     /// Trailers the metadata names (YouTube), first is the main one.
     pub trailers: Vec<Trailer>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[cfg_attr(
+    feature = "ts",
+    derive(ts_rs::TS),
+    ts(export, export_to = "../../../apps/web/src/core/generated/")
+)]
+#[serde(rename_all = "camelCase")]
+/// One of the title's cast.
+pub struct CastMember {
+    pub name: String,
+    /// The role TMDB names; null until its credits land, or when it names
+    /// none.
+    pub character: Option<String>,
+    /// TMDB's headshot (185 px wide); null until its credits land, or when
+    /// it has none: draw the name's initials.
+    pub photo: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -301,6 +321,8 @@ struct State {
     /// TMDB's and Trakt's answers, once each landed.
     tmdb: Option<Slot>,
     trakt: Option<Slot>,
+    /// TMDB's cast, once it landed.
+    credits: Option<Vec<mq_tracking::tmdb::Credit>>,
     /// RPDB's cover for the title, read when the meta lands and again when
     /// the addons change (the key comes from one), not on every render.
     rated_poster: Option<String>,
@@ -377,6 +399,7 @@ impl TitleView {
                 captions: None,
                 tmdb: None,
                 trakt: None,
+                credits: None,
                 rated_poster: None,
                 offline: false,
             })),
@@ -567,6 +590,8 @@ fn lock<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
 const VISIBLE_FOR: Duration = Duration::from_secs(1);
 /// "More like this" shows at most this many titles.
 const SIMILAR: usize = 20;
+/// The cast taken from TMDB for a title whose addon names none.
+const CAST_SHOWN: usize = 10;
 
 /// The kind TMDB and Trakt are asked as: a movie or a series as itself; an
 /// anime by what TMDB says its IMDb id is (`None` here); other kinds not at
@@ -647,13 +672,52 @@ async fn look_up(ctx: Ctx) {
     };
     match asked {
         Asked::As(kind) => {
+            let tmdb = async {
+                if let Some(found) = tmdb.await {
+                    ctx.ask_credits(&found).await;
+                }
+            };
             tokio::join!(tmdb, ctx.ask_trakt(kind, &imdb));
         }
         Asked::ByTmdb => match tmdb.await {
-            Some(found) => ctx.ask_trakt(found.kind, &imdb).await,
+            Some(found) => {
+                tokio::join!(ctx.ask_credits(&found), ctx.ask_trakt(found.kind, &imdb));
+            }
             None => ctx.put(|s| s.trakt = Some(Slot::Empty)),
         },
     }
+}
+
+/// The addon's cast with TMDB's headshot and role on each name TMDB lists
+/// (the same letters and digits, in any case); with no cast from the addon,
+/// TMDB's first `CAST_SHOWN`.
+fn with_credits(cast: Vec<CastMember>, credits: &[mq_tracking::tmdb::Credit]) -> Vec<CastMember> {
+    let key = |name: &str| -> String {
+        name.chars()
+            .filter(|c| c.is_alphanumeric())
+            .flat_map(char::to_lowercase)
+            .collect()
+    };
+    let member = |c: &mq_tracking::tmdb::Credit| CastMember {
+        name: c.name.clone(),
+        character: c.character.clone(),
+        photo: c.photo.clone(),
+    };
+    if cast.is_empty() {
+        return credits.iter().take(CAST_SHOWN).map(member).collect();
+    }
+    cast.into_iter()
+        .map(|m| {
+            let name = key(&m.name);
+            match credits.iter().find(|c| key(&c.name) == name) {
+                Some(c) => CastMember {
+                    name: m.name,
+                    ..member(c)
+                },
+                None => m,
+            }
+        })
+        .collect()
 }
 
 async fn load_meta(ctx: Ctx) {
@@ -912,6 +976,13 @@ impl Ctx {
         self.render();
     }
 
+    /// TMDB's cast of the title it found, for the headshots.
+    async fn ask_credits(&self, found: &mq_tracking::tmdb::Found) {
+        if let Some(credits) = self.core.tmdb_credits(found).await {
+            self.put(|s| s.credits = Some(credits));
+        }
+    }
+
     /// Trakt's score and related titles for the title as `kind`, together.
     async fn ask_trakt(&self, kind: &'static str, imdb: &str) {
         let score = async {
@@ -1072,9 +1143,15 @@ impl Ctx {
                 crate::views::playback::next_after(&meta, &done.video_id).is_some()
             });
         let downloads = self.downloads();
-        let rated_poster = lock(&self.state).rated_poster.clone();
+        let (rated_poster, credits) = {
+            let state = lock(&self.state);
+            (state.rated_poster.clone(), state.credits.clone())
+        };
         let imdb = self.imdb();
         let mut details = details(&meta, source, rated_poster, imdb.as_deref(), self.scores());
+        if let Some(credits) = credits {
+            details.cast = with_credits(details.cast, &credits);
+        }
         if self.kids {
             // A trailer is a YouTube hand-off and IMDb's page the open web:
             // both leave the app.
@@ -1351,7 +1428,14 @@ fn details(
         release_info: super::home::year_line(p.release_info.as_deref()),
         runtime: p.runtime.clone(),
         genres: links("Genres"),
-        cast: links("Cast"),
+        cast: links("Cast")
+            .into_iter()
+            .map(|name| CastMember {
+                name,
+                character: None,
+                photo: None,
+            })
+            .collect(),
         directors: links("Directors"),
         writers: links("Writers"),
         ratings: Ratings::of(rating.as_deref()),

@@ -1,7 +1,8 @@
-//! TMDB, for the title page's score (plans/title-page-ratings-genres-similar.md):
-//! one `find` by IMDb id gives TMDB's user score and whether the id is a
-//! movie or a show. The read token is the owner's, baked at build time like
-//! Trakt's app id; it is used for `find` only.
+//! TMDB, for the title page's score and cast photos
+//! (plans/title-page-ratings-genres-similar.md): one `find` by IMDb id
+//! gives TMDB's user score and whether the id is a movie or a show, and
+//! TMDB's id for its credits. The read token is the owner's, baked at build
+//! time like Trakt's app id; it only reads.
 
 use crate::trakt::api::{Answer, classify};
 use mq_http::{HttpClient, RequestOptions};
@@ -56,6 +57,17 @@ impl Tmdb {
             .await
     }
 
+    /// The cast of TMDB's title `id` of `kind` (`movie` or `series`): a
+    /// movie's credits, a show's credits across its seasons.
+    pub async fn credits(&self, kind: &str, id: u64) -> Answer {
+        let path = if kind == "movie" {
+            format!("/3/movie/{id}/credits")
+        } else {
+            format!("/3/tv/{id}/aggregate_credits")
+        };
+        self.get(&path).await
+    }
+
     /// TMDB's list of watch providers, with their logos (Discover's service
     /// rail, plans/discover-v2.md 6.6).
     pub async fn watch_providers(&self) -> Answer {
@@ -84,6 +96,19 @@ impl Tmdb {
 /// Where TMDB serves a logo of `size` ("w154") at `path` ("/abc.png").
 pub const IMAGES: &str = "https://image.tmdb.org/t/p";
 
+/// An image path TMDB gave ("/abc.png"), only as a plain file name: nothing
+/// an answer could turn into a query or another host.
+fn image_path(value: &Value) -> Option<&str> {
+    value.as_str().filter(|l| {
+        l.strip_prefix('/').is_some_and(|f| {
+            !f.is_empty()
+                && !f.contains("..")
+                && f.chars()
+                    .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-'))
+        })
+    })
+}
+
 /// The logo path of each provider `watch_providers` lists, by provider id.
 pub fn provider_logos(body: &Value) -> std::collections::HashMap<u64, String> {
     body["results"]
@@ -91,16 +116,43 @@ pub fn provider_logos(body: &Value) -> std::collections::HashMap<u64, String> {
         .into_iter()
         .flatten()
         .filter_map(|p| {
-            // A plain file name only: nothing an answer could turn into a query or another host.
-            let path = p["logo_path"].as_str().filter(|l| {
-                l.strip_prefix('/').is_some_and(|f| {
-                    !f.is_empty()
-                        && !f.contains("..")
-                        && f.chars()
-                            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-'))
-                })
-            })?;
-            Some((p["provider_id"].as_u64()?, path.to_owned()))
+            Some((
+                p["provider_id"].as_u64()?,
+                image_path(&p["logo_path"])?.to_owned(),
+            ))
+        })
+        .collect()
+}
+
+/// One person of a title's cast, as TMDB lists it.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Credit {
+    pub name: String,
+    /// The role, when TMDB names one.
+    pub character: Option<String>,
+    /// The headshot, 185 px wide, when TMDB has one.
+    pub photo: Option<String>,
+}
+
+/// The cast of a `credits` answer, in TMDB's billing order, each with a
+/// movie's `character` or a show's first role's.
+pub fn credits(body: &Value) -> Vec<Credit> {
+    let text = |v: &Value| {
+        v.as_str()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(str::to_owned)
+    };
+    body["cast"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|p| {
+            Some(Credit {
+                name: text(&p["name"])?,
+                character: text(&p["character"]).or_else(|| text(&p["roles"][0]["character"])),
+                photo: image_path(&p["profile_path"]).map(|path| format!("{IMAGES}/w185{path}")),
+            })
         })
         .collect()
 }
@@ -197,6 +249,46 @@ mod tests {
             true,
         );
         assert!(!format!("{tmdb:?}").contains("secret-token"));
+    }
+}
+
+#[cfg(test)]
+mod credit_tests {
+    use super::*;
+
+    /// The shapes of a movie's credits and a show's aggregate credits.
+    #[test]
+    fn credits_give_name_role_and_headshot_in_billing_order() {
+        let movie = serde_json::json!({"id": 278, "cast": [
+            {"name": "Tim Robbins", "character": "Andy Dufresne", "profile_path": "/djLVFETFTvPyVUdrd7aLVykobof.jpg"},
+            {"name": "Morgan Freeman", "character": "Ellis Boyd 'Red' Redding", "profile_path": null},
+            {"name": "", "character": "Nobody"}
+        ]});
+        assert_eq!(
+            credits(&movie),
+            [
+                Credit {
+                    name: "Tim Robbins".into(),
+                    character: Some("Andy Dufresne".into()),
+                    photo: Some(
+                        "https://image.tmdb.org/t/p/w185/djLVFETFTvPyVUdrd7aLVykobof.jpg".into()
+                    ),
+                },
+                Credit {
+                    name: "Morgan Freeman".into(),
+                    character: Some("Ellis Boyd 'Red' Redding".into()),
+                    photo: None,
+                },
+            ]
+        );
+        let show = serde_json::json!({"id": 1396, "cast": [
+            {"name": "Bryan Cranston", "roles": [{"character": "Walter White", "episode_count": 62}], "profile_path": "/x.jpg"},
+            {"name": "Odd", "roles": [], "profile_path": "//evil.host/x.jpg"}
+        ]});
+        let cast = credits(&show);
+        assert_eq!(cast[0].character.as_deref(), Some("Walter White"));
+        assert_eq!(cast[1].character, None);
+        assert_eq!(cast[1].photo, None);
     }
 }
 

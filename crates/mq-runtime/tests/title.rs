@@ -266,7 +266,8 @@ async fn resumes_the_season_being_watched() {
     let snap = settle(&view).await;
     let details = snap.header.details.clone().unwrap();
     assert_eq!(details.genres, ["Drama"]);
-    assert_eq!(details.cast, ["Emilia Clarke"]);
+    let cast: Vec<_> = details.cast.iter().map(|m| m.name.as_str()).collect();
+    assert_eq!(cast, ["Emilia Clarke"]);
     assert_eq!(details.rating.as_deref(), Some("9.2"));
     assert_eq!(snap.header.seasons, [0, 1, 2]);
     assert_eq!(snap.header.selected_season, Some(2));

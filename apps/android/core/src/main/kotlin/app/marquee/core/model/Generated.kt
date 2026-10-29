@@ -201,6 +201,16 @@ data class Captions(
     val hearingImpaired: Boolean,
 )
 
+/** One of the title's cast. */
+@Serializable
+data class CastMember(
+    val name: String,
+    /** The role TMDB names; null until its credits land, or when it names none. */
+    val character: String? = null,
+    /** TMDB's headshot (185 px wide); null until its credits land, or when it has none: draw the name's initials. */
+    val photo: String? = null,
+)
+
 @Serializable
 data class CatalogChoice(
     /** `addon id|type|catalog id`, the value `select` takes. */
@@ -2022,7 +2032,8 @@ data class TitleDetails(
     val releaseInfo: String? = null,
     val runtime: String? = null,
     val genres: List<String> = emptyList(),
-    val cast: List<String> = emptyList(),
+    /** From the meta's `Cast` links, in its order, each with TMDB's headshot and role once its credits land (asked with `scores`). */
+    val cast: List<CastMember> = emptyList(),
     val directors: List<String> = emptyList(),
     /** From the meta's `Writers` links, as `cast` and `directors`. */
     val writers: List<String> = emptyList(),

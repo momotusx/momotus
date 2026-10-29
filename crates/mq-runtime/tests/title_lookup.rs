@@ -7,7 +7,7 @@
 //! nothing.
 
 use mq_library::{AddonRow, AllowedRow};
-use mq_runtime::views::title::{Slot, TitleSnapshot, TitleState};
+use mq_runtime::views::title::{CastMember, Slot, TitleSnapshot, TitleState};
 use mq_runtime::{Core, SearchView, TitleView, TmdbHost, TraktConfig, TraktHosts};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
@@ -47,7 +47,10 @@ impl Fake {
     }
 }
 
-const MOVIE: &str = r#"{"meta":{"id":"tt0111161","type":"movie","name":"The Shawshank Redemption","links":[{"name":"9.3","category":"imdb","url":"https://imdb.com/title/tt0111161"},{"name":"Drama","category":"Genres","url":"stremio:///discover"},{"name":"Frank Darabont","category":"Writers","url":"stremio:///search?search=Frank%20Darabont"}]}}"#;
+const MOVIE: &str = r#"{"meta":{"id":"tt0111161","type":"movie","name":"The Shawshank Redemption","links":[{"name":"9.3","category":"imdb","url":"https://imdb.com/title/tt0111161"},{"name":"Drama","category":"Genres","url":"stremio:///discover"},{"name":"Frank Darabont","category":"Writers","url":"stremio:///search?search=Frank%20Darabont"},{"name":"Tim Robbins","category":"Cast","url":"stremio:///search?search=Tim%20Robbins"},{"name":"Morgan Freeman","category":"Cast","url":"stremio:///search?search=Morgan%20Freeman"},{"name":"Bob Gunton","category":"Cast","url":"stremio:///search?search=Bob%20Gunton"}]}}"#;
+/// TMDB's credits of 2026-10-30, trimmed: the addon's names in another
+/// case, one with no headshot, one the addon does not name.
+const CREDITS: &str = r#"{"id":278,"cast":[{"name":"tim robbins","character":"Andy Dufresne","profile_path":"/robbins.jpg"},{"name":"Morgan Freeman","character":"Ellis Boyd 'Red' Redding","profile_path":null},{"name":"William Sadler","character":"Heywood","profile_path":"/sadler.jpg"}]}"#;
 const SERIES: &str =
     r#"{"meta":{"id":"tt0903747","type":"series","name":"Breaking Bad","videos":[]}}"#;
 const ANIME: &str = r#"{"meta":{"id":"kitsu:50016","type":"anime","name":"Cyberpunk: Edgerunners II","imdb_id":"tt12590266","videos":[]}}"#;
@@ -76,6 +79,7 @@ async fn fake() -> Fake {
         ("/3/find/tt0111161".into(), 200, TMDB_MOVIE.into()),
         ("/3/find/tt0903747".into(), 200, TMDB_SHOW.into()),
         ("/3/find/tt12590266".into(), 200, TMDB_SHOW.into()),
+        ("/3/movie/278/credits".into(), 200, CREDITS.into()),
         ("/movies/tt0111161/ratings".into(), 200, TRAKT_SCORE.into()),
         ("/movies/tt0111161/related".into(), 200, RELATED.into()),
         ("/shows/".into(), 200, "[]".into()),
@@ -246,7 +250,9 @@ async fn scores_and_similar_land_once_the_page_is_visible() {
 
     view.set_visible(true);
     let snap = until(&view, "the scores", |s| {
-        scores(s) == (shown("87%"), shown("92%")) && s.similar.len() == 2
+        scores(s) == (shown("87%"), shown("92%"))
+            && s.similar.len() == 2
+            && cast(s).first().is_some_and(|m| m.photo.is_some())
     })
     .await;
     // Each badge links to the title's own page there, built from checked
@@ -300,7 +306,88 @@ async fn scores_and_similar_land_once_the_page_is_visible() {
         "kept answers show at once, with no wait: {:?}",
         opened.elapsed()
     );
-    assert_eq!(lookups(&fake), 3, "answers are kept");
+    assert_eq!(lookups(&fake), 4, "answers are kept, the credits too");
+}
+
+fn cast(snap: &TitleSnapshot) -> Vec<CastMember> {
+    snap.header
+        .details
+        .as_ref()
+        .map(|d| d.cast.clone())
+        .unwrap_or_default()
+}
+
+fn member(name: &str, character: Option<&str>, photo: Option<&str>) -> CastMember {
+    CastMember {
+        name: name.into(),
+        character: character.map(str::to_owned),
+        photo: photo.map(|p| format!("https://image.tmdb.org/t/p/w185{p}")),
+    }
+}
+
+/// Starring's headshots (plans/batch-2.md R5): TMDB's credits put a
+/// headshot and a role on each name the addon gives, matched by name in any
+/// case, in the addon's order; a name TMDB does not list stays bare (the
+/// apps draw its initials). Asked once with the scores and kept.
+#[tokio::test]
+async fn the_cast_gets_tmdbs_headshots_and_roles() {
+    let fake = fake().await;
+    let core = core(&fake, Some("test-token"));
+    let view = TitleView::open(&core, "movie", "tt0111161");
+    let snap = until(&view, "the meta", ready).await;
+    assert_eq!(
+        cast(&snap),
+        [
+            member("Tim Robbins", None, None),
+            member("Morgan Freeman", None, None),
+            member("Bob Gunton", None, None),
+        ],
+        "names only before the page is visible"
+    );
+    view.set_visible(true);
+    let snap = until(&view, "the headshots", |s| {
+        cast(s).iter().any(|m| m.photo.is_some())
+    })
+    .await;
+    assert_eq!(
+        cast(&snap),
+        [
+            member("Tim Robbins", Some("Andy Dufresne"), Some("/robbins.jpg")),
+            member("Morgan Freeman", Some("Ellis Boyd 'Red' Redding"), None),
+            member("Bob Gunton", None, None),
+        ]
+    );
+    let again = TitleView::open(&core, "movie", "tt0111161");
+    again.set_visible(true);
+    until(&again, "the kept headshots", |s| {
+        cast(s).first().is_some_and(|m| m.photo.is_some())
+    })
+    .await;
+    assert_eq!(fake.asked("/3/movie/278/credits"), 1);
+}
+
+/// A show whose addon names no cast shows TMDB's first ten, from its
+/// credits across the seasons.
+#[tokio::test]
+async fn a_title_with_no_cast_from_its_addon_shows_tmdbs() {
+    let fake = fake().await;
+    let people: Vec<String> = (1..=12)
+        .map(|i| format!(r#"{{"name":"Actor {i}","roles":[{{"character":"Role {i}"}}],"profile_path":"/a{i}.jpg"}}"#))
+        .collect();
+    fake.route(
+        "/3/tv/105248/aggregate_credits",
+        200,
+        &format!(r#"{{"cast":[{}]}}"#, people.join(",")),
+    );
+    let core = core(&fake, Some("test-token"));
+    let view = TitleView::open(&core, "series", "tt0903747");
+    until(&view, "the meta", ready).await;
+    view.set_visible(true);
+    let snap = until(&view, "TMDB's cast", |s| !cast(s).is_empty()).await;
+    let shown = cast(&snap);
+    assert_eq!(shown.len(), 10);
+    assert_eq!(shown[0], member("Actor 1", Some("Role 1"), Some("/a1.jpg")));
+    assert_eq!(shown[9].name, "Actor 10");
 }
 
 /// TMDB down or with no token never holds Trakt back: a movie still gets
