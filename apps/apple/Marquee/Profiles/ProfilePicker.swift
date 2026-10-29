@@ -68,6 +68,8 @@ struct ProfilePicker: View {
             PinKeypad(
                 title: "Enter the PIN for \(target.name)",
                 initial: failedSwitch(for: target),
+                // Opened by the bar's menu: Cancel goes back where the menu was, not to the tiles.
+                cancelTitle: mode == .push && target.id == pinFor?.id ? "Cancel" : "Choose another profile",
                 note: ownerNote(target, snapshot),
                 reset: resetAction(target, snapshot),
                 submit: { pin in await enter(target, pin: pin, snapshot: snapshot) },

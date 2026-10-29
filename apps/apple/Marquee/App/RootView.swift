@@ -278,7 +278,9 @@ struct MainShell: View {
             .background(Theme.Palette.bg)
             // The owner's variant 4: the places in a glass ornament at the window's foot; pages end above it.
             .placeOrnament(tab, strong: ornamentStrong, shown: !immersion.active, select: { select($0) }) {
-                ProfileMenu(onSettings: { select(.settings) }, onPin: pin) { OrnamentProfile(profile: $0, lit: tab == .settings) }
+                ProfileMenu(onSettings: { select(.settings) }, onPin: pin) { me in
+                    OrnamentProfile(lit: tab == .settings) { BarAvatar(profile: me, size: OrnamentLayout.itemHeight - 8) }
+                }
                     .help("Profiles and Settings")
             }
             // Content under the traffic lights and the top buttons gets a soft blurred edge once it scrolls there.

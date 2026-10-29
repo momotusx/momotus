@@ -306,6 +306,7 @@ export function Picker(props: { mode: "start" | "locked" | "switch" }) {
             title={`Enter the PIN for ${t().name}`}
             note={forgot()}
             onSubmit={(pin) => enter(t(), pin)}
+            cancelLabel={t().id === asked ? "Cancel" : undefined}
             onCancel={() => {
               const id = t().id;
               if (id === asked) return goBack();

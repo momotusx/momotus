@@ -141,11 +141,12 @@ function TopNav() {
       <span>{d.label}</span>
     </A>
   );
-  // The profile menu's Settings, as Select on its tab was: on TV a replace, or into the page when it shows already.
+  // The profile menu's Settings: Settings' first page (from one of its pages too). On TV a replace, as a tab switches,
+  // and on the first page itself it goes into the page, as Select on the shown tab did.
   const settings = () => {
     clearTimeout(settle);
     if (!tv()) navigate("/settings");
-    else if (section(location.pathname) === "/settings") move("down");
+    else if (location.pathname === "/settings") move("down");
     else navigate("/settings", { replace: true });
   };
   const profile = () => <ProfileMenu lit={section(location.pathname) === "/settings"} onSettings={settings} />;

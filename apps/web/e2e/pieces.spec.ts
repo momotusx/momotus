@@ -240,7 +240,9 @@ test("phone: the floating glass capsule, 348x62 and 21 from the edges, five tabs
   const box = (await bar.boundingBox())!;
   expect(box).toMatchObject({ x: 21, width: 348, height: 62 });
   expect(Math.round(844 - box.y - box.height)).toBe(21);
-  await expect(bar.locator("a, .ptab")).toHaveText(["Home", "Discover", "Library", "Search", "Profile"]);
+  await expect(bar.locator("a")).toHaveText(["Home", "Discover", "Library", "Search"]);
+  // The profile last, its avatar over "Profile" (plans/nav-profile.md).
+  await expect(bar.locator(":scope > *").last().locator(".ptab > span:not(.avatar)")).toHaveText("Profile");
   const s = await style(page, "nav.tabs");
   expect(s.background).toBe("rgba(32, 32, 32, 0.8)");
   expect(s.blur).toContain("blur(24px)");

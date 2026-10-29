@@ -36,7 +36,9 @@ private func source(_ path: String) throws -> String {
     let tools = try body(of: "private struct TopTools: ToolbarContent", in: root)
     #expect(tools.components(separatedBy: "ToolbarItem(placement: .primaryAction) { search }").count - 1 == 2, "Search keeps its item on both macOS paths")
     #expect(!tools.contains("Profile"), "the profile is back in the toolbar")
-    #expect(root.contains("ProfileMenu(onSettings: { select(.settings) }, onPin: pin) { OrnamentProfile("), "the ornament lost the profile")
+    let ornament = try #require(root.range(of: ".placeOrnament(tab, strong: ornamentStrong")).lowerBound
+    #expect(root[ornament...].prefix(400).contains("ProfileMenu(onSettings: { select(.settings) }, onPin: pin)"), "the ornament lost the profile's menu")
+    #expect(root.contains("OrnamentProfile(lit: tab == .settings)"), "the ornament's profile is not lit on Settings")
 }
 
 @Test func thePhonesProfileTabKeepsTheMinimum() throws {

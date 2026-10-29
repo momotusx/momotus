@@ -50,12 +50,12 @@ extension PlaceOrnament where Profile == EmptyView {
 }
 
 /// The ornament's last item: the profile's avatar at a place's height, on the white fill while Settings shows.
-struct OrnamentProfile: View {
-    let profile: ProfileInfo
+struct OrnamentProfile<Avatar: View>: View {
     let lit: Bool
+    @ViewBuilder let avatar: Avatar
 
     var body: some View {
-        BarAvatar(profile: profile, size: OrnamentLayout.itemHeight - 8)
+        avatar
             .padding(.horizontal, 8)
             .frame(height: OrnamentLayout.itemHeight)
             .background { if lit { Capsule().fill(Theme.Palette.primary) } }

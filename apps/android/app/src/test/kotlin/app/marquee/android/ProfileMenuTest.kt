@@ -180,7 +180,7 @@ class ProfileMenuTest {
         compose.onNodeWithText("Enter the PIN for Bo").assertExists()
         // Asked once: a picker opened later starts on the tiles.
         assertEquals(null, gate.asked)
-        compose.onNodeWithText("Choose another profile").performClick()
+        compose.onNodeWithText("Cancel").performClick()
         compose.waitForIdle()
         assertEquals(1, left)
     }

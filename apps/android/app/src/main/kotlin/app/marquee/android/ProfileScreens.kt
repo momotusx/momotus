@@ -528,7 +528,7 @@ fun PickerScreen(
     // keypad opens again with the reason, whichever picker asked).
     // Kept across a rotation, which the device's lock screen can bring while a reset waits.
     // Opened by the bar's menu on a profile with a PIN: its keypad first, and its Cancel goes back where the menu was.
-    val asked: String? = rememberSaveable { if (mode == PickerMode.Switch) gate.takeAsked() else null }
+    val asked by rememberSaveable { mutableStateOf(if (mode == PickerMode.Switch) gate.takeAsked() else null) }
     var picked by rememberSaveable { mutableStateOf<String?>(asked) }
     val target = picked ?: gate.switching.takeIf { gate.switchProblem != null }
     var said by remember { mutableStateOf("") }
@@ -625,6 +625,8 @@ fun PickerScreen(
                         if (gate.switching != null) gate.cancelSwitch()
                     }
                 },
+                // Opened by the bar's menu: Cancel goes back where the menu was, not to the tiles.
+                cancelLabel = if (picked != null && picked == asked) "Cancel" else "Choose another profile",
                 extra =
                     if (chosen.isOwner) {
                         (
