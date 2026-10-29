@@ -50,6 +50,17 @@ object AccountRules {
 
     fun continueWith(id: String): String = fill(AccountCopy.CONTINUE_WITH, mapOf("provider" to providerName(id)))
 
+    /** Settings' Connect Google: the relay offers Google and the account's links, once read, have none. */
+    fun connectGoogle(
+        offered: List<String>,
+        linked: List<String>?,
+    ): Boolean = linked != null && "google" in offered && "google" !in linked
+
+    fun connectTitle(id: String): String = fill(AccountCopy.CONNECT_PROVIDER, mapOf("provider" to providerName(id)))
+
+    fun connectText(id: String): String =
+        fill(AccountCopy.CONNECT_PROVIDER_TEXT, mapOf("providerAccount" to providerAccount(id)))
+
     /** Android's order (4.1.1): Google first, then Apple and Facebook, then any other in the relay's order. */
     private val ORDER = listOf("google", "apple", "facebook")
 

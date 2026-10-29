@@ -54,6 +54,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import app.marquee.core.AccountCopy
+import app.marquee.core.AccountRules
 import app.marquee.core.AddonsCopy
 import app.marquee.core.DebridCopy
 import app.marquee.core.DefaultsCopy
@@ -210,6 +212,9 @@ fun SettingsScreen(
     onEditProfile: (String) -> Unit,
     onManageProfiles: () -> Unit,
     sync: SyncController,
+    accounts: AccountFlows,
+    /** Sign in: the phone's sign-in screen, a TV's QR. */
+    onSignIn: () -> Unit,
     onAddons: () -> Unit,
     onImport: () -> Unit,
     onSync: () -> Unit,
@@ -233,6 +238,17 @@ fun SettingsScreen(
     val editable = editableProfile(me, kids)
     val canManage = editable?.isOwner == true
     val line = profileLine((snapshot?.profiles?.size ?: 1) > 1)
+    // Sign in and Connect Google sit here, where people look for them; the Account page keeps the rest.
+    val actions = accounts.actions
+    val server = remember(sync.joined) { accounts.server(context) }
+    val offered by produceState(emptyList<String>(), server, sync.joined) {
+        value = if (sync.joined) emptyList() else accounts.providers(server)
+    }
+    val mayLink = accounts.rows(tv).links
+    LaunchedEffect(sync.joined, mayLink) { if (sync.joined && mayLink && !tv) actions.load() }
+    val connect =
+        sync.joined && mayLink && !tv &&
+            AccountRules.connectGoogle(actions.providers, actions.links?.map { it.provider })
     val parts =
         buildList {
             // The phone's header holds the profile alone; its edits are a group of their own. TV has them on the art.
@@ -274,7 +290,38 @@ fun SettingsScreen(
             add(
                 SettingsPart(SettingsSection.Account) {
                     SettingsGroup(
+                        // Signed out, where the sync service offers sign-in: the phone's screen, a TV's QR.
+                        if (!sync.joined && offered.isNotEmpty()) {
+                            {
+                                SettingsRow(
+                                    Icons.DoorOpen,
+                                    Tone.Blue,
+                                    AccountCopy.SIGN_IN_TITLE,
+                                    AccountCopy.LIBRARY_ADDED,
+                                    onSignIn,
+                                )
+                            }
+                        } else {
+                            null
+                        },
                         { SettingsRow(Icons.MonitorSmartphone, Tone.Sky, SyncCopy.TITLE, syncWords(sync), onSync) },
+                        // Google's page opens over the Account page, which shows how the link went.
+                        if (connect) {
+                            {
+                                SettingsRow(
+                                    Icons.Link,
+                                    Tone.Blue,
+                                    AccountRules.connectTitle("google"),
+                                    AccountRules.connectText("google"),
+                                    {
+                                        actions.link("google")
+                                        onSync()
+                                    },
+                                )
+                            }
+                        } else {
+                            null
+                        },
                     )
                 },
             )

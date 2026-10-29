@@ -8,6 +8,8 @@ private typealias W = SyncWords
 /// Remove and Report lost, Add a device, Make a recovery kit, stopping, and
 /// deleting the account.
 struct SyncScreen: View {
+    /// A provider to link at once (Settings' Connect Google).
+    var connect: String?
     @Environment(SyncModel.self) private var sync
     @Environment(\.metrics) private var metrics
 
@@ -19,7 +21,7 @@ struct SyncScreen: View {
                     .textFont(Theme.type.body)
                     .foregroundStyle(Theme.Palette.muted)
                     .fixedSize(horizontal: false, vertical: true)
-                if sync.keyUnreadable { KeyUnreadable() } else if sync.joined { JoinedSync() } else { NotJoined() }
+                if sync.keyUnreadable { KeyUnreadable() } else if sync.joined { JoinedSync(connect: connect) } else { NotJoined() }
             }
             .frame(maxWidth: 760, alignment: .leading)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -101,6 +103,7 @@ struct KeyUnreadable: View {
 }
 
 private struct JoinedSync: View {
+    let connect: String?
     @Environment(SyncModel.self) private var sync
     @Environment(ProfileSession.self) private var profiles
     @Environment(\.metrics) private var metrics
@@ -116,7 +119,7 @@ private struct JoinedSync: View {
         VStack(alignment: .leading, spacing: Theme.Space.m) {
             state
             kitCallouts
-            SignedInWith()
+            SignedInWith(connect: connect)
             devices
             links
             // A TV's Sign out always removes the library: the owner's only (D13).

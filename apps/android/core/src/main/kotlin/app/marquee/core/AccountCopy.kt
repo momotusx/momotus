@@ -148,6 +148,8 @@ object AccountCopy {
     const val START_OVER = "Start over"
     const val SIGNED_IN_WITH = "Signed in with"
     const val LINK_ANOTHER = "Link another"
+    const val CONNECT_PROVIDER = "Connect {provider}"
+    const val CONNECT_PROVIDER_TEXT = "Sign in with your {providerAccount} too."
     const val LINKED_ON = "Linked on {date}"
     const val UNLINK = "Unlink"
     const val SAVE_PASSKEY_HERE = "Save a passkey here"
@@ -306,6 +308,8 @@ object AccountCopy {
             "startOver" to START_OVER,
             "signedInWith" to SIGNED_IN_WITH,
             "linkAnother" to LINK_ANOTHER,
+            "connectProvider" to CONNECT_PROVIDER,
+            "connectProviderText" to CONNECT_PROVIDER_TEXT,
             "linkedOn" to LINKED_ON,
             "unlink" to UNLINK,
             "savePasskeyHere" to SAVE_PASSKEY_HERE,

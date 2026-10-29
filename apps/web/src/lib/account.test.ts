@@ -6,6 +6,9 @@ import {
   announcementLine,
   cancelUnlink,
   codeDigits,
+  connectGoogle,
+  connectText,
+  connectTitle,
   continueWith,
   continueWithEmail,
   emailEnds,
@@ -275,4 +278,15 @@ test("the code field keeps digits only and cuts at 6; Send a new code waits 60 s
   expect(resendIn(1000, 61_000)).toBe(0);
   // Time in the background counts: the count comes from the mail's time, not from ticks.
   expect(resendIn(1000, 3_600_000)).toBe(0);
+});
+
+test("Settings offers Connect Google only when the relay has Google and the read links lack it", () => {
+  expect(connectGoogle(["google", "email"], ["email"])).toBe(true);
+  expect(connectGoogle(["google"], [])).toBe(true);
+  expect(connectGoogle(["google"], ["google"])).toBe(false);
+  expect(connectGoogle(["facebook"], [])).toBe(false);
+  // Links not read yet: no row that might name a link the account already has.
+  expect(connectGoogle(["google"], undefined)).toBe(false);
+  expect(connectTitle("google")).toBe("Connect Google");
+  expect(connectText("google")).toBe("Sign in with your Google account too.");
 });

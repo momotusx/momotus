@@ -79,6 +79,18 @@ class AccountRulesTest {
     }
 
     @Test
+    fun `Settings offers Connect Google only when the relay has Google and the read links lack it`() {
+        assertTrue(AccountRules.connectGoogle(listOf("google", "email"), listOf("email")))
+        assertTrue(AccountRules.connectGoogle(listOf("google"), emptyList()))
+        assertFalse(AccountRules.connectGoogle(listOf("google"), listOf("google")))
+        assertFalse(AccountRules.connectGoogle(listOf("facebook", "email"), emptyList()))
+        // Links not read yet: no row that might name a link the account already has.
+        assertFalse(AccountRules.connectGoogle(listOf("google"), null))
+        assertEquals("Connect Google", AccountRules.connectTitle("google"))
+        assertEquals("Sign in with your Google account too.", AccountRules.connectText("google"))
+    }
+
+    @Test
     fun `email is never a provider button, and its words are the email ones`() {
         assertEquals(listOf("google", "mock"), AccountRules.providerOrder(listOf("email", "mock", "google")))
         assertEquals(emptyList<String>(), AccountRules.providerOrder(listOf("email")))

@@ -127,6 +127,8 @@
   "startOver": "Start over",
   "signedInWith": "Signed in with",
   "linkAnother": "Link another",
+  "connectProvider": "Connect {provider}",
+  "connectProviderText": "Sign in with your {providerAccount} too.",
   "linkedOn": "Linked on {date}",
   "unlink": "Unlink",
   "savePasskeyHere": "Save a passkey here",

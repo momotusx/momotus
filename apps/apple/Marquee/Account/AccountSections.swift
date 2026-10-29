@@ -13,6 +13,9 @@ enum AccountServerOf {
 
 /// Signed in with: each identity, Link another and Unlink (owner, D16).
 struct SignedInWith: View {
+    /// A provider to link once the links are read (Settings' Connect Google), if still unlinked.
+    var connect: String?
+    @State private var connectAsked = false
     @Environment(SyncModel.self) private var sync
     @Environment(ProfileSession.self) private var profiles
     @State private var links: [IdentityLink]?
@@ -68,7 +71,16 @@ struct SignedInWith: View {
             }
             #endif
         }
-        .task { await load() }
+        .task {
+            await load()
+            #if !os(tvOS)
+            // Once per page: coming back from the email screen asks nothing again.
+            if let connect, !connectAsked, owner, unlinked.contains(connect) {
+                connectAsked = true
+                await link(connect)
+            }
+            #endif
+        }
         #if !os(tvOS)
         // A sign-in another account holds, met after a join by QR: offered here.
         .onChange(of: sync.heldLink, initial: true) { takeHeld() }

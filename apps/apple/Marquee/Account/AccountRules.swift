@@ -48,6 +48,13 @@ enum AccountRules {
         return !linked.contains("email")
     }
 
+    /// Settings' Connect Google: the relay offers Google and the account's
+    /// links, once read, have none.
+    static func connectGoogle(offered: [String], linked: [String]?) -> Bool {
+        guard let linked else { return false }
+        return offered.contains("google") && !linked.contains("google")
+    }
+
     /// The code field keeps digits only, cut at 6: a pasted "123 456" or "123-456" works.
     static func codeDigits(_ typed: String) -> String {
         String(typed.filter { $0.isASCII && $0.isNumber }.prefix(6))

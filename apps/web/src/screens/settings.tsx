@@ -15,10 +15,14 @@ import Trash from "lucide-solid/icons/trash";
 import ArrowDownToLine from "lucide-solid/icons/arrow-down-to-line";
 import CirclePlay from "lucide-solid/icons/circle-play";
 import Info from "lucide-solid/icons/info";
+import Link2 from "lucide-solid/icons/link-2";
+import LogIn from "lucide-solid/icons/log-in";
 import Monitor from "lucide-solid/icons/monitor";
 import User from "lucide-solid/icons/user";
 import Wrench from "lucide-solid/icons/wrench";
-import { createSignal, For, type JSX, onCleanup, onMount, Show } from "solid-js";
+import { createResource, createSignal, For, type JSX, onCleanup, onMount, Show } from "solid-js";
+import { relayProviders, signInServer } from "../core/sign-in";
+import { mayDeleteAccount } from "../lib/sync";
 import { deviceLanguage, homeView, liveView, op, prefsView, reasonOf } from "../core/client";
 import { Backdrop, useTrimmedLogo } from "../components/art";
 import { CONTINUE_ROW } from "../components/row";
@@ -48,7 +52,7 @@ import { AvatarArt } from "../components/avatar";
 import { profiles } from "../core/profiles";
 import { debridAccounts } from "../core/debrid";
 import { inUse } from "../lib/debrid";
-import { accountWords } from "../lib/account";
+import { accountWords, connectGoogle, connectText, connectTitle } from "../lib/account";
 
 const clockTime = (ms: number) => new Date(ms).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 
@@ -288,6 +292,16 @@ export default function SettingsScreen() {
   // Edit and Manage need the owner's PIN on a kids profile (DECISION kids rules): a kids profile shows neither.
   const canEdit = () => !!me() && !kids();
   const canManage = () => me()?.isOwner === true;
+  // Sign in and Connect Google sit here, where people look for them; the Account page keeps the rest.
+  // Signed out: the sync service this device knows, where it offers sign-in (the Account page's rule).
+  const [offered] = createResource(() => !sync.joined() && (signInServer() || false), relayProviders);
+  const signIn = () => !sync.joined() && offered.state === "ready" && offered().length > 0;
+  // Joined, on the owner (D16) and never on a TV: the account's links and its relay's providers.
+  const [linking] = createResource(
+    () => sync.joined() && form() !== "tv" && mayDeleteAccount(profiles()) && (sync.accountServer() || false),
+    async (server) => ({ offered: await relayProviders(server), linked: (await sync.identities()).map((l) => l.provider) }),
+  );
+  const connect = () => linking.state === "ready" && connectGoogle(linking().offered, linking().linked);
   // Decided once Home's rows are in, so a hero's art never shows first and gives way to Continue Watching's.
   const art = () =>
     home.rows.length === 0
@@ -478,7 +492,15 @@ export default function SettingsScreen() {
               Account
             </h2>
             <div class="sgroup">
+              {/* A TV signs in with the phone's QR, from the first-run sign-in. */}
+              <Show when={signIn()}>
+                <Row href={form() === "tv" ? "/welcome" : "/sign-in"} fkey="settings:sign-in" tone="blue" icon={<LogIn />} title={accountWords.signInTitle} text={accountWords.libraryAdded} />
+              </Show>
               <Row href="/sync" fkey="settings:sync" tone="sky" icon={<MonitorSmartphone />} title={syncWords.title} text={syncLine()} />
+              {/* The Account page opens with Google's button ready: its window needs that page's own click. */}
+              <Show when={connect()}>
+                <Row href="/sync?connect=google" fkey="settings:connect-google" tone="blue" icon={<Link2 />} title={connectTitle("google")} text={connectText("google")} />
+              </Show>
             </div>
           </section>
 

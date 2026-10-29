@@ -59,6 +59,16 @@ private func announcement(_ kind: String, member: String? = "m", by: String? = "
     #expect(PasskeyContract.challenge() != PasskeyContract.challenge())
 }
 
+@Test func settingsOffersConnectGoogleOnlyWhenTheRelayHasItAndTheLinksLackIt() {
+    #expect(AccountRules.connectGoogle(offered: ["google", "email"], linked: ["email"]))
+    #expect(AccountRules.connectGoogle(offered: ["google"], linked: []))
+    #expect(!AccountRules.connectGoogle(offered: ["google"], linked: ["google"]))
+    #expect(!AccountRules.connectGoogle(offered: ["facebook"], linked: []))
+    #expect(!AccountRules.connectGoogle(offered: ["google"], linked: nil))
+    #expect(AccountRules.fill(AccountRules.words.connectProvider, ["provider": "Google"]) == "Connect Google")
+    #expect(AccountRules.fill(AccountRules.words.connectProviderText, ["providerAccount": "Google account"]) == "Sign in with your Google account too.")
+}
+
 @Test func providersAreWordedAndAppleComesFirst() {
     #expect(AccountRules.orderedProviders(["google", "facebook", "apple"]) == ["apple", "google", "facebook"])
     #expect(AccountRules.orderedProviders(["mock", "facebook", "google"]) == ["google", "facebook", "mock"])

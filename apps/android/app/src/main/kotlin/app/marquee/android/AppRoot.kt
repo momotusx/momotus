@@ -659,6 +659,8 @@ private fun AppNav(
                             onEditProfile = { backStack.add(Route.EditProfile(it)) },
                             onManageProfiles = { backStack.add(Route.ManageProfiles) },
                             sync,
+                            marquee.accounts,
+                            onSignIn = { backStack.add(if (tv) Route.TvSignIn else Route.SignIn(firstRun = false)) },
                             onAddons = { backStack.add(Route.Addons) },
                             onImport = { backStack.add(Route.Import) },
                             onSync = { backStack.add(Route.Sync) },

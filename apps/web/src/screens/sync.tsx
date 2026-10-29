@@ -559,6 +559,23 @@ function SignedInWith(props: { links: IdentityLink[] | undefined; providers: str
   const owner = () => mayDeleteAccount(profiles());
   const server = () => sync.accountServer();
   const [picking, setPicking] = createSignal(false);
+  // Settings' Connect Google: Link another open with Google's button focused, once the links are read
+  // (its window needs a click on this page; one opened unasked would be blocked).
+  const [params] = useSearchParams<{ connect?: string }>();
+  let connectAsked = false;
+  createEffect(
+    on(
+      () => props.links,
+      (links) => {
+        const p = params.connect;
+        if (connectAsked || !p || !links || !owner() || links.some((l) => l.provider === p) || !props.providers.includes(p)) return;
+        connectAsked = true;
+        setPicking(true);
+        focusSoon(`[data-f="sync:link:${p}"]`);
+      },
+      { defer: false },
+    ),
+  );
   const [note, setNote] = createSignal<string | null>(null);
   const [failure, setFailure] = createSignal<Failure | null>(null);
   let ticket = "";

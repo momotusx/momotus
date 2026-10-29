@@ -73,6 +73,24 @@ struct SettingsScreen: View {
     }
     private var me: ProfileInfo? { profiles.snapshot?.current }
     private var kids: Bool { me?.kids == true }
+    /// Settings' Connect Google: the relay's providers and the account's links, read while joined.
+    @State private var offered: [String] = []
+    @State private var linked: [String]?
+
+    /// Sign in shows signed out, where the build has a sync service (the Account page's own rule).
+    private var signInServer: String? {
+        sync.joined || sync.keyUnreadable ? nil : AccountServer.default
+    }
+
+    /// Connect Google is the owner's (D16), never a TV's (it links nothing there).
+    private func readLinks() async {
+        guard !tvForm, sync.joined, SyncRules.mayDeleteAccount(profiles.snapshot), let server = AccountServerOf.joined else {
+            linked = nil
+            return
+        }
+        offered = (try? await sync.relayInfo(server: server)) ?? []
+        linked = (try? await sync.identities())?.map(\.provider)
+    }
     private var art: Tile? { SettingsRules.art(rows: home.rows, heroes: home.header.heroes, kids: kids) }
     private let space = "settings-page"
 
@@ -330,8 +348,29 @@ struct SettingsScreen: View {
             }
             section(.account) {
                 SettingsGroup(sizes: sizes) {
-                    row(.account, tone: .sky, glyph: "monitor-smartphone", title: SyncWords.title, detail: syncSummary) { SyncScreen() }
+                    // Signed out, on the build's sync service: Sign in here (a TV: with the phone's QR).
+                    if let server = signInServer {
+                        #if os(tvOS)
+                        row(.account, tone: .blue, glyph: "qr-code", title: AccountWords.shared.tvSignIn, detail: AccountWords.shared.tvSignInHow) {
+                            PairingScreen(core: core, autostart: server, heading: AccountWords.shared.tvSignIn, lede: AccountWords.shared.tvSignInHow)
+                        }
+                        #else
+                        row(.account, tone: .blue, glyph: "door-open", title: AccountWords.shared.signInTitle, detail: AccountWords.shared.libraryAdded) {
+                            LaterSignIn(server: server)
+                        }
+                        #endif
+                    }
+                    row(signInServer == nil ? .account : nil, tone: .sky, glyph: "monitor-smartphone", title: SyncWords.title, detail: syncSummary) { SyncScreen() }
+                    // The Account page starts the link and shows how it went.
+                    if AccountRules.connectGoogle(offered: offered, linked: linked) {
+                        row(nil, tone: .blue, glyph: "link-2",
+                            title: AccountRules.fill(AccountWords.shared.connectProvider, ["provider": AccountRules.providerName("google")]),
+                            detail: AccountRules.fill(AccountWords.shared.connectProviderText, ["providerAccount": AccountRules.providerAccount("google")])) {
+                            SyncScreen(connect: "google")
+                        }
+                    }
                 }
+                .task(id: sync.joined) { await readLinks() }
             }
             section(.home) {
                 SettingsGroup(sizes: sizes) {

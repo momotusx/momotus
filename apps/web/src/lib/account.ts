@@ -22,6 +22,10 @@ export const providerName = (id: string) => (id in w.providerName ? w.providerNa
 /** "Apple Account", "Google account", ..., else "<provider> sign-in". */
 export const providerAccount = (id: string) => (id in w.providerAccount ? w.providerAccount[id as Named] : fill(w.providerAccountOther, { provider: providerName(id) }));
 export const continueWith = (id: string) => fill(w.continueWith, { provider: providerName(id) });
+/** Settings' Connect Google: the relay offers Google and the account's links, once read, have none. */
+export const connectGoogle = (offered: readonly string[], linked: readonly string[] | undefined) => !!linked && offered.includes("google") && !linked.includes("google");
+export const connectTitle = (id: string) => fill(w.connectProvider, { provider: providerName(id) });
+export const connectText = (id: string) => fill(w.connectProviderText, { providerAccount: providerAccount(id) });
 
 /** The order of a relay's providers on the first screen: Apple, Google and Facebook first, as
  * the web shows no platform's own sheet (4.1.1), then any other in the relay's order. */
