@@ -17,7 +17,7 @@
  * code from the mock. Mail signs in by email (both stages, Back, a wrong code, `new`, Create);
  * Desk links an address from Account; a second deletion is asked on the link host's real page by
  * email; Late's Send a new code turns on after its minute; Mail signs out and finds its account by
- * email. The relay runs with test-only limits (`--sign-in-budget`, `--mail-gap-ms`): every core here
+ * email. The relay runs with test-only limits (`--clients-per-address`, `--mail-gap-ms`): every core here
  * reaches it from 127.0.0.1, and the real minute between two codes to one mailbox would make the
  * spec wait; Late's 60 s resend timer runs on Playwright's clock. No address reaches storage,
  * history or the URL. */
@@ -303,7 +303,7 @@ test.describe.serial("accounts on the web", () => {
         email: { accessKeyId: "AKIDMOCK", secretAccessKey: "mock/secret/key", region: "us-east-1", from: "noreply@example.org", endpoint: mock.url },
       }),
     );
-    procs.push(await startRelay(P.relay, undefined, ["--identity", identity, "--public-host", "127.0.0.1", "--sign-in-budget", "1000", "--mail-gap-ms", String(MAIL_GAP_MS)]));
+    procs.push(await startRelay(P.relay, undefined, ["--identity", identity, "--public-host", "127.0.0.1", "--clients-per-address", "50", "--mail-gap-ms", String(MAIL_GAP_MS)]));
     for (const port of [P.a, P.b, P.c, P.d, P.e]) {
       procs.push(await startBridge(port));
       // Something to show on Home: the local sample addon (a device with none starts at the welcome steps).
