@@ -419,6 +419,30 @@ class AccountSignInTest {
     }
 
     @Test
+    fun `a failed or empty Google sheet falls back to the relay's page in the browser`() {
+        for (answer in listOf(
+            GoogleAnswer.Failed("GetCredentialProviderConfigurationException"),
+            GoogleAnswer.NoCredential,
+        )) {
+            platform.google =
+                object : GoogleSheet {
+                    override suspend fun signIn(
+                        nonce: String,
+                        passkeyRequest: String?,
+                    ) = answer
+                }
+            core.answers["nativeSignInStart"] =
+                { ok("""{"flow":"FLOW","nonce":"n","expiresMs":${Long.MAX_VALUE}}""") }
+            val s = signIn(nativeGoogle = true)
+            ready(s)
+            broker(s, """{"phase":"new","ticket":"T8"}""", provider = "google")
+            core.waitFor("new after $answer") { s.step == Step.New }
+            assertNull(s.failure, "no failure line after $answer")
+            assertFalse("nativeSignIn" in core.ops(), "no ID token after $answer")
+        }
+    }
+
+    @Test
     fun `the passkey picked in Google's sheet opens its account at once`() {
         platform.google =
             object : GoogleSheet {

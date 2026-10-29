@@ -196,8 +196,11 @@ class AccountSignIn(
                 brokeredSignIn("google")
             }
 
+            // The sheet failed (no Google Play services, an app not registered with Google, ...): the browser
+            // signs in instead, as in a build without the web client id, so Google never dead-ends here.
             is GoogleAnswer.Failed -> {
-                SignInSnapshot.Failed("signInRefused")
+                CoreLog.w("google sign-in: the native sheet failed (${answer.reason}), using the browser")
+                brokeredSignIn("google")
             }
         }
     }
