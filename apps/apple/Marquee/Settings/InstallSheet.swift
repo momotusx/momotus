@@ -62,6 +62,8 @@ struct InstallAsk: Identifiable {
     let title: String
     let lines: [String]
     let run: @MainActor () -> Void
+    /// The answer that runs it: Install, or Add for a plugin repository.
+    var action = InstallSheetRules.install
 }
 
 /// The question waiting for an answer. Install runs it once; Cancel, or
@@ -99,7 +101,7 @@ extension View {
     func installSheet(_ gate: InstallGate, closed: (() -> Void)? = nil) -> some View {
         let shown = Binding(get: { gate.asking }, set: { if $0 == nil { gate.cancel() } })
         let sheet = { (ask: InstallAsk) in
-            ConfirmSheet(title: ask.title, lines: ask.lines, action: InstallSheetRules.install, cancel: InstallSheetRules.cancel,
+            ConfirmSheet(title: ask.title, lines: ask.lines, action: ask.action, cancel: InstallSheetRules.cancel,
                          confirm: gate.confirm, dismiss: gate.cancel)
                 .onAppear { gate.presented() }
         }

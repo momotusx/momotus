@@ -197,6 +197,12 @@ enum VersionWords {
     /// row as one untitled section. `held`: the order held while Versions is over the player.
     static func sections(_ s: VersionsSnapshot?, held: [String: [String]]? = nil) -> [Section] {
         guard let s else { return [] }
+        // "From plugins" (plans/plugins-and-marketplace.md 4.4, 7.8): their own pass, after the addons' rows.
+        let plugins = (s.plugins?.rows ?? []).isEmpty ? [] : [Section(quality: "plugins", title: PluginWords.section, rows: s.plugins?.rows ?? [])]
+        return addonSections(s, held: held) + plugins
+    }
+
+    private static func addonSections(_ s: VersionsSnapshot, held: [String: [String]]?) -> [Section] {
         if let empty = s.empty { return empty.rows.isEmpty ? [] : [Section(quality: "", title: nil, rows: empty.rows)] }
         guard let sections = s.sections, !sections.isEmpty else {
             return s.rows.isEmpty ? [] : [Section(quality: "", title: nil, rows: s.rows)]
@@ -279,6 +285,8 @@ enum VersionWords {
         let said: String? = if let dimmed { dimmed }
             else if let kept = row.onDevice { kept }
             else if line.map({ $0.tone != .ok }) == true { line?.text }
+            // A plugin's row names its provider and the host it plays from (4.4).
+            else if row.origin == "plugin" { PluginWords.rowLine(row) }
             else { source(row.status) ?? line?.text }
         guard let size = bytes(row) else { return said ?? "" }
         return ([size] + [said.map(StreamChoice.lowerFirst)].compactMap { $0 }).joined(separator: ", ")

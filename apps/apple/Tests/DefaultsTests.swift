@@ -145,14 +145,15 @@ private func on(_ choices: [DefaultChoice]) -> [String: Bool] {
         #expect(offer.names(kids: false) == nil)
         let step = DefaultsStep(core: core.client, scope: .all)
         await step.load()
-        #expect(step.rows.count == 11)
+        // The eleven addons and, in a full core, the two plugin repositories (R7).
+        #expect(step.rows.count == 13)
         #expect(step.rows.allSatisfy { DefaultsRules.hasSwitch($0) && step.isOn($0) })
         for row in step.rows where ["torrentio", "trakt"].contains(row.key) { step.flip(row) }
         #expect(await step.install())
         let state = try await installed(core.client)
-        #expect(state.count == 11)
+        #expect(state.count == 13)
         #expect(state.filter { $0.value == .off }.keys.sorted() == ["torrentio", "trakt"])
-        #expect(state.filter { $0.value == .on }.count == 9)
+        #expect(state.filter { $0.value == .on }.count == 11)
         #expect(await eventually { !offer.fresh })
         // The profile has seen this list: a default removed later brings no card.
         #expect(await eventually { offer.prefs.snapshot?.defaultsSeen == 1 })
@@ -234,11 +235,12 @@ private func on(_ choices: [DefaultChoice]) -> [String: Bool] {
         state = try await installed(core.client)
         #expect(state["torrentio"] == .on)
         #expect(state["opensubtitles"] == .off)
-        #expect(state.filter { $0.value == .on }.count == 10)
+        // Ten addons and the two plugin repositories.
+        #expect(state.filter { $0.value == .on }.count == 12)
         // Settings switches one where it is, and reads the list again.
         #expect(await fixer.set("trakt", on: false))
         #expect(fixer.list?.addons.first { $0.key == "trakt" }?.installed == .off)
-        #expect(try await installed(core.client).filter { $0.value == .on }.count == 9)
+        #expect(try await installed(core.client).filter { $0.value == .on }.count == 11)
     }
 
     @Test func aLinkWithASignInWaitsForTheUsersWord() async throws {

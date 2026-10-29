@@ -10,7 +10,7 @@ enum DefaultsRules {
 
     /// The groups, in order, with their headings.
     static let groups: [(id: String, title: String)] = [
-        ("catalogs", "Catalogs and details"), ("streams", "Streams"), ("subtitles", "Subtitles"), ("lists", "Lists"),
+        ("catalogs", "Catalogs and details"), ("streams", "Streams"), ("subtitles", "Subtitles"), ("lists", "Lists"), ("plugins", "Plugins"),
     ]
     static let title = "Recommended addons"
     static let lead = "Momotus starts with these. Turn off any you do not want; you can change this later in Settings."

@@ -28,6 +28,15 @@ struct VersionsSnapshot: Decodable, Hashable, Sendable {
     var sections: [VersionSection]?
     /// What was hidden and why, for the versions metric line only (plans/apple-second-engine.md section 4).
     var hidden: HiddenSummary?
+    /// "From plugins" (plans/plugins-and-marketplace.md 4.4, 7.8): the Nuvio providers' rows, a pass of their
+    /// own after the addons', never the pick (optional for older cores).
+    var plugins: SourceRows?
+}
+
+/// The rows of a source ranked in a pass of its own, and whether it is still working.
+struct SourceRows: Decodable, Hashable, Sendable {
+    let rows: [VersionRow]
+    let pending: Bool
 }
 
 struct HiddenSummary: Decodable, Hashable, Sendable {
@@ -156,6 +165,11 @@ struct VersionRow: Decodable, Hashable, Sendable, Identifiable {
     /// "On this device": the version last played here starts from what this
     /// device keeps, with no peer (optional for older cores).
     var onDevice: String?
+    /// "addon", "archive" or "plugin" (optional for older cores).
+    var origin: String?
+    /// The host a plugin or Archive row plays from, and its source's name.
+    var host: String?
+    var sourceName: String?
 
     var id: String { key }
 }

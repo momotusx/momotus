@@ -24,6 +24,8 @@ struct SettingsScreen: View {
     let home: HomeModel
     @State private var prefs: LiveRecord<Prefs>
     @State private var addons: LiveRecord<AddonsSnapshot>
+    /// Nuvio plugin repositories (R7): the row shows only where plugins run (full builds, not kids).
+    @State private var plugins: PluginsAnswer?
     @Environment(\.metrics) private var metrics
     #if !os(tvOS)
     @AppStorage(HeroTrailers.previewsKey) private var previewsOn = true
@@ -152,6 +154,7 @@ struct SettingsScreen: View {
         .topScrim(offset > 1)
         .task(id: prefs.taskId) { prefs.start() }
         .task(id: addons.taskId) { addons.start() }
+        .task { plugins = try? await core.call("plugins", as: PluginsAnswer.self) }
         #if DEBUG
         .task {
             guard let section = DebugHooks.settingsSection else { return }
@@ -336,6 +339,9 @@ struct SettingsScreen: View {
                     }
                     row(nil, tone: .teal, glyph: "package-search", title: FindAddonsWords.title, detail: FindAddonsWords.lede) { FindAddonsScreen(core: core) }
                     row(nil, tone: .mint, glyph: "puzzle", title: "Addons", detail: addons.snapshot?.summary ?? "Loading") { AddonsScreen(addons: addons) }
+                    if let plugins, plugins.available {
+                        row(nil, tone: .teal, glyph: "power", title: PluginWords.title, detail: PluginWords.summary(plugins.repos)) { PluginsScreen(core: core) }
+                    }
                     row(nil, tone: .sky, glyph: "key-round", title: "Debrid services",
                         detail: debrid.inUse ?? "Real-Debrid, TorBox, AllDebrid or Premiumize, for fast direct links.") { DebridScreen(core: core) }
                     // An account, as Debrid is (the web's order).
