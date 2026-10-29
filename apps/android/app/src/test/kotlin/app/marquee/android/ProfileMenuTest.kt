@@ -16,6 +16,7 @@ import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsFocused
+import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasText
@@ -108,6 +109,19 @@ class ProfileMenuTest {
     private fun showButton(lit: Boolean = false) =
         open { PillProfile(gate, lit, Modifier, { settings++ }, { pins += it }) }
 
+    /** The menu's rows from the top, each as it is said: a profile row its spoken label, Settings its word. */
+    private fun menuRows(): List<String> =
+        compose
+            .onAllNodes(hasClickAction() and hasAnyAncestor(isDialog()))
+            .fetchSemanticsNodes()
+            .sortedBy { it.boundsInRoot.top }
+            .map { n ->
+                n.config
+                    .getOrElse(SemanticsProperties.ContentDescription) {
+                        n.config.getOrElse(SemanticsProperties.Text) { emptyList() }.map { it.text }
+                    }.joinToString()
+            }
+
     // A profile row says its spoken label alone; Settings says its word.
     private fun row(said: String) = compose.onNode((hasContentDescription(said) or hasText(said)) and hasClickAction())
 
@@ -117,19 +131,9 @@ class ProfileMenuTest {
         compose.onNodeWithContentDescription("Profile: Ana").performClick()
         compose.waitForIdle()
         compose.onNode(isDialog()).assertExists()
-        val rows =
-            compose
-                .onAllNodes(hasClickAction())
-                .fetchSemanticsNodes()
-                .map { n ->
-                    n.config
-                        .getOrElse(SemanticsProperties.ContentDescription) {
-                            n.config.getOrElse(SemanticsProperties.Text) { emptyList() }.map { it.text }
-                        }.joinToString()
-                }.filter { it != "Profile: Ana" }
         assertEquals(
             listOf("Ana, current profile", "Kid", "Bo, locked with a PIN", "Cy, still syncing", "Settings"),
-            rows,
+            menuRows(),
         )
         compose.onNodeWithText("Profiles").assertExists()
         // TV: focus starts on the current profile.
@@ -176,17 +180,7 @@ class ProfileMenuTest {
     fun `on a phone in an account, Sign in another device sits after the profiles, before Settings`() {
         var scans = 0
         open { ProfileMenu(gate, {}, {}, {}) { scans++ } }
-        val said =
-            compose
-                .onAllNodes(hasClickAction())
-                .fetchSemanticsNodes()
-                .map { n ->
-                    n.config
-                        .getOrElse(SemanticsProperties.ContentDescription) {
-                            n.config.getOrElse(SemanticsProperties.Text) { emptyList() }.map { it.text }
-                        }.joinToString()
-                }
-        assertEquals(listOf("Sign in another device", "Settings"), said.takeLast(2))
+        assertEquals(listOf("Sign in another device", "Settings"), menuRows().takeLast(2))
         row("Sign in another device").performClick()
         assertEquals(1, scans)
     }
