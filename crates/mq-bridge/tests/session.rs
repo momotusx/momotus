@@ -812,7 +812,10 @@ async fn defaults_and_links_with_a_sign_in_over_the_protocol() {
         .await;
     let listed = next(&mut rx).await;
     let addons = listed["result"]["addons"].as_array().unwrap();
-    assert_eq!(addons.len(), 11, "{listed}");
+    // The eleven addons, then the two plugin repositories (R7).
+    assert_eq!(addons.len(), 13, "{listed}");
+    assert_eq!(addons[11]["group"], "plugins");
+    assert_eq!(addons[12]["key"], "nuvio-world");
     assert_eq!(addons[1]["key"], "torrentio");
     assert_eq!(addons[1]["installed"], "absent");
     session
@@ -2162,4 +2165,29 @@ async fn a_screen_signed_in_by_qr_gets_the_whole_account() {
     assert_eq!(cw.len(), 1, "tt1 only: tt3 was taken off");
     assert!(tv.library().is_gone("guest").unwrap());
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// The plugin ops over the protocol: the list, and a link that is no
+/// repository refused before anything is asked or written.
+#[tokio::test]
+async fn plugin_repositories_over_the_protocol() {
+    let (tx, mut rx) = Output::channel();
+    let mut session = Session::new(Core::temporary("p").unwrap(), tx);
+    let listed = ask(&mut session, &mut rx, json!({"id": 1, "op": "plugins"})).await;
+    assert_eq!(listed["result"]["available"], true, "{listed}");
+    assert_eq!(listed["result"]["repos"], json!([]));
+    let refused = ask(
+        &mut session,
+        &mut rx,
+        json!({"id": 2, "op": "addPluginRepo", "url": "http://example.com/"}),
+    )
+    .await;
+    assert_eq!(refused["ok"], false, "{refused}");
+    let switched = ask(
+        &mut session,
+        &mut rx,
+        json!({"id": 3, "op": "setPluginEnabled", "url": "https://x.test/manifest.json", "plugin": "a", "enabled": false}),
+    )
+    .await;
+    assert_eq!(switched["ok"], true, "{switched}");
 }

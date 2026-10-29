@@ -12,6 +12,9 @@ ts = ["dep:ts-rs", "mq-streams/ts", "mq-sync/ts"]
 torrent = ["dep:mq-engine", "mq-server/torrent"]
 # The engine's range barrier, for tests of a playback stopped mid-setup.
 test-hooks = ["torrent", "mq-engine/test-hooks"]
+# Nuvio plugins on the sandboxed QuickJS engine (plans/plugins-and-marketplace.md
+# 6.1): full builds only, never store builds.
+plugins = ["dep:mq-plugins"]
 
 [dependencies]
 libc = "0.2"
@@ -30,6 +33,7 @@ mq-sync = { path = "../mq-sync" }
 mq-tracking = { path = "../mq-tracking" }
 mq-turkcealtyazi = { path = "../mq-turkcealtyazi" }
 mq-engine = { path = "../mq-engine", optional = true }
+mq-plugins = { path = "../mq-plugins", optional = true }
 bytes = "1"
 # Reading addon links' config segments (`carries_token`).
 base64 = "0.22"
@@ -64,3 +68,7 @@ libc = "0.2"
 tokio = { workspace = true, features = ["test-util"] }
 # Captures the log lines of a test (tests/title_lookup.rs: the TMDB token never reaches one).
 tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt"] }
+
+[[test]]
+name = "plugins"
+required-features = ["plugins"]

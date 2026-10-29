@@ -12,7 +12,8 @@
 //! "cancelPairing" | "readPairingCode" |
 //! "forkPreview" | "useServerRoster" | "createProfile" | "allowTitle" | "updateProfile" | "deleteProfile" |
 //! "setPin" | "switchProfile" | "unlockProfile" | "lockSession" | "removeFromContinue" |
-//! "languages",
+//! "languages" | "plugins" | "previewPluginRepo" | "addPluginRepo" | "removePluginRepo" |
+//! "setPluginRepoEnabled" | "setPluginEnabled",
 //! ...}`.
 //! Views: home, search, discover, library, title, versions, playback, addons, addonCatalog,
 //! import, settings, pairing, profiles, debrid, debridLogin.
@@ -116,6 +117,38 @@ enum Request {
     RemoveAddon {
         id: u64,
         url: String,
+    },
+    /// The profile's Nuvio plugin repositories and their providers
+    /// (`PluginsAnswer`); stale manifests are read again first.
+    Plugins {
+        id: u64,
+    },
+    /// What a pasted repository link would add, for the consent sheet;
+    /// writes nothing. Replies `PluginRepoPreview`.
+    PreviewPluginRepo {
+        id: u64,
+        url: String,
+    },
+    /// Adds a repository the user agreed to. Replies `PluginsAnswer`.
+    AddPluginRepo {
+        id: u64,
+        url: String,
+    },
+    RemovePluginRepo {
+        id: u64,
+        url: String,
+    },
+    SetPluginRepoEnabled {
+        id: u64,
+        url: String,
+        enabled: bool,
+    },
+    /// One provider of repository `url` on or off.
+    SetPluginEnabled {
+        id: u64,
+        url: String,
+        plugin: String,
+        enabled: bool,
     },
     MoveAddon {
         id: u64,
@@ -1050,6 +1083,45 @@ impl Session {
             }
             Request::MoveAddon { id, url, to } => {
                 let result = core.move_addon(&url, to);
+                self.reply(json!(id), done(result));
+            }
+            Request::Plugins { id } => {
+                self.spawn_fenced(id, async move {
+                    let answer = core.plugin_repos().await.map_err(|e| e.to_string())?;
+                    to_value(&answer)
+                });
+            }
+            Request::PreviewPluginRepo { id, url } => {
+                self.spawn_fenced(id, async move {
+                    let preview =
+                        (core.preview_plugin_repo(&url).await).map_err(|e| e.to_string())?;
+                    to_value(&preview)
+                });
+            }
+            Request::AddPluginRepo { id, url } => {
+                self.spawn_fenced(id, async move {
+                    let answer = core
+                        .add_plugin_repo(&url)
+                        .await
+                        .map_err(|e| e.to_string())?;
+                    to_value(&answer)
+                });
+            }
+            Request::RemovePluginRepo { id, url } => {
+                let result = core.remove_plugin_repo(&url);
+                self.reply(json!(id), done(result));
+            }
+            Request::SetPluginRepoEnabled { id, url, enabled } => {
+                let result = core.set_plugin_repo_enabled(&url, enabled);
+                self.reply(json!(id), done(result));
+            }
+            Request::SetPluginEnabled {
+                id,
+                url,
+                plugin,
+                enabled,
+            } => {
+                let result = core.set_plugin_enabled(&url, &plugin, enabled);
                 self.reply(json!(id), done(result));
             }
             Request::DefaultAddons { id } => {

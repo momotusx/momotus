@@ -234,6 +234,9 @@ impl Core {
         if self.policy().kids() || self.library().addon_list_hlc(self.profile())?.is_none() {
             return Ok(Vec::new());
         }
+        // The plugin repositories this profile never had arrive on (R7),
+        // kept per device as the repositories are.
+        self.give_plugin_defaults()?;
         self.move_old_links()?;
         let mut given = self.defaults_given();
         if given.is_empty() {

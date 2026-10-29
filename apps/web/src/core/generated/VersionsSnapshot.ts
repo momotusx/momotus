@@ -60,4 +60,9 @@ nobodySharing: boolean,
  * 5): its own pass, after the addons' rows, never the pick, never a
  * failover; `done` never waits for it.
  */
-archive: SourceRows, };
+archive: SourceRows, 
+/**
+ * "From plugins" (plans/plugins-and-marketplace.md 4.4, 7.8): the
+ * Nuvio providers' rows, a pass of their own like the Archive's.
+ */
+plugins: SourceRows, };

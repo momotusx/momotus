@@ -255,7 +255,7 @@ fn atob(ctx: Ctx<'_>, data: String) -> Result<String> {
         .chars()
         .filter(|c| !matches!(c, '\t' | '\n' | '\x0c' | '\r' | ' '))
         .collect();
-    let trimmed = if clean.len() % 4 == 0 {
+    let trimmed = if clean.len().is_multiple_of(4) {
         clean
             .strip_suffix("==")
             .or(clean.strip_suffix('='))

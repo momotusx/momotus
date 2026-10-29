@@ -13,6 +13,7 @@ pub mod downloads;
 pub mod languages;
 pub mod learn;
 pub mod live;
+pub mod plugins;
 mod profiles;
 pub mod ratings;
 pub mod segments;

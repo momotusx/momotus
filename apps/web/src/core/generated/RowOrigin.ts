@@ -5,4 +5,4 @@
  * built-in source listed in a section of its own and never picked
  * (plans/plugins-and-marketplace.md 4.4).
  */
-export type RowOrigin = "addon" | "archive";
+export type RowOrigin = "addon" | "archive" | "plugin";

@@ -2909,6 +2909,7 @@ dependencies = [
  "mq-import",
  "mq-library",
  "mq-media",
+ "mq-plugins",
  "mq-protocol",
  "mq-relparse",
  "mq-server",

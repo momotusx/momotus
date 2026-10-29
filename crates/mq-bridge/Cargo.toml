@@ -14,6 +14,9 @@ path = "src/main.rs"
 # builds it in; the web e2e builds without it, so a run never touches
 # BitTorrent.
 torrent = ["mq-runtime/torrent"]
+# Nuvio plugins: the bridge is never a store build, so they are on by default.
+plugins = ["mq-runtime/plugins"]
+default = ["plugins"]
 
 [dependencies]
 mq-http = { path = "../mq-http" }

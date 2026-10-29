@@ -88,6 +88,7 @@ pub struct VersionRow {
 pub enum RowOrigin {
     Addon,
     Archive,
+    Plugin,
 }
 
 /// The rows of a source that ranks in a pass of its own, in that pass's
@@ -180,6 +181,9 @@ pub struct VersionsSnapshot {
     /// 5): its own pass, after the addons' rows, never the pick, never a
     /// failover; `done` never waits for it.
     pub archive: SourceRows,
+    /// "From plugins" (plans/plugins-and-marketplace.md 4.4, 7.8): the
+    /// Nuvio providers' rows, a pass of their own like the Archive's.
+    pub plugins: SourceRows,
 }
 
 /// What the ranking read for this view, for the header "This TV: 4K HDR,
@@ -431,6 +435,11 @@ struct State {
     archive: Vec<ParsedStream>,
     archive_ranked: Ranked,
     archive_pending: bool,
+    /// The plugins' streams, their own pass, and whether a provider is
+    /// still running (7.8).
+    plugins: Vec<ParsedStream>,
+    plugins_ranked: Ranked,
+    plugins_pending: bool,
 }
 
 pub struct VersionsView {
@@ -1106,6 +1115,12 @@ impl VersionsView {
             archive_ranked: Ranked::default(),
             // Movies only (5.3), for a profile that may contact archive.org.
             archive_pending: params.kind == "movie" && crate::archive::wanted(core),
+            // Titles with an IMDb id, for a profile with a repository on (7.8).
+            plugins_pending: item_id.starts_with("tt")
+                && verified.is_none()
+                && core.plugins_wanted(),
+            plugins: Vec::new(),
+            plugins_ranked: Ranked::default(),
         }));
         let snapshot = SharedObservable::new(render(&lock(&state)));
         let mut tasks = JoinSet::new();
@@ -1140,6 +1155,14 @@ impl VersionsView {
         ));
         if lock(&state).archive_pending {
             tasks.spawn(archive_pass(
+                core.clone(),
+                ranking.clone(),
+                state.clone(),
+                snapshot.clone(),
+            ));
+        }
+        if lock(&state).plugins_pending {
+            tasks.spawn(plugin_pass(
                 core.clone(),
                 ranking.clone(),
                 state.clone(),
@@ -1205,6 +1228,9 @@ impl VersionsView {
             archive: Vec::new(),
             archive_ranked: Ranked::default(),
             archive_pending: false,
+            plugins: Vec::new(),
+            plugins_ranked: Ranked::default(),
+            plugins_pending: false,
         };
         Self {
             core: core.clone(),
@@ -1278,9 +1304,16 @@ impl VersionsView {
     /// The stream for row `key` followed by its failover chain, for playback.
     pub fn candidates(&self, key: &str) -> Vec<ParsedStream> {
         let s = lock(&self.state);
-        // An Archive row plays from its own pass alone (4.4).
-        if key.starts_with(crate::archive::KEY_PREFIX) {
-            return holding(&s.archive_ranked.rows, |st| st.key == key)
+        // An Archive or plugin row plays from its own pass alone (4.4).
+        let own = if key.starts_with(crate::plugins::KEY_PREFIX) {
+            Some(&s.plugins_ranked.rows)
+        } else if key.starts_with(crate::archive::KEY_PREFIX) {
+            Some(&s.archive_ranked.rows)
+        } else {
+            None
+        };
+        if let Some(rows) = own {
+            return holding(rows, |st| st.key == key)
                 .map(|r| {
                     std::iter::once(&r.stream)
                         .chain(&r.failover)
@@ -1530,6 +1563,65 @@ fn rank_archive(s: &mut State, ranking: &Ranking) {
         conditions: &s.rank,
     };
     s.archive_ranked = rank(s.archive.clone(), &input);
+}
+
+/// The Nuvio providers' rows for this video (plans/plugins-and-marketplace.md
+/// 7.8): every provider switched on runs in the device's pool, its rows
+/// ranked in a pass of their own as each one answers. `done` and the pick
+/// never wait for it; an addon change leaves it (`restart`).
+async fn plugin_pass(
+    core: Core,
+    ranking: Arc<Ranking>,
+    state: Arc<Mutex<State>>,
+    snapshot: SharedObservable<VersionsSnapshot>,
+) {
+    let p = &ranking.params;
+    let ask = crate::plugins::Ask {
+        kind: p.kind.clone(),
+        imdb: ranking.item_id.clone(),
+        season: p.target.season,
+        episode: p.target.episode,
+        title: p.target.title.clone(),
+        year: p.target.year.or(p.facts.title_year),
+        video_id: p.video_id.clone(),
+    };
+    let providers = crate::plugins::providers_for(&core, &ask).await;
+    let tmdb = if providers.is_empty() {
+        None
+    } else {
+        core.tmdb_find(&ask.imdb, Some(ask.kind.as_str()))
+            .await
+            .map(|f| f.id)
+    };
+    let mut calls: futures_util::stream::FuturesUnordered<_> = (providers.iter())
+        .map(|(repo, provider)| crate::plugins::streams(&core, repo, provider, &ask, tmdb))
+        .collect();
+    while let Some(found) = calls.next().await {
+        if found.is_empty() {
+            continue;
+        }
+        let mut s = lock(&state);
+        s.plugins.extend(found);
+        rank_plugins(&mut s, &ranking);
+        snapshot.set(render(&s));
+    }
+    let mut s = lock(&state);
+    s.plugins_pending = false;
+    snapshot.set(render(&s));
+}
+
+/// The plugin pass: its streams ranked alone, with the view's input.
+fn rank_plugins(s: &mut State, ranking: &Ranking) {
+    let params = &ranking.params;
+    let input = RankInput {
+        caps: &params.caps,
+        prefs: &params.prefs,
+        target: &params.target,
+        last_binge_group: params.last_binge_group.as_deref(),
+        kids: ranking.kids.as_deref(),
+        conditions: &s.rank,
+    };
+    s.plugins_ranked = rank(s.plugins.clone(), &input);
 }
 
 /// A streaming account came, went or was replaced: the rows rank by the
@@ -2278,6 +2370,7 @@ fn rerank(s: &mut State, ranking: &Ranking) {
         }
     }
     rank_archive(s, ranking);
+    rank_plugins(s, ranking);
     reblock(s, ranking);
 }
 
@@ -2468,6 +2561,12 @@ fn render(s: &State) -> VersionsSnapshot {
                 .collect(),
             pending: s.archive_pending,
         },
+        plugins: SourceRows {
+            rows: (s.plugins_ranked.rows.iter())
+                .map(|r| row_dto(r, kept, s.rank.debrid))
+                .collect(),
+            pending: s.plugins_pending,
+        },
     }
 }
 
@@ -2490,8 +2589,12 @@ fn empty(s: &State) -> Option<EmptyVersions> {
     if s.kids && s.addons == 0 {
         return named(EmptyKind::KidsNothing, EmptyAction::None);
     }
-    // The Archive may still list this film, or lists it (4.4).
-    if s.archive_pending || !s.archive_ranked.rows.is_empty() {
+    // The Archive or a plugin may still list it, or lists it (4.4).
+    if s.archive_pending
+        || !s.archive_ranked.rows.is_empty()
+        || s.plugins_pending
+        || !s.plugins_ranked.rows.is_empty()
+    {
         return None;
     }
     if !s.done || !s.ranked.rows.is_empty() || s.download.is_some() {
@@ -2574,6 +2677,7 @@ fn row_dto(r: &RankedRow, kept: Option<&str>, account: bool) -> VersionRow {
     });
     let rel = &s.release;
     let archive = s.key.starts_with(crate::archive::KEY_PREFIX);
+    let plugin = crate::plugins::row_source(s);
     VersionRow {
         key: s.key.clone(),
         quality: quality_word(rel.resolution.height(), rel.quality),
@@ -2600,11 +2704,21 @@ fn row_dto(r: &RankedRow, kept: Option<&str>, account: bool) -> VersionRow {
         on_device: on_device.then(|| crate::views::playback::ON_DEVICE.to_owned()),
         origin: if archive {
             RowOrigin::Archive
+        } else if plugin.is_some() {
+            RowOrigin::Plugin
         } else {
             RowOrigin::Addon
         },
-        host: archive.then(|| crate::archive::HOST.to_owned()),
-        source_name: archive.then(|| crate::archive::NAME.to_owned()),
+        host: if archive {
+            Some(crate::archive::HOST.to_owned())
+        } else {
+            plugin.as_ref().map(|(_, host)| host.clone())
+        },
+        source_name: if archive {
+            Some(crate::archive::NAME.to_owned())
+        } else {
+            plugin.map(|(name, _)| name)
+        },
     }
 }
 

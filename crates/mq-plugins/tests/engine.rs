@@ -118,7 +118,7 @@ fn shape(html: &str) -> String {
             Kind::Text => out.push_str(&format!("{:?}", node.text)),
             Kind::Comment => out.push('!'),
             _ => {
-                out.push_str(&node.name.as_ref().map_or("", |q| &*q.local).to_string());
+                out.push_str(node.name.as_ref().map_or("", |q| &*q.local));
                 out.push('[');
                 for (i, &child) in node.children.iter().enumerate() {
                     if i > 0 {

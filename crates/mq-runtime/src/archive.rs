@@ -609,7 +609,7 @@ fn stream(origin: &Url, id: &str, file: &File, index: u32) -> Option<ParsedStrea
 /// Format and separator characters that change how text reads without
 /// showing: bidi marks, overrides and isolates, zero widths, line and
 /// paragraph separators, the soft hyphen and the BOM.
-fn hidden(c: char) -> bool {
+pub(crate) fn hidden(c: char) -> bool {
     matches!(c, '\u{00ad}' | '\u{061c}' | '\u{180e}' | '\u{200b}'..='\u{200f}' | '\u{2028}'..='\u{202e}' | '\u{2060}'..='\u{206f}' | '\u{feff}' | '\u{e0000}'..='\u{e007f}')
 }
 

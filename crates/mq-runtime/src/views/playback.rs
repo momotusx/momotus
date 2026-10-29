@@ -1774,9 +1774,11 @@ async fn reachable(
         ),
         _ => {}
     }
-    // A built-in source (`mq-builtin:`) has no link to ask, and its file is
-    // asked as its playback asks it, held to its hosts.
-    let builtin = (stream.addon_url.as_ref()).filter(|u| u.scheme() == "mq-builtin");
+    // A built-in source (`mq-builtin:`) or a plugin (`mq-plugin:`) has no
+    // link to ask, and its file is asked as its playback asks it, held to
+    // its hosts.
+    let builtin = (stream.addon_url.as_ref())
+        .filter(|u| matches!(u.scheme(), "mq-builtin" | crate::plugins::LINK_SCHEME));
     let http = match builtin {
         Some(link) => mq_server::upstream_http(core.http(), Some(link)),
         None => {

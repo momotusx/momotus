@@ -204,6 +204,11 @@ pub enum Body {
     /// Text fields only, sent as `multipart/form-data`.
     Multipart(Vec<(String, String)>),
     Json(serde_json::Value),
+    /// Bytes sent as they are, with their own type (a plugin's `fetch`).
+    Raw {
+        content_type: String,
+        bytes: Vec<u8>,
+    },
 }
 
 // ponytail: fixed boundary, fine for the short text fields callers send;
@@ -221,6 +226,10 @@ impl Body {
                     .into_bytes(),
             ),
             Body::Json(value) => ("application/json".into(), value.to_string().into_bytes()),
+            Body::Raw {
+                content_type,
+                bytes,
+            } => (content_type.clone(), bytes.clone()),
             Body::Multipart(fields) => {
                 let mut out = String::new();
                 for (name, value) in fields {

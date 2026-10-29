@@ -78,6 +78,8 @@ pub enum CoreError {
     KidsLibrary,
     /// An offline download op refused: a kids profile, a title whose
     /// episodes cannot be read, a scope that names none.
+    #[error("{0}")]
+    Plugins(String),
     #[error("downloads: {0}")]
     Downloads(String),
 }
@@ -153,6 +155,8 @@ struct Inner {
     turkcealtyazi: std::sync::OnceLock<Arc<mq_turkcealtyazi::Site>>,
     /// The Internet Archive source: its fetch state and the items read.
     archive: std::sync::OnceLock<crate::archive::Archive>,
+    /// Nuvio plugins: the call pool, answers kept, the defaults.
+    plugins: std::sync::OnceLock<crate::plugins::Plugins>,
     /// Each genre's art for the genre grids, by catalog and genre (core
     /// backlog C43), with when it was looked up.
     genre_art: std::sync::Mutex<HashMap<String, crate::views::genres::Looked>>,
@@ -311,6 +315,7 @@ impl Core {
                 live_seeders: std::sync::Mutex::default(),
                 turkcealtyazi: std::sync::OnceLock::new(),
                 archive: std::sync::OnceLock::new(),
+                plugins: std::sync::OnceLock::new(),
                 genre_art: std::sync::Mutex::default(),
                 downloads_dir,
                 downloads: std::sync::OnceLock::new(),
@@ -360,6 +365,19 @@ impl Core {
     pub fn use_turkcealtyazi_at(&self, origin: url::Url, limits: mq_turkcealtyazi::Limits) {
         let site = mq_turkcealtyazi::Site::with(self.http().clone(), origin, limits);
         let _ = self.inner.turkcealtyazi.set(Arc::new(site));
+    }
+
+    /// Nuvio plugins' device state (`plugins`).
+    pub(crate) fn plugins(&self) -> &crate::plugins::Plugins {
+        (self.inner.plugins).get_or_init(|| crate::plugins::Plugins::new(None))
+    }
+
+    /// Tests: the plugin repositories given as defaults; only before the
+    /// first use. Development builds only.
+    #[doc(hidden)]
+    #[cfg(debug_assertions)]
+    pub fn use_plugin_defaults(&self, defaults: Vec<crate::plugins::PluginDefault>) {
+        let _ = (self.inner.plugins).set(crate::plugins::Plugins::new(Some(defaults)));
     }
 
     /// The built-in Internet Archive source (plans/plugins-and-marketplace.md 5).
@@ -1142,19 +1160,29 @@ impl Core {
                     }
                 })
         };
+        let addons = defaults::list().iter().map(|d| DefaultAddonInfo {
+            key: d.key.clone(),
+            name: d.name.clone(),
+            line: d.line.clone(),
+            group: d.group.clone(),
+            installed: state(d),
+            logo: server.as_ref().and_then(|s| s.logo_url(&d.key)),
+        });
+        // The plugin repositories given as defaults (R7), in a group of
+        // their own; none in a build without plugins.
+        let plugins = (self.plugin_defaults().iter())
+            .filter(|_| self.has_plugins())
+            .map(|d| DefaultAddonInfo {
+                key: d.key.clone(),
+                name: d.name.clone(),
+                line: d.line.clone(),
+                group: "plugins".into(),
+                installed: self.plugin_default_state(d),
+                logo: None,
+            });
         Ok(DefaultAddons {
             version: defaults::LIST_VERSION,
-            addons: defaults::list()
-                .iter()
-                .map(|d| DefaultAddonInfo {
-                    key: d.key.clone(),
-                    name: d.name.clone(),
-                    line: d.line.clone(),
-                    group: d.group.clone(),
-                    installed: state(d),
-                    logo: server.as_ref().and_then(|s| s.logo_url(&d.key)),
-                })
-                .collect(),
+            addons: addons.chain(plugins).collect(),
         })
     }
 
@@ -1195,15 +1223,29 @@ impl Core {
                 "a kids profile uses the owner's addons".into(),
             ));
         }
+        // The plugin repositories are no addons (R7): set apart, and
+        // written once every key is known.
+        let plugin =
+            |key: &str| self.has_plugins() && self.plugin_defaults().iter().any(|d| d.key == key);
+        let (plugins, choices): (Vec<DefaultChoice>, Vec<DefaultChoice>) =
+            choices.iter().cloned().partition(|c| plugin(&c.key));
         if let Some(c) = choices
             .iter()
             .find(|c| !defaults::list().iter().any(|d| d.key == c.key))
         {
             return Err(CoreError::Defaults(format!("no default named {}", c.key)));
         }
-        if choices.is_empty() {
-            return Ok(());
+        for c in &plugins {
+            self.choose_plugin_default(&c.key, c.on)?;
         }
+        if choices.is_empty() {
+            return if plugins.is_empty() {
+                Ok(())
+            } else {
+                self.seen_defaults()
+            };
+        }
+        let choices = choices.as_slice();
         let chosen = |key: &str| choices.iter().find(|c| c.key == key).map(|c| c.on);
         let edit = |rows: &mut Vec<AddonRow>| {
             for d in defaults::list() {
