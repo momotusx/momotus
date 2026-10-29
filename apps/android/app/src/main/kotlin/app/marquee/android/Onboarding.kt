@@ -1,5 +1,6 @@
 package app.marquee.android
 
+import android.graphics.Bitmap
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -113,10 +114,15 @@ import app.marquee.design.focusSoon
 import app.marquee.design.marqueeFocus
 import app.marquee.design.windowPx
 import coil3.compose.AsyncImage
+import coil3.compose.LocalPlatformContext
+import coil3.request.ImageRequest
+import coil3.request.transformations
+import coil3.transform.Transformation
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlin.math.abs
 
 /**
  * A new user's first screen, one decision: how to begin. "I use Stremio" brings a library over (only
@@ -309,7 +315,12 @@ internal fun FilmFrame(
             var landed by remember(s.background) { mutableStateOf(false) }
             val alpha by animateFloatAsState(if (landed) 1f else 0f, tween(Marquee.panelMs), label = "still")
             AsyncImage(
-                model = s.background,
+                model =
+                    ImageRequest
+                        .Builder(LocalPlatformContext.current)
+                        .data(s.background)
+                        .transformations(TrimFlatEdges)
+                        .build(),
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 alignment = BiasAlignment(0f, -0.2f),
@@ -336,6 +347,54 @@ internal fun FilmFrame(
         }
     }
 }
+
+/** Crops the still's flat margin before the frame's crop ([trimFlatEdges]). */
+private object TrimFlatEdges : Transformation() {
+    override val cacheKey = "trimFlatEdges"
+
+    override suspend fun transform(
+        input: Bitmap,
+        size: coil3.size.Size,
+    ) = trimFlatEdges(input)
+}
+
+/**
+ * [b] without its flat margin: the rows and columns at its edges in one colour, its corners' colour, such as a promo
+ * collage's cream ground, which in the black film frame reads as a light strip. A framed picture has the same colour at
+ * opposite corners; a side whose run reaches a third of the picture is the picture itself, not a margin, and stays.
+ */
+internal fun trimFlatEdges(b: Bitmap): Bitmap {
+    val w = b.width
+    val h = b.height
+    val ground = b.getPixel(0, 0)
+
+    fun near(p: Int) =
+        abs(android.graphics.Color.red(p) - android.graphics.Color.red(ground)) <= FLAT_SPREAD &&
+            abs(android.graphics.Color.green(p) - android.graphics.Color.green(ground)) <= FLAT_SPREAD &&
+            abs(android.graphics.Color.blue(p) - android.graphics.Color.blue(ground)) <= FLAT_SPREAD
+    if (!near(b.getPixel(w - 1, h - 1))) return b
+    val line = IntArray(maxOf(w, h))
+
+    fun row(y: Int) = b.getPixels(line, 0, w, 0, y, w, 1).let { (0 until w).all { near(line[it]) } }
+
+    fun column(x: Int) = b.getPixels(line, 0, 1, x, 0, 1, h).let { (0 until h).all { near(line[it]) } }
+
+    // The run from one edge, or 0 when it reaches a third of the side.
+    fun run(
+        count: Int,
+        flat: (Int) -> Boolean,
+    ) = (0 until count / 3).firstOrNull { !flat(it) } ?: 0
+
+    val top = run(h, ::row)
+    val bottom = run(h) { row(h - 1 - it) }
+    val left = run(w, ::column)
+    val right = run(w) { column(w - 1 - it) }
+    if (top + bottom + left + right == 0) return b
+    return Bitmap.createBitmap(b, left, top, w - left - right, h - top - bottom)
+}
+
+/** How far a margin pixel may stray from its ground per channel: JPEG noise, not a picture's edge. */
+private const val FLAT_SPREAD = 12
 
 /** A line set as a film's subtitle: white, one box of the player's 60 percent scrim behind each line. */
 @Composable

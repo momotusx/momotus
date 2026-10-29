@@ -325,6 +325,34 @@ class FirstRunB4Test {
     /** WCAG contrast of white on [back]. */
     private fun whiteOn(back: Color): Float = (1.05f) / (back.luminance() + 0.05f)
 
+    /** A promo collage as a still: two dark panels on a cream ground, 40 px of it at the sides, 60 above and below. */
+    private fun collage(): Bitmap {
+        val b = Bitmap.createBitmap(480, 270, Bitmap.Config.ARGB_8888)
+        b.eraseColor(0xFFFCF1E6.toInt())
+        val c = Canvas(b)
+        c.drawRect(40f, 60f, 230f, 210f, Paint().apply { color = 0xFF3A4A3E.toInt() })
+        c.drawRect(250f, 60f, 440f, 210f, Paint().apply { color = 0xFF5A3E2E.toInt() })
+        return b
+    }
+
+    @Test
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun `a still's flat margin is cropped, its gutters kept`() {
+        val t = trimFlatEdges(collage())
+        assertEquals(400 to 150, t.width to t.height)
+        assertEquals(0xFF3A4A3E.toInt(), t.getPixel(0, 0))
+        assertEquals(0xFF5A3E2E.toInt(), t.getPixel(399, 149))
+    }
+
+    @Test
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun `a still with no flat margin stays whole`() {
+        val flat = white()
+        assertTrue(trimFlatEdges(flat) === flat)
+        val scene = scene()
+        assertTrue(trimFlatEdges(scene) === scene)
+    }
+
     @Test
     @GraphicsMode(GraphicsMode.Mode.NATIVE)
     @Config(qualifiers = "w960dp-h540dp-xhdpi")
