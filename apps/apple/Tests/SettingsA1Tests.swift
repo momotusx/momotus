@@ -107,7 +107,6 @@ private func hero(_ id: String, background: String?) throws -> Hero {
 
 @MainActor private final class Frames {
     var column = CGRect.zero
-    var header = CGSize.zero
 }
 
 @MainActor @Test(arguments: [1440.0, 1920.0, 800.0])
@@ -132,15 +131,8 @@ func theColumnSitsInTheMiddleOfTheWindow(width: Double) {
 @MainActor @Test func theHeaderKeepsOneHeightArtOrNone() {
     // The art lands late, or never: the header is the same height from its first frame (no layout shift).
     func height(_ art: some View) -> CGFloat {
-        let frames = Frames()
-        let header = Text("Main").font(.system(size: 50))
-            .settingsHeader(height: 380) { art }
-            .onGeometryChange(for: CGSize.self) { $0.size } action: { frames.header = $0 }
-        let host = NSHostingView(rootView: header.frame(width: 1440))
-        host.frame = CGRect(x: 0, y: 0, width: 1440, height: 2400)
-        host.layoutSubtreeIfNeeded()
-        RunLoop.main.run(until: Date().addingTimeInterval(0.1))
-        return frames.header.height
+        let header = Text("Main").font(.system(size: 50)).settingsHeader(height: 380) { art }
+        return NSHostingView(rootView: header.frame(width: 1440)).fittingSize.height
     }
     #expect(height(EmptyView()) == 380)
     #expect(height(Color.red.frame(height: 2000)) == 380)
