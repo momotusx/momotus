@@ -17,8 +17,10 @@
  * code from the mock. Mail signs in by email (both stages, Back, a wrong code, `new`, Create);
  * Desk links an address from Account; a second deletion is asked on the link host's real page by
  * email; Late's Send a new code turns on after its minute; Mail signs out and finds its account by
- * email. The relay allows one mail a minute per address, so each address is mailed again only
- * after that minute. No address reaches storage, history or the URL. */
+ * email. The relay runs with test-only limits (`--sign-in-budget`, `--mail-gap-ms`): every core here
+ * reaches it from 127.0.0.1, and the real minute between two codes to one mailbox would make the
+ * spec wait; Late's 60 s resend timer runs on Playwright's clock. No address reaches storage,
+ * history or the URL. */
 
 import { type Browser, expect, type Page, test } from "@playwright/test";
 import type { ChildProcess } from "node:child_process";
@@ -45,6 +47,8 @@ const SAM = "sam@example.org";
 const LEE = "lee@example.org";
 const PAT = "pat@example.org";
 const ANN = "ann@example.org";
+/** The relay's gap between two codes to one mailbox in this spec (60 s in production). */
+const MAIL_GAP_MS = 5000;
 const LINKHOST = fileURLToPath(new URL("../../linkhost/", import.meta.url));
 const errors: string[] = [];
 /** The last pairing code each core's page showed, by the core's port. */
@@ -87,8 +91,10 @@ const FORMS = {
 };
 
 /** A browser context whose page talks to the core on `port`, with this relay as the one it knows. */
-async function device(browser: Browser, port: number, form: keyof typeof FORMS, approver = false): Promise<Page> {
+async function device(browser: Browser, port: number, form: keyof typeof FORMS, approver = false, clock = false): Promise<Page> {
   const context = await browser.newContext({ ...FORMS[form], colorScheme: "dark", baseURL: `http://127.0.0.1:${PORTS.vite}` });
+  // A clock the test can move; it runs at real speed until then.
+  if (clock) await context.clock.install();
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
   await context.addInitScript((server) => localStorage.getItem("mq.syncServer") || localStorage.setItem("mq.syncServer", server), SERVER);
   if (approver) await context.addInitScript(() => localStorage.setItem("mq.devDeviceForm", "phone"));
@@ -177,14 +183,7 @@ async function syncNow(page: Page) {
  * returning to the page, take the ticket with the verifier, ask for the deletion. */
 async function requestDeletion(provider: string, who: string): Promise<number> {
   const post = async (path: string, body: unknown) => {
-    const send = () => fetch(`${SERVER}${path}`, { method: "POST", headers: { "content-type": "application/json", origin: `https://${LINK_HOST}` }, body: JSON.stringify(body) });
-    let r = await send();
-    // Every core here reaches the relay from 127.0.0.1, so they share its 30 sign-in calls a
-    // minute: a spent minute is waited out once.
-    if (r.status === 429) {
-      await new Promise((ok) => setTimeout(ok, 61_000));
-      r = await send();
-    }
+    const r = await fetch(`${SERVER}${path}`, { method: "POST", headers: { "content-type": "application/json", origin: `https://${LINK_HOST}` }, body: JSON.stringify(body) });
     expect(r.headers.get("access-control-allow-origin")).toBe(`https://${LINK_HOST}`);
     expect(r.ok, `${path}: ${r.status}`).toBe(true);
     return (await r.json()) as Record<string, unknown>;
@@ -231,10 +230,10 @@ async function mailText(to: string): Promise<string> {
   return text;
 }
 const codeIn = (text: string) => /^\d{6}$/m.exec(text)?.[0] ?? "";
-/** The relay mails an address once a minute: wait out what is left of that minute. */
+/** The relay mails an address once per gap: wait out what is left of it. */
 async function mailable(to: string) {
   const at = mailed.get(to);
-  if (at) await new Promise((ok) => setTimeout(ok, Math.max(0, at + 62_000 - Date.now())));
+  if (at) await new Promise((ok) => setTimeout(ok, Math.max(0, at + MAIL_GAP_MS + 500 - Date.now())));
 }
 const emailStarts = (port: number) => asked.filter((a) => a.port === port && a.op === "emailSignInStart").length;
 const codeTries = (port: number) => asked.filter((a) => a.port === port && a.op === "emailSignIn").length;
@@ -304,7 +303,7 @@ test.describe.serial("accounts on the web", () => {
         email: { accessKeyId: "AKIDMOCK", secretAccessKey: "mock/secret/key", region: "us-east-1", from: "noreply@example.org", endpoint: mock.url },
       }),
     );
-    procs.push(await startRelay(P.relay, undefined, ["--identity", identity, "--public-host", "127.0.0.1"]));
+    procs.push(await startRelay(P.relay, undefined, ["--identity", identity, "--public-host", "127.0.0.1", "--sign-in-budget", "1000", "--mail-gap-ms", String(MAIL_GAP_MS)]));
     for (const port of [P.a, P.b, P.c, P.d, P.e]) {
       procs.push(await startBridge(port));
       // Something to show on Home: the local sample addon (a device with none starts at the welcome steps).
@@ -317,7 +316,7 @@ test.describe.serial("accounts on the web", () => {
     phone = await device(browser, P.b, "phone");
     tv = await device(browser, P.c, "tv");
     mail = await device(browser, P.d, "desktop");
-    late = await device(browser, P.e, "phone");
+    late = await device(browser, P.e, "phone", false, true);
   });
 
   test.afterAll(async () => {
@@ -432,10 +431,8 @@ test.describe.serial("accounts on the web", () => {
     await late.locator('[data-f="signin:email:send"]').click();
     mailed.set(LEE, Date.now());
     await expect(late).toHaveURL(/\/sign-in\/email\?stage=code$/);
-    await mailText(LEE);
-    await shots(late, "email-code-375");
-    // Use another address, then the same mailbox written another way within the minute: the
-    // relay's emailWait, with no button, and Send code still there.
+    // Use another address, then the same mailbox written another way inside the relay's gap: its
+    // emailWait, with no button, and Send code still there.
     await late.locator('[data-f="signin:email:another"]').click();
     await expect(late).toHaveURL(/\/sign-in\/email$/);
     await lateAddress.fill("Lee@example.org");
@@ -450,6 +447,8 @@ test.describe.serial("accounts on the web", () => {
     await late.locator('[data-f="signin:email:send"]').click();
     await expect(late).toHaveURL(/\/sign-in\/email\?stage=code$/);
     expect(emailStarts(P.e)).toBe(lateStarts);
+    await mailText(LEE);
+    await shots(late, "email-code-375");
   });
 
   test("Desk signs in: a cancel says nothing, a closed window asks, then new, Create, the kit, the doors", async () => {
@@ -702,7 +701,6 @@ test.describe.serial("accounts on the web", () => {
   });
 
   test("a deletion asked on the link host shows on Home with Cancel, and with Cancel and turn off", async ({ browser }) => {
-    test.setTimeout(300_000);
     const due = await requestDeletion("mock", "alice");
     expect(due).toBeGreaterThan(Date.now() + 6 * 86_400_000);
     await syncNow(tv);
@@ -730,9 +728,7 @@ test.describe.serial("accounts on the web", () => {
     await expect(desk.locator('section[aria-label="Signed in with"] .sync-member h3')).toHaveText(["Apple", "Email"]);
 
     // Asked once more, on the link host's own page by email (E14): the email words, and Cancel
-    // and turn off email sign-in. A fresh minute of the relay's sign-in calls first, which every
-    // core here shares (they all reach it from 127.0.0.1).
-    await new Promise((ok) => setTimeout(ok, 61_000));
+    // and turn off email sign-in.
     await deletionByEmail(browser, PAT);
     await syncNow(desk);
     await go(desk, "/");
@@ -774,10 +770,12 @@ test.describe.serial("accounts on the web", () => {
   });
 
   test("Late's Send a new code turns on after its minute; Mail signs out and finds its account by email", async () => {
-    test.setTimeout(240_000);
-    // Counted from the mail's time: on once the minute is out, then off again for the next.
+    // Counted from the mail's time: off until the minute is out on the page's clock, then on,
+    // then off again for the next.
     await mailable(LEE);
     const newCode = late.locator('[data-f="signin:email:new-code"]');
+    await expect(newCode).toBeDisabled();
+    await late.clock.fastForward(61_000);
     await expect(newCode).toHaveText("Send a new code");
     await expect(newCode).toBeEnabled();
     const starts = emailStarts(P.e);
