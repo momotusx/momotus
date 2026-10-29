@@ -45,7 +45,7 @@ struct OnboardingScreen: View {
     @State private var note: (ok: Bool, text: String)?
     @State private var showImport = false
     @State private var showPairing = false
-    /// The still the framed steps show (B4), asked once as first run opens.
+    /// The still the framed steps show (V1), asked once as first run opens.
     @State private var still: FirstRunStill?
     /// TV: the doors step enters on the first door, not on Browse first.
     @FocusState private var firstDoor: Bool
@@ -119,7 +119,7 @@ struct OnboardingScreen: View {
                       doneOnJoin: true)
     }
 
-    /// The question steps are framed (B4) and fill the screen; the addons, sign-in and the check keep a column.
+    /// The question steps are framed (V1, the still full bleed); the addons, sign-in and the check keep a column.
     private var steps: some View {
         Group {
             switch step {
@@ -131,7 +131,7 @@ struct OnboardingScreen: View {
             case .check: column { checkStep }
             }
         }
-        // The still is asked as first run opens, so the frame rarely waits for it.
+        // The still is asked as first run opens, so a step rarely waits for it.
         .task { still = await StillOnce.shared.get { [core] in try await core.call("firstRunStill", as: FirstRunStill?.self) } }
         .navigationDestination(isPresented: $showImport) {
             ImportScreen(core: core) {
@@ -203,7 +203,7 @@ struct OnboardingScreen: View {
                         .focused($onFast)
                     Button { Task { await answer(q.best) } } label: { FilmChoice(symbol: "gem", title: q.best.label, text: q.best.text) }
                 }
-                .buttonStyle(.filmChoice)
+                .buttonStyle(.filmChoice(wide: metrics.wide))
                 .disabled(busy != nil)
                 if let note, !note.ok {
                     StatusDot(tone: .bad, text: note.text)
@@ -251,7 +251,7 @@ struct OnboardingScreen: View {
     /// first, then the common ones and No subtitles, the rest behind More
     /// languages. Continue writes it; Skip writes nothing.
     private var subtitlesStep: some View {
-        let columns = Array(repeating: GridItem(.flexible(), spacing: Theme.Space.s, alignment: .top), count: metrics.wide ? 3 : 1)
+        let columns = Array(repeating: GridItem(.flexible(), spacing: Theme.Space.xs, alignment: .top), count: 2)
         // Skip is off while Continue saves: the step leaves once.
         return FramedStep(header: header(.subtitles, skip: "Skip") { afterSubtitles() }, still: still,
                           question: SubtitleStepRules.title, lead: SubtitleStepRules.lead) {
@@ -262,8 +262,12 @@ struct OnboardingScreen: View {
         .onChange(of: languagesLoaded) { _, loaded in if loaded { onSubtitles = true } }
     }
 
+    /// The languages in two columns, Continue (the white primary) and More languages under them: full width and
+    /// stacked on the phone, side by side in the wide column.
     private func subtitleChoices(_ columns: [GridItem]) -> some View {
-        VStack(alignment: .leading, spacing: Theme.Space.m) {
+        let full = !metrics.wide
+        let acts = full ? AnyLayout(VStackLayout(spacing: Theme.Space.xs)) : AnyLayout(HStackLayout(spacing: 12))
+        return VStack(alignment: .leading, spacing: 14) {
             LazyVGrid(columns: columns, alignment: .leading, spacing: Theme.Space.xs) {
                 let mine = SubtitleStepRules.listed(languages)
                 ForEach(SubtitleStepRules.common(languages, device: mine), id: \.code) { language in
@@ -274,16 +278,18 @@ struct OnboardingScreen: View {
             if let note, !note.ok {
                 StatusDot(tone: .bad, text: note.text)
             }
-            HStack {
-                Button(moreLanguages ? SubtitleStepRules.fewer : SubtitleStepRules.more) { moreLanguages.toggle() }
-                    .buttonStyle(PillButtonStyle())
-                Spacer()
-                Button(busy == "subtitles" ? "Saving" : "Continue") { Task { await saveSubtitle() } }
-                    .buttonStyle(PillButtonStyle(prominent: true))
-                    .disabled(busy != nil || !languagesLoaded)
-                    .focused($onSubtitles)
+            acts {
+                Button { Task { await saveSubtitle() } } label: {
+                    Text(busy == "subtitles" ? "Saving" : "Continue").frame(maxWidth: full ? CGFloat.infinity : nil)
+                }
+                .buttonStyle(PillButtonStyle(prominent: true))
+                .disabled(busy != nil || !languagesLoaded)
+                .focused($onSubtitles)
+                Button { moreLanguages.toggle() } label: {
+                    Text(moreLanguages ? SubtitleStepRules.fewer : SubtitleStepRules.more).frame(maxWidth: full ? CGFloat.infinity : nil)
+                }
+                .buttonStyle(PillButtonStyle())
             }
-            .padding(.top, Theme.Space.s)
             if moreLanguages {
                 LazyVGrid(columns: columns, alignment: .leading, spacing: Theme.Space.xs) {
                     ForEach(SubtitleStepRules.rest(languages, device: SubtitleStepRules.listed(languages)), id: \.code) { language in
@@ -297,34 +303,13 @@ struct OnboardingScreen: View {
     /// One language: its name, a line when it has one, a check when chosen.
     private func languageRow(_ code: String?, _ name: String, line: String?) -> some View {
         let on = subtitle == code
-        let shape = RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous)
         return Button {
             subtitleTouched = true
             subtitle = code
         } label: {
-            HStack(spacing: Theme.Space.s) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(name).textFont(Theme.type.headline, weight: .semibold, relativeTo: .headline)
-                    if let line {
-                        Text(line)
-                            .textFont(Theme.type.callout, relativeTo: .callout)
-                            .foregroundStyle(Theme.Palette.muted)
-                    }
-                }
-                Spacer(minLength: 0)
-                if on { Glyph("check") }
-            }
-            .multilineTextAlignment(.leading)
-            .foregroundStyle(Theme.Palette.text)
-            .padding(.horizontal, Theme.Space.s)
-            .padding(.vertical, Theme.Space.xs + 2)
-            .frame(maxWidth: .infinity, minHeight: 56, alignment: .leading)
-            // A row is content: solid surface, no glass (design/DECISION.md, Surfaces).
-            .background(shape.fill(Theme.Palette.surface))
-            .overlay(shape.strokeBorder(Theme.Palette.text, lineWidth: on ? 2 : 0))
-            .contentShape(Rectangle())
+            FilmLanguage(name: name, line: line, on: on)
         }
-        .buttonStyle(.row)
+        .buttonStyle(.filmLanguage(on: on))
         .accessibilityAddTraits(on ? .isSelected : [])
     }
 
@@ -381,7 +366,7 @@ struct OnboardingScreen: View {
                         }
                     }
                 }
-                .buttonStyle(.filmChoice)
+                .buttonStyle(.filmChoice(wide: metrics.wide))
                 if let note, !note.ok {
                     StatusDot(tone: .bad, text: note.text)
                 }

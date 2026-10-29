@@ -994,7 +994,7 @@ struct FullScreen<Flow: View>: ViewModifier {
     /// Cmd-[ (the Go menu's Back) closes this sheet, on the Mac: only the profile picker, which is a place to
     /// leave. A flow with its own steps (onboarding) keeps Back to itself: its pages give the Go menu none.
     var closesOnBack = false
-    /// The Mac's sheet takes the whole window (first run's letterbox), not the sheet's own small size.
+    /// The Mac's sheet takes the whole window (first run's full-bleed still), not the sheet's own small size.
     var fillsWindow = false
     @ViewBuilder let flow: () -> Flow
     /// A place kept alive out of sight presents nothing until it shows again:

@@ -317,8 +317,8 @@ targets:
       - path: Marquee/Settings/InstallSheet.swift
       - path: Marquee/Settings/Language.swift
       - path: Marquee/Onboarding/SubtitleStepRules.swift
-      # Settings A1 and first run B4: their rules, the B4 layout laid out for real (Tests/SettingsA1Tests.swift,
-      # Tests/FirstRunB4Tests.swift).
+      # Settings A1 and first run V1: their rules and V1's ramps and column (Tests/SettingsA1Tests.swift,
+      # Tests/FirstRunV1Tests.swift).
       - path: Marquee/Settings/SettingsRules.swift
       - path: Marquee/Onboarding/FilmLayout.swift
       # Offline downloads: the models, the control's words, the keeper's reducer, the network report and the

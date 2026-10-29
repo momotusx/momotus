@@ -1,9 +1,9 @@
 import SwiftUI
 
-/// A first-run question step (B4, the owner's pick of 2026-10-28, design/DECISION.md): the step's header, then a
-/// film frame on black holding the still with the question set as its subtitle, and the choices in the bar under
-/// it (`FilmLayout`). TV and wide screens keep the header and the bar on Settings' column; the phone's frame spans
-/// the width, its lead line under the frame.
+/// A first-run question step (V1, Full Bleed, the owner's pick of 2026-10-30, design/exploration/onboarding-v2,
+/// design/DECISION.md): the still fills the screen behind the step's header, the question, its lead line and the
+/// choices. The phone keeps the block at the foot on a ramp anchored to it, in thumb reach; TV and wide screens
+/// keep it in a column at the lower leading corner. A block taller than the screen scrolls over the still.
 struct FramedStep<Bar: View>: View {
     let header: StepHeader
     let still: FirstRunStill?
@@ -15,43 +15,120 @@ struct FramedStep<Bar: View>: View {
 
     var body: some View {
         GeometryReader { page in
-            let pad = metrics.wide ? SettingsRules.pad(width: page.size.width, gutter: metrics.gutter, column: column) : 16
-            VStack(spacing: 0) {
-                header.padding(.horizontal, pad).padding(.vertical, tvForm ? 0 : metrics.wide ? 20 : 8)
-                GeometryReader { space in
-                    ScrollView(.vertical) {
-                        FilmLayout(room: space.size.height, floor: page.size.height * FilmRules.floor, edge: edge) {
-                            FilmFrame(still: still, question: question, lead: metrics.wide ? lead : nil)
-                                .accessibilityFocused($onQuestion)
-                            VStack(spacing: metrics.wide ? 0 : 20) {
-                                if !metrics.wide, let lead {
-                                    Text(lead)
-                                        .textFont(14, relativeTo: .callout)
-                                        .foregroundStyle(Theme.Palette.dim)
-                                        .multilineTextAlignment(.center)
-                                        .fixedSize(horizontal: false, vertical: true)
-                                        .padding(.horizontal, 8)
-                                }
-                                bar
-                                    // The choices are one group, named by the question.
-                                    .accessibilityElement(children: .contain)
-                                    .accessibilityLabel(question)
-                            }
-                            .padding(.horizontal, pad)
-                            .padding(.top, tvForm ? 32 : metrics.wide ? 28 : 16)
-                        }
-                    }
-                    .scrollIndicators(.hidden)
+            ScrollView(.vertical) {
+                VStack(alignment: .leading, spacing: 0) {
+                    header
+                        .padding(.horizontal, metrics.wide ? (tvForm ? 0 : 56) : 12)
+                        .frame(minHeight: metrics.wide && !tvForm ? 104 : nil)
+                        // Over the phone's ramp where a tall block reaches it.
+                        .zIndex(1)
+                    Spacer(minLength: Theme.Space.m)
+                    if metrics.wide { column } else { foot }
                 }
+                .frame(minHeight: page.size.height)
             }
+            .scrollIndicators(.hidden)
+            .background { FilmStill(still: still, wide: metrics.wide, insets: page.safeAreaInsets) }
         }
         .background(Color.black)
         // A step change puts a screen reader on the question; TV puts the remote on the first choice instead.
         .onAppear { if !tvForm { onQuestion = true } }
     }
 
-    private var column: CGFloat { tvForm ? SettingsRules.Sizes.tv.column : SettingsRules.Sizes.wide.column }
-    private var edge: CGFloat { tvForm ? 24 : metrics.wide ? 24 : 16 }
+    /// The phone's block at the foot, on its ramp: clear over it, black from just under the question's top line.
+    private var foot: some View {
+        block
+            .padding(.horizontal, 16)
+            .padding(.bottom, 34)
+            .background(alignment: .top) {
+                GeometryReader { ramp in
+                    LinearGradient(stops: BackdropStops.gradient(FilmRules.ramp(height: ramp.size.height), .black),
+                                   startPoint: .top, endPoint: .bottom)
+                }
+                .padding(.top, -FilmRules.above)
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
+            }
+    }
+
+    private var column: some View {
+        block
+            .frame(maxWidth: FilmRules.column(tv: tvForm), alignment: .leading)
+            .padding(.leading, tvForm ? 0 : FilmRules.inset)
+            .padding(.trailing, tvForm ? 0 : 56)
+            .padding(.bottom, tvForm ? 0 : 84)
+    }
+
+    private var block: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text(question)
+                .textFont(questionSize, weight: .bold, relativeTo: .largeTitle)
+                .foregroundStyle(.white)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityAddTraits(.isHeader)
+                .accessibilityFocused($onQuestion)
+            if let lead {
+                Text(lead)
+                    .textFont(leadSize, relativeTo: .body)
+                    .foregroundStyle(Theme.Palette.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.top, metrics.wide ? 14 : 10)
+            }
+            bar
+                // The choices are one group, named by the question.
+                .accessibilityElement(children: .contain)
+                .accessibilityLabel(question)
+                .padding(.top, metrics.wide ? 34 : 22)
+        }
+        .multilineTextAlignment(.leading)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var questionSize: CGFloat { tvForm ? Theme.type.hero : metrics.wide ? 56 : 34 }
+    private var leadSize: CGFloat { tvForm ? Theme.type.headline : metrics.wide ? 19 : 15 }
+}
+
+/// The still behind the whole screen, decorative, under its washes: faded in by opacity (at once under Reduce
+/// Motion); with none the screen stays black. Wide screens take Apple's wash (from the leading edge, the foot and
+/// under the header); the phone a light wash under the header and black under the home indicator, where the
+/// block's own ramp ends.
+private struct FilmStill: View {
+    let still: FirstRunStill?
+    let wide: Bool
+    let insets: EdgeInsets
+    @State private var art: DecodedArt?
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        GeometryReader { box in
+            ZStack(alignment: .top) {
+                Color.black
+                if let art {
+                    FilledArt(art: art, size: box.size, y: wide ? 0.4 : 0.5).transition(.opacity)
+                }
+                if wide {
+                    BackdropStops.wash(box.size, box: box.size, stops: FilmRules.side(width: box.size.width, height: box.size.height, tv: tvForm))
+                    LinearGradient(stops: BackdropStops.gradient(FilmRules.foot, .black), startPoint: .bottom, endPoint: .top)
+                    LinearGradient(stops: BackdropStops.gradient(FilmRules.top, .black), startPoint: .top, endPoint: .bottom)
+                } else {
+                    LinearGradient(stops: BackdropStops.gradient(FilmRules.phoneTop, .black), startPoint: .top, endPoint: .bottom)
+                        .frame(height: FilmRules.phoneTopReach)
+                }
+                if !wide {
+                    Color.black
+                        .frame(height: insets.bottom)
+                        .frame(maxHeight: .infinity, alignment: .bottom)
+                }
+            }
+        }
+        .ignoresSafeArea()
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+        .task(id: still?.background) {
+            let loaded = await ArtLoader.shared.image(still?.background, maxPixels: ArtSize.backdrop)
+            withAnimation(reduceMotion ? nil : Theme.Motion.panel) { art = loaded }
+        }
+    }
 }
 
 /// A first-run step's header: the mark and name at the left; Back (from step 2), "Step N of 4" with its dots
@@ -103,7 +180,8 @@ private struct HeaderLink: ViewModifier {
     }
 }
 
-/// "Step N of 4" with its dots; on the phone it is read only.
+/// "Step N of 4" with its dots; on the phone it is read only. Its words are white over the art, never dim, so
+/// they keep 4.5:1 over the header's wash.
 private struct StepCount: View {
     let count: Int
     let shown: Bool
@@ -122,7 +200,7 @@ private struct StepCount: View {
                 .accessibilityHidden(true)
                 Text(words)
                     .textFont(tvForm ? Theme.type.caption : 15, weight: .semibold, relativeTo: .caption)
-                    .foregroundStyle(Theme.Palette.dim)
+                    .foregroundStyle(Theme.Palette.text)
             }
         } else {
             Color.clear.frame(width: 1, height: 1)
@@ -132,72 +210,8 @@ private struct StepCount: View {
     }
 }
 
-/// The frame at the size its layout gives it: the still fills it, faded in by opacity (at once under Reduce
-/// Motion); with none it stays black. The question is its subtitle, one 60 percent box per line, and a real
-/// heading; on TV and wide screens the lead line rides under it.
-struct FilmFrame: View {
-    let still: FirstRunStill?
-    let question: String
-    let lead: String?
-    @State private var art: DecodedArt?
-    @Environment(\.metrics) private var metrics
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-    var body: some View {
-        GeometryReader { box in
-            ZStack(alignment: .bottom) {
-                Color.black
-                if let art {
-                    FilledArt(art: art, size: box.size, y: 0.4).transition(.opacity)
-                }
-                VStack(spacing: metrics.wide ? min(10, box.size.width * 0.01) : 10) {
-                    Cue(text: question, size: questionSize(box.size.width), weight: .semibold)
-                        .accessibilityAddTraits(.isHeader)
-                    if let lead {
-                        Cue(text: lead, size: leadSize(box.size.width), weight: .medium)
-                    }
-                }
-                .padding(.horizontal, metrics.wide ? box.size.width * 0.06 : 14)
-                .padding(.bottom, box.size.height * (metrics.wide ? 0.09 : 0.12))
-            }
-        }
-        .clipped()
-        .task(id: still?.background) {
-            let loaded = await ArtLoader.shared.image(still?.background, maxPixels: ArtSize.backdrop)
-            withAnimation(reduceMotion ? nil : Theme.Motion.panel) { art = loaded }
-        }
-    }
-
-    /// The question's type follows the frame on a small window, so it always fits inside the picture.
-    private func questionSize(_ width: CGFloat) -> CGFloat {
-        tvForm ? Theme.type.title3 : metrics.wide ? min(40, max(16, width * 0.052)) : 22
-    }
-
-    private func leadSize(_ width: CGFloat) -> CGFloat {
-        tvForm ? Theme.type.headline : min(19, max(12, width * 0.024))
-    }
-}
-
-/// A line set as a film's subtitle: white, the player's 60 percent scrim behind each line.
-private struct Cue: View {
-    let text: String
-    let size: CGFloat
-    let weight: Font.Weight
-
-    var body: some View {
-        // A thin space at each end gives the first and last box a little air.
-        var line = AttributedString("\u{2009}\(text)\u{2009}")
-        line.backgroundColor = Color.black.opacity(FilmRules.scrim)
-        return Text(line)
-            .textFont(size, weight: weight, relativeTo: .title3)
-            .foregroundStyle(.white)
-            .multilineTextAlignment(.center)
-            .fixedSize(horizontal: false, vertical: true)
-    }
-}
-
-/// A choice in the bar: a pill filled white at 12 percent, its icon in a circle, its title and line; white
-/// under TV focus.
+/// A choice: a pill filled white at 12 percent, its icon in a circle, its title and line, a chevron at the end;
+/// white under TV focus.
 struct FilmChoice: View {
     let symbol: String
     let title: String
@@ -206,66 +220,84 @@ struct FilmChoice: View {
     @Environment(\.metrics) private var metrics
 
     var body: some View {
-        HStack(spacing: tvForm ? 24 : metrics.wide ? 16 : 12) {
+        HStack(spacing: tvForm ? 22 : metrics.wide ? 16 : 12) {
             Circle()
                 .fill(lit ? Color.black.opacity(0.08) : Color.white.opacity(0.12))
                 .frame(width: icon, height: icon)
                 .overlay { Glyph(symbol, size: icon * 0.46).foregroundStyle(lit ? Theme.Palette.onPrimary : .white) }
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: 2) {
                 Text(title)
-                    .textFont(tvForm ? Theme.type.headline : metrics.wide ? 18 : 16, weight: .semibold, relativeTo: .headline)
+                    .textFont(tvForm ? Theme.type.headline : metrics.wide ? 19 : 16, weight: .semibold, relativeTo: .headline)
                     .foregroundStyle(lit ? Theme.Palette.onPrimary : Theme.Palette.text)
                 Text(text)
-                    .textFont(tvForm ? Theme.type.caption : metrics.wide ? 13 : 12, relativeTo: .footnote)
-                    .foregroundStyle(lit ? Color.black.opacity(0.64) : Theme.Palette.dim)
+                    .textFont(tvForm ? Theme.type.caption : metrics.wide ? 15 : 13, relativeTo: .footnote)
+                    .foregroundStyle(lit ? Color.black.opacity(0.64) : Theme.Palette.muted)
                     .fixedSize(horizontal: false, vertical: true)
             }
             Spacer(minLength: 0)
+            Glyph("chevron-right", size: tvForm ? 26 : 18)
+                .foregroundStyle(lit ? Color.black.opacity(0.4) : Color.white.opacity(0.4))
         }
         .multilineTextAlignment(.leading)
-        .padding(.leading, tvForm ? 20 : metrics.wide ? 20 : 14)
-        .padding(.trailing, tvForm ? 36 : metrics.wide ? 22 : 18)
-        .padding(.vertical, 12)
-        .frame(maxWidth: .infinity, minHeight: tvForm ? 120 : metrics.wide ? 88 : 72, alignment: .leading)
-        .frame(maxHeight: .infinity)
-        .contentShape(Capsule())
+        .padding(.leading, tvForm ? 22 : metrics.wide ? 18 : 12)
+        .padding(.trailing, tvForm ? 32 : metrics.wide ? 24 : 14)
+        .padding(.vertical, tvForm ? 20 : metrics.wide ? 16 : 12)
+        .frame(maxWidth: .infinity, minHeight: tvForm ? 120 : metrics.wide ? 92 : 72, alignment: .leading)
+        .contentShape(RoundedRectangle(cornerRadius: Self.radius(wide: metrics.wide), style: .continuous))
     }
 
-    private var icon: CGFloat { tvForm ? 76 : metrics.wide ? 48 : 44 }
+    private var icon: CGFloat { tvForm ? 68 : metrics.wide ? 52 : 44 }
+
+    static func radius(wide: Bool) -> CGFloat { tvForm ? 60 : wide ? 46 : 26 }
 }
 
 extension ButtonStyle where Self == LitRowStyle {
     /// A first-run choice: white 12 percent at rest, 20 under the Mac's pointer, white under TV focus.
-    static var filmChoice: LitRowStyle {
-        LitRowStyle(radius: Theme.Radius.pill, rest: .white.opacity(0.12), hover: .white.opacity(0.2))
+    static func filmChoice(wide: Bool) -> LitRowStyle {
+        LitRowStyle(radius: FilmChoice.radius(wide: wide), rest: .white.opacity(0.12), hover: .white.opacity(0.2))
+    }
+
+    /// A subtitle language: white 12 percent at rest, 24 when chosen, white under TV focus.
+    static func filmLanguage(on: Bool) -> LitRowStyle {
+        LitRowStyle(radius: tvForm ? 22 : 16, rest: .white.opacity(on ? 0.24 : 0.12), hover: .white.opacity(on ? 0.28 : 0.2))
     }
 }
 
-/// The bar's choices: side by side across the column on TV and wide screens (one height), stacked on the phone
-/// and wherever three would not fit side by side (the Mac's first-run sheet).
+/// The choices, stacked on every form.
 struct FilmChoices<Content: View>: View {
     @ViewBuilder let content: Content
     @Environment(\.metrics) private var metrics
 
     var body: some View {
-        if metrics.wide {
-            ViewThatFits(in: .horizontal) {
-                HStack(alignment: .top, spacing: tvForm ? 24 : 16) {
-                    Group(subviews: content) { choices in
-                        // The ideal is the narrowest a choice may be, so three sit side by side wherever they fit.
-                        ForEach(choices) { $0.frame(minWidth: tvForm ? 400 : 300, idealWidth: tvForm ? 400 : 300, maxWidth: tvForm ? 520 : 410) }
-                    }
-                }
-                .fixedSize(horizontal: false, vertical: true)
-                .frame(maxWidth: .infinity)
-                stacked.frame(maxWidth: tvForm ? 720 : 560).frame(maxWidth: .infinity)
-            }
-        } else {
-            stacked
-        }
+        VStack(spacing: metrics.wide ? 12 : 10) { content }
     }
+}
 
-    private var stacked: some View {
-        VStack(spacing: 10) { content }
+/// A subtitle language in the step's two columns: its name, a line when it has one, a check when chosen.
+struct FilmLanguage: View {
+    let name: String
+    let line: String?
+    let on: Bool
+    @Environment(\.settingsLit) private var lit
+
+    var body: some View {
+        HStack(spacing: 8) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(name).textFont(tvForm ? Theme.type.headline : 16, weight: .semibold, relativeTo: .headline)
+                if let line {
+                    Text(line)
+                        .textFont(tvForm ? Theme.type.caption : 13, relativeTo: .footnote)
+                        .foregroundStyle(lit ? Color.black.opacity(0.64) : Theme.Palette.muted)
+                }
+            }
+            Spacer(minLength: 0)
+            if on { Glyph("check", size: tvForm ? 26 : 18) }
+        }
+        .multilineTextAlignment(.leading)
+        .foregroundStyle(lit ? Theme.Palette.onPrimary : Theme.Palette.text)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 8)
+        .frame(maxWidth: .infinity, minHeight: tvForm ? 72 : 52, alignment: .leading)
+        .contentShape(Rectangle())
     }
 }
