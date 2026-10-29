@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -48,7 +49,6 @@ import app.marquee.core.session.DownloadAction
 import app.marquee.core.session.DownloadTarget
 import app.marquee.core.views.DownloadsView
 import app.marquee.core.views.ViewStatus
-import app.marquee.design.Chip
 import app.marquee.design.Icons
 import app.marquee.design.Marquee
 import app.marquee.design.MqIcon
@@ -59,6 +59,7 @@ import app.marquee.design.Spinner
 import app.marquee.design.StateMessage
 import app.marquee.design.Status
 import app.marquee.design.StatusNote
+import app.marquee.design.SwitchRow
 import app.marquee.design.TextRole
 import app.marquee.design.focusClickable
 import app.marquee.ui.phone.DownloadButton
@@ -421,19 +422,13 @@ internal fun DownloadsSettings(session: CoreSession) {
     Section(0.dp, groupRadius()) {
         Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.s)) {
             val settings = snapshot.settings
-            Chip(
-                "Download on Wi-Fi only",
-                selected = settings.wifiOnly,
-                onClick = { send { session.ops.setDownloadSettings(wifiOnly = !settings.wifiOnly) } },
-                switch = true,
-            )
-            Chip(
-                "Smart downloads",
-                selected = settings.smart,
-                onClick = { send { session.ops.setDownloadSettings(smart = !settings.smart) } },
-                switch = true,
-            )
-            MqText(DownloadCopy.SMART_LINE, role = TextRole.Caption, color = Marquee.colors.muted)
+            // Each setting is one switch row with its state drawn (as the web and Apple): the words, then the switch.
+            SettingSwitch("Download on Wi-Fi only", null, settings.wifiOnly) {
+                send { session.ops.setDownloadSettings(wifiOnly = !settings.wifiOnly) }
+            }
+            SettingSwitch("Smart downloads", DownloadCopy.SMART_LINE, settings.smart) {
+                send { session.ops.setDownloadSettings(smart = !settings.smart) }
+            }
             MqText(DownloadCopy.storage(snapshot.storage), role = TextRole.Callout, color = Marquee.colors.muted)
             if (snapshot.storage.downloadsBytes > 0) {
                 if (!confirm) {
@@ -449,6 +444,26 @@ internal fun DownloadsSettings(session: CoreSession) {
                     }
                 }
             }
+        }
+    }
+}
+
+/** A Downloads setting: its name and line at the left, its switch at the right; TalkBack reads one switch. */
+@Composable
+private fun SettingSwitch(
+    title: String,
+    line: String?,
+    on: Boolean,
+    onToggle: () -> Unit,
+) {
+    SwitchRow(
+        on,
+        onToggle,
+        Modifier.fillMaxWidth().heightIn(min = 48.dp).clip(RoundedCornerShape(Marquee.radius.m)),
+    ) {
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            MqText(title, role = TextRole.Headline, weight = FontWeight.SemiBold)
+            line?.let { MqText(it, role = TextRole.Caption, color = Marquee.colors.muted) }
         }
     }
 }

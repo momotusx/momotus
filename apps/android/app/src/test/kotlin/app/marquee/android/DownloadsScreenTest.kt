@@ -9,10 +9,14 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.assertIsOff
+import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -232,6 +236,19 @@ class DownloadsScreenTest {
         controls("Downloading").assertCountEquals(0)
         assertTrue(!shows(DownloadCopy.storage(snapshot().storage)))
         compose.onAllNodesWithText("Pause all").assertCountEquals(0)
+    }
+
+    /** Settings > Downloads: each setting is a switch with its state, not a grey pill that never says on or off. */
+    @Test
+    fun `Wi-Fi only and Smart downloads are switches that say their state`() {
+        core(snapshot().copy(settings = DownloadSettings(wifiOnly = true, smart = false)))
+        compose.setContent { MarqueeTheme(Form.Phone) { DownloadsSettings(session) } }
+        until("the settings drew") { shows("Smart downloads") }
+        val switch = SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Switch)
+        compose.onNodeWithText("Download on Wi-Fi only").assert(switch).assertIsOn()
+        compose.onNodeWithText("Smart downloads").assert(switch).assertIsOff()
+        compose.onNodeWithText("Smart downloads").performClick()
+        until("the switch went") { ops.any { it.startsWith("setDownloadSettings") } }
     }
 
     @Test
