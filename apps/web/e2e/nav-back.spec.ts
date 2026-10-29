@@ -61,6 +61,12 @@ for (const { form, viewport, minSide } of forms) {
     const contrast = ratio(lum(channels(fg)), lum(under));
     console.log(`${form} title: Back ${fg} on ${bg} over white art = ${contrast.toFixed(2)}:1`);
     expect(contrast).toBeGreaterThanOrEqual(4.5);
+    // The phone (R4): one round button over the art, and a cover, which prints its title at its top, starts under it.
+    if (form === "phone") {
+      expect(Math.abs(b.width - b.height)).toBeLessThanOrEqual(1);
+      const art = page.locator(".title-scr.cover .title-bd");
+      if (await art.count()) expect(((await art.boundingBox()) as Box).y).toBeGreaterThanOrEqual(b.y + b.height);
+    }
 
     // The phone's link stays while the page scrolls.
     if (form === "phone") {

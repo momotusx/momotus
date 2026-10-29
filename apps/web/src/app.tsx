@@ -362,7 +362,7 @@ function Shell(props: RouteSectionProps) {
                     }}
                   >
                     <ChevronLeft aria-hidden />
-                    Back
+                    <span class="back-word">Back</span>
                   </a>
                 </div>
               )}

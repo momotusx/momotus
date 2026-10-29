@@ -24,9 +24,11 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.windowInsetsTopHeight
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
@@ -219,7 +221,12 @@ fun PhoneShell(
     }
 }
 
-/** The pushed page's way back, in the key blue as Apple's navigation bar draws it. */
+/**
+ * The pushed page's way back. In a bar, the key blue chevron and word, as Apple's navigation bar draws them. Over
+ * art ([floating]), one round button as the iPhone's own (R4, the owner, 2026-10-30): a white chevron on a black 64
+ * percent circle that reads over any art (6.4:1 over white), spoken "Back"; small, it stays clear of a cover's
+ * printed title, which starts under its row ([BACK_ROW]).
+ */
 @Composable
 private fun BackLink(
     onBack: () -> Unit,
@@ -227,15 +234,27 @@ private fun BackLink(
     floating: Boolean = false,
 ) {
     val side = Marquee.safe.side
+    if (floating) {
+        Box(
+            modifier
+                .padding(start = side - 4.dp, top = 4.dp)
+                .size(BACK_HEIGHT)
+                .clip(CircleShape)
+                .background(Color.Black.copy(alpha = BACK_PILL_ALPHA))
+                .focusClickable(onBack, Role.Button)
+                .semantics { contentDescription = "Back" }
+                .testTag(BACK_ROUND_TAG),
+            contentAlignment = Alignment.Center,
+        ) { MqIcon(Icons.ChevronLeft, tint = Color.White, size = 24.dp) }
+        return
+    }
     val shape = RoundedCornerShape(Marquee.radius.pill)
     Row(
         modifier
-            .padding(start = if (floating) side - 4.dp else 0.dp, top = if (floating) 4.dp else 0.dp)
             .height(BACK_HEIGHT)
             .clip(shape)
-            .then(if (floating) Modifier.background(Marquee.colors.bg.copy(alpha = BACK_PILL_ALPHA)) else Modifier)
             .focusClickable(onBack, Role.Button)
-            .padding(start = if (floating) 8.dp else side - 4.dp, end = 12.dp),
+            .padding(start = side - 4.dp, end = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         MqIcon(Icons.ChevronLeft, tint = Marquee.colors.key)
@@ -437,5 +456,10 @@ internal val LabelSizeKey = SemanticsPropertyKey<Float>("LabelSize")
 /** A back link's height: Material's 48 dp target. */
 internal val BACK_HEIGHT = 48.dp
 
-/** The floating link's pill over title art: at 0.9 the key blue keeps 4.5:1 even over pure white art. */
-internal const val BACK_PILL_ALPHA = 0.9f
+/** The round Back's black over title art: at 0.64 its white chevron keeps 6.4:1 even over pure white art. */
+internal const val BACK_PILL_ALPHA = 0.64f
+
+/** The floating Back's row under the status bar: its 4 dp gap, the button and 4 dp under it. A cover starts below. */
+internal val BACK_ROW = BACK_HEIGHT + 8.dp
+
+internal const val BACK_ROUND_TAG = "back-round"

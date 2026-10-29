@@ -198,11 +198,13 @@
    the screen and kept by its top, where the faces are. It prints its own title, so no logo goes over it: only its
    bottom edge fades into the page, and the meta line starts under it, on the page color. */
 [data-form="phone"] .title-scr.cover { --art-h: min(150vw, 75vh); }
-[data-form="phone"] .title-scr.cover .title-bd { height: var(--art-h); }
+/* The cover starts under Back's row (R4): a poster prints its title at its top, and Back never sits on it. */
+[data-form="phone"] .title-scr.cover { --back-row: calc(52px + var(--notch, env(safe-area-inset-top))); }
+[data-form="phone"] .title-scr.cover .title-bd { top: var(--back-row); height: var(--art-h); }
 [data-form="phone"] .title-scr.cover .title-bd img { object-position: center top; }
 /* The small poster from the lists, already in the cache, under the large cover until it lands: never a blank box. */
 [data-form="phone"] .title-scr.cover .title-bd { background-size: cover; background-position: center top; }
-[data-form="phone"] .title-scr.cover .info { padding-top: calc(var(--art-h) + 8px); }
+[data-form="phone"] .title-scr.cover .info { padding-top: calc(var(--back-row) + var(--art-h) + 8px); }
 [data-form="phone"] .play { margin: 16px 0 14px; gap: 10px; width: 100%; align-items: stretch; }
 [data-form="phone"] .play-row { width: 100%; gap: 10px; }
 [data-form="phone"] .airs-next { height: 52px; gap: 8px; }

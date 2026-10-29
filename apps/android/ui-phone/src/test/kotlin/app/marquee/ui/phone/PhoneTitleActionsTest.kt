@@ -421,6 +421,8 @@ class PhoneTitleActionsTest {
         val art = bounds(TITLE_ART_TAG)
         // 411 dp wide: 616.5 dp high, far under 75 percent of the 2400 dp window.
         assertEquals(1.5f, art.height / art.width, 0.01f)
+        // It prints its title at its top, so it starts under Back's row: Back never sits on it (R4).
+        assertTrue(dp(art.top) >= BACK_ROW.value - 0.5f, "the cover starts at ${dp(art.top)} dp")
     }
 
     @Test
@@ -475,8 +477,9 @@ class PhoneTitleActionsTest {
             )
     }
 
+    // 800 dp high: the cover starts under Back's row (R4), so a 740 dp phone at this text size takes the band.
     @Test
-    @Config(qualifiers = "w360dp-h740dp")
+    @Config(qualifiers = "w360dp-h800dp")
     fun `on a narrow phone with large text Play is whole on the first screen under the cover`() {
         RuntimeEnvironment.setFontScale(1.3f)
         draw(wordy)

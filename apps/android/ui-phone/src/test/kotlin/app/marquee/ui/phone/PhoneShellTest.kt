@@ -21,17 +21,16 @@ import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertHasClickAction
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
+import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithContentDescription
-import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
-import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.unit.dp
 import app.marquee.core.route.Route
 import app.marquee.design.Form
-import app.marquee.design.Marquee
 import app.marquee.design.MarqueeTheme
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -69,9 +68,12 @@ class PhoneShellTest {
                 PhoneShell(Route.Home, showTabs = false, onSelect = {}, statusStrip = strip, onBack = { backs++ }) {}
             }
         }
-        compose.onNodeWithText("Back").assertHasClickAction().performClick()
+        back().assertHasClickAction().performClick()
         compose.runOnIdle { assertEquals(1, backs) }
     }
+
+    /** Back: the word in a bar, the round button's spoken name over art. */
+    private fun back() = compose.onNode(hasText("Back") or hasContentDescription("Back"))
 
     @Test
     fun `a page under the status bar shows the back link and it goes back`() = linkGoesBack(strip = true)
@@ -84,7 +86,7 @@ class PhoneShellTest {
         compose.setContent {
             MarqueeTheme(Form.Phone) { PhoneShell(selected = Route.Home, showTabs = false, onSelect = {}) {} }
         }
-        compose.onAllNodesWithText("Back").assertCountEquals(0)
+        compose.onAllNodes(hasText("Back") or hasContentDescription("Back")).assertCountEquals(0)
     }
 
     @Test
@@ -108,19 +110,18 @@ class PhoneShellTest {
     }
 
     @Test
-    fun `the floating back link keeps 4_5 to 1 for the key blue over pure white art`() {
-        var key = Color.Unspecified
-        var page = Color.Unspecified
+    fun `over art Back is one round button whose white chevron keeps 4_5 to 1 over pure white art`() {
         compose.setContent {
             MarqueeTheme(Form.Phone) {
-                key = Marquee.colors.key
-                page = Marquee.colors.bg
+                PhoneShell(Route.Home, showTabs = false, onSelect = {}, statusStrip = false, onBack = {}) {}
             }
         }
-        compose.waitForIdle()
-        val pill = page.copy(alpha = BACK_PILL_ALPHA).compositeOver(Color.White)
-        val ratio = (key.luminance() + 0.05f) / (pill.luminance() + 0.05f)
-        assertTrue("the key blue on the pill is $ratio to 1", ratio >= 4.5f)
+        val round = compose.onNodeWithTag(BACK_ROUND_TAG).getUnclippedBoundsInRoot()
+        assertEquals(round.right - round.left, round.bottom - round.top)
+        assertEquals(BACK_HEIGHT, round.bottom - round.top)
+        val circle = Color.Black.copy(alpha = BACK_PILL_ALPHA).compositeOver(Color.White)
+        val ratio = (Color.White.luminance() + 0.05f) / (circle.luminance() + 0.05f)
+        assertTrue("the chevron on the circle is $ratio to 1", ratio >= 4.5f)
     }
 
     /**
@@ -182,9 +183,9 @@ class PhoneShellTest {
             }
         }
         val banner = compose.onNodeWithTag("shell-banner").getUnclippedBoundsInRoot()
-        val back = compose.onNodeWithText("Back").getUnclippedBoundsInRoot()
-        assertTrue("Back at ${back.top}, the banner ends at ${banner.bottom}", back.top >= banner.bottom)
-        compose.onNodeWithText("Back").performClick()
+        val bounds = back().getUnclippedBoundsInRoot()
+        assertTrue("Back at ${bounds.top}, the banner ends at ${banner.bottom}", bounds.top >= banner.bottom)
+        back().performClick()
         compose.runOnIdle { assertEquals(1, backs) }
     }
 

@@ -312,16 +312,23 @@ struct TitleScreen: View {
         guard width > 0, height > 0 else { return 633 }
         // A cover at its own 2:3, whole, held to 75 percent of the window (covers are vertical, and a
         // backdrop is often a crop of the same art).
-        if phoneCover != nil { return coverHeroHeight(width: width, height: windowHeight) }
+        if phoneCover != nil { return coverHeroHeight(width: width, height: coverRoom) }
         // The iPhone's 390x680 hero, its status bar under the art's top, held to most of a short window.
         return min(width * 633 / 390, max(height * 0.85, 280))
     }
 
     /// The cover the iPhone shows: only where its 2:3 fits (a portrait window, `coverFits`), never on the Mac or iPad.
     private var phoneCover: String? {
-        guard !metrics.wide, !coverFailed, width > 0, windowHeight > 0, coverFits(width: width, height: windowHeight) else { return nil }
+        guard !metrics.wide, !coverFailed, width > 0, windowHeight > 0, coverFits(width: width, height: coverRoom) else { return nil }
         return details?.cover
     }
+
+    /// Where a cover starts (R4): under the status bar and the navigation bar's floating Back, the page's top inset,
+    /// so Back never sits on the title a cover prints at its top.
+    private var coverRow: CGFloat { insetTop ?? 0 }
+
+    /// The window under that row, which a cover's 2:3 is held to (`coverHeroHeight`, `coverFits`).
+    private var coverRoom: CGFloat { windowHeight - coverRow }
 
     @ViewBuilder private var v3Hero: some View {
         if let details {
@@ -335,7 +342,8 @@ struct TitleScreen: View {
                     // knows the cover prints the title (metahub's), else with it. Unseen until the page's top inset
                     // is known, so the words never land one inset low and jump.
                     VStack(spacing: 0) {
-                        Color.clear.frame(height: max(0, coverHeroHeight(width: width, height: windowHeight) - (insetTop ?? 0)))
+                        // The page starts at its top inset, where the cover starts too.
+                        Color.clear.frame(height: coverHeroHeight(width: width, height: coverRoom))
                         TitleHeroPhone(facts: facts, logo: coverWantsLogo(details)) { phoneButtons() } secondaries: { phoneSecondaries(details) }
                     }
                     .opacity(coverWordsShown(insetTop: insetTop) ? 1 : 0)
@@ -375,13 +383,15 @@ struct TitleScreen: View {
                 // The phone's art runs up under the status bar, the Mac's under the traffic lights.
                 ZStack(alignment: .top) {
                     if phoneCover != nil {
-                        // The iPhone shows the cover first, whole at its 2:3 from the screen's top, with no words
-                        // over it: the status bar's wash at its top, and only its bottom edge fading into the page.
-                        // A large cover that does not load gives way to the addon's poster, then to the name.
-                        headerSurface.frame(height: coverHeroHeight(width: width, height: windowHeight))
-                        CoverArt(sources: coverArtSources(details), name: details.name, height: coverHeroHeight(width: width, height: windowHeight)) {
+                        // The iPhone shows the cover first, whole at its 2:3 under the status bar and Back's row
+                        // (R4: it prints its title at its top, and Back never sits on it), with no words over it:
+                        // only its bottom edge fades into the page. A large cover that does not load gives way to the
+                        // addon's poster, then to the name.
+                        headerSurface.frame(height: coverHeroHeight(width: width, height: coverRoom)).padding(.top, coverRow)
+                        CoverArt(sources: coverArtSources(details), name: details.name, height: coverHeroHeight(width: width, height: coverRoom)) {
                             coverFailed = true
                         }
+                        .padding(.top, coverRow)
                         .opacity(headerArtOpacity)
                     } else {
                         headerSurface

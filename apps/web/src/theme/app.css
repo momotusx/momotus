@@ -295,6 +295,12 @@ h1, h2, h3 { font-family: var(--font-display); font-weight: var(--weight-heading
 [data-form="phone"] .backbar { position: fixed; left: 8px; top: calc(4px + var(--offline-h, 0px) + var(--notch, env(safe-area-inset-top))); }
 [data-form="phone"] .back { height: 44px; padding: 0 14px 0 8px; font-size: 17px; }
 [data-form="phone"] .back svg { width: 24px; height: 24px; }
+/* Over a title's art (R4, the owner, 2026-10-30): one round button as the iPhone's own, a white chevron on a black 64
+ * percent circle that reads over any art (6.4:1 over white), the word kept for screen readers. Small, it stays clear
+ * of a cover's printed title, which starts under its row (title.css, `--back-row`). */
+[data-form="phone"] .backbar:not(.bar) .back { width: 44px; padding: 0; justify-content: center; border-radius: 50%; color: #fff;
+  background: rgba(0, 0, 0, .64); -webkit-backdrop-filter: blur(20px) saturate(1.6); backdrop-filter: blur(20px) saturate(1.6); }
+[data-form="phone"] .backbar:not(.bar) .back-word { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 [data-form="phone"] .backbar.bar { position: relative; left: auto; right: auto; top: auto; height: auto; padding: calc(4px + var(--notch, env(safe-area-inset-top))) 8px 0; background: none; }
 
 /* TV focus, the white lift. A focused control or row turns white with dark

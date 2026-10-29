@@ -12,7 +12,9 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -580,9 +582,10 @@ private val UNDER_COVER = 180.dp
 @Composable
 private fun coverHeight(): Dp {
     val window = windowDp()
-    // The words under it grow with the reader's text size, and so does their room.
+    // The words under it grow with the reader's text size, and so does their room; Back's row sits above it.
     val room = UNDER_COVER * maxOf(1f, LocalDensity.current.fontScale)
-    return minOf(window.width * 1.5f, window.height * 0.75f, window.height - room)
+    val top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + BACK_ROW
+    return minOf(window.width * 1.5f, window.height * 0.75f, window.height - room - top)
 }
 
 /**
@@ -663,6 +666,9 @@ private fun Hero(
             Modifier
         }
     Column {
+        // A cover prints its title at its top: it starts under the status bar and Back's row (R4), so Back never
+        // sits on it. A backdrop runs under them, its logo drawn at its foot.
+        if (cover) Spacer(Modifier.windowInsetsPadding(WindowInsets.statusBars).height(BACK_ROW))
         Box(
             Modifier
                 .fillMaxWidth()
