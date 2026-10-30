@@ -21,6 +21,7 @@ class SnapshotReadsTest {
             "val snapshot: ProfilesSnapshot? get() = view?.snapshot?.takeIf { current }",
             "val first = v.snapshot ?: return@launch",
             "val joined = current.snapshot as? PairingSnapshot.Joined ?: return",
+            "for ((key, view) in views) if (key.videoId == videoId && view.snapshot?.selectedKind != null) view.setKind(null)",
         )
 
     @Test
