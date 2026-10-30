@@ -32,6 +32,26 @@ struct PluginInfo: Decodable, Hashable, Sendable, Identifiable {
     let enabled: Bool
 }
 
+/// The repositories nuvioplugins.com lists, for Find addons (R8).
+struct PluginDirectory: Decodable, Hashable, Sendable {
+    let source: String
+    let fromSnapshot: Bool
+    let repos: [ListedRepo]
+}
+
+struct ListedRepo: Decodable, Hashable, Sendable, Identifiable {
+    let url: String
+    let host: String
+    let name: String
+    let description: String
+    let providers: [String]
+    let languages: [String]
+    let types: [String]
+    let installed: Bool
+
+    var id: String { url }
+}
+
 /// What a pasted link would add, for the consent sheet.
 struct PluginRepoPreview: Decodable, Hashable, Sendable {
     let url: String
@@ -71,6 +91,13 @@ enum PluginWords {
     static let kids = "Kids profiles never run plugins."
     static let notAvailable = "Plugins are not available in this version."
     static let summaryNone = "Add Nuvio repositories for direct links."
+    static let directoryTitle = "Nuvio plugins"
+    static let directoryFrom = "From {source}"
+    static let directorySearch = "Search plugins"
+    static let installed = "Installed"
+    static let directoryNoMatch = "No repository matches."
+    static let forKinds = "for {kinds}"
+    static let languages = "Languages: {languages}."
 
     /// Every word by its key in the shared file.
     static let all: [String: String] = [
@@ -79,6 +106,8 @@ enum PluginWords {
         "sheetTitle": sheetTitle, "sheetFrom": sheetFrom, "sheetAdds": sheetAdds, "sheetNote": sheetNote, "providers": providers,
         "on": on, "off": off, "remove": remove, "removeConfirm": removeConfirm, "empty": empty, "unread": unread,
         "loading": loading, "kids": kids, "notAvailable": notAvailable, "summaryNone": summaryNone,
+        "directoryTitle": directoryTitle, "directoryFrom": directoryFrom, "directorySearch": directorySearch,
+        "installed": installed, "directoryNoMatch": directoryNoMatch, "forKinds": forKinds, "languages": languages,
     ]
 
     /// `template` with each `{name}` replaced by its value.
@@ -105,6 +134,23 @@ enum PluginWords {
             list = "\(shown.dropLast().joined(separator: ", ")) and \(shown[shown.count - 1])"
         }
         return fill(sheetAdds, ["what": "\(n) \(n == 1 ? "provider" : "providers"): \(list)"])
+    }
+
+    /// "8 providers for films and series. Languages: tr, en." for a listed repository's card.
+    static func directoryLine(_ r: ListedRepo) -> String {
+        let n = r.providers.count
+        let kinds = r.types.map { $0 == "movie" ? "films" : $0 }
+        let forKinds = kinds.isEmpty ? "" : " " + fill(Self.forKinds, ["kinds": kinds.joined(separator: " and ")])
+        let head = "\(n) \(n == 1 ? "provider" : "providers")\(forKinds)."
+        return r.languages.isEmpty ? head : "\(head) \(fill(Self.languages, ["languages": r.languages.joined(separator: ", ")]))"
+    }
+
+    /// Whether every word of `query` is in the repository's name, its providers' names or its
+    /// languages, case and accents aside ("turk" finds "Türk").
+    static func matches(_ r: ListedRepo, _ query: String) -> Bool {
+        let fold = { (s: String) in s.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil) }
+        let text = fold(([r.name] + r.providers + r.languages).joined(separator: " "))
+        return fold(query).split(whereSeparator: \.isWhitespace).allSatisfy { text.contains($0) }
     }
 
     /// The Settings row's line: repositories, and the providers on in those that are on.

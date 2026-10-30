@@ -14,6 +14,19 @@ private func shared() throws -> [String: String] {
     #expect(try shared() == PluginWords.all)
 }
 
+@Test func aListedRepositorySaysWhatItHasAndIsFoundByAnyOfIt() throws {
+    let json = """
+    {"url": "u", "host": "raw.githubusercontent.com", "name": "Türk Plugins", "description": "",
+     "providers": ["Dizibox", "HDFilmCehennemi"], "languages": ["tr"], "types": ["movie", "series"], "installed": false}
+    """
+    let r = try JSONDecoder().decode(ListedRepo.self, from: Data(json.utf8))
+    #expect(PluginWords.directoryLine(r) == "2 providers for films and series. Languages: tr.")
+    #expect(PluginWords.matches(r, "turk"))
+    #expect(PluginWords.matches(r, "dizibox TR"))
+    #expect(!PluginWords.matches(r, "anime"))
+    #expect(PluginWords.matches(r, "  "))
+}
+
 @Test func theSheetNamesFiveProvidersAndCountsTheRest() {
     #expect(PluginWords.adds(["One"]) == "Adds 1 provider: One.")
     #expect(PluginWords.adds(["A", "B"]) == "Adds 2 providers: A and B.")

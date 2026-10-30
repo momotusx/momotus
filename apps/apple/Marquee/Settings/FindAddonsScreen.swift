@@ -26,6 +26,8 @@ struct FindAddonsScreen: View {
     @State private var query = ""
     @FocusState private var searchFocused: Bool
     @FocusState private var focus: FindFocus?
+    /// The Nuvio plugins row shows where plugins run (full builds, not kids).
+    @State private var pluginsShown = false
     /// The card focus returns to when it comes back to the grid (TV).
     @State private var lastCard: String?
     @Environment(\.metrics) private var metrics
@@ -97,13 +99,21 @@ struct FindAddonsScreen: View {
 
     /// Phone and Mac: the link field. TV has no field here: a row opens Addons.
     @ViewBuilder private var paste: some View {
-        #if os(tvOS)
-        NavigationLink { AddonsPage(core: core) } label: { Label(W.pasteLink, glyph: "link-2") }
-            .buttonStyle(PillButtonStyle())
-            .focused($focus, equals: .paste)
-        #else
-        InstallField(core: core)
-        #endif
+        VStack(alignment: .leading, spacing: Theme.Space.s) {
+            #if os(tvOS)
+            NavigationLink { AddonsPage(core: core) } label: { Label(W.pasteLink, glyph: "link-2") }
+                .buttonStyle(PillButtonStyle())
+                .focused($focus, equals: .paste)
+            #else
+            InstallField(core: core)
+            #endif
+            // Nuvio plugins from nuvioplugins.com (R8), where plugins run.
+            if pluginsShown {
+                NavigationLink { PluginDirectoryScreen(core: core) } label: { Label(PluginWords.directoryTitle, glyph: "power") }
+                    .buttonStyle(PillButtonStyle())
+            }
+        }
+        .task { pluginsShown = (try? await core.call("plugins", as: PluginsAnswer.self))?.available == true }
     }
 
     /// The List chips with the list's status or Refresh beside them, then the

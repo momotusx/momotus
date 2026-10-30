@@ -152,6 +152,125 @@ struct PluginsScreen: View {
     }
 }
 
+/// Find addons > Nuvio plugins (R8): the repositories nuvioplugins.com lists, in its order, each with
+/// its provider count, kinds and languages, searched on the device (not on TV); Add reads one and asks
+/// on the install sheet first, and one the profile has says Installed (removed in Settings > Plugins).
+struct PluginDirectoryScreen: View {
+    let core: CoreClient
+    @State private var listed: PluginDirectory?
+    @State private var query = ""
+    @State private var said: (url: String, tone: StatusDot.Tone, text: String)?
+    @State private var gate = InstallGate()
+    @Environment(\.metrics) private var metrics
+
+    var body: some View {
+        ScrollView(.vertical) {
+            VStack(alignment: .leading, spacing: Theme.Space.m) {
+                ScreenTitle(text: PluginWords.directoryTitle)
+                Text(PluginWords.fill(PluginWords.directoryFrom, ["source": listed?.source ?? "nuvioplugins.com"]))
+                    .textFont(Theme.type.body)
+                    .foregroundStyle(Theme.Palette.muted)
+                if let listed {
+                    if listed.repos.isEmpty {
+                        StateLine(symbol: "circle-slash", text: PluginWords.notAvailable)
+                    } else {
+                        #if !os(tvOS)
+                        TextField(PluginWords.directorySearch, text: $query)
+                            .textFieldStyle(.plain)
+                            .textFont(Theme.type.body)
+                            .autocorrectionDisabled()
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 12)
+                            .fieldChrome(focused: false)
+                        #endif
+                        let shown = listed.repos.filter { PluginWords.matches($0, query) }
+                        if shown.isEmpty {
+                            StateLine(symbol: "circle-slash", text: PluginWords.directoryNoMatch)
+                        }
+                        ForEach(shown) { repo in card(repo, source: listed.source) }
+                    }
+                } else {
+                    StatusDot(tone: .idle, text: PluginWords.loading)
+                }
+            }
+            .frame(maxWidth: 940, alignment: .leading)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, metrics.gutter)
+            .padding(.vertical, Theme.Space.l)
+        }
+        .scrollIndicators(.hidden)
+        .background(Theme.Palette.bg)
+        .topScrim()
+        .task { await reload() }
+        .installSheet(gate)
+    }
+
+    private func card(_ r: ListedRepo, source: String) -> some View {
+        VStack(alignment: .leading, spacing: Theme.Space.s) {
+            HStack(alignment: .firstTextBaseline) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(r.name).textFont(Theme.type.headline, weight: .semibold, relativeTo: .headline)
+                    Text(PluginWords.fill(PluginWords.directoryFrom, ["source": source]))
+                        .textFont(Theme.type.caption).foregroundStyle(Theme.Palette.muted)
+                }
+                Spacer(minLength: 12)
+                if r.installed {
+                    Label(PluginWords.installed, glyph: "check").textFont(Theme.type.callout, weight: .semibold)
+                } else {
+                    Button(PluginWords.add, glyph: "plus") { ask(r) }
+                        .buttonStyle(PillButtonStyle())
+                        .accessibilityLabel("\(PluginWords.add) \(r.name)")
+                }
+            }
+            Text(PluginWords.directoryLine(r)).textFont(Theme.type.callout, weight: .medium)
+            if !r.description.isEmpty {
+                Text(r.description)
+                    .textFont(Theme.type.callout)
+                    .foregroundStyle(Theme.Palette.muted)
+                    .lineLimit(3)
+            }
+            if let said, said.url == r.url {
+                StatusDot(tone: said.tone, text: said.text)
+            }
+        }
+        .padding(Theme.Space.m)
+        .background(Theme.Palette.surface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+    }
+
+    private func reload() async {
+        listed = try? await core.call("pluginDirectory", as: PluginDirectory.self)
+    }
+
+    private func ask(_ r: ListedRepo) {
+        said = (r.url, .idle, PluginWords.checking)
+        Task {
+            do {
+                let p = try await core.call("previewPluginRepo", ["url": r.url], as: PluginRepoPreview.self)
+                said = nil
+                gate.ask(InstallAsk(
+                    title: PluginWords.fill(PluginWords.sheetTitle, ["name": p.name]),
+                    lines: [PluginWords.fill(PluginWords.sheetFrom, ["host": p.host]), PluginWords.adds(p.providers), PluginWords.sheetNote],
+                    run: { add(p) },
+                    action: PluginWords.add))
+            } catch {
+                said = (r.url, .bad, PluginWords.fill(PluginWords.couldNotAdd, ["reason": error.localizedDescription]))
+            }
+        }
+    }
+
+    private func add(_ p: PluginRepoPreview) {
+        Task {
+            do {
+                _ = try await core.call("addPluginRepo", ["url": p.url], as: PluginsAnswer.self)
+                said = (p.url, .ok, PluginWords.fill(PluginWords.added, ["name": p.name]))
+            } catch {
+                said = (p.url, .bad, PluginWords.fill(PluginWords.couldNotAdd, ["reason": error.localizedDescription]))
+            }
+            await reload()
+        }
+    }
+}
+
 /// Any answer, read as nothing.
 private struct EmptyAnswer: Decodable, Sendable {
     init(from decoder: any Decoder) throws {}
