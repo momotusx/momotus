@@ -303,11 +303,10 @@ h1, h2, h3 { font-family: var(--font-display); font-weight: var(--weight-heading
   background: rgba(0, 0, 0, .64); }
 /* Once the page scrolls, Back's row takes the page color, as the iPhone's navigation bar does at a scroll edge (R4,
  * Pixel walk 2026-10-30 F5): what scrolls up passes under the row, so Back never sits on Play or a cover's printed
- * title. At rest the art runs to the top under Back alone. Fixed to the window, under the button. */
-[data-form="phone"] .backbar:not(.bar)::before { content: ""; position: fixed; z-index: -1; left: 0; right: 0; top: var(--offline-h, 0px);
-  height: calc(52px + var(--notch, env(safe-area-inset-top))); background: var(--bg); opacity: 0; pointer-events: none;
-  transition: opacity var(--motion-panel) var(--ease); }
-[data-form="phone"] .backbar.under:not(.bar)::before { opacity: 1; }
+ * title. At rest the art runs to the top under Back alone. Fixed to the window, under the button, and drawn only once
+ * scrolled: a fill kept at opacity 0 under the page cost the phone title glide a paint pass a frame (home-perf). */
+[data-form="phone"] .backbar.under:not(.bar)::before { content: ""; position: fixed; z-index: -1; left: 0; right: 0; top: var(--offline-h, 0px);
+  height: calc(52px + var(--notch, env(safe-area-inset-top))); background: var(--bg); pointer-events: none; }
 [data-form="phone"] .backbar:not(.bar) .back-word { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 [data-form="phone"] .backbar.bar { position: relative; left: auto; right: auto; top: auto; height: auto; padding: calc(4px + var(--notch, env(safe-area-inset-top))) 8px 0; background: none; }
 

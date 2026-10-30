@@ -75,11 +75,11 @@ for (const { form, viewport, minSide } of forms) {
       const row = () =>
         page.locator(".backbar").evaluate((el) => {
           const s = getComputedStyle(el, "::before");
-          return { opacity: Number(s.opacity), top: parseFloat(s.top), height: parseFloat(s.height), width: parseFloat(s.width), bg: s.backgroundColor };
+          return { drawn: s.content !== "none", top: parseFloat(s.top), height: parseFloat(s.height), width: parseFloat(s.width), bg: s.backgroundColor };
         });
-      expect((await row()).opacity).toBe(0);
+      expect((await row()).drawn).toBe(false);
       await page.evaluate(() => window.scrollTo(0, 40));
-      await expect.poll(async () => (await row()).opacity).toBe(1);
+      await expect.poll(async () => (await row()).drawn).toBe(true);
       const r = await row();
       const pageBg = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
       expect(r.bg).toBe(pageBg);
@@ -88,7 +88,7 @@ for (const { form, viewport, minSide } of forms) {
       await page.evaluate(() => window.scrollTo(0, 700));
       expect((await back.boundingBox())?.y).toBeLessThan(60);
       await page.evaluate(() => window.scrollTo(0, 0));
-      await expect.poll(async () => (await row()).opacity).toBe(0);
+      await expect.poll(async () => (await row()).drawn).toBe(false);
     }
 
     // Versions, from the title: its own bar, clear of the heading.
