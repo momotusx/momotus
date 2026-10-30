@@ -33,6 +33,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.LifecycleRegistry
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import app.marquee.core.PluginCopy
 import app.marquee.core.StreamChoiceCopy
 import app.marquee.core.client.CoreClient
 import app.marquee.core.client.CoreJson
@@ -48,7 +49,9 @@ import app.marquee.core.model.Playability
 import app.marquee.core.model.QualityPref
 import app.marquee.core.model.RankKey
 import app.marquee.core.model.ReasonLine
+import app.marquee.core.model.RowOrigin
 import app.marquee.core.model.SourceClass
+import app.marquee.core.model.SourceRows
 import app.marquee.core.model.Speed
 import app.marquee.core.model.StreamPrefs
 import app.marquee.core.model.VersionRow
@@ -435,6 +438,16 @@ class PhoneVersionsTest {
         compose.onNodeWithText("Try again").assertIsDisplayed()
         compose.onNodeWithText("Play from this device").performClick()
         assertEquals(listOf("kept"), played)
+    }
+
+    @Test
+    fun `only plugin rows count in the header, and no empty card sits over them`() {
+        val found = row("plugin:r/castle:h1", ReasonLine.Few(0)).copy(origin = RowOrigin.Plugin, sourceName = "Castle")
+        show(snapshot().copy(plugins = SourceRows(listOf(found), pending = false)))
+        compose.onNodeWithText("1 version").assertIsDisplayed()
+        compose.onNodeWithText(PluginCopy.CHOOSE).assertIsDisplayed()
+        compose.onAllNodesWithTag(CARD_PLACEHOLDER).assertCountEquals(0)
+        compose.onAllNodesWithText("0 versions").assertCountEquals(0)
     }
 
     @Test

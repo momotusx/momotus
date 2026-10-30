@@ -469,9 +469,10 @@ object VersionsCopy {
      * when nothing can play and nothing was found, since the empty state's line says it.
      */
     fun progress(snapshot: VersionsSnapshot?): Pair<String, Tone>? {
-        val found = snapshot?.let { it.rows.size + (if (it.recommended != null) 1 else 0) } ?: 0
+        val found = snapshot?.let(::listed) ?: 0
         return when {
-            snapshot == null || (!snapshot.done && found == 0 && snapshot.empty == null) -> {
+            // Never "0 versions" while a pass still works: the core says why once nothing is left to ask.
+            snapshot == null || (found == 0 && snapshot.empty == null) -> {
                 StreamChoiceCopy.FINDING to Tone.Idle
             }
 
@@ -491,6 +492,18 @@ object VersionsCopy {
             }
         }
     }
+
+    /** Every row the page lists: the pick, the addons' rows and the plugins' own pass (plans/plugins-and-marketplace.md 4.4). */
+    fun listed(snapshot: VersionsSnapshot): Int =
+        snapshot.rows.size + (if (snapshot.recommended != null) 1 else 0) + snapshot.plugins.rows.size
+
+    /**
+     * Every addon answered with nothing to pick and only the plugins' pass listed rows: those are never picked (4.4),
+     * so the card gives way to one line and the viewer chooses below.
+     */
+    fun onlyPlugins(snapshot: VersionsSnapshot?): Boolean =
+        snapshot != null && snapshot.done && snapshot.recommended == null && snapshot.rows.isEmpty() &&
+            snapshot.empty == null && snapshot.plugins.rows.isNotEmpty()
 
     /** What an opened row adds under its release name: "English, 2 sources", or "Language not stated". */
     fun detail(row: VersionRow): String =

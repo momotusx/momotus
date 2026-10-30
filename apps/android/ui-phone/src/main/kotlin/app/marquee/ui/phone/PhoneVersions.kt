@@ -59,6 +59,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import app.marquee.core.Format
+import app.marquee.core.PluginCopy
 import app.marquee.core.StreamChoiceCopy
 import app.marquee.core.VersionsCopy
 import app.marquee.core.VersionsCopy.EmptyStep
@@ -348,6 +349,11 @@ private fun Pick(
     val colors = Marquee.colors
     val shape = RoundedCornerShape(Marquee.radius.l)
     val best = snapshot?.recommended
+    // Only the plugins' rows, never picked (4.4): no card and no block, one line over them.
+    if (failure == null && VersionsCopy.onlyPlugins(snapshot)) {
+        MqText(PluginCopy.CHOOSE, modifier, role = TextRole.Callout, color = colors.muted)
+        return
+    }
     Column(
         modifier
             .fillMaxWidth()

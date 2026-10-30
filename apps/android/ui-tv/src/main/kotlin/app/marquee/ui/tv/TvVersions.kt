@@ -59,6 +59,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import app.marquee.core.Format
+import app.marquee.core.PluginCopy
 import app.marquee.core.StreamChoiceCopy
 import app.marquee.core.VersionsCopy
 import app.marquee.core.VersionsCopy.EmptyStep
@@ -179,7 +180,7 @@ fun TvVersions(
     val target =
         when {
             failure != null || snapshot?.recommended != null || empty != null -> PLAY
-            else -> snapshot?.rows?.firstOrNull()?.let { rowKey(it) }
+            else -> (snapshot?.rows?.firstOrNull() ?: snapshot?.plugins?.rows?.firstOrNull())?.let { rowKey(it) }
         }
     focus.FirstFocus(target, ask = failure != null)
 
@@ -292,6 +293,11 @@ private fun Pick(
     val shape = RoundedCornerShape(Marquee.radius.l)
     val best = snapshot?.recommended
     val play = focus.requesterFor(PLAY)
+    // Only the plugins' rows, never picked (4.4): no card and no block, one line over them.
+    if (failure == null && VersionsCopy.onlyPlugins(snapshot)) {
+        MqText(PluginCopy.CHOOSE, Modifier.width(620.dp), role = TextRole.Callout, color = colors.muted)
+        return
+    }
     Column(
         Modifier
             // Entering the card from the list lands on Play, never on the details above it.

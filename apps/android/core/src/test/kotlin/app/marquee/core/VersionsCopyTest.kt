@@ -189,7 +189,20 @@ class VersionsCopyTest {
             "1 version" to VersionsCopy.Tone.Ok,
             VersionsCopy.progress(snapshot(recommended = row(), done = true, failed = listOf("Torrentio"))),
         )
-        assertEquals("0 versions" to VersionsCopy.Tone.Ok, VersionsCopy.progress(snapshot(done = true)))
+        // Every addon done with nothing while the plugins still look: never "0 versions" (batch-2 walk F3).
+        val looking = snapshot(done = true).copy(plugins = SourceRows(emptyList(), pending = true))
+        assertEquals("Finding versions" to VersionsCopy.Tone.Idle, VersionsCopy.progress(looking))
+        assertFalse(VersionsCopy.onlyPlugins(looking))
+        // Only the plugins found one: it counts, and the card gives way to the choose line.
+        val one = row().copy(key = "plugin:r/p:h1", origin = RowOrigin.Plugin)
+        val plugins = snapshot(done = true).copy(plugins = SourceRows(listOf(one), pending = false))
+        assertEquals("1 version" to VersionsCopy.Tone.Ok, VersionsCopy.progress(plugins))
+        assertTrue(VersionsCopy.onlyPlugins(plugins))
+        assertFalse(VersionsCopy.onlyPlugins(plugins.copy(recommended = row())))
+        assertEquals(
+            "2 versions" to VersionsCopy.Tone.Ok,
+            VersionsCopy.progress(plugins.copy(recommended = row())),
+        )
         for (s in listOf(
             found,
             snapshot(slow = listOf("Torrentio")),
