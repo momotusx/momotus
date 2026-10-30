@@ -192,6 +192,15 @@ class StreamChoiceCopyTest {
                         put("chooseAnother", CHOOSE_ANOTHER)
                         put("chooseAnotherSaid", CHOOSE_ANOTHER_SAID)
                         put("subtitlesFailed", SUBTITLES_FAILED)
+                        put("firstLine", FIRST_LINE)
+                        put("secondLine", SECOND_LINE)
+                        put("spokenLanguage", SPOKEN_LANGUAGE)
+                        put("spokenNotKnown", SPOKEN_NOT_KNOWN)
+                        put("onFirstLine", ON_FIRST_LINE)
+                        put("onSecondLine", ON_SECOND_LINE)
+                        put("layout", LAYOUT)
+                        put("layouts", buildJsonObject { for ((l, w) in LAYOUTS) put(l.wire, w) })
+                        put("onlyWhenPaused", ONLY_WHEN_PAUSED)
                     },
                 )
                 put(

@@ -1521,7 +1521,7 @@ data class RankKey(
     /** No year in the name, or one within 3 years of the title's or the episode's. */
     val yearOk: Boolean,
     /** The release is in the title's original language, names no language, or the original is not known: a dub ranks below the original whenever both can start (`Conditions::original_language`). */
-    val original: Boolean,
+    val original: Boolean = true,
     /** The bitrate is unknown or within the safe speed of its kind: at most 0.7 of the speed, that is a speed at least 1.43 times the bitrate. */
     val sustains: Boolean,
     /** How far the bitrate is over the row's speed (x = bitrate / speed): 3 when it sustains (x at most 0.7) or the bitrate is unknown, 2 when the speed covers it with no margin (x at most 1), 1 up to 1.5 times the speed, 0 beyond. Among rows that cannot keep up, the one that pauses least ranks first, before resolution (research R1). */

@@ -114,6 +114,8 @@ const DEFAULTED = new Map([
   ["RankKey.covered", "0"],
   // The pick audit's tier, above resolution: an older core or recording ranks without it.
   ["RankKey.tier", "0"],
+  // The original audio above a dub: an older core or recording never put a dub below, as when the original is not known.
+  ["RankKey.original", "true"],
   ["MayPause.smallSwarm", "false"],
   ["Prefs.subtitleSize", "SubtitleSize.Medium"],
   // Accounts phase 1c: passkey kits and the devices that joined through one.

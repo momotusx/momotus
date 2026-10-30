@@ -9,6 +9,7 @@ import app.marquee.core.model.ReasonLine
 import app.marquee.core.model.SectionQuality
 import app.marquee.core.model.Speed
 import app.marquee.core.model.StreamPrefs
+import app.marquee.core.model.SubtitleLayout
 import app.marquee.core.model.VersionRow
 import app.marquee.core.model.VersionsConditions
 import java.util.Locale
@@ -234,6 +235,22 @@ object StreamChoiceCopy {
 
     /** Every start subtitle failed to read (`startSubtitleFailed`): said with no source. */
     const val SUBTITLES_FAILED = "Subtitles could not be loaded"
+
+    /** The subtitle picker's second line (plans/dual-subtitles.md): its switch, rows and options. */
+    const val FIRST_LINE = "First line"
+    const val SECOND_LINE = "Second line"
+    const val SPOKEN_LANGUAGE = "Spoken language"
+    const val SPOKEN_NOT_KNOWN = "not known for this video"
+    const val ON_FIRST_LINE = "On the first line"
+    const val ON_SECOND_LINE = "On the second line"
+    const val LAYOUT = "Layout"
+    val LAYOUTS =
+        mapOf(
+            SubtitleLayout.Stacked to "Stacked",
+            SubtitleLayout.Split to "Split",
+            SubtitleLayout.OneBox to "One box",
+        )
+    const val ONLY_WHEN_PAUSED = "Only when paused"
 
     /** "Show all 12". */
     fun showAll(n: Int): String = SHOW_ALL.replace("{n}", "$n")
