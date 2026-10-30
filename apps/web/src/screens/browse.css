@@ -26,9 +26,6 @@
 /* On the selected fill (`control`) only full 92 percent text keeps 4.5:1 (5.37; at .8 it is 4.11). */
 .chip.on small { opacity: 1; }
 .chip svg { width: 24px; height: 24px; }
-/* A chosen language's rank, in the check's place: a number in a small disc. */
-.chip-rank { display: grid; place-items: center; min-width: 26px; height: 26px; padding: 0 6px; border-radius: 13px; background: var(--text); color: var(--bg); font: 800 15px / 1 var(--font-text); }
-[data-form="phone"] .chip-rank { min-width: 20px; height: 20px; font-size: 12px; }
 /* Apple's segmented control: each choice on the track, the selected one a grey step up with a
  * white label, as the season tabs; a white pill is only ever the screen's primary action. */
 .chip.on { color: #fff; background: var(--selected-fill); }

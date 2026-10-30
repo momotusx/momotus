@@ -478,9 +478,20 @@ const DIRS: Record<string, Direction> = { ArrowUp: "up", ArrowDown: "down", Arro
 // Tizen and webOS remotes send these for Back.
 const BACK_CODES = new Set([10009, 461]);
 
-/** Back on a keyboard or a remote; Backspace only outside a text field. */
+/** Back on a keyboard or a remote; Backspace only outside a text field and outside the language picker, where
+ * it deletes the query's last character (screens/language-picker.tsx). */
 export const isBackKey = (e: KeyboardEvent) =>
-  e.key === "Escape" || e.key === "GoBack" || e.key === "BrowserBack" || BACK_CODES.has(e.keyCode) || (e.key === "Backspace" && !typing(e.target));
+  e.key === "Escape" ||
+  e.key === "GoBack" ||
+  e.key === "BrowserBack" ||
+  BACK_CODES.has(e.keyCode) ||
+  (e.key === "Backspace" && !typing(e.target) && !inPicker(e.target));
+
+/** In the language picker: inside it, or with the focus nowhere while it is open; on TV, anywhere while it is
+ * open (its keys type wherever the focus is). */
+const inPicker = (t: EventTarget | null) =>
+  t instanceof Element &&
+  (!!t.closest("[data-lp]") || ((t === document.body || document.documentElement.dataset.form === "tv") && !!document.querySelector("[data-lp]")));
 
 const typing = (t: EventTarget | null) =>
   t instanceof HTMLInputElement || t instanceof HTMLTextAreaElement || (t instanceof HTMLElement && t.isContentEditable);

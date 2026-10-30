@@ -234,7 +234,7 @@ export const SCREENS: Screen[] = [
     name: "settings",
     path: "/settings",
     ready: async (page) => {
-      await visible('[data-fgroup="pref-subs"]')(page);
+      await visible('[data-f="pref-subs:open"]')(page);
       await expect(page.locator('[data-f="settings:stream-choice"] small')).toContainText(/shared by at least/);
       await expect(page.locator('[data-f="settings:addons"] small')).toContainText(/\d+ installed/);
     },
@@ -273,7 +273,7 @@ export const focusStop = (page: Page, form: Form) =>
         // An endless animation (a skeleton's pulse) cannot finish; it never carries focus.
       }
     }
-    // An input shows focus on the field that holds it (.lang-search, the palette field).
+    // An input shows focus on the field that holds it (the language picker's .lp-field, the palette field).
     const holders = (el: HTMLElement) => (el.tagName === "INPUT" ? [el.parentElement, el.parentElement?.parentElement].filter((n): n is HTMLElement => !!n) : []);
     // The download control draws its ring on its mark (components/download.css), the circle it sits in.
     const parts = (el: HTMLElement) => [el, ...el.querySelectorAll<HTMLElement>(".pic, .ring, .avatar, .cal-art, .dl-mark, svg"), ...holders(el)];
@@ -298,7 +298,7 @@ export const focusStop = (page: Page, form: Form) =>
     const key = el.dataset.f ?? el.tagName.toLowerCase();
     w.__stop = { el, key, on: look(el) };
     if (form !== "tv") {
-      // The field that holds an input draws the ring (.lang-search, the palette field): two levels up at most.
+      // The field that holds an input draws the ring (the language picker's .lp-field, the palette field): two levels up at most.
       const ringed = [...new Set([...parts(el), el.parentElement, el.parentElement?.parentElement])].filter((n): n is HTMLElement => !!n);
       const blue = "rgb(10, 132, 255)";
       const field = form === "phone" && el.tagName === "INPUT";

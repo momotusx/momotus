@@ -26,9 +26,16 @@ export default function StreamChoice() {
   const prefs = prefsView();
   const p = () => prefs.state.data;
   const [error, setError] = createSignal<string | null>(null);
+  // Answers whether it was saved; a failure shows on the page.
   const write = (x: Record<string, unknown>) => {
     setError(null);
-    op<Prefs>("setPrefs", { patch: x }).catch((e) => setError(reasonOf(e)));
+    return op<Prefs>("setPrefs", { patch: x }).then(
+      () => true,
+      (e: unknown) => {
+        setError(reasonOf(e));
+        return false;
+      },
+    );
   };
   const patch = (x: Record<string, unknown>) => write({ streams: x });
   const hasAccount = () => (debridAccounts()?.accounts.length ?? 0) > 0;

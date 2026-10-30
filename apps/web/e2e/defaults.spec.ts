@@ -52,7 +52,7 @@ test.afterEach(async () => {
 async function device(
   browser: Browser,
   form: Form,
-  opts: { importDone?: boolean; locale?: string; slowSubtitles?: number; languages?: number | "fail" } = {},
+  opts: { importDone?: boolean; locale?: string; slowSubtitles?: number; languages?: number | "fail"; slowQuery?: { query: string; ms: number } } = {},
 ): Promise<Page> {
   const context = await browser.newContext({ ...FORMS[form], locale: opts.locale, colorScheme: "dark", baseURL: `http://127.0.0.1:${PORTS.vite}` });
   await context.routeWebSocket(/\/ws$/, (ws) => {
@@ -75,11 +75,16 @@ async function device(
         ws.send(JSON.stringify({ id: msg.id, ok: true, result: {} }));
         return;
       }
-      if (opts.languages === "fail" && msg.op === "languages") {
+      if (opts.languages === "fail" && msg.op === "languagePicker") {
         ws.send(JSON.stringify({ id: msg.id, ok: false, error: "the core is busy" }));
         return;
       }
-      if (typeof opts.languages === "number" && msg.op === "languages") {
+      // One query's answer held back, so it arrives after a later one.
+      if (opts.slowQuery && msg.op === "languagePicker" && msg.query === opts.slowQuery.query) {
+        setTimeout(() => upstream.send(String(m)), opts.slowQuery.ms);
+        return;
+      }
+      if (typeof opts.languages === "number" && msg.op === "languagePicker") {
         setTimeout(() => upstream.send(String(m)), opts.languages);
         return;
       }
@@ -101,6 +106,12 @@ async function device(
 const shot = (page: Page, name: string, form: Form) =>
   page.waitForTimeout(500).then(() => page.screenshot({ path: `${OUT}/${name}-${form}.jpg`, type: "jpeg", quality: 80 }));
 const focused = (page: Page) => page.evaluate(() => (document.activeElement as HTMLElement | null)?.dataset.f ?? null);
+
+/** The subtitles step's selector opens the picker over the step (V1: the step shows the choice alone). */
+async function openPicker(page: Page) {
+  await page.locator('[data-f="welcome:lang:open"]:not([aria-disabled="true"])').click();
+  await expect(page.locator(".lp-layer")).toHaveCount(1);
+}
 const states = async () => Object.fromEntries((await client.req<DefaultAddons>("defaultAddons")).addons.map((a) => [a.key, a.installed]));
 const allAbsent = async () => Object.values(await states()).every((s) => s === "absent");
 /** Public addons sometimes miss the core's 10 s fetch limit; try thrice. */
@@ -153,12 +164,17 @@ test("Start fresh: nothing installed before Continue, two switches turned off st
   await expect(page.locator("h1")).toHaveText("How should Momotus pick what to play?");
   await shot(page, "stream-choice-question", "desktop");
   await page.locator('[data-f="welcome:best"]').click();
-  // Then the subtitle language: on an English browser English leads the
-  // list, and No subtitles is chosen (most titles are in English).
+  // Then the subtitle language: on an English browser No subtitles leads and
+  // is chosen (most titles are in English), English right after it.
   await expect(page).toHaveURL(/step=subs/);
-  await expect(page.locator('.langs[data-fgroup="subs"] .subrow').first()).toHaveAttribute("data-f", "welcome:sub:en");
-  await expect(page.locator('[data-f="welcome:sub:en"]')).toHaveAttribute("aria-checked", "false");
-  await expect(page.locator('[data-f="welcome:sub:none"]')).toHaveAttribute("aria-checked", "true");
+  await expect(page.locator('[data-f="welcome:lang:open"]')).toContainText("No subtitles");
+  await openPicker(page);
+  const suggested = page.locator('[data-fgroup="welcome:lang-s"] [data-f]');
+  await expect(suggested.first()).toHaveAttribute("data-f", "welcome:lang:s:none");
+  await expect(suggested.first()).toHaveAttribute("aria-selected", "true");
+  await expect(suggested.nth(1)).toHaveAttribute("data-f", "welcome:lang:s:en");
+  await expect(suggested.nth(1)).toHaveAttribute("aria-selected", "false");
+  await page.locator('[data-f="lp:done"]').click();
   await page.locator('[data-f="welcome:next"]').click();
   await expect(page).toHaveURL(/step=3/);
   expect((await client.req<Prefs>("setPrefs", { patch: {} })).streams).toMatchObject({ sizeLimitBytes: null, minSeeders: 20 });
@@ -275,9 +291,10 @@ test("a TV does it with keys only: Continue first, a row toggles with select", a
   expect(at.right).toBeLessThan(0.62);
   await shot(page, "stream-choice-question", "tv");
   await page.keyboard.press("Enter");
-  // The subtitle language: one press keeps this TV's.
+  // The subtitle language: one press on Continue keeps this TV's (No subtitles on an English TV).
   await expect(page).toHaveURL(/step=subs/);
   await expect.poll(() => focused(page)).toBe("welcome:next");
+  await expect(page.locator('[data-f="welcome:lang:open"]')).toContainText("No subtitles");
   await page.keyboard.press("Enter");
   await expect(page).toHaveURL(/step=3/);
   expect(sent.find((m) => m.op === "setPrefs" && JSON.stringify(m).includes("streams"))).toMatchObject({ patch: { streams: { sizeLimitBytes: 5 * 1024 ** 3, minSeeders: 50 } } });
@@ -386,51 +403,92 @@ test("Settings by keys: a switch keeps focus on its own row while the list reloa
 
 test("Subtitles: the device's language is chosen; the pick is the profile's; a profile with one passes by", async ({ browser }) => {
   const languages = async () => (await client.req<Prefs>("setPrefs", { patch: {} })).subtitleLanguages;
-  // A Turkish phone: Turkish first and chosen, then the common ones and No subtitles.
+  // A Turkish phone: the step shows the choice alone, Turkish; the list opens from it.
   const phone = await device(browser, "phone", { locale: "tr-TR" });
   await phone.goto("/welcome?step=subs&form=phone");
   await expect(phone.locator("h1")).toHaveText("Subtitles");
-  const rows = phone.locator('.langs[data-fgroup="subs"] .subrow');
-  await expect(rows.first()).toHaveAttribute("data-f", "welcome:sub:tr");
-  await expect(rows.first()).toHaveAttribute("aria-checked", "true");
-  await expect(rows.first()).toContainText("This device's language");
-  await expect(rows.last()).toHaveAttribute("data-f", "welcome:sub:none");
-  await expect(rows).toHaveCount(9);
+  const selector = phone.locator('[data-f="welcome:lang:open"]');
+  await expect(selector).toContainText("Türkçe");
+  await expect(selector).toContainText("Turkish");
+  await expect(phone.locator('[data-fgroup="welcome:lang-r"]')).toHaveCount(0);
   await phone.waitForTimeout(500);
-  await phone.screenshot({ path: `${OUT}/subtitles-step-phone.jpg`, type: "jpeg", quality: 80, fullPage: true });
-  await phone.locator('[data-f="welcome:sub:none"]').click();
-  await expect(phone.locator('[data-f="welcome:sub:tr"]')).toHaveAttribute("aria-checked", "false");
+  await phone.screenshot({ path: `${OUT}/subtitles-step-phone.jpg`, type: "jpeg", quality: 80 });
+  await selector.click();
+  await expect(phone.locator('[data-f="welcome:lang:field"]')).toBeFocused();
+  const chips = phone.locator('[data-fgroup="welcome:lang-s"] [data-f]');
+  await expect(chips.first()).toHaveAttribute("data-f", "welcome:lang:s:tr");
+  await expect(chips.first()).toHaveAttribute("aria-selected", "true");
+  await expect(chips.last()).toHaveAttribute("data-f", "welcome:lang:s:none");
+  await expect(phone.locator('[data-fgroup="welcome:lang-r"] [data-f]')).toHaveCount(113);
+  await phone.waitForTimeout(500);
+  await phone.screenshot({ path: `${OUT}/subtitles-picker-phone.jpg`, type: "jpeg", quality: 80 });
+  await phone.locator('[data-f="welcome:lang:s:none"]').click();
+  await expect(phone.locator(".lp-layer")).toHaveCount(0);
+  await expect(selector).toContainText("No subtitles");
   await phone.locator('[data-f="welcome:next"]').click();
   await expect(phone).toHaveURL(/step=3/);
   expect(await languages()).toEqual([]);
 
-  // Desktop: every other language behind More languages, one chosen there.
+  // Desktop: the picker over the step, the field focused; "farsi" finds Persian.
   const desktop = await device(browser, "desktop", { locale: "tr-TR" });
   await desktop.goto("/welcome?step=subs&form=desktop");
-  await desktop.locator('[data-f="welcome:sub-more"]').click();
-  await expect(desktop.locator('[data-fgroup="subs-all"] .subrow')).toHaveCount(113 - 8);
+  await expect(desktop.locator('[data-f="welcome:lang:open"]')).toContainText("Türkçe");
   await shot(desktop, "subtitles-step", "desktop");
-  await desktop.locator('[data-f="welcome:sub:pt-BR"]').click();
+  await openPicker(desktop);
+  await expect(desktop.locator('[data-f="welcome:lang:field"]')).toBeFocused();
+  await expect(desktop.locator('[data-fgroup="welcome:lang-r"] [data-f]')).toHaveCount(113);
+  await shot(desktop, "subtitles-picker", "desktop");
+  // Letters typed with a row focused go to the field; Backspace there deletes, it is not Back.
+  await desktop.locator('[data-f="welcome:lang:r:de"]').focus();
+  await desktop.keyboard.press("q");
+  await expect(desktop.locator('[data-f="welcome:lang:field"]')).toBeFocused();
+  await expect(desktop.locator('[data-f="welcome:lang:field"]')).toHaveValue("q");
+  // "q" finds Kazakh (its own name, Qazaq tili): a row of it takes the focus, then Backspace.
+  await desktop.locator('[data-f="welcome:lang:r:kk"]').focus();
+  await desktop.keyboard.press("Backspace");
+  await expect(desktop.locator('[data-f="welcome:lang:field"]')).toHaveValue("");
+  await expect(desktop).toHaveURL(/step=subs/);
+  await desktop.locator('[data-f="welcome:lang:field"]').focus();
+  await desktop.keyboard.type("farsi");
+  await expect(desktop.locator('[data-fgroup="welcome:lang-r"] [data-f]').first()).toHaveAttribute("data-f", "welcome:lang:r:fa");
+  await desktop.locator('[data-f="welcome:lang:r:fa"]').click();
+  await expect(desktop.locator(".lp-layer")).toHaveCount(0);
+  await expect(desktop.locator('[data-f="welcome:lang:open"]')).toContainText("Persian");
   await desktop.locator('[data-f="welcome:next"]').click();
   await expect(desktop).toHaveURL(/step=3/);
-  expect(await languages()).toEqual(["pt-BR"]);
+  expect(await languages()).toEqual(["fa"]);
 
   // A profile with a language passes by, to the next step.
   await desktop.goto("/welcome?step=subs&form=desktop");
   await expect(desktop).toHaveURL(/step=3/);
   await expect(desktop.locator("h1")).toHaveText("Setup check");
-  expect(await languages()).toEqual(["pt-BR"]);
+  expect(await languages()).toEqual(["fa"]);
 
-  // A TV: Continue has the focus, so one press keeps the TV's language.
+  // A TV: Continue has the focus, so one press keeps the pre-chosen language. Up is the selector; in its picker
+  // the pre-chosen language has the focus, Up reaches the drawn keyboard, keys type, Back clears the query first.
   await client.req("setPrefs", { patch: { subtitleLanguages: [] } });
   const tv = await device(browser, "tv", { locale: "tr-TR" });
   await tv.goto("/welcome?step=subs&form=tv");
   await expect.poll(() => focused(tv)).toBe("welcome:next");
   await shot(tv, "subtitles-step", "tv");
   await tv.keyboard.press("ArrowUp");
-  await expect.poll(() => focused(tv)).toMatch(/^welcome:sub:/);
+  await expect.poll(() => focused(tv)).toBe("welcome:lang:open");
+  await tv.keyboard.press("Enter");
+  await expect.poll(() => focused(tv)).toBe("welcome:lang:s:tr");
+  await tv.keyboard.press("ArrowUp");
+  await expect.poll(() => focused(tv)).toMatch(/^welcome:lang:kb:/);
+  // Left and Right stop at the keyboard's ends.
+  for (let i = 0; i < 30; i++) await tv.keyboard.press("ArrowLeft");
+  await expect.poll(() => focused(tv)).toBe("welcome:lang:kb:space");
+  await tv.keyboard.type("russk");
+  await expect(tv.locator('[data-fgroup="welcome:lang-r"] [data-f]').first()).toHaveAttribute("data-f", "welcome:lang:r:ru");
+  await tv.keyboard.press("Backspace");
+  await expect(tv.locator(".lp-field input")).toHaveValue("russ");
+  await tv.keyboard.press("Escape");
+  await expect(tv.locator(".lp-field input")).toHaveValue("");
+  await expect(tv).toHaveURL(/step=subs/);
   await tv.keyboard.press("ArrowDown");
-  await expect.poll(() => focused(tv)).toBe("welcome:next");
+  await expect.poll(() => focused(tv)).toBe("welcome:lang:s:tr");
   await tv.keyboard.press("Enter");
   await expect(tv).toHaveURL(/step=3/);
   expect(await languages()).toEqual(["tr"]);
@@ -440,39 +498,196 @@ test("Subtitles: a device language reads as the one the core lists", async ({ br
   // Norway says Bokmål ("nb"); the core lists Norwegian as "no".
   const page = await device(browser, "desktop", { locale: "nb-NO" });
   await page.goto("/welcome?step=subs&form=desktop");
-  const rows = page.locator('.langs[data-fgroup="subs"] .subrow');
-  await expect(rows.first()).toHaveAttribute("data-f", "welcome:sub:no");
-  await expect(rows.first()).toHaveAttribute("aria-checked", "true");
-  await expect(rows.first()).toContainText("Norwegian");
-  await expect(rows.first()).toContainText("This device's language");
-  await expect(page.locator('[data-f="welcome:sub:nb"]')).toHaveCount(0);
+  await expect(page.locator('[data-f="welcome:lang:open"]')).toContainText("Norsk");
+  await openPicker(page);
+  const first = page.locator('[data-fgroup="welcome:lang-s"] [data-f]').first();
+  await expect(first).toHaveAttribute("data-f", "welcome:lang:s:no");
+  await expect(first).toHaveAttribute("aria-selected", "true");
+  await expect(first).toContainText("Norsk");
+  await expect(page.locator('[data-f="welcome:lang:s:nb"]')).toHaveCount(0);
+  await page.locator('[data-f="lp:done"]').click();
   await page.locator('[data-f="welcome:next"]').click();
   await expect(page).toHaveURL(/step=3/);
   expect((await client.req<Prefs>("setPrefs", { patch: {} })).subtitleLanguages).toEqual(["no"]);
 });
 
-test("Subtitles: Continue waits for the language list, and a choice made before it stays", async ({ browser }) => {
+test("Subtitles: Continue waits for the language list, then keeps the device's language", async ({ browser }) => {
   const page = await device(browser, "desktop", { locale: "de-DE", languages: 2000 });
   await page.goto("/welcome?step=subs&form=desktop");
   const next = page.locator('[data-f="welcome:next"]');
   await expect(next).toHaveAttribute("aria-disabled", "true");
-  // A press before the list goes nowhere; No subtitles, chosen now, stays.
+  await expect(page.locator('[data-f="welcome:lang:open"]')).toContainText("Loading languages");
+  // A press before the list goes nowhere.
   await next.dispatchEvent("click");
-  await page.locator('[data-f="welcome:sub:none"]').click();
   await expect(page).toHaveURL(/step=subs/);
   await expect(next).toHaveAttribute("aria-disabled", "false", { timeout: 10_000 });
-  await expect(page.locator('[data-f="welcome:sub:de"]')).toHaveAttribute("aria-checked", "false");
-  await expect(page.locator('[data-f="welcome:sub:none"]')).toHaveAttribute("aria-checked", "true");
+  await expect(page.locator('[data-f="welcome:lang:open"]')).toContainText("Deutsch");
   await next.click();
   await expect(page).toHaveURL(/step=3/);
-  expect((await client.req<Prefs>("setPrefs", { patch: {} })).subtitleLanguages).toEqual([]);
+  expect((await client.req<Prefs>("setPrefs", { patch: {} })).subtitleLanguages).toEqual(["de"]);
 });
 
-test("Subtitles: a language list that fails says so, and Continue still goes on", async ({ browser }) => {
+test("Subtitles: an older query's answer that arrives last changes nothing", async ({ browser }) => {
+  // "a" lists Abkhazian first; its answer is held back until after "ar"'s, which lists Arabic first.
+  const page = await device(browser, "desktop", { locale: "de-DE", slowQuery: { query: "a", ms: 1500 } });
+  await page.goto("/welcome?step=subs&form=desktop");
+  await openPicker(page);
+  await expect(page.locator('[data-f="welcome:lang:field"]')).toBeFocused();
+  await page.keyboard.type("ar");
+  const first = page.locator('[data-fgroup="welcome:lang-r"] [data-f]').first();
+  await expect(first).toHaveAttribute("data-f", "welcome:lang:r:ar");
+  await page.waitForTimeout(2000);
+  await expect(first).toHaveAttribute("data-f", "welcome:lang:r:ar");
+  await expect(page.locator('[data-f="welcome:lang:field"]')).toHaveValue("ar");
+});
+
+test("Subtitles picker on TV: Space never picks, Up to the remembered key, Back and Clear hand the focus on", async ({ browser }) => {
+  const tv = await device(browser, "tv", { locale: "tr-TR" });
+  await tv.goto("/welcome?step=subs&form=tv");
+  await expect.poll(() => focused(tv)).toBe("welcome:next");
+  await openPicker(tv);
+  await expect.poll(() => focused(tv)).toBe("welcome:lang:s:tr");
+  const query = tv.locator(".lp-field input");
+  // A Space on a language types (nothing, with no query) and never presses it.
+  await tv.keyboard.press(" ");
+  await tv.waitForTimeout(300);
+  await expect(tv).toHaveURL(/step=subs/);
+  await expect.poll(() => focused(tv)).toBe("welcome:lang:s:tr");
+  // Up reaches the keyboard on its first remembered key, "a"; Right moves to "d".
+  await tv.keyboard.press("ArrowUp");
+  await expect.poll(() => focused(tv)).toBe("welcome:lang:kb:a");
+  for (let i = 0; i < 3; i++) await tv.keyboard.press("ArrowRight");
+  await expect.poll(() => focused(tv)).toBe("welcome:lang:kb:d");
+  // Typed with the keys of a keyboard, the focus stays on the drawn key.
+  await tv.keyboard.type("a");
+  await expect(query).toHaveValue("a");
+  await expect.poll(() => focused(tv)).toBe("welcome:lang:kb:d");
+  // "a"'s answer is drawn (the count follows it), not the whole list still on screen.
+  await expect(tv.locator(".lp-count")).toContainText("found");
+  const first = tv.locator('[data-fgroup="welcome:lang-r"] [data-f]').first();
+  const firstKey = await first.getAttribute("data-f");
+  await tv.keyboard.press("ArrowDown");
+  await expect.poll(() => focused(tv)).toBe(firstKey);
+  // Up from any language of the first row is the remembered key, not the nearest one.
+  await tv.keyboard.press("ArrowRight");
+  await expect.poll(() => focused(tv)).not.toBe(firstKey);
+  await tv.keyboard.press("ArrowUp");
+  await expect.poll(() => focused(tv)).toBe("welcome:lang:kb:d");
+  // Backspace on a language edits the query, never Back: the list changes, the focus goes to the first suggestion.
+  await tv.keyboard.press("ArrowDown");
+  await tv.keyboard.press("Backspace");
+  await expect(query).toHaveValue("");
+  await expect.poll(() => focused(tv)).toBe("welcome:lang:s:tr");
+  await expect(tv).toHaveURL(/step=subs/);
+  // Typed from a suggestion: the focus goes to the new list's first language.
+  await tv.keyboard.type("a");
+  await expect.poll(() => focused(tv)).toBe(firstKey);
+  // Back with the focus on a language: the query goes, the focus goes to the first suggestion, the step stays.
+  await tv.keyboard.press("Escape");
+  await expect(query).toHaveValue("");
+  await expect.poll(() => focused(tv)).toBe("welcome:lang:s:tr");
+  await expect(tv).toHaveURL(/step=subs/);
+  // Typing that finds nothing, from a language: the focus goes to Clear, and Clear hands it to the key.
+  await tv.keyboard.type("zzzz");
+  await expect.poll(() => focused(tv)).toBe("welcome:lang:clear");
+  await tv.keyboard.press("Enter");
+  await expect(query).toHaveValue("");
+  await expect.poll(() => focused(tv)).toBe("welcome:lang:kb:d");
+});
+
+test("Subtitles picker on desktop: one Tab stop per list, the directory's columns, the spoken words", async ({ browser }) => {
+  const page = await device(browser, "desktop", { locale: "tr-TR" });
+  await page.goto("/welcome?step=subs&form=desktop");
+  await openPicker(page);
+  const field = page.locator('[data-f="welcome:lang:field"]');
+  await expect(field).toBeFocused();
+  const dir = page.locator('[data-fgroup="welcome:lang-r"]');
+  await expect(dir.locator("[data-f]")).toHaveCount(113);
+  await expect(dir).toHaveAttribute("role", "listbox");
+  await expect(dir.locator('[role="group"]').first()).toHaveAttribute("aria-label", "A");
+  await expect(page.locator('[data-fgroup="welcome:lang-s"]')).toHaveAttribute("role", "listbox");
+  // The English name is spoken first, the own name in its own language; flags load as they scroll in.
+  const turkish = page.locator('[data-f="welcome:lang:r:tr"]');
+  await expect(turkish).toHaveAccessibleName(/^Turkish,\s*Türkçe$/);
+  await expect(turkish.locator('[lang="tr"]')).toHaveText("Türkçe");
+  await expect(turkish.locator("img")).toHaveAttribute("loading", "lazy");
+  // Tab: the field, Suggested, the directory; the page behind the picker takes none.
+  await page.keyboard.press("Tab");
+  expect(await focused(page)).toBe("welcome:lang:s:tr");
+  await page.keyboard.press("Tab");
+  expect(await focused(page)).toMatch(/^welcome:lang:r:/);
+  await page.keyboard.press("Tab");
+  expect(await focused(page)).not.toBe("welcome:next");
+  // Down at a column's foot goes to the next column's top, Up comes back.
+  const [end, top] = await page.evaluate(() => {
+    const rows = [...document.querySelectorAll<HTMLElement>(".lp-dir [data-f]")];
+    const i = rows.findIndex((r, n) => n + 1 < rows.length && (rows[n + 1] as HTMLElement).getBoundingClientRect().left > r.getBoundingClientRect().left + 50);
+    return [rows[i]?.dataset.f, rows[i + 1]?.dataset.f];
+  });
+  expect(end).toBeTruthy();
+  await page.locator(`[data-f="${end}"]`).focus();
+  await page.keyboard.press("ArrowDown");
+  expect(await focused(page)).toBe(top);
+  await page.keyboard.press("ArrowUp");
+  expect(await focused(page)).toBe(end);
+  // The count is spoken once the typing stops.
+  await field.focus();
+  const spoken = page.locator(".lp-count .sr");
+  await page.keyboard.type("farsi");
+  expect(await spoken.textContent()).toBe("");
+  await expect(spoken).toHaveText("1 found");
+});
+
+test("Subtitles picker on the phone: the selector speaks its label, Back and Cancel close the list, not the step", async ({ browser }) => {
+  const phone = await device(browser, "phone", { locale: "tr-TR" });
+  await phone.goto("/welcome?step=subs&form=phone");
+  const selector = phone.locator('[data-f="welcome:lang:open"]');
+  await expect(selector).toHaveAccessibleName(/^Subtitle language\s*Türkçe\s*Turkish$/);
+  await expect(selector).toHaveAttribute("aria-haspopup", "dialog");
+  await expect(phone.locator(".lp-hint")).toHaveText("Tap to search 113 languages");
+  // The browser's Back with a query typed closes the list.
+  await selector.click();
+  await phone.locator('[data-f="welcome:lang:field"]').fill("a");
+  await phone.goBack();
+  await expect(phone.locator(".lp-layer")).toHaveCount(0);
+  await expect(phone).toHaveURL(/step=subs/);
+  // Cancel closes it with the choice unchanged.
+  await selector.click();
+  await phone.locator('[data-f="lp:done"]').click();
+  await expect(phone.locator(".lp-layer")).toHaveCount(0);
+  await expect(selector).toContainText("Türkçe");
+  await expect(phone).toHaveURL(/step=subs/);
+});
+
+test("Settings on TV: OK on a language applies the rule and the focus stays on it", async ({ browser }) => {
+  await client.req("setPrefs", { patch: { subtitleLanguages: ["en"] } });
+  const tv = await device(browser, "tv", { locale: "tr-TR" });
+  await tv.goto("/settings?form=tv");
+  const open = tv.locator('[data-f="pref-subs:open"]');
+  await expect(open).toBeVisible({ timeout: 30_000 });
+  await open.focus();
+  await tv.keyboard.press("Enter");
+  await expect(tv.locator('[data-fgroup="pref-subs-s"]')).toHaveAttribute("aria-multiselectable", "true");
+  await expect.poll(() => focused(tv)).toMatch(/^pref-subs:s:/);
+  // Turkish, this TV's language, is added first: the most recent pick is the default.
+  const key = "pref-subs:s:tr";
+  await tv.locator(`[data-f="${key}"]`).focus();
+  await tv.keyboard.press("Enter");
+  await expect.poll(async () => (await client.req<Prefs>("setPrefs", { patch: {} })).subtitleLanguages).toEqual(["tr", "en"]);
+  await expect.poll(() => focused(tv)).toBe(key);
+  await expect(tv.locator(`[data-f="${key}"] .lp-rank`)).toHaveText("Default");
+  await expect(tv.locator(`[data-f="${key}"]`)).toHaveAccessibleName(/default, Remove$/);
+});
+
+test("Subtitles: a language list that fails says so, offers the common ones, and Continue still goes on", async ({ browser }) => {
   const page = await device(browser, "desktop", { locale: "de-DE", languages: "fail" });
   await page.goto("/welcome?step=subs&form=desktop");
-  await expect(page.locator('section.framed .st.bad')).toContainText("Could not load the languages: the core is busy");
-  await expect(page.locator('[data-f="welcome:sub:none"]')).toHaveAttribute("aria-checked", "true");
+  await expect(page.locator('[data-f="welcome:lang:open"]')).toContainText("No subtitles");
+  await openPicker(page);
+  await expect(page.locator(".lp-note")).toContainText("The language list could not be loaded: the core is busy");
+  await expect(page.locator('[data-f="welcome:lang:s:none"]')).toHaveAttribute("aria-selected", "true");
+  await expect(page.locator('[data-f="welcome:lang:s:en"]')).toBeVisible();
+  await page.locator('[data-f="lp:done"]').click();
   await page.locator('[data-f="welcome:next"]').click();
   await expect(page).toHaveURL(/step=3/);
   expect((await client.req<Prefs>("setPrefs", { patch: {} })).subtitleLanguages).toEqual([]);
@@ -481,7 +696,7 @@ test("Subtitles: a language list that fails says so, and Continue still goes on"
 test("Subtitles: Skip waits while Continue saves, so the step leaves once", async ({ browser }) => {
   const page = await device(browser, "desktop", { locale: "de-DE", slowSubtitles: 1500 });
   await page.goto("/welcome?step=subs&form=desktop");
-  await expect(page.locator('[data-f="welcome:sub:de"]')).toHaveAttribute("aria-checked", "true");
+  await expect(page.locator('[data-f="welcome:lang:open"]')).toContainText("Deutsch");
   await page.locator('[data-f="welcome:next"]').click();
   const skip = page.locator('[data-f="welcome:skip"]');
   await expect(skip).toHaveAttribute("aria-disabled", "true");

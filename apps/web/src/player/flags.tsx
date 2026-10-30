@@ -13,13 +13,14 @@ const path = (name: string) => `./flags/${name}.svg`;
 
 /** A language's flag in its circle; with none, or one that did not load, a neutral round mark with the language
  * glyph or its two letters. */
-export function Flag(props: { language: string }) {
+export function Flag(props: { language: string; lazy?: boolean }) {
   const [failed, setFailed] = createSignal<string | null>(null);
   const src = () => {
     const name = flagFile(props.language, (n) => path(n) in files);
     const url = name ? files[path(name)] : undefined;
     return url === failed() ? undefined : url;
   };
+  // The image's attributes reserve a square (CSS sets the size); a long list loads its flags as they scroll in.
   return (
     <Show
       when={src()}
@@ -31,7 +32,7 @@ export function Flag(props: { language: string }) {
         </span>
       }
     >
-      {(s) => <img class="flag" src={s()} alt="" decoding="async" onError={() => setFailed(s())} />}
+      {(s) => <img class="flag" src={s()} alt="" width="64" height="64" decoding="async" loading={props.lazy ? "lazy" : "eager"} onError={() => setFailed(s())} />}
     </Show>
   );
 }

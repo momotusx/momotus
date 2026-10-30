@@ -7,7 +7,6 @@
  * through the steps. The Settings page of the same switches is at the end. */
 
 import { A, useNavigate, useSearchParams } from "@solidjs/router";
-import Check from "lucide-solid/icons/check";
 import ChevronLeft from "lucide-solid/icons/chevron-left";
 import ChevronRight from "lucide-solid/icons/chevron-right";
 import DoorOpen from "lucide-solid/icons/door-open";
@@ -15,6 +14,7 @@ import Gem from "lucide-solid/icons/gem";
 import Link2 from "lucide-solid/icons/link-2";
 import PackageSearch from "lucide-solid/icons/package-search";
 import QrCode from "lucide-solid/icons/qr-code";
+import SearchIcon from "lucide-solid/icons/search";
 import Sparkle from "lucide-solid/icons/sparkle";
 import Zap from "lucide-solid/icons/zap";
 import { createEffect, createSignal, For, Index, Match, on, onCleanup, onMount, Show, Switch } from "solid-js";
@@ -23,17 +23,17 @@ import { displayCaps, link, liveView, op, ping, prefsView, reasonOf } from "../c
 import type { AddonsSnapshot } from "../core/generated/AddonsSnapshot";
 import type { DefaultAddonInfo } from "../core/generated/DefaultAddonInfo";
 import type { DefaultAddons } from "../core/generated/DefaultAddons";
-import type { LanguageChoice } from "../core/generated/LanguageChoice";
 import { autoFocusSoon, goBack } from "../focus/dom";
 import type { FirstRunStill } from "../core/generated/FirstRunStill";
 import { form } from "../form";
 import { resetHistoryBase } from "../history";
 import { accountWords } from "../lib/account";
 import { afterContinue, catalogMissing, choicesFor, defaultsWords, grouped, switchable } from "../lib/defaults";
-import { choiceWords, findAddons, languageName, type Tone } from "../lib/words";
+import { choiceWords, findAddons, type Tone } from "../lib/words";
 import * as sync from "../core/sync";
 import { InstallField } from "./addons";
-import { allLanguages, QUICK } from "./settings";
+import { firstChoice, LanguageOverlay, LanguageSearch, NoneFlag, type Pickable, preChosen } from "./language-picker";
+import { Flag } from "../player/flags";
 import { SignInStart, TvSignIn, tvQrShows } from "./sign-in";
 import "./browse.css";
 import Brand from "../components/brand";
@@ -518,58 +518,51 @@ function Question(props: { then?: string }) {
   );
 }
 
-/** The language subtitles start in, one choice: this device's language
- * chosen (No subtitles on an English device: most titles are in English, and
- * English audio the file does not tag would get English subtitles over it),
- * then the common ones and No subtitles, every other language behind More
- * languages. Continue writes it as the profile's subtitle languages; Skip
- * writes nothing. A profile that has languages already passes by. */
+/** The language subtitles start in, one choice, "Search first" (plans/onboarding-language-picker.md), on the V1
+ * still like every framed step: the core suggests and pre-chooses (this device's language, or No subtitles on an
+ * English device or one whose language it does not know); the step shows only that choice, in a search-shaped
+ * selector that opens the picker over the step (flags, the search field first, every language). A pick on the
+ * phone or desktop closes the picker; on TV, OK on a language picks it and goes on. Continue writes the choice as
+ * the profile's subtitle languages: No subtitles writes an empty list, which the core keeps as off for good. Skip
+ * writes nothing, so the question stays unanswered and the core starts subtitles in the device's language
+ * (`Core::subtitle_languages_set`). A profile that has languages already passes by. */
 function Subtitles(props: { then?: string }) {
   const navigate = useNavigate();
   const prefs = prefsView();
   const next = () => leave(navigate, afterContinue(props.then));
   // Once, when the preferences are in: a Continue here must not pass twice.
   createEffect(on(() => prefs.state.data !== null, (ready) => ready && (prefs.state.data?.subtitleLanguages.length ?? 0) > 0 && next()));
-  const [all, setAll] = createSignal<LanguageChoice[]>([]);
-  const [chosen, setChosen] = createSignal<string | null>(null);
-  // The device's language as the core lists it ("no" for a Norwegian "nb"):
-  // a code it does not list would be a preference no track ever matches.
-  const device = () => all().find((l) => l.device)?.code ?? null;
+  const [chosen, setChosen] = createSignal<Pickable | null>(null);
+  const [total, setTotal] = createSignal<number | null>(null);
   let touched = false;
-  const pick = (code: string | null) => {
-    touched = true;
-    setChosen(code);
-  };
-  // Continue waits for the list: before it, the device's language is unknown.
+  // Continue waits for the first answer: before it, the pre-chosen language is unknown.
   const [loaded, setLoaded] = createSignal(false);
-  const [more, setMore] = createSignal(false);
+  const [open, setOpen] = createSignal(false);
   const [busy, setBusy] = createSignal(false);
   const [problem, setProblem] = createSignal<string | null>(null);
-  const load = (list: LanguageChoice[]) => {
-    setAll(list);
-    const mine = device();
-    if (!touched && mine !== "en") setChosen(mine);
+  const tv = () => form() === "tv";
+  // The core's first answer pre-chooses: its own call (the picker is not drawn until it is opened), or the
+  // picker's, whichever comes; with no answer, No subtitles, and the picker says why.
+  const first = (pre: Pickable | null) => {
+    if (!touched) setChosen(pre);
     setLoaded(true);
   };
   onMount(
     () =>
-      void allLanguages().then(load, (e: unknown) => {
-        setProblem(`Could not load the languages: ${reasonOf(e)}`);
-        load([]);
+      void firstChoice().then((r) => {
+        setTotal(r.total);
+        if (!loaded() || r.total !== null) first(r.chosen);
       }),
   );
-  const nameOf = (code: string) => all().find((l) => l.code === code)?.name ?? languageName(code);
-  const common = () => [...new Set([device(), ...QUICK].filter((c): c is string => c !== null))];
-  // The core's list comes sorted by name.
-  const rest = () => all().filter((l) => !common().includes(l.code));
-  const go = async () => {
-    if (busy() || !loaded()) return;
+  // Continue writes the chosen language; a pick on TV writes its own at once, known before any answer.
+  const go = async (code?: string | null) => {
+    if (busy() || (code === undefined && !loaded())) return;
     setBusy(true);
     setSubsSaving(true);
     setProblem(null);
     try {
-      const code = chosen();
-      await op("setPrefs", { patch: { subtitleLanguages: code ? [code] : [] } });
+      const c = code === undefined ? (chosen()?.code ?? null) : code;
+      await op("setPrefs", { patch: { subtitleLanguages: c ? [c] : [] } });
       next();
     } catch (e) {
       setProblem(`Could not save the language: ${reasonOf(e)}`);
@@ -578,28 +571,62 @@ function Subtitles(props: { then?: string }) {
       setSubsSaving(false);
     }
   };
-  // The device's line follows the core's list, which can come after the row.
-  const row = (code: string | null, name: string, line?: string) => (
-    <button class="drow subrow" role="radio" aria-checked={chosen() === code} data-f={`welcome:sub:${code ?? "none"}`} onClick={() => pick(code)}>
-      <span class="dtext">
-        <b>{name}</b>
-        <Show when={line ?? (code !== null && code === device() ? "This device's language" : undefined)}>
-          {(text) => <small>{text()}</small>}
-        </Show>
-      </span>
-      <Check aria-hidden class="lcheck" />
-    </button>
-  );
+  const pick = (code: string | null, p: Pickable) => {
+    touched = true;
+    setChosen(code === null ? null : p);
+    setOpen(false);
+    if (tv()) void go(code);
+  };
+  const words = () => {
+    const c = chosen();
+    if (!c) return { own: "No subtitles", english: "Turn them on while watching", lang: "en" };
+    return c.native && c.native !== c.name ? { own: c.native, english: c.name, lang: c.code ?? "en" } : { own: c.name, english: "", lang: "en" };
+  };
   return (
     <section class="step-body framed" aria-labelledby="welcome-q">
       <Film title="Subtitles" lead="Pick the language subtitles start in. They turn on when a film's audio is in another language. Change it later in Settings, under Playback." />
-      <div class="langs" role="radiogroup" aria-labelledby="welcome-q" data-fgroup="subs">
-        <For each={common()}>{(code) => row(code, nameOf(code))}</For>
-        {row(null, "No subtitles", "Turn them on while watching")}
+      <div class="lp-pick" role="group" aria-labelledby="welcome-q">
+        <span class="kicker lp-kicker" id="lp-sub-label">
+          Subtitle language
+        </span>
+        <button
+          class="lp-selector"
+          id="lp-sub-open"
+          data-f="welcome:lang:open"
+          aria-labelledby="lp-sub-label lp-sub-open"
+          aria-haspopup="dialog"
+          aria-disabled={!loaded()}
+          onClick={() => loaded() && setOpen(true)}
+        >
+          <Show when={chosen()} fallback={<NoneFlag />}>
+            {(c) => <Flag language={c().code ?? ""} />}
+          </Show>
+          <span class="lp-names">
+            <b lang={loaded() ? words().lang : "en"} dir="auto">
+              {loaded() ? words().own : "Loading languages"}
+            </b>
+            <small>{loaded() ? words().english : ""}</small>
+          </span>
+          <SearchIcon aria-hidden class="lp-sel-icon" />
+        </button>
+        <p class="lp-hint">{`${tv() ? "Select" : form() === "phone" ? "Tap" : "Click"} to search ${total() ? `${total()} languages` : "the languages"}`}</p>
       </div>
+      <Show when={open()}>
+        <LanguageOverlay title="Subtitle language" done="Cancel" onClose={() => setOpen(false)}>
+          <LanguageSearch
+            group="welcome:lang"
+            chosen={[]}
+            isOn={(code) => (chosen()?.code ?? null) === code}
+            onPick={pick}
+            onList={(reply) => first(preChosen(reply))}
+            focusField={!tv()}
+            focusFirst={tv()}
+          />
+        </LanguageOverlay>
+      </Show>
       <Show when={problem()}>
         {(p) => (
-          <p class="st bad" role="status">
+          <p class="st bad" role="alert">
             <i class="dot" />
             {p()}
           </p>
@@ -610,15 +637,7 @@ function Subtitles(props: { then?: string }) {
           Continue
           <ChevronRight aria-hidden />
         </button>
-        <button class="btn" data-f="welcome:sub-more" aria-expanded={more()} onClick={() => setMore(!more())}>
-          {more() ? "Fewer languages" : "More languages"}
-        </button>
       </div>
-      <Show when={more()}>
-        <div class="langs" role="radiogroup" aria-label="More languages" data-fgroup="subs-all">
-          <For each={rest()}>{(l) => row(l.code, l.name)}</For>
-        </div>
-      </Show>
     </section>
   );
 }

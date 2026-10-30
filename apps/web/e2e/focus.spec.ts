@@ -145,17 +145,17 @@ test("TV: an episode's actions lay over its card: no width change, Right in, Lef
 // The focus loop (plans/design-v3-rollout.md, phase 1a): Tab through every screen the shots
 // cover, on each form, until the walk comes back to a stop it judged, and judge every stop
 // (focusStop). The player screens wait for phase 5. Home rows is walked at rest (its shot picks a
-// row up), and Settings once more with More languages open, for its search field.
+// row up), and Settings once more with the subtitle language picker open, for its search field.
 const LOOP: Screen[] = [
   ...SCREENS.filter((s) => !s.name.startsWith("player") && s.name !== "title-trailer" && s.name !== "home-rows"),
   { name: "home-rows at rest", path: "/home-rows", ready: visible(".hrow-main") },
   {
-    name: "settings with more languages",
+    name: "settings with the language picker",
     path: "/settings",
     ready: async (page) => {
-      await visible('[data-fgroup="pref-subs"]')(page);
-      await page.locator('[data-f="pref-subs:more"]').click();
-      await page.locator(".lang-search input").focus();
+      await visible('[data-f="pref-subs:open"]')(page);
+      await page.locator('[data-f="pref-subs:open"]').click();
+      await visible('[data-fgroup="pref-subs-r"]')(page);
     },
   },
 ];

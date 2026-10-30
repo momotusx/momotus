@@ -1,0 +1,133 @@
+/* The language picker (plans/onboarding-language-picker.md, "Search first"). Desktop and TV share the 1920
+ * canvas; the phone is in CSS pixels. Rows and chips are fixed boxes: a focus shadow never takes a size that
+ * follows the words (the Fire TV focus shadow cache, plans/android-tv-oom.md). */
+
+.lp { display: grid; gap: 28px; min-width: 0; }
+/* The field and the keyboard stay in view while the results scroll under them, and the foot (the step's
+ * Continue) under the results; a focused row is revealed clear of both (--lp-head and --lp-foot are
+ * measured by the picker). */
+.lp-head { position: sticky; top: 0; z-index: 4; display: grid; gap: 22px; padding: 12px 0 16px; background: var(--bg); }
+/* The foot stops over the safe area, the strip under it painted over (at rest the strip lies on the page's own padding). */
+.lp-foot { position: sticky; bottom: var(--safe-bottom); z-index: 4; display: grid; justify-items: center; gap: 16px; padding: 16px 0;
+  background: var(--bg); box-shadow: 0 var(--safe-bottom) 0 var(--bg); }
+.lp-foot:empty { display: none; }
+.lp[data-lp] :is(.lp-sug, .lp-list, .lp-dir, .lp-empty, .lp-note) [data-f] {
+  scroll-margin-top: calc(var(--lp-head, 0px) + 16px); scroll-margin-bottom: max(var(--safe-bottom), calc(var(--lp-foot, 0px) + 16px)); }
+/* The head's own controls are always in view. */
+.lp[data-lp] .lp-head [data-f] { scroll-margin-top: 0; }
+[data-form="tv"] .lp[data-lp] :is(.lp-sug, .lp-list, .lp-dir, .lp-empty, .lp-note) [data-f] { scroll-margin-top: calc(var(--lp-head, 0px) + 16px + var(--focus-rise)); }
+.lp .flag { width: 44px; height: 44px; font-size: 18px; }
+.lp-off svg { width: 55%; height: 55%; color: var(--muted); }
+.flag-glyph { color: var(--muted); }
+
+.lp-field { display: flex; align-items: center; gap: 18px; height: 88px; padding: 0 32px; border-radius: var(--radius-l); background: var(--surface); color: var(--muted); }
+.lp-field svg { width: 34px; height: 34px; flex: none; }
+.lp-field input { flex: 1; min-width: 0; height: 100%; font: 500 var(--type-title3) / 1 var(--font-text); color: var(--text); outline: none; }
+.lp-field input::placeholder { color: var(--dim); }
+.lp-field input:focus { outline: none; box-shadow: none; }
+.lp-field:focus-within { outline: var(--focus-ring) solid var(--key); outline-offset: var(--focus-ring); }
+.lp-field input::-webkit-search-cancel-button { filter: invert(1); opacity: .6; }
+[data-form="desktop"] .lp-field { height: 64px; padding: 0 24px; }
+[data-form="desktop"] .lp-field input { font-size: var(--type-headline); }
+/* TV: the query is a large line over the drawn keyboard. */
+.lp-field.tv { height: 84px; padding: 0; background: none; border-radius: 0; border-bottom: 2px solid var(--line-strong); }
+.lp-field.tv input { font: 700 var(--type-title2) / 1 var(--font-display); }
+
+.lp-kb { display: flex; justify-content: center; gap: 4px; }
+.lp-key { display: grid; place-items: center; width: 52px; height: 64px; flex: none; border-radius: var(--radius-m); font: 500 var(--type-body) / 1 var(--font-text);
+  color: var(--muted); background: var(--raised); }
+.lp-key.wide { width: 110px; font-size: var(--type-caption); }
+.lp-key svg { width: 30px; height: 30px; }
+/* TV focus: the app's white lift (theme/app.css), scaled as its cards and tiles. */
+[data-form="tv"] .lp-key:focus { transform: scale(var(--focus-scale-art)); }
+
+.lp-hint, .lp-note, .lp-count, .lp-empty { margin: 0; font: 500 var(--type-caption) / 1.35 var(--font-text); color: var(--dim); }
+.lp-count { font-weight: 600; }
+.lp-retry, .lp-clear { display: inline-flex; align-items: center; gap: 8px; height: 56px; padding: 0 24px; margin-left: 12px; border-radius: var(--radius-pill);
+  font: 600 var(--type-callout) / 1 var(--font-text); color: var(--text); background: var(--fill); }
+.lp-clear svg { width: 24px; height: 24px; }
+
+/* Suggested: chips of one width, the own name cut inside. */
+.lp-sug { display: flex; flex-wrap: wrap; gap: 14px; }
+.lp-chip { display: inline-flex; align-items: center; gap: 12px; width: 300px; height: 64px; padding: 0 20px 0 10px; border-radius: var(--radius-pill);
+  font: 600 var(--type-callout) / 1 var(--font-text); color: var(--text); background: var(--track); }
+.lp-chip .lp-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: start; }
+/* Chosen: the grey selected fill with white words (DECISION.md: a fill, never white; white is the primary and the TV focus). */
+.lp-chip.on { background: var(--selected-fill); color: var(--text); }
+.lp-chip.on .lp-check { color: currentColor; }
+/* TV: large round flags with the own name under them. */
+.lp-sug.tv { gap: 40px; }
+.lp-sug.tv .lp-chip { flex-direction: column; justify-content: flex-start; width: 200px; height: 220px; padding: 12px 0 0; gap: 16px; border-radius: var(--radius-l); background: none; }
+.lp-sug.tv .lp-chip .flag { width: 128px; height: 128px; font-size: 42px; }
+.lp-sug.tv .lp-chip .lp-name { flex: none; width: 100%; text-align: center; font-size: var(--type-callout); }
+.lp-sug.tv .lp-chip.on { background: var(--selected-fill); }
+[data-form="tv"] .lp-sug.tv .lp-chip:focus { transform: scale(var(--focus-scale-card)); }
+
+/* The chosen mark and the rank draw in the row's own colour, so a focused (white) row keeps them. */
+.lp-check { width: 26px; height: 26px; flex: none; color: var(--key); }
+[data-form="tv"] .lp-check { color: currentColor; }
+.lp-rank { flex: none; padding: 2px 8px; border: 2px solid currentColor; border-radius: var(--radius-pill); font: 700 var(--type-caption) / 1 var(--font-text); }
+
+/* The rows: two lines reserved, the own name then the English name. */
+.lp-list { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px 24px; }
+.lp-row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 16px; height: 84px; padding: 0 18px;
+  border-radius: var(--radius-l); text-align: start; color: var(--text); }
+.lp-names { display: grid; min-width: 0; }
+.lp-names .lp-name { font: 500 var(--type-callout) / 1.2 var(--font-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lp-en { min-height: 1.2em; font: 400 var(--type-caption) / 1.2 var(--font-text); color: var(--dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lp-row.on { background: var(--raised); }
+[data-form="tv"] .lp-row.on { background: var(--selected-fill); }
+[data-form="tv"] .lp-row.on .lp-en { color: var(--text); }
+[data-form="tv"] .lp-row:focus { transform: scale(var(--focus-scale-tile)); }
+[data-form="tv"] :is(.lp-clear, .lp-retry, .lp-done):focus { transform: scale(var(--focus-scale-card)); }
+@media (hover: hover) { [data-form="desktop"] .lp-row:hover, [data-form="desktop"] .lp-chip:not(.on):hover { background: var(--raised); } }
+
+/* Desktop with nothing typed: the A to Z directory in four columns. */
+.lp-dir { columns: 4; column-gap: 32px; }
+.lp-letter { break-inside: avoid; display: grid; gap: 2px; margin-bottom: 18px; }
+.lp-letter h3 { margin: 0 0 4px 18px; font: 700 var(--type-caption) / 1 var(--font-text); color: var(--dim); }
+[data-form="desktop"] .lp-row { height: 64px; }
+
+/* The picker over the page. */
+/* Inside the app's canvas (TV and desktop scale it); the phone pins it to the viewport. */
+.lp-layer { position: absolute; inset: 0; z-index: 50; display: flex; flex-direction: column; background: var(--bg); }
+[data-form="phone"] .lp-layer { position: fixed; bottom: auto; height: 100%; }
+.lp-top { display: flex; align-items: center; justify-content: space-between; gap: 24px; padding: 40px 80px 20px; }
+.lp-top h2 { margin: 0; font: var(--weight-display, 700) var(--type-title2) / 1.1 var(--font-display); }
+.lp-done { height: 64px; padding: 0 32px; border-radius: var(--radius-pill); font: 600 var(--type-callout) / 1 var(--font-text); background: var(--primary); color: var(--on-primary); }
+/* TV: one white on the screen, the focus; Done is quiet until it has it. */
+[data-form="tv"] .lp-done:not(:focus) { background: var(--fill); color: var(--text); }
+.lp-body { flex: 1; min-height: 0; overflow-y: auto; padding: 0 80px 80px; }
+
+/* Phone: CSS pixels, one column, chips that wrap; the field never under 16 px (iOS zooms a smaller one);
+ * every control at least 44 tall. */
+[data-form="phone"] .lp { gap: 14px; }
+[data-form="phone"] .lp .flag { width: 28px; height: 28px; font-size: 11px; }
+[data-form="phone"] .lp-field { height: 44px; padding: 0 12px; gap: 8px; border-radius: var(--radius-m); }
+[data-form="phone"] .lp-field svg { width: 18px; height: 18px; }
+[data-form="phone"] .lp-field input { font: 400 var(--type-body) / 1 var(--font-text); }
+[data-form="phone"] .lp-sug { gap: 8px; }
+[data-form="phone"] .lp-chip { width: calc(50% - 4px); height: 44px; gap: 8px; padding: 0 12px 0 6px; }
+[data-form="phone"] .lp-list { grid-template-columns: 1fr; gap: 0; }
+[data-form="phone"] .lp-row { height: 56px; padding: 0 4px; gap: 12px; border-radius: var(--radius-m); }
+[data-form="phone"] .lp-names .lp-name { font-size: var(--type-body); }
+[data-form="phone"] .lp-check { width: 20px; height: 20px; }
+[data-form="phone"] .lp-rank { padding: 2px 6px; border-width: 1.5px; }
+[data-form="phone"] :is(.lp-retry, .lp-clear) { height: 44px; padding: 0 14px; }
+[data-form="phone"] .lp-top { padding: calc(env(safe-area-inset-top) + 12px) 16px 8px; }
+[data-form="phone"] .lp-top h2 { font-size: var(--type-headline); font-weight: 600; }
+[data-form="phone"] .lp-done { height: 44px; padding: 0 16px; font-size: var(--type-body); background: none; color: var(--key); }
+[data-form="phone"] .lp-body { padding: 0 16px calc(env(safe-area-inset-bottom) + 24px); }
+
+.lp-foot .acts { margin: 0; }
+.lp-setting .flag { width: 44px; height: 44px; flex: none; }
+/* In a Settings group the row lies flat on the group, as its neighbours do. */
+.sgroup .lp-setting { background: none; box-shadow: none; }
+/* The onboarding step's selector: the choice alone, search-shaped; the picker opens from it. */
+.lp-kicker { display: block; margin: 8px 0 -6px; }
+.lp-selector { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 62px; padding: 8px 18px 8px 10px; border-radius: var(--radius-pill);
+  background: var(--surface); text-align: start; color: var(--text); }
+.lp-selector .flag { width: 42px; height: 42px; flex: none; }
+.lp-selector .lp-names b { font: 600 var(--type-headline) / 1.2 var(--font-text); }
+.lp-selector .lp-names small { font: 400 var(--type-callout) / 1.2 var(--font-text); color: var(--dim); }
+.lp-sel-icon { width: 20px; height: 20px; margin-left: auto; color: var(--dim); flex: none; }

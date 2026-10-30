@@ -8,7 +8,6 @@ import Plug from "lucide-solid/icons/plug";
 import Puzzle from "lucide-solid/icons/puzzle";
 import MonitorSmartphone from "lucide-solid/icons/monitor-smartphone";
 import Radio from "lucide-solid/icons/radio";
-import SearchIcon from "lucide-solid/icons/search";
 import Rows3 from "lucide-solid/icons/rows-3";
 import SlidersHorizontal from "lucide-solid/icons/sliders-horizontal";
 import Sparkles from "lucide-solid/icons/sparkles";
@@ -21,7 +20,7 @@ import LogIn from "lucide-solid/icons/log-in";
 import Monitor from "lucide-solid/icons/monitor";
 import User from "lucide-solid/icons/user";
 import Wrench from "lucide-solid/icons/wrench";
-import { createResource, createSignal, For, type JSX, onCleanup, onMount, Show } from "solid-js";
+import { createEffect, createResource, createSignal, For, type JSX, on, onCleanup, onMount, Show } from "solid-js";
 import { relayProviders, signInServer } from "../core/sign-in";
 import { mayDeleteAccount } from "../lib/sync";
 import type { PluginsAnswer } from "../core/generated/PluginsAnswer";
@@ -35,7 +34,7 @@ import type { DownloadsSnapshot } from "../core/generated/DownloadsSnapshot";
 import { downloadAct, downloadsHere } from "../components/download";
 import { deleteAll, downloadWords, shownDownloads } from "../lib/download";
 import { focusOn, StorageLine } from "./downloads";
-import type { LanguageChoice } from "../core/generated/LanguageChoice";
+import type { LanguageList } from "../core/generated/LanguageList";
 import type { Prefs } from "../core/generated/Prefs";
 import type { SubtitleSize } from "../core/generated/SubtitleSize";
 import { chooseForm, type Form, form, pinned } from "../form";
@@ -49,6 +48,9 @@ import "./browse.css";
 import { markSrc } from "../components/marks";
 import "./settings.css";
 import "./onboarding.css";
+import { LanguageOverlay, LanguageSearch, NoneFlag } from "./language-picker";
+import { Flag } from "../player/flags";
+import { settingsHint, summary, tap, tapAction, tapWords } from "../lib/language-picker";
 import UserPen from "lucide-solid/icons/user-pen";
 import Users from "lucide-solid/icons/users";
 import { AvatarArt } from "../components/avatar";
@@ -59,111 +61,117 @@ import { accountWords, connectGoogle, connectText, connectTitle } from "../lib/a
 
 const clockTime = (ms: number) => new Date(ms).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 
-/** The languages the pickers show before "More languages", as core tags. */
-export const QUICK = ["en", "tr", "es", "fr", "de", "it", "pt", "ja"];
 /** The ISO 639-2 codes earlier pickers stored for subtitles; the core reads both. */
 const LEGACY: Record<string, string> = { eng: "en", tur: "tr", spa: "es", fre: "fr", ger: "de", ita: "it", por: "pt", jpn: "ja" };
 
-// Every language the core knows (113), loaded once per app run; `device`
-// marks the one this browser's language reads as.
-let catalog: Promise<LanguageChoice[]> | undefined;
-export const allLanguages = () =>
-  (catalog ??= op<LanguageChoice[]>("languages", { device: deviceLanguage() }).catch((e: unknown) => {
-    catalog = undefined;
-    throw e;
-  }));
+// Every language's own name as the core names it, asked once per app run (and again after a failure).
+const ownNames = new Map<boolean, Promise<Record<string, string>>>();
+const namesFor = (audio: boolean) => {
+  let names = ownNames.get(audio);
+  if (!names) {
+    names = op<LanguageList>("languagePicker", { device: deviceLanguage(), audio }).then((reply) =>
+      Object.fromEntries(reply.results.map((l) => [l.code, l.native || l.name])),
+    );
+    names.catch(() => ownNames.delete(audio));
+    ownNames.set(audio, names);
+  }
+  return names;
+};
 
-/** A language picker (subtitles; audio with `audio`): the common languages,
- * then the other chosen ones, each chosen one numbered by its rank (the
- * first one wins), and every language the core knows behind "More
- * languages", with a search. Chips keep their place and their element when
- * one is picked, so a remote's focus stays on it. Subtitles store the core's
- * tag as is, audio the part before "-" ("pt" for "pt-BR"). `first` words the
- * help line from the first chosen language's name (null for none). */
+/** A language picker's row in Settings (subtitles; audio with `audio`): the first chosen language's flag,
+ * its value ("Türkçe first, 2 more", or `none` with nothing chosen), and the search-first picker over the
+ * page when it is pressed (plans/onboarding-language-picker.md). Subtitles: a visit's picks rank in tap
+ * order before the older ones, a tap on an older pick makes it the default, a tap on the default (or on a
+ * pick of this visit) removes it. Audio: a new pick goes last, a tap removes. Each tap is written at once;
+ * `onChange` answers whether it was saved. Subtitles store the core's tag as is, audio the part before "-"
+ * ("pt" for "pt-BR"). */
 export function LanguagePicker(props: {
   label: string;
   help?: string;
-  first?: (name: string | null) => string;
+  /** The value with nothing chosen. */
+  none?: string;
   group: string;
   chosen: string[];
   audio?: boolean;
-  onChange: (next: string[]) => void;
+  onChange: (next: string[]) => Promise<boolean>;
 }) {
-  const [all, setAll] = createSignal<LanguageChoice[] | null>(null);
-  const [failed, setFailed] = createSignal<string | null>(null);
-  const [more, setMore] = createSignal(false);
-  const [query, setQuery] = createSignal("");
-  onMount(() => void allLanguages().then(setAll, (e: unknown) => setFailed(reasonOf(e))));
+  const [open, setOpen] = createSignal(false);
+  const [names, setNames] = createSignal<Record<string, string>>({});
+  // A visit's additions (the undo rule); a new visit starts empty.
+  const [added, setAdded] = createSignal<ReadonlySet<string>>(new Set());
   const codeOf = (tag: string) => (props.audio ? (tag.split("-")[0] ?? tag) : tag);
   const norm = (v: string) => codeOf(LEGACY[v.toLowerCase()] ?? v);
-  const chosen = () => props.chosen.map(norm);
-  const nameOf = (code: string) => all()?.find((l) => l.code === code)?.name ?? languageName(code);
-  // One object per language, so `For` keeps each chip's element.
-  const items = new Map<string, { value: string; label: string }>();
-  const item = (code: string) => {
-    const label = nameOf(code);
-    let it = items.get(code);
-    if (it?.label !== label) items.set(code, (it = { value: code, label }));
-    return it;
+  const saved = () => [...new Set(props.chosen.map(norm))];
+  // The list as last tapped, ahead of the saved one, so two quick taps inside one save both count. It
+  // gives way once the saved list matches it, or when a save fails (the row then shows what is saved and
+  // the page says why).
+  const [local, setLocal] = createSignal<string[] | null>(null);
+  createEffect(on(saved, (s) => local()?.join() === s.join() && setLocal(null), { defer: true }));
+  const chosen = () => local() ?? saved();
+  onMount(() => void namesFor(!!props.audio).then(setNames, () => undefined));
+  const nameOf = (code: string) => names()[code] ?? languageName(code);
+  const value = () => summary(chosen().map(nameOf), props.none ?? "Any language");
+  const write = (next: string[]) => {
+    setLocal(next);
+    void props.onChange(next).then((ok) => ok || setLocal(null));
   };
-  const shown = () => [...new Set([...QUICK.map(codeOf), ...chosen()])].map(item);
-  const rank = (code: string) => chosen().indexOf(code) + 1;
-  const options = () => {
-    const q = query().trim().toLowerCase();
-    const codes = [...new Set((all() ?? []).map((l) => codeOf(l.code)))];
-    return codes
-      .map(item)
-      .filter((i) => !q || i.label.toLowerCase().includes(q))
-      .sort((a, b) => a.label.localeCompare(b.label, "en"));
+  const pick = (code: string | null) => {
+    if (code === null) {
+      if (chosen().length === 0) return;
+      setAdded(new Set<string>());
+      write([]);
+      return;
+    }
+    const next = tap(chosen(), code, added(), !!props.audio);
+    setAdded(next.added);
+    write(next.list);
   };
-  const isOn = (code: string) => chosen().includes(code);
-  const pick = (code: string) => props.onChange(isOn(code) ? props.chosen.filter((v) => norm(v) !== code) : [...props.chosen, code]);
+  const isOn = (code: string | null) => (code === null ? chosen().length === 0 : chosen().includes(code));
   return (
-    <Choice<string>
-      multi
-      label={props.label}
-      help={props.first ? props.first(chosen()[0] ? nameOf(chosen()[0] as string) : null) : props.help}
-      group={props.group}
-      items={shown()}
-      isOn={isOn}
-      rank={rank}
-      onPick={pick}
-      extra={
-        <>
-          <button class="chip" aria-expanded={more()} data-f={`${props.group}:more`} onClick={() => setMore(!more())}>
-            {more() ? "Fewer languages" : "More languages"}
-          </button>
-          <Show when={more()}>
-            <div class="lang-more">
-              <label class="lang-search">
-                <SearchIcon aria-hidden />
-                <span class="sr">Search languages</span>
-                <input
-                  type="search"
-                  placeholder="Search languages"
-                  autocomplete="off"
-                  spellcheck={false}
-                  data-f={`${props.group}:search`}
-                  value={query()}
-                  onInput={(e) => setQuery(e.currentTarget.value)}
-                />
-              </label>
-              <Show when={failed()}>{(why) => <p class="note small">The language list could not be loaded: {why()}</p>}</Show>
-              <Show when={all() && options().length === 0}>
-                <p class="note small">No language is called "{query().trim()}".</p>
-              </Show>
-              <div class="lang-all">
-                <For each={options()}>{(o) => <ChoiceChip group={`${props.group}-all`} item={o} on={isOn(o.value)} rank={rank(o.value)} multi onPick={pick} />}</For>
-              </div>
-            </div>
+    <>
+      <button
+        class="link-row lp-setting"
+        data-f={`${props.group}:open`}
+        aria-haspopup="dialog"
+        onClick={() => {
+          setAdded(new Set<string>());
+          setOpen(true);
+        }}
+      >
+        <Show when={chosen()[0]} fallback={<NoneFlag />}>
+          {(c) => <Flag language={c()} />}
+        </Show>
+        <span>
+          <b>{props.label}</b>
+          <small>{value()}</small>
+          <Show when={props.help}>
+            <small>{props.help}</small>
           </Show>
-        </>
-      }
-    />
+        </span>
+        <ChevronRight aria-hidden class="chev" />
+      </button>
+      <Show when={open()}>
+        <LanguageOverlay title={props.label} done="Done" onClose={() => setOpen(false)}>
+          <LanguageSearch
+            group={props.group}
+            audio={props.audio}
+            multi
+            chosen={chosen()}
+            isOn={isOn}
+            rank={(code) => chosen().indexOf(code) + 1}
+            action={(code) => (code === null ? (isOn(null) ? "" : "Remove all") : tapWords[tapAction(chosen(), code, added(), !!props.audio)])}
+            onPick={pick}
+            focusField
+            focusFirst
+            hint={settingsHint(!!props.audio)}
+          />
+        </LanguageOverlay>
+      </Show>
+    </>
   );
 }
 
-function ChoiceChip<T>(props: { group: string; item: { value: T; label: string }; on: boolean; rank?: number; multi?: boolean; autofocus?: boolean; onPick: (v: T) => void }) {
+function ChoiceChip<T>(props: { group: string; item: { value: T; label: string }; on: boolean; multi?: boolean; autofocus?: boolean; onPick: (v: T) => void }) {
   return (
     <button
       class="chip"
@@ -175,9 +183,7 @@ function ChoiceChip<T>(props: { group: string; item: { value: T; label: string }
       onClick={() => props.onPick(props.item.value)}
     >
       <Show when={props.on}>
-        <Show when={props.rank} fallback={<Check aria-hidden class="chip-check" />}>
-          {(n) => <b class="chip-rank num">{n()}</b>}
-        </Show>
+        <Check aria-hidden class="chip-check" />
       </Show>
       {props.item.label}
     </button>
@@ -191,13 +197,9 @@ export function Choice<T>(props: {
   group: string;
   items: { value: T; label: string }[];
   isOn: (v: T) => boolean;
-  /** A chosen item's rank (1 first), shown in place of the check. */
-  rank?: (v: T) => number;
   onPick: (v: T) => void;
   autofocus?: boolean;
   multi?: boolean;
-  /** After the chips, in the same track ("More languages"). */
-  extra?: JSX.Element;
 }) {
   return (
     <div class="chips-row wrap-row" role={props.multi ? "group" : "radiogroup"} aria-label={props.label} data-fgroup={props.group}>
@@ -214,14 +216,12 @@ export function Choice<T>(props: {
               group={props.group}
               item={item}
               on={props.isOn(item.value)}
-              rank={props.rank?.(item.value)}
               multi={props.multi}
               autofocus={props.autofocus && i() === 0}
               onPick={props.onPick}
             />
           )}
         </For>
-        {props.extra}
       </div>
     </div>
   );
@@ -288,9 +288,16 @@ export default function SettingsScreen() {
   const home = homeView();
   const p = () => prefs.state.data;
   const [error, setError] = createSignal<string | null>(null);
+  // Answers whether it was saved; a failure shows on the page.
   const patch = (x: Record<string, unknown>) => {
     setError(null);
-    op<Prefs>("setPrefs", { patch: x }).catch((e) => setError(reasonOf(e)));
+    return op<Prefs>("setPrefs", { patch: x }).then(
+      () => true,
+      (e: unknown) => {
+        setError(reasonOf(e));
+        return false;
+      },
+    );
   };
   const me = () => profiles()?.profiles.find((x) => x.id === profiles()?.active);
   const kids = () => me()?.kids === true;
@@ -541,7 +548,7 @@ export default function SettingsScreen() {
                   <div class="sgroup filters">
                     <LanguagePicker
                       label="Subtitle language"
-                      first={(name) => (name ? `${name} first` : "None, subtitles start off")}
+                      none="None, subtitles start off"
                       group="pref-subs"
                       chosen={x().subtitleLanguages}
                       onChange={(next) => patch({ subtitleLanguages: next })}

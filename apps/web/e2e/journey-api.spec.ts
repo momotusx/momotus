@@ -371,40 +371,53 @@ test("the language pickers search every language the core knows", async ({ brows
   const { context, page: p } = await page(browser);
   await p.goto("/settings?form=desktop");
   // "eng" from an earlier picker reads as English, chosen, and first.
-  const english = p.locator('[data-f="pref-subs:en"]');
-  await expect(english).toHaveAttribute("aria-checked", "true", { timeout: 30_000 });
-  const first = p.locator('[data-fgroup="pref-subs"] > .kicker small');
-  await expect(first).toHaveText("English first");
-  await p.locator('[data-f="pref-subs:more"]').click();
-  await expect(p.locator('[data-fgroup="pref-subs"] .lang-all .chip')).toHaveCount(113);
-  await p.locator('[data-f="pref-subs:search"]').fill("brazil");
-  const brazil = p.locator('[data-f="pref-subs-all:pt-BR"]');
-  await expect(p.locator('[data-fgroup="pref-subs"] .lang-all .chip')).toHaveCount(1);
+  const row = p.locator('[data-f="pref-subs:open"]');
+  await expect(row).toContainText("English first", { timeout: 30_000 });
+  await row.click();
+  // The picker: the field has the focus, the chosen language leads Suggested as the default.
+  await expect(p.locator('[data-f="pref-subs:field"]')).toBeFocused();
+  const english = p.locator('[data-f="pref-subs:s:en"]');
+  await expect(english).toHaveAttribute("aria-selected", "true");
+  await expect(english.locator(".lp-rank")).toHaveText("Default");
+  await expect(p.locator('[data-fgroup="pref-subs-r"] [data-f]')).toHaveCount(113);
+  // Typed in any spelling: "brazil" finds Portuguese (Brazil).
+  await p.locator('[data-f="pref-subs:field"]').fill("brazil");
+  const brazil = p.locator('[data-f="pref-subs:r:pt-BR"]');
+  await expect(p.locator('[data-fgroup="pref-subs-r"] [data-f]').first()).toHaveAttribute("data-f", "pref-subs:r:pt-BR");
+  // A new pick of this visit goes before the older ones: the most recent is the default.
   await brazil.click();
-  await expect(brazil).toHaveAttribute("aria-checked", "true");
-  // The common languages keep their places; a chosen one from the long list
-  // joins the row after them, and each chosen one shows its rank.
-  const row = p.locator('[data-fgroup="pref-subs"] .chips-track > .chip');
-  await expect(row.nth(0)).toHaveAttribute("data-f", "pref-subs:en");
-  await expect(row.nth(8)).toHaveAttribute("data-f", "pref-subs:pt-BR");
-  await expect(english.locator(".chip-rank")).toHaveText("1");
-  await expect(p.locator('[data-f="pref-subs:pt-BR"] .chip-rank')).toHaveText("2");
-  await expect.poll(async () => (await prefs()).subtitleLanguages).toEqual(["eng", "pt-BR"]);
-  // Turning English off takes the old code out too.
-  await english.click();
-  await expect.poll(async () => (await prefs()).subtitleLanguages).toEqual(["pt-BR"]);
-  await expect(first).toHaveText("Portuguese (Brazil) first");
-  await p.locator('[data-f="pref-subs:search"]').fill("klingon");
-  await expect(p.locator('[data-fgroup="pref-subs"] .note')).toHaveText('No language is called "klingon".');
+  await expect(brazil).toHaveAttribute("aria-selected", "true");
+  await expect.poll(async () => (await prefs()).subtitleLanguages).toEqual(["pt-BR", "en"]);
+  // A second tap on this visit's pick takes it back out (undo).
+  await expect(brazil).toHaveAccessibleName(/Remove/);
+  await brazil.click();
+  await expect.poll(async () => (await prefs()).subtitleLanguages).toEqual(["en"]);
+  await brazil.click();
+  await expect.poll(async () => (await prefs()).subtitleLanguages).toEqual(["pt-BR", "en"]);
+  // Nothing matches: the words say so, and Clear empties the field.
+  await p.locator('[data-f="pref-subs:field"]').fill("klingon");
+  await expect(p.locator(".lp-empty")).toContainText('No language matches "klingon".');
+  await p.locator('[data-f="pref-subs:clear"]').click();
+  await expect(p.locator('[data-f="pref-subs:field"]')).toHaveValue("");
+  await p.locator('[data-f="lp:done"]').click();
+  await expect(row).toContainText("Português (Brasil) first, 1 more");
+  // A later visit: a tap on an older pick makes it the default.
+  await row.click();
+  await expect(p.locator('[data-f="pref-subs:s:en"]')).toHaveAccessibleName(/Make default/);
+  await p.locator('[data-f="pref-subs:s:en"]').click();
+  await expect.poll(async () => (await prefs()).subtitleLanguages).toEqual(["en", "pt-BR"]);
+  await p.keyboard.press("Escape");
+  await expect(p.locator(".lp-layer")).toHaveCount(0);
 
-  // Audio keeps the language without its region: one Chinese, sent as "zh".
+  // Audio keeps the language without its region: one Chinese, sent as "zh", and a new pick goes last.
   await p.goto("/stream-choice?form=desktop");
-  await p.locator('[data-f="choice-audio:more"]').click({ timeout: 30_000 });
-  await p.locator('[data-f="choice-audio:search"]').fill("chinese");
-  await expect(p.locator('[data-f="choice-audio-all:zh"]')).toHaveText("Chinese");
-  await expect(p.locator('[data-fgroup="choice-audio"] .lang-all [data-f^="choice-audio-all:zh-"]')).toHaveCount(0);
-  await p.locator('[data-f="choice-audio-all:zh"]').click();
-  await expect.poll(async () => (await prefs()).streams.languages).toContain("zh");
+  await p.locator('[data-f="choice-audio:open"]').click({ timeout: 30_000 });
+  await p.locator('[data-f="choice-audio:field"]').fill("chinese");
+  await expect(p.locator('[data-f="choice-audio:r:zh"]')).toContainText("Chinese");
+  await expect(p.locator('[data-fgroup="choice-audio-r"] [data-f^="choice-audio:r:zh-"]')).toHaveCount(0);
+  const before = (await prefs()).streams.languages;
+  await p.locator('[data-f="choice-audio:r:zh"]').click();
+  await expect.poll(async () => (await prefs()).streams.languages).toEqual([...before, "zh"]);
   await context.close();
 });
 
@@ -452,13 +465,13 @@ test("Settings > Playback: Subtitle language names the first language, at every 
   for (const [form, viewport] of Object.entries(sizes)) {
     const { context, page: p } = await page(browser, viewport);
     await p.goto(`/settings?form=${form}`);
-    const row = p.locator('[data-fgroup="pref-subs"]');
-    await expect(row.locator("> .kicker")).toContainText("Subtitle language", { timeout: 30_000 });
-    await expect(row.locator("> .kicker small")).toHaveText("Turkish first");
-    await expect(row.locator('[data-f="pref-subs:tr"] .chip-rank')).toHaveText("1");
-    await expect(row.locator('[data-f="pref-subs:en"] .chip-rank')).toHaveText("2");
+    // The row: the first language's flag, its own name and how many follow ("eng" reads as English).
+    const row = p.locator('[data-f="pref-subs:open"]');
+    await expect(row.locator("b")).toHaveText("Subtitle language", { timeout: 30_000 });
+    await expect(row).toContainText("Türkçe first, 1 more");
+    await expect(row.locator("img.flag")).toHaveCount(1);
     // One row for it: no second subtitle language picker on the page.
-    await expect(p.locator('[data-fgroup="pref-subs"]')).toHaveCount(1);
+    await expect(p.locator('[data-f="pref-subs:open"]')).toHaveCount(1);
     await expect(p.locator(".kicker", { hasText: /^Subtitles/ })).toHaveCount(0);
     await row.scrollIntoViewIfNeeded();
     await p.waitForTimeout(500);
@@ -1225,25 +1238,31 @@ test("TV: a focused element rebuilt by live data keeps the focus; one gone hands
   await context.close();
 });
 
-test("TV: OK on a language chip keeps the focus on that chip, numbered by its rank", async ({ browser }) => {
+test("TV: OK on a language keeps the focus on that row, ranked, and the rows stay in place", async ({ browser }) => {
   const { context, page: p } = await page(browser, { width: 1920, height: 1080 });
   await p.goto("/settings?form=tv");
-  const spanish = p.locator('[data-f="pref-subs:es"]');
+  const open = p.locator('[data-f="pref-subs:open"]');
+  await expect(open).toBeVisible({ timeout: 30_000 });
+  await open.focus();
+  await p.keyboard.press("Enter");
+  const spanish = p.locator('[data-f="pref-subs:r:es"]');
   await expect(spanish).toBeVisible({ timeout: 30_000 });
   await spanish.focus();
   await markFocused(p);
-  const before = await p.locator('[data-fgroup="pref-subs"] .chips-track > .chip').evaluateAll((els) => els.map((e) => e.getAttribute("data-f")));
+  const rows = () => p.locator('[data-fgroup="pref-subs-r"] [data-f]').evaluateAll((els) => els.map((e) => e.getAttribute("data-f")));
+  const before = await rows();
   await p.keyboard.press("Enter");
-  await expect(spanish).toHaveAttribute("aria-checked", "true");
-  // The same chip, in the same place, now with its rank.
-  expect(await focusedKey(p)).toBe("pref-subs:es");
+  await expect(spanish).toHaveAttribute("aria-selected", "true");
+  // The same row, in the same place, now the default: this visit's pick goes first.
+  expect(await focusedKey(p)).toBe("pref-subs:r:es");
   expect(await focusedIsMarked(p)).toBe(true);
-  const rank = (await prefs()).subtitleLanguages.length;
-  await expect(spanish.locator(".chip-rank")).toHaveText(String(rank));
-  expect(await p.locator('[data-fgroup="pref-subs"] .chips-track > .chip').evaluateAll((els) => els.map((e) => e.getAttribute("data-f")))).toEqual(before);
+  await expect.poll(async () => (await prefs()).subtitleLanguages[0]).toBe("es");
+  await expect(spanish.locator(".lp-rank")).toHaveText("Default");
+  expect(await rows()).toEqual(before);
+  // A second OK takes this visit's pick out again.
   await p.keyboard.press("Enter");
-  await expect(spanish).toHaveAttribute("aria-checked", "false");
-  expect(await focusedKey(p)).toBe("pref-subs:es");
+  await expect(spanish).toHaveAttribute("aria-selected", "false");
+  expect(await focusedKey(p)).toBe("pref-subs:r:es");
   expect(await focusedIsMarked(p)).toBe(true);
   await context.close();
 });
@@ -1790,21 +1809,21 @@ test("Discover: Try again asks a failed catalog, and a failed page, again", asyn
   }
 });
 
-test("TV: a focused chip gone after the page scrolled hands the focus to its nearest neighbour where it is now", async ({ browser }) => {
+test("TV: a focused row gone after the list scrolled hands the focus to its nearest neighbour where it is now", async ({ browser }) => {
   const { context, page: p } = await page(browser, { width: 1920, height: 1080 });
   await p.goto("/settings?form=tv");
-  const more = p.locator('[data-f="pref-subs:more"]');
-  await expect(more).toBeVisible({ timeout: 30_000 });
-  await more.focus();
+  const open = p.locator('[data-f="pref-subs:open"]');
+  await expect(open).toBeVisible({ timeout: 30_000 });
+  await open.focus();
   await p.keyboard.press("Enter");
-  const chips = p.locator('[data-fgroup="pref-subs"] .lang-all .chip');
+  const chips = p.locator('[data-fgroup="pref-subs-r"] [data-f]');
   await expect(chips).toHaveCount(113);
-  // A chip in the middle of the 113, then the page scrolls under it.
+  // A row in the middle of the 113, then the list scrolls under it.
   await chips.nth(60).focus();
   await p.keyboard.press("ArrowRight");
-  const page_ = () => p.evaluate(() => document.querySelector(".settings-page")?.scrollTop ?? 0);
+  const page_ = () => p.evaluate(() => document.querySelector(".lp-body")?.scrollTop ?? 0);
   const at = await page_();
-  await p.evaluate(() => document.querySelector(".settings-page")?.scrollBy(0, 320));
+  await p.evaluate(() => document.querySelector(".lp-body")?.scrollBy(0, 320));
   await expect.poll(page_).toBeGreaterThan(at + 200);
   await p.waitForTimeout(300);
   // It leaves the list: the chip nearest to where it is on screen now takes the focus.
@@ -1812,7 +1831,7 @@ test("TV: a focused chip gone after the page scrolled hands the focus to its nea
     const gone = document.activeElement as HTMLElement;
     const r = gone.getBoundingClientRect();
     const [x, y] = [r.left + r.width / 2, r.top + r.height / 2];
-    const others = [...document.querySelectorAll<HTMLElement>('[data-fgroup="pref-subs"] [data-f]')].filter((el) => el !== gone);
+    const others = [...document.querySelectorAll<HTMLElement>('[data-fgroup="pref-subs-r"] [data-f]')].filter((el) => el !== gone);
     gone.remove();
     let best: HTMLElement | null = null;
     let d = Infinity;

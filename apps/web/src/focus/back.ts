@@ -55,7 +55,10 @@ if (typeof window !== "undefined")
       e.stopImmediatePropagation();
       return;
     }
-    const top = stack[stack.length - 1];
+    // The newest overlay with an entry: closes without one may sit above it (the language picker's query),
+    // and closing it takes them with it.
+    let top: Entry | undefined;
+    for (let i = stack.length - 1; i >= 0 && !top; i--) if (stack[i]?.mark) top = stack[i];
     if (!top?.mark || marked() === top.mark) return;
     e.stopImmediatePropagation();
     // Its entry is already gone: closing must not go back again.

@@ -67,13 +67,6 @@
 /* Settings shows the same rows in one column. */
 .settings-page .dgroups { columns: 1; width: 100%; }
 
-/* Subtitles: the languages as rows of the addons step, one chosen, a check on it. */
-.langs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px 40px; width: min(100%, 1560px); }
-.subrow { grid-template-columns: minmax(0, 1fr) auto; min-height: 72px; }
-.lcheck { width: 28px; height: 28px; opacity: 0; }
-.subrow[aria-checked="true"] { box-shadow: inset 0 0 0 2px var(--text); }
-.subrow[aria-checked="true"] .lcheck { opacity: 1; }
-
 /* Step 3: the setup check, a dot and a word per row, never color alone. */
 .check ul { display: grid; width: min(100%, 1200px); }
 .check li { display: grid; grid-template-columns: 220px minmax(0, 1fr) auto; align-items: center; gap: 14px; min-height: 72px; padding: 8px 0; border-bottom: 1px solid var(--line); }
@@ -118,9 +111,6 @@
 [data-form="phone"] .drow[aria-checked="true"] .switch i { transform: translateX(18px); }
 [data-form="phone"] .dstate { font-size: 12px; }
 [data-form="phone"] .step-body .acts { gap: 10px; }
-[data-form="phone"] .langs { grid-template-columns: 1fr; gap: 8px; }
-[data-form="phone"] .subrow { min-height: 52px; grid-template-columns: minmax(0, 1fr) auto; }
-[data-form="phone"] .lcheck { width: 20px; height: 20px; }
 [data-form="phone"] .check li { grid-template-columns: 84px minmax(0, 1fr) auto; min-height: 44px; gap: 8px; }
 [data-form="phone"] .check .cl { font-size: 14px; }
 [data-form="phone"] .check .st { font-size: 13px; }
@@ -148,7 +138,7 @@
 .framed h1:focus-visible { outline: var(--focus-ring) solid var(--key); outline-offset: 4px; }
 .framed > .lead { margin-top: 14px; color: var(--muted); max-width: none; }
 /* The choices: pills filled white 12 percent, the icon in a circle, stacked; white under TV focus. */
-.framed :is(.doors, .langs) { margin-top: 34px; }
+.framed :is(.doors, .lp-pick) { margin-top: 34px; }
 .framed .doors, .framed .doors.two { display: grid; grid-template-columns: 1fr; gap: 12px; width: 100%; }
 .framed .door { flex-direction: row; align-items: center; gap: 16px; min-height: 92px; padding: 16px 24px 16px 18px; border-radius: 46px;
   background: rgba(255, 255, 255, .12); box-shadow: none; }
@@ -159,9 +149,13 @@
 [data-form="tv"] .framed .door:focus > svg:first-child { background: rgba(0, 0, 0, .08); }
 [data-form="tv"] .framed .door:focus .chev { color: rgba(0, 0, 0, .4); }
 @media (hover: hover) { [data-form="desktop"] .framed .door:hover { background: rgba(255, 255, 255, .2); } }
-.framed .langs { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; width: 100%; }
-.framed .subrow { min-height: 52px; padding: 0 14px; border-radius: 16px; background: rgba(255, 255, 255, .12); box-shadow: none; }
-.framed .subrow[aria-checked="true"] { background: rgba(255, 255, 255, .24); box-shadow: none; }
+/* Subtitles: the chosen language in a door-shaped selector that opens the picker, its hint under it. */
+.framed .lp-pick { display: grid; gap: 12px; }
+.framed .lp-kicker { margin: 0; color: var(--muted); }
+.framed .lp-selector { min-height: 92px; padding: 16px 28px 16px 18px; border-radius: 46px; background: rgba(255, 255, 255, .12); }
+.framed .lp-selector .flag { width: 52px; height: 52px; }
+.framed .lp-hint { color: var(--muted); }
+@media (hover: hover) { [data-form="desktop"] .framed .lp-selector:hover { background: rgba(255, 255, 255, .2); } }
 .framed .acts { margin-top: 14px; }
 /* TV and desktop: the column at the lower left, under the header, on the safe area. */
 :is([data-form="tv"], [data-form="desktop"]) .welcome.page:has(> .framed) { padding-inline: var(--safe-side); }
@@ -170,7 +164,9 @@
 [data-form="desktop"] .step-body.framed { width: min(100%, calc(580 * var(--px))); }
 [data-form="desktop"] .framed h1 { font-size: calc(56 * var(--px)); }
 [data-form="desktop"] .framed > .lead { margin-top: calc(14 * var(--px)); font-size: calc(19 * var(--px)); }
-[data-form="desktop"] .framed :is(.doors, .langs) { margin-top: calc(34 * var(--px)); }
+[data-form="desktop"] .framed :is(.doors, .lp-pick) { margin-top: calc(34 * var(--px)); }
+[data-form="desktop"] .framed .lp-selector { min-height: calc(92 * var(--px)); padding: calc(16 * var(--px)) calc(28 * var(--px)) calc(16 * var(--px)) calc(18 * var(--px)); border-radius: calc(46 * var(--px)); }
+[data-form="desktop"] .framed .lp-selector .flag { width: calc(52 * var(--px)); height: calc(52 * var(--px)); }
 [data-form="desktop"] .framed .doors { gap: calc(12 * var(--px)); }
 [data-form="desktop"] .framed .door { gap: calc(16 * var(--px)); min-height: calc(92 * var(--px)); padding: calc(16 * var(--px)) calc(24 * var(--px)) calc(16 * var(--px)) calc(18 * var(--px)); border-radius: calc(46 * var(--px)); }
 [data-form="desktop"] .framed .door > svg:first-child { width: calc(52 * var(--px)); height: calc(52 * var(--px)); padding: calc(14 * var(--px)); }
@@ -181,7 +177,8 @@
 [data-form="tv"] .framed .door > svg:first-child { width: 68px; height: 68px; padding: 18px; }
 [data-form="tv"] .framed .door b { font-size: var(--type-headline); }
 [data-form="tv"] .framed .door small { font-size: var(--type-caption); }
-[data-form="tv"] .framed .subrow { min-height: 72px; border-radius: 22px; }
+[data-form="tv"] .framed .lp-selector { min-height: 120px; padding: 20px 36px 20px 22px; border-radius: 60px; gap: 22px; }
+[data-form="tv"] .framed .lp-selector .flag { width: 68px; height: 68px; }
 /* Phone: the still behind the whole screen, a wash under the header deep enough for its words, and the step's block at the foot on a
  * ramp anchored to it: clear 170 px over the question, black 82 percent at its top line, black from 135 under it,
  * so the still shows above whatever the step holds and no black band is left over. */
@@ -193,15 +190,16 @@
   background: linear-gradient(to bottom, rgba(0, 0, 0, 0) 0, rgba(0, 0, 0, .82) 170px, #000 305px); }
 [data-form="phone"] .framed h1 { font-size: 34px; line-height: 1.08; }
 [data-form="phone"] .framed > .lead { margin: 10px 0 0; font-size: 15px; line-height: 1.4; text-align: left; }
-[data-form="phone"] .framed :is(.doors, .langs) { margin-top: 22px; }
+[data-form="phone"] .framed :is(.doors, .lp-pick) { margin-top: 22px; }
 [data-form="phone"] .framed .doors { gap: 10px; }
 [data-form="phone"] .framed .door { min-height: 72px; gap: 12px; padding: 12px 14px 12px 12px; border-radius: 26px; }
 [data-form="phone"] .framed .door > svg:first-child { width: 44px; height: 44px; padding: 12px; }
 [data-form="phone"] .framed .door b { font-size: 16px; }
 [data-form="phone"] .framed .door small { font-size: 13px; }
 [data-form="phone"] .framed .door .chev { margin-left: auto; }
-[data-form="phone"] .framed .langs { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
-[data-form="phone"] .framed .subrow { min-height: 52px; }
+[data-form="phone"] .framed .lp-pick { gap: 8px; }
+[data-form="phone"] .framed .lp-selector { min-height: 72px; padding: 12px 18px 12px 12px; border-radius: 26px; }
+[data-form="phone"] .framed .lp-selector .flag { width: 44px; height: 44px; }
 [data-form="phone"] .framed .acts { display: grid; gap: 8px; justify-self: stretch; }
 [data-form="phone"] .framed .acts .btn { width: 100%; justify-content: center; }
 
