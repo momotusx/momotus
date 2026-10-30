@@ -396,7 +396,7 @@ class TvVersionsTest {
     @Test
     fun `only plugin rows give one line for the card, focus starts on the first of them, and Left keeps it there`() {
         val found =
-            row("plugin:r/castle:h1", ReasonLine.Few(0))
+            row("plugin:r/castle:h1", ReasonLine.Quick())
                 .copy(
                     status = VersionStatus.Direct,
                     sizeBytes = null,

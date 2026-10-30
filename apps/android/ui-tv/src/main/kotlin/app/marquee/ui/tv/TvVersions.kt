@@ -179,9 +179,21 @@ fun TvVersions(
     // state's first action), else the first row (the plugins' first once only theirs are left).
     val target =
         when {
-            failure != null || snapshot?.recommended != null || empty != null -> PLAY
-            VersionsCopy.onlyPlugins(snapshot) -> snapshot?.plugins?.rows?.firstOrNull()?.let { rowKey(it) }
-            else -> snapshot?.rows?.firstOrNull()?.let { rowKey(it) }
+            failure != null || snapshot?.recommended != null || empty != null -> {
+                PLAY
+            }
+
+            VersionsCopy.onlyPlugins(snapshot) -> {
+                snapshot
+                    ?.plugins
+                    ?.rows
+                    ?.firstOrNull()
+                    ?.let { rowKey(it) }
+            }
+
+            else -> {
+                snapshot?.rows?.firstOrNull()?.let { rowKey(it) }
+            }
         }
     focus.FirstFocus(target, ask = failure != null)
 
@@ -229,7 +241,7 @@ fun TvVersions(
                     { at, key -> lastRow = at to key },
                     // Nothing to list yet and nothing said: the table's frame waits in place, so nothing moves.
                     failure == null && snapshot?.recommended == null && snapshot?.empty == null &&
-                        snapshot?.rows.isNullOrEmpty(),
+                        snapshot?.rows.isNullOrEmpty() && snapshot?.plugins?.rows.isNullOrEmpty(),
                     focus,
                     list,
                     onPlay,
