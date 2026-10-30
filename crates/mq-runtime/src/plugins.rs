@@ -225,12 +225,13 @@ pub struct PluginRepoPreview {
     pub providers: Vec<String>,
 }
 
-/// Control characters, those that change how text reads without showing,
-/// and emoji dropped ("🧲 Torrentio" reads "Torrentio"), with the spaces
-/// they leave; at most `max` characters.
+/// Control characters and those that change how text reads without showing
+/// dropped, and emoji read as a space ("🧲 Torrentio" reads "Torrentio",
+/// "4K🔥HDR" reads "4K HDR"), runs of spaces as one; at most `max` characters.
 fn clean(text: &str, max: usize) -> String {
     text.chars()
-        .filter(|c| !c.is_control() && !crate::archive::hidden(*c) && !pictograph(*c))
+        .filter(|c| !c.is_control() && !crate::archive::hidden(*c))
+        .map(|c| if pictograph(c) { ' ' } else { c })
         .take(max)
         .collect::<String>()
         .split_whitespace()
@@ -240,9 +241,11 @@ fn clean(text: &str, max: usize) -> String {
 
 /// Emoji and pictographs, with the selectors and keycap mark that build
 /// them: no screen shows emoji, and plugin repositories put them in names.
-// ponytail: blocks, not Extended_Pictographic; a stray symbol in them goes too.
+// ponytail: blocks, not Extended_Pictographic: a plain symbol in them (a star,
+// a check mark) goes too, and a text-default one outside them (the trade
+// mark, an arrow) stays. Letters of every script are outside them.
 fn pictograph(c: char) -> bool {
-    matches!(c, '\u{20e3}' | '\u{231a}' | '\u{231b}' | '\u{23e9}'..='\u{23fa}' | '\u{2600}'..='\u{27bf}' | '\u{2b00}'..='\u{2bff}' | '\u{fe00}'..='\u{fe0f}' | '\u{1f000}'..='\u{1faff}')
+    matches!(c, '\u{20e3}' | '\u{231a}' | '\u{231b}' | '\u{23e9}'..='\u{23fa}' | '\u{2600}'..='\u{27bf}' | '\u{2b00}'..='\u{2bff}' | '\u{fe0e}' | '\u{fe0f}' | '\u{1f000}'..='\u{1faff}')
 }
 
 /// A repository link as Nuvio keeps it (2.1): https added when no scheme
@@ -291,7 +294,7 @@ fn text(v: &Value, key: &str, max: usize) -> String {
 /// first to sort it first ("!DiziBal" reads "DiziBal").
 fn label(v: &Value) -> String {
     let name = text(v, "name", NAME_MAX);
-    (name.trim_start_matches(|c: char| c.is_ascii_punctuation() && !matches!(c, '(' | '[')))
+    (name.trim_start_matches(['!', '.', '_', '-', '*', '~', '+']))
         .trim_start()
         .to_owned()
 }
@@ -769,7 +772,8 @@ async fn run(
             Outcome::Done(found) if !found.is_empty() => return Some(found),
             Outcome::Done(found) => answer = Some(found),
             Outcome::Threw(_) => {}
-            _ => return None,
+            // An empty answer by the TMDB id still counts when the second call runs out.
+            _ => return answer,
         }
     }
     answer
@@ -856,7 +860,9 @@ fn adapt(repo: &str, p: &Provider, found: Vec<PluginStream>) -> Vec<ParsedStream
         if !keys.insert(key.clone()) {
             continue;
         }
-        let name = clean(s.name.as_deref().unwrap_or(&p.name), NAME_MAX);
+        let name = Some(clean(s.name.as_deref().unwrap_or_default(), NAME_MAX))
+            .filter(|n| !n.is_empty())
+            .unwrap_or_else(|| p.name.clone());
         let lines: Vec<String> = [&s.title, &s.quality, &s.size, &s.language]
             .into_iter()
             .flatten()
@@ -1159,7 +1165,7 @@ mod tests {
     fn names_lose_emoji_and_sort_marks() {
         // Real names from the All-in-One-Nuvio, MoOnCrOwN and Manitux manifests (2026-10-30).
         let base = Url::parse("https://example.com/repo/manifest.json").unwrap();
-        let body = r#"{"name": "MoOnCrOwN-NUVİO ✨", "description": "4K • 1080p Movies",
+        let body = r#"{"name": "MoOnCrOwN-NUVİO ✨", "description": "4K🔥HDR • 1080p Movies",
             "scrapers": [
             {"id": "a", "name": "🧲 Torrentio", "filename": "a.js"},
             {"id": "b", "name": "❤️ VidLove", "filename": "b.js"},
@@ -1173,7 +1179,7 @@ mod tests {
         ]}"#;
         let repo = parse_manifest(&base, body.as_bytes()).unwrap();
         assert_eq!(repo.name, "MoOnCrOwN-NUVİO");
-        assert_eq!(repo.description, "4K • 1080p Movies");
+        assert_eq!(repo.description, "4K HDR • 1080p Movies");
         let names: Vec<&str> = repo.providers.iter().map(|p| p.name.as_str()).collect();
         assert_eq!(
             names,
