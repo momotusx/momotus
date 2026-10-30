@@ -19,7 +19,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.text.font.FontWeight
@@ -371,10 +370,8 @@ private fun RepoRow(
                 repo.enabled,
                 onToggle,
                 Modifier
-                    .marqueeFocus(
-                        Marquee.radius.m,
-                        Tokens.FOCUS_SCALE_TILE,
-                    ).clip(RoundedCornerShape(Marquee.radius.m)),
+                    .marqueeFocus(Marquee.radius.m, Tokens.FOCUS_SCALE_TILE),
+                shape = RoundedCornerShape(Marquee.radius.m),
             ) {
                 Column(Modifier.weight(1f)) {
                     MqText(name, role = TextRole.Headline, weight = FontWeight.Bold, maxLines = 2)
@@ -397,10 +394,8 @@ private fun RepoRow(
                     p.enabled,
                     { onProvider(p.id, !p.enabled) },
                     Modifier
-                        .marqueeFocus(
-                            Marquee.radius.m,
-                            Tokens.FOCUS_SCALE_TILE,
-                        ).clip(RoundedCornerShape(Marquee.radius.m)),
+                        .marqueeFocus(Marquee.radius.m, Tokens.FOCUS_SCALE_TILE),
+                    shape = RoundedCornerShape(Marquee.radius.m),
                 ) {
                     Column(Modifier.weight(1f)) {
                         MqText(p.name, role = TextRole.Body, maxLines = 2)

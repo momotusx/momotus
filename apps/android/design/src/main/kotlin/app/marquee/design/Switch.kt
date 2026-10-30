@@ -23,7 +23,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.layout
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
@@ -101,8 +104,12 @@ fun MqSwitch(
 /**
  * A row that is one switch: [content] (a mark, a name, a line) and the switch at its end. One focus
  * stop on TV, where the state is also said in a word; TalkBack reads the row's words with the switch
- * role and its state. [modifier] draws the row (focus, shape, fill); [padding] sits inside the touch area.
+ * role and its state. [modifier] draws the row (focus, fill); [padding] sits inside the touch area.
  * On TV the focused row turns white with dark words ([focusPalette]), its switch too.
+ *
+ * [shape] rounds the row's fill, press veil and focus, which then reach the xs space past the words on each side:
+ * the words keep the column of the card they sit in, and the rounded corners never cut a letter (a clip flush with
+ * the words took the top of Torrentio's T and the r of raw.githubusercontent.com, Pixel walk 2026-10-30 F2).
  */
 @Composable
 fun SwitchRow(
@@ -110,17 +117,23 @@ fun SwitchRow(
     onToggle: () -> Unit,
     modifier: Modifier = Modifier,
     padding: PaddingValues = PaddingValues(),
+    shape: Shape? = null,
     content: @Composable RowScope.() -> Unit,
 ) {
     val tv = Marquee.form == Form.Tv
     var focused by remember { mutableStateOf(false) }
     val colors = focusPalette(focused)
+    val bleed = if (shape != null) Marquee.space.xs else 0.dp
     Row(
-        modifier
+        Modifier
+            .bleed(bleed)
+            .then(modifier)
+            .then(if (shape != null) Modifier.clip(shape) else Modifier)
             .onFocusChanged { focused = it.isFocused }
             .then(if (tv && focused) Modifier.background(colors.surface) else Modifier)
             .focusToggleable(on, onToggle)
-            .padding(padding),
+            .padding(padding)
+            .padding(horizontal = bleed),
         horizontalArrangement = Arrangement.spacedBy(Marquee.space.s),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -140,6 +153,23 @@ fun SwitchRow(
         }
     }
 }
+
+/** Lays the node out [x] wider on each side than its parent gives; to the parent it keeps the parent's width. */
+private fun Modifier.bleed(x: Dp): Modifier =
+    if (x == 0.dp) {
+        this
+    } else {
+        layout { measurable, constraints ->
+            val px = x.roundToPx()
+            val wide =
+                constraints.copy(
+                    minWidth = constraints.minWidth + px * 2,
+                    maxWidth = if (constraints.hasBoundedWidth) constraints.maxWidth + px * 2 else Constraints.Infinity,
+                )
+            val placeable = measurable.measure(wide)
+            layout(placeable.width - px * 2, placeable.height) { placeable.place(-px, 0) }
+        }
+    }
 
 /**
  * An addon's mark: its logo on a neutral tile, or the name's first letter when there is none or it

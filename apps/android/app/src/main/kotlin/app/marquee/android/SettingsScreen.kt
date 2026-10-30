@@ -667,9 +667,9 @@ internal fun SettingSwitch(
         Modifier
             .fillMaxWidth()
             .heightIn(min = 48.dp)
-            .marqueeFocus(Marquee.radius.m, Tokens.FOCUS_SCALE_TILE)
-            .clip(RoundedCornerShape(Marquee.radius.m)),
+            .marqueeFocus(Marquee.radius.m, Tokens.FOCUS_SCALE_TILE),
         if (tv) PaddingValues(horizontal = 16.dp, vertical = 12.dp) else PaddingValues(),
+        RoundedCornerShape(Marquee.radius.m),
     ) {
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             MqText(title, role = TextRole.Headline, weight = FontWeight.SemiBold)
@@ -746,8 +746,8 @@ private fun AddonRow(
                 onToggle,
                 Modifier
                     .focusRequester(focusRequester)
-                    .marqueeFocus(Marquee.radius.m, Tokens.FOCUS_SCALE_TILE)
-                    .clip(RoundedCornerShape(Marquee.radius.m)),
+                    .marqueeFocus(Marquee.radius.m, Tokens.FOCUS_SCALE_TILE),
+                shape = RoundedCornerShape(Marquee.radius.m),
             ) {
                 Column(Modifier.weight(1f)) {
                     MqText(addon.name, role = TextRole.Headline, weight = FontWeight.Bold, maxLines = 1)
