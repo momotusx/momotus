@@ -15,7 +15,7 @@ private func details(_ overrides: [String: Any] = [:]) throws -> TitleDetails {
         "id": "tt5875444", "kind": "series", "name": "Slow Horses",
         "description": "A dysfunctional team of MI5 agents, exiled to Slough House for their career-ending mistakes, find themselves drawn into the heart of a conspiracy that reaches the very top of the service, while their boss, the brilliant and slovenly Jackson Lamb, keeps them in line.",
         "poster": NSNull(), "background": NSNull(), "logo": NSNull(), "releaseInfo": "Since 2022", "runtime": "46 min",
-        "genres": ["Drama", "Thriller", "Crime"], "cast": [{"name": "Gary Oldman", "character": null, "photo": null}, {"name": "Jack Lowden", "character": null, "photo": null}, {"name": "Kristin Scott Thomas", "character": null, "photo": null}],
+        "genres": ["Drama", "Thriller", "Crime"], "cast": [["name": "Gary Oldman", "character": NSNull(), "photo": NSNull()], ["name": "Jack Lowden", "character": NSNull(), "photo": NSNull()], ["name": "Kristin Scott Thomas", "character": NSNull(), "photo": NSNull()]],
         "directors": ["James Hawes", "Jeremy Lovering"], "rating": "8.4",
         "ratings": ["imdb": "8.4"], "imdbUrl": "https://www.imdb.com/title/tt5875444/",
         "source": "Cinemeta", "trailers": [],

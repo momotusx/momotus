@@ -12,7 +12,7 @@ private func details(scores: [String: Any]?, ratedPoster: String? = nil) throws 
         "id": "tt0111161", "kind": "movie", "name": "The Shawshank Redemption",
         "description": "Over the course of several years, two convicts form a friendship, seeking consolation and, eventually, redemption through basic compassion.",
         "poster": NSNull(), "background": NSNull(), "logo": NSNull(), "releaseInfo": "1994", "runtime": "142 min",
-        "genres": ["Drama", "Crime"], "cast": [{"name": "Tim Robbins", "character": null, "photo": null}, {"name": "Morgan Freeman", "character": null, "photo": null}], "directors": ["Frank Darabont"],
+        "genres": ["Drama", "Crime"], "cast": [["name": "Tim Robbins", "character": NSNull(), "photo": NSNull()], ["name": "Morgan Freeman", "character": NSNull(), "photo": NSNull()]], "directors": ["Frank Darabont"],
         "rating": "9.3", "ratings": ["imdb": "9.3"], "imdbUrl": "https://www.imdb.com/title/tt0111161/",
         "source": "Cinemeta", "trailers": [], "ratedPoster": ratedPoster ?? NSNull(),
     ]
