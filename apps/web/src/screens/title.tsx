@@ -611,8 +611,13 @@ function TitlePage(props: { kind: string; id: string; retry: () => void }) {
                   <Similar view={view} />
                   <RatedCover src={x().ratedPoster} />
                 </Show>
-                <Cast cast={x().cast} />
+                <Show when={form() === "phone"}>
+                  <Cast cast={x().cast} />
+                </Show>
                 <dl class="facts">
+                  <Show when={form() !== "phone"}>
+                    <StarringFact cast={x().cast} />
+                  </Show>
                   <Fact label="Directed by" value={x().directors.slice(0, 2).join(", ")} />
                   <Fact label="Runtime" value={x().runtime ? `${x().runtime}${series() ? " an episode" : ""}` : ""} />
                 </dl>
@@ -689,8 +694,20 @@ function failure(view: TitleView): string {
   return h?.state === "failed" ? h.reason : "";
 }
 
-/** Starring (plans/batch-2.md R5): a row of round TMDB headshots with each name and role under it, the initials on
- * a plain circle while there is no photo or it cannot load. */
+/** A person's round TMDB headshot, or their initials on a plain circle while there is none or it cannot load. */
+function Face(props: { person: CastMember }): JSX.Element {
+  const [broken, setBroken] = createSignal(false);
+  return (
+    <span class="face" aria-hidden="true">
+      <Show when={props.person.photo && !broken()} fallback={initials(props.person.name)}>
+        <img src={props.person.photo ?? undefined} alt="" decoding="async" loading="lazy" onError={() => setBroken(true)} />
+      </Show>
+    </span>
+  );
+}
+
+/** Starring on a phone (plans/batch-2.md R5): a row of headshots with each name and role under it, in the page's
+ * flow. */
 function Cast(props: { cast: CastMember[] }): JSX.Element {
   return (
     <Show when={props.cast.length}>
@@ -698,25 +715,40 @@ function Cast(props: { cast: CastMember[] }): JSX.Element {
         <h2 class="kicker">Starring</h2>
         <ul>
           <For each={props.cast}>
-            {(person) => {
-              const [broken, setBroken] = createSignal(false);
-              return (
-                <li>
-                  <span class="face" aria-hidden="true">
-                    <Show when={person.photo && !broken()} fallback={initials(person.name)}>
-                      <img src={person.photo ?? undefined} alt="" decoding="async" loading="lazy" onError={() => setBroken(true)} />
-                    </Show>
-                  </span>
-                  <span class="who">{person.name}</span>
-                  <Show when={person.character}>
-                    <span class="role">{person.character}</span>
-                  </Show>
-                </li>
-              );
-            }}
+            {(person) => (
+              <li>
+                <Face person={person} />
+                <span class="who">{person.name}</span>
+                <Show when={person.character}>
+                  <span class="role">{person.character}</span>
+                </Show>
+              </li>
+            )}
           </For>
         </ul>
       </section>
+    </Show>
+  );
+}
+
+/** Starring on TV and desktop: a row of the facts table as before, each of the first three names after a small
+ * headshot sized to the row, so the hero's column (fixed to the safe area) is not one pixel taller. */
+function StarringFact(props: { cast: CastMember[] }): JSX.Element {
+  return (
+    <Show when={props.cast.length}>
+      <div class="starring">
+        <dt class="kicker">Starring</dt>
+        <dd>
+          <For each={props.cast.slice(0, 3)}>
+            {(person) => (
+              <span class="person">
+                <Face person={person} />
+                <span class="who">{person.name}</span>
+              </span>
+            )}
+          </For>
+        </dd>
+      </div>
     </Show>
   );
 }

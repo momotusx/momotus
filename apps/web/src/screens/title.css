@@ -76,20 +76,24 @@
 .facts > div:first-child dt, .facts > div:first-child dd { border-top: 0; }
 .facts dt { font: 600 var(--type-caption) / 1.3 var(--font-text); letter-spacing: 0; text-transform: none; color: var(--dim); }
 .facts dd { font: 600 var(--type-caption) / 1.3 var(--font-text); color: var(--text); text-align: right; min-width: 0; }
-/* Starring: round headshots with the name and role under each, scrolling sideways past the column's width. */
-.cast { margin-top: var(--space-l); width: 100%; max-width: 760px; text-align: left; }
-.cast h2 { margin: 0 0 12px; font: 600 var(--type-caption) / 1.3 var(--font-text); letter-spacing: 0; text-transform: none; color: var(--dim); }
+/* Starring (plans/batch-2.md R5): round headshots, the initials on a plain circle where there is no photo. */
+.face { flex: none; border-radius: 50%; overflow: hidden; display: grid; place-items: center; background: var(--surface); color: var(--muted); }
+.face img { width: 100%; height: 100%; object-fit: cover; }
+/* TV and desktop: a row of the facts table, each face as tall as the row's line and its padding together (1.3em
+ * and 16 px each side), so the row, and the hero's column, keep their height. */
+.facts .starring dd { display: flex; justify-content: flex-end; gap: 20px; padding-top: 8px; padding-bottom: 8px; }
+.facts .starring .person { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.facts .starring .face { width: calc(1.3em + 16px); height: calc(1.3em + 16px); line-height: 1; }
+.facts .starring .who { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* The phone: a row of its own in the page's flow, the name and role under each face, scrolling sideways. */
+.cast { margin-top: 22px; width: 100%; text-align: left; }
+.cast h2 { margin: 0 0 12px; font: 600 13px / 1.3 var(--font-text); letter-spacing: 0; text-transform: none; color: var(--dim); }
 .cast ul { display: flex; gap: var(--space-s); margin: 0; padding: 0; list-style: none; overflow-x: auto; scrollbar-width: none; }
-.cast li { flex: none; width: 96px; display: grid; justify-items: center; gap: 4px; text-align: center; }
-.cast .face { width: 80px; height: 80px; margin-bottom: 4px; border-radius: 50%; overflow: hidden; display: grid; place-items: center;
-  background: var(--surface); color: var(--muted); font: 600 var(--type-callout) / 1 var(--font-text); }
-.cast .face img { width: 100%; height: 100%; object-fit: cover; }
-.cast .who, .cast .role { font: 600 var(--type-caption) / 1.3 var(--font-text); overflow-wrap: anywhere; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+.cast li { flex: none; width: 80px; display: grid; justify-items: center; gap: 4px; text-align: center; }
+.cast .face { width: 64px; height: 64px; margin-bottom: 4px; font: 600 var(--type-callout) / 1 var(--font-text); }
+.cast .who, .cast .role { font: 600 13px / 1.3 var(--font-text); overflow-wrap: anywhere; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
 .cast .who { color: var(--text); }
 .cast .role { color: var(--dim); font-weight: 400; }
-[data-form="phone"] .cast { margin-top: 22px; max-width: none; }
-[data-form="phone"] .cast li { width: 80px; }
-[data-form="phone"] .cast .face { width: 64px; height: 64px; }
 .title-skel { display: grid; gap: 22px; width: 640px; margin-top: 60px; }
 .title-skel .skel { height: 140px; border-radius: var(--radius-m); }
 .title-skel .skel:nth-child(2) { height: 120px; }
