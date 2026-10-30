@@ -346,7 +346,8 @@ export function VersionsPage(props: { kind: string; id: string; videoId: string;
   const count = () => {
     const s = snap();
     if (!s) return null;
-    const n = s.empty ? s.empty.count : s.rows.length + (s.recommended ? 1 : 0);
+    // Every row listed, the plugins' own pass too (4.4).
+    const n = s.empty ? s.empty.count : s.rows.length + (s.recommended ? 1 : 0) + s.plugins.rows.length;
     return n ? counted("versions", n) : null;
   };
   const doneWords = () => {

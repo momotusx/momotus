@@ -83,6 +83,10 @@ test("a repository added from the sheet runs in Versions under From plugins", as
   await expect(section.getByRole("heading")).toContainText("From plugins");
   await expect(section.locator(".vrow")).toHaveCount(1);
   await expect(section.locator(".vrow")).toContainText(`Test film, plays from ${PLUGIN_HOST}`);
+  // No addon here: the plugin's row is the page's one version, and the viewer chooses it (batch-2 walk F3).
+  await expect(p.locator(".vstate")).toHaveText("1 version");
+  await expect(p.locator(".vstatus")).toHaveText("Choose a version to play.");
+  await expect(p.locator(".pick-wait")).toHaveCount(0);
   await p.screenshot({ path: `${SHOTS}/plugins-versions-desktop.png` });
   await p.context().close();
 });
