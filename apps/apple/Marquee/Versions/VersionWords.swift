@@ -159,17 +159,23 @@ enum VersionWords {
     /// none, so no zero sits beside an empty line.
     static func count(_ s: VersionsSnapshot?) -> String? {
         guard let s else { return nil }
-        let n = s.rows.count + (s.recommended == nil ? 0 : 1)
+        // Every row listed, the plugins' own pass too (plans/plugins-and-marketplace.md 4.4).
+        let n = s.rows.count + (s.recommended == nil ? 0 : 1) + (s.plugins?.rows.count ?? 0)
         let shown = n > 0 ? n : s.empty?.rows.count ?? 0
         return shown > 0 ? StreamChoice.counted("versions", shown) : nil
     }
 
     /// The reserved status line: "Finding versions" until one is found, "Still looking for more
-    /// versions" while the core still asks, then nothing. Never an addon's name.
+    /// versions" while the core still asks, then nothing. Never an addon's name. When every addon
+    /// answered with nothing to pick, the plugins' rows are chosen by hand (4.4), or they still look.
     static func status(_ s: VersionsSnapshot?) -> String? {
         guard let s else { return words.page.finding }
-        guard !s.done, s.empty == nil else { return nil }
-        return s.recommended == nil && s.rows.isEmpty ? words.page.finding : words.page.stillLooking
+        guard s.empty == nil else { return nil }
+        let none = s.recommended == nil && s.rows.isEmpty
+        guard s.done else { return none ? words.page.finding : words.page.stillLooking }
+        guard none else { return nil }
+        if !(s.plugins?.rows ?? []).isEmpty { return PluginWords.choose }
+        return s.plugins?.pending == true ? words.page.finding : nil
     }
 
     /// "Smaller file: 720p, 1.5 GB" and "Sharper: 4K, 12 GB", in the core's order, each only when the

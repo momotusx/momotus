@@ -72,4 +72,16 @@ private func shared() throws -> [String: String] {
     // An older core sends none.
     let older = try JSONDecoder().decode(VersionsSnapshot.self, from: Data(json.replacingOccurrences(of: "\"plugins\"", with: "\"ignored\"").utf8))
     #expect(VersionWords.sections(older).count == 1)
+    // The plugins' row counts beside the addons' (batch-2 walk F3).
+    #expect(VersionWords.count(s) == "2 versions")
+    // No addon row: the plugins' one is the page's version, chosen by hand; while they still look,
+    // the page is still finding, never "0 versions".
+    let alone = try JSONDecoder().decode(VersionsSnapshot.self, from: Data(json.replacingOccurrences(of: "[\(addonRow)]", with: "[]").utf8))
+    #expect(VersionWords.count(alone) == "1 version")
+    #expect(VersionWords.status(alone) == PluginWords.choose)
+    let looking = try JSONDecoder().decode(VersionsSnapshot.self, from: Data(json
+        .replacingOccurrences(of: "[\(addonRow)]", with: "[]")
+        .replacingOccurrences(of: "[\(pluginRow)], \"pending\": false", with: "[], \"pending\": true").utf8))
+    #expect(VersionWords.count(looking) == nil)
+    #expect(VersionWords.status(looking) == StreamChoice.words.page.finding)
 }
