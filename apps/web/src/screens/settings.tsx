@@ -1,4 +1,4 @@
-import { A } from "@solidjs/router";
+import { A, useNavigate, useParams } from "@solidjs/router";
 import Check from "lucide-solid/icons/check";
 import ChevronRight from "lucide-solid/icons/chevron-right";
 import Download from "lucide-solid/icons/download";
@@ -20,7 +20,7 @@ import LogIn from "lucide-solid/icons/log-in";
 import Monitor from "lucide-solid/icons/monitor";
 import User from "lucide-solid/icons/user";
 import Wrench from "lucide-solid/icons/wrench";
-import { createEffect, createResource, createSignal, For, type JSX, on, onCleanup, onMount, Show } from "solid-js";
+import { createEffect, createResource, createSignal, For, type JSX, on, onMount, Show } from "solid-js";
 import { relayProviders, signInServer } from "../core/sign-in";
 import { mayDeleteAccount } from "../lib/sync";
 import type { PluginsAnswer } from "../core/generated/PluginsAnswer";
@@ -58,6 +58,7 @@ import { profiles } from "../core/profiles";
 import { debridAccounts } from "../core/debrid";
 import { inUse } from "../lib/debrid";
 import { accountWords, connectGoogle, connectText, connectTitle } from "../lib/account";
+import { sectionId } from "../lib/settings-sections";
 
 const clockTime = (ms: number) => new Date(ms).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 
@@ -263,23 +264,30 @@ function Row(props: { href: string; fkey: string; tone: Tone; icon: JSX.Element;
   );
 }
 
-/** The section menu's entries, in page order. Profiles is the header. */
-const SECTIONS: { id: string; label: string; tone: Tone; icon: () => JSX.Element }[] = [
-  { id: "profiles", label: "Profiles", tone: "blue", icon: () => <User /> },
-  { id: "sources", label: "Sources", tone: "green", icon: () => <Puzzle /> },
-  { id: "account", label: "Account", tone: "sky", icon: () => <MonitorSmartphone /> },
-  { id: "home", label: "Home", tone: "mint", icon: () => <Rows3 /> },
-  { id: "playback", label: "Playback", tone: "teal", icon: () => <CirclePlay /> },
-  { id: "downloads", label: "Downloads", tone: "blue", icon: () => <ArrowDownToLine /> },
-  { id: "device", label: "This device", tone: "sea", icon: () => <Monitor /> },
-  { id: "about", label: "About", tone: "grey", icon: () => <Info /> },
+/** The section menu's entries, with the line the phone's list shows under each. Profiles is the header. */
+const SECTIONS: { id: string; label: string; tone: Tone; icon: () => JSX.Element; line: string }[] = [
+  { id: "profiles", label: "Profiles", tone: "blue", icon: () => <User />, line: "" },
+  { id: "sources", label: "Sources", tone: "green", icon: () => <Puzzle />, line: "Addons, plugins, debrid services, Trakt and import" },
+  { id: "account", label: "Account", tone: "sky", icon: () => <MonitorSmartphone />, line: "Sign in and sync with your other devices" },
+  { id: "home", label: "Home", tone: "mint", icon: () => <Rows3 />, line: "Which rows Home shows" },
+  { id: "playback", label: "Playback", tone: "teal", icon: () => <CirclePlay />, line: "Stream choice, subtitles and up next" },
+  { id: "downloads", label: "Downloads", tone: "blue", icon: () => <ArrowDownToLine />, line: "Smart downloads and storage" },
+  { id: "device", label: "This device", tone: "sea", icon: () => <Monitor />, line: "Settings kept on this device only" },
+  { id: "about", label: "About", tone: "grey", icon: () => <Info />, line: "Version, credits and licences" },
 ];
 
-/** Settings (A1, the owner's pick of 2026-10-28): one long page. The profile sits on a film's backdrop (the first
- * Continue Watching title with one, else Home's first hero; a kids profile only its own Continue Watching), with
- * the film's logo at the right; under it a section menu (TV and desktop) beside the grouped lists, centered in the
- * content column. The phone has no menu: its groups follow each other under the header. */
+/** Settings (A1, the owner's pick of 2026-10-28) in sections (plans/settings-sections.md, "On A1"). The profile sits
+ * on a film's backdrop (the first Continue Watching title with one, else Home's first hero; a kids profile only its
+ * own Continue Watching), with the film's logo at the right. TV and desktop: under it a section menu beside the
+ * chosen section (`/settings/<id>`, Sources first), centered in the content column. The phone: the profile's edits,
+ * then a row per section, each opening the section as its own page (`/settings/<id>`). */
 export default function SettingsScreen() {
+  const params = useParams<{ section?: string }>();
+  const navigate = useNavigate();
+  // The phone's section page, or the section beside the menu.
+  const open = () => (form() === "phone" ? sectionId(params.section) : undefined);
+  const chosen = () => sectionId(params.section) ?? "sources";
+  const shows = (id: string) => (form() !== "phone" ? id === chosen() : open() ? id === open() : id === "profiles");
   const [previews, setPreviews] = createSignal(previewsOn());
   const prefs = prefsView();
   const addons = liveView<AddonsSnapshot>("addons");
@@ -334,43 +342,22 @@ export default function SettingsScreen() {
       time: sync.syncedAt() ? new Date(sync.syncedAt() as number).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : null,
     });
 
-  // The section menu fills the section at the top third of the page; the list's tail lets the last one get there.
   let page!: HTMLElement;
-  const [active, setActive] = createSignal("profiles");
-  const spy = () => {
-    const line = page.getBoundingClientRect().top + page.getBoundingClientRect().height / 3;
-    let on = "profiles";
-    for (const s of SECTIONS) {
-      const el = document.getElementById(`set-${s.id}`);
-      if (el && el.getBoundingClientRect().top <= line) on = s.id;
-    }
-    setActive(on);
-  };
-  let frame = 0;
-  // A menu entry's own scroll keeps its entry filled (a short section may never reach the line); the viewer's next
-  // scroll, by wheel, touch, key or pointer, hands the menu back to the line.
-  let held = false;
-  const release = () => (held = false);
-  const onScroll = () => {
-    if (held) return;
-    cancelAnimationFrame(frame);
-    frame = requestAnimationFrame(spy);
-  };
-  onCleanup(() => cancelAnimationFrame(frame));
-  // A menu entry brings its section to the top (Profiles, the header under the desktop bar, the page's top). The
-  // remote goes on into the section, and stays on the menu where it has nothing to press (About); a keyboard lands
-  // on its heading, or on the profile for the header.
+  // A menu entry shows its section in place of the last (Profiles goes up to the header), and brings the column's top
+  // into view. The remote goes on into the section, and stays on the menu where it has nothing to press (About); a
+  // keyboard lands on its heading, or on the profile for the header.
   const jump = (e: MouseEvent, id: string) => {
     e.preventDefault();
-    const sec = document.getElementById(`set-${id}`);
-    if (!sec) return;
-    const behavior = reducedMotion() ? "auto" : "smooth";
-    if (id === "profiles") page.scrollTo({ top: 0, behavior });
-    else sec.scrollIntoView({ block: "start", behavior });
-    held = true;
-    setActive(id);
-    const to = form() === "tv" || id === "profiles" ? sec.querySelector<HTMLElement>("[data-f]") : sec.querySelector<HTMLElement>("h2[tabindex]");
-    if (to) form() === "tv" ? focusEl(to) : to.focus({ preventScroll: true });
+    if (id !== "profiles") navigate(`/settings/${id}`, { replace: true });
+    requestAnimationFrame(() => {
+      const sec = document.getElementById(`set-${id}`);
+      if (!sec) return;
+      const behavior = reducedMotion() ? "auto" : "smooth";
+      if (id === "profiles") page.scrollTo({ top: 0, behavior });
+      else if (sec.getBoundingClientRect().top < page.getBoundingClientRect().top) sec.scrollIntoView({ block: "start", behavior });
+      const to = form() === "tv" || id === "profiles" ? sec.querySelector<HTMLElement>("[data-f]") : sec.querySelector<HTMLElement>("h2[tabindex]");
+      if (to) form() === "tv" ? focusEl(to) : to.focus({ preventScroll: true });
+    });
   };
 
   const header = (
@@ -415,8 +402,14 @@ export default function SettingsScreen() {
   );
 
   return (
-    <main class="browse page settings-page a1" data-vscroll ref={page} onScroll={onScroll} onWheel={release} onTouchStart={release} onKeyDown={release} onPointerDown={release}>
-      {header}
+    <main class="browse page settings-page a1" classList={{ "sec-page": !!open() }} data-vscroll ref={page}>
+      <Show when={open()} fallback={header}>
+        {(id) => (
+          <h1 class="set-page-title" tabindex="-1">
+            {SECTIONS.find((s) => s.id === id())?.label}
+          </h1>
+        )}
+      </Show>
       <div class="set-body">
         <Show when={form() !== "phone"}>
           <nav class="set-menu" aria-label="Settings sections" data-fgroup="settings-menu">
@@ -425,7 +418,13 @@ export default function SettingsScreen() {
             </span>
             <For each={SECTIONS.filter((s) => s.id !== "downloads" || downloadsHere())}>
               {(s) => (
-                <a class="snav" href={`#set-${s.id}`} data-f={`settings-nav:${s.id}`} aria-current={active() === s.id ? "true" : undefined} onClick={(e) => jump(e, s.id)}>
+                <a
+                  class="snav"
+                  href={s.id === "profiles" ? "/settings" : `/settings/${s.id}`}
+                  data-f={`settings-nav:${s.id}`}
+                  aria-current={chosen() === s.id ? "true" : undefined}
+                  onClick={(e) => jump(e, s.id)}
+                >
                   <Tile tone={s.tone}>{s.icon()}</Tile>
                   {s.label}
                 </a>
@@ -441,8 +440,8 @@ export default function SettingsScreen() {
             </p>
           </Show>
 
-          {/* The phone's header holds the profile alone; its edits are a group of their own. */}
-          <Show when={form() === "phone" && canEdit()}>
+          {/* The phone's header holds the profile alone; its edits are a group of their own, then a row per section. */}
+          <Show when={form() === "phone" && !open() && canEdit()}>
             <section class="set-sec" aria-labelledby="set-h-profiles">
               <h2 id="set-h-profiles" tabindex="-1">
                 Profiles
@@ -456,188 +455,210 @@ export default function SettingsScreen() {
             </section>
           </Show>
 
-          <section class="set-sec" id="set-sources" aria-labelledby="set-h-sources">
-            <h2 id="set-h-sources" tabindex="-1">
-              Sources
-            </h2>
-            <div class="sgroup">
-              <Row
-                href="/recommended-addons"
-                fkey="settings:recommended"
-                tone="green"
-                icon={<Sparkles />}
-                title={defaultsWords.title}
-                text="Catalogs, streams, subtitles and lists Momotus recommends, a switch each."
-              />
-              <Row href="/find-addons" fkey="settings:find-addons" tone="teal" icon={<PackageSearch />} title={findAddons.title} text={findAddons.lede} />
-              <Row
-                href="/addons"
-                fkey="settings:addons"
-                tone="mint"
-                icon={<Puzzle />}
-                title="Addons"
-                text={addonsSummary(addons.state.data?.addons ?? [])}
-              />
-              <Show when={plugins()?.available}>
-                <Row href="/plugins" fkey="settings:plugins" tone="teal" icon={<Plug />} title={pluginWords.title} text={pluginsSummary(plugins()?.repos ?? [])} />
-              </Show>
-              <Row
-                href="/debrid"
-                fkey="settings:debrid"
-                tone="sky"
-                icon={<KeyRound />}
-                title="Debrid services"
-                text={debridAccounts()?.accounts.length ? inUse(debridAccounts()!.accounts.length) : "Play torrents as fast direct links with a debrid account."}
-              />
-              <Row
-                href="/trakt"
-                fkey="settings:trakt"
-                tone="blue"
-                icon={<Radio />}
-                title={traktWords.title}
-                text={rowLine(traktStatus(), traktLink, clockTime, traktStorage()?.words ?? null, traktLockedHere())}
-              />
-              <Row href="/import" fkey="settings:import" tone="sea" icon={<Download />} title="Import from Stremio" text="Addons, library and progress, with a code. No password typed here." />
-              <Row href="/welcome?step=3" fkey="settings:setup" tone="grey" icon={<Wrench />} title="Setup check" text="Network, display, catalogs, sources and subtitles at a glance." />
-            </div>
-          </section>
+          <Show when={form() === "phone" && !open()}>
+            <section class="set-sec" aria-label="Sections">
+              <div class="sgroup">
+                <For each={SECTIONS.filter((s) => s.id !== "profiles" && (s.id !== "downloads" || downloadsHere()))}>
+                  {(s) => <Row href={`/settings/${s.id}`} fkey={`settings-sec:${s.id}`} tone={s.tone} icon={s.icon()} title={s.label} text={s.line} />}
+                </For>
+              </div>
+            </section>
+          </Show>
 
-          <section class="set-sec" id="set-account" aria-labelledby="set-h-account">
-            <h2 id="set-h-account" tabindex="-1">
-              Account
-            </h2>
-            <div class="sgroup">
-              {/* A TV signs in with the phone's QR, from the first-run sign-in. */}
-              <Show when={signIn()}>
-                <Row href={form() === "tv" ? "/welcome" : "/sign-in"} fkey="settings:sign-in" tone="blue" icon={<LogIn />} title={accountWords.signInTitle} text={accountWords.libraryAdded} />
-              </Show>
-              <Row href="/sync" fkey="settings:sync" tone="sky" icon={<MonitorSmartphone />} title={syncWords.title} text={syncLine()} />
-              {/* The Account page opens with Google's button ready: its window needs that page's own click. */}
-              <Show when={connect()}>
-                <Row href="/sync?connect=google" fkey="settings:connect-google" tone="blue" icon={<Link2 />} title={connectTitle("google")} text={connectText("google")} />
-              </Show>
-            </div>
-          </section>
+          <Show when={shows("sources")}>
+            <section class="set-sec" id="set-sources" aria-labelledby="set-h-sources">
+              <h2 id="set-h-sources" tabindex="-1">
+                Sources
+              </h2>
+              <div class="sgroup">
+                <Row
+                  href="/recommended-addons"
+                  fkey="settings:recommended"
+                  tone="green"
+                  icon={<Sparkles />}
+                  title={defaultsWords.title}
+                  text="Catalogs, streams, subtitles and lists Momotus recommends, a switch each."
+                />
+                <Row href="/find-addons" fkey="settings:find-addons" tone="teal" icon={<PackageSearch />} title={findAddons.title} text={findAddons.lede} />
+                <Row
+                  href="/addons"
+                  fkey="settings:addons"
+                  tone="mint"
+                  icon={<Puzzle />}
+                  title="Addons"
+                  text={addonsSummary(addons.state.data?.addons ?? [])}
+                />
+                <Show when={plugins()?.available}>
+                  <Row href="/plugins" fkey="settings:plugins" tone="teal" icon={<Plug />} title={pluginWords.title} text={pluginsSummary(plugins()?.repos ?? [])} />
+                </Show>
+                <Row
+                  href="/debrid"
+                  fkey="settings:debrid"
+                  tone="sky"
+                  icon={<KeyRound />}
+                  title="Debrid services"
+                  text={debridAccounts()?.accounts.length ? inUse(debridAccounts()!.accounts.length) : "Play torrents as fast direct links with a debrid account."}
+                />
+                <Row
+                  href="/trakt"
+                  fkey="settings:trakt"
+                  tone="blue"
+                  icon={<Radio />}
+                  title={traktWords.title}
+                  text={rowLine(traktStatus(), traktLink, clockTime, traktStorage()?.words ?? null, traktLockedHere())}
+                />
+                <Row href="/import" fkey="settings:import" tone="sea" icon={<Download />} title="Import from Stremio" text="Addons, library and progress, with a code. No password typed here." />
+                <Row href="/welcome?step=3" fkey="settings:setup" tone="grey" icon={<Wrench />} title="Setup check" text="Network, display, catalogs, sources and subtitles at a glance." />
+              </div>
+            </section>
+          </Show>
 
-          <section class="set-sec" id="set-home" aria-labelledby="set-h-home">
-            <h2 id="set-h-home" tabindex="-1">
-              Home
-            </h2>
-            <div class="sgroup">
-              <Row href="/home-rows" fkey="settings:home-rows" tone="mint" icon={<Rows3 />} title="Home rows" text="Which catalogs Home shows after Continue Watching, and in what order." />
-            </div>
-          </section>
+          <Show when={shows("account")}>
+            <section class="set-sec" id="set-account" aria-labelledby="set-h-account">
+              <h2 id="set-h-account" tabindex="-1">
+                Account
+              </h2>
+              <div class="sgroup">
+                {/* A TV signs in with the phone's QR, from the first-run sign-in. */}
+                <Show when={signIn()}>
+                  <Row href={form() === "tv" ? "/welcome" : "/sign-in"} fkey="settings:sign-in" tone="blue" icon={<LogIn />} title={accountWords.signInTitle} text={accountWords.libraryAdded} />
+                </Show>
+                <Row href="/sync" fkey="settings:sync" tone="sky" icon={<MonitorSmartphone />} title={syncWords.title} text={syncLine()} />
+                {/* The Account page opens with Google's button ready: its window needs that page's own click. */}
+                <Show when={connect()}>
+                  <Row href="/sync?connect=google" fkey="settings:connect-google" tone="blue" icon={<Link2 />} title={connectTitle("google")} text={connectText("google")} />
+                </Show>
+              </div>
+            </section>
+          </Show>
 
-          <section class="set-sec" id="set-playback" aria-labelledby="set-h-playback">
-            <h2 id="set-h-playback" tabindex="-1">
-              Playback
-            </h2>
-            <Show when={p()}>
-              {(x) => (
-                <>
-                  <div class="sgroup">
-                    <Row
-                      href="/stream-choice"
-                      fkey="settings:stream-choice"
-                      tone="teal"
-                      icon={<SlidersHorizontal />}
-                      title={choiceWords.settings.title}
-                      text={choiceSummary(x().streams)}
-                    />
-                  </div>
-                  <div class="sgroup filters">
-                    <LanguagePicker
-                      label="Subtitle language"
-                      none="None, subtitles start off"
-                      group="pref-subs"
-                      chosen={x().subtitleLanguages}
-                      onChange={(next) => patch({ subtitleLanguages: next })}
-                    />
-                    <Choice<SubtitleSize>
-                      label="Subtitle size"
-                      group="pref-subsize"
-                      items={[
-                        { value: "small", label: "Small" },
-                        { value: "medium", label: "Medium" },
-                        { value: "large", label: "Large" },
-                        { value: "extraLarge", label: "Extra large" },
-                      ]}
-                      isOn={(v) => x().subtitleSize === v}
-                      onPick={(v) => patch({ subtitleSize: v })}
-                    />
-                    <Choice<boolean>
-                      label="Up next"
-                      group="pref-next"
-                      items={[
-                        { value: true, label: "Starts on its own" },
-                        { value: false, label: "Wait for me" },
-                      ]}
-                      isOn={(v) => x().autoplayNext === v}
-                      onPick={(v) => patch({ autoplayNext: v })}
-                    />
-                    {/* This device only, never synced (plans/appletv-polish.md decision 13). A TV shows it where its title pages
-                        may play the header trailer (plans/trailer-inline.md 4a); its Home has none. */}
-                    <Show when={form() !== "tv" || headerOnTvNow()}>
-                      <Choice<boolean>
-                        label="Trailer previews"
-                        group="pref-previews"
-                        items={[
-                          { value: true, label: "On" },
-                          { value: false, label: "Off" },
-                        ]}
-                        isOn={(v) => previews() === v}
-                        onPick={(v) => {
-                          setPreviewsOn(v);
-                          setPreviews(v);
-                        }}
+          <Show when={shows("home")}>
+            <section class="set-sec" id="set-home" aria-labelledby="set-h-home">
+              <h2 id="set-h-home" tabindex="-1">
+                Home
+              </h2>
+              <div class="sgroup">
+                <Row href="/home-rows" fkey="settings:home-rows" tone="mint" icon={<Rows3 />} title="Home rows" text="Which catalogs Home shows after Continue Watching, and in what order." />
+              </div>
+            </section>
+          </Show>
+
+          <Show when={shows("playback")}>
+            <section class="set-sec" id="set-playback" aria-labelledby="set-h-playback">
+              <h2 id="set-h-playback" tabindex="-1">
+                Playback
+              </h2>
+              <Show when={p()}>
+                {(x) => (
+                  <>
+                    <div class="sgroup">
+                      <Row
+                        href="/stream-choice"
+                        fkey="settings:stream-choice"
+                        tone="teal"
+                        icon={<SlidersHorizontal />}
+                        title={choiceWords.settings.title}
+                        text={choiceSummary(x().streams)}
                       />
+                    </div>
+                    <div class="sgroup filters">
+                      <LanguagePicker
+                        label="Subtitle language"
+                        none="None, subtitles start off"
+                        group="pref-subs"
+                        chosen={x().subtitleLanguages}
+                        onChange={(next) => patch({ subtitleLanguages: next })}
+                      />
+                      <Choice<SubtitleSize>
+                        label="Subtitle size"
+                        group="pref-subsize"
+                        items={[
+                          { value: "small", label: "Small" },
+                          { value: "medium", label: "Medium" },
+                          { value: "large", label: "Large" },
+                          { value: "extraLarge", label: "Extra large" },
+                        ]}
+                        isOn={(v) => x().subtitleSize === v}
+                        onPick={(v) => patch({ subtitleSize: v })}
+                      />
+                      <Choice<boolean>
+                        label="Up next"
+                        group="pref-next"
+                        items={[
+                          { value: true, label: "Starts on its own" },
+                          { value: false, label: "Wait for me" },
+                        ]}
+                        isOn={(v) => x().autoplayNext === v}
+                        onPick={(v) => patch({ autoplayNext: v })}
+                      />
+                      {/* This device only, never synced (plans/appletv-polish.md decision 13). A TV shows it where its title pages
+                          may play the header trailer (plans/trailer-inline.md 4a); its Home has none. */}
+                      <Show when={form() !== "tv" || headerOnTvNow()}>
+                        <Choice<boolean>
+                          label="Trailer previews"
+                          group="pref-previews"
+                          items={[
+                            { value: true, label: "On" },
+                            { value: false, label: "Off" },
+                          ]}
+                          isOn={(v) => previews() === v}
+                          onPick={(v) => {
+                            setPreviewsOn(v);
+                            setPreviews(v);
+                          }}
+                        />
+                      </Show>
+                    </div>
+                    <p class="note small">The numbers are the order you turned languages on; number 1 wins. A subtitle you pick while watching makes its language number 1.</p>
+                    <Show when={form() !== "tv" || headerOnTvNow()}>
+                      <p class="note small">Trailers play muted on {form() === "tv" ? "title pages" : "Home and title pages"}, from YouTube, when the connection is not metered.</p>
                     </Show>
-                  </div>
-                  <p class="note small">The numbers are the order you turned languages on; number 1 wins. A subtitle you pick while watching makes its language number 1.</p>
-                  <Show when={form() !== "tv" || headerOnTvNow()}>
-                    <p class="note small">Trailers play muted on {form() === "tv" ? "title pages" : "Home and title pages"}, from YouTube, when the connection is not metered.</p>
-                  </Show>
-                </>
-              )}
-            </Show>
-          </section>
+                  </>
+                )}
+              </Show>
+            </section>
+          </Show>
 
-          <Show when={downloadsHere()}>
+          <Show when={downloadsHere() && shows("downloads")}>
             <DownloadsSection />
           </Show>
 
-          <section class="set-sec" id="set-device" aria-labelledby="set-h-device">
-            <h2 id="set-h-device" tabindex="-1">
-              This device
-            </h2>
-            <div class="sgroup filters">
-              <Choice<Form | null>
-                label="Layout"
-                group="dev-form"
-                items={[
-                  { value: null, label: "Automatic" },
-                  { value: "tv", label: "TV" },
-                  { value: "desktop", label: "Desktop" },
-                  { value: "phone", label: "Phone" },
-                ]}
-                isOn={(v) => pinned() === v}
-                onPick={(v) => chooseForm(v)}
-              />
-            </div>
-          </section>
+          <Show when={shows("device")}>
+            <section class="set-sec" id="set-device" aria-labelledby="set-h-device">
+              <h2 id="set-h-device" tabindex="-1">
+                This device
+              </h2>
+              <div class="sgroup filters">
+                <Choice<Form | null>
+                  label="Layout"
+                  group="dev-form"
+                  items={[
+                    { value: null, label: "Automatic" },
+                    { value: "tv", label: "TV" },
+                    { value: "desktop", label: "Desktop" },
+                    { value: "phone", label: "Phone" },
+                  ]}
+                  isOn={(v) => pinned() === v}
+                  onPick={(v) => chooseForm(v)}
+                />
+              </div>
+            </section>
+          </Show>
 
-          <section class="set-sec" id="set-about" aria-labelledby="set-h-about">
-            <h2 id="set-h-about" tabindex="-1">
-              About
-            </h2>
-            <div class="sgroup notes">
-              <p class="note">The name is drawn from Unbounded, SIL Open Font License 1.1.</p>
-              <p class="note credit">
-                <img class="credit-mark" src={markSrc("tmdb")} alt="" />
-                {tmdbCredit}
-              </p>
-            </div>
-          </section>
+          <Show when={shows("about")}>
+            <section class="set-sec" id="set-about" aria-labelledby="set-h-about">
+              <h2 id="set-h-about" tabindex="-1">
+                About
+              </h2>
+              <div class="sgroup notes">
+                <p class="note">The name is drawn from Unbounded, SIL Open Font License 1.1.</p>
+                <p class="note credit">
+                  <img class="credit-mark" src={markSrc("tmdb")} alt="" />
+                  {tmdbCredit}
+                </p>
+              </div>
+            </section>
+          </Show>
         </div>
       </div>
     </main>

@@ -142,7 +142,7 @@ test.describe("Settings > Stream choice", () => {
 
   test("each row writes its preference to the core, and Settings sums it up", async ({ browser }) => {
     const page = await device(browser, "desktop", DEFAULTS_PORT);
-    await page.goto("/settings?form=desktop");
+    await page.goto("/settings/playback?form=desktop");
     const row = page.locator('[data-f="settings:stream-choice"]');
     await expect(row).toContainText("Up to 5 GB, shared by at least 50 people");
     // The old Pick and Up to chips are gone; Audio moved with them.
@@ -175,7 +175,7 @@ test.describe("Settings > Stream choice", () => {
       await expect.poll(streams, { message: f }).toMatchObject(want);
       await expect(page.locator(`[data-f="${f}"]`)).toHaveAttribute("aria-checked", "true");
     }
-    await page.goto("/settings?form=desktop");
+    await page.goto("/settings/playback?form=desktop");
     await expect(row).toContainText("Any size, shared by at least 100 people");
   });
 

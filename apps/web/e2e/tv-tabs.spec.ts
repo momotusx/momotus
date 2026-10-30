@@ -89,7 +89,7 @@ test("TV: Back on the bar goes Home from under a pushed Settings page, past it",
     });
   });
   const page = await context.newPage();
-  await page.goto("/settings?form=tv");
+  await page.goto("/settings/sources?form=tv");
   const addons = page.locator('[data-f="settings:addons"]');
   await expect(addons).toBeVisible({ timeout: 30_000 });
   await addons.focus();
@@ -117,7 +117,7 @@ test("TV: Back on the bar goes Home from under a pushed Settings page, past it",
 test("TV: Back on the bar of a pushed Settings page goes Home", async ({ browser }) => {
   const context = await browser.newContext({ viewport: { width: 1920, height: 1080 }, reducedMotion: "reduce" });
   const page = await context.newPage();
-  await page.goto("/settings?form=tv");
+  await page.goto("/settings/sources?form=tv");
   const addons = page.locator('[data-f="settings:addons"]');
   await expect(addons).toBeVisible({ timeout: 30_000 });
   await addons.focus();

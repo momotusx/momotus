@@ -296,7 +296,7 @@ test("a series watched to its end plays again from its first episode", async ({ 
 
 test("subtitle size is the profile's; timing steps, holds and resets, and moves the cues for this play", async ({ browser }) => {
   const { context, page: p } = await page(browser);
-  await p.goto("/settings?form=desktop");
+  await p.goto("/settings/playback?form=desktop");
   const large = p.locator('[data-f="pref-subsize:large"]');
   await expect(p.locator('[data-f="pref-subsize:medium"]')).toHaveAttribute("aria-checked", "true", { timeout: 30_000 });
   await large.click();
@@ -369,7 +369,7 @@ test("subtitle size is the profile's; timing steps, holds and resets, and moves 
 
 test("the language pickers search every language the core knows", async ({ browser }) => {
   const { context, page: p } = await page(browser);
-  await p.goto("/settings?form=desktop");
+  await p.goto("/settings/playback?form=desktop");
   // "eng" from an earlier picker reads as English, chosen, and first.
   const row = p.locator('[data-f="pref-subs:open"]');
   await expect(row).toContainText("English first", { timeout: 30_000 });
@@ -464,7 +464,7 @@ test("Settings > Playback: Subtitle language names the first language, at every 
   const sizes = { tv: { width: 1920, height: 1080 }, desktop: { width: 1440, height: 900 }, phone: { width: 390, height: 844 } };
   for (const [form, viewport] of Object.entries(sizes)) {
     const { context, page: p } = await page(browser, viewport);
-    await p.goto(`/settings?form=${form}`);
+    await p.goto(`/settings/playback?form=${form}`);
     // The row: the first language's flag, its own name and how many follow ("eng" reads as English).
     const row = p.locator('[data-f="pref-subs:open"]');
     await expect(row.locator("b")).toHaveText("Subtitle language", { timeout: 30_000 });
@@ -719,7 +719,7 @@ test("a lost core and a profile list that did not come each show a focused Reloa
 
 test("Layout: Automatic follows the device; a chosen form is kept", async ({ browser }) => {
   const { context, page: p } = await page(browser);
-  await p.goto("/settings?form=tv");
+  await p.goto("/settings/device?form=tv");
   const auto = p.locator('[data-f="dev-form:null"]');
   await expect(p.locator('[data-f="dev-form:tv"]')).toHaveAttribute("aria-checked", "true", { timeout: 30_000 });
   await expect(auto).toHaveAttribute("aria-checked", "false");
@@ -727,7 +727,7 @@ test("Layout: Automatic follows the device; a chosen form is kept", async ({ bro
   await expect(auto).toHaveAttribute("aria-checked", "true");
   // A 1440 wide window is a desktop by detection, and stays automatic.
   await expect(p.locator("html")).toHaveAttribute("data-form", "desktop");
-  await p.goto("/settings");
+  await p.goto("/settings/device");
   await expect(p.locator('[data-f="dev-form:null"]')).toHaveAttribute("aria-checked", "true", { timeout: 30_000 });
   expect(await p.evaluate(() => localStorage.getItem("mq.form"))).toBeNull();
   await context.close();
@@ -1215,7 +1215,7 @@ test("the Continue Watching button says when the core refused", async ({ browser
 
 test("TV: a focused element rebuilt by live data keeps the focus; one gone hands it to its neighbour", async ({ browser }) => {
   const { context, page: p } = await page(browser, { width: 1920, height: 1080 });
-  await p.goto("/settings?form=tv");
+  await p.goto("/settings/playback?form=tv");
   const chip = p.locator('[data-f="pref-subsize:large"]');
   await expect(chip).toBeVisible({ timeout: 30_000 });
   await chip.focus();
@@ -1240,7 +1240,7 @@ test("TV: a focused element rebuilt by live data keeps the focus; one gone hands
 
 test("TV: OK on a language keeps the focus on that row, ranked, and the rows stay in place", async ({ browser }) => {
   const { context, page: p } = await page(browser, { width: 1920, height: 1080 });
-  await p.goto("/settings?form=tv");
+  await p.goto("/settings/playback?form=tv");
   const open = p.locator('[data-f="pref-subs:open"]');
   await expect(open).toBeVisible({ timeout: 30_000 });
   await open.focus();
@@ -1679,13 +1679,13 @@ test("TV: Up and Down on an addon keep the remote on that addon", async ({ brows
 
 test("TV: closing Search leaves the page where it was scrolled", async ({ browser }) => {
   const { context, page: p } = await page(browser, { width: 1920, height: 1080 });
-  await p.goto("/settings?form=tv");
+  await p.goto("/settings/playback?form=tv");
   const far = p.locator('[data-f="pref-subsize:large"]');
   await expect(far).toBeVisible({ timeout: 30_000 });
   await far.focus();
   await p.keyboard.press("ArrowRight");
   const scrolled = () => p.evaluate(() => document.querySelector(".settings-page")?.scrollTop ?? document.scrollingElement?.scrollTop ?? 0);
-  await expect.poll(scrolled).toBeGreaterThan(100);
+  await expect.poll(scrolled).toBeGreaterThan(10);
   // Once the page has come to rest (the move scrolls it smoothly).
   await expect
     .poll(async () => {
@@ -1811,7 +1811,7 @@ test("Discover: Try again asks a failed catalog, and a failed page, again", asyn
 
 test("TV: a focused row gone after the list scrolled hands the focus to its nearest neighbour where it is now", async ({ browser }) => {
   const { context, page: p } = await page(browser, { width: 1920, height: 1080 });
-  await p.goto("/settings?form=tv");
+  await p.goto("/settings/playback?form=tv");
   const open = p.locator('[data-f="pref-subs:open"]');
   await expect(open).toBeVisible({ timeout: 30_000 });
   await open.focus();

@@ -143,7 +143,7 @@ test.describe.serial("Trakt on the web", () => {
 
   test("Connect shows the code to enter at Trakt; approved there, the card says who is connected", async () => {
     // Settings lists Trakt with its state, and leads to its page.
-    await go(page, "/settings");
+    await go(page, "/settings/sources");
     await expect(page.locator('[data-f="settings:trakt"]')).toContainText("Keep watched marks and resume points in step with your Trakt account.");
     await page.locator('[data-f="settings:trakt"]').click();
     await expect(page).toHaveURL(/\/trakt$/);
@@ -177,7 +177,7 @@ test.describe.serial("Trakt on the web", () => {
     expect(asked("GET", "/sync/last_activities")).toBeGreaterThan(before);
     await expect(card(page)).toContainText(/Last synced \d/);
     await shot(page, "trakt-connected-desktop");
-    await go(page, "/settings");
+    await go(page, "/settings/sources");
     await expect(page.locator('[data-f="settings:trakt"]')).toContainText("Connected as marquee-tester");
     await page.locator('[data-f="settings:trakt"]').scrollIntoViewIfNeeded();
     await shot(page, "trakt-settings-desktop");

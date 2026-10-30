@@ -4,7 +4,8 @@ import { PORTS } from "./core";
 import { type Json, patchedContext } from "./patch";
 
 /** Settings A1 (design/DECISION.md, the owner's pick of 2026-10-28): the profile on a film's backdrop, a section
- * menu beside grouped lists in one centered column. */
+ * menu beside the chosen section in one centered column; on the phone a row per section, each its own page
+ * (plans/settings-sections.md, "On A1"). */
 
 type Form = "tv" | "desktop" | "phone";
 const SIZE: Record<Form, [number, number]> = { tv: [1920, 1080], desktop: [1440, 900], phone: [390, 844] };
@@ -35,7 +36,9 @@ async function open(browser: Browser, form: Form, opts: { size?: [number, number
   const page = await context.newPage();
   await page.goto(`/settings?form=${form}`);
   await expect(page.locator('[data-f="settings:profiles"]')).toBeVisible({ timeout: 30_000 });
-  await expect(page.locator('[data-f="settings:addons"] small')).toContainText(/installed/);
+  // The phone lists the sections; TV and desktop show Sources first.
+  if (form === "phone") await expect(page.locator('[data-f="settings-sec:sources"]')).toBeVisible();
+  else await expect(page.locator('[data-f="settings:addons"] small')).toContainText(/installed/);
   await expect(page.locator('.set-head[data-home="ready"]')).toHaveCount(1, { timeout: 30_000 });
   return { context, page };
 }
@@ -144,19 +147,47 @@ test("TV: the profile takes the first focus; the remote moves from the menu to t
   await context.close();
 });
 
-test("desktop: a menu entry brings its section to the top and fills; the keyboard lands on its heading", async ({ browser }) => {
+test("desktop: a menu entry shows its section alone and fills; the keyboard lands on its heading", async ({ browser }) => {
   const { context, page } = await open(browser, "desktop");
-  await expect(page.locator('[data-f="settings-nav:profiles"]')).toHaveAttribute("aria-current", "true");
+  await expect(page.locator('[data-f="settings-nav:sources"]')).toHaveAttribute("aria-current", "true");
+  const depth = await page.evaluate(() => history.length);
   await page.locator('[data-f="settings-nav:playback"]').click();
+  await expect(page).toHaveURL(/\/settings\/playback/);
   await expect(page.locator('[data-f="settings-nav:playback"]')).toHaveAttribute("aria-current", "true");
   await expect(page.locator('[aria-current="true"]')).toHaveCount(1);
-  expect(await page.evaluate(() => document.activeElement?.id)).toBe("set-h-playback");
-  const top = await page.evaluate(() => (document.getElementById("set-playback") as HTMLElement).getBoundingClientRect().top / innerHeight);
-  expect(top).toBeLessThan(0.2);
-  // The viewer scrolling back up fills the section that reaches the top third again.
-  await page.mouse.move(900, 600);
-  await page.mouse.wheel(0, -6000);
-  await expect(page.locator('[data-f="settings-nav:profiles"]')).toHaveAttribute("aria-current", "true");
+  await expect.poll(() => page.evaluate(() => document.activeElement?.id)).toBe("set-h-playback");
+  await expect(page.locator("#set-sources")).toHaveCount(0);
+  await expect(page.locator(".set-list .set-sec")).toHaveCount(1);
+  // The menu replaces the address: Back leaves Settings instead of walking its sections.
+  expect(await page.evaluate(() => history.length)).toBe(depth);
+  // A reload keeps the section.
+  await page.reload();
+  await expect(page.locator('[data-f="pref-subs:open"]')).toBeVisible({ timeout: 30_000 });
+  await expect(page.locator('[data-f="settings-nav:playback"]')).toHaveAttribute("aria-current", "true");
+  await context.close();
+});
+
+test("phone: Settings lists a row per section; a row opens the section as its own page, Back returns", async ({ browser }) => {
+  const { context, page } = await open(browser, "phone");
+  const rows = page.locator('[data-f^="settings-sec:"]');
+  // Sources, Account, Home, Playback, This device, About, and Downloads where this browser keeps them.
+  await expect(rows.first()).toBeVisible();
+  expect([6, 7]).toContain(await rows.count());
+  await expect(page.locator('[data-f="settings-sec:sources"]')).toContainText("Addons, plugins, debrid services, Trakt and import");
+  await expect(page.locator('[data-f="settings:addons"]')).toHaveCount(0);
+  await page.locator('[data-f="settings-sec:sources"]').click();
+  await expect(page).toHaveURL(/\/settings\/sources/);
+  await expect(page.locator("h1.set-page-title")).toHaveText("Sources");
+  await expect(page.locator('[data-f="settings:addons"]')).toBeVisible();
+  await expect(page.locator(".set-head")).toHaveCount(0);
+  await page.locator('[data-f="back"]').click();
+  await expect(page).toHaveURL(/\/settings(\?|$)/);
+  await expect(page.locator('[data-f="settings-sec:sources"]')).toBeVisible();
+  // A section opened by its address goes back to Settings.
+  await page.goto("/settings/playback?form=phone");
+  await expect(page.locator('[data-f="pref-subs:open"]')).toBeVisible({ timeout: 30_000 });
+  await page.locator('[data-f="back"]').click();
+  await expect(page).toHaveURL(/\/settings(\?|$)/);
   await context.close();
 });
 
@@ -215,18 +246,21 @@ for (const form of ["tv", "desktop", "phone"] as const) {
 
 test("desktop: every menu entry fills itself; Profiles takes the page back to its top and the keyboard to the profile", async ({ browser }) => {
   const { context, page } = await open(browser, "desktop");
-  for (const id of ["sources", "account", "home", "playback", "device", "about", "profiles"]) {
+  for (const id of ["sources", "account", "home", "playback", "device", "about"]) {
     await page.locator(`[data-f="settings-nav:${id}"]`).click();
     await expect(page.locator('.set-menu [aria-current="true"]'), id).toHaveAttribute("data-f", `settings-nav:${id}`);
+    await expect(page.locator(`#set-${id}`), id).toBeVisible();
   }
+  await page.locator('[data-f="settings-nav:profiles"]').click();
   await expect.poll(() => page.evaluate(() => (document.querySelector(".settings-page") as HTMLElement).scrollTop)).toBe(0);
-  expect(await focused(page)).toBe("settings:profiles");
+  await expect.poll(() => focused(page)).toBe("settings:profiles");
   await context.close();
 });
 
 for (const form of ["tv", "desktop", "phone"] as const) {
   test(`${form}: groups in one section keep their gap`, async ({ browser }) => {
     const { context, page } = await open(browser, form);
+    await page.goto(`/settings/playback?form=${form}`);
     await expect(page.locator("#set-playback .sgroup")).toHaveCount(2, { timeout: 30_000 });
     const gap = await page.locator("#set-playback .sgroup").evaluateAll((g) => g[1]!.getBoundingClientRect().top - g[0]!.getBoundingClientRect().bottom);
     expect(gap).toBeGreaterThanOrEqual(8);

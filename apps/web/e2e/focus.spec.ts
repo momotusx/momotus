@@ -151,7 +151,7 @@ const LOOP: Screen[] = [
   { name: "home-rows at rest", path: "/home-rows", ready: visible(".hrow-main") },
   {
     name: "settings with the language picker",
-    path: "/settings",
+    path: "/settings/playback",
     ready: async (page) => {
       await visible('[data-f="pref-subs:open"]')(page);
       await page.locator('[data-f="pref-subs:open"]').click();
@@ -297,7 +297,7 @@ test("TV: one white per action row, a white profile with a dark glyph, dark word
   });
   expect(avatar).toEqual({ fill: "rgba(255, 255, 255, 0.92)", ink: "rgba(0, 0, 0, 0.88)", sheen: true });
 
-  await page.goto("/settings?form=tv");
+  await page.goto("/settings/playback?form=tv");
   const row = page.locator('[data-f="settings:stream-choice"]');
   await expect(row).toBeVisible({ timeout: 30_000 });
   await row.focus();
@@ -387,7 +387,7 @@ test("TV: a focus moved without a key stays where it went when the screen's list
   const hold = await holdAddons(context);
   const page = await context.newPage();
   const focused = () => page.evaluate(() => (document.activeElement as HTMLElement | null)?.dataset.f ?? null);
-  await page.goto("/settings?form=tv");
+  await page.goto("/settings/sources?form=tv");
   const addons = page.locator('[data-f="settings:addons"]');
   await expect(addons).toBeVisible({ timeout: 30_000 });
   await addons.focus();
@@ -434,7 +434,7 @@ test("TV: the window regaining focus is no move: the waiting first focus still l
   const hold = await holdAddons(context);
   const page = await context.newPage();
   const focused = () => page.evaluate(() => (document.activeElement as HTMLElement | null)?.dataset.f ?? null);
-  await page.goto("/settings?form=tv");
+  await page.goto("/settings/sources?form=tv");
   const addons = page.locator('[data-f="settings:addons"]');
   await expect(addons).toBeVisible({ timeout: 30_000 });
   await addons.focus();

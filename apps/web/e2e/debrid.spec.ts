@@ -13,7 +13,7 @@ const KEY = "MQDUMMYE2EKEY1";
 test("debrid: a key connects, is counted, can be replaced and disconnects", async ({ page }) => {
   const console: string[] = [];
   page.on("console", (m) => console.push(m.text()));
-  await page.goto("/settings?form=tv");
+  await page.goto("/settings/sources?form=tv");
   await expect(page.locator('[data-f="settings:debrid"]')).toContainText("Play torrents as fast direct links");
   await page.locator('[data-f="settings:debrid"]').click();
   await expect(page).toHaveURL(/\/debrid/);

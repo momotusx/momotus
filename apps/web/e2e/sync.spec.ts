@@ -338,6 +338,7 @@ test.describe.serial("sync across three devices", () => {
   });
 
   test("Desk starts an account from Settings and is asked for its kit next", async () => {
+    await go(desk, "/settings/account");
     await desk.locator('[data-f="settings:sync"]').click();
     await desk.locator('[data-f="sync:start"]').click();
     await desk.locator('[data-f="sync-form:server"]').fill(`${SERVER.replace("http://", "http://me:pw@")}`);
@@ -586,7 +587,7 @@ test.describe.serial("sync across three devices", () => {
   test("what Desk had arrives on Phone", async () => {
     await go(phone, "/addons");
     await expect(phone.locator(".addon h2", { hasText: "Sample Source" })).toBeVisible({ timeout: 30_000 });
-    await go(phone, "/settings");
+    await go(phone, "/settings/account");
     await expect(phone.locator('[data-f="settings:sync"]')).toContainText(/On\. Synced at/);
   });
 
@@ -718,7 +719,7 @@ test.describe.serial("sync across three devices", () => {
     await expect(state(tv)).toHaveText(/^Synced at [\d:]+\s[AP]M$/);
     await syncNow(desk);
     await expect.poll(async () => (await tv.locator(".sync-fp").textContent()) === (await desk.locator(".sync-fp").textContent())).toBe(true);
-    await go(desk, "/settings");
+    await go(desk, "/settings/playback");
     await expect(desk.locator('[data-f="pref-next:false"]')).toHaveAttribute("aria-checked", "true");
     await go(desk, "/sync");
   });
@@ -934,7 +935,7 @@ test.describe.serial("sync across three devices", () => {
     // Nothing is sealed here any more, and the passkey that guarded it was dropped by its manager.
     await expect.poll(credentials).toBe(held - 1);
     expect((await kept(desk)).text).not.toContain("credential");
-    await go(desk, "/settings");
+    await go(desk, "/settings/account");
     await expect(desk.locator('[data-f="settings:sync"]')).toContainText("Keep your library, progress and addons the same on every device.");
   });
 
@@ -992,7 +993,7 @@ test.describe.serial("sync across three devices", () => {
       db.close();
     });
     await tv.evaluate(() => sessionStorage.setItem("mq.e2e.noIdb", "1"));
-    await tv.goto("/settings");
+    await tv.goto("/settings/account");
     // Settings names the storage, not a passkey lock.
     await expect(tv.locator('[data-f="settings:sync"]')).toContainText("This browser could not check whether it remembers a sync account");
     await go(tv, "/sync");

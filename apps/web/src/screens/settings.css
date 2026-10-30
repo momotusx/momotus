@@ -276,9 +276,8 @@
 [data-form="desktop"] .snav .stile { width: calc(28 * var(--px)); height: calc(28 * var(--px)); border-radius: calc(7 * var(--px)); }
 [data-form="desktop"] .srow .stile { width: calc(32 * var(--px)); height: calc(32 * var(--px)); border-radius: calc(8 * var(--px)); }
 
-/* The lists: a heading per section, solid groups with hairlines between rows only. Their tail lets the last
- * section reach the menu's line. */
-.set-list { min-width: 0; padding-bottom: calc(var(--ch, 100vh) * .4); }
+/* The lists: the shown section's heading over its solid groups, hairlines between rows only. */
+.set-list { min-width: 0; padding-bottom: 64px; }
 .set-sec { scroll-margin-top: calc(var(--nav-top) + var(--nav-h) + 24px); }
 .set-sec + .set-sec { margin-top: 56px; }
 .set-sec > h2 { font: 700 var(--type-title3) / 1.1 var(--font-display); letter-spacing: var(--tracking-heading); margin: 8px 0 20px; outline-offset: 4px; }
@@ -319,6 +318,9 @@
 [data-form="phone"] .set-who .chev { display: block; width: 20px; height: 20px; color: rgba(235, 235, 245, .5); }
 [data-form="phone"] .set-body { display: block; padding: 18px 16px 0; }
 [data-form="phone"] .set-list { padding-bottom: 0; }
+/* A section's own page: its name as the page's title (the section's heading would say it again). */
+[data-form="phone"] .settings-page h1.set-page-title { margin: 8px 20px 0; font: 700 34px / 1.1 var(--font-display); letter-spacing: var(--tracking-display); outline: none; }
+.sec-page .set-sec > h2 { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 [data-form="phone"] .set-sec + .set-sec { margin-top: 30px; }
 [data-form="phone"] .set-sec > h2 { margin: 0 16px 8px; font: 600 15px / 1.3 var(--font-text); letter-spacing: 0; color: var(--dim); }
 [data-form="phone"] .sgroup { border-radius: 26px; }

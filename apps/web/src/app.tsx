@@ -20,7 +20,9 @@ import "./core/trakt";
 import "./core/wipe";
 import { gateOpen, profiles, profilesFailed } from "./core/profiles";
 import { autoFocusSoon, focusRail, installFocus, move, railHasFocus, restoreSoon, viewerMoving } from "./focus/dom";
-import { form } from "./form";
+import { type Form, form } from "./form";
+import { parentOf } from "./lib/parent";
+import { isSettingsPage } from "./lib/settings-sections";
 import { backThenReplace, entryOwner, historyBase, historyDepth, leaveGuarded, markBack, resetHistoryBase, stampEntriesWith, takeAfterBack, takeBack } from "./history";
 import Addons from "./screens/addons";
 import FindAddons from "./screens/find-addons";
@@ -56,9 +58,6 @@ const destinations: Destination[] = [
   { path: "/search", label: "Search", icon: SearchIcon, tool: true },
   { path: "/settings", label: "Settings", icon: Settings, tool: true },
 ];
-// Settings sub-pages keep the rail and light up Settings.
-const settingsPages = ["/settings", "/addons", "/recommended-addons", "/find-addons", "/plugins", "/import", "/pair", "/home-rows", "/stream-choice", "/debrid", "/sync", "/trakt"];
-const isSettingsPage = (path: string) => settingsPages.includes(path) || path.startsWith("/profiles/") || path.startsWith("/sync/");
 // Downloads live under Library and keep it lit (plans/offline-downloads.md 3.4).
 const section = (path: string) => (isSettingsPage(path) ? "/settings" : path.startsWith("/library/") ? "/library" : path);
 const hasNav = (path: string) => destinations.some((d) => d.path === section(path));
@@ -68,24 +67,12 @@ const barPlaces = destinations.filter((d) => d.path !== "/settings");
 const phoneTabs = barPlaces.filter((d) => d.path !== "/calendar");
 const lit = (path: string) => (form() === "phone" && path === "/calendar" ? "/library" : section(path));
 
-/** Where Back goes when there is no in-app history (a deep link or reload). */
-export function parentOf(path: string): string | null {
-  const parts = path.split("/").filter(Boolean);
-  if (parts[0] === "title" && parts[3] === "versions") return `/${parts.slice(0, 3).join("/")}`;
-  if (parts[0] === "play" && parts[2]) return `/title/${parts[1]}/${parts[2]}`;
-  if (path.startsWith("/profiles/edit/") || path === "/profiles/new") return "/profiles/manage";
-  if (path.startsWith("/sync/") || path === "/pair" || path === "/sign-in") return "/sync";
-  if (path.startsWith("/sign-in/")) return "/sign-in";
-  if (isSettingsPage(path) && path !== "/settings") return "/settings";
-  if (path.startsWith("/library/downloads/")) return "/library/downloads";
-  if (path.startsWith("/library/")) return "/library";
-  return path === "/" ? null : "/";
-}
-
 /** Where a pushed page draws its back link (phone and desktop; TV has the remote's Back): over the title's art, or as a
  * bar of its own above Versions and the profile switcher (design/DECISION.md, Navigation). */
-function backAt(path: string): "art" | "bar" | null {
+function backAt(path: string, form: Form): "art" | "bar" | null {
   const parts = path.split("/").filter(Boolean);
+  // A Settings section is its own page on the phone, a pane beside the menu elsewhere.
+  if (parts[0] === "settings" && parts[1]) return form === "phone" ? "bar" : null;
   if (parts[0] === "title" && parts.length === 3) return "art";
   if (parts[0] === "title" && parts[3] === "versions") return "bar";
   return path === "/profiles" ? "bar" : null;
@@ -234,7 +221,7 @@ function Shell(props: RouteSectionProps) {
       history.back();
       return;
     }
-    const parent = parentOf(location.pathname);
+    const parent = parentOf(location.pathname, form());
     if (!parent) return; // Home is the root: the platform shell owns exit.
     markBack();
     navigate(parent, { replace: true });
@@ -327,7 +314,7 @@ function Shell(props: RouteSectionProps) {
     ),
   );
   const nav = () => hasNav(location.pathname);
-  const backPlace = () => (form() === "tv" ? null : backAt(location.pathname));
+  const backPlace = () => (form() === "tv" ? null : backAt(location.pathname, form()));
   // Nothing of a profile shows before the core says which one runs and
   // whether it is locked (plans/m11-profiles.md, P1 apps v2 5).
   return (
@@ -364,7 +351,7 @@ function Shell(props: RouteSectionProps) {
                 <div class="backbar" classList={{ bar: place() === "bar", under: scrolled() || docScrolled() }} inert={searchOpen() || undefined}>
                   <a
                     class="back"
-                    href={parentOf(location.pathname) ?? "/"}
+                    href={parentOf(location.pathname, form()) ?? "/"}
                     data-f="back"
                     on:click={(e) => {
                       e.preventDefault();
@@ -419,7 +406,7 @@ export function App() {
       <Route path="/sign-in/email" component={EmailSignIn} />
       <Route path="/sign-in/new" component={NewAccount} />
       <Route path="/sign-in/found" component={Found} />
-      <Route path="/settings" component={SettingsScreen} />
+      <Route path="/settings/:section?" component={SettingsScreen} />
       <Route path="/search" component={Search} />
       <Route path="/discover" component={Discover} />
       <Route path="/library" component={Library} />

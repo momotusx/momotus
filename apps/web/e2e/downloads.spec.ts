@@ -257,7 +257,7 @@ test("the TV form shows no control, no Downloads entry, no section and no offlin
   await page.goto("/library");
   await expect(page.getByRole("heading", { name: "Library", exact: true })).toBeVisible();
   await expect(page.locator('[data-f="library:downloads"]')).toHaveCount(0);
-  await page.goto("/settings");
+  await page.goto("/settings/playback");
   await expect(page.getByRole("heading", { name: "Playback", exact: true })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Downloads", exact: true })).toHaveCount(0);
   // Downloads' own pages give way to Home on TV, even by address.
@@ -364,7 +364,7 @@ test("Choose a version to download keeps the version picked on Versions, and Set
 
   // Settings: Smart downloads with its line, the storage line, Delete all downloads with its confirmation;
   // no Wi-Fi switch on the web.
-  await page.goto("/settings?form=desktop");
+  await page.goto("/settings/downloads?form=desktop");
   await expect(page.getByRole("heading", { name: "Downloads", exact: true })).toBeVisible();
   const smart = page.getByRole("switch", { name: /Smart downloads/ });
   await expect(smart).toHaveAttribute("aria-checked", "true");

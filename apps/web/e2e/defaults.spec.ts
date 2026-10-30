@@ -662,7 +662,7 @@ test("Subtitles picker on the phone: the selector speaks its label, Back and Can
 test("Settings on TV: OK on a language applies the rule and the focus stays on it", async ({ browser }) => {
   await client.req("setPrefs", { patch: { subtitleLanguages: ["en"] } });
   const tv = await device(browser, "tv", { locale: "tr-TR" });
-  await tv.goto("/settings?form=tv");
+  await tv.goto("/settings/playback?form=tv");
   const open = tv.locator('[data-f="pref-subs:open"]');
   await expect(open).toBeVisible({ timeout: 30_000 });
   await open.focus();
@@ -769,7 +769,7 @@ test("the built-in TurkceAltyazi.org row says where it runs instead of a host", 
   await shot(page, "addons-built-in", "desktop");
   // The site's credit lives with its own row; About names no addon (the owner, 2026-10-30).
   await expect(builtIn).toContainText("Turkish subtitles from TurkceAltyazi.org.");
-  await page.goto("/settings?form=desktop");
+  await page.goto("/settings/about?form=desktop");
   await expect(page.locator("#set-about")).toBeVisible();
   await expect(page.locator("#set-about")).not.toContainText("TurkceAltyazi");
   await expect(page.locator("#set-about")).not.toContainText("Turkish");

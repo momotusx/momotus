@@ -229,14 +229,20 @@ export const SCREENS: Screen[] = [
     },
   },
   {
-    // Playback (prefs) and the addons line come from live views; "This
-    // device" renders at once, so it cannot stand for the whole screen.
+    // Sources' addons line comes from a live view (Settings in sections: Sources is the first shown).
     name: "settings",
-    path: "/settings",
+    path: "/settings/sources",
+    ready: async (page) => {
+      await expect(page.locator('[data-f="settings:addons"] small')).toContainText(/\d+ installed/);
+    },
+  },
+  {
+    // Playback (prefs) comes from a live view.
+    name: "settings playback",
+    path: "/settings/playback",
     ready: async (page) => {
       await visible('[data-f="pref-subs:open"]')(page);
       await expect(page.locator('[data-f="settings:stream-choice"] small')).toContainText(/shared by at least/);
-      await expect(page.locator('[data-f="settings:addons"] small')).toContainText(/\d+ installed/);
     },
   },
   { name: "stream-choice", path: "/stream-choice", ready: visible('[data-fgroup="choice-size"]') },
