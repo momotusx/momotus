@@ -1,8 +1,8 @@
 import SwiftUI
 
-/// Settings A1 (the owner's pick of 2026-10-28, design/DECISION.md): one long page, the profile on a film's
-/// backdrop, then a section menu beside grouped lists in one centered column (TV and wide screens), or the
-/// groups one after another (the phone). The menu's entries in page order.
+/// Settings A1 (the owner's pick of 2026-10-28, design/DECISION.md) in sections (plans/settings-sections.md, "On
+/// A1"): the profile on a film's backdrop, then a section menu beside the chosen section in one centered column
+/// (TV and wide screens), or a list of the sections, each opening its own page (the phone). The menu's entries.
 enum SettingsSection: String, CaseIterable, Identifiable {
     case profiles, sources, account, home, playback, downloads, device, about
 
@@ -31,6 +31,20 @@ enum SettingsSection: String, CaseIterable, Identifiable {
         case .downloads: .blue
         case .device: .sea
         case .about: .grey
+        }
+    }
+
+    /// The phone's list says what each section holds (the profile is the header).
+    var summary: String {
+        switch self {
+        case .profiles: ""
+        case .sources: "Addons, plugins, debrid services, Trakt and import"
+        case .account: "Sign in and sync with your other devices"
+        case .home: "Which rows Home shows"
+        case .playback: "Stream choice, subtitles and up next"
+        case .downloads: "Smart downloads and storage"
+        case .device: "Settings kept on this device only"
+        case .about: "Version, credits and licences"
         }
     }
 
@@ -120,12 +134,6 @@ enum SettingsRules {
     }
 
     static let continueRow = "continue-watching"
-
-    /// The section the menu fills: the last one whose top has passed the top third of the page.
-    static func active(_ tops: [(SettingsSection, CGFloat)], viewport: CGFloat) -> SettingsSection {
-        let line = viewport / 3
-        return tops.last { $0.1 <= line }?.0 ?? tops.first?.0 ?? .profiles
-    }
 
     /// How far the menu moves down to stay in sight once its column scrolls past `stick`: never above where it
     /// sits, never past the end of the lists.

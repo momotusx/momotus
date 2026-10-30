@@ -89,12 +89,11 @@ private func hero(_ id: String, background: String?) throws -> Hero {
     #expect(SettingsRules.profileLine(many: false) == "Add a profile for someone else, or switch")
 }
 
-@Test func theMenuFillsTheSectionAtTheTopThird() {
-    let tops: [(SettingsSection, CGFloat)] = [(.profiles, -900), (.sources, -400), (.account, 250), (.home, 320), (.playback, 900)]
-    // A 900 pt page: the line is at 300; Account (250) has passed it, Home (320) has not.
-    #expect(SettingsRules.active(tops, viewport: 900) == .account)
-    // At rest the first section fills.
-    #expect(SettingsRules.active([(.profiles, 0), (.sources, 450)], viewport: 900) == .profiles)
+@Test func everySectionButTheProfileSaysWhatItHolds() {
+    for s in SettingsSection.allCases where s != .profiles {
+        #expect(!s.summary.isEmpty, "\(s)")
+    }
+    #expect(SettingsSection.profiles.summary.isEmpty)
 }
 
 @Test func theMenuHoldsUnderTheBarAndNeverPastTheLists() {

@@ -12,16 +12,20 @@ enum SettingsPage: Hashable {
     case streamChoice
 }
 
-/// Settings A1 (the owner's pick of 2026-10-28, design/DECISION.md): one long page. The profile sits on a film's
-/// backdrop (the first Continue Watching title with one, else Home's first hero; a kids profile only its own
-/// Continue Watching), with the film's logo at the right; under it a section menu (TV and wide screens) beside
-/// the grouped lists, centered in the content column. The phone has no menu: its groups follow each other
-/// under the header. Sources (addons) and the few playback choices worth making; everything else has a
-/// device-aware default.
+/// Settings A1 (the owner's pick of 2026-10-28, design/DECISION.md) in sections (plans/settings-sections.md, "On
+/// A1"). The profile sits on a film's backdrop (the first Continue Watching title with one, else Home's first hero;
+/// a kids profile only its own Continue Watching), with the film's logo at the right; under it a section menu (TV
+/// and wide screens) beside the chosen section, centered in the content column. The phone lists the sections under
+/// the header, each opening its own page (`only`). Sources (addons) and the few playback choices worth making;
+/// everything else has a device-aware default.
 struct SettingsScreen: View {
     let core: CoreClient
     /// Home's view, whose Continue Watching or hero lends the header its art.
     let home: HomeModel
+    /// The phone's page of one section; nil for Settings itself.
+    let only: SettingsSection?
+    /// TV and wide: the section shown beside the menu.
+    @State private var chosen: SettingsSection = .sources
     @State private var prefs: LiveRecord<Prefs>
     @State private var addons: LiveRecord<AddonsSnapshot>
     /// Nuvio plugin repositories (R7): the row shows only where plugins run (full builds, not kids).
@@ -34,11 +38,9 @@ struct SettingsScreen: View {
     @Environment(ProfileSession.self) private var profiles
     @Environment(DebridSession.self) private var debrid
     @Environment(TraktModel.self) private var trakt
-    /// The page's scroll, and each section's top in the page (the menu's jumps and its fill).
+    /// The page's scroll (the menu holds under the bar and goes back to the column's top).
     @State private var position = ScrollPosition(edge: .top)
     @State private var offset: CGFloat = 0
-    @State private var viewport: CGFloat = 0
-    @State private var tops: [SettingsSection: CGFloat] = [:]
     @State private var columnTop: CGFloat = 0
     @State private var listHeight: CGFloat = 0
     @State private var menuHeight: CGFloat = 0
@@ -56,9 +58,10 @@ struct SettingsScreen: View {
         case row(SettingsSection)
     }
 
-    init(core: CoreClient, home: HomeModel) {
+    init(core: CoreClient, home: HomeModel, only: SettingsSection? = nil) {
         self.core = core
         self.home = home
+        self.only = only
         _prefs = State(initialValue: LiveRecord("settings", core: core))
         _addons = State(initialValue: LiveRecord("addons", core: core))
     }
@@ -102,38 +105,44 @@ struct SettingsScreen: View {
             let stick = page.safeAreaInsets.top + Theme.Space.m
             ScrollView(.vertical) {
                 VStack(alignment: .leading, spacing: 0) {
-                    header(pad: pad, top: page.safeAreaInsets.top)
-                        .modifier(Top(section: .profiles, space: space) { tops[$0] = $1 })
-                    if metrics.wide {
-                        HStack(alignment: .top, spacing: sizes.gap) {
-                            menu
-                                .frame(width: sizes.menu)
-                                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { menuHeight = $0 }
-                                .offset(y: SettingsRules.menuShift(columnTop: columnTop - offset, stick: stick, room: listHeight - menuHeight))
-                                #if os(tvOS)
-                                .focusSection()
-                                #endif
-                            list
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { listHeight = $0 }
-                                #if os(tvOS)
-                                .focusSection()
-                                #endif
-                        }
-                        .padding(.horizontal, pad)
-                        .padding(.top, tvForm ? 32 : 12)
-                        .onGeometryChange(for: CGFloat.self) { $0.frame(in: .named(space)).minY } action: { columnTop = $0 }
-                    } else {
+                    if let only {
+                        // A section's own page (the phone): its title, then its groups.
+                        ScreenTitle(text: only.title)
+                            .padding(.horizontal, 20)
+                            .padding(.top, page.safeAreaInsets.top + 8)
                         list.padding(.horizontal, 16).padding(.top, 18)
+                    } else {
+                        header(pad: pad, top: page.safeAreaInsets.top)
+                        if metrics.wide {
+                            HStack(alignment: .top, spacing: sizes.gap) {
+                                menu
+                                    .frame(width: sizes.menu)
+                                    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { menuHeight = $0 }
+                                    .offset(y: SettingsRules.menuShift(columnTop: columnTop - offset, stick: stick, room: listHeight - menuHeight))
+                                    #if os(tvOS)
+                                    .focusSection()
+                                    #endif
+                                list
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { listHeight = $0 }
+                                    #if os(tvOS)
+                                    .focusSection()
+                                    #endif
+                            }
+                            .padding(.horizontal, pad)
+                            .padding(.top, tvForm ? 32 : 12)
+                            .onGeometryChange(for: CGFloat.self) { $0.frame(in: .named(space)).minY } action: { columnTop = $0 }
+                        } else {
+                            list.padding(.horizontal, 16).padding(.top, 18)
+                            sectionList.padding(.horizontal, 16).padding(.top, kids ? 18 : 30)
+                        }
                     }
                 }
-                // The last section can reach the top third, where its menu entry fills.
-                .padding(.bottom, metrics.wide ? page.size.height * 0.4 : Theme.Space.l)
+                .padding(.bottom, Theme.Space.l)
                 .coordinateSpace(.named(space))
             }
             .scrollPosition($position)
             .onScrollGeometryChange(for: CGFloat.self) { $0.contentOffset.y + $0.contentInsets.top } action: { offset = $1 }
-            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { viewport = $0 }
             .onChange(of: stick, initial: true) { _, now in stickTop = now }
             .scrollIndicators(.hidden)
             // The header's art runs under the status bar, the Mac's toolbar and the TV's bar.
@@ -157,7 +166,7 @@ struct SettingsScreen: View {
         .task { plugins = try? await core.call("plugins", as: PluginsAnswer.self) }
         #if DEBUG
         .task {
-            guard let section = DebugHooks.settingsSection else { return }
+            guard only == nil, let section = DebugHooks.settingsSection else { return }
             try? await Task.sleep(for: .seconds(4))
             jump(section)
         }
@@ -175,9 +184,25 @@ struct SettingsScreen: View {
         }
     }
 
-    /// The menu's current section: the last one whose top has passed the top third of the page.
-    private var active: SettingsSection {
-        SettingsRules.active(sections.compactMap { s in tops[s].map { (s, $0 - offset) } }, viewport: viewport)
+    /// What the list shows: the one section of a section page; beside the menu, the chosen one; the phone's
+    /// Settings, only the header's edits (the sections are its rows).
+    private func shows(_ s: SettingsSection) -> Bool {
+        if let only { return s == only }
+        return metrics.wide ? s == chosen : s == .profiles
+    }
+
+    /// The phone: one row per section, each opening its page.
+    private var sectionList: some View {
+        SettingsGroup(sizes: sizes) {
+            ForEach(sections.filter { $0 != .profiles }) { s in
+                NavigationLink {
+                    SettingsScreen(core: core, home: home, only: s)
+                } label: {
+                    A1Row(tone: s.tone, glyph: s.glyph, title: s.title, detail: s.summary, sizes: sizes)
+                }
+                .buttonStyle(LitRowStyle(radius: sizes.radius))
+            }
+        }
     }
 
     // MARK: header
@@ -282,8 +307,8 @@ struct SettingsScreen: View {
 
     // MARK: menu
 
-    /// TV and wide: the sections with their tiles; an entry brings its section to the top (and on TV takes the
-    /// remote into it); the section at the top third fills its entry.
+    /// TV and wide: the sections with their tiles; an entry shows its section beside the menu (and on TV takes the
+    /// remote into it), and fills; Profiles goes up to the header.
     private var menu: some View {
         VStack(alignment: .leading, spacing: tvForm ? 8 : 2) {
             // The page's heading, shown as the menu's label.
@@ -298,16 +323,21 @@ struct SettingsScreen: View {
                 Button { jump(s) } label: {
                     MenuEntry(section: s, sizes: sizes)
                 }
-                .buttonStyle(LitRowStyle(radius: tvForm ? Theme.Radius.l : 10, selected: active == s))
+                .buttonStyle(LitRowStyle(radius: tvForm ? Theme.Radius.l : 10, selected: chosen == s))
                 .focused($focus, equals: .menu(s))
-                .accessibilityAddTraits(active == s ? .isSelected : [])
+                .accessibilityAddTraits(chosen == s ? .isSelected : [])
             }
         }
     }
 
     /// At once: the Mac's scroll view leaves an animated jump where it was.
     private func jump(_ s: SettingsSection) {
-        if s == .profiles { position.scrollTo(edge: .top) } else if let top = tops[s] { position.scrollTo(y: max(0, top - stickTop)) }
+        if s == .profiles {
+            position.scrollTo(edge: .top)
+        } else {
+            chosen = s
+            if offset > columnTop - stickTop { position.scrollTo(y: max(0, columnTop - stickTop)) }
+        }
         #if os(tvOS)
         // The remote goes on into the section; it stays on the menu where there is nothing to press (About).
         if s == .profiles { focus = .profile } else if s != .about { focus = .row(s) }
@@ -316,13 +346,13 @@ struct SettingsScreen: View {
 
     // MARK: the lists
 
-    /// The grouped lists, one section after another; on the phone the header's edits are a group of their own.
+    /// The shown section's groups (`shows`); on the phone the header's edits are a group of their own.
     private var list: some View {
         VStack(alignment: .leading, spacing: sizes.sectionGap) {
             if let failure = prefs.failure ?? addons.failure {
                 StateLine(symbol: "triangle-alert", text: failure, action: ("Try again", { prefs.retry(); addons.retry() }))
             }
-            if !metrics.wide, let me, SettingsRules.canEdit(kids: kids) {
+            if only == nil, !metrics.wide, let me, SettingsRules.canEdit(kids: kids) {
                 section(.profiles) {
                     SettingsGroup(sizes: sizes) {
                         row(.profiles, tone: .blue, glyph: "user-pen", title: "Edit profile", detail: "Name, picture and PIN.") { EditProfile(profileId: me.id) }
@@ -407,15 +437,18 @@ struct SettingsScreen: View {
         }
     }
 
-    /// One section: its title (a heading) over its groups; it reports its top for the menu.
-    private func section<Content: View>(_ s: SettingsSection, @ViewBuilder content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: 0) {
-            Text(s.title)
-                .modifier(SectionTitle(sizes: sizes, wide: metrics.wide))
-                .accessibilityAddTraits(.isHeader)
-            content()
+    /// One section, when shown: its title (a heading; a section page has its own) over its groups.
+    @ViewBuilder private func section<Content: View>(_ s: SettingsSection, @ViewBuilder content: () -> Content) -> some View {
+        if shows(s) {
+            VStack(alignment: .leading, spacing: 0) {
+                if only == nil {
+                    Text(s.title)
+                        .modifier(SectionTitle(sizes: sizes, wide: metrics.wide))
+                        .accessibilityAddTraits(.isHeader)
+                }
+                content()
+            }
         }
-        .modifier(Top(section: s, space: space) { tops[$0] = $1 })
     }
 
     /// A row that opens its page; `first` marks the section's first row, where a menu entry sends the remote.
@@ -644,17 +677,6 @@ private struct Note: ViewModifier {
             .textFont(Theme.type.callout, relativeTo: .callout)
             .foregroundStyle(Theme.Palette.muted)
             .fixedSize(horizontal: false, vertical: true)
-    }
-}
-
-/// Reports a section's top in the page's own space (it holds while the page scrolls).
-private struct Top: ViewModifier {
-    let section: SettingsSection
-    let space: String
-    let set: (SettingsSection, CGFloat) -> Void
-
-    func body(content: Content) -> some View {
-        content.onGeometryChange(for: CGFloat.self) { $0.frame(in: .named(space)).minY } action: { set(section, $0) }
     }
 }
 
