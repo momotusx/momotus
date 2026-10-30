@@ -110,6 +110,8 @@ async function open(browser: Parameters<typeof patchedContext>[0], form = "deskt
   return { context, page, errors };
 }
 
+// Cues that start together draw in the track's cue order, the later end first (HTML's text track cue order):
+// the English file's sign (to 10:00) over its line (to 5:00).
 type Line = { text: string; second: boolean; font: number; top: number; bottom: number };
 /** The lines drawn: each `.cue` span of the foot block and of Split's top block, with its box. */
 const drawn = (page: Page) =>
@@ -135,14 +137,15 @@ test("a second line in the spoken language over the first, at 85%, its own timin
   await expect(page.locator('[data-f="sublang:tr"]')).toContainText("On the first line");
   await page.locator('[data-f="sub:spoken"]').click();
   // Both lines: the second (with its file's sign joined to it, not placed) over the first, at 85% of its size.
-  await expect.poll(() => texts(page)).toEqual(["English line", "ENGLISH SIGN", "Turkish line"]);
+  await expect.poll(() => texts(page)).toEqual(["ENGLISH SIGN", "English line", "Turkish line"]);
   const lines = await drawn(page);
   const first = lines.find((l) => !l.second) as Line;
   for (const l of lines.filter((x) => x.second)) {
     expect(l.font).toBeCloseTo(first.font * 0.85, 1);
     expect(l.bottom).toBeLessThanOrEqual(first.top + 1);
   }
-  await expect(page.locator(".cues-at")).toHaveCount(0);
+  // Only the first line's sign is placed; the second's joined its line.
+  await expect(page.locator(".cues-at .cue")).toHaveText(["TURKISH SIGN"]);
   await expect.poll(() => subsValue(page)).toBe("Turkish + English");
   // Each line's own track element, both running hidden.
   expect(await page.evaluate(() => Array.from(document.querySelectorAll<HTMLTrackElement>("video track"), (t) => [t.dataset.line, t.track.mode]))).toEqual([
@@ -167,7 +170,7 @@ test("a second line in the spoken language over the first, at 85%, its own timin
     if (v) v.muted = true;
   });
   await startIfPaused(page);
-  await expect.poll(() => texts(page), { timeout: 30_000 }).toEqual(["English line", "ENGLISH SIGN", "Turkish line"]);
+  await expect.poll(() => texts(page), { timeout: 30_000 }).toEqual(["ENGLISH SIGN", "English line", "Turkish line"]);
   // Off on the first line: both go.
   await page.locator('[data-f="player:subs"]').click();
   await page.locator('[data-f="sub:line1"]').click();
@@ -178,7 +181,7 @@ test("a second line in the spoken language over the first, at 85%, its own timin
   await page.locator('[data-f="player:subs"]').click();
   await expect(page.locator('[data-f="sub:line1"]')).toHaveCount(0);
   await page.locator('[data-f="sublang:tr"]').click();
-  await expect.poll(() => texts(page)).toEqual(["English line", "ENGLISH SIGN", "Turkish line"]);
+  await expect.poll(() => texts(page)).toEqual(["ENGLISH SIGN", "English line", "Turkish line"]);
   expect(errors).toEqual([]);
   await context.close();
 });
@@ -186,7 +189,7 @@ test("a second line in the spoken language over the first, at 85%, its own timin
 test("each layout: Stacked one block, One box one background, Split from the top under the title and its signs", async ({ browser }) => {
   await setPrefs({ secondSubtitle: "en" });
   const { context, page } = await open(browser);
-  await expect.poll(() => texts(page), { timeout: 30_000 }).toEqual(["English line", "ENGLISH SIGN", "Turkish line"]);
+  await expect.poll(() => texts(page), { timeout: 30_000 }).toEqual(["ENGLISH SIGN", "English line", "Turkish line"]);
   // Stacked: one foot block, no box around both.
   await expect(page.locator(".cues")).toHaveCount(1);
   await expect(page.locator(".cue-box")).toHaveCount(0);
@@ -237,7 +240,7 @@ test("Only when paused: the second line hides while playing and shows at once on
   const { context, page } = await open(browser);
   await expect.poll(() => texts(page), { timeout: 30_000 }).toEqual(["Turkish line"]);
   await page.evaluate(() => document.querySelector("video")?.pause());
-  await expect.poll(() => texts(page)).toEqual(["English line", "ENGLISH SIGN", "Turkish line"]);
+  await expect.poll(() => texts(page)).toEqual(["ENGLISH SIGN", "English line", "Turkish line"]);
   // A seek while paused keeps it, showing the new time's line.
   const seek = (sec: number) =>
     page.evaluate((at) => {
@@ -274,7 +277,7 @@ test("the core's second line going null turns it off", async ({ browser }) => {
   await setPrefs({ secondSubtitle: "en" });
   let drop = false;
   const { context, page } = await open(browser, "desktop", { width: 1440, height: 900 }, (s) => (drop ? { ...s, autoSecondSubtitle: null } : s));
-  await expect.poll(() => texts(page), { timeout: 30_000 }).toEqual(["English line", "ENGLISH SIGN", "Turkish line"]);
+  await expect.poll(() => texts(page), { timeout: 30_000 }).toEqual(["ENGLISH SIGN", "English line", "Turkish line"]);
   drop = true;
   // Any next snapshot carries it: a delay sent for the first line makes one.
   await page.locator('[data-f="player:subs"]').click();
@@ -288,7 +291,7 @@ test("the core's second line going null turns it off", async ({ browser }) => {
 test("TV: Up from the search reaches the switch, Left and Right move on it, OK lands on the tab's chosen row", async ({ browser }) => {
   await setPrefs({ secondSubtitle: "en" });
   const { context, page } = await open(browser, "tv", { width: 960, height: 540 });
-  await expect.poll(() => texts(page), { timeout: 30_000 }).toEqual(["English line", "ENGLISH SIGN", "Turkish line"]);
+  await expect.poll(() => texts(page), { timeout: 30_000 }).toEqual(["ENGLISH SIGN", "English line", "Turkish line"]);
   await page.locator('[data-f="player:subs"]').focus();
   await page.keyboard.press("Enter");
   const focused = () => page.evaluate(() => document.activeElement?.getAttribute("data-f"));
@@ -311,13 +314,15 @@ test("TV: Up from the search reaches the switch, Left and Right move on it, OK l
   await expect.poll(focused).toBe("sublang:en");
   // Only when paused, focused by the remote: its label reads dark on the white fill, as the panel's rows do.
   await page.locator('[data-f="sub:paused"]').focus();
-  const look = await page.evaluate(() => {
-    const el = document.querySelector('[data-f="sub:paused"]') as HTMLElement;
-    const own = getComputedStyle(el);
-    return { fill: own.backgroundColor, ink: own.color, label: getComputedStyle(el.querySelector("span:not(.knob)") as Element).color };
-  });
-  expect(look.label).not.toBe(look.fill);
-  expect(look.label).toBe(look.ink);
+  const look = () =>
+    page.evaluate(() => {
+      const el = document.querySelector('[data-f="sub:paused"]') as HTMLElement;
+      const own = getComputedStyle(el);
+      return { fill: own.backgroundColor, ink: own.color, label: getComputedStyle(el.querySelector("span:not(.knob)") as Element).color };
+    });
+  // The row's own colour eases in with the focus (app.css [data-f]): read it once the move has ended.
+  await expect.poll(async () => ((l) => l.label === l.ink)(await look())).toBe(true);
+  expect((await look()).label).not.toBe((await look()).fill);
   await context.close();
 });
 
