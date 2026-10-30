@@ -1692,7 +1692,7 @@ impl Engine {
         // A file kept for download, or downloading, is whole on disk: no
         // window, cap or keeper (plans/offline-downloads.md 4.6).
         if self.kept_of(&t).contains(&file) || lock(&t.downloading).contains_key(&file) {
-            return self.play_whole(h, file).await;
+            return self.play_whole(h, file).await.map(|()| true);
         }
         // Stale already: no idle torrent is deleted for it (review r2 N8).
         if after.is_some_and(|seen| seen != window::Seen::of(&t)) {
@@ -2460,8 +2460,8 @@ pub struct DownloadProgress {
     pub len: u64,
     /// The disk fell under the reserve and fetching stopped.
     pub out_of_space: bool,
-    /// The torrent ended (a window's space guard) or librqbit stopped it
-    /// with an error (its words): download again to go on.
+    /// librqbit stopped the torrent with an error (its words): download
+    /// again to go on.
     /// [`is_space_failure`] tells a full disk from the rest.
     pub failed: Option<String>,
     /// Connected peers.
@@ -2499,7 +2499,7 @@ impl DownloadHandle {
             have,
             len: t.files[file].len,
             out_of_space: t.out_of_space.load(Ordering::Relaxed),
-            failed: lock(&t.ended).clone().or(errored),
+            failed: errored,
             peers,
         }
     }
