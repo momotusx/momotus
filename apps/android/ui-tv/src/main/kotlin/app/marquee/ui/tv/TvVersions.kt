@@ -176,11 +176,12 @@ fun TvVersions(
     var lastRow by remember { mutableStateOf<Pair<Int, String>?>(null) }
     val scope = rememberCoroutineScope()
     // The target exists once there is something to focus: the card's Play (or Try again, or the empty
-    // state's first action), else the first row.
+    // state's first action), else the first row (the plugins' first once only theirs are left).
     val target =
         when {
             failure != null || snapshot?.recommended != null || empty != null -> PLAY
-            else -> (snapshot?.rows?.firstOrNull() ?: snapshot?.plugins?.rows?.firstOrNull())?.let { rowKey(it) }
+            VersionsCopy.onlyPlugins(snapshot) -> snapshot?.plugins?.rows?.firstOrNull()?.let { rowKey(it) }
+            else -> snapshot?.rows?.firstOrNull()?.let { rowKey(it) }
         }
     focus.FirstFocus(target, ask = failure != null)
 
@@ -292,12 +293,13 @@ private fun Pick(
     val colors = Marquee.colors
     val shape = RoundedCornerShape(Marquee.radius.l)
     val best = snapshot?.recommended
-    val play = focus.requesterFor(PLAY)
-    // Only the plugins' rows, never picked (4.4): no card and no block, one line over them.
+    // Only the plugins' rows, never picked (4.4): no card and no block, one line over them. Play is
+    // never registered, so Left from a row takes the plain focus search.
     if (failure == null && VersionsCopy.onlyPlugins(snapshot)) {
         MqText(PluginCopy.CHOOSE, Modifier.width(620.dp), role = TextRole.Callout, color = colors.muted)
         return
     }
+    val play = focus.requesterFor(PLAY)
     Column(
         Modifier
             // Entering the card from the list lands on Play, never on the details above it.

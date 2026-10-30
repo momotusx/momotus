@@ -42,6 +42,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.LifecycleRegistry
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import app.marquee.core.PluginCopy
 import app.marquee.core.StreamChoiceCopy
 import app.marquee.core.VersionsCopy
 import app.marquee.core.client.CoreClient
@@ -58,8 +59,10 @@ import app.marquee.core.model.Playability
 import app.marquee.core.model.QualityPref
 import app.marquee.core.model.RankKey
 import app.marquee.core.model.ReasonLine
+import app.marquee.core.model.RowOrigin
 import app.marquee.core.model.SectionQuality
 import app.marquee.core.model.SourceClass
+import app.marquee.core.model.SourceRows
 import app.marquee.core.model.Speed
 import app.marquee.core.model.StreamPrefs
 import app.marquee.core.model.VersionRow
@@ -388,6 +391,27 @@ class TvVersionsTest {
         val badge =
             compose.onAllNodesWithText("1080p", useUnmergedTree = true).fetchSemanticsNodes().map { it.boundsInRoot }
         assertTrue(badge.any { kotlin.math.abs(it.center.y - tag.center.y) < 2f && it.right < tag.left })
+    }
+
+    @Test
+    fun `only plugin rows give one line for the card, focus starts on the first of them, and Left keeps it there`() {
+        val found =
+            row("plugin:r/castle:h1", ReasonLine.Few(0))
+                .copy(
+                    status = VersionStatus.Direct,
+                    sizeBytes = null,
+                    origin = RowOrigin.Plugin,
+                    sourceName = "Castle",
+                    host = "cdn.example.com",
+                )
+        show(snapshot().copy(plugins = SourceRows(listOf(found), pending = false)))
+        compose.onNodeWithText(PluginCopy.CHOOSE).assertExists()
+        compose.onNodeWithText("1 version").assertExists()
+        compose.onAllNodesWithText("Play this version").assertCountEquals(0)
+        val castle = hasContentDescription("Castle, plays from cdn.example.com", substring = true)
+        compose.waitUntil(5_000) { compose.onAllNodes(castle and isFocused()).fetchSemanticsNodes().isNotEmpty() }
+        press(Key.DirectionLeft)
+        compose.onNode(castle).assertIsFocused()
     }
 
     @Test
