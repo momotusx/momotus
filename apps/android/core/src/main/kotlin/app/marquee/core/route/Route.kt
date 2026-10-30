@@ -31,6 +31,12 @@ sealed interface Route : NavKey {
     @Serializable
     data object Settings : Route
 
+    /** One Settings section as its own page, the phone's drill-in (plans/settings-sections.md, "On A1"); [id] is its name. */
+    @Serializable
+    data class SettingsSection(
+        val id: String,
+    ) : Route
+
     /** Import from Stremio: a code to enter at link.stremio.com. */
     @Serializable
     data object Import : Route
@@ -211,7 +217,7 @@ val Route.hasBackLink: Boolean
     get() =
         this is Route.Title || this is Route.Versions || this is Route.Profiles ||
             this is Route.ManageProfiles || this is Route.EditProfile || this is Route.Calendar ||
-            this == Route.Downloads || this is Route.DownloadedSeries
+            this == Route.Downloads || this is Route.DownloadedSeries || this is Route.SettingsSection
 
 /**
  * The back stack after choosing a top-level destination: Home is the root, and the chosen place

@@ -74,8 +74,10 @@ class RouteTest {
                 Route.EditProfile(),
                 Route.Downloads,
                 Route.DownloadedSeries("tt2"),
+                Route.SettingsSection("Sources"),
             )
         assertTrue(pushed.all { it.hasBackLink })
+        assertFalse(Route.SettingsSection("Sources").isTopLevel)
         assertFalse(listOf(Route.Home, Route.Settings, Route.Onboarding, player, Route.Sync).any { it.hasBackLink })
     }
 

@@ -231,6 +231,10 @@ fun SettingsScreen(
     onDefaults: () -> Unit,
     /** Settings > Sources > Plugins. */
     onPlugins: () -> Unit = {},
+    /** The phone's section page this entry shows ([SettingsSection] name); null for the list of sections. */
+    section: String? = null,
+    /** Opens a section's page on the phone. */
+    onSection: (String) -> Unit = {},
 ) {
     val holder = settingsHolder(session)
     val runner = rememberRunner()
@@ -394,7 +398,7 @@ fun SettingsScreen(
             parts,
         )
     } else {
-        PhoneSettings(me, line, art, onProfiles, parts)
+        PhoneSettings(me, line, art, onProfiles, parts, settingsSection(section)) { onSection(it.name) }
     }
 }
 

@@ -22,17 +22,17 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.ReadOnlyComposable
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.BiasAlignment
 import androidx.compose.ui.ExperimentalComposeUiApi
@@ -87,8 +87,9 @@ import app.marquee.ui.tv.TvNavRoom
 import coil3.compose.AsyncImage
 import kotlinx.coroutines.launch
 
-// Settings A1 (the owner's pick of 2026-10-28, design/DECISION.md): the profile on a film's backdrop, then one long
-// page of grouped lists with blue-to-green icon tiles; TV adds a section menu at the left of one centered column.
+// Settings A1 (the owner's pick of 2026-10-28, design/DECISION.md): the profile on a film's backdrop and grouped lists
+// with blue-to-green icon tiles, in sections (plans/settings-sections.md, "On A1"): the phone lists the sections and each
+// opens its own page; TV shows the chosen section beside a section menu in one centered column.
 
 /** An icon tile's fill: one of the blue-to-green steps, an owner-picked exception to the one key color. */
 internal enum class Tone { Blue, Sky, Sea, Teal, Mint, Green, Grey }
@@ -108,21 +109,25 @@ internal fun Tone.fill(): Color =
         }
     }
 
-/** The page's sections, in page order. Profiles is the header. */
+/** The sections, in menu order, with the line the phone's list shows under each. Profiles is the header. */
 internal enum class SettingsSection(
     val label: String,
     val tone: Tone,
     val icon: ImageVector,
+    val summary: String,
 ) {
-    Profiles("Profiles", Tone.Blue, Icons.User),
-    Sources("Sources", Tone.Green, Icons.Puzzle),
-    Account("Account", Tone.Sky, Icons.MonitorSmartphone),
-    Home("Home", Tone.Mint, Icons.Rows3),
-    Playback("Playback", Tone.Teal, Icons.CirclePlay),
-    Downloads("Downloads", Tone.Blue, Icons.ArrowDownToLine),
-    Device("This device", Tone.Sea, Icons.Monitor),
-    About("About", Tone.Grey, Icons.Info),
+    Profiles("Profiles", Tone.Blue, Icons.User, ""),
+    Sources("Sources", Tone.Green, Icons.Puzzle, "Addons, plugins, debrid services, Trakt and import"),
+    Account("Account", Tone.Sky, Icons.MonitorSmartphone, "Sign in and sync with your other devices"),
+    Home("Home", Tone.Mint, Icons.Rows3, "Which rows Home shows"),
+    Playback("Playback", Tone.Teal, Icons.CirclePlay, "Stream choice, subtitles and up next"),
+    Downloads("Downloads", Tone.Blue, Icons.ArrowDownToLine, "Smart downloads and storage"),
+    Device("This device", Tone.Sea, Icons.Monitor, "Settings kept on this device only"),
+    About("About", Tone.Grey, Icons.Info, "Version, credits and licences"),
 }
+
+/** A section by its name, as a route carries it. */
+internal fun settingsSection(id: String?): SettingsSection? = SettingsSection.entries.firstOrNull { it.name == id }
 
 /** One section of the list: its groups, under its title. */
 internal class SettingsPart(
@@ -313,7 +318,8 @@ internal fun profileLine(many: Boolean): String =
 
 /**
  * The phone: the art at the top, the large title and the profile as one glass card on its lower half (one tap to the
- * picker), then the groups with their section names as group titles.
+ * picker), the profile's edits, then one group with a row per section; a row opens the section as its own page
+ * ([section] set), its groups under its title.
  */
 @Composable
 internal fun PhoneSettings(
@@ -322,7 +328,15 @@ internal fun PhoneSettings(
     art: Tile?,
     onProfiles: () -> Unit,
     parts: List<SettingsPart>,
+    section: SettingsSection? = null,
+    onSection: (SettingsSection) -> Unit = {},
 ) {
+    if (section != null) {
+        PhoneSection(section, parts.firstOrNull { it.section == section })
+        return
+    }
+    val profiles = parts.firstOrNull { it.section == SettingsSection.Profiles }
+    val sections = parts.filter { it.section != SettingsSection.Profiles }
     LazyColumn(
         Modifier.fillMaxSize().testTag(SETTINGS_LIST),
         contentPadding = PaddingValues(bottom = Marquee.space.l + LocalBarSpace.current),
@@ -354,12 +368,69 @@ internal fun PhoneSettings(
                 }
             }
         }
-        itemsIndexed(parts, key = { _, part -> part.section.name }) { i, part ->
-            Column(Modifier.padding(start = 16.dp, end = 16.dp, top = if (i == 0) 18.dp else 30.dp)) {
-                SettingsTitle(part.section.label)
-                part.content()
+        profiles?.let { part ->
+            item(key = part.section.name) {
+                Column(Modifier.padding(start = 16.dp, end = 16.dp, top = 18.dp)) {
+                    SettingsTitle(part.section.label)
+                    part.content()
+                }
             }
         }
+        item(key = "sections") {
+            Column(
+                Modifier
+                    .padding(
+                        start = 16.dp,
+                        end = 16.dp,
+                        top =
+                            if (profiles ==
+                                null
+                            ) {
+                                18.dp
+                            } else {
+                                30.dp
+                            },
+                    ).testTag(SETTINGS_SECTIONS),
+            ) {
+                SettingsGroup(
+                    *sections
+                        .map { part ->
+                            val s = part.section
+                            @Composable { SettingsRow(s.icon, s.tone, s.label, s.summary, { onSection(s) }, lines = 2) }
+                        }.toTypedArray(),
+                )
+            }
+        }
+    }
+}
+
+/** A section's own page on the phone: its name as the page's title, then its groups. Back is the shell's. */
+@Composable
+private fun PhoneSection(
+    section: SettingsSection,
+    part: SettingsPart?,
+) {
+    LazyColumn(
+        Modifier.fillMaxSize().testTag(SETTINGS_LIST),
+        contentPadding =
+            PaddingValues(
+                start = 16.dp,
+                end = 16.dp,
+                top = pageTop(),
+                bottom =
+                    Marquee.space.l + LocalBarSpace.current,
+            ),
+    ) {
+        item(key = "title") {
+            MqText(
+                section.label,
+                Modifier.padding(start = 4.dp, top = 8.dp, bottom = 18.dp).semantics { heading() },
+                role = TextRole.Title1,
+                weight = FontWeight.Bold,
+            )
+        }
+        // A section that is not offered here (Downloads on a device that keeps none) shows its title alone.
+        part?.let { item(key = it.section.name) { it.content() } }
     }
 }
 
@@ -399,10 +470,10 @@ private fun ProfileCard(
 }
 
 /**
- * TV: the header on the film, then the section menu at the left of one centered column and the grouped lists at its
- * right. The profile takes the first focus; the header scrolls away once focus goes down into the menu (past its
- * Profiles entry) or the lists, and the menu stays in place while the lists scroll. Select on an entry brings its
- * section to the top and takes the remote into it; the section at the top of the lists fills its entry.
+ * TV: the header on the film, then the section menu at the left of one centered column and the chosen section's
+ * groups at its right (Sources first). The profile takes the first focus; the header scrolls away once focus goes
+ * down into the menu (past its Profiles entry) or the section, and the menu stays in place while the section scrolls.
+ * Select on an entry shows its section and takes the remote into it; the shown section fills its entry.
  */
 @Composable
 internal fun TvSettings(
@@ -418,8 +489,10 @@ internal fun TvSettings(
 ) {
     val profile = remember { FocusRequester() }
     val entries = remember { SettingsSection.entries.associateWith { FocusRequester() } }
-    val sections = remember { SettingsSection.entries.associateWith { FocusRequester() } }
+    val pane = remember { FocusRequester() }
     val list = rememberLazyListState()
+    var chosen by rememberSaveable { mutableStateOf(SettingsSection.Sources.name) }
+    val shownPart = parts.firstOrNull { it.section.name == chosen } ?: parts.firstOrNull()
     val scope = rememberCoroutineScope()
     var menuFocus by remember { mutableStateOf<SettingsSection?>(null) }
     var listFocus by remember { mutableStateOf(false) }
@@ -429,19 +502,10 @@ internal fun TvSettings(
         tween(Marquee.panelMs, easing = Tokens.ease),
         label = "header",
     )
-    val atTop by remember(parts) {
-        derivedStateOf {
-            val info = list.layoutInfo
-            // The topmost section still showing under the list's top edge (offsets start under its padding): the one an
-            // entry brought to the top.
-            info.visibleItemsInfo.firstOrNull { it.offset + it.size > 0 }?.index ?: list.firstVisibleItemIndex
-        }
-    }
-    val active = if (away) parts.getOrNull(atTop)?.section ?: SettingsSection.Sources else SettingsSection.Profiles
+    val active = if (away) shownPart?.section ?: SettingsSection.Sources else SettingsSection.Profiles
     AutoFocus(profile)
     BoxWithConstraints(Modifier.fillMaxSize().focusRestorer(profile)) {
         val pad = maxOf(Marquee.safe.side, (maxWidth - TV_COLUMN) / 2)
-        val tail = maxHeight * 0.6f
         Column(Modifier.fillMaxSize()) {
             Box(
                 Modifier.fillMaxWidth().layout { measurable, constraints ->
@@ -500,10 +564,12 @@ internal fun TvSettings(
                                 if (s == SettingsSection.Profiles) {
                                     runCatching { profile.requestFocus() }
                                 } else {
-                                    val index = parts.indexOfFirst { it.section == s }
+                                    chosen = s.name
                                     scope.launch {
-                                        list.animateScrollToItem(index)
-                                        runCatching { sections.getValue(s).requestFocus(FocusDirection.Enter) }
+                                        list.scrollToItem(0)
+                                        // The new section is drawn on the next frame; the remote goes on into it.
+                                        withFrameNanos {}
+                                        runCatching { pane.requestFocus(FocusDirection.Enter) }
                                     }
                                 }
                             },
@@ -519,17 +585,14 @@ internal fun TvSettings(
                         .onFocusChanged { listFocus = it.hasFocus }
                         .testTag(SETTINGS_LIST),
                     state = list,
-                    contentPadding = PaddingValues(top = 32.dp, bottom = tail),
-                    verticalArrangement = Arrangement.spacedBy(56.dp),
+                    contentPadding = PaddingValues(top = 32.dp, bottom = 64.dp),
                 ) {
-                    itemsIndexed(parts, key = { _, part -> part.section.name }) { _, part ->
-                        Column(
-                            Modifier
-                                .focusRequester(sections.getValue(part.section))
-                                .focusGroup(),
-                        ) {
-                            SettingsTitle(part.section.label)
-                            part.content()
+                    shownPart?.let { part ->
+                        item(key = part.section.name) {
+                            Column(Modifier.focusRequester(pane).focusGroup()) {
+                                SettingsTitle(part.section.label)
+                                part.content()
+                            }
                         }
                     }
                 }
@@ -704,4 +767,5 @@ internal const val SETTINGS_HEADER = "settings-header"
 internal const val SETTINGS_ART = "settings-art"
 internal const val SETTINGS_MENU = "settings-menu"
 internal const val SETTINGS_LIST = "settings-list"
+internal const val SETTINGS_SECTIONS = "settings-sections"
 internal const val SETTINGS_PROFILE = "settings-profile"

@@ -372,6 +372,64 @@ class SettingsA1Test {
         compose.onNode(hasText("Playback") and inMenu).assertIsSelected()
     }
 
+    @Test
+    @Config(qualifiers = "w960dp-h540dp-xhdpi")
+    fun `TV, the menu shows one section at a time, Sources first`() {
+        serve()
+        tv({ null })
+        compose.waitUntil(5_000) { runCatching { focused().assert(hasTestTag(SETTINGS_PROFILE)) }.isSuccess }
+        compose.onNode(hasText("Debrid services") and inList).assertExists()
+        compose.onNode(hasText("Stream choice") and inList).assertDoesNotExist()
+        compose.onNode(hasText("Playback") and inMenu).performClick()
+        compose.waitForIdle()
+        compose.onNode(hasText("Stream choice") and inList).assertExists()
+        compose.onNode(hasText("Debrid services") and inList).assertDoesNotExist()
+    }
+
+    @Test
+    @Config(qualifiers = "w390dp-h844dp-xxhdpi")
+    fun `phone, the list names each section with its line and opens its page`() {
+        serve()
+        var opened: SettingsSection? = null
+        compose.setContent {
+            MarqueeTheme(Form.Phone) {
+                PhoneSettings(me, profileLine(false), null, {}, parts(), onSection = {
+                    opened =
+                        it
+                })
+            }
+        }
+        compose.waitForIdle()
+        compose.onNodeWithText("Debrid services").assertDoesNotExist()
+        compose.onNodeWithTag(SETTINGS_LIST).performScrollToIndex(1)
+        compose.onNodeWithText(SettingsSection.Sources.summary).assertExists()
+        compose.onNodeWithText("Sources").performClick()
+        compose.runOnIdle { assertEquals(SettingsSection.Sources, opened) }
+    }
+
+    @Test
+    @Config(qualifiers = "w390dp-h844dp-xxhdpi")
+    fun `phone, a section's page has its title and its rows`() {
+        serve()
+        compose.setContent {
+            MarqueeTheme(
+                Form.Phone,
+            ) { PhoneSettings(me, profileLine(false), null, {}, parts(), SettingsSection.Playback) }
+        }
+        compose.waitForIdle()
+        compose.onNodeWithText("Playback").assertExists()
+        compose.onNodeWithText("Stream choice").assertExists()
+        compose.onNodeWithText("Debrid services").assertDoesNotExist()
+        compose.onNodeWithTag(SETTINGS_HEADER).assertDoesNotExist()
+    }
+
+    @Test
+    fun `a route's section name reads back as its section`() {
+        for (s in SettingsSection.entries) assertSame(s, settingsSection(s.name))
+        assertNull(settingsSection("Nope"))
+        assertNull(settingsSection(null))
+    }
+
     /** WCAG contrast of [ink] on [fill] laid on [art]. */
     private fun contrast(
         ink: Color,
@@ -468,7 +526,7 @@ class SettingsA1Test {
         compose.waitForIdle()
         artLanded()
         shot("settings-phone")
-        compose.onNodeWithTag(SETTINGS_LIST).performScrollToIndex(3)
+        compose.onNodeWithTag(SETTINGS_LIST).performScrollToIndex(1)
         compose.waitForIdle()
         shot("settings-phone-scrolled")
     }

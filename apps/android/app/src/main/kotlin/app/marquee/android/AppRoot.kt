@@ -290,6 +290,12 @@ private fun AppNav(
         backStack.addAll(next)
     }
 
+    // Home's and Discover's Add an addon: Settings > Sources (TV's Settings opens on it).
+    fun addAnAddon() {
+        choose(Route.Settings)
+        if (!tv) backStack.add(Route.SettingsSection(SettingsSection.Sources.name))
+    }
+
     // A title page's link (a genre, a name) keeps the title under the place it opens: Back returns to it.
     fun link(place: Route) {
         val next = linkedTo(routes, place)
@@ -372,6 +378,32 @@ private fun AppNav(
 
     val content: @Composable () -> Unit = {
         val fade = screenFade(Marquee.panelMs)
+        // Settings and one of its sections (the phone's drill-in) share every link.
+        val settings: @Composable (String?) -> Unit = { section ->
+            SettingsScreen(
+                session,
+                gate,
+                art = settingsArt(app.home.rows, app.home.heroes, kids = gate.snapshot?.kids == true),
+                onProfiles = { backStack.add(Route.Profiles) },
+                onEditProfile = { backStack.add(Route.EditProfile(it)) },
+                onManageProfiles = { backStack.add(Route.ManageProfiles) },
+                sync,
+                marquee.accounts,
+                onSignIn = { backStack.add(if (tv) Route.TvSignIn else Route.SignIn(firstRun = false)) },
+                onAddons = { backStack.add(Route.Addons) },
+                onImport = { backStack.add(Route.Import) },
+                onSync = { backStack.add(Route.Sync) },
+                onDebrid = { backStack.add(Route.Debrid) },
+                onTrakt = { backStack.add(Route.Trakt) },
+                onHomeRows = { backStack.add(Route.HomeRows) },
+                onFindAddons = { backStack.add(Route.FindAddons) },
+                onStreamChoice = { backStack.add(Route.StreamChoice) },
+                onDefaults = { backStack.add(Route.Defaults(DefaultsMode.Settings)) },
+                onPlugins = { backStack.add(Route.Plugins) },
+                section = section,
+                onSection = { backStack.add(Route.SettingsSection(it)) },
+            )
+        }
         NavDisplay(
             backStack = backStack,
             onBack = {
@@ -560,7 +592,7 @@ private fun AppNav(
                                 onOpen = ::open,
                                 onPlay = ::playTile,
                                 onSetup = { backStack.add(Route.Onboarding) },
-                                onAddons = { choose(Route.Settings) },
+                                onAddons = ::addAnAddon,
                                 rowsHidden = rowsHidden,
                                 onHomeRows = onHomeRows,
                                 card = card,
@@ -572,7 +604,7 @@ private fun AppNav(
                                 onOpen = ::open,
                                 onPlay = ::playTile,
                                 onSetup = { backStack.add(Route.Onboarding) },
-                                onAddons = { choose(Route.Settings) },
+                                onAddons = ::addAnAddon,
                                 rowsHidden = rowsHidden,
                                 onHomeRows = onHomeRows,
                                 card = card,
@@ -598,7 +630,7 @@ private fun AppNav(
                             request = app.discoverRequest,
                             onRequestSent = { app.discoverRequest = null },
                             onSetup = { backStack.add(Route.Onboarding) },
-                            onAddons = { choose(Route.Settings) },
+                            onAddons = ::addAnAddon,
                             focus = app.discoverFocus,
                         )
                     }
@@ -650,29 +682,8 @@ private fun AppNav(
                         )
                     }
                     entry<Route.EditProfile> { route -> EditProfileScreen(gate, session, route.id, onDone = ::pop) }
-                    entry<Route.Settings> {
-                        SettingsScreen(
-                            session,
-                            gate,
-                            art = settingsArt(app.home.rows, app.home.heroes, kids = gate.snapshot?.kids == true),
-                            onProfiles = { backStack.add(Route.Profiles) },
-                            onEditProfile = { backStack.add(Route.EditProfile(it)) },
-                            onManageProfiles = { backStack.add(Route.ManageProfiles) },
-                            sync,
-                            marquee.accounts,
-                            onSignIn = { backStack.add(if (tv) Route.TvSignIn else Route.SignIn(firstRun = false)) },
-                            onAddons = { backStack.add(Route.Addons) },
-                            onImport = { backStack.add(Route.Import) },
-                            onSync = { backStack.add(Route.Sync) },
-                            onDebrid = { backStack.add(Route.Debrid) },
-                            onTrakt = { backStack.add(Route.Trakt) },
-                            onHomeRows = { backStack.add(Route.HomeRows) },
-                            onFindAddons = { backStack.add(Route.FindAddons) },
-                            onStreamChoice = { backStack.add(Route.StreamChoice) },
-                            onDefaults = { backStack.add(Route.Defaults(DefaultsMode.Settings)) },
-                            onPlugins = { backStack.add(Route.Plugins) },
-                        )
-                    }
+                    entry<Route.Settings> { settings(null) }
+                    entry<Route.SettingsSection> { route -> settings(route.id) }
                     entry<Route.Addons> {
                         AddonsScreen(
                             session,
