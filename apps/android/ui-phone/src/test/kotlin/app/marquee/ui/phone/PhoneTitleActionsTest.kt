@@ -10,6 +10,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.test.SemanticsMatcher
@@ -33,6 +34,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToIndex
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.unit.dp
 import app.marquee.core.client.CoreClient
 import app.marquee.core.client.CoreJson
@@ -795,5 +797,67 @@ class PhoneTitleActionsTest {
         // Over art, Back is the round button, spoken "Back".
         val back = compose.onNodeWithContentDescription("Back").getBoundsInRoot()
         assertTrue(name.top >= back.bottom, "the name starts at ${name.top}, the link ends at ${back.bottom}")
+    }
+
+    /**
+     * R4 (Pixel walk 2026-10-30 F5): once the page scrolls, the status bar and Back's row take the page color, so what
+     * scrolls up (Play, a cover's printed title) passes under the bar and never sits under Back. At rest there is no
+     * bar: the art runs to the top under Back alone.
+     */
+    @Test
+    @Config(qualifiers = "w411dp-h740dp")
+    fun `once the page scrolls a bar of the page color holds Back, and at rest there is none`() {
+        client.attach { text ->
+            val msg = CoreJson.parseToJsonElement(text).jsonObject
+            val id = msg["id"]?.jsonPrimitive?.longOrNull ?: return@attach
+            val result =
+                if (msg["op"]?.jsonPrimitive?.content == "subscribe") {
+                    """{"sub":7,"snapshot":${CoreJson.encodeToString(TitleSnapshot.serializer(), wordy)}}"""
+                } else {
+                    "{}"
+                }
+            client.onMessage("""{"id":$id,"ok":true,"result":$result}""")
+        }
+        val view = TitleView(client, scope, "movie", "tt1")
+        compose.setContent {
+            MarqueeTheme(Form.Phone) {
+                PhoneShell(Route.Home, showTabs = false, onSelect = {}, statusStrip = false, onBack = {}) {
+                    PhoneTitle(view, null, onPlay = {
+                        _,
+                        _,
+                        ->
+                    }, onVersions = {}, onEpisode = {}, onEpisodeVersions = {})
+                }
+            }
+        }
+        compose.waitForIdle()
+        view.open()
+        compose.waitUntil(120_000) {
+            Snapshot.sendApplyNotifications()
+            compose.onAllNodesWithTag(TITLE_ART_TAG).fetchSemanticsNodes().isNotEmpty()
+        }
+
+        fun bars() = compose.onAllNodesWithTag(TITLE_BAR_TAG).fetchSemanticsNodes()
+        assertTrue(bars().isEmpty(), "a bar over the art at rest")
+        // A short scroll, the art still under the status bar: the cover's top already reaches Back's row.
+        compose
+            .onAllNodes(hasScrollAction())
+            .onFirst()
+            .performSemanticsAction(SemanticsActions.ScrollBy) { it(0f, 40f * compose.density.density) }
+        compose.waitForIdle()
+        val bar = bars().singleOrNull()?.boundsInRoot ?: error("no bar after a scroll")
+        val back = compose.onNodeWithContentDescription("Back").getBoundsInRoot()
+        val root = compose.onRoot().fetchSemanticsNode().boundsInRoot
+        assertTrue(bar.left <= 0f && bar.right >= root.right, "the bar spans ${bar.left}..${bar.right}")
+        assertTrue(
+            bar.top <= 0f && dp(bar.bottom) >= back.bottom.value,
+            "the bar ends at ${dp(bar.bottom)} dp, Back at ${back.bottom}",
+        )
+        compose
+            .onAllNodes(hasScrollAction())
+            .onFirst()
+            .performSemanticsAction(SemanticsActions.ScrollBy) { it(0f, -400f * compose.density.density) }
+        compose.waitForIdle()
+        assertTrue(bars().isEmpty(), "the bar stayed back at the top")
     }
 }

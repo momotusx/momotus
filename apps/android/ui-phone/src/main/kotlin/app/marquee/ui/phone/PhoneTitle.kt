@@ -24,7 +24,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
-import androidx.compose.foundation.layout.windowInsetsTopHeight
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -44,6 +43,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
@@ -192,8 +192,7 @@ fun PhoneTitle(
             val list = rememberLazyListState()
             val bar = WindowInsets.statusBars.getTop(LocalDensity.current)
             // The page reaches the status bar once the artwork has scrolled out from under it (without
-            // artwork, at the first scroll). From then on a strip of page color sits behind the bar,
-            // so its icons never cross the text, and they take the page's colors.
+            // artwork, at the first scroll). From then on its icons take the page's colors.
             val underBar by remember(bar, hasArt) {
                 derivedStateOf {
                     val first = list.layoutInfo.visibleItemsInfo.firstOrNull() ?: return@derivedStateOf false
@@ -201,6 +200,13 @@ fun PhoneTitle(
                 }
             }
             if (hasArt && !underBar) LightStatusBarIcons()
+            val scrolled by remember {
+                derivedStateOf {
+                    list.firstVisibleItemIndex > 0 ||
+                        list.firstVisibleItemScrollOffset > 0
+                }
+            }
+            val barFill by animateFloatAsState(if (scrolled) 1f else 0f, tween(Marquee.panelMs), label = "titleBar")
             menuFor?.let { episode ->
                 ActionMenu(
                     title = TitleCopy.episode(episode).removePrefix("Watched, "),
@@ -401,12 +407,18 @@ fun PhoneTitle(
                         item(key = "details") { FactsTable(facts, Modifier.padding(horizontal = side).fillMaxWidth()) }
                     }
                 }
-                if (underBar) {
+                // Once the page scrolls, the status bar and Back's row take the page color, as the iPhone's
+                // navigation bar does at a scroll edge (R4): what scrolls up passes under the bar, so Back never
+                // sits on Play or on a printed logo. At rest the art runs to the top under Back alone.
+                if (barFill > 0f) {
                     Box(
                         Modifier
                             .fillMaxWidth()
-                            .windowInsetsTopHeight(WindowInsets.statusBars)
-                            .background(Marquee.colors.bg),
+                            .graphicsLayer { alpha = barFill }
+                            .background(Marquee.colors.bg)
+                            .windowInsetsPadding(WindowInsets.statusBars)
+                            .height(BACK_ROW)
+                            .testTag(TITLE_BAR_TAG),
                     )
                 }
             }
@@ -418,6 +430,9 @@ private const val HERO_RATIO = 1.45f
 
 /** The title's artwork, for tests. */
 internal const val TITLE_ART_TAG = "title-art"
+
+/** The page-colored bar behind the status bar and Back once the page scrolls, for tests. */
+internal const val TITLE_BAR_TAG = "title-bar"
 
 /** The rated cover's width on a phone: the band's digits stay legible from 200 dp up. */
 private val COVER_WIDTH = 200.dp
