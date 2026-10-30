@@ -28,6 +28,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.unit.Dp
+import coil3.Image
 import coil3.ImageLoader
 import coil3.SingletonImageLoader
 import coil3.compose.AsyncImage
@@ -291,6 +292,8 @@ fun Backdrop(
     lag: (() -> Float)? = null,
 ) {
     val page = Marquee.colors.bg
+    // The last picture that landed, with its address.
+    var landed by remember { mutableStateOf<Pair<String, Image>?>(null) }
     val scrims =
         Modifier.drawWithCache {
             fun stops(list: List<ScrimStop>) = list.map { it.at to page.copy(alpha = it.alpha) }.toTypedArray()
@@ -335,8 +338,23 @@ fun Backdrop(
             )
         }
         if (url != null) {
+            // A new picture (the hero's backdrop turned into TMDB's scene frame) fades in over the last one that
+            // landed, held as its placeholder, so the box never goes blank between them.
+            val context = LocalContext.current
+            val request =
+                remember(url) {
+                    ImageRequest
+                        .Builder(context)
+                        .data(url)
+                        .apply {
+                            landed?.takeIf { it.first != url }?.let {
+                                placeholder(it.second)
+                                crossfade(true)
+                            }
+                        }.build()
+                }
             AsyncImage(
-                model = url,
+                model = request,
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 alignment = alignment,
@@ -352,7 +370,10 @@ fun Backdrop(
                         }
                     },
                 onError = { onError?.invoke() },
-                onSuccess = { onSuccess?.invoke() },
+                onSuccess = {
+                    landed = url to it.result.image
+                    onSuccess?.invoke()
+                },
             )
         }
     }

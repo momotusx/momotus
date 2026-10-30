@@ -30,6 +30,9 @@ struct ArtImage: View {
                     Image(decorative: art.image, scale: 1)
                         .resizable()
                         .aspectRatio(contentMode: mode)
+                        // One view per picture: a new one (the hero's backdrop turned into TMDB's scene frame)
+                        // fades in as the last one fades out, never a cut.
+                        .id(ObjectIdentifier(art))
                         .transition(.opacity)
                 } else if let underArt {
                     Image(decorative: underArt.image, scale: 1)
