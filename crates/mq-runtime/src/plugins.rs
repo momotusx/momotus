@@ -287,6 +287,15 @@ fn text(v: &Value, key: &str, max: usize) -> String {
         .unwrap_or_default()
 }
 
+/// A repository's or provider's name, without the punctuation some put
+/// first to sort it first ("!DiziBal" reads "DiziBal").
+fn label(v: &Value) -> String {
+    let name = text(v, "name", NAME_MAX);
+    (name.trim_start_matches(|c: char| c.is_ascii_punctuation() && !matches!(c, '(' | '[')))
+        .trim_start()
+        .to_owned()
+}
+
 fn words(v: &Value, key: &str) -> Vec<String> {
     (v.get(key).and_then(Value::as_array).into_iter().flatten())
         .filter_map(Value::as_str)
@@ -334,7 +343,7 @@ pub(crate) fn parse_manifest(base: &Url, body: &[u8]) -> Result<Repo, String> {
         if types.is_empty() {
             types = vec!["movie".into(), "tv".into()];
         }
-        let name = text(e, "name", NAME_MAX);
+        let name = label(e);
         providers.push(Provider {
             id: id.to_owned(),
             name: if name.is_empty() { id.to_owned() } else { name },
@@ -349,7 +358,7 @@ pub(crate) fn parse_manifest(base: &Url, body: &[u8]) -> Result<Repo, String> {
     if providers.is_empty() {
         return Err("Its manifest lists no providers.".into());
     }
-    let name = text(&v, "name", NAME_MAX);
+    let name = label(&v);
     Ok(Repo {
         name: if name.is_empty() {
             base.host_str().unwrap_or_default().to_owned()
@@ -1147,8 +1156,8 @@ mod tests {
     }
 
     #[test]
-    fn names_lose_their_emoji() {
-        // Real names from D3adlyRocket's All-in-One-Nuvio and mooncrown04's manifests (2026-10-30).
+    fn names_lose_emoji_and_sort_marks() {
+        // Real names from the All-in-One-Nuvio, MoOnCrOwN and Manitux manifests (2026-10-30).
         let base = Url::parse("https://example.com/repo/manifest.json").unwrap();
         let body = r#"{"name": "MoOnCrOwN-NUVİO ✨", "description": "4K • 1080p Movies",
             "scrapers": [
@@ -1158,6 +1167,8 @@ mod tests {
             {"id": "d", "name": "🗡️ AnimeWorld", "filename": "d.js"},
             {"id": "e", "name": "🫰 OnlyKDrama", "filename": "e.js"},
             {"id": "f", "name": "Vid 🪨 Rock", "filename": "f.js"},
+            {"id": "h", "name": "!DiziBal", "filename": "h.js"},
+            {"id": "i", "name": "[TR] Dizi", "filename": "i.js"},
             {"id": "g", "name": "🌸", "filename": "g.js"}
         ]}"#;
         let repo = parse_manifest(&base, body.as_bytes()).unwrap();
@@ -1173,6 +1184,8 @@ mod tests {
                 "AnimeWorld",
                 "OnlyKDrama",
                 "Vid Rock",
+                "DiziBal",
+                "[TR] Dizi",
                 "g"
             ]
         );
