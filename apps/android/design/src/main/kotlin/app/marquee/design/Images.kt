@@ -329,12 +329,13 @@ fun Backdrop(
                         .placeholderMemoryCacheKey(drawnKey(SingletonImageLoader.get(context), under))
                         .build()
                 }
+            // It fades with the picture, or it would hold the box over the trailer the picture faded for.
             AsyncImage(
                 model = request,
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 alignment = alignment,
-                modifier = Modifier.matchParentSize(),
+                modifier = Modifier.matchParentSize().graphicsLayer { alpha = artAlpha() },
             )
         }
         if (url != null) {
