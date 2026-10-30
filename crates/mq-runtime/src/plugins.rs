@@ -702,9 +702,10 @@ async fn script(core: &Core, p: &Provider) -> Option<String> {
 }
 
 /// The rows provider `p` of repository `repo` gives for `ask`: an answer
-/// kept for 10 minutes, else a call in the pool. A call that throws on a
-/// TMDB id runs once more with the IMDb id, which some repositories read
-/// without a TMDB key of their own.
+/// kept for 10 minutes, else a call in the pool. A call that throws or finds
+/// nothing on a TMDB id runs once more with the IMDb id, which some
+/// repositories read without a TMDB key of their own (Manitux answers an
+/// empty list to a TMDB id).
 pub(crate) async fn streams(
     core: &Core,
     repo: &str,
@@ -749,18 +750,20 @@ async fn run(
     let ids: Vec<String> = (tmdb.map(|id| id.to_string()).into_iter())
         .chain(Some(ask.imdb.clone()))
         .collect();
+    let mut answer = None;
     for id in ids {
         let outcome = {
             let _permit = core.plugins().pool.acquire().await.ok()?;
             engine::call(core, code, p, ask, id).await
         };
         match outcome {
-            Outcome::Done(found) => return Some(found),
-            Outcome::Threw(_) => continue,
+            Outcome::Done(found) if !found.is_empty() => return Some(found),
+            Outcome::Done(found) => answer = Some(found),
+            Outcome::Threw(_) => {}
             _ => return None,
         }
     }
-    None
+    answer
 }
 
 #[cfg(not(feature = "plugins"))]

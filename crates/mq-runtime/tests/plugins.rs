@@ -63,6 +63,8 @@ impl Fixture {
                 "/repo/test-film.js" => {
                     reply(200, "text/javascript", &SCRIPT.replace("{{BASE}}", &base))
                 }
+                // The provider finds nothing by the TMDB id `tmdb_77` gives.
+                "/lookup/movie/77" => reply(404, "text/plain", ""),
                 p if p.starts_with("/lookup/") => {
                     reply(200, "application/json", r#"{"title": "Fixture Film"}"#)
                 }
@@ -212,6 +214,48 @@ async fn a_provider_turned_off_runs_nothing() {
     // Removed, it is gone from the list.
     core.remove_plugin_repo(&fixture.repo()).unwrap();
     assert!(core.plugin_repos().await.unwrap().repos.is_empty());
+}
+
+/// A TMDB on loopback that answers every lookup with the film 77.
+async fn tmdb_77() -> String {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    tokio::spawn(async move {
+        while let Ok((mut socket, _)) = listener.accept().await {
+            let mut head = [0u8; 4096];
+            let _ = socket.read(&mut head).await;
+            let body = r#"{"movie_results": [{"id": 77, "vote_average": 7.0, "vote_count": 9}], "tv_results": []}"#;
+            let _ = socket
+                .write_all(&reply(200, "application/json", body))
+                .await;
+        }
+    });
+    format!("http://{addr}")
+}
+
+/// A provider that finds nothing by the TMDB id is asked again by the IMDb
+/// id: Manitux's providers read only that one and answer a TMDB id with an
+/// empty list.
+#[tokio::test]
+async fn a_provider_empty_by_tmdb_is_asked_by_imdb() {
+    let fixture = Fixture::start();
+    let core = core();
+    core.set_tmdb_host(mq_runtime::TmdbHost {
+        url: tmdb_77().await,
+        token: Some("test".into()),
+        local: true,
+    });
+    core.add_plugin_repo(&fixture.repo()).await.unwrap();
+    let view = settled(&core, film("tt0000004")).await;
+    let asked = fixture.asked();
+    assert_eq!(view.snapshot().plugins.rows.len(), 1, "{asked:?}");
+    let lookups: Vec<&String> = asked.iter().filter(|p| p.starts_with("/lookup/")).collect();
+    assert_eq!(
+        lookups,
+        ["/lookup/movie/77", "/lookup/movie/tt0000004"],
+        "{asked:?}"
+    );
 }
 
 /// A link that is no repository writes nothing.
