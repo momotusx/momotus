@@ -282,6 +282,9 @@ function Shell(props: RouteSectionProps) {
   // scrim behind the pill shows then. Scroll does not bubble, so listen in
   // the capture phase; a new page starts at its top until it scrolls.
   const [scrolled, setScrolled] = createSignal(false);
+  // The phone's page scrolls the document itself, which no element above sees. Only Back's row reads it: the
+  // scrim behind the pill stays off there, as a live layer over every frame of a fling (home-perf).
+  const [docScrolled, setDocScrolled] = createSignal(false);
   const watchScroll = (app: HTMLDivElement) => {
     app.addEventListener(
       "scroll",
@@ -291,8 +294,7 @@ function Shell(props: RouteSectionProps) {
       },
       { capture: true, passive: true },
     );
-    // The phone's page scrolls the document itself, which no element above sees.
-    const onWindow = () => setScrolled(window.scrollY > 0);
+    const onWindow = () => setDocScrolled(window.scrollY > 0);
     window.addEventListener("scroll", onWindow, { passive: true });
     onCleanup(() => window.removeEventListener("scroll", onWindow));
   };
@@ -303,7 +305,8 @@ function Shell(props: RouteSectionProps) {
         const then = takeAfterBack();
         if (then && then !== location.pathname) return navigate(then, { replace: true });
         // A new page starts at its top, but a phone's document may keep its scroll with no event to follow.
-        setScrolled(window.scrollY > 0);
+        setScrolled(false);
+        setDocScrolled(window.scrollY > 0);
         // The tab and history name the screen; a title, Versions and the
         // player name their title themselves once it is known.
         const path = location.pathname;
@@ -358,7 +361,7 @@ function Shell(props: RouteSectionProps) {
             </Show>
             <Show when={backPlace()}>
               {(place) => (
-                <div class="backbar" classList={{ bar: place() === "bar", under: scrolled() }} inert={searchOpen() || undefined}>
+                <div class="backbar" classList={{ bar: place() === "bar", under: scrolled() || docScrolled() }} inert={searchOpen() || undefined}>
                   <a
                     class="back"
                     href={parentOf(location.pathname) ?? "/"}
