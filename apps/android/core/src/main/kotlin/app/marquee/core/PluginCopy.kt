@@ -1,5 +1,6 @@
 package app.marquee.core
 
+import app.marquee.core.model.ListedRepo
 import app.marquee.core.model.PluginRepoInfo
 import app.marquee.core.model.VersionRow
 
@@ -38,6 +39,13 @@ object PluginCopy {
     const val KIDS = "Kids profiles never run plugins."
     const val NOT_AVAILABLE = "Plugins are not available in this version."
     const val SUMMARY_NONE = "Add Nuvio repositories for direct links."
+    const val DIRECTORY_TITLE = "Nuvio plugins"
+    const val DIRECTORY_FROM = "From {source}"
+    const val DIRECTORY_SEARCH = "Search plugins"
+    const val INSTALLED = "Installed"
+    const val DIRECTORY_NO_MATCH = "No repository matches."
+    const val FOR_KINDS = "for {kinds}"
+    const val LANGUAGES = "Languages: {languages}."
 
     /** Every word by its key in the shared file. */
     val ALL: Map<String, String> =
@@ -70,6 +78,13 @@ object PluginCopy {
             "kids" to KIDS,
             "notAvailable" to NOT_AVAILABLE,
             "summaryNone" to SUMMARY_NONE,
+            "directoryTitle" to DIRECTORY_TITLE,
+            "directoryFrom" to DIRECTORY_FROM,
+            "directorySearch" to DIRECTORY_SEARCH,
+            "installed" to INSTALLED,
+            "directoryNoMatch" to DIRECTORY_NO_MATCH,
+            "forKinds" to FOR_KINDS,
+            "languages" to LANGUAGES,
         )
 
     /** `template` with each `{name}` replaced by its value as plain text. */
@@ -93,6 +108,36 @@ object PluginCopy {
                 else -> "${shown.dropLast(1).joinToString(", ")} and ${shown.last()}"
             }
         return fill(SHEET_ADDS, "what" to "$n ${if (n == 1) "provider" else "providers"}: $list")
+    }
+
+    /** "8 providers for films and series. Languages: tr, en." for a listed repository's card. */
+    fun directoryLine(r: ListedRepo): String {
+        val n = r.providers.size
+        val kinds = r.types.map { if (it == "movie") "films" else it }
+        val forKinds = if (kinds.isEmpty()) "" else " " + fill(FOR_KINDS, "kinds" to kinds.joinToString(" and "))
+        val head = "$n ${if (n == 1) "provider" else "providers"}$forKinds."
+        return if (r.languages.isEmpty()) {
+            head
+        } else {
+            "$head " +
+                fill(LANGUAGES, "languages" to r.languages.joinToString(", "))
+        }
+    }
+
+    /** Lower case, accents dropped: "Türkçe" finds "turkce". */
+    private fun fold(s: String) =
+        java.text.Normalizer
+            .normalize(s, java.text.Normalizer.Form.NFD)
+            .replace(Regex("\\p{M}+"), "")
+            .lowercase()
+
+    /** Whether every word of [query] is in the repository's name, its providers' names or its languages. */
+    fun matches(
+        r: ListedRepo,
+        query: String,
+    ): Boolean {
+        val text = fold((listOf(r.name) + r.providers + r.languages).joinToString(" "))
+        return fold(query).split(Regex("\\s+")).filter { it.isNotEmpty() }.all { it in text }
     }
 
     /** The Settings row's line: repositories and the providers on in those that are on. */

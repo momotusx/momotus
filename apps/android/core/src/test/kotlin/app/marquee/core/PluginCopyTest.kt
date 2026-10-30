@@ -1,5 +1,6 @@
 package app.marquee.core
 
+import app.marquee.core.model.ListedRepo
 import app.marquee.core.model.PluginInfo
 import app.marquee.core.model.PluginRepoInfo
 import kotlinx.serialization.json.Json
@@ -20,6 +21,30 @@ class PluginCopyTest {
     @Test
     fun `the words are the shared ones, every key and no more`() {
         assertEquals(shared, PluginCopy.ALL)
+    }
+
+    @Test
+    fun `a listed repository says its providers, kinds and languages, and is found by any of them`() {
+        val r =
+            ListedRepo(
+                url = "u",
+                host = "raw.githubusercontent.com",
+                name = "Türk Plugins",
+                description = "",
+                providers = listOf("Dizibox", "HDFilmCehennemi"),
+                languages = listOf("tr"),
+                types = listOf("movie", "series"),
+                installed = false,
+            )
+        assertEquals("2 providers for films and series. Languages: tr.", PluginCopy.directoryLine(r))
+        assertEquals(
+            "1 provider.",
+            PluginCopy.directoryLine(r.copy(providers = listOf("One"), types = emptyList(), languages = emptyList())),
+        )
+        assertEquals(true, PluginCopy.matches(r, "turk"))
+        assertEquals(true, PluginCopy.matches(r, "dizibox TR"))
+        assertEquals(false, PluginCopy.matches(r, "anime"))
+        assertEquals(true, PluginCopy.matches(r, "  "))
     }
 
     @Test

@@ -22,6 +22,7 @@ import app.marquee.core.model.LostPreview
 import app.marquee.core.model.NativeStart
 import app.marquee.core.model.Network
 import app.marquee.core.model.PairingCode
+import app.marquee.core.model.PluginDirectory
 import app.marquee.core.model.PluginRepoPreview
 import app.marquee.core.model.PluginsAnswer
 import app.marquee.core.model.Prefs
@@ -309,6 +310,9 @@ class CoreOps(
 
     /** The profile's Nuvio plugin repositories and their providers; stale manifests are read again first. */
     suspend fun plugins(): PluginsAnswer = call("plugins", emptyMap(), PluginsAnswer.serializer())
+
+    /** The Nuvio repositories nuvioplugins.com lists, for Find addons (R8). */
+    suspend fun pluginDirectory(): PluginDirectory = call("pluginDirectory", emptyMap(), PluginDirectory.serializer())
 
     /** What a pasted repository link would add, for the consent sheet; writes nothing. */
     suspend fun previewPluginRepo(url: String): PluginRepoPreview =

@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
@@ -27,11 +28,14 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import app.marquee.core.PluginCopy
 import app.marquee.core.client.CoreError
+import app.marquee.core.model.ListedRepo
+import app.marquee.core.model.PluginDirectory
 import app.marquee.core.model.PluginRepoInfo
 import app.marquee.core.model.PluginRepoPreview
 import app.marquee.core.model.PluginsAnswer
 import app.marquee.core.session.CoreSession
 import app.marquee.design.ConfirmSheet
+import app.marquee.design.Form
 import app.marquee.design.Icons
 import app.marquee.design.LiveSpoken
 import app.marquee.design.Marquee
@@ -47,8 +51,145 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
+/**
+ * Find addons > Nuvio plugins (R8): the repositories nuvioplugins.com lists, in its order, each with its provider
+ * count, kinds and languages, searched on the device; Add reads one and asks on the sheet first, and one the
+ * profile has says Installed (removed in Settings > Sources > Plugins).
+ */
+@Composable
+fun PluginDirectoryScreen(session: CoreSession) {
+    val scope = rememberCoroutineScope()
+    var listed by remember { mutableStateOf<PluginDirectory?>(null) }
+    var query by remember { mutableStateOf("") }
+    var asking by remember { mutableStateOf<PluginRepoPreview?>(null) }
+    var said by remember { mutableStateOf<Pair<String, Said>?>(null) }
+    val reload: suspend () -> Unit = { listed = runCatching { session.ops.pluginDirectory() }.getOrNull() }
+    LaunchedEffect(Unit) { reload() }
+    asking?.let { p ->
+        ConfirmSheet(
+            PluginCopy.fill(PluginCopy.SHEET_TITLE, "name" to p.name),
+            listOf(
+                PluginCopy.fill(PluginCopy.SHEET_FROM, "host" to p.host),
+                PluginCopy.adds(p.providers),
+                PluginCopy.SHEET_NOTE,
+            ),
+            PluginCopy.ADD,
+            "Cancel",
+            onConfirm = {
+                asking = null
+                scope.launch {
+                    said =
+                        runCatching { session.ops.addPluginRepo(p.url) }.fold(
+                            {
+                                val added = PluginCopy.fill(PluginCopy.ADDED, "name" to p.name)
+                                p.url to Said(Place.Addons, added, failed = false)
+                            },
+                            {
+                                if (it is CancellationException) throw it
+                                p.url to couldNotAdd(it)
+                            },
+                        )
+                    reload()
+                }
+            },
+            onCancel = { asking = null },
+        )
+    }
+    val source = listed?.source.orEmpty()
+    val tv = Marquee.form == Form.Tv
+    val shown = listed?.repos.orEmpty().filter { PluginCopy.matches(it, query) }
+    LazyColumn(
+        Modifier.fillMaxSize().focusRestorer(),
+        contentPadding = pagePadding(),
+        verticalArrangement = Arrangement.spacedBy(Marquee.space.m),
+    ) {
+        item(key = "head") { BrowseHeader(PluginCopy.DIRECTORY_TITLE) }
+        item(key = "from") { Note(PluginCopy.fill(PluginCopy.DIRECTORY_FROM, "source" to source)) }
+        when {
+            listed == null -> {
+                item(key = "loading") { Note(PluginCopy.LOADING) }
+            }
+
+            listed?.repos.isNullOrEmpty() -> {
+                item(key = "na") { Note(PluginCopy.NOT_AVAILABLE) }
+            }
+
+            else -> {
+                if (!tv) {
+                    item(key = "search") {
+                        Section {
+                            MqTextField(
+                                value = query,
+                                onValueChange = { query = it },
+                                label = PluginCopy.DIRECTORY_SEARCH,
+                                placeholder = "",
+                            )
+                        }
+                    }
+                }
+                if (shown.isEmpty()) item(key = "none") { Note(PluginCopy.DIRECTORY_NO_MATCH, spoken = true) }
+                items(shown, key = { "listed:${it.url}" }) { r ->
+                    ListedCard(r, source, said?.takeIf { it.first == r.url }?.second) {
+                        scope.launch {
+                            runCatching { session.ops.previewPluginRepo(r.url) }
+                                .onSuccess { asking = it }
+                                .onFailure {
+                                    if (it is CancellationException) throw it
+                                    said = r.url to couldNotAdd(it)
+                                }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** One listed repository: name, the directory it comes from, its line and description, Add or Installed. */
+@Composable
+private fun ListedCard(
+    r: ListedRepo,
+    source: String,
+    said: Said?,
+    onAdd: () -> Unit,
+) {
+    val colors = Marquee.colors
+    Section {
+        Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.xs)) {
+            MqText(r.name, role = TextRole.Headline, weight = FontWeight.Bold, maxLines = 2)
+            MqText(
+                PluginCopy.fill(PluginCopy.DIRECTORY_FROM, "source" to source),
+                role = TextRole.Caption,
+                color = colors.dim,
+                maxLines = 1,
+            )
+            MqText(PluginCopy.directoryLine(r), role = TextRole.Caption, weight = FontWeight.SemiBold)
+            if (r.description.isNotEmpty()) {
+                MqText(
+                    r.description,
+                    role = TextRole.Caption,
+                    color = colors.muted,
+                    maxLines = 3,
+                )
+            }
+            if (said != null) LiveSpoken(said.text) { SaidLine(said, side = 0.dp) }
+            if (r.installed) {
+                MqText(PluginCopy.INSTALLED, role = TextRole.Callout, weight = FontWeight.SemiBold)
+            } else {
+                RoundButton(Icons.Plus, PluginCopy.ADD, onAdd, showLabel = true, spoken = "${PluginCopy.ADD} ${r.name}")
+            }
+        }
+    }
+}
+
 /** Why an op failed, in the core's words. */
 private fun reason(e: Throwable): String = (e as? CoreError)?.message ?: e.message ?: "Something went wrong"
+
+/** "Could not add: {reason}" under the field or the card. */
+private fun couldNotAdd(e: Throwable): Said {
+    val words = PluginCopy.fill(PluginCopy.COULD_NOT_ADD, "reason" to reason(e))
+    return Said(Place.Addons, words, failed = true)
+}
 
 /**
  * Settings > Sources > Plugins (plans/plugins-and-marketplace.md 7.7, R7): the profile's Nuvio

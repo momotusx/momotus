@@ -83,6 +83,7 @@ import app.marquee.core.FindAddonsPage
 import app.marquee.core.InstallCards
 import app.marquee.core.InstallSheetCopy
 import app.marquee.core.LinkInstall
+import app.marquee.core.PluginCopy
 import app.marquee.core.model.ListState
 import app.marquee.core.model.ListedAddon
 import app.marquee.core.session.CoreSession
@@ -286,7 +287,10 @@ fun FindAddonsScreen(
     link: LinkInstall,
     /** TV: opens the page with the link field (a remote types there; this page has no field). */
     onPasteLink: () -> Unit,
+    /** Nuvio plugins from nuvioplugins.com (R8), where plugins run. */
+    onPlugins: () -> Unit = {},
 ) {
+    val plugins by produceState(false) { value = runCatching { session.ops.plugins().available }.getOrDefault(false) }
     val holder =
         viewModel<FindAddonsHolder>(
             key = "find-addons",
@@ -459,18 +463,33 @@ fun FindAddonsScreen(
             item(key = "head") { BrowseHeader(FindAddonsCopy.TITLE, side = 0.dp) }
             item(key = "lede") { MqText(FindAddonsCopy.LEDE, color = Marquee.colors.muted) }
             item(key = "paste") {
-                if (tv) {
-                    Row {
-                        SecondaryButton(
-                            FindAddonsCopy.PASTE_LINK,
-                            onPasteLink,
-                            icon = Icons.Link,
-                            focusRequester = paste,
-                            onFocusChange = onControl,
+                // One item with the paste row, so the items the TV landing counts keep their places.
+                Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.m)) {
+                    if (tv) {
+                        Row {
+                            SecondaryButton(
+                                FindAddonsCopy.PASTE_LINK,
+                                onPasteLink,
+                                icon = Icons.Link,
+                                focusRequester = paste,
+                                onFocusChange = onControl,
+                            )
+                        }
+                    } else {
+                        PasteLink(session, link, pasteFocus)
+                    }
+                    if (plugins) {
+                        LinkRow(
+                            Icons.Power,
+                            PluginCopy.DIRECTORY_TITLE,
+                            PluginCopy.fill(
+                                PluginCopy.DIRECTORY_FROM,
+                                "source" to "nuvioplugins.com",
+                            ),
+                            onPlugins,
+                            side = 0.dp,
                         )
                     }
-                } else {
-                    PasteLink(session, link, pasteFocus)
                 }
             }
             item(key = "lists") {

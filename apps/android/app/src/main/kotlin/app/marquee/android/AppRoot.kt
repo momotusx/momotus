@@ -696,12 +696,15 @@ private fun AppNav(
                                 it == Route.Sources ||
                                     it == Route.Addons
                             }
-                        FindAddonsScreen(session, app.installCards, app.linkInstall, onPasteLink = {
+                        FindAddonsScreen(session, app.installCards, app.linkInstall, onPlugins = {
+                            backStack.add(Route.PluginDirectory)
+                        }, onPasteLink = {
                             if (fromSources) pop() else backStack.add(Route.Sources)
                         })
                     }
                     entry<Route.Debrid> { DebridScreen(session) }
                     entry<Route.Plugins> { PluginsScreen(session) }
+                    entry<Route.PluginDirectory> { PluginDirectoryScreen(session) }
                     entry<Route.Trakt> {
                         TraktScreen(
                             session,

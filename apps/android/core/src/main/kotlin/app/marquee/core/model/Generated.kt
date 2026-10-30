@@ -1108,6 +1108,24 @@ data class ListedAddon(
     val copyKey: String? = null,
 )
 
+/** One repository as the directory lists it. */
+@Serializable
+data class ListedRepo(
+    /** Its manifest link: what `previewPluginRepo` and `addPluginRepo` take. */
+    val url: String,
+    val host: String,
+    val name: String,
+    val description: String,
+    /** Its providers' names, in its order. */
+    val providers: List<String> = emptyList(),
+    /** Every language its providers name, first seen first. */
+    val languages: List<String> = emptyList(),
+    /** "movie", "series". */
+    val types: List<String> = emptyList(),
+    /** In this profile's list already. */
+    val installed: Boolean,
+)
+
 @Serializable
 @JsonClassDiscriminator("state")
 sealed interface ListState {
@@ -1335,6 +1353,16 @@ data class PlayTarget(
     val resumeMs: Long? = null,
     /** What is left of the file, from the stored duration (the figure Continue Watching uses); null when nothing was played or the duration is unknown. */
     val leftMs: Long? = null,
+)
+
+/** The `pluginDirectory` answer. */
+@Serializable
+data class PluginDirectory(
+    /** "nuvioplugins.com", for the cards' credit. */
+    val source: String,
+    /** The page could not be read or listed none: these come from the shipped snapshot. */
+    val fromSnapshot: Boolean,
+    val repos: List<ListedRepo> = emptyList(),
 )
 
 /** One provider as the apps show it, with its switch. */

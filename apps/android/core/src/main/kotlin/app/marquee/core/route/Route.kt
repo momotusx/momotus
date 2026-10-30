@@ -129,6 +129,10 @@ sealed interface Route : NavKey {
     @Serializable
     data object Plugins : Route
 
+    /** Find addons > Nuvio plugins: the repositories nuvioplugins.com lists (R8). */
+    @Serializable
+    data object PluginDirectory : Route
+
     /** The picker opened over the app (the pill or Settings): Back returns where it was. */
     @Serializable
     data object Profiles : Route
