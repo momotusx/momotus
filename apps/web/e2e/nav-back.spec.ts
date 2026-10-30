@@ -68,10 +68,27 @@ for (const { form, viewport, minSide } of forms) {
       if (await art.count()) expect(((await art.boundingBox()) as Box).y).toBeGreaterThanOrEqual(b.y + b.height);
     }
 
-    // The phone's link stays while the page scrolls.
+    // The phone's link stays while the page scrolls, and from the first scroll its row takes the page color, so what
+    // scrolls up (Play, a cover's printed title) passes under it, never under Back (R4, Pixel walk 2026-10-30 F5).
+    // At rest the art runs to the top under Back alone.
     if (form === "phone") {
+      const row = () =>
+        page.locator(".backbar").evaluate((el) => {
+          const s = getComputedStyle(el, "::before");
+          return { opacity: Number(s.opacity), top: parseFloat(s.top), height: parseFloat(s.height), width: parseFloat(s.width), bg: s.backgroundColor };
+        });
+      expect((await row()).opacity).toBe(0);
+      await page.evaluate(() => window.scrollTo(0, 40));
+      await expect.poll(async () => (await row()).opacity).toBe(1);
+      const r = await row();
+      const pageBg = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
+      expect(r.bg).toBe(pageBg);
+      expect(r.width).toBe(viewport.width);
+      expect(r.top + r.height, `the row ends at ${r.top + r.height}, Back at ${b.y + b.height}`).toBeGreaterThanOrEqual(b.y + b.height);
       await page.evaluate(() => window.scrollTo(0, 700));
       expect((await back.boundingBox())?.y).toBeLessThan(60);
+      await page.evaluate(() => window.scrollTo(0, 0));
+      await expect.poll(async () => (await row()).opacity).toBe(0);
     }
 
     // Versions, from the title: its own bar, clear of the heading.

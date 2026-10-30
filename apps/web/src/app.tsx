@@ -282,7 +282,7 @@ function Shell(props: RouteSectionProps) {
   // scrim behind the pill shows then. Scroll does not bubble, so listen in
   // the capture phase; a new page starts at its top until it scrolls.
   const [scrolled, setScrolled] = createSignal(false);
-  const watchScroll = (app: HTMLDivElement) =>
+  const watchScroll = (app: HTMLDivElement) => {
     app.addEventListener(
       "scroll",
       (e) => {
@@ -291,6 +291,9 @@ function Shell(props: RouteSectionProps) {
       },
       { capture: true, passive: true },
     );
+    // The phone's page scrolls the document itself, which no element above sees.
+    window.addEventListener("scroll", () => setScrolled(window.scrollY > 0), { passive: true });
+  };
   createEffect(
     on(
       () => location.pathname,
@@ -352,7 +355,7 @@ function Shell(props: RouteSectionProps) {
             </Show>
             <Show when={backPlace()}>
               {(place) => (
-                <div class="backbar" classList={{ bar: place() === "bar" }} inert={searchOpen() || undefined}>
+                <div class="backbar" classList={{ bar: place() === "bar", under: scrolled() }} inert={searchOpen() || undefined}>
                   <a
                     class="back"
                     href={parentOf(location.pathname) ?? "/"}
