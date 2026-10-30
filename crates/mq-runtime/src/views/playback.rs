@@ -2223,7 +2223,6 @@ fn not_here(state: &Mutex<State>) {
 
 /// The version did not start here (a swarm); a reason it did not play
 /// here, found first, stays.
-#[cfg(feature = "torrent")]
 fn failed_to_start(s: &mut State) {
     s.version_failed.get_or_insert(NOT_STARTED);
 }
