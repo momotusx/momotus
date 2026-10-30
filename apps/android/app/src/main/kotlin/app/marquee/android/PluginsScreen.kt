@@ -121,7 +121,7 @@ fun PluginDirectoryScreen(session: CoreSession) {
                                 value = query,
                                 onValueChange = { query = it },
                                 label = PluginCopy.DIRECTORY_SEARCH,
-                                placeholder = "",
+                                placeholder = PluginCopy.DIRECTORY_SEARCH,
                             )
                         }
                     }
