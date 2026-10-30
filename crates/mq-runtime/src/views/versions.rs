@@ -1340,8 +1340,8 @@ impl VersionsView {
     /// Lists one kind of version only (`setKind`, plans/plugins-and-marketplace.md
     /// 4.2), or every one again (`None`): the pick freezes, and that kind's
     /// streams rank in a pass of their own, which gives the card, the rows
-    /// and the sections. A kind no row holds, the Archive's included, lists
-    /// everything.
+    /// and the sections. A kind no row holds, the Archive's and the plugins'
+    /// included, lists everything.
     pub fn set_kind(&self, kind: Option<SourceKind>) {
         let mut state = lock(&self.state);
         if state.recommended.is_some() {
@@ -2579,8 +2579,10 @@ fn rank_kind(s: &mut State, ranking: &Ranking) {
         .cloned()
         .collect();
     s.kind_ranked = rank(streams, &input(ranking, &s.rank));
-    let archived = (s.archive_ranked.rows.iter()).any(|r| holds_kind(s, r, k));
-    if s.kind_ranked.rows.is_empty() && !archived {
+    let own_pass = (s.archive_ranked.rows.iter())
+        .chain(&s.plugins_ranked.rows)
+        .any(|r| holds_kind(s, r, k));
+    if s.kind_ranked.rows.is_empty() && !own_pass {
         s.kind = None;
         s.kind_pick = None;
         return;
@@ -2742,6 +2744,7 @@ fn render(s: &State) -> VersionsSnapshot {
         },
         plugins: SourceRows {
             rows: (s.plugins_ranked.rows.iter())
+                .filter(|r| s.kind.is_none_or(|k| holds_kind(s, r, k)))
                 .map(|r| row_dto(r, kept, &s.rank))
                 .collect(),
             pending: s.plugins_pending,
@@ -2753,14 +2756,15 @@ fn render(s: &State) -> VersionsSnapshot {
 
 /// Each kind the listed rows hold, in the chips' order (torrents, direct
 /// links, debrid), with the rows holding a source of it, from the pass of
-/// every kind and the Archive's, so the label and the list agree: a row of a
-/// torrent and a direct link counts under both.
+/// every kind, the Archive's and the plugins', so the label and the list
+/// agree: a row of a torrent and a direct link counts under both.
 fn kinds(s: &State) -> Vec<KindChip> {
     [SourceKind::Torrent, SourceKind::Direct, SourceKind::Debrid]
         .into_iter()
         .filter_map(|k| {
             let held: Vec<Vec<&ParsedStream>> = (s.ranked.rows.iter())
                 .chain(&s.archive_ranked.rows)
+                .chain(&s.plugins_ranked.rows)
                 .map(|r| {
                     let all = std::iter::once(&r.stream).chain(&r.failover);
                     all.filter(|st| kind_of(s, st) == k).collect()

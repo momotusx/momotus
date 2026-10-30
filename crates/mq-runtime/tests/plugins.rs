@@ -3,11 +3,11 @@
 //! repository (`mq-plugins/tests/fixtures/plugin-repo`) served over https on
 //! loopback. No third-party repository is asked.
 
-use mq_library::OWNER;
+use mq_library::{AddonRow, OWNER};
 use mq_protocol::Source;
 use mq_runtime::defaults::{DefaultChoice, DefaultInstalled};
 use mq_runtime::{Core, RowOrigin, TitleFacts, VersionsParams, VersionsView};
-use mq_streams::{DeviceCaps, StreamPrefs, Target};
+use mq_streams::{DeviceCaps, SourceKind, StreamPrefs, Target};
 use std::net::IpAddr;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -188,6 +188,85 @@ async fn a_repository_s_provider_lists_rows_from_plugins() {
             .asked()
             .contains(&"/lookup/movie/tt0000001".to_owned())
     );
+}
+
+/// An addon on loopback that answers every stream request with `body`.
+async fn stream_addon(body: String) -> AddonRow {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    tokio::spawn(async move {
+        while let Ok((mut socket, _)) = listener.accept().await {
+            let mut head = [0u8; 4096];
+            let _ = socket.read(&mut head).await;
+            let _ = socket
+                .write_all(&reply(200, "application/json", &body))
+                .await;
+        }
+    });
+    let manifest = serde_json::json!({
+        "id": "films", "version": "1.0.0", "name": "Films",
+        "types": ["movie"], "resources": ["stream"], "catalogs": [], "idPrefixes": ["tt"]
+    });
+    AddonRow {
+        transport_url: format!("http://{addr}/manifest.json"),
+        manifest_json: manifest.to_string(),
+        position: 0,
+        enabled: true,
+        allow_private: true,
+    }
+}
+
+/// The kind chips count the plugins' rows as the direct links they are
+/// (plans/plugins-and-marketplace.md 4.1, 4.2), so the label and the list
+/// agree: under Debrid "From plugins" lists nothing, under Direct links it
+/// lists its row, which plays, and that chip stays on though no addon row
+/// is a direct link.
+#[tokio::test]
+async fn the_kind_chips_count_and_filter_the_plugin_rows() {
+    let fixture = Fixture::start();
+    let core = core();
+    core.set_debrid_keys(&[(mq_runtime::StoreId::RealDebrid, "rd".into())]);
+    core.add_plugin_repo(&fixture.repo()).await.unwrap();
+    let body = serde_json::json!({"streams": [
+        {"name": "Films\n1080p", "title": "Fixture.Film.2001.1080p.BluRay.x264-GRP",
+         "infoHash": "a".repeat(40), "fileIdx": 0,
+         "behaviorHints": {"cached": true, "service": "realdebrid", "videoSize": 4_000_000_000u64}}
+    ]});
+    let addon = stream_addon(body.to_string()).await;
+    core.library()
+        .set_addons(OWNER, &[addon], &core.hlc())
+        .unwrap();
+    let view = settled(&core, film("tt0000005")).await;
+    let counts = |view: &VersionsView| -> Vec<(SourceKind, u32)> {
+        (view.snapshot().kinds.iter())
+            .map(|k| (k.kind, k.count))
+            .collect()
+    };
+    assert_eq!(
+        counts(&view),
+        [(SourceKind::Direct, 1), (SourceKind::Debrid, 1)]
+    );
+    let row = view.snapshot().plugins.rows[0].clone();
+    assert_eq!(row.kind, SourceKind::Direct);
+    view.set_kind(Some(SourceKind::Debrid));
+    let s = view.snapshot();
+    assert_eq!(s.selected_kind, Some(SourceKind::Debrid));
+    assert!(s.plugins.rows.is_empty() && s.recommended.is_some());
+    view.set_kind(Some(SourceKind::Direct));
+    let s = view.snapshot();
+    assert_eq!(
+        s.selected_kind,
+        Some(SourceKind::Direct),
+        "the chip stays on"
+    );
+    assert!(s.recommended.is_none() && s.rows.is_empty());
+    assert_eq!(s.plugins.rows.len(), 1);
+    assert_eq!(view.candidates(&row.key).len(), 1, "it plays");
+    view.set_kind(None);
+    let s = view.snapshot();
+    assert_eq!(s.plugins.rows.len(), 1);
+    assert!(s.recommended.is_some());
 }
 
 /// A provider turned off runs nothing; turned on again it runs.
