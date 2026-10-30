@@ -344,6 +344,7 @@ impl HomeView {
             header.clone(),
         ));
         tasks.spawn(watch_hero_play(core.clone(), header.clone()));
+        tasks.spawn(watch_hero_backdrops(core.clone(), header.clone()));
         Self {
             core: core.clone(),
             rows,
@@ -1280,6 +1281,58 @@ async fn watch_hero_play(core: Core, header: SharedObservable<HomeHeader>) {
             () = tokio::time::sleep_until(retry.unwrap_or_else(tokio::time::Instant::now)), if retry.is_some() => {
                 dirty = true;
             }
+        }
+    }
+}
+
+/// Each hero page's backdrop is TMDB's textless scene frame of its title
+/// when TMDB holds one, the rule first run's still follows
+/// (plans/batch-2.md F7): a catalog's own background is often key art, a
+/// collage on a flat ground. A page shows its addon's background until the
+/// frame is known and keeps it when TMDB has none or cannot be asked, so
+/// nothing waits for TMDB. Each title is asked once per view; TMDB's answers
+/// are kept a day (`tmdb_textless_backdrop`). ponytail: a failed ask keeps
+/// the addon's background for the view's life; retry it if that shows.
+async fn watch_hero_backdrops(core: Core, header: SharedObservable<HomeHeader>) {
+    // No token, or a kids profile (whose Home has no hero): nothing to ask, for the view's life.
+    if !core.tmdb_ready() {
+        return;
+    }
+    let mut pages = header.subscribe();
+    // Answered, by tile id: the frame, or none.
+    let mut frames: HashMap<String, Option<String>> = HashMap::new();
+    let mut asked: HashSet<String> = HashSet::new();
+    let mut asks = futures_util::stream::FuturesUnordered::new();
+    loop {
+        for hero in header.get().heroes {
+            let tile = hero.tile;
+            if asked.insert(tile.id.clone()) {
+                let core = core.clone();
+                asks.push(async move {
+                    let frame = core.tmdb_textless_backdrop(&tile.kind, &tile.id).await;
+                    (tile.id, frame)
+                });
+            }
+        }
+        header.update_if(|current| {
+            let mut changed = false;
+            for hero in &mut current.heroes {
+                if let Some(Some(frame)) = frames.get(&hero.tile.id)
+                    && hero.tile.background.as_ref() != Some(frame)
+                {
+                    hero.tile.background = Some(frame.clone());
+                    changed = true;
+                }
+            }
+            changed
+        });
+        tokio::select! {
+            Some((id, frame)) = asks.next() => {
+                frames.insert(id, frame);
+            }
+            page = pages.next() => if page.is_none() {
+                return;
+            },
         }
     }
 }

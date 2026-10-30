@@ -120,7 +120,7 @@ pub(crate) struct Memory {
     logos: Kept<HashMap<u64, String>>,
     /// TMDB's cast by `kind:id`, kept a day.
     credits: Kept<Vec<tmdb::Credit>>,
-    /// The best textless backdrop's path by TMDB movie id (first run's still), kept a day.
+    /// The best textless backdrop's path by TMDB `kind:id` (first run's still, Home's hero), kept a day.
     stills: Kept<Option<String>>,
 }
 
@@ -346,47 +346,24 @@ impl Core {
         .await
     }
 
-    /// TMDB's best textless backdrop of an IMDb movie, as an image URL (first
-    /// run's still, plans/batch-2.md R2): a scene frame with nothing printed
-    /// on it. `None` when TMDB has none, does not know the id as a movie, or
-    /// cannot be asked (as `tmdb_find`). Kept a day by TMDB id.
-    pub(crate) async fn tmdb_textless_backdrop(&self, imdb: &str) -> Option<String> {
-        let id = self.tmdb_find(imdb, Some("movie")).await?.id;
-        let key = id.to_string();
-        let url = |path: Option<String>| {
-            path.map(|p| format!("{}/{}{p}", tmdb::IMAGES, tmdb::STILL_SIZE))
-        };
-        let trakt = self.trakt();
-        let client = {
-            let memory = lock(&trakt.lookups);
-            let now = Instant::now();
-            match memory.stills.held(&key, now) {
-                Held::Answer(path) => return url(path),
-                Held::Resting => return None,
-                Held::Nothing => {}
-            }
-            if memory.tmdb_quiet.is_some_and(|until| now < until) {
-                return None;
-            }
-            let host = &memory.tmdb_host;
-            Tmdb::new(
-                trakt.http.clone(),
-                &host.url,
-                host.token.as_deref()?,
-                host.local,
+    /// TMDB's best textless backdrop of an IMDb title of `kind` (`movie` or
+    /// `series`), as an image URL (first run's still and Home's hero,
+    /// plans/batch-2.md R2 and F7): a scene frame with nothing printed on it.
+    /// `None` when TMDB has none, does not know the id as that kind, or
+    /// cannot be asked (as `tmdb_find`). Kept a day by TMDB kind and id.
+    pub(crate) async fn tmdb_textless_backdrop(&self, kind: &str, imdb: &str) -> Option<String> {
+        let found = self.tmdb_find(imdb, Some(kind)).await?;
+        let (kind, id) = (found.kind, found.id);
+        let path = self
+            .tmdb_kept(
+                |m| &mut m.stills,
+                format!("{kind}:{id}"),
+                move |tmdb| async move { tmdb.images(kind, id).await },
+                tmdb::textless_backdrop,
+                None,
             )
-        };
-        let answer = client.movie_images(id).await;
-        let mut memory = lock(&trakt.lookups);
-        let now = Instant::now();
-        quiet_tmdb(&mut memory, &answer, now);
-        let got = kept(&answer, tmdb::textless_backdrop, None)?;
-        let path = match &got {
-            Got::Answer(path) => path.clone(),
-            Got::Rest => None,
-        };
-        memory.stills.put(key, got, now);
-        url(path)
+            .await??;
+        Some(format!("{}/{}{path}", tmdb::IMAGES, tmdb::STILL_SIZE))
     }
 
     /// Trakt's score (rating 0 to 10, votes) for a title of `kind` (`movie`

@@ -392,7 +392,9 @@ impl Core {
         if self.tmdb_ready() {
             let textless = async {
                 for m in metas.iter().take(STILL_TRIES) {
-                    if let Some(background) = self.tmdb_textless_backdrop(&m.id).await {
+                    if let Some(background) =
+                        self.tmdb_textless_backdrop(&catalog.r#type, &m.id).await
+                    {
                         return Some(FirstRunStill {
                             background,
                             logo: m.logo.as_ref().map(|u| u.to_string()),

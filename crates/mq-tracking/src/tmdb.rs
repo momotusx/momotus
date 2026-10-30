@@ -74,12 +74,16 @@ impl Tmdb {
         self.get("/3/watch/providers/movie").await
     }
 
-    /// A movie's images that carry no language (first run's still,
-    /// plans/batch-2.md R2): textless backdrops, frames with no title
+    /// The images of TMDB's title `id` of `kind` (`movie` or `series`) that
+    /// carry no language (first run's still and Home's hero,
+    /// plans/batch-2.md R2 and F7): textless backdrops, frames with no title
     /// printed on them.
-    pub async fn movie_images(&self, id: u64) -> Answer {
-        self.get(&format!("/3/movie/{id}/images?include_image_language=null"))
-            .await
+    pub async fn images(&self, kind: &str, id: u64) -> Answer {
+        let kind = if kind == "movie" { "movie" } else { "tv" };
+        self.get(&format!(
+            "/3/{kind}/{id}/images?include_image_language=null"
+        ))
+        .await
     }
 
     async fn get(&self, path: &str) -> Answer {
@@ -104,7 +108,8 @@ impl Tmdb {
 /// Where TMDB serves a logo of `size` ("w154") at `path` ("/abc.png").
 pub const IMAGES: &str = "https://image.tmdb.org/t/p";
 
-/// The size first run asks its still at: a phone's or a TV's full width.
+/// The size first run's still and Home's hero ask a textless backdrop at: a
+/// phone's or a TV's full width.
 pub const STILL_SIZE: &str = "w1280";
 
 /// An image path TMDB gave ("/abc.png"), only as a plain file name: nothing
@@ -168,7 +173,7 @@ pub fn credits(body: &Value) -> Vec<Credit> {
         .collect()
 }
 
-/// The best textless backdrop of a `movie_images` answer, as its path: a
+/// The best textless backdrop of an `images` answer, as its path: a
 /// landscape frame at least 1280 wide with no language (no title or words
 /// printed on it), the best voted first, the first listed on a tie.
 pub fn textless_backdrop(body: &Value) -> Option<String> {

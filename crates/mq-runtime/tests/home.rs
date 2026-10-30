@@ -2025,3 +2025,103 @@ async fn a_hero_series_without_episodes_offers_what_its_meta_allows() {
         }
     }
 }
+
+/// A TMDB fake answering after `delay`: each request line starting `GET <prefix>` gets its body; anything else a
+/// 404.
+async fn fake_tmdb(delay: Duration, answers: &[(&str, &'static str)]) -> String {
+    let answers: Vec<(String, &'static str)> = answers
+        .iter()
+        .map(|(p, b)| (format!("GET {p}"), *b))
+        .collect();
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    tokio::spawn(async move {
+        while let Ok((mut socket, _)) = listener.accept().await {
+            let answers = answers.clone();
+            tokio::spawn(async move {
+                let mut buf = [0u8; 4096];
+                let n = socket.read(&mut buf).await.unwrap_or(0);
+                tokio::time::sleep(delay).await;
+                let head = String::from_utf8_lossy(&buf[..n]);
+                let resp = match answers.iter().find(|(p, _)| head.starts_with(p.as_str())) {
+                    Some((_, body)) => format!(
+                        "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{body}",
+                        body.len()
+                    ),
+                    None => "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\n\r\n".to_owned(),
+                };
+                let _ = socket.write_all(resp.as_bytes()).await;
+            });
+        }
+    });
+    format!("http://{addr}")
+}
+
+/// The hero's backdrop follows first run's still (plans/batch-2.md F7): a
+/// page shows its addon's background at once, then TMDB's textless scene
+/// frame of its title once TMDB answers; a title TMDB holds only titled
+/// backdrops for keeps the addon's.
+#[tokio::test]
+async fn a_hero_backdrop_becomes_tmdbs_textless_frame_without_waiting_for_it() {
+    const BODY: &str = r#"{"metas":[
+      {"id":"tt0000001","type":"series","name":"A","background":"https://images.metahub.space/background/medium/tt0000001/img"},
+      {"id":"tt0000002","type":"movie","name":"B","background":"https://images.metahub.space/background/medium/tt0000002/img"}
+    ]}"#;
+    let core = Core::temporary("p").unwrap();
+    let tmdb = fake_tmdb(
+        Duration::from_millis(300),
+        &[
+            ("/3/find/tt0000001?", r#"{"movie_results":[],"tv_results":[{"id":10,"vote_average":7.1,"vote_count":90}]}"#),
+            ("/3/find/tt0000002?", r#"{"movie_results":[{"id":20,"vote_average":6.4,"vote_count":40}],"tv_results":[]}"#),
+            (
+                "/3/tv/10/images?include_image_language=null ",
+                r#"{"backdrops":[{"file_path":"/scene.jpg","iso_639_1":null,"width":1920,"aspect_ratio":1.778}]}"#,
+            ),
+            (
+                "/3/movie/20/images?include_image_language=null ",
+                r#"{"backdrops":[{"file_path":"/keyart.jpg","iso_639_1":"en","width":3840,"aspect_ratio":1.778}]}"#,
+            ),
+        ],
+    )
+    .await;
+    core.set_tmdb_host(mq_runtime::TmdbHost {
+        url: tmdb,
+        token: Some("test".into()),
+        local: true,
+    });
+    let addon = catalog_addon("a", Duration::ZERO, 200, BODY).await;
+    core.library()
+        .set_addons("p", &[addon], &core.hlc())
+        .unwrap();
+    let view = HomeView::open(&core);
+    let backdrops = |v: &HomeView| -> Vec<Option<String>> {
+        v.snapshot()
+            .header
+            .heroes
+            .into_iter()
+            .map(|h| h.tile.background)
+            .collect()
+    };
+    view_until(&view, "two pages", |v| {
+        v.snapshot().header.heroes.len() == 2
+    })
+    .await;
+    assert_eq!(
+        backdrops(&view),
+        [
+            Some("https://images.metahub.space/background/medium/tt0000001/img".to_owned()),
+            Some("https://images.metahub.space/background/medium/tt0000002/img".to_owned()),
+        ],
+        "the pages came before TMDB answered, with the addon's backdrops"
+    );
+    view_until(&view, "A's scene frame", |v| {
+        backdrops(v)[0].as_deref() == Some("https://image.tmdb.org/t/p/w1280/scene.jpg")
+    })
+    .await;
+    tokio::time::sleep(Duration::from_millis(700)).await;
+    assert_eq!(
+        backdrops(&view)[1].as_deref(),
+        Some("https://images.metahub.space/background/medium/tt0000002/img"),
+        "B has only titled backdrops on TMDB"
+    );
+}
