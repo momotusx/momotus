@@ -292,7 +292,9 @@ function Shell(props: RouteSectionProps) {
       { capture: true, passive: true },
     );
     // The phone's page scrolls the document itself, which no element above sees.
-    window.addEventListener("scroll", () => setScrolled(window.scrollY > 0), { passive: true });
+    const onWindow = () => setScrolled(window.scrollY > 0);
+    window.addEventListener("scroll", onWindow, { passive: true });
+    onCleanup(() => window.removeEventListener("scroll", onWindow));
   };
   createEffect(
     on(
@@ -300,7 +302,8 @@ function Shell(props: RouteSectionProps) {
       () => {
         const then = takeAfterBack();
         if (then && then !== location.pathname) return navigate(then, { replace: true });
-        setScrolled(false);
+        // A new page starts at its top, but a phone's document may keep its scroll with no event to follow.
+        setScrolled(window.scrollY > 0);
         // The tab and history name the screen; a title, Versions and the
         // player name their title themselves once it is known.
         const path = location.pathname;
