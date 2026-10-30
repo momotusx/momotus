@@ -859,7 +859,7 @@ private fun DefaultRow(
             onToggle,
             Modifier.marqueeFocus(Marquee.radius.l, Tokens.FOCUS_SCALE_TILE).then(card),
             padding,
-            words,
+            content = words,
         )
     } else {
         Row(
