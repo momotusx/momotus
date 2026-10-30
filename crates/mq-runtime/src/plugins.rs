@@ -225,15 +225,24 @@ pub struct PluginRepoPreview {
     pub providers: Vec<String>,
 }
 
-/// Control characters and those that change how text reads without
-/// showing dropped; at most `max` characters.
+/// Control characters, those that change how text reads without showing,
+/// and emoji dropped ("🧲 Torrentio" reads "Torrentio"), with the spaces
+/// they leave; at most `max` characters.
 fn clean(text: &str, max: usize) -> String {
     text.chars()
-        .filter(|c| !c.is_control() && !crate::archive::hidden(*c))
+        .filter(|c| !c.is_control() && !crate::archive::hidden(*c) && !pictograph(*c))
         .take(max)
         .collect::<String>()
-        .trim()
-        .to_owned()
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+/// Emoji and pictographs, with the selectors and keycap mark that build
+/// them: no screen shows emoji, and plugin repositories put them in names.
+// ponytail: blocks, not Extended_Pictographic; a stray symbol in them goes too.
+fn pictograph(c: char) -> bool {
+    matches!(c, '\u{20e3}' | '\u{231a}' | '\u{231b}' | '\u{23e9}'..='\u{23fa}' | '\u{2600}'..='\u{27bf}' | '\u{2b00}'..='\u{2bff}' | '\u{fe00}'..='\u{fe0f}' | '\u{1f000}'..='\u{1faff}')
 }
 
 /// A repository link as Nuvio keeps it (2.1): https added when no scheme
@@ -1132,6 +1141,38 @@ mod tests {
         assert!(repo.providers[0].listed_on && !repo.providers[1].listed_on);
         assert!(parse_manifest(&base, br#"{"scrapers": []}"#).is_err());
         assert!(parse_manifest(&base, b"<html>").is_err());
+    }
+
+    #[test]
+    fn names_lose_their_emoji() {
+        // Real names from D3adlyRocket's All-in-One-Nuvio and mooncrown04's manifests (2026-10-30).
+        let base = Url::parse("https://example.com/repo/manifest.json").unwrap();
+        let body = r#"{"name": "MoOnCrOwN-NUVİO ✨", "description": "4K • 1080p Movies",
+            "scrapers": [
+            {"id": "a", "name": "🧲 Torrentio", "filename": "a.js"},
+            {"id": "b", "name": "❤️ VidLove", "filename": "b.js"},
+            {"id": "c", "name": "💋 Kisskh", "filename": "c.js"},
+            {"id": "d", "name": "🗡️ AnimeWorld", "filename": "d.js"},
+            {"id": "e", "name": "🫰 OnlyKDrama", "filename": "e.js"},
+            {"id": "f", "name": "Vid 🪨 Rock", "filename": "f.js"},
+            {"id": "g", "name": "🌸", "filename": "g.js"}
+        ]}"#;
+        let repo = parse_manifest(&base, body.as_bytes()).unwrap();
+        assert_eq!(repo.name, "MoOnCrOwN-NUVİO");
+        assert_eq!(repo.description, "4K • 1080p Movies");
+        let names: Vec<&str> = repo.providers.iter().map(|p| p.name.as_str()).collect();
+        assert_eq!(
+            names,
+            [
+                "Torrentio",
+                "VidLove",
+                "Kisskh",
+                "AnimeWorld",
+                "OnlyKDrama",
+                "Vid Rock",
+                "g"
+            ]
+        );
     }
 
     #[test]
