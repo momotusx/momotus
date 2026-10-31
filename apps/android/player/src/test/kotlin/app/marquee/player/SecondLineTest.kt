@@ -1,6 +1,7 @@
 package app.marquee.player
 
 import android.graphics.Color
+import android.text.Layout
 import android.text.Spanned
 import android.text.style.BackgroundColorSpan
 import android.text.style.RelativeSizeSpan
@@ -71,6 +72,74 @@ class SecondLineTest {
         val fitted = CueFrame(bottom = 0.1f, text = 0.05f).fit(joined)
         assertEquals(0.9f, fitted.line, 1e-6f)
         assertEquals(Cue.ANCHOR_TYPE_END, fitted.lineAnchor)
+    }
+
+    @Test
+    fun `the joined block keeps the first line's place across, a left or right aligned file's, never the second's`() {
+        // A SubRip {\an1} line as Media3 hands it over: at the foot, its block from 8% of the width at the left.
+        val left =
+            Cue
+                .Builder()
+                .setText("foot")
+                .setLine(0.92f, Cue.LINE_TYPE_FRACTION)
+                .setLineAnchor(Cue.ANCHOR_TYPE_END)
+                .setPosition(0.08f)
+                .setPositionAnchor(Cue.ANCHOR_TYPE_START)
+                .build()
+        // A WebVTT `align:right` line: its words to the right edge of a block that ends at the right.
+        val right =
+            bottomLine("foot", 0)
+                .buildUpon()
+                .setTextAlignment(Layout.Alignment.ALIGN_OPPOSITE)
+                .setPosition(1f)
+                .setPositionAnchor(Cue.ANCHOR_TYPE_END)
+                .setSize(0.6f)
+                .build()
+        // The second line's own placement (centred, from the left at 30%) is dropped.
+        val placedSecond =
+            Cue
+                .Builder()
+                .setText("Hello")
+                .setTextAlignment(Layout.Alignment.ALIGN_CENTER)
+                .setPosition(0.3f)
+                .setPositionAnchor(Cue.ANCHOR_TYPE_START)
+                .build()
+        for (layout in listOf(SubtitleLayout.Stacked, SubtitleLayout.OneBox)) {
+            val l = twoLines(listOf(left), listOf(placedSecond), layout, 0f, Color.BLACK).single()
+            assertNull(l.textAlignment)
+            assertEquals(0.08f, l.position)
+            assertEquals(Cue.ANCHOR_TYPE_START, l.positionAnchor)
+            assertEquals(Cue.DIMEN_UNSET, l.size)
+            // A higher foot cue of its own placement does not move the block: the lowest one places it.
+            val r =
+                twoLines(
+                    listOf(left.buildUpon().setLine(-2f, Cue.LINE_TYPE_NUMBER).build(), right),
+                    listOf(placedSecond),
+                    layout,
+                    0f,
+                    Color.BLACK,
+                ).single()
+            assertEquals(Layout.Alignment.ALIGN_OPPOSITE, r.textAlignment)
+            assertEquals(1f, r.position)
+            assertEquals(Cue.ANCHOR_TYPE_END, r.positionAnchor)
+            assertEquals(0.6f, r.size)
+            // The frame hangs it from the foot and leaves its place across alone.
+            val fitted = CueFrame(bottom = 0.1f, text = 0.05f).fit(r)
+            assertEquals(Layout.Alignment.ALIGN_OPPOSITE, fitted.textAlignment)
+            assertEquals(1f, fitted.position)
+        }
+        // A centred first line leaves the block centred: nothing set, as before.
+        val centred =
+            twoLines(
+                listOf(bottomLine("foot", 0)),
+                listOf(placedSecond),
+                SubtitleLayout.Stacked,
+                0f,
+                Color.BLACK,
+            ).single()
+        assertNull(centred.textAlignment)
+        assertEquals(Cue.DIMEN_UNSET, centred.position)
+        assertEquals(Cue.TYPE_UNSET, centred.positionAnchor)
     }
 
     @Test
