@@ -185,7 +185,7 @@ function CalendarPage(props: { retry: () => void }) {
         <section class="problem">
           <h2>{s()?.series ? "Nothing airs in these weeks" : "No series in your library yet"}</h2>
           <p>{s()?.series ? "None of the series in your library has an episode in this time." : "Series you add show their episodes here."}</p>
-          <A class="btn primary" href="/discover" data-f="calendar:discover" data-autofocus>
+          <A class="btn" href="/discover" data-f="calendar:discover" data-autofocus>
             <Compass aria-hidden />
             Find series to follow
           </A>

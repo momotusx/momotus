@@ -657,6 +657,8 @@ test("Calendar that could not open offers Try again, focused, and an empty one a
   // The Try again button went with the old page: the remote lands on the new one's first control, not on the lit tab.
   await expect(find).toBeFocused({ timeout: 30_000 });
   await expect(find).toHaveText("Find series to follow");
+  // A secondary action, as DECISION's States and the other apps draw it: the page's one primary is never an empty state's.
+  await expect(find).not.toHaveClass(/primary/);
   await p.keyboard.press("Enter");
   await expect(p).toHaveURL(/\/discover/);
   await context.close();
