@@ -73,10 +73,11 @@ struct CalendarScreen: View {
         if s.pending > 0 {
             StateLine(symbol: "clock", text: s.pending == 1 ? "Loading 1 series" : "Loading \(s.pending) series")
         }
-        if !s.failed.isEmpty {
+        // Each series that could not load has its own Try again (a secondary, as DECISION's States draws it).
+        ForEach(s.failed, id: \.itemId) { series in
             StateLine(
-                symbol: "triangle-alert",
-                text: "Could not load " + s.failed.map { series in series.reason.map { "\(series.name) (\($0))" } ?? series.name }.joined(separator: ", "), spoken: true)
+                symbol: "triangle-alert", text: series.failedWords, action: ("Try again", { calendar.command(series.retryCommand) }),
+                actionSpoken: series.retrySpoken, spoken: true)
         }
         if !s.noSchedule.isEmpty {
             StateLine(symbol: "calendar-x", text: "No dated episodes yet: " + s.noSchedule.map(\.name).joined(separator: ", "))

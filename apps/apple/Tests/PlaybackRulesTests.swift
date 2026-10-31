@@ -83,6 +83,25 @@ private func snapshot(next: String = next, nextAtMs: String = "null", segments: 
     #expect(try calendar("2026-10-30", []).startDay == nil)
 }
 
+@Test func eachCalendarSeriesThatFailedHasItsOwnTryAgain() throws {
+    let json = #"{"itemId":"tt11280740","name":"Severance","reason":"timed out"}"#
+    let series = try JSONDecoder().decode(CalendarSeries.self, from: Data(json.utf8))
+    #expect(series.failedWords == "Could not load Severance (timed out).")
+    #expect(series.retryCommand == ["type": "retry", "itemId": "tt11280740"], "the core's per-series retry")
+    #expect(series.retrySpoken == "Try again for Severance")
+    let bare = try JSONDecoder().decode(CalendarSeries.self, from: Data(#"{"itemId":"x","name":"Andor","reason":null}"#.utf8))
+    #expect(bare.failedWords == "Could not load Andor.")
+    // One line per series, its Try again a secondary that sends that series' retry, named for VoiceOver.
+    let screen = try String(contentsOf: URL(fileURLWithPath: #filePath).deletingLastPathComponent().appending(path: "../Marquee/Library/CalendarScreen.swift"), encoding: .utf8)
+    let notes = try body(of: "@ViewBuilder private func notes(_ s: CalendarSnapshot)", in: screen)
+    #expect(notes.contains("ForEach(s.failed, id: \\.itemId) { series in"))
+    #expect(notes.contains("action: (\"Try again\", { calendar.command(series.retryCommand) })"), "a failed series lost its Try again")
+    #expect(notes.contains("actionSpoken: series.retrySpoken"))
+    let components = try String(contentsOf: URL(fileURLWithPath: #filePath).deletingLastPathComponent().appending(path: "../Marquee/Theme/Components.swift"), encoding: .utf8)
+    #expect(try body(of: "@ViewBuilder private var fix: some View", in: components).contains(".accessibilityLabel(actionSpoken ?? action.title)"))
+    #expect(!notes.contains("primary: true"))
+}
+
 @Test func anEmptyCalendarSaysWhyAndLeadsToDiscover() throws {
     func calendar(days: Int, pending: Int, series: Int) throws -> CalendarSnapshot {
         let day = #"{"date":"2026-10-31","items":[]}"#

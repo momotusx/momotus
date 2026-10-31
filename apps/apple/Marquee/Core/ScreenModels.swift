@@ -767,6 +767,15 @@ struct CalendarSeries: Decodable, Hashable, Sendable {
     let reason: String?
 }
 
+extension CalendarSeries {
+    /// A series that could not load, on its own line: "Could not load Severance (timed out)." (Android's words).
+    var failedWords: String { "Could not load \(reason.map { "\(name) (\($0))" } ?? name)." }
+    /// Its own Try again: the core fetches this series alone again.
+    var retryCommand: [String: String] { ["type": "retry", "itemId": itemId] }
+    /// What VoiceOver says for that Try again.
+    var retrySpoken: String { "Try again for \(name)" }
+}
+
 /// One Home catalog as the Home rows screen lists it; hidden ones sit
 /// where they would show.
 struct HomeCatalog: Decodable, Hashable, Sendable {

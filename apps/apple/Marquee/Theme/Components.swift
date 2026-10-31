@@ -596,6 +596,8 @@ struct StateLine: View {
     let symbol: String
     let text: String
     var action: (title: String, run: () -> Void)?
+    /// What VoiceOver says for the action when its word alone does not say what it acts on ("Try again for Severance").
+    var actionSpoken: String?
     /// True only where the fix is the page's one action and so its primary.
     var primary = false
     /// Says its words to VoiceOver when it appears and whenever they change (a status or failure the
@@ -633,7 +635,9 @@ struct StateLine: View {
 
     @ViewBuilder private var fix: some View {
         if let action {
-            Button(action.title, action: action.run).buttonStyle(PillButtonStyle(prominent: primary))
+            Button(action.title, action: action.run)
+                .buttonStyle(PillButtonStyle(prominent: primary))
+                .accessibilityLabel(actionSpoken ?? action.title)
         }
     }
 }
