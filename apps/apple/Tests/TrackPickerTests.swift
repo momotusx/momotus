@@ -219,7 +219,7 @@ private let klingon = track(5, "tlh", "tlh", "Klingon")
     let screen = try String(contentsOf: app.appending(path: "Player/PlayerScreen.swift"), encoding: .utf8)
     let controls = try String(contentsOf: app.appending(path: "Player/PlayerControls.swift"), encoding: .utf8)
     let picker = try String(contentsOf: app.appending(path: "Player/SubtitlePicker.swift"), encoding: .utf8)
-    #expect(try body(of: "private func bare(", in: commands).contains("guard let player, !player.pickerOpen else { return nil }"))
+    #expect(try body(of: "private func playerKey(", in: commands).contains("guard let player, !player.pickerOpen else { return nil }"))
     #expect(screen.contains("PlayerKeys(model: model, close: close, pickerOpen: model.pickerOpen)"))
     #expect(try body(of: "private func playerKey(", in: screen).contains("guard !showVersions, !model.pickerOpen else { return .ignored }"))
     // Esc is the picker's while it is open; else it leaves Versions, then the player.

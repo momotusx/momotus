@@ -64,14 +64,14 @@ final class AetherSession {
     /// `openWithin` bounds the open to its first frame (what the start budget has left, plan 2.3), past which the
     /// source counts as failed.
     func load(
-        _ source: MediaSource, container: String?, at start: Double, rate: Float, muted: Bool, autoplay: Bool = true,
+        _ source: MediaSource, container: String?, at start: Double, rate: Float, volume: Float, autoplay: Bool = true,
         openWithin: Duration, events: Events
     ) {
         // With the window up the engine swaps the item in place; a stop would close the window and end the film.
         if EngineChoice.stopsBeforeLoad(pictureInPictureActive: engine.pictureInPictureActive) { stop() } else { release() }
         load += 1
         let load = load
-        engine.volume = muted ? 0 : 1
+        engine.volume = volume
         let mine = { [weak self] in self?.load == load }
         Self.fresh(engine.clock.$currentTime)
             .sink { time in MainActor.assumeIsolated { if mine() { events.time(time) } } }

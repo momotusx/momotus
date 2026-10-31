@@ -241,3 +241,16 @@ private func snapshot(_ profiles: [ProfileInfo], locked: Bool = false) -> Profil
     #expect(ProfileRules.choice(mainPin, in: snapshot([mainPin, kid], locked: true)) == .pin)
     #expect(ProfileRules.choice(main, in: snapshot([main, kid], locked: true)) == .switchTo)
 }
+
+@Test func theKeypadsDeleteKeyOnlyDeletes() throws {
+    // The web's rule: the key on screen deletes a digit and never leaves; the keyboard's Delete leaves once empty.
+    #expect(KeypadDelete.of(digits: "12", onScreen: true) == .removeLast)
+    #expect(KeypadDelete.of(digits: "", onScreen: true) == .nothing)
+    #expect(KeypadDelete.of(digits: "1", onScreen: false) == .removeLast)
+    #expect(KeypadDelete.of(digits: "", onScreen: false) == .leave)
+    // The keypad's key and the keyboard's Delete each say which they are.
+    let keypad = try String(contentsOf: URL(fileURLWithPath: #filePath).deletingLastPathComponent().appending(path: "../Marquee/Profiles/PinKeypad.swift"), encoding: .utf8)
+    #expect(keypad.contains("{ name == \"delete\" ? delete(onScreen: true) : type(Character(name)) }"))
+    #expect(keypad.contains(".onKeyPress(.delete, phases: .down) { _ in delete(onScreen: false); return .handled }"))
+    #expect(try body(of: "private func delete(onScreen: Bool)", in: keypad).contains("KeypadDelete.of(digits: digits, onScreen: onScreen)"))
+}

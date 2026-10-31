@@ -575,6 +575,12 @@ struct TitleScreen: View {
     /// not fit. Watched sits beside Library, a small round toggle.
     private func phoneSecondaries(_ details: TitleDetails) -> some View {
         FlowRow(spacing: 8, centered: true) {
+            // Start over in sight, first, never only in Resume's long press (the Mac and iPad draw it beside Resume).
+            if (model.header?.playTarget?.resumeMs ?? 0) > 0 {
+                Button { play(fromStart: true) } label: { Label("Start over", glyph: "rotate-ccw") }
+                    .buttonStyle(PillButtonStyle())
+                    .disabled(PlayBlock.inert(failure: versions?.failure, versions: versions?.snapshot))
+            }
             if !offline, !details.trailers.isEmpty {
                 Button { openTrailer(details) } label: { Label("Trailer", glyph: "film") }
                     .buttonStyle(PillButtonStyle())

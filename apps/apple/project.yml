@@ -245,6 +245,7 @@ targets:
       - path: Marquee/Theme/ThemeSupport.swift
       - path: Marquee/Theme/Theme.generated.swift
       - path: Marquee/Home/HeroPager.swift
+      - path: Marquee/Home/ContinueRemoval.swift
       # The trailer player itself, run for real in Tests/TrailerInlineTests.swift.
       - path: Marquee/Home/HeroTrailer.swift
       - path: Marquee/Core/PlaybackModels.swift
@@ -270,6 +271,7 @@ targets:
       - path: Marquee/Player/LegibleLog.swift
       - path: Marquee/Player/PlayerLayout.swift
       - path: Marquee/Player/SwipeRules.swift
+      - path: Marquee/Player/PlayerVolume.swift
       # The second engine's switch and routing (Tests/EngineChoiceTests.swift).
       - path: Marquee/Player/EngineChoice.swift
       - path: Marquee/Player/DeviceCaps.swift

@@ -39,3 +39,11 @@ private func source(_ path: String) throws -> String {
     }
     #expect(menu.contains("Button(\"Settings\", glyph: \"settings\", action: onSettings)"))
 }
+
+@Test func theBarsAvatarIsAFillWithNoRestingEdge() throws {
+    // DECISION: fills, not edges. The Mac ornament's, the iPhone bar's and the TV bar's avatar keep only the lit ring.
+    let picker = try source("Profiles/ProfilePicker.swift")
+    let avatar = try body(of: "var body: some View", in: try body(of: "struct BarAvatar: View", in: picker))
+    #expect(avatar.contains(".overlay { if lit { Circle().strokeBorder(.white.opacity(0.92), lineWidth: 2) } }"))
+    #expect(avatar.components(separatedBy: "strokeBorder").count - 1 == 1, "the avatar has an edge outside the lit ring")
+}

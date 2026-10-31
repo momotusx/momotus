@@ -9,6 +9,7 @@ struct CalendarScreen: View {
     @State private var scrolled = false
     @Environment(\.metrics) private var metrics
     @Environment(\.scenePhase) private var phase
+    @Environment(\.openTab) private var openTab
 
     init(core: CoreClient) {
         _calendar = State(initialValue: LiveRecord("calendar", params: ["today": Self.today()], core: core))
@@ -80,12 +81,8 @@ struct CalendarScreen: View {
         if !s.noSchedule.isEmpty {
             StateLine(symbol: "calendar-x", text: "No dated episodes yet: " + s.noSchedule.map(\.name).joined(separator: ", "))
         }
-        if s.days.isEmpty, s.pending == 0 {
-            StateLine(
-                symbol: "calendar",
-                text: s.series == 0
-                    ? "No series in your library yet. Series you add show their episodes here."
-                    : "Nothing airs from a week ago to a month ahead for the series in your library.")
+        if let empty = s.emptyWords {
+            StateLine(symbol: "calendar", text: empty, action: (CalendarSnapshot.findSeries, { openTab(.discover) }))
         }
     }
 

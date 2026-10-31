@@ -18,6 +18,8 @@ final class HomeModel {
 
     /// First run and the "New recommended addons" card.
     let offer: DefaultsOffer
+    /// Remove from Continue Watching, with its Undo.
+    let removal: ContinueRemoval
     @ObservationIgnored private let core: CoreClient
     /// The open Home view, for its commands.
     @ObservationIgnored private var sub: UInt64?
@@ -25,6 +27,7 @@ final class HomeModel {
     init(core: CoreClient) {
         self.core = core
         offer = DefaultsOffer(core: core)
+        removal = ContinueRemoval { try await core.perform("removeFromContinue", ["itemId": $0.id]) }
     }
 
     func reload() {

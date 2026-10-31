@@ -177,6 +177,14 @@ func filterEpisodes(_ episodes: [Episode], query: String) -> [Episode] {
     return episodes.filter { "\($0.episode)" == text || $0.title.range(of: text, options: .caseInsensitive) != nil }
 }
 
+/// The episode search found none of the loaded episodes: a line that says so with the query, never a blank list.
+/// Nil while it finds some, with no query, and before the season has episodes.
+func noEpisodeMatch(_ episodes: [Episode], query: String) -> String? {
+    let text = query.trimmingCharacters(in: .whitespaces)
+    guard !text.isEmpty, !episodes.isEmpty, filterEpisodes(episodes, query: text).isEmpty else { return nil }
+    return "No episodes in this season match \"\(text)\"."
+}
+
 /// The Information band's rows: Genres, Runtime, and for a series Seasons and the selected season's
 /// episodes, "8 episodes in Season 2" (the core sends one season's episodes at a time).
 func informationRows(

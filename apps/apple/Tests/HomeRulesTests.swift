@@ -113,3 +113,86 @@ private func row(_ state: RowState, _ tiles: String...) -> HomeRow {
     // The core's retryRow on the open Home view, with the row's id as the snapshot gave it.
     #expect(row.retryCommand == ["type": "retryRow", "rowId": "cinemeta/movie/top"])
 }
+
+private func card(_ id: String) -> Tile {
+    Tile(
+        id: id, kind: "series", name: "Title \(id)", poster: nil, posterFallback: nil, background: nil, logo: nil, posterShape: "landscape",
+        releaseInfo: nil, progress: 0.4, videoId: nil, rating: nil, ratings: nil)
+}
+
+private struct Refused: LocalizedError { var errorDescription: String? { "timed out" } }
+
+@MainActor private final class Sent { var ids: [String] = []; var fail = false }
+
+@MainActor @Test func aRemovalWaitsForItsUndoThenGoesToTheCore() async throws {
+    let sent = Sent()
+    let removal = ContinueRemoval(wait: .milliseconds(200)) { tile in
+        if sent.fail { throw Refused() }
+        sent.ids.append(tile.id)
+    }
+    // Out of the row at once, nothing sent until the window ends; then sent once, and Undo is gone.
+    removal.remove(card("a"))
+    #expect(removal.removing == card("a") && removal.hides(card("a")) && sent.ids.isEmpty)
+    try await Task.sleep(for: .milliseconds(800))
+    #expect(sent.ids == ["a"] && removal.removing == nil && !removal.hides(card("a")))
+    // Undo: back, and nothing is sent.
+    removal.remove(card("b"))
+    removal.undo()
+    #expect(!removal.hides(card("b")))
+    try await Task.sleep(for: .milliseconds(800))
+    #expect(sent.ids == ["a"])
+    // A second removal sends the first at once, never twice.
+    removal.remove(card("c"))
+    removal.remove(card("d"))
+    try await Task.sleep(for: .milliseconds(50))
+    #expect(sent.ids == ["a", "c"] && removal.removing == card("d") && removal.hides(card("d")))
+    try await Task.sleep(for: .milliseconds(800))
+    #expect(sent.ids == ["a", "c", "d"])
+    // Refused: the title is back, and the line says why.
+    sent.fail = true
+    removal.remove(card("e"))
+    try await Task.sleep(for: .milliseconds(800))
+    #expect(removal.removing == nil && !removal.hides(card("e")) && removal.failed?.tile == card("e"))
+    #expect(removal.failed?.words == "Title e could not be removed from Continue Watching: timed out")
+    #expect(removedWords(name: "Title e") == "Title e was removed from Continue Watching.")
+}
+
+@MainActor @Test func aTitleOnItsWayToTheCoreHasNoUndo() async throws {
+    // The window ended and the send is under way: Undo is gone, so it can never bring back a title the core removes.
+    let sent = Sent()
+    let gate = AsyncStream<Void>.makeStream()
+    let removal = ContinueRemoval(wait: .milliseconds(300)) { tile in
+        for await _ in gate.stream { break }
+        sent.ids.append(tile.id)
+    }
+    removal.remove(card("a"))
+    try await Task.sleep(for: .milliseconds(600))
+    #expect(removal.removing == nil && removal.sending == card("a") && removal.hides(card("a")))
+    // Another removal now does not send the first again; the core's answer lets the first back out of hiding.
+    removal.remove(card("b"))
+    gate.continuation.yield()
+    try await Task.sleep(for: .milliseconds(60))
+    #expect(sent.ids == ["a"] && removal.sending == nil)
+    #expect(removal.removing == card("b"))
+    removal.undo()
+}
+
+@Test func continueWatchingIsReachableWithoutALongPressAndUndoes() throws {
+    let here = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+    let rows = try String(contentsOf: here.appending(path: "../Marquee/Home/RowView.swift"), encoding: .utf8)
+    // The phone's X on each card, the row leaving out a title that waits, and the Undo line under it.
+    let strip = try body(of: "private var strip: some View", in: rows)
+    #expect(strip.contains("let tiles = (continues ? row.tiles.filter { removal?.hides($0) != true } : row.tiles).keyed"))
+    #expect(strip.contains("#if os(iOS)") && strip.contains("RemoveTileButton(name: tile.name) { removal.remove(tile) }"), "the card lost its X")
+    let line = try body(of: "private struct RemovalLine: View", in: rows)
+    #expect(line.contains("action: (\"Undo\", removal.undo)"))
+    #expect(try String(contentsOf: here.appending(path: "../Marquee/Home/HomeScreen.swift"), encoding: .utf8).contains("removal: model.removal)"))
+    // Start over in sight beside Resume (Mac, iPad, TV), and on the iPhone with Trailer and Versions.
+    let actions = try String(contentsOf: here.appending(path: "../Marquee/Title/TitleActions.swift"), encoding: .utf8)
+    let play = try body(of: "struct PlayBlock: View", in: actions)
+    #expect(play.contains("if let resume = target?.resumeMs, resume > 0, wide || !v3 {\n                        Button { play(true) } label: {"))
+    #expect(!play.contains(".contextMenu"), "Start over went back into a long press")
+    let title = try String(contentsOf: here.appending(path: "../Marquee/Title/TitleScreen.swift"), encoding: .utf8)
+    let phone = try body(of: "private func phoneSecondaries(_ details: TitleDetails) -> some View", in: title)
+    #expect(phone.contains("Button { play(fromStart: true) } label: { Label(\"Start over\", glyph: \"rotate-ccw\") }"))
+}

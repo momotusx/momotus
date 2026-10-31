@@ -7,9 +7,8 @@ struct RowView: View {
     /// TV: this row is Home's start; its first tile is the scope's default focus.
     var startScope: Namespace.ID?
     @Environment(\.metrics) private var metrics
-    @Environment(CoreClient.self) private var core
-    /// Remove from Continue Watching did not go through: the title and why.
-    @State private var removeFailure: (tile: Tile, words: String)?
+    /// Home's Remove from Continue Watching, with its Undo; nil where a row cannot lose a title (Search).
+    var removal: ContinueRemoval?
 
     var body: some View {
         VStack(alignment: .leading, spacing: metrics.wide ? 16 : 12) {
@@ -26,10 +25,7 @@ struct RowView: View {
                     .padding(.horizontal, metrics.gutter)
             case .ready:
                 strip
-                if let removeFailure {
-                    StateLine(symbol: "triangle-alert", text: removeFailure.words, action: ("Try again", { remove(removeFailure.tile) }), primary: false)
-                        .padding(.horizontal, metrics.gutter)
-                }
+                if let removal, continues { RemovalLine(removal: removal).padding(.horizontal, metrics.gutter) }
             }
         }
         #if os(tvOS)
@@ -37,26 +33,13 @@ struct RowView: View {
         #endif
     }
 
-    /// Takes the title off Continue Watching; a failure says so under the row,
-    /// with Try again, as a failed row does.
-    private func remove(_ tile: Tile) {
-        removeFailure = nil
-        Task {
-            do {
-                try await core.perform("removeFromContinue", ["itemId": tile.id])
-            } catch {
-                coreLog.error("remove from continue watching: \(error.localizedDescription, privacy: .public)")
-                removeFailure = (tile, removeFailedWords(name: tile.name, reason: error.localizedDescription))
-            }
-        }
-    }
-
     private var strip: some View {
         Shelf(spacing: metrics.wide ? Theme.TileDesktop.gap : Theme.Tile.gap, inset: metrics.gutter, room: 12) {
-            let tiles = row.tiles.keyed
+            // A title waiting for its Undo is out of the row.
+            let tiles = (continues ? row.tiles.filter { removal?.hides($0) != true } : row.tiles).keyed
             ForEach(tiles, id: \.key) { key, tile in
                 NavigationLink(value: TitleRoute(tile)) {
-                    if row.rowId == "continue-watching" {
+                    if continues {
                         ContinueCard(tile: tile)
                     } else {
                         PosterTile(tile: tile)
@@ -66,16 +49,61 @@ struct RowView: View {
                 // Continue Watching and Next Up: a title can leave the row (right click, long press,
                 // a long press of select on TV) until it is played again, on every synced device.
                 .contextMenu {
-                    if row.rowId == "continue-watching" {
-                        Button("Remove from Continue Watching", glyph: "x") { remove(tile) }
+                    if let removal, continues {
+                        Button("Remove from Continue Watching", glyph: "x") { removal.remove(tile) }
                     }
                 }
+                #if os(iOS)
+                // Touch has no right click and a long press is hidden: the X on the card, as the web's phone shows it.
+                .overlay(alignment: .topTrailing) {
+                    if let removal, continues { RemoveTileButton(name: tile.name) { removal.remove(tile) } }
+                }
+                #endif
                 // TV: Home's start row enters on its first tile.
                 .modifier(StartFocus(scope: key == tiles.first?.key ? startScope : nil))
             }
         }
     }
+
+    private var continues: Bool { row.rowId == SettingsRules.continueRow }
 }
+
+/// Under Continue Watching after Remove: the words with Undo while it can be taken back, or why it failed with
+/// Try again, as a failed row says it.
+private struct RemovalLine: View {
+    let removal: ContinueRemoval
+
+    var body: some View {
+        if let tile = removal.removing {
+            StateLine(symbol: "check", text: removedWords(name: tile.name), action: ("Undo", removal.undo), spoken: true)
+        } else if let failed = removal.failed {
+            StateLine(symbol: "triangle-alert", text: failed.words, action: ("Try again", { removal.remove(failed.tile) }), spoken: true)
+        }
+    }
+}
+
+#if os(iOS)
+/// The X on a Continue Watching card, as the web's phone draws it (`.tile-x`): a dark disc over the still at its
+/// top corner, 44 pt to touch.
+private struct RemoveTileButton: View {
+    let name: String
+    let run: () -> Void
+
+    var body: some View {
+        Button(action: run) {
+            Glyph("x", size: 16)
+                .foregroundStyle(.white)
+                .frame(width: 30, height: 30)
+                // The web's disc (`rgba(0, 0, 0, .62)`): white reads on it over white art.
+                .background(.black.opacity(0.62), in: Circle())
+                .frame(width: Theme.minTarget, height: Theme.minTarget)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Remove \(name) from Continue Watching")
+    }
+}
+#endif
 
 /// A section header: the title, and a quiet word beside it ("Slow to answer, still trying").
 struct RowHeader: View {

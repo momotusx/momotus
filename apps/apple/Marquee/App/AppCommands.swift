@@ -82,25 +82,34 @@ struct AppCommands: Commands {
             Divider()
             Group {
                 Button(player?.model.playing == true ? "Pause" : "Play") { player?.model.togglePlay() }
-                    .keyboardShortcut(bare(.space))
+                    .keyboardShortcut(playerKey(.space))
                 Button("Back 10 Seconds") { player?.model.skip(-10) }
-                    .keyboardShortcut(bare(.leftArrow))
+                    .keyboardShortcut(playerKey(.leftArrow))
                 Button("Forward 10 Seconds") { player?.model.skip(10) }
-                    .keyboardShortcut(bare(.rightArrow))
+                    .keyboardShortcut(playerKey(.rightArrow))
+                Divider()
+                // The player's own volume, on the keys the TV app and QuickTime use (Mute on Option-Cmd-Down, as Music's).
+                Button("Increase Volume") { player?.model.volume.up() }
+                    .keyboardShortcut(playerKey(.upArrow, .command))
+                Button("Decrease Volume") { player?.model.volume.down() }
+                    .keyboardShortcut(playerKey(.downArrow, .command))
+                Button(player?.model.volume.muted == true ? "Unmute" : "Mute") { player?.model.volume.muted.toggle() }
+                    .keyboardShortcut(playerKey(.downArrow, [.command, .option]))
+                Divider()
                 if let model = player?.model { subtitles(model) }
                 Divider()
                 Button("Close Player") { player?.close() }
-                    .keyboardShortcut(bare(.escape))
+                    .keyboardShortcut(playerKey(.escape))
             }
             .disabled(player == nil)
         }
     }
 
-    /// A key alone, only while the player is up and no track picker is open: a text field, or the picker's
-    /// rows and search, keep their spaces, arrows and Esc.
-    private func bare(_ key: KeyEquivalent) -> KeyboardShortcut? {
+    /// A player key (alone unless `modifiers` say otherwise), only while the player is up and no track picker is
+    /// open: a text field, or the picker's rows and search, keep their spaces, arrows and Esc.
+    private func playerKey(_ key: KeyEquivalent, _ modifiers: EventModifiers = []) -> KeyboardShortcut? {
         guard let player, !player.pickerOpen else { return nil }
-        return KeyboardShortcut(key, modifiers: [])
+        return KeyboardShortcut(key, modifiers: modifiers)
     }
 
     /// Off, the profile's languages, then the file's own tracks; the rest

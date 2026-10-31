@@ -269,3 +269,14 @@ enum KeypadResult: Equatable, Sendable {
         return .problem(ProfileRules.problem(code, fallback: message.isEmpty ? "That did not work." : message))
     }
 }
+
+/// What a keypad's delete does, as the web's: the key on screen only deletes; the keyboard's Delete, which a keyboard
+/// has no other key for, leaves the keypad once there is nothing left to delete.
+enum KeypadDelete: Equatable {
+    case removeLast, leave, nothing
+
+    static func of(digits: String, onScreen: Bool) -> KeypadDelete {
+        if !digits.isEmpty { return .removeLast }
+        return onScreen ? .nothing : .leave
+    }
+}

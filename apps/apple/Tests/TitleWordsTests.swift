@@ -167,6 +167,17 @@ private func ep(_ number: Int, _ title: String, released: String? = "2022-02-18"
     #expect(filterEpisodes(season, query: " DATES ").map(\.episode) == [1])
 }
 
+@Test func anEpisodeSearchThatFindsNothingSaysSo() throws {
+    let season = [ep(1, "Bad Dates"), ep(2, "Dead Weight")]
+    #expect(noEpisodeMatch(season, query: " zqxj ") == "No episodes in this season match \"zqxj\".")
+    #expect(noEpisodeMatch(season, query: "dead") == nil)
+    #expect(noEpisodeMatch(season, query: "  ") == nil)
+    #expect(noEpisodeMatch([], query: "zqxj") == nil, "a season still loading is not a miss")
+    // The panel draws the line over its rows, so the list is never blank.
+    let panel = try String(contentsOf: URL(fileURLWithPath: #filePath).deletingLastPathComponent().appending(path: "../Marquee/Title/TitlePanel.swift"), encoding: .utf8)
+    #expect(panel.contains("if let none = noEpisodeMatch(episodes, query: query) {\n                            StateLine(symbol: \"search\", text: none, spoken: true)"))
+}
+
 @Test func informationCountsTheSelectedSeasonsEpisodes() {
     let series = informationRows(genres: ["Drama", "Thriller"], runtime: "46 min", seasons: [0, 1, 2], selectedSeason: 2, episodes: 8)
     #expect(series.map(\.key) == ["Genres", "Runtime", "Seasons", "Episodes"])

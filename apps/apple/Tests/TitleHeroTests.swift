@@ -161,14 +161,15 @@ private func spot(_ part: CGRect, in box: CGRect) -> (top: CGFloat, end: CGFloat
     }
 }
 
-@Test func resumeCarriesStartOverAsANamedAction() throws {
-    // VoiceOver's way to Start over beside Resume's context menu, only with a resume point (plans/
-    // design-v3-phase3-apple.md 2.1). Read from the source: a hosting view out of a running app builds
-    // no accessibility tree to ask.
+@Test func startOverIsAButtonInSightNotANamedAction() throws {
+    // Start over is a button beside Resume (the iPhone draws it with Trailer and Versions), so VoiceOver, touch and
+    // a pointer all reach it; no context menu or named action stands in for it. Read from the source: a hosting view
+    // out of a running app builds no accessibility tree to ask.
     let file = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appending(path: "../Marquee/Title/TitleActions.swift")
     let text = try String(contentsOf: file, encoding: .utf8)
-    let action = #"\.accessibilityActions \{\s+if \(target\?\.resumeMs \?\? 0\) > 0 \{ Button\("Start over"\) \{ play\(true\) \} \}\s+\}"#
-    #expect(text.range(of: action, options: .regularExpression) != nil)
+    let play = try body(of: "struct PlayBlock: View", in: text)
+    #expect(!play.contains(".accessibilityActions") && !play.contains(".contextMenu"))
+    #expect(text.contains("Label(\"Start over\", glyph: \"rotate-ccw\")"))
 }
 
 @MainActor @Test func aSeriesCapsuleDrawsNoWatchedCell() {

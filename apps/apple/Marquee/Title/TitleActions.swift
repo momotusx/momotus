@@ -62,20 +62,9 @@ struct PlayBlock: View {
                     // The reason shows right under it: dimmed, not focusable, does nothing.
                     .disabled(inert)
                     .accessibilityLabel(playWords)
-                    #if !os(tvOS)
-                    // Start over from Resume's menu and a named action; the Mac also has it in the
-                    // Playback menu (plans/design-v3-phase3-apple.md 2.1).
-                    .contextMenu {
-                        if (target?.resumeMs ?? 0) > 0 {
-                            Button { play(true) } label: { Label("Start Over", glyph: "rotate-ccw") }
-                        }
-                    }
-                    .accessibilityActions {
-                        if (target?.resumeMs ?? 0) > 0 { Button("Start over") { play(true) } }
-                    }
-                    #endif
-                    #if os(tvOS)
-                    if let resume = target?.resumeMs, resume > 0 {
+                    // Start over in sight, as the web draws it, never only in a menu; the iPhone's page has it beside
+                    // Trailer and Versions, where its 178 pt Play leaves no room (`phoneSecondaries`).
+                    if let resume = target?.resumeMs, resume > 0, wide || !v3 {
                         Button { play(true) } label: {
                             Label("Start over", glyph: "rotate-ccw")
                                 .frame(maxWidth: wide || !typeSize.isAccessibilitySize ? nil : .infinity)
@@ -84,7 +73,6 @@ struct PlayBlock: View {
                         .fixedSize(horizontal: wide, vertical: false)
                         .disabled(inert)
                     }
-                    #endif
                 }
             }
             #if os(tvOS)
@@ -104,7 +92,9 @@ struct PlayBlock: View {
     }
 
     /// The versions could not load, or nothing here can play and the way on would hold only Back.
-    private var inert: Bool { failure != nil || TitlePlay.of(versions) == .inert }
+    private var inert: Bool { Self.inert(failure: failure, versions: versions) }
+
+    static func inert(failure: String?, versions: VersionsSnapshot?) -> Bool { failure != nil || TitlePlay.of(versions) == .inert }
 
     /// "Resume Season 2, Episode 3, 36 min left": the code said as words.
     private var playWords: String {

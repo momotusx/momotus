@@ -55,6 +55,9 @@ struct EpisodePanel: View {
             ScrollViewReader { proxy in
                 ScrollView(.vertical) {
                     LazyVStack(alignment: .leading, spacing: 4) {
+                        if let none = noEpisodeMatch(episodes, query: query) {
+                            StateLine(symbol: "search", text: none, spoken: true)
+                        }
                         ForEach(filterEpisodes(episodes, query: query), id: \.videoId) { episode in
                             PanelRow(episode: episode, minutes: minutes, actions: actions).id(episode.videoId)
                         }

@@ -348,7 +348,8 @@ struct ProfileMenu<Face: View>: View {
     }
 }
 
-/// The avatar a bar draws for `ProfileMenu`: a circle with a hairline, ringed white while Settings shows (`lit`).
+/// The avatar a bar draws for `ProfileMenu`: the filled circle with no edge (design/DECISION.md: fills, not edges),
+/// ringed white only while Settings shows (`lit`).
 struct BarAvatar: View {
     let profile: ProfileInfo
     var size: CGFloat = 32
@@ -356,7 +357,7 @@ struct BarAvatar: View {
 
     var body: some View {
         ProfileAvatar(profile.avatar, name: profile.name, size: size)
-            .overlay(Circle().strokeBorder(.white.opacity(lit ? 0.92 : 0.3), lineWidth: lit ? 2 : 1))
+            .overlay { if lit { Circle().strokeBorder(.white.opacity(0.92), lineWidth: 2) } }
     }
 }
 

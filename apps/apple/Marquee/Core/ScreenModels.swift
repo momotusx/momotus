@@ -36,7 +36,8 @@ struct GenreTile: Decodable, Hashable, Sendable {
 enum SearchWords {
     static let hint = "Search movies and series by title."
     static let noAddons = "None of your addons can search"
-    static let noMatches = "No matches"
+    /// The way on from `noAddons`: the recommended addons, which search.
+    static let addons = DefaultsRules.title
     static let recent = "Recent"
     static let topResults = "Top results"
     /// The view could not open: the core's words can name a host or an addon, so these instead.
@@ -51,8 +52,14 @@ enum SearchWords {
     static func answered(_ s: SearchSnapshot?, query: String) -> String? {
         guard let s, s.query == query.trimmingCharacters(in: .whitespaces) else { return nil }
         if s.searchable == 0 { return noAddons }
-        return s.rows.isEmpty ? noMatches : nil
+        return s.rows.isEmpty ? noMatches(s.query) : nil
     }
+
+    /// Nothing came back for `query`: said with the query, as the web and Android say it.
+    static func noMatches(_ query: String) -> String { "No matches for \"\(query)\" in your catalogs." }
+
+    /// No addon can search, so nothing could match: the line offers the recommended addons.
+    static func offersAddons(_ s: SearchSnapshot?) -> Bool { s?.searchable == 0 }
 
     enum Top: Equatable {
         case loading
@@ -721,6 +728,17 @@ extension CalendarSnapshot {
     /// Where the screen opens: the first day on or after today (dates compare
     /// as "YYYY-MM-DD" text), else the last day.
     var startDay: String? { days.first { $0.date >= today }?.date ?? days.last?.date }
+
+    /// Nothing to list and nothing still loading: why, said for no series and for no dates; nil otherwise.
+    var emptyWords: String? {
+        guard days.isEmpty, pending == 0 else { return nil }
+        return series == 0
+            ? "No series in your library yet. Series you add show their episodes here."
+            : "Nothing airs from a week ago to a month ahead for the series in your library."
+    }
+
+    /// The empty page's way on, as the web and Android offer it: Discover.
+    static let findSeries = "Find series to follow"
 }
 
 struct CalendarDay: Decodable, Hashable, Sendable {

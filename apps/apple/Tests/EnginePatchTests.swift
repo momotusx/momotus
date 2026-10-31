@@ -98,7 +98,7 @@ private let fixtures = URL(fileURLWithPath: #filePath).deletingLastPathComponent
 @MainActor @Test func theViewersSpeedHoldsAcrossAnEngineLoad() async throws {
     let session = try #require(AetherSession())
     let mkv = try Data(contentsOf: fixtures.appending(path: "tiny.mkv"))
-    session.load(.custom(DataReader(mkv), formatHint: "matroska"), container: "mkv", at: 0, rate: 1.5, muted: true, openWithin: .seconds(30), events: .none)
+    session.load(.custom(DataReader(mkv), formatHint: "matroska"), container: "mkv", at: 0, rate: 1.5, volume: 0, openWithin: .seconds(30), events: .none)
     for _ in 0..<100 where session.engine.desiredRate == nil { try await Task.sleep(for: .milliseconds(100)) }
     #expect(session.engine.desiredRate == 1.5)
     session.stop()
@@ -107,7 +107,7 @@ private let fixtures = URL(fileURLWithPath: #filePath).deletingLastPathComponent
 @MainActor @Test func aSessionStoppedWhileItOpensDoesNotPlay() async throws {
     let session = try #require(AetherSession())
     let mkv = try Data(contentsOf: fixtures.appending(path: "tiny.mkv"))
-    session.load(.custom(DataReader(mkv), formatHint: "matroska"), container: "mkv", at: 0, rate: 1.5, muted: true, openWithin: .seconds(30), events: .none)
+    session.load(.custom(DataReader(mkv), formatHint: "matroska"), container: "mkv", at: 0, rate: 1.5, volume: 0, openWithin: .seconds(30), events: .none)
     session.stop()
     try await Task.sleep(for: .seconds(2))
     #expect(session.engine.state != .playing)
@@ -209,7 +209,7 @@ extension AetherSession.Events {
 @MainActor @Test func aSessionOpenedUnderTheCoverWaitsPaused() async throws {
     let session = try #require(AetherSession())
     let mkv = try Data(contentsOf: fixtures.appending(path: "tiny.mkv"))
-    session.load(.custom(DataReader(mkv), formatHint: "matroska"), container: "mkv", at: 0, rate: 1.5, muted: true,
+    session.load(.custom(DataReader(mkv), formatHint: "matroska"), container: "mkv", at: 0, rate: 1.5, volume: 0,
                  autoplay: false, openWithin: .seconds(30), events: .none)
     // The rate is set once the source is open, just before the play that autoplay false leaves out.
     for _ in 0..<100 where session.engine.desiredRate == nil { try await Task.sleep(for: .milliseconds(100)) }
@@ -228,7 +228,7 @@ extension AetherSession.Events {
     events.failed = { _ in failures.count += 1 }
     let session = try #require(AetherSession())
     let sound = try Data(contentsOf: fixtures.appending(path: "sound-only.mka"))
-    session.load(.custom(DataReader(sound), formatHint: "matroska"), container: "mkv", at: 0, rate: 1, muted: true,
+    session.load(.custom(DataReader(sound), formatHint: "matroska"), container: "mkv", at: 0, rate: 1, volume: 0,
                  autoplay: false, openWithin: .milliseconds(300), events: events)
     try await Task.sleep(for: .seconds(1.5))
     #expect(failures.count == 0, "paused under the cover: no bound")

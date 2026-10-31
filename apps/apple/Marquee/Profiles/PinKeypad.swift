@@ -138,7 +138,7 @@ struct PinKeypad: View {
             press.characters.forEach { type($0) }
             return .handled
         }
-        .onKeyPress(.delete, phases: .down) { _ in delete(); return .handled }
+        .onKeyPress(.delete, phases: .down) { _ in delete(onScreen: false); return .handled }
         #if os(tvOS)
         // Menu leaves the keypad for the profile tiles, one step, never the whole picker.
         .onExitCommand { leave() }
@@ -210,7 +210,7 @@ struct PinKeypad: View {
                         if name.isEmpty {
                             Color.clear.frame(width: key, height: key)
                         } else {
-                            Button { name == "delete" ? delete() : type(Character(name)) } label: {
+                            Button { name == "delete" ? delete(onScreen: true) : type(Character(name)) } label: {
                                 Group {
                                     if name == "delete" { Glyph("delete", size: 24) } else { Text(name).textFont(Theme.type.title2, weight: .semibold) }
                                 }
@@ -241,10 +241,15 @@ struct PinKeypad: View {
         }
     }
 
-    /// Removes the last digit; with none, leaves the keypad. Works while waiting.
-    private func delete() {
+    /// Removes the last digit; with none, the keyboard's Delete leaves the keypad and the key on screen does nothing
+    /// (`KeypadDelete`). Works while waiting.
+    private func delete(onScreen: Bool) {
         guard !busy else { return }
-        if digits.isEmpty { leave() } else { digits.removeLast() }
+        switch KeypadDelete.of(digits: digits, onScreen: onScreen) {
+        case .removeLast: digits.removeLast()
+        case .leave: leave()
+        case .nothing: break
+        }
     }
 
     private func leave() {

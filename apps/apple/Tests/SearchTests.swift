@@ -32,10 +32,26 @@ private func snapshot(query: String = "dune", rows: [[String: Any]] = [], search
     // No addon can search: said before any query, and after one.
     #expect(SearchWords.idle(try snapshot(searchable: 0)) == "None of your addons can search")
     #expect(SearchWords.answered(try snapshot(searchable: 0), query: "dune") == "None of your addons can search")
-    #expect(SearchWords.answered(try snapshot(rows: []), query: "dune") == "No matches")
+    // Nothing matched: the line says the query, as the web and Android do (trimmed, as the core keeps it).
+    #expect(SearchWords.answered(try snapshot(rows: []), query: "dune ") == "No matches for \"dune\" in your catalogs.")
     #expect(SearchWords.answered(try snapshot(rows: [row("a", title: "Movies", source: "Cinemeta", state: "ready", tiles: 2)]), query: "dune") == nil)
     // An answer to an older query says nothing yet.
     #expect(SearchWords.answered(try snapshot(query: "du"), query: "dune") == nil)
+}
+
+@Test func noAddonThatSearchesOffersTheRecommendedAddons() throws {
+    // The line that says no addon can search has a way on; one that says nothing matched does not.
+    #expect(SearchWords.offersAddons(try snapshot(searchable: 0)))
+    #expect(!SearchWords.offersAddons(try snapshot(rows: [])))
+    #expect(!SearchWords.offersAddons(nil))
+    #expect(SearchWords.addons == "Recommended addons")
+    // Each line that can say it carries the action, and the action pushes the page Settings opens.
+    let screen = try source("Search/SearchScreen.swift")
+    // The answered line on every form, and TV's idle line.
+    #expect(screen.components(separatedBy: "StateLine(symbol: \"search\", text: line, action: addonsAction, spoken: true)").count - 1 == 2, "an answered line lost its action")
+    #expect(screen.contains("StateLine(symbol: \"search\", text: SearchWords.idle(search.snapshot), action: addonsAction)"), "TV's idle line lost its action")
+    #expect(screen.contains("if let addonsAction {\n                Button(addonsAction.title, action: addonsAction.run)"), "the idle line lost its action")
+    #expect(screen.contains(".navigationDestination(isPresented: $addons) { RecommendedAddonsPage(core: core, scope: .all) }"))
 }
 
 @Test func topResultsLeadWithSixAndGoWhenTheyHaveNone() throws {

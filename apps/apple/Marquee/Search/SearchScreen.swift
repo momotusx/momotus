@@ -18,8 +18,12 @@ struct SearchScreen: View {
     /// The query, shared with the Mac header's field (plans/design-v3-phase7-apple.md 2).
     @Environment(SearchInput.self) private var input
     @State private var width: CGFloat = 0
+    /// Recommended addons, pushed from the line that says no addon can search.
+    @State private var addons = false
+    private let core: CoreClient
 
     init(core: CoreClient) {
+        self.core = core
         _search = State(initialValue: LiveRecord("search", core: core))
         _genres = State(initialValue: LiveRecord("genres", core: core))
     }
@@ -49,6 +53,7 @@ struct SearchScreen: View {
             ForEach(search.snapshot?.recent ?? [], id: \.self) { Label($0, glyph: "history").searchCompletion($0) }
         }
         #endif
+        .navigationDestination(isPresented: $addons) { RecommendedAddonsPage(core: core, scope: .all) }
         .task(id: search.taskId) { search.start() }
         #if os(iOS)
         .task(id: genres.taskId) { if !metrics.wide { genres.start() } }
@@ -105,6 +110,11 @@ struct SearchScreen: View {
         search.command(["type": "setQuery", "query": value])
     }
 
+    /// No addon can search: the line's way on is one that does (the web's and Android's Recommended addons).
+    private var addonsAction: (title: String, run: () -> Void)? {
+        SearchWords.offersAddons(search.snapshot) ? (SearchWords.addons, { addons = true }) : nil
+    }
+
     /// The page's edge (the token's on the phone): the field, Recent, the lists and the genre tiles sit on it.
     private var margin: CGFloat { metrics.gutter }
 
@@ -123,7 +133,7 @@ struct SearchScreen: View {
             idle.padding(.horizontal, margin)
         } else {
             if let line = SearchWords.answered(search.snapshot, query: query) {
-                StateLine(symbol: "search", text: line, spoken: true).padding(.horizontal, margin)
+                StateLine(symbol: "search", text: line, action: addonsAction, spoken: true).padding(.horizontal, margin)
             }
             if metrics.wide { wideResults } else { phoneResults }
         }
@@ -137,6 +147,9 @@ struct SearchScreen: View {
             Text(SearchWords.idle(search.snapshot))
                 .textFont(metrics.wide ? 13 : 15, relativeTo: .footnote)
                 .foregroundStyle(Theme.Palette.dim)
+            if let addonsAction {
+                Button(addonsAction.title, action: addonsAction.run).buttonStyle(PillButtonStyle())
+            }
             if let recent = search.snapshot?.recent, !recent.isEmpty {
                 RecentList(recent: recent, input: input)
             }
@@ -232,9 +245,9 @@ struct SearchScreen: View {
                 .padding(.horizontal, metrics.gutter)
         }
         if !typed {
-            StateLine(symbol: "search", text: SearchWords.idle(search.snapshot)).padding(.horizontal, metrics.gutter)
+            StateLine(symbol: "search", text: SearchWords.idle(search.snapshot), action: addonsAction).padding(.horizontal, metrics.gutter)
         } else if let line = SearchWords.answered(search.snapshot, query: query) {
-            StateLine(symbol: "search", text: line, spoken: true).padding(.horizontal, metrics.gutter)
+            StateLine(symbol: "search", text: line, action: addonsAction, spoken: true).padding(.horizontal, metrics.gutter)
         }
         ForEach(search.snapshot?.rows ?? [], id: \.rowId) { row in
             RowView(row: row, retry: { setQuery(query) })

@@ -156,7 +156,7 @@ struct HomeScreen: View {
             // The card sits under Continue Watching, or first without it.
             if !model.rows.contains(where: { $0.rowId == continueRow }) { offerCard }
             ForEach(model.rows, id: \.rowId) { row in
-                RowView(row: row, retry: { model.retry(row) }, startScope: start == .row(row.rowId) ? startScopeID : nil)
+                RowView(row: row, retry: { model.retry(row) }, startScope: start == .row(row.rowId) ? startScopeID : nil, removal: model.removal)
                 if row.rowId == continueRow { offerCard }
             }
             if model.needsSetup { setup.padding(.horizontal, metrics.gutter) }

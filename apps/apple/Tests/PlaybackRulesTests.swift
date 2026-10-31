@@ -83,6 +83,22 @@ private func snapshot(next: String = next, nextAtMs: String = "null", segments: 
     #expect(try calendar("2026-10-30", []).startDay == nil)
 }
 
+@Test func anEmptyCalendarSaysWhyAndLeadsToDiscover() throws {
+    func calendar(days: Int, pending: Int, series: Int) throws -> CalendarSnapshot {
+        let day = #"{"date":"2026-10-31","items":[]}"#
+        let json = #"{"today":"2026-10-31","days":[\#(days == 0 ? "" : day)],"pending":\#(pending),"failed":[],"noSchedule":[],"series":\#(series)}"#
+        return try JSONDecoder().decode(CalendarSnapshot.self, from: Data(json.utf8))
+    }
+    #expect(try calendar(days: 0, pending: 0, series: 0).emptyWords == "No series in your library yet. Series you add show their episodes here.")
+    #expect(try calendar(days: 0, pending: 0, series: 2).emptyWords == "Nothing airs from a week ago to a month ahead for the series in your library.")
+    #expect(try calendar(days: 0, pending: 1, series: 2).emptyWords == nil, "still loading")
+    #expect(try calendar(days: 1, pending: 0, series: 2).emptyWords == nil)
+    // The way on, as the web and Android offer it: Discover, from the empty line itself.
+    let screen = try String(contentsOf: URL(fileURLWithPath: #filePath).deletingLastPathComponent().appending(path: "../Marquee/Library/CalendarScreen.swift"), encoding: .utf8)
+    #expect(CalendarSnapshot.findSeries == "Find series to follow")
+    #expect(screen.contains("StateLine(symbol: \"calendar\", text: empty, action: (CalendarSnapshot.findSeries, { openTab(.discover) }))"), "the empty Calendar lost its action")
+}
+
 @Test func thePhonePlayerPlacesItsPartsByTheRealWindow() {
     // A 320 pt class phone in landscape: the transport joins the actions; from 360 it stays centered.
     #expect(PlayerLayout.joinsTransport(windowHeight: 320))
@@ -1008,4 +1024,32 @@ private func route(_ key: String, sub: UInt64 = 3) -> PlayRoute {
     let start = try #require(source.range(of: "struct EndCard"))
     let card = String(source[start.lowerBound...])
     #expect(!card.contains("kicker("), "an eyebrow is back on the end card")
+}
+
+@Test func thePlaybackMenusVolumeStepsByTenthsAndMutes() throws {
+    var volume = PlayerVolume()
+    #expect(volume.level == 1 && !volume.muted)
+    volume.up()
+    #expect(volume.level == 1, "never past full")
+    for _ in 0..<3 { volume.down() }
+    #expect(volume.level == 0.7)
+    volume.muted = true
+    #expect(volume.muted && volume.level == 0.7, "Mute keeps the level for Unmute")
+    volume.up()
+    #expect(!volume.muted && volume.level == 0.8, "turning it up ends the mute")
+    for _ in 0..<12 { volume.down() }
+    #expect(volume.level == 0)
+    // The Mac's Playback menu holds the three, on their keys, and the model hands the level to both engines.
+    let here = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+    let menu = try String(contentsOf: here.appending(path: "../Marquee/App/AppCommands.swift"), encoding: .utf8)
+    #expect(menu.contains("Button(\"Increase Volume\") { player?.model.volume.up() }\n                    .keyboardShortcut(playerKey(.upArrow, .command))"))
+    #expect(menu.contains("Button(\"Decrease Volume\") { player?.model.volume.down() }\n                    .keyboardShortcut(playerKey(.downArrow, .command))"))
+    #expect(menu.contains("Button(player?.model.volume.muted == true ? \"Unmute\" : \"Mute\") { player?.model.volume.muted.toggle() }\n                    .keyboardShortcut(playerKey(.downArrow, [.command, .option]))"))
+    let model = try String(contentsOf: here.appending(path: "../Marquee/Player/PlayerModel.swift"), encoding: .utf8)
+    let applied = try body(of: "var volume = PlayerVolume()", in: model)
+    #expect(applied.contains("player.volume = volume.level") && applied.contains("player.isMuted = silent") && applied.contains("aether?.engine.volume = heard"))
+    // A walk stays silent whatever the menu says.
+    #expect(try body(of: "private var silent: Bool", in: model).contains("DebugHooks.mute || volume.muted"))
+    #expect(model.contains("private var heard: Float { silent ? 0 : volume.level }"))
+    #expect(model.contains("volume: heard, autoplay: autoplay"), "the second engine opens at the menu's volume")
 }

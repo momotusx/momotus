@@ -18,6 +18,24 @@ final class PlayerModel {
     private(set) var backend: Backend = .avPlayer
     /// The second engine, made the first time a source needs it.
     @ObservationIgnored private(set) var aether: AetherSession?
+    /// The Playback menu's volume and Mute (the Mac), on whichever engine plays.
+    var volume = PlayerVolume() {
+        didSet {
+            player.volume = volume.level
+            player.isMuted = silent
+            aether?.engine.volume = heard
+        }
+    }
+    /// Muted by the menu, or a walk (`-MQMute YES`), which never makes a sound whatever the menu says.
+    private var silent: Bool {
+        #if DEBUG
+        DebugHooks.mute || volume.muted
+        #else
+        volume.muted
+        #endif
+    }
+    /// What the second engine plays at.
+    private var heard: Float { silent ? 0 : volume.level }
     /// One more each time a source on the second engine shows its first frame, failovers included: the window
     /// attaches to that session's layer (`firstFrameMs` is set once a play).
     private(set) var enginePictures = 0
@@ -219,7 +237,7 @@ final class PlayerModel {
         player.audiovisualBackgroundPlaybackPolicy = .continuesIfPossible
         #if DEBUG
         // Walks never make a sound (`-MQMute YES`), and the log says so before anything plays.
-        player.isMuted = DebugHooks.mute
+        player.isMuted = silent
         coreLog.notice("debug: player muted \(self.player.isMuted, privacy: .public)")
         if WalkLog.on { walkLog = WalkLog(player: player) }
         #endif
@@ -1289,15 +1307,10 @@ final class PlayerModel {
         (audioTracks, audioTrack, textTracks, textTrack, textTimeable, engineCues, engineImages, textPictures) = ([], nil, [], nil, [], [], [], [])
         viewerPickedAudio = false
         let mine = { [weak self] in self.map { $0.generation == generation } ?? false }
-        #if DEBUG
-        let muted = DebugHooks.mute
-        #else
-        let muted = false
-        #endif
         // As AVPlayer's load: a source opened under Versions, or again after the server moved, waits paused.
         let autoplay = !(holdPause || covered)
         holdPause = false
-        session.load(.url(address), container: playback?.container, at: start, rate: rate, muted: muted, autoplay: autoplay, openWithin: EngineChoice.openWithin(budgetEndsAtMs: playback?.startBudgetEndsAt), events: .init(
+        session.load(.url(address), container: playback?.container, at: start, rate: rate, volume: heard, autoplay: autoplay, openWithin: EngineChoice.openWithin(budgetEndsAtMs: playback?.startBudgetEndsAt), events: .init(
             time: { [weak self] time in if mine() { self?.engineTick(time) } },
             duration: { [weak self] seconds in if mine() { self?.engineDuration(seconds, key: key) } },
             state: { [weak self] playing, waiting in if mine() { self?.engineState(playing: playing, waiting: waiting) } },
