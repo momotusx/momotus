@@ -378,7 +378,7 @@ object StreamChoiceCopy {
 
     /** The Streaming service row shows only with an account. */
     const val READY_ONLY_WITH_ACCOUNT = true
-    const val AUDIO = "Audio"
+    const val AUDIO = "Audio language"
     const val AUDIO_HELP = "Listed in the order you turn them on; the first one wins."
     val LEARN = Setting("Learn from my picks", listOf(Choice("On", true), Choice("Off", false)))
     const val FORGET = "Forget what was learned"

@@ -32,7 +32,6 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import app.marquee.core.StreamChoiceCopy
 import app.marquee.core.StreamChoiceSettings
 import app.marquee.core.client.DeviceCapsParams
-import app.marquee.core.model.LanguageChoice
 import app.marquee.core.model.Network
 import app.marquee.core.model.Prefs
 import app.marquee.core.model.Speed
@@ -100,7 +99,7 @@ fun StreamChoiceScreen(session: CoreSession) {
                             ?.accounts
                             ?.size ?: 0
                     ) > 0
-                Section { Rows(prefs, page, account, session.ops::languages) }
+                Section { Rows(prefs, page, account) }
             }
         }
     }
@@ -112,7 +111,6 @@ private fun Rows(
     prefs: Prefs,
     page: StreamChoiceSettings,
     account: Boolean,
-    languages: suspend () -> List<LanguageChoice>,
 ) {
     val s = prefs.streams
     // Undo and Forget take their row away: focus goes to the Learn choice, never to Forget (a second
@@ -131,11 +129,6 @@ private fun Rows(
         if (account || !StreamChoiceCopy.READY_ONLY_WITH_ACCOUNT) {
             Hairline()
             Choices(StreamChoiceCopy.READY, { it == s.preferReady }) { page.set("preferReady", it) }
-        }
-        Hairline()
-        Labelled(StreamChoiceCopy.AUDIO, StreamChoiceCopy.AUDIO_HELP) {
-            // Several may be on; the list keeps the order they were turned on in, the first wins.
-            Languages(s.languages, languages, { page.set("languages", it) }, audio = true)
         }
         Hairline()
         Labelled(StreamChoiceCopy.LEARN.label, null) {

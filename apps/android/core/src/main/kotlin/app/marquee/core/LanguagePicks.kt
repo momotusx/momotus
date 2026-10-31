@@ -20,6 +20,20 @@ object LanguagePicks {
             .groupBy { it.code.substringBefore('-') }
             .map { (code, same) -> LanguageChoice(code, same.first().name.substringBefore(" (")) }
 
+    /** What Settings' Second line stores for its "Spoken language" row (`Prefs.secondSubtitle`). */
+    const val SPOKEN = "audio"
+
+    /**
+     * Settings' Second line (plans/dual-subtitles.md 5.5): a language in the first subtitle language's primary
+     * language ([first], as the profile stores it, "eng" or "pt-BR") is the first line's and cannot be picked there.
+     */
+    fun onFirstLine(
+        code: String,
+        first: String?,
+    ): Boolean = first != null && primary(code) == primary(first)
+
+    private fun primary(code: String) = VersionsCopy.tag(code).substringBefore('-').lowercase()
+
     /** The English name of [code]: the core's, else what the platform calls it (a code from before the full list, "eng"). */
     fun name(
         code: String,

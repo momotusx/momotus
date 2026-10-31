@@ -3,6 +3,7 @@ package app.marquee.core
 import app.marquee.core.model.LanguageChoice
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /** The language pickers over the core's full list. */
@@ -57,5 +58,15 @@ class LanguagePicksTest {
         val audio = LanguagePicks.audio(all)
         assertEquals(listOf("en", "es", "pl", "pt", "ko", "zh", "ar"), audio.map { it.code })
         assertEquals("Chinese", audio.first { it.code == "zh" }.name)
+    }
+
+    @Test
+    fun `the Second line cannot take the first subtitle language, in any spelling`() {
+        assertTrue(LanguagePicks.onFirstLine("en", "eng"))
+        assertTrue(LanguagePicks.onFirstLine("en", "en"))
+        assertTrue(LanguagePicks.onFirstLine("pt", "pt-BR"))
+        assertTrue(LanguagePicks.onFirstLine("pt-BR", "por"))
+        assertFalse(LanguagePicks.onFirstLine("tr", "eng"))
+        assertFalse(LanguagePicks.onFirstLine("en", null))
     }
 }

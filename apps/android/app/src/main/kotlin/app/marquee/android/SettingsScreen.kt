@@ -45,6 +45,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.disabled
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -73,6 +74,7 @@ import app.marquee.core.client.CoreLog
 import app.marquee.core.model.AddonInfo
 import app.marquee.core.model.LanguageChoice
 import app.marquee.core.model.PluginsAnswer
+import app.marquee.core.model.SubtitleLayout
 import app.marquee.core.model.SubtitleSize
 import app.marquee.core.model.Tile
 import app.marquee.core.session.CoreSession
@@ -108,6 +110,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
@@ -128,7 +132,7 @@ class SettingsHolder(
 }
 
 /** The parts of the page an operation can come from. */
-internal enum class Place { Addons, Install, Playback }
+internal enum class Place { Addons, Install, Playback, Subtitles }
 
 /** What an operation ended with, shown under the part of the page it came from. */
 internal class Said(
@@ -374,6 +378,17 @@ fun SettingsScreen(
                         })
                         Playback(holder, runner.busy != null) { what, op -> runner.run(what, Place.Playback, op = op) }
                         runner.said?.takeIf { it.place == Place.Playback }?.let { SaidLine(it, side = 0.dp) }
+                    }
+                },
+            )
+            add(
+                SettingsPart(SettingsSection.Subtitles) {
+                    Column(verticalArrangement = Arrangement.spacedBy(if (tv) 20.dp else 16.dp)) {
+                        SubtitlesAudio(
+                            holder,
+                            runner.busy != null,
+                        ) { what, op -> runner.run(what, Place.Subtitles, op = op) }
+                        runner.said?.takeIf { it.place == Place.Subtitles }?.let { SaidLine(it, side = 0.dp) }
                     }
                 },
             )
@@ -982,35 +997,6 @@ private fun Playback(
     val ops = holder.session.ops
     Section(0.dp, groupRadius()) {
         Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.s)) {
-            // The core marks the device's language as it lists it ("nb" reads as "no").
-            val device = DeviceCaps.languageCode(LocalConfiguration.current.locales[0])
-            val load = remember(ops, device) { suspend { ops.languages(device) } }
-            SubtitleLanguage(prefs.subtitleLanguages, load) { list ->
-                if (!busy) {
-                    run("Changing the subtitle languages") {
-                        ops.setPrefs(buildJsonObject { put("subtitleLanguages", json(list)) })
-                    }
-                }
-            }
-            MqText("Subtitle size", role = TextRole.Headline, weight = FontWeight.Bold)
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(Marquee.space.xs),
-                verticalArrangement = Arrangement.spacedBy(Marquee.space.xs),
-            ) {
-                for ((size, words) in SUBTITLE_SIZES) {
-                    Chip(
-                        words,
-                        selected = prefs.subtitleSize == size,
-                        onClick = {
-                            if (!busy && prefs.subtitleSize != size) {
-                                run("Changing the subtitle size") {
-                                    ops.setPrefs(buildJsonObject { put("subtitleSize", JsonPrimitive(size.wire)) })
-                                }
-                            }
-                        },
-                    )
-                }
-            }
             SettingSwitch(
                 "Next episode",
                 if (prefs.autoplayNext) "Plays on its own" else "Waits for you",
@@ -1025,6 +1011,167 @@ private fun Playback(
         }
     }
 }
+
+/**
+ * Settings > Subtitles and audio (the owner, 2026-10-27 and 2026-10-31): the subtitle languages, their size and the
+ * audio languages; then the second line (plans/dual-subtitles.md 5.5), the same profile values as the player's.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun SubtitlesAudio(
+    holder: SettingsHolder,
+    busy: Boolean,
+    run: (String, suspend () -> Unit) -> Unit,
+) {
+    val prefs = holder.prefs.current() ?: return
+    val ops = holder.session.ops
+    val set = { what: String, field: String, value: JsonElement ->
+        if (!busy) run(what) { ops.setPrefs(buildJsonObject { put(field, value) }) }
+    }
+    // The core marks the device's language as it lists it ("nb" reads as "no").
+    val device = DeviceCaps.languageCode(LocalConfiguration.current.locales[0])
+    val load = remember(ops, device) { suspend { ops.languages(device) } }
+    Section(0.dp, groupRadius()) {
+        Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.s)) {
+            SubtitleLanguage(prefs.subtitleLanguages, load) {
+                set("Changing the subtitle languages", "subtitleLanguages", json(it))
+            }
+            MqText("Subtitle size", role = TextRole.Headline, weight = FontWeight.Bold)
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(Marquee.space.xs),
+                verticalArrangement = Arrangement.spacedBy(Marquee.space.xs),
+            ) {
+                for ((size, words) in SUBTITLE_SIZES) {
+                    Chip(words, selected = prefs.subtitleSize == size, onClick = {
+                        if (prefs.subtitleSize !=
+                            size
+                        ) {
+                            set("Changing the subtitle size", "subtitleSize", JsonPrimitive(size.wire))
+                        }
+                    })
+                }
+            }
+            MqText(StreamChoiceCopy.AUDIO, role = TextRole.Headline, weight = FontWeight.Bold)
+            Languages(prefs.streams.languages, load, {
+                set("Changing the audio languages", "streams", buildJsonObject { put("languages", json(it)) })
+            }, audio = true)
+            MqText(StreamChoiceCopy.AUDIO_HELP, role = TextRole.Caption, color = Marquee.colors.muted)
+        }
+    }
+    Section(0.dp, groupRadius()) {
+        SecondLineRows(
+            prefs.secondSubtitle,
+            prefs.subtitleLayout,
+            prefs.secondOnPause,
+            prefs.subtitleLanguages.firstOrNull(),
+            load,
+            onSecond = { set("Changing the second line", "secondSubtitle", it?.let(::JsonPrimitive) ?: JsonNull) },
+            onLayout = { set("Changing the layout", "subtitleLayout", JsonPrimitive(it.wire)) },
+            onPaused = { set("Changing the second line", "secondOnPause", JsonPrimitive(it)) },
+        )
+    }
+}
+
+/**
+ * The second line's rows (plans/dual-subtitles.md 5.5): Second line (Off, Spoken language, then the languages by
+ * search, the first subtitle language's reading "Subtitle language" and not to be picked), then Layout and Only when
+ * paused while a second line is set.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+internal fun SecondLineRows(
+    second: String?,
+    layout: SubtitleLayout,
+    paused: Boolean,
+    /** The profile's first subtitle language, as stored. */
+    first: String?,
+    load: suspend () -> List<LanguageChoice>,
+    onSecond: (String?) -> Unit,
+    onLayout: (SubtitleLayout) -> Unit,
+    onPaused: (Boolean) -> Unit,
+) {
+    val all by produceState(emptyList<LanguageChoice>(), load) {
+        value =
+            try {
+                load()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                emptyList()
+            }
+    }
+    var query by remember { mutableStateOf("") }
+    val device = DeviceCaps.languageCode(LocalConfiguration.current.locales[0])
+    val language = second?.takeIf { it != LanguagePicks.SPOKEN }
+    val row = Modifier.fillMaxWidth()
+    Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.s)) {
+        // The chosen chip (Off, Spoken language or the language) is the row's value.
+        MqText(StreamChoiceCopy.SECOND_LINE, role = TextRole.Headline, weight = FontWeight.Bold)
+        MqText(SECOND_LINE_HELP, role = TextRole.Caption, color = Marquee.colors.muted)
+        FlowRow(
+            row,
+            horizontalArrangement = Arrangement.spacedBy(Marquee.space.xs),
+            verticalArrangement = Arrangement.spacedBy(Marquee.space.xs),
+        ) {
+            Chip("Off", selected = second == null, onClick = { if (second != null) onSecond(null) })
+            Chip(StreamChoiceCopy.SPOKEN_LANGUAGE, selected = second == LanguagePicks.SPOKEN, onClick = {
+                if (second != LanguagePicks.SPOKEN) onSecond(LanguagePicks.SPOKEN)
+            })
+            language?.let { Chip(LanguagePicks.name(it, all), selected = true, onClick = {}) }
+        }
+        MqTextField(
+            value = query,
+            onValueChange = { query = it },
+            label = "Find a language",
+            placeholder = "Polish, Korean, Arabic",
+        )
+        FlowRow(
+            row,
+            horizontalArrangement = Arrangement.spacedBy(Marquee.space.xs),
+            verticalArrangement = Arrangement.spacedBy(Marquee.space.xs),
+        ) {
+            for (choice in LanguagePicks.search(all, query, listOfNotNull(language), device)) {
+                key(choice.code) {
+                    // The first line's language stays in the list, says why it cannot be picked, and is skipped by
+                    // TalkBack's actions; a remote still lands on it, so the focused chip explains itself.
+                    val blocked = LanguagePicks.onFirstLine(choice.code, first)
+                    Chip(
+                        choice.name,
+                        selected = false,
+                        onClick = {
+                            if (!blocked) {
+                                onSecond(choice.code)
+                                query = ""
+                            }
+                        },
+                        modifier = if (blocked) Modifier.semantics { disabled() } else Modifier,
+                        detail = if (blocked) "Subtitle language" else null,
+                    )
+                }
+            }
+        }
+        if (second != null) {
+            MqText(StreamChoiceCopy.LAYOUT, role = TextRole.Headline, weight = FontWeight.Bold)
+            FlowRow(
+                row,
+                horizontalArrangement = Arrangement.spacedBy(Marquee.space.xs),
+                verticalArrangement = Arrangement.spacedBy(Marquee.space.xs),
+            ) {
+                for ((value, words) in StreamChoiceCopy.LAYOUTS) {
+                    Chip(words, selected = layout == value, onClick = { if (layout != value) onLayout(value) })
+                }
+            }
+            MqText(LAYOUT_HELP, role = TextRole.Caption, color = Marquee.colors.muted)
+            SettingSwitch(StreamChoiceCopy.ONLY_WHEN_PAUSED, PAUSED_HELP, paused) { onPaused(!paused) }
+        }
+    }
+}
+
+internal const val SECOND_LINE_HELP =
+    "A second subtitle in another language, with the first. Spoken language follows each film's audio."
+internal const val LAYOUT_HELP =
+    "Stacked puts the second line above the first, Split at the top of the picture, One box both in one box."
+internal const val PAUSED_HELP = "The second line shows only while the video is paused."
 
 /**
  * This device: what this device keeps for itself, never synced (plans/appletv-polish.md decision 13). A TV has it where
@@ -1054,7 +1201,7 @@ internal fun DevicePrefs() {
 
 private fun json(list: List<String>) = JsonArray(list.map(::JsonPrimitive))
 
-/** Settings > Playback's Subtitle language: the first chosen language named, then the ordered picker. */
+/** Settings > Subtitles and audio's Subtitle language: the first chosen language named, then the ordered picker. */
 @Composable
 internal fun SubtitleLanguage(
     chosen: List<String>,

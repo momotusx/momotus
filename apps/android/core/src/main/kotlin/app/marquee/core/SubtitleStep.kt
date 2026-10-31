@@ -114,7 +114,7 @@ class SubtitleStep(
         const val TITLE = "Subtitles"
         const val LEAD =
             "Pick the language subtitles start in. They turn on when a film's audio is in another language. " +
-                "Change it later in Settings, under Playback."
+                "Change it later in Settings, under Subtitles and audio."
         const val DEVICE = "This device's language"
         const val NONE = "No subtitles"
         const val NONE_LINE = "Turn them on while watching"

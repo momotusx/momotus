@@ -573,10 +573,12 @@ object VersionsCopy {
 
     /** The English name of a language code ("eng", "tr", "pt-BR"); the code in capitals when unknown. */
     fun languageName(code: String): String {
-        val tag = ISO1[code.lowercase()] ?: code
-        val name = Locale.forLanguageTag(tag).getDisplayName(Locale.ENGLISH)
+        val name = Locale.forLanguageTag(tag(code)).getDisplayName(Locale.ENGLISH)
         return if (name.isEmpty() || name.equals(code, ignoreCase = true)) code.uppercase() else name
     }
+
+    /** A language code as a tag: the bibliographic three-letter codes ("eng", "pob") as the core reads them. */
+    fun tag(code: String): String = ISO1[code.lowercase()] ?: code
 
     // The bibliographic three-letter codes Locale does not take, as on the web.
     private val ISO1 =

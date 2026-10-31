@@ -195,6 +195,9 @@ class SettingsA1Test {
             SettingsPart(SettingsSection.Playback) {
                 SettingsGroup({ SettingsRow(Icons.SlidersHorizontal, Tone.Teal, "Stream choice", "Start fast.", {}) })
             },
+            SettingsPart(SettingsSection.Subtitles) {
+                SettingsGroup({ SettingsRow(Icons.Captions, Tone.Sky, "Second line", "Spoken language.", {}) })
+            },
             SettingsPart(SettingsSection.About) {
                 SettingsGroup({ SettingsRow(Icons.Info, Tone.Grey, "Momotus", "Free software under the GPL 3.", {}) })
             },
@@ -374,6 +377,22 @@ class SettingsA1Test {
 
     @Test
     @Config(qualifiers = "w960dp-h540dp-xhdpi")
+    fun `TV, Subtitles and audio is its own menu entry after Playback and takes the remote into its section`() {
+        serve()
+        tv({ null })
+        compose.waitUntil(5_000) { runCatching { focused().assert(hasTestTag(SETTINGS_PROFILE)) }.isSuccess }
+        val playback = boundsOf(compose.onNode(hasText("Playback") and inMenu))
+        val subtitles = boundsOf(compose.onNode(hasText("Subtitles and audio") and inMenu))
+        assertTrue(subtitles.top > playback.top, "Subtitles and audio is not after Playback: $subtitles, $playback")
+        compose.onNode(hasText("Subtitles and audio") and inMenu).performClick()
+        compose.waitForIdle()
+        focused().assert(inList and hasText("Second line"))
+        compose.onNode(hasText("Stream choice") and inList).assertDoesNotExist()
+        compose.onNode(hasText("Subtitles and audio") and inMenu).assertIsSelected()
+    }
+
+    @Test
+    @Config(qualifiers = "w960dp-h540dp-xhdpi")
     fun `TV, the menu shows one section at a time, Sources first`() {
         serve()
         tv({ null })
@@ -403,6 +422,8 @@ class SettingsA1Test {
         compose.onNodeWithText("Debrid services").assertDoesNotExist()
         compose.onNodeWithTag(SETTINGS_LIST).performScrollToIndex(1)
         compose.onNodeWithText(SettingsSection.Sources.summary).assertExists()
+        compose.onNodeWithText(SettingsSection.Subtitles.summary).assertExists()
+        compose.onNodeWithText(SettingsSection.Playback.summary).assertExists()
         compose.onNodeWithText("Sources").performClick()
         compose.runOnIdle { assertEquals(SettingsSection.Sources, opened) }
     }
