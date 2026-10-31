@@ -151,7 +151,7 @@ final class DefaultsStep {
             failure = nil
         } catch is CancellationError {
         } catch {
-            failure = error.localizedDescription
+            failure = ErrorWords.of(error)
         }
     }
 
@@ -183,7 +183,7 @@ final class DefaultsStep {
         } catch is CancellationError {
             return false
         } catch {
-            failure = error.localizedDescription
+            failure = ErrorWords.of(error)
             return false
         }
     }
@@ -287,7 +287,7 @@ final class LinkInstall {
             refused = url
         } catch is CancellationError {
         } catch {
-            problem = error.localizedDescription
+            problem = ErrorWords.of(error)
         }
     }
 
@@ -302,7 +302,7 @@ final class LinkInstall {
             if trimmed == url { link = "" }
         } catch is CancellationError {
         } catch {
-            problem = error.localizedDescription
+            problem = ErrorWords.of(error)
         }
     }
 

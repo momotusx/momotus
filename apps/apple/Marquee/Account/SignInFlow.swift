@@ -402,7 +402,7 @@ final class SignInFlow {
             mailFlow = nil
         default:
             say(refused)
-            if trouble == nil { trouble = AccountRules.Trouble(text: error?.localizedDescription ?? AccountRules.words.unreachable, actions: []) }
+            if trouble == nil { trouble = AccountRules.Trouble(text: error.map(ErrorWords.of) ?? AccountRules.words.unreachable, actions: []) }
         }
     }
 
@@ -583,7 +583,7 @@ final class SignInFlow {
         }
         let code = (error as? CoreError)?.code ?? "unreachable"
         say(code)
-        if trouble == nil { trouble = AccountRules.Trouble(text: error.localizedDescription, actions: []) }
+        if trouble == nil { trouble = AccountRules.Trouble(text: ErrorWords.of(error), actions: []) }
         if !onEmail { stage = .choose }
     }
 }

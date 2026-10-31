@@ -181,7 +181,7 @@ struct DebridScreen: View {
                 keyFields.remove(service.id)
             } catch is CancellationError {
             } catch {
-                said = (service.id, error.localizedDescription)
+                said = (service.id, ErrorWords.of(error))
             }
         }
     }

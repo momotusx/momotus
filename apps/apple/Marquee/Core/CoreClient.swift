@@ -74,7 +74,7 @@ final class CoreClient {
             Task { @MainActor in
                 guard let self, let router, self.router === router else { return }
                 // Falling behind is no crash: a new core opens at once.
-                if reason.hasPrefix("overflow") { self.restart() } else { self.failure = "The core stopped (\(reason))." }
+                if reason.hasPrefix("overflow") { self.restart() } else { self.failure = ErrorWords.of(kind: "coreStopped") }
             }
         }
         router.onProfileGone { [weak self] profile in
@@ -110,10 +110,12 @@ final class CoreClient {
                 for text in queued { core.send(json: text) }
                 queued = []
             case .failure(let error):
-                let reason = "The core could not open: \(error)"
-                failure = reason
+                // Its reason goes to the log; the screen says it in words.
+                coreLog.fault("core could not open: \(String(describing: error), privacy: .public)")
+                let words = ErrorWords.of(kind: "coreNotStarted")
+                failure = words
                 queued = []
-                router.fail(CoreError(reason))
+                router.fail(CoreError(words, kind: "coreNotStarted"))
             }
         }
     }
@@ -175,7 +177,7 @@ final class CoreClient {
     /// when a field cannot be sent; a reply from before a profile switch is dropped, as `request` drops it.
     /// Each call waits in the router until its reply: for user-rate senders, not per-tick ones.
     func sendNow(_ op: String, _ fields: [String: any Sendable], done: @escaping @MainActor @Sendable (CoreError?) -> Void) {
-        if core == nil, let failure { done(CoreError(failure)); return }
+        if core == nil, let failure { done(CoreError(failure, kind: "said")); return }
         let router = router
         let id = router.nextId()
         let text: String
@@ -271,7 +273,7 @@ final class CoreClient {
     func request<R: Sendable>(
         _ op: String, _ fields: [String: any Sendable], decode: @escaping @Sendable (Data) throws -> R
     ) async throws -> R {
-        if core == nil, let failure { throw CoreError(failure) }
+        if core == nil, let failure { throw CoreError(failure, kind: "said") }
         let router = router
         let id = router.nextId()
         let text = try Self.encode(op: op, id: id, fields: fields)

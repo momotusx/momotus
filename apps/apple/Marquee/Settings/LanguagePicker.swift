@@ -70,7 +70,7 @@ struct LanguagePicker: View {
             all = try await core.call("languages", as: [LanguageChoice].self)
             failure = nil
         } catch {
-            failure = "The languages did not load: \(error.localizedDescription)"
+            failure = "The languages did not load: \(ErrorWords.of(error))"
         }
     }
 }

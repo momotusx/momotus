@@ -4,7 +4,7 @@ extension KeypadResult {
     /// A core refusal sorted for the keypad.
     static func of(_ error: any Error) -> KeypadResult {
         let core = error as? CoreError
-        return of(code: core?.code, retryAfterMs: core?.retryAfterMs, message: error.localizedDescription)
+        return of(code: core?.code, retryAfterMs: core?.retryAfterMs, message: ErrorWords.of(error))
     }
 }
 

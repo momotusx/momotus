@@ -78,7 +78,8 @@ private let preview = ForkPreview(
         let words = { (code: String?, message: String, action: SyncAction) in SyncProblem(code: code, message: message, action: action).words }
         #expect(words("rosterChanged", "", .serverList) == W.forkChanged)
         #expect(words("wrongRecord", "", .leave) == W.wrongRecord)
-        #expect(words(nil, "http status 401", .compare) == W.forkTokenLost)
+        #expect(SyncProblem(code: nil, message: "raw", action: .compare, kind: "unauthorized").words == W.forkTokenLost)
+        #expect(words(nil, "http status 401", .compare) != W.forkTokenLost)
         #expect(words(nil, "http status 401", .serverList).hasPrefix("Nothing changed."))
         #expect(words("unconfirmed", "", .differ).hasPrefix("The approval is still open"))
         #expect(words("unconfirmed", "", .remove).hasPrefix("Nothing changed"))

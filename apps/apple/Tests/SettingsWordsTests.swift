@@ -8,8 +8,9 @@ import Testing
     let silent = "The sync server did not answer. Check the address and try again."
     #expect(PairingWords.problem("network: error sending request for url (https://relay.example.org/v1/pair)") == silent)
     #expect(PairingWords.problem("http status 502 Bad Gateway") == silent)
-    #expect(PairingWords.problem("invalid url: https://user:secret@relay.example.org") == "That is not a sync server address. It looks like https://sync.example.org.")
-    #expect(PairingWords.problem("blocked private address 10.0.0.4") == "This device does not connect to that address.")
+    #expect(PairingWords.problem("invalid url: https://user:secret@relay.example.org", kind: "invalidUrl") == "That is not a sync server address. It looks like https://sync.example.org.")
+    #expect(PairingWords.problem("invalid url: https://user:secret@relay.example.org") == silent)
+    #expect(PairingWords.problem("blocked private address 10.0.0.4", kind: "blockedAddress") == "This device does not connect to that address.")
     #expect(PairingWords.problem("the relay must use https unless it is on this network") == "The sync server address must start with https.")
 }
 

@@ -149,7 +149,7 @@ struct StreamChoiceScreen: View {
         focus = "learn"
         problem = nil
         Task {
-            do { try await core.perform(op, fields) } catch { problem = error.localizedDescription }
+            do { try await core.perform(op, fields) } catch { problem = ErrorWords.of(error) }
         }
     }
 
@@ -158,7 +158,7 @@ struct StreamChoiceScreen: View {
             conditions = try await core.call("resetSpeed", as: StreamConditions.self)
             measuring = true
         } catch {
-            problem = error.localizedDescription
+            problem = ErrorWords.of(error)
         }
     }
 }

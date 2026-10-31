@@ -26,7 +26,7 @@ import Testing
     }
 }
 
-private let timeout = CoreError("This addon's server did not answer in time", code: "timeout")
+private let timeout = CoreError("This addon's server did not answer in time", code: "timeout", kind: "said")
 
 @Suite(.serialized) @MainActor struct FindAddonsWiringTests {
     private let cards = InstallCards.shared
@@ -91,7 +91,7 @@ private let timeout = CoreError("This addon's server did not answer in time", co
             Issue.record("the page is \(page.status(of: "official")), not failed")
             return
         }
-        #expect(words.hasPrefix("The core could not open"))
+        #expect(words == ErrorWords.of(kind: "coreNotStarted"))
         #expect(page.status(of: "official").announcement(after: .loading) == words)
     }
 

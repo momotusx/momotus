@@ -190,10 +190,10 @@ private let tokenRefusal = CoreError("this link carries a sign-in in its setting
 
     @Test func aLinkThatCannotBeReadStaysUnderTheFieldAndAsksNothing() async {
         let calls = Calls()
-        let link = field(calls, previewFails: CoreError("This addon's server did not answer in time", code: "timeout"))
+        let link = field(calls, previewFails: CoreError("timed out", kind: "timeout"))
         link.link = "https://addon.example/manifest.json"
         await link.install()
-        #expect(link.problem == "This addon's server did not answer in time")
+        #expect(link.problem == ErrorWords.of(kind: "timeout"))
         #expect(link.gate.asking == nil)
         #expect(calls.installs.isEmpty)
         #expect(!link.checking)

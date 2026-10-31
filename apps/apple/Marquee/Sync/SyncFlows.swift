@@ -1107,7 +1107,7 @@ struct ForkReviewScreen: View {
                 if let loadError {
                     Said(tone: .bad, text: loadError.words)
                     // A server that no longer knows this device's token: stopping here is the way out.
-                    if loadError.code == nil, loadError.message == "http status 401" { LeaveHere() }
+                    if loadError.code == nil, loadError.kind == "unauthorized" { LeaveHere() }
                     FlowRow(spacing: Theme.Space.xs) {
                         Button { Task { await load() } } label: { Label(W.retry, glyph: "refresh-cw") }.buttonStyle(PillButtonStyle(prominent: true))
                         Button(W.cancel) { dismiss() }.buttonStyle(PillButtonStyle())

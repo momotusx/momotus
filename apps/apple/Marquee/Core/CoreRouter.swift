@@ -29,6 +29,7 @@ final class CoreRouter: CoreListener {
         let ok: Bool?
         let error: String?
         let code: String?
+        let kind: String?
         let sub: UInt64?
         let core: String?
         let reason: String?
@@ -38,7 +39,7 @@ final class CoreRouter: CoreListener {
         let profile: String?
         let profileId: String?
 
-        private enum Key: String, CodingKey { case id, ok, error, code, sub, core, reason, retryAfterMs, views, profile }
+        private enum Key: String, CodingKey { case id, ok, error, code, kind, sub, core, reason, retryAfterMs, views, profile }
 
         init(from decoder: any Decoder) throws {
             let c = try decoder.container(keyedBy: Key.self)
@@ -48,6 +49,7 @@ final class CoreRouter: CoreListener {
             ok = try c.decodeIfPresent(Bool.self, forKey: .ok)
             error = try c.decodeIfPresent(String.self, forKey: .error)
             code = try c.decodeIfPresent(String.self, forKey: .code)
+            kind = try c.decodeIfPresent(String.self, forKey: .kind)
             sub = try c.decodeIfPresent(UInt64.self, forKey: .sub)
             core = try c.decodeIfPresent(String.self, forKey: .core)
             reason = try c.decodeIfPresent(String.self, forKey: .reason)
@@ -114,7 +116,7 @@ final class CoreRouter: CoreListener {
             push(sub, data)
         } else if let id = head.id {
             let waiter = state.withLock { $0.waiters.removeValue(forKey: id) }
-            waiter?(head.ok == true ? .success(data) : .failure(CoreError(head.error ?? "request failed", code: head.code, retryAfterMs: head.retryAfterMs, views: head.views)))
+            waiter?(head.ok == true ? .success(data) : .failure(CoreError(head.error ?? "request failed", code: head.code, retryAfterMs: head.retryAfterMs, views: head.views, kind: head.kind)))
         } else if head.profile == "gone", let profile = head.profileId {
             state.withLock { $0.onProfileGone }?(profile)
         } else if head.core == "died" || head.core == "overflow" {
@@ -126,7 +128,7 @@ final class CoreRouter: CoreListener {
                 defer { state.waiters.removeAll() }
                 return (Array(state.waiters.values), state.onDied)
             }
-            waiters.forEach { $0(.failure(CoreError("The core stopped: \(reason)"))) }
+            waiters.forEach { $0(.failure(CoreError("The core stopped: \(reason)", kind: "coreStopped"))) }
             onDied?(reason)
         } else if head.ok == false {
             coreLog.error("core rejected a request: \(head.error ?? "", privacy: .public)")

@@ -217,7 +217,7 @@ final class DownloadKeeper {
         failure = nil
         core.sendNow(op, fields) { [weak self] error in
             if let error {
-                coreLog.notice("downloads: \(op, privacy: .public) failed: \(error.localizedDescription, privacy: .public)")
+                coreLog.notice("downloads: \(op, privacy: .public) failed: \(String(describing: error), privacy: .public)")
                 let words = op == "downloadAdd" ? DownloadCopy.addFailed : DownloadCopy.actFailed
                 self?.failure = words
                 // Said once, here: every page showing the line is still mounted under the top one (review r4 N12).
@@ -293,7 +293,7 @@ final class DownloadKeeper {
             submitted = id
             lastProgress = progress
         } catch {
-            coreLog.notice("downloads: the continued task was refused: \(error.localizedDescription, privacy: .public)")
+            coreLog.notice("downloads: the continued task was refused: \(String(describing: error), privacy: .public)")
             // Refused: the downloads go on while the app is open, as below iOS 26.
             handle(.expired)
         }

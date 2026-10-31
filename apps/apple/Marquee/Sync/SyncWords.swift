@@ -261,22 +261,25 @@ enum SyncAction: Equatable, Sendable {
     case round, start, recover, approve, devices, kit, remove, lost, leave, delete, differ, compare, serverList
 }
 
-/// A sync failure in plain words; `code` names the ones with a fix.
+/// A sync failure in plain words; `code` names the ones with a fix, `kind`
+/// what kind of failure it was (a status is read from it, never from `message`).
 struct SyncProblem: Equatable {
     let code: String?
     let message: String
     var action: SyncAction = .round
+    var kind: String?
 
-    init(code: String?, message: String, action: SyncAction = .round) {
+    init(code: String?, message: String, action: SyncAction = .round, kind: String? = nil) {
         self.code = code
         self.message = message
         self.action = action
+        self.kind = kind
     }
 
-    /// From a thrown error: the core's code and words.
+    /// From a thrown error: the core's code, raw text and kind.
     init(_ error: any Error, action: SyncAction) {
         let core = error as? CoreError
-        self.init(code: core?.code, message: core?.message ?? error.localizedDescription, action: action)
+        self.init(code: core?.code, message: core?.message ?? String(describing: error), action: action, kind: core?.kind)
     }
 
     var words: String {
@@ -302,17 +305,18 @@ struct SyncProblem: Equatable {
         case "notOwner": return "Only the main profile can do that."
         default: break
         }
-        if action == .start, message == "http status 403" { return "This sync server needs an invite code, or the one entered is wrong." }
-        if action == .recover, message == "http status 404" { return SyncWords.wrongKit }
-        if action == .approve, message == "http status 404" || message == "http status 410" {
+        if action == .start, kind == "forbidden" { return "This sync server needs an invite code, or the one entered is wrong." }
+        if action == .recover, kind == "notFound" { return SyncWords.wrongKit }
+        if action == .approve, kind == "notFound" {
             return "This code expired or was used already. Ask the new device for a new one."
         }
         // The core's own sentences are kept; anything else may name the server's address.
         if message.hasPrefix("roster: ") { return PairingWords.problem("pairing: " + message.dropFirst("roster: ".count)) }
-        for kept in ["pairing: ", "invalid url", "blocked private address", "the relay must use https"] where message.hasPrefix(kept) {
+        for kept in ["pairing: ", "the relay must use https"] where message.hasPrefix(kept) {
             return PairingWords.problem(message)
         }
-        if action == .compare, message == "http status 401" { return SyncWords.forkTokenLost }
+        if kind == "invalidUrl" || kind == "blockedAddress" { return PairingWords.problem(message, kind: kind) }
+        if action == .compare, kind == "unauthorized" { return SyncWords.forkTokenLost }
         if action == .round { return "The sync server did not answer. Your changes wait here and go out on the next sync." }
         if action == .devices { return "The sync server did not answer, so this list may be out of date. Try again in a moment." }
         let notDone = switch action {
@@ -387,15 +391,15 @@ enum PairingWords {
 
     /// Why pairing stopped. The core's own pairing reasons are fixed sentences
     /// and are kept; a connection or address error is replaced, since its text
-    /// can name the server's address.
-    static func problem(_ reason: String) -> String {
+    /// can name the server's address: its `kind` says which.
+    static func problem(_ reason: String, kind: String? = nil) -> String {
         if reason.hasPrefix("pairing: ") {
             let why = reason.dropFirst("pairing: ".count)
             return why.prefix(1).uppercased() + why.dropFirst() + "."
         }
         if reason.hasPrefix("the relay must use https") { return SyncProblem(code: "insecure", message: reason).words }
-        if reason.hasPrefix("invalid url") { return "That is not a sync server address. It looks like https://sync.example.org." }
-        if reason.hasPrefix("blocked private address") { return "This device does not connect to that address." }
+        if kind == "invalidUrl" { return "That is not a sync server address. It looks like https://sync.example.org." }
+        if kind == "blockedAddress" { return "This device does not connect to that address." }
         return "The sync server did not answer. Check the address and try again."
     }
 

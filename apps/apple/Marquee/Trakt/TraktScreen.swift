@@ -200,7 +200,7 @@ private struct TraktCard: View {
         do {
             said = (.ok, TraktRules.syncedLine(try await trakt.syncNow()))
         } catch {
-            said = (.bad, TraktRules.fill(W.syncFailed, ["reason": error.localizedDescription]))
+            said = (.bad, TraktRules.fill(W.syncFailed, ["reason": ErrorWords.of(error)]))
         }
     }
 
@@ -214,7 +214,7 @@ private struct TraktCard: View {
             // A record the Keychain kept is said at the top instead.
             if !trakt.deleteFailed { said = (.ok, W.signedOut) }
         } catch {
-            said = (.bad, TraktRules.fill(W.signOutFailed, ["reason": error.localizedDescription]))
+            said = (.bad, TraktRules.fill(W.signOutFailed, ["reason": ErrorWords.of(error)]))
         }
     }
 }

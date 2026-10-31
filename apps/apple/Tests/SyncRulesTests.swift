@@ -142,16 +142,19 @@ private func report(_ changes: [String: Any] = [:]) throws -> SyncReport {
 
     @Test func failuresAreWordedForTheirAction() {
         let words = { (message: String, action: SyncAction) in SyncProblem(code: nil, message: message, action: action).words }
-        #expect(words("http status 403", .start) == "This sync server needs an invite code, or the one entered is wrong.")
-        #expect(words("http status 404", .recover) == W.wrongKit)
-        #expect(words("http status 404", .approve).hasPrefix("This code expired or was used already."))
-        #expect(words("http status 410", .approve).hasPrefix("This code expired or was used already."))
+        let kinded = { (kind: String, action: SyncAction) in SyncProblem(code: nil, message: "raw", action: action, kind: kind).words }
+        #expect(kinded("forbidden", .start) == "This sync server needs an invite code, or the one entered is wrong.")
+        #expect(kinded("notFound", .recover) == W.wrongKit)
+        #expect(kinded("notFound", .approve).hasPrefix("This code expired or was used already."))
+        // The status is the reply's kind, never read out of the text.
+        #expect(!words("http status 403", .start).contains("invite code"))
+        #expect(!words("http status 404", .approve).contains("code expired"))
         // A 404 while making a kit, removing or reporting is no expired code.
         for action in [SyncAction.kit, .remove, .lost, .devices, .leave] {
-            #expect(!words("http status 404", action).contains("code expired"), "\(action)")
-            #expect(words("http status 404", action).contains("The sync server did not answer"), "\(action)")
+            #expect(!kinded("notFound", action).contains("code expired"), "\(action)")
+            #expect(kinded("notFound", action).contains("The sync server did not answer"), "\(action)")
         }
-        #expect(words("http status 403", .recover) != words("http status 403", .start))
+        #expect(kinded("forbidden", .recover) != kinded("forbidden", .start))
         // The core's own sentences are kept, an address never shows.
         #expect(words("roster: sign out to remove this device", .remove) == "Sign out to remove this device.")
         #expect(words("pairing: the code is for another sync server", .approve) == "The code is for another sync server.")

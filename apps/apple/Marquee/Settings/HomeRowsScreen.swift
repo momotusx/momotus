@@ -59,7 +59,7 @@ struct HomeRowsScreen: View {
         .onExitCommand(perform: picked == nil ? nil : { picked = nil })
         #endif
         .task {
-            do { rows = try await core.call("homeCatalogs", as: [HomeCatalog].self) } catch { failure = error.localizedDescription }
+            do { rows = try await core.call("homeCatalogs", as: [HomeCatalog].self) } catch { failure = ErrorWords.of(error) }
         }
     }
 
@@ -82,7 +82,7 @@ struct HomeRowsScreen: View {
                 rows = try await core.call(op, fields, as: [HomeCatalog].self)
                 failure = nil
             } catch {
-                failure = error.localizedDescription
+                failure = ErrorWords.of(error)
             }
         }
     }

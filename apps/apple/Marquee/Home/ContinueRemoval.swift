@@ -65,8 +65,8 @@ final class ContinueRemoval {
         do {
             try await send(tile)
         } catch {
-            coreLog.error("remove from continue watching: \(error.localizedDescription, privacy: .public)")
-            failed = (tile, removeFailedWords(name: tile.name, reason: error.localizedDescription))
+            coreLog.error("remove from continue watching: \(String(describing: error), privacy: .public)")
+            failed = (tile, removeFailedWords(name: tile.name, reason: ErrorWords.of(error)))
         }
         // Gone from the row once the core's own list leaves it out; back when it failed.
         if sending == tile { sending = nil }

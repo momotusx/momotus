@@ -237,11 +237,11 @@ private func recorded() throws -> AddonCatalogSnapshot {
     }
 
     @Test func aRefusalKeepsTheCoresCodeAndWords() {
-        let refused = InstallCards.refusal(CoreError("This addon now needs setup first", code: "needsSetup"))
+        let refused = InstallCards.refusal(CoreError("This addon now needs setup first", code: "needsSetup", kind: "said"))
         #expect(refused.code == "needsSetup")
         #expect(refused.words == "This addon now needs setup first")
         // A code the app does not know shows its words all the same.
-        #expect(InstallCards.refusal(CoreError("Something new", code: "later")) == ("later", "Something new"))
+        #expect(InstallCards.refusal(CoreError("Something new", code: "later", kind: "said")) == ("later", "Something new"))
         #expect(InstallCards.refusal(CoreError("No code")).code == nil)
     }
 
@@ -272,7 +272,7 @@ private func recorded() throws -> AddonCatalogSnapshot {
         let second = Task { await cards.run("a", held.request) }
         for _ in 0..<20 { await Task.yield() }
         #expect(held.started == 1)
-        held.answer(.failure(CoreError("This addon now needs setup first", code: "needsSetup")))
+        held.answer(.failure(CoreError("This addon now needs setup first", code: "needsSetup", kind: "said")))
         #expect(await run.value == InstallCards.Card(busy: false, code: "needsSetup", words: "This addon now needs setup first"))
         #expect(await second.value == nil)
         #expect(cards["a"] == InstallCards.Card(busy: false, code: "needsSetup", words: "This addon now needs setup first"))
@@ -293,7 +293,7 @@ private func recorded() throws -> AddonCatalogSnapshot {
         await held.waitForStart()
         cards.forgetAll()
         #expect(cards["a"] == InstallCards.Card())
-        held.answer(.failure(CoreError("This addon's server did not answer in time", code: "timeout")))
+        held.answer(.failure(CoreError("This addon's server did not answer in time", code: "timeout", kind: "said")))
         #expect(await run.value == nil)
         #expect(cards["a"] == InstallCards.Card())
     }
@@ -313,14 +313,14 @@ private func recorded() throws -> AddonCatalogSnapshot {
         let held = Held()
         let failed = Task { await cards.run("done", held.request) }
         await held.waitForStart()
-        held.answer(.failure(CoreError("This addon's server could not be reached", code: "unreachable")))
+        held.answer(.failure(CoreError("This addon's server could not be reached", code: "unreachable", kind: "said")))
         _ = await failed.value
         let run = Task { await cards.run("a", held.request) }
         await held.waitForStart(2)
         cards.forgetAll(running: false)
         #expect(cards["done"] == InstallCards.Card())
         #expect(cards["a"].busy)
-        held.answer(.failure(CoreError("This addon's server did not answer in time", code: "timeout")))
+        held.answer(.failure(CoreError("This addon's server did not answer in time", code: "timeout", kind: "said")))
         _ = await run.value
         #expect(cards["a"].words == "This addon's server did not answer in time")
         #expect(cards["a"].code == "timeout")
@@ -333,7 +333,7 @@ private func recorded() throws -> AddonCatalogSnapshot {
         await held.waitForStart()
         cards.forget("a")
         #expect(cards["a"].busy)
-        held.answer(.failure(CoreError("This addon is not the one the list named", code: "mismatch")))
+        held.answer(.failure(CoreError("This addon is not the one the list named", code: "mismatch", kind: "said")))
         _ = await run.value
         cards.forget("a")
         #expect(cards["a"] == InstallCards.Card())

@@ -62,7 +62,7 @@ final class HomeModel {
             }
         } catch is CancellationError {
         } catch {
-            phase = .failed(error.localizedDescription)
+            phase = .failed(ErrorWords.of(error))
         }
     }
 

@@ -199,7 +199,7 @@ struct SignedInWith: View {
             try await use(AccountTickets.ticket(provider: provider, server: server, sync: sync), provider: provider)
         } catch {
             if case SignInSheets.Failure.cancelled = error { return }
-            self.error = AccountRules.trouble((error as? CoreError)?.code ?? "", provider: provider)?.text ?? error.localizedDescription
+            self.error = AccountRules.trouble((error as? CoreError)?.code ?? "", provider: provider)?.text ?? ErrorWords.of(error)
         }
     }
 
@@ -236,7 +236,7 @@ struct SignedInWith: View {
         do {
             try await use(ticket, provider: "email")
         } catch {
-            self.error = AccountRules.trouble((error as? CoreError)?.code ?? "", provider: "email")?.text ?? error.localizedDescription
+            self.error = AccountRules.trouble((error as? CoreError)?.code ?? "", provider: "email")?.text ?? ErrorWords.of(error)
         }
     }
 
@@ -258,7 +258,7 @@ struct SignedInWith: View {
             error = nil
             await load()
         } catch {
-            self.error = AccountRules.trouble((error as? CoreError)?.code ?? "")?.text ?? error.localizedDescription
+            self.error = AccountRules.trouble((error as? CoreError)?.code ?? "")?.text ?? ErrorWords.of(error)
         }
     }
     #endif

@@ -624,7 +624,7 @@ final class PlayerModel {
             }
         } catch is CancellationError {
         } catch {
-            openError = error.localizedDescription
+            openError = ErrorWords.of(error)
         }
     }
 

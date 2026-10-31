@@ -525,6 +525,6 @@ struct EditProfile: View {
     }
 
     private func problem(_ error: any Error) -> String {
-        ProfileRules.problem((error as? CoreError)?.code, fallback: error.localizedDescription)
+        ProfileRules.problem((error as? CoreError)?.code, fallback: ErrorWords.of(error))
     }
 }

@@ -74,7 +74,7 @@ final class TitleModel {
                 }
             } catch is CancellationError {
             } catch {
-                self?.failure = error.localizedDescription
+                self?.failure = ErrorWords.of(error)
             }
             self?.sub = nil
         }
@@ -102,7 +102,7 @@ final class TitleModel {
     private func send(_ command: [String: any Sendable]) {
         guard let sub else { return }
         // At once, in call order: a quick Library on then off lands as off.
-        core.command(sub, command) { [weak self] error in self?.failure = error.localizedDescription }
+        core.command(sub, command) { [weak self] error in self?.failure = ErrorWords.of(error) }
     }
 
     private func apply(_ event: ViewEvent<TitleSnapshot, TitleUpdate>) {

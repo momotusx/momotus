@@ -100,7 +100,7 @@ struct PluginsScreen: View {
             answer = try await core.call("plugins", as: PluginsAnswer.self)
             failure = nil
         } catch {
-            failure = error.localizedDescription
+            failure = ErrorWords.of(error)
         }
     }
 
@@ -121,7 +121,7 @@ struct PluginsScreen: View {
                     run: { add(p) },
                     action: PluginWords.add))
             } catch {
-                said = (.bad, PluginWords.fill(PluginWords.couldNotAdd, ["reason": error.localizedDescription]))
+                said = (.bad, PluginWords.fill(PluginWords.couldNotAdd, ["reason": ErrorWords.of(error)]))
             }
         }
     }
@@ -134,7 +134,7 @@ struct PluginsScreen: View {
                 said = (.ok, PluginWords.fill(PluginWords.added, ["name": p.name]))
                 link = ""
             } catch {
-                said = (.bad, PluginWords.fill(PluginWords.couldNotAdd, ["reason": error.localizedDescription]))
+                said = (.bad, PluginWords.fill(PluginWords.couldNotAdd, ["reason": ErrorWords.of(error)]))
             }
         }
     }
@@ -145,7 +145,7 @@ struct PluginsScreen: View {
             do {
                 _ = try await core.call(op, fields, as: EmptyAnswer.self)
             } catch {
-                said = (.bad, error.localizedDescription)
+                said = (.bad, ErrorWords.of(error))
             }
             await reload()
         }
@@ -253,7 +253,7 @@ struct PluginDirectoryScreen: View {
                     run: { add(p) },
                     action: PluginWords.add))
             } catch {
-                said = (r.url, .bad, PluginWords.fill(PluginWords.couldNotAdd, ["reason": error.localizedDescription]))
+                said = (r.url, .bad, PluginWords.fill(PluginWords.couldNotAdd, ["reason": ErrorWords.of(error)]))
             }
         }
     }
@@ -264,7 +264,7 @@ struct PluginDirectoryScreen: View {
                 _ = try await core.call("addPluginRepo", ["url": p.url], as: PluginsAnswer.self)
                 said = (p.url, .ok, PluginWords.fill(PluginWords.added, ["name": p.name]))
             } catch {
-                said = (p.url, .bad, PluginWords.fill(PluginWords.couldNotAdd, ["reason": error.localizedDescription]))
+                said = (p.url, .bad, PluginWords.fill(PluginWords.couldNotAdd, ["reason": ErrorWords.of(error)]))
             }
             await reload()
         }

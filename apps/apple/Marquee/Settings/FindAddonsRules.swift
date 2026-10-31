@@ -252,7 +252,7 @@ final class InstallCards {
 
     /// A refusal's code (the card's action may follow it) and the core's words.
     nonisolated static func refusal(_ error: any Error) -> (code: String?, words: String) {
-        ((error as? CoreError)?.code, error.localizedDescription)
+        ((error as? CoreError)?.code, ErrorWords.of(error))
     }
 }
 

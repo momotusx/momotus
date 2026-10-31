@@ -206,7 +206,7 @@ struct MainShell: View {
                     } catch {
                         // The host only: an addon link can carry a key in its path.
                         let host = URL(string: url)?.host() ?? "?"
-                        coreLog.notice("debug install from \(host, privacy: .public): \(error.localizedDescription, privacy: .public)")
+                        coreLog.notice("debug install from \(host, privacy: .public): \(String(describing: error), privacy: .public)")
                         DebugHooks.note("install from \(host) failed: \(error.localizedDescription)")
                     }
                 }

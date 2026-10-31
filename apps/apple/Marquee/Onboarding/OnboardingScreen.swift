@@ -153,7 +153,7 @@ struct OnboardingScreen: View {
                 do {
                     languages = try await core.call("languages", device, as: [LanguageChoice].self)
                 } catch {
-                    note = (false, "\(SubtitleStepRules.listFailed): \(error.localizedDescription)")
+                    note = (false, "\(SubtitleStepRules.listFailed): \(ErrorWords.of(error))")
                 }
                 subtitle = SubtitleStepRules.loaded(subtitle, touched: subtitleTouched, all: languages)
                 languagesLoaded = true
@@ -222,7 +222,7 @@ struct OnboardingScreen: View {
             try await core.perform("setPrefs", ["patch": StreamChoice.patch(answer)])
             afterQuestion()
         } catch {
-            note = (false, "Could not save the choice: \(error.localizedDescription)")
+            note = (false, "Could not save the choice: \(ErrorWords.of(error))")
         }
     }
 
@@ -322,7 +322,7 @@ struct OnboardingScreen: View {
             try await core.perform("setPrefs", ["patch": SubtitleStepRules.patch(subtitle)])
             afterSubtitles()
         } catch {
-            note = (false, "Could not save the language: \(error.localizedDescription)")
+            note = (false, "Could not save the language: \(ErrorWords.of(error))")
         }
     }
 

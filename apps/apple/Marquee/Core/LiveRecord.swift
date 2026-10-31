@@ -84,7 +84,7 @@ final class LiveRecord<Snapshot: Decodable & Sendable> {
             } catch is CancellationError {
             } catch {
                 if run == self?.runs, mine == core.generation {
-                    self?.failure = error.localizedDescription
+                    self?.failure = ErrorWords.of(error)
                     self?.landed += 1
                 }
             }
@@ -98,13 +98,13 @@ final class LiveRecord<Snapshot: Decodable & Sendable> {
     func command(_ fields: [String: any Sendable]) {
         // A number from a core that was replaced could name another view on the new one.
         guard let sub, generation == core.generation else { return }
-        core.command(sub, fields) { [weak self] error in self?.failure = error.localizedDescription }
+        core.command(sub, fields) { [weak self] error in self?.failure = ErrorWords.of(error) }
     }
 
     /// Runs a protocol op at once, in call order with every other sent after it (a setting changed
     /// twice lands as last changed); a failure shows in `failure`, an answer clears it.
     func performNow(_ op: String, _ fields: [String: any Sendable]) {
-        core.sendNow(op, fields) { [weak self] error in self?.failure = error?.localizedDescription }
+        core.sendNow(op, fields) { [weak self] error in self?.failure = error.map(ErrorWords.of) }
     }
 
     /// Runs a protocol op on the user's behalf; a failure shows in `failure`.
@@ -118,7 +118,7 @@ final class LiveRecord<Snapshot: Decodable & Sendable> {
         } catch is CancellationError {
             return false
         } catch {
-            failure = error.localizedDescription
+            failure = ErrorWords.of(error)
             return false
         }
     }

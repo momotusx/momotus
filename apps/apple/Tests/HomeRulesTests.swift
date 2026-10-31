@@ -153,7 +153,8 @@ private struct Refused: LocalizedError { var errorDescription: String? { "timed 
     removal.remove(card("e"))
     try await Task.sleep(for: .milliseconds(800))
     #expect(removal.removing == nil && !removal.hides(card("e")) && removal.failed?.tile == card("e"))
-    #expect(removal.failed?.words == "Title e could not be removed from Continue Watching: timed out")
+    // In words, never the error's own text.
+    #expect(removal.failed?.words == "Title e could not be removed from Continue Watching: \(ErrorWords.failed)")
     #expect(removedWords(name: "Title e") == "Title e was removed from Continue Watching.")
 }
 
