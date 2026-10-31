@@ -493,16 +493,28 @@ test("Continue Watching: the tile's remove button off TV, the title page on TV",
     await slot.hover();
     const remove = slot.locator(".tile-x");
     await expect(remove).toHaveAttribute("aria-label", "Remove Journey Film from Continue Watching");
-    // It reaches every synced device, so the first press only asks.
-    await remove.click();
-    await expect(remove).toHaveText("Press again to remove");
-    await p.waitForTimeout(500);
-    await expect(tile).toBeVisible();
-    expect(await home.ids()).toContain("mqjm");
+    // One press takes it off the row, with Undo (focused) for five seconds before it reaches every synced device.
     await remove.click();
     await expect(tile).toHaveCount(0);
-    // The core dropped it, not just this page.
-    await expect.poll(home.ids).not.toContain("mqjm");
+    const note = p.locator(".removal-note");
+    await expect(note).toContainText("Journey Film was removed from Continue Watching.");
+    const undo = p.locator('[data-f="continue:undo"]');
+    await expect(undo).toBeFocused();
+    await p.waitForTimeout(1000);
+    expect(await home.ids()).toContain("mqjm");
+    // Undo: back on the row, and the core never heard of it.
+    await undo.click();
+    await expect(tile).toBeVisible();
+    await expect(undo).toHaveCount(0);
+    await expect(tile).toBeFocused();
+    await p.waitForTimeout(5500);
+    expect(await home.ids()).toContain("mqjm");
+    // Again, left to run out: the core drops it, not just this page, and the tile never comes back meanwhile.
+    await slot.hover();
+    await remove.click();
+    await expect.poll(home.ids, { timeout: 15_000 }).not.toContain("mqjm");
+    await expect(tile).toHaveCount(0);
+    await expect(undo).toHaveCount(0);
     await context.close();
   }
   // A newer play brings it back; TV has no button on the tile, the title page has one.
@@ -520,14 +532,19 @@ test("Continue Watching: the tile's remove button off TV, the title page on TV",
     const remove = p.locator('[data-f="title:uncontinue"]');
     await expect(remove).toBeVisible({ timeout: 30_000 });
     await remove.focus();
-    // It reaches every synced device: the first OK only asks.
-    await p.keyboard.press("Enter");
-    await expect(remove).toContainText("Press again to remove");
-    await p.waitForTimeout(500);
-    expect(await home.ids()).toContain("mqjm");
+    // One OK: the button goes, Undo takes the focus, and the core hears of it when the five seconds pass.
     await p.keyboard.press("Enter");
     await expect(remove).toHaveCount(0);
-    await expect.poll(home.ids).not.toContain("mqjm");
+    await expect(p.locator('[data-f="continue:undo"]')).toBeFocused();
+    await expect(p.locator(".removal-note")).toContainText("Journey Film was removed from Continue Watching.");
+    // Undo by remote puts the button back with the focus; OK again and the time runs out.
+    await p.keyboard.press("Enter");
+    await expect(remove).toBeFocused();
+    await p.keyboard.press("Enter");
+    await expect(p.locator('[data-f="continue:undo"]')).toBeFocused();
+    expect(await home.ids()).toContain("mqjm");
+    await expect.poll(home.ids, { timeout: 15_000 }).not.toContain("mqjm");
+    await expect(remove).toHaveCount(0);
     // Focus never falls to the page.
     await expect.poll(() => p.evaluate(() => document.activeElement !== document.body)).toBe(true);
     // Back to Home, where the tile it remembers is gone: the focus lands on
@@ -1196,7 +1213,7 @@ test("Search with no addon that can search says so, with the way to one", async 
   await context.close();
 });
 
-test("the Continue Watching button says when the core refused", async ({ browser }) => {
+test("a removal from Continue Watching the core refused brings the title back and says so", async ({ browser }) => {
   await seedFilm(200_000);
   const { context, page: p } = await page(browser, undefined, (m) => (m.op === "removeFromContinue" ? { ok: false, error: "network: connection refused" } : undefined));
   await p.goto("/?form=desktop");
@@ -1206,8 +1223,9 @@ test("the Continue Watching button says when the core refused", async ({ browser
   await slot.hover();
   const remove = slot.locator(".tile-x");
   await remove.click();
-  await remove.click();
-  await expect(remove).toHaveText("Not removed, try again");
+  await expect(tile).toHaveCount(0);
+  // When the Undo time is out the core refuses: the title comes back and the line says so.
+  await expect(p.locator(".removal-note")).toHaveText("Journey Film could not be removed from Continue Watching.", { timeout: 15_000 });
   await expect(tile).toBeVisible();
   await context.close();
 });
@@ -1522,8 +1540,9 @@ test("TV: Remove on the title page says when the core refused", async ({ browser
   await expect(remove).toBeVisible({ timeout: 30_000 });
   await remove.focus();
   await p.keyboard.press("Enter");
-  await p.keyboard.press("Enter");
-  await expect(remove).toContainText("Not removed, try again");
+  await expect(remove).toHaveCount(0);
+  await expect(p.locator(".removal-note")).toHaveText("Journey Film could not be removed from Continue Watching.", { timeout: 15_000 });
+  await expect(remove).toBeVisible();
   await context.close();
 });
 

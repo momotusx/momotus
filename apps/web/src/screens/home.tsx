@@ -7,9 +7,10 @@ import Sparkle from "lucide-solid/icons/sparkle";
 import ShieldAlert from "lucide-solid/icons/shield-alert";
 import { createEffect, createSignal, For, Match, on, onCleanup, Show, Switch } from "solid-js";
 import { HeroCarousel } from "../components/hero";
-import { CONTINUE_ROW, Row } from "../components/row";
+import { CONTINUE_ROW, leftOut, RemovalNote, Row, settleRemovals } from "../components/row";
 import { homeView, liveView, op, prefsView, retryHomeRow } from "../core/client";
 import type { AddonsSnapshot } from "../core/generated/AddonsSnapshot";
+import type { HomeRow } from "../core/generated/HomeRow";
 import type { DefaultAddons } from "../core/generated/DefaultAddons";
 import { onProfileReset, profiles } from "../core/profiles";
 import { BridgeError } from "../core/bridge";
@@ -248,6 +249,9 @@ export default function Home() {
   });
   const [page, setPage] = createSignal<HTMLElement | null>(null);
   const hasContinue = () => home.rows[0]?.rowId === CONTINUE_ROW;
+  // A title removed from Continue Watching is left out until its Undo passes and the core's row drops it.
+  createEffect(() => settleRemovals(home.rows.find((r) => r.rowId === CONTINUE_ROW)?.tiles.map((t) => t.id) ?? []));
+  const shown = (row: HomeRow) => (row.rowId === CONTINUE_ROW ? { ...row, tiles: row.tiles.filter((t) => !leftOut(t.id)) } : row);
   const empty = () => home.status.state === "open" && home.rows.length === 0;
   const hero = () => home.heroes.length > 0;
   // Rows still on their way: only then is a missing hero still coming. When
@@ -334,7 +338,13 @@ export default function Home() {
               <For each={home.rows}>
                 {(row, i) => (
                   <>
-                    <Row row={row} root={page} onRetry={retryHomeRow} />
+                    {/* A Continue Watching whose every title was just removed leaves with them. */}
+                    <Show when={row.rowId !== CONTINUE_ROW || row.tiles.length === 0 || shown(row).tiles.length > 0}>
+                      <Row row={shown(row)} root={page} onRetry={retryHomeRow} />
+                    </Show>
+                    <Show when={i() === 0 && row.rowId === CONTINUE_ROW}>
+                      <RemovalNote />
+                    </Show>
                     {/* The account's notices and the defaults card come after the first row, never over the
                         hero's art or between it and the row that rises into it (as Android's TV Home). */}
                     <Show when={i() === 0}>

@@ -7,6 +7,7 @@ import CircleAlert from "lucide-solid/icons/circle-alert";
 import LoaderCircle from "lucide-solid/icons/loader-circle";
 import RefreshCw from "lucide-solid/icons/refresh-cw";
 import Wrench from "lucide-solid/icons/wrench";
+import Undo2 from "lucide-solid/icons/undo-2";
 import X from "lucide-solid/icons/x";
 import { createEffect, createMemo, createSignal, For, type JSX, Match, on, onCleanup, onMount, Show, Switch } from "solid-js";
 import tokens from "../../../../design/tokens.json";
@@ -96,7 +97,7 @@ export function TileCard(props: {
   /** Continue Watching: a 16:9 still with the logo, Apple TV Up Next style. */
   wide?: boolean;
   /** A remove button on the tile (Continue Watching off TV; TV removes from the title page). */
-  onRemove?: () => Promise<unknown>;
+  onRemove?: () => void;
   /** A small label on the poster's corner (Discover's sort value). */
   corner?: JSX.Element | null;
   /** The line under the name in place of the year: null leaves it out (the corner shows the year already). */
@@ -183,22 +184,17 @@ export function TileCard(props: {
     </A>
   );
   if (!slotted) return card;
-  const { ask, press } = askOnce(() => props.onRemove?.() ?? Promise.resolve());
   return (
-    <div class="tile-slot" classList={{ failed: ask() === "failed" }} style={{ width: `${props.w}px`, ...props.style }}>
+    <div class="tile-slot" style={{ width: `${props.w}px`, ...props.style }}>
       {card}
       <button
         class="tile-x"
-        classList={{ asking: ask() === "confirm", failed: ask() === "failed" }}
         data-index={props.index}
-        aria-label={ask() === "confirm" ? `Press again to remove ${props.tile.name} from Continue Watching` : `Remove ${props.tile.name} from Continue Watching`}
+        aria-label={`Remove ${props.tile.name} from Continue Watching`}
         title="Remove from Continue Watching"
-        onClick={press}
+        onClick={() => props.onRemove?.()}
       >
-        <Switch fallback={<X aria-hidden />}>
-          <Match when={ask() === "confirm"}>Press again to remove</Match>
-          <Match when={ask() === "failed"}>Not removed, try again</Match>
-        </Switch>
+        <X aria-hidden />
       </button>
     </div>
   );
@@ -225,25 +221,86 @@ function fitWords(el: HTMLElement, text: () => string) {
   });
 }
 
-/** Removing from Continue Watching reaches every synced device, so it asks
- * once ("Press again to remove", 4 s, as Remove on an addon) and says when
- * the core refused: the X on a tile and TV's button on the title page. */
-export function askOnce(act: () => Promise<unknown>) {
-  const [ask, setAsk] = createSignal<"idle" | "confirm" | "failed">("idle");
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  onCleanup(() => clearTimeout(timer));
-  const settle = (state: "confirm" | "failed") => {
-    setAsk(state);
-    clearTimeout(timer);
-    timer = setTimeout(() => setAsk("idle"), 4000);
-  };
-  const press = () => {
-    if (ask() !== "confirm") return settle("confirm");
-    clearTimeout(timer);
-    setAsk("idle");
-    act().catch(() => settle("failed"));
-  };
-  return { ask, press };
+/** "Remove from Continue Watching" with five seconds for Undo, as Android's PendingRemoval: Home leaves the title
+ * out at once, and it goes to the core when the time passes, at once when another title is removed or the page goes
+ * (a synced register, so a slip would hide it on every device). A failure is said and the title comes back. The X on
+ * a tile and TV's button on the title page. */
+const UNDO_MS = 5000;
+const [removal, setRemoval] = createSignal<{ id: string; name: string } | null>(null);
+// Sent and not yet gone from the core's own row: still left out, so the tile never flashes back.
+const [sent, setSent] = createSignal<string[]>([]);
+const [removeFailed, setRemoveFailed] = createSignal<string | null>(null);
+let waiting: ReturnType<typeof setTimeout> | undefined;
+
+/** Whether Continue Watching leaves this title out: waiting for its Undo, or sent. */
+export const leftOut = (id: string) => removal()?.id === id || sent().includes(id);
+
+/** The core's row no longer has these titles: nothing to leave out for them any more. */
+export function settleRemovals(ids: readonly string[]) {
+  if (sent().some((id) => !ids.includes(id))) setSent((s) => s.filter((id) => ids.includes(id)));
+}
+
+function send(r: { id: string; name: string }) {
+  if (removal()?.id === r.id) setRemoval(null);
+  setSent((s) => [...s, r.id]);
+  removeFromContinue(r.id).catch(() => {
+    setSent((s) => s.filter((id) => id !== r.id));
+    const words = `${r.name} could not be removed from Continue Watching.`;
+    setRemoveFailed(words);
+    setTimeout(() => removeFailed() === words && setRemoveFailed(null), UNDO_MS * 2);
+  });
+}
+
+export function removeSoon(tile: { id: string; name: string }) {
+  clearTimeout(waiting);
+  const earlier = removal();
+  if (earlier) send(earlier);
+  setRemoveFailed(null);
+  setRemoval(tile);
+  waiting = setTimeout(() => send(tile), UNDO_MS);
+  // The pressed control leaves with its tile: Undo takes the focus.
+  requestAnimationFrame(() => document.querySelector<HTMLElement>('[data-f="continue:undo"]')?.focus());
+}
+
+/** Undo: nothing goes to the core, and the title is back, its control with the focus. */
+function undoRemoval() {
+  const r = removal();
+  clearTimeout(waiting);
+  setRemoval(null);
+  if (r) requestAnimationFrame(() => document.querySelector<HTMLElement>(`[data-f="title:uncontinue"], [data-f$=":continue-watching:${CSS.escape(r.id)}"]`)?.focus());
+}
+
+// A new profile: a removal still waiting is dropped, never sent for the next profile.
+onProfileReset(() => {
+  undoRemoval();
+  setSent([]);
+  setRemoveFailed(null);
+});
+
+window.addEventListener("pagehide", () => {
+  const r = removal();
+  if (!r) return;
+  clearTimeout(waiting);
+  send(r);
+});
+
+/** After Remove: the words with Undo while it can be taken back, or why it failed. */
+export function RemovalNote() {
+  return (
+    <div class="removal-note" role="status">
+      <Show when={removal()} fallback={removeFailed()}>
+        {(r) => (
+          <>
+            <span>{r().name} was removed from Continue Watching.</span>
+            <button class="btn" data-f="continue:undo" onClick={undoRemoval}>
+              <Undo2 aria-hidden />
+              Undo
+            </button>
+          </>
+        )}
+      </Show>
+    </div>
+  );
 }
 
 /** "Remove from Continue Watching": the core drops the title from Continue
@@ -414,7 +471,7 @@ export function Row(props: {
                           eager
                           wide={wide()}
                           captions={captions()}
-                          onRemove={wide() && form() !== "tv" ? () => removeFromContinue(tile().id) : undefined}
+                          onRemove={wide() && form() !== "tv" ? () => removeSoon(tile()) : undefined}
                         />
                       )}
                     </Show>

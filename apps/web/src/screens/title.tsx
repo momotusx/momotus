@@ -20,7 +20,7 @@ import { SynopsisDialog } from "../components/synopsis";
 import { TitleScores } from "../components/title-scores";
 import { KeyedPage } from "../components/keyed-page";
 import { Why } from "../components/why";
-import { askOnce, removeFromContinue, Row } from "../components/row";
+import { leftOut, RemovalNote, removeSoon, Row } from "../components/row";
 import { separators } from "../components/separators";
 import { TrailerOverlay } from "../components/trailer";
 import { muted, playTrailer, setMuted, type TrailerControl, trailerPlaying } from "../components/yt-player";
@@ -70,7 +70,6 @@ function TitlePage(props: { kind: string; id: string; retry: () => void }) {
   const header = () => view.state.header;
   const d = () => header()?.details ?? null;
   const target = () => header()?.playTarget ?? null;
-  const uncontinue = askOnce(() => removeFromContinue(props.id));
   createEffect(() => {
     const name = d()?.name;
     if (name) document.title = `${name} · Momotus`;
@@ -584,12 +583,10 @@ function TitlePage(props: { kind: string; id: string; retry: () => void }) {
                   {/* TV has no remove button on its tiles: the title page carries it
                       while the title is in Continue Watching (or Next Up), as the title header says from its first
                       render, so the row never grows after it is drawn. */}
-                  <Show when={form() === "tv" && header()?.continuing}>
-                    <button class="btn" classList={{ danger: uncontinue.ask() !== "idle" }} data-f="title:uncontinue" onClick={uncontinue.press}>
+                  <Show when={form() === "tv" && header()?.continuing && !leftOut(props.id)}>
+                    <button class="btn" data-f="title:uncontinue" onClick={() => removeSoon({ id: props.id, name: x().name })}>
                       <CircleX aria-hidden />
-                      <span class="long">
-                        {uncontinue.ask() === "confirm" ? "Press again to remove" : uncontinue.ask() === "failed" ? "Not removed, try again" : "Remove from Continue Watching"}
-                      </span>
+                      <span class="long">Remove from Continue Watching</span>
                     </button>
                   </Show>
                   {/* The header trailer's sound, last in the row so nothing moves when it comes and goes. */}
@@ -602,6 +599,10 @@ function TitlePage(props: { kind: string; id: string; retry: () => void }) {
                     </button>
                   </Show>
                 </div>
+                {/* Undo for a removal from Continue Watching, which TV makes here. */}
+                <Show when={form() === "tv"}>
+                  <RemovalNote />
+                </Show>
                 <VersionNote target={!!target()} noVideo={playInert() && !target()} view={versions()} />
                 {/* Phone reads top to bottom: episodes before the details. */}
                 <Show when={series() && form() === "phone"}>
