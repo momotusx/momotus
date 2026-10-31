@@ -25,8 +25,9 @@ import org.robolectric.annotation.Config
 
 /**
  * On a TV, a Calendar series line that leaves after its Try again loaded it hands the focus on: to the next line's
- * Try again, and after the last one to the list's first episode, never to nothing. Compose moves the focus on from a
- * focused node that leaves; this holds the screen to it.
+ * Try again, else the one before, and after the last line to the list's first episode, never to nothing, as on the
+ * web. Compose does it (the lines are positional, so the next one takes the place and the focus of the line that left);
+ * this holds the screen to it.
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [36], application = Application::class)
@@ -63,10 +64,11 @@ class CalendarRetryFocusTest {
     private fun shown(label: String) =
         compose.onAllNodesWithContentDescription(label).fetchSemanticsNodes().isNotEmpty()
 
-    @Test
-    fun `a line that leaves hands the focus to the next Try again, then to the first episode`() {
-        val andor = "tt1" to "Andor"
-        val severance = "tt2" to "Severance"
+    private val andor = "tt1" to "Andor"
+    private val severance = "tt2" to "Severance"
+
+    /** The TV Calendar with Andor and Severance failed, the remote on [focused]'s Try again. */
+    private fun open(focused: String) {
         session.client.attach { text ->
             val id =
                 CoreJson
@@ -82,16 +84,30 @@ class CalendarRetryFocusTest {
             MarqueeTheme(Form.Tv) { CalendarScreen(session, onOpen = {}, onDiscover = {}) }
         }
         waitFor("the failed series never drew") { shown("Try again for Severance") }
-        compose.onNodeWithContentDescription("Try again for Andor").requestFocus().assertIsFocused()
+        compose.onNodeWithContentDescription("Try again for $focused").requestFocus().assertIsFocused()
+    }
 
+    private fun push(failed: List<Pair<String, String>>) =
+        session.client.onMessage("""{"sub":4,"updates":[${snapshot(failed)}]}""")
+
+    @Test
+    fun `a line that leaves hands the focus to the next Try again, then to the first episode`() {
+        open("Andor")
         // Andor loaded: its line leaves, and Severance's Try again takes the focus.
-        session.client.onMessage("""{"sub":4,"updates":[${snapshot(listOf(severance))}]}""")
+        push(listOf(severance))
         waitFor("Andor's line never left") { !shown("Try again for Andor") }
         compose.onNodeWithContentDescription("Try again for Severance").assertIsFocused()
-
         // The last line leaves: the list's first episode.
-        session.client.onMessage("""{"sub":4,"updates":[${snapshot(emptyList())}]}""")
+        push(emptyList())
         waitFor("Severance's line never left") { !shown("Try again for Severance") }
         compose.onNodeWithContentDescription("Slow Horses").assertIsFocused()
+    }
+
+    @Test
+    fun `the last line leaving hands the focus to the line before it`() {
+        open("Severance")
+        push(listOf(andor))
+        waitFor("Severance's line never left") { !shown("Try again for Severance") }
+        compose.onNodeWithContentDescription("Try again for Andor").assertIsFocused()
     }
 }
