@@ -832,6 +832,8 @@ private fun AppNav(
                         )
                     }
                     entry<Route.Player> { route ->
+                        // Removed from Continue Watching a moment ago and played now: the removal waiting for Undo goes.
+                        LaunchedEffect(route) { app.removal.played(route.id) }
                         // The player's controls sit over the picture with no scrim: they keep an opaque fill. Their TV
                         // focus is the white invert, as everywhere.
                         CompositionLocalProvider(LocalOverPicture provides true) {

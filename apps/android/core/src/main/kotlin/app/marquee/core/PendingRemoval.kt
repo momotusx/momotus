@@ -78,6 +78,11 @@ class PendingRemoval(
         removing = null
     }
 
+    /** [id] plays: a title that is wanted again is not removed, so its removal still waiting is dropped. */
+    fun played(id: String) {
+        if (removing?.id == id) undo()
+    }
+
     /** A new profile: a removal still waiting is dropped, never sent for the next profile. */
     fun forget() {
         undo()

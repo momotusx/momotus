@@ -1215,6 +1215,27 @@ test("Search with no addon that can search says so, with the way to one", async 
   await context.close();
 });
 
+test("a title removed from Continue Watching and played within its Undo time is not removed", async ({ browser }) => {
+  await seedFilm(205_000);
+  const { context, page: p, sent } = await page(browser);
+  await p.goto("/?form=desktop");
+  const tile = p.locator('[data-f="tile:home:continue-watching:mqjm"]');
+  await expect(tile).toBeVisible({ timeout: 30_000 });
+  const slot = p.locator(".tile-slot", { has: tile });
+  await slot.hover();
+  await slot.locator(".tile-x").click();
+  await expect(p.locator('[data-f="continue:undo"]')).toBeVisible();
+  // Played in the same page, as a Play button would: the title is wanted again.
+  await p.evaluate(() => {
+    history.pushState(null, "", "/play/movie/mqjm/mqjm");
+    dispatchEvent(new PopStateEvent("popstate"));
+  });
+  await expect(p).toHaveURL(/\/play\/movie\/mqjm/);
+  await p.waitForTimeout(6500);
+  expect(sent.filter((m) => m.op === "removeFromContinue")).toEqual([]);
+  await context.close();
+});
+
 test("a removal from Continue Watching the core refused brings the title back and says so", async ({ browser }) => {
   await seedFilm(200_000);
   const { context, page: p } = await page(browser, undefined, (m) => (m.op === "removeFromContinue" ? { ok: false, error: "network: connection refused" } : undefined));

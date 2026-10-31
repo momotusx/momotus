@@ -21,6 +21,7 @@ import Volume2 from "lucide-solid/icons/volume-2";
 import VolumeX from "lucide-solid/icons/volume-x";
 import { createEffect, createMemo, createSignal, For, Match, on, onCleanup, onMount, Show, Switch, untrack } from "solid-js";
 import { Backdrop } from "../components/art";
+import { played } from "../components/row";
 import { EmptyActs } from "../components/empty-acts";
 import { Why } from "../components/why";
 import { KeyedPage } from "../components/keyed-page";
@@ -138,6 +139,8 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
   // Every play passes here: the hero's trailers are muted again, so Home after a film is never loud by surprise
   // (the lead, 2026-10-26). A tab or a page change on Home keeps the viewer's choice.
   setTrailerMuted(true);
+  // Removed from Continue Watching a moment ago and played now: the removal waiting for Undo is dropped.
+  played(props.id);
   // The page this play was opened from, read when needed: the router renders
   // a route before it writes its history entry. Leaving the play for that
   // same page (Versions, or the title for Episodes) goes back to it; any

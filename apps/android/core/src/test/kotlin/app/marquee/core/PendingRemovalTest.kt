@@ -49,6 +49,18 @@ class PendingRemovalTest {
     }
 
     @Test
+    fun `playing the title drops its removal, playing another keeps it`() {
+        removal.remove(tile("a"))
+        removal.played("b")
+        assertEquals("a", removal.removing?.id)
+        removal.played("a")
+        scope.advanceTimeBy(10_000)
+        scope.runCurrent()
+        assertEquals(emptyList(), sent)
+        assertNull(removal.removing)
+    }
+
+    @Test
     fun `a second removal sends the first at once`() {
         removal.remove(tile("a"))
         removal.remove(tile("b"))

@@ -272,6 +272,11 @@ function undoRemoval() {
   if (r) requestAnimationFrame(() => document.querySelector<HTMLElement>(`[data-f="title:uncontinue"], [data-f$=":continue-watching:${CSS.escape(r.id)}"]`)?.focus());
 }
 
+/** A title that plays is wanted: its removal waiting for Undo is dropped, never sent while it plays. */
+export function played(id: string) {
+  if (removal()?.id === id) dropRemoval();
+}
+
 function dropRemoval() {
   clearTimeout(waiting);
   setRemoval(null);
