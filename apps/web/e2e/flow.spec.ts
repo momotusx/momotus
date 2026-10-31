@@ -559,6 +559,8 @@ test("Calendar on a TV: a series line that leaves after its Try again hands the 
   await expect(simpsons).toBeVisible({ timeout: 60_000 });
   await expect(page.locator(".cal-head .st.warn")).toHaveCount(0, { timeout: 60_000 });
   const retries = () => commands.filter((c) => c.view === "calendar" && c.command?.type === "retry").map((c) => c.command.itemId);
+  // A key first: from then on the screen stops placing its first episode, so a late update cannot take the focus.
+  await page.keyboard.press("Shift");
   await simpsons.focus();
   await page.keyboard.press("Enter");
   await expect.poll(retries).toEqual(["tt0096697"]);
