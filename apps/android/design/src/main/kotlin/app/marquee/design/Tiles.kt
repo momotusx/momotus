@@ -36,6 +36,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import kotlin.math.roundToInt
@@ -206,14 +207,48 @@ fun PosterTile(
         }
         // Read as part of the tile above.
         Column(Modifier.clearAndSetSemantics { }) {
-            MqText(title, role = TextRole.Callout, weight = FontWeight.SemiBold, maxLines = 1)
-            // Two lines whatever the title has, so every tile of a row ends level.
-            val line: @Composable (String) -> Unit = {
-                MqText(it, role = TextRole.Caption, color = colors.dim, weight = FontWeight.Medium, maxLines = 1)
-            }
-            line(caption ?: genre.orEmpty())
+            // Two lines whatever the title has, so every tile of a row ends level; each ends at a whole word.
+            WordLine(title, size.width, TextRole.Callout, colors.text, FontWeight.SemiBold)
+            WordLine(caption ?: genre.orEmpty(), size.width, TextRole.Caption, colors.dim, FontWeight.Medium)
         }
     }
+}
+
+/**
+ * One line of a tile's caption that ends at a whole word and an ellipsis ("Game of…", never "Game of Thr…": the line
+ * breaker's own ellipsis cuts inside a word). A first word too long for the line is cut where it must.
+ */
+@Composable
+private fun WordLine(
+    text: String,
+    width: Dp,
+    role: TextRole,
+    color: Color,
+    weight: FontWeight,
+) {
+    val measurer = rememberTextMeasurer()
+    val style = mqTextStyle(role, color, weight)
+    val room = with(LocalDensity.current) { width.roundToPx() }
+    val shown =
+        remember(text, style, room) {
+            wordFit(text) { measurer.measure(it, style, maxLines = 1, softWrap = false).size.width <= room }
+        }
+    MqText(shown, role = role, color = color, weight = weight, maxLines = 1)
+}
+
+/** The longest run of whole words of [text], then "…", that [fits]; [text] itself when it fits or is one word. */
+internal fun wordFit(
+    text: String,
+    fits: (String) -> Boolean,
+): String {
+    if (fits(text)) return text
+    val words = text.split(' ').filter { it.isNotEmpty() }
+    for (n in words.size - 1 downTo 1) {
+        // A separator left at the end ("S2:E3 ·") goes with the words after it.
+        val cut = words.take(n).joinToString(" ").trimEnd(' ', '·', ',', ':', ';', '-') + "…"
+        if (fits(cut)) return cut
+    }
+    return text
 }
 
 /**
