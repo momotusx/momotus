@@ -123,8 +123,10 @@ export function offSummary(languages: number, pending: boolean): { text: string;
 }
 
 /** `subtitleChosen` for a track inside the file: no core URL, and the file's own code for its
- * language (`eng`, `pt-BR`) when it gives one, so the profile's languages follow the pick. */
-export const fileChoice = (lang: string | null) => ({ type: "subtitleChosen", url: null, ...(lang ? { language: lang } : {}) });
+ * language (`eng`, `pt-BR`), so the profile's languages follow the pick. A track that names no
+ * language sends nothing, as Android and Apple: `{url: null}` alone is Off, and the core would keep
+ * Off for the title. */
+export const fileChoice = (lang: string | null) => (lang ? { type: "subtitleChosen", url: null, language: lang } : null);
 
 /** The core's words for a track that names the playing release's group. */
 export const FITS = "Same release group";

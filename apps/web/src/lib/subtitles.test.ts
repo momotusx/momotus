@@ -196,8 +196,8 @@ test("a flag is the tag's own file, else its language's, else none", () => {
 test("a pick inside the file tells the core its language, as the file names it", () => {
   expect(fileChoice("eng")).toEqual({ type: "subtitleChosen", url: null, language: "eng" });
   expect(fileChoice("pt-BR")).toEqual({ type: "subtitleChosen", url: null, language: "pt-BR" });
-  // A file that names none: the pick still clears the core's start pick.
-  expect(fileChoice(null)).toEqual({ type: "subtitleChosen", url: null });
+  // A file that names none: nothing goes, since `{url: null}` alone would keep Off for the title.
+  expect(fileChoice(null)).toBeNull();
 });
 
 test("a language with no flag shows the glyph when it is a glyph language, else its letters", () => {

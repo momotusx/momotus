@@ -980,7 +980,8 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
   const pickFileSub = (id: string) => {
     // A track in the file is the viewer's choice too, and its language the profile's.
     chose = true;
-    void playback()?.command(fileChoice(fileSubs().find((t) => t.id === id)?.lang ?? null));
+    const choice = fileChoice(fileSubs().find((t) => t.id === id)?.lang ?? null);
+    if (choice) void playback()?.command(choice);
     pickSubtitle(null);
     engine.selectTrack("sub", id);
   };
