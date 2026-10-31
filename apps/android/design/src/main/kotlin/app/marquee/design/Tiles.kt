@@ -228,9 +228,11 @@ private fun WordLine(
 ) {
     val measurer = rememberTextMeasurer()
     val style = mqTextStyle(role, color, weight)
-    val room = with(LocalDensity.current) { width.roundToPx() }
+    val density = LocalDensity.current
+    val room = with(density) { width.roundToPx() }
+    // The density carries the font scale too: a larger text size fits fewer words.
     val shown =
-        remember(text, style, room) {
+        remember(text, style, room, density) {
             wordFit(text) { measurer.measure(it, style, maxLines = 1, softWrap = false).size.width <= room }
         }
     MqText(shown, role = role, color = color, weight = weight, maxLines = 1)
