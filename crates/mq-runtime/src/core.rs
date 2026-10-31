@@ -909,7 +909,8 @@ impl Core {
                     status: 404 | 410, ..
                 })) => {
                     unknown.get_or_insert(true);
-                    reason = format!("{name} has no details for this title");
+                    tracing::debug!("{name} has no details for {id}");
+                    reason = NO_DETAILS.to_owned();
                     continue;
                 }
                 Err(e) => {
@@ -921,12 +922,14 @@ impl Core {
             };
             let Some(raw) = raw else {
                 unknown = Some(false);
-                reason = format!("{name} sent details Momotus cannot read");
+                tracing::debug!("{name} sent unreadable details for {id}");
+                reason = UNREADABLE.to_owned();
                 continue;
             };
             if !raw["meta"].is_object() {
                 unknown.get_or_insert(true);
-                reason = format!("{name} has no details for this title");
+                tracing::debug!("{name} has no details for {id}");
+                reason = NO_DETAILS.to_owned();
                 continue;
             }
             unknown = Some(false);
@@ -939,7 +942,8 @@ impl Core {
                 }
             }
             if ids.len() == before {
-                reason = format!("{name} gave no TVDB ids for this title");
+                tracing::debug!("{name} gave no TVDB ids for {id}");
+                reason = "No TVDB ids came back for this title".to_owned();
             }
         }
         match unknown {
@@ -978,7 +982,8 @@ impl Core {
                     Ok(ResourceResponse::Meta { meta })
                         if kids && (meta.preview.id != id || meta.preview.r#type != kind) =>
                     {
-                        last_error = format!("{name} sent details for another title");
+                        tracing::debug!("{name} sent details for another title than {id}");
+                        last_error = "Details came back for another title".to_owned();
                     }
                     Ok(ResourceResponse::Meta { mut meta }) => {
                         if kids {
@@ -988,20 +993,16 @@ impl Core {
                         self.learn_imdb_ids(&fetched.body);
                         return Ok((meta, name.clone()));
                     }
-                    Ok(_) => last_error = format!("{name} has no details for this title"),
+                    Ok(_) => {
+                        tracing::debug!("{name} has no details for {id}");
+                        last_error = NO_DETAILS.to_owned();
+                    }
                     Err(e) => {
                         tracing::debug!("{name} sent unreadable details: {e}");
-                        last_error = format!("{name} sent details Momotus cannot read");
+                        last_error = UNREADABLE.to_owned();
                     }
                 },
                 Err(e) => {
-                    // An HTTP error's text can carry the addon's URL, so only its kind.
-                    match &e {
-                        AddonError::Http(h) => {
-                            tracing::debug!("{name} gave no details: {}", h.kind())
-                        }
-                        other => tracing::debug!("{name} gave no details: {other}"),
-                    }
                     silent += usize::from(unanswered(&e));
                     last_error = meta_failure(name, &e);
                 }
@@ -1664,30 +1665,42 @@ pub(crate) fn unanswered(error: &AddonError) -> bool {
     )
 }
 
-/// Why an addon gave no details, in a sentence the title page shows as is,
-/// worded as the playback attempt list words a source's answer
-/// (`mq_server::refused`), with the status kept for support.
+/// A title's details are not there: the addon has none, or its answer has
+/// no meta.
+const NO_DETAILS: &str = "Details for this title are not available right now";
+/// The addon's answer did not decode.
+const UNREADABLE: &str = "Details for this title came in a form Momotus cannot read";
+
+/// Why an addon gave no details, in a sentence the title page shows as is:
+/// never the addon's name or a status code (the owner's rule); both go to
+/// the log only.
 fn meta_failure(name: &str, error: &AddonError) -> String {
     use mq_http::HttpError;
+    // An HTTP error's text can carry the addon's URL, so only its kind.
+    match error {
+        AddonError::Http(HttpError::Status { status, .. }) => {
+            tracing::debug!("{name} gave no details: status {status}");
+        }
+        AddonError::Http(h) => tracing::debug!("{name} gave no details: {}", h.kind()),
+        other => tracing::debug!("{name} gave no details: {other}"),
+    }
     match error {
         AddonError::TimedOut | AddonError::Http(HttpError::Timeout(_)) => {
-            format!("{name} did not answer in time")
+            "Details for this title took too long to load"
         }
         AddonError::Http(HttpError::Status { status, .. }) => match status {
-            404 | 410 => format!("{name} has no details for this title ({status})"),
-            401 | 403 => format!("{name} refused access ({status})"),
-            429 => format!("{name} is busy, try again soon ({status})"),
-            500..=599 => format!("{name} had an error ({status})"),
-            _ => format!("{name} answered with an error ({status})"),
+            404 | 410 => NO_DETAILS,
+            401 | 403 => "Access to the details for this title was refused",
+            429 => "Too many requests for details right now, try again soon",
+            _ => "Details for this title could not load right now",
         },
         AddonError::Http(HttpError::BlockedPrivate(_)) => {
-            format!("{name} points to a private network address")
+            "The details source points to a private network address"
         }
-        AddonError::Http(HttpError::TooLarge { .. } | HttpError::Decode(_)) => {
-            format!("{name} sent details Momotus cannot read")
-        }
-        _ => format!("{name} could not be reached"),
+        AddonError::Http(HttpError::TooLarge { .. } | HttpError::Decode(_)) => UNREADABLE,
+        _ => "Details for this title could not be reached",
     }
+    .to_owned()
 }
 
 /// The walk-only setting (plans/streaming-window.md 4): debug builds read
@@ -1824,50 +1837,72 @@ mod tests {
             })
         };
         let cases = [
-            (AddonError::TimedOut, "did not answer in time"),
+            (
+                AddonError::TimedOut,
+                "Details for this title took too long to load",
+            ),
             (
                 AddonError::Http(HttpError::Timeout(Duration::from_secs(10))),
-                "did not answer in time",
+                "Details for this title took too long to load",
             ),
-            (status(404), "has no details for this title (404)"),
-            (status(410), "has no details for this title (410)"),
-            (status(401), "refused access (401)"),
-            (status(403), "refused access (403)"),
-            (status(429), "is busy, try again soon (429)"),
-            (status(500), "had an error (500)"),
-            (status(599), "had an error (599)"),
-            (status(400), "answered with an error (400)"),
+            (status(404), NO_DETAILS),
+            (status(410), NO_DETAILS),
+            (
+                status(401),
+                "Access to the details for this title was refused",
+            ),
+            (
+                status(403),
+                "Access to the details for this title was refused",
+            ),
+            (
+                status(429),
+                "Too many requests for details right now, try again soon",
+            ),
+            (
+                status(500),
+                "Details for this title could not load right now",
+            ),
+            (
+                status(599),
+                "Details for this title could not load right now",
+            ),
+            (
+                status(400),
+                "Details for this title could not load right now",
+            ),
             (
                 AddonError::Http(HttpError::BlockedPrivate("10.0.0.1".into())),
-                "points to a private network address",
+                "The details source points to a private network address",
             ),
             (
                 AddonError::Http(HttpError::TooLarge { limit: 1 }),
-                "sent details Momotus cannot read",
+                UNREADABLE,
             ),
-            (
-                AddonError::Http(HttpError::Decode("x".into())),
-                "sent details Momotus cannot read",
-            ),
+            (AddonError::Http(HttpError::Decode("x".into())), UNREADABLE),
             (
                 AddonError::Http(HttpError::Network("dns".into())),
-                "could not be reached",
+                "Details for this title could not be reached",
             ),
             (
                 AddonError::Http(HttpError::InvalidUrl("x".into())),
-                "could not be reached",
+                "Details for this title could not be reached",
             ),
-            (AddonError::LegacyTransport, "could not be reached"),
+            (
+                AddonError::LegacyTransport,
+                "Details for this title could not be reached",
+            ),
             (
                 AddonError::InvalidTransportUrl("no scheme"),
-                "could not be reached",
+                "Details for this title could not be reached",
             ),
         ];
         for (error, words) in cases {
-            assert_eq!(
-                meta_failure("Cinemeta", &error),
-                format!("Cinemeta {words}")
-            );
+            let said = meta_failure("Cinemeta", &error);
+            assert_eq!(said, words);
+            // Never the addon's name or a status code (the owner's rule).
+            assert!(!said.contains("Cinemeta"), "{said}");
+            assert!(!said.chars().any(|c| c.is_ascii_digit()), "{said}");
         }
     }
 }

@@ -438,21 +438,52 @@ async fn a_title_that_cannot_load_says_why() {
     );
     assert_eq!(
         reason(&[addon_answering("404 Not Found", "{}").await]).await,
-        "Meta Test has no details for this title (404)"
+        "Details for this title are not available right now"
     );
     assert_eq!(
         reason(&[meta_addon(r#"{"metas":[]}"#).await]).await,
-        "Meta Test has no details for this title"
+        "Details for this title are not available right now"
     );
     // `{}` is an empty answer only for a catalog: a meta has no empty form.
     assert_eq!(
         reason(&[meta_addon("{}").await]).await,
-        "Meta Test sent details Momotus cannot read"
+        "Details for this title came in a form Momotus cannot read"
     );
     assert_eq!(
         reason(&[meta_addon("not json").await]).await,
-        "Meta Test sent details Momotus cannot read"
+        "Details for this title came in a form Momotus cannot read"
     );
+}
+
+/// The owner's rule: a title that cannot load never names the addon that
+/// failed (it reads as "Cinemeta has no details..." on every platform) nor
+/// shows a status code; both stay in the log.
+#[tokio::test]
+async fn a_title_failure_never_names_the_addon_or_a_status() {
+    for status in [
+        "404 Not Found",
+        "410 Gone",
+        "401 Unauthorized",
+        "429 Too Many Requests",
+        "500 Internal Server Error",
+        "400 Bad Request",
+        "200 OK",
+    ] {
+        let core = Core::temporary("p").unwrap();
+        let addon = addon_answering(status, "not json").await;
+        core.library()
+            .set_addons("p", &[addon], &core.hlc())
+            .unwrap();
+        let view = TitleView::open(&core, "series", "tt0944947");
+        let TitleState::Failed { reason } = settle(&view).await.header.state else {
+            panic!("{status}: not failed");
+        };
+        assert!(!reason.contains("Meta Test"), "{status}: {reason}");
+        assert!(
+            !reason.chars().any(|c| c.is_ascii_digit()),
+            "{status}: {reason}"
+        );
+    }
 }
 
 /// A meta that gives its IMDb rating as `imdbRating` beside links of its own
