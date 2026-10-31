@@ -143,3 +143,20 @@ test("a narrow desktop canvas, by window or by zoom, keeps Resume, Start over an
   await expect(page.locator('[data-f="title:startover"]')).toContainText("Start over");
   await wide.close();
 });
+
+test("a short desktop canvas, by window or by zoom, keeps the synopsis and the facts whole and scrolls to them", async ({ browser }) => {
+  // 1440 by 465 CSS px is what Chrome leaves of a 1440 by 900 window at 175 percent: a canvas 741 units tall.
+  const context = await browser.newContext({ viewport: { width: 1440, height: 465 }, reducedMotion: "reduce" });
+  const page = await context.newPage();
+  await page.goto(`/title/series/${GOT.id}?form=desktop`);
+  const syn = page.locator(".info .syn");
+  await expect(syn).toBeVisible({ timeout: 30_000 });
+  // Three clamped lines, never squeezed: the synopsis is as tall as on a tall window.
+  expect((await syn.boundingBox())?.height ?? 0).toBeGreaterThan(70);
+  const facts = page.locator(".info .facts");
+  await expect(facts).toBeVisible();
+  await page.mouse.move(300, 300);
+  await page.mouse.wheel(0, 2000);
+  await expect(facts).toBeInViewport({ ratio: 0.95 });
+  await context.close();
+});

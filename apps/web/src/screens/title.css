@@ -11,6 +11,9 @@
 .info { position: absolute; left: var(--safe-side); top: var(--safe-top); bottom: var(--safe-bottom); width: 840px;
   display: flex; flex-direction: column; align-items: flex-start; }
 .title-scr.movie .info { width: 1000px; }
+/* A short canvas (a short window, or one zoomed in) runs the column past the foot and the page scrolls: nothing in it
+   shrinks, so the clamped synopsis and the facts never collapse to nothing. */
+.info > * { flex-shrink: 0; }
 /* The logo's slot: one fixed height per form, there from the first frame. The logo sits contained at its foot (a
    wide one low, a stacked one as tall as the slot), or the title's name when it does not load, so the meta line
    never moves whatever arrives, and whenever. Desktop draws the TV canvas scaled, so its slot scales with it. */
