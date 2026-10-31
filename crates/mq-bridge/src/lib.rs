@@ -1071,7 +1071,7 @@ impl Session {
             Request::Subscribe { id, view, params } => {
                 let result = self.subscribe(&view, &params);
                 let sub = result.as_ref().ok().and_then(|r| r["sub"].as_u64());
-                let reply = message(json!(id), result.map_err(Failure::from));
+                let reply = message(json!(id), result);
                 if self.out.send(&reply) == Err(SendError::TooLarge) {
                     // An oversized snapshot opens no view: the client gets a
                     // failed subscribe it can show, never a partial view.
@@ -2182,7 +2182,7 @@ impl Session {
         });
     }
 
-    fn subscribe(&mut self, view: &str, params: &Value) -> Result<Value, String> {
+    fn subscribe(&mut self, view: &str, params: &Value) -> Result<Value, Failure> {
         let sub = self.next_sub;
         self.next_sub += 1;
         let core = self.core();
@@ -2362,7 +2362,7 @@ impl Session {
                     .get("today")
                     .and_then(Value::as_str)
                     .and_then(mq_runtime::views::calendar::parse_day)
-                    .ok_or("today must be YYYY-MM-DD")?;
+                    .ok_or_else(|| Failure::from("today must be YYYY-MM-DD".to_owned()))?;
                 let calendar = CalendarView::open(&core, today);
                 let (snapshot, updates) = calendar.subscribe();
                 let forward = tokio::spawn(forward(sub, updates, out, fence));
@@ -2403,7 +2403,7 @@ impl Session {
                 let forward = tokio::spawn(forward(sub, updates, out, fence));
                 (View::Playback(playback), to_value(&snapshot)?, forward)
             }
-            other => return Err(format!("unknown view: {other}")),
+            other => return Err(format!("unknown view: {other}").into()),
         };
         lock(&self.shared)
             .subs
@@ -2605,41 +2605,41 @@ impl Session {
     /// `episode`.
     /// The version a download add names: its row of an open Versions view
     /// and that row's failover chain. No learning: a download is no pick.
-    fn download_pick(&self, pick: &DownloadPick) -> Result<Vec<mq_streams::ParsedStream>, String> {
+    fn download_pick(&self, pick: &DownloadPick) -> Result<Vec<mq_streams::ParsedStream>, Failure> {
         let shared = lock(&self.shared);
         let Some(Subscription {
             view: View::Versions(versions),
             ..
         }) = shared.subs.get(&pick.versions_sub)
         else {
-            return Err(format!("no versions subscription {}", pick.versions_sub));
+            return Err(format!("no versions subscription {}", pick.versions_sub).into());
         };
         let chain = versions.candidates(&pick.key);
         if chain.is_empty() {
-            return Err("that version is no longer listed".into());
+            return Err(not_listed());
         }
         Ok(chain)
     }
 
-    fn playback(&self, core: &Core, params: &Value) -> Result<PlaybackView, String> {
+    fn playback(&self, core: &Core, params: &Value) -> Result<PlaybackView, Failure> {
         let versions_sub = params
             .get("versionsSub")
             .and_then(Value::as_u64)
-            .ok_or("missing parameter: versionsSub")?;
+            .ok_or_else(|| Failure::from("missing parameter: versionsSub".to_owned()))?;
         let shared = lock(&self.shared);
         let Some(Subscription {
             view: View::Versions(versions),
             ..
         }) = shared.subs.get(&versions_sub)
         else {
-            return Err(format!("no versions subscription {versions_sub}"));
+            return Err(format!("no versions subscription {versions_sub}").into());
         };
         // The pick counts toward learning and hears back when it fails.
         let pick = versions.pick(&param(params, "key")?);
         let plays = versions.plays();
         drop(shared);
         if pick.candidates.is_empty() {
-            return Err("that version is no longer listed".into());
+            return Err(not_listed());
         }
         let num = |key: &str| params.get(key).and_then(Value::as_u64).map(|n| n as u32);
         let target = PlayTarget {
@@ -2759,6 +2759,15 @@ impl From<ProfileError> for Failure {
 fn send_answer(out: &Output, id: Value, result: Result<Value, Failure>) {
     if out.send(&message(id.clone(), result)) == Err(SendError::TooLarge) {
         let _ = out.send(&message(id, Err(too_large())));
+    }
+}
+
+/// A version a pick names that its Versions view no longer lists: said to
+/// the viewer as it is (the player's card names it).
+fn not_listed() -> Failure {
+    Failure {
+        kind: "said",
+        ..Failure::from("This version is no longer listed".to_owned())
     }
 }
 
