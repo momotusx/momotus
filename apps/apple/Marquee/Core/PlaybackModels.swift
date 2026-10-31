@@ -543,9 +543,11 @@ enum SubtitleMenu {
         nonEmpty(track.languageName) ?? Locale(identifier: "en").localizedString(forLanguageCode: track.lang) ?? track.lang
     }
 
-    /// A track's line in its group; with no name or label its language, never the source (as Android's TrackNames).
+    /// A track's line in its group: the core's name; with none (an older core) its language, never the source or
+    /// the addon's label, which can carry a provider and a file name ("OpenSubtitles · [SRT] · x.srt"), as
+    /// Android's TrackNames.
     static func title(_ track: SubtitleTrack) -> String {
-        nonEmpty(track.name) ?? nonEmpty(track.label) ?? heading(track)
+        nonEmpty(track.name) ?? heading(track)
     }
 
     /// Beneath the line, as the web and Android say it: the source unless the line starts with it,

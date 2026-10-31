@@ -1,9 +1,15 @@
 package app.marquee.player
 
+import app.marquee.core.client.CoreJson
 import app.marquee.core.model.SubtitleTrack
+import kotlinx.serialization.decodeFromString
+import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertNotEquals
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 /** The subtitles menu as the core orders and names the tracks (plans/m13-subtitle-languages.md 2 and 4). */
 class SubtitleRowsTest {
@@ -133,5 +139,37 @@ class SubtitleRowsTest {
         assertNull(startSubtitle("u/tur", chose = false, picked = true, started = null), "a carried pick is on")
         assertNull(startSubtitle("u/tur", chose = false, picked = false, started = "u/tur"), "once")
         assertEquals("u/eng", startSubtitle("u/eng", chose = false, picked = false, started = "u/tur"))
+    }
+
+    /**
+     * What the core sends for Sintel (apps/shared/fixtures/playback-subtitles-sintel.json, kept true by the core's
+     * own test): OpenSubtitles v3's real answer and SubSense's labels ("OpenSubtitles · [SRT] · sintel.he.srt").
+     * Every option reads as a viewer reads it, sintel.he under Hebrew.
+     */
+    @Test
+    fun `Sintel's real list reads clean, with no addon, format or extension`() {
+        val text = File("../../shared/fixtures/playback-subtitles-sintel.json").readText()
+        val core = CoreJson.decodeFromString<List<SubtitleTrack>>(text)
+        val rows = subtitleRows(core, emptyMap(), emptySet(), emptyList(), "late:").drop(1)
+        val raw = Regex("opensubtitles|subsense|\\[|\\.srt|·", RegexOption.IGNORE_CASE)
+        for (row in rows) {
+            val line = listOfNotNull(row.name, row.detail, row.release).joinToString(" | ")
+            assertFalse(raw.containsMatchIn(line), line)
+            assertNotEquals(row.name, row.release, line)
+        }
+        val languages = subtitleLanguages(rows).associateBy { it.name }
+        assertEquals((1..6).map { "English $it" }, languages.getValue("English").options.map { it.name })
+        assertTrue("Hebrew 4" in languages.getValue("Hebrew").options.map { it.name })
+        // An older core sends no name: the track reads as its language, never the addon's label.
+        val old =
+            SubtitleTrack(
+                url = "u/old",
+                lang = "heb",
+                label = "OpenSubtitles · [SRT] · sintel.he.srt",
+                source = "SubSense",
+                forced = false,
+                hearingImpaired = false,
+            )
+        assertEquals("Hebrew", subtitleRows(listOf(old), emptyMap(), emptySet(), emptyList(), "late:")[1].name)
     }
 }

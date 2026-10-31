@@ -104,9 +104,10 @@ internal fun subtitleRows(
         core.mapNotNull { t ->
             val row = loaded[t.url]
             if (row == null && t.url in hidden) return@mapNotNull null
-            // An older core sends no name or heading: the code's language stands in, never the addon's name.
+            // An older core sends no name or heading: the code's language stands in, never the addon's name
+            // or its label (a label can carry a provider and a file name, "OpenSubtitles · [SRT] · x.srt").
             val section = t.languageName.ifEmpty { languageName(t.lang) ?: t.lang }
-            val name = t.name.ifEmpty { t.label ?: section }
+            val name = t.name.ifEmpty { section }
             TrackChoice(
                 row?.id ?: "$late${t.url}",
                 name,

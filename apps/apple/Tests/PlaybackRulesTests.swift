@@ -323,12 +323,33 @@ private func sub(_ n: Int, _ lang: String, _ language: String, _ heading: String
     #expect(none.top.count == 7 && none.other.isEmpty)
 }
 
+/// What the core sends for Sintel (apps/shared/fixtures/playback-subtitles-sintel.json, kept true by the core's
+/// own test): OpenSubtitles v3's real answer and SubSense's labels ("OpenSubtitles · [SRT] · sintel.he.srt"). Every
+/// option reads as a viewer reads it, sintel.he under Hebrew.
+@Test func sintelsRealSubtitleListReadsClean() throws {
+    let url = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+        .appending(path: "../../shared/fixtures/playback-subtitles-sintel.json")
+    let tracks = try JSONDecoder().decode([SubtitleTrack].self, from: Data(contentsOf: url))
+    let raw = /(?i)opensubtitles|subsense|\[|\.srt|·/
+    for t in tracks {
+        let line = [SubtitleMenu.title(t), SubtitleMenu.detail(t)].compactMap { $0 }.joined(separator: " | ")
+        #expect(line.firstMatch(of: raw) == nil, "\(line)")
+        #expect(SubtitleMenu.detail(t) != SubtitleMenu.title(t), "\(line)")
+    }
+    let languages = TrackPicker.languages(tracks, file: [])
+    #expect(languages.first { $0.name == "English" }?.tracks.map(SubtitleMenu.title) == (1...6).map { "English \($0)" })
+    #expect(languages.first { $0.name == "Hebrew" }?.tracks.map(SubtitleMenu.title).contains("Hebrew 4") == true)
+}
+
 @Test func subtitleTracksFromAnOlderCoreStillGroupAndName() throws {
     let old = try JSONDecoder().decode(SubtitleTrack.self, from: Data(#"{"url": "u", "lang": "tur", "label": null, "source": "SubSense", "forced": true, "hearingImpaired": false}"#.utf8))
     #expect(old.language == nil && old.name == nil)
     #expect(SubtitleMenu.heading(old) == "Turkish")
     // No name or label: its language, never the source.
     #expect(SubtitleMenu.title(old) == "Turkish")
+    // A label of an older core can carry a provider and a file name: still its language.
+    let labelled = try JSONDecoder().decode(SubtitleTrack.self, from: Data(#"{"url": "u", "lang": "heb", "label": "OpenSubtitles · [SRT] · sintel.he.srt", "source": "SubSense", "forced": false, "hearingImpaired": false}"#.utf8))
+    #expect(SubtitleMenu.title(labelled) == "Hebrew")
     #expect(SubtitleMenu.detail(old) == "Forced")
     #expect(SubtitleMenu.groups([old], preferred: ["tr"]).top.map(\.language) == ["tur"])
     let new = try JSONDecoder().decode(SubtitleTrack.self, from: Data(#"{"url": "u", "lang": "pob", "label": null, "source": "OpenSubtitles v3", "forced": false, "hearingImpaired": false, "language": "pt-BR", "languageName": "Portuguese (Brazil)", "name": "OpenSubtitles v3 2"}"#.utf8))
