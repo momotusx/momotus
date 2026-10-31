@@ -888,7 +888,7 @@ private fun RowScope.TvColumns(
         }
     // No language here can be picked (each is the first line's): the Second line tab's foot stands alone at the right,
     // where Right from Off or the Spoken language row reaches it.
-    val footOnly = preview == null && tab.second && second != null
+    val footOnly = preview == null && tab.second && second != null && languages.none { tab.taken(it) == null }
     val requesters = remember { HashMap<String, FocusRequester>() }
     val requester = { key: String -> requesters.getOrPut(key) { FocusRequester() } }
     val off = remember { FocusRequester() }
@@ -1023,7 +1023,7 @@ private fun RowScope.TvColumns(
         // Left goes back to the row the options came from, the Spoken language row included; to Off with no options.
         val back =
             when {
-                focusedKey == SPOKEN_ROW -> spokenFocus
+                focusedKey == SPOKEN_ROW && spokenRow -> spokenFocus
                 preview != null -> requester(preview.key)
                 else -> off
             }
@@ -1069,7 +1069,7 @@ private fun RowScope.TvColumns(
         }
         val foot = Modifier.padding(start = 16.dp, top = 12.dp)
         val left = Modifier.focusProperties { this.left = back }
-        if (tab.second && second != null) {
+        if (tab.second && second != null && (preview != null || footOnly)) {
             // Down chains Timing, Size, Layout, then Only when paused, whose Down stays (plans/dual-subtitles.md 5.3).
             Column(if (footOnly) Modifier.focusRequester(into) else Modifier) {
                 second.timing?.let { TimingRow(it, second.onDelay, foot) }

@@ -251,9 +251,10 @@ internal fun cueFoot(
  * The cues drawn with a second line (plans/dual-subtitles.md 4, 6.2). Stacked and One box join every cue of the second
  * line, its own placement dropped (decision 7), at [SECOND_SIZE] over the first line's foot cues, highest first, into
  * one cue that hangs from the foot and wraps as one ([SubtitleView] draws each cue on its own, so two would overlap),
- * placed across as the first line's lowest foot cue (its alignment, position and width). One box gives it the caption window [box] and clears the lines' own background under it. Split keeps the first line
- * as it is and hangs the second, at full size, from [top] (a fraction of the view's height). The first line's signs
- * stay where its file put them.
+ * placed across as the first line's lowest foot cue (its alignment, position and width). One box gives it the caption
+ * window [box] and clears the lines' own background under it. Split keeps the first line as it is and hangs the
+ * second, at full size, from [top] (a fraction of the view's height). The first line's signs stay where its file put
+ * them.
  */
 internal fun twoLines(
     first: List<Cue>,

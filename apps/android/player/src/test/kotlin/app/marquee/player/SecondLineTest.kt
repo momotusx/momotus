@@ -127,6 +127,11 @@ class SecondLineTest {
             val fitted = CueFrame(bottom = 0.1f, text = 0.05f).fit(r)
             assertEquals(Layout.Alignment.ALIGN_OPPOSITE, fitted.textAlignment)
             assertEquals(1f, fitted.position)
+            // Beside a corner control the frame's narrowing wins: the block centres in the room left of it.
+            val narrowed = CueFrame(bottom = 0.1f, text = 0.05f, width = 0.6f, center = 0.3f).fit(r)
+            assertEquals(0.3f, narrowed.position)
+            assertEquals(Cue.ANCHOR_TYPE_MIDDLE, narrowed.positionAnchor)
+            assertEquals(0.6f, narrowed.size)
         }
         // A centred first line leaves the block centred: nothing set, as before.
         val centred =

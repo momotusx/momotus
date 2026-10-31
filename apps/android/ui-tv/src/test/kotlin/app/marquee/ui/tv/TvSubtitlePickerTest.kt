@@ -454,6 +454,41 @@ class TvSubtitlePickerTest {
         footWithNothingToPick(spoken = null, opensOn = "Spoken language, not known for this video")
 
     @Test
+    fun `with a search typed, Left from the lone foot comes back to Off, never to the hidden Spoken language row`() {
+        val onlyFirst = secondRows.filter { it.id == "off" || it.language == "tr" }
+        openTwo(secondLine(spokenOn = true, rows = onlyFirst, spoken = null, timing = null))
+        row("Turkish, Türkçe, 1 option").press(Key.DirectionUp)
+        repeat(3) { compose.onNode(isFocused()).press(Key.DirectionUp) }
+        compose.onNode(isFocused() and hasText("First line")).press(Key.DirectionRight)
+        compose.onNode(isFocused()).press(Key.Enter)
+        compose.waitForIdle()
+        row("Spoken language, not known for this video").assertIsFocused().press(Key.DirectionUp)
+        row("Off").assertIsFocused().press(Key.DirectionUp)
+        compose
+            .onNode(isFocused() and hasContentDescription(SEARCH_LANGUAGES))
+            .performSemanticsAction(SemanticsActions.SetText) { it(AnnotatedString("t")) }
+        compose.waitForIdle()
+        row("Spoken language, not known for this video").assertDoesNotExist()
+        compose.onNode(hasContentDescription(SEARCH_LANGUAGES)).press(Key.DirectionDown)
+        row("Off").assertIsFocused().press(Key.DirectionRight)
+        compose.onNode(isFocused() and hasText("Smaller")).assertExists().press(Key.DirectionLeft)
+        row("Off").assertIsFocused()
+    }
+
+    @Test
+    fun `with languages to pick, Right from a Spoken language not known stays, the foot under a language's options`() {
+        openTwo(secondLine(spokenOn = true, spoken = null, timing = null))
+        row("Turkish, Türkçe, 1 option").press(Key.DirectionUp)
+        repeat(3) { compose.onNode(isFocused()).press(Key.DirectionUp) }
+        compose.onNode(isFocused() and hasText("First line")).press(Key.DirectionRight)
+        compose.onNode(isFocused()).press(Key.Enter)
+        compose.waitForIdle()
+        row("Spoken language, not known for this video").assertIsFocused().press(Key.DirectionRight)
+        row("Spoken language, not known for this video").assertIsFocused()
+        compose.onNodeWithText("Only when paused").assertDoesNotExist()
+    }
+
+    @Test
     fun `no switch while no second line can be on, and the first line's rows are today's`() {
         openTwo(second = null)
         compose.onNodeWithText("First line").assertDoesNotExist()
