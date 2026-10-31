@@ -8,12 +8,13 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 
 /** The picker's Size against the profile's setting (review P3-11): no flicker on fast presses, a failed write undone. */
-class SizeSettingTest {
+class ProfileSettingTest {
     private val shown = mutableListOf<SubtitleSize>()
     private val answers = ArrayDeque<CompletableDeferred<SubtitleSize>>()
     private val setting =
-        SizeSetting(
+        ProfileSetting(
             CoroutineScope(Dispatchers.Unconfined),
+            SubtitleSize.Medium,
             write = { CompletableDeferred<SubtitleSize>().also(answers::addLast).await() },
             show = { shown += it },
         )

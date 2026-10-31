@@ -64,6 +64,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import app.marquee.core.model.EmptyKind
 import app.marquee.core.model.NextEpisode
+import app.marquee.core.model.SubtitleLayout
 import app.marquee.core.model.SubtitleSize
 import app.marquee.design.Icons
 import app.marquee.design.Marquee
@@ -98,6 +99,7 @@ import app.marquee.player.nextSpeed
 import app.marquee.player.rememberTitleMark
 import app.marquee.player.rememberTouchExploration
 import app.marquee.player.scrubTo
+import app.marquee.player.secondLine
 import app.marquee.player.speedText
 import app.marquee.player.subtitlesDetail
 import app.marquee.player.subtitlesStillListing
@@ -141,6 +143,10 @@ fun PhonePlayer(
     onOffer: (String) -> Unit = {},
     /** The subtitle picker's Size: the profile's subtitle size, for this video and the next. */
     onSubtitleSize: (SubtitleSize) -> Unit = {},
+    /** The picker's second line: the profile's layout, Only when paused, and the Spoken language kept with no track here. */
+    onSubtitleLayout: (SubtitleLayout) -> Unit = {},
+    onSecondOnPause: (Boolean) -> Unit = {},
+    onSpokenKept: () -> Unit = {},
     /** The failure card's Settings: the addons (noSource). */
     onSettings: ((EmptyKind) -> Unit)? = null,
     brightness: ScreenBrightness = remember { ScreenBrightness() },
@@ -319,6 +325,10 @@ fun PhonePlayer(
             subtitleCorner = corner.takeIf { showSkip || showNextCard },
             addonCues = { controller.addonCues() }.takeIf { controller.addonOn },
             videoRatio = controller.videoRatio,
+            secondCues = { controller.secondCues() }.takeIf { controller.secondOn },
+            subtitleLayout = controller.subtitleLayout,
+            secondOnPause = controller.secondOnPause,
+            subtitleTop = if (showControls) titleFoot else 0.dp,
         )
         // The level swipes' own layer, right over the picture: the controls, lists and cards drawn after it are hit
         // first, so a touch on any of them never reaches it, and the picture's taps (on the Box) still see the rest.
@@ -578,6 +588,9 @@ fun PhonePlayer(
                         onDelay = controller::setSubtitleDelay,
                         textSize = controller.subtitleSize,
                         onSize = onSubtitleSize,
+                        second = controller.secondLine(onSubtitleLayout, onSecondOnPause, onSpokenKept),
+                        secondTab = controller.secondTab,
+                        onTab = { controller.secondTab = it },
                     )
                 }
 

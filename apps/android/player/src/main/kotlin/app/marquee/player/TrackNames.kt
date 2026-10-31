@@ -42,8 +42,18 @@ const val IN_THE_FILE = "In the file"
 /** The picker's heading for a track in the file that names no language. */
 const val UNKNOWN_LANGUAGE = "Unknown language"
 
-/** What the Subtitles action says under its name: the chosen language, or how many the picker shows ("None found" for zero). */
-fun PlaybackController.subtitlesDetail(): String = subtitlesDetail(text, subtitlesPending)
+/**
+ * What the Subtitles action says under its name: the chosen language, "Turkish + English" with a second line drawn,
+ * or how many the picker shows ("None found" for zero).
+ */
+fun PlaybackController.subtitlesDetail(): String =
+    subtitlesDetail(
+        text,
+        subtitlesPending,
+        secondText.takeIf {
+            secondOn
+        },
+    )
 
 /** The core still lists, but tracks are in: the count shows with a small searching mark until the listing is done. */
 fun PlaybackController.subtitlesStillListing(): Boolean = subtitlesStillListing(text, subtitlesPending)
@@ -60,10 +70,13 @@ internal fun subtitlesStillListing(
 internal fun subtitlesDetail(
     rows: List<TrackChoice>,
     pending: Boolean,
+    /** The second line's rows while it is drawn: its language follows the first's. */
+    second: List<TrackChoice>? = null,
 ): String {
     val found = subtitleLanguages(rows).size
     val chosen = rows.firstOrNull { it.selected && it.id != TRACK_OFF }
-    return chosen?.let { it.section ?: it.name }
+    val two = second?.firstOrNull { it.selected && it.id != TRACK_OFF }?.section
+    return chosen?.let { it.section ?: it.name }?.let { if (two != null) "$it + $two" else it }
         ?: if (pending && found == 0) {
             "Searching"
         } else if (found == 0) {
@@ -128,6 +141,31 @@ internal const val DOT = " · "
 
 /** One key for every spelling of a language, so the file's "eng" and the core's "en" meet: "en", "pt-br". */
 fun languageKey(code: String): String = Util.normalizeLanguageCode(code).lowercase(Locale.ROOT)
+
+/**
+ * Whether two codes or tags name one language by their base language ("en" and "en-GB", "eng" and "en"), as the web's
+ * `sameLanguage` (this package's [sameLanguage] matches whole tags): two lines never show one language. An unknown
+ * or empty one never matches.
+ */
+fun samePrimaryLanguage(
+    a: String?,
+    b: String?,
+): Boolean {
+    val base = { c: String -> languageKey(c).substringBefore('-') }
+    if (a.isNullOrBlank() || b.isNullOrBlank()) return false
+    val x = base(a)
+    return x.isNotEmpty() && x != C.LANGUAGE_UNDETERMINED && x == base(b)
+}
+
+/**
+ * The second line's track (plans/dual-subtitles.md 6.2): the core's [auto] (`autoSecondSubtitle`) as a level, which
+ * may change or go null with the first line, until the viewer [chose] one in this play; then the [current] one.
+ */
+internal fun followSecond(
+    auto: String?,
+    chose: Boolean,
+    current: String?,
+): String? = if (chose) current else auto
 
 /** "Türkçe" for "tr": the language's name in itself, from the platform; null when it has none. */
 internal fun ownName(code: String): String? {

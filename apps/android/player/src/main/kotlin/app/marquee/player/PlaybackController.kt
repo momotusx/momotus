@@ -32,6 +32,7 @@ import app.marquee.core.model.PlaybackPhase
 import app.marquee.core.model.PlaybackSnapshot
 import app.marquee.core.model.Segment
 import app.marquee.core.model.StartProgress
+import app.marquee.core.model.SubtitleLayout
 import app.marquee.core.model.SubtitleNote
 import app.marquee.core.model.SubtitleSize
 import app.marquee.core.model.SubtitleTrack
@@ -263,15 +264,39 @@ class PlaybackController(
     /** Each track's delay in this play, by [delayKey]. */
     private val delays = mutableMapOf<String, Long>()
 
+    /** How two subtitle lines draw, from the profile's settings (plans/dual-subtitles.md 4); the screen sets it. */
+    var subtitleLayout: SubtitleLayout by mutableStateOf(SubtitleLayout.Stacked)
+
+    /** The second line shows only while paused, from the profile's settings; the screen sets it. */
+    var secondOnPause by mutableStateOf(false)
+
+    /** The profile's second line (`Prefs.secondSubtitle`: "audio", a language tag, or null); the screen sets it. */
+    var secondPref: String? by mutableStateOf(null)
+
+    /** The picker shows the Second line tab: kept for its next open. */
+    var secondTab by mutableStateOf(false)
+
+    /** The second line's track delay (positive: later), its own Timing row's; never the first line's renderer's. */
+    var secondDelayMs by mutableLongStateOf(0L)
+        private set
+
+    /** The spoken language as the core reads it (`PlaybackSnapshot.spokenLanguage`); null while not known. */
+    var spokenLanguage: String? by mutableStateOf(null)
+        private set
+
+    /** The Second line tab's rows: Off, then the core's tracks, the second line's selected (no tracks in the file). */
+    var secondText: List<TrackChoice> by mutableStateOf(listOf(TrackChoice(TRACK_OFF, "Off", selected = true)))
+        private set
+
     private var view: PlaybackView? = null
     private var loadedUrl: String? = null
 
-    /** The addon track drawn over the picture, once its file is in; null with none on. */
-    private var shown: TimedCues? by mutableStateOf(null)
+    /** The two lines the app draws from the core's tracks (plans/dual-subtitles.md 6.2). */
+    private val first = ShownLine()
+    private val second = ShownLine()
 
-    /** Addon files already parsed in this play: a pick back to one shows at once. */
+    /** Addon files already parsed in this play: a pick back to one shows at once, on either line. */
     private val fetched = HashMap<String, TimedCues>()
-    private var fetching: Job? = null
     private var snapshotSubs: List<SubtitleTrack> = emptyList()
     private var firstFrame = false
     private var raised = false
@@ -284,6 +309,7 @@ class PlaybackController(
     private var pick: TextPick? = null
         set(value) {
             field = value
+            shownPick = value
             // A delay the viewer set belongs to the track it was set on: it goes to the core before another comes.
             if (value?.url != unsentDelay?.first) sendDelay()
             // A track comes on with its own delay (a core track where the viewer last left it); Off keeps the last
@@ -291,8 +317,17 @@ class PlaybackController(
             if (value != null) applyDelay(delays[value.delayKey] ?: startDelay(value))
         }
 
+    /** [pick] as state, for what composition reads of the first line (the second line's rules). */
+    private var shownPick: TextPick? by mutableStateOf(null)
+
     /** The viewer picked a subtitle or Off in this play: the core's start subtitle no longer turns on. */
     private var chose = false
+
+    /** The viewer picked a second line or Off in this play: the core's `autoSecondSubtitle` is no longer followed. */
+    private var choseSecond = false
+
+    /** Whether the viewer's second-line pick in this play is the Spoken language row; null before one. */
+    private var spokenPick: Boolean? by mutableStateOf(null)
 
     /** The start subtitle already turned on, so a repeat of it does nothing. */
     private var started: String? = null
@@ -462,18 +497,24 @@ class PlaybackController(
         // While a source is being found its list is still to come: not "None found".
         subtitlesPending = s.subtitlesPending || s.phase == PlaybackPhase.Resolving
         snapshotSubs = s.subtitles
+        spokenLanguage = s.spokenLanguage
         val added = newSubtitleNotes(subtitleNotes, s.subtitleNotes)
         subtitleNotes = s.subtitleNotes
         // Every start subtitle failed to read (the core handed over to the next until none was left): said once,
         // with no source; a later choice clears it in the core, and a new failure is said again.
         if (s.startSubtitleFailed && !startSubtitleFailed) announce(StreamChoiceCopy.SUBTITLES_FAILED)
         startSubtitleFailed = s.startSubtitleFailed
-        // A note while one of the core's tracks is on is about it (only the picked file is fetched).
-        if (pick?.external == true) added.lastOrNull()?.let { announce(subtitleNoteWords(it)) }
-        // The picked file left the list (the core could not read it): it goes off quietly, as the note above
+        // A note while one of the core's tracks is on is about it (only the picked files are fetched); the core's own
+        // second line fails quietly (plans/dual-subtitles.md 3.2).
+        if (pick?.external == true || (second.url != null && choseSecond)) {
+            added.lastOrNull()?.let { announce(subtitleNoteWords(it)) }
+        }
+        // A picked file left the list (the core could not read it): it goes off quietly, as the note above
         // already said so. Not on a new source, whose list the load below carries the pick over to.
         if (s.url != null && s.url == loadedUrl) {
-            pick?.url?.takeIf { url -> s.subtitles.none { it.url == url } }?.let { dropTrack(it, words = null) }
+            listOfNotNull(pick?.url, second.url)
+                .filter { url -> s.subtitles.none { it.url == url } }
+                .forEach { dropTrack(it, words = null) }
         }
         // The core's start subtitle, once, as if picked; nothing goes back to the core.
         startSubtitle(s.autoSubtitle, chose, pick != null, started)?.let { url ->
@@ -533,6 +574,11 @@ class PlaybackController(
                 Unit
             }
         }
+        // After a new source's load, which starts the second line over: the core's second line as a level until the
+        // viewer picks one, a change to null turning it off.
+        val want = followSecond(s.autoSecondSubtitle, choseSecond, second.url)
+        val track = s.subtitles.firstOrNull { it.url == want && it.url !in dead }
+        if (track?.url != second.url) showSecond(track)
         refreshTracks()
     }
 
@@ -579,6 +625,10 @@ class PlaybackController(
             sendDelay()
             delays.clear()
             pick?.let { applyDelay(startDelay(it)) }
+            // The second line starts over with the source, as the core's second line does: its own start follows.
+            choseSecond = false
+            spokenPick = null
+            showSecond(null)
         }
         // A new source lists its files at new addresses: the addon pick goes over to the same file, else the
         // best one in its language, else off.
@@ -746,8 +796,9 @@ class PlaybackController(
         fetched.remove(url)
         if (pick?.url == url) {
             pick = null
-            hideAddon()
+            hideAddon(first)
         }
+        if (second.url == url) showSecond(null)
         refreshTracks()
         words?.let(::announce)
     }
@@ -943,19 +994,26 @@ class PlaybackController(
                 .buildUpon()
                 .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
                 .build()
-        showAddon(track)
+        showAddon(first, track)
         refreshTracks()
     }
 
-    /** Draws [track] from its file: at once when this play parsed it already, else once it is in. */
-    private fun showAddon(track: SubtitleTrack) {
-        fetching?.cancel()
+    /**
+     * Draws [track] on [line] from its file: at once when this play parsed it already, else once it is in. Each line
+     * fetches on its own, so a pick on one never cancels the other's.
+     */
+    private fun showAddon(
+        line: ShownLine,
+        track: SubtitleTrack,
+    ) {
+        line.fetching?.cancel()
+        line.url = track.url
         fetched[track.url]?.let {
-            shown = it
+            line.cues = it
             return
         }
-        shown = null
-        fetching =
+        line.cues = null
+        line.fetching =
             scope.launch {
                 val cues =
                     try {
@@ -968,35 +1026,131 @@ class PlaybackController(
                         null
                     }
                 if (cues == null) {
-                    dropTrack(track.url, UNREADABLE)
+                    // The core's own second line fails quietly, as the core hands it over (plans/dual-subtitles.md 3.2).
+                    dropTrack(track.url, UNREADABLE.takeIf { line === first || choseSecond })
                     return@launch
                 }
                 fetched[track.url] = cues
-                if (pick?.url == track.url) shown = cues
+                if (line.url == track.url) line.cues = cues
             }
     }
 
-    private fun hideAddon() {
-        fetching?.cancel()
-        shown = null
+    private fun hideAddon(line: ShownLine) {
+        line.fetching?.cancel()
+        line.url = null
+        line.cues = null
     }
 
     /** An addon track is drawn over the picture: the player's own cues give way to [addonCues]. */
-    val addonOn: Boolean get() = shown != null
+    val addonOn: Boolean get() = first.cues != null
 
     /**
      * The addon track's cues at [positionMs], moved by the track's delay (later when positive); none with no addon
      * track on. The picture's subtitles read it every frame while [addonOn].
      */
     fun addonCues(positionMs: Long = player.currentPosition): List<Cue> =
-        shown?.at((positionMs - subtitleDelayMs) * 1000) ?: emptyList()
+        first.cues?.at((positionMs - subtitleDelayMs) * 1000) ?: emptyList()
+
+    /**
+     * A second line can be on (the picker's First line / Second line switch shows): a first line is on, and it is not
+     * a picture track, whose bitmaps sit where the file put them (plans/dual-subtitles.md 4).
+     */
+    val secondOffered: Boolean get() = shownPick?.let { it.kind !in PICTURES } == true
+
+    /** The second line's language: its core track's. */
+    private val secondLanguage: String?
+        get() =
+            second.url
+                ?.let { url ->
+                    snapshotSubs.firstOrNull { it.url == url }
+                }?.let { it.language.ifEmpty { it.lang } }
+
+    /**
+     * The second line is drawn: its file is in, a first line is on and drawn (a core track's file in too) that is not a
+     * picture track, and the two are not one language (a guard over the core's rule, which knows neither a file first
+     * line nor a viewer's second pick). A second line never shows before a first.
+     */
+    val secondOn: Boolean
+        get() =
+            second.cues != null && secondOffered && (shownPick?.external != true || first.cues != null) &&
+                !samePrimaryLanguage(shownPick?.language, secondLanguage)
+
+    /** The second line's language as the picker disables it on the First line tab, while it is drawn. */
+    val secondKey: String? get() = secondLanguage?.takeIf { secondOn }?.let(::languageKey)
+
+    /** The first line's language, which the Second line tab disables; null with none on or an untagged one. */
+    val firstKey: String? get() = shownPick?.language?.takeIf { it.isNotEmpty() }?.let(::languageKey)
+
+    /** The Spoken language row is the second line's choice: the viewer's pick in this play, else the profile's. */
+    val spokenOn: Boolean get() = spokenPick ?: (second.url != null && secondPref == SPOKEN)
+
+    /**
+     * The second line's cues at [positionMs], moved by its own delay; none while it is not drawn ([secondOn]). The
+     * picture's subtitles read it every frame while [secondOn].
+     */
+    fun secondCues(positionMs: Long = player.currentPosition): List<Cue> =
+        second.cues?.takeIf { secondOn }?.at((positionMs - secondDelayMs) * 1000) ?: emptyList()
+
+    /**
+     * The viewer's second line from the picker (a core track's row id) or Off: it wins over the core's for the rest
+     * of the play, and the core keeps its language as the profile's, the spoken one when [spoken] (the Spoken
+     * language row).
+     */
+    fun selectSecond(
+        id: String,
+        spoken: Boolean = false,
+    ) {
+        val track = if (id == TRACK_OFF) null else snapshotSubs.firstOrNull { "$LATE${it.url}" == id } ?: return
+        choseSecond = true
+        spokenPick = spoken
+        view?.secondSubtitleChosen(track?.url, spoken)
+        showSecond(track)
+    }
+
+    /**
+     * The Spoken language row with no track of it here: nothing shows now, and the screen keeps the choice in the
+     * profile for the next titles. While the list is still coming the core's own second line may yet bring it.
+     */
+    fun keepSpoken() {
+        if (!subtitlesPending) choseSecond = true
+        spokenPick = true
+        showSecond(null)
+    }
+
+    /** Turns [track] on as the second line, or the second line off: drawn from its file, with its own delay. */
+    private fun showSecond(track: SubtitleTrack?) {
+        // A delay set on the line's last track goes to the core before another comes.
+        if (unsentDelay != null && unsentDelay?.first == second.url && track?.url != second.url) sendDelay()
+        if (track == null) {
+            hideAddon(second)
+        } else {
+            secondDelayMs = delays[track.url] ?: track.delayMs.toLong()
+            showAddon(second, track)
+        }
+        refreshSecond()
+    }
+
+    /** The Second line tab's rows, the second line's track selected. */
+    private fun refreshSecond() {
+        val on = second.url?.let { mapOf(it to TrackChoice("$LATE$it", "", selected = true)) } ?: emptyMap()
+        secondText = subtitleRows(snapshotSubs, on, dead, emptyList(), LATE)
+    }
+
+    /** The second line's Timing row: its track shows [ms] later (earlier when negative), within [SUBTITLE_MAX_MS]. */
+    fun setSecondDelay(ms: Long) {
+        val url = second.url ?: return
+        val next = ms.coerceIn(-SUBTITLE_MAX_MS, SUBTITLE_MAX_MS)
+        delays[url] = next
+        secondDelayMs = next
+        queueDelay(url, next)
+    }
 
     private fun choose(id: String) {
         val params = player.trackSelectionParameters.buildUpon()
         when {
             id == TRACK_OFF -> {
                 pick = null
-                hideAddon()
+                hideAddon(first)
                 player.trackSelectionParameters = params.setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true).build()
             }
 
@@ -1009,7 +1163,7 @@ class PlaybackController(
             else -> {
                 val (group, index) = find(C.TRACK_TYPE_TEXT, id) ?: return
                 val format = group.getTrackFormat(index)
-                hideAddon()
+                hideAddon(first)
                 pick =
                     TextPick(
                         language = format.language.orEmpty(),
@@ -1052,9 +1206,19 @@ class PlaybackController(
         val next = ms.coerceIn(-SUBTITLE_MAX_MS, SUBTITLE_MAX_MS)
         delays[chosen.delayKey] = next
         applyDelay(next)
-        // A core track's delay goes to the core once a run of presses settles, so its next play starts there.
-        val url = chosen.url?.takeIf { chosen.external } ?: return
-        unsentDelay = url to next
+        queueDelay(chosen.url?.takeIf { chosen.external } ?: return, next)
+    }
+
+    /**
+     * A core track's delay goes to the core once a run of presses settles, so its next play starts there. One delay
+     * waits at a time: one for another track (the other line's) goes first, so tuning both lines loses neither.
+     */
+    private fun queueDelay(
+        url: String,
+        ms: Long,
+    ) {
+        if (unsentDelay?.first != url) sendDelay()
+        unsentDelay = url to ms
         delaySend?.cancel()
         delaySend =
             scope.launch {
@@ -1174,6 +1338,7 @@ class PlaybackController(
         val loaded = on?.let { mapOf(it to TrackChoice("$LATE$it", "", selected = true)) } ?: emptyMap()
         audio = audioRows
         text = subtitleRows(snapshotSubs, loaded, dead, fileRows, LATE)
+        refreshSecond()
         applyPick(tracks)
         fileTakesOverStart()
     }
@@ -1223,7 +1388,8 @@ class PlaybackController(
         StartService.release()
         ticker?.cancel()
         noticeJob?.cancel()
-        fetching?.cancel()
+        first.fetching?.cancel()
+        second.fetching?.cancel()
         tryingAgainJob?.cancel()
         player.removeListener(listener)
         view?.close()
@@ -1244,7 +1410,20 @@ class PlaybackController(
         val CAPTIONS =
             setOf(MimeTypes.APPLICATION_CEA608, MimeTypes.APPLICATION_CEA708, MimeTypes.APPLICATION_MP4CEA608)
 
+        /** Picture subtitles in the file (PGS, DVB, DVD): a second line never joins them. */
+        val PICTURES = setOf(MimeTypes.APPLICATION_PGS, MimeTypes.APPLICATION_DVBSUBS, MimeTypes.APPLICATION_VOBSUB)
+
+        /** `Prefs.secondSubtitle`'s word for the spoken language. */
+        const val SPOKEN = "audio"
+
         /** How long after the last delay press a core track's delay goes to the core. */
         const val DELAY_SETTLE_MS = 700L
     }
+}
+
+/** One subtitle line the app draws from a core track: the track, its cues once its file is in, the fetch for it. */
+private class ShownLine {
+    var url: String? by mutableStateOf(null)
+    var cues: TimedCues? by mutableStateOf(null)
+    var fetching: Job? = null
 }

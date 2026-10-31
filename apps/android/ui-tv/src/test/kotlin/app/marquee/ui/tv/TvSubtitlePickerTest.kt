@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -17,7 +18,9 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.SemanticsNodeInteraction
+import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsFocused
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isFocused
@@ -30,10 +33,12 @@ import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
+import app.marquee.core.model.SubtitleLayout
 import app.marquee.core.model.SubtitleSize
 import app.marquee.design.Form
 import app.marquee.design.MarqueeTheme
 import app.marquee.player.SEARCH_LANGUAGES
+import app.marquee.player.SecondLine
 import app.marquee.player.TrackChoice
 import app.marquee.player.TvSubtitlePicker
 import org.junit.Rule
@@ -247,5 +252,163 @@ class TvSubtitlePickerTest {
         compose.onNodeWithText("0.0 s").assertExists()
         compose.onNodeWithText("Reset").assertDoesNotExist()
         compose.onNode(isFocused() and hasContentDescription("Timing")).assertExists()
+    }
+
+    // The second line (plans/dual-subtitles.md 5.3).
+
+    /** Turkish on the first line, English on the second (the core's tracks only: no track in the file). */
+    private val secondRows =
+        listOf(
+            TrackChoice("off", "Off"),
+            TrackChoice("late:en1", "CAKES, WEB 1080p", null, selected = true, section = "English", language = "en"),
+            TrackChoice("late:en2", "FLUX, WEB-DL 1080p", null, section = "English", language = "en"),
+            TrackChoice(
+                "late:ar",
+                "PSA, WEBRip 1080p",
+                null,
+                section = "Arabic",
+                language = "ar",
+                nativeName = "العربية",
+            ),
+            TrackChoice("late:tr", "Turkish 1", section = "Turkish", language = "tr", nativeName = "Türkçe"),
+        )
+
+    /** The same rows with Turkish chosen on the first line. */
+    private val firstRows = rows.map { it.copy(selected = it.id == "late:tr") }
+
+    private val secondPicks = mutableListOf<String>()
+    private val pauses = mutableListOf<Boolean>()
+    private val layouts = mutableListOf<SubtitleLayout>()
+    private var spokenPressed = 0
+
+    private fun secondLine(spokenOn: Boolean = false) =
+        SecondLine(
+            rows = secondRows,
+            firstKey = "tr",
+            secondKey = "en",
+            spoken = "en",
+            spokenOn = spokenOn,
+            pending = false,
+            timing = 0L,
+            layout = SubtitleLayout.Stacked,
+            onPause = false,
+            onPick = { secondPicks += it },
+            onSpoken = { spokenPressed++ },
+            onDelay = {},
+            onLayout = { layouts += it },
+            onPauseChange = { pauses += it },
+        )
+
+    private fun openTwo(second: SecondLine? = secondLine()) {
+        compose.setContent {
+            MarqueeTheme(Form.Tv) {
+                var tab by remember { mutableStateOf(false) }
+                TvSubtitlePicker(
+                    firstRows,
+                    onPick = { picks += it },
+                    second = second,
+                    secondTab = tab,
+                    onTab = { tab = it },
+                )
+            }
+        }
+        compose.waitForIdle()
+    }
+
+    @Test
+    fun `Up from search reaches the switch, Left and Right stop at its ends, OK lands on the tab's chosen row`() {
+        openTwo()
+        row("Turkish, Türkçe, 1 option").assertIsFocused()
+        // English is the second line's: it reads so here, and the remote passes it by.
+        row("English, On the second line, 3 options").assertIsNotEnabled()
+        row("Turkish, Türkçe, 1 option").press(Key.DirectionUp)
+        row("Arabic, العربية, 1 option").assertIsFocused().press(Key.DirectionUp)
+        row("Off").assertIsFocused().press(Key.DirectionUp)
+        compose.onNode(isFocused() and hasContentDescription(SEARCH_LANGUAGES)).assertExists().press(Key.DirectionUp)
+        compose.onNode(isFocused() and hasText("First line")).assertExists().press(Key.DirectionLeft)
+        compose.onNode(isFocused() and hasText("First line")).assertExists().press(Key.DirectionUp)
+        compose.onNode(isFocused() and hasText("First line")).assertExists().press(Key.DirectionRight)
+        compose.onNode(isFocused() and hasText("Second line")).assertExists().press(Key.DirectionRight)
+        compose.onNode(isFocused() and hasText("Second line")).assertExists().press(Key.Enter)
+        // The Second line tab: its chosen row takes the focus; the first line's Turkish is taken.
+        compose.waitForIdle()
+        row("English, 2 options").assertIsFocused()
+        row("Turkish, On the first line, 1 option").assertIsNotEnabled()
+        row("Spoken language, English").assertExists()
+        // Back up to the switch and over to First line: its chosen row again.
+        row("English, 2 options").press(Key.DirectionUp)
+        row("Spoken language, English").assertIsFocused().press(Key.DirectionUp)
+        row("Off").assertIsFocused().press(Key.DirectionUp)
+        compose.onNode(isFocused()).press(Key.DirectionUp)
+        compose.onNode(isFocused() and hasText("Second line")).assertExists().press(Key.DirectionLeft)
+        compose.onNode(isFocused() and hasText("First line")).press(Key.Enter)
+        compose.waitForIdle()
+        row("Turkish, Türkçe, 1 option").assertIsFocused()
+        compose.runOnIdle { assertEquals(emptyList(), picks + secondPicks) }
+    }
+
+    @Test
+    fun `the Second line tab picks into the second line, its Spoken language row included`() {
+        openTwo()
+        row("Turkish, Türkçe, 1 option").press(Key.DirectionUp)
+        repeat(3) { compose.onNode(isFocused()).press(Key.DirectionUp) }
+        compose.onNode(isFocused() and hasText("First line")).press(Key.DirectionRight)
+        compose.onNode(isFocused()).press(Key.Enter)
+        compose.waitForIdle()
+        row("English, 2 options").assertIsFocused().press(Key.DirectionDown)
+        row("Arabic, العربية, 1 option").assertIsFocused().press(Key.Enter)
+        // Down from Arabic passes the taken Turkish and stays: Arabic is the last that can be picked.
+        row("Arabic, العربية, 1 option").press(Key.DirectionDown)
+        row("Arabic, العربية, 1 option").assertIsFocused()
+        repeat(2) { compose.onNode(isFocused()).press(Key.DirectionUp) }
+        row("Spoken language, English").assertIsFocused().press(Key.Enter)
+        compose.onNode(isFocused()).press(Key.DirectionUp)
+        row("Off").assertIsFocused().press(Key.Enter)
+        compose.runOnIdle {
+            assertEquals(listOf("late:ar", "off"), secondPicks)
+            assertEquals(1, spokenPressed)
+            assertEquals(emptyList(), picks, "a Second line pick went to the first line")
+        }
+    }
+
+    @Test
+    fun `the second line's options end with Timing, Size, Layout and Only when paused, whose Down stays`() {
+        openTwo()
+        row("Turkish, Türkçe, 1 option").press(Key.DirectionUp)
+        repeat(3) { compose.onNode(isFocused()).press(Key.DirectionUp) }
+        compose.onNode(isFocused() and hasText("First line")).press(Key.DirectionRight)
+        compose.onNode(isFocused()).press(Key.Enter)
+        compose.waitForIdle()
+        row("English, 2 options").press(Key.DirectionRight)
+        row("CAKES, WEB 1080p").assertIsFocused().press(Key.DirectionDown)
+        row("FLUX, WEB-DL 1080p").assertIsFocused().press(Key.DirectionDown)
+        compose.onNode(isFocused() and hasContentDescription("Timing")).assertExists().press(Key.DirectionDown)
+        compose
+            .onNode(
+                isFocused() and (hasText("Smaller") or hasText("Larger")),
+            ).assertExists()
+            .press(Key.DirectionDown)
+        compose
+            .onNode(
+                isFocused() and (hasContentDescription("Previous layout") or hasContentDescription("Next layout")),
+            ).assertExists()
+            .press(Key.DirectionRight)
+        compose.onNodeWithText("Stacked").assertExists()
+        compose.onNode(isFocused() and hasContentDescription("Next layout")).assertExists().press(Key.Enter)
+        compose.onNode(isFocused()).press(Key.DirectionDown)
+        compose.onNode(isFocused() and hasText("Only when paused")).assertExists().press(Key.DirectionDown)
+        compose.onNode(isFocused() and hasText("Only when paused")).assertExists().press(Key.Enter)
+        compose.runOnIdle {
+            assertEquals(listOf(true), pauses)
+            assertEquals(listOf(SubtitleLayout.Split), layouts)
+        }
+    }
+
+    @Test
+    fun `no switch while no second line can be on, and the first line's rows are today's`() {
+        openTwo(second = null)
+        compose.onNodeWithText("First line").assertDoesNotExist()
+        compose.onNodeWithText("Second line").assertDoesNotExist()
+        row("English, 3 options").assertIsEnabled()
     }
 }

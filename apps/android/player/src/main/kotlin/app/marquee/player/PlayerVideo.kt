@@ -1,7 +1,12 @@
 package app.marquee.player
 
 import android.content.Context
+import android.text.SpannableStringBuilder
+import android.text.Spanned
+import android.text.style.BackgroundColorSpan
+import android.text.style.RelativeSizeSpan
 import android.view.accessibility.CaptioningManager
+import androidx.annotation.ColorInt
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
@@ -29,14 +34,17 @@ import androidx.lifecycle.repeatOnLifecycle
 import androidx.media3.common.Player
 import androidx.media3.common.text.Cue
 import androidx.media3.common.text.CueGroup
+import androidx.media3.ui.CaptionStyleCompat
 import androidx.media3.ui.SubtitleView
 import androidx.media3.ui.compose.ContentFrame
 import androidx.media3.ui.compose.SURFACE_TYPE_SURFACE_VIEW
+import app.marquee.core.model.SubtitleLayout
 import app.marquee.core.model.SubtitleSize
 import kotlinx.coroutines.delay
 import kotlin.math.ceil
 import kotlin.math.max
 import kotlin.math.min
+import android.graphics.Color as AndroidColor
 
 /**
  * The picture and its subtitles. The picture goes to a SurfaceView, which is what lets the
@@ -65,6 +73,14 @@ fun PlayerVideo(
     addonCues: (() -> List<Cue>)? = null,
     /** The picture's width over its height, its pixel shape counted ([PlaybackController.videoRatio]); 0 before. */
     videoRatio: Float = 0f,
+    /** The second subtitle line ([PlaybackController.secondCues]): its cues now, read every frame; null for none. */
+    secondCues: (() -> List<Cue>)? = null,
+    /** How two lines draw (plans/dual-subtitles.md 4). */
+    subtitleLayout: SubtitleLayout = SubtitleLayout.Stacked,
+    /** The second line shows only while paused. */
+    secondOnPause: Boolean = false,
+    /** While the controls show: the foot of the bar at the top, which Split's second line hangs under. */
+    subtitleTop: Dp = 0.dp,
 ) {
     BoxWithConstraints(modifier.background(Color.Black)) {
         ContentFrame(
@@ -73,41 +89,70 @@ fun PlayerVideo(
             surfaceType = SURFACE_TYPE_SURFACE_VIEW,
             contentScale = ContentScale.Fit,
         )
-        // The cues on screen: the frame is set for the lines they take. The player's, or an addon track's.
+        // The first line's cues: the player's (the file's own track), or an addon track's; and the second line's,
+        // always an addon track's. Each is its own state, so the cues drawn are rebuilt only when one changes.
         var cues by remember(player) { mutableStateOf<List<Cue>>(player.currentCues.cues) }
+        var second by remember(player) { mutableStateOf<List<Cue>>(emptyList()) }
+        // The viewer's pause (a stall keeps it true): Only when paused keys on it, and the poll wakes on it.
+        var playing by remember(player) { mutableStateOf(player.playWhenReady) }
         val addon = rememberUpdatedState(addonCues)
+        val two = rememberUpdatedState(secondCues)
         DisposableEffect(player) {
             val listener =
                 object : Player.Listener {
                     override fun onCues(cueGroup: CueGroup) {
                         if (addon.value == null) cues = cueGroup.cues
                     }
+
+                    override fun onPlayWhenReadyChanged(
+                        playWhenReady: Boolean,
+                        reason: Int,
+                    ) {
+                        playing = playWhenReady
+                    }
                 }
             player.addListener(listener)
             onDispose { player.removeListener(listener) }
         }
         val lifecycle = LocalLifecycleOwner.current.lifecycle
-        LaunchedEffect(player, addonCues != null) {
-            if (addonCues == null) {
-                cues = player.currentCues.cues
-                return@LaunchedEffect
-            }
+        LaunchedEffect(player, addonCues != null, secondCues != null, playing) {
+            if (addonCues == null) cues = player.currentCues.cues
+            if (secondCues == null) second = emptyList()
+            if (addonCues == null && secondCues == null) return@LaunchedEffect
             // Only while the screen is in front. ponytail: a look every 40 ms while it plays, near a frame's worth for a
             // subtitle, and every 250 ms while paused, for a seek or a delay step; a wait until the next cue's start
             // or end if the polling ever shows in a profile.
             lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
                 while (true) {
-                    val now = addon.value?.invoke() ?: break
-                    if (now != cues) cues = now
+                    val firstNow = addon.value
+                    val secondNow = two.value
+                    if (firstNow == null && secondNow == null) break
+                    firstNow?.invoke()?.let { if (it != cues) cues = it }
+                    secondNow?.invoke()?.let { if (it != second) second = it }
                     delay(if (player.isPlaying) ADDON_POLL_MS else ADDON_PAUSED_POLL_MS)
                 }
             }
         }
         // The system caption size (as setUserDefaultTextSize reads it) times the profile's size.
-        val text =
-            SubtitleView.DEFAULT_TEXT_SIZE_FRACTION * captionScale(LocalContext.current) * subtitleScale(subtitleSize)
+        val context = LocalContext.current
+        val text = SubtitleView.DEFAULT_TEXT_SIZE_FRACTION * captionScale(context) * subtitleScale(subtitleSize)
+        val box = remember(context) { boxColor(captionStyle(context)) }
         val height = if (constraints.hasBoundedHeight) constraints.maxHeight.toFloat() else 0f
         val width = if (constraints.hasBoundedWidth) constraints.maxWidth.toFloat() else 0f
+        val top =
+            with(LocalDensity.current) {
+                val bar = if (subtitleTop > 0.dp) (subtitleTop + CUE_GAP).toPx() else 0f
+                if (height >
+                    0f
+                ) {
+                    secondTop(height, width, videoRatio, bar, cues, text * height, CUE_GAP.toPx()) / height
+                } else {
+                    0f
+                }
+            }
+        // Not one frame of a line the controller no longer draws: [second] empties only after the effect runs.
+        val shown = if (secondCues != null && secondShows(secondOnPause, playing)) second else emptyList()
+        val drawn = remember(cues, shown, subtitleLayout, top, box) { twoLines(cues, shown, subtitleLayout, top, box) }
         val frame =
             with(LocalDensity.current) {
                 val gap = CUE_GAP.toPx()
@@ -127,12 +172,12 @@ fun PlayerVideo(
                         ceiling = if (subtitleCeiling > 0.dp) (subtitleCeiling + CUE_CLEARANCE).toPx() else 0f,
                         text = text,
                         corner = subtitleCorner?.let { Rect(it.left - gap, it.top - gap, it.right, it.bottom) },
-                        lines = { span -> cueLines(cues, text * height, span) },
+                        lines = { span -> cueLines(drawn, text * height, span) },
                     )
                 }
             }
         // The view keeps the whole picture area, so the cues keep their size and a picture cue (PGS) its shape.
-        Subtitles(cues, frame, Modifier.fillMaxSize().testTag(SUBTITLES_TAG))
+        Subtitles(drawn, frame, Modifier.fillMaxSize().testTag(SUBTITLES_TAG))
     }
 }
 
@@ -200,6 +245,129 @@ internal fun cueFoot(
     val picture = if (ratio > 0f) min(height, width / ratio) else height
     val plain = (height + picture) / 2 - picture * CUE_RISE
     return lifted?.let { min(plain, it) } ?: plain
+}
+
+/**
+ * The cues drawn with a second line (plans/dual-subtitles.md 4, 6.2). Stacked and One box join every cue of the second
+ * line, its own placement dropped (decision 7), at [SECOND_SIZE] over the first line's foot cues, highest first, into
+ * one cue that hangs from the foot and wraps as one ([SubtitleView] draws each cue on its own, so two would overlap);
+ * One box gives it the caption window [box] and clears the lines' own background under it. Split keeps the first line
+ * as it is and hangs the second, at full size, from [top] (a fraction of the view's height). The first line's signs
+ * stay where its file put them.
+ */
+internal fun twoLines(
+    first: List<Cue>,
+    second: List<Cue>,
+    layout: SubtitleLayout,
+    top: Float,
+    @ColorInt box: Int,
+): List<Cue> {
+    val words = second.mapNotNull { cue -> cue.text?.takeIf { it.isNotEmpty() } }
+    if (words.isEmpty()) return first
+    val text = SpannableStringBuilder()
+    words.forEach { if (text.isEmpty()) text.append(it) else text.append('\n').append(it) }
+    if (layout == SubtitleLayout.Split) {
+        val upper =
+            Cue
+                .Builder()
+                .setText(text)
+                .setLine(top, Cue.LINE_TYPE_FRACTION)
+                .setLineAnchor(Cue.ANCHOR_TYPE_START)
+                .build()
+        return first + upper
+    }
+    text.setSpan(RelativeSizeSpan(SECOND_SIZE), 0, text.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+    val (foot, signs) = first.partition { linesOverFoot(it) != null }
+    foot.sortedByDescending { linesOverFoot(it) }.forEach { text.append('\n').append(it.text ?: "") }
+    val joined = Cue.Builder().setText(text)
+    if (layout == SubtitleLayout.OneBox) {
+        // Set last, so it wins over the caption style's line background that Media3 puts first.
+        text.setSpan(BackgroundColorSpan(AndroidColor.TRANSPARENT), 0, text.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        joined.setWindowColor(box)
+    }
+    return signs + joined.build()
+}
+
+/** The second line's size, of the first's, in Stacked and One box. */
+const val SECOND_SIZE = 0.85f
+
+/** Only when paused: the second line shows while the viewer has it paused (a stall is no pause), else always. */
+internal fun secondShows(
+    onPause: Boolean,
+    playWhenReady: Boolean,
+): Boolean = !onPause || !playWhenReady
+
+/**
+ * Split's second line: its top, px from the top, the mirror of the foot ([cueFoot]): [CUE_RISE] of the picture under
+ * the picture's top, never over the 5% line, under [bar] (the top bar's foot and a gap, 0 with the controls hidden),
+ * and [gap] under the lowest sign the first line's file placed in the top half.
+ */
+internal fun secondTop(
+    height: Float,
+    width: Float,
+    ratio: Float,
+    bar: Float,
+    first: List<Cue>,
+    textPx: Float,
+    gap: Float,
+): Float {
+    val picture = if (ratio > 0f) min(height, width / ratio) else height
+    val sign = first.mapNotNull { signFoot(it, height, textPx) }.maxOrNull()
+    return maxOf((height - picture) / 2 + picture * CUE_RISE, height * SAFE_LINE, bar, sign?.plus(gap) ?: 0f)
+}
+
+/** The top of the screen text keeps under: the 5% title-safe line (EBU R 95). */
+private const val SAFE_LINE = 0.05f
+
+/**
+ * The foot, px from the top, of a text cue the file placed in the top half (a sign); null for any other. Estimated
+ * from its line and its lines' count, as the foot block is ([CUE_LINE]).
+ */
+private fun signFoot(
+    cue: Cue,
+    height: Float,
+    textPx: Float,
+): Float? {
+    if (cue.bitmap != null || linesOverFoot(cue) != null) return null
+    val box = (cue.text?.lines()?.size ?: return null) * CUE_LINE * textPx
+    val top =
+        when {
+            cue.lineType == Cue.LINE_TYPE_FRACTION -> {
+                cue.line * height -
+                    when (cue.lineAnchor) {
+                        Cue.ANCHOR_TYPE_MIDDLE -> box / 2
+                        Cue.ANCHOR_TYPE_END -> box
+                        else -> 0f
+                    }
+            }
+
+            cue.lineType == Cue.LINE_TYPE_NUMBER && cue.line >= 0 -> {
+                cue.line * CUE_LINE * textPx
+            }
+
+            else -> {
+                return null
+            }
+        }
+    return (top + box).takeIf { top < height / 2 }
+}
+
+/**
+ * One box's fill (plans/dual-subtitles.md 4 E): the user's caption window when their style sets one, else the caption
+ * background, which the joined cue's window takes over from its lines.
+ */
+@ColorInt
+internal fun boxColor(style: CaptionStyleCompat): Int =
+    if (AndroidColor.alpha(style.windowColor) > 0) style.windowColor else style.backgroundColor
+
+/** The system caption style, as [SubtitleView.setUserDefaultStyle] reads it: the default while captions are off. */
+private fun captionStyle(context: Context): CaptionStyleCompat {
+    val captions = context.getSystemService(CaptioningManager::class.java)
+    return if (captions?.isEnabled == true) {
+        CaptionStyleCompat.createFromCaptionStyle(captions.userStyle)
+    } else {
+        CaptionStyleCompat.DEFAULT
+    }
 }
 
 /**

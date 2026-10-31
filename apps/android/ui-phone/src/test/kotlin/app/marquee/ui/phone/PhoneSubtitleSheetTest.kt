@@ -13,6 +13,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.doubleClick
@@ -25,11 +27,13 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.unit.dp
 import app.marquee.core.client.CoreClient
 import app.marquee.core.client.CoreJson
+import app.marquee.core.model.SubtitleLayout
 import app.marquee.core.model.SubtitleSize
 import app.marquee.core.views.PlaybackView
 import app.marquee.design.Form
@@ -39,6 +43,7 @@ import app.marquee.player.PhoneSubtitleSheet
 import app.marquee.player.PlaybackController
 import app.marquee.player.SEARCH_LANGUAGES
 import app.marquee.player.SUBTITLE_SHEET_TAG
+import app.marquee.player.SecondLine
 import app.marquee.player.TrackChoice
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
@@ -388,6 +393,114 @@ class PhoneSubtitleSheetTest {
         compose.waitForIdle()
         compose.onNodeWithTag(LOADING_TAG).assertDoesNotExist()
         compose.onNodeWithText("Sintel").assertExists()
+    }
+
+    // The second line (plans/dual-subtitles.md 5.1, 5.2).
+
+    @Test
+    fun `the First line and Second line switch, the Spoken language row and the other line's language taken`() {
+        val picks = mutableListOf<String>()
+        val second = mutableListOf<String>()
+        var spoken = 0
+        val pauses = mutableListOf<Boolean>()
+        val line =
+            SecondLine(
+                rows =
+                    listOf(
+                        TrackChoice("off", "Off"),
+                        TrackChoice(
+                            "late:en1",
+                            "CAKES, WEB 1080p",
+                            null,
+                            selected = true,
+                            section = "English",
+                            language = "en",
+                        ),
+                        TrackChoice(
+                            "late:tr",
+                            "Turkish 1",
+                            section = "Turkish",
+                            language = "tr",
+                            nativeName = "Türkçe",
+                        ),
+                    ),
+                firstKey = "tr",
+                secondKey = "en",
+                spoken = "fr",
+                spokenOn = false,
+                pending = false,
+                timing = 0L,
+                layout = SubtitleLayout.Stacked,
+                onPause = false,
+                onPick = { second += it },
+                onSpoken = { spoken++ },
+                onDelay = {},
+                onLayout = {},
+                onPauseChange = { pauses += it },
+            )
+        compose.setContent {
+            MarqueeTheme(Form.Phone) {
+                var opened by remember { mutableStateOf<String?>(null) }
+                var tab by remember { mutableStateOf(false) }
+                PhoneSubtitleSheet(
+                    rows,
+                    opened,
+                    { opened = it },
+                    onPick = { picks += it },
+                    onDone = {},
+                    modifier = Modifier.width(420.dp).fillMaxHeight(),
+                    second = line,
+                    secondTab = tab,
+                    onTab = { tab = it },
+                )
+            }
+        }
+        // First line: English is the second line's, shown and not picked.
+        compose.onNodeWithText("First line").assertIsSelected()
+        compose
+            .onNodeWithContentDescription(
+                "English, On the second line, 3 options",
+            ).assertIsNotEnabled()
+            .performClick()
+        compose.onNodeWithContentDescription("English options").assertDoesNotExist()
+        compose.runOnIdle { assertEquals(emptyList(), picks) }
+        // Second line: the Spoken language row with the audio's language, the first line's Turkish taken.
+        compose.onNodeWithText("Second line").performClick()
+        compose.onNodeWithText("Second line").assertIsSelected()
+        compose.onNodeWithContentDescription("Spoken language, French").performClick()
+        compose.onNodeWithContentDescription("Turkish, On the first line, 1 option").assertIsNotEnabled()
+        compose.onNodeWithContentDescription("English, 1 option").assertIsSelected()
+        compose.onNodeWithContentDescription("Off").performClick()
+        // Its options end with Timing, Size, Layout and Only when paused.
+        compose.onNodeWithContentDescription("English options").performClick()
+        compose.onNodeWithContentDescription("CAKES, WEB 1080p").performClick()
+        compose.onNodeWithText("Layout").performScrollTo().assertExists()
+        compose.onNodeWithText("Stacked").assertExists()
+        compose.onNodeWithText("Only when paused").performScrollTo().performClick()
+        compose.runOnIdle {
+            assertEquals(1, spoken)
+            assertEquals(listOf("off", "late:en1"), second)
+            assertEquals(listOf(true), pauses)
+            assertEquals(emptyList(), picks, "a Second line pick went to the first line")
+        }
+    }
+
+    @Test
+    fun `no switch while no second line can be on`() {
+        compose.setContent {
+            MarqueeTheme(Form.Phone) {
+                PhoneSubtitleSheet(
+                    rows,
+                    null,
+                    {},
+                    onPick = {},
+                    onDone = {},
+                    modifier = Modifier.width(420.dp).fillMaxHeight(),
+                )
+            }
+        }
+        compose.onNodeWithText("First line").assertDoesNotExist()
+        compose.onNodeWithContentDescription("English, 3 options").assertIsEnabled()
     }
 }
 

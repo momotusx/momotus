@@ -44,6 +44,8 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -51,6 +53,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import app.marquee.core.model.EmptyKind
 import app.marquee.core.model.NextEpisode
+import app.marquee.core.model.SubtitleLayout
 import app.marquee.core.model.SubtitleSize
 import app.marquee.design.Icons
 import app.marquee.design.Marquee
@@ -83,6 +86,7 @@ import app.marquee.player.loadingLines
 import app.marquee.player.nextSpeed
 import app.marquee.player.rememberTitleMark
 import app.marquee.player.rememberTouchExploration
+import app.marquee.player.secondLine
 import app.marquee.player.seekStepMs
 import app.marquee.player.speedText
 import app.marquee.player.subtitlesDetail
@@ -128,6 +132,10 @@ fun TvPlayer(
     onOffer: (String) -> Unit = {},
     /** The subtitle picker's Size: the profile's subtitle size, for this video and the next. */
     onSubtitleSize: (SubtitleSize) -> Unit = {},
+    /** The picker's second line: the profile's layout, Only when paused, and the Spoken language kept with no track here. */
+    onSubtitleLayout: (SubtitleLayout) -> Unit = {},
+    onSecondOnPause: (Boolean) -> Unit = {},
+    onSpokenKept: () -> Unit = {},
     /** The failure card's Settings: the addons (noSource). */
     onSettings: ((EmptyKind) -> Unit)? = null,
 ) {
@@ -150,6 +158,8 @@ fun TvPlayer(
     var osd by remember { mutableStateOf(true) }
     // The controls band's height (bar, transport and options), as last laid out: the cues sit over it.
     var controlsHeight by remember { mutableStateOf(0.dp) }
+    // The title block's foot, as last laid out: Split's second line hangs under it while the controls show.
+    var headerFoot by remember { mutableStateOf(0.dp) }
     val density = LocalDensity.current
     var wake by remember { mutableIntStateOf(0) }
     var panel by remember { mutableStateOf<Panel?>(null) }
@@ -396,6 +406,10 @@ fun TvPlayer(
             subtitleLift = if (showControls) controlsHeight else 0.dp,
             addonCues = { controller.addonCues() }.takeIf { controller.addonOn },
             videoRatio = controller.videoRatio,
+            secondCues = { controller.secondCues() }.takeIf { controller.secondOn },
+            subtitleLayout = controller.subtitleLayout,
+            secondOnPause = controller.secondOnPause,
+            subtitleTop = if (showControls) headerFoot else 0.dp,
         )
 
         // The loading screen until the picture comes, and over the paused picture while it stalls.
@@ -427,7 +441,12 @@ fun TvPlayer(
         AnimatedVisibility(visible = ((osd && !ended) || !live) && !opening, enter = fadeIn(), exit = fadeOut()) {
             Box(Modifier.fillMaxSize()) {
                 Scrim(top = true, height = 200.dp, peak = 0.85f)
-                Header(controller, Modifier.padding(start = safe.side, top = safe.top))
+                Header(
+                    controller,
+                    Modifier
+                        .padding(start = safe.side, top = safe.top)
+                        .onGloballyPositioned { headerFoot = with(density) { it.boundsInRoot().bottom.toDp() } },
+                )
                 EndsAt(controller, Modifier.align(Alignment.TopEnd).padding(end = safe.side, top = 70.dp))
             }
         }
@@ -520,6 +539,9 @@ fun TvPlayer(
                     onDelay = controller::setSubtitleDelay,
                     textSize = controller.subtitleSize,
                     onSize = onSubtitleSize,
+                    second = controller.secondLine(onSubtitleLayout, onSecondOnPause, onSpokenKept),
+                    secondTab = controller.secondTab,
+                    onTab = { controller.secondTab = it },
                 )
             }
 

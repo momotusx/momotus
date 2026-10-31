@@ -14,8 +14,10 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import app.marquee.core.Format
 import app.marquee.core.PlayPick
 import app.marquee.core.VersionsCopy
+import app.marquee.core.client.CoreLog
 import app.marquee.core.model.EmptyKind
 import app.marquee.core.model.NextEpisode
+import app.marquee.core.model.SubtitleLayout
 import app.marquee.core.model.SubtitleSize
 import app.marquee.core.model.VersionRow
 import app.marquee.core.pickVersion
@@ -28,7 +30,7 @@ import app.marquee.design.Form
 import app.marquee.player.PlaybackController
 import app.marquee.player.PlayerHost
 import app.marquee.player.PlayerLifecycle
-import app.marquee.player.SizeSetting
+import app.marquee.player.ProfileSetting
 import app.marquee.ui.phone.PhonePlayer
 import app.marquee.ui.tv.TvPlayer
 import kotlinx.coroutines.CancellationException
@@ -84,8 +86,9 @@ class PlayerHolder(
 
     /** The picker's Size: shown at once, and kept as the profile's setting, as Settings sets it. */
     private val sizes =
-        SizeSetting(
+        ProfileSetting(
             viewModelScope,
+            SubtitleSize.Medium,
             write = { size ->
                 session.ops
                     .setPrefs(buildJsonObject { put("subtitleSize", JsonPrimitive(size.wire)) })
@@ -96,6 +99,40 @@ class PlayerHolder(
 
     fun setSubtitleSize(size: SubtitleSize) = sizes.pick(size)
 
+    /** The second line's Layout and Only when paused (plans/dual-subtitles.md 5.1), as Settings sets them. */
+    private val layouts =
+        ProfileSetting(
+            viewModelScope,
+            SubtitleLayout.Stacked,
+            write = { layout ->
+                session.ops
+                    .setPrefs(buildJsonObject { put("subtitleLayout", JsonPrimitive(layout.wire)) })
+                    .subtitleLayout
+            },
+            show = { controller.subtitleLayout = it },
+        )
+    private val onPause =
+        ProfileSetting(
+            viewModelScope,
+            false,
+            write = { on ->
+                session.ops.setPrefs(buildJsonObject { put("secondOnPause", JsonPrimitive(on)) }).secondOnPause
+            },
+            show = { controller.secondOnPause = it },
+        )
+
+    fun setSubtitleLayout(layout: SubtitleLayout) = layouts.pick(layout)
+
+    fun setSecondOnPause(on: Boolean) = onPause.pick(on)
+
+    /** The Spoken language row with no track of it here: the profile keeps it as its second line. */
+    fun keepSpoken() {
+        viewModelScope.launch {
+            runCatching { session.ops.setPrefs(buildJsonObject { put("secondSubtitle", JsonPrimitive("audio")) }) }
+                .onFailure { CoreLog.w("the spoken second line was not kept: ${it.message}") }
+        }
+    }
+
     init {
         viewModelScope.launch { start() }
         // Subtitles show at the profile's size, and follow it when Settings change it.
@@ -103,6 +140,14 @@ class PlayerHolder(
             snapshotFlow {
                 prefs.snapshot?.subtitleSize
             }.collect { sizes.fromProfile(it ?: SubtitleSize.Medium) }
+        }
+        // The second line's settings, followed when Settings change them.
+        viewModelScope.launch {
+            snapshotFlow { prefs.snapshot }.collect { p ->
+                layouts.fromProfile(p?.subtitleLayout ?: SubtitleLayout.Stacked)
+                onPause.fromProfile(p?.secondOnPause == true)
+                controller.secondPref = p?.secondSubtitle
+            }
         }
         viewModelScope.launch {
             snapshotFlow { art.header?.details }.collect {
@@ -305,6 +350,9 @@ fun PlayerScreen(
             active = active,
             onOffer = offer,
             onSubtitleSize = holder::setSubtitleSize,
+            onSubtitleLayout = holder::setSubtitleLayout,
+            onSecondOnPause = holder::setSecondOnPause,
+            onSpokenKept = holder::keepSpoken,
             onSettings = onSettings,
         )
     } else {
@@ -319,6 +367,9 @@ fun PlayerScreen(
             leave,
             onOffer = offer,
             onSubtitleSize = holder::setSubtitleSize,
+            onSubtitleLayout = holder::setSubtitleLayout,
+            onSecondOnPause = holder::setSecondOnPause,
+            onSpokenKept = holder::keepSpoken,
             onSettings = onSettings,
             brightness = window.brightness,
         )

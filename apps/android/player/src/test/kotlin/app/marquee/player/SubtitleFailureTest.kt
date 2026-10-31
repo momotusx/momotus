@@ -96,8 +96,12 @@ class SubtitleFailureTest {
     /** The addon files the controller fetched, in order. */
     private val fetches = CopyOnWriteArrayList<String>()
 
+    /** A fetch that waits until its gate opens, by address. */
+    private val gates = mutableMapOf<String, kotlinx.coroutines.CompletableDeferred<Unit>>()
+
     private val fetch: suspend (String) -> ByteArray = { url ->
         fetches += url
+        gates[url]?.await()
         files[url]?.toByteArray() ?: throw IOException("502 for $url")
     }
 
@@ -114,10 +118,13 @@ class SubtitleFailureTest {
         pending: Boolean = false,
         /** The delay the viewer last left on a track, by its address (`delayMs`). */
         delays: Map<String, Int> = emptyMap(),
+        /** A track's language by its address; Turkish otherwise. */
+        langs: Map<String, String> = emptyMap(),
     ) = """{"phase":"$phase","url":"$url","key":"k1","attempt":1,"manifest":false,"subtitlesPending":$pending,""" +
         """"trakt":"off","subtitleNotes":$notes,$extra"subtitles":[""" +
         subtitles.joinToString(",") {
-            """{"url":"$it","lang":"tur","source":"${if (it == subtitle) "SubSense" else "OpenSubtitles v3"}",""" +
+            """{"url":"$it","lang":"${langs[it] ?: "tur"}",""" +
+                """"source":"${if (it == subtitle) "SubSense" else "OpenSubtitles v3"}",""" +
                 """"forced":false,"hearingImpaired":false,"delayMs":${delays[it] ?: 0}}"""
         } + "]}"
 
@@ -1061,6 +1068,175 @@ class SubtitleFailureTest {
         controller.covered = false
         controller.play()
         assertTrue(player.playWhenReady)
+        controller.release()
+    }
+
+    // The second line (plans/dual-subtitles.md 6.2).
+
+    private val english = "http://127.0.0.1:7781/opensubtitles/eng.srt"
+    private val german = "http://127.0.0.1:7781/opensubtitles/ger.srt"
+
+    /** Turkish, English and German tracks, the core's first line Turkish and its second [second]. */
+    private fun twoLines(
+        second: String? = english,
+        extra: String = "",
+        pending: Boolean = false,
+    ): String {
+        files[english] = "1\n00:00:01,000 --> 00:00:03,000\nHello\n"
+        files[german] = "1\n00:00:01,000 --> 00:00:03,000\nHallo\n"
+        val auto = second?.let { "\"autoSecondSubtitle\":\"$it\"," } ?: ""
+        return snapshot(
+            subtitles = listOf(subtitle, english, german),
+            langs = mapOf(english to "eng", german to "ger"),
+            extra = "\"autoSubtitle\":\"$subtitle\",$auto$extra",
+            pending = pending,
+        )
+    }
+
+    /** What the second line draws at [ms]. */
+    private fun PlaybackController.secondAt(ms: Long) = secondCues(ms).map { it.text.toString() }
+
+    /** What each `secondSubtitleChosen` sent: a track's address or null, and whether it was the Spoken language row. */
+    private fun secondsChosen() =
+        commands("secondSubtitleChosen").map {
+            val command = it["command"]!!.jsonObject
+            command["url"]?.jsonPrimitive?.contentOrNull to command["spoken"]!!.jsonPrimitive.content.toBoolean()
+        }
+
+    @Test
+    fun `the second line follows the core's as a level until the viewer picks one, which then stays`() {
+        val (_, controller) = open(twoLines())
+        push(twoLines())
+        until("both lines are drawn") {
+            controller.drawnAt(2_000) == listOf("Merhaba") &&
+                controller.secondAt(2_000) == listOf("Hello")
+        }
+        assertTrue(controller.secondOn)
+        assertEquals("Turkish + English", controller.subtitlesDetail())
+        // The core's second line goes (the first line changed in the core): it goes here too, and comes back.
+        push(twoLines(second = null))
+        until("the second line goes") { !controller.secondOn }
+        push(twoLines(second = german))
+        until("the core's next second line is drawn") { controller.secondAt(2_000) == listOf("Hallo") }
+        assertEquals(emptyList(), secondsChosen(), "following the core sent a pick")
+        // The viewer's Off wins for the rest of the play.
+        controller.selectSecond(TRACK_OFF)
+        assertFalse(controller.secondOn)
+        push(twoLines(second = english))
+        runFor(300)
+        assertFalse(controller.secondOn, "the core's second line came back after Off")
+        // A pick of the Spoken language row goes to the core as such.
+        controller.selectSecond("late:$english", spoken = true)
+        until("the pick is drawn") { controller.secondAt(2_000) == listOf("Hello") }
+        until("the picks go to the core") { secondsChosen().size == 2 }
+        assertEquals(listOf(null to false, english to true), secondsChosen())
+        assertTrue(controller.spokenOn)
+        controller.release()
+    }
+
+    @Test
+    fun `the second line's delay is its own and never reaches the first line's renderer`() {
+        val delay = SubtitleDelay()
+        val (player, controller) = open(twoLines(), delay = delay)
+        // The file's own Turkish track is the first line, the core's English the second.
+        player.media(withOwnTrack, 10_000_000L)
+        controller.selectText(OWN)
+        push(twoLines())
+        until("the second line is drawn") { controller.secondAt(2_000) == listOf("Hello") }
+        controller.setSubtitleDelay(500)
+        controller.setSecondDelay(1_500)
+        assertEquals(500L, controller.subtitleDelayMs)
+        assertEquals(500L, delay.ms, "the second line's delay reached the file track's renderer")
+        assertEquals(1_500L, controller.secondDelayMs)
+        // The file's 2 s at 3.5 s on the second line only.
+        assertEquals(listOf("Hello"), controller.secondAt(3_500))
+        assertEquals(emptyList(), controller.secondAt(1_200))
+        controller.release()
+    }
+
+    @Test
+    fun `tuning one line and then the other inside the settle time sends both delays`() {
+        val (_, controller) = open(twoLines())
+        push(twoLines())
+        until("both lines are drawn") { controller.addonOn && controller.secondOn }
+        controller.setSubtitleDelay(300)
+        controller.setSecondDelay(-400)
+        until("both delays go") { delaysSent().size == 2 }
+        runFor(1_000)
+        assertEquals(listOf(subtitle to 300L, english to -400L), delaysSent())
+        controller.release()
+    }
+
+    @Test
+    fun `a second line picked while the first line's file still loads never cancels it`() {
+        gates[subtitle] = kotlinx.coroutines.CompletableDeferred()
+        val (_, controller) = open(twoLines(second = null))
+        controller.selectText("late:$subtitle")
+        until("the first line's file is asked for") { subtitle in fetches }
+        controller.selectSecond("late:$english")
+        until("the second line's file is in") { english in fetches }
+        gates.getValue(subtitle).complete(Unit)
+        until("the first line is drawn") { controller.drawnAt(2_000) == listOf("Merhaba") }
+        until("the second line is drawn") { controller.secondAt(2_000) == listOf("Hello") }
+        controller.release()
+    }
+
+    @Test
+    fun `a second line that does not load goes off, the core's own quietly, a picked one with a word`() {
+        val lines = twoLines()
+        files.remove(english)
+        files.remove(german)
+        val (_, controller) = open(lines)
+        until("the core's second line is dropped") {
+            english in fetches &&
+                controller.secondText.none { it.id == "late:$english" }
+        }
+        assertFalse(controller.secondOn)
+        assertEquals(null, controller.notice, "the core's own second line failing was said")
+        controller.selectSecond("late:$german")
+        until("the picked one is dropped") { controller.secondText.none { it.id == "late:$german" } }
+        assertEquals("This subtitle could not be read.", controller.notice)
+        controller.release()
+    }
+
+    @Test
+    fun `two lines in one language never show, and a picture first line takes no second`() {
+        val (player, controller) = open(twoLines())
+        push(twoLines())
+        until("both lines are drawn") { controller.secondOn }
+        // The viewer turns on the file's own English track as the first line: the English second line hides at once.
+        player.media(ownTrack(MimeTypes.APPLICATION_SUBRIP, "en"), 10_000_000L)
+        controller.selectText(OWN)
+        until("the second line hides") { !controller.secondOn }
+        assertEquals(emptyList(), controller.secondAt(2_000))
+        assertTrue(controller.secondOffered)
+        // A picture track as the first line: no switch, no second line, from the pick on.
+        player.media(ownTrack(MimeTypes.APPLICATION_PGS, "tr"), 10_000_000L)
+        controller.selectText(OWN)
+        until("the pick is on") { controller.subtitleOn }
+        assertFalse(controller.secondOffered)
+        assertFalse(controller.secondOn)
+        // Off on the first line hides the second too; on again, both are back.
+        controller.selectText(TRACK_OFF)
+        assertFalse(controller.secondOffered)
+        controller.selectText("late:$subtitle")
+        until("both are back") { controller.secondOn }
+        controller.release()
+    }
+
+    @Test
+    fun `a new source starts the second line over, and the viewer's pick no longer holds`() {
+        val (player, controller) = open(twoLines())
+        push(twoLines())
+        until("both lines are drawn") { controller.secondOn }
+        controller.selectSecond(TRACK_OFF)
+        val next =
+            twoLines()
+                .replace(video, "http://127.0.0.1:7780/second.mp4")
+                .replace("\"attempt\":1", "\"attempt\":2")
+        push(next)
+        until("the new source loads") { player.items.lastOrNull()?.uri == "http://127.0.0.1:7780/second.mp4" }
+        until("the core's second line is followed again") { controller.secondAt(2_000) == listOf("Hello") }
         controller.release()
     }
 

@@ -86,6 +86,7 @@ import app.marquee.core.model.EmptyKind
 import app.marquee.core.model.NextEpisode
 import app.marquee.core.model.OtherVersion
 import app.marquee.core.model.Segment
+import app.marquee.core.model.SubtitleLayout
 import app.marquee.core.model.SubtitleSize
 import app.marquee.core.model.TraktPlayback
 import app.marquee.design.ButtonFocused
@@ -100,7 +101,9 @@ import app.marquee.design.PrimaryButton
 import app.marquee.design.RemoteImage
 import app.marquee.design.SecondaryButton
 import app.marquee.design.Spinner
+import app.marquee.design.SwitchRow
 import app.marquee.design.TextRole
+import app.marquee.design.Tokens
 import app.marquee.design.endFade
 import app.marquee.design.focusClickable
 import app.marquee.design.focusPalette
@@ -465,6 +468,62 @@ fun SizeRow(
     first,
 )
 
+/**
+ * How two subtitle lines draw, on the Second line tab (plans/dual-subtitles.md 5.1): Previous and Next step through
+ * Stacked, Split and One box, the profile's setting as Settings sets it; at either end the press changes nothing.
+ */
+@Composable
+fun LayoutRow(
+    layout: SubtitleLayout,
+    onLayout: (SubtitleLayout) -> Unit,
+    modifier: Modifier = Modifier,
+    first: Modifier = Modifier,
+) = StepRow(
+    StreamChoiceCopy.LAYOUT,
+    StreamChoiceCopy.LAYOUTS[layout] ?: StreamChoiceCopy.LAYOUTS.getValue(SubtitleLayout.Stacked),
+    "Previous",
+    { stepLayout(layout, -1)?.let(onLayout) },
+    "Next",
+    { stepLayout(layout, 1)?.let(onLayout) },
+    modifier,
+    first,
+    noun = "layout",
+)
+
+/** The layout [by] steps from [layout], or null past either end; one from a newer core steps from Stacked. */
+fun stepLayout(
+    layout: SubtitleLayout,
+    by: Int,
+): SubtitleLayout? = LAYOUTS.getOrNull(LAYOUTS.indexOf(layout).coerceAtLeast(0) + by)
+
+private val LAYOUTS = listOf(SubtitleLayout.Stacked, SubtitleLayout.Split, SubtitleLayout.OneBox)
+
+/** Only when paused, on the Second line tab: the second line shows only while the video is paused. */
+@Composable
+fun PausedRow(
+    on: Boolean,
+    onChange: (Boolean) -> Unit,
+    modifier: Modifier = Modifier,
+) = SwitchRow(
+    on,
+    { onChange(!on) },
+    // As Settings draws a switch row: on a TV the focused row turns white and lifts, its words inset.
+    modifier
+        .fillMaxWidth()
+        .heightIn(min = if (Marquee.form == Form.Tv) 60.dp else 48.dp)
+        .marqueeFocus(Marquee.radius.m, Tokens.FOCUS_SCALE_TILE),
+    if (Marquee.form == Form.Tv) PaddingValues(horizontal = 16.dp, vertical = 12.dp) else PaddingValues(),
+    RoundedCornerShape(Marquee.radius.m),
+) {
+    MqText(
+        StreamChoiceCopy.ONLY_WHEN_PAUSED,
+        Modifier.weight(1f),
+        role = TextRole.Callout,
+        weight = FontWeight.SemiBold,
+        maxLines = 1,
+    )
+}
+
 /** A setting the picker steps with two buttons: its name and value at the left, the buttons at the right. */
 @Composable
 private fun StepRow(
@@ -476,6 +535,8 @@ private fun StepRow(
     onMore: () -> Unit,
     modifier: Modifier,
     first: Modifier,
+    /** Said after each button's word ("Next layout") when the word alone does not name the setting. */
+    noun: String? = null,
 ) {
     Row(
         modifier.fillMaxWidth(),
@@ -492,8 +553,13 @@ private fun StepRow(
                 modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
             )
         }
-        SecondaryButton(less, onLess, first)
-        SecondaryButton(more, onMore, Modifier.focusProperties { right = FocusRequester.Cancel })
+        SecondaryButton(less, onLess, first, spoken = noun?.let { "$less $it" })
+        SecondaryButton(
+            more,
+            onMore,
+            Modifier.focusProperties { right = FocusRequester.Cancel },
+            spoken = noun?.let { "$more $it" },
+        )
     }
 }
 

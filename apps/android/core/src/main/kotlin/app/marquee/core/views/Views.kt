@@ -564,6 +564,21 @@ class PlaybackView(
     )
 
     /**
+     * The viewer's second subtitle line (a core track's `url`) or Off (null), plans/dual-subtitles.md 3.1: the core's
+     * `autoSecondSubtitle` clears for the rest of the play, and the profile keeps its language, the spoken one for the
+     * Spoken language row ([spoken]).
+     */
+    fun secondSubtitleChosen(
+        url: String?,
+        spoken: Boolean,
+    ) = post(
+        command("secondSubtitleChosen") {
+            put("url", url)
+            put("spoken", spoken)
+        },
+    )
+
+    /**
      * The viewer's delay for a core track ([url]), in ms (positive shows the text later): the title remembers it
      * for this version and video, and the track's `delayMs` starts there next time.
      */
