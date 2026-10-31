@@ -12,6 +12,7 @@ import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
+import app.marquee.core.ErrorCopy
 import app.marquee.core.client.CoreClient
 import app.marquee.core.views.TitleView
 import app.marquee.design.Form
@@ -93,7 +94,9 @@ class TvTitleFailureTest {
             compose.waitForIdle()
             Thread.sleep(10)
         }
-        compose.onNodeWithText("The core did not open", useUnmergedTree = true).assertExists()
+        // The screen says the shared words; the core's own reason goes to the log only.
+        compose.onNodeWithText(ErrorCopy.CORE_NOT_STARTED, useUnmergedTree = true).assertExists()
+        compose.onAllNodesWithText("The core did not open", useUnmergedTree = true).assertCountEquals(0)
         compose.onNodeWithText("Try again").assertHasClickAction()
         // The remote has a place to start: Try again has the focus before any key is pressed.
         compose.waitUntil(10_000) {
