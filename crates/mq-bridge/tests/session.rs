@@ -204,6 +204,75 @@ async fn local_addon() -> String {
     base
 }
 
+/// A server answering every request with the status its path starts with
+/// (`/404/manifest.json` is a 404).
+async fn status_server() -> String {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    tokio::spawn(async move {
+        while let Ok((mut socket, _)) = listener.accept().await {
+            tokio::spawn(async move {
+                let mut buf = vec![0u8; 4096];
+                let n = socket.read(&mut buf).await.unwrap_or(0);
+                let head = String::from_utf8_lossy(&buf[..n]).into_owned();
+                let status = head.get(5..8).unwrap_or("500").to_owned();
+                let reply = format!(
+                    "HTTP/1.1 {status} X\r\nContent-Length: 1\r\nConnection: close\r\n\r\nM"
+                );
+                let _ = socket.write_all(reply.as_bytes()).await;
+            });
+        }
+    });
+    base
+}
+
+/// Every failed reply carries a `kind` the apps word (apps/shared/
+/// error-words.json); the raw text stays in `error` for the log, and no
+/// app reads a status out of it.
+#[tokio::test]
+async fn failures_carry_a_kind() {
+    let base = status_server().await;
+    let core = Core::temporary("p").unwrap();
+    let (tx, mut rx) = Output::channel();
+    let mut session = Session::new(core, tx);
+    let cases = [
+        ("401", "unauthorized"),
+        ("403", "forbidden"),
+        ("404", "notFound"),
+        ("429", "rateLimited"),
+        ("503", "serverError"),
+        ("418", "httpError"),
+        ("200", "unreadable"),
+    ];
+    for (n, (status, kind)) in cases.into_iter().enumerate() {
+        let url = format!("{base}/{status}/manifest.json");
+        let id = n as u64 + 1;
+        let reply = ask(
+            &mut session,
+            &mut rx,
+            json!({"id": id, "op": "installAddon", "url": url}),
+        )
+        .await;
+        assert_eq!(reply["ok"], false, "{reply}");
+        assert_eq!(reply["kind"], kind, "{status}: {reply}");
+    }
+    let reply = ask(
+        &mut session,
+        &mut rx,
+        json!({"id": 20, "op": "addPluginRepo", "url": "http://plugins.example/repo.json"}),
+    )
+    .await;
+    assert_eq!(reply["kind"], "said", "{reply}");
+    assert_eq!(reply["error"], "A repository link starts with https.");
+    session
+        .handle_text("{\"id\": 21, \"op\": \"whatever\"}")
+        .await;
+    let reply = reply_to(&mut rx, 21).await;
+    assert_eq!(reply["kind"], "failed", "{reply}");
+    assert!(reply["error"].as_str().unwrap().starts_with("bad request"));
+}
+
 /// Waits for a push on `sub` whose last update satisfies `done`.
 async fn push_until(
     rx: &mut mpsc::UnboundedReceiver<Outgoing>,

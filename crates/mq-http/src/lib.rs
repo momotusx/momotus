@@ -123,6 +123,26 @@ impl HttpError {
         }
     }
 
+    /// The failure's kind as the apps word it (a bridge reply's `kind`, the
+    /// words in apps/shared/error-words.json): never the status itself.
+    pub fn failure_kind(&self) -> &'static str {
+        match self {
+            HttpError::InvalidUrl(_) => "invalidUrl",
+            HttpError::BlockedPrivate(_) => "blockedAddress",
+            HttpError::Timeout(_) => "timeout",
+            HttpError::Network(_) => "network",
+            HttpError::TooLarge { .. } | HttpError::Decode(_) => "unreadable",
+            HttpError::Status { status, .. } => match status {
+                401 => "unauthorized",
+                403 => "forbidden",
+                404 | 410 => "notFound",
+                429 => "rateLimited",
+                500.. => "serverError",
+                _ => "httpError",
+            },
+        }
+    }
+
     fn from_reqwest(e: reqwest::Error, timeout: Duration) -> Self {
         if e.is_timeout() {
             HttpError::Timeout(timeout)

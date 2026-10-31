@@ -34,6 +34,8 @@ async fn trakt_ops_say_not_configured_without_an_app() {
         .await;
     let refused = reply(&mut rx, 1).await;
     assert_eq!(refused["code"], "notConfigured", "{refused}");
+    // Its words are a sentence for the screen.
+    assert_eq!(refused["kind"], "said", "{refused}");
     session
         .handle_text(&json!({"id": 2, "op": "traktSync"}).to_string())
         .await;

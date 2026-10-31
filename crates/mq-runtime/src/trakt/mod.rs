@@ -783,7 +783,7 @@ async fn turned_kids(
 pub(super) const KIDS: &str = "Trakt is off for kids profiles";
 
 /// A profile check that failed: refused for now, nothing dropped.
-const READ_AGAIN: &str = "the profile could not be read; try again";
+const READ_AGAIN: &str = "The profile could not be read; try again";
 
 /// Whether the library says the profile was deleted, here or by sync. A
 /// read that fails is not a deletion: the next look asks again.

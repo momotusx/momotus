@@ -84,6 +84,24 @@ pub enum CoreError {
     Downloads(String),
 }
 
+impl CoreError {
+    /// The failure's kind as the apps word it (a bridge reply's `kind`):
+    /// `said` when the text is already a sentence for the screen, else the
+    /// words in apps/shared/error-words.json stand for it.
+    pub fn failure_kind(&self) -> &'static str {
+        match self {
+            CoreError::Http(e) | CoreError::Addon(AddonError::Http(e)) => e.failure_kind(),
+            CoreError::Addon(AddonError::TimedOut) => "timeout",
+            CoreError::Addon(AddonError::InvalidTransportUrl(_)) => "invalidUrl",
+            CoreError::Addon(AddonError::LegacyTransport) | CoreError::BadManifest(_) => {
+                "unreadable"
+            }
+            CoreError::Plugins(_) | CoreError::Trakt(_) => "said",
+            _ => "failed",
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct CoreConfig {
     pub data_dir: PathBuf,
@@ -893,7 +911,7 @@ impl Core {
         };
         let addons = self
             .installed_addons()
-            .map_err(|e| TvdbMiss::Unavailable(e.to_string()))?;
+            .map_err(|e| TvdbMiss::Unavailable(addons_unread(&e)))?;
         let mut reason = "None of your addons has details for this title".to_owned();
         // Every addon asked answered that it has no such title.
         let mut unknown = None;
@@ -967,7 +985,7 @@ impl Core {
             extra: vec![],
         };
         let addons = self.installed_addons().map_err(|e| MetaMiss {
-            reason: e.to_string(),
+            reason: addons_unread(&e),
             unreached: false,
         })?;
         let kids = self.policy().kids();
@@ -1671,6 +1689,13 @@ const NO_DETAILS: &str = "Details for this title are not available right now";
 /// The addon's answer did not decode.
 const UNREADABLE: &str = "Details for this title came in a form Momotus cannot read";
 
+/// The installed addons could not be read from storage: a sentence the
+/// title page and Trakt's status show as is, the error to the log only.
+fn addons_unread(e: &CoreError) -> String {
+    tracing::debug!("installed addons not read: {e}");
+    "Your addons could not be read right now".to_owned()
+}
+
 /// Why an addon gave no details, in a sentence the title page shows as is:
 /// never the addon's name or a status code (the owner's rule); both go to
 /// the log only.
@@ -1893,6 +1918,68 @@ mod tests {
         let config = core.engine_config();
         assert!(!config.upload, "the app's engine seeds");
         assert!(config.discovery, "the DHT stays on");
+    }
+
+    /// Addons that could not be read give the title page and Trakt's status
+    /// a sentence, never the storage error's text.
+    #[test]
+    fn unread_addons_say_no_raw_error() {
+        let e = CoreError::Io(std::io::Error::other("disk I/O error at /data/library.db"));
+        let line = addons_unread(&e);
+        assert_eq!(line, "Your addons could not be read right now");
+    }
+
+    /// A failure's kind names what the apps word, never a status: the
+    /// HTTP ones by class, the core's own sentences as `said`.
+    #[test]
+    fn failures_have_a_kind() {
+        let status = |status| {
+            CoreError::Addon(AddonError::Http(HttpError::Status {
+                status,
+                body: Default::default(),
+                retry_after: None,
+            }))
+        };
+        let cases = [
+            (status(401), "unauthorized"),
+            (status(403), "forbidden"),
+            (status(404), "notFound"),
+            (status(410), "notFound"),
+            (status(429), "rateLimited"),
+            (status(503), "serverError"),
+            (status(418), "httpError"),
+            (
+                CoreError::Http(HttpError::Timeout(Duration::from_secs(5))),
+                "timeout",
+            ),
+            (CoreError::Addon(AddonError::TimedOut), "timeout"),
+            (
+                CoreError::Http(HttpError::Network("refused".into())),
+                "network",
+            ),
+            (
+                CoreError::Http(HttpError::Decode("eof".into())),
+                "unreadable",
+            ),
+            (
+                CoreError::Http(HttpError::BlockedPrivate("10.0.0.1".into())),
+                "blockedAddress",
+            ),
+            (
+                CoreError::Addon(AddonError::InvalidTransportUrl("no host")),
+                "invalidUrl",
+            ),
+            (
+                CoreError::Plugins("Kids profiles never run plugins.".into()),
+                "said",
+            ),
+            (CoreError::Trakt("Trakt did not answer".into()), "said"),
+            (CoreError::NotLoaded, "failed"),
+            (CoreError::Io(std::io::Error::other("disk")), "failed"),
+        ];
+        for (e, kind) in cases {
+            assert_eq!(e.failure_kind(), kind, "{e}");
+        }
     }
 
     #[test]

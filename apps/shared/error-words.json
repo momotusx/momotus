@@ -1,0 +1,17 @@
+{
+  "about": "Failure words (the owner's rule: no status code, raw error text or addon name on any screen), shared by the web, Android and Apple apps; each platform's reader test checks every key. A failed core reply carries `kind`, and the app shows the entry of that name; kind `said` means the reply's `error` is already a sentence for the screen (the core's own words), shown as it is. Any other kind, a missing one, or an error that did not come from the core shows `failed`. The reply's `error` text is for the log only, never shown, and no app reads a status out of it: sync and other flows switch on `code` and `kind`. A screen leads with what did not happen (\"Could not install.\"), then these words. `It` is the server or addon the action reached. coreStopped is the line when the core itself ended (its reason goes to the log); coreNotStarted when it never opened.",
+  "failed": "Momotus could not finish this. Try again in a moment.",
+  "network": "It could not be reached. Check the connection, then try again.",
+  "timeout": "It did not answer in time. Check the connection, then try again.",
+  "notFound": "It has nothing at this address.",
+  "unauthorized": "It refused access.",
+  "forbidden": "It refused access.",
+  "rateLimited": "It is busy; try again soon.",
+  "serverError": "It had an error on its side.",
+  "httpError": "It answered with an error.",
+  "unreadable": "It sent something Momotus cannot read.",
+  "blockedAddress": "It points to a private network address, which Momotus does not open.",
+  "invalidUrl": "That is not a web address.",
+  "coreStopped": "Momotus stopped unexpectedly. Close it and open it again.",
+  "coreNotStarted": "Momotus could not start. Close it and open it again."
+}

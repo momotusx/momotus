@@ -1107,8 +1107,8 @@ impl Session {
             }
             Request::Plugins { id } => {
                 self.spawn_fenced(id, async move {
-                    let answer = core.plugin_repos().await.map_err(|e| e.to_string())?;
-                    to_value(&answer)
+                    let answer = core.plugin_repos().await?;
+                    Ok::<_, Failure>(to_value(&answer)?)
                 });
             }
             Request::PluginDirectory { id } => {
@@ -1116,18 +1116,14 @@ impl Session {
             }
             Request::PreviewPluginRepo { id, url } => {
                 self.spawn_fenced(id, async move {
-                    let preview =
-                        (core.preview_plugin_repo(&url).await).map_err(|e| e.to_string())?;
-                    to_value(&preview)
+                    let preview = core.preview_plugin_repo(&url).await?;
+                    Ok::<_, Failure>(to_value(&preview)?)
                 });
             }
             Request::AddPluginRepo { id, url } => {
                 self.spawn_fenced(id, async move {
-                    let answer = core
-                        .add_plugin_repo(&url)
-                        .await
-                        .map_err(|e| e.to_string())?;
-                    to_value(&answer)
+                    let answer = core.add_plugin_repo(&url).await?;
+                    Ok::<_, Failure>(to_value(&answer)?)
                 });
             }
             Request::RemovePluginRepo { id, url } => {
@@ -1149,8 +1145,8 @@ impl Session {
             }
             Request::DefaultAddons { id } => {
                 self.spawn_fenced(id, async move {
-                    let defaults = core.default_addons().await.map_err(|e| e.to_string())?;
-                    to_value(&defaults)
+                    let defaults = core.default_addons().await?;
+                    Ok::<_, Failure>(to_value(&defaults)?)
                 });
             }
             Request::FirstRunStill { id } => {
@@ -1669,7 +1665,7 @@ impl Session {
                     )
                 });
             }
-            Request::Ping { id } => self.reply(json!(id), Ok(json!({}))),
+            Request::Ping { id } => self.reply(json!(id), Ok::<_, Failure>(json!({}))),
             Request::RemoveFromContinue { id, item_id } => {
                 let result = core.remove_from_continue(&item_id);
                 self.reply(json!(id), done(result));
@@ -1705,8 +1701,7 @@ impl Session {
                 };
                 self.spawn(id, async move {
                     let ids = mq_runtime::downloads::add(&core, request).await;
-                    ids.map(|ids| json!({ "ids": ids }))
-                        .map_err(|e| e.to_string())
+                    ids.map(|ids| json!({ "ids": ids })).map_err(Failure::from)
                 });
             }
             Request::DownloadPause { id, which } => {
@@ -1744,11 +1739,11 @@ impl Session {
                 free_bytes,
             } => {
                 core.downloads().set_allowed(allowed, free_bytes);
-                self.reply(json!(id), Ok(json!({})));
+                self.reply(json!(id), Ok::<_, Failure>(json!({})));
             }
             Request::Languages { id, device } => {
                 let all = mq_runtime::languages::all(device.as_deref());
-                self.reply(json!(id), Ok(json!(all)));
+                self.reply(json!(id), Ok::<_, Failure>(json!(all)));
             }
             Request::LanguagePicker {
                 id,
@@ -1758,7 +1753,7 @@ impl Session {
                 audio,
             } => {
                 let list = mq_runtime::languages::picker(device.as_deref(), &query, &chosen, audio);
-                self.reply(json!(id), Ok(json!(list)));
+                self.reply(json!(id), Ok::<_, Failure>(json!(list)));
             }
             Request::SetTrakt { id, record } => {
                 self.spawn_fenced(id, async move {
@@ -1793,7 +1788,7 @@ impl Session {
             }
             Request::HomeCatalogs { id } => {
                 let catalogs = core.home_catalogs();
-                self.reply(json!(id), Ok(json!(catalogs)))
+                self.reply(json!(id), Ok::<_, Failure>(json!(catalogs)))
             }
             Request::SetHomeRow { id, row_id, hidden } => {
                 let result = core
@@ -1929,7 +1924,7 @@ impl Session {
                 revision,
             } => {
                 core.ack_debrid(&service, &generation, revision);
-                self.reply(json!(id), Ok(json!({})));
+                self.reply(json!(id), Ok::<_, Failure>(json!({})));
             }
             Request::SetDebridKey { id, service, key } => {
                 let result = debrid_service(&service)
@@ -1960,7 +1955,7 @@ impl Session {
                     core.preview_addon(&url)
                         .await
                         .map(|a| json!(a))
-                        .map_err(|e| e.to_string())
+                        .map_err(Failure::from)
                 });
             }
             Request::InstallAddon {
@@ -1976,7 +1971,7 @@ impl Session {
                     core.install_addon(&url)
                         .await
                         .map(|a| json!({ "id": a.id(), "name": a.manifest.name }))
-                        .map_err(|e| e.to_string())
+                        .map_err(Failure::from)
                 });
             }
             Request::InstallListed { id, key } => {
@@ -2069,8 +2064,8 @@ impl Session {
         }
     }
 
-    fn reply(&self, id: Value, result: Result<Value, String>) {
-        send_answer(&self.out, id, result.map_err(Failure::from));
+    fn reply<E: Into<Failure>>(&self, id: Value, result: Result<Value, E>) {
+        send_answer(&self.out, id, result.map_err(Into::into));
     }
 
     /// The picker's snapshot after a profile op, or the op's error.
@@ -2668,11 +2663,14 @@ fn field<T: serde::de::DeserializeOwned>(params: &Value, key: &str) -> Result<Op
         .transpose()
 }
 
-/// A failed request: the message to show and, for the errors an app acts
-/// on (a dropped device, a fork, a wrong PIN), a stable `code`, with any
-/// fields that go with it (`retryAfterMs`, `views`).
+/// A failed request: its `kind` (what the apps word, from
+/// apps/shared/error-words.json; `said` when `error` is already a sentence
+/// for the screen), the raw `error` text for the log and, for the errors an
+/// app acts on (a dropped device, a fork, a wrong PIN), a stable `code`,
+/// with any fields that go with it (`retryAfterMs`, `views`).
 struct Failure {
     error: String,
+    kind: &'static str,
     code: Option<&'static str>,
     extra: Value,
 }
@@ -2680,9 +2678,8 @@ struct Failure {
 impl Failure {
     fn coded(code: &'static str, error: &str) -> Self {
         Self {
-            error: error.to_owned(),
             code: Some(code),
-            extra: Value::Null,
+            ..Failure::from(error.to_owned())
         }
     }
 
@@ -2695,18 +2692,32 @@ impl From<String> for Failure {
     fn from(error: String) -> Self {
         Self {
             error,
+            kind: "failed",
             code: None,
             extra: Value::Null,
         }
     }
 }
 
+impl From<mq_runtime::CoreError> for Failure {
+    fn from(e: mq_runtime::CoreError) -> Self {
+        Self {
+            kind: e.failure_kind(),
+            ..Failure::from(e.to_string())
+        }
+    }
+}
+
 impl From<mq_sync::SyncError> for Failure {
     fn from(e: mq_sync::SyncError) -> Self {
+        let kind = match &e {
+            mq_sync::SyncError::Http(h) => h.failure_kind(),
+            _ => "failed",
+        };
         Self {
+            kind,
             code: e.code(),
-            error: e.to_string(),
-            extra: Value::Null,
+            ..Failure::from(e.to_string())
         }
     }
 }
@@ -2714,8 +2725,11 @@ impl From<mq_sync::SyncError> for Failure {
 impl From<ListedError> for Failure {
     fn from(e: ListedError) -> Self {
         match e {
-            ListedError::Refused(failure) => Failure::coded(failure.code(), failure.words()),
-            ListedError::Core(e) => Failure::from(e.to_string()),
+            ListedError::Refused(failure) => Failure {
+                kind: "said",
+                ..Failure::coded(failure.code(), failure.words())
+            },
+            ListedError::Core(e) => Failure::from(e),
         }
     }
 }
@@ -2728,8 +2742,8 @@ impl From<ProfileError> for Failure {
         };
         Self {
             code: e.code(),
-            error: e.to_string(),
             extra,
+            ..Failure::from(e.to_string())
         }
     }
 }
@@ -2749,8 +2763,13 @@ fn too_large() -> Failure {
 fn message(id: Value, result: Result<Value, Failure>) -> Value {
     match result {
         Ok(value) => json!({ "id": id, "ok": true, "result": value }),
-        Err(Failure { error, code, extra }) => {
-            let mut reply = json!({ "id": id, "ok": false, "error": error });
+        Err(Failure {
+            error,
+            kind,
+            code,
+            extra,
+        }) => {
+            let mut reply = json!({ "id": id, "ok": false, "error": error, "kind": kind });
             if let Some(code) = code {
                 reply["code"] = json!(code);
             }
@@ -2783,15 +2802,16 @@ const AWAY_LOCK: std::time::Duration = std::time::Duration::from_secs(30 * 60);
 /// app.
 fn trakt_failure(e: mq_runtime::CoreError) -> Failure {
     match e {
-        mq_runtime::CoreError::TraktNotConfigured => {
-            Failure::coded("notConfigured", "Trakt is not set up in this build")
-        }
-        other => Failure::from(other.to_string()),
+        mq_runtime::CoreError::TraktNotConfigured => Failure {
+            kind: "said",
+            ..Failure::coded("notConfigured", "Trakt is not set up in this build")
+        },
+        other => Failure::from(other),
     }
 }
 
-fn done(result: Result<(), mq_runtime::CoreError>) -> Result<Value, String> {
-    result.map(|()| json!({})).map_err(|e| e.to_string())
+fn done(result: Result<(), mq_runtime::CoreError>) -> Result<Value, Failure> {
+    result.map(|()| json!({})).map_err(Failure::from)
 }
 
 /// A download op on the downloads `which` names; refused for a kids
@@ -3627,7 +3647,7 @@ mod catalog {
             let sent = message(json!(7), Err(failure));
             assert_eq!(
                 sent,
-                json!({"id": 7, "ok": false, "code": code, "error": words})
+                json!({"id": 7, "ok": false, "code": code, "error": words, "kind": "said"})
             );
         }
     }
