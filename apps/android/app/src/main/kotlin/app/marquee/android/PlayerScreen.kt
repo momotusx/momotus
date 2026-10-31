@@ -79,6 +79,7 @@ class PlayerHolder(
             artwork = null,
             openedAtMs = SystemClock.elapsedRealtime(),
             subtitleDelay = host.subtitleDelay,
+            startOver = route.startOver,
         )
 
     /** Start the next episode by itself when one ends. */

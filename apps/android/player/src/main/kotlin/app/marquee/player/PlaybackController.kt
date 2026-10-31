@@ -78,6 +78,8 @@ class PlaybackController(
     private val openedAtMs: Long,
     /** The delay the file's own tracks draw with ([PlayerHost.subtitleDelay]). */
     private val subtitleDelay: SubtitleDelay = SubtitleDelay(),
+    /** Start over: the first source starts at the beginning, not at the core's resume point. */
+    private val startOver: Boolean = false,
     /** An addon subtitle file from its loopback address ([fetchSubtitle]). */
     private val fetch: suspend (String) -> ByteArray = ::fetchSubtitle,
 ) {
@@ -600,7 +602,12 @@ class PlaybackController(
     ) {
         stallEnded()
         val again = loadedUrl != null || handlingFailure
-        val from = if (again) lastPositionMs else s.resumeMs ?: 0L
+        val from =
+            when {
+                again -> lastPositionMs
+                startOver -> 0L
+                else -> s.resumeMs ?: 0L
+            }
         loadedUrl = url
         playingKey = s.key
         playingAttempt = s.attempt

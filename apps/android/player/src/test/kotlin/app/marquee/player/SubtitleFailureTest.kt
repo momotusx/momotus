@@ -136,6 +136,7 @@ class SubtitleFailureTest {
         delay: SubtitleDelay = SubtitleDelay(),
         /** The first snapshot has the stream: wait for it to load. */
         loads: Boolean = true,
+        startOver: Boolean = false,
     ): Pair<FakePlayer, PlaybackController> {
         client.attach { text ->
             val msg = CoreJson.parseToJsonElement(text).jsonObject
@@ -153,7 +154,17 @@ class SubtitleFailureTest {
         }
         val player = FakePlayer()
         val controller =
-            PlaybackController(player, scope, "Sintel", null, null, SystemClock.elapsedRealtime(), delay, fetch)
+            PlaybackController(
+                player,
+                scope,
+                "Sintel",
+                null,
+                null,
+                SystemClock.elapsedRealtime(),
+                delay,
+                startOver,
+                fetch,
+            )
         controller.attach(PlaybackView(client, scope, JsonObject(emptyMap())).also { it.open() })
         if (loads) until("the stream loads") { player.items.size == 1 }
         return player to controller
@@ -245,6 +256,18 @@ class SubtitleFailureTest {
         ),
         PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS,
     )
+
+    @Test
+    fun `a play starts where the core left it`() {
+        val (player, _) = open(snapshot(extra = "\"resumeMs\":60000,"))
+        assertEquals(60_000L, player.items.single().startMs)
+    }
+
+    @Test
+    fun `Start over starts at the beginning, not where the core left it`() {
+        val (player, _) = open(snapshot(extra = "\"resumeMs\":60000,"), startOver = true)
+        assertEquals(0L, player.items.single().startMs)
+    }
 
     @Test
     fun `a subtitle that does not load drops that track and the same stream plays on`() {
@@ -1025,7 +1048,7 @@ class SubtitleFailureTest {
         val delay = SubtitleDelay()
         val player = FakePlayer()
         val controller =
-            PlaybackController(player, scope, "Sintel", null, null, SystemClock.elapsedRealtime(), delay, fetch)
+            PlaybackController(player, scope, "Sintel", null, null, SystemClock.elapsedRealtime(), delay, fetch = fetch)
         controller.attach(PlaybackView(client, scope, JsonObject(emptyMap())).also { it.open() })
         until("the stream loads") { player.items.size == 1 }
         player.media(withOwnTrack, 10_000_000L)

@@ -91,6 +91,7 @@ class TvTitleStripTest {
     private fun page(
         continuing: Boolean,
         movie: Boolean = false,
+        resumeMs: Long? = null,
     ) = TitleSnapshot(
         TitleHeader(
             state = TitleState.Ready,
@@ -103,7 +104,7 @@ class TvTitleStripTest {
                     trailers = listOf(Trailer("Trailer", "abc", "https://example.test/t")),
                 ),
             inLibrary = false,
-            playTarget = PlayTarget("tt1:1:1", "Play"),
+            playTarget = PlayTarget("tt1:1:1", if (resumeMs != null) "Resume S1:E1" else "Play", resumeMs = resumeMs),
             watched = false,
             seasons = if (movie) emptyList() else listOf(1),
             selectedSeason = if (movie) null else 1,
@@ -121,8 +122,9 @@ class TvTitleStripTest {
     private fun show(
         continuing: Boolean = false,
         movie: Boolean = false,
+        resumeMs: Long? = null,
     ) {
-        val snapshot = CoreJson.encodeToString(TitleSnapshot.serializer(), page(continuing, movie))
+        val snapshot = CoreJson.encodeToString(TitleSnapshot.serializer(), page(continuing, movie, resumeMs))
         client.attach { text ->
             val msg = CoreJson.parseToJsonElement(text).jsonObject
             val id = msg["id"]?.jsonPrimitive?.longOrNull ?: return@attach
@@ -148,6 +150,7 @@ class TvTitleStripTest {
                         onEpisodeVersions = { calls += "versions ${it.videoId}" },
                         onOpen = { calls += "open ${it.id}" },
                         onUncontinue = { calls += "uncontinue" },
+                        onStartOver = { _, videoId -> calls += "again $videoId" },
                     )
                 }
             }
@@ -194,13 +197,24 @@ class TvTitleStripTest {
     }
 
     @Test
-    fun `Remove from Continue Watching asks once and shows only while the title is continuing`() {
+    fun `Remove from Continue Watching acts on one press, its Undo comes after`() {
         show(continuing = true)
         // A round button's word is drawn for the eye and spoken as its description.
         compose.onNode(hasContentDescription("Remove from Continue Watching")).performClick()
-        compose.runOnIdle { assertEquals(emptyList<String>(), calls) }
-        compose.onNode(hasContentDescription("Press again to remove")).performClick()
-        compose.waitUntil(10_000) { calls == listOf("uncontinue") }
+        compose.runOnIdle { assertEquals(listOf("uncontinue"), calls) }
+    }
+
+    @Test
+    fun `Start over shows part way in and plays the target from its beginning`() {
+        show(resumeMs = 60_000)
+        compose.onNode(hasContentDescription("Start over")).performClick()
+        compose.runOnIdle { assertEquals(listOf("again tt1:1:1"), calls) }
+    }
+
+    @Test
+    fun `nothing played yet has no Start over`() {
+        show()
+        compose.onAllNodes(hasContentDescription("Start over")).assertCountEquals(0)
     }
 
     @Test

@@ -152,6 +152,10 @@ fun PhoneTitle(
     /** A person's name: Search for them. */
     onPerson: (String) -> Unit = {},
     downloads: TitleDownloads? = null,
+    /** Remove from Continue Watching, with its Undo; null where it shows no such button (or one waits for Undo). */
+    onUncontinue: (() -> Unit)? = null,
+    /** Start over: the play target from its beginning, with the version Play would take (null: Versions picks). */
+    onStartOver: ((key: String?, videoId: String) -> Unit)? = null,
 ) {
     // A snapshot that came while this page first drew reaches every reader (LiveView.follow).
     title.follow()
@@ -330,6 +334,8 @@ fun PhoneTitle(
                                 fullTrailer = true
                             },
                             downloads = downloads,
+                            onUncontinue = onUncontinue,
+                            onStartOver = onStartOver,
                         ) {
                             downloadMenu =
                                 it
@@ -777,6 +783,8 @@ private fun Info(
     onGenre: (String, String) -> Unit,
     onTrailer: () -> Unit,
     downloads: TitleDownloads?,
+    onUncontinue: (() -> Unit)?,
+    onStartOver: ((String?, String) -> Unit)?,
     onDownloadMenu: (DownloadAsk) -> Unit,
 ) {
     val header = checkNotNull(title.header)
@@ -801,19 +809,33 @@ private fun Info(
         // row, their words on up to two lines (Watched one of those small circles, never a big button: the
         // owner's rule); the genres and the synopsis after them, so Play stays on the first screen under a
         // tall cover, as on the iPhone.
-        PrimaryButton(
-            label = primary.label,
-            icon = PlayFilled,
-            modifier = Modifier.fillMaxWidth(),
-            enabled = TitleCopy.live(primary, target),
-            onClick = {
-                when (val to = TitleCopy.playTo(primary, target, versions)) {
-                    is PlayTo.Player -> target?.let { onPlay(to.key, it.videoId) }
-                    PlayTo.Versions -> target?.let { onVersions(it.videoId) }
-                    PlayTo.Nowhere -> Unit
-                }
-            },
-        )
+        // Part way in, Start over beside Play: the same video from its beginning (as the web's). Only where Play
+        // goes straight to the player: a choice on Versions would resume, so none is offered then.
+        val again =
+            (TitleCopy.playTo(primary, target, versions) as? PlayTo.Player)?.takeIf {
+                onStartOver != null && (target?.resumeMs ?: 0L) > 0L
+            }
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(Marquee.space.s),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            PrimaryButton(
+                label = primary.label,
+                icon = PlayFilled,
+                modifier = Modifier.weight(1f),
+                enabled = TitleCopy.live(primary, target),
+                onClick = {
+                    when (val to = TitleCopy.playTo(primary, target, versions)) {
+                        is PlayTo.Player -> target?.let { onPlay(to.key, it.videoId) }
+                        PlayTo.Versions -> target?.let { onVersions(it.videoId) }
+                        PlayTo.Nowhere -> Unit
+                    }
+                },
+            )
+            if (again != null && target != null && onStartOver != null) {
+                RoundButton(Icons.RotateCcw, "Start over", { onStartOver(again.key, target.videoId) })
+            }
+        }
         if (target == null) {
             StatusNote(TitleCopy.nothingToPlay(header.nextAirs))
         } else {
@@ -868,6 +890,7 @@ private fun Info(
                 (if (header.inLibrary) "In Library" else "Add to Library").takeIf { header.librarySettable },
                 "Watched".takeIf { details.kind == "movie" },
                 "Download".takeIf { downloads != null },
+                "Remove".takeIf { header.continuing && onUncontinue != null },
             )
         BoxWithConstraints(Modifier.fillMaxWidth().padding(top = Marquee.space.xs)) {
             // The words under the circles only where they fit whole (two lines, no word broken); a large font on a narrow
@@ -952,6 +975,17 @@ private fun Info(
                 } else if (header.download?.state == DownloadState.Done) {
                     // A kids profile: a plain badge, no control (plans/offline-downloads.md 3.2).
                     DownloadedBadge(Modifier.weight(1f))
+                }
+                // While the title is in Continue Watching: a press, not only the hold on Home's tile.
+                if (header.continuing && onUncontinue != null) {
+                    RoundButton(
+                        Icons.CircleX,
+                        "Remove",
+                        onUncontinue,
+                        Modifier.weight(1f),
+                        showLabel = words,
+                        spoken = "Remove from Continue Watching",
+                    )
                 }
             }
         }

@@ -199,6 +199,8 @@ sealed interface Route : NavKey {
         val key: String? = null,
         /** The release line of the episode that just played, so the next one comes from the same line. */
         val binge: String? = null,
+        /** Start over on the title page: this play starts at the beginning, not where it was left. */
+        val startOver: Boolean = false,
     ) : Route
 }
 

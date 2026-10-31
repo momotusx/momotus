@@ -26,8 +26,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.platform.LocalAccessibilityManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.LiveRegionMode
@@ -784,6 +786,9 @@ private fun AppNav(
                             onPlay = { key, videoId, title ->
                                 backStack.add(Route.Player(route.kind, route.id, videoId, title, key))
                             },
+                            onStartOver = { key, videoId, title ->
+                                backStack.add(Route.Player(route.kind, route.id, videoId, title, key, startOver = true))
+                            },
                             onVersions = { videoId, name ->
                                 backStack.add(Route.Versions(route.kind, route.id, videoId, name))
                             },
@@ -864,7 +869,8 @@ private fun AppNav(
                                     )
                                 },
                                 // The same video and Versions view, the offered version's key.
-                                onOffer = { key -> replacePlayer(route, route.copy(key = key)) },
+                                // Another version mid-play goes on from where it was, never from the start again.
+                                onOffer = { key -> replacePlayer(route, route.copy(key = key, startOver = false)) },
                                 // Where an addon is added (noSource). Accounts are set up in Settings only.
                                 onSettings = { backStack.add(Route.Sources) },
                             )
@@ -956,13 +962,29 @@ private fun AppNav(
 internal fun screenFade(ms: Int): ContentTransform =
     ContentTransform(fadeIn(tween(ms)), fadeOut(tween(ms)), sizeTransform = SizeTransform(clip = false))
 
-/** Under Continue Watching after Remove: the words with Undo while it can be taken back, or why it failed. */
+/**
+ * After Remove from Continue Watching: the words with Undo while it can be taken back, or why it failed. Under the row
+ * on Home; on the title page [undoFocus] takes the focus to Undo, as the button that was pressed has gone.
+ */
 @Composable
-private fun RemovalNote(removal: PendingRemoval) {
+internal fun RemovalNote(
+    removal: PendingRemoval,
+    modifier: Modifier = Modifier.padding(horizontal = Marquee.safe.side),
+    undoFocus: FocusRequester? = null,
+    onUndo: () -> Unit = removal::undo,
+) {
     val tile = removal.removing
     val words = tile?.let { TileCopy.removed(it.name) } ?: removal.failed ?: return
+    if (undoFocus != null) {
+        LaunchedEffect(tile?.id) {
+            if (tile == null) return@LaunchedEffect
+            // Attached on the next frame, not during this composition.
+            withFrameNanos {}
+            undoFocus.requestFocus()
+        }
+    }
     Row(
-        Modifier.padding(horizontal = Marquee.safe.side),
+        modifier,
         horizontalArrangement = Arrangement.spacedBy(Marquee.space.s),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -972,7 +994,7 @@ private fun RemovalNote(removal: PendingRemoval) {
             color = Marquee.colors.muted,
             modifier = Modifier.weight(1f, fill = false).semantics { liveRegion = LiveRegionMode.Polite },
         )
-        if (tile != null) SecondaryButton("Undo", removal::undo)
+        if (tile != null) SecondaryButton("Undo", onUndo, focusRequester = undoFocus)
     }
 }
 

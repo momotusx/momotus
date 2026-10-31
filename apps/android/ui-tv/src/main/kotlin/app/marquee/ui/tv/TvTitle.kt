@@ -118,9 +118,6 @@ import app.marquee.design.marqueeFocus
 import app.marquee.design.rememberTrailerHost
 import app.marquee.design.scrollByKey
 import app.marquee.player.TrailerDialog
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 
 private const val PLAY = "play"
 private const val EPISODES = "episodes"
@@ -163,8 +160,10 @@ fun TvTitle(
     onOpen: (Tile) -> Unit = {},
     /** A person's name: Search for them. */
     onPerson: (String) -> Unit = {},
-    /** Remove from Continue Watching, on every synced device; null where the page has no such button. */
-    onUncontinue: (suspend () -> Unit)? = null,
+    /** Remove from Continue Watching, with its Undo; null where the page has no such button (or one waits for Undo). */
+    onUncontinue: (() -> Unit)? = null,
+    /** Start over: the play target from its beginning, with the version Play would take (null: Versions picks). */
+    onStartOver: ((key: String?, videoId: String) -> Unit)? = null,
 ) {
     // A snapshot that came while this page first drew reaches every reader (LiveView.follow).
     title.follow()
@@ -301,6 +300,7 @@ fun TvTitle(
                                     onVersions,
                                     onGenre,
                                     onUncontinue,
+                                    onStartOver,
                                     onTrailer = {
                                         TitleTrailers.spent += details.id
                                         if (headerTrailer.loading) trailers.stop()
@@ -578,7 +578,8 @@ private fun Info(
     onPlay: (String?, String) -> Unit,
     onVersions: (String) -> Unit,
     onGenre: (String, String) -> Unit,
-    onUncontinue: (suspend () -> Unit)?,
+    onUncontinue: (() -> Unit)?,
+    onStartOver: ((String?, String) -> Unit)?,
     onTrailer: () -> Unit,
     sound: (() -> Unit)?,
 ) {
@@ -624,6 +625,19 @@ private fun Info(
                 focusRequester = if (TitleCopy.live(primary, target)) focus.requesterFor(PLAY) else null,
                 onFocusChange = focus.watch(ACTIONS, PLAY),
             )
+            // Part way in: the same video from its beginning, beside Play (as the web's Start over). Only where Play
+            // goes straight to the player: a choice on Versions would resume, so none is offered then.
+            val again = (TitleCopy.playTo(primary, target, versions) as? PlayTo.Player)
+            if (onStartOver != null && target != null && again != null && (target.resumeMs ?: 0L) > 0L) {
+                RoundButton(
+                    icon = Icons.RotateCcw,
+                    label = "Start over",
+                    onClick = { onStartOver(again.key, target.videoId) },
+                    showLabel = true,
+                    focusRequester = focus.requesterFor("startover"),
+                    onFocusChange = focus.watch(ACTIONS, "startover"),
+                )
+            }
             if (details.trailers.isNotEmpty()) {
                 RoundButton(
                     icon = Icons.Film,
@@ -671,7 +685,16 @@ private fun Info(
             }
             // TV has no remove on its tiles: the page carries it while the title is in Continue Watching (the header
             // says so from its first render, so the row never grows after it is drawn).
-            if (header.continuing && onUncontinue != null) Uncontinue(onUncontinue, focus)
+            if (header.continuing && onUncontinue != null) {
+                RoundButton(
+                    icon = Icons.CircleX,
+                    label = "Remove from Continue Watching",
+                    onClick = onUncontinue,
+                    showLabel = true,
+                    focusRequester = focus.requesterFor("uncontinue"),
+                    onFocusChange = focus.watch(ACTIONS, "uncontinue"),
+                )
+            }
             TrailerSoundItem(
                 sound,
                 HeroTrailers.sound,
@@ -687,57 +710,6 @@ private fun Info(
         }
     }
 }
-
-/**
- * Remove from Continue Watching reaches every synced device, so it asks once ("Press again to remove", for four
- * seconds) and says when the core refused. Once it went, focus moves to Play before the button leaves with the header.
- */
-@Composable
-private fun Uncontinue(
-    remove: suspend () -> Unit,
-    focus: FocusMemory,
-) {
-    var ask by remember { mutableStateOf(Ask.Idle) }
-    val scope = rememberCoroutineScope()
-    LaunchedEffect(ask) {
-        if (ask == Ask.Idle) return@LaunchedEffect
-        delay(ASK_MS)
-        ask = Ask.Idle
-    }
-    RoundButton(
-        icon = Icons.CircleX,
-        label =
-            when (ask) {
-                Ask.Idle -> "Remove from Continue Watching"
-                Ask.Confirm -> "Press again to remove"
-                Ask.Failed -> "Not removed, try again"
-            },
-        onClick = {
-            if (ask != Ask.Confirm) {
-                ask = Ask.Confirm
-            } else {
-                ask = Ask.Idle
-                scope.launch {
-                    try {
-                        remove()
-                        focus.requester(PLAY)?.requestFocus()
-                    } catch (e: CancellationException) {
-                        throw e
-                    } catch (e: Exception) {
-                        ask = Ask.Failed
-                    }
-                }
-            }
-        },
-        showLabel = true,
-        focusRequester = focus.requesterFor("uncontinue"),
-        onFocusChange = focus.watch(ACTIONS, "uncontinue"),
-    )
-}
-
-private enum class Ask { Idle, Confirm, Failed }
-
-private const val ASK_MS = 4_000L
 
 /** The line under the primary action: a wait, the chosen version, or why nothing plays. */
 @Composable

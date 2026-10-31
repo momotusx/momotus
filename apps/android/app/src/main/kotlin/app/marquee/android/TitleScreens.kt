@@ -1,12 +1,14 @@
 package app.marquee.android
 
 import androidx.activity.compose.ReportDrawnWhen
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -15,8 +17,11 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.platform.LocalAccessibilityManager
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
@@ -41,6 +46,7 @@ import app.marquee.design.Form
 import app.marquee.design.Icons
 import app.marquee.design.Marquee
 import app.marquee.design.Toast
+import app.marquee.design.actionWindow
 import app.marquee.ui.phone.PhoneTitle
 import app.marquee.ui.phone.PhoneVersions
 import app.marquee.ui.tv.FocusMemory
@@ -112,6 +118,8 @@ fun TitleScreen(
     app: AppState,
     form: Form,
     onPlay: (key: String?, videoId: String, title: String) -> Unit,
+    /** Start over: [onPlay] from the video's beginning. */
+    onStartOver: (key: String?, videoId: String, title: String) -> Unit,
     onVersions: (videoId: String, title: String) -> Unit,
     onPlayEpisode: (videoId: String, title: String) -> Unit,
     onGenre: (kind: String, genre: String) -> Unit,
@@ -167,6 +175,33 @@ fun TitleScreen(
     }
     val episodeVersions: (Episode) -> Unit = { onVersions(it.videoId, title) }
     val play: (String?, String) -> Unit = { key, id -> onPlay(key, id, title) }
+    val again: (String?, String) -> Unit = { key, id -> onStartOver(key, id, title) }
+    // Remove from Continue Watching with its Undo (app.removal, as the hold on Home's tile): the button goes while
+    // the removal waits; Undo brings it back with the focus on it, and when the time runs out the focus goes to Play.
+    val removal = app.removal
+    val waiting = removal.removing?.id == route.id
+    // This page removed the title: its note (and a failure's) shows here, never one started elsewhere.
+    var mine by remember { mutableStateOf(false) }
+    var undid by remember { mutableStateOf(false) }
+    val uncontinue: (() -> Unit)? =
+        if (waiting || name == null) {
+            null
+        } else {
+            {
+                mine = true
+                undid = false
+                removal.remove(
+                    Tile(id = route.id, kind = route.kind, name = name, posterShape = "poster"),
+                    accessibility::actionWindow,
+                )
+            }
+        }
+    LaunchedEffect(waiting) {
+        if (waiting || !mine || form != Form.Tv) return@LaunchedEffect
+        withFrameNanos {}
+        holder.focus.requester(if (undid) "uncontinue" else "play")?.requestFocus()
+    }
+    val undoFocus = remember { FocusRequester() }
     val downloads =
         if (canDownload && form != Form.Tv) {
             app.downloads.forTitle(
@@ -192,7 +227,8 @@ fun TitleScreen(
                 onGenre = onGenre,
                 onOpen = onOpen,
                 onPerson = onPerson,
-                onUncontinue = { session.ops.removeFromContinue(route.id) },
+                onUncontinue = uncontinue,
+                onStartOver = again,
             )
         } else {
             PhoneTitle(
@@ -207,6 +243,26 @@ fun TitleScreen(
                 onOpen = onOpen,
                 onPerson = onPerson,
                 downloads = downloads,
+                onUncontinue = uncontinue,
+                onStartOver = again,
+            )
+        }
+        if (waiting || (mine && removal.removing == null)) {
+            RemovalNote(
+                removal,
+                Modifier
+                    .align(Alignment.BottomCenter)
+                    .windowInsetsPadding(WindowInsets.navigationBars)
+                    .padding(horizontal = Marquee.safe.side)
+                    .padding(bottom = if (form == Form.Tv) Marquee.safe.bottom else Marquee.space.m)
+                    .clip(RoundedCornerShape(Marquee.radius.pill))
+                    .background(Marquee.colors.raised)
+                    .padding(horizontal = Marquee.space.m, vertical = Marquee.space.xs),
+                undoFocus = undoFocus.takeIf { form == Form.Tv },
+                onUndo = {
+                    undid = true
+                    removal.undo()
+                },
             )
         }
         note?.let { (id, words) ->

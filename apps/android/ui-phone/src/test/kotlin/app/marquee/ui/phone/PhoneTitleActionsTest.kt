@@ -274,6 +274,57 @@ class PhoneTitleActionsTest {
     }
 
     @Test
+    fun `part way in Start over sits beside Play, and Remove shows while the title is in Continue Watching`() {
+        val resumed =
+            title.copy(
+                header =
+                    title.header.copy(
+                        playTarget = PlayTarget("tt1", "Resume", resumeMs = 60_000),
+                        continuing = true,
+                    ),
+            )
+        client.attach { text ->
+            val msg = CoreJson.parseToJsonElement(text).jsonObject
+            val id = msg["id"]?.jsonPrimitive?.longOrNull ?: return@attach
+            val result =
+                if (msg["op"]?.jsonPrimitive?.content == "subscribe") {
+                    """{"sub":7,"snapshot":${CoreJson.encodeToString(TitleSnapshot.serializer(), resumed)}}"""
+                } else {
+                    "{}"
+                }
+            client.onMessage("""{"id":$id,"ok":true,"result":$result}""")
+        }
+        val view = TitleView(client, scope, "movie", "tt1")
+        val calls = mutableListOf<String>()
+        compose.setContent {
+            MarqueeTheme(Form.Phone) {
+                PhoneTitle(
+                    view,
+                    null,
+                    onPlay = { key, id -> calls += "play $key $id" },
+                    onVersions = { calls += "versions $it" },
+                    onEpisode = {},
+                    onEpisodeVersions = {},
+                    onUncontinue = { calls += "uncontinue" },
+                    onStartOver = { key, id -> calls += "again $key $id" },
+                )
+            }
+        }
+        compose.waitForIdle()
+        view.open()
+        val deadline = System.currentTimeMillis() + 120_000
+        while (compose.onAllNodes(hasContentDescription("Start over")).fetchSemanticsNodes().isEmpty()) {
+            check(System.currentTimeMillis() < deadline) { "the title never drew" }
+            Snapshot.sendApplyNotifications()
+            compose.waitForIdle()
+            Thread.sleep(10)
+        }
+        compose.onNode(hasContentDescription("Start over")).performClick()
+        compose.onNode(hasContentDescription("Remove from Continue Watching")).performClick()
+        assertEquals(listOf("again null tt1", "uncontinue"), calls)
+    }
+
+    @Test
     fun `a kids profile's page shows no Add to Library`() {
         val kids = title.copy(header = title.header.copy(librarySettable = false))
         client.attach { text ->
