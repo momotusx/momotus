@@ -2503,6 +2503,7 @@ impl Session {
                     .ok_or("today must be YYYY-MM-DD")?;
                 calendar.set_today(today);
             }
+            (View::Calendar(calendar), "retry") => calendar.retry(&param(command, "itemId")?),
             (View::Library(library), "setFilter") => {
                 library.set_filter(
                     command

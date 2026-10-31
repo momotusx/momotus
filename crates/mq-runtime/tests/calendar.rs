@@ -37,6 +37,9 @@ static DROP: std::sync::LazyLock<String> = std::sync::LazyLock::new(|| {
     )
 });
 
+/// tt5 is a 404 until a test sets this, then answers as tt2 does.
+static TT5_UP: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
 /// A meta addon: tt1, tt2 and tt4 answer after `delay`, anything else is a 404.
 async fn meta_addon(delay: Duration) -> AddonRow {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -56,6 +59,10 @@ async fn meta_addon(delay: Duration) -> AddonRow {
                     Some(UNDATED)
                 } else if line.contains("/meta/series/tt4.json") {
                     Some(DROP.as_str())
+                } else if line.contains("/meta/series/tt5.json")
+                    && TT5_UP.load(std::sync::atomic::Ordering::SeqCst)
+                {
+                    Some(UNDATED)
                 } else {
                     None
                 };
@@ -249,6 +256,30 @@ async fn failed_and_unscheduled_series_are_told_apart() {
     );
     assert!(s.failed[0].reason.is_some());
     assert_eq!(s.series, 3, "loaded, undated and failed series all count");
+}
+
+/// Retry fetches one failed series again; a retry of a loaded or unknown
+/// series changes nothing.
+#[tokio::test]
+async fn a_failed_series_can_be_retried_on_its_own() {
+    let core = setup(Duration::ZERO, &[("tt1", "Show"), ("tt5", "Late Show")]).await;
+    let view = CalendarView::open(&core, parse_day("2026-10-17").unwrap());
+    let s = settled(&view, |s| !s.failed.is_empty()).await;
+    assert_eq!(s.failed[0].item_id, "tt5");
+    TT5_UP.store(true, std::sync::atomic::Ordering::SeqCst);
+    let before = layout(&s);
+    view.retry("tt1");
+    view.retry("nope");
+    view.retry("tt5");
+    let s = settled(&view, |s| s.failed.is_empty()).await;
+    assert_eq!(
+        s.no_schedule
+            .iter()
+            .map(|x| x.item_id.as_str())
+            .collect::<Vec<_>>(),
+        ["tt5"]
+    );
+    assert_eq!(layout(&s), before, "the loaded series keeps its episodes");
 }
 
 /// A future day shows a series' first episode only, so Kitsu's placeholder

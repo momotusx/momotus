@@ -124,9 +124,14 @@ pub fn parse_day(s: &str) -> Option<NaiveDate> {
     NaiveDate::parse_from_str(s, "%Y-%m-%d").ok()
 }
 
+enum Command {
+    Today(NaiveDate),
+    Retry(String),
+}
+
 pub struct CalendarView {
     snapshot: SharedObservable<CalendarSnapshot>,
-    commands: mpsc::UnboundedSender<NaiveDate>,
+    commands: mpsc::UnboundedSender<Command>,
     task: JoinHandle<()>,
 }
 
@@ -183,7 +188,12 @@ impl CalendarView {
 
     /// The app's day changed (local midnight, or back from the background).
     pub fn set_today(&self, today: NaiveDate) {
-        let _ = self.commands.send(today);
+        let _ = self.commands.send(Command::Today(today));
+    }
+
+    /// Fetches one failed series again; it shows as loading meanwhile.
+    pub fn retry(&self, item_id: &str) {
+        let _ = self.commands.send(Command::Retry(item_id.to_owned()));
     }
 }
 
@@ -208,20 +218,23 @@ impl Owner {
     async fn run(
         mut self,
         mut changes: tokio::sync::broadcast::Receiver<Vec<Table>>,
-        mut commands: mpsc::UnboundedReceiver<NaiveDate>,
+        mut commands: mpsc::UnboundedReceiver<Command>,
     ) {
         loop {
             tokio::select! {
-                command = commands.recv() => {
-                    let Some(today) = command else { return };
-                    self.today = today;
-                    let stale = self.series.values().any(|s| {
-                        s.fetched_at.is_some_and(|at| at.elapsed() > REFRESH_AFTER)
-                    });
-                    if stale {
-                        self.sync_membership(true);
+                command = commands.recv() => match command {
+                    None => return,
+                    Some(Command::Today(today)) => {
+                        self.today = today;
+                        let stale = self.series.values().any(|s| {
+                            s.fetched_at.is_some_and(|at| at.elapsed() > REFRESH_AFTER)
+                        });
+                        if stale {
+                            self.sync_membership(true);
+                        }
                     }
-                }
+                    Some(Command::Retry(id)) => self.retry(&id),
+                },
                 change = changes.recv() => match change {
                     Ok(tables) => {
                         let addons = tables.iter().any(|t| matches!(t, Table::Addons));
@@ -303,6 +316,23 @@ impl Owner {
                     self.queue.push_back(id);
                 }
             }
+        }
+        self.start_fetches();
+    }
+
+    /// Only a failed series is fetched again: one loading or loaded has nothing to retry.
+    fn retry(&mut self, id: &str) {
+        let Some(series) = self.series.get_mut(id) else {
+            return;
+        };
+        if !matches!(series.outcome, Outcome::Failed(_)) {
+            return;
+        }
+        self.next_generation += 1;
+        series.generation = self.next_generation;
+        series.outcome = Outcome::Pending;
+        if !self.queue.iter().any(|q| q == id) {
+            self.queue.push_back(id.to_owned());
         }
         self.start_fetches();
     }
