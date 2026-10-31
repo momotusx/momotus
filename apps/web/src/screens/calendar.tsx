@@ -142,12 +142,22 @@ function CalendarPage(props: { retry: () => void }) {
             Loading the schedule of {s()?.pending} series
           </p>
         </Show>
-        {/* The series by name; what each addon answered stays behind Details. */}
+        {/* Each series by name with its own Try again; what each addon answered stays behind Details. */}
         <Show when={s()?.failed.length}>
-          <p class="st bad cal-note">
-            <i class="dot" />
-            Could not load {s()?.failed.map((f) => f.name).join(", ")}.
-          </p>
+          <ul class="cal-failed">
+            <For each={s()?.failed ?? []}>
+              {(f) => (
+                <li class="st bad cal-note">
+                  <i class="dot" />
+                  Could not load {f.name}.
+                  <button class="btn" data-f={`calendar:retry:${f.itemId}`} aria-label={`Try again for ${f.name}`} onClick={() => view.command({ type: "retry", itemId: f.itemId }).catch(() => undefined)}>
+                    <RefreshCw aria-hidden />
+                    Try again
+                  </button>
+                </li>
+              )}
+            </For>
+          </ul>
           <Show when={s()?.failed.some((f) => f.reason)}>
             <details class="why-raw cal-note">
               <summary>Details</summary>

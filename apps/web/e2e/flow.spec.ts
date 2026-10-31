@@ -1,5 +1,6 @@
 import { expect, type Page, test } from "@playwright/test";
-import { Client, GOT, reseedBbb, startIfPaused, watch } from "./core";
+import { Client, GOT, PORTS, reseedBbb, startIfPaused, watch } from "./core";
+import { patchedContext } from "./patch";
 import { BBB_ID, SAMPLE_EPISODE } from "./source";
 import { fakeYouTube, ytLog } from "./yt-fake";
 
@@ -514,6 +515,33 @@ test("Calendar: days in order, today's day first, an episode opens its season", 
   await expect(page.locator(".cal-head .st.warn")).toHaveCount(0, { timeout: 60_000 });
   await page.waitForTimeout(1000);
   expect(await focused(page)).toBe(opened);
+});
+
+test("Calendar: each series that could not load has its own Try again, which asks the core for that one", async ({ browser }) => {
+  // The shared core loads both series; the page is told two of them failed until one is retried.
+  let retried: string[] = [];
+  const failed = [
+    { itemId: "tt0096697", name: "The Simpsons", reason: "the addon did not answer" },
+    { itemId: "tt0121955", name: "South Park", reason: null },
+  ];
+  const { context, commands, repush } = await patchedContext(browser, PORTS.bridge, { viewport: { width: 1440, height: 900 } }, (view, s) =>
+    view === "calendar" && s ? { ...s, failed: failed.filter((f) => !retried.includes(f.itemId)) } : s,
+  );
+  const page = await context.newPage();
+  await page.goto("/calendar?form=desktop");
+  const rows = page.locator(".cal-failed li");
+  await expect(rows).toHaveCount(2, { timeout: 60_000 });
+  await expect(rows.first()).toContainText("Could not load The Simpsons.");
+  const again = page.getByRole("button", { name: "Try again for The Simpsons" });
+  await expect(again).toHaveText("Try again");
+  await again.click();
+  await expect.poll(() => commands.filter((c) => c.view === "calendar" && c.command?.type === "retry").map((c) => c.command.itemId)).toEqual(["tt0096697"]);
+  retried = ["tt0096697"];
+  repush("calendar");
+  await expect(rows).toHaveCount(1);
+  await expect(rows.first()).toContainText("Could not load South Park.");
+  await expect(page.getByRole("button", { name: "Try again for South Park" })).toBeVisible();
+  await context.close();
 });
 
 test("Calendar sends the new date at local midnight", async ({ page }) => {

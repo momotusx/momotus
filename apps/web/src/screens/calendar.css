@@ -5,6 +5,9 @@
 .cal-head .st { margin-bottom: 12px; font: 500 var(--type-callout) var(--font-text); }
 .cal-head .st svg { width: 28px; height: 28px; }
 .cal-note { font: 400 var(--type-callout) / 1.4 var(--font-text); color: var(--muted); margin-bottom: 12px; max-width: 1300px; }
+.cal-failed { list-style: none; margin: 0; padding: 0; }
+.cal-failed li { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; }
+.cal-failed .btn { height: 56px; padding: 0 24px; }
 .cal-day { display: grid; grid-template-columns: 250px minmax(0, 1fr); gap: 32px; align-items: start; padding: 28px 0; border-top: 1px solid var(--line); }
 .cal-day h2 { display: grid; gap: 8px; padding-top: 6px; font: 800 var(--type-title3) / 1.05 var(--font-display); }
 .cal-day h2 small { font: 500 var(--type-callout) var(--font-text); color: var(--muted); }
@@ -38,6 +41,7 @@
 [data-form="phone"] .cal .lede { margin: -8px 0 12px; font-size: 15px; }
 [data-form="phone"] .cal-head .st, [data-form="phone"] .cal-note { font-size: 13px; }
 [data-form="phone"] .cal-head .st svg { width: 18px; height: 18px; }
+[data-form="phone"] .cal-failed .btn { height: 44px; padding: 0 16px; font-size: 15px; }
 [data-form="phone"] .cal-day { grid-template-columns: 1fr; gap: 10px; padding: 16px 0; }
 [data-form="phone"] .cal-day h2 { display: flex; align-items: baseline; gap: 10px; padding: 0; font-size: 22px; }
 [data-form="phone"] .cal-day h2 small { font-size: 14px; }
