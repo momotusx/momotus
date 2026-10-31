@@ -116,7 +116,8 @@ test("Home, the hero and every row state name no addon, and the later twin waits
   // A catalog that is no ranking gives the row's title alone, with no place (plans/appletv-polish.md decision 2).
   await expect(page.locator(".hero-page.on .reason")).toHaveText("Popular Movies", { timeout: 30_000 });
   await expect(row("Broken Movies").locator(".row-msg p").first()).toHaveText("This row did not load.");
-  await expect(row("Quiet Movies").locator(".row-msg p")).toHaveText("Nothing in this row right now.");
+  // A catalog with nothing in it is off Home, never a blank row (the owner's rule: empty sections collapse).
+  await expect(row("Quiet Movies")).toHaveCount(0, { timeout: 30_000 });
   await expect(row("Late Movies").locator(".tile").first()).toBeVisible({ timeout: 30_000 });
   // One "Popular Movies": Alpha's, first in addon order; Beta's is off Home.
   await expect(row("Popular Movies")).toHaveCount(1);

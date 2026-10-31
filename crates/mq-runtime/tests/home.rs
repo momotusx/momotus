@@ -1258,8 +1258,9 @@ async fn a_twin_installed_after_the_hero_shows_changes_nothing() {
     );
 }
 
-/// The first row's state once it is no longer loading.
-async fn settled_state(body: &'static str) -> RowState {
+/// The only row's state once it is no longer loading; `None` once it left
+/// Home.
+async fn settled_state(body: &'static str) -> Option<RowState> {
     let core = Core::temporary("p").unwrap();
     let addon = catalog_addon("trakt", Duration::ZERO, 200, body).await;
     core.library()
@@ -1267,8 +1268,8 @@ async fn settled_state(body: &'static str) -> RowState {
         .unwrap();
     let view = HomeView::open(&core);
     for _ in 0..300 {
-        let state = view.snapshot().rows[0].state.clone();
-        if state != RowState::Loading {
+        let state = view.snapshot().rows.first().map(|r| r.state.clone());
+        if state != Some(RowState::Loading) {
             return state;
         }
         tokio::time::sleep(Duration::from_millis(10)).await;
@@ -1276,16 +1277,17 @@ async fn settled_state(body: &'static str) -> RowState {
     panic!("the row never answered");
 }
 
-/// Trakt Tv's "Trending movies" answered `{}` (2026-10-22): an empty row,
-/// never "This row did not load". An error object still fails the row.
+/// Trakt Tv's "Trending movies" answered `{}` (2026-10-22): the row leaves
+/// Home (the owner's rule: empty sections collapse), never "This row did not
+/// load". An error object still fails the row.
 #[tokio::test]
-async fn an_empty_answer_is_an_empty_row_and_an_error_object_fails_it() {
+async fn an_empty_answer_leaves_home_and_an_error_object_fails_it() {
     const TRAKT_TRENDING: &str =
         include_str!("../../mq-protocol/tests/fixtures/trakt_trending_movies.json");
-    assert_eq!(settled_state(TRAKT_TRENDING).await, RowState::Empty);
+    assert_eq!(settled_state(TRAKT_TRENDING).await, None);
     assert!(matches!(
         settled_state(r#"{"err": "upstream failed"}"#).await,
-        RowState::Failed { .. }
+        Some(RowState::Failed { .. })
     ));
 }
 
@@ -1313,6 +1315,50 @@ async fn a_title_a_catalog_repeats_shows_once_where_it_first_shows() {
     row_until(&view, &id, |r| r.state == RowState::Ready).await;
     let ids: Vec<String> = row(&view, &id).tiles.into_iter().map(|t| t.id).collect();
     assert_eq!(ids, ["tt5753856", "tt0903747", "tt0944947"]);
+}
+
+/// Home shows no row `id` at any look over the next 200 ms.
+async fn absent_for_200ms(view: &HomeView, id: &str) {
+    for _ in 0..20 {
+        let rows = view.snapshot().rows;
+        assert!(rows.iter().all(|r| r.row_id != id), "{rows:?}");
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+}
+
+/// The owner's Trakt Watchlist and Collection catalogs answer 200 with no
+/// metas (2026-10-28): an empty catalog never reaches Home as a blank row,
+/// the rows around it keep their places, and a later edit of the board
+/// (another row hidden, then shown) does not bring it back to load again.
+#[tokio::test]
+async fn an_empty_catalog_never_reaches_home() {
+    let core = Core::temporary("p").unwrap();
+    let mut full = named_catalog_addon("full", "Popular", Duration::ZERO, 200, METAS).await;
+    // Slow to answer, so a reload would show its loading row for a while.
+    let mut quiet = named_catalog_addon(
+        "quiet",
+        "Watchlist",
+        Duration::from_millis(300),
+        200,
+        r#"{"metas":[]}"#,
+    )
+    .await;
+    let mut other = named_catalog_addon("other", "Other", Duration::ZERO, 200, METAS).await;
+    (full.position, quiet.position, other.position) = (0, 1, 2);
+    core.library()
+        .set_addons("p", &[full, quiet, other], &core.hlc())
+        .unwrap();
+    let ids: Vec<String> = core.home_catalogs().into_iter().map(|c| c.row_id).collect();
+    let view = HomeView::open(&core);
+    rows_until(&view, &[&ids[0], &ids[2]]).await;
+    // Watched right after each edit: a reload would show its loading row
+    // for the quiet catalog's 300 ms.
+    core.set_home_row_hidden(&ids[2], true).unwrap();
+    absent_for_200ms(&view, &ids[1]).await;
+    rows_until(&view, &[&ids[0]]).await;
+    core.set_home_row_hidden(&ids[2], false).unwrap();
+    absent_for_200ms(&view, &ids[1]).await;
+    rows_until(&view, &[&ids[0], &ids[2]]).await;
 }
 
 /// A catalog that gives its IMDb titles a landscape shape still shows each

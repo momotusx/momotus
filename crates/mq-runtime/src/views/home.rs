@@ -700,7 +700,7 @@ async fn watch_addons(
         if next == ids {
             continue;
         }
-        ids = next;
+        let before = std::mem::replace(&mut ids, next);
         let mut fresh = Vec::new();
         {
             let mut rows = lock(&rows);
@@ -711,6 +711,9 @@ async fn watch_addons(
             for slot in slots {
                 match find_row(&rows, &slot.row_id) {
                     Some(i) => swapped.push(rows[i].clone()),
+                    // On the board before and gone: its catalog answered
+                    // with nothing, and stays off Home.
+                    None if before.contains(&slot.row_id) => {}
                     None => {
                         swapped.push(loading_row(&slot));
                         fresh.push(slot);
@@ -999,34 +1002,42 @@ fn apply_catalog(
             }
             _ => Err("addon returned no catalog items".to_owned()),
         });
-    update_row(rows, row_id, |row| {
-        // A row shown again loads again. The first answer fills it; a later
-        // success may still replace a failure (an older load that failed
-        // first), but nothing replaces tiles.
-        let open = matches!(row.state, RowState::Loading | RowState::Slow);
-        let recovers = matches!(row.state, RowState::Failed { .. }) && outcome.is_ok();
-        if !open && !recovers {
-            return;
-        }
-        match outcome {
-            Ok(mut tiles) => {
-                if row.ranked {
-                    tiles.truncate(RANKED_TILES);
-                    for (place, tile) in (1u8..).zip(tiles.iter_mut()) {
-                        tile.rank = Some(place);
-                        tile.genre = tile.blurb.as_ref().and_then(|b| b.genres.first().cloned());
-                    }
+    let mut rows = lock(rows);
+    let Some(index) = find_row(&rows, row_id) else {
+        return;
+    };
+    let mut row = rows[index].clone();
+    // A row shown again loads again. The first answer fills it; a later
+    // success may still replace a failure (an older load that failed
+    // first), but nothing replaces tiles.
+    let open = matches!(row.state, RowState::Loading | RowState::Slow);
+    let recovers = matches!(row.state, RowState::Failed { .. }) && outcome.is_ok();
+    if !open && !recovers {
+        return;
+    }
+    // A catalog with nothing in it leaves Home, never a blank row (the
+    // owner's rule: empty sections collapse).
+    if outcome.as_ref().is_ok_and(Vec::is_empty) {
+        rows.remove(index);
+        return;
+    }
+    match outcome {
+        Ok(mut tiles) => {
+            if row.ranked {
+                tiles.truncate(RANKED_TILES);
+                for (place, tile) in (1u8..).zip(tiles.iter_mut()) {
+                    tile.rank = Some(place);
+                    tile.genre = tile.blurb.as_ref().and_then(|b| b.genres.first().cloned());
                 }
-                row.tiles = tiles;
-                row.state = if row.tiles.is_empty() {
-                    RowState::Empty
-                } else {
-                    RowState::Ready
-                };
             }
-            Err(reason) => row.state = RowState::Failed { reason },
+            row.tiles = tiles;
+            row.state = RowState::Ready;
         }
-    });
+        Err(reason) => row.state = RowState::Failed { reason },
+    }
+    if row != rows[index] {
+        rows.set(index, row);
+    }
 }
 
 /// A title's year line as the apps show it, with no dash (core backlog
