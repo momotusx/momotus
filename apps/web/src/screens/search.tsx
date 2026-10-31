@@ -189,6 +189,8 @@ function Panel(props: { dialog?: boolean; retry: () => void }) {
   };
   const scopeLabel = () => (current() ? kindLabel(current() as string) : "All");
   const count = () => rows().reduce((n, r) => n + scoped(r).length, 0);
+  // Why nothing came back: no addon can search, or none matched this query.
+  const none = () => (s()?.searchable === 0 ? "None of your addons can search." : `No matches for "${text()}" in your catalogs.`);
   const remember = () => void view.command({ type: "remember" });
   // One status region, there from the start, so a screen reader hears each change: Searching, the count, why
   // there is none, or why the search could not open. The visible lines below are not live: this is their voice.
@@ -198,7 +200,7 @@ function Panel(props: { dialog?: boolean; retry: () => void }) {
     if (!searching()) return "";
     if (!snap || snap.query !== text() || loading()) return "Searching";
     if (count() > 0) return `${count()} ${count() === 1 ? "result" : "results"}`;
-    return snap.searchable === 0 ? "None of your addons can search." : "No matches";
+    return none();
   };
   // The palette is modal and what is behind it is inert: Tab wraps at its first and last control instead of leaving
   // for the browser's own.
@@ -294,19 +296,16 @@ function Panel(props: { dialog?: boolean; retry: () => void }) {
               </section>
             </Show>
           </Match>
-          {/* No installed addon has a search catalog: nothing could match, so
-              the way on is an addon that searches (core `searchable`). */}
-          <Match when={s() && s()?.query === text() && !loading() && rows().length === 0 && s()?.searchable === 0}>
+          {/* Nothing came back: no addon can search (core `searchable`) or none matched. Either way the
+              way on is more addons. */}
+          <Match when={s() && s()?.query === text() && !loading() && rows().length === 0}>
             <div class="palette-note none-search">
-              <p>None of your addons can search.</p>
+              <p>{none()}</p>
               <A class="btn" href="/recommended-addons" data-f="search:addons">
                 Recommended addons
                 <ChevronRight aria-hidden />
               </A>
             </div>
-          </Match>
-          <Match when={s() && s()?.query === text() && !loading() && rows().length === 0}>
-            <p class="palette-note">No matches for "{text()}" in your catalogs.</p>
           </Match>
           <Match when={true}>
             <Show when={topGone() && !current()}>

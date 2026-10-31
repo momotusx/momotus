@@ -83,13 +83,16 @@ for (const form of Object.keys(FORMS) as Form[]) {
   });
 }
 
-test("desktop: a query nothing matches says No matches, the addons can search", async ({ browser }) => {
+test("desktop: a query nothing matches repeats it and offers Recommended addons, the addons can search", async ({ browser }) => {
   const { context, page } = await open(browser, "desktop", "/");
   await expect(page.locator(".hero-page.on .reason")).toBeVisible({ timeout: 30_000 });
   await openFromNav(page, "desktop");
   await page.locator('[data-f="search:input"]').fill("zqxjvkwpqzv");
-  await expect(page.locator(".palette-layer .palette-note").last()).toHaveText('No matches for "zqxjvkwpqzv" in your catalogs.', { timeout: 30_000 });
-  await expect(page.locator(".none-search")).toHaveCount(0);
+  await expect(page.locator(".none-search p")).toHaveText('No matches for "zqxjvkwpqzv" in your catalogs.', { timeout: 30_000 });
+  const addons = page.locator('[data-f="search:addons"]');
+  await expect(addons).toHaveText("Recommended addons");
+  await addons.click();
+  await expect(page).toHaveURL(/\/recommended-addons/);
   await context.close();
 });
 
@@ -246,7 +249,7 @@ test("desktop: one status region carries Searching, the count and No matches, an
   await expect(status).toHaveText(/^\d+ results?$/, { timeout: 30_000 });
   expect(said).toContain("Searching");
   await page.locator('[data-f="search:input"]').fill("zzqxjkvv");
-  await expect(status).toHaveText("No matches", { timeout: 30_000 });
+  await expect(status).toHaveText('No matches for "zzqxjkvv" in your catalogs.', { timeout: 30_000 });
   await page.locator('[data-f="search:input"]').fill("");
   await expect(status).toHaveText("");
 
