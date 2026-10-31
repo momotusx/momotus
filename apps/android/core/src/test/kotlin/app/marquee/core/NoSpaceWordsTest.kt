@@ -1,9 +1,9 @@
 package app.marquee.core
 
-import java.io.File
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.io.File
 
 /**
  * No free space or storage warning anywhere a viewer reads (the owner, plans/no-space-warnings.md): the string
@@ -12,9 +12,20 @@ import org.junit.Test
 class NoSpaceWordsTest {
     private val space =
         listOf(
-            "free space", "{free}", "nearly full", "device is full", "storage full", "storage is full", "no room",
-            "for this storage", "not enough space", "not enough room", "not enough storage", "out of space",
-            "low on storage", "free some storage",
+            "free space",
+            "{free}",
+            "nearly full",
+            "device is full",
+            "storage full",
+            "storage is full",
+            "no room",
+            "for this storage",
+            "not enough space",
+            "not enough room",
+            "not enough storage",
+            "out of space",
+            "low on storage",
+            "free some storage",
         )
 
     private val literal = Regex("\"((?:[^\"\\\\]|\\\\.)*)\"")
