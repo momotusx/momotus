@@ -17,6 +17,7 @@ import app.marquee.core.model.PlaybackSnapshot
 import app.marquee.core.model.Prefs
 import app.marquee.core.model.RecoveryKitResult
 import app.marquee.core.model.SearchSnapshot
+import app.marquee.core.model.SubtitleLayout
 import app.marquee.core.model.SyncReport
 import app.marquee.core.model.TitleSnapshot
 import app.marquee.core.model.TitleUpdate
@@ -116,7 +117,25 @@ class TraceDecodeTest {
                 .getValue("id")
                 .jsonPrimitive.long
         val reply = trace.first { it.dir == "in" && it.msg["id"]?.jsonPrimitive?.long == id }
-        strict.decodeFromJsonElement(Prefs.serializer(), reply.msg.getValue("result"))
+        val prefs = strict.decodeFromJsonElement(Prefs.serializer(), reply.msg.getValue("result"))
+        // Recorded before the second subtitle line (plans/dual-subtitles.md 3.4): its settings take their defaults.
+        assertEquals(null, prefs.secondSubtitle)
+        assertEquals(SubtitleLayout.Stacked, prefs.subtitleLayout)
+        assertEquals(false, prefs.secondOnPause)
+    }
+
+    @Test
+    fun `a playback recorded before the second subtitle line decodes with none`() {
+        val snapshots =
+            load("versions-playback").mapNotNull { line ->
+                (line.msg["result"] as? JsonObject)?.get("snapshot")?.takeIf { it is JsonObject && "phase" in it }
+            }
+        assertTrue(snapshots.isNotEmpty())
+        for (snapshot in snapshots) {
+            val playback = strict.decodeFromJsonElement(PlaybackSnapshot.serializer(), snapshot)
+            assertEquals(null, playback.autoSecondSubtitle)
+            assertEquals(null, playback.spokenLanguage)
+        }
     }
 
     /** Two cores and a real sync server (scripts/capture-sync-trace.ts); records and kits are placeholders. */
