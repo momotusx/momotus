@@ -203,7 +203,9 @@ enum DebugHooks {
     #if os(macOS)
     /// `-MQScrollWalk YES`: 12 s after Home shows, Home scrolls itself to its foot and back three times at a trackpad
     /// flick's speed, one step per screen refresh through AppKit, and logs each pass's frame times (`metric scroll`): the Mac's
-    /// scroll measured with no pointer or key sent to the window.
+    /// scroll measured with no pointer or key sent to the window. Each line also says how many AppKit views (and shelf
+    /// scroll views) the page holds after the pass, whether the Mac's pointer was inside the window's frame (hover may
+    /// then update on every step) and whether the window showed (one out of sight is no measurement).
     static var scrollWalk: Bool { UserDefaults.standard.bool(forKey: "MQScrollWalk") }
 
     /// `notifyutil -p app.momotus.snapshot` writes each window to
@@ -243,6 +245,8 @@ import QuartzCore
     private static let passes = 3
     private let scroll: NSScrollView
     private let room: Double
+    /// The window showed when the walk began (`showOnSomeScreen`).
+    private let visible: Bool
     private var finished: CheckedContinuation<Void, Never>?
     private var start: CFTimeInterval?
     private var last: CFTimeInterval?
@@ -252,17 +256,19 @@ import QuartzCore
     private var cpu: UInt64 = 0
     private var pass = 0
 
-    private init(scroll: NSScrollView) {
+    private init(scroll: NSScrollView, visible: Bool) {
         self.scroll = scroll
+        self.visible = visible
         room = (scroll.documentView?.frame.height ?? 0) - scroll.contentView.bounds.height
     }
 
     /// Scrolls the main window's tallest scroll view to its foot and back, `passes` times, logging one line a pass.
     static func run() async {
-        guard let window = NSApp.windows.max(by: { $0.frame.height < $1.frame.height }),
-              let scroll = scrollViews(in: window.contentView).max(by: { ($0.documentView?.frame.height ?? 0) < ($1.documentView?.frame.height ?? 0) }),
+        guard let window = NSApp.windows.max(by: { $0.frame.height < $1.frame.height }) else { return }
+        let visible = await showOnSomeScreen(window)
+        guard let scroll = scrollViews(in: window.contentView).max(by: { ($0.documentView?.frame.height ?? 0) < ($1.documentView?.frame.height ?? 0) }),
               let screen = window.screen ?? NSScreen.main else { return }
-        let walk = ScrollWalk(scroll: scroll)
+        let walk = ScrollWalk(scroll: scroll, visible: visible)
         guard walk.room > 0 else { return }
         await withCheckedContinuation { done in
             walk.finished = done
@@ -270,11 +276,27 @@ import QuartzCore
         }
     }
 
+    /// A window in a Space out of sight still draws, but its views pile up and each pass costs more than the last: the
+    /// walk tries the other displays in turn (moved only, never in front, no focus) and says whether the window shows.
+    private static func showOnSomeScreen(_ window: NSWindow) async -> Bool {
+        for screen in NSScreen.screens where screen != window.screen {
+            if window.occlusionState.contains(.visible) { break }
+            window.setFrameOrigin(NSPoint(x: screen.visibleFrame.midX - window.frame.width / 2, y: screen.visibleFrame.midY - window.frame.height / 2))
+            guard (try? await Task.sleep(for: .seconds(2))) != nil else { break }
+        }
+        return window.occlusionState.contains(.visible)
+    }
+
     private static func scrollViews(in view: NSView?) -> [NSScrollView] {
         guard let view else { return [] }
         // The outermost only: a shelf inside the page is a scroll view of its own.
         if let scroll = view as? NSScrollView { return [scroll] }
         return view.subviews.flatMap { scrollViews(in: $0) }
+    }
+
+    private static func count(_ view: NSView?) -> (all: Int, scrolls: Int) {
+        guard let view else { return (0, 0) }
+        return view.subviews.map { count($0) }.reduce((1, view is NSScrollView ? 1 : 0)) { ($0.all + $1.all, $0.scrolls + $1.scrolls) }
     }
 
     private func move(to y: Double) {
@@ -297,6 +319,9 @@ import QuartzCore
     }
 
     private func end(pass seconds: Double, link: CADisplayLink) {
+        let spent = clock_gettime_nsec_np(CLOCK_THREAD_CPUTIME_ID) - cpu
+        // What the page holds after the pass: AppKit views under it, and how many of them scroll (each shelf is one).
+        let views = Self.count(scroll.documentView)
         let ms = intervals.map { $0 * 1000 }.sorted()
         let frameMs = frame * 1000
         // Apple's hitch time: what each late frame overran its slot by, per second of scrolling.
@@ -304,10 +329,10 @@ import QuartzCore
         let hitch = late.reduce(0) { $0 + $1 - frameMs }
         let at = { (q: Double) in ms.isEmpty ? 0 : ms[min(ms.count - 1, Int(Double(ms.count) * q))] }
         let line = String(
-            format: "pass=%d frames=%d frame_ms=%.2f p50_ms=%.2f p95_ms=%.2f p99_ms=%.2f max_ms=%.2f late=%d hitch_ms_per_s=%.1f main_cpu_ms_per_s=%.0f room=%.0f view=%@",
+            format: "pass=%d frames=%d frame_ms=%.2f p50_ms=%.2f p95_ms=%.2f p99_ms=%.2f max_ms=%.2f late=%d hitch_ms_per_s=%.1f main_cpu_ms_per_s=%.0f room=%.0f view=%@ views=%d scroll_views=%d pointer_in=%d visible=%d",
             pass + 1, ms.count, frameMs, at(0.5), at(0.95), at(0.99), ms.last ?? 0, late.count, hitch / seconds,
-            Double(clock_gettime_nsec_np(CLOCK_THREAD_CPUTIME_ID) - cpu) / 1e6 / seconds, room,
-            String(describing: type(of: scroll)))
+            Double(spent) / 1e6 / seconds, room,
+            String(describing: type(of: scroll)), views.all, views.scrolls, scroll.window?.frame.contains(NSEvent.mouseLocation) == true ? 1 : 0, visible ? 1 : 0)
         coreLog.notice("metric scroll \(line, privacy: .public)")
         pass += 1
         (start, last, intervals) = (nil, nil, [])
