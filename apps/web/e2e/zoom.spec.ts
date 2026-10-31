@@ -8,7 +8,7 @@ import { chromium, expect, type Page, test } from "@playwright/test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { BROWSER_ARGS, GOT, PORTS } from "./core";
+import { BROWSER_ARGS, GOT, PORTS, ZOOM_HOSTS } from "./core";
 
 /** The synopsis's size on screen: its font size in canvas units, times the canvas scale and the device pixel ratio. */
 const syn = (page: Page) =>
@@ -80,28 +80,42 @@ test("a touch screen in the desktop form sees each episode's actions without a h
 });
 
 test("a saved site zoom is seen from the first load: text grows at 125, 175, 200 and 250 percent in a Chrome profile", async () => {
+  // A real Chrome start is slow on a loaded machine (five in one test ran past its timeout under the full suite), so
+  // one Chrome holds every zoom, each saved for its own host, and this test has three times the time.
+  test.slow();
   // Chrome's per-host zoom level is the zoom's logarithm to base 1.2 (the headless shell Playwright bundles ignores it).
   const level = (zoom: number) => Math.log(zoom) / Math.log(1.2);
   const measured: { zoom: number; dpr: number; inner: number; outer: number; form: string; size: number }[] = [];
-  for (const zoom of [1, 1.25, 1.75, 2, 2.5]) {
-    const dir = mkdtempSync(join(tmpdir(), "mq-zoom-"));
+  const dir = mkdtempSync(join(tmpdir(), "mq-zoom-"));
+  try {
+    mkdirSync(join(dir, "Default"), { recursive: true });
+    const saved = Object.fromEntries([...ZOOM_HOSTS].map(([zoom, host]) => [host, { zoom_level: level(zoom) }]));
+    writeFileSync(join(dir, "Default", "Preferences"), JSON.stringify({ partition: { per_host_zoom_levels: { x: saved } } }));
+    // Only a missing Chrome skips: a start that fails or hangs is a failure, within its own minute.
+    const context = await chromium
+      .launchPersistentContext(dir, { channel: "chrome", headless: true, viewport: null, timeout: 60_000, args: ["--window-size=1440,900", ...BROWSER_ARGS] })
+      .catch((e: Error) => {
+        if (/distribution 'chrome' is not found/.test(e.message)) return null;
+        throw e;
+      });
+    test.skip(!context, "Chrome is not installed here: the saved zoom is read by the real browser only");
+    if (!context) return;
     try {
-      mkdirSync(join(dir, "Default"), { recursive: true });
-      writeFileSync(join(dir, "Default", "Preferences"), JSON.stringify({ partition: { per_host_zoom_levels: { x: { "127.0.0.1": { zoom_level: level(zoom) } } } } }));
-      const context = await chromium.launchPersistentContext(dir, { channel: "chrome", headless: true, viewport: null, args: ["--window-size=1440,900", ...BROWSER_ARGS] }).catch(() => null);
-      test.skip(!context, "Chrome is not installed here: the saved zoom is read by the real browser only");
-      if (!context) return;
-      const page = context.pages()[0] ?? (await context.newPage());
-      await page.goto(`http://127.0.0.1:${PORTS.vite}/title/series/${GOT.id}`);
-      await expect(page.locator(".info .syn")).toBeVisible({ timeout: 30_000 });
-      const seen = await page.evaluate(() => ({ dpr: devicePixelRatio, inner: innerWidth, outer: outerWidth, form: document.documentElement.dataset.form ?? "" }));
-      // The browser applied the zoom before anything is measured.
-      expect(seen.dpr).toBeCloseTo(zoom, 2);
-      measured.push({ zoom, ...seen, size: await syn(page) });
-      await context.close();
+      for (const [zoom, host] of ZOOM_HOSTS) {
+        const page = await context.newPage();
+        await page.goto(`http://${host}:${PORTS.vite}/title/series/${GOT.id}`);
+        await expect(page.locator(".info .syn")).toBeVisible({ timeout: 30_000 });
+        const seen = await page.evaluate(() => ({ dpr: devicePixelRatio, inner: innerWidth, outer: outerWidth, form: document.documentElement.dataset.form ?? "" }));
+        // The browser applied the zoom before anything is measured.
+        expect(seen.dpr).toBeCloseTo(zoom, 2);
+        measured.push({ zoom, ...seen, size: await syn(page) });
+        await page.close();
+      }
     } finally {
-      rmSync(dir, { recursive: true, force: true });
+      await context.close();
     }
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
   }
   console.log(`zoom profile: ${JSON.stringify(measured)}`);
   const size = (zoom: number) => measured.find((m) => m.zoom === zoom)?.size ?? 0;

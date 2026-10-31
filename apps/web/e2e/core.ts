@@ -58,6 +58,9 @@ export const DUAL_PORT = 17832 + shift;
 
 /** The kind chips' own: a core with a streaming account, so a title lists debrid torrents beside direct links. */
 export const KINDS_PORT = 17836 + shift;
+/** The zoom spec's saved zooms, each on its own host in one Chrome profile (Chrome keeps a zoom per host and sends every
+ * *.localhost to this machine): the core lets these pages open its socket too. */
+export const ZOOM_HOSTS = new Map([1, 1.25, 1.75, 2, 2.5].map((zoom) => [zoom, `z${zoom * 100}.localhost`]));
 /** Every browser a run launches takes these: each name but this machine's resolves to the browser's
  * recorder, whose certificate it does not check, so pages load images and frames from the
  * recording and a run needs the network only to record (none with MQ_E2E_OFFLINE=1). A spec that
@@ -133,8 +136,10 @@ export function startBridge(port = PORTS.bridge, env: Record<string, string> = {
   // TMDB and Trakt off unless a spec gives its fake (title-scores, search-top, trakt): a build with a token or an app id
   // baked in never asks the real services, and no title page holds a slot it will never fill, whether or not this
   // machine has them.
-  // The suite's dev server is the one page origin the core lets open its socket (crates/mq-bridge/src/main.rs).
-  const hooks = { MQ_BRIDGE_ORIGINS: `http://127.0.0.1:${PORTS.vite}`, MQ_DEV_SEGMENTS: `${local}/segments`, MQ_DEV_REPLAY: `${local}/replay`, MQ_DEV_TMDB: "off", MQ_DEV_TRAKT: "off", MQ_DEV_PLUGINS: "off", ...offline };
+  // The suite's dev server is the one page origin the core lets open its socket (crates/mq-bridge/src/main.rs), under
+  // its own address and the zoom spec's hosts.
+  const origins = ["127.0.0.1", ...ZOOM_HOSTS.values()].map((host) => `http://${host}:${PORTS.vite}`).join(",");
+  const hooks = { MQ_BRIDGE_ORIGINS: origins, MQ_DEV_SEGMENTS: `${local}/segments`, MQ_DEV_REPLAY: `${local}/replay`, MQ_DEV_TMDB: "off", MQ_DEV_TRAKT: "off", MQ_DEV_PLUGINS: "off", ...offline };
   const proc = spawn(bridgeBinary(), [], {
     env: { ...process.env, ...hooks, ...env, MQ_DATA: data, MQ_BRIDGE_PORT: String(port) },
     stdio: ["ignore", "pipe", "inherit"],
