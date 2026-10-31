@@ -684,7 +684,6 @@ export default function SettingsScreen() {
                         onChange={(next) => patch({ streams: { languages: next } })}
                       />
                     </div>
-                    <p class="note small">The numbers are the order you turned languages on; number 1 wins. A subtitle you pick while watching makes its language number 1.</p>
                     {/* Dual subtitles (plans/dual-subtitles.md 5.5): the same profile values as the player's Second line tab. */}
                     <div class="sgroup filters">
                       <SecondLine chosen={x().secondSubtitle} first={x().subtitleLanguages[0]} onPick={(v) => patch({ secondSubtitle: v })} />
@@ -710,6 +709,7 @@ export default function SettingsScreen() {
                         />
                       </Show>
                     </div>
+                    <p class="note small">The numbers are the order you turned languages on; number 1 wins. A subtitle you pick while watching makes its language number 1.</p>
                   </>
                 )}
               </Show>
