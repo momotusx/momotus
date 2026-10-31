@@ -2701,9 +2701,15 @@ impl From<String> for Failure {
 
 impl From<mq_runtime::CoreError> for Failure {
     fn from(e: mq_runtime::CoreError) -> Self {
+        let kind = e.failure_kind();
+        // A Trakt sentence is shown as it is, without the log's "Trakt: ".
+        let error = match e {
+            mq_runtime::CoreError::Trakt(said) => said,
+            e => e.to_string(),
+        };
         Self {
-            kind: e.failure_kind(),
-            ..Failure::from(e.to_string())
+            kind,
+            ..Failure::from(error)
         }
     }
 }
@@ -3650,5 +3656,29 @@ mod catalog {
                 json!({"id": 7, "ok": false, "code": code, "error": words, "kind": "said"})
             );
         }
+    }
+
+    /// The sync flows read a relay's status from the kind (an invite on
+    /// start, a used code on approve, a lost token on compare), never the
+    /// text; a Trakt sentence goes out without the log's prefix.
+    #[test]
+    fn sync_and_trakt_failures_carry_their_kind() {
+        let http = |status| {
+            mq_sync::SyncError::Http(mq_http::HttpError::Status {
+                status,
+                body: Default::default(),
+                retry_after: None,
+            })
+        };
+        for (status, kind) in [(401, "unauthorized"), (403, "forbidden"), (404, "notFound")] {
+            let sent = message(json!(1), Err(Failure::from(http(status))));
+            assert_eq!(sent["kind"], kind, "{sent}");
+        }
+        let trakt = mq_runtime::CoreError::Trakt("Trakt did not answer".into());
+        let sent = message(json!(2), Err(Failure::from(trakt)));
+        assert_eq!(
+            (&sent["kind"], &sent["error"]),
+            (&json!("said"), &json!("Trakt did not answer"))
+        );
     }
 }
