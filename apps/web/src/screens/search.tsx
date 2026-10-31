@@ -214,7 +214,8 @@ function Panel(props: { dialog?: boolean; retry: () => void }) {
     to.focus();
   };
 
-  // A search that could not open puts a remote on its Try again: the field has nothing to search with.
+  // A search that could not open puts a remote on its Try again: the field has nothing to search with. Try again is
+  // then the screen's first focus too, so a first focus that comes after the failure (a late frame) lands on it.
   const failed = () => view.state.status.state === "failed";
   createEffect(on(failed, (f) => f && autoFocusSoon(() => document.querySelector<HTMLElement>('[data-f="search:retry"]')), { defer: true }));
 
@@ -242,7 +243,7 @@ function Panel(props: { dialog?: boolean; retry: () => void }) {
           spellcheck={false}
           enterkeyhint="search"
           data-f="search:input"
-          data-autofocus
+          data-autofocus={failed() ? undefined : ""}
           onInput={(e) => send(e.currentTarget.value)}
         />
       </label>
@@ -273,7 +274,7 @@ function Panel(props: { dialog?: boolean; retry: () => void }) {
                 Search could not open.
               </p>
               <Why class="palette-note" reason={(view.state.status as { reason: string }).reason} raw={(view.state.status as { raw?: string }).raw} />
-              <button class="btn" data-f="search:retry" onClick={() => props.retry()}>
+              <button class="btn" data-f="search:retry" data-autofocus onClick={() => props.retry()}>
                 <RefreshCw aria-hidden />
                 Try again
               </button>

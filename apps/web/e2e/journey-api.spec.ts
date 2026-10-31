@@ -671,11 +671,23 @@ test("Search that could not open offers Try again, which opens it anew with the 
     refused++;
     return { ok: false, error: "the core did not answer" };
   });
+  // A loaded machine: no frame comes until the failure is drawn, so the screen's first focus (on the next frame
+  // after the screen was asked for) runs after it, as it did under the full suite's load.
+  await context.addInitScript(() => {
+    const frame = window.requestAnimationFrame.bind(window);
+    let drawn = false;
+    window.requestAnimationFrame = (cb) => {
+      const go = () => ((drawn ||= !!document.querySelector('[data-f="search:retry"]')) ? frame(cb) : window.setTimeout(go, 20));
+      go();
+      return 0;
+    };
+  });
   await p.goto("/search?q=journey&form=tv");
   const retry = p.locator('[data-f="search:retry"]');
   await expect(retry).toBeVisible({ timeout: 30_000 });
   await expect(p.locator(".palette-body")).toContainText("Search could not open.");
-  // A remote lands on it, and Enter opens the search anew.
+  // A remote lands on it and stays there once the late frames have run, and Enter opens the search anew.
+  await p.evaluate(() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))));
   await expect(retry).toBeFocused();
   await p.keyboard.press("Enter");
   await expect(retry).toHaveCount(0);
