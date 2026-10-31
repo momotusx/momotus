@@ -25,8 +25,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import app.marquee.core.ErrorCopy
 import app.marquee.core.PluginCopy
-import app.marquee.core.client.CoreError
 import app.marquee.core.model.ListedRepo
 import app.marquee.core.model.PluginDirectory
 import app.marquee.core.model.PluginRepoInfo
@@ -182,7 +182,7 @@ private fun ListedCard(
 }
 
 /** Why an op failed, in the core's words. */
-private fun reason(e: Throwable): String = (e as? CoreError)?.message ?: e.message ?: "Something went wrong"
+private fun reason(e: Throwable): String = ErrorCopy.words(e)
 
 /** "Could not add: {reason}" under the field or the card. */
 private fun couldNotAdd(e: Throwable): Said {

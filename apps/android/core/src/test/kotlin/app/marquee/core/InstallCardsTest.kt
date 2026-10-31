@@ -57,7 +57,7 @@ class InstallCardsTest {
     fun `a failure keeps the core's code and words on its own card only`() =
         runTest {
             val cards = cards()
-            cards.run(a) { throw CoreError("This addon now needs setup first", code = "needsSetup") }
+            cards.run(a) { throw CoreError("This addon now needs setup first", code = "needsSetup", kind = "said") }
             cards.run(b) { }
             runCurrent()
             assertEquals(InstallCards.State(false, "needsSetup", "This addon now needs setup first"), cards[a])
@@ -121,17 +121,19 @@ class InstallCardsTest {
         runTest {
             assertEquals(
                 "This addon is not the one the list named",
-                InstallCards.wordsOf(CoreError("This addon is not the one the list named", code = "mismatch")),
+                ErrorCopy.words(
+                    CoreError("This addon is not the one the list named", code = "mismatch", kind = "said"),
+                ),
             )
             assertEquals(
-                "The core is not responding.",
-                InstallCards.wordsOf(CoreError("installListed did not answer in 1m", timedOut = true)),
+                ErrorCopy.FAILED,
+                ErrorCopy.words(CoreError("installListed did not answer in 1m", timedOut = true)),
             )
-            assertEquals("IllegalStateException: boom", InstallCards.wordsOf(IllegalStateException("boom")))
+            assertEquals(ErrorCopy.FAILED, ErrorCopy.words(IllegalStateException("boom")))
             val cards = cards()
             cards.run(a) { throw java.io.IOException("socket closed") }
             runCurrent()
-            assertEquals("IOException: socket closed", cards[a]?.words)
+            assertEquals(ErrorCopy.FAILED, cards[a]?.words)
         }
 
     @Test

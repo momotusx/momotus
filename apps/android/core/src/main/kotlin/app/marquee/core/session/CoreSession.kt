@@ -250,7 +250,7 @@ class CoreSession(
         if (!mayRestart()) {
             health = CoreHealth.Stopped(reason)
             // A start still waiting goes Home, which says why.
-            ready.completeExceptionally(CoreError(reason))
+            ready.completeExceptionally(CoreError(reason, kind = "coreStopped"))
             return
         }
         health = CoreHealth.Restarting

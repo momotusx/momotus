@@ -51,9 +51,8 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import app.marquee.core.DebridCopy
+import app.marquee.core.ErrorCopy
 import app.marquee.core.ProfileCopy
-import app.marquee.core.client.CoreError
-import app.marquee.core.client.CoreLog
 import app.marquee.core.model.AccountState
 import app.marquee.core.model.DebridAccount
 import app.marquee.core.model.DebridLoginSnapshot
@@ -134,7 +133,7 @@ class DebridHolder(
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
-                        DebridSaid(service, "The key was not taken: ${why(e)}.", Status.Bad)
+                        DebridSaid(service, "The key was not taken. ${ErrorCopy.words(e)}", Status.Bad)
                     }
             }
         }
@@ -155,7 +154,7 @@ class DebridHolder(
                     } catch (e: Exception) {
                         DebridSaid(
                             account.service,
-                            "Not disconnected yet: ${why(e)}. It finishes at the next start.",
+                            "Not disconnected yet. It finishes at the next start.",
                             Status.Warn,
                         )
                     }
@@ -166,8 +165,6 @@ class DebridHolder(
     fun connected(service: String) {
         said = DebridSaid(service, "Connected", Status.Ok)
     }
-
-    private fun why(e: Exception) = (e as? CoreError)?.message ?: CoreLog.describe(e)
 
     override fun onCleared() {
         closeLogin()

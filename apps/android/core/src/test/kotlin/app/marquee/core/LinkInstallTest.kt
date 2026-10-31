@@ -36,10 +36,13 @@ class LinkInstallTest {
         runTest {
             val link = LinkInstall(backgroundScope)
             var cleared = 0
-            link.run({ throw CoreError("the manifest is not valid JSON") }, added = { cleared++ })
+            link.run(
+                { throw CoreError("decode: expected value at line 1", kind = "unreadable") },
+                added = { cleared++ },
+            )
             runCurrent()
             assertEquals(
-                LinkInstall.Said("Adding the addon did not work: the manifest is not valid JSON", failed = true),
+                LinkInstall.Said("Adding the addon did not work: ${ErrorCopy.UNREADABLE}", failed = true),
                 link.said,
             )
             assertEquals(0, cleared)
@@ -88,11 +91,11 @@ class LinkInstallTest {
             link.edited()
             assertNull(link.said)
             // Any other line stays through an edit: it says how the last add went.
-            link.run({ throw CoreError("the manifest is not valid JSON") })
+            link.run({ throw CoreError("decode: expected value at line 1", kind = "unreadable") })
             runCurrent()
             link.edited()
             assertEquals(
-                LinkInstall.Said("Adding the addon did not work: the manifest is not valid JSON", failed = true),
+                LinkInstall.Said("Adding the addon did not work: ${ErrorCopy.UNREADABLE}", failed = true),
                 link.said,
             )
             // A profile switch drops a warning too.
@@ -205,10 +208,12 @@ class LinkInstallTest {
     fun `a link the core cannot read stays under the field with no sheet`() =
         runTest {
             val link = LinkInstall(backgroundScope)
-            link.check("https://a.example/manifest.json") { _, _ -> throw CoreError("the manifest is not valid JSON") }
+            link.check(
+                "https://a.example/manifest.json",
+            ) { _, _ -> throw CoreError("decode: expected value at line 1", kind = "unreadable") }
             runCurrent()
             assertEquals(
-                LinkInstall.Said("Adding the addon did not work: the manifest is not valid JSON", failed = true),
+                LinkInstall.Said("Adding the addon did not work: ${ErrorCopy.UNREADABLE}", failed = true),
                 link.said,
             )
             assertNull(link.checked)

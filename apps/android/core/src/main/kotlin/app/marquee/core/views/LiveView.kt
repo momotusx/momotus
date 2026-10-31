@@ -6,8 +6,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.Snapshot
+import app.marquee.core.ErrorCopy
 import app.marquee.core.client.CoreClient
-import app.marquee.core.client.CoreError
 import app.marquee.core.client.CoreLog
 import app.marquee.core.client.Subscription
 import app.marquee.core.client.ViewBinding
@@ -131,7 +131,7 @@ abstract class LiveView<S, U>(
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            client.onState { if (isCurrent(gen)) status = ViewStatus.Failed(reasonOf(e)) }
+            client.onState { if (isCurrent(gen)) status = ViewStatus.Failed(ErrorCopy.words(e)) }
             opened.completeExceptionally(e)
         }
     }
@@ -218,11 +218,4 @@ abstract class LiveView<S, U>(
         job?.cancel()
         opened.cancel()
     }
-
-    private fun reasonOf(e: Exception): String =
-        when {
-            e is CoreError && e.timedOut -> "The core is not responding."
-            e is CoreError -> e.message ?: "The core refused the request."
-            else -> e.message ?: e.javaClass.simpleName
-        }
 }

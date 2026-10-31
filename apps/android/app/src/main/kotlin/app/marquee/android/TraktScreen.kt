@@ -39,10 +39,9 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import app.marquee.core.DebridCopy
+import app.marquee.core.ErrorCopy
 import app.marquee.core.ProfileCopy
 import app.marquee.core.TraktCopy
-import app.marquee.core.client.CoreError
-import app.marquee.core.client.CoreLog
 import app.marquee.core.model.TraktLoginSnapshot
 import app.marquee.core.model.TraktStatus
 import app.marquee.core.model.TraktUnmapped
@@ -155,7 +154,7 @@ class TraktHolder(
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
-                    failed((e as? CoreError)?.message ?: CoreLog.describe(e)) to Status.Bad
+                    failed(ErrorCopy.words(e)) to Status.Bad
                 } finally {
                     busy = false
                 }

@@ -332,11 +332,15 @@ class CoreClientTest {
         runBlocking {
             client.attach(
                 CoreTransport { text ->
-                    client.onMessage("""{"id":${idOf(text)},"ok":false,"error":"removed","code":"dropped"}""")
+                    client.onMessage(
+                        """{"id":${idOf(text)},"ok":false,"error":"removed","code":"dropped","kind":"notFound"}""",
+                    )
                 },
             )
             val error = assertFailsWith<CoreError> { client.request("syncNow") }
             assertEquals("dropped", error.code)
+            // And its kind, the words a screen shows (ErrorCopy).
+            assertEquals("notFound", error.kind)
         }
 
     @Test
@@ -496,9 +500,11 @@ class CoreClientTest {
 
             client.onMessage("""{"core":"died","reason":"task panicked"}""")
 
-            assertEquals("The core stopped.", waiting.await().exceptionOrNull()?.message)
+            assertEquals(ErrorCopy.CORE_STOPPED, waiting.await().exceptionOrNull()?.message)
+            // A screen says it in the same words.
+            assertEquals(ErrorCopy.CORE_STOPPED, ErrorCopy.words(waiting.await().exceptionOrNull()))
             until("reported") { died == listOf("task panicked") }
-            until("the view shows it") { view.status == ViewStatus.Failed("The core stopped.") }
+            until("the view shows it") { view.status == ViewStatus.Failed(ErrorCopy.CORE_STOPPED) }
             assertFailsWith<CoreError> { client.request("setPrefs") }
             assertTrue(view.currentSubscription?.alive == false)
             Unit
@@ -539,7 +545,7 @@ class CoreClientTest {
             client.onMessage("""{"core":"overflow"}""")
 
             until("reported") { died.singleOrNull()?.startsWith("overflow") == true }
-            until("the view shows it") { view.status == ViewStatus.Failed("The core stopped.") }
+            until("the view shows it") { view.status == ViewStatus.Failed(ErrorCopy.CORE_STOPPED) }
             assertFailsWith<CoreError> { client.request("setPrefs") }
             Unit
         }

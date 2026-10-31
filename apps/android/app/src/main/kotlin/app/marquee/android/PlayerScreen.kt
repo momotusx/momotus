@@ -13,6 +13,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import app.marquee.core.ErrorCopy
 import app.marquee.core.Format
 import app.marquee.core.PlayPick
 import app.marquee.core.VersionsCopy
@@ -227,7 +228,7 @@ class PlayerHolder(
         } catch (e: Exception) {
             // The version could not be opened (no longer listed): the reason under the headline, and Try
             // again opens it again (review 2026-10-20 r3 P3-9).
-            controller.cannotOpen(e.message ?: "The core could not start this version") {
+            controller.cannotOpen(ErrorCopy.words(e)) {
                 viewModelScope.launch { start() }
             }
         }

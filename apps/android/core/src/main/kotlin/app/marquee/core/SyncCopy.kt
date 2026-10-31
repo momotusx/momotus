@@ -341,12 +341,14 @@ object SyncCopy {
 
     /**
      * A sync failure in plain words; [code] names the ones with a fix. The core's own sentences are
-     * kept; anything that may name the server's address is replaced.
+     * kept; anything that may name the server's address is replaced. The statuses are the reply's [kind],
+     * never read out of [message].
      */
     fun problem(
         code: String?,
         message: String,
         action: Action = Action.Round,
+        kind: String? = null,
     ): String {
         when (code) {
             "dropped" -> {
@@ -415,19 +417,20 @@ object SyncCopy {
                 return "Only the main profile can do that."
             }
         }
-        if (action == Action.Start && message == "http status 403") {
+        if (action == Action.Start && kind == "forbidden") {
             return "This sync server needs an invite code, or the one entered is wrong."
         }
-        if (action == Action.Recover && message == "http status 404") return WRONG_KIT
+        if (action == Action.Recover && kind == "notFound") return WRONG_KIT
         // The sync server no longer knows this device's token (a restore without it): retrying cannot help.
-        if (action == Action.Compare && message == "http status 401") return FORK_TOKEN_LOST
-        if (action == Action.Approve && (message == "http status 404" || message == "http status 410")) {
+        if (action == Action.Compare && kind == "unauthorized") return FORK_TOKEN_LOST
+        if (action == Action.Approve && kind == "notFound") {
             return "This code expired or was used already. Ask the new device for a new one."
         }
         if (message.startsWith("roster: ")) return pairingProblem("pairing: " + message.removePrefix("roster: "))
-        for (kept in listOf("pairing: ", "invalid url", "blocked private address", "the relay must use https")) {
+        for (kept in listOf("pairing: ", "the relay must use https")) {
             if (message.startsWith(kept)) return pairingProblem(message)
         }
+        if (kind == "invalidUrl" || kind == "blockedAddress") return pairingProblem(message, kind)
         return when (action) {
             Action.Round -> {
                 "The sync server did not answer. Your changes wait here and go out on the next sync."
@@ -456,7 +459,10 @@ object SyncCopy {
      * Why pairing stopped, in words. The core's own pairing reasons are fixed sentences and are kept;
      * a connection or address error is replaced, since its text can name the server's address.
      */
-    fun pairingProblem(reason: String): String =
+    fun pairingProblem(
+        reason: String,
+        kind: String? = null,
+    ): String =
         when {
             reason.startsWith("pairing: ") -> {
                 reason.removePrefix("pairing: ").replaceFirstChar { it.uppercase() } + "."
@@ -466,11 +472,11 @@ object SyncCopy {
                 problem("insecure", reason)
             }
 
-            reason.startsWith("invalid url") -> {
+            kind == "invalidUrl" -> {
                 "That is not a sync server address. It looks like https://sync.example.org."
             }
 
-            reason.startsWith("blocked private address") -> {
+            kind == "blockedAddress" -> {
                 "This device does not connect to that address."
             }
 

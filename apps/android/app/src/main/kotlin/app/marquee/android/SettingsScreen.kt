@@ -62,6 +62,7 @@ import app.marquee.core.AccountRules
 import app.marquee.core.AddonsCopy
 import app.marquee.core.DebridCopy
 import app.marquee.core.DefaultsCopy
+import app.marquee.core.ErrorCopy
 import app.marquee.core.FindAddonsCopy
 import app.marquee.core.LanguagePicks
 import app.marquee.core.LinkInstall
@@ -69,8 +70,6 @@ import app.marquee.core.PluginCopy
 import app.marquee.core.StreamChoiceCopy
 import app.marquee.core.SyncCopy
 import app.marquee.core.TraktCopy
-import app.marquee.core.client.CoreError
-import app.marquee.core.client.CoreLog
 import app.marquee.core.model.AddonInfo
 import app.marquee.core.model.LanguageChoice
 import app.marquee.core.model.PluginsAnswer
@@ -187,7 +186,7 @@ internal class Runner(
                 said =
                     Said(
                         place,
-                        "$what did not work: ${(e as? CoreError)?.message ?: CoreLog.describe(e)}",
+                        "$what did not work: ${ErrorCopy.words(e)}",
                         failed = true,
                     )
             } finally {

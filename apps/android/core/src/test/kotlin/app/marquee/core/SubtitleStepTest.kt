@@ -141,7 +141,7 @@ class SubtitleStepTest {
         core.answers["languages"] = { fail(null, "the core is busy") }
         val step = SubtitleStep(core.ops, core.scope, "tr").also { it.load() }
         core.waitFor("the failure") { step.loaded }
-        assertEquals("the core is busy", step.listProblem)
+        assertEquals(ErrorCopy.FAILED, step.listProblem)
         assertNull(step.chosen)
         var done = false
         step.save { done = true }
@@ -157,7 +157,7 @@ class SubtitleStepTest {
         var done = false
         step.save { done = true }
         core.waitFor("the answer") { step.problem != null }
-        assertEquals("the profile is locked", step.problem)
+        assertEquals(ErrorCopy.FAILED, step.problem)
         assertEquals(false, done)
     }
 }

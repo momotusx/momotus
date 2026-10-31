@@ -47,7 +47,7 @@ class DefaultsStep(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                problem = InstallCards.wordsOf(e)
+                problem = ErrorCopy.words(e)
             }
         }
     }
@@ -73,7 +73,7 @@ class DefaultsStep(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                failed = InstallCards.wordsOf(e)
+                failed = ErrorCopy.words(e)
             } finally {
                 busy = false
             }

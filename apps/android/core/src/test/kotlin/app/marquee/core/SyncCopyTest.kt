@@ -32,18 +32,31 @@ class SyncCopyTest {
     fun `each action words the same answer for what it means there`() {
         assertEquals(
             "This sync server needs an invite code, or the one entered is wrong.",
+            SyncCopy.problem(null, "refused", Action.Start, kind = "forbidden"),
+        )
+        // The status is the reply's kind, never read out of the text.
+        assertEquals(
+            "The sync server did not answer. Try again in a moment.",
             SyncCopy.problem(null, "http status 403", Action.Start),
         )
-        assertEquals(SyncCopy.WRONG_KIT, SyncCopy.problem(null, "http status 404", Action.Recover))
+        assertEquals(
+            SyncCopy.FORK_TOKEN_LOST,
+            SyncCopy.problem(null, "unknown token", Action.Compare, kind = "unauthorized"),
+        )
+        assertEquals(
+            "That is not a sync server address. It looks like https://sync.example.org.",
+            SyncCopy.problem(null, "anything", Action.Start, kind = "invalidUrl"),
+        )
+        assertEquals(SyncCopy.WRONG_KIT, SyncCopy.problem(null, "gone", Action.Recover, kind = "notFound"))
         assertEquals(SyncCopy.WRONG_KIT, SyncCopy.problem("kitUnknown", "opens no account", Action.Recover))
         assertEquals(
             "This code expired or was used already. Ask the new device for a new one.",
-            SyncCopy.problem(null, "http status 410", Action.Approve),
+            SyncCopy.problem(null, "gone", Action.Approve, kind = "notFound"),
         )
         // A 404 while making a kit is not a used pairing code.
         assertEquals(
             "The sync server did not answer. Try again in a moment.",
-            SyncCopy.problem(null, "http status 404", Action.Kit),
+            SyncCopy.problem(null, "gone", Action.Kit, kind = "notFound"),
         )
         assertEquals(
             "The sync server did not answer, so this list may be out of date. Try again in a moment.",
@@ -258,7 +271,10 @@ class SyncCopyTest {
         assertEquals("Its 2 recovery kits go with it.", SyncCopy.goesWith(2))
         assertEquals(SyncCopy.FORK_CHANGED, SyncCopy.problem("rosterChanged", "", Action.ServerList))
         // A server that lost this device's token: retrying cannot help, so it says so.
-        assertEquals(SyncCopy.FORK_TOKEN_LOST, SyncCopy.problem(null, "http status 401", Action.Compare))
+        assertEquals(
+            SyncCopy.FORK_TOKEN_LOST,
+            SyncCopy.problem(null, "token unknown", Action.Compare, kind = "unauthorized"),
+        )
         assertEquals(
             "The sync server did not answer, so the lists could not be compared. Try again in a moment.",
             SyncCopy.problem(null, "http status 502", Action.Compare),

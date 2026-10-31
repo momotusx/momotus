@@ -147,7 +147,7 @@ class StreamChoiceSettingsTest {
             assertEquals("height", undo.getValue("choice").jsonPrimitive.content)
             page.set("hdr", false)
             until { page.problem != null }
-            assertEquals("the profile is locked", page.problem)
+            assertEquals(ErrorCopy.FAILED, page.problem)
         }
 
     @Test
@@ -172,7 +172,7 @@ class StreamChoiceSettingsTest {
             page.answer(StreamChoiceCopy.FAST) { went = true }
             until { page.problem != null && !page.answering }
             assertFalse(went)
-            assertEquals("the profile is locked", page.problem)
+            assertEquals(ErrorCopy.FAILED, page.problem)
         }
 
     @Test

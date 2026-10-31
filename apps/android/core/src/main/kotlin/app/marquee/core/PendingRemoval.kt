@@ -95,7 +95,7 @@ class PendingRemoval(
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            val words = TileCopy.removeFailed(tile.name, InstallCards.wordsOf(e))
+            val words = TileCopy.removeFailed(tile.name, ErrorCopy.words(e))
             failed = words
             // Said for a while, then the note goes.
             scope.launch {

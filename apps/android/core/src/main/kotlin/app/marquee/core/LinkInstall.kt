@@ -145,7 +145,7 @@ class LinkInstall(
         if (e is CoreError && e.code == TOKEN_IN_LINK && !acknowledged) {
             Said(TOKEN_WARNING, failed = true, token = true)
         } else {
-            Said("Adding the addon did not work: ${InstallCards.wordsOf(e)}", failed = true)
+            Said("Adding the addon did not work: ${ErrorCopy.words(e)}", failed = true)
         }
 
     /**

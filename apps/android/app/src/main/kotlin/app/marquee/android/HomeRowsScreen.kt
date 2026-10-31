@@ -42,9 +42,8 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import app.marquee.core.ErrorCopy
 import app.marquee.core.TileCopy
-import app.marquee.core.client.CoreError
-import app.marquee.core.client.CoreLog
 import app.marquee.core.model.HomeCatalog
 import app.marquee.core.session.CoreOps
 import app.marquee.core.session.CoreSession
@@ -104,7 +103,7 @@ class HomeRowsHolder(
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
-                    failure = (e as? CoreError)?.message ?: CoreLog.describe(e)
+                    failure = ErrorCopy.words(e)
                 }
             }
         }

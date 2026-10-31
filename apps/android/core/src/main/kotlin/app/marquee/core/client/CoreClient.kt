@@ -3,6 +3,7 @@ package app.marquee.core.client
 import android.os.Handler
 import android.os.HandlerThread
 import androidx.compose.runtime.snapshots.Snapshot
+import app.marquee.core.ErrorCopy
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
@@ -38,8 +39,9 @@ fun interface CoreTransport {
 }
 
 /**
- * The core answered `ok: false` (its plain text is the message, and [code] names the failures an app
- * can act on, such as "dropped" for sync), or did not answer in time.
+ * The core answered `ok: false` (its raw text is the message, for the log only; [kind] is what a screen
+ * shows, `ErrorCopy.words`; [code] names the failures an app can act on, such as "dropped" for sync), or
+ * did not answer in time.
  */
 class CoreError(
     message: String,
@@ -49,6 +51,8 @@ class CoreError(
     val retryAfterMs: Long? = null,
     /** With code `viewsOpen`: the views still open. */
     val views: List<String> = emptyList(),
+    /** The reply's `kind`: what a screen shows for it (apps/shared/error-words.json). */
+    val kind: String? = null,
 ) : Exception(message)
 
 /** The protocol's JSON settings: tolerant of keys a newer core adds. Tests decode strictly. */
@@ -198,7 +202,7 @@ class CoreClient(
 
     /** The core could not open: every waiting and later request fails with this reason. */
     fun attachFailed(reason: String) {
-        attached.completeExceptionally(CoreError(reason))
+        attached.completeExceptionally(CoreError(reason, kind = "coreNotStarted"))
     }
 
     /** Entry point for the core's listener. Never blocks, never parses. */
@@ -376,9 +380,14 @@ class CoreClient(
         completions: MutableList<() -> Unit>,
     ) {
         CoreLog.e("the core stopped: ${reason.take(200)}")
-        val message = "The core stopped."
+        val message = ErrorCopy.CORE_STOPPED
         epoch++
-        attached = CompletableDeferred<CoreTransport>().also { it.completeExceptionally(CoreError(message)) }
+        attached =
+            CompletableDeferred<CoreTransport>().also {
+                it.completeExceptionally(
+                    CoreError(message, kind = "coreStopped"),
+                )
+            }
         val waiting = pending.values.toList()
         val open = subs.values.toList()
         subs.clear()
@@ -393,8 +402,8 @@ class CoreClient(
         completions.add {
             for (w in waiting) {
                 when (w) {
-                    is Pending.Plain -> w.deferred.completeExceptionally(CoreError(message))
-                    is Pending.Subscribe -> w.deferred.completeExceptionally(CoreError(message))
+                    is Pending.Plain -> w.deferred.completeExceptionally(CoreError(message, kind = "coreStopped"))
+                    is Pending.Subscribe -> w.deferred.completeExceptionally(CoreError(message, kind = "coreStopped"))
                 }
             }
             onCoreDied?.invoke(reason)
@@ -486,6 +495,7 @@ class CoreClient(
         }
         val error = message["error"]?.jsonPrimitive?.contentOrNull ?: "request failed"
         val code = message["code"]?.jsonPrimitive?.contentOrNull
+        val kind = message["kind"]?.jsonPrimitive?.contentOrNull
         when (waiting) {
             is Pending.Plain -> {
                 completions.add {
@@ -501,6 +511,7 @@ class CoreClient(
                                     (message["views"] as? JsonArray)
                                         ?.mapNotNull { it.jsonPrimitive.contentOrNull }
                                         .orEmpty(),
+                                kind = kind,
                             ),
                         )
                     }
@@ -509,7 +520,7 @@ class CoreClient(
 
             is Pending.Subscribe -> {
                 if (!ok) {
-                    completions.add { waiting.deferred.completeExceptionally(CoreError(error)) }
+                    completions.add { waiting.deferred.completeExceptionally(CoreError(error, kind = kind)) }
                     return
                 }
                 val sub = result?.get("sub")?.jsonPrimitive?.longOrNull
@@ -569,7 +580,7 @@ class Subscription internal constructor(
     val alive: Boolean get() = born == client.epoch
 
     suspend fun command(command: JsonObject): JsonElement {
-        if (!alive) throw CoreError("The core stopped.")
+        if (!alive) throw CoreError("The core stopped.", kind = "coreStopped")
         return client.request("command", mapOf("sub" to JsonPrimitive(sub), "command" to command))
     }
 

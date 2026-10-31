@@ -8,6 +8,7 @@ import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -78,7 +79,9 @@ class PendingRemovalTest {
         assertNull(removal.removing)
         val said = removal.failed.orEmpty()
         assertTrue(said.startsWith("Title a could not be removed from Continue Watching: "), said)
-        assertTrue("timed out" in said, said)
+        // In words, never the error's own text.
+        assertTrue(ErrorCopy.FAILED.trimEnd('.') in said, said)
+        assertFalse("timed out" in said, said)
     }
 
     @Test

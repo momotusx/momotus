@@ -747,8 +747,9 @@ open class SyncAccount(
             e: Throwable,
             action: SyncCopy.Action,
         ): Problem {
-            val code = (e as? CoreError)?.code
-            return Problem(code, SyncCopy.problem(code, (e as? CoreError)?.message ?: e.message.orEmpty(), action))
+            val core = e as? CoreError
+            val code = core?.code
+            return Problem(code, SyncCopy.problem(code, core?.message ?: e.message.orEmpty(), action, core?.kind))
         }
     }
 }

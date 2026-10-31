@@ -3,8 +3,6 @@ package app.marquee.core
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import app.marquee.core.client.CoreError
-import app.marquee.core.client.CoreLog
 import app.marquee.core.model.StreamConditions
 import app.marquee.core.session.CoreOps
 import kotlinx.coroutines.CancellationException
@@ -97,7 +95,7 @@ class StreamChoiceSettings(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                problem = (e as? CoreError)?.message ?: CoreLog.describe(e)
+                problem = ErrorCopy.words(e)
             } finally {
                 done()
             }

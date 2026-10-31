@@ -77,6 +77,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
+import app.marquee.core.ErrorCopy
 import app.marquee.core.ProfileCopy
 import app.marquee.core.client.CoreError
 import app.marquee.core.model.ProfileInfo
@@ -132,7 +133,7 @@ internal fun tried(e: Throwable): Tried {
     return when {
         c?.code == "wrongPin" -> Tried.Wrong
         c?.code == "locked" && c.retryAfterMs != null -> Tried.Wait(c.retryAfterMs!!)
-        else -> Tried.Problem(ProfileCopy.problem(c?.code, e.message ?: "That did not work."))
+        else -> Tried.Problem(ProfileCopy.problem(c?.code, ErrorCopy.words(e)))
     }
 }
 
@@ -825,12 +826,15 @@ private fun ForgotPin(
                             // The PIN is gone; only the switch was refused (or one was already out).
                             val refused = gate.switchProblem
                             "The PIN was removed. " +
-                                ProfileCopy.problem(refused?.code, refused?.message ?: "Choose the profile again.")
+                                ProfileCopy.problem(
+                                    refused?.code,
+                                    refused?.let(ErrorCopy::words) ?: "Choose the profile again.",
+                                )
                         }
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
-                        e.message ?: "The PIN could not be reset."
+                        ErrorCopy.words(e)
                     }
             }
         }

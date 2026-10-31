@@ -792,7 +792,7 @@ class CoreOps(
     }
 
     /**
-     * After a roster conflict: both sides, read only. Fails with `http status 401` when the sync
+     * After a roster conflict: both sides, read only. Fails with kind `unauthorized` when the sync
      * server no longer knows this device's token (a restore without it).
      */
     suspend fun forkPreview(record: SyncRecord): ForkPreview =
