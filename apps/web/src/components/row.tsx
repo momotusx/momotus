@@ -16,9 +16,10 @@ import type { HomeRow } from "../core/generated/HomeRow";
 import type { Tile as TileData } from "../core/generated/Tile";
 import { op } from "../core/client";
 import { onProfileReset } from "../core/profiles";
-import { form, scale } from "../form";
+import { form, scale, viewport } from "../form";
 import { pct, posterLabel, titlePath } from "../lib/format";
 import { caption } from "../lib/words";
+import { wordFit } from "../lib/word-fit";
 import { visibleRange } from "../lib/range";
 import { rowWords } from "../lib/rows";
 
@@ -173,9 +174,9 @@ export function TileCard(props: {
       <Show when={props.captions !== false}>
         {/* The name, then the year or the core's caption: no scores (the cover carries them). */}
         <p class="cap">
-          <b>{props.tile.name}</b>
+          <b ref={(el) => fitWords(el, () => props.tile.name)} />
           <Show when={sub()}>
-            <span class="num">{sub()}</span>
+            <span class="num" ref={(el) => fitWords(el, () => sub() ?? "")} />
           </Show>
         </p>
       </Show>
@@ -201,6 +202,27 @@ export function TileCard(props: {
       </button>
     </div>
   );
+}
+
+// The text face draws wider than its fallback: lines measured before a face loaded are measured again.
+const [fonts, setFonts] = createSignal(0);
+document.fonts?.addEventListener("loadingdone", () => setFonts((n) => n + 1));
+
+/** Keeps a caption line (`nowrap`, `overflow: hidden`) at whole words of `text`, again when the window changes. */
+function fitWords(el: HTMLElement, text: () => string) {
+  createEffect(() => {
+    const t = text();
+    void viewport();
+    void fonts();
+    el.textContent = t;
+    const frame = requestAnimationFrame(() => {
+      el.textContent = wordFit(t, (line) => {
+        el.textContent = line;
+        return el.scrollWidth <= el.clientWidth;
+      });
+    });
+    onCleanup(() => cancelAnimationFrame(frame));
+  });
 }
 
 /** Removing from Continue Watching reaches every synced device, so it asks

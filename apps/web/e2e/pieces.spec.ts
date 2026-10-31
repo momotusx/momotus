@@ -94,6 +94,27 @@ for (const form of Object.keys(FORMS) as Form[]) {
     await context.close();
   });
 
+  test(`${form}: a caption line that is too long ends at a whole word and an ellipsis`, async ({ browser }) => {
+    for (const path of ["/library", "/"]) {
+      const { context, page } = await open(browser, form, path);
+      await expect(page.locator(".tile .cap b").first()).toBeVisible({ timeout: 30_000 });
+      // Measured again once the text face has loaded.
+      await page.evaluate(() => document.fonts.ready);
+      await page.waitForTimeout(300);
+      const lines = await page.locator(".tile").evaluateAll((tiles) =>
+        tiles.flatMap((t) => [...t.querySelectorAll<HTMLElement>(".cap > *")].map((el) => ({ shown: el.textContent ?? "", label: t.getAttribute("aria-label") ?? "", over: el.scrollWidth - el.clientWidth }))),
+      );
+      expect(lines.length, path).toBeGreaterThan(0);
+      for (const { shown, label, over } of lines) {
+        // The line fits, so the browser's own ellipsis never cuts inside a word.
+        expect(over, `${path}: "${shown}" fits its line`).toBeLessThanOrEqual(0);
+        // A cut line is whole words of the tile's words, then the ellipsis.
+        if (shown.endsWith("…")) expect(label, `${path}: "${shown}" ends at a word`).toMatch(new RegExp(`(^|, )${shown.slice(0, -1).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}[\\s·,:;-]`));
+      }
+      await context.close();
+    }
+  });
+
   test(`${form}: progress is white on a dark track`, async ({ browser }) => {
     const { context, page } = await open(browser, form, "/");
     const track = page.locator(".row .tile .bar-track").first();
