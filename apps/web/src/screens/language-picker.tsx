@@ -7,6 +7,7 @@
  * draws its own one-line keyboard (no system keyboard), large round flags and a four-column grid. The
  * field and the keyboard stay pinned while the results scroll. */
 
+import AudioLines from "lucide-solid/icons/audio-lines";
 import CaptionsOff from "lucide-solid/icons/captions-off";
 import Check from "lucide-solid/icons/check";
 import Delete from "lucide-solid/icons/delete";
@@ -30,10 +31,13 @@ const QUICK = ["en", "tr", "es", "fr", "de", "it", "pt", "ja"];
 /** Scripts TV browsers often lack (Santali, Syriac, Tifinagh): their own name is left out on TV. */
 const RARE_ON_TV = new Set(["sat", "syr", "zgh"]);
 
-/** One language, or No subtitles (`code` null). `native` is empty when the own name is not known. */
+/** One language, No subtitles (`code` null), or the spoken language (`SPOKEN`). `native` is empty when the own name is
+ * not known. */
 export type Pickable = { code: string | null; name: string; native: string };
 
-const none = (): Pickable => ({ code: null, name: "No subtitles", native: "" });
+/** The Second line's "Spoken language" row: the word `Prefs.secondSubtitle` stores for it. */
+export const SPOKEN = "audio";
+const none = (name = "No subtitles"): Pickable => ({ code: null, name, native: "" });
 const pickable = (l: LanguageChoice): Pickable => ({ code: l.code, name: l.name, native: l.native });
 /** The common languages, named in English, for when the core does not answer. */
 const fallback = (): Pickable[] => QUICK.map((code) => ({ code, name: languageName(code), native: "" }));
@@ -43,6 +47,13 @@ const keyOf = (code: string | null) => code ?? "none";
 export const NoneFlag = () => (
   <span class="flag none lp-off" aria-hidden="true">
     <CaptionsOff />
+  </span>
+);
+
+/** The spoken language's round mark, where a flag would be. */
+export const SpokenFlag = () => (
+  <span class="flag none lp-off" aria-hidden="true">
+    <AudioLines />
   </span>
 );
 
@@ -92,6 +103,12 @@ export function LanguageSearch(props: {
   hint?: string;
   /** Pinned under the results (the step's error line and Continue). */
   foot?: JSX.Element;
+  /** The No subtitles row's name (Settings' Second line: "Off"). */
+  none?: string;
+  /** The Second line: a "Spoken language" row (`SPOKEN`) right after the first, which is then always None. */
+  spoken?: string;
+  /** Why a language cannot be picked here, shown on its row ("Subtitle language"); undefined for one that can. */
+  blocked?: (code: string) => string | undefined;
 }): JSX.Element {
   const tv = () => form() === "tv";
   const [query, setQuery] = createSignal("");
@@ -163,7 +180,8 @@ export function LanguageSearch(props: {
     const reply = list();
     const langs = reply ? reply.suggested.map(pickable) : fallback();
     if (props.audio) return langs;
-    return (reply?.noneFirst ?? true) ? [none(), ...langs] : [...langs, none()];
+    if (props.spoken) return [none(props.none), { code: SPOKEN, name: props.spoken, native: "" }, ...langs];
+    return (reply?.noneFirst ?? true) ? [none(props.none), ...langs] : [...langs, none(props.none)];
   });
   const results = createMemo<LanguageChoice[]>(() => (failed() ? [] : (list()?.results ?? [])));
 
@@ -347,9 +365,11 @@ export function LanguageSearch(props: {
   );
   const flag = (p: Pickable, lazy: boolean) => (
     <Show when={p.code} fallback={<NoneFlag />}>
-      {(c) => <Flag language={c()} lazy={lazy} />}
+      {(c) => (c() === SPOKEN && props.spoken ? <SpokenFlag /> : <Flag language={c()} lazy={lazy} />)}
     </Show>
   );
+  const why = (p: Pickable) => (p.code && p.code !== SPOKEN ? props.blocked?.(p.code) : undefined);
+  const pick = (p: Pickable) => why(p) === undefined && props.onPick(p.code, p);
   const name = (p: Pickable) => (
     <>
       <Show when={own(p)}>
@@ -458,13 +478,21 @@ export function LanguageSearch(props: {
                 classList={{ on: props.isOn(p.code) }}
                 role="option"
                 aria-selected={props.isOn(p.code)}
+                aria-disabled={why(p) !== undefined || undefined}
                 tabindex={sugStop() === keyOf(p.code) ? 0 : -1}
                 data-f={`${props.group}:s:${keyOf(p.code)}`}
                 data-key={keyOf(p.code)}
-                onClick={() => props.onPick(p.code, p)}
+                onClick={() => pick(p)}
               >
                 {flag(p, false)}
-                {name(p)}
+                <Show when={why(p)} fallback={name(p)}>
+                  {(w) => (
+                    <span class="lp-stack">
+                      {name(p)}
+                      <small class="lp-why">{w()}</small>
+                    </span>
+                  )}
+                </Show>
                 {mark(p)}
                 <span class="sr">{said(p)}</span>
               </button>
@@ -505,18 +533,26 @@ export function LanguageSearch(props: {
                   classList={{ on: props.isOn(p.code) }}
                   role="option"
                   aria-selected={props.isOn(p.code)}
+                  aria-disabled={why(p) !== undefined || undefined}
                   tabindex={rowStop() === l.code ? 0 : -1}
                   data-f={`${props.group}:r:${l.code}`}
                   data-key={l.code}
-                  onClick={() => props.onPick(p.code, p)}
+                  onClick={() => pick(p)}
                 >
                   {flag(p, true)}
                   <span class="lp-names">
                     {name(p)}
-                    {/* Two lines always: a row's box never follows its words. */}
-                    <small class="lp-en" aria-hidden="true">
-                      {own(p) ? p.name : ""}
-                    </small>
+                    {/* Two lines always: a row's box never follows its words. A row that cannot be picked says why. */}
+                    <Show
+                      when={why(p)}
+                      fallback={
+                        <small class="lp-en" aria-hidden="true">
+                          {own(p) ? p.name : ""}
+                        </small>
+                      }
+                    >
+                      {(w) => <small class="lp-en lp-why">{w()}</small>}
+                    </Show>
                   </span>
                   {mark(p)}
                   <span class="sr">{said(p)}</span>

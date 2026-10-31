@@ -2,6 +2,8 @@
  * tap does in Settings, the words for it, the row's summary, and the query the TV keyboard edits. The
  * search, its order and the suggestions are the core's (`languagePicker`). */
 
+import { languageTag } from "./words";
+
 /** What a tap on a language does in Settings. */
 export type TapAction = "add" | "remove" | "default";
 
@@ -60,3 +62,8 @@ export function press(query: string, key: Key): string {
 
 /** "12 found", "1 found". */
 export const found = (n: number) => `${n} found`;
+
+/** Settings' Second line (plans/dual-subtitles.md 5.5): a language in the first subtitle language's primary language
+ * (`first`, as the profile stores it, "eng" or "pt-BR") is the first line's and cannot be picked there. */
+export const onFirstLine = (code: string, first: string | undefined): boolean => !!first && primary(code) === primary(first);
+const primary = (code: string) => languageTag(code).split("-")[0];

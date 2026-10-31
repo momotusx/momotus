@@ -584,7 +584,7 @@ function Subtitles(props: { then?: string }) {
   };
   return (
     <section class="step-body framed" aria-labelledby="welcome-q">
-      <Film title="Subtitles" lead="Pick the language subtitles start in. They turn on when a film's audio is in another language. Change it later in Settings, under Playback." />
+      <Film title="Subtitles" lead="Pick the language subtitles start in. They turn on when a film's audio is in another language. Change it later in Settings, under Subtitles and audio." />
       <div class="lp-pick" role="group" aria-labelledby="welcome-q">
         <span class="kicker lp-kicker" id="lp-sub-label">
           Subtitle language

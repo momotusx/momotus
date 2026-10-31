@@ -4,9 +4,9 @@
 
 import type { Form } from "../form";
 
-export type SectionId = "sources" | "account" | "home" | "playback" | "downloads" | "device" | "about";
+export type SectionId = "sources" | "account" | "home" | "playback" | "subtitles" | "downloads" | "device" | "about";
 
-export const SECTION_IDS: readonly SectionId[] = ["sources", "account", "home", "playback", "downloads", "device", "about"];
+export const SECTION_IDS: readonly SectionId[] = ["sources", "account", "home", "playback", "subtitles", "downloads", "device", "about"];
 
 export const sectionId = (id: string | undefined): SectionId | undefined => SECTION_IDS.find((s) => s === id);
 

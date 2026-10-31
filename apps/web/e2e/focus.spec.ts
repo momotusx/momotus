@@ -151,7 +151,7 @@ const LOOP: Screen[] = [
   { name: "home-rows at rest", path: "/home-rows", ready: visible(".hrow-main") },
   {
     name: "settings with the language picker",
-    path: "/settings/playback",
+    path: "/settings/subtitles",
     ready: async (page) => {
       await visible('[data-f="pref-subs:open"]')(page);
       await page.locator('[data-f="pref-subs:open"]').click();

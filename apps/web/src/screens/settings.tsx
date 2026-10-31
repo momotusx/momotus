@@ -13,6 +13,7 @@ import SlidersHorizontal from "lucide-solid/icons/sliders-horizontal";
 import Sparkles from "lucide-solid/icons/sparkles";
 import Trash from "lucide-solid/icons/trash";
 import ArrowDownToLine from "lucide-solid/icons/arrow-down-to-line";
+import Captions from "lucide-solid/icons/captions";
 import CirclePlay from "lucide-solid/icons/circle-play";
 import Info from "lucide-solid/icons/info";
 import Link2 from "lucide-solid/icons/link-2";
@@ -36,6 +37,7 @@ import { deleteAll, downloadWords, shownDownloads } from "../lib/download";
 import { focusOn, StorageLine } from "./downloads";
 import type { LanguageList } from "../core/generated/LanguageList";
 import type { Prefs } from "../core/generated/Prefs";
+import type { SubtitleLayout } from "../core/generated/SubtitleLayout";
 import type { SubtitleSize } from "../core/generated/SubtitleSize";
 import { chooseForm, type Form, form, pinned } from "../form";
 import { headerOnTvNow, previewsOn, setPreviewsOn } from "../lib/trailers";
@@ -48,9 +50,9 @@ import "./browse.css";
 import { markSrc } from "../components/marks";
 import "./settings.css";
 import "./onboarding.css";
-import { LanguageOverlay, LanguageSearch, NoneFlag } from "./language-picker";
+import { LanguageOverlay, LanguageSearch, NoneFlag, SPOKEN, SpokenFlag } from "./language-picker";
 import { Flag } from "../player/flags";
-import { settingsHint, summary, tap, tapAction, tapWords } from "../lib/language-picker";
+import { onFirstLine, settingsHint, summary, tap, tapAction, tapWords } from "../lib/language-picker";
 import UserPen from "lucide-solid/icons/user-pen";
 import Users from "lucide-solid/icons/users";
 import { AvatarArt } from "../components/avatar";
@@ -172,6 +174,51 @@ export function LanguagePicker(props: {
   );
 }
 
+const dual = choiceWords.player;
+
+/** Settings' Second line (plans/dual-subtitles.md 5.5): its value, and over the page the language picker with Off and
+ * Spoken language first; the first subtitle language's row reads "Subtitle language" and cannot be picked. A pick is
+ * written at once and closes the picker. */
+function SecondLine(props: { chosen: string | null; first: string | undefined; onPick: (v: string | null) => void }) {
+  const [open, setOpen] = createSignal(false);
+  const [names, setNames] = createSignal<Record<string, string>>({});
+  onMount(() => void namesFor(false).then(setNames, () => undefined));
+  const value = () => (props.chosen === null ? "Off" : props.chosen === SPOKEN ? dual.spokenLanguage : (names()[props.chosen] ?? languageName(props.chosen)));
+  return (
+    <>
+      <button class="link-row lp-setting" data-f="pref-second:open" aria-haspopup="dialog" onClick={() => setOpen(true)}>
+        <Show when={props.chosen} fallback={<NoneFlag />}>
+          {(c) => (c() === SPOKEN ? <SpokenFlag /> : <Flag language={c()} />)}
+        </Show>
+        <span>
+          <b>{dual.secondLine}</b>
+          <small>{value()}</small>
+          <small>A second subtitle in another language, with the first. Spoken language follows each film's audio.</small>
+        </span>
+        <ChevronRight aria-hidden class="chev" />
+      </button>
+      <Show when={open()}>
+        <LanguageOverlay title={dual.secondLine} done="Done" onClose={() => setOpen(false)}>
+          <LanguageSearch
+            group="pref-second"
+            none="Off"
+            spoken={dual.spokenLanguage}
+            chosen={props.chosen && props.chosen !== SPOKEN ? [props.chosen] : []}
+            isOn={(code) => code === props.chosen}
+            blocked={(code) => (onFirstLine(code, props.first) ? "Subtitle language" : undefined)}
+            onPick={(code) => {
+              if (code !== props.chosen) props.onPick(code);
+              setOpen(false);
+            }}
+            focusField
+            focusFirst
+          />
+        </LanguageOverlay>
+      </Show>
+    </>
+  );
+}
+
 function ChoiceChip<T>(props: { group: string; item: { value: T; label: string }; on: boolean; multi?: boolean; autofocus?: boolean; onPick: (v: T) => void }) {
   return (
     <button
@@ -270,7 +317,8 @@ const SECTIONS: { id: string; label: string; tone: Tone; icon: () => JSX.Element
   { id: "sources", label: "Sources", tone: "green", icon: () => <Puzzle />, line: "Addons, plugins, debrid services, Trakt and import" },
   { id: "account", label: "Account", tone: "sky", icon: () => <MonitorSmartphone />, line: "Sign in and sync with your other devices" },
   { id: "home", label: "Home", tone: "mint", icon: () => <Rows3 />, line: "Which rows Home shows" },
-  { id: "playback", label: "Playback", tone: "teal", icon: () => <CirclePlay />, line: "Stream choice, subtitles and up next" },
+  { id: "playback", label: "Playback", tone: "teal", icon: () => <CirclePlay />, line: "Stream choice and up next" },
+  { id: "subtitles", label: "Subtitles and audio", tone: "sky", icon: () => <Captions />, line: "Subtitle and audio languages, size and a second line" },
   { id: "downloads", label: "Downloads", tone: "blue", icon: () => <ArrowDownToLine />, line: "Smart downloads and storage" },
   { id: "device", label: "This device", tone: "sea", icon: () => <Monitor />, line: "Settings kept on this device only" },
   { id: "about", label: "About", tone: "grey", icon: () => <Info />, line: "Version, credits and licences" },
@@ -562,25 +610,6 @@ export default function SettingsScreen() {
                       />
                     </div>
                     <div class="sgroup filters">
-                      <LanguagePicker
-                        label="Subtitle language"
-                        none="None, subtitles start off"
-                        group="pref-subs"
-                        chosen={x().subtitleLanguages}
-                        onChange={(next) => patch({ subtitleLanguages: next })}
-                      />
-                      <Choice<SubtitleSize>
-                        label="Subtitle size"
-                        group="pref-subsize"
-                        items={[
-                          { value: "small", label: "Small" },
-                          { value: "medium", label: "Medium" },
-                          { value: "large", label: "Large" },
-                          { value: "extraLarge", label: "Extra large" },
-                        ]}
-                        isOn={(v) => x().subtitleSize === v}
-                        onPick={(v) => patch({ subtitleSize: v })}
-                      />
                       <Choice<boolean>
                         label="Up next"
                         group="pref-next"
@@ -609,10 +638,78 @@ export default function SettingsScreen() {
                         />
                       </Show>
                     </div>
-                    <p class="note small">The numbers are the order you turned languages on; number 1 wins. A subtitle you pick while watching makes its language number 1.</p>
                     <Show when={form() !== "tv" || headerOnTvNow()}>
                       <p class="note small">Trailers play muted on {form() === "tv" ? "title pages" : "Home and title pages"}, from YouTube, when the connection is not metered.</p>
                     </Show>
+                  </>
+                )}
+              </Show>
+            </section>
+          </Show>
+
+          <Show when={shows("subtitles")}>
+            <section class="set-sec" id="set-subtitles" aria-labelledby="set-h-subtitles">
+              <h2 id="set-h-subtitles" tabindex="-1">
+                Subtitles and audio
+              </h2>
+              <Show when={p()}>
+                {(x) => (
+                  <>
+                    <div class="sgroup filters">
+                      <LanguagePicker
+                        label="Subtitle language"
+                        none="None, subtitles start off"
+                        group="pref-subs"
+                        chosen={x().subtitleLanguages}
+                        onChange={(next) => patch({ subtitleLanguages: next })}
+                      />
+                      <Choice<SubtitleSize>
+                        label="Subtitle size"
+                        group="pref-subsize"
+                        items={[
+                          { value: "small", label: "Small" },
+                          { value: "medium", label: "Medium" },
+                          { value: "large", label: "Large" },
+                          { value: "extraLarge", label: "Extra large" },
+                        ]}
+                        isOn={(v) => x().subtitleSize === v}
+                        onPick={(v) => patch({ subtitleSize: v })}
+                      />
+                      <LanguagePicker
+                        audio
+                        label={choiceWords.settings.audio.label}
+                        help={choiceWords.settings.audio.help}
+                        group="choice-audio"
+                        chosen={x().streams.languages}
+                        onChange={(next) => patch({ streams: { languages: next } })}
+                      />
+                    </div>
+                    <p class="note small">The numbers are the order you turned languages on; number 1 wins. A subtitle you pick while watching makes its language number 1.</p>
+                    {/* Dual subtitles (plans/dual-subtitles.md 5.5): the same profile values as the player's Second line tab. */}
+                    <div class="sgroup filters">
+                      <SecondLine chosen={x().secondSubtitle} first={x().subtitleLanguages[0]} onPick={(v) => patch({ secondSubtitle: v })} />
+                      <Show when={x().secondSubtitle !== null}>
+                        <Choice<SubtitleLayout>
+                          label={dual.layout}
+                          help="Stacked puts the second line above the first, Split at the top of the picture, One box both in one box."
+                          group="pref-layout"
+                          items={(["stacked", "split", "oneBox"] as const).map((value) => ({ value, label: dual.layouts[value] }))}
+                          isOn={(v) => x().subtitleLayout === v}
+                          onPick={(v) => patch({ subtitleLayout: v })}
+                        />
+                        <Choice<boolean>
+                          label={dual.onlyWhenPaused}
+                          help="The second line shows only while the video is paused."
+                          group="pref-paused"
+                          items={[
+                            { value: true, label: "On" },
+                            { value: false, label: "Off" },
+                          ]}
+                          isOn={(v) => x().secondOnPause === v}
+                          onPick={(v) => patch({ secondOnPause: v })}
+                        />
+                      </Show>
+                    </div>
                   </>
                 )}
               </Show>

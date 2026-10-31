@@ -241,10 +241,11 @@ export const SCREENS: Screen[] = [
     name: "settings playback",
     path: "/settings/playback",
     ready: async (page) => {
-      await visible('[data-f="pref-subs:open"]')(page);
+      await visible('[data-f="pref-next:true"]')(page);
       await expect(page.locator('[data-f="settings:stream-choice"] small')).toContainText(/shared by at least/);
     },
   },
+  { name: "settings subtitles", path: "/settings/subtitles", ready: visible('[data-f="pref-second:open"]') },
   { name: "stream-choice", path: "/stream-choice", ready: visible('[data-fgroup="choice-size"]') },
   { name: "welcome", path: "/welcome", ready: visible(".door") },
   { name: "welcome-choice", path: "/welcome?step=choice", ready: visible(".doors.two .door") },

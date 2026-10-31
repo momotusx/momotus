@@ -319,7 +319,7 @@
       ]
     },
     "audio": {
-      "label": "Audio",
+      "label": "Audio language",
       "help": "Listed in the order you turn them on; the first one wins."
     },
     "learn": {

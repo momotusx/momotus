@@ -81,6 +81,17 @@
 [data-form="tv"] .lp-row:focus { transform: scale(var(--focus-scale-tile)); }
 [data-form="tv"] :is(.lp-clear, .lp-retry, .lp-done):focus { transform: scale(var(--focus-scale-card)); }
 @media (hover: hover) { [data-form="desktop"] .lp-row:hover, [data-form="desktop"] .lp-chip:not(.on):hover { background: var(--raised); } }
+/* A language that cannot be picked here (Settings' Second line: the first line's language): its row says why, and its
+   flag and name step back (an inactive control, outside the contrast floor). The reason keeps its colour. */
+.lp-chip .lp-stack { flex: 1; min-width: 0; display: flex; flex-direction: column; text-align: start; }
+.lp-chip .lp-stack .lp-name { flex: none; }
+.lp-sug.tv .lp-chip .lp-stack { flex: none; width: 100%; text-align: center; }
+.lp-chip .lp-why { font: 400 var(--type-caption) / 1.2 var(--font-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* The phone's half-width chips: a name takes two lines before it is cut ("Spoken language"). */
+[data-form="phone"] .lp-chip .lp-name { white-space: normal; line-height: 1.1; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+[data-form="phone"] .lp-chip .lp-stack .lp-name { -webkit-line-clamp: 1; }
+:is(.lp-chip, .lp-row)[aria-disabled="true"] { cursor: default; }
+:is(.lp-chip, .lp-row)[aria-disabled="true"] :is(.flag, .lp-name) { opacity: 0.5; }
 
 /* Desktop with nothing typed: the A to Z directory in four columns. */
 .lp-dir { columns: 4; column-gap: 32px; }

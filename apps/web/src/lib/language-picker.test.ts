@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { press, summary, tap, tapAction } from "./language-picker";
+import { press, summary, tap, tapAction, onFirstLine } from "./language-picker";
 
 const run = (list: string[], taps: string[], audio = false) => {
   let state = { list, added: new Set<string>() };
@@ -44,4 +44,13 @@ test("the row's summary and the TV keyboard", () => {
   expect(press("", "space")).toBe("");
   expect(press("pt", "space")).toBe("pt ");
   expect(press("pt ", "space")).toBe("pt ");
+});
+
+test("Second line: the first subtitle language's primary language is the first line's, in any spelling", () => {
+  expect(onFirstLine("en", "eng")).toBe(true);
+  expect(onFirstLine("en", "en")).toBe(true);
+  expect(onFirstLine("pt", "pt-BR")).toBe(true);
+  expect(onFirstLine("pt-BR", "por")).toBe(true);
+  expect(onFirstLine("tr", "eng")).toBe(false);
+  expect(onFirstLine("en", undefined)).toBe(false);
 });

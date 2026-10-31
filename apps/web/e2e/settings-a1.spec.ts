@@ -1,6 +1,7 @@
 import { type Browser, expect, type Page, test } from "@playwright/test";
 import { drawnContrast, WHITE_PNG } from "./contrast";
-import { PORTS } from "./core";
+import type { Prefs } from "../src/core/generated/Prefs";
+import { Client, PORTS, SHOTS } from "./core";
 import { type Json, patchedContext } from "./patch";
 
 /** Settings A1 (design/DECISION.md, the owner's pick of 2026-10-28): the profile on a film's backdrop, a section
@@ -151,11 +152,11 @@ test("desktop: a menu entry shows its section alone and fills; the keyboard land
   const { context, page } = await open(browser, "desktop");
   await expect(page.locator('[data-f="settings-nav:sources"]')).toHaveAttribute("aria-current", "true");
   const depth = await page.evaluate(() => history.length);
-  await page.locator('[data-f="settings-nav:playback"]').click();
-  await expect(page).toHaveURL(/\/settings\/playback/);
-  await expect(page.locator('[data-f="settings-nav:playback"]')).toHaveAttribute("aria-current", "true");
+  await page.locator('[data-f="settings-nav:subtitles"]').click();
+  await expect(page).toHaveURL(/\/settings\/subtitles/);
+  await expect(page.locator('[data-f="settings-nav:subtitles"]')).toHaveAttribute("aria-current", "true");
   await expect(page.locator('[aria-current="true"]')).toHaveCount(1);
-  await expect.poll(() => page.evaluate(() => document.activeElement?.id)).toBe("set-h-playback");
+  await expect.poll(() => page.evaluate(() => document.activeElement?.id)).toBe("set-h-subtitles");
   await expect(page.locator("#set-sources")).toHaveCount(0);
   await expect(page.locator(".set-list .set-sec")).toHaveCount(1);
   // The menu replaces the address: Back leaves Settings instead of walking its sections.
@@ -163,16 +164,16 @@ test("desktop: a menu entry shows its section alone and fills; the keyboard land
   // A reload keeps the section.
   await page.reload();
   await expect(page.locator('[data-f="pref-subs:open"]')).toBeVisible({ timeout: 30_000 });
-  await expect(page.locator('[data-f="settings-nav:playback"]')).toHaveAttribute("aria-current", "true");
+  await expect(page.locator('[data-f="settings-nav:subtitles"]')).toHaveAttribute("aria-current", "true");
   await context.close();
 });
 
 test("phone: Settings lists a row per section; a row opens the section as its own page, Back returns", async ({ browser }) => {
   const { context, page } = await open(browser, "phone");
   const rows = page.locator('[data-f^="settings-sec:"]');
-  // Sources, Account, Home, Playback, This device, About, and Downloads where this browser keeps them.
+  // Sources, Account, Home, Playback, Subtitles and audio, This device, About, and Downloads where this browser keeps them.
   await expect(rows.first()).toBeVisible();
-  expect([6, 7]).toContain(await rows.count());
+  expect([7, 8]).toContain(await rows.count());
   await expect(page.locator('[data-f="settings-sec:sources"]')).toContainText("Addons, plugins, debrid services, Trakt and import");
   await expect(page.locator('[data-f="settings:addons"]')).toHaveCount(0);
   await page.locator('[data-f="settings-sec:sources"]').click();
@@ -184,7 +185,7 @@ test("phone: Settings lists a row per section; a row opens the section as its ow
   await expect(page).toHaveURL(/\/settings(\?|$)/);
   await expect(page.locator('[data-f="settings-sec:sources"]')).toBeVisible();
   // A section opened by its address goes back to Settings.
-  await page.goto("/settings/playback?form=phone");
+  await page.goto("/settings/subtitles?form=phone");
   await expect(page.locator('[data-f="pref-subs:open"]')).toBeVisible({ timeout: 30_000 });
   await page.locator('[data-f="back"]').click();
   await expect(page).toHaveURL(/\/settings(\?|$)/);
@@ -246,7 +247,7 @@ for (const form of ["tv", "desktop", "phone"] as const) {
 
 test("desktop: every menu entry fills itself; Profiles takes the page back to its top and the keyboard to the profile", async ({ browser }) => {
   const { context, page } = await open(browser, "desktop");
-  for (const id of ["sources", "account", "home", "playback", "device", "about"]) {
+  for (const id of ["sources", "account", "home", "playback", "subtitles", "device", "about"]) {
     await page.locator(`[data-f="settings-nav:${id}"]`).click();
     await expect(page.locator('.set-menu [aria-current="true"]'), id).toHaveAttribute("data-f", `settings-nav:${id}`);
     await expect(page.locator(`#set-${id}`), id).toBeVisible();
@@ -280,4 +281,122 @@ test("desktop 844x390: the section menu stays inside a short window; its last en
   expect(box.bottom).toBeLessThanOrEqual(box.vh);
   expect(box.last).toBeLessThanOrEqual(box.vh);
   await context.close();
+});
+
+/** The shared core's profile values the Subtitles and audio tests change, read and put back. */
+const SUBTITLE_PREFS = ["subtitleLanguages", "secondSubtitle", "subtitleLayout", "secondOnPause"] as const;
+const prefsNow = (c: Client) => c.req<Prefs>("setPrefs", { patch: {} });
+async function subtitlePrefs(patch: Partial<Prefs>) {
+  const c = new Client(`ws://127.0.0.1:${PORTS.bridge}/ws`);
+  const now = await prefsNow(c);
+  const saved = Object.fromEntries(SUBTITLE_PREFS.map((k) => [k, now[k]]));
+  await c.req("setPrefs", { patch });
+  return { c, restore: () => c.req("setPrefs", { patch: saved }).finally(() => c.close()) };
+}
+
+for (const form of ["desktop", "phone"] as const) {
+  test(`${form}: Subtitles and audio holds the subtitle and audio rows; Layout and Only when paused show with a second line only`, async ({ browser }) => {
+    const { c, restore } = await subtitlePrefs({ subtitleLanguages: ["eng"], secondSubtitle: null, subtitleLayout: "stacked", secondOnPause: false });
+    const { context, page } = await open(browser, form);
+    if (form === "phone") {
+      await expect(page.locator('[data-f="settings-sec:subtitles"]')).toContainText("Subtitle and audio languages, size and a second line");
+      await expect(page.locator('[data-f="settings-sec:playback"]')).toContainText("Stream choice and up next");
+      await page.locator('[data-f="settings-sec:subtitles"]').click();
+      await expect(page.locator("h1.set-page-title")).toHaveText("Subtitles and audio");
+    } else {
+      await page.locator('[data-f="settings-nav:subtitles"]').click();
+    }
+    await expect(page).toHaveURL(/\/settings\/subtitles/);
+    const sec = page.locator("#set-subtitles");
+    for (const f of ["pref-subs:open", "pref-subsize:medium", "choice-audio:open", "pref-second:open"]) await expect(sec.locator(`[data-f="${f}"]`), f).toHaveCount(1, { timeout: 30_000 });
+    await expect(sec.locator('[data-f="choice-audio:open"] b')).toHaveText("Audio language");
+    const second = sec.locator('[data-f="pref-second:open"]');
+    await expect(second.locator("b")).toHaveText("Second line");
+    await expect(second).toContainText("Off");
+    // No second line: no Layout, no Only when paused.
+    await expect(page.locator('[data-fgroup="pref-layout"], [data-fgroup="pref-paused"]')).toHaveCount(0);
+    await page.screenshot({ path: `${SHOTS}/settings-subtitles-${form}.png` });
+
+    // The picker: Off and Spoken language lead; the first subtitle language (stored as "eng") reads "Subtitle language"
+    // and cannot be picked.
+    await second.click();
+    const lead = page.locator('[data-fgroup="pref-second-s"] [data-f]');
+    await expect(lead.nth(0)).toHaveAttribute("data-f", "pref-second:s:none");
+    await expect(lead.nth(0)).toContainText("Off");
+    await expect(lead.nth(1)).toHaveAttribute("data-f", "pref-second:s:audio");
+    await expect(lead.nth(1)).toContainText("Spoken language");
+    await expect(lead.nth(0)).toHaveAttribute("aria-selected", "true");
+    const english = page.locator('[data-f="pref-second:s:en"]');
+    await expect(english).toHaveAttribute("aria-disabled", "true");
+    await expect(english).toContainText("Subtitle language");
+    // Also in the full list, and a press on it (forced past its aria-disabled) picks nothing.
+    await expect(page.locator('[data-f="pref-second:r:en"]')).toHaveAttribute("aria-disabled", "true");
+    await english.click({ force: true });
+    await expect(page.locator(".lp-layer")).toHaveCount(1);
+    expect((await prefsNow(c)).secondSubtitle).toBeNull();
+    await page.screenshot({ path: `${SHOTS}/settings-subtitles-picker-${form}.png` });
+    await lead.nth(1).click();
+    await expect(page.locator(".lp-layer")).toHaveCount(0);
+    await expect.poll(async () => (await prefsNow(c)).secondSubtitle).toBe("audio");
+    await expect(second).toContainText("Spoken language");
+
+    // A second line set: its Layout and Only when paused, each written at once.
+    await page.locator('[data-f="pref-layout:oneBox"]').click();
+    await expect.poll(async () => (await prefsNow(c)).subtitleLayout).toBe("oneBox");
+    await page.locator('[data-f="pref-paused:true"]').click();
+    await expect.poll(async () => (await prefsNow(c)).secondOnPause).toBe(true);
+    await expect(page.locator('[data-f="pref-paused:true"]')).toHaveAttribute("aria-checked", "true");
+    await page.locator('[data-fgroup="pref-paused"]').scrollIntoViewIfNeeded();
+    await page.screenshot({ path: `${SHOTS}/settings-subtitles-second-${form}.png` });
+
+    // A language by search, written as the core's tag.
+    await second.click();
+    await page.locator('[data-f="pref-second:field"]').fill("spanish");
+    await page.locator('[data-f="pref-second:r:es"]').click();
+    await expect.poll(async () => (await prefsNow(c)).secondSubtitle).toBe("es");
+    await expect(second).toContainText("Español");
+    // Off takes the rows away again; the layout stays as chosen.
+    await second.click();
+    await page.locator('[data-f="pref-second:s:none"]').click();
+    await expect.poll(async () => (await prefsNow(c)).secondSubtitle).toBeNull();
+    await expect(page.locator('[data-fgroup="pref-layout"], [data-fgroup="pref-paused"]')).toHaveCount(0);
+    expect((await prefsNow(c)).subtitleLayout).toBe("oneBox");
+
+    // Playback keeps Stream choice and Up next; Stream choice no longer lists audio.
+    await page.goto(`/settings/playback?form=${form}`);
+    await expect(page.locator('[data-f="pref-next:true"]')).toHaveCount(1, { timeout: 30_000 });
+    await expect(page.locator('[data-f="pref-subs:open"], [data-f="pref-second:open"], [data-f="choice-audio:open"]')).toHaveCount(0);
+    await page.goto(`/stream-choice?form=${form}`);
+    await expect(page.locator('[data-fgroup="choice-size"]')).toBeVisible({ timeout: 30_000 });
+    await expect(page.locator('[data-f="choice-audio:open"]')).toHaveCount(0);
+    await context.close();
+    await restore();
+  });
+}
+
+test("TV: the remote goes from the menu into Subtitles and audio and walks to the Second line and its rows", async ({ browser }) => {
+  const { c, restore } = await subtitlePrefs({ subtitleLanguages: ["eng"], secondSubtitle: null });
+  const { context, page } = await open(browser, "tv");
+  await page.locator('[data-f="settings-nav:subtitles"]').focus();
+  await page.keyboard.press("Enter");
+  await expect.poll(() => focused(page)).toBe("pref-subs:open");
+  for (let i = 0; i < 12 && (await focused(page)) !== "pref-second:open"; i++) await page.keyboard.press("ArrowDown");
+  expect(await focused(page)).toBe("pref-second:open");
+  // The focused row explains itself.
+  await expect(page.locator('[data-f="pref-second:open"]')).toContainText("A second subtitle in another language");
+  await page.keyboard.press("Enter");
+  await expect.poll(() => focused(page)).toBe("pref-second:s:none");
+  await page.keyboard.press("ArrowRight");
+  await expect.poll(() => focused(page)).toBe("pref-second:s:audio");
+  await page.keyboard.press("Enter");
+  await expect.poll(async () => (await prefsNow(c)).secondSubtitle).toBe("audio");
+  await expect(page.locator(".lp-layer")).toHaveCount(0);
+  await expect.poll(() => focused(page)).toBe("pref-second:open");
+  // The rows come with the saved value; a remote is never faster than that, the test is.
+  await expect(page.locator('[data-f="pref-layout:stacked"]')).toBeVisible();
+  await page.keyboard.press("ArrowDown");
+  await expect.poll(() => focused(page)).toMatch(/^pref-layout:/);
+  await page.screenshot({ path: `${SHOTS}/settings-subtitles-tv.png` });
+  await context.close();
+  await restore();
 });

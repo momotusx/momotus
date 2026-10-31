@@ -15,7 +15,7 @@ import type { Prefs } from "../core/generated/Prefs";
 import type { StreamConditions } from "../core/generated/StreamConditions";
 import { form } from "../form";
 import { anyLearned, choiceWords, conditionsLine, learnedRows, screenClass, speedFor } from "../lib/words";
-import { Choice, LanguagePicker } from "./settings";
+import { Choice } from "./settings";
 import "./browse.css";
 import "./settings.css";
 
@@ -123,14 +123,6 @@ export default function StreamChoice() {
                   onPick={(v) => patch({ preferReady: v })}
                 />
               </Show>
-              <LanguagePicker
-                audio
-                label={w.audio.label}
-                help={w.audio.help}
-                group="choice-audio"
-                chosen={s().languages}
-                onChange={(next) => patch({ languages: next })}
-              />
               <Choice<boolean> label={w.learn.label} group="choice-learn" items={labelled(w.learn.choices)} isOn={(v) => s().learn === v} onPick={(v) => patch({ learn: v })} />
               <Show when={anyLearned(x())}>
                 <div class="learned" data-fgroup="choice-learned">

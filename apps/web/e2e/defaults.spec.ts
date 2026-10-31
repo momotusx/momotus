@@ -662,7 +662,7 @@ test("Subtitles picker on the phone: the selector speaks its label, Back and Can
 test("Settings on TV: OK on a language applies the rule and the focus stays on it", async ({ browser }) => {
   await client.req("setPrefs", { patch: { subtitleLanguages: ["en"] } });
   const tv = await device(browser, "tv", { locale: "tr-TR" });
-  await tv.goto("/settings/playback?form=tv");
+  await tv.goto("/settings/subtitles?form=tv");
   const open = tv.locator('[data-f="pref-subs:open"]');
   await expect(open).toBeVisible({ timeout: 30_000 });
   await open.focus();
