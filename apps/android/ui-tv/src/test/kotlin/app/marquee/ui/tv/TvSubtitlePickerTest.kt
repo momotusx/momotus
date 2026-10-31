@@ -281,23 +281,27 @@ class TvSubtitlePickerTest {
     private val layouts = mutableListOf<SubtitleLayout>()
     private var spokenPressed = 0
 
-    private fun secondLine(spokenOn: Boolean = false) =
-        SecondLine(
-            rows = secondRows,
-            firstKey = "tr",
-            secondKey = "en",
-            spoken = "en",
-            spokenOn = spokenOn,
-            pending = false,
-            timing = 0L,
-            layout = SubtitleLayout.Stacked,
-            onPause = false,
-            onPick = { secondPicks += it },
-            onSpoken = { spokenPressed++ },
-            onDelay = {},
-            onLayout = { layouts += it },
-            onPauseChange = { pauses += it },
-        )
+    private fun secondLine(
+        spokenOn: Boolean = false,
+        rows: List<TrackChoice> = secondRows,
+        spoken: String? = "en",
+        timing: Long? = 0L,
+    ) = SecondLine(
+        rows = rows,
+        firstKey = "tr",
+        secondKey = "en",
+        spoken = spoken,
+        spokenOn = spokenOn,
+        pending = false,
+        timing = timing,
+        layout = SubtitleLayout.Stacked,
+        onPause = false,
+        onPick = { secondPicks += it },
+        onSpoken = { spokenPressed++ },
+        onDelay = {},
+        onLayout = { layouts += it },
+        onPauseChange = { pauses += it },
+    )
 
     private fun openTwo(second: SecondLine? = secondLine()) {
         compose.setContent {
@@ -403,6 +407,51 @@ class TvSubtitlePickerTest {
             assertEquals(listOf(SubtitleLayout.Split), layouts)
         }
     }
+
+    /**
+     * The Second line tab where no language can be picked (Turkish, the only one, is the first line's), the audio in
+     * [spoken]: Right from the row focus opens on reaches the foot, which steps and switches, and Left comes back.
+     */
+    private fun footWithNothingToPick(
+        spoken: String?,
+        opensOn: String,
+    ) {
+        val onlyFirst = secondRows.filter { it.id == "off" || it.language == "tr" }
+        // Nothing on the second line, so no Timing: the foot opens on Size.
+        openTwo(secondLine(spokenOn = true, rows = onlyFirst, spoken = spoken, timing = null))
+        row("Turkish, Türkçe, 1 option").press(Key.DirectionUp)
+        repeat(3) { compose.onNode(isFocused()).press(Key.DirectionUp) }
+        compose.onNode(isFocused() and hasText("First line")).press(Key.DirectionRight)
+        compose.onNode(isFocused()).press(Key.Enter)
+        compose.waitForIdle()
+        row("Turkish, On the first line, 1 option").assertIsNotEnabled()
+        // The taken language never shows its options here, even as the Spoken language.
+        compose.onNodeWithText("Turkish 1").assertDoesNotExist()
+        row(opensOn).assertIsFocused().press(Key.DirectionRight)
+        compose.onNode(isFocused() and hasText("Smaller")).assertExists().press(Key.DirectionDown)
+        compose
+            .onNode(
+                isFocused() and hasContentDescription("Previous layout"),
+            ).assertExists()
+            .press(Key.DirectionRight)
+        compose.onNode(isFocused() and hasContentDescription("Next layout")).press(Key.Enter)
+        compose.onNode(isFocused()).press(Key.DirectionDown)
+        compose.onNode(isFocused() and hasText("Only when paused")).assertExists().press(Key.Enter)
+        compose.onNode(isFocused()).press(Key.DirectionLeft)
+        row(opensOn).assertIsFocused()
+        compose.runOnIdle {
+            assertEquals(listOf(true), pauses)
+            assertEquals(listOf(SubtitleLayout.Split), layouts)
+        }
+    }
+
+    @Test
+    fun `with no language to pick on the Second line tab, Right from Off reaches Layout and Only when paused`() =
+        footWithNothingToPick(spoken = "tr", opensOn = "Off")
+
+    @Test
+    fun `with no language to pick and the audio's not known, Right from Spoken language reaches the foot`() =
+        footWithNothingToPick(spoken = null, opensOn = "Spoken language, not known for this video")
 
     @Test
     fun `no switch while no second line can be on, and the first line's rows are today's`() {

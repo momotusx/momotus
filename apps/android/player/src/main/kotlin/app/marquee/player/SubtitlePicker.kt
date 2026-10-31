@@ -883,9 +883,12 @@ private fun RowScope.TvColumns(
         } else {
             languages.firstOrNull { it.key == focusedKey && tab.taken(it) == null }
                 ?: chosen
-                ?: spoken?.language?.takeIf { tab.spokenOn }
+                ?: spoken?.language?.takeIf { tab.spokenOn && spoken.taken == null }
                 ?: languages.firstOrNull { tab.taken(it) == null }
         }
+    // No language here can be picked (each is the first line's): the Second line tab's foot stands alone at the right,
+    // where Right from Off or the Spoken language row reaches it.
+    val footOnly = preview == null && tab.second && second != null
     val requesters = remember { HashMap<String, FocusRequester>() }
     val requester = { key: String -> requesters.getOrPut(key) { FocusRequester() } }
     val off = remember { FocusRequester() }
@@ -932,7 +935,7 @@ private fun RowScope.TvColumns(
                     // Focus stays in the panel while it is open: the controls under it take nothing.
                     Modifier.focusRequester(off).focusProperties {
                         left = FocusRequester.Cancel
-                        right = FocusRequester.Cancel
+                        right = if (footOnly) into else FocusRequester.Cancel
                         if (lastOpen == null && !spokenRow) down = FocusRequester.Cancel
                     },
                 ) {
@@ -959,7 +962,7 @@ private fun RowScope.TvColumns(
                             .onFocusChanged { if (it.isFocused) focusedKey = SPOKEN_ROW }
                             .focusProperties {
                                 left = FocusRequester.Cancel
-                                right = if (spoken.language != null) into else FocusRequester.Cancel
+                                right = if (spoken.language != null || footOnly) into else FocusRequester.Cancel
                                 if (lastOpen == null) down = FocusRequester.Cancel
                             },
                         enabled = spoken.taken == null,
@@ -1017,11 +1020,16 @@ private fun RowScope.TvColumns(
     }
     Box(Modifier.width(1.dp).fillMaxHeight().background(Marquee.colors.line))
     Column(Modifier.weight(1f).fillMaxHeight().padding(horizontal = 16.dp, vertical = 24.dp)) {
+        // Left goes back to the row the options came from, the Spoken language row included; to Off with no options.
+        val back =
+            when {
+                focusedKey == SPOKEN_ROW -> spokenFocus
+                preview != null -> requester(preview.key)
+                else -> off
+            }
         if (preview != null) {
             Heading(preview.name)
             val target = preview.options.firstOrNull { it.selected } ?: preview.options.first()
-            // Left goes back to the row the options came from, the Spoken language row included.
-            val back = if (focusedKey == SPOKEN_ROW) spokenFocus else requester(preview.key)
             Column(
                 Modifier
                     .weight(
@@ -1058,10 +1066,12 @@ private fun RowScope.TvColumns(
                     }
                 }
             }
-            val foot = Modifier.padding(start = 16.dp, top = 12.dp)
-            val left = Modifier.focusProperties { this.left = back }
-            if (tab.second && second != null) {
-                // Down chains Timing, Size, Layout, then Only when paused, whose Down stays (plans/dual-subtitles.md 5.3).
+        }
+        val foot = Modifier.padding(start = 16.dp, top = 12.dp)
+        val left = Modifier.focusProperties { this.left = back }
+        if (tab.second && second != null) {
+            // Down chains Timing, Size, Layout, then Only when paused, whose Down stays (plans/dual-subtitles.md 5.3).
+            Column(if (footOnly) Modifier.focusRequester(into) else Modifier) {
                 second.timing?.let { TimingRow(it, second.onDelay, foot) }
                 SizeRow(textSize, onSize, foot, first = left)
                 LayoutRow(second.layout, second.onLayout, foot, first = left)
@@ -1075,19 +1085,19 @@ private fun RowScope.TvColumns(
                         down = FocusRequester.Cancel
                     },
                 )
-            } else {
-                if (timing != null) TimingRow(timing, onDelay, foot)
-                SizeRow(
-                    textSize,
-                    onSize,
-                    foot,
-                    first =
-                        Modifier.focusProperties {
-                            this.left = back
-                            down = FocusRequester.Cancel
-                        },
-                )
             }
+        } else if (preview != null) {
+            if (timing != null) TimingRow(timing, onDelay, foot)
+            SizeRow(
+                textSize,
+                onSize,
+                foot,
+                first =
+                    Modifier.focusProperties {
+                        this.left = back
+                        down = FocusRequester.Cancel
+                    },
+            )
         }
     }
 }
