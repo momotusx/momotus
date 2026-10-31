@@ -6,7 +6,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.createSavedStateHandle
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
@@ -53,6 +55,22 @@ private const val SETTLE_MS = 3_000L
 private const val BINGE_WAIT_MS = 6_000L
 
 /**
+ * Whether this player starts at the beginning: [Route.Player.startOver], once. The route is kept with the back stack,
+ * so a player made again for it (the app back after the system ended its process) would start the film over and lose
+ * the viewer's place; [saved] outlives that and remembers the start over was used.
+ */
+internal fun startsOver(
+    route: Route.Player,
+    saved: SavedStateHandle,
+): Boolean {
+    if (!route.startOver || saved.get<Boolean>(STARTED_OVER) == true) return false
+    saved[STARTED_OVER] = true
+    return true
+}
+
+private const val STARTED_OVER = "startedOver"
+
+/**
  * The player of one Player route: the ExoPlayer, the controller that follows the core, and the
  * steps before them (find the ranked versions, pick one, open the core's playback). Lives as long
  * as the route is on the back stack, and lets go of the player when it leaves.
@@ -62,6 +80,7 @@ class PlayerHolder(
     private val versions: VersionsHolder,
     private val route: Route.Player,
     context: Context,
+    saved: SavedStateHandle,
 ) : ViewModel() {
     private val host = PlayerHost(context.applicationContext, DeviceCaps.deviceLanguage(Locale.getDefault()))
     private val prefs: SettingsView = session.settings()
@@ -79,7 +98,7 @@ class PlayerHolder(
             artwork = null,
             openedAtMs = SystemClock.elapsedRealtime(),
             subtitleDelay = host.subtitleDelay,
-            startOver = route.startOver,
+            startOver = startsOver(route, saved),
         )
 
     /** Start the next episode by itself when one ends. */
@@ -312,7 +331,10 @@ fun PlayerScreen(
     val holder =
         viewModel<PlayerHolder>(
             key = "player:$route",
-            factory = viewModelFactory { initializer { PlayerHolder(session, app.versions, route, context) } },
+            factory =
+                viewModelFactory {
+                    initializer { PlayerHolder(session, app.versions, route, context, createSavedStateHandle()) }
+                },
         )
     val controller = holder.controller
     // Leaving stops the sound; a start under way goes on in the background (plans/player-polish.md 2c).
