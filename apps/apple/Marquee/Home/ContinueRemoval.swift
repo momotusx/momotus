@@ -25,11 +25,22 @@ final class ContinueRemoval {
         self.send = send
     }
 
+    /// The removal that last took a title, for `played`: set by `remove`, not `init`, since a view's init can make
+    /// models it throws away.
+    private static weak var current: ContinueRemoval?
+
+    /// A title started playing (`PlayerModel`, every way a play starts): playing it brings it back to Continue
+    /// Watching, so a removal of it still waiting for its Undo is dropped, never sent when the time ends.
+    static func played(itemId: String) {
+        if let current, current.removing?.id == itemId { current.undo() }
+    }
+
     /// Whether the row leaves `tile` out: waiting for its Undo, or on its way.
     func hides(_ tile: Tile) -> Bool { tile.id == removing?.id || tile.id == sending?.id }
 
     func remove(_ tile: Tile) {
         timer?.cancel()
+        Self.current = self
         // The one waiting goes now, without its Undo.
         if let earlier = removing { Task { await deliver(earlier) } }
         failed = nil

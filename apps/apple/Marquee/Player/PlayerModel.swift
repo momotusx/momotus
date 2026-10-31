@@ -230,6 +230,8 @@ final class PlayerModel {
 
     init(route: PlayRoute, versions: VersionsModel?, core: CoreClient) {
         self.route = route
+        // Playing a title takes back a removal of it from Continue Watching still waiting for its Undo.
+        ContinueRemoval.played(itemId: route.target.itemId)
         self.versions = versions
         self.core = core
         prefs = LiveRecord("settings", core: core)

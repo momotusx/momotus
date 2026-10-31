@@ -196,3 +196,19 @@ private struct Refused: LocalizedError { var errorDescription: String? { "timed 
     let phone = try body(of: "private func phoneSecondaries(_ details: TitleDetails) -> some View", in: title)
     #expect(phone.contains("Button { play(fromStart: true) } label: { Label(\"Start over\", glyph: \"rotate-ccw\") }"))
 }
+
+@MainActor @Test func playingATitleWithinItsUndoWindowKeepsItInContinueWatching() async throws {
+    let sent = Sent()
+    let removal = ContinueRemoval(wait: .milliseconds(200)) { sent.ids.append($0.id) }
+    removal.remove(card("a"))
+    // Another title playing changes nothing; this one playing drops the removal, and nothing is sent.
+    ContinueRemoval.played(itemId: "b")
+    #expect(removal.removing == card("a"))
+    ContinueRemoval.played(itemId: "a")
+    #expect(removal.removing == nil && !removal.hides(card("a")))
+    try await Task.sleep(for: .milliseconds(600))
+    #expect(sent.ids.isEmpty, "a played title was removed when the time ended")
+    // Every play starts through PlayerModel's init, which says so first.
+    let model = try String(contentsOf: URL(fileURLWithPath: #filePath).deletingLastPathComponent().appending(path: "../Marquee/Player/PlayerModel.swift"), encoding: .utf8)
+    #expect(try body(of: "init(route: PlayRoute, versions: VersionsModel?, core: CoreClient)", in: model).contains("ContinueRemoval.played(itemId: route.target.itemId)"))
+}
