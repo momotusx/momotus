@@ -361,7 +361,7 @@ async fn versions_then_playback_then_progress() {
     assert_eq!(next(&mut rx).await["ok"], true);
     let failed = push_until(&mut rx, playback, |s| s["phase"] == "failed").await;
     assert_eq!(
-        failed["attempts"][0]["error"], "The link no longer exists (404)",
+        failed["attempts"][0]["error"], "The link no longer exists",
         "{failed}"
     );
     session

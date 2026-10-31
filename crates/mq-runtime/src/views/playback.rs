@@ -2348,6 +2348,21 @@ fn said(error: &str) -> String {
     }
 }
 
+/// A failure in a system's words (the engine, the library, the stream
+/// server): the log keeps them and the attempt list says the source did not
+/// start, never the raw text (the owner's rule). A full disk keeps its
+/// words, which the attempt line and the version's mark read
+/// (`names_full_disk`).
+fn unsaid(e: impl std::fmt::Display) -> String {
+    let text = e.to_string();
+    tracing::info!("source did not start: {text}");
+    if names_full_disk(&text) {
+        text
+    } else {
+        NOT_STARTED.to_owned()
+    }
+}
+
 /// Words for a full disk or storage: the system's (ENOSPC,
 /// `ErrorKind::StorageFull`), a service's, an older core's.
 fn names_full_disk(text: &str) -> bool {
@@ -2465,7 +2480,7 @@ async fn resolve_next(
             s.snapshot.attempts.push(Attempt {
                 key: String::new(),
                 via: "Momotus".into(),
-                error: said(&format!("local stream server did not start: {e}")),
+                error: unsaid(format!("local stream server did not start: {e}")),
             });
             failed(&mut s);
             snapshot.set(s.snapshot.clone());
@@ -3073,12 +3088,13 @@ async fn open_source(
             let resolved = resolver
                 .resolve(with_store(&resolver, service.as_deref(), request))
                 .await
-                .map_err(|e| e.to_string());
+                .map_err(|e| crate::debrid::link_words(&e));
             // Hybrid: a torrent the debrid store cannot give plays peer to
-            // peer in full builds.
+            // peer in full builds, and the attempt line is the swarm's (the
+            // account's reason is in the log).
             #[cfg(feature = "torrent")]
             if let (
-                Err(e),
+                Err(_),
                 Source::Torrent {
                     info_hash,
                     file_idx,
@@ -3088,10 +3104,9 @@ async fn open_source(
             ) = (&resolved, &stream.source)
             {
                 return open_torrent(core, stream, target, run, info_hash, *file_idx, trackers)
-                    .await
-                    .map_err(|p2p| format!("{e}; peer to peer: {p2p}"));
+                    .await;
             }
-            let link = resolved?;
+            let link = resolved.map_err(str::to_owned)?;
             if let Some(why) = never_opens(core, stream, target, state, &link.filename) {
                 not_here(state);
                 return Err(why);
@@ -3199,7 +3214,7 @@ async fn open_torrent(
             return Err(SAME_TORRENT.into());
         }
     }
-    let engine = core.torrent_engine().await.map_err(|e| e.to_string())?;
+    let engine = core.torrent_engine().await.map_err(unsaid)?;
     // The add, once the engine is up: a cold engine start never eats into
     // the attempt's window.
     let begun = tokio::time::Instant::now();
@@ -3215,7 +3230,7 @@ async fn open_torrent(
     ) {
         Ok(Authorization::Authorized { generation }) => generation,
         Ok(Authorization::Denied { .. }) => return Err("This title is not on the list".into()),
-        Err(e) => return Err(e.to_string()),
+        Err(e) => return Err(unsaid(e)),
     };
     // Addresses the policy refused while this torrent tried to start, as
     // counts only (plans/c27-torrent-policy.md 3.8). The window is this
@@ -3291,11 +3306,11 @@ async fn open_torrent(
             remember_dead(core, now);
             "No peer sent the torrent's details in time".to_owned()
         })?
-        .map_err(|e| e.to_string())?;
+        .map_err(unsaid)?;
     // This profile's use of it, for as long as the playback lives: a hold
     // for another profile leaves the torrent running for it.
     let profile = core.profile();
-    let claim = engine.claim(torrent, profile).map_err(|e| e.to_string())?;
+    let claim = engine.claim(torrent, profile).map_err(unsaid)?;
     {
         // Kept from now on, so a closure pauses it even before its head is
         // ready; a view already stopped starts nothing.
@@ -3492,7 +3507,7 @@ async fn open_torrent(
             failed_to_start(&mut lock(state));
             NOT_STARTED.to_owned()
         }
-        Ok((_, _, Started::Ready(Err(e)))) | Err(e) => e.to_string(),
+        Ok((_, _, Started::Ready(Err(e)))) | Err(e) => unsaid(e),
     };
     // The next candidate plays instead: stop downloading this one, unless
     // another playback still claims it (the engine then keeps it). What it
@@ -6330,6 +6345,27 @@ mod tests {
         assert_eq!(s.failed_as, Some(EmptyKind::NotStarted));
         fail(&mut s, "The source could not be reached", None);
         assert_eq!(s.failed_as, Some(EmptyKind::Unreachable));
+    }
+
+    /// The owner's rule: a system's own words (the engine, the library, the
+    /// stream server) never reach an attempt line; the log keeps them, and a
+    /// full disk keeps its own way to "did not start here".
+    #[test]
+    fn no_attempt_line_carries_a_systems_words() {
+        let link = stream(r#"{"url":"https://cdn.example/v.mkv"}"#);
+        for raw in [
+            "connection reset by peer (os error 54)",
+            "database is locked",
+            "local stream server did not start: Address already in use (os error 48)",
+        ] {
+            assert_eq!(attempt(&link, &unsaid(raw)).error, NOT_STARTED, "{raw}");
+        }
+        let full = "No space left on device (os error 28)";
+        assert!(
+            names_full_disk(&unsaid(full)),
+            "a full disk is still told apart"
+        );
+        assert_eq!(attempt(&link, &unsaid(full)).error, NOT_STARTED);
     }
 
     /// Review r3 P1: every way a full disk reaches an attempt line (the

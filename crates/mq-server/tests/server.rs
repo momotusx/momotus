@@ -1090,7 +1090,7 @@ async fn open_checks_the_origin_with_the_read_that_serves_the_player() {
         .open(upstream(&refusing), "v.mkv", Duration::from_secs(5))
         .await
         .unwrap_err();
-    assert_eq!(err, "The source refused access (403)");
+    assert_eq!(err, "The source refused access");
     let err = server
         .open(
             upstream("http://127.0.0.1:9/v.mkv"),

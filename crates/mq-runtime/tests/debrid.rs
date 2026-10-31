@@ -813,3 +813,48 @@ async fn a_resolved_debrid_link_gets_no_private_reach() {
     );
     assert_eq!(origin.count("GET", "/Movie.mkv"), 0, "the origin was asked");
 }
+
+/// The owner's rule: a service's refusal reads in plain words in the attempt
+/// list, never its code or its own text ("provider error 35:
+/// infringing_file"). Store builds only: a full build plays the torrent
+/// peer to peer instead.
+#[cfg(not(feature = "torrent"))]
+#[tokio::test]
+async fn a_services_refusal_reads_without_its_code() {
+    use mq_runtime::{PlayTarget, PlaybackPhase, PlaybackView};
+    let rd = Server::start(vec![route(
+        "POST",
+        "/rest/1.0/torrents/addMagnet",
+        400,
+        r#"{"error":"infringing_file","error_code":35}"#,
+    )])
+    .await;
+    let core = Core::temporary("owner").unwrap();
+    core.set_debrid_origin(&rd.base);
+    core.restore_debrid(vec![rd_record(G1, "TOKEN", now_ms())], vec![])
+        .unwrap();
+    let streams =
+        br#"{"streams":[{"name":"RD","infoHash":"dd8255ecdc7ca55fb0bbf81323d87062db1f6d1c"}]}"#;
+    let candidates: Vec<_> = mq_protocol::decode_streams(streams)
+        .unwrap()
+        .streams
+        .iter()
+        .map(|w| mq_streams::normalize(w, "local", "Local", 0, 0))
+        .collect();
+    let target = PlayTarget {
+        kind: "movie".into(),
+        item_id: "tt1727587".into(),
+        video_id: "tt1727587".into(),
+        ..PlayTarget::default()
+    };
+    let view = PlaybackView::open(&core, candidates, target);
+    until("playback settles", || {
+        view.snapshot().phase != PlaybackPhase::Resolving
+    })
+    .await;
+    let s = view.snapshot();
+    assert_eq!(s.phase, PlaybackPhase::Failed, "{s:?}");
+    let line = &s.attempts[0].error;
+    assert_eq!(line, "The streaming service had an error");
+    assert!(!line.contains(char::is_numeric), "{line}");
+}

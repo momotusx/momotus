@@ -730,7 +730,8 @@ async fn falls_over_to_the_first_source_that_answers() {
         assert!(errors.remove(0).contains("debrid account"), "{errors:?}");
     }
     assert_eq!(errors.len(), 1, "{errors:?}");
-    assert!(errors[0].contains("404"), "{errors:?}");
+    // In words, never the status (the owner's rule).
+    assert_eq!(errors[0], "The link no longer exists", "{errors:?}");
 
     // The player gets a loopback URL; the origin's header is injected for it.
     let url = s.url.unwrap();
@@ -743,11 +744,15 @@ async fn falls_over_to_the_first_source_that_answers() {
     let resp = http.get_range(&url, 0, 1, &local).await.unwrap();
     assert_eq!(&resp.body[..], b"M");
 
-    // A player error moves on; with nothing left the view says so.
+    // A player error moves on; with nothing left the view says so, in the
+    // core's words: the player's own ("decoder error") go to the log.
     view.fail_over(None, None, None, "decoder error");
     let s = settled(&view).await;
     assert_eq!(s.phase, PlaybackPhase::Failed);
-    assert_eq!(s.attempts.last().unwrap().error, "decoder error");
+    assert_eq!(
+        s.attempts.last().unwrap().error,
+        "This source could not be played"
+    );
     assert!(http.get_range(&url, 0, 1, &local).await.is_err());
 }
 
@@ -858,7 +863,7 @@ async fn a_late_fail_over_never_drops_the_next_source() {
     assert_eq!(second.key, first.key);
     assert!(second.attempt > first.attempt, "{second:?}");
     let failed: Vec<_> = second.attempts.iter().map(|a| a.error.as_str()).collect();
-    assert_eq!(failed, ["The link no longer exists (404)"]);
+    assert_eq!(failed, ["The link no longer exists"]);
     // The first source's player reports a second error after the move.
     view.fail_over(Some(first.attempt), Some("decode"), None, "late");
     let now = view.snapshot();

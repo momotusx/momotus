@@ -311,6 +311,23 @@ fn kind(e: &DebridError) -> &'static str {
     }
 }
 
+/// Why a streaming service gave no link, in the attempt list's words: never
+/// a provider's code or text (the owner's rule); the log keeps its kind.
+pub(crate) fn link_words(e: &DebridError) -> &'static str {
+    tracing::info!(error = kind(e), "debrid link failed");
+    match e {
+        DebridError::Auth => "The streaming service did not accept the account",
+        DebridError::NotPremium => "The streaming account has no premium plan",
+        DebridError::NotCached => "The streaming service does not have this file ready",
+        DebridError::RateLimited { .. } => "The streaming service is busy, try again soon",
+        DebridError::Quota => "The streaming account reached its limit",
+        DebridError::Provider { .. } => "The streaming service had an error",
+        DebridError::Http(_) => "The streaming service could not be reached",
+        DebridError::Timeout => "The streaming service did not answer in time",
+        DebridError::NoPlayableFile => "The torrent has no video to play",
+    }
+}
+
 /// Network trouble, a busy service or a server fault: worth another try.
 fn transient(e: &DebridError) -> bool {
     match e {
@@ -891,8 +908,11 @@ fn failed(e: &DebridError) -> DebridLoginSnapshot {
         DebridError::Provider { code, .. } if code == "no_code_sign_in" => {
             "This service signs in with a key.".into()
         }
-        DebridError::Provider { code, .. } => format!("The service refused the sign-in ({code})."),
-        e => format!("The service refused the sign-in ({}).", kind(e)),
+        // Never the provider's own code (the owner's rule: no codes on screen).
+        DebridError::Provider { .. } => "The service refused the sign-in.".into(),
+        DebridError::NotPremium => "This account has no premium plan.".into(),
+        // Its kind is in the log above, never an internal label on screen.
+        _ => "The service refused the sign-in.".into(),
     };
     DebridLoginSnapshot::Failed { reason }
 }
@@ -1259,5 +1279,43 @@ mod tests {
         assert_eq!(conn.refused("OLD").await.as_deref(), Some("NEW"));
         assert_eq!(conn.health(), AccountState::Ok);
         assert_eq!(lock(&conn.record).revision, 1);
+    }
+
+    /// The owner's rule: a refused sign-in or link says no provider code, no
+    /// status and no internal label; the log keeps the kind.
+    #[test]
+    fn a_services_refusal_says_no_code() {
+        let coded = || DebridError::Provider {
+            code: "35".into(),
+            message: "infringing_file".into(),
+        };
+        let http = || {
+            DebridError::Http(mq_http::HttpError::Status {
+                status: 503,
+                body: Default::default(),
+                retry_after: None,
+            })
+        };
+        let link = |e: DebridError| link_words(&e).to_owned();
+        let sign_in = |e: DebridError| match failed(&e) {
+            DebridLoginSnapshot::Failed { reason } => reason,
+            other => panic!("{other:?}"),
+        };
+        for line in [
+            link(coded()),
+            link(http()),
+            link(DebridError::RateLimited {
+                retry_after: Some(Duration::from_secs(5)),
+            }),
+            sign_in(coded()),
+            sign_in(DebridError::Auth),
+            sign_in(DebridError::Quota),
+        ] {
+            assert!(!line.contains(char::is_numeric), "{line}");
+            assert!(
+                !line.contains('(') && !line.contains("infringing"),
+                "{line}"
+            );
+        }
     }
 }

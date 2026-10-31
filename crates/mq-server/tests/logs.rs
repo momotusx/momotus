@@ -117,7 +117,7 @@ async fn upstream_logs_never_name_the_origin() {
     let refused = open(refusing, Some(local.clone()), second)
         .await
         .unwrap_err();
-    assert_eq!(refused, "The source refused access (403)");
+    assert_eq!(refused, "The source refused access");
     let late = open(silent, Some(local.clone()), Duration::from_millis(300)).await;
     assert_eq!(late.unwrap_err(), "The source did not answer in time");
     let down = open(dead, Some(local.clone()), second).await.unwrap_err();
@@ -176,6 +176,8 @@ async fn upstream_logs_never_name_the_origin() {
         "stream upstream refused: blocked address",
         "stream upstream failed: network",
         "stream source unreachable: network",
+        // The status the attempt list leaves out, kept for support.
+        "stream source refused: status 403",
         "subtitle upstream failed: network",
         "plain proxy upstream failed: network",
         "stream redirect target failed: blocked address",
