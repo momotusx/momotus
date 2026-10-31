@@ -55,7 +55,10 @@ export { devices, failed, fingerprint, joined, locked, memoryOnly, memoryProblem
 export const dismissFailed = () => setFailed({ refused: 0, unreadable: 0, newer: 0 });
 
 const code = (e: unknown) => (e instanceof BridgeError || e instanceof vault.VaultError ? e.code : undefined);
-export const problemOf = (e: unknown) => ({ code: code(e), words: syncProblem(code(e), e instanceof Error ? e.message : String(e)) });
+export const problemOf = (e: unknown) => ({
+  code: code(e),
+  words: syncProblem(code(e), e instanceof Error ? e.message : String(e), e instanceof BridgeError ? e.kind : undefined),
+});
 
 /** The record never travels a link that is neither encrypted nor on this machine. */
 function guardLink() {

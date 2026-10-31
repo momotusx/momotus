@@ -82,7 +82,12 @@ const codeOf = (e: unknown) => {
   const c = e && typeof e === "object" && "code" in e ? (e as { code?: unknown }).code : undefined;
   return typeof c === "string" ? c : undefined;
 };
-const say = (e: unknown, step: SyncStep) => stepProblem(codeOf(e), e instanceof Error ? e.message : String(e), step);
+/** The reply's `kind` (what the core says it was), never read out of the text. */
+const kindOf = (e: unknown) => {
+  const k = e && typeof e === "object" && "kind" in e ? (e as { kind?: unknown }).kind : undefined;
+  return typeof k === "string" ? k : undefined;
+};
+const say = (e: unknown, step: SyncStep) => stepProblem(codeOf(e), e instanceof Error ? e.message : String(e), step, kindOf(e));
 const clock = (ms: number) => new Date(ms).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 /** After the page changed under it, focus goes to the step's own target (remote and keys only). */
 const focusSoon = (sel: string) => autoFocusSoon(() => document.querySelector<HTMLElement>(sel));
@@ -1603,7 +1608,7 @@ export function ForkReview() {
           fallback={
             <section class="problem">
               <Said tone="bad">{say(data.error, "compare")}</Said>
-              <Show when={codeOf(data.error) === undefined && String((data.error as Error | undefined)?.message) === "http status 401"}>
+              <Show when={codeOf(data.error) === undefined && kindOf(data.error) === "unauthorized"}>
                 <LeaveHere fkey="sync-fork:leave-here" />
               </Show>
               <div class="acts">

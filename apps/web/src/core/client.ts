@@ -7,6 +7,7 @@ import { createStore, reconcile } from "solid-js/store";
 import { Bridge, BridgeError, ipcTransport, shellPost, webSocketTransport } from "./bridge";
 import { applyDiffs } from "./diff";
 import { isPrivateLink } from "../lib/sync";
+import { failureWords } from "../lib/words";
 import type { DiscoverSnapshot } from "./generated/DiscoverSnapshot";
 import type { Episode } from "./generated/Episode";
 import type { Hero } from "./generated/Hero";
@@ -85,15 +86,27 @@ connection?.addEventListener("change", networkChanged);
 // Told at load, online or not: the core runs no download before it hears the network.
 networkChanged();
 
-export type ViewStatus ={ state: "opening" } | { state: "open" } | { state: "failed"; reason: string };
+/** A failed view: `reason` is what the screen says (`reasonOf`), `raw` the core's own text, for Details only. */
+export type ViewStatus = { state: "opening" } | { state: "open" } | { state: "failed"; reason: string; raw?: string };
 
 /** This browser's language as the core's codes begin ("nb" for "nb-NO"). */
 export const deviceLanguage = () => (navigator.language || "en").split("-")[0]?.toLowerCase() || "en";
 
+/** What a screen says for a failure: its kind's words (apps/shared/error-words.json), never the raw text. */
 export const reasonOf = (e: unknown) =>
   e instanceof Error && e.message === "connection closed"
     ? `Cannot reach the core at ${bridgeUrl}. Start it with: bun run bridge (in apps/web)`
-    : String(e instanceof Error ? e.message : e);
+    : failureWords(e);
+
+/** A view that could not open: the words, and the core's raw text behind Details (none when it is its own sentence). */
+const failedStatus = (e: unknown): ViewStatus => {
+  const reason = reasonOf(e);
+  const raw = e instanceof Error ? e.message : String(e);
+  return raw === reason ? { state: "failed", reason } : { state: "failed", reason, raw };
+};
+
+/** A failed view's raw text, for Details. */
+export const rawOf = (s: ViewStatus | undefined) => (s?.state === "failed" ? s.raw : undefined);
 
 /** Work from before a profile switch or a lock (`switched`): its screen is gone, so nothing shows it. */
 export const isSwitched = (e: unknown) => e instanceof BridgeError && e.code === "switched";
@@ -161,7 +174,7 @@ export function liveView<S>(view: string, params: Record<string, unknown> = {}, 
       return s;
     })
     .catch((e) => {
-      setState("status", { state: "failed", reason: reasonOf(e) });
+      setState("status", failedStatus(e));
       commands.drop();
       return null;
     });
@@ -210,7 +223,7 @@ export function homeView(): HomeState {
       return s;
     })
     .catch((e) => {
-      setState("status", { state: "failed", reason: reasonOf(e) });
+      setState("status", failedStatus(e));
       return null;
     });
   return state;
@@ -267,7 +280,7 @@ export function titleView(kind: string, id: string): TitleView {
       commands.open((c) => sub.command(c));
     })
     .catch((e) => {
-      setState("status", { state: "failed", reason: reasonOf(e) });
+      setState("status", failedStatus(e));
       commands.drop();
     });
   return { state, command: commands.send };

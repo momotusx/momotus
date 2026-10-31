@@ -14,7 +14,7 @@ import RefreshCw from "lucide-solid/icons/refresh-cw";
 import TriangleAlert from "lucide-solid/icons/triangle-alert";
 import { createSignal, For, type JSX, Match, onCleanup, Show, Switch } from "solid-js";
 import { Qr } from "../components/qr";
-import { liveView } from "../core/client";
+import { liveView, reasonOf } from "../core/client";
 import type { TraktLoginSnapshot } from "../core/generated/TraktLoginSnapshot";
 import type { TraktStatus } from "../core/generated/TraktStatus";
 import { remembered } from "../core/sync";
@@ -27,7 +27,6 @@ import "./sync.css";
 import "./trakt.css";
 
 const clock = (ms: number) => new Date(ms).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
-const reasonOf = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
 function Said(props: { tone: "ok" | "warn" | "bad" | ""; children: JSX.Element }) {
   return (

@@ -19,7 +19,7 @@ import { Chips } from "../components/grid";
 import { EmptyActs } from "../components/empty-acts";
 import { KeyedPage } from "../components/keyed-page";
 import { Why } from "../components/why";
-import { askKind, op } from "../core/client";
+import { askKind, op, rawOf } from "../core/client";
 import type { SectionQuality } from "../core/generated/SectionQuality";
 import type { SourceKind } from "../core/generated/SourceKind";
 import type { VersionRow } from "../core/generated/VersionRow";
@@ -444,7 +444,7 @@ export function VersionsPage(props: { kind: string; id: string; videoId: string;
             {(reason) => (
               <section class="vempty problem">
                 <h2>{ctx.failure() ? nextVersion.titleNotOpened : nextVersion.listNotLoaded}</h2>
-                <Why reason={reason()} />
+                <Why reason={reason()} raw={rawOf(ctx.failure() ? ctx.title.state.status : ctx.versions()?.state.status)} />
                 <div class="acts">
                   <button class="btn primary" data-f="versions:retry" data-autofocus onClick={() => props.retry()}>
                     <RefreshCw aria-hidden />

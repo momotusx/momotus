@@ -186,7 +186,7 @@ function DiscoverPage(props: { retry: () => void }) {
           <h1>Discover</h1>
           <section class="problem">
             <h2>Discover could not open</h2>
-            <Why reason={(view.state.status as { reason: string }).reason} />
+            <Why reason={(view.state.status as { reason: string }).reason} raw={(view.state.status as { raw?: string }).raw} />
             <button class="btn primary" data-f="discover:retry" data-autofocus onClick={() => props.retry()}>
               <RefreshCw aria-hidden />
               Try again

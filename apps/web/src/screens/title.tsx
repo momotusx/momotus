@@ -24,7 +24,7 @@ import { leftOut, RemovalNote, removeSoon, Row } from "../components/row";
 import { separators } from "../components/separators";
 import { TrailerOverlay } from "../components/trailer";
 import { muted, playTrailer, setMuted, type TrailerControl, trailerPlaying } from "../components/yt-player";
-import { type LiveView, type TitleView, titleView, versionsView } from "../core/client";
+import { type LiveView, rawOf, type TitleView, titleView, versionsView } from "../core/client";
 import type { CastMember } from "../core/generated/CastMember";
 import type { DownloadBadge } from "../core/generated/DownloadBadge";
 import type { EmptyKind } from "../core/generated/EmptyKind";
@@ -386,7 +386,7 @@ function TitlePage(props: { kind: string; id: string; retry: () => void }) {
             <div class="problem">
               <CircleAlert aria-hidden class="problem-icon" />
               <h2>This title could not be opened</h2>
-              <Why reason={failure(view)} />
+              <Why reason={failure(view)} raw={rawOf(view.state.status)} />
               <div class="problem-acts">
                 <button class="btn primary" data-f="title:retry" data-autofocus onClick={() => props.retry()}>
                   <RefreshCw aria-hidden />

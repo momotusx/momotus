@@ -238,8 +238,8 @@ test("sync failures read by code and by action, and never show the server's addr
   expect(syncProblem("forget", "x")).toBe(syncWords.forgetFailed);
   expect(syncProblem("wrongRecord", "this record is not this device's sync account")).toBe(syncWords.wrongRecord);
   // A relay that lost this device's token cannot be read: it says so, never "try again".
-  expect(stepProblem(undefined, "http status 401", "compare")).toBe(syncWords.forkTokenLost);
-  expect(stepProblem(undefined, "http status 502", "compare")).toStartWith("The lists could not be compared.");
+  expect(stepProblem(undefined, "unauthorized by the relay", "compare", "unauthorized")).toBe(syncWords.forkTokenLost);
+  expect(stepProblem(undefined, "http status 502", "compare", "serverError")).toStartWith("The lists could not be compared.");
   expect(stepProblem("noPrf", "x", "unlock")).toBe(syncWords.noPrf);
   expect(syncProblem("plainLink", "x")).toBe(syncWords.plainLink);
   expect(syncProblem("alreadyJoined", "x")).toBe(syncWords.alreadyJoined);
@@ -251,12 +251,15 @@ test("sync failures read by code and by action, and never show the server's addr
       expect(words.includes("relay.example") || words.includes("secret") || words.includes("http")).toBe(false);
     }
   }
-  expect(stepProblem(undefined, "http status 403", "start")).toContain("invite code");
-  expect(stepProblem(undefined, "http status 404", "recover")).toBe(syncWords.wrongKit);
+  expect(stepProblem(undefined, "refused", "start", "forbidden")).toContain("invite code");
+  // The status is the reply's kind, never read out of the text.
+  expect(stepProblem(undefined, "http status 403", "start")).not.toContain("invite code");
+  expect(stepProblem(undefined, "http status 401", "compare")).not.toBe(syncWords.forkTokenLost);
+  expect(stepProblem(undefined, "gone", "recover", "notFound")).toBe(syncWords.wrongKit);
   expect(stepProblem("kitUnknown", "this kit or passkey opens no account", "recover")).toBe(syncWords.wrongKit);
-  expect(stepProblem(undefined, "http status 404", "approve")).toContain("expired or was used");
+  expect(stepProblem(undefined, "gone", "approve", "notFound")).toContain("expired or was used");
   // A 404 elsewhere is no expired code: each action says what did not happen.
-  expect(stepProblem(undefined, "http status 404", "kit")).toBe("No kit was made. The sync server did not answer. Try again in a moment.");
+  expect(stepProblem(undefined, "gone", "kit", "notFound")).toBe("No kit was made. The sync server did not answer. Try again in a moment.");
   expect(stepProblem(undefined, "http status 502", "remove")).toStartWith("Nothing was removed.");
   expect(stepProblem(undefined, "http status 502", "load")).toStartWith("The device list did not load.");
   expect(stepProblem(undefined, "http status 502", "leave")).toStartWith("This device still syncs.");

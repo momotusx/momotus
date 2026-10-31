@@ -61,7 +61,7 @@ test("a late install result lands on its own card after the page closed and open
   await page.locator('[data-f="settings:find-addons"]').click();
   await expect(install()).toHaveText("Installing");
 
-  answer({ ok: false, error: "This addon's server did not answer in time", code: "timeout" });
+  answer({ ok: false, error: "This addon's server did not answer in time", code: "timeout", kind: "said" });
   await expect(card(page, "WatchHub").locator(".st.bad")).toHaveText("This addon's server did not answer in time");
   await expect(install()).toHaveText("Install");
   await expect(card(page, "YouTube").locator(".st.bad")).toHaveCount(0);

@@ -8,11 +8,12 @@ export interface Transport {
   onClose(handler: () => void): void;
 }
 
-/** `code` names an error the app acts on (sync, keystore); `error` is the
- * plain text to show. */
+/** `code` names an error the app acts on (sync, keystore); `kind` is what to
+ * show (apps/shared/error-words.json, `said` for the core's own sentence);
+ * `error` is the raw text, for the log and Details only. */
 type Reply =
   | { id: number; ok: true; result: unknown }
-  | { id: number; ok: false; error: string; code?: string; retryAfterMs?: number; views?: string[] };
+  | { id: number; ok: false; error: string; kind?: string; code?: string; retryAfterMs?: number; views?: string[] };
 type Push = { sub: number; updates: unknown[] };
 
 export class BridgeError extends Error {
@@ -24,6 +25,8 @@ export class BridgeError extends Error {
     readonly retryAfterMs?: number,
     /** With `viewsOpen`: the views still open. */
     readonly views?: string[],
+    /** The reply's `kind`: what the app shows for it (`failureWords`). */
+    readonly kind?: string,
   ) {
     super(message);
   }
@@ -99,7 +102,7 @@ export class Bridge {
     if (message.ok) {
       waiter.onResult?.(message.result);
       waiter.resolve(message.result);
-    } else waiter.reject(new BridgeError(message.error, message.code, message.retryAfterMs, message.views));
+    } else waiter.reject(new BridgeError(message.error, message.code, message.retryAfterMs, message.views, message.kind));
     // The last open settled: what still waits has no view to go to.
     if (waiter.opens && --this.opening === 0) this.early.clear();
   }

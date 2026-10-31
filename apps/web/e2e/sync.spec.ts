@@ -175,7 +175,7 @@ async function device(browser: Browser, port: number, form: keyof typeof FORMS, 
       const fail = failOnce.get(port);
       if (request.op && request.op === fail?.op) {
         failOnce.delete(port);
-        ws.send(JSON.stringify({ id: request.id, ok: false, error: fail.code ? "the relay shows a roster that conflicts" : "http status 502", code: fail.code }));
+        ws.send(JSON.stringify({ id: request.id, ok: false, error: fail.code ? "the relay shows a roster that conflicts" : "http status 502", kind: fail.code ? "failed" : "serverError", code: fail.code }));
         return;
       }
       if (core.readyState === WebSocket.OPEN) core.send(String(m));

@@ -100,7 +100,7 @@ function Card(props: {
       setKeyOpen(false);
       props.onSaid(null);
     } catch (err) {
-      props.onSaid({ service: id(), text: `The key was not taken: ${reasonOf(err)}.`, tone: "bad" });
+      props.onSaid({ service: id(), text: `The key was not taken. ${reasonOf(err)}`, tone: "bad" });
     } finally {
       setBusy(false);
     }
@@ -125,8 +125,8 @@ function Card(props: {
     try {
       await debridStore.disconnect(a.service, a.generation);
       props.onSaid({ service: id(), text: "Disconnected", tone: "idle" });
-    } catch (err) {
-      props.onSaid({ service: id(), text: `Not disconnected yet: ${reasonOf(err)}. It finishes at the next start.`, tone: "bad" });
+    } catch {
+      props.onSaid({ service: id(), text: "Not disconnected yet. It finishes at the next start.", tone: "bad" });
     } finally {
       setBusy(false);
     }

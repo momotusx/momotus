@@ -173,7 +173,7 @@ function CalendarPage(props: { retry: () => void }) {
       <Show when={view.state.status.state === "failed"}>
         <section class="problem">
           <h2>The calendar could not open</h2>
-          <Why reason={(view.state.status as { reason: string }).reason} />
+          <Why reason={(view.state.status as { reason: string }).reason} raw={(view.state.status as { raw?: string }).raw} />
           <button class="btn primary" data-f="calendar:retry" data-autofocus onClick={() => props.retry()}>
             <RefreshCw aria-hidden />
             Try again

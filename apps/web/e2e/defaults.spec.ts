@@ -76,7 +76,7 @@ async function device(
         return;
       }
       if (opts.languages === "fail" && msg.op === "languagePicker") {
-        ws.send(JSON.stringify({ id: msg.id, ok: false, error: "the core is busy" }));
+        ws.send(JSON.stringify({ id: msg.id, ok: false, error: "the core is busy", kind: "failed" }));
         return;
       }
       // One query's answer held back, so it arrives after a later one.
@@ -684,7 +684,7 @@ test("Subtitles: a language list that fails says so, offers the common ones, and
   await page.goto("/welcome?step=subs&form=desktop");
   await expect(page.locator('[data-f="welcome:lang:open"]')).toContainText("No subtitles");
   await openPicker(page);
-  await expect(page.locator(".lp-note")).toContainText("The language list could not be loaded: the core is busy");
+  await expect(page.locator(".lp-note")).toContainText("The language list could not be loaded: Momotus could not finish this.");
   await expect(page.locator('[data-f="welcome:lang:s:none"]')).toHaveAttribute("aria-selected", "true");
   await expect(page.locator('[data-f="welcome:lang:s:en"]')).toBeVisible();
   await page.locator('[data-f="lp:done"]').click();

@@ -8,7 +8,7 @@ import Plus from "lucide-solid/icons/plus";
 import { createEffect, createSignal, For, type JSX, on, onCleanup, onMount, Show } from "solid-js";
 import { AvatarArt } from "../components/avatar";
 import { BridgeError } from "../core/bridge";
-import { op } from "../core/client";
+import { op, reasonOf } from "../core/client";
 import type { ProfileInfo } from "../core/generated/ProfileInfo";
 import type { ProfilesSnapshot } from "../core/generated/ProfilesSnapshot";
 import { markChosen, profiles, switchProfile, takePick, unlockProfile } from "../core/profiles";
@@ -34,7 +34,7 @@ function tried(e: unknown): Tried {
   if (e instanceof BridgeError && e.code === "wrongPin") return { kind: "wrong" };
   if (e instanceof BridgeError && e.code === "locked" && e.retryAfterMs !== undefined) return { kind: "wait", ms: e.retryAfterMs };
   const code = e instanceof BridgeError ? e.code : undefined;
-  return { kind: "problem", text: profileProblem(code, e instanceof Error ? e.message : String(e)) };
+  return { kind: "problem", text: profileProblem(code, reasonOf(e)) };
 }
 
 /** Four digits, one try at a time. The digits live only here and go when it closes or the app hides. */

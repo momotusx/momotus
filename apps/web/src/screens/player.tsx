@@ -26,7 +26,7 @@ import { EmptyActs } from "../components/empty-acts";
 import { Why } from "../components/why";
 import { KeyedPage } from "../components/keyed-page";
 import { TraktMark } from "../components/trakt-mark";
-import { liveView, op, prefsView, serverMoves } from "../core/client";
+import { liveView, op, prefsView, rawOf, serverMoves } from "../core/client";
 import type { EmptyVersions } from "../core/generated/EmptyVersions";
 import type { PlaybackSnapshot } from "../core/generated/PlaybackSnapshot";
 import type { Segment } from "../core/generated/Segment";
@@ -1035,11 +1035,11 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
       {failed() || openError() ? nextVersion.another : choiceWords.empty.nothingPlaysHere.action}
     </A>
   );
-  const status = (): { tone: string; text: string; detail?: string; note?: string; busy: boolean; empty?: EmptyVersions } | null => {
+  const status = (): { tone: string; text: string; detail?: string; raw?: string; note?: string; busy: boolean; empty?: EmptyVersions } | null => {
     const t = titleError();
-    if (t) return { tone: "bad", text: nextVersion.titleNotOpened, detail: t, busy: false };
+    if (t) return { tone: "bad", text: nextVersion.titleNotOpened, detail: t, raw: rawOf(ctx.title.state.status), busy: false };
     const v = ctx.versions();
-    if (v?.state.status.state === "failed") return { tone: "bad", text: nextVersion.listNotLoaded, detail: (v.state.status as { reason: string }).reason, busy: false };
+    if (v?.state.status.state === "failed") return { tone: "bad", text: nextVersion.listNotLoaded, detail: v.state.status.reason, raw: rawOf(v.state.status), busy: false };
     // The playback could not open (a version no longer listed): a card with
     // the error under it, as Apple's, never a spinner.
     const open = openError();
@@ -1284,7 +1284,7 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
                   <CircleAlert aria-hidden />
                   {s().text}
                 </p>
-                <Show when={s().detail}>{(d) => <Why class="end-detail" reason={d()} />}</Show>
+                <Show when={s().detail}>{(d) => <Why class="end-detail" reason={d()} raw={s().raw} />}</Show>
                 <Show when={s().note}>
                   {(n) => (
                     <p class="end-detail end-note" role="status">

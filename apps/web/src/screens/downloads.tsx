@@ -122,7 +122,7 @@ export default function Downloads() {
           <Match when={view.state.status.state === "failed"}>
             <section class="problem">
               <h2>Downloads could not open</h2>
-              <Why reason={(view.state.status as { reason: string }).reason} />
+              <Why reason={(view.state.status as { reason: string }).reason} raw={(view.state.status as { raw?: string }).raw} />
             </section>
           </Match>
           <Match when={s()}>

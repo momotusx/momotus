@@ -1,11 +1,12 @@
 /** A reason in plain words (lib/words.ts problemWords), the core's own text
- * behind Details for support. */
+ * behind Details for support. A view that could not open passes its words as
+ * `reason` and the core's text as `raw` (`ViewStatus`). */
 
 import { Show } from "solid-js";
 import { problemWords } from "../lib/words";
 
-export function Why(props: { reason: string; class?: string }) {
-  const w = () => problemWords(props.reason);
+export function Why(props: { reason: string; raw?: string; class?: string }) {
+  const w = () => (props.raw === undefined ? problemWords(props.reason) : { text: props.reason, raw: props.raw });
   return (
     <>
       <p class={props.class}>{w().text}</p>

@@ -12,6 +12,6 @@
   "unreadable": "It sent something Momotus cannot read.",
   "blockedAddress": "It points to a private network address, which Momotus does not open.",
   "invalidUrl": "That is not a web address.",
-  "coreStopped": "Momotus stopped unexpectedly. Close it and open it again.",
-  "coreNotStarted": "Momotus could not start. Close it and open it again."
+  "coreStopped": "Momotus stopped unexpectedly. Open it again to carry on.",
+  "coreNotStarted": "Momotus could not start. Open it again to try once more."
 }

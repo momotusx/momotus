@@ -21,7 +21,25 @@ import type { StreamPrefs } from "../core/generated/StreamPrefs";
 import type { Form } from "../form";
 import { bytes } from "./format";
 import accountShared from "../../../shared/account-words.json";
+import errorShared from "../../../shared/error-words.json";
 import choice from "../../../shared/stream-choice-words.json";
+
+/** The failure words every app shows (apps/shared/error-words.json). */
+export const errorWords = errorShared;
+type FailureKind = Exclude<keyof typeof errorShared, "about">;
+
+/** The words for a failure kind; an unknown or missing kind is `failed`. */
+export const kindWords = (kind: string | undefined): string =>
+  kind && kind !== "about" && Object.hasOwn(errorShared, kind) ? errorShared[kind as FailureKind] : errorShared.failed;
+
+/** A failure in words, never its raw text: the core's own sentence when its
+ * `kind` is `said`, else the words for its kind. An error that did not come
+ * from the core (no kind) is `failed`. */
+export function failureWords(e: unknown): string {
+  const kind = (e as { kind?: unknown } | null)?.kind;
+  if (kind === "said" && e instanceof Error) return e.message;
+  return kindWords(typeof kind === "string" ? kind : undefined);
+}
 
 export type Tone = "ok" | "warn" | "bad" | "idle";
 
@@ -106,16 +124,17 @@ export function providesText(p: string): string {
 /**
  * Why pairing stopped, in words. The core's own pairing reasons are fixed
  * sentences and are kept; a connection or address error is replaced, since its
- * text can name the server's address (Android's `SyncCopy.pairingProblem`).
+ * text can name the server's address (Android's `SyncCopy.pairingProblem`): its
+ * `kind` says which.
  */
-export function pairingProblem(reason: string): string {
+export function pairingProblem(reason: string, kind?: string): string {
   if (reason.startsWith("pairing: ")) {
     const why = reason.slice("pairing: ".length);
     return `${why.charAt(0).toUpperCase()}${why.slice(1)}.`;
   }
   if (reason.startsWith("the relay must use https")) return "The sync server address must start with https.";
-  if (reason.startsWith("invalid url")) return "That is not a sync server address. It looks like https://sync.example.org.";
-  if (reason.startsWith("blocked private address")) return "This device does not connect to that address.";
+  if (kind === "invalidUrl") return "That is not a sync server address. It looks like https://sync.example.org.";
+  if (kind === "blockedAddress") return "This device does not connect to that address.";
   return "The sync server did not answer. Check the address and try again.";
 }
 
@@ -459,7 +478,7 @@ export function addedLine(kit: boolean, addedMs: number, by: string | null): str
  * `SyncProblem` and Android's `SyncCopy` word them), then the app's own
  * (`passkey`, `plainLink`, `alreadyJoined`). The core's own sentences are
  * kept; anything that may name the server's address is replaced. */
-export function syncProblem(code: string | undefined, message: string): string {
+export function syncProblem(code: string | undefined, message: string, kind?: string): string {
   switch (code) {
     case "dropped":
       return "This device was removed from your sync account. Your library stays here as local data.";
@@ -500,8 +519,8 @@ export function syncProblem(code: string | undefined, message: string): string {
       return "Only the main profile can do that.";
   }
   if (message.startsWith("roster: ")) return pairingProblem(`pairing: ${message.slice("roster: ".length)}`);
-  if (message.startsWith("pairing: ") || message.startsWith("invalid url") || message.startsWith("blocked private address") || message.startsWith("the relay must use https"))
-    return pairingProblem(message);
+  if (message.startsWith("pairing: ") || message.startsWith("the relay must use https") || kind === "invalidUrl" || kind === "blockedAddress")
+    return pairingProblem(message, kind);
   return "The sync server did not answer. Your changes wait here and go out on the next sync.";
 }
 
@@ -524,17 +543,18 @@ export type SyncStep = "start" | "recover" | "remember" | keyof typeof notDone;
 
 /** A failure of one action in words: by code, then the step's own statuses
  * (an invite on start, an unknown kit on recover, a used code on approve),
- * then what did not happen. Never the raw text: it can name the server. */
-export function stepProblem(code: string | undefined, message: string, step: SyncStep): string {
-  if (code) return syncProblem(code, message);
+ * then what did not happen. Never the raw text: it can name the server. The
+ * statuses are the reply's `kind`, never read out of the text. */
+export function stepProblem(code: string | undefined, message: string, step: SyncStep, kind?: string): string {
+  if (code) return syncProblem(code, message, kind);
   // Remembering fails in this browser's storage, not on the sync server.
   if (step === "remember") return syncWords.storageFailed;
-  if (step === "start" && message === "http status 403") return "This sync server needs an invite code, or the one entered is wrong.";
-  if (step === "recover" && message === "http status 404") return syncWords.wrongKit;
-  if (step === "start" || step === "recover") return pairingProblem(message);
-  if (step === "compare" && message === "http status 401") return syncWords.forkTokenLost;
-  if (step === "approve" && (message === "http status 404" || message === "http status 410")) return "This code expired or was used already. Ask the new device for a new one.";
-  if (message.startsWith("pairing: ") || message.startsWith("roster: ")) return syncProblem(undefined, message);
+  if (step === "start" && kind === "forbidden") return "This sync server needs an invite code, or the one entered is wrong.";
+  if (step === "recover" && kind === "notFound") return syncWords.wrongKit;
+  if (step === "start" || step === "recover") return pairingProblem(message, kind);
+  if (step === "compare" && kind === "unauthorized") return syncWords.forkTokenLost;
+  if (step === "approve" && kind === "notFound") return "This code expired or was used already. Ask the new device for a new one.";
+  if (message.startsWith("pairing: ") || message.startsWith("roster: ")) return syncProblem(undefined, message, kind);
   return `${notDone[step]} The sync server did not answer. Try again in a moment.`;
 }
 
@@ -860,16 +880,16 @@ export function problemWords(reason: string): { text: string; raw: string | null
   const status = /^http status (\d{3})/i.exec(r)?.[1];
   if (status) {
     const n = Number(status);
-    if (n === 404 || n === 410) return said("It has nothing at this address.");
-    if (n === 401 || n === 403) return said("It refused access.");
-    if (n === 429) return said("It is busy; try again soon.");
-    if (n >= 500) return said("It had an error on its side.");
-    return said("It answered with an error.");
+    if (n === 404 || n === 410) return said(errorShared.notFound);
+    if (n === 401 || n === 403) return said(errorShared.forbidden);
+    if (n === 429) return said(errorShared.rateLimited);
+    if (n >= 500) return said(errorShared.serverError);
+    return said(errorShared.httpError);
   }
-  if (/^timed out/i.test(r)) return said("It did not answer in time. Check the connection, then try again.");
-  if (/^network:/i.test(r)) return said("It could not be reached. Check the connection, then try again.");
-  if (/^(decode:|response larger than)/i.test(r)) return said("It sent something Momotus cannot read.");
-  if (/^blocked private address/i.test(r)) return said("It points to a private network address, which Momotus does not open.");
+  if (/^timed out/i.test(r)) return said(errorShared.timeout);
+  if (/^network:/i.test(r)) return said(errorShared.network);
+  if (/^(decode:|response larger than)/i.test(r)) return said(errorShared.unreadable);
+  if (/^blocked private address/i.test(r)) return said(errorShared.blockedAddress);
   return { text: r, raw: null };
 }
 

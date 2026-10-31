@@ -272,7 +272,7 @@ function Panel(props: { dialog?: boolean; retry: () => void }) {
                 <i class="dot" />
                 Search could not open.
               </p>
-              <Why class="palette-note" reason={(view.state.status as { reason: string }).reason} />
+              <Why class="palette-note" reason={(view.state.status as { reason: string }).reason} raw={(view.state.status as { raw?: string }).raw} />
               <button class="btn" data-f="search:retry" onClick={() => props.retry()}>
                 <RefreshCw aria-hidden />
                 Try again

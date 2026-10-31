@@ -18,6 +18,9 @@ import type { AddressInfo } from "node:net";
 import { Client, cleanup, NEXT_PORT, PORTS, startBridge } from "./core";
 import { BBB_ID, FILM_FILE } from "./source";
 
+// The failure words every app shows (apps/shared/error-words.json).
+const errorWords = JSON.parse(readFileSync(new URL("../../shared/error-words.json", import.meta.url), "utf8")) as { timeout: string };
+
 let core: { proc: ChildProcess; data: string } | null = null;
 let addon: Server | null = null;
 let slow: Server | null = null;
@@ -237,7 +240,7 @@ async function page(browser: Browser, viewport = { width: 1440, height: 900 }, o
       sent.push(msg);
       // A title view the meta addon cannot answer for, made up at the socket.
       if (msg.op === "subscribe" && msg.view === "title" && opts.failTitle?.()) {
-        return ws.send(JSON.stringify({ id: msg.id, ok: false, error: "the meta addon did not answer" }));
+        return ws.send(JSON.stringify({ id: msg.id, ok: false, error: "the meta addon did not answer", kind: "timeout" }));
       }
       if (upstream.readyState === WebSocket.OPEN) upstream.send(String(m));
       else early.push(String(m));
@@ -551,7 +554,8 @@ test("a title that cannot be opened: the player and Versions say so, with Try ag
   const card = p.locator(".endcard");
   await expect(card).toBeVisible({ timeout: 30_000 });
   await expect(card.locator(".st")).toHaveText("This title could not be opened");
-  await expect(card.locator(".end-detail")).toHaveText("the meta addon did not answer");
+  await expect(card.locator(".end-detail")).toHaveText(errorWords.timeout);
+  await expect(card.locator(".why-raw code")).toHaveText("the meta addon did not answer");
   const acts = card.locator(".acts > *");
   await expect(acts).toHaveCount(2);
   await expect(acts.nth(0)).toHaveAttribute("data-f", "player:retry");
@@ -574,7 +578,7 @@ test("a title that cannot be opened: the player and Versions say so, with Try ag
   await p.goto(`/title/movie/${BBB_ID}/versions/${BBB_ID}?form=tv`);
   const block = p.locator(".vempty.problem");
   await expect(block.locator("h2")).toHaveText("This title could not be opened", { timeout: 30_000 });
-  await expect(block.locator("p")).toHaveText("the meta addon did not answer");
+  await expect(block.locator("p")).toHaveText(errorWords.timeout);
   await expect.poll(focused).toBe("versions:retry");
   await expect(p.locator('[data-f="versions:back"]')).toBeVisible();
   failing = false;

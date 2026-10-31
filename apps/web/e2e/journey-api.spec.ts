@@ -152,7 +152,7 @@ type Sent = { id?: number; op?: string; view?: string; event?: string; sub?: num
 /** A page on this spec's core; `sent` is what it asked, in order, and
  * `fake` may answer a message at the socket instead of the core (a reply's
  * `ok` and `result` or `error`), or hold it with null. */
-type Reply = { ok: true; result: unknown } | { ok: false; error: string };
+type Reply = { ok: true; result: unknown } | { ok: false; error: string; kind?: string };
 async function page(browser: Browser, viewport = { width: 1440, height: 900 }, fake?: (m: Sent) => Reply | null | undefined) {
   const sent: Sent[] = [];
   // What the core sent the page, and a way to send it more as if from the core.
@@ -964,7 +964,7 @@ test("Start over beside Resume plays the same video from its beginning", async (
 
 test("a raw reason reads in plain words, the core's text behind Details", async ({ browser }) => {
   const raw = "network: error sending request for url (http://127.0.0.1:9/catalog.json): Connection refused (os error 61)";
-  const { context, page: p } = await page(browser, undefined, (m) => (m.op === "subscribe" && m.view === "library" ? { ok: false, error: raw } : undefined));
+  const { context, page: p } = await page(browser, undefined, (m) => (m.op === "subscribe" && m.view === "library" ? { ok: false, error: raw, kind: "network" } : undefined));
   await p.goto("/library?form=desktop");
   const problem = p.locator(".problem").first();
   await expect(problem).toContainText("It could not be reached. Check the connection, then try again.", { timeout: 30_000 });
@@ -1473,7 +1473,7 @@ test("the player, Calendar and Search say why they could not open in plain words
   const raw = "network: error sending request for url (http://127.0.0.1:9/x): Connection refused (os error 61)";
   const plain = "It could not be reached. Check the connection, then try again.";
   const { context, page: p } = await page(browser, undefined, (m) =>
-    m.op === "subscribe" && (m.view === "versions" || m.view === "calendar" || m.view === "search") ? { ok: false, error: raw } : undefined,
+    m.op === "subscribe" && (m.view === "versions" || m.view === "calendar" || m.view === "search") ? { ok: false, error: raw, kind: "network" } : undefined,
   );
   await p.goto("/play/movie/mqjm/mqjm?form=desktop");
   const card = p.locator(".endcard");
