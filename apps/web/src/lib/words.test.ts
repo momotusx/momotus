@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { addonHost, addonsSummary, nextVersion, qualityCell, sheetDetails, languageName, pairingProblem, plainAddress, problemWords, restartLine, serverHost, startAudio, statusText, subtitleNote, lowerFirst, kindBest, kindChips } from "./words";
+import { addonHost, addonsSummary, nextVersion, qualityCell, sheetDetails, languageName, pairingProblem, plainAddress, problemWords, restartLine, serverHost, startAudio, subtitleNote, lowerFirst, kindBest, kindChips } from "./words";
 import shared from "../../../shared/stream-choice-words.json";
 import type { EmptyAction } from "../core/generated/EmptyAction";
 import type { EmptyKind } from "../core/generated/EmptyKind";
@@ -22,14 +22,6 @@ import {
   screenClass,
   speedFor,
 } from "./words";
-
-test("status always has a word", () => {
-  expect(statusText({ kind: "ready", service: "TorBox" }).text).toBe("Ready");
-  expect(statusText({ kind: "needsDownload", service: "TorBox" }).text).toBe("Needs download");
-  expect(statusText({ kind: "torrent", seeds: 45 })).toEqual({ tone: "warn", text: "Torrent, 45 seeds" });
-  expect(statusText({ kind: "torrent", seeds: null }).text).toBe("Torrent");
-  expect(statusText({ kind: "ready", service: null }).text).toBe("Ready");
-});
 
 test("language codes become names", () => {
   expect(languageName("fr")).toBe("French");

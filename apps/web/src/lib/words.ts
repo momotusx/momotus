@@ -1,7 +1,6 @@
 /** Plain-language copy for the core's typed facts. The core sends enums and
  * codes; every UI turns them into the same words. */
 
-import type { Group } from "../core/generated/Group";
 import type { SubtitleNote } from "../core/generated/SubtitleNote";
 import type { SyncReport } from "../core/generated/SyncReport";
 import type { Tile } from "../core/generated/Tile";
@@ -24,30 +23,7 @@ import { bytes } from "./format";
 import accountShared from "../../../shared/account-words.json";
 import choice from "../../../shared/stream-choice-words.json";
 
-export const groupLabel: Record<Group, string> = {
-  best: "Best quality",
-  smallerFaster: "Smaller and faster",
-  otherLanguages: "Other languages",
-  needsDownload: "Needs download",
-};
-
-export const groupOrder: Group[] = ["best", "smallerFaster", "otherLanguages", "needsDownload"];
-
 export type Tone = "ok" | "warn" | "bad" | "idle";
-
-/** Status in words with a tone for its dot; the word always carries it. */
-export function statusText(s: VersionStatus): { tone: Tone; text: string } {
-  switch (s.kind) {
-    case "ready":
-      return { tone: "ok", text: "Ready" };
-    case "direct":
-      return { tone: "ok", text: "Direct link" };
-    case "torrent":
-      return { tone: "warn", text: s.seeds === null ? "Torrent" : `Torrent, ${s.seeds} seeds` };
-    case "needsDownload":
-      return { tone: "warn", text: "Needs download" };
-  }
-}
 
 const names = (() => {
   try {
