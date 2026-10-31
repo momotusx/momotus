@@ -250,7 +250,7 @@ export default function Home() {
   const [page, setPage] = createSignal<HTMLElement | null>(null);
   const hasContinue = () => home.rows[0]?.rowId === CONTINUE_ROW;
   // A title removed from Continue Watching is left out until its Undo passes and the core's row drops it.
-  createEffect(() => settleRemovals(home.rows.find((r) => r.rowId === CONTINUE_ROW)?.tiles.map((t) => t.id) ?? []));
+  createEffect(() => home.status.state === "open" && settleRemovals(home.rows.find((r) => r.rowId === CONTINUE_ROW)?.tiles.map((t) => t.id) ?? []));
   const shown = (row: HomeRow) => (row.rowId === CONTINUE_ROW ? { ...row, tiles: row.tiles.filter((t) => !leftOut(t.id)) } : row);
   const empty = () => home.status.state === "open" && home.rows.length === 0;
   const hero = () => home.heroes.length > 0;

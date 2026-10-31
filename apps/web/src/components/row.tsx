@@ -206,11 +206,14 @@ document.fonts?.addEventListener("loadingdone", () => setFonts((n) => n + 1));
 
 /** Keeps a caption line (`nowrap`, `overflow: hidden`) at whole words of `text`, again when the window changes. */
 function fitWords(el: HTMLElement, text: () => string) {
+  let last: string | null = null;
   createEffect(() => {
     const t = text();
     void viewport();
     void fonts();
-    el.textContent = t;
+    // New words show at once; a resize keeps the fitted line until it is measured again (no flash of the cut one).
+    if (t !== last) el.textContent = t;
+    last = t;
     const frame = requestAnimationFrame(() => {
       el.textContent = wordFit(t, (line) => {
         el.textContent = line;
@@ -265,24 +268,31 @@ export function removeSoon(tile: { id: string; name: string }) {
 /** Undo: nothing goes to the core, and the title is back, its control with the focus. */
 function undoRemoval() {
   const r = removal();
+  dropRemoval();
+  if (r) requestAnimationFrame(() => document.querySelector<HTMLElement>(`[data-f="title:uncontinue"], [data-f$=":continue-watching:${CSS.escape(r.id)}"]`)?.focus());
+}
+
+function dropRemoval() {
   clearTimeout(waiting);
   setRemoval(null);
-  if (r) requestAnimationFrame(() => document.querySelector<HTMLElement>(`[data-f="title:uncontinue"], [data-f$=":continue-watching:${CSS.escape(r.id)}"]`)?.focus());
 }
 
 // A new profile: a removal still waiting is dropped, never sent for the next profile.
 onProfileReset(() => {
-  undoRemoval();
+  dropRemoval();
   setSent([]);
   setRemoveFailed(null);
 });
 
-window.addEventListener("pagehide", () => {
+// The page going (or hidden, which may be the last chance a phone gives it): a removal still waiting goes now.
+const sendNow = () => {
   const r = removal();
   if (!r) return;
   clearTimeout(waiting);
   send(r);
-});
+};
+window.addEventListener("pagehide", sendNow);
+document.addEventListener("visibilitychange", () => document.hidden && sendNow());
 
 /** After Remove: the words with Undo while it can be taken back, or why it failed. */
 export function RemovalNote() {
