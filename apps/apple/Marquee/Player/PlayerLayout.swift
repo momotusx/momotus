@@ -198,6 +198,25 @@ enum PlayerLayout {
         let lines = [file, addon].compactMap { $0 }
         return lines.isEmpty ? nil : lines.joined(separator: "\n")
     }
+    /// The second subtitle line's size, a share of the first's (plans/dual-subtitles.md decision 6).
+    static let secondScale: CGFloat = 0.85
+
+    /// Whether the second subtitle line is drawn (plans/dual-subtitles.md 2 and 4): only while a first line is on,
+    /// never beside a picture first line (its bitmaps sit where the file put them), never in the first's language
+    /// (an automatic change can bring that about), and with Only when paused only while the viewer has paused
+    /// (`paused`, the model's own: a stall is not a pause).
+    static func secondDrawn(second: Bool, firstOn: Bool, pictureFirst: Bool, sameLanguage: Bool, onPause: Bool, paused: Bool) -> Bool {
+        second && firstOn && !pictureFirst && !sameLanguage && (!onPause || paused)
+    }
+
+    /// A file subtitle the second engine draws as pictures (PGS, DVD, DVB, XSUB): known from the track, before any
+    /// bitmap arrives. The engine's own rule (`isBitmapSubtitleCodec`, internal to it): `TrackInfo.codec` is the
+    /// decoder's name ("pgssub"), the descriptor's ("hdmv_pgs_subtitle") also read.
+    static func pictureTrack(codec: String) -> Bool {
+        let c = codec.lowercased()
+        return ["pgs", "hdmv", "dvb_sub", "dvbsub", "dvd_sub", "dvdsub", "vobsub", "xsub"].contains { c.contains($0) }
+    }
+
     /// Where a bitmap subtitle (PGS, DVD, DVB) sits in `view`: its `position` is [0, 1] against the video frame,
     /// which is fitted into the view; nothing before the video's size is known.
     static func imageCueRect(position: CGRect, video: CGSize, view: CGSize) -> CGRect {
@@ -515,6 +534,25 @@ extension PlayerLayout {
         return min(pictureFoot, screenHeight - clear)
     }
 
+    /// Split's second line, hung from the top (plans/dual-subtitles.md 4 B): its top edge, from the screen's top,
+    /// the mirror of the foot: 8% of the picture's height under the picture's top, never over the 5% line or the
+    /// safe area. Upright, a band over the picture that holds its box (`boxHeight`) and 8 pt takes it, just over the
+    /// picture, as the first line takes the band under it. Under the top bar while the controls show
+    /// (`topBarFoot`, its measured foot), 8 pt clear.
+    // ponytail: no sign dodge. A first line the app draws as text has no placement, and a picture first line (the
+    // only one with signs) turns the second line off; add the dodge when a placed text line comes.
+    static func subtitleTop(
+        screenHeight: CGFloat, pictureHeight: CGFloat, safeTop: CGFloat, controlsShown: Bool, topBarFoot: CGFloat,
+        upright: Bool = false, boxHeight: CGFloat = 0
+    ) -> CGFloat {
+        let pictureTop = (screenHeight - pictureHeight) / 2
+        let safe = max(screenHeight * 0.05, safeTop)
+        let band = pictureTop - PhoneFrame.bandGap - boxHeight
+        let start = upright && band >= safe ? band : max(pictureTop + pictureHeight * subtitleRise, safe)
+        let underBar = controlsShown ? topBarFoot + PhoneFrame.subtitleGap : 0
+        return max(start, underBar)
+    }
+
     /// The least room under a subtitle's foot with the controls hidden: 24 pt
     /// over the safe area, 40 pt at least, and never under the title-safe line,
     /// 5% of the screen over its foot (EBU R 95; plans/subtitles-letterbox.md),
@@ -668,6 +706,8 @@ struct StepperClock: Sendable {
     /// by VoiceOver as it changes, so it is not said again. `sent` false: kept for the play only (a
     /// file's own track, which the core does not know).
     func set(url: String, seconds: Double, spoken: Bool = true, sent: Bool = true) {
+        // Another track's value still waiting goes first: two subtitle lines tuned one after the other keep both.
+        if let pending, pending.url != url { flush() }
         kept[url] = seconds
         if sent { pending = (url, seconds) } else { flush() }
         settle?.cancel()

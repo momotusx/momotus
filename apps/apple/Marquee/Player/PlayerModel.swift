@@ -37,8 +37,9 @@ final class PlayerModel {
     private(set) var position: Double = 0
     private(set) var duration: Double = 0
     private(set) var playing = false
-    /// Paused by the user or the system, not buffering: what `progress` says to Trakt.
-    private var paused = false
+    /// Paused by the user or the system, not buffering: what `progress` says to Trakt, and when an Only when
+    /// paused second subtitle line shows.
+    private(set) var paused = false
     private(set) var waiting = true
     private(set) var ended = false
     private(set) var firstFrameMs: Int?
@@ -65,6 +66,16 @@ final class PlayerModel {
     /// Play opened the player while versions were found, and none could start.
     private(set) var noPick = false
     private(set) var cues: [WebVTT.Cue] = [] { didSet { watchCueEdges() } }
+    /// The second subtitle line (plans/dual-subtitles.md 6.3): a core track drawn over the first, with its own cues
+    /// and timing. The core's `autoSecondSubtitle` until the viewer picks one in this play.
+    private(set) var secondSubtitle: SubtitleTrack?
+    private(set) var secondCues: [WebVTT.Cue] = [] { didSet { watchCueEdges() } }
+    private(set) var secondDelay: Double = 0 { didSet { watchCueEdges() } }
+    /// The viewer's last pick on the Second line tab was the Spoken language row (nil before one): its check follows
+    /// the pick, not the profile, which a kids profile does not write.
+    private(set) var spokenPick: Bool?
+    /// The picker's tab: the line it sets, kept while the player is open.
+    var pickerLine: TrackPicker.Line = .first
     var rate: Float = 1 {
         // The Lock Screen extrapolates the playhead from the rate: it hears every change at once.
         didSet {
@@ -110,6 +121,8 @@ final class PlayerModel {
     @ObservationIgnored private var textOptions: [AVMediaSelectionOption] = []
     /// Per option: the app can draw it with a timing (subtitles and text, not captions in the video).
     @ObservationIgnored private var textTimeable: [Bool] = []
+    /// Per option: the second engine draws it as pictures (PGS, DVD, DVB); a second line never shows beside one.
+    private(set) var textPictures: [Bool] = []
     /// The item's legible text as its muting output delivers it: the app draws the file's own subtitles itself, so a
     /// timing can move them (plans/apple-file-subtitle-timing.md, decision A).
     @ObservationIgnored private var legibleLog = LegibleLog()
@@ -337,7 +350,7 @@ final class PlayerModel {
     private func loadTracks(_ item: AVPlayerItem, generation: Int) {
         (audioTracks, audioTrackLanguages, audioDefault, audioTrack, audioGroup) = ([], [], nil, nil, nil)
         viewerPickedAudio = false
-        (textTracks, textTrackLanguages, textTrack, textGroup, textOptions, textTimeable) = ([], [], nil, nil, [], [])
+        (textTracks, textTrackLanguages, textTrack, textGroup, textOptions, textTimeable, textPictures) = ([], [], nil, nil, [], [], [])
 
         let asset = item.asset
         Task { [weak self] in
@@ -441,6 +454,17 @@ final class PlayerModel {
     /// The profile's subtitle size, synced (`Prefs.subtitleSize`).
     var subtitleSize: SubtitleSize { prefs.snapshot?.subtitleSize ?? .medium }
 
+    /// How two subtitle lines draw and whether the second shows only while paused (`Prefs.subtitleLayout`,
+    /// `secondOnPause`), synced; an older core sends neither.
+    var subtitleLayout: SubtitleLayout { prefs.snapshot?.subtitleLayout ?? .stacked }
+    var secondOnPause: Bool { prefs.snapshot?.secondOnPause ?? false }
+
+    /// The picker's Layout and Only when paused rows write the profile's values at once, as Settings does.
+    func setSubtitleLayout(_ layout: SubtitleLayout) { setPrefs(["subtitleLayout": layout.rawValue]) }
+    func setSecondOnPause(_ on: Bool) { setPrefs(["secondOnPause": on]) }
+
+    private func setPrefs(_ patch: [String: any Sendable]) { prefs.performNow("setPrefs", ["patch": patch]) }
+
     /// The profile's size on the file's own tracks too, drawn by AVFoundation:
     /// on each new item and when the size changes.
     func textSize(_ item: AVPlayerItem? = nil) {
@@ -494,6 +518,8 @@ final class PlayerModel {
         (position, duration, skippedAt) = (0, 0, nil)
         heatHandled = false
         selectSubtitle(nil)
+        selectSecondSubtitle(nil)
+        spokenPick = nil
         // Floating in Picture in Picture there is no page to start the new
         // run: the model starts it, and a page brought back joins it.
         if floating { Task { await drive() } }
@@ -629,6 +655,8 @@ final class PlayerModel {
         (loadedURL, rendered, firstFrameMs, playback) = (nil, false, nil, nil)
         (loadedAttempt, stoppedAt, pendingStart) = (nil, nil, nil)
         selectSubtitle(nil)
+        selectSecondSubtitle(nil)
+        spokenPick = nil
     }
 
     private func showTryingAgain() {
@@ -801,6 +829,23 @@ final class PlayerModel {
         selectSubtitle(track)
     }
 
+    /// The viewer's second line, or Off, from the Second line tab: it wins for the rest of the play, and the core
+    /// keeps it as the profile's (`spoken`: the Spoken language row).
+    func chooseSecondSubtitle(_ track: SubtitleTrack?, spoken: Bool = false) {
+        choices.choseSecond(track, spoken: spoken)
+        spokenPick = spoken
+        selectSecondSubtitle(track)
+    }
+
+    /// The Spoken language row with no track of the spoken language here: nothing shows now, and the profile
+    /// keeps the choice for the next titles.
+    func keepSpoken() {
+        choices.keptSpoken(pending: playback?.subtitlesPending == true)
+        spokenPick = true
+        setPrefs(["secondSubtitle": "audio"])
+        selectSecondSubtitle(nil)
+    }
+
     /// "Try again" on the failure card: the core starts the same versions
     /// again from the first, each with its full start time.
     func retry() {
@@ -854,6 +899,13 @@ final class PlayerModel {
         outbox.set(url: key, seconds: seconds, spoken: spoken, sent: false)
     }
 
+    /// The second line's stepper: its own track's value, kept and sent as the first line's is.
+    func setSecondDelay(_ seconds: Double, spoken: Bool = true) {
+        guard let url = secondSubtitle?.url else { return }
+        secondDelay = seconds
+        outbox.set(url: url, seconds: seconds, spoken: spoken)
+    }
+
     /// The value not sent yet goes to the view still open, now.
     private func flushDelay() { outbox.flush() }
 
@@ -876,9 +928,30 @@ final class PlayerModel {
         }
         guard let track, let url = URL(string: track.url) else { return }
         Task {
-            guard let (data, _) = try? await URLSession.shared.data(from: url), subtitle == track else { return }
-            cues = WebVTT.parse(String(decoding: data, as: UTF8.self))
+            guard let parsed = await Self.cues(url), subtitle == track else { return }
+            cues = parsed
         }
+    }
+
+    /// Turns a core track on as the second line, or none; its timing starts where it was left (`outbox`).
+    func selectSecondSubtitle(_ track: SubtitleTrack?) {
+        if track?.url != secondSubtitle?.url {
+            flushDelay()
+            secondDelay = outbox.start(track)
+        }
+        secondSubtitle = track
+        secondCues = []
+        guard let track, let url = URL(string: track.url) else { return }
+        Task {
+            guard let parsed = await Self.cues(url), secondSubtitle == track else { return }
+            secondCues = parsed
+        }
+    }
+
+    /// A core track's cues (always UTF-8 WebVTT); nil when it could not be read.
+    private static func cues(_ url: URL) async -> [WebVTT.Cue]? {
+        guard let (data, _) = try? await URLSession.shared.data(from: url) else { return nil }
+        return WebVTT.parse(String(decoding: data, as: UTF8.self))
     }
 
     /// The drawn line changes at each cue's start and end, shifted by the
@@ -886,7 +959,7 @@ final class PlayerModel {
     private func watchCueEdges() {
         if let cueObserver { player.removeTimeObserver(cueObserver) }
         cueObserver = nil
-        let edges = PlayerLayout.cueEdges(cues, delay: subtitleDelay)
+        let edges = PlayerLayout.cueEdges(cues, delay: subtitleDelay) + PlayerLayout.cueEdges(secondCues, delay: secondDelay)
             + legibleLog.edges(delay: fileDelay, from: position, ahead: PlayerLayout.maxSubtitleDelay + 10)
         edgesUntil = position + PlayerLayout.maxSubtitleDelay
         guard !edges.isEmpty else { return }
@@ -916,6 +989,40 @@ final class PlayerModel {
             addon: WebVTT.text(at: PlayerLayout.cueTime(position: position, delay: subtitleDelay), in: cues))
     }
 
+    /// A first line is on: the core's track or one of the file's.
+    var firstOn: Bool { subtitle != nil || textTrack != nil }
+
+    /// The first line's language as drawn: the core's track's, else the file track's own code.
+    var firstLanguage: String? {
+        if let subtitle { return subtitle.language ?? subtitle.lang }
+        return textTrack.flatMap { textTrackLanguages[safe: $0] ?? nil }
+    }
+
+    var secondLanguage: String? { secondSubtitle.map { $0.language ?? $0.lang } }
+
+    /// The file track on is drawn as pictures: the second line and the picker's switch are off.
+    var pictureFirst: Bool { subtitle == nil && textTrack.flatMap { textPictures[safe: $0] } == true }
+
+    /// The second line goes with the first (playing or paused): the picker's tabs and the Subtitles value read it.
+    var secondOn: Bool { secondDrawn(paused: true) }
+
+    private func secondDrawn(paused: Bool) -> Bool {
+        PlayerLayout.secondDrawn(
+            second: secondSubtitle != nil, firstOn: firstOn, pictureFirst: pictureFirst,
+            sameLanguage: TrackPicker.sameLanguage(firstLanguage, secondLanguage), onPause: secondOnPause, paused: paused)
+    }
+
+    /// The second line's text now, at its own timing; nil while it is not drawn (Only when paused: until the
+    /// viewer pauses, a stall not counting).
+    var secondText: String? {
+        guard secondDrawn(paused: paused) else { return nil }
+        return WebVTT.text(at: PlayerLayout.cueTime(position: position, delay: secondDelay), in: secondCues)
+    }
+
+    /// The Spoken language row is the choice: the viewer's pick in this play, else a second line on from the
+    /// profile's "audio".
+    var spokenOn: Bool { spokenPick ?? (secondSubtitle != nil && prefs.snapshot?.secondSubtitle == "audio") }
+
     /// `untilPlay`: the line stays until the viewer plays again (a heat pause), not for a few seconds.
     private func showStatus(_ words: String, untilPlay: Bool = false) {
         statusLine = words
@@ -934,12 +1041,14 @@ final class PlayerModel {
     private func apply(_ snapshot: PlaybackSnapshot) {
         let wasPending = playback?.subtitlesPending == true
         let wasFailed = playback?.phase == "failed"
+        // A second line the viewer picked keeps the note a picked first line has; the core's own hands over quietly.
         if let trouble = PlayerLayout.subtitleTrouble(
-            picked: subtitle, old: playback?.notes ?? [], new: snapshot.notes, tracks: snapshot.subtitles
+            picked: subtitle ?? (choices.viewerChoseSecond ? secondSubtitle : nil), old: playback?.notes ?? [], new: snapshot.notes,
+            tracks: snapshot.subtitles
         ) {
             showStatus(trouble.say)
             // Its file played as an empty one: the position stays, and no other version is tried.
-            if trouble.off { selectSubtitle(nil) }
+            if trouble.off, subtitle != nil { selectSubtitle(nil) }
         }
         // Every start subtitle the core tried could not be read: said once, naming no source.
         if let words = PlayerLayout.startSubtitleFailedWords(snapshot), PlayerLayout.startSubtitleFailedWords(playback) == nil {
@@ -956,7 +1065,10 @@ final class PlayerModel {
         // The core's start subtitle, once, as if picked, sending nothing.
         // A move on to another source: the old start subtitle and its cues go.
         let step = choices.subtitleStep(attempt: snapshot.attempt, auto: snapshot.autoSubtitle, tracks: snapshot.subtitles)
-        if step.drop { selectSubtitle(nil) }
+        if step.drop {
+            spokenPick = nil
+            selectSubtitle(nil)
+        }
         if let track = step.turnOn {
             startPick(track)
             coreLog.notice("metric start_subtitle_ms=\(self.sinceTap, privacy: .public)")
@@ -969,6 +1081,14 @@ final class PlayerModel {
         if let shown = subtitle, !snapshot.subtitles.contains(shown), let same = SubtitleMenu.same(shown, in: snapshot.subtitles) {
             outbox.moved(from: shown.url, to: same.url)
             subtitle = same
+        }
+        if let shown = secondSubtitle, !snapshot.subtitles.contains(shown), let same = SubtitleMenu.same(shown, in: snapshot.subtitles) {
+            outbox.moved(from: shown.url, to: same.url)
+            secondSubtitle = same
+        }
+        // The second line follows the core's as a level until the viewer picks one (plans/dual-subtitles.md 6.3).
+        if let next = choices.secondStep(auto: snapshot.autoSecondSubtitle, tracks: snapshot.subtitles, shown: secondSubtitle) {
+            selectSecondSubtitle(next)
         }
         switch snapshot.phase {
         case "ready":
@@ -1166,7 +1286,7 @@ final class PlayerModel {
             return
         }
         aether = session
-        (audioTracks, audioTrack, textTracks, textTrack, textTimeable, engineCues, engineImages) = ([], nil, [], nil, [], [], [])
+        (audioTracks, audioTrack, textTracks, textTrack, textTimeable, engineCues, engineImages, textPictures) = ([], nil, [], nil, [], [], [], [])
         viewerPickedAudio = false
         let mine = { [weak self] in self.map { $0.generation == generation } ?? false }
         #if DEBUG
@@ -1254,6 +1374,7 @@ final class PlayerModel {
         (audioTrackLanguages, audioDefault, textTrackLanguages) = AetherSession.pickerTags(audio: tracks.audio, text: text)
         // Bitmap tracks draw as images (`subtitleImages`) at the file's timing, as text tracks do.
         textTimeable = text.map { _ in true }
+        textPictures = text.map { PlayerLayout.pictureTrack(codec: $0.codec) }
         textTrack = tracks.activeText.flatMap { engineTextIDs.firstIndex(of: $0) }
         // As `loadTracks` does once AVPlayer has them: the picks carried over a reopen, then the file's timing.
         if audioArrived, let index = carriedTracks?.audio {

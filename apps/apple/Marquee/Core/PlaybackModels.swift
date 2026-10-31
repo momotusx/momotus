@@ -629,6 +629,8 @@ struct NextEpisode: Decodable, Hashable, Sendable {
     private var adoptNextAuto = false
     /// The source the play is on: the snapshot's `attempt`.
     private var attempt: Int64?
+    /// The viewer picked a second line, or Off, in this play: the core's `autoSecondSubtitle` no longer moves it.
+    private(set) var viewerChoseSecond = false
 
     /// The playback view `sub` opened: commands go to it, never to an older view.
     func opened(sub: UInt64, deliver: @escaping (_ sub: UInt64, _ command: [String: any Sendable]) -> Void) {
@@ -670,6 +672,31 @@ struct NextEpisode: Decodable, Hashable, Sendable {
         if let language { send?(["type": "subtitleChosen", "url": NSNull(), "language": language]) }
     }
 
+    /// The second line to show now (plans/dual-subtitles.md 6.3), nil when `shown` stays: the core's
+    /// `autoSecondSubtitle`, followed as a level (it moves, or goes nil, as the first line changes) until the
+    /// viewer picks one; a picked track that left the list goes off.
+    func secondStep(auto: String?, tracks: [SubtitleTrack], shown: SubtitleTrack?) -> SubtitleTrack?? {
+        if viewerChoseSecond {
+            guard let shown, !tracks.contains(where: { $0.url == shown.url }) else { return nil }
+            return .some(nil)
+        }
+        let want = auto.flatMap { url in tracks.first { $0.url == url } }
+        return want?.url == shown?.url ? nil : .some(want)
+    }
+
+    /// The viewer's second line, or Off: it wins for the rest of the play, and the core keeps it as the profile's
+    /// (`spoken`: the Spoken language row, kept as the audio's language).
+    func choseSecond(_ track: SubtitleTrack?, spoken: Bool) {
+        viewerChoseSecond = true
+        send?(["type": "secondSubtitleChosen", "url": track?.url ?? NSNull(), "spoken": spoken])
+    }
+
+    /// The Spoken language row with no track of it here: while the list is still out (`pending`) the core's own
+    /// pick may yet bring the spoken track, so it is still followed.
+    func keptSpoken(pending: Bool) {
+        if !pending { viewerChoseSecond = true }
+    }
+
     /// Try again on the failure card: the same versions from the first.
     func retry() {
         send?(["type": "retry"])
@@ -686,7 +713,7 @@ struct NextEpisode: Decodable, Hashable, Sendable {
 
     /// Another episode or version: its own start subtitle applies.
     func newPlay() {
-        (viewerChose, appliedAuto, adoptNextAuto, attempt) = (false, nil, false, nil)
+        (viewerChose, appliedAuto, adoptNextAuto, attempt, viewerChoseSecond) = (false, nil, false, nil, false)
     }
 
     /// The snapshot's source. A move on to another source drops the start
@@ -700,7 +727,7 @@ struct NextEpisode: Decodable, Hashable, Sendable {
         // The viewer's pick goes too, as on the web: its file was the old
         // release's. The core's start subtitle for the new list brings back
         // the viewer's language, and Off stays Off (review r4 P3-4).
-        (viewerChose, appliedAuto) = (false, nil)
+        (viewerChose, appliedAuto, viewerChoseSecond) = (false, nil, false)
         return true
     }
 
@@ -806,6 +833,8 @@ enum TrackPicker {
         let codes: [String]
         var file: [FileTrack]
         let tracks: [SubtitleTrack]
+        /// The other subtitle line's language (plans/dual-subtitles.md 5.1): shown, never picked on this line.
+        var disabled = false
 
         var id: String { language }
         /// Every option the language opens.
@@ -852,6 +881,30 @@ enum TrackPicker {
             out.append(Language(language: "", name: "Unknown language", own: nil, codes: [], file: unknown, tracks: []))
         }
         return out
+    }
+
+    /// The two subtitle lines (plans/dual-subtitles.md 5.1): the first is today's subtitle, the second another
+    /// language over it.
+    enum Line: Hashable { case first, second }
+
+    /// Whether two language codes or tags name one language, by their base language ("en" and "en-GB", "eng" and
+    /// "en"); an unknown or empty one never matches (the web's `sameLanguage`).
+    static func sameLanguage(_ a: String?, _ b: String?) -> Bool {
+        guard let a = tag(a), let b = tag(b) else { return false }
+        let base = SubtitleMenu.base(fileTag(a))
+        return !base.isEmpty && base == SubtitleMenu.base(fileTag(b))
+    }
+
+    /// One line's languages. The second line takes the core's tracks only (a track inside the file stays on the
+    /// first line) and disables the first line's language; the first disables the second's. Two lines in one
+    /// language never happen by a pick.
+    static func lineLanguages(_ line: Line, tracks: [SubtitleTrack], file: [FileTrack], first: String?, second: String?) -> [Language] {
+        let other = line == .second ? first : second
+        return languages(tracks, file: line == .second ? [] : file).map { l in
+            var l = l
+            l.disabled = sameLanguage(l.language, other)
+            return l
+        }
     }
 
     /// A language tag as a file gives it ("en", "eng", "pt-BR"); nil for none or "und" (undetermined).
@@ -941,9 +994,10 @@ enum TrackPicker {
         tag.isEmpty ? "?" : String(SubtitleMenu.base(tag).prefix(2)).uppercased()
     }
 
-    /// A language's row read out: "English, Auto, 4 options, selected".
-    static func spoken(_ l: Language, auto: Bool, selected: Bool) -> String {
-        ([l.name, l.own, auto ? "Auto" : nil, "\(l.count) \(l.count == 1 ? "option" : "options")", selected ? "selected" : nil]
+    /// A language's row read out: "English, Auto, 4 options, selected"; the other line's language says so
+    /// (`other`, "On the first line") in place of its own name.
+    static func spoken(_ l: Language, auto: Bool, selected: Bool, other: String? = nil) -> String {
+        ([l.name, other ?? l.own, auto ? "Auto" : nil, "\(l.count) \(l.count == 1 ? "option" : "options")", selected ? "selected" : nil]
             .compactMap { $0 }).joined(separator: ", ")
     }
 
@@ -988,6 +1042,10 @@ enum TrackPicker {
 extension TrackPicker {
     enum Row: Hashable {
         case search, off, back, language(String), opener(String), option(Int), audio(Int)
+        /// The First line / Second line switch, one stop: Left and Right move on it.
+        case line
+        /// The Second line tab's Spoken language row.
+        case spoken
     }
 
     /// A file track's option row is its index past this, so it never meets a core track's place in the list.
@@ -1004,22 +1062,27 @@ extension TrackPicker {
         case off
         case turnOn(Option)
         case audio(Int)
+        /// The switch moves to a line.
+        case line(Line)
+        /// The Spoken language row: its best track, else the preference alone.
+        case spoken
         case none
     }
 
     /// The focusable rows of the level showing, in order: the languages (search, Off, each language), a
-    /// language's options (back, the file's tracks, the core's), or the audio tracks (search past five).
-    static func order(audio: [FileTrack]?, open: Language?, shown: [Language]) -> [Row] {
+    /// language's options (back, the file's tracks, the core's), or the audio tracks (search past five). The
+    /// line switch (`lines`) heads the languages, and the Second line tab's Spoken row (`spoken`) follows Off.
+    static func order(audio: [FileTrack]?, open: Language?, shown: [Language], lines: Bool = false, spoken: Bool = false) -> [Row] {
         if let audio { return (audioSearch(audio.count) ? [Row.search] : []) + audio.map { .audio($0.index) } }
         if let open { return [.back] + open.file.map { .option(fileRow + $0.index) } + open.tracks.indices.map { .option($0) } }
-        return [.search, .off] + shown.map { .language($0.language) }
+        return (lines ? [.line] : []) + [.search, .off] + (spoken ? [.spoken] : []) + shown.map { .language($0.language) }
     }
 
     /// A row's press (a click, a tap, Return): a language turns its best option on at once; its chevron opens it.
     static func press(_ row: Row, languages: [Language], open: Language?) -> Act {
         switch row {
         case .off: return .off
-        case .language(let tag): return languages.first { $0.language == tag }.flatMap(best).map(Act.turnOn) ?? .none
+        case .language(let tag): return languages.first { $0.language == tag && !$0.disabled }.flatMap(best).map(Act.turnOn) ?? .none
         case .opener(let tag): return .open(tag)
         case .option(let id):
             guard let open else { return .none }
@@ -1027,13 +1090,15 @@ extension TrackPicker {
             return open.tracks.indices.contains(id) ? .turnOn(.track(open.tracks[id])) : .none
         case .audio(let index): return .audio(index)
         case .back: return .back
-        case .search: return .none
+        case .spoken: return .spoken
+        case .search, .line: return .none
         }
     }
 
     /// The Mac's keys over the rows (the timing stepper keeps its own while it has the focus on purpose): Up and
-    /// Down move, Right opens the focused language, Left goes back, Esc goes back or closes, Return presses.
-    static func key(_ key: Key, focus: Row?, order: [Row], languages: [Language], open: Language?) -> Act {
+    /// Down move, Right opens the focused language, Left goes back, Esc goes back or closes, Return presses. On the
+    /// line switch Left and Right take a line; Right on the Spoken row opens the spoken language (`spoken`).
+    static func key(_ key: Key, focus: Row?, order: [Row], languages: [Language], open: Language?, spoken: String? = nil) -> Act {
         // A language's chevron moves and opens as its row.
         let current = focus.map { row -> Row in if case .opener(let tag) = row { .language(tag) } else { row } }
         switch key {
@@ -1042,9 +1107,13 @@ extension TrackPicker {
             let at = current.flatMap(order.firstIndex(of:)) ?? (key == .down ? -1 : order.count)
             return .focus(order[max(0, min(order.count - 1, at + (key == .down ? 1 : -1)))])
         case .right:
-            if case .language(let tag)? = current { return .open(tag) }
+            if case .language(let tag)? = current { return languages.contains { $0.language == tag && !$0.disabled } ? .open(tag) : .none }
+            if current == .line { return .line(.second) }
+            if current == .spoken { return spoken.map(Act.open) ?? .none }
             return .none
-        case .left: return open == nil ? .none : .back
+        case .left:
+            if current == .line { return .line(.first) }
+            return open == nil ? .none : .back
         case .escape: return open == nil ? .close : .back
         case .enter: return focus.map { press($0, languages: languages, open: open) } ?? .none
         }
@@ -1062,7 +1131,9 @@ extension TrackPicker {
 
     /// The Subtitles button's value: the language on, "English, Auto" for the core's start pick, its file track
     /// included (the language, not the file's own name for its track); else the track the viewer chose.
-    static func buttonValue(core: String?, file: String?, auto: Bool, autoLanguage: String?) -> String? {
+    /// With a second line showing (`second`, its language) both read: "Turkish + English".
+    static func buttonValue(core: String?, file: String?, auto: Bool, autoLanguage: String?, second: String? = nil) -> String? {
+        if let second, let first = core ?? file { return "\(first) + \(second)" }
         guard auto, let language = core ?? autoLanguage else { return core ?? file }
         return "\(language), Auto"
     }

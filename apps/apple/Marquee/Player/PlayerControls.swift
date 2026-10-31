@@ -26,6 +26,8 @@ struct PlayerControls: View {
     var windowHeight: CGFloat = 0
     /// The bottom controls' height with their foot padding, for Skip and Up Next.
     var measured: (CGFloat) -> Void = { _ in }
+    /// The top bar's foot from the window's top, for a second subtitle line hung from the top (Split).
+    var measuredTop: (CGFloat) -> Void = { _ in }
     @State private var actionsWidth: CGFloat = 0
     @State private var moreAfter = false
     /// The subtitle or audio picker over the picture (a sheet on the iPhone).
@@ -205,6 +207,7 @@ struct PlayerControls: View {
                     .frame(minHeight: 40)
             }
         }
+        .onGeometryChange(for: CGFloat.self) { $0.frame(in: .global).maxY } action: { measuredTop($0) }
     }
 
     /// The film is starting or buffering (the status overlay's waiting).
@@ -528,7 +531,8 @@ struct PlayerControls: View {
         return PlayerLayout.subtitleValue(
             picked: TrackPicker.buttonValue(
                 core: model.subtitle.map(SubtitleMenu.heading), file: file, auto: model.subtitleIsAuto,
-                autoLanguage: model.playback?.subtitles.first { $0.url == model.playback?.autoSubtitle }.map(SubtitleMenu.heading)),
+                autoLanguage: model.playback?.subtitles.first { $0.url == model.playback?.autoSubtitle }.map(SubtitleMenu.heading),
+                second: model.secondOn ? model.secondSubtitle.map(SubtitleMenu.heading) : nil),
             found: (model.playback?.subtitles.count ?? 0) + model.textTracks.count,
             pending: model.playback?.subtitlesPending == true,
             ready: model.playback?.phase == "ready"

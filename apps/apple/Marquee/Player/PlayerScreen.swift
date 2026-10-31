@@ -29,6 +29,9 @@ struct PlayerScreen: View {
     @State private var safeBottom: CGFloat = 0
     /// The drawn subtitle's box at full size, for the phone's rule.
     @State private var subtitleBox: CGFloat = 0
+    /// Split's second line: the top bar's measured foot, and the line's box (plans/dual-subtitles.md 4 B).
+    @State private var topBarFoot: CGFloat = 0
+    @State private var secondBox: CGFloat = 0
     /// Skip's and Up Next's measured heights, which the phone's subtitle keeps over.
     @State private var skipHeight: CGFloat = 0
     @State private var upNextHeight: CGFloat = 0
@@ -157,7 +160,7 @@ struct PlayerScreen: View {
                     PlayerControls(model: model, versions: model.versions, back: close, hold: { open in
                         menuOpenedAt = open ? .now : nil
                         lastTouch = .now
-                    }, activity: { lastTouch = .now }, pip: pipControl, windowHeight: windowHeight, measured: { controlsHeight = $0 })
+                    }, activity: { lastTouch = .now }, pip: pipControl, windowHeight: windowHeight, measured: { controlsHeight = $0 }, measuredTop: { topBarFoot = $0 })
                         .transition(.opacity)
                 } else if model.playback?.phase != "failed", let trakt = model.playback?.trakt, TraktRules.playbackMark(trakt)?.warn == true {
                     // A Trakt warning stays in sight with the controls hidden: it often comes after they hid.
@@ -191,17 +194,33 @@ struct PlayerScreen: View {
                 }
                 // Over the controls and their scrim, so a line never reads dimmed with
                 // them up (the iPhone walk, round 3); the rules keep it off their buttons.
-                if let text = model.subtitleText, model.playback?.phase != "failed" {
+                // The second subtitle line (plans/dual-subtitles.md 4): Stacked and One box draw it over the first in
+                // one block hung from the foot; Split hangs it from the top.
+                let first = model.subtitleText
+                let second = model.secondText
+                let split = model.subtitleLayout == .split
+                if first != nil || (second != nil && !split), model.playback?.phase != "failed" {
                     GeometryReader { geo in
                         let place = subtitlePlace(geo.size)
-                        // Its foot stays put; a larger caption style or a second line grows upward.
-                        SubtitleLine(text: text, size: model.subtitleSize)
-                            // The player's own file subtitles were never spoken line by line, so the file's are not; an
-                            // addon track's lines stay readable, as they were.
-                            .accessibilityHidden(model.subtitle == nil)
+                        // Its foot stays put; a larger caption style or a second line grows upward. Scaled as one, so
+                        // the shrink near the controls takes both lines.
+                        SubtitleBlock(
+                            first: first, second: split ? nil : second, size: model.subtitleSize,
+                            oneBox: model.subtitleLayout == .oneBox, firstHidden: model.subtitle == nil)
                             .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { subtitleBox = $0 }
                             .scaleEffect(place.scale, anchor: .bottom)
                             .frame(width: geo.size.width, height: max(place.foot, 0), alignment: .bottom)
+                    }
+                    .ignoresSafeArea()
+                    .allowsHitTesting(false)
+                    .animation(Theme.Motion.panel, value: controls)
+                }
+                if split, let second, model.playback?.phase != "failed" {
+                    GeometryReader { geo in
+                        SubtitleBlock(first: nil, second: second, size: model.subtitleSize, scale: 1)
+                            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { secondBox = $0 }
+                            .padding(.top, subtitleTop(geo.size))
+                            .frame(width: geo.size.width, height: geo.size.height, alignment: .top)
                     }
                     .ignoresSafeArea()
                     .allowsHitTesting(false)
@@ -577,6 +596,19 @@ struct PlayerScreen: View {
         return (controlsShown ? foot - 10 : foot, 1)
     }
 
+    /// Split's second line: its top edge from the screen's top (`PlayerLayout.subtitleTop`), under the top bar while
+    /// the controls show.
+    private func subtitleTop(_ size: CGSize) -> CGFloat {
+        #if os(iOS)
+        let top = safeTop
+        #else
+        let top: CGFloat = 0
+        #endif
+        return PlayerLayout.subtitleTop(
+            screenHeight: size.height, pictureHeight: fittedHeight(size), safeTop: top, controlsShown: controlsShown,
+            topBarFoot: topBarFoot, upright: size.height > size.width, boxHeight: secondBox)
+    }
+
     /// Height of the picture fitted into `size`, or the full height before it is known.
     private func fittedHeight(_ size: CGSize) -> CGFloat {
         let video = model.videoSize
@@ -678,25 +710,81 @@ private struct BareStyle: ButtonStyle {
 }
 #endif
 
+/// The drawn subtitle lines: the first, and the second over it at 85% (plans/dual-subtitles.md 4), 0.25 em apart,
+/// each in its own caption box, or both in one (One box). VoiceOver reads only the first: two languages read in a
+/// row are noise. `scale` is the second line's size (Split draws it at full size, alone).
+private struct SubtitleBlock: View {
+    let first: String?
+    let second: String?
+    let size: SubtitleSize
+    var oneBox = false
+    /// The player's own file subtitles were never spoken line by line, so the file's are not; an addon track's
+    /// lines stay readable, as they were.
+    var firstHidden = false
+    var scale = PlayerLayout.secondScale
+    /// The gap grows with Dynamic Type as the lines do.
+    @ScaledMetric(relativeTo: .title3) private var unit: CGFloat = 1
+
+    var body: some View {
+        let style = CaptionStyle.current
+        VStack(spacing: SubtitleLine.points(style, size) * 0.25 * unit) {
+            if let second {
+                SubtitleLine(text: second, style: style, size: size, scale: scale, boxed: !oneBox)
+                    .accessibilityHidden(true)
+            }
+            if let first {
+                SubtitleLine(text: first, style: style, size: size, boxed: !oneBox)
+                    .accessibilityHidden(firstHidden)
+            }
+        }
+        // One box: one caption box behind both lines and the gap between them.
+        .modifier(CaptionBox(on: oneBox, style: style, fill: style.oneBoxFill))
+        .padding(.horizontal, Theme.Space.l)
+    }
+}
+
 /// Subtitle text in the viewer's caption style: by default white on a dark
 /// box so it reads on any picture.
 private struct SubtitleLine: View {
     let text: String
+    let style: CaptionStyle
     let size: SubtitleSize
+    var scale: CGFloat = 1
+    /// Its own caption box and the style's colour behind its glyphs; in One box the block's one box stands in for
+    /// both, so nothing draws twice.
+    var boxed = true
+
+    static func points(_ style: CaptionStyle, _ size: SubtitleSize) -> CGFloat {
+        (Theme.type.headline + 3) * style.scale * CaptionStyle.factor(size)
+    }
 
     var body: some View {
-        let style = CaptionStyle.current
-        let points = (Theme.type.headline + 3) * style.scale * CaptionStyle.factor(size)
+        let points = Self.points(style, size) * scale
         Text(text)
             .font(style.face.map { .custom($0, size: points, relativeTo: .title3) } ?? .text(points, weight: .semibold, relativeTo: .title3))
             .foregroundStyle(style.text)
             .modifier(CaptionEdge(edge: style.edge))
-            .background(style.highlight)
+            .background(boxed ? style.highlight : .clear)
             .multilineTextAlignment(.center)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 6)
-            .background(RoundedRectangle(cornerRadius: style.radius).fill(style.window))
-            .padding(.horizontal, Theme.Space.l)
+            .modifier(CaptionBox(on: boxed, style: style, fill: style.window))
+    }
+}
+
+/// The caption box: the style's padding, corner radius and fill around a line, or around both in One box.
+private struct CaptionBox: ViewModifier {
+    let on: Bool
+    let style: CaptionStyle
+    let fill: Color
+
+    func body(content: Content) -> some View {
+        if on {
+            content
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(RoundedRectangle(cornerRadius: style.radius).fill(fill))
+        } else {
+            content
+        }
     }
 }
 

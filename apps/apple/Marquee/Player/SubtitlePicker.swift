@@ -24,14 +24,19 @@ struct TrackPickerPanel: View {
     @FocusState private var panelFocused: Bool
     /// The languages, built once per change of the tracks, not on every pass (a search runs per keystroke).
     @State private var languages: [TrackPicker.Language] = []
+    /// A tab was taken off the Mac: once its languages are built, the focus lands on its chosen row.
+    @State private var landOnTab = false
     @Environment(\.metrics) private var metrics
 
     typealias Row = TrackPicker.Row
 
-    /// What the languages are built from.
+    /// What the languages are built from: the tracks, the line the picker sets and both lines' languages.
     private struct Inputs: Equatable {
         let subtitles: [SubtitleTrack]
         let file: [TrackPicker.FileTrack]
+        let line: TrackPicker.Line
+        let first: String?
+        let second: String?
     }
 
     var body: some View {
@@ -49,11 +54,16 @@ struct TrackPickerPanel: View {
             .onKeyPress(.escape) { key(.escape) }
             .onKeyPress(.return) { key(.enter) }
             #endif
-            .onChange(of: Inputs(subtitles: model.playback?.subtitles ?? [], file: model.fileTextTracks), initial: true) { _, inputs in
-                languages = TrackPicker.languages(inputs.subtitles, file: inputs.file)
+            .onChange(of: inputs, initial: true) { _, inputs in
+                languages = TrackPicker.lineLanguages(
+                    inputs.line, tracks: inputs.subtitles, file: inputs.file, first: inputs.first, second: inputs.second)
+                if landOnTab {
+                    landOnTab = false
+                    setRow(chosenRow)
+                }
             }
             .onAppear {
-                setRow(kind == .subtitles ? (chosen.map(Row.language) ?? .off) : audioChosen.map(Row.audio))
+                setRow(kind == .subtitles ? chosenRow : audioChosen.map(Row.audio))
                 #if os(macOS)
                 panelFocused = true
                 #endif
@@ -65,9 +75,42 @@ struct TrackPickerPanel: View {
 
     // MARK: the data
 
+    private var inputs: Inputs {
+        Inputs(
+            subtitles: model.playback?.subtitles ?? [], file: model.fileTextTracks, line: line,
+            first: model.firstOn ? model.firstLanguage : nil, second: model.secondOn ? model.secondLanguage : nil)
+    }
+
+    private var w: StreamChoiceWords.Player { StreamChoice.words.player }
+    /// The First line / Second line switch (plans/dual-subtitles.md 5.1): while a first line is on that is not
+    /// drawn as pictures.
+    private var lines: Bool { kind == .subtitles && model.firstOn && !model.pictureFirst }
+    /// The line the picker sets: the tab while the switch shows, else the first.
+    private var line: TrackPicker.Line { lines ? model.pickerLine : .first }
+    private var second: Bool { line == .second }
+
     private var shown: [TrackPicker.Language] { languages.filter { TrackPicker.matches($0, query) } }
-    private var chosen: String? { TrackPicker.chosen(languages, subtitle: model.subtitle, fileIndex: model.textTrack) }
-    private var openLanguage: TrackPicker.Language? { open.flatMap { tag in languages.first { $0.language == tag } } }
+    private var chosen: String? {
+        second
+            ? TrackPicker.chosen(languages, subtitle: model.spokenOn ? nil : model.secondSubtitle, fileIndex: nil)
+            : TrackPicker.chosen(languages, subtitle: model.subtitle, fileIndex: model.textTrack)
+    }
+    /// The tab's chosen row: the Spoken row when it is the choice, else the chosen language, else Off.
+    private var chosenRow: Row { second && model.spokenOn ? .spoken : chosen.map(Row.language) ?? .off }
+    /// The other line's language never opens: none of its tracks can be picked here.
+    private var openLanguage: TrackPicker.Language? { open.flatMap { tag in languages.first { $0.language == tag && !$0.disabled } } }
+    /// The spoken language's tracks in the list; nil when none is listed.
+    private var spokenLanguage: TrackPicker.Language? {
+        model.playback?.spokenLanguage.flatMap { tag in languages.first { !$0.disabled && TrackPicker.sameLanguage($0.language, tag) } }
+    }
+    private var spokenDisabled: Bool { TrackPicker.sameLanguage(model.playback?.spokenLanguage, model.firstLanguage) }
+    /// Beside "Spoken language": its name; nil while the list is still out with no language known (the pending
+    /// mark); "not known for this video" once it settles with none.
+    private var spokenOwn: String? {
+        if spokenDisabled { return w.onFirstLine }
+        if let tag = model.playback?.spokenLanguage { return TrackPicker.englishName(tag) }
+        return model.playback?.subtitlesPending == true ? nil : w.spokenNotKnown
+    }
     private var audioChosen: Int? { model.audioTrack }
 
     private var audio: [TrackPicker.FileTrack] {
@@ -85,7 +128,7 @@ struct TrackPickerPanel: View {
         #if os(tvOS)
         HStack(alignment: .top, spacing: Theme.Space.l) {
             firstLevel.frame(width: 640)
-            if kind == .subtitles, let language = openLanguage ?? languages.first(where: { $0.language == chosen }) {
+            if kind == .subtitles, let language = openLanguage ?? languages.first(where: { $0.language == chosen && !$0.disabled }) {
                 options(language).frame(width: 640)
             }
         }
@@ -115,6 +158,7 @@ struct TrackPickerPanel: View {
                 Button("Done", action: close).textFont(Theme.type.callout, weight: .semibold, relativeTo: .callout)
                 #endif
             }
+            if lines { lineSwitch }
             if kind == .subtitles || TrackPicker.audioSearch(audio.count) {
                 searchField
             }
@@ -123,6 +167,7 @@ struct TrackPickerPanel: View {
                     LazyVStack(alignment: .leading, spacing: 2) {
                         if kind == .subtitles {
                             offRow
+                            if second, query.trimmingCharacters(in: .whitespaces).isEmpty { spokenRow }
                             ForEach(shown) { language in languageRow(language) }
                             if !query.trimmingCharacters(in: .whitespaces).isEmpty, shown.isEmpty {
                                 Text("No language matches \u{201C}\(query.trimmingCharacters(in: .whitespaces))\u{201D}")
@@ -161,8 +206,44 @@ struct TrackPickerPanel: View {
         .background(.white.opacity(0.12), in: Capsule())
     }
 
+    /// First line / Second line: a segmented control on iOS; on the Mac one keyboard stop the panel moves on with
+    /// Left and Right; on tvOS two focusable buttons, a remote's Left and Right between them.
+    @ViewBuilder private var lineSwitch: some View {
+        #if os(iOS)
+        Picker("Subtitle line", selection: Binding(get: { line }, set: switchLine)) {
+            Text(w.firstLine).tag(TrackPicker.Line.first)
+            Text(w.secondLine).tag(TrackPicker.Line.second)
+        }
+        .pickerStyle(.segmented)
+        .controlSize(.large)
+        .frame(minHeight: Theme.minTarget)
+        #else
+        HStack(spacing: 2) {
+            ForEach([TrackPicker.Line.first, .second], id: \.self) { tab in
+                Button { switchLine(tab) } label: {
+                    Text(tab == .first ? w.firstLine : w.secondLine)
+                        .textFont(Theme.type.callout, weight: .semibold, relativeTo: .callout)
+                        .frame(maxWidth: .infinity, minHeight: 32)
+                        .background(Capsule().fill(.white.opacity(line == tab ? 0.24 : 0)))
+                        .contentShape(Capsule())
+                }
+                .buttonStyle(FocusPlainStyle(shape: Capsule()))
+                .accessibilityAddTraits(line == tab ? .isSelected : [])
+            }
+        }
+        .padding(2)
+        .background(Capsule().fill(.white.opacity(0.12)))
+        #if os(macOS)
+        .overlay { if lit(.line) { Capsule().strokeBorder(Theme.Palette.key, lineWidth: Theme.Focus.ring) } }
+        #endif
+        .id(Row.line)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Subtitle line")
+        #endif
+    }
+
     private var offRow: some View {
-        let on = model.subtitle == nil && model.textTrack == nil
+        let on = second ? model.secondSubtitle == nil && !model.spokenOn : model.subtitle == nil && model.textTrack == nil
         return PickerRow(focused: lit(.off), selected: on) {
             Color.clear.frame(width: 28, height: 28)
             Text("Off").textFont(Theme.type.body, relativeTo: .body)
@@ -173,34 +254,83 @@ struct TrackPickerPanel: View {
         .accessibilityLabel(on ? "Off, selected" : "Off")
     }
 
+    /// The Second line tab's Spoken language row: whatever language the audio is, its flag and name beside it;
+    /// its chevron (Right on the Mac) opens that language's tracks.
+    private var spokenRow: some View {
+        let on = model.spokenOn
+        let own = spokenOwn
+        return HStack(spacing: 4) {
+            PickerRow(focused: lit(.spoken), selected: on) {
+                if let tag = model.playback?.spokenLanguage { FlagMark(tag: tag) } else { Color.clear.frame(width: 24, height: 24) }
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 8) {
+                        Text(w.spokenLanguage).textFont(Theme.type.body, relativeTo: .body).lineLimit(1).fixedSize()
+                        if let own {
+                            Text(own).textFont(Theme.type.callout, relativeTo: .callout).foregroundStyle(Theme.Palette.muted).lineLimit(1).fixedSize()
+                        } else {
+                            ProgressView().controlSize(.small).tint(Theme.Palette.muted)
+                        }
+                    }
+                    Text(w.spokenLanguage).textFont(Theme.type.body, relativeTo: .body).lineLimit(1)
+                }
+                Spacer(minLength: 8)
+            } action: { run(.spoken) }
+            .disabled(spokenDisabled)
+            .opacity(spokenDisabled ? 0.6 : 1)
+            .focused($focus, equals: .spoken)
+            .accessibilityLabel([w.spokenLanguage, own ?? "still searching", on ? "selected" : nil].compactMap { $0 }.joined(separator: ", "))
+            #if !os(tvOS)
+            if let l = spokenLanguage, !spokenDisabled {
+                Button { show(l) } label: {
+                    Glyph("chevron-right", size: 15).foregroundStyle(Theme.Palette.muted).frame(width: 36, height: 40)
+                }
+                .buttonStyle(FocusPlainStyle(shape: Circle()))
+                .accessibilityHidden(true)
+            }
+            #endif
+        }
+        .id(Row.spoken)
+        #if os(tvOS)
+        .onChange(of: focus) { _, now in if now == .spoken, let l = spokenLanguage { open = l.language } }
+        #endif
+    }
+
     /// Flag, English name, own name in quiet text, Auto for the core's start pick, the count, the check; its
-    /// chevron (Right on the Mac) opens the options.
+    /// chevron (Right on the Mac) opens the options. The other line's language reads "On the first line" (or
+    /// second) in place of its own name and cannot be picked or opened.
     private func languageRow(_ l: TrackPicker.Language) -> some View {
         let on = chosen == l.language
-        let auto = on && model.subtitleIsAuto
+        let auto = on && !second && model.subtitleIsAuto
+        let other = l.disabled ? (second ? w.onFirstLine : w.onSecondLine) : nil
+        let dim = l.disabled ? 0.5 : 1
         return HStack(spacing: 4) {
             PickerRow(focused: lit(.language(l.language)), selected: on) {
-                FlagMark(tag: l.language)
+                // The other line's language: its flag, name and count dim, the reason stays readable.
+                FlagMark(tag: l.language).opacity(dim)
                 ViewThatFits(in: .horizontal) {
-                    HStack(spacing: 8) { name(l); own(l) }
-                    name(l)
+                    HStack(spacing: 8) { name(l).opacity(dim); own(l, other) }
+                    name(l).opacity(dim)
                 }
                 if auto { AutoMark() }
                 Spacer(minLength: 8)
                 Text("\(l.count)").monospacedDigit().foregroundStyle(Theme.Palette.dim)
                     .textFont(Theme.type.callout, relativeTo: .callout)
+                    .opacity(dim)
             } action: { run(TrackPicker.press(.language(l.language), languages: languages, open: openLanguage)) }
+            .disabled(l.disabled)
             .focused($focus, equals: .language(l.language))
-            .accessibilityLabel(TrackPicker.spoken(l, auto: auto, selected: on))
-            .accessibilityAction(named: "Options") { show(l) }
+            .accessibilityLabel(TrackPicker.spoken(l, auto: auto, selected: on, other: other))
+            .accessibilityAction(named: "Options") { if !l.disabled { show(l) } }
             #if !os(tvOS)
-            Button { show(l) } label: {
-                Glyph("chevron-right", size: 15).foregroundStyle(Theme.Palette.muted).frame(width: 36, height: 40)
+            if !l.disabled {
+                Button { show(l) } label: {
+                    Glyph("chevron-right", size: 15).foregroundStyle(Theme.Palette.muted).frame(width: 36, height: 40)
+                }
+                .buttonStyle(FocusPlainStyle(shape: Circle()))
+                .focused($focus, equals: .opener(l.language))
+                // One stop per language for a reader: the row carries Options as an action.
+                .accessibilityHidden(true)
             }
-            .buttonStyle(FocusPlainStyle(shape: Circle()))
-            .focused($focus, equals: .opener(l.language))
-            // One stop per language for a reader: the row carries Options as an action.
-            .accessibilityHidden(true)
             #endif
         }
         .id(Row.language(l.language))
@@ -213,8 +343,8 @@ struct TrackPickerPanel: View {
         Text(l.name).textFont(Theme.type.body, relativeTo: .body).lineLimit(1).fixedSize()
     }
 
-    @ViewBuilder private func own(_ l: TrackPicker.Language) -> some View {
-        if let own = l.own {
+    @ViewBuilder private func own(_ l: TrackPicker.Language, _ other: String?) -> some View {
+        if let own = other ?? l.own {
             Text(own).textFont(Theme.type.callout, relativeTo: .callout).foregroundStyle(Theme.Palette.muted).lineLimit(1).fixedSize()
         }
     }
@@ -264,48 +394,101 @@ struct TrackPickerPanel: View {
             .focused($focus, equals: .back)
             .accessibilityLabel("Back to the languages")
             #endif
+            // The tuning foot scrolls with the options: a landscape phone cannot hold its rows fixed.
             ScrollView(.vertical) {
-                LazyVStack(alignment: .leading, spacing: 2) {
-                    if !l.file.isEmpty {
-                        Text("In the file").textFont(Theme.type.caption, weight: .semibold, relativeTo: .caption)
-                            .foregroundStyle(Theme.Palette.dim).padding(.horizontal, 10).padding(.top, 4)
-                            .accessibilityAddTraits(.isHeader)
-                        ForEach(l.file, id: \.index) { f in
-                            optionRow(id: TrackPicker.fileRow + f.index, title: f.name, detail: nil, selected: model.textTrack == f.index)
+                VStack(alignment: .leading, spacing: 12) {
+                    LazyVStack(alignment: .leading, spacing: 2) {
+                        if !l.file.isEmpty {
+                            Text("In the file").textFont(Theme.type.caption, weight: .semibold, relativeTo: .caption)
+                                .foregroundStyle(Theme.Palette.dim).padding(.horizontal, 10).padding(.top, 4)
+                                .accessibilityAddTraits(.isHeader)
+                            ForEach(l.file, id: \.index) { f in
+                                optionRow(id: TrackPicker.fileRow + f.index, title: f.name, detail: nil, selected: model.textTrack == f.index)
+                            }
+                        }
+                        ForEach(Array(l.tracks.enumerated()), id: \.element.url) { i, t in
+                            optionRow(
+                                id: i, title: SubtitleMenu.title(t), detail: SubtitleMenu.detail(t, max: 40),
+                                selected: second ? model.secondSubtitle == t : model.subtitle == t)
                         }
                     }
-                    ForEach(Array(l.tracks.enumerated()), id: \.element.url) { i, t in
-                        optionRow(id: i, title: SubtitleMenu.title(t), detail: SubtitleMenu.detail(t, max: 40), selected: model.subtitle == t)
+                    // The tuning foot: the line's timing while its track is on (the second's also when the Spoken
+                    // row picked it); on the Second line tab also the profile's Layout and Only when paused, which
+                    // redraw the lines at once.
+                    if second {
+                        if let url = model.secondSubtitle?.url, l.tracks.contains(where: { $0.url == url }) {
+                            timing({ model.secondDelay }, track: url) { model.setSecondDelay($0, spoken: $1) }
+                        }
+                        layoutRow
+                        Toggle(w.onlyWhenPaused, isOn: Binding(get: { model.secondOnPause }, set: { model.setSecondOnPause($0) }))
+                            .textFont(Theme.type.callout, weight: .semibold, relativeTo: .callout)
+                            .frame(minHeight: Theme.minTarget)
+                    } else if let key = model.timingKey, chosen == l.language {
+                        timing({ model.subtitleDelay }, track: key) { model.setSubtitleDelay($0, spoken: $1) }
                     }
                 }
             }
             .scrollIndicators(.hidden)
-            if model.timingKey != nil, chosen == l.language {
-                #if os(tvOS)
-                // A remote: the three steps as buttons, as the old menu had them.
-                HStack(spacing: Theme.Space.s) {
-                    Text("Timing \(PlayerLayout.delayText(model.subtitleDelay))").monospacedDigit()
-                    Button { model.setSubtitleDelay(PlayerLayout.nudge(model.subtitleDelay, by: -PlayerLayout.subtitleStep)) } label: {
-                        Label("\u{2212}0.1 s", glyph: "minus")
-                    }
-                    Button { model.setSubtitleDelay(PlayerLayout.nudge(model.subtitleDelay, by: PlayerLayout.subtitleStep)) } label: {
-                        Label("+0.1 s", glyph: "plus")
-                    }
-                    if model.subtitleDelay != 0 {
-                        Button { model.setSubtitleDelay(0) } label: { Label("Reset", glyph: "rotate-ccw") }
-                    }
-                }
-                .buttonStyle(PillButtonStyle())
-                #else
-                // Its keys only when it is focused on purpose (a click, Tab): the panel's rows keep the arrows.
-                SubtitleTimingStepper(value: model.subtitleDelay, track: model.timingKey ?? "", takesFocus: false) { by, spoken in
-                    model.setSubtitleDelay(PlayerLayout.nudge(model.subtitleDelay, by: by), spoken: spoken)
-                } reset: {
-                    model.setSubtitleDelay(0)
-                }
-                #endif
+        }
+    }
+
+    /// A line's Timing row. `value` is read at each step, so a hold moves on from where the last step left it.
+    @ViewBuilder private func timing(_ value: @escaping () -> Double, track: String, set: @escaping (Double, Bool) -> Void) -> some View {
+        #if os(tvOS)
+        // A remote: the three steps as buttons, as the old menu had them.
+        HStack(spacing: Theme.Space.s) {
+            Text("Timing \(PlayerLayout.delayText(value()))").monospacedDigit()
+            Button { set(PlayerLayout.nudge(value(), by: -PlayerLayout.subtitleStep), true) } label: {
+                Label("\u{2212}0.1 s", glyph: "minus")
+            }
+            Button { set(PlayerLayout.nudge(value(), by: PlayerLayout.subtitleStep), true) } label: {
+                Label("+0.1 s", glyph: "plus")
+            }
+            if value() != 0 {
+                Button { set(0, true) } label: { Label("Reset", glyph: "rotate-ccw") }
             }
         }
+        .buttonStyle(PillButtonStyle())
+        #else
+        // Its keys only when it is focused on purpose (a click, Tab): the panel's rows keep the arrows.
+        SubtitleTimingStepper(value: value(), track: track, takesFocus: false) { by, spoken in
+            set(PlayerLayout.nudge(value(), by: by), spoken)
+        } reset: {
+            set(0, true)
+        }
+        #endif
+    }
+
+    /// Layout: Stacked, Split, One box, stepped as a value in words (plans/dual-subtitles.md 5.1).
+    private var layoutRow: some View {
+        let all = SubtitleLayout.allCases
+        let at = all.firstIndex(of: model.subtitleLayout) ?? 0
+        let step = { (by: Int) in if all.indices.contains(at + by) { model.setSubtitleLayout(all[at + by]) } }
+        return HStack(spacing: 12) {
+            Text(w.layout).textFont(Theme.type.callout, weight: .semibold, relativeTo: .callout)
+            Spacer(minLength: 16)
+            layoutStep("minus", enabled: at > 0) { step(-1) }
+            Text(w.layoutName(all[at])).textFont(Theme.type.callout, weight: .semibold, relativeTo: .callout).frame(minWidth: 72)
+            layoutStep("plus", enabled: at < all.count - 1) { step(1) }
+        }
+        // One element for a reader: its name, its value, and a swipe to step.
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(w.layout)
+        .accessibilityValue(w.layoutName(all[at]))
+        .accessibilityAdjustableAction { direction in step(direction == .increment ? 1 : -1) }
+    }
+
+    private func layoutStep(_ glyph: String, enabled: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Glyph(glyph, size: 16)
+                .frame(width: 40, height: 40)
+                .background(.white.opacity(0.12), in: Circle())
+                .frame(width: Theme.minTarget, height: Theme.minTarget)
+                .contentShape(Circle())
+        }
+        .buttonStyle(FocusPlainStyle(shape: Circle()))
+        .disabled(!enabled)
+        .opacity(enabled ? 1 : 0.4)
     }
 
     private func optionRow(id: Int, title: String, detail: String?, selected: Bool) -> some View {
@@ -345,18 +528,39 @@ struct TrackPickerPanel: View {
                 setRow(.language(was))
             }
         case .close: close()
-        case .off: model.chooseSubtitle(nil)
+        case .off: if second { model.chooseSecondSubtitle(nil) } else { model.chooseSubtitle(nil) }
         case .turnOn(.file(let index)): model.selectText(index)
-        case .turnOn(.track(let track)): model.chooseSubtitle(track)
+        case .turnOn(.track(let track)): if second { model.chooseSecondSubtitle(track) } else { model.chooseSubtitle(track) }
         case .audio(let index): model.selectAudio(index)
+        case .line(let tab): switchLine(tab)
+        case .spoken:
+            // The spoken language's best track; with none here the profile keeps the choice for the next titles.
+            // Never while it is the first line's language (a Mac's Return reaches a disabled row).
+            guard !spokenDisabled else { break }
+            if let best = spokenLanguage?.tracks.first { model.chooseSecondSubtitle(best, spoken: true) } else { model.keepSpoken() }
         case .none: break
         }
+    }
+
+    /// Another tab: its languages, landing on its chosen row, else Off (a remote's focus goes there; the Mac's
+    /// keyboard stays on the switch).
+    private func switchLine(_ tab: TrackPicker.Line) {
+        guard tab != line else { return }
+        model.pickerLine = tab
+        open = nil
+        #if os(macOS)
+        setRow(.line)
+        #else
+        landOnTab = true
+        #endif
     }
 
     /// A language's options, landing on the option playing when it is the chosen language, else its best.
     private func show(_ l: TrackPicker.Language) {
         open = l.language
-        setRow(TrackPicker.landing(l, subtitle: model.subtitle, fileIndex: model.textTrack))
+        setRow(second
+            ? TrackPicker.landing(l, subtitle: model.secondSubtitle, fileIndex: nil)
+            : TrackPicker.landing(l, subtitle: model.subtitle, fileIndex: model.textTrack))
     }
 
     /// The keyboard's row: the highlight, and the system focus where the platform gives buttons one.
@@ -377,8 +581,12 @@ struct TrackPickerPanel: View {
 
     #if os(macOS)
     private func key(_ key: TrackPicker.Key) -> KeyPress.Result {
-        let order = TrackPicker.order(audio: kind == .audio ? shownAudio : nil, open: openLanguage, shown: shown)
-        let act = TrackPicker.key(key, focus: focus ?? current, order: order, languages: languages, open: openLanguage)
+        let order = TrackPicker.order(
+            audio: kind == .audio ? shownAudio : nil, open: openLanguage, shown: shown, lines: lines,
+            spoken: second && query.trimmingCharacters(in: .whitespaces).isEmpty)
+        let act = TrackPicker.key(
+            key, focus: focus ?? current, order: order, languages: languages, open: openLanguage,
+            spoken: spokenDisabled ? nil : spokenLanguage?.language)
         // Nothing for the rows (Left and Right in the search field): the key goes on to the field.
         if act == .none { return .ignored }
         run(act)

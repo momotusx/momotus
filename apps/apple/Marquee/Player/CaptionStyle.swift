@@ -17,6 +17,9 @@ struct CaptionStyle {
     var highlight: Color
     /// The box behind the lines.
     var window: Color
+    /// One box's fill (plans/dual-subtitles.md 4 E): the viewer's window colour when their style shows one, else
+    /// the colour behind the glyphs, drawn once behind both lines.
+    var oneBoxFill: Color
     var radius: CGFloat
     var edge: MACaptionAppearanceTextEdgeStyle
 
@@ -39,6 +42,10 @@ struct CaptionStyle {
         return percent == 100 ? nil : percent
     }
 
+    /// One box takes the window colour when the style shows a window (its opacity over 0), as Android takes the
+    /// style's window colour over its background.
+    static func oneBoxUsesWindow(windowOpacity: CGFloat) -> Bool { windowOpacity > 0 }
+
     static func words(_ size: SubtitleSize) -> String {
         switch size {
         case .small: "Small"
@@ -52,12 +59,16 @@ struct CaptionStyle {
     // while a cue is on screen shows from the next cue.
     static var current: CaptionStyle {
         let descriptor = MACaptionAppearanceCopyFontDescriptorForStyle(.user, nil, .default).takeRetainedValue()
+        let highlight = color(MACaptionAppearanceCopyBackgroundColor(.user, nil), MACaptionAppearanceGetBackgroundOpacity(.user, nil))
+        let windowOpacity = MACaptionAppearanceGetWindowOpacity(.user, nil)
+        let window = color(MACaptionAppearanceCopyWindowColor(.user, nil), windowOpacity)
         return CaptionStyle(
             face: face(named: CTFontDescriptorCopyAttribute(descriptor, kCTFontNameAttribute) as? String),
             scale: MACaptionAppearanceGetRelativeCharacterSize(.user, nil),
             text: color(MACaptionAppearanceCopyForegroundColor(.user, nil), MACaptionAppearanceGetForegroundOpacity(.user, nil)),
-            highlight: color(MACaptionAppearanceCopyBackgroundColor(.user, nil), MACaptionAppearanceGetBackgroundOpacity(.user, nil)),
-            window: color(MACaptionAppearanceCopyWindowColor(.user, nil), MACaptionAppearanceGetWindowOpacity(.user, nil)),
+            highlight: highlight,
+            window: window,
+            oneBoxFill: oneBoxUsesWindow(windowOpacity: windowOpacity) ? window : highlight,
             radius: MACaptionAppearanceGetWindowRoundedCornerRadius(.user, nil),
             edge: MACaptionAppearanceGetTextEdgeStyle(.user, nil))
     }

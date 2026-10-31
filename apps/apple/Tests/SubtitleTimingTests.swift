@@ -260,7 +260,10 @@ func playerModel() throws -> String {
 @Test func theTimingStepperSitsInTheLanguagesOptions() throws {
     // The picker's second level ends with the timing row while a track that takes one is on (plans/player-polish.md 2.4).
     let url = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appending(path: "../Marquee/Player/SubtitlePicker.swift")
-    let options = try body(of: "private func options(", in: try String(contentsOf: url, encoding: .utf8))
-    #expect(options.contains("if model.timingKey != nil, chosen == l.language {"))
-    #expect(options.contains("SubtitleTimingStepper(value: model.subtitleDelay"))
+    let picker = try String(contentsOf: url, encoding: .utf8)
+    let options = try body(of: "private func options(", in: picker)
+    #expect(options.contains("} else if let key = model.timingKey, chosen == l.language {\n                        timing({ model.subtitleDelay }, track: key)"))
+    // Each line's row reads its own value at each step, so a hold moves on from the last step.
+    #expect(options.contains("timing({ model.secondDelay }, track: url) { model.setSecondDelay($0, spoken: $1) }"))
+    #expect(try body(of: "@ViewBuilder private func timing(", in: picker).contains("SubtitleTimingStepper(value: value(), track: track, takesFocus: false)"))
 }

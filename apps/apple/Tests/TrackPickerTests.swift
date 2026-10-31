@@ -122,7 +122,7 @@ private let klingon = track(5, "tlh", "tlh", "Klingon")
     #expect(TrackPicker.buttonValue(core: nil, file: "English (US) Transcribed", auto: false, autoLanguage: "English") == "English (US) Transcribed")
     #expect(TrackPicker.buttonValue(core: "Turkish", file: nil, auto: false, autoLanguage: "English") == "Turkish")
     #expect(controls.contains("picked: TrackPicker.buttonValue("))
-    #expect(picker.contains("let auto = on && model.subtitleIsAuto"))
+    #expect(picker.contains("let auto = on && !second && model.subtitleIsAuto"))
     #expect(picker.contains("if isDefault { AutoMark(text: \"Default\") }"))
 }
 
@@ -196,10 +196,10 @@ private let klingon = track(5, "tlh", "tlh", "Klingon")
     let controls = try String(contentsOf: player.appending(path: "PlayerControls.swift"), encoding: .utf8)
     let picker = try String(contentsOf: player.appending(path: "SubtitlePicker.swift"), encoding: .utf8)
     #expect(controls.contains("if takesFocus { focus = .value }"))
-    #expect(picker.contains("SubtitleTimingStepper(value: model.subtitleDelay, track: model.timingKey ?? \"\", takesFocus: false)"))
-    #expect(try body(of: "private func key(", in: picker).contains("TrackPicker.key(key, focus: focus ?? current, order: order, languages: languages, open: openLanguage)"))
+    #expect(picker.contains("SubtitleTimingStepper(value: value(), track: track, takesFocus: false)"))
+    #expect(try body(of: "private func key(", in: picker).contains("key, focus: focus ?? current, order: order, languages: languages, open: openLanguage,"))
     // One reader stop per language: the chevron is hidden, the row carries Options.
-    #expect(picker.contains(".focused($focus, equals: .opener(l.language))\n            // One stop per language for a reader: the row carries Options as an action.\n            .accessibilityHidden(true)"))
+    #expect(picker.contains(".focused($focus, equals: .opener(l.language))\n                // One stop per language for a reader: the row carries Options as an action.\n                .accessibilityHidden(true)"))
 }
 
 @Test func thePanelGrowsToTheAreaUnderTheTitleBar() {
