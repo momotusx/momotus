@@ -2909,6 +2909,10 @@ const CHOOSE_AFTER: Duration = Duration::from_secs(20);
 /// Why a version was left, in the words of `moved`.
 const NOT_HERE: &str = "did not play on this device";
 const NOT_STARTED: &str = "did not start here";
+/// A version that plays only through a streaming account, with none here:
+/// said quietly, never pointing at Settings or an account (the owner's
+/// rule: no account call to action outside Settings).
+const NO_ACCOUNT_HERE: &str = "This version does not play on this device";
 
 /// How a "Try again" run judges a torrent's start (a first play's attempts
 /// follow `Attempting`): whether a swarm that falls short may be cut at its
@@ -3076,15 +3080,13 @@ async fn open_source(
             #[cfg(not(feature = "torrent"))]
             {
                 let _ = (info_hash, file_idx, trackers);
-                return Err("Torrents need a debrid account in this version".into());
+                return Err(NO_ACCOUNT_HERE.into());
             }
         }
         Source::ClientResolve(_) | Source::Torrent { .. } => {
             let (service, request) = debrid_request(stream, target.season, target.episode)
                 .ok_or("The addon did not say which torrent to play")?;
-            let resolver = core
-                .debrid()
-                .ok_or("This version needs a debrid account. Add one in Settings")?;
+            let resolver = core.debrid().ok_or(NO_ACCOUNT_HERE)?;
             let resolved = resolver
                 .resolve(with_store(&resolver, service.as_deref(), request))
                 .await

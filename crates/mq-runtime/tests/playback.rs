@@ -727,7 +727,16 @@ async fn falls_over_to_the_first_source_that_answers() {
     assert_eq!(s.phase, PlaybackPhase::Ready, "{s:?}");
     let mut errors: Vec<_> = s.attempts.iter().map(|a| a.error.as_str()).collect();
     if !torrent.is_empty() {
-        assert!(errors.remove(0).contains("debrid account"), "{errors:?}");
+        // Quietly, with no push to Settings or an account (the owner's rule).
+        let quiet = errors.remove(0);
+        assert_eq!(
+            quiet, "This version does not play on this device",
+            "{errors:?}"
+        );
+        assert!(
+            !quiet.contains("Settings") && !quiet.contains("account"),
+            "{quiet}"
+        );
     }
     assert_eq!(errors.len(), 1, "{errors:?}");
     // In words, never the status (the owner's rule).
@@ -3416,4 +3425,23 @@ async fn the_audio_starts_in_the_original_unless_the_user_chose() {
     // TMDB is never asked over a choice: it stays.
     tokio::time::sleep(Duration::from_millis(200)).await;
     assert_eq!(view.snapshot().audio_languages, ["tr", "en"]);
+}
+
+/// A version that plays only through a streaming account, with none here,
+/// says so quietly: never "Add one in Settings" or any push to an account
+/// (the owner's rule: no account call to action outside Settings).
+#[tokio::test]
+async fn a_version_for_an_account_says_no_account_push() {
+    let core = Core::temporary("p").unwrap();
+    let resolve = r#"{"name":"RD","title":"Sintel.2010.1080p","clientResolve":{"type":"debrid","service":"realdebrid","infoHash":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA","fileIdx":0}}"#;
+    let streams = format!(r#"{{"streams":[{resolve}]}}"#);
+    let view = PlaybackView::open(&core, setup(&core, &streams), target());
+    let s = settled(&view).await;
+    assert_eq!(s.phase, PlaybackPhase::Failed, "{s:?}");
+    let line = &s.attempts[0].error;
+    assert_eq!(line, "This version does not play on this device");
+    assert!(
+        !line.contains("Settings") && !line.contains("account"),
+        "{line}"
+    );
 }
