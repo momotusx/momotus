@@ -1703,6 +1703,47 @@ fn meta_failure(name: &str, error: &AddonError) -> String {
     .to_owned()
 }
 
+/// A list's answer did not decode, or was not a list.
+pub(crate) const UNREADABLE_LIST: &str = "This list came in a form Momotus cannot read";
+
+/// Why a catalog gave no list (a Home row, Discover, a search row), in a
+/// sentence the apps show as is: never the addon's name, a status code or
+/// the HTTP stack's text (the owner's rule); the log keeps the kind.
+pub(crate) fn list_failure(error: &AddonError) -> String {
+    use mq_http::HttpError;
+    match error {
+        AddonError::Http(HttpError::Status { status, .. }) => {
+            tracing::debug!("a catalog gave no list: status {status}");
+        }
+        AddonError::Http(h) => tracing::debug!("a catalog gave no list: {}", h.kind()),
+        other => tracing::debug!("a catalog gave no list: {other}"),
+    }
+    match error {
+        AddonError::TimedOut | AddonError::Http(HttpError::Timeout(_)) => {
+            "This list took too long to load"
+        }
+        AddonError::Http(HttpError::Status { status, .. }) => match status {
+            404 | 410 => "This list is not available right now",
+            401 | 403 => "Access to this list was refused",
+            429 => "Too many requests for this list right now, try again soon",
+            _ => "This list could not load right now",
+        },
+        AddonError::Http(HttpError::BlockedPrivate(_)) => {
+            "This list points to a private network address"
+        }
+        AddonError::Http(HttpError::TooLarge { .. } | HttpError::Decode(_)) => UNREADABLE_LIST,
+        _ => "This list could not be reached",
+    }
+    .to_owned()
+}
+
+/// A list that did not decode, in `UNREADABLE_LIST`'s words; the log keeps
+/// the decoder's.
+pub(crate) fn unreadable_list(e: impl std::fmt::Display) -> String {
+    tracing::debug!("a catalog sent an unreadable list: {e}");
+    UNREADABLE_LIST.to_owned()
+}
+
 /// The walk-only setting (plans/streaming-window.md 4): debug builds read
 /// `walk-window` in the data folder, one or two numbers: the window `W` in
 /// bytes for every torrent playback (0 for none, a file that fits then
@@ -1788,6 +1829,33 @@ fn free_space(_dir: &std::path::Path) -> Option<u64> {
 mod tests {
     use super::*;
     use mq_http::HttpError;
+
+    /// The owner's rule: a list that did not load names no status code and
+    /// none of the HTTP stack's text; the log keeps them.
+    #[test]
+    fn a_failed_list_says_no_status() {
+        let status = |status| {
+            AddonError::Http(HttpError::Status {
+                status,
+                body: Default::default(),
+                retry_after: None,
+            })
+        };
+        for e in [404, 403, 429, 500, 503, 418].map(status) {
+            let line = list_failure(&e);
+            assert!(!line.contains(char::is_numeric), "{line}");
+        }
+        assert_eq!(
+            list_failure(&status(404)),
+            "This list is not available right now"
+        );
+        assert_eq!(
+            list_failure(&AddonError::TimedOut),
+            "This list took too long to load"
+        );
+        let decode = unreadable_list("expected value at line 1 column 1");
+        assert_eq!(decode, UNREADABLE_LIST);
+    }
 
     /// The volume's free space is read in every build, the store's without
     /// the engine too, so a download's space rule always has a figure (code

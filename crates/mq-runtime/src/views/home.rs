@@ -979,10 +979,10 @@ fn apply_catalog(
     result: Result<mq_addons::Fetched, mq_addons::AddonError>,
 ) {
     let outcome = result
-        .map_err(|e| e.to_string())
+        .map_err(|e| crate::core::list_failure(&e))
         .and_then(|f| {
             core.learn_imdb_ids(&f.body);
-            decode_catalog(&f.body).map_err(|e| format!("unreadable catalog: {e}"))
+            decode_catalog(&f.body).map_err(crate::core::unreadable_list)
         })
         .and_then(|response| match response {
             ResourceResponse::Metas { metas } => {
@@ -1000,7 +1000,7 @@ fn apply_catalog(
                     .map(|m| tile_from_preview(m, &covers))
                     .collect::<Vec<Tile>>())
             }
-            _ => Err("addon returned no catalog items".to_owned()),
+            _ => Err(crate::core::UNREADABLE_LIST.to_owned()),
         });
     let mut rows = lock(rows);
     let Some(index) = find_row(&rows, row_id) else {

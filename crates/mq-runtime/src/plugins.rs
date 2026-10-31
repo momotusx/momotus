@@ -391,7 +391,10 @@ pub(crate) async fn fetch_manifest(core: &Core, url: &Url) -> Result<(Repo, Stri
         .await
         .map_err(|e| match e {
             mq_http::HttpError::TooLarge { .. } => "Its manifest is too large.".to_owned(),
-            mq_http::HttpError::Status { status, .. } => format!("{host} answered {status}."),
+            mq_http::HttpError::Status { status, .. } => {
+                tracing::debug!("{host} answered a plugin manifest with status {status}");
+                format!("{host} answered with an error.")
+            }
             _ => format!("Could not reach {host}."),
         })?;
     let repo = parse_manifest(url, &response.body)?;

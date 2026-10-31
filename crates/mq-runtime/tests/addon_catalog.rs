@@ -716,7 +716,7 @@ async fn fresh_waits_for_the_network_and_replaces_a_cached_list() {
     assert_eq!(
         failed.lists[0].state,
         ListState::Failed {
-            words: "Cinemeta answered with an error (503)".into()
+            words: "Cinemeta answered with an error".into()
         }
     );
     assert!(failed.lists[0].entries.is_empty());
@@ -1563,7 +1563,7 @@ async fn a_publishers_list_that_fails_names_its_host() {
     assert_eq!(
         snapshot.lists[2].state,
         ListState::Failed {
-            words: "fails.b7.test answered with an error (500)".into()
+            words: "fails.b7.test answered with an error".into()
         }
     );
 }

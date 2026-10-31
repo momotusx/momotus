@@ -383,17 +383,22 @@ impl Conn {
     }
 }
 
-/// An error's words for the status: a status and Trakt's `error` field, or
-/// the transport's reason. Never a body.
+/// An error's words for the status, in plain words: the status, Trakt's
+/// `error` field and the transport's reason go to the log only (the owner's
+/// rule: no status codes or raw errors on screen). Never a body.
 fn reason(e: &mq_tracking::trakt::CallError) -> String {
+    use mq_tracking::trakt::{AuthError, CallError};
+    tracing::debug!("trakt call failed: {e}");
     match e {
-        mq_tracking::trakt::CallError::Refused {
-            status,
-            error: Some(error),
-        } => format!("status {status} ({error})"),
-        other => other.to_string(),
+        CallError::Refused { .. } => "Trakt refused the request".into(),
+        CallError::Auth(AuthError::Off) => "Not signed in to Trakt".into(),
+        CallError::Auth(AuthError::Reconnect(_)) => "Sign in to Trakt again".into(),
+        CallError::Auth(AuthError::Transient(_)) | CallError::Transient(_) => TRAKT_SILENT.into(),
     }
 }
+
+/// Trakt or the connection to it did not answer.
+const TRAKT_SILENT: &str = "Trakt did not answer";
 
 impl Core {
     pub(crate) fn trakt(&self) -> Arc<Trakt> {

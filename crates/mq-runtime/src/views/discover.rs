@@ -1486,7 +1486,7 @@ async fn load_page(
                         }
                     }
                 }
-                Ok(_) => failed = Some("addon returned no catalog items".to_owned()),
+                Ok(_) => failed = Some(crate::core::UNREADABLE_LIST.to_owned()),
                 Err(reason) => failed = Some(reason),
             }
         }
@@ -1564,7 +1564,7 @@ async fn load_one(
                 }
             }
             Ok(_) => DiscoverState::Failed {
-                reason: "addon returned no catalog items".into(),
+                reason: crate::core::UNREADABLE_LIST.into(),
             },
             Err(reason) => DiscoverState::Failed { reason },
         };
@@ -1830,9 +1830,9 @@ async fn fetch(
         match core.addons().fetch(&catalog.addon, &path, TIMEOUT).await {
             Ok(f) => {
                 core.learn_imdb_ids(&f.body);
-                return decode_catalog(&f.body).map_err(|e| format!("unreadable catalog: {e}"));
+                return decode_catalog(&f.body).map_err(crate::core::unreadable_list);
             }
-            Err(e) => last = e.to_string(),
+            Err(e) => last = crate::core::list_failure(&e),
         }
     }
     Err(last)

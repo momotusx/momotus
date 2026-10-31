@@ -151,7 +151,12 @@ impl Login {
             () = self.owner.cancelled() => return self.overtaken(),
             code = auth::start(&api) => match code {
                 Ok(code) => code,
-                Err(reason) => return self.set(TraktLoginSnapshot::Failed { reason }),
+                Err(reason) => {
+                    // Its status and Trakt's code go to the log only.
+                    tracing::debug!("trakt sign-in not started: {reason}");
+                    let reason = "Trakt did not start the sign-in".into();
+                    return self.set(TraktLoginSnapshot::Failed { reason });
+                }
             },
         };
         let deadline = tokio::time::Instant::now() + code.expires_in;

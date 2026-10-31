@@ -371,28 +371,35 @@ enum Reply {
     Transient(String, Option<Duration>),
 }
 
+/// Trakt's refusals in words the Trakt page shows: never a status or
+/// Trakt's own `error` code (the owner's rule), which go to the log.
 fn read(answer: Result<Answer, AuthError>) -> Reply {
+    if let Ok(Answer::Refused { status, error }) = &answer {
+        tracing::debug!("trakt scrobble refused: status {status} {error:?}");
+    }
     match answer {
         Ok(Answer::Ok { body, .. }) => Reply::Ok(body),
         Ok(Answer::Refused { status: 409, .. }) => Reply::Duplicate,
         Ok(Answer::Refused {
-            status: status @ (404 | 422),
-            error,
-        }) => Reply::Unmapped(match error {
-            Some(error) => format!("Trakt does not know it ({status}, {error})"),
-            None => format!("Trakt does not know it ({status})"),
-        }),
-        Ok(Answer::Refused { status, error }) => Reply::Refused(match (status, error) {
-            (420, _) => "status 420 (account limit)".into(),
-            (423, _) => "status 423 (account locked)".into(),
-            (status, Some(error)) => format!("status {status} ({error})"),
-            (status, None) => format!("status {status}"),
+            status: 404 | 422, ..
+        }) => Reply::Unmapped("Trakt does not know it".into()),
+        Ok(Answer::Refused { status, .. }) => Reply::Refused(match status {
+            420 => "The Trakt account reached its limit".into(),
+            423 => "The Trakt account is locked".into(),
+            _ => "Trakt refused the change".into(),
         }),
         Ok(Answer::Transient {
             reason,
             retry_after,
-        }) => Reply::Transient(reason, retry_after.map(|after| after.min(RETRY_AFTER_CAP))),
-        Err(AuthError::Transient(reason)) => Reply::Transient(reason, None),
+        }) => {
+            tracing::debug!("trakt scrobble: {reason}");
+            let after = retry_after.map(|after| after.min(RETRY_AFTER_CAP));
+            Reply::Transient(super::TRAKT_SILENT.into(), after)
+        }
+        Err(AuthError::Transient(reason)) => {
+            tracing::debug!("trakt scrobble: {reason}");
+            Reply::Transient(super::TRAKT_SILENT.into(), None)
+        }
         Err(_) => Reply::Off,
     }
 }

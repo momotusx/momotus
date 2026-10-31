@@ -114,10 +114,33 @@ async fn run(core: Core, endpoints: Endpoints, snapshot: SharedObservable<Import
         },
         Ok(None) => ImportSnapshot::Expired,
         Err(e) => ImportSnapshot::Failed {
-            reason: e.to_string(),
+            reason: failure(&e),
         },
     };
     snapshot.set(end);
+}
+
+/// An import that failed, in plain words: never Stremio's code, a status or
+/// the HTTP stack's text (the owner's rule), which go to the log.
+fn failure(e: &ImportError) -> String {
+    tracing::info!("import failed: {e}");
+    match e {
+        ImportError::InvalidAuthKey => e.to_string(),
+        ImportError::Http(mq_http::HttpError::Timeout(_)) => {
+            "Stremio did not answer in time. Check the connection, then try again".into()
+        }
+        ImportError::Http(mq_http::HttpError::Status { .. }) | ImportError::Api { .. } => {
+            "Stremio refused the import. Try again".into()
+        }
+        ImportError::Http(_) => {
+            "Stremio could not be reached. Check the connection, then try again".into()
+        }
+        ImportError::Decode(_) => "Stremio sent an answer Momotus cannot read".into(),
+        // The raw import is kept and can be applied again: said so.
+        ImportError::Store(_) | ImportError::Apply { .. } => {
+            "The import could not be saved on this device. Try again".into()
+        }
+    }
 }
 
 /// `Ok(None)` when the link code expired.
@@ -215,5 +238,30 @@ fn summary(report: &ImportReport) -> ImportSummary {
         in_progress: report.in_progress as u32,
         watched: report.watched_marked as u32,
         series_unmatched: report.deferred_watched_items.len() as u32,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The owner's rule: a failed import says no Stremio code, no status and
+    /// none of the HTTP stack's text; the log keeps them.
+    #[test]
+    fn a_failed_import_says_no_code() {
+        let status = mq_http::HttpError::Status {
+            status: 500,
+            body: Default::default(),
+            retry_after: None,
+        };
+        let api = ImportError::Api {
+            code: 403,
+            message: "account locked 42".into(),
+        };
+        let decode = ImportError::Decode("expected value at line 1 column 1".into());
+        for e in [ImportError::Http(status), api, decode] {
+            let line = failure(&e);
+            assert!(!line.contains(char::is_numeric), "{line}");
+        }
     }
 }

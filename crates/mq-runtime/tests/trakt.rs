@@ -917,7 +917,7 @@ async fn a_refused_scrobble_is_not_tried_again() {
     assert_eq!(actions(&fake), ["start"]);
     assert_eq!(
         status(&core).last_error.as_deref(),
-        Some("status 420 (account limit)")
+        Some("The Trakt account reached its limit")
     );
     std::mem::forget(view);
 }
@@ -1052,7 +1052,7 @@ async fn a_failed_history_write_waits_and_an_old_one_shows_failing() {
     assert!(waiting.is_empty(), "not before its retry time");
     match status(&core).state {
         TraktState::Failing { reason, .. } => {
-            assert_eq!(reason, "Trakt did not answer: status 503")
+            assert_eq!(reason, "Trakt did not answer")
         }
         other => panic!("{other:?}"),
     }
@@ -1831,7 +1831,7 @@ async fn an_answer_that_counts_nothing_keeps_the_writes() {
     );
     assert_eq!(
         status(&core).last_error.as_deref(),
-        Some("Trakt did not answer: Trakt's answer did not acknowledge the writes")
+        Some("Trakt did not answer")
     );
     due(&core, "a-ack");
     core.trakt_sync().await.unwrap();

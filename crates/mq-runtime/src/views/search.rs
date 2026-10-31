@@ -387,10 +387,12 @@ fn outcome(
     result: Result<mq_addons::Fetched, mq_addons::AddonError>,
     query: &str,
 ) -> (RowState, Vec<Tile>) {
-    let parsed = result.map_err(|e| e.to_string()).and_then(|f| {
-        core.learn_imdb_ids(&f.body);
-        decode_catalog(&f.body).map_err(|e| format!("unreadable results: {e}"))
-    });
+    let parsed = result
+        .map_err(|e| crate::core::list_failure(&e))
+        .and_then(|f| {
+            core.learn_imdb_ids(&f.body);
+            decode_catalog(&f.body).map_err(crate::core::unreadable_list)
+        });
     match parsed {
         Ok(ResourceResponse::Metas { metas }) => {
             let covers = core.covers(metas.iter().map(|m| m.id.as_str()));
@@ -406,7 +408,7 @@ fn outcome(
         }
         Ok(_) => (
             RowState::Failed {
-                reason: "addon returned no search results".into(),
+                reason: crate::core::UNREADABLE_LIST.into(),
             },
             Vec::new(),
         ),

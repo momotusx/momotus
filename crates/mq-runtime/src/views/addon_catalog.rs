@@ -1269,14 +1269,16 @@ fn copy_key(stored: &str) -> Option<String> {
     (json.len() <= COPY_KEY_MAX).then(|| stored.to_owned())
 }
 
-/// The words of a list that could not be read, naming its source.
+/// The words of a list that could not be read, naming its source (this is
+/// the Find addons page); never a status code, which goes to the log.
 fn list_failure(error: &AddonError, who: &str) -> String {
     match error {
         AddonError::TimedOut | AddonError::Http(HttpError::Timeout(_)) => {
             format!("{who} did not answer in time")
         }
         AddonError::Http(HttpError::Status { status, .. }) => {
-            format!("{who} answered with an error ({status})")
+            tracing::debug!("{who} answered an addon list with status {status}");
+            format!("{who} answered with an error")
         }
         AddonError::Http(HttpError::TooLarge { .. } | HttpError::Decode(_)) => {
             format!("{who} sent a list Momotus cannot read")
