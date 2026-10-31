@@ -5,7 +5,7 @@ object SearchCopy {
     /** No installed addon has a search catalog (the core's `searchable` is 0): nothing could match. */
     const val NONE_CAN_SEARCH = "None of your addons can search."
 
-    /** The way on from [NONE_CAN_SEARCH]. */
+    /** The way on when nothing came back, from [NONE_CAN_SEARCH] or no match. */
     const val RECOMMENDED = "Recommended addons"
 
     /** Nothing came back for [query]: no addon can search ([searchable] 0), or none of them matched. */

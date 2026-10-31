@@ -292,7 +292,7 @@ fun SearchScreen(
     /** A person's name from a title page: searched once, as if typed. */
     request: String? = null,
     onRequestSent: () -> Unit = {},
-    /** No addon can search: the recommended addons, which include one that does. */
+    /** Nothing came back: the recommended addons, which include ones that search. */
     onAddons: () -> Unit,
 ) {
     val holder =
@@ -359,15 +359,13 @@ fun SearchScreen(
                 item(key = "none") {
                     Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.s)) {
                         Note(SearchCopy.empty(holder.query, snapshot.searchable), spoken = true)
-                        // No addon can search: nothing could have matched, so the way on is one that does.
-                        if (snapshot.searchable == 0) {
-                            SecondaryButton(
-                                SearchCopy.RECOMMENDED,
-                                onAddons,
-                                Modifier.padding(start = Marquee.safe.side),
-                                icon = Icons.ChevronRight,
-                            )
-                        }
+                        // No addon can search, or none matched: either way the way on is more addons.
+                        SecondaryButton(
+                            SearchCopy.RECOMMENDED,
+                            onAddons,
+                            Modifier.padding(start = Marquee.safe.side),
+                            icon = Icons.ChevronRight,
+                        )
                     }
                 }
             }
