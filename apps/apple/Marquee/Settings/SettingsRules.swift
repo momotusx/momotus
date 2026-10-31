@@ -4,7 +4,7 @@ import SwiftUI
 /// A1"): the profile on a film's backdrop, then a section menu beside the chosen section in one centered column
 /// (TV and wide screens), or a list of the sections, each opening its own page (the phone). The menu's entries.
 enum SettingsSection: String, CaseIterable, Identifiable {
-    case profiles, sources, account, home, playback, downloads, device, about
+    case profiles, sources, account, home, playback, subtitles, downloads, device, about
 
     var id: String { rawValue }
 
@@ -15,6 +15,7 @@ enum SettingsSection: String, CaseIterable, Identifiable {
         case .account: "Account"
         case .home: "Home"
         case .playback: "Playback"
+        case .subtitles: "Subtitles and audio"
         case .downloads: "Downloads"
         case .device: "This device"
         case .about: "About"
@@ -28,6 +29,7 @@ enum SettingsSection: String, CaseIterable, Identifiable {
         case .account: .sky
         case .home: .mint
         case .playback: .teal
+        case .subtitles: .sky
         case .downloads: .blue
         case .device: .sea
         case .about: .grey
@@ -41,7 +43,8 @@ enum SettingsSection: String, CaseIterable, Identifiable {
         case .sources: "Addons, plugins, debrid services, Trakt and import"
         case .account: "Sign in and sync with your other devices"
         case .home: "Which rows Home shows"
-        case .playback: "Stream choice, subtitles and up next"
+        case .playback: "Stream choice and up next"
+        case .subtitles: "Subtitle and audio languages, size and a second line"
         case .downloads: "Smart downloads and storage"
         case .device: "Settings kept on this device only"
         case .about: "Version, credits and licences"
@@ -55,6 +58,7 @@ enum SettingsSection: String, CaseIterable, Identifiable {
         case .account: "monitor-smartphone"
         case .home: "rows-3"
         case .playback: "circle-play"
+        case .subtitles: "captions"
         case .downloads: "arrow-down-to-line"
         case .device: "monitor"
         case .about: "info"

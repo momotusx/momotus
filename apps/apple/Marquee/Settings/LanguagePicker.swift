@@ -9,6 +9,8 @@ struct LanguagePicker: View {
     let core: CoreClient
     let isOn: (String) -> Bool
     let toggle: (String) -> Void
+    /// Why a language cannot be picked here ("Subtitle language", Settings' Second line); nil for one that can.
+    var blocked: (String) -> String? = { _ in nil }
     @State private var all: [LanguageChoice] = []
     @State private var failure: String?
     @State private var query = ""
@@ -34,10 +36,12 @@ struct LanguagePicker: View {
                 LazyVStack(alignment: .leading, spacing: 0) {
                     ForEach(LanguageChoice.rows(all, audio: audio, query: query), id: \.code) { row in
                         let on = isOn(row.code)
-                        Button { toggle(row.code) } label: {
+                        let why = blocked(row.code)
+                        Button { if why == nil { toggle(row.code) } } label: {
                             HStack {
                                 Text(row.name).textFont(Theme.type.body)
                                 Spacer()
+                                if let why { Text(why).textFont(Theme.type.callout).foregroundStyle(Theme.Palette.muted) }
                                 if on { Glyph("check") }
                             }
                             .foregroundStyle(Theme.Palette.text)

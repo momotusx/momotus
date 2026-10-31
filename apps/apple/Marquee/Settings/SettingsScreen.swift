@@ -421,8 +421,17 @@ struct SettingsScreen: View {
                             detail: prefs.snapshot.map { StreamChoice.summary($0.streams) } ?? "Loading") { StreamChoiceScreen(core: core) }
                     }
                     if let p = prefs.snapshot {
-                        panel { playback(p) }
+                        panel { upNext(p) }
                     }
+                }
+            }
+            section(.subtitles) {
+                if let p = prefs.snapshot {
+                    VStack(alignment: .leading, spacing: tvForm ? 20 : 16) {
+                        panel { subtitlesAudio(p) }
+                        panel { secondLine(p) }
+                    }
+                    .modifier(FirstRow(section: .subtitles, focus: $focus))
                 }
             }
             #if !os(tvOS)
@@ -503,8 +512,9 @@ struct SettingsScreen: View {
                                  notes: sync.lastReport?.notes ?? [], at: sync.lastSynced)
     }
 
-    /// The quality, size and audio choices live on Stream choice; subtitles and Up next stay here.
-    private func playback(_ p: Prefs) -> some View {
+    /// Subtitles and audio (the owner, 2026-10-27 and 2026-10-31): the subtitle languages, their size and the audio
+    /// languages.
+    private func subtitlesAudio(_ p: Prefs) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             subtitles(p)
             Text(Language.firstLine(p.subtitleLanguages))
@@ -518,9 +528,65 @@ struct SettingsScreen: View {
             } label: { Label("More languages", glyph: "search") }
             .buttonStyle(.textLink)
             subtitleSize(p)
-            upNext(p)
             Text("Languages are listed in the order you turn them on; the first one wins. A subtitle you pick while watching moves its language first.")
                 .modifier(Note())
+            audio(p)
+            NavigationLink {
+                LanguagePicker(title: StreamChoice.words.settings.audio.label, audio: true, core: core,
+                               isOn: { prefs.snapshot?.streams.languages.contains($0) ?? false }, toggle: toggleAudio)
+            } label: { Label("More languages", glyph: "search") }
+            .buttonStyle(.textLink)
+            Text(StreamChoice.words.settings.audio.help).modifier(Note())
+        }
+    }
+
+    /// The common languages, then any other chosen; a new pick goes last (the first wins), a tap takes one off.
+    private func audio(_ p: Prefs) -> ChipRow<String> {
+        let chips = Language.items(chosen: p.streams.languages, subtitle: false).map { Chip(id: $0.0, title: $0.1) }
+        return ChipRow(label: StreamChoice.words.settings.audio.label, chips: chips, isSelected: { p.streams.languages.contains($0) }) {
+            toggleAudio($0)
+        }
+    }
+
+    /// Adds an audio language at the end, or takes it off.
+    private func toggleAudio(_ code: String) {
+        let list = prefs.snapshot?.streams.languages ?? []
+        set(["streams": ["languages": list.contains(code) ? list.filter { $0 != code } : list + [code]] as [String: any Sendable]])
+    }
+
+    /// The second line (plans/dual-subtitles.md 5.5), the same profile values as the player's: Off, Spoken language,
+    /// then the languages (the first subtitle language's says so and cannot be picked); Layout and Only when paused
+    /// while a second line is set.
+    private func secondLine(_ p: Prefs) -> some View {
+        let words = StreamChoice.words.player
+        let second = p.secondSubtitle
+        let first = p.subtitleLanguages.first
+        let languages = [second].compactMap { $0 }.filter { $0 != Language.spoken && !Language.all.map(\.audio).contains($0) }
+            + Language.all.map(\.audio)
+        let chips = [Chip(id: "", title: "Off"), Chip(id: Language.spoken, title: words.spokenLanguage)]
+            + languages.map { Chip(id: $0, title: Language.name($0), detail: Language.onFirstLine($0, first: first) ? "Subtitle language" : nil) }
+        let pick = { (tag: String) in
+            guard !Language.onFirstLine(tag, first: first) else { return }
+            set(["secondSubtitle": tag])
+        }
+        return VStack(alignment: .leading, spacing: 12) {
+            ChipRow(label: words.secondLine, chips: chips, isSelected: { $0 == (second ?? "") }) { id in
+                if id.isEmpty { set(["secondSubtitle": NSNull()]) } else if id != second { pick(id) }
+            }
+            NavigationLink {
+                LanguagePicker(title: words.secondLine, audio: false, core: core, isOn: { $0 == prefs.snapshot?.secondSubtitle },
+                               toggle: pick, blocked: { Language.onFirstLine($0, first: first) ? "Subtitle language" : nil })
+            } label: { Label("More languages", glyph: "search") }
+            .buttonStyle(.textLink)
+            Text("A second subtitle in another language, with the first. Spoken language follows each film's audio.").modifier(Note())
+            if second != nil {
+                ChipRow(label: words.layout, chips: SubtitleLayout.allCases.map { Chip(id: $0, title: words.layoutName($0)) },
+                        isSelected: { $0 == (p.subtitleLayout ?? .stacked) }) { set(["subtitleLayout": $0.rawValue]) }
+                Text("Stacked puts the second line above the first, Split at the top of the picture, One box both in one box.").modifier(Note())
+                ChipRow(label: words.onlyWhenPaused, chips: [Chip(id: true, title: "On"), Chip(id: false, title: "Off")],
+                        isSelected: { $0 == (p.secondOnPause ?? false) }) { set(["secondOnPause": $0]) }
+                Text("The second line shows only while the video is paused.").modifier(Note())
+            }
         }
     }
 

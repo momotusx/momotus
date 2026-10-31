@@ -39,10 +39,12 @@ private func hero(_ id: String, background: String?) throws -> Hero {
 }
 
 @Test func theMenuListsTheSectionsInPageOrderAndTVHasNoThisDevice() {
-    #expect(SettingsSection.shown(tv: false, downloads: false).map(\.title) == ["Profiles", "Sources", "Account", "Home", "Playback", "This device", "About"])
-    #expect(SettingsSection.shown(tv: false, downloads: true).map(\.title) == ["Profiles", "Sources", "Account", "Home", "Playback", "Downloads", "This device", "About"])
+    #expect(SettingsSection.shown(tv: false, downloads: false).map(\.title)
+        == ["Profiles", "Sources", "Account", "Home", "Playback", "Subtitles and audio", "This device", "About"])
+    #expect(SettingsSection.shown(tv: false, downloads: true).map(\.title)
+        == ["Profiles", "Sources", "Account", "Home", "Playback", "Subtitles and audio", "Downloads", "This device", "About"])
     // tvOS has no setting of its own for This device (the trailer previews switch is off the TV), as Android TV.
-    #expect(SettingsSection.shown(tv: true, downloads: true) == [.profiles, .sources, .account, .home, .playback, .about])
+    #expect(SettingsSection.shown(tv: true, downloads: true) == [.profiles, .sources, .account, .home, .playback, .subtitles, .about])
 }
 
 @Test(arguments: SettingsTone.allCases) func everyTileIsABlueToGreenStepItsWhiteGlyphReads(_ tone: SettingsTone) throws {
@@ -60,8 +62,9 @@ private func hero(_ id: String, background: String?) throws -> Hero {
 }
 
 @Test func everySectionAndRowTakesATileFromTheSteps() {
-    // Profiles blue, Sources green, Account sky, Home mint, Playback teal, This device sea, About grey (the web's).
-    #expect(SettingsSection.allCases.map(\.tone) == [.blue, .green, .sky, .mint, .teal, .blue, .sea, .grey])
+    // Profiles blue, Sources green, Account sky, Home mint, Playback teal, Subtitles and audio sky, Downloads blue,
+    // This device sea, About grey (the web's).
+    #expect(SettingsSection.allCases.map(\.tone) == [.blue, .green, .sky, .mint, .teal, .sky, .blue, .sea, .grey])
 }
 
 @Test func theHeaderArtIsContinueWatchingsFirstBackdropElseTheHero() throws {
@@ -94,6 +97,10 @@ private func hero(_ id: String, background: String?) throws -> Hero {
         #expect(!s.summary.isEmpty, "\(s)")
     }
     #expect(SettingsSection.profiles.summary.isEmpty)
+    // Subtitles and audio is its own section (the owner, 2026-10-31); Playback no longer holds subtitles.
+    #expect(SettingsSection.subtitles.summary == "Subtitle and audio languages, size and a second line")
+    #expect(SettingsSection.playback.summary == "Stream choice and up next")
+    #expect(SettingsSection.subtitles.glyph == "captions")
 }
 
 @Test func theMenuHoldsUnderTheBarAndNeverPastTheLists() {

@@ -79,3 +79,12 @@ private let known = [
     #expect(Language.firstLine(stored) == "\(Language.name("tr")) first")
     #expect(Language.firstLine([]) == "None, subtitles start off")
 }
+
+@Test func theSecondLineCannotTakeTheFirstSubtitleLanguageInAnySpelling() {
+    #expect(Language.onFirstLine("en", first: "eng"))
+    #expect(Language.onFirstLine("en", first: "en"))
+    #expect(Language.onFirstLine("pt", first: "pt-BR"))
+    #expect(Language.onFirstLine("pt-BR", first: "por"))
+    #expect(!Language.onFirstLine("tr", first: "eng"))
+    #expect(!Language.onFirstLine("en", first: nil))
+}

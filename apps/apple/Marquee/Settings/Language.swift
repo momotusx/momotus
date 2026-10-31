@@ -46,6 +46,17 @@ struct Language {
         all.first { $0.audio == tag }?.name ?? Locale.current.localizedString(forIdentifier: tag)?.capitalized ?? tag
     }
 
+    /// Settings' Second line (plans/dual-subtitles.md 5.5): a language in the first subtitle language's primary
+    /// language (`first`, as the profile stores it, "eng" or "pt-BR") is the first line's and cannot be picked there.
+    static func onFirstLine(_ code: String, first: String?) -> Bool {
+        guard let first else { return false }
+        let primary = { (c: String) in tag(c).split(separator: "-").first.map { $0.lowercased() } ?? c }
+        return primary(code) == primary(first)
+    }
+
+    /// What Settings' Second line stores for its "Spoken language" row (`Prefs.secondSubtitle`).
+    static let spoken = "audio"
+
     /// Settings' line under the chips: the language subtitles start in.
     static func firstLine(_ stored: [String]) -> String {
         ordered(stored).first.map { "\(name($0)) first" } ?? "None, subtitles start off"

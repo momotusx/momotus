@@ -73,6 +73,31 @@ struct StreamChoiceWords: Decodable, Sendable {
         /// Every start subtitle the core tried could not be read (`startSubtitleFailed`); no source named.
         /// Optional: the key lands with the core's subtitle hand-over.
         let subtitlesFailed: String?
+        /// The second subtitle line (plans/dual-subtitles.md 5.1): the picker's switch, its Spoken row, the other
+        /// line's disabled language, and its Layout and Only when paused rows.
+        let firstLine: String
+        let secondLine: String
+        let spokenLanguage: String
+        let spokenNotKnown: String
+        let onFirstLine: String
+        let onSecondLine: String
+        let layout: String
+        let layouts: Layouts
+        let onlyWhenPaused: String
+
+        struct Layouts: Decodable, Sendable {
+            let stacked: String
+            let split: String
+            let oneBox: String
+        }
+
+        func layoutName(_ layout: SubtitleLayout) -> String {
+            switch layout {
+            case .stacked: layouts.stacked
+            case .split: layouts.split
+            case .oneBox: layouts.oneBox
+            }
+        }
     }
 
     struct Learned: Decodable, Sendable {

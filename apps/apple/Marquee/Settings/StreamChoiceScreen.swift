@@ -75,15 +75,6 @@ struct StreamChoiceScreen: View {
                       isOn: { $0 == s.preferReady }, focus: $focus, id: "ready") { patch(["preferReady": $0]) }
         }
         divider
-        ChoiceRow(label: w.audio.label, help: w.audio.help, items: Language.items(chosen: s.languages, subtitle: false),
-                  isOn: { s.languages.contains($0) }, focus: $focus, id: "audio") { toggleAudio($0) } more: {
-            NavigationLink {
-                LanguagePicker(title: "Audio languages", audio: true, core: core,
-                               isOn: { prefs.snapshot?.streams.languages.contains($0) ?? false }, toggle: toggleAudio)
-            } label: { Label("More languages", glyph: "search") }
-            .buttonStyle(.textLink)
-        }
-        divider
         ChoiceRow(label: w.learn.label, items: w.learn.choices.compactMap { c in c.value.map { ($0, c.label) } },
                   isOn: { $0 == s.learn }, focus: $focus, id: "learn") { patch(["learn": $0]) } more: {
             if StreamChoice.anyLearned(p) { learned(p) }
@@ -146,12 +137,6 @@ struct StreamChoiceScreen: View {
 
     private var divider: some View {
         Rectangle().fill(Theme.Palette.line).frame(height: 1)
-    }
-
-    /// Adds an audio language at the end, or takes it off.
-    private func toggleAudio(_ code: String) {
-        let list = prefs.snapshot?.streams.languages ?? []
-        patch(["languages": list.contains(code) ? list.filter { $0 != code } : list + [code]])
     }
 
     private func patch(_ streams: [String: any Sendable]) {

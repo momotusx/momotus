@@ -10,7 +10,7 @@ import Foundation
 /// `subtitleLanguages` (none for No subtitles); Skip writes nothing.
 enum SubtitleStepRules {
     static let title = "Subtitles"
-    static let lead = "Pick the language subtitles start in. They turn on when a film's audio is in another language. Change it later in Settings, under Playback."
+    static let lead = "Pick the language subtitles start in. They turn on when a film's audio is in another language. Change it later in Settings, under Subtitles and audio."
     static let device = "This device's language"
     static let none = "No subtitles"
     static let noneLine = "Turn them on while watching"
