@@ -349,6 +349,9 @@ class CalendarView(
     ) {
     /** Sent at local midnight and on every return to the app, so the window follows the date. */
     fun setToday(today: String) = post(command("setToday") { put("today", today) })
+
+    /** Fetches one series of [CalendarSnapshot.failed] again. */
+    fun retrySeries(itemId: String) = post(command("retry") { put("itemId", itemId) })
 }
 
 class AddonsView(

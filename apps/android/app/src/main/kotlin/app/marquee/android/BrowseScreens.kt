@@ -267,6 +267,8 @@ internal fun Note(
     onRetry: (() -> Unit)? = null,
     /** Read out once when it appears or changes (a failure or an empty result): off for a hint or a line in a list. */
     spoken: Boolean = false,
+    /** What a screen reader says for Try again when the page has more than one. */
+    retrySpoken: String? = null,
 ) {
     Column(Modifier.padding(horizontal = side), verticalArrangement = Arrangement.spacedBy(Marquee.space.s)) {
         val words: @Composable () -> Unit = {
@@ -279,7 +281,7 @@ internal fun Note(
             }
         }
         if (spoken) LiveSpoken(text, ON_ARRIVAL_MS, words) else words()
-        onRetry?.let { SecondaryButton("Try again", it, icon = Icons.RefreshCw) }
+        onRetry?.let { SecondaryButton("Try again", it, icon = Icons.RefreshCw, spoken = retrySpoken) }
     }
 }
 

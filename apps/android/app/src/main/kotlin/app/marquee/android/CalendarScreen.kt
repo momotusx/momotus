@@ -144,7 +144,15 @@ private fun Head(
 
             else -> {
                 if (snapshot.pending > 0) Note("Loading the schedule of ${snapshot.pending} series")
-                if (snapshot.failed.isNotEmpty()) Note(CalendarCopy.failed(snapshot.failed), failed = true)
+                // Each series that could not load has its own Try again.
+                snapshot.failed.forEach { series ->
+                    Note(
+                        CalendarCopy.failed(series),
+                        failed = true,
+                        onRetry = { view.retrySeries(series.itemId) },
+                        retrySpoken = CalendarCopy.retrySpoken(series),
+                    )
+                }
                 if (snapshot.noSchedule.isNotEmpty()) Note(CalendarCopy.noSchedule(snapshot.noSchedule))
                 if (snapshot.days.isEmpty() && snapshot.pending == 0) {
                     Note(CalendarCopy.empty(snapshot.series))

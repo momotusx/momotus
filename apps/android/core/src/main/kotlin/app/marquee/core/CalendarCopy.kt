@@ -56,9 +56,12 @@ object CalendarCopy {
         return label?.let { "$it · ${item.title}" } ?: item.title
     }
 
-    /** "Could not load Severance (timed out), Andor." */
-    fun failed(series: List<CalendarSeries>): String =
-        "Could not load ${series.joinToString(", ") { s -> s.reason?.let { "${s.name} ($it)" } ?: s.name }}."
+    /** "Could not load Severance (timed out)." */
+    fun failed(series: CalendarSeries): String =
+        "Could not load ${series.reason?.let { "${series.name} ($it)" } ?: series.name}."
+
+    /** What a screen reader says for the Try again beside [failed]. */
+    fun retrySpoken(series: CalendarSeries): String = "Try again for ${series.name}"
 
     /** "No air dates known for Severance, Andor." */
     fun noSchedule(series: List<CalendarSeries>): String =
