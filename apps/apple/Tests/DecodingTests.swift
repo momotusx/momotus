@@ -217,7 +217,7 @@ private func playback(_ extra: String) throws -> PlaybackSnapshot {
     #expect(try playback("").notes == [])
     let notes = try playback(#", "subtitleNotes": [{"source": "TurkceAltyazi.org", "problem": "blocked"}, {"source": "Subs", "problem": "somethingNew"}]"#).notes
     #expect(notes == [SubtitleNote(source: "TurkceAltyazi.org", problem: "blocked"), SubtitleNote(source: "Subs", problem: "somethingNew")])
-    #expect(notes[1].words == "Subtitles from Subs did not load.")
+    #expect(notes[1].words == "Some subtitles did not load.")
 }
 
 // The start progress and the subtitle picker's fields (plans/player-polish.md 1.3, 2).

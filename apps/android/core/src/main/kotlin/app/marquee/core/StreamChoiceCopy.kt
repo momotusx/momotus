@@ -276,6 +276,19 @@ object StreamChoiceCopy {
     const val AUDIO_ONE = "Audio"
     const val AUDIO_NUMBERED = "Audio {n}"
 
+    /**
+     * A subtitle source that gave nothing this time, by the note's problem ("other" for a newer core's): the same
+     * lines whichever source it was, never its name (the owner's rule).
+     */
+    val SUBTITLE_NOTES =
+        mapOf(
+            "unreachable" to "A subtitle source did not answer. Try its subtitles again in a moment.",
+            "blocked" to "A subtitle source is turning requests away. Momotus will try again in a few minutes.",
+            "changed" to "A subtitle source changed its pages, so Momotus cannot read them. An update will fix this.",
+            "trackFailed" to "This subtitle could not be read.",
+            "other" to "Some subtitles did not load.",
+        )
+
     /** "Show all 12". */
     fun showAll(n: Int): String = SHOW_ALL.replace("{n}", "$n")
 

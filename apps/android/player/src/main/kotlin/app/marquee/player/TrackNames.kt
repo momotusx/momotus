@@ -182,38 +182,31 @@ internal fun ownName(code: String): String? {
 const val SUBTITLES_PENDING = "Still asking subtitle addons"
 
 /**
- * What a subtitle note says (plans/m13-turkcealtyazi.md 4.2, the web's `subtitleNote`): a subtitle
- * source that gave nothing this time, and why. A problem from a newer core gets the general line.
+ * What a subtitle note says (plans/m13-turkcealtyazi.md 4.2, `player.subtitleNotes` in the shared words): a
+ * subtitle source that gave nothing this time, and why, never the source's name (the owner's rule). A problem
+ * from a newer core gets the general line.
  */
-fun subtitleNoteWords(note: SubtitleNote): String =
-    when (note.problem) {
-        SubtitleProblem.Unreachable -> {
-            "${note.source} did not answer. Try its subtitles again in a moment."
+fun subtitleNoteWords(note: SubtitleNote): String {
+    val key =
+        when (note.problem) {
+            SubtitleProblem.Unreachable -> "unreachable"
+            SubtitleProblem.Blocked -> "blocked"
+            SubtitleProblem.Changed -> "changed"
+            SubtitleProblem.TrackFailed -> "trackFailed"
+            SubtitleProblem.Unknown -> "other"
         }
+    return StreamChoiceCopy.SUBTITLE_NOTES.getValue(key)
+}
 
-        SubtitleProblem.Blocked -> {
-            "${note.source} is turning requests away. Momotus will try again in a few minutes."
-        }
-
-        SubtitleProblem.Changed -> {
-            "${note.source} changed its pages, so Momotus cannot read them. An update will fix this."
-        }
-
-        SubtitleProblem.TrackFailed -> {
-            "This subtitle could not be read."
-        }
-
-        SubtitleProblem.Unknown -> {
-            "Subtitles from ${note.source} did not load."
-        }
-    }
-
-/** Under the subtitle list: the pending line while it shows, then one line per note in the core's order. */
+/**
+ * Under the subtitle list: the pending line while it shows, then one line per note in the core's order, each line
+ * once (two sources with one problem read alike).
+ */
 fun subtitlePanelNote(
     pending: Boolean,
     notes: List<SubtitleNote>,
 ): String? =
-    (listOfNotNull(SUBTITLES_PENDING.takeIf { pending }) + notes.map(::subtitleNoteWords))
+    (listOfNotNull(SUBTITLES_PENDING.takeIf { pending }) + notes.map(::subtitleNoteWords).distinct())
         .joinToString("\n")
         .ifEmpty { null }
 

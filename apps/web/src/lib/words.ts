@@ -62,19 +62,16 @@ export function languageName(code: string): string {
 }
 
 /** A subtitle source that gave nothing this time, as every app says it
- * (plans/m13-turkcealtyazi.md 4.2). */
-export function subtitleNote({ source, problem }: SubtitleNote): string {
-  switch (problem) {
-    case "unreachable":
-      return `${source} did not answer. Try its subtitles again in a moment.`;
-    case "blocked":
-      return `${source} is turning requests away. Momotus will try again in a few minutes.`;
-    case "changed":
-      return `${source} changed its pages, so Momotus cannot read them. An update will fix this.`;
-    case "trackFailed":
-      return "This subtitle could not be read.";
-  }
+ * (plans/m13-turkcealtyazi.md 4.2, `player.subtitleNotes` in
+ * apps/shared/stream-choice-words.json): never the source's name (the
+ * owner's rule). */
+export function subtitleNote({ problem }: SubtitleNote): string {
+  const said: Record<string, string> = choice.player.subtitleNotes;
+  return said[problem] ?? choice.player.subtitleNotes.other;
 }
+
+/** The notes' lines, each once: two sources with one problem read alike. */
+export const subtitleNoteLines = (notes: readonly SubtitleNote[]) => [...new Set(notes.map(subtitleNote))];
 
 /** Continue Watching tiles (in progress, or Next Up) carry their one caption
  * from the core ("S2:E3 · 36 min left", "Next: S1:E2"); it is shown as is.

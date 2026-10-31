@@ -332,15 +332,17 @@ struct SubtitleNote: Decodable, Hashable, Sendable {
     /// "unreachable", "blocked", "changed", "trackFailed"; a string, so a newer core's value still decodes.
     let problem: String
 
-    /// The words the player shows, the same on every app.
+    /// The words the player shows, the same on every app (`player.subtitleNotes` in
+    /// apps/shared/stream-choice-words.json): never the source's name (the owner's rule); a newer core's
+    /// problem gets the general line.
     var words: String {
-        switch problem {
-        case "unreachable": "\(source) did not answer. Try its subtitles again in a moment."
-        case "blocked": "\(source) is turning requests away. Momotus will try again in a few minutes."
-        case "changed": "\(source) changed its pages, so Momotus cannot read them. An update will fix this."
-        case "trackFailed": "This subtitle could not be read."
-        default: "Subtitles from \(source) did not load."
-        }
+        let said = StreamChoice.words.player.subtitleNotes
+        return said[problem] ?? said["other"] ?? ""
+    }
+
+    /// The notes' lines in order, each once: two sources with one problem read alike.
+    static func lines(_ notes: [SubtitleNote]) -> [String] {
+        notes.map(\.words).reduce(into: []) { lines, line in if !lines.contains(line) { lines.append(line) } }
     }
 
     /// The notes a snapshot adds to the last one, in its order. A failover

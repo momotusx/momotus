@@ -84,6 +84,9 @@ struct StreamChoiceWords: Decodable, Sendable {
         let layout: String
         let layouts: Layouts
         let onlyWhenPaused: String
+        /// A subtitle source that gave nothing this time, by the note's problem ("other" for a newer core's):
+        /// never the source's name.
+        let subtitleNotes: [String: String]
 
         struct Layouts: Decodable, Sendable {
             let stacked: String

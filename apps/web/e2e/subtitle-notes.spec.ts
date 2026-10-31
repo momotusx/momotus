@@ -13,7 +13,8 @@ import { Client, cleanup, NOTES_PORT, PORTS, startBridge, startIfPaused } from "
 import { BBB_ID, NAME, startSource } from "./source";
 
 const CINEMETA = "https://v3-cinemeta.strem.io/manifest.json";
-const GONE = "Flaky Subs did not answer. Try its subtitles again in a moment.";
+// Never the source's name ("Flaky Subs"): the owner's rule.
+const GONE = "A subtitle source did not answer. Try its subtitles again in a moment.";
 const BROKEN = "This subtitle could not be read.";
 
 let core: { proc: ChildProcess; data: string } | null = null;

@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { addonHost, listFailed, addonsSummary, audioTrackName, nextVersion, qualityCell, sheetDetails, languageName, pairingProblem, plainAddress, problemWords, restartLine, serverHost, startAudio, subtitleNote, lowerFirst, kindBest, kindChips } from "./words";
+import { addonHost, listFailed, addonsSummary, audioTrackName, nextVersion, qualityCell, sheetDetails, languageName, pairingProblem, plainAddress, problemWords, restartLine, serverHost, startAudio, subtitleNote, subtitleNoteLines, lowerFirst, kindBest, kindChips } from "./words";
 import shared from "../../../shared/stream-choice-words.json";
 import type { EmptyAction } from "../core/generated/EmptyAction";
 import type { EmptyKind } from "../core/generated/EmptyKind";
@@ -42,12 +42,20 @@ test("pairing keeps the core's own reasons and never shows an address", () => {
   expect(plainAddress("not an address")).toBe(false);
 });
 
-test("a subtitle note names its source and what to do", () => {
+test("a subtitle note says what to do and never names its source", () => {
   const say = (problem: Parameters<typeof subtitleNote>[0]["problem"]) => subtitleNote({ source: "OpenSubtitles v3", problem });
-  expect(say("unreachable")).toBe("OpenSubtitles v3 did not answer. Try its subtitles again in a moment.");
-  expect(say("blocked")).toBe("OpenSubtitles v3 is turning requests away. Momotus will try again in a few minutes.");
-  expect(say("changed")).toBe("OpenSubtitles v3 changed its pages, so Momotus cannot read them. An update will fix this.");
+  expect(say("unreachable")).toBe("A subtitle source did not answer. Try its subtitles again in a moment.");
+  expect(say("blocked")).toBe("A subtitle source is turning requests away. Momotus will try again in a few minutes.");
+  expect(say("changed")).toBe("A subtitle source changed its pages, so Momotus cannot read them. An update will fix this.");
   expect(say("trackFailed")).toBe("This subtitle could not be read.");
+  // A problem from a newer core: the general line.
+  expect(say("somethingNew" as never)).toBe("Some subtitles did not load.");
+  // Two sources with one problem read alike, so the list says it once (the owner's rule: no addon names).
+  const lines = subtitleNoteLines([
+    { source: "OpenSubtitles v3", problem: "unreachable" },
+    { source: "SubSense", problem: "unreachable" },
+  ]);
+  expect(lines).toEqual(["A subtitle source did not answer. Try its subtitles again in a moment."]);
 });
 
 const GiB = 1024 ** 3;

@@ -300,15 +300,21 @@ class SubtitleFailureTest {
         push(snapshot(notes = """[{"source":"SubSense","problem":"unreachable"}]"""))
         until(
             "the note is said",
-        ) { controller.notice == "SubSense did not answer. Try its subtitles again in a moment." }
+        ) { controller.notice == "A subtitle source did not answer. Try its subtitles again in a moment." }
         assertEquals(null, controller.status, "the note came with the waiting mark")
         assertEquals(1, player.items.size, "the item was set again")
-        assertEquals("SubSense did not answer. Try its subtitles again in a moment.", controller.subtitlePanelNote)
+        assertEquals(
+            "A subtitle source did not answer. Try its subtitles again in a moment.",
+            controller.subtitlePanelNote,
+        )
         assertTrue(failOvers().isEmpty())
         // After its few seconds (four, timed on the real clock here) the line goes; the panel keeps the note.
         Thread.sleep(4_200)
         until("the line goes after a few seconds") { controller.notice == null }
-        assertEquals("SubSense did not answer. Try its subtitles again in a moment.", controller.subtitlePanelNote)
+        assertEquals(
+            "A subtitle source did not answer. Try its subtitles again in a moment.",
+            controller.subtitlePanelNote,
+        )
         controller.release()
     }
 

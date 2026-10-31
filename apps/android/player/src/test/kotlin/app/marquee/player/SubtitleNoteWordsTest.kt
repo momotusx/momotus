@@ -14,11 +14,11 @@ class SubtitleNoteWordsTest {
     fun `each problem has its words, and one from a newer core the general line`() {
         assertEquals(
             listOf(
-                "TurkceAltyazi.org did not answer. Try its subtitles again in a moment.",
-                "TurkceAltyazi.org is turning requests away. Momotus will try again in a few minutes.",
-                "TurkceAltyazi.org changed its pages, so Momotus cannot read them. An update will fix this.",
+                "A subtitle source did not answer. Try its subtitles again in a moment.",
+                "A subtitle source is turning requests away. Momotus will try again in a few minutes.",
+                "A subtitle source changed its pages, so Momotus cannot read them. An update will fix this.",
                 "This subtitle could not be read.",
-                "Subtitles from TurkceAltyazi.org did not load.",
+                "Some subtitles did not load.",
             ),
             listOf(
                 SubtitleProblem.Unreachable,
@@ -35,10 +35,21 @@ class SubtitleNoteWordsTest {
         val notes = listOf(note(SubtitleProblem.Blocked), SubtitleNote("SubSense", SubtitleProblem.Unreachable))
         assertEquals(
             "Still asking subtitle addons\n" +
-                "TurkceAltyazi.org is turning requests away. Momotus will try again in a few minutes.\n" +
-                "SubSense did not answer. Try its subtitles again in a moment.",
+                "A subtitle source is turning requests away. Momotus will try again in a few minutes.\n" +
+                "A subtitle source did not answer. Try its subtitles again in a moment.",
             subtitlePanelNote(pending = true, notes = notes),
         )
+        // Never a source's name (the owner's rule), and a line two sources share is said once.
+        val alike = notes + SubtitleNote("OpenSubtitles v3", SubtitleProblem.Unreachable)
+        val said = subtitlePanelNote(pending = false, notes = alike).orEmpty()
+        assertEquals(
+            listOf(
+                "A subtitle source is turning requests away. Momotus will try again in a few minutes.",
+                "A subtitle source did not answer. Try its subtitles again in a moment.",
+            ),
+            said.lines(),
+        )
+        listOf("TurkceAltyazi", "SubSense", "OpenSubtitles").forEach { assert(it !in said) { said } }
         assertEquals("Still asking subtitle addons", subtitlePanelNote(pending = true, notes = emptyList()))
         assertNull(subtitlePanelNote(pending = false, notes = emptyList()))
         // What just happened: the notes the last snapshot did not have.

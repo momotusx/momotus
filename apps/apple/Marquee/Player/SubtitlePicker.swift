@@ -509,8 +509,8 @@ struct TrackPickerPanel: View {
     /// Why a source's files did not load, under the languages, for as long as the core says so.
     @ViewBuilder private var notes: some View {
         if let notes = model.playback?.notes, !notes.isEmpty {
-            ForEach(notes, id: \.self) { note in
-                Text(note.words).textFont(Theme.type.caption, relativeTo: .caption).foregroundStyle(Theme.Palette.muted).padding(10)
+            ForEach(SubtitleNote.lines(notes), id: \.self) { line in
+                Text(line).textFont(Theme.type.caption, relativeTo: .caption).foregroundStyle(Theme.Palette.muted).padding(10)
             }
         }
     }

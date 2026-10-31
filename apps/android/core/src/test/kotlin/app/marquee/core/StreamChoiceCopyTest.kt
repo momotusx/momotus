@@ -219,6 +219,7 @@ class StreamChoiceCopyTest {
                         put("onlyWhenPaused", ONLY_WHEN_PAUSED)
                         put("audio", AUDIO_ONE)
                         put("audioNumbered", AUDIO_NUMBERED)
+                        put("subtitleNotes", buildJsonObject { for ((k, w) in SUBTITLE_NOTES) put(k, w) })
                     },
                 )
                 put(

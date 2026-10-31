@@ -256,12 +256,18 @@ private func snapshot(next: String = next, nextAtMs: String = "null", segments: 
 @Test func eachSubtitleProblemHasItsWords() {
     let words = ["unreachable", "blocked", "changed", "trackFailed", "somethingNew"].map { SubtitleNote(source: "OpenSubtitles v3", problem: $0).words }
     #expect(words == [
-        "OpenSubtitles v3 did not answer. Try its subtitles again in a moment.",
-        "OpenSubtitles v3 is turning requests away. Momotus will try again in a few minutes.",
-        "OpenSubtitles v3 changed its pages, so Momotus cannot read them. An update will fix this.",
+        "A subtitle source did not answer. Try its subtitles again in a moment.",
+        "A subtitle source is turning requests away. Momotus will try again in a few minutes.",
+        "A subtitle source changed its pages, so Momotus cannot read them. An update will fix this.",
         "This subtitle could not be read.",
-        "Subtitles from OpenSubtitles v3 did not load.",
+        "Some subtitles did not load.",
     ])
+    // Never a source's name (the owner's rule), and a line two sources share is said once.
+    let lines = SubtitleNote.lines([
+        SubtitleNote(source: "OpenSubtitles v3", problem: "unreachable"),
+        SubtitleNote(source: "SubSense", problem: "unreachable"),
+    ])
+    #expect(lines == ["A subtitle source did not answer. Try its subtitles again in a moment."])
 }
 
 @Test func aNewNoteIsSaidAndAFileThatLeftGoesOff() {

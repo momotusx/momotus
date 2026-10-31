@@ -47,7 +47,7 @@ import { DELAY_SETTLE_MS } from "../lib/delay";
 import { cuePlace, cueSpot, cueTop, SAFE_LINE } from "../lib/cues";
 import { bufferShare, loadingLines, STALL_AHEAD_S, startFill } from "../lib/loading";
 import { fileChoice, offSummary, pickerLanguages, sameLanguage, startOption } from "../lib/subtitles";
-import { audioTrackName, choiceWords, emptyWords, languageName, nextVersion, qualityCell, qualityText, restartLine, subtitleNote } from "../lib/words";
+import { audioTrackName, choiceWords, emptyWords, languageName, nextVersion, qualityCell, qualityText, restartLine, subtitleNote, subtitleNoteLines } from "../lib/words";
 import { VersionsPage } from "./versions";
 import "./player.css";
 
@@ -1611,7 +1611,7 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
           on={track()?.url ?? null}
           onFile={track() ? null : (fileSubs().find((t) => t.selected)?.id ?? null)}
           pending={!!snap()?.subtitlesPending}
-          notes={(snap()?.subtitleNotes ?? []).map(subtitleNote)}
+          notes={subtitleNoteLines(snap()?.subtitleNotes ?? [])}
           open={subLanguage()}
           setOpen={setSubLanguage}
           timing={track() ? { value: subDelay(), set: setSubDelay, track: track()?.url ?? "" } : null}
