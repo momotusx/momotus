@@ -142,9 +142,11 @@ function CalendarPage(props: { retry: () => void }) {
             Loading the schedule of {s()?.pending} series
           </p>
         </Show>
-        {/* Each series by name with its own Try again; what each addon answered stays behind Details. */}
+        {/* Each series by name with its own Try again; what each addon answered stays behind Details. One focus group:
+            a line that leaves once its retry loaded hands the focus to the nearest line's Try again, and after the
+            last one the shell gives it to the screen's first episode. */}
         <Show when={s()?.failed.length}>
-          <ul class="cal-failed">
+          <ul class="cal-failed" data-fgroup="cal:failed">
             <For each={s()?.failed ?? []}>
               {(f) => (
                 <li class="st bad cal-note">

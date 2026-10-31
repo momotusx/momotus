@@ -544,6 +544,39 @@ test("Calendar: each series that could not load has its own Try again, which ask
   await context.close();
 });
 
+test("Calendar on a TV: a series line that leaves after its Try again hands the focus to the next line's, then to the list", async ({ browser }) => {
+  let retried: string[] = [];
+  const failed = [
+    { itemId: "tt0096697", name: "The Simpsons", reason: null },
+    { itemId: "tt0121955", name: "South Park", reason: null },
+  ];
+  const { context, commands, repush } = await patchedContext(browser, PORTS.bridge, { viewport: { width: 1920, height: 1080 } }, (view, s) =>
+    view === "calendar" && s ? { ...s, failed: failed.filter((f) => !retried.includes(f.itemId)) } : s,
+  );
+  const page = await context.newPage();
+  await page.goto("/calendar?form=tv");
+  const simpsons = page.getByRole("button", { name: "Try again for The Simpsons" });
+  await expect(simpsons).toBeVisible({ timeout: 60_000 });
+  await expect(page.locator(".cal-head .st.warn")).toHaveCount(0, { timeout: 60_000 });
+  const retries = () => commands.filter((c) => c.view === "calendar" && c.command?.type === "retry").map((c) => c.command.itemId);
+  await simpsons.focus();
+  await page.keyboard.press("Enter");
+  await expect.poll(retries).toEqual(["tt0096697"]);
+  // The line leaves with its button: the remote lands on the next line's Try again, not on nothing.
+  retried = ["tt0096697"];
+  repush("calendar");
+  const southPark = page.getByRole("button", { name: "Try again for South Park" });
+  await expect(southPark).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect.poll(retries).toEqual(["tt0096697", "tt0121955"]);
+  // The last line leaves: the list's first episode, where the screen starts.
+  retried = ["tt0096697", "tt0121955"];
+  repush("calendar");
+  await expect(page.locator(".cal-failed li")).toHaveCount(0);
+  await expect(page.locator(".cal-card[data-autofocus]")).toBeFocused();
+  await context.close();
+});
+
 test("Calendar sends the new date at local midnight", async ({ page }) => {
   const now = new Date();
   await page.clock.install({ time: new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 55) });
