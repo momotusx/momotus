@@ -272,6 +272,10 @@ object StreamChoiceCopy {
         )
     const val ONLY_WHEN_PAUSED = "Only when paused"
 
+    /** An audio track inside the file that names no language: the file's only one, else by its place ("{n}"). */
+    const val AUDIO_ONE = "Audio"
+    const val AUDIO_NUMBERED = "Audio {n}"
+
     /** "Show all 12". */
     fun showAll(n: Int): String = SHOW_ALL.replace("{n}", "$n")
 

@@ -29,7 +29,7 @@ export function createVideoEngine(events: EngineEvents): Engine {
     const list = audioList();
     setTracks(
       list
-        ? Array.from(list, (t) => ({ id: t.id, kind: "audio" as const, lang: t.language || null, label: t.label || t.language || "Track", selected: t.enabled }))
+        ? Array.from(list, (t) => ({ id: t.id, kind: "audio" as const, lang: t.language || null, label: t.label, selected: t.enabled }))
         : [],
     );
   };

@@ -153,6 +153,23 @@ class PlayerLogicTest {
     }
 
     @Test
+    fun `an audio track that names no language reads Audio alone, by its place among several`() {
+        // The shared player words (apps/shared/stream-choice-words.json), never "Original": a dub is not.
+        val untagged =
+            androidx.media3.common.Format
+                .Builder()
+                .build()
+        assertEquals("Audio", audioChoice("a", untagged, false).name)
+        assertEquals("Audio 2", audioChoice("a", untagged, false, index = 1, count = 3).name)
+        val english =
+            androidx.media3.common.Format
+                .Builder()
+                .setLanguage("en")
+                .build()
+        assertEquals("English", audioChoice("a", english, false, index = 0, count = 3).name)
+    }
+
+    @Test
     fun `the speed button steps through its list and comes back to 1x`() {
         assertEquals(1.25f, nextSpeed(1f))
         assertEquals(0.75f, nextSpeed(2f))

@@ -307,13 +307,15 @@ private let klingon = track(5, "tlh", "tlh", "Klingon")
 }
 
 @Test func anAudioTrackThatNamesNoLanguageIsNamedByItsPlaceWithNoQuestionMark() throws {
-    // One: "Original audio", never "Default" with a "?"; several: "Audio 1", "Audio 2".
-    #expect(TrackPicker.placeName(index: 0, count: 1, audio: true) == "Original audio")
+    // One: "Audio", never "Default" with a "?" nor "Original" (a dub is not); several: "Audio 1", "Audio 2".
+    // The words are the shared player ones (apps/shared/stream-choice-words.json).
+    #expect(TrackPicker.placeName(index: 0, count: 1, audio: true) == "Audio")
+    #expect(TrackPicker.placeName(index: 0, count: 1, audio: true) == StreamChoice.words.player.audio)
     #expect(TrackPicker.placeName(index: 1, count: 3, audio: true) == "Audio 2")
     #expect(TrackPicker.placeName(index: 0, count: 1, audio: false) == "Subtitles")
     #expect(TrackPicker.placeName(index: 2, count: 3, audio: false) == "Subtitles 3")
     // No flag column when no track names its language; a blank, not "?", beside tagged ones.
-    let untagged = TrackPicker.FileTrack(index: 0, name: "Original audio", language: nil)
+    let untagged = TrackPicker.FileTrack(index: 0, name: "Audio", language: nil)
     #expect(!TrackPicker.audioFlags([untagged]))
     #expect(!TrackPicker.audioFlags([TrackPicker.FileTrack(index: 0, name: "Audio 1", language: "und")]))
     #expect(TrackPicker.audioFlags([untagged, TrackPicker.FileTrack(index: 1, name: "German", language: "ger")]))

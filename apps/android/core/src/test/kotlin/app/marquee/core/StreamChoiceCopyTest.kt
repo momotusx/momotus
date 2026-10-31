@@ -217,6 +217,8 @@ class StreamChoiceCopyTest {
                         put("layout", LAYOUT)
                         put("layouts", buildJsonObject { for ((l, w) in LAYOUTS) put(l.wire, w) })
                         put("onlyWhenPaused", ONLY_WHEN_PAUSED)
+                        put("audio", AUDIO_ONE)
+                        put("audioNumbered", AUDIO_NUMBERED)
                     },
                 )
                 put(

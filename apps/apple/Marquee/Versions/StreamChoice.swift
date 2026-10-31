@@ -98,6 +98,11 @@ struct StreamChoiceWords: Decodable, Sendable {
             case .oneBox: layouts.oneBox
             }
         }
+
+        /// An audio track inside the file that names no language: "Audio" when it is the file's only one, else
+        /// "Audio {n}" by its place.
+        let audio: String
+        let audioNumbered: String
     }
 
     struct Learned: Decodable, Sendable {

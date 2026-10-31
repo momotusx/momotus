@@ -46,7 +46,7 @@ import { DELAY_SETTLE_MS } from "../lib/delay";
 import { cuePlace, cueSpot, cueTop, SAFE_LINE } from "../lib/cues";
 import { bufferShare, loadingLines, STALL_AHEAD_S, startFill } from "../lib/loading";
 import { fileChoice, offSummary, pickerLanguages, sameLanguage, startOption } from "../lib/subtitles";
-import { choiceWords, emptyWords, languageName, nextVersion, qualityCell, qualityText, restartLine, subtitleNote } from "../lib/words";
+import { audioTrackName, choiceWords, emptyWords, languageName, nextVersion, qualityCell, qualityText, restartLine, subtitleNote } from "../lib/words";
 import { VersionsPage } from "./versions";
 import "./player.css";
 
@@ -971,7 +971,7 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
   // Audio: the track the engine reports, else what the playing version says.
   const audioText = () => {
     const picked = audioTracks().find((t) => t.selected);
-    if (picked && audioTracks().length > 1) return picked.lang ? languageName(picked.lang) : picked.label;
+    if (picked && audioTracks().length > 1) return audioTrackName(picked, audioTracks().indexOf(picked), audioTracks().length);
     const lang = playing()?.languages[0];
     const channels = playing()?.features.find((f) => /^\d\.\d$|Atmos/.test(f));
     return [lang ? languageName(lang) : null, channels].filter(Boolean).join(" ") || "Default";
@@ -1572,7 +1572,7 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
               }
             >
               <For each={audioTracks()}>
-                {(t) => (
+                {(t, i) => (
                   <button
                     class="opt"
                     classList={{ on: t.selected }}
@@ -1585,8 +1585,8 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
                     <Show when={t.selected}>
                       <Check aria-hidden class="opt-check" />
                     </Show>
-                    <b>{t.lang ? languageName(t.lang) : t.label}</b>
-                    <Show when={t.lang && t.label !== t.lang}>
+                    <b>{audioTrackName(t, i(), audioTracks().length)}</b>
+                    <Show when={t.lang && t.label && t.label !== t.lang}>
                       <span>{t.label}</span>
                     </Show>
                   </button>

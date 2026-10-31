@@ -1024,11 +1024,13 @@ enum TrackPicker {
         return Language(language: tag, name: t.name, own: audioOwnName(t), codes: codes.sorted(), file: [t], tracks: [])
     }
 
-    /// A file track that names no language, by its place: an only audio track is "Original audio", several
-    /// read "Audio 1", "Audio 2"; subtitles read "Subtitles" alone or numbered. Apple's own words for now: a
-    /// shared key in stream-choice-words.json replaces them when the other apps add it in the same landing.
+    /// A file track that names no language, by its place: an only audio track is "Audio", several read "Audio 1",
+    /// "Audio 2" (the shared player words); subtitles read "Subtitles" alone or numbered.
     static func placeName(index: Int, count: Int, audio: Bool) -> String {
-        if audio { return count == 1 ? "Original audio" : "Audio \(index + 1)" }
+        if audio {
+            let words = StreamChoice.words.player
+            return count == 1 ? words.audio : words.audioNumbered.replacingOccurrences(of: "{n}", with: "\(index + 1)")
+        }
         return count == 1 ? "Subtitles" : "Subtitles \(index + 1)"
     }
 

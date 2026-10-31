@@ -3,6 +3,7 @@ package app.marquee.player
 import androidx.media3.common.C
 import androidx.media3.common.Format
 import androidx.media3.common.util.Util
+import app.marquee.core.StreamChoiceCopy
 import app.marquee.core.model.SubtitleNote
 import app.marquee.core.model.SubtitleProblem
 import app.marquee.core.model.SubtitleTrack
@@ -228,6 +229,16 @@ fun PlaybackController.audioDetail(): String? =
         if (row.name == "Audio") row.detail else listOfNotNull(row.name, row.detail).joinToString(" ")
     }
 
+/**
+ * An audio track that names no language, in the shared player words (apps/shared/stream-choice-words.json): "Audio"
+ * when it is the file's only one, else "Audio 2" by its place. Never "Original": a dub is not.
+ */
+fun audioPlace(
+    index: Int,
+    count: Int,
+): String =
+    if (count == 1) StreamChoiceCopy.AUDIO_ONE else StreamChoiceCopy.AUDIO_NUMBERED.replace("{n}", "${index + 1}")
+
 /** "English" for "en" or "eng"; the code itself when the platform has no name for it. */
 fun languageName(code: String?): String? {
     if (code.isNullOrBlank() || code == C.LANGUAGE_UNDETERMINED) return null
@@ -275,13 +286,18 @@ fun channelLayout(count: Int): String? =
         else -> "$count channels"
     }
 
-/** The menu row of an audio track: "English" over "AC-3, 5.1". */
+/**
+ * The menu row of an audio track: "English" over "AC-3, 5.1". One that names no language reads by its place among
+ * the file's [count] audio tracks ([audioPlace]).
+ */
 fun audioChoice(
     id: String,
     format: Format,
     selected: Boolean,
+    index: Int = 0,
+    count: Int = 1,
 ): TrackChoice {
-    val name = format.label ?: languageName(format.language) ?: "Audio"
+    val name = format.label ?: languageName(format.language) ?: audioPlace(index, count)
     val detail = listOfNotNull(codecName(format.sampleMimeType), channelLayout(format.channelCount)).joinToString(", ")
     return TrackChoice(id, name, detail.ifBlank { null }, selected)
 }

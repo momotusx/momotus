@@ -613,6 +613,15 @@ export function syncSummary(s: { locked: boolean; problem: string | null; joined
 
 export const choiceWords = choice;
 
+/** An audio track inside the file by its language, else its own label, else its place among the file's `count`
+ * audio tracks in the shared player words: "Audio" when it is the only one, "Audio 2" among several, never
+ * "Original" (a dub is not). */
+export function audioTrackName(t: { lang: string | null; label: string }, index: number, count: number): string {
+  if (t.lang) return languageName(t.lang);
+  if (t.label) return t.label;
+  return count === 1 ? choice.player.audio : choice.player.audioNumbered.replace("{n}", String(index + 1));
+}
+
 type Fields = Record<string, string | number | boolean | null | undefined>;
 
 /** Fills `{name}` fields; null when one is unknown, so the part is left out. */

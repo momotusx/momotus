@@ -10,6 +10,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.core.net.toUri
 import androidx.media3.common.C
+import androidx.media3.common.Format
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.MimeTypes
@@ -1314,7 +1315,7 @@ class PlaybackController(
     ): String = "$groupIndex:$trackIndex"
 
     private fun refreshTracks(tracks: Tracks = player.currentTracks) {
-        val audioRows = ArrayList<TrackChoice>()
+        val audioFormats = ArrayList<Triple<String, Format, Boolean>>()
         val fileRows = ArrayList<TrackChoice>()
         tracks.groups.forEachIndexed { gi, group ->
             for (ti in 0 until group.length) {
@@ -1324,7 +1325,7 @@ class PlaybackController(
                 val selected = group.isTrackSelected(ti)
                 when (group.type) {
                     C.TRACK_TYPE_AUDIO -> {
-                        audioRows += audioChoice(id, format, selected)
+                        audioFormats += Triple(id, format, selected)
                     }
 
                     C.TRACK_TYPE_TEXT -> {
@@ -1336,7 +1337,14 @@ class PlaybackController(
         // The addon pick is on from the moment it is picked, while its file comes in.
         val on = pick?.takeIf { it.external }?.url
         val loaded = on?.let { mapOf(it to TrackChoice("$LATE$it", "", selected = true)) } ?: emptyMap()
-        audio = audioRows
+        // An audio track that names no language is named by its place among them all ("Audio 2").
+        audio =
+            audioFormats.mapIndexed {
+                i,
+                (id, format, selected),
+                ->
+                audioChoice(id, format, selected, i, audioFormats.size)
+            }
         text = subtitleRows(snapshotSubs, loaded, dead, fileRows, LATE)
         refreshSecond()
         applyPick(tracks)

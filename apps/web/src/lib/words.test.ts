@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { addonHost, addonsSummary, nextVersion, qualityCell, sheetDetails, languageName, pairingProblem, plainAddress, problemWords, restartLine, serverHost, startAudio, subtitleNote, lowerFirst, kindBest, kindChips } from "./words";
+import { addonHost, addonsSummary, audioTrackName, nextVersion, qualityCell, sheetDetails, languageName, pairingProblem, plainAddress, problemWords, restartLine, serverHost, startAudio, subtitleNote, lowerFirst, kindBest, kindChips } from "./words";
 import shared from "../../../shared/stream-choice-words.json";
 import type { EmptyAction } from "../core/generated/EmptyAction";
 import type { EmptyKind } from "../core/generated/EmptyKind";
@@ -334,4 +334,13 @@ test("the kind chips are the core's kinds after All, each with its count, the de
   expect(kindBest("debrid", [])).toBe("Best debrid link");
   expect(kindBest("torrent", named)).toBe("Best torrent");
   expect(kindBest("direct", named)).toBe("Best direct link");
+});
+
+test("an audio track that names no language reads Audio alone, by its place among several", () => {
+  // The shared player words (stream-choice-words.json), never "Original": a dub is not.
+  expect(audioTrackName({ lang: null, label: "" }, 0, 1)).toBe(shared.player.audio);
+  expect(audioTrackName({ lang: null, label: "" }, 0, 1)).toBe("Audio");
+  expect(audioTrackName({ lang: null, label: "" }, 1, 3)).toBe("Audio 2");
+  expect(audioTrackName({ lang: "en", label: "" }, 0, 3)).toBe("English");
+  expect(audioTrackName({ lang: null, label: "Commentary" }, 1, 3)).toBe("Commentary");
 });
