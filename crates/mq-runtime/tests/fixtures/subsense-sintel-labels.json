@@ -1,0 +1,28 @@
+{
+  "subtitles": [
+    {
+      "id": "subsense-1",
+      "lang": "eng",
+      "url": "https://subsense.test/1.srt",
+      "label": "OpenSubtitles · [SRT] · sintel_en.srt"
+    },
+    {
+      "id": "subsense-2",
+      "lang": "eng",
+      "url": "https://subsense.test/2.srt",
+      "label": "OpenSubtitles · [SRT] · sintel_en.srt"
+    },
+    {
+      "id": "subsense-3",
+      "lang": "eng",
+      "url": "https://subsense.test/3.srt",
+      "label": "OpenSubtitles · [SRT] · Sintel (2010).eng.srt"
+    },
+    {
+      "id": "subsense-4",
+      "lang": "eng",
+      "url": "https://subsense.test/4.srt",
+      "label": "OpenSubtitles · [SRT] · sintel.he.srt"
+    }
+  ]
+}

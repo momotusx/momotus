@@ -4766,8 +4766,10 @@ fn track(
     let mut t = SubtitleTrack::new(url, &lang, w.label.clone(), source, release(w));
     // A file name names a file, not what tells it apart: without a group,
     // source or resolution in it ("sintel_en", "Sintel (2010).eng"), the
-    // track reads as its language. An addon's own label stays.
-    if !labelled(w) && t.release.as_ref() == Some(&t.base) {
+    // track reads as its language, and the name says nothing worth a
+    // detail line. An addon's own label stays.
+    let says_nothing = !labelled(w) && t.release.as_ref() == Some(&t.base);
+    if says_nothing {
         t.base.clone_from(&t.language_name);
         t.name.clone_from(&t.language_name);
     }
@@ -4777,6 +4779,9 @@ fn track(
     // ponytail: a real forced file of such a film needs the addon's flag.
     let named = !title_forced && t.release.as_deref().is_some_and(forced_mark);
     let forced = w.forced || named;
+    if says_nothing {
+        t.release = None;
+    }
     // OpenSubtitles marks a match on the hash we sent with `"m": "h"`; any
     // other addon could mark every row, so only its mark counts. Its
     // `fpsMilli` is the rate the file was timed for.
@@ -4831,7 +4836,8 @@ const OPENSUBTITLES: &str = "org.stremio.opensubtitlesv3";
 /// knows, so they never move a track.
 fn file_language(w: &mq_protocol::WireSubtitle) -> Option<String> {
     use crate::languages::{is_known, language, primary};
-    let file = w.extra.get("subtitleFileName")?.as_str()?;
+    let file = file_name(w)?;
+    let file = file.as_str();
     let stem = file
         .rsplit_once('.')
         .map_or(file, |(stem, ext)| if ext.len() <= 4 { stem } else { file });
@@ -4862,16 +4868,57 @@ const ENGLISH_WORDS: &[&str] = &[
 ];
 
 /// Whether the addon gave the track a label of its own, one that says more
-/// than its language: then it names the track as the addon wrote it.
+/// than its language and is no file name: then it names the track as the
+/// addon wrote it.
 fn labelled(w: &mq_protocol::WireSubtitle) -> bool {
     let language = crate::languages::language(&w.lang);
     w.label.as_deref().map(str::trim).is_some_and(|l| {
-        !l.is_empty() && !l.eq_ignore_ascii_case(&language.name) && !l.eq_ignore_ascii_case(&w.lang)
+        !l.is_empty()
+            && !l.eq_ignore_ascii_case(&language.name)
+            && !l.eq_ignore_ascii_case(&w.lang)
+            && labelled_file(l).is_none()
     })
 }
 
-/// The release a file was made for, as the addon names it: its label, or
-/// OpenSubtitles' file name (without its extension) or release name.
+/// The file a track names: OpenSubtitles' `subtitleFileName`, else a label
+/// that is a file name (`labelled_file`).
+fn file_name(w: &mq_protocol::WireSubtitle) -> Option<String> {
+    let file = w.extra.get("subtitleFileName").and_then(|f| f.as_str());
+    let file = file.map(str::trim).filter(|f| !f.is_empty());
+    file.map(str::to_owned)
+        .or_else(|| w.label.as_deref().and_then(labelled_file))
+}
+
+/// The file name in a label that carries one, as SubSense writes its
+/// labels: "OpenSubtitles · [SRT] · sintel_en.srt" names the provider (an
+/// addon name a viewer never reads), the format and the file. The last
+/// part after a middle dot or a bar, without bracketed tags, when the label
+/// has a bracketed tag or ends in a subtitle file's extension; `None` for a
+/// label that is just words ("English (Forced)", "Spanish · Latin America").
+fn labelled_file(label: &str) -> Option<String> {
+    const EXTENSIONS: [&str; 7] = ["srt", "vtt", "ass", "ssa", "sub", "smi", "txt"];
+    let tagged = label.contains('[') && label.contains(']');
+    let last = label.rsplit(['·', '|']).next().unwrap_or(label);
+    let mut file = String::new();
+    let mut depth = 0u32;
+    for c in last.chars() {
+        match c {
+            '[' => depth += 1,
+            ']' => depth = depth.saturating_sub(1),
+            _ if depth == 0 => file.push(c),
+            _ => {}
+        }
+    }
+    let file = file.trim();
+    let extension = file
+        .rsplit_once('.')
+        .is_some_and(|(_, ext)| EXTENSIONS.iter().any(|e| ext.eq_ignore_ascii_case(e)));
+    (!file.is_empty() && (tagged || extension)).then(|| file.to_owned())
+}
+
+/// The release a file was made for, as the addon names it: its own label,
+/// or the file name (`file_name`, without its extension), or
+/// OpenSubtitles' release name.
 fn release(w: &mq_protocol::WireSubtitle) -> Option<String> {
     let extra = |key: &str| {
         w.extra
@@ -4880,11 +4927,10 @@ fn release(w: &mq_protocol::WireSubtitle) -> Option<String> {
             .map(str::trim)
             .filter(|s| !s.is_empty())
     };
-    let file = extra("subtitleFileName").map(|f| {
-        let stem = f
-            .rsplit_once('.')
-            .map_or(f, |(stem, ext)| if ext.len() <= 4 { stem } else { f });
-        stem.to_owned()
+    let file = file_name(w).map(|f| {
+        f.rsplit_once('.')
+            .filter(|(_, ext)| ext.len() <= 4)
+            .map_or(f.clone(), |(stem, _)| stem.to_owned())
     });
     // A label that only names the language says nothing of the release.
     let text = w
@@ -7258,6 +7304,50 @@ mod tests {
             track(w, "Subs", "", "u".into(), false).name,
             "CAKES, WEB 1080p"
         );
+    }
+
+    /// A label that is a file name, SubSense's "provider · [format] · file",
+    /// reads as that file; a label of plain words stays the addon's, parted
+    /// or not.
+    #[test]
+    fn a_label_that_names_a_file_reads_as_the_file() {
+        assert_eq!(
+            labelled_file("OpenSubtitles · [SRT] · sintel.he.srt").as_deref(),
+            Some("sintel.he.srt")
+        );
+        assert_eq!(
+            labelled_file("[SRT] sintel_en.srt").as_deref(),
+            Some("sintel_en.srt")
+        );
+        // Parts alone are an addon's own words, not a file.
+        assert_eq!(labelled_file("English | SDH"), None);
+        assert_eq!(labelled_file("Spanish · Latin America"), None);
+        assert_eq!(
+            labelled_file("OpenSubtitles · [SRT] · Sintel").as_deref(),
+            Some("Sintel")
+        );
+        assert_eq!(labelled_file("English (Forced)"), None);
+        assert_eq!(labelled_file("Mr. Robot"), None);
+        let w: mq_protocol::WireSubtitle = serde_json::from_value(serde_json::json!({
+            "id": "4", "lang": "eng", "url": "https://subs.test/4.srt",
+            "label": "OpenSubtitles · [SRT] · sintel.he.srt",
+        }))
+        .unwrap();
+        let t = track(&w, "SubSense", "subsense", "u".into(), false);
+        assert_eq!((t.language.as_str(), t.name.as_str()), ("he", "Hebrew"));
+        assert_eq!(t.release, None);
+        // A plain label with no file marks stays the addon's words, its forced word still read.
+        let plain: mq_protocol::WireSubtitle = serde_json::from_value(serde_json::json!({
+            "id": "5", "lang": "eng", "url": "https://subs.test/5.srt", "label": "English (Forced)",
+        }))
+        .unwrap();
+        let t = track(&plain, "Subs", "subs", "u".into(), false);
+        assert_eq!(
+            (t.language.as_str(), t.name.as_str()),
+            ("en", "English (Forced)")
+        );
+        assert!(t.forced);
+        assert_eq!(t.release.as_deref(), Some("English (Forced)"));
     }
 
     /// A file name's last word wins over the addon's code when it names

@@ -1,3 +1,5 @@
+mod golden;
+
 use futures_util::StreamExt;
 use mq_http::{ClientConfig, HttpClient, RequestOptions};
 use mq_library::{AddonRow, CachedResponse};
@@ -1807,10 +1809,13 @@ async fn real_subtitle_names_read_clean() {
         .find(|t| t.source == "Bare Subs")
         .unwrap();
     assert_eq!(bare.name, "English 4");
-    assert!(
-        s.subtitles
-            .iter()
-            .any(|t| t.language_name == "Hebrew" && t.release.as_deref() == Some("sintel.he")),
+    // A file name that says nothing leaves no detail line either.
+    for t in s.subtitles.iter().filter(|t| t.language_name == "English") {
+        assert_eq!(t.release, None, "{}", t.name);
+    }
+    assert_eq!(
+        names("Hebrew").len(),
+        4,
         "sintel.he is Hebrew: {:?}",
         names("Hebrew")
     );
@@ -1829,7 +1834,7 @@ async fn real_subtitle_names_read_clean() {
         Some("1080p"),
         "a copy number is no group"
     );
-    assert_eq!(named("sintel_fi_ps").as_deref(), Some("Finnish"));
+    assert_eq!(names("Finnish"), ["Finnish"]);
 
     // Review P3-3: a series' names too, from OpenSubtitles v3's answer for
     // Breaking Bad S1E1 (tests/fixtures/opensubtitles-breaking-bad-s01e01.json,
@@ -1869,11 +1874,71 @@ async fn real_subtitle_names_read_clean() {
         named("Breaking.Bad.S01E01.720p.BluRay.X264-REWARD").as_deref(),
         Some("REWARD, BluRay 720p")
     );
+    // "Breaking Bad Season 1 Episode 01 - Pilot" tells nothing: it reads
+    // as its language, with no detail line.
+    assert_eq!(named("Breaking Bad Season 1 Episode 01 - Pilot"), None);
     assert!(
-        named("Breaking Bad Season 1 Episode 01 - Pilot")
-            .is_some_and(|n| n.starts_with("English ")),
+        s.subtitles
+            .iter()
+            .any(|t| t.name.starts_with("English ") && t.release.is_none()),
         "a name with nothing to tell reads as its language"
     );
+}
+
+/// The owner's iPhone walk on 2026-10-23 listed SubSense's Sintel rows as
+/// it labels them, "OpenSubtitles · [SRT] · sintel_en.srt 1": the
+/// provider's name, the format and the file, with sintel.he under English.
+/// tests/fixtures/subsense-sintel-labels.json holds those four labels as
+/// the walk showed them (ids and URLs stand in for SubSense's own). Every
+/// option now reads as a viewer reads it: no addon or provider name, no
+/// "[SRT]", no extension, the language numbered when the file names no
+/// release, no detail line that says nothing, sintel.he under Hebrew.
+/// The whole list, OpenSubtitles v3's real answer with SubSense's, is the
+/// golden every app's picker test reads
+/// (apps/shared/fixtures/playback-subtitles-sintel.json).
+#[tokio::test]
+async fn labels_that_name_a_file_read_as_the_file() {
+    let v3 = recorded_subtitles(
+        "org.stremio.opensubtitlesv3",
+        include_str!("fixtures/opensubtitles-sintel.json"),
+    )
+    .await;
+    let subsense = recorded_subtitles(
+        "SubSense",
+        include_str!("fixtures/subsense-sintel-labels.json"),
+    )
+    .await;
+    let view = open_with_subtitles(&["eng", "heb"], vec![v3, subsense]).await;
+    let s = settled_list(&view).await;
+    for t in &s.subtitles {
+        let lower = t.name.to_lowercase();
+        assert!(
+            !["opensubtitles", "subsense", "[", ".srt", "·"]
+                .iter()
+                .any(|w| lower.contains(w)),
+            "{:?} reads {:?}",
+            t.label,
+            t.name
+        );
+        assert_ne!(t.release.as_deref(), Some(t.name.as_str()), "{}", t.name);
+    }
+    let rows = |language: &str| -> Vec<(String, Option<String>)> {
+        s.subtitles
+            .iter()
+            .filter(|t| t.language_name == language && t.source == "SubSense")
+            .map(|t| (t.name.clone(), t.release.clone()))
+            .collect()
+    };
+    assert_eq!(
+        rows("English"),
+        [
+            ("English 4".to_owned(), None),
+            ("English 5".to_owned(), None),
+            ("English 6".to_owned(), None),
+        ]
+    );
+    assert_eq!(rows("Hebrew").len(), 1, "sintel.he is Hebrew");
+    golden::golden("playback-subtitles-sintel", &s.subtitles);
 }
 
 /// Opens Sintel with the stream addon and `subtitles` installed in this
@@ -2757,9 +2822,11 @@ async fn a_subtitle_delay_is_remembered_for_the_version_and_the_track() {
     let (video, _) = counted_origin().await;
     let core = Core::temporary("p").unwrap();
     let streams = |file: &str| {
+        // Two tracks the addon labels "a" and "b": file names "a.srt" and
+        // "b.srt" name no release and would both read as English.
         let subs: Vec<_> = ["a", "b"]
             .iter()
-            .map(|id| serde_json::json!({"id": id, "lang": "eng", "url": format!("https://subs.test/{id}.srt"), "subtitleFileName": format!("{id}.srt")}))
+            .map(|id| serde_json::json!({"id": id, "lang": "eng", "url": format!("https://subs.test/{id}.srt"), "label": id}))
             .collect();
         serde_json::json!({"streams": [{"url": format!("{video}/{file}"), "title": "Sintel.2010.1080p.WEB", "subtitles": subs}]})
             .to_string()

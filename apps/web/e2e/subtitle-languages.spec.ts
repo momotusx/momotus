@@ -10,8 +10,10 @@
 
 import { type Browser, expect, type Page, test } from "@playwright/test";
 import type { ChildProcess } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
+import { fileURLToPath } from "node:url";
 import { Client, cleanup, LANGS_PORT, PORTS, SHOTS, startBridge, startIfPaused } from "./core";
 import { type Json, patchedContext } from "./patch";
 import { BBB_ID, NAME, startSource } from "./source";
@@ -546,4 +548,58 @@ test("the core's marks show in the detail line; timing goes to the core once it 
   expect(commands.filter((c, i) => c.command && commands.slice(0, i).some((d) => !d.command && d.conn === c.conn && d.sub === c.sub))).toEqual([]);
   expect(errors).toEqual([]);
   await context.close();
+});
+
+/** A subtitle addon that labels its rows as SubSense does, "provider · [format] · file": the four Sintel labels the
+ * owner's iPhone walk showed on 2026-10-23 (crates/mq-runtime/tests/fixtures/subsense-sintel-labels.json). */
+function labelSubs(): Promise<Server> {
+  const labels = (JSON.parse(readFileSync(fileURLToPath(new URL("../../../crates/mq-runtime/tests/fixtures/subsense-sintel-labels.json", import.meta.url)), "utf8")) as {
+    subtitles: { id: string; lang: string; label: string }[];
+  }).subtitles;
+  const server = createServer((req, res) => {
+    const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+    const json = (body: unknown) => {
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify(body));
+    };
+    if (req.url === "/manifest.json") {
+      return json({ id: "dev.marquee.label-subs", version: "1.0.0", name: "SubSense", resources: ["subtitles"], types: ["movie"], idPrefixes: ["tt"], catalogs: [] });
+    }
+    if (req.url?.startsWith("/subtitles/")) return json({ subtitles: labels.map((l) => ({ ...l, url: `${base}/${l.id}.srt` })) });
+    if (req.url?.endsWith(".srt")) {
+      res.writeHead(200, { "content-type": "text/plain" });
+      return res.end(SRT);
+    }
+    res.writeHead(404);
+    res.end();
+  });
+  return new Promise((resolve) => server.listen(0, "127.0.0.1", () => resolve(server)));
+}
+
+test("an addon's label that names a file reads as the viewer's words, its language from the file", async ({ browser }) => {
+  const subs = await labelSubs();
+  const c = new Client(`ws://127.0.0.1:${LANGS_PORT}/ws`);
+  const url = `http://127.0.0.1:${(subs.address() as AddressInfo).port}/manifest.json`;
+  await c.req("installAddon", { url });
+  try {
+    const { context, page, errors, panel } = await picker(browser, "desktop");
+    await page.locator('[data-f="player:subs"]').dispatchEvent("click");
+    await panel.locator('[data-f="subopen:en"]').dispatchEvent("click");
+    const opts = panel.locator(".subp-opts");
+    // The stream's own two, then SubSense's three English files: no provider, no "[SRT]", no
+    // extension, the language numbered, and no detail line that says nothing.
+    await expect(opts.locator(".opt b")).toHaveText([/^OPENFILM, WEB\b/, "English 1", "English 2", "English 3", "English 4"]);
+    await expect(opts.locator(".opt").filter({ hasText: /OpenSubtitles|SubSense|\[SRT\]|\.srt/ })).toHaveCount(0);
+    await expect(opts.locator(".opt").last().locator("small")).toHaveCount(0);
+    // sintel.he.srt is Hebrew, whatever the addon's code says.
+    await panel.locator('[data-f="sub:languages"]').dispatchEvent("click");
+    await panel.locator('[data-f="subopen:he"]').dispatchEvent("click");
+    await expect(opts.locator(".opt b")).toHaveText(["Hebrew"]);
+    expect(errors).toEqual([]);
+    await context.close();
+  } finally {
+    await c.req("removeAddon", { url }).catch(() => undefined);
+    c.close();
+    subs.close();
+  }
 });

@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
 import type { SubtitleTrack } from "../core/generated/SubtitleTrack";
 import { bestOption, byLanguage, FITS, fileChoice, flagFile, flagGlyph, MATCHES, matchesLanguage, middle, offSummary, optionCount, pickerLanguages, sameLanguage, secondLanguages, startOption, trackDetail } from "./subtitles";
 
@@ -226,4 +227,20 @@ test("one language is one language by its base, whatever the spelling", () => {
   expect(sameLanguage("tr", "en")).toBe(false);
   expect(sameLanguage("und", "und")).toBe(false);
   expect(sameLanguage(null, "en")).toBe(false);
+});
+
+test("Sintel's real list reads clean: no addon or provider, no [SRT] or extension, sintel.he under Hebrew", () => {
+  // What the core sends for OpenSubtitles v3's answer and SubSense's labels
+  // ("OpenSubtitles · [SRT] · sintel.he.srt"), kept true by the core's own test.
+  const path = new URL("../../../shared/fixtures/playback-subtitles-sintel.json", import.meta.url);
+  const tracks = JSON.parse(readFileSync(path, "utf8")) as SubtitleTrack[];
+  const sections = byLanguage(tracks);
+  for (const t of tracks) {
+    const line = [t.name, ...trackDetail(t)].join(" | ");
+    expect(line).not.toMatch(/opensubtitles|subsense|\[|\.srt|·/i);
+    expect(trackDetail(t)).not.toContain(t.name);
+  }
+  const names = (language: string) => sections.find((s) => s.name === language)?.tracks.map(({ track }) => track.name);
+  expect(names("English")).toEqual(["English 1", "English 2", "English 3", "English 4", "English 5", "English 6"]);
+  expect(names("Hebrew")).toContain("Hebrew 4");
 });
