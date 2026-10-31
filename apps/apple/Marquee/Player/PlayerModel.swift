@@ -1260,7 +1260,8 @@ final class PlayerModel {
     private func sourceFailed(_ error: Error?) {
         let failure = playerFailure(error)
         if fallBack(why: failure.kind) { return }
-        fail(failure, notice: "This source failed: \(failure.error). Trying the next one.")
+        // The player's own words go to the core (its log), never on screen (the owner's rule).
+        fail(failure, notice: "This source failed. Trying the next one.")
     }
 
     /// The sound runs but no frame ever came: never a spinner over a running
@@ -1320,7 +1321,7 @@ final class PlayerModel {
             ended: { [weak self] in if mine() { self?.engineEnded() } },
             failed: { [weak self] words in
                 guard mine() else { return }
-                self?.fail(PlayerFailure(kind: EngineChoice.failureKind(refused: false), error: words), notice: "This source failed: \(words). Trying the next one.")
+                self?.fail(PlayerFailure(kind: EngineChoice.failureKind(refused: false), error: words), notice: "This source failed. Trying the next one.")
             },
             refused: { [weak self] words, waited in
                 guard mine() else { return }

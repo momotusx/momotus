@@ -214,19 +214,17 @@ data class Failure(
 
 /**
  * A source's error status in the core's words (mq-server `status_words`), so the line shown while the
- * next source opens matches the failure history the core keeps.
+ * next source opens matches the failure history the core keeps. Never the number itself (the owner's
+ * rule: the UI shows no status codes); the core logs it.
  */
-fun statusWords(status: Int): String {
-    val words =
-        when (status) {
-            404, 410 -> "The link no longer exists"
-            401, 403 -> "The source refused access"
-            429 -> "The source is busy, try again soon"
-            in 500..599 -> "The source had an error"
-            else -> "The source answered with an error"
-        }
-    return "$words ($status)"
-}
+fun statusWords(status: Int): String =
+    when (status) {
+        404, 410 -> "The link no longer exists"
+        401, 403 -> "The source refused access"
+        429 -> "The source is busy, try again soon"
+        in 500..599 -> "The source had an error"
+        else -> "The source answered with an error"
+    }
 
 /**
  * Sorts a Media3 error code into what failed, with a sentence a viewer can read. [formatSupport] is the
@@ -412,7 +410,7 @@ data class FailedSources(
     val error: String,
     val count: Int,
 ) {
-    /** "The link no longer exists (404) · 8 sources". */
+    /** "The link no longer exists · 8 sources". */
     val words: String get() = if (count > 1) "$error · $count sources" else error
 }
 

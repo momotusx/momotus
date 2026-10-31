@@ -853,27 +853,35 @@ export function choiceSummary(p: Pick<StreamPrefs, "sizeLimitBytes" | "minSeeder
 export const screenClass = (lines: number) => (lines >= 2000 ? 2160 : lines >= 1000 ? 1080 : lines >= 700 ? 720 : 480);
 
 /** A raw reason from the core (its HTTP and addon errors, "network: error
- * sending request ...") as a sentence a viewer reads, with the raw text kept
- * for a details toggle. A reason the core already wrote as a sentence ("Cinemeta did not
- * answer in time") stays as it is. */
+ * sending request ...") as a sentence a viewer reads, never with a status
+ * code (the owner's rule), the raw text kept for a details toggle. A reason
+ * the core already wrote as a sentence ("This list took too long to load")
+ * stays as it is. */
 export function problemWords(reason: string): { text: string; raw: string | null } {
   const r = reason.trim();
   const said = (text: string) => ({ text, raw: r });
   const status = /^http status (\d{3})/i.exec(r)?.[1];
   if (status) {
     const n = Number(status);
-    if (n === 404 || n === 410) return said(`It has nothing at this address (${n}).`);
-    if (n === 401 || n === 403) return said(`It refused access (${n}).`);
-    if (n === 429) return said(`It is busy; try again soon (${n}).`);
-    if (n >= 500) return said(`It had an error on its side (${n}).`);
-    return said(`It answered with an error (${n}).`);
+    if (n === 404 || n === 410) return said("It has nothing at this address.");
+    if (n === 401 || n === 403) return said("It refused access.");
+    if (n === 429) return said("It is busy; try again soon.");
+    if (n >= 500) return said("It had an error on its side.");
+    return said("It answered with an error.");
   }
   if (/^timed out/i.test(r)) return said("It did not answer in time. Check the connection, then try again.");
   if (/^network:/i.test(r)) return said("It could not be reached. Check the connection, then try again.");
   if (/^(decode:|response larger than)/i.test(r)) return said("It sent something Momotus cannot read.");
   if (/^blocked private address/i.test(r)) return said("It points to a private network address, which Momotus does not open.");
-  if (/^addon returned no catalog items/i.test(r)) return said("It sent an empty list.");
   return { text: r, raw: null };
+}
+
+/** Discover's line for a list that did not load: the core's own sentence
+ * ("This list took too long to load") alone, a raw reason after "This list
+ * could not load." */
+export function listFailed(reason: string): string {
+  const w = problemWords(reason);
+  return w.raw ? `This list could not load. ${w.text}` : w.text;
 }
 
 /** A kind chip's choice: every version, or one kind. */

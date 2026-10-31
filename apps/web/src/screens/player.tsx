@@ -1295,14 +1295,7 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
                 </Show>
                 <Show when={snap()?.attempts.length}>
                   <ul class="attempts">
-                    <For each={groupFailures(snap()?.attempts ?? [])}>
-                      {(a) => (
-                        <li>
-                          <b>{a.via}</b>
-                          <span>{a.words}</span>
-                        </li>
-                      )}
-                    </For>
+                    <For each={groupFailures(snap()?.attempts ?? [])}>{(words) => <li>{words}</li>}</For>
                   </ul>
                 </Show>
                 <div class="acts">

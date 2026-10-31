@@ -703,7 +703,7 @@ fun PlayerStatus(
                 verticalArrangement = Arrangement.spacedBy(Marquee.space.s),
             ) {
                 for (failed in groupFailures(attempts)) {
-                    // The core words the reason in plain sentences ("The link no longer exists (404)"), never the
+                    // The core words the reason in plain sentences ("The link no longer exists"), never the
                     // addon's name: the logs keep it.
                     MqText(failed.words, role = TextRole.Callout, color = colors.muted)
                 }

@@ -48,21 +48,17 @@ test("release names break between tokens only", () => {
   ]);
 });
 
-test("groupFailures says sources that failed alike once, in first order", () => {
-  const gone = "The link no longer exists (404)";
+test("groupFailures says sources that failed alike once, in first order, with no addon's name", () => {
+  const gone = "The link no longer exists";
   const slow = "The source did not answer in time";
-  expect(
-    groupFailures([
-      { via: "Torrentio", error: slow },
-      { via: "Torrentio", error: gone },
-      { via: "Local", error: gone },
-      { via: "Torrentio", error: gone },
-    ]),
-  ).toEqual([
-    { via: "Torrentio", words: slow },
-    { via: "Torrentio", words: `${gone} · 2 sources` },
-    { via: "Local", words: gone },
-  ]);
+  const lines = groupFailures([
+    { via: "Torrentio", error: slow },
+    { via: "Torrentio", error: gone },
+    { via: "Local", error: gone },
+    { via: "Torrentio", error: gone },
+  ] as { via: string; error: string }[]);
+  expect(lines).toEqual([slow, `${gone} · 3 sources`]);
+  expect(lines.join(" ")).not.toMatch(/Torrentio|Local/);
 });
 
 test("an air date reads as its UTC day", () => {

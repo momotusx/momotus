@@ -117,16 +117,12 @@ export function seasonName(season: number): string {
   return season === 0 ? "Specials" : `Season ${season}`;
 }
 
-/** Sources that failed the same way, from one addon, once each in first order, with their count. */
-export function groupFailures(attempts: readonly { via: string; error: string }[]): { via: string; words: string }[] {
-  const seen = new Map<string, { via: string; error: string; count: number }>();
-  for (const a of attempts) {
-    const id = `${a.via}\u0000${a.error}`;
-    const found = seen.get(id);
-    if (found) found.count += 1;
-    else seen.set(id, { via: a.via, error: a.error, count: 1 });
-  }
-  return [...seen.values()].map((f) => ({ via: f.via, words: f.count > 1 ? `${f.error} · ${f.count} sources` : f.error }));
+/** Sources that failed the same way, once each in first order, with their count: by reason alone, never
+ * with an addon's name (the owner's rule, as on Android and Apple). */
+export function groupFailures(attempts: readonly { error: string }[]): string[] {
+  const seen = new Map<string, number>();
+  for (const a of attempts) seen.set(a.error, (seen.get(a.error) ?? 0) + 1);
+  return [...seen].map(([error, count]) => (count > 1 ? `${error} · ${count} sources` : error));
 }
 
 /** An air date ("YYYY-MM-DD", read in UTC as the core writes it): "Oct 27, 2026". */

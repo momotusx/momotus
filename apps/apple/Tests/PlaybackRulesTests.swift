@@ -170,7 +170,7 @@ private func snapshot(next: String = next, nextAtMs: String = "null", segments: 
 }
 
 @Test func sourcesThatFailedAlikeAreSaidOnceInFirstOrderWithNoAddonName() throws {
-    let gone = "The link no longer exists (404)"
+    let gone = "The link no longer exists"
     let slow = "The source did not answer in time"
     let attempts = [
         Attempt(key: "a", via: "Torrentio", error: slow),
@@ -403,15 +403,28 @@ private func phase(_ phase: String, _ extra: String = "") throws -> PlaybackSnap
 @Test func theCoreNamesTheNextVersionWhileItResolves() throws {
     let moving = try phase("resolving", #","trying":{"key":"k2","label":"720p WEB"}"#)
     #expect(moving.trying == OtherVersion(key: "k2", label: "720p WEB"))
-    #expect(PlayerLayout.waitingWords(moving, notice: "This source failed: 404. Trying the next one.") == "Trying the next version: 720p WEB")
+    #expect(PlayerLayout.waitingWords(moving, notice: "This source failed. Trying the next one.") == "Trying the next version: 720p WEB")
     // Once it is ready the name has done its job: the player's own words, or the plain wait.
     let ready = try phase("ready", #","trying":{"key":"k2","label":"720p WEB"}"#)
     #expect(PlayerLayout.waitingWords(ready, notice: nil) == "Getting the stream ready")
     // An older core names nothing.
     let older = try phase("resolving")
     #expect(older.trying == nil && older.offer == nil)
-    #expect(PlayerLayout.waitingWords(older, notice: "This source failed: 404. Trying the next one.") == "This source failed: 404. Trying the next one.")
+    #expect(PlayerLayout.waitingWords(older, notice: "This source failed. Trying the next one.") == "This source failed. Trying the next one.")
     #expect(PlayerLayout.waitingWords(nil, notice: nil) == "Getting the stream ready")
+}
+
+@Test func aPlayersNoticeNeverCarriesItsOwnErrorWords() throws {
+    // The owner's rule: the line under the player never shows a status code or a system's words
+    // (`localizedDescription`, an engine's message); those go to the core in failOver, which logs them.
+    let player = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appending(path: "../Marquee/Player")
+    var notices = 0
+    for name in try FileManager.default.contentsOfDirectory(atPath: player.path) where name.hasSuffix(".swift") {
+        let text = try String(contentsOf: player.appending(path: name), encoding: .utf8)
+        notices += text.components(separatedBy: "notice: \"").count - 1
+        #expect(text.range(of: #"notice: "[^"]*\\\("#, options: .regularExpression) == nil, "\(name) puts a value in a notice")
+    }
+    #expect(notices >= 4)
 }
 
 @Test func aFailedPlaybackCanOfferTheNextVersion() throws {

@@ -204,10 +204,10 @@ class PlayerFailureCardTest {
     fun `the failure history says why each source failed, never the addon's name`() {
         show(
             ""","offer":{"key":"k2","label":"720p WEB"},"attempts":[""" +
-                """{"key":"k1","via":"Torrentio","error":"The link no longer exists (404)"},""" +
-                """{"key":"k3","via":"Comet","error":"The link no longer exists (404)"}]""",
+                """{"key":"k1","via":"Torrentio","error":"The link no longer exists"},""" +
+                """{"key":"k3","via":"Comet","error":"The link no longer exists"}]""",
         )
-        compose.onNodeWithText("The link no longer exists (404) · 2 sources").assertExists()
+        compose.onNodeWithText("The link no longer exists · 2 sources").assertExists()
         for (name in listOf(
             "Torrentio",
             "Comet",

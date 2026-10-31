@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { addonHost, addonsSummary, audioTrackName, nextVersion, qualityCell, sheetDetails, languageName, pairingProblem, plainAddress, problemWords, restartLine, serverHost, startAudio, subtitleNote, lowerFirst, kindBest, kindChips } from "./words";
+import { addonHost, listFailed, addonsSummary, audioTrackName, nextVersion, qualityCell, sheetDetails, languageName, pairingProblem, plainAddress, problemWords, restartLine, serverHost, startAudio, subtitleNote, lowerFirst, kindBest, kindChips } from "./words";
 import shared from "../../../shared/stream-choice-words.json";
 import type { EmptyAction } from "../core/generated/EmptyAction";
 import type { EmptyKind } from "../core/generated/EmptyKind";
@@ -224,15 +224,23 @@ test("raw reasons read as sentences, the raw text kept", () => {
   expect(problemWords(net)).toEqual({ text: "It could not be reached. Check the connection, then try again.", raw: net });
   expect(problemWords("timed out after 10s").text).toBe("It did not answer in time. Check the connection, then try again.");
   expect(problemWords("timed out").text).toBe("It did not answer in time. Check the connection, then try again.");
-  expect(problemWords("http status 404").text).toBe("It has nothing at this address (404).");
-  expect(problemWords("http status 403").text).toBe("It refused access (403).");
-  expect(problemWords("http status 429").text).toBe("It is busy; try again soon (429).");
-  expect(problemWords("http status 502").text).toBe("It had an error on its side (502).");
-  expect(problemWords("http status 400").text).toBe("It answered with an error (400).");
+  expect(problemWords("http status 404").text).toBe("It has nothing at this address.");
+  expect(problemWords("http status 403").text).toBe("It refused access.");
+  expect(problemWords("http status 429").text).toBe("It is busy; try again soon.");
+  expect(problemWords("http status 502").text).toBe("It had an error on its side.");
+  expect(problemWords("http status 400").text).toBe("It answered with an error.");
+  // The owner's rule: the line never carries the status; Details keeps the core's text.
+  for (const n of [400, 401, 403, 404, 410, 429, 451, 500, 503]) {
+    const w = problemWords(`http status ${n}`);
+    expect(w.text).not.toMatch(/\d/);
+    expect(w.raw).toBe(`http status ${n}`);
+  }
   expect(problemWords("decode: expected value at line 1").text).toBe("It sent something Momotus cannot read.");
-  expect(problemWords("addon returned no catalog items").text).toBe("It sent an empty list.");
   // The core's own sentences stay as they are.
-  expect(problemWords("Cinemeta did not answer in time")).toEqual({ text: "Cinemeta did not answer in time", raw: null });
+  expect(problemWords("This list took too long to load")).toEqual({ text: "This list took too long to load", raw: null });
+  // Discover says the core's sentence once, never "This list could not load. This list ...".
+  expect(listFailed("This list took too long to load")).toBe("This list took too long to load");
+  expect(listFailed("http status 500")).toBe("This list could not load. It had an error on its side.");
 });
 
 test("a row's one line starts with its size, then where it comes from, a warning or why it is dimmed", () => {

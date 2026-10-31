@@ -1530,7 +1530,8 @@ test("Home: Try again on a failed row asks that one catalog again, not all of Ho
     const row = p.locator('section.row[data-fgroup*="jpicks"]');
     const retry = row.locator('[data-f^="retry:"]');
     await expect(retry).toBeVisible({ timeout: 30_000 });
-    await expect(row.locator(".row-msg")).toContainText("It had an error on its side (500).");
+    await expect(row.locator(".row-msg")).toContainText("This list could not load right now");
+    await expect(row.locator(".row-msg")).not.toContainText("500");
     const opened = () => sent.filter((m) => m.op === "subscribe" && m.view === "home").length;
     const before = opened();
     // By remote: the row's Try again. The focus stays on it while the row

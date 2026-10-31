@@ -360,7 +360,10 @@ test("a source that fails before its metadata is not a decode failure, and Try a
   const failOvers = () => sent.filter((m) => m.command?.type === "failOver").map((m) => m.command);
   expect(failOvers().length).toBeGreaterThan(0);
   for (const f of failOvers()) expect(f).toMatchObject({ kind: "http", status: 500 });
-  await expect(card.locator(".attempts")).toContainText("(500)");
+  await expect(card.locator(".attempts")).toContainText("The source had an error");
+  // In words, never the status or the addon's name (the owner's rule).
+  await expect(card.locator(".attempts")).not.toContainText("500");
+  await expect(card.locator(".attempts b")).toHaveCount(0);
   // Nothing offered: every source failed, and the core says none could be reached.
   await expect(card.locator(".st")).toHaveText("Can't reach any source");
   await expect(card.locator(".attempts")).not.toContainText("decode");

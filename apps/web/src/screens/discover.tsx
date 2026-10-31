@@ -13,7 +13,7 @@ import { onProfileReset } from "../core/profiles";
 import { form } from "../form";
 import { defaultsWords } from "../lib/defaults";
 import { extends_ } from "../lib/discover-hold";
-import { problemWords } from "../lib/words";
+import { listFailed, problemWords } from "../lib/words";
 import "./browse.css";
 
 // Where the page was scrolled to: the view is kept, so Back lands here too.
@@ -318,7 +318,7 @@ function DiscoverPage(props: { retry: () => void }) {
                   <div class="discover-fail">
                     <p class="note" classList={{ bad: !retrying() }}>
                       <i class="dot" />
-                      {retrying() ? "Asking again." : `This list could not load. ${problemWords((s().state as { reason: string }).reason).text}`}
+                      {retrying() ? "Asking again." : listFailed((s().state as { reason: string }).reason)}
                     </p>
                     {retryButton("discover:retry-catalog")}
                   </div>

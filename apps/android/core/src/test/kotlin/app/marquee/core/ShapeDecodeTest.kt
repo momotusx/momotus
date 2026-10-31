@@ -87,7 +87,7 @@ class ShapeDecodeTest {
             strict.decodeFromString(
                 PlaybackSnapshot.serializer(),
                 """{"phase":"ready","url":"http://127.0.0.1:1/s/t/x.mkv","key":"k","attempt":2,"manifest":false,"filename":"x.mkv","sizeBytes":5000000000,
-                    "resumeMs":4000,"attempts":[{"key":"k0","via":"Local","error":"The link no longer exists (404)"}],
+                    "resumeMs":4000,"attempts":[{"key":"k0","via":"Local","error":"The link no longer exists"}],
                     "subtitles":[{"url":"https://s/x.srt","lang":"eng","label":null,"source":"OpenSubtitles","forced":false,"hearingImpaired":true}],
                     "subtitlesPending":true,
                     "next":{"videoId":"tt1:1:2","title":"Two","season":1,"episode":2,"thumbnail":null},

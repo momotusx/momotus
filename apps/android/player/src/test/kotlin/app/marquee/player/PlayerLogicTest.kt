@@ -101,7 +101,7 @@ class PlayerLogicTest {
     @Test
     fun `errors are sorted into what failed, with the status and a sentence`() {
         assertEquals(
-            Failure(FailureKind.Http, "The link no longer exists (404)", 404),
+            Failure(FailureKind.Http, "The link no longer exists", 404),
             classifyFailure(PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS, 404),
         )
         val kinds =
@@ -234,7 +234,7 @@ class PlayerLogicTest {
 
     @Test
     fun `sources that failed alike are said once with their count, in first order`() {
-        val gone = "The link no longer exists (404)"
+        val gone = "The link no longer exists"
         val slow = "The source did not answer in time"
         val attempts =
             listOf(
@@ -253,12 +253,16 @@ class PlayerLogicTest {
     }
 
     @Test
-    fun `status words match the core's`() {
-        assertEquals("The link no longer exists (410)", statusWords(410))
-        assertEquals("The source refused access (403)", statusWords(403))
-        assertEquals("The source is busy, try again soon (429)", statusWords(429))
-        assertEquals("The source had an error (502)", statusWords(502))
-        assertEquals("The source answered with an error (400)", statusWords(400))
+    fun `status words match the core's, with no status code`() {
+        assertEquals("The link no longer exists", statusWords(410))
+        assertEquals("The source refused access", statusWords(403))
+        assertEquals("The source is busy, try again soon", statusWords(429))
+        assertEquals("The source had an error", statusWords(502))
+        assertEquals("The source answered with an error", statusWords(400))
+        // The owner's rule: the line under the player never shows the number.
+        for (status in listOf(400, 401, 403, 404, 410, 429, 451, 500, 503, 599)) {
+            assertFalse(statusWords(status).any(Char::isDigit), statusWords(status))
+        }
     }
 
     @Test
