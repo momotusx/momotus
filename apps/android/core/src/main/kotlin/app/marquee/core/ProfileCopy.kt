@@ -77,7 +77,10 @@ object ProfileCopy {
         return "${total / 60}:${(total % 60).toString().padStart(2, '0')}"
     }
 
-    /** The profile codes the core sends, in words. */
+    /**
+     * The profile codes the core sends, in words. A full disk at Incognito's entry (`noSpace`) reads as a quiet
+     * failure: no space words on any screen (plans/no-space-warnings.md, the owner's rule, over section 6's line).
+     */
     fun problem(
         code: String?,
         fallback: String,
@@ -91,8 +94,7 @@ object ProfileCopy {
             "viewsOpen" -> "Something is still open. Try again."
             "unknownProfile" -> "That profile was removed on another device."
             "pinUnreadable" -> "This PIN was set by a newer version. Remove it, then set a new one."
-            "noSpace" -> "Couldn't open Incognito: this device is out of space."
-            "incognitoFailed" -> "Couldn't open Incognito. Try again."
+            "noSpace", "incognitoFailed" -> "Couldn't open Incognito. Try again."
             "incognito" -> "Not available in Incognito."
             else -> fallback
         }

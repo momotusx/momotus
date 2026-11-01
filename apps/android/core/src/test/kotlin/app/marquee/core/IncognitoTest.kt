@@ -120,7 +120,8 @@ class IncognitoTest {
 
     @Test
     fun `the entry codes have their words`() {
-        assertEquals("Couldn't open Incognito: this device is out of space.", ProfileCopy.problem("noSpace", "x"))
+        // The owner's no-space rule: a full disk is a quiet failure.
+        assertEquals("Couldn't open Incognito. Try again.", ProfileCopy.problem("noSpace", "x"))
         assertEquals("Couldn't open Incognito. Try again.", ProfileCopy.problem("incognitoFailed", "x"))
         assertEquals("Not available in Incognito.", ProfileCopy.problem("incognito", "x"))
     }
