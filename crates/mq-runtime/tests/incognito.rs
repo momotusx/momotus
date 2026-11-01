@@ -55,8 +55,11 @@ async fn addon(id: &str, delay: Duration) -> (AddonRow, Arc<AtomicUsize>) {
                 tokio::time::sleep(delay).await;
                 let body = if head.contains("manifest.json") {
                     manifest
-                } else if head.contains("/meta/") {
+                } else if head.contains("/meta/") && head.contains(TITLE) {
                     meta
+                } else if head.contains("/meta/") {
+                    // No such title: an answer with no meta.
+                    r#"{"metas":[]}"#.to_owned()
                 } else if head.contains("/stream/") {
                     streams
                 } else {
@@ -624,4 +627,60 @@ async fn no_space_says_neutral_words() {
     assert_eq!(refused.code(), "noSpace");
     let said = refused.to_string().to_lowercase();
     assert!(!said.contains("space") && !said.contains("full"), "{said}");
+}
+
+/// A scope dropped without its end still counts down and goes: `ping`'s
+/// `liveScopes` never counts a scope that is gone (review P3-10).
+#[tokio::test]
+async fn a_scope_dropped_without_its_end_counts_down() {
+    let (host, dir) = device().await;
+    let core = host.open_incognito().unwrap();
+    assert_eq!(host.live_scope_count(), 1);
+    assert_eq!(scope_folders(dir.path()).len(), 1);
+    drop(core);
+    assert_eq!(host.live_scope_count(), 0);
+    assert!(scope_folders(dir.path()).is_empty());
+}
+
+/// What a log line writes, for the test below.
+#[derive(Clone)]
+struct Sink(Arc<Mutex<Vec<u8>>>);
+
+impl std::io::Write for Sink {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        self.0.lock().unwrap().extend_from_slice(buf);
+        Ok(buf.len())
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
+/// Logs are files on disk (logcat, the Mac's): in Incognito no line names
+/// the title asked for, at any level; the host's lines still do (review
+/// P3-12).
+#[tokio::test]
+async fn incognito_logs_name_no_title() {
+    let lines = Sink(Arc::new(Mutex::new(Vec::new())));
+    let writer = lines.clone();
+    let subscriber = tracing_subscriber::fmt()
+        .with_max_level(tracing::Level::TRACE)
+        .with_ansi(false)
+        .with_writer(move || writer.clone())
+        .finish();
+    // The only subscriber this binary sets.
+    tracing::subscriber::set_global_default(subscriber).expect("one subscriber");
+    // Call sites other tests reached before had no subscriber to ask.
+    tracing::callsite::rebuild_interest_cache();
+    let read = || String::from_utf8_lossy(&lines.0.lock().unwrap()).into_owned();
+    let (host, _dir) = device().await;
+    let core = host.open_incognito().unwrap();
+    let (inside, outside) = ("tt7654321", "tt7654322");
+    assert!(core.fetch_meta("movie", inside).await.is_err());
+    assert!(host.fetch_meta("movie", outside).await.is_err());
+    let logged = read();
+    assert!(logged.contains(outside), "the control: {logged}");
+    assert!(!logged.contains(inside), "{logged}");
+    core.end_incognito();
 }

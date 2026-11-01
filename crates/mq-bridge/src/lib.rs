@@ -4507,6 +4507,22 @@ mod incognito_clock {
         assert_eq!(c.pushed("ended"), 0);
     }
 
+    /// A repeated `idle`, or `background` after it, never moves the start
+    /// of the absence: the end comes 30 minutes after the first (review
+    /// P3-6).
+    #[tokio::test]
+    async fn a_repeated_idle_keeps_the_start_of_the_absence() {
+        let mut c = Client::new(device(None).await);
+        c.enter().await;
+        c.event("idle").await;
+        c.jump(20 * MIN);
+        c.event("idle").await;
+        c.event("background").await;
+        c.jump(11 * MIN);
+        c.ok(json!({"op": "ping"})).await;
+        assert!(!c.incognito(), "31 minutes after the first idle");
+    }
+
     /// A sleeping Mac or phone stops the timer: the wall clock decides at
     /// the return, before the request is handled. 29 minutes keep it.
     #[tokio::test]

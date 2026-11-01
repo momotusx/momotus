@@ -210,8 +210,9 @@ struct Device {
     pins: std::sync::Mutex<crate::profiles::Throttle>,
     /// Trakt connections, sessions and rounds, started on first use.
     trakt: std::sync::OnceLock<Arc<crate::trakt::Trakt>>,
-    /// Incognito scopes alive on this device (`ping`'s `liveScopes`).
-    live_scopes: std::sync::atomic::AtomicUsize,
+    /// Incognito scopes alive on this device (`ping`'s `liveScopes`); each
+    /// scope holds it, so a scope dropped without its end still counts down.
+    live_scopes: Arc<std::sync::atomic::AtomicUsize>,
     /// An Incognito end no session has shown yet (plans/batch-10-incognito.md
     /// 5.4); sessions started behind a scope watch it.
     ended_unseen: tokio::sync::watch::Sender<bool>,
@@ -263,7 +264,7 @@ impl Device {
             sync_gate: Arc::default(),
             pins: std::sync::Mutex::new(crate::profiles::Throttle::new(std::time::Instant::now())),
             trakt: std::sync::OnceLock::new(),
-            live_scopes: std::sync::atomic::AtomicUsize::new(0),
+            live_scopes: Arc::default(),
             ended_unseen: tokio::sync::watch::Sender::new(false),
             incognito_dir,
             sweeping: std::sync::atomic::AtomicBool::new(false),
@@ -465,8 +466,14 @@ impl Core {
             .unwrap_or_else(|p| p.into_inner())
     }
 
-    pub(crate) fn live_scopes(&self) -> &std::sync::atomic::AtomicUsize {
+    pub(crate) fn live_scopes(&self) -> &Arc<std::sync::atomic::AtomicUsize> {
         &self.inner.device.live_scopes
+    }
+
+    /// A title id as a log line may name it: never in Incognito, whose logs
+    /// (logcat, the Mac's) are files on disk too.
+    pub(crate) fn logged<'a>(&self, id: &'a str) -> &'a str {
+        if self.scope.is_some() { "a title" } else { id }
     }
 
     /// Incognito scopes alive on this device.
@@ -1089,7 +1096,7 @@ impl Core {
                     status: 404 | 410, ..
                 })) => {
                     unknown.get_or_insert(true);
-                    tracing::debug!("{name} has no details for {id}");
+                    tracing::debug!("{name} has no details for {}", self.logged(id));
                     reason = NO_DETAILS.to_owned();
                     continue;
                 }
@@ -1102,13 +1109,13 @@ impl Core {
             };
             let Some(raw) = raw else {
                 unknown = Some(false);
-                tracing::debug!("{name} sent unreadable details for {id}");
+                tracing::debug!("{name} sent unreadable details for {}", self.logged(id));
                 reason = UNREADABLE.to_owned();
                 continue;
             };
             if !raw["meta"].is_object() {
                 unknown.get_or_insert(true);
-                tracing::debug!("{name} has no details for {id}");
+                tracing::debug!("{name} has no details for {}", self.logged(id));
                 reason = NO_DETAILS.to_owned();
                 continue;
             }
@@ -1122,7 +1129,7 @@ impl Core {
                 }
             }
             if ids.len() == before {
-                tracing::debug!("{name} gave no TVDB ids for {id}");
+                tracing::debug!("{name} gave no TVDB ids for {}", self.logged(id));
                 reason = "No TVDB ids came back for this title".to_owned();
             }
         }
@@ -1162,7 +1169,10 @@ impl Core {
                     Ok(ResourceResponse::Meta { meta })
                         if kids && (meta.preview.id != id || meta.preview.r#type != kind) =>
                     {
-                        tracing::debug!("{name} sent details for another title than {id}");
+                        tracing::debug!(
+                            "{name} sent details for another title than {}",
+                            self.logged(id)
+                        );
                         last_error = "Details came back for another title".to_owned();
                     }
                     Ok(ResourceResponse::Meta { mut meta }) => {
@@ -1174,7 +1184,7 @@ impl Core {
                         return Ok((meta, name.clone()));
                     }
                     Ok(_) => {
-                        tracing::debug!("{name} has no details for {id}");
+                        tracing::debug!("{name} has no details for {}", self.logged(id));
                         last_error = NO_DETAILS.to_owned();
                     }
                     Err(e) => {

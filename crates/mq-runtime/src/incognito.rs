@@ -30,16 +30,20 @@ pub(crate) struct Scope {
     /// to no live scope.
     _lock: std::fs::File,
     pub(crate) ended: AtomicBool,
+    /// The device's count of live scopes (`liveScopes`).
+    live: Arc<std::sync::atomic::AtomicUsize>,
     /// Taken by the torrent record step and by the end, so no line is
     /// written after the end's pass.
     pub(crate) record: std::sync::Mutex<()>,
 }
 
 impl Drop for Scope {
-    /// A backstop only: `end` removed the folder already. Never touches
-    /// `incognito/` itself.
+    /// A backstop only: `end` removed the folder and counted down already.
+    /// A scope dropped without its end does both here, so `liveScopes`
+    /// never counts one that is gone. Never touches `incognito/` itself.
     fn drop(&mut self) {
-        if !self.ended.load(Ordering::SeqCst) {
+        if !self.ended.swap(true, Ordering::SeqCst) {
+            self.live.fetch_sub(1, Ordering::SeqCst);
             let _ = std::fs::remove_dir_all(&self.dir);
         }
     }
@@ -162,6 +166,7 @@ impl Core {
             dir,
             _lock: lock,
             ended: AtomicBool::new(false),
+            live: self.live_scopes().clone(),
             record: std::sync::Mutex::new(()),
         };
         self.live_scopes().fetch_add(1, Ordering::SeqCst);
