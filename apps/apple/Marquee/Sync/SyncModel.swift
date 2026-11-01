@@ -265,6 +265,10 @@ final class SyncModel {
         keyLeft = nil
         unstored = stored ? nil : record
         joinStored = stored
+        // The account pages reach the relay this join used, also when it moved to a new name.
+        if case .object(let fields) = record, case .string(let server)? = fields["server"] {
+            defaults.set(server, forKey: SyncRecord.serverKey)
+        }
         joined = true
         notice = nil
         defaults.set(false, forKey: Self.goneKey)

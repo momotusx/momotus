@@ -2108,8 +2108,9 @@ fun PairingScreen(
             factory = viewModelFactory { initializer { PairingHolder(session, sync, deviceForm(context, tv)) } },
         )
     // A remembered address with a user name or password (an older version saved it) is not used. The build's hosted
-    // relay too, so the code shows at once with no field (plans/tv-qr-login.md 5.5).
-    val known = remember(context) { context.knownServer().ifEmpty { BuildConfig.SYNC_SERVER } }
+    // relay comes first, so the code shows at once with no field (plans/tv-qr-login.md 5.5) and a relay moved to a
+    // new name is joined there; a remembered address is the fallback of a build without one.
+    val known = remember(context) { BuildConfig.SYNC_SERVER.ifEmpty { context.knownServer() } }
     var server by rememberSaveable { mutableStateOf(known) }
     var name by rememberSaveable { mutableStateOf(context.deviceName(tv)) }
     // The fields are open only while no server is known: with one, the code shows at once.

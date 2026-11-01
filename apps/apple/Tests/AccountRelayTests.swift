@@ -63,6 +63,8 @@ private func browse(_ url: String, as subject: String) async throws -> String {
         guard case .new(let ticket) = first else { Issue.record("not new: \(first)"); return }
         try await sync.createAccount(server: relay, invite: "", name: "Mac test", ticket: ticket)
         #expect(sync.joined && keychain.held != nil)
+        // The account pages reach the relay this join used.
+        #expect(defaults.string(forKey: SyncRecord.serverKey) == relay)
         let links = try await sync.identities()
         #expect(links.map(\.provider) == ["mock"])
 

@@ -22,8 +22,16 @@ class AccountFlows(
 ) {
     private val platform get() = app.accountPlatform
 
-    /** The sync service sign-in goes to: the one this device used, else the build's hosted default. */
-    fun server(context: Context): String = context.knownServer().ifEmpty { BuildConfig.SYNC_SERVER }
+    /**
+     * The sync service: the one this device joined while it is joined; otherwise the build's hosted default, so a
+     * relay moved to a new name is signed in to there (a remembered address is only the fallback of a build without
+     * one).
+     */
+    fun server(context: Context): String =
+        when {
+            app.sync.joined -> context.knownServer().ifEmpty { BuildConfig.SYNC_SERVER }
+            else -> BuildConfig.SYNC_SERVER.ifEmpty { context.knownServer() }
+        }
 
     /** Account passkeys work here: the build has a link host and the system has Credential Manager's passkeys. */
     val passkeys: Boolean get() = platform.rpId.isNotEmpty()
