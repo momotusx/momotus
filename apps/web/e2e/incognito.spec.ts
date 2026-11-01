@@ -79,10 +79,9 @@ async function open(browser: Browser, form: Form, opts: { clock?: boolean; trail
 // Pass or fail, every scope this spec opened ends, quietly, and an end not yet read is read.
 test.afterEach(async () => {
   for (const [context, line] of lines) {
-    for (const server of line.servers) {
-      await line.ask("leaveIncognito", {}, server).catch(() => undefined);
-      await line.ask("ackIncognitoEnded", {}, server).catch(() => undefined);
-    }
+    // The newest socket is the live one; an older one is closed and would only wait out its answer.
+    await line.ask("leaveIncognito").catch(() => undefined);
+    await line.ask("ackIncognitoEnded").catch(() => undefined);
     await context.close();
   }
   lines.clear();
@@ -105,6 +104,20 @@ const live = async () => {
     c.close();
   }
 };
+
+/** Every in-app link's address on screen that names a page of a title (its route rides in `data-route` instead). */
+const routesShown = (page: Page) =>
+  page.evaluate(() =>
+    [...document.querySelectorAll("a[href]")]
+      .map((a) => a.getAttribute("href") ?? "")
+      .filter((h) => h.startsWith("/") && (/^\/(title|play)\b|^\/library\/downloads\/./.test(h) || /tt\d|%3A/.test(h))),
+  );
+/** On this screen: nothing the browser keeps names it, no link shows a title's route, no input keeps its words. */
+async function namesNothing(page: Page, where: string) {
+  expect(await kept(page), where).not.toMatch(/tt\d|\/title|\/play|thrones/);
+  expect(await routesShown(page), where).toEqual([]);
+  expect(await page.locator('input:not([autocomplete="off"])').count(), where).toBe(0);
+}
 
 /** Opens `route` as an in-app link does in Incognito: an anchor saying "/" with its route in `data-route`. */
 const go = (page: Page, route: string) =>
@@ -143,7 +156,9 @@ for (const form of ["tv", "desktop", "phone"] as const) {
     await expect(intro).toContainText("Your browser may keep images it showed.");
     const ends = { tv: "It ends when you leave, or after 30 minutes away.", desktop: "It ends when you leave, close this tab, or after 30 minutes without use.", phone: "It ends when you leave, close the app, or after 30 minutes away." };
     await expect(intro.locator(".incog-ends")).toHaveText(ends[form]);
+    // TV starts on Continue; elsewhere the heading is read first.
     if (form === "tv") await expect.poll(() => focused(page)).toBe("incognito:continue");
+    else await expect(intro.locator("h1")).toBeFocused();
     await page.locator('[data-f="incognito:continue"]').click();
     await expect(menuButton(page)).toHaveAttribute("aria-label", "Profile: Incognito");
     await expect(menuButton(page).locator(".incog-mark")).toBeVisible();
@@ -155,11 +170,13 @@ for (const form of ["tv", "desktop", "phone"] as const) {
     const rows = await page.locator('[role="menu"] [role^="menuitem"]').evaluateAll((els) => els.map((e) => (e as HTMLElement).dataset.f));
     expect(rows.slice(-3)).toEqual(["pmenu:incognito", "pmenu:leave-incognito", "pmenu:settings"]);
     await page.locator('[data-f="pmenu:settings"]').click();
-    // Settings: the Incognito header, Leave its button, and nothing of the account, Downloads or this device.
+    // Settings: the Incognito header, Leave its button, nothing of the account, Downloads, Trakt or Import; This
+    // device stays.
     await expect(page.locator(".set-head")).toContainText("Nothing you watch here is kept.");
     await expect(page.locator('[data-f="settings:leave-incognito"]')).toBeVisible();
     await expect(page.locator('[data-f="settings-nav:account"], [data-f="settings-sec:account"]')).toHaveCount(0);
-    await expect(page.locator('[data-f="settings-nav:device"], [data-f="settings-sec:device"]')).toHaveCount(0);
+    await expect(page.locator('[data-f="settings-nav:downloads"], [data-f="settings-sec:downloads"]')).toHaveCount(0);
+    await expect(page.locator('[data-f="settings-nav:device"], [data-f="settings-sec:device"]')).toHaveCount(1);
     await expect(page.locator('[data-f="settings:trakt"], [data-f="settings:import"]')).toHaveCount(0);
     await page.locator('[data-f="settings:leave-incognito"]').click();
     await expect(menuButton(page)).toHaveAttribute("aria-label", "Profile: Main");
@@ -322,48 +339,153 @@ test("desktop: a minute idle sends idle; the warning's button is one Tab away an
   await page.keyboard.press("Tab");
   await expect(stay).toBeFocused();
   expect(actives()).toBe(before);
-  // 3. The button keeps Incognito.
-  await page.keyboard.press("Enter");
+  // Tab on from the button moves on and the warning stays; the next Tab reaches it again.
+  await page.keyboard.press("Tab");
+  await expect(stay).not.toBeFocused();
+  await expect(alert).toHaveCount(1);
+  expect(actives()).toBe(before);
+  await page.keyboard.press("Tab");
+  await expect(stay).toBeFocused();
+  // 3. The button keeps Incognito, by its own press, and the focus goes back to where it was.
+  await stay.click();
   await expect(alert).toHaveCount(0);
   await expect.poll(actives).toBe(before + 1);
   expect(await live()).toBe(1);
-  // In a second run, any key keeps it too.
+  // Pressed with Enter from the keyboard, the same, and the focus goes back to where Tab took it from.
+  await page.locator('[data-f="nav:/search"]').focus();
   await page.clock.fastForward(61_000);
   await expect.poll(idles).toBe(2);
   line.push({ incognito: "endsSoon" });
   await expect(alert).toBeVisible();
-  await page.keyboard.press("Shift");
+  await page.keyboard.press("Tab");
+  await expect(stay).toBeFocused();
+  await page.keyboard.press("Enter");
   await expect(alert).toHaveCount(0);
   await expect.poll(actives).toBe(before + 2);
-  // 4. Left alone, the end (here the core's own loud end, a lock) shows the chooser and the ended line before any input.
+  expect(await focused(page)).toBe("nav:/search");
+  // In a third run, any key keeps it too.
   await page.clock.fastForward(61_000);
   await expect.poll(idles).toBe(3);
+  line.push({ incognito: "endsSoon" });
+  await expect(alert).toBeVisible();
+  await page.keyboard.press("Shift");
+  await expect(alert).toHaveCount(0);
+  await expect.poll(actives).toBe(before + 3);
+  // 4. Left alone, the end (here the core's own loud end, a lock) shows the chooser and the ended line before any input.
+  await page.clock.fastForward(61_000);
+  await expect.poll(idles).toBe(4);
   await line.ask("lockSession");
   await expect(page.locator(".picker h1")).toHaveText("Who's watching?");
   await expect(page.locator(".picker .st")).toHaveText(ENDED);
   expect(await live()).toBe(0);
 });
 
-test("the ended line survives two reloads before any click, and clears only after one", async ({ browser }) => {
-  const { page, line } = await open(browser, "desktop");
+test("a reload ends Incognito, and the next page says so", async ({ browser }) => {
+  const { page } = await open(browser, "desktop");
   await enterFromMenu(page);
-  // A reload ends it: the tab closing is an end the person did not ask for.
+  // The tab closing is an end the person did not ask for: the line shows, on the chooser or over Home.
   await page.reload();
   await expect(page.getByText(ENDED)).toBeVisible({ timeout: 30_000 });
   expect(await live()).toBe(0);
-  await page.reload();
-  await expect(page.getByText(ENDED)).toBeVisible({ timeout: 30_000 });
-  // Requests the app sends on its own never clear it.
-  await line.ask("syncNow");
-  await line.ask("ping");
-  await page.reload();
-  await expect(page.getByText(ENDED)).toBeVisible({ timeout: 30_000 });
-  // Read: OK over Home, or a profile on the chooser.
-  const ok = page.locator('[data-f="incognito:ended-ok"]');
-  if (await ok.isVisible()) await ok.click();
-  else await page.locator('[data-f="profile:default"]').click();
+});
+
+test("over a single profile's Home the ended notice survives reloads and Sync now, and OK reads it", async ({ browser }) => {
+  const { page, line } = await open(browser, "desktop");
+  await enterFromMenu(page);
+  // A loud end; the scope is gone before the reload, so the next session opens the host's Home, not the chooser.
+  await line.ask("lockSession");
+  await expect(page.locator(".picker .st")).toHaveText(ENDED);
+  for (let i = 0; i < 2; i++) {
+    await page.reload();
+    await expect(page.locator(".incog-notice[role=status]")).toContainText(ENDED, { timeout: 30_000 });
+    await expect(page.locator(".picker")).toHaveCount(0);
+    // Requests the app sends on its own never clear it.
+    await line.ask("syncNow");
+    await line.ask("ping");
+  }
+  await page.locator('[data-f="incognito:ended-ok"]').click();
   await expect(page.getByText(ENDED)).toHaveCount(0);
   await page.reload();
   await expect(menuButton(page)).toBeVisible({ timeout: 30_000 });
   await expect(page.getByText(ENDED)).toHaveCount(0);
+});
+
+test("on the chooser the ended line stays across a reload and goes once a profile is chosen", async ({ browser }) => {
+  const c = new Client();
+  await c.ready;
+  // Two profiles: a cold start asks who is watching.
+  const other = (await c.req<{ profiles: { id: string; name: string }[] }>("createProfile", { name: "Other", avatar: "letter:sky" })).profiles.find((p) => p.name === "Other")?.id as string;
+  try {
+    const { page, line } = await open(browser, "desktop");
+    await page.locator('[data-f="profile:incognito"]').click();
+    await page.locator('[data-f="incognito:continue"]').click();
+    await line.ask("lockSession");
+    await expect(page.locator(".picker .st")).toHaveText(ENDED);
+    await page.reload();
+    await expect(page.locator(".picker .st")).toHaveText(ENDED, { timeout: 30_000 });
+    await line.ask("syncNow");
+    await page.locator('[data-f="profile:default"]').click();
+    await expect(menuButton(page)).toHaveAttribute("aria-label", "Profile: Main");
+    await expect(page.getByText(ENDED)).toHaveCount(0);
+  } finally {
+    await c.req("deleteProfile", { profile: other }).catch(() => undefined);
+    c.close();
+  }
+});
+
+for (const form of ["tv", "desktop", "phone"] as const) {
+  test(`${form}: every screen in Incognito names nothing; Back and Forward work with the address at "/"`, async ({ browser }) => {
+    const { page } = await open(browser, form);
+    await enterFromMenu(page);
+    await expect(page.locator(".row a.tile").first()).toBeVisible({ timeout: 30_000 });
+    await namesNothing(page, "home");
+    const places = ["/discover", "/library", "/calendar", "/settings", "/settings/sources", "/settings/subtitles", "/addons", ...(form === "tv" ? [] : ["/library/downloads"])];
+    for (const place of places) {
+      await go(page, place);
+      await expect(page.locator("main h1, .set-page-title, .set-title").first()).toBeAttached({ timeout: 30_000 });
+      await page.waitForTimeout(500);
+      await namesNothing(page, place);
+    }
+    // A title, then its Versions, each naming nothing; the phone's page starts at its top.
+    await go(page, "/");
+    const tile = page.locator(".row a.tile[data-route]").first();
+    await expect(tile).toBeVisible({ timeout: 30_000 });
+    if (form === "phone") {
+      await page.evaluate(() => window.scrollTo(0, 600));
+      expect(await page.evaluate(() => window.scrollY)).toBeGreaterThan(0);
+    }
+    await tile.click();
+    await expect(page.locator('[data-f="title:versions"]')).toBeVisible({ timeout: 30_000 });
+    if (form === "phone") expect(await page.evaluate(() => window.scrollY)).toBe(0);
+    const name = await page.locator(".title-scr h1").first().textContent({ timeout: 10_000 });
+    await namesNothing(page, "title");
+    await page.locator('[data-f="title:versions"]').click();
+    await expect(page.locator('[data-f="title:versions"]')).toHaveCount(0, { timeout: 30_000 });
+    await page.waitForTimeout(1000);
+    await namesNothing(page, "versions");
+    // The browser's Back and Forward: the title, then Versions again.
+    await page.evaluate(() => history.back());
+    await expect(page.locator(".title-scr h1").first()).toHaveText(name ?? "", { timeout: 30_000 });
+    await page.evaluate(() => history.forward());
+    await expect(page.locator('[data-f="title:versions"]')).toHaveCount(0, { timeout: 30_000 });
+    await namesNothing(page, "versions again");
+    expect(new URL(page.url()).pathname).toBe("/");
+  });
+}
+
+test("tv: Back from a title opened in Incognito puts the focus back on its tile", async ({ browser }) => {
+  const { page } = await open(browser, "tv");
+  await enterFromMenu(page);
+  const tile = page.locator(".row a.tile[data-route]").first();
+  await expect(tile).toBeVisible({ timeout: 30_000 });
+  await tile.focus();
+  const key = await tile.getAttribute("data-f");
+  await page.keyboard.press("Enter");
+  await expect(page.locator('[data-f="title:versions"]')).toBeVisible({ timeout: 30_000 });
+  // A move of the viewer's own on the title page: remembered for that page, not for Home.
+  await expect.poll(() => focused(page)).not.toBe(key);
+  await page.keyboard.press("ArrowRight");
+  await page.waitForTimeout(300);
+  await page.keyboard.press("Escape");
+  await expect.poll(() => focused(page), { timeout: 1500 }).toBe(key);
 });
