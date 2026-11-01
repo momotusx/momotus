@@ -1115,7 +1115,13 @@ async fn serve_subtitle(
         // subtitle may stop or fail over the video.
         EMPTY_VTT.to_owned()
     });
-    cors(([(header::CONTENT_TYPE, "text/vtt; charset=utf-8")], vtt).into_response())
+    // Never kept by a player's or a browser's cache: a subtitle names what
+    // plays (plans/batch-10-incognito.md 5.5), for every profile.
+    let headers = [
+        (header::CONTENT_TYPE, "text/vtt; charset=utf-8"),
+        (header::CACHE_CONTROL, "no-store"),
+    ];
+    cors((headers, vtt).into_response())
 }
 
 /// What a subtitle that could not be served answers.

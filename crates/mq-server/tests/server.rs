@@ -694,6 +694,7 @@ async fn subtitles_come_out_as_utf8_webvtt_for_any_page() {
 
     let resp = http.get(&url, &local()).await.unwrap();
     assert_eq!(resp.header("content-type"), Some("text/vtt; charset=utf-8"));
+    assert_eq!(resp.header("cache-control"), Some("no-store"));
     assert_eq!(resp.header("access-control-allow-origin"), Some("*"));
     let text = String::from_utf8(resp.body.to_vec()).unwrap();
     assert!(text.starts_with("WEBVTT"), "{text}");
