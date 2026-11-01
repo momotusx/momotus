@@ -4,9 +4,13 @@
 //! the same after as before.
 
 use mq_library::{AddonRow, DownloadRecord, INCOGNITO, LibraryItemRow, OWNER, ProgressRow};
+use mq_runtime::views::title::TitleState;
 use mq_runtime::{
-    Core, CoreConfig, DownloadsView, HomeView, ProfilesView, SearchView, TraktConfig, TraktHosts,
+    Core, CoreConfig, DownloadsView, HomeView, PlayTarget, PlaybackPhase, PlaybackView,
+    ProfilesView, SearchView, TitleFacts, TitleView, TraktConfig, TraktHosts, VersionsParams,
+    VersionsView,
 };
+use mq_streams::{DeviceCaps, StreamPrefs, Target};
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -16,6 +20,8 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;
 
 const TITLE: &str = "tt0013442";
+/// A second title, played halfway.
+const OTHER: &str = "tt0000002";
 
 /// An addon on loopback: a manifest with a search catalog and meta, the
 /// meta of `TITLE`, each answer after `delay`; counts its requests.
@@ -24,19 +30,24 @@ async fn addon(id: &str, delay: Duration) -> (AddonRow, Arc<AtomicUsize>) {
     let addr = listener.local_addr().unwrap();
     let manifest = serde_json::json!({
         "id": id, "version": "1.0.0", "name": format!("Addon {id}"), "types": ["movie"],
-        "resources": ["catalog", "meta"], "idPrefixes": ["tt"],
+        "resources": ["catalog", "meta", "stream"], "idPrefixes": ["tt"],
         "catalogs": [{"type": "movie", "id": "top", "extra": [{"name": "search", "isRequired": true}]}]
     })
     .to_string();
     let meta = serde_json::json!({"meta": {"id": TITLE, "type": "movie", "name": "Nosferatu"}})
         .to_string();
+    let streams = serde_json::json!({"streams": [
+        {"name": "Fixture\n1080p", "title": "Nosferatu.1922.1080p.WEB.x264-GROUP",
+         "url": format!("{}/nosferatu.mkv", origin().await)}
+    ]})
+    .to_string();
     let hits = Arc::new(AtomicUsize::new(0));
     let counter = hits.clone();
     let served = manifest.clone();
     tokio::spawn(async move {
         while let Ok((mut socket, _)) = listener.accept().await {
             counter.fetch_add(1, Ordering::SeqCst);
-            let (manifest, meta) = (served.clone(), meta.clone());
+            let (manifest, meta, streams) = (served.clone(), meta.clone(), streams.clone());
             tokio::spawn(async move {
                 let mut buf = [0u8; 2048];
                 let n = socket.read(&mut buf).await.unwrap_or(0);
@@ -46,6 +57,8 @@ async fn addon(id: &str, delay: Duration) -> (AddonRow, Arc<AtomicUsize>) {
                     manifest
                 } else if head.contains("/meta/") {
                     meta
+                } else if head.contains("/stream/") {
+                    streams
                 } else {
                     r#"{"metas":[]}"#.to_owned()
                 };
@@ -65,6 +78,23 @@ async fn addon(id: &str, delay: Duration) -> (AddonRow, Arc<AtomicUsize>) {
         allow_private: true,
     };
     (row, hits)
+}
+
+/// A loopback origin answering every range with one byte of a film.
+async fn origin() -> String {
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    tokio::spawn(async move {
+        while let Ok((mut socket, _)) = listener.accept().await {
+            tokio::spawn(async move {
+                let mut buf = [0u8; 2048];
+                let _ = socket.read(&mut buf).await;
+                let reply = "HTTP/1.1 206 Partial Content\r\nContent-Range: bytes 0-0/10\r\nContent-Length: 1\r\nConnection: close\r\n\r\nM";
+                let _ = socket.write_all(reply.as_bytes()).await;
+            });
+        }
+    });
+    format!("http://{addr}")
 }
 
 /// A device on disk with the owner's addon list, and its data folder.
@@ -162,6 +192,45 @@ fn item() -> LibraryItemRow {
     }
 }
 
+fn target(id: &str) -> PlayTarget {
+    PlayTarget {
+        kind: "movie".into(),
+        item_id: id.into(),
+        video_id: id.into(),
+        name: Some("Nosferatu".into()),
+        ..PlayTarget::default()
+    }
+}
+
+fn film(id: &str) -> VersionsParams {
+    VersionsParams {
+        kind: "movie".into(),
+        video_id: id.into(),
+        target: Target {
+            title: "Nosferatu".into(),
+            year: Some(1922),
+            season: None,
+            episode: None,
+        },
+        caps: DeviceCaps::basic_1080p(),
+        prefs: StreamPrefs::default(),
+        last_binge_group: None,
+        facts: TitleFacts::read(Some("94 min"), Some("1922"), None, None),
+        device_language: None,
+    }
+}
+
+/// Waits up to 10 s for `done`.
+async fn until(what: &str, done: impl Fn() -> bool) {
+    for _ in 0..500 {
+        if done() {
+            return;
+        }
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    panic!("waited 10 s for {what}");
+}
+
 fn progress(position_ms: i64) -> ProgressRow<'static> {
     ProgressRow {
         video_id: TITLE,
@@ -184,19 +253,36 @@ async fn nothing_incognito_wrote_is_on_the_device_after_it() {
     let (extra, _) = addon("extra", Duration::ZERO).await;
 
     let library = core.library();
-    library
-        .set_progress(core.profile(), progress(1000), core.clock())
-        .unwrap();
-    library
-        .set_progress(core.profile(), progress(500), core.clock())
-        .unwrap();
-    library
-        .set_watched(core.profile(), TITLE, TITLE, true, core.clock())
-        .unwrap();
-    library
-        .upsert_item(core.profile(), &item(), true, core.clock())
-        .unwrap();
-    core.remove_from_continue(TITLE).unwrap();
+    // The title page: Add to Library and Watched, once its meta is in.
+    let title = TitleView::open(&core, "movie", TITLE);
+    until("the title", || {
+        title.snapshot().header.state == TitleState::Ready
+    })
+    .await;
+    title.set_in_library(true).unwrap();
+    title.set_watched(TITLE, true).unwrap();
+    drop(title);
+    // A version picked on Versions and played to the end; another title
+    // played halfway: the player's own reports.
+    let versions = VersionsView::open(&core, film(TITLE));
+    until("the versions", || versions.snapshot().done).await;
+    let shown = versions.snapshot();
+    let key = (shown.recommended.as_ref().or(shown.rows.first()))
+        .expect("a version")
+        .key
+        .clone();
+    let pick = versions.pick(&key);
+    let played = PlaybackView::open_picked(&core, pick, target(TITLE), &versions.plays());
+    until("the film ready", || {
+        played.snapshot().phase == PlaybackPhase::Ready
+    })
+    .await;
+    played.report_progress(890_000, 900_000, false);
+    drop((played, versions));
+    let half = PlaybackView::open(&core, Vec::new(), target(OTHER));
+    half.report_progress(450_000, 900_000, false);
+    drop(half);
+    core.remove_from_continue(OTHER).unwrap();
     let search = SearchView::open(&core);
     search.remember(Some("nosferatu")).unwrap();
     core.set_prefs(&serde_json::json!({"subtitleLanguages": ["de"], "autoplayNext": false}))
@@ -206,17 +292,16 @@ async fn nothing_incognito_wrote_is_on_the_device_after_it() {
         .transport_url
         .clone();
     core.remove_addon(&copied).unwrap();
-    library
-        .set_stream_memory(core.profile(), TITLE, None, "{\"key\":\"k\"}", core.clock())
-        .unwrap();
     mq_runtime::speed::record_dead(library, &"a".repeat(40), mq_library::hlc::now_ms());
     core.fetch_meta("movie", TITLE).await.unwrap();
 
     // The positive control: the scope held them all.
     assert_eq!(
-        library.progress(INCOGNITO, TITLE).unwrap(),
-        Some((500, 1000))
+        library.progress(INCOGNITO, OTHER).unwrap(),
+        Some((450_000, 900_000))
     );
+    assert!(library.progress(INCOGNITO, TITLE).unwrap().is_some());
+    assert!(library.stream_memory(INCOGNITO, TITLE).unwrap().is_some());
     assert_eq!(
         library.recent_searches(INCOGNITO, 5).unwrap(),
         ["nosferatu"]
@@ -527,4 +612,16 @@ async fn search_in_incognito_never_asks_trakt() {
     }
     assert!(*asked.lock().unwrap() > 0);
     core.end_incognito();
+}
+
+/// A device out of room answers `noSpace` with neutral words: the
+/// protocol's message never says why (review P2-4).
+#[tokio::test]
+async fn no_space_says_neutral_words() {
+    let (host, _dir) = device().await;
+    host.set_free_bytes(1024);
+    let refused = host.open_incognito().err().expect("refused");
+    assert_eq!(refused.code(), "noSpace");
+    let said = refused.to_string().to_lowercase();
+    assert!(!said.contains("space") && !said.contains("full"), "{said}");
 }

@@ -1508,7 +1508,10 @@ impl Session {
             if let Some(incognito) = shared.incognito.as_mut()
                 && request.person_driven()
             {
+                // The person is here: a lost `active` leaves no stale absence.
                 incognito.last_request_ms = now;
+                incognito.away_since_ms = None;
+                incognito.warned = false;
             }
             // Read: the ended notice goes, here and for the next session.
             if shared.ended && request.reads_the_ended_notice() {
@@ -2676,9 +2679,9 @@ impl Session {
         let mut shared = lock(&self.shared);
         let now = shared.wall_ms();
         if let Some(incognito) = shared.incognito.as_mut() {
-            incognito.away_since_ms = Some(now);
+            // A repeated `idle` never moves the start of the absence.
+            incognito.away_since_ms.get_or_insert(now);
             incognito.idle = idle;
-            incognito.warned = false;
         }
     }
 
