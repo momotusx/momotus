@@ -64,6 +64,9 @@ const SEP: char = '\u{1f}';
 
 /// The owner profile: every device starts with it, it can never be gone.
 pub const OWNER: &str = "default";
+/// The Incognito profile's id (plans/batch-10-incognito.md 2.3): never a
+/// created id (32 hex digits), never synced, never listed.
+pub const INCOGNITO: &str = "incognito";
 /// The owner's name until someone renames it (the apps call it the main profile).
 pub const OWNER_NAME: &str = "Main";
 
@@ -978,6 +981,11 @@ fn apply_one(c: &Connection, r: &SyncRecord) -> Result<usize, ApplyError> {
     // dropped (every key starts with its profile).
     let profile = r.key.split(SEP).next().unwrap_or_default();
     if r.coll != coll::PROFILE_GONE && gone(c, profile)? {
+        return Ok(0);
+    }
+    // Incognito never syncs: a record naming it was forged, in any
+    // collection (plans/batch-10-incognito.md 2.7).
+    if profile == INCOGNITO {
         return Ok(0);
     }
     Ok(match r.coll {

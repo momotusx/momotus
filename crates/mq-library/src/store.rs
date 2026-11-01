@@ -35,6 +35,11 @@ pub enum LibraryError {
     /// A new allow past the cap, on this device (plans/m11-kids.md 3.4).
     #[error("the kids list is full")]
     ListFull,
+    /// A write to an Incognito scope's library after its end
+    /// (plans/batch-10-incognito.md 2.3): refused, so nothing lands in the
+    /// unlinked file.
+    #[error("the library is closed")]
+    Closed,
 }
 
 impl From<rusqlite::Error> for LibraryError {
@@ -178,6 +183,8 @@ pub struct Library {
     /// A removal's log could not be emptied (a reader was in the middle of
     /// a read); the next read or write tries again.
     scrub_pending: AtomicBool,
+    /// Set when an Incognito scope ends: every later write is refused.
+    closed: AtomicBool,
 }
 
 impl Library {
@@ -229,11 +236,30 @@ impl Library {
             removals: AtomicU64::new(0),
             removing: AtomicBool::new(false),
             scrub_pending: AtomicBool::new(false),
+            closed: AtomicBool::new(false),
         };
         // Rows a migration dropped, or a removal whose scrub a crash cut
         // short, leave the files now.
         library.checkpoint();
         Ok(library)
+    }
+
+    /// An Incognito scope's library (plans/batch-10-incognito.md 2.6, wall
+    /// 2): every insert into the sync outbox is dropped, so nothing written
+    /// here is ever queued for the relay. A TEMP trigger lives on this
+    /// connection only and never reaches the file.
+    pub fn drop_outbox(&self) -> Result<(), LibraryError> {
+        let conn = self.writer.lock().unwrap_or_else(|p| p.into_inner());
+        conn.execute_batch(
+            "CREATE TEMP TRIGGER no_sync BEFORE INSERT ON sync_outbox
+             BEGIN SELECT RAISE(IGNORE); END",
+        )?;
+        Ok(())
+    }
+
+    /// Refuses every later write (an Incognito scope that ended).
+    pub fn close(&self) {
+        self.closed.store(true, Ordering::SeqCst);
     }
 
     /// Receives the set of tables touched by each committed write transaction.
@@ -320,6 +346,9 @@ impl Library {
         &self,
         f: impl FnOnce(&Connection) -> rusqlite::Result<T>,
     ) -> Result<T, LibraryError> {
+        if self.closed.load(Ordering::SeqCst) {
+            return Err(LibraryError::Closed);
+        }
         let out = {
             let mut conn = self.writer.lock().unwrap_or_else(|p| p.into_inner());
             let committed = commit(&mut conn, f);
