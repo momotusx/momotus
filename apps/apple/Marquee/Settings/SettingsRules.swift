@@ -66,12 +66,14 @@ enum SettingsSection: String, CaseIterable, Identifiable {
     }
 
     /// This device holds the trailer previews switch; tvOS has none, so it has no such section (as Android TV).
-    /// Downloads shows where the device downloads (plans/offline-downloads.md 3.7), never on TV.
-    static func shown(tv: Bool, downloads: Bool) -> [SettingsSection] {
+    /// Downloads shows where the device downloads (plans/offline-downloads.md 3.7), never on TV. Incognito has
+    /// nothing of the profiles, the account or Downloads' settings (plans/batch-10-incognito.md 6).
+    static func shown(tv: Bool, downloads: Bool, incognito: Bool = false) -> [SettingsSection] {
         allCases.filter { s in
             switch s {
+            case .profiles, .account: !incognito
             case .device: !tv
-            case .downloads: downloads && !tv
+            case .downloads: downloads && !tv && !incognito
             default: true
             }
         }

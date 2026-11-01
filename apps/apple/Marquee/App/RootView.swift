@@ -54,8 +54,12 @@ struct RootView: View {
 
     var body: some View {
         Group {
-            if profiles.open && debrid.ready {
-                MainShell(core: core).id(profiles.epoch)
+            if profiles.open && debrid.ready && profiles.intro {
+                IncognitoIntro()
+            } else if profiles.open && debrid.ready {
+                // Built again on a switch, and when Incognito starts or ends: its screens read it once.
+                MainShell(core: core).id("\(profiles.epoch)/\(profiles.incognito)")
+                    .overlay(alignment: .bottom) { notices }
             } else if core.failure != nil {
                 // The core stopped: only its message and the way back show, in the overlay.
                 Theme.Palette.bg.ignoresSafeArea()
@@ -84,6 +88,10 @@ struct RootView: View {
         // The profiles view, again after a core restart.
         .task(id: profiles.view.taskId) { profiles.view.start() }
         .onAppear(perform: Launch.firstFrame)
+        #if os(macOS)
+        // Closing the main window ends Incognito (5.3); the app itself may stay for downloads.
+        .onDisappear { profiles.leaveOnClose() }
+        #endif
         #if os(iOS)
         .environment(floating)
         // A profile switch or a lock closes the floating window with the screens.
@@ -94,6 +102,23 @@ struct RootView: View {
                 CoreStopped(message: failure, reopen: core.restart)
             }
         }
+    }
+
+    /// Over the profile's screens, at the foot above the bar: the ended line over a single profile's Home (5.4), and
+    /// the Mac's one-minute warning (2.7).
+    private var notices: some View {
+        VStack(spacing: Theme.Space.s) {
+            if profiles.snapshot?.incognitoEnded == true {
+                IncognitoEndedNotice(ok: profiles.ackEnded)
+            }
+            #if os(macOS)
+            if profiles.endsSoon {
+                IncognitoEndsSoon(stay: profiles.stay)
+            }
+            #endif
+        }
+        .padding(.horizontal, metrics.gutter)
+        .padding(.bottom, 96)
     }
 
     private var metrics: Metrics {
@@ -173,6 +198,8 @@ struct MainShell: View {
             .environment(\.linkRequests, links)
             .environment(immersion)
             .environment(searchInput)
+            // Incognito's typing teaches the keyboard nothing (plans/batch-10-incognito.md 5.5).
+            .autocorrectionDisabled(profiles.incognito)
             // Typing shows Search's first page, as Cmd-F does.
             .onChange(of: searchInput.text) { _, text in
                 if SearchRules.bringsSearch(text: text, onSearch: tab == .search, titleOver: !(titlePaths[.search] ?? []).isEmpty) {
@@ -224,6 +251,8 @@ struct MainShell: View {
         #if os(iOS)
         places
         .modifier(offline)
+        // The app switcher shows nothing of an Incognito session (5.5).
+        .modifier(IncognitoCovering(on: profiles.incognito, playerOnScreen: immersion.active || floating.shown != nil))
         // The bar's inset below does not reach scroll views inside the tabs'
         // navigation stacks (a page's end stayed under the bar): every page,
         // pushed or not, keeps the bar's height free at its end.
@@ -619,6 +648,7 @@ private struct TabBar: View {
     let pin: (ProfileInfo) -> Void
     let bottomInset: CGFloat
     @Environment(\.dynamicTypeSize) private var type
+    @Environment(ProfileSession.self) private var profiles
     @State private var width = CGFloat.infinity
 
     var body: some View {
@@ -685,7 +715,7 @@ private struct TabBar: View {
             VStack(spacing: 1) {
                 BarAvatar(profile: me, size: 26, lit: on)
                 if !iconsOnly {
-                    Text("Profile")
+                    Text(Incognito.tabWord(me))
                         .textFont(11, weight: .semibold, relativeTo: .caption2)
                         .lineLimit(1)
                         .minimumScaleFactor(0.8)
@@ -701,7 +731,7 @@ private struct TabBar: View {
         }
         // On the menu's own button, as the places carry them on theirs.
         .accessibilityAddTraits(on ? .isSelected : [])
-        .accessibilityShowsLargeContentViewer { Text("Profile") }
+        .accessibilityShowsLargeContentViewer { Text(Incognito.tabWord(profiles.snapshot?.current)) }
     }
 }
 #endif

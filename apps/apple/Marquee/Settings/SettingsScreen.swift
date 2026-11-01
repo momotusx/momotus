@@ -67,7 +67,9 @@ struct SettingsScreen: View {
     }
 
     private var sizes: SettingsRules.Sizes { tvForm ? .tv : metrics.wide ? .wide : .phone }
-    private var sections: [SettingsSection] { SettingsSection.shown(tv: tvForm, downloads: downloadsShown) }
+    private var sections: [SettingsSection] { SettingsSection.shown(tv: tvForm, downloads: downloadsShown, incognito: incognito) }
+    /// Incognito: its header with Leave, and only what its own copy may change (plans/batch-10-incognito.md 6).
+    private var incognito: Bool { profiles.snapshot?.incognito == true }
     /// Settings' Downloads (plans/offline-downloads.md 3.7): iOS and macOS, never a kids profile.
     private var downloadsShown: Bool {
         #if os(tvOS)
@@ -215,7 +217,9 @@ struct SettingsScreen: View {
                 VStack(alignment: .leading, spacing: tvForm ? 28 : 18) {
                     if let me {
                         profileBlock(me)
-                        if SettingsRules.canEdit(kids: kids) {
+                        if incognito {
+                            leaveButton.padding(.leading, sizes.avatar + (tvForm ? 40 : 28))
+                        } else if SettingsRules.canEdit(kids: kids) {
                             HStack(spacing: tvForm ? 20 : 12) { editButtons(me) }
                                 .padding(.leading, sizes.avatar + (tvForm ? 40 : 28))
                         }
@@ -236,7 +240,7 @@ struct SettingsScreen: View {
                     .foregroundStyle(.white)
                     .accessibilityAddTraits(.isHeader)
                     .padding(.leading, 4)
-                if let me { profileCard(me) }
+                if let me { if incognito { incognitoCard(me) } else { profileCard(me) } }
             }
             .padding(.horizontal, 16)
             .padding(.bottom, sizes.foot)
@@ -244,15 +248,55 @@ struct SettingsScreen: View {
         }
     }
 
+    /// Leave Incognito: off TV the header's one button, on TV the secondary beside the block (5.2).
+    private var leaveButton: some View {
+        Button { profiles.leaveIncognito() } label: { Label(Incognito.leave, glyph: "log-out", size: tvForm ? 26 : 16) }
+            .buttonStyle(PillButtonStyle())
+    }
+
+    /// The phone's header in Incognito: the mark, its name and line, and Leave its one button.
+    private func incognitoCard(_ me: ProfileInfo) -> some View {
+        let shape = RoundedRectangle(cornerRadius: 26, style: .continuous)
+        return VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 14) {
+                ProfileAvatar(me.avatar, name: me.name, size: 56)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(me.name)
+                        .textFont(19, weight: .semibold, relativeTo: .headline)
+                        .foregroundStyle(Theme.Palette.text)
+                        .accessibilityAddTraits(.isHeader)
+                    Text(Incognito.keptNothing)
+                        .textFont(13, relativeTo: .footnote)
+                        .foregroundStyle(Theme.Palette.dim)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            leaveButton
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(shape.fill(Color(red: 44 / 255, green: 44 / 255, blue: 46 / 255).opacity(0.82)))
+        .background(.ultraThinMaterial, in: shape)
+    }
+
     /// TV and wide: the avatar, the name (the page's second heading) and its line; the whole block opens the picker.
     private func profileBlock(_ me: ProfileInfo) -> some View {
-        NavigationLink {
-            ProfilePicker(mode: .push, core: core)
-        } label: {
-            ProfileBlock(me: me, many: (profiles.snapshot?.profiles.count ?? 1) > 1, sizes: sizes)
+        let block = ProfileBlock(me: me, line: incognito ? Incognito.keptNothing : SettingsRules.profileLine(many: (profiles.snapshot?.profiles.count ?? 1) > 1), sizes: sizes)
+        // Off TV, Incognito's block is words only: Leave is the header's one button.
+        return Group {
+            if incognito && !tvForm {
+                block
+            } else {
+                NavigationLink {
+                    ProfilePicker(mode: .push, core: core)
+                } label: {
+                    block
+                }
+                .buttonStyle(ProfileBlockStyle())
+                .focused($focus, equals: .profile)
+            }
         }
-        .buttonStyle(ProfileBlockStyle())
-        .focused($focus, equals: .profile)
     }
 
     @ViewBuilder private func editButtons(_ me: ProfileInfo) -> some View {
@@ -352,7 +396,7 @@ struct SettingsScreen: View {
             if let failure = prefs.failure ?? addons.failure {
                 StateLine(symbol: "triangle-alert", text: failure, action: ("Try again", { prefs.retry(); addons.retry() }))
             }
-            if only == nil, !metrics.wide, let me, SettingsRules.canEdit(kids: kids) {
+            if only == nil, !metrics.wide, !incognito, let me, SettingsRules.canEdit(kids: kids) {
                 section(.profiles) {
                     SettingsGroup(sizes: sizes) {
                         row(.profiles, tone: .blue, glyph: "user-pen", title: "Edit profile", detail: "Name, picture and PIN.") { EditProfile(profileId: me.id) }
@@ -363,23 +407,25 @@ struct SettingsScreen: View {
                 }
             }
             section(.sources) {
-                SettingsGroup(sizes: sizes) {
-                    row(.sources, tone: .green, glyph: "sparkles", title: DefaultsRules.title, detail: DefaultsRules.settingsDetail) {
-                        RecommendedAddonsPage(core: core, scope: .all)
+                if incognito { incognitoSources } else {
+                    SettingsGroup(sizes: sizes) {
+                        row(.sources, tone: .green, glyph: "sparkles", title: DefaultsRules.title, detail: DefaultsRules.settingsDetail) {
+                            RecommendedAddonsPage(core: core, scope: .all)
+                        }
+                        row(nil, tone: .teal, glyph: "package-search", title: FindAddonsWords.title, detail: FindAddonsWords.lede) { FindAddonsScreen(core: core) }
+                        row(nil, tone: .mint, glyph: "puzzle", title: "Addons", detail: addons.snapshot?.summary ?? "Loading") { AddonsScreen(addons: addons) }
+                        if let plugins, plugins.available {
+                            row(nil, tone: .teal, glyph: "power", title: PluginWords.title, detail: PluginWords.summary(plugins.repos)) { PluginsScreen(core: core) }
+                        }
+                        row(nil, tone: .sky, glyph: "key-round", title: "Debrid services",
+                            detail: debrid.inUse ?? "Real-Debrid, TorBox, AllDebrid or Premiumize, for fast direct links.") { DebridScreen(core: core) }
+                        // An account, as Debrid is (the web's order).
+                        row(nil, tone: .blue, glyph: "radio", title: TraktWords.title, detail: TraktRules.rowLine(trakt.status, clock: TraktClock.time)) { TraktScreen() }
+                        row(nil, tone: .sea, glyph: "download", title: "Import from Stremio",
+                            detail: "Addons, library and progress, with a code. No password typed here.") { ImportScreen(core: core) }
+                        row(nil, tone: .grey, glyph: "wrench", title: "Setup check",
+                            detail: "Network, display, catalogs, sources and subtitles at a glance.") { OnboardingScreen(core: core, start: .check) }
                     }
-                    row(nil, tone: .teal, glyph: "package-search", title: FindAddonsWords.title, detail: FindAddonsWords.lede) { FindAddonsScreen(core: core) }
-                    row(nil, tone: .mint, glyph: "puzzle", title: "Addons", detail: addons.snapshot?.summary ?? "Loading") { AddonsScreen(addons: addons) }
-                    if let plugins, plugins.available {
-                        row(nil, tone: .teal, glyph: "power", title: PluginWords.title, detail: PluginWords.summary(plugins.repos)) { PluginsScreen(core: core) }
-                    }
-                    row(nil, tone: .sky, glyph: "key-round", title: "Debrid services",
-                        detail: debrid.inUse ?? "Real-Debrid, TorBox, AllDebrid or Premiumize, for fast direct links.") { DebridScreen(core: core) }
-                    // An account, as Debrid is (the web's order).
-                    row(nil, tone: .blue, glyph: "radio", title: TraktWords.title, detail: TraktRules.rowLine(trakt.status, clock: TraktClock.time)) { TraktScreen() }
-                    row(nil, tone: .sea, glyph: "download", title: "Import from Stremio",
-                        detail: "Addons, library and progress, with a code. No password typed here.") { ImportScreen(core: core) }
-                    row(nil, tone: .grey, glyph: "wrench", title: "Setup check",
-                        detail: "Network, display, catalogs, sources and subtitles at a glance.") { OnboardingScreen(core: core, start: .check) }
                 }
             }
             section(.account) {
@@ -443,6 +489,21 @@ struct SettingsScreen: View {
             }
             #endif
             section(.about) { panel { about } }
+        }
+    }
+
+    /// Incognito's sources: its own copy of the addons and plugins; the device's debrid account is used, never changed.
+    private var incognitoSources: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            SettingsGroup(sizes: sizes) {
+                row(.sources, tone: .mint, glyph: "puzzle", title: "Addons", detail: addons.snapshot?.summary ?? "Loading") { AddonsScreen(addons: addons) }
+                if let plugins, plugins.available {
+                    row(nil, tone: .teal, glyph: "power", title: PluginWords.title, detail: PluginWords.summary(plugins.repos)) { PluginsScreen(core: core) }
+                }
+            }
+            if !(debrid.view.snapshot?.accounts.isEmpty ?? true) {
+                Text(Incognito.debrid).modifier(Note())
+            }
         }
     }
 
@@ -619,8 +680,12 @@ struct SettingsScreen: View {
     #if !os(tvOS)
     /// This device's own switch, never synced, as the web and Android have it (review r1, W4).
     private var trailerPreviews: some View {
-        ChipRow(label: "Trailer previews", chips: [Chip(id: true, title: "On"), Chip(id: false, title: "Off")],
-                isSelected: { $0 == previewsOn }) { previewsOn = $0 }
+        VStack(alignment: .leading, spacing: 8) {
+            ChipRow(label: "Trailer previews", chips: [Chip(id: true, title: "On"), Chip(id: false, title: "Off")],
+                    isSelected: { $0 == previewsOn }) { previewsOn = $0 }
+            // The switch keeps its value; it applies again after Leave (5.5).
+            if incognito { Text(Incognito.trailersOff).modifier(Note()) }
+        }
     }
     #endif
 
@@ -664,7 +729,7 @@ struct SettingsRow: View {
 /// white and rises.
 private struct ProfileBlock: View {
     let me: ProfileInfo
-    let many: Bool
+    let line: String
     let sizes: SettingsRules.Sizes
     @Environment(\.settingsLit) private var lit
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -683,7 +748,7 @@ private struct ProfileBlock: View {
                     .foregroundStyle(.white)
                     .lineLimit(2)
                     .accessibilityAddTraits(.isHeader)
-                Text(SettingsRules.profileLine(many: many))
+                Text(line)
                     .textFont(sizes.line, weight: .medium, relativeTo: .body)
                     .foregroundStyle(Theme.Palette.muted)
             }

@@ -8,6 +8,8 @@ struct MarqueeApp: App {
     #if os(macOS)
     /// Quit while downloads run asks first.
     @NSApplicationDelegateAdaptor(MacAppDelegate.self) private var macDelegate
+    /// Incognito's idle and wake, for the core's clock.
+    @State private var incognitoIdle: IncognitoIdle
     #endif
     @State private var core: CoreClient
     @State private var profiles: ProfileSession
@@ -47,6 +49,10 @@ struct MarqueeApp: App {
         _trakt = State(initialValue: trakt)
         let profiles = ProfileSession(core: core, sync: sync, trakt: trakt)
         _profiles = State(initialValue: profiles)
+        #if os(macOS)
+        _incognitoIdle = State(initialValue: IncognitoIdle(
+            running: { profiles.incognito }, warned: { profiles.endsSoon }, stay: profiles.stay, send: { core.lifecycle($0) }))
+        #endif
         let debrid = DebridSession(core: core)
         _debrid = State(initialValue: debrid)
         _wipe = State(initialValue: AccountWipe(

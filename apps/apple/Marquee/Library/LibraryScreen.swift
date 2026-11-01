@@ -126,7 +126,8 @@ private struct EmptyLibrary: View {
             Text("Your library is empty")
                 .display(Theme.type.title2)
                 .foregroundStyle(Theme.Palette.text)
-            Text("Add titles with Add to Library on a title page, or import your Stremio library from Settings.")
+            // Incognito's Library is its own, and goes with it (plans/batch-10-incognito.md 6).
+            Text(Incognito.on ? Incognito.libraryEmpty : "Add titles with Add to Library on a title page, or import your Stremio library from Settings.")
                 .textFont(Theme.type.body)
                 .foregroundStyle(Theme.Palette.muted)
                 .multilineTextAlignment(.center)

@@ -68,10 +68,13 @@ struct DownloadControlButton: View {
     var choose: (() -> Void)?
     /// What the control is for, where the row's name is not beside it for VoiceOver (the Downloads rows).
     var name: String?
+    /// Said in the menu before anything is downloaded (Incognito: the file stays, and every profile sees it); a
+    /// control with a note always opens its menu, so the note is read before a tap starts a download.
+    var note: String?
     @Environment(\.metrics) private var metrics
 
     var body: some View {
-        if entries.isEmpty {
+        if entries.isEmpty && note == nil {
             Button(action: start) { label }
                 .modifier(Chrome(look: look))
                 .contextMenu {
@@ -83,6 +86,7 @@ struct DownloadControlButton: View {
                 }
         } else {
             Menu {
+                if let note { Section { Text(note) } }
                 if let detail = control.detail {
                     Section(detail) { items }
                 } else {
@@ -99,6 +103,8 @@ struct DownloadControlButton: View {
     }
 
     @ViewBuilder private var items: some View {
+        // A note's menu offers the tap's own download first.
+        if entries.isEmpty { Button(control.label, glyph: "arrow-down-to-line", action: start) }
         ForEach(entries) { entry in
             if let run = entry.run {
                 if let glyph = entry.glyph { Button(entry.label, glyph: glyph, action: run) } else { Button(entry.label, action: run) }

@@ -531,7 +531,8 @@ struct TitleScreen: View {
 
     /// The Mac's action row: the primary, Trailer, the Library and Watched capsule, Versions.
     private func wideActions(_ details: TitleDetails) -> some View {
-        let trailer: (() -> Void)? = details.trailers.isEmpty || offline ? nil : { openTrailer(details) }
+        let shown = Incognito.trailerShown(hasTrailers: !details.trailers.isEmpty, offline: offline, incognito: Incognito.on)
+        let trailer: (() -> Void)? = shown ? { openTrailer(details) } : nil
         let sound: (() -> Void)? = headerSoundShown ? { toggleHeaderSound() } : nil
         return WideActions(
             trailer: trailer,
@@ -581,7 +582,7 @@ struct TitleScreen: View {
                     .buttonStyle(PillButtonStyle())
                     .disabled(PlayBlock.inert(failure: versions?.failure, versions: versions?.snapshot))
             }
-            if !offline, !details.trailers.isEmpty {
+            if Incognito.trailerShown(hasTrailers: !details.trailers.isEmpty, offline: offline, incognito: Incognito.on) {
                 Button { openTrailer(details) } label: { Label("Trailer", glyph: "film") }
                     .buttonStyle(PillButtonStyle())
             }
@@ -651,14 +652,16 @@ struct TitleScreen: View {
                 DownloadControlButton(
                     control: DownloadCopy.seriesControl(header?.seriesDownload), look: .pill,
                     entries: seriesEntries(details, keeper: keeper),
-                    start: { if let season { keeper.add(kind: details.kind, itemId: details.id, scope: "season", season: season) } })
+                    start: { if let season { keeper.add(kind: details.kind, itemId: details.id, scope: "season", season: season) } },
+                    note: Incognito.on ? Incognito.downloadNote : nil)
             } else {
                 let badge = header?.download
                 DownloadControlButton(
                     control: DownloadCopy.control(badge), look: .pill,
                     entries: badge.map { videoEntries($0, keeper: keeper, play: { play(fromStart: false) }, choose: { chooseDownload(videoId: details.id) }) } ?? [],
                     start: { keeper.add(kind: details.kind, itemId: details.id, scope: "video", videoId: details.id) },
-                    choose: { chooseDownload(videoId: details.id) })
+                    choose: { chooseDownload(videoId: details.id) },
+                    note: Incognito.on ? Incognito.downloadNote : nil)
             }
         } else if keeper != nil, kids, series ? (header?.seriesDownload?.downloaded ?? 0) > 0 : header?.download?.state == .done {
             DownloadedBadge()

@@ -59,25 +59,30 @@ struct ProfilePicker: View {
         if mode == .gate, let target = profiles.switching, profiles.switchProblem == nil {
             VStack(spacing: Theme.Space.s) {
                 ProgressView().controlSize(.large).tint(Theme.Palette.text)
-                Text("Opening \(snapshot.profiles.first { $0.id == target }?.name ?? "the profile")")
+                Text(target == Incognito.id ? Incognito.opening : "Opening \(snapshot.profiles.first { $0.id == target }?.name ?? "the profile")")
                     .textFont(Theme.type.headline, weight: .semibold, relativeTo: .headline)
                     .foregroundStyle(Theme.Palette.text)
             }
             .padding(.top, Theme.Space.xl)
-        } else if let target = keypadTarget(snapshot) {
+        } else if case let (target, incognito)? = keypadTarget(snapshot) {
+            // Incognito asks another profile's PIN (the owner's, or the host's own): the keypad says which and why.
+            let keyed = incognito ? Incognito.id : target.id
             PinKeypad(
-                title: "Enter the PIN for \(target.name)",
-                initial: failedSwitch(for: target),
+                title: incognito ? Incognito.pinTitle(target.name) : "Enter the PIN for \(target.name)",
+                initial: failedSwitch(for: keyed),
                 // Opened by the bar's menu: Cancel goes back where the menu was, not to the tiles.
-                cancelTitle: mode == .push && target.id == pinFor?.id ? "Cancel" : "Choose another profile",
-                note: ownerNote(target, snapshot),
-                reset: resetAction(target, snapshot),
-                submit: { pin in await enter(target, pin: pin, snapshot: snapshot) },
-                cancel: { leaveKeypad(target) })
-            .id(target.id)
+                cancelTitle: mode == .push && keyed == pinFor?.id ? "Cancel" : "Choose another profile",
+                note: incognito ? (Incognito.kidsReason(snapshot) ? Incognito.kidsReason : nil) : ownerNote(target, snapshot),
+                reset: incognito ? nil : resetAction(target, snapshot),
+                submit: { pin in
+                    incognito ? await enterIncognito(pin: pin) : await enter(target, pin: pin, snapshot: snapshot)
+                },
+                cancel: { leaveKeypad(keyed) })
+            .id(keyed)
         } else {
             header(snapshot)
-            if let said = said ?? switchWords {
+            // The ended line takes the chooser's polite status until the next profile op clears it (5.4).
+            if let said = said ?? switchWords ?? (snapshot.incognitoEnded == true ? Incognito.ended : nil) {
                 Text(said)
                     .textFont(Theme.type.body, weight: .semibold)
                     .foregroundStyle(Theme.Palette.text)
@@ -97,7 +102,7 @@ struct ProfilePicker: View {
                 .display(metrics.wide ? 44 : Theme.type.title1 + 4)
                 .foregroundStyle(Theme.Palette.text)
                 .accessibilityAddTraits(.isHeader)
-            if snapshot.locked {
+            if ProfileRules.lockLine(snapshot) {
                 Text("This profile is locked. Choose a profile, then enter its PIN.")
                     .textFont(Theme.type.body)
                     .foregroundStyle(Theme.Palette.muted)
@@ -116,7 +121,8 @@ struct ProfilePicker: View {
 
     private func tiles(_ snapshot: ProfilesSnapshot) -> some View {
         let addable = canManage(snapshot) && snapshot.profiles.count < snapshot.max
-        let count = snapshot.profiles.count + (addable ? 1 : 0)
+        let incognito = Incognito.offered(snapshot)
+        let count = snapshot.profiles.count + (incognito ? 1 : 0) + (addable ? 1 : 0)
         let columns = Array(repeating: GridItem(.fixed(tile + 24), spacing: Theme.Space.m), count: metrics.wide ? min(max(count, 1), 6) : 2)
         return LazyVGrid(columns: columns, spacing: Theme.Space.m) {
             ForEach(snapshot.profiles) { profile in
@@ -139,6 +145,22 @@ struct ProfilePicker: View {
                 .disabled(profile.syncing)
                 .focused($focused, equals: profile.id)
                 .accessibilityLabel(ProfileRules.spoken(profile, active: snapshot.active))
+            }
+            // Incognito, quiet, after the profiles and before Add profile, drawn like it (5.1).
+            if incognito {
+                Button { pickIncognito(snapshot) } label: {
+                    VStack(spacing: 10) {
+                        Circle()
+                            .fill(Theme.Palette.raised)
+                            .overlay(Glyph("hat-glasses", size: tile * 0.4))
+                            .frame(width: tile, height: tile)
+                        Text(Incognito.name).textFont(Theme.type.headline, weight: .semibold, relativeTo: .headline)
+                    }
+                    .foregroundStyle(Theme.Palette.text)
+                }
+                .buttonStyle(TileButtonStyle())
+                .focused($focused, equals: Incognito.id)
+                .accessibilityLabel(snapshot.incognito ? "\(Incognito.name), current profile" : Incognito.name)
             }
             if addable {
                 Button { showAdd = true } label: {
@@ -165,15 +187,21 @@ struct ProfilePicker: View {
         mode == .push && !snapshot.locked && snapshot.current?.isOwner == true
     }
 
-    /// The keypad's profile: the one chosen, or a switch that failed for a PIN.
-    private func keypadTarget(_ snapshot: ProfilesSnapshot) -> ProfileInfo? {
-        if let keypad { return snapshot.profiles.first { $0.id == keypad.id } }
+    /// The keypad's profile: the one chosen, or a switch that failed for a PIN; `incognito` when it opens Incognito
+    /// with that profile's PIN.
+    private func keypadTarget(_ snapshot: ProfilesSnapshot) -> (ProfileInfo, incognito: Bool)? {
+        let incognitoPin = Incognito.pinProfile(snapshot).map { ($0, incognito: true) }
+        if let keypad {
+            if keypad.id == Incognito.id { return incognitoPin }
+            return snapshot.profiles.first { $0.id == keypad.id }.map { ($0, incognito: false) }
+        }
         guard mode == .gate, let target = profiles.switching, profiles.switchProblem != nil else { return nil }
-        return snapshot.profiles.first { $0.id == target && $0.hasPin }
+        if target == Incognito.id { return incognitoPin }
+        return snapshot.profiles.first { $0.id == target && $0.hasPin }.map { ($0, incognito: false) }
     }
 
-    private func failedSwitch(for target: ProfileInfo) -> KeypadResult? {
-        guard mode == .gate, profiles.switching == target.id, let problem = profiles.switchProblem else { return nil }
+    private func failedSwitch(for target: String) -> KeypadResult? {
+        guard mode == .gate, profiles.switching == target, let problem = profiles.switchProblem else { return nil }
         return .of(problem)
     }
 
@@ -203,6 +231,24 @@ struct ProfilePicker: View {
         }
     }
 
+    /// The Incognito tile: it does what a profile's tile does (`Incognito.choice`); from a tile, Leave comes back here.
+    private func pickIncognito(_ snapshot: ProfilesSnapshot) {
+        said = nil
+        switch Incognito.choice(snapshot) {
+        case .close:
+            if mode == .push { dismiss() }
+        case .pin: keypad = Incognito.profile
+        default: Task { await profiles.enterIncognito(pin: nil, fromChooser: true) }
+        }
+    }
+
+    private func enterIncognito(pin: String) async -> KeypadResult {
+        // The menu's keypad says false; a failed entry asked again keeps what it said.
+        let fromChooser = keypad == nil ? profiles.incognitoFromChooser : pinFor?.id != Incognito.id
+        if await profiles.enterIncognito(pin: pin, fromChooser: fromChooser) { return .ok }
+        return profiles.switchProblem.map { .of($0) } ?? .problem(Incognito.couldNotOpen)
+    }
+
     private func enter(_ target: ProfileInfo, pin: String, snapshot: ProfilesSnapshot) async -> KeypadResult {
         if target.id == snapshot.active && snapshot.locked {
             do {
@@ -216,13 +262,13 @@ struct ProfilePicker: View {
         return profiles.switchProblem.map { .of($0) } ?? .problem("The switch did not finish.")
     }
 
-    private func leaveKeypad(_ target: ProfileInfo) {
+    private func leaveKeypad(_ target: String) {
         // Opened by the bar's menu on this keypad: Cancel leaves the picker, back where the menu was.
-        if mode == .push, target.id == pinFor?.id { return dismiss() }
+        if mode == .push, target == pinFor?.id { return dismiss() }
         keypad = nil
         // A switch that failed is given up: the current profile opens again.
         if mode == .gate, profiles.switching != nil { profiles.cancelSwitch() }
-        focused = target.id
+        focused = target
     }
 
     private func ownerNote(_ target: ProfileInfo, _ snapshot: ProfilesSnapshot) -> String? {
@@ -293,19 +339,32 @@ struct ProfileMenu<Face: View>: View {
                     ForEach(snapshot.profiles) { profile in
                         Button(title(profile, snapshot)) { choose(profile, snapshot) }
                     }
+                    if Incognito.offered(snapshot) {
+                        Button(snapshot.incognito ? "\(Incognito.name), current" : Incognito.name) { chooseIncognito(snapshot) }
+                    }
+                    if snapshot.incognito { Button(Incognito.leave) { profiles.leaveIncognito() } }
                     Button("Settings", action: onSettings)
                 }
             #else
             Menu {
                 // An inline picker: the system draws the current profile's check and says it is selected.
                 Picker("Profiles", selection: Binding { snapshot.active } set: { id in
+                    if id == Incognito.id { return chooseIncognito(snapshot) }
                     if let profile = snapshot.profiles.first(where: { $0.id == id }) { choose(profile, snapshot) }
                 }) {
                     ForEach(snapshot.profiles) { profile in
                         row(profile, snapshot).tag(profile.id).disabled(profile.syncing)
                     }
+                    // The same rows in both states (5.1): Incognito after the profiles, checked while it runs.
+                    if Incognito.offered(snapshot) {
+                        Label(Incognito.name, image: "hat-glasses").tag(Incognito.id)
+                    }
                 }
                 .pickerStyle(.inline)
+                // Directly under the checked row; focus starts on the current row, never here.
+                if snapshot.incognito {
+                    Button(Incognito.leave, glyph: "log-out") { profiles.leaveIncognito() }
+                }
                 Divider()
                 Button("Settings", glyph: "settings", action: onSettings)
             } label: {
@@ -338,6 +397,15 @@ struct ProfileMenu<Face: View>: View {
         .accessibilityLabel(ProfileRules.spoken(profile, active: snapshot.active))
     }
     #endif
+
+    /// The Incognito row: as its tile does, but Leave goes back to this profile (`fromChooser` false).
+    private func chooseIncognito(_ snapshot: ProfilesSnapshot) {
+        switch Incognito.choice(snapshot) {
+        case .none, .close: break
+        case .pin: onPin(Incognito.profile)
+        case .switchTo: Task { await profiles.enterIncognito(pin: nil, fromChooser: false) }
+        }
+    }
 
     private func choose(_ profile: ProfileInfo, _ snapshot: ProfilesSnapshot) {
         switch ProfileRules.choice(profile, in: snapshot) {

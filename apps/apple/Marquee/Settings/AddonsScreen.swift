@@ -34,6 +34,10 @@ struct AddonsScreen: View {
                     : "Addons bring catalogs, details, streams and subtitles. Order matters: earlier addons answer first.")
                     .textFont(Theme.type.body)
                     .foregroundStyle(Theme.Palette.muted)
+                // Incognito works on its own copy of the addons (plans/batch-10-incognito.md 3).
+                if Incognito.on {
+                    StateLine(symbol: "hat-glasses", text: Incognito.addonsNote)
+                }
                 InstallField(core: addons.core, focusRequest: focusLink ? 1 : 0)
                 FindAddonsLink(core: addons.core)
                 if let failure = addons.failure {

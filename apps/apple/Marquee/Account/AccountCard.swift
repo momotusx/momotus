@@ -22,6 +22,8 @@ struct AccountCard: View {
     private var members: [MemberInfo] { sync.devices?.members ?? [] }
 
     private var card: AccountRules.HomeCard? {
+        // Incognito reaches no account page: the core refuses every account op there.
+        if profiles.snapshot?.incognito == true { return nil }
         let shown = (sync.lastReport?.announcements ?? []).filter { AccountRules.shows($0, kids: kids) }
         return AccountRules.homeCard(
             deletion: sync.joined ? sync.lastReport?.deletion : nil,

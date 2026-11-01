@@ -27,6 +27,16 @@ final class ProfileSession {
     /// A profile removed on another device, and how many times one was: the
     /// picker closes its keypad and says so.
     private(set) var gone: (id: String, count: Int)?
+    /// Incognito runs (plans/batch-10-incognito.md): from the snapshot, and from the moment its entry answered.
+    private(set) var incognito = false {
+        didSet { Incognito.set(incognito) }
+    }
+    /// Incognito was just entered: its intro shows over the app until Continue (5.1).
+    private(set) var intro = false
+    /// The core warned that Incognito ends in a minute without use (the Mac's notice, 2.7).
+    private(set) var endsSoon = false
+    /// The last Incognito entry came from a chooser tile (Leave goes back there), not the bar's menu.
+    private(set) var incognitoFromChooser = true
 
     @ObservationIgnored private let core: CoreClient
     @ObservationIgnored private let sync: SyncModel
@@ -54,6 +64,7 @@ final class ProfileSession {
         view = LiveRecord("profiles", core: core)
         view.onSnapshot = { [weak self] snapshot in self?.saw(snapshot) }
         core.onProfileGone = { [weak self] id in self?.removed(id) }
+        core.onIncognito = { [weak self] event in self?.heard(event) }
         view.start()
         // A profiles view that failed to open (at launch or after a restart)
         // is opened again every 2 seconds; the root says so meanwhile.
@@ -80,6 +91,11 @@ final class ProfileSession {
 
     private func saw(_ snapshot: ProfilesSnapshot) {
         seen = core.generation
+        incognito = snapshot.incognito
+        if !snapshot.incognito {
+            intro = false
+            endsSoon = false
+        }
         // A lock starts the profile on Home again, as a switch does.
         if snapshot.locked { resumeOnboarding = false }
         guard !decided else { return }
@@ -98,6 +114,12 @@ final class ProfileSession {
             resumeOnboarding = true
             epoch += 1
         }
+    }
+
+    /// `{"incognito": "endsSoon"}` shows the Mac's warning; `ended` needs nothing here: the snapshot that follows
+    /// locks the session, so the chooser shows with the ended line at once.
+    private func heard(_ event: String) {
+        endsSoon = event == "endsSoon" && incognito
     }
 
     /// The root: the profile's screens appeared, or left.
@@ -136,25 +158,90 @@ final class ProfileSession {
     /// shut with `switchProblem` for the picker; `cancelSwitch` goes back.
     @discardableResult
     func switchTo(_ id: String, pin: String?) async -> Bool {
+        var fields: [String: any Sendable] = ["profile": id]
+        if let pin { fields["pin"] = pin }
+        return await change(id, op: "switchProfile", fields)
+    }
+
+    /// Enters Incognito from the session's profile (plans/batch-10-incognito.md 2.7) as a switch does; `fromChooser`
+    /// sends Leave back to the chooser. Its intro shows once it opens.
+    @discardableResult
+    func enterIncognito(pin: String?, fromChooser: Bool) async -> Bool {
+        var fields: [String: any Sendable] = ["profile": Incognito.id, "fromChooser": fromChooser]
+        incognitoFromChooser = fromChooser
+        if let pin { fields["pin"] = pin }
+        return await change(Incognito.id, op: "switchProfile", fields) {
+            self.incognito = true
+            self.intro = true
+        }
+    }
+
+    /// Leaves Incognito for where it was entered, never with a PIN (5.3): the gate shuts as for a switch, so its
+    /// screens close first.
+    func leaveIncognito() {
+        guard let host = snapshot?.incognitoHost else { return }
+        Task {
+            await change(host, op: "leaveIncognito", [:]) { self.incognito = false }
+        }
+    }
+
+    /// The intro's Continue.
+    func continueIntro() {
+        intro = false
+    }
+
+    /// The person is here: the warning goes, and the core hears `active` (the notice's button, or any input).
+    func stay() {
+        endsSoon = false
+        core.lifecycle("active")
+    }
+
+    /// The person read the ended notice over Home (5.4).
+    func ackEnded() {
+        Task { try? await core.perform("ackIncognitoEnded") }
+    }
+
+    /// The Mac's window closed: Incognito ends as closing the app ends it (5.3). No screen is left to reset, so the
+    /// gate does not shut for it; views still closing are waited for.
+    func leaveOnClose() {
+        guard incognito else { return }
+        intro = false
+        Task {
+            for attempt in 1...10 {
+                do {
+                    try await core.perform("leaveIncognito")
+                    return
+                } catch let error as CoreError where error.code == "viewsOpen" && attempt < 10 {
+                    try? await Task.sleep(for: .milliseconds(100))
+                } catch {
+                    coreLog.error("leave on close: \((error as? CoreError)?.code ?? "error", privacy: .public)")
+                    return
+                }
+            }
+        }
+    }
+
+    /// A switch or a Leave: the gate shuts for `target` (the profile it opens), then `op` runs once the views closed;
+    /// `done` runs on its success, before the gate opens.
+    @discardableResult
+    private func change(_ target: String, op: String, _ fields: [String: any Sendable], done: (@MainActor () -> Void)? = nil) async -> Bool {
         guard !inFlight else { return false }
         // Out from now until the last answer: a second ask, or Cancel, waits.
         inFlight = true
         if switching == nil { chosenBefore = chosen }
         resumeOnboarding = false
-        switching = id
+        switching = target
         switchProblem = nil
         epoch += 1
         // Device-level views a profile does not own still count as open.
         sync.endPairing()
         trakt?.end()
         // The session's own task: the caller's view leaves with the gate.
-        let work = Task { await runSwitch(id, pin: pin) }
+        let work = Task { await runSwitch(op, fields, done: done) }
         return await work.value
     }
 
-    private func runSwitch(_ id: String, pin: String?) async -> Bool {
-        var fields: [String: any Sendable] = ["profile": id]
-        if let pin { fields["pin"] = pin }
+    private func runSwitch(_ op: String, _ fields: [String: any Sendable], done: (@MainActor () -> Void)?) async -> Bool {
         defer { inFlight = false }
         // The old profile's screens have left (the root acknowledges it), so
         // their views are closed or closing before the core is asked.
@@ -169,7 +256,8 @@ final class ProfileSession {
         }
         for attempt in 1...10 {
             do {
-                try await core.perform("switchProfile", fields)
+                try await core.perform(op, fields)
+                done?()
                 // A Find addons card's state belongs to the profile that pressed it.
                 InstallCards.shared.forgetAll()
                 chosen = true
