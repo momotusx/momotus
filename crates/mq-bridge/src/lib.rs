@@ -731,13 +731,239 @@ impl Request {
             | Request::SetDebridKey { .. }
             | Request::DisconnectDebrid { .. }
             | Request::Ping { .. }
-            // The ended notice shows over the chooser too.
+            // The ended notice shows over the chooser too, and a Leave
+            // pressed as the away end locked the session answers it.
             | Request::AckIncognitoEnded { .. }
+            | Request::LeaveIncognito { .. }
             // The platform's say on downloads is the device's.
             | Request::DownloadsAllowed { .. }
             | Request::Lifecycle { .. } => true,
             _ => false,
         }
+    }
+}
+
+impl Request {
+    /// What a session in Incognito answers (plans/batch-10-incognito.md
+    /// 2.7, wall 3); everything else is `incognito`. No wildcard: a new op
+    /// does not compile until it is classified.
+    fn allowed_in_incognito(&self) -> bool {
+        match self {
+            Request::Subscribe { view, .. } => matches!(
+                view.as_str(),
+                "profiles"
+                    | "home"
+                    | "title"
+                    | "versions"
+                    | "discover"
+                    | "genres"
+                    | "calendar"
+                    | "library"
+                    | "search"
+                    | "playback"
+                    | "settings"
+                    | "addons"
+                    | "addonCatalog"
+                    | "downloads"
+                    | "debrid"
+            ),
+            Request::Unsubscribe { .. }
+            | Request::Command { .. }
+            | Request::PreviewAddon { .. }
+            | Request::InstallAddon { .. }
+            | Request::InstallListed { .. }
+            | Request::RemoveAddon { .. }
+            | Request::MoveAddon { .. }
+            | Request::SetAddonEnabled { .. }
+            | Request::SetPrefs { .. }
+            | Request::HomeCatalogs { .. }
+            | Request::SetHomeRow { .. }
+            | Request::MoveHomeRow { .. }
+            | Request::RemoveFromContinue { .. }
+            | Request::StreamConditions { .. }
+            | Request::ResetSpeed { .. }
+            | Request::ForgetLearned { .. }
+            | Request::UndoLearned { .. }
+            | Request::Languages { .. }
+            | Request::LanguagePicker { .. }
+            | Request::Plugins { .. }
+            | Request::PluginDirectory { .. }
+            | Request::PreviewPluginRepo { .. }
+            | Request::AddPluginRepo { .. }
+            | Request::RemovePluginRepo { .. }
+            | Request::SetPluginRepoEnabled { .. }
+            | Request::SetPluginEnabled { .. }
+            | Request::DownloadAdd { .. }
+            | Request::DownloadPause { .. }
+            | Request::DownloadResume { .. }
+            | Request::DownloadRemove { .. }
+            | Request::DownloadRetry { .. }
+            | Request::DownloadsAllowed { .. }
+            | Request::SwitchProfile { .. }
+            | Request::LeaveIncognito { .. }
+            | Request::AckIncognitoEnded { .. }
+            | Request::LockSession { .. }
+            | Request::SyncNow { .. }
+            | Request::Ping { .. }
+            | Request::Lifecycle { .. }
+            | Request::SetDebridKeys { .. }
+            | Request::RestoreDebrid { .. }
+            | Request::AckDebrid { .. } => true,
+            Request::DefaultAddons { .. }
+            | Request::FirstRunStill { .. }
+            | Request::InstallDefaults { .. }
+            | Request::SetDebridKey { .. }
+            | Request::DisconnectDebrid { .. }
+            | Request::CreateSyncAccount { .. }
+            | Request::RelayInfo { .. }
+            | Request::NativeSignInStart { .. }
+            | Request::NativeSignIn { .. }
+            | Request::EmailSignInStart { .. }
+            | Request::EmailSignIn { .. }
+            | Request::Identities { .. }
+            | Request::LinkIdentity { .. }
+            | Request::UnlinkIdentity { .. }
+            | Request::CancelDeletion { .. }
+            | Request::AckAnnouncements { .. }
+            | Request::ApprovePairing { .. }
+            | Request::ReadPairingCode { .. }
+            | Request::CreateRecoveryKit { .. }
+            | Request::SavePasskey { .. }
+            | Request::Recover { .. }
+            | Request::SyncDevices { .. }
+            | Request::LostPreview { .. }
+            | Request::RemoveDevice { .. }
+            | Request::ReportLost { .. }
+            | Request::SignOut { .. }
+            | Request::DeleteAccount { .. }
+            | Request::CancelPairing { .. }
+            | Request::ForkPreview { .. }
+            | Request::UseServerRoster { .. }
+            | Request::SetDownloadSettings { .. }
+            | Request::SetTrakt { .. }
+            | Request::TraktSync { .. }
+            | Request::TraktSignOut { .. }
+            | Request::CreateProfile { .. }
+            | Request::AllowTitle { .. }
+            | Request::UpdateProfile { .. }
+            | Request::DeleteProfile { .. }
+            | Request::SetPin { .. }
+            | Request::UnlockProfile { .. }
+            | Request::ResetOwnerPin { .. } => false,
+        }
+    }
+
+    /// Whether a person caused this request (plans/batch-10-incognito.md
+    /// 2.7): only these keep Incognito's 60-minute bound from running out.
+    /// What the apps send on their own never counts: the web's `syncNow`
+    /// every minute, `ping`, every `lifecycle` event, the debrid
+    /// handshakes, Calendar's `setToday`, a `duration` or a paused report.
+    /// No wildcard.
+    fn person_driven(&self) -> bool {
+        match self {
+            Request::Command { command, .. } => match command.get("type").and_then(Value::as_str) {
+                Some("setToday" | "duration") => false,
+                Some("progress") => command.get("paused").and_then(Value::as_bool) != Some(true),
+                _ => true,
+            },
+            Request::Unsubscribe { .. }
+            | Request::SetDebridKeys { .. }
+            | Request::RestoreDebrid { .. }
+            | Request::AckDebrid { .. }
+            | Request::SyncNow { .. }
+            | Request::Ping { .. }
+            | Request::DownloadsAllowed { .. }
+            | Request::Lifecycle { .. } => false,
+            Request::Subscribe { .. }
+            | Request::PreviewAddon { .. }
+            | Request::InstallAddon { .. }
+            | Request::DefaultAddons { .. }
+            | Request::FirstRunStill { .. }
+            | Request::InstallDefaults { .. }
+            | Request::InstallListed { .. }
+            | Request::RemoveAddon { .. }
+            | Request::Plugins { .. }
+            | Request::PluginDirectory { .. }
+            | Request::PreviewPluginRepo { .. }
+            | Request::AddPluginRepo { .. }
+            | Request::RemovePluginRepo { .. }
+            | Request::SetPluginRepoEnabled { .. }
+            | Request::SetPluginEnabled { .. }
+            | Request::MoveAddon { .. }
+            | Request::SetAddonEnabled { .. }
+            | Request::SetDebridKey { .. }
+            | Request::DisconnectDebrid { .. }
+            | Request::CreateSyncAccount { .. }
+            | Request::RelayInfo { .. }
+            | Request::NativeSignInStart { .. }
+            | Request::NativeSignIn { .. }
+            | Request::EmailSignInStart { .. }
+            | Request::EmailSignIn { .. }
+            | Request::Identities { .. }
+            | Request::LinkIdentity { .. }
+            | Request::UnlinkIdentity { .. }
+            | Request::CancelDeletion { .. }
+            | Request::AckAnnouncements { .. }
+            | Request::ApprovePairing { .. }
+            | Request::ReadPairingCode { .. }
+            | Request::CreateRecoveryKit { .. }
+            | Request::SavePasskey { .. }
+            | Request::Recover { .. }
+            | Request::SyncDevices { .. }
+            | Request::LostPreview { .. }
+            | Request::RemoveDevice { .. }
+            | Request::ReportLost { .. }
+            | Request::SignOut { .. }
+            | Request::DeleteAccount { .. }
+            | Request::CancelPairing { .. }
+            | Request::ForkPreview { .. }
+            | Request::UseServerRoster { .. }
+            | Request::SetPrefs { .. }
+            | Request::StreamConditions { .. }
+            | Request::ResetSpeed { .. }
+            | Request::ForgetLearned { .. }
+            | Request::UndoLearned { .. }
+            | Request::RemoveFromContinue { .. }
+            | Request::Languages { .. }
+            | Request::LanguagePicker { .. }
+            | Request::HomeCatalogs { .. }
+            | Request::SetHomeRow { .. }
+            | Request::MoveHomeRow { .. }
+            | Request::DownloadAdd { .. }
+            | Request::DownloadPause { .. }
+            | Request::DownloadResume { .. }
+            | Request::DownloadRemove { .. }
+            | Request::DownloadRetry { .. }
+            | Request::SetDownloadSettings { .. }
+            | Request::SetTrakt { .. }
+            | Request::TraktSync { .. }
+            | Request::TraktSignOut { .. }
+            | Request::CreateProfile { .. }
+            | Request::AllowTitle { .. }
+            | Request::UpdateProfile { .. }
+            | Request::DeleteProfile { .. }
+            | Request::SetPin { .. }
+            | Request::SwitchProfile { .. }
+            | Request::LeaveIncognito { .. }
+            | Request::AckIncognitoEnded { .. }
+            | Request::UnlockProfile { .. }
+            | Request::LockSession { .. }
+            | Request::ResetOwnerPin { .. } => true,
+        }
+    }
+
+    /// The ops that show a person read an Incognito ended notice: at the
+    /// chooser one of them is the only way on (plans/batch-10-incognito.md
+    /// 2.7).
+    fn reads_the_ended_notice(&self) -> bool {
+        matches!(
+            self,
+            Request::SwitchProfile { .. }
+                | Request::UnlockProfile { .. }
+                | Request::LeaveIncognito { .. }
+                | Request::CreateProfile { .. }
+                | Request::AckIncognitoEnded { .. }
+        )
     }
 }
 
@@ -858,6 +1084,61 @@ struct Shared {
     /// opened again under the lock with a fence of their own.
     out: Output,
     me: Weak<Mutex<Shared>>,
+    /// The session's Incognito while it runs (plans/batch-10-incognito.md
+    /// 2.7); `core` is then its scope's.
+    incognito: Option<Incognito>,
+    /// An Incognito end this session has not shown yet: the snapshot's
+    /// `incognitoEnded`, until a profile op or `ackIncognitoEnded`.
+    ended: bool,
+    /// Started while a scope lived: that scope's end is this session's too.
+    behind: bool,
+    /// Tests: added to the wall clock the Incognito clock reads.
+    #[cfg(test)]
+    skew_ms: u64,
+}
+
+/// The Incognito clock (plans/batch-10-incognito.md 2.7), apart from the
+/// PIN lock's `background_ms`. Times are the wall clock in ms: a monotonic
+/// clock stops while a Mac or a phone sleeps.
+struct Incognito {
+    /// Where Leave goes: the profile it copied, and whether it was entered
+    /// from the chooser (then Leave locks, so the chooser shows).
+    host: String,
+    to_chooser: bool,
+    /// Since `idle` or `background`, until `active`, `foreground` or a
+    /// playing report.
+    away_since_ms: Option<u64>,
+    /// The absence is `idle` (the window is in view, unused): only then the
+    /// one-minute warning goes out, once.
+    idle: bool,
+    warned: bool,
+    /// The last request a person caused (`person_driven`).
+    last_request_ms: u64,
+    timer: JoinHandle<()>,
+}
+
+impl Drop for Incognito {
+    fn drop(&mut self) {
+        self.timer.abort();
+    }
+}
+
+/// Incognito ends after this long away or without use, as `AWAY_LOCK`.
+const INCOGNITO_AWAY: u64 = 30 * 60_000;
+/// The desktop's warning goes out this long into an idle absence.
+const INCOGNITO_WARN: u64 = 29 * 60_000;
+/// With no request a person caused for this long, Incognito ends: a client
+/// that never sends `idle` is still bounded.
+const INCOGNITO_BOUND: u64 = 60 * 60_000;
+/// How often the Incognito clock looks while the process runs.
+const INCOGNITO_TICK: std::time::Duration = std::time::Duration::from_secs(15);
+
+/// Why the Incognito clock ends a scope now, if it does.
+fn clock_ran_out(incognito: &Incognito, now: u64) -> bool {
+    let away = incognito
+        .away_since_ms
+        .is_some_and(|at| now.saturating_sub(at) > INCOGNITO_AWAY);
+    away || now.saturating_sub(incognito.last_request_ms) > INCOGNITO_BOUND
 }
 
 /// A native flow lives this long at the relay; then the core drops it too.
@@ -872,6 +1153,9 @@ impl Shared {
     #[must_use = "drop the closed views after releasing the session lock"]
     fn transition(&mut self, core: Core, locked: bool) -> Vec<Subscription> {
         self.generation += 1;
+        if !core.incognito() {
+            self.incognito = None;
+        }
         self.core = core;
         let (kept, closed) = std::mem::take(&mut self.subs)
             .into_iter()
@@ -883,8 +1167,7 @@ impl Shared {
             });
         self.subs = kept;
         self.locked = locked;
-        self.state
-            .send_replace((self.core.profile().to_owned(), locked, None));
+        self.publish();
         self.repoint_downloads();
         closed.into_values().collect()
     }
@@ -893,10 +1176,76 @@ impl Shared {
     fn set_locked(&mut self, locked: bool) {
         let changed = self.locked != locked;
         self.locked = locked;
-        self.state
-            .send_replace((self.core.profile().to_owned(), locked, None));
+        self.publish();
         if changed {
             self.repoint_downloads();
+        }
+    }
+
+    /// The picker's state as it is now.
+    fn publish(&self) {
+        let host = self.incognito.as_ref().map(|i| i.host.clone());
+        let state = (
+            self.core.profile().to_owned(),
+            self.locked,
+            host,
+            self.ended,
+        );
+        self.state.send_replace(state);
+    }
+
+    /// The picker's snapshot for this session now.
+    fn snapshot(&self) -> Value {
+        json!(self.core.profiles_snapshot_for(&self.state.borrow()))
+    }
+
+    /// The wall clock the Incognito clock reads.
+    fn wall_ms(&self) -> u64 {
+        #[cfg(test)]
+        return mq_library::hlc::now_ms() + self.skew_ms;
+        #[cfg(not(test))]
+        mq_library::hlc::now_ms()
+    }
+
+    /// Ends the session's Incognito (plans/batch-10-incognito.md 2.3) and
+    /// moves to `to`: the scope's end, then the switch. `loud` for an end
+    /// the person did not ask for (a lock, the clock, the host removed):
+    /// the session is told with `{"incognito": "ended"}` and its snapshots
+    /// carry `incognitoEnded` until it is read. A Leave or a switch says
+    /// nothing.
+    #[must_use = "drop the closed views after releasing the session lock"]
+    fn end_incognito(&mut self, loud: bool, to: Core, locked: bool) -> Vec<Subscription> {
+        if self.core.end_incognito() && loud {
+            self.ended = true;
+            self.core.incognito_ended_unseen().send_replace(true);
+            let _ = self.out.send(&json!({ "incognito": "ended" }));
+        }
+        self.transition(to, locked)
+    }
+
+    /// Where an end the person did not ask for goes: the chooser over the
+    /// host, or over the owner when the host is gone.
+    fn chooser_after(&self) -> Option<Core> {
+        let host = &self.incognito.as_ref()?.host;
+        let device = self.core.device();
+        Some(if usable(&device, host) {
+            device.for_profile(host)
+        } else {
+            device.for_profile(mq_library::OWNER)
+        })
+    }
+
+    /// The Incognito clock ran out (`clock_ran_out`): the scope ends, and
+    /// the chooser shows with the ended line.
+    #[must_use = "drop the closed views after releasing the session lock"]
+    fn end_when_out_of_time(&mut self) -> Vec<Subscription> {
+        let now = self.wall_ms();
+        match &self.incognito {
+            Some(incognito) if clock_ran_out(incognito, now) => {
+                let to = self.chooser_after().expect("in Incognito");
+                self.end_incognito(true, to, true)
+            }
+            _ => Vec::new(),
         }
     }
 
@@ -939,6 +1288,45 @@ fn lock(shared: &Mutex<Shared>) -> MutexGuard<'_, Shared> {
     shared.lock().unwrap_or_else(|p| p.into_inner())
 }
 
+/// A device profile a session can run as now: there, not gone, synced.
+fn usable(device: &Core, profile: &str) -> bool {
+    matches!(device.library().profile(profile), Ok(Some(p)) if p.ready())
+}
+
+/// The Incognito clock's timer (plans/batch-10-incognito.md 2.7): while the
+/// process runs and the machine is awake it ends a scope whose time ran out
+/// and sends the one-minute warning. A sleeping device stops it; the wall
+/// clock checks at the next request cover that.
+async fn incognito_clock(shared: Weak<Mutex<Shared>>, generation: u64) {
+    loop {
+        tokio::time::sleep(INCOGNITO_TICK).await;
+        let Some(shared) = shared.upgrade() else {
+            return;
+        };
+        let mut shared = lock(&shared);
+        if shared.generation != generation || shared.incognito.is_none() {
+            return;
+        }
+        let closed = shared.end_when_out_of_time();
+        if !closed.is_empty() || shared.incognito.is_none() {
+            drop(shared);
+            drop(closed);
+            return;
+        }
+        let now = shared.wall_ms();
+        let incognito = shared.incognito.as_mut().expect("in Incognito");
+        let warn = incognito.idle
+            && !incognito.warned
+            && incognito
+                .away_since_ms
+                .is_some_and(|at| now.saturating_sub(at) >= INCOGNITO_WARN);
+        if warn {
+            incognito.warned = true;
+            let _ = shared.out.send(&json!({ "incognito": "endsSoon" }));
+        }
+    }
+}
+
 /// Fetches installed manifests again in the background, at most once a day
 /// (`Core::refresh_addons`): when a session starts and when the app comes to
 /// the foreground. Views see a changed manifest through the addon list.
@@ -975,8 +1363,14 @@ pub struct Session {
 }
 
 impl Drop for Session {
+    /// A closed app, window or tab ends its Incognito, with or without an
+    /// async runtime; the next session shows the ended line.
     fn drop(&mut self) {
         self.watcher.abort();
+        let mut shared = lock(&self.shared);
+        if shared.incognito.take().is_some() && shared.core.end_incognito() {
+            shared.core.incognito_ended_unseen().send_replace(true);
+        }
     }
 }
 
@@ -1002,14 +1396,19 @@ impl Session {
 
     fn start(core: Core, changes: broadcast::Receiver<Vec<Table>>, out: Output) -> Self {
         let gone = core.library().gone_profiles().unwrap_or_default();
+        // Behind a live Incognito scope (a new tab or window) the chooser
+        // shows, and that scope's end is this session's too.
+        let behind = core.live_scope_count() > 0;
+        // An end no session has shown yet shows here.
+        let ended = *core.incognito_ended_unseen().borrow();
         // A profile removed after it was chosen starts locked.
-        let locked = gone.iter().any(|id| id == core.profile()) || core.has_pin();
+        let locked = gone.iter().any(|id| id == core.profile()) || core.has_pin() || behind;
         // Removals made while the app was closed: it may still hold their
         // keystore entries.
         for id in &gone {
             let _ = out.send(&json!({ "profile": "gone", "id": id }));
         }
-        let (state, _) = watch::channel((core.profile().to_owned(), locked, None));
+        let (state, _) = watch::channel((core.profile().to_owned(), locked, None, ended));
         let shared = Arc::new_cyclic(|me| {
             Mutex::new(Shared {
                 core: core.clone(),
@@ -1021,15 +1420,21 @@ impl Session {
                 email: HashMap::new(),
                 out: out.clone(),
                 me: me.clone(),
+                incognito: None,
+                ended,
+                behind,
+                #[cfg(test)]
+                skew_ms: 0,
             })
         });
         refresh_addons(&core);
         // A launch resumes the downloads a kill or a reboot left.
         let _ = core.downloads();
+        let ends = core.incognito_ended_unseen().subscribe();
         let watcher = tokio::spawn(watch_gone(
             Arc::downgrade(&shared),
             core,
-            changes,
+            (changes, ends),
             gone.into_iter().collect(),
             out.clone(),
         ));
@@ -1082,10 +1487,35 @@ impl Session {
                 return;
             }
         };
+        // The Incognito clock first: a scope whose time ran out (the wall
+        // clock, a sleeping Mac included) ends before anything is handled.
+        let closed = lock(&self.shared).end_when_out_of_time();
+        drop(closed);
         if lock(&self.shared).locked && !request.allowed_while_locked() {
             let refused = Failure::coded("locked", "the profile is locked: unlock it first");
             send_answer(&self.out, id, Err(refused));
             return;
+        }
+        {
+            let mut shared = lock(&self.shared);
+            if shared.incognito.is_some() && !request.allowed_in_incognito() {
+                drop(shared);
+                let refused = Failure::coded("incognito", "not available in Incognito");
+                send_answer(&self.out, id, Err(refused));
+                return;
+            }
+            let now = shared.wall_ms();
+            if let Some(incognito) = shared.incognito.as_mut()
+                && request.person_driven()
+            {
+                incognito.last_request_ms = now;
+            }
+            // Read: the ended notice goes, here and for the next session.
+            if shared.ended && request.reads_the_ended_notice() {
+                shared.ended = false;
+                shared.core.incognito_ended_unseen().send_replace(false);
+                shared.publish();
+            }
         }
         let core = self.core();
         match request {
@@ -1687,7 +2117,8 @@ impl Session {
                 });
             }
             Request::Ping { id } => {
-                self.reply(json!(id), Ok::<_, Failure>(json!({ "liveScopes": 0 })))
+                let live = core.live_scope_count();
+                self.reply(json!(id), Ok::<_, Failure>(json!({ "liveScopes": live })))
             }
             Request::RemoveFromContinue { id, item_id } => {
                 let result = core.remove_from_continue(&item_id);
@@ -1830,6 +2261,7 @@ impl Session {
             // Replies once running scrobbles are paused, or after 4 s.
             Request::Lifecycle { id, event, .. } if event == "background" => {
                 self.background_ms = Some(mq_library::hlc::now_ms());
+                self.incognito_away(false);
                 self.spawn(id, async move {
                     let _ = tokio::time::timeout(TRAKT_FLUSH, core.trakt_background()).await;
                     Ok::<_, Failure>(json!({}))
@@ -1838,6 +2270,7 @@ impl Session {
             // Locks a PIN profile that was away too long, then checks the
             // stream server (it can take a second) and replies `{serverMoved}`.
             Request::Lifecycle { id, event, .. } if event == "foreground" => {
+                self.incognito_back();
                 refresh_addons(&core);
                 core.trakt_foreground();
                 let away = self
@@ -1870,8 +2303,16 @@ impl Session {
                         Ok(json!({}))
                     }
                     // The Incognito clock's input only; outside Incognito
-                    // they do nothing.
-                    "idle" | "active" => Ok(json!({})),
+                    // they do nothing, and never act as `background` or
+                    // `foreground`.
+                    "idle" => {
+                        self.incognito_away(true);
+                        Ok(json!({}))
+                    }
+                    "active" => {
+                        self.incognito_back();
+                        Ok(json!({}))
+                    }
                     "networkChanged" => {
                         let known = match network {
                             Some(NetworkWord::Known(n)) => Some(n),
@@ -2076,7 +2517,7 @@ impl Session {
                 pin,
                 from_chooser,
             } => {
-                let result = if profile == "incognito" {
+                let result = if profile == mq_runtime::incognito::INCOGNITO {
                     self.enter_incognito(from_chooser, pin.as_deref()).await
                 } else {
                     self.switch(&profile, pin.as_deref()).await
@@ -2084,11 +2525,8 @@ impl Session {
                 send_answer(&self.out, json!(id), result);
             }
             Request::LeaveIncognito { id } => {
-                let result = Err(Failure::coded(
-                    "notIncognito",
-                    "the session is not in Incognito",
-                ));
-                send_answer(&self.out, json!(id), result);
+                let result = self.leave_incognito();
+                send_answer(&self.out, json!(id), Ok(result));
             }
             Request::AckIncognitoEnded { id } => self.reply_profiles(id, Ok(())),
             Request::UnlockProfile { id, pin } => {
@@ -2096,7 +2534,13 @@ impl Session {
                 self.reply_profiles(id, result);
             }
             Request::LockSession { id } => {
-                let closed = lock(&self.shared).transition(core, true);
+                let mut shared = lock(&self.shared);
+                // In Incognito: its end, and the chooser over the host.
+                let closed = match shared.chooser_after() {
+                    Some(host) => shared.end_incognito(true, host, true),
+                    None => shared.transition(core, true),
+                };
+                drop(shared);
                 drop(closed);
                 self.reply_profiles(id, Ok(()));
             }
@@ -2113,10 +2557,9 @@ impl Session {
 
     /// The picker's snapshot after a profile op, or the op's error.
     fn reply_profiles(&self, id: u64, result: Result<(), ProfileError>) {
-        let result = result.map_err(Failure::from).map(|()| {
-            let shared = lock(&self.shared);
-            json!(shared.core.profiles_snapshot(shared.locked))
-        });
+        let result = result
+            .map_err(Failure::from)
+            .map(|()| lock(&self.shared).snapshot());
         send_answer(&self.out, json!(id), result);
     }
 
@@ -2124,6 +2567,15 @@ impl Session {
     /// while any view but the picker is open: the app closes them first, so
     /// playback has saved its position.
     async fn switch(&mut self, profile: &str, pin: Option<&str>) -> Result<Value, Failure> {
+        self.only_the_picker_open()?;
+        let target = self.core().for_profile(profile);
+        target.check_pin(profile, pin).await?;
+        self.commit_switch(target)
+    }
+
+    /// A switch or an entry is refused while any view but the picker, the
+    /// debrid accounts and the downloads keeper's view is open.
+    fn only_the_picker_open(&self) -> Result<(), Failure> {
         let open: Vec<&str> = lock(&self.shared)
             .subs
             .values()
@@ -2137,23 +2589,106 @@ impl Session {
             return Err(Failure::coded("viewsOpen", "close the open views first")
                 .with(json!({ "views": open })));
         }
-        let target = self.core().for_profile(profile);
-        target.check_pin(profile, pin).await?;
-        self.commit_switch(target)
+        Ok(())
     }
 
-    /// Enters Incognito (plans/batch-10-incognito.md 2.7). Answers
-    /// `incognitoFailed` until the scope is built; the entry also answers
-    /// `kids`, `noSpace`, `viewsOpen` and the PIN codes.
+    /// Enters Incognito (plans/batch-10-incognito.md 2.7): a new scope
+    /// copied from the host, the session's profile when it is unlocked, the
+    /// owner otherwise, with the owner's PIN when `incognito_pin` asks for
+    /// it. The device's active profile stays. Answers `kids`, `noSpace`,
+    /// `incognitoFailed`, `viewsOpen` and the PIN codes; in Incognito
+    /// already, the snapshot.
     async fn enter_incognito(
         &mut self,
-        _from_chooser: bool,
-        _pin: Option<&str>,
+        from_chooser: bool,
+        pin: Option<&str>,
     ) -> Result<Value, Failure> {
-        Err(Failure::coded(
-            "incognitoFailed",
-            "Incognito could not start",
-        ))
+        self.only_the_picker_open()?;
+        let (core, locked) = {
+            let shared = lock(&self.shared);
+            if shared.incognito.is_some() {
+                return Ok(shared.snapshot());
+            }
+            (shared.core.clone(), shared.locked)
+        };
+        if !locked && core.policy().kids() {
+            return Err(Failure::coded(
+                "kids",
+                "a kids profile cannot open Incognito",
+            ));
+        }
+        if let Some(asked) = core.incognito_pin(locked) {
+            core.for_profile(&asked).check_pin(&asked, pin).await?;
+        }
+        let host = if locked {
+            core.for_profile(mq_library::OWNER)
+        } else {
+            core
+        };
+        let scope = host
+            .open_incognito()
+            .map_err(|e| Failure::coded(e.code(), &e.to_string()))?;
+        let mut shared = lock(&self.shared);
+        let generation = shared.generation + 1;
+        let timer = tokio::spawn(incognito_clock(shared.me.clone(), generation));
+        let now = shared.wall_ms();
+        shared.incognito = Some(Incognito {
+            host: host.profile().to_owned(),
+            to_chooser: from_chooser,
+            away_since_ms: None,
+            idle: false,
+            warned: false,
+            last_request_ms: now,
+            timer,
+        });
+        let closed = shared.transition(scope, false);
+        let snapshot = shared.snapshot();
+        drop(shared);
+        drop(closed);
+        Ok(snapshot)
+    }
+
+    /// Leaves Incognito without a PIN (plans/batch-10-incognito.md 2.7): to
+    /// the host, unlocked, or locked when it was entered from the chooser;
+    /// the owner, locked, when the host is gone. Outside Incognito (the
+    /// clock may end it just before Leave is pressed) the snapshot.
+    fn leave_incognito(&mut self) -> Value {
+        let mut shared = lock(&self.shared);
+        let Some(incognito) = &shared.incognito else {
+            return shared.snapshot();
+        };
+        let device = shared.core.device();
+        let (to, locked) = if usable(&device, &incognito.host) {
+            (device.for_profile(&incognito.host), incognito.to_chooser)
+        } else {
+            (device.for_profile(mq_library::OWNER), true)
+        };
+        let closed = shared.end_incognito(false, to, locked);
+        let snapshot = shared.snapshot();
+        drop(shared);
+        drop(closed);
+        snapshot
+    }
+
+    /// The Incognito clock: the app is away from now on (`idle` with its
+    /// window in view, `background` without).
+    fn incognito_away(&mut self, idle: bool) {
+        let mut shared = lock(&self.shared);
+        let now = shared.wall_ms();
+        if let Some(incognito) = shared.incognito.as_mut() {
+            incognito.away_since_ms = Some(now);
+            incognito.idle = idle;
+            incognito.warned = false;
+        }
+    }
+
+    /// The Incognito clock: the app is back (`active`, `foreground`, a
+    /// Mac's wake). An absence too long already ended the scope.
+    fn incognito_back(&mut self) {
+        if let Some(incognito) = lock(&self.shared).incognito.as_mut() {
+            incognito.away_since_ms = None;
+            incognito.warned = false;
+        }
     }
 
     /// The switch, once its PIN passed. The target is checked again under
@@ -2169,8 +2704,9 @@ impl Session {
             return Err(ProfileError::Unknown.into());
         }
         target.make_active()?;
-        let closed = shared.transition(target, false);
-        let snapshot = json!(shared.core.profiles_snapshot(false));
+        // From Incognito: its end, with nothing to tell.
+        let closed = shared.end_incognito(false, target, false);
+        let snapshot = shared.snapshot();
         drop(shared);
         drop(closed);
         Ok(snapshot)
@@ -2469,7 +3005,7 @@ impl Session {
     }
 
     fn command(&mut self, sub: u64, command: &Value) -> Result<Value, String> {
-        let shared = lock(&self.shared);
+        let mut shared = lock(&self.shared);
         let subscription = shared
             .subs
             .get(&sub)
@@ -2598,6 +3134,9 @@ impl Session {
                 // P2-A): each report while it plays restarts the away clock.
                 if !paused && self.background_ms.is_some() {
                     self.background_ms = Some(mq_library::hlc::now_ms());
+                }
+                if !paused && let Some(incognito) = shared.incognito.as_mut() {
+                    incognito.away_since_ms = None;
                 }
             }
             (View::Playback(playback), "duration") => {
@@ -2979,19 +3518,40 @@ where
 
 /// Profiles removed while the session runs, here or by sync: the app is
 /// told with `{"profile": "gone", "id"}` (to drop that profile's keystore
-/// entries), and a session running as one is locked, its views closed.
+/// entries), and a session running as one is locked, its views closed; in
+/// Incognito, a removed host ends it at the owner's chooser. A session
+/// started behind a live Incognito scope hears that scope's end.
 async fn watch_gone(
     shared: Weak<Mutex<Shared>>,
     core: Core,
-    mut changes: broadcast::Receiver<Vec<Table>>,
+    (mut changes, mut ends): (broadcast::Receiver<Vec<Table>>, watch::Receiver<bool>),
     mut known: HashSet<String>,
     out: Output,
 ) {
     loop {
-        match changes.recv().await {
-            Ok(tables) if !tables.contains(&Table::Profiles) => continue,
-            Ok(_) | Err(RecvError::Lagged(_)) => {}
-            Err(RecvError::Closed) => return,
+        tokio::select! {
+            change = changes.recv() => match change {
+                Ok(tables) if !tables.contains(&Table::Profiles) => continue,
+                Ok(_) | Err(RecvError::Lagged(_)) => {}
+                Err(RecvError::Closed) => return,
+            },
+            changed = ends.changed() => {
+                if changed.is_err() {
+                    return;
+                }
+                let ended = *ends.borrow_and_update();
+                let Some(shared) = shared.upgrade() else {
+                    return;
+                };
+                let mut shared = lock(&shared);
+                if ended && shared.behind && shared.incognito.is_none() {
+                    shared.behind = false;
+                    shared.ended = true;
+                    shared.publish();
+                    let _ = out.send(&json!({ "incognito": "ended" }));
+                }
+                continue;
+            }
         }
         let Ok(gone) = core.library().gone_profiles() else {
             continue;
@@ -3003,7 +3563,11 @@ async fn watch_gone(
         // Checked against every tombstone on each pass, not only new ones,
         // so a session that reached a removed profile still locks.
         let mut closed = Vec::new();
-        if !shared.locked && gone.iter().any(|id| id == shared.core.profile()) {
+        let host = shared.incognito.as_ref().map(|i| i.host.clone());
+        if host.is_some_and(|host| gone.contains(&host)) {
+            let owner = shared.core.device().for_profile(mq_library::OWNER);
+            closed = shared.end_incognito(true, owner, true);
+        } else if !shared.locked && gone.iter().any(|id| id == shared.core.profile()) {
             let core = shared.core.clone();
             closed = shared.transition(core, true);
         }
@@ -3746,5 +4310,381 @@ mod catalog {
             (&sent["kind"], &sent["error"]),
             (&json!("said"), &json!("Trakt did not answer"))
         );
+    }
+}
+
+/// The Incognito clock (plans/batch-10-incognito.md 2.7 and 7.1): the
+/// wall clock is read through `skew_ms`, the timer runs under paused tokio
+/// time.
+#[cfg(test)]
+mod incognito_clock {
+    use super::*;
+    use tokio::sync::mpsc::UnboundedReceiver;
+
+    const MIN: u64 = 60_000;
+
+    /// A device whose owner has an addon list (empty, so no fetch), with
+    /// `pin` as the owner's PIN when given.
+    async fn device(pin: Option<&str>) -> Core {
+        let core = Core::temporary(mq_library::OWNER).unwrap();
+        let row = mq_library::AddonRow {
+            transport_url: "http://127.0.0.1:9/manifest.json".into(),
+            manifest_json: r#"{"id":"x","version":"1.0.0","name":"X","resources":[],"types":[]}"#
+                .into(),
+            position: 0,
+            enabled: true,
+            allow_private: true,
+        };
+        core.library()
+            .set_addons(mq_library::OWNER, &[row], core.clock())
+            .unwrap();
+        core.remove_addon("http://127.0.0.1:9/manifest.json")
+            .unwrap();
+        if pin.is_some() {
+            core.set_pin(mq_library::OWNER, pin, None).await.unwrap();
+        }
+        core
+    }
+
+    /// A relay on loopback and an account on it for `c`: its record.
+    async fn account(c: &mut Client) -> Value {
+        static N: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+        let n = N.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        let dir =
+            std::env::temp_dir().join(format!("mq-incognito-clock-{}-{n}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let app = mq_sync_server::router(&dir.join("relay.sqlite"), Default::default()).unwrap();
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let server = format!("http://{}", listener.local_addr().unwrap());
+        tokio::spawn(async move { mq_sync_server::serve(listener, app).await.unwrap() });
+        c.ok(json!({"op": "createSyncAccount", "server": server, "name": "Mac"}))
+            .await
+    }
+
+    struct Client {
+        session: Session,
+        rx: UnboundedReceiver<Outgoing>,
+        pushes: Vec<Value>,
+        next: u64,
+    }
+
+    impl Client {
+        fn new(core: Core) -> Self {
+            let (tx, rx) = Output::channel();
+            Self {
+                session: Session::new(core, tx),
+                rx,
+                pushes: Vec::new(),
+                next: 1,
+            }
+        }
+
+        async fn call(&mut self, mut request: Value) -> Value {
+            let id = self.next;
+            self.next += 1;
+            request["id"] = json!(id);
+            self.session.handle_text(&request.to_string()).await;
+            loop {
+                let message = self.rx.recv().await.unwrap().json();
+                if message["id"] == json!(id) {
+                    return message;
+                }
+                self.pushes.push(message);
+            }
+        }
+
+        async fn ok(&mut self, request: Value) -> Value {
+            let reply = self.call(request.clone()).await;
+            assert_eq!(reply["ok"], true, "{request} -> {reply}");
+            reply["result"].clone()
+        }
+
+        async fn event(&mut self, event: &str) -> Value {
+            self.ok(json!({"op": "lifecycle", "event": event})).await
+        }
+
+        async fn enter(&mut self) {
+            let entered = self
+                .ok(json!({"op": "switchProfile", "profile": "incognito"}))
+                .await;
+            assert_eq!(entered["active"], "incognito", "{entered}");
+        }
+
+        fn incognito(&self) -> bool {
+            lock(&self.session.shared).incognito.is_some()
+        }
+
+        /// The wall clock moves on by `ms`; the timer does not tick.
+        fn jump(&self, ms: u64) {
+            lock(&self.session.shared).skew_ms += ms;
+        }
+
+        /// Both clocks move on by `ms`, and the timer gets to run.
+        async fn pass(&self, ms: u64) {
+            self.jump(ms);
+            tokio::time::advance(std::time::Duration::from_millis(ms)).await;
+            for _ in 0..20 {
+                tokio::task::yield_now().await;
+            }
+        }
+
+        fn drain(&mut self) {
+            while let Ok(message) = self.rx.try_recv() {
+                self.pushes.push(message.json());
+            }
+        }
+
+        fn pushed(&mut self, what: &str) -> usize {
+            self.drain();
+            let push = json!({ "incognito": what });
+            self.pushes.iter().filter(|p| **p == push).count()
+        }
+    }
+
+    /// While the process runs, the timer ends an idle Incognito after 30
+    /// minutes, with the warning at 29: the chooser over the host, the
+    /// ended push.
+    #[tokio::test(start_paused = true)]
+    async fn the_timer_warns_at_29_minutes_and_ends_at_30() {
+        let mut c = Client::new(device(None).await);
+        c.enter().await;
+        c.event("idle").await;
+        c.pass(28 * MIN).await;
+        assert_eq!(c.pushed("endsSoon"), 0);
+        c.pass(MIN + 20_000).await;
+        assert_eq!(c.pushed("endsSoon"), 1);
+        assert!(c.incognito());
+        c.pass(MIN).await;
+        assert!(!c.incognito());
+        assert_eq!(c.pushed("ended"), 1);
+        assert_eq!(c.pushed("endsSoon"), 1, "warned once");
+        let shared = lock(&c.session.shared);
+        assert_eq!((shared.core.profile(), shared.locked), ("default", true));
+        assert_eq!(shared.core.live_scope_count(), 0);
+    }
+
+    /// `active`, `foreground` and a playing report each end the absence;
+    /// `background` is away with no warning (the window is not in view).
+    #[tokio::test(start_paused = true)]
+    async fn coming_back_cancels_the_end_and_background_gets_no_warning() {
+        let mut c = Client::new(device(None).await);
+        c.enter().await;
+        for back in ["active", "foreground"] {
+            c.event("idle").await;
+            c.pass(25 * MIN).await;
+            c.event(back).await;
+            // A person's request: the hour's bound starts again.
+            c.ok(json!({"op": "languages"})).await;
+            c.pass(25 * MIN).await;
+            assert!(c.incognito(), "{back}");
+        }
+        c.event("background").await;
+        c.pass(29 * MIN + 30_000).await;
+        assert_eq!(c.pushed("endsSoon"), 0);
+        c.event("foreground").await;
+        c.ok(json!({"op": "languages"})).await;
+        let core = c.session.core();
+        let playback = PlaybackView::open(&core, Vec::new(), PlayTarget::default());
+        lock(&c.session.shared).subs.insert(
+            7,
+            Subscription {
+                view: View::Playback(playback),
+                forward: tokio::spawn(async {}),
+            },
+        );
+        c.event("idle").await;
+        for _ in 0..8 {
+            c.pass(5 * MIN).await;
+            let report = json!({"op": "command", "sub": 7, "command":
+                {"type": "progress", "positionMs": 60_000, "durationMs": 888_000}});
+            c.ok(report).await;
+        }
+        assert!(c.incognito(), "40 minutes of playing is no absence");
+        assert_eq!(c.pushed("ended"), 0);
+    }
+
+    /// A sleeping Mac or phone stops the timer: the wall clock decides at
+    /// the return, before the request is handled. 29 minutes keep it.
+    #[tokio::test]
+    async fn the_wall_clock_ends_it_at_the_return() {
+        for back in ["active", "foreground"] {
+            let mut c = Client::new(device(None).await);
+            c.enter().await;
+            c.event("idle").await;
+            c.jump(29 * MIN);
+            c.event(back).await;
+            assert!(c.incognito(), "{back} after 29 minutes");
+            c.event("idle").await;
+            c.jump(31 * MIN);
+            let reply = c.call(json!({"op": "lifecycle", "event": back})).await;
+            assert!(!c.incognito(), "{back} after 31 minutes");
+            // The end went out before the reply.
+            assert_eq!(c.pushed("ended"), 1, "{reply}");
+        }
+    }
+
+    /// 60 minutes with no request a person caused end it, though `syncNow`
+    /// and `ping` come every minute and the network changes; a request a
+    /// person caused after the gap is answered after the end.
+    #[tokio::test]
+    async fn an_hour_without_a_person_ends_it() {
+        let mut c = Client::new(device(None).await);
+        let record = account(&mut c).await;
+        c.enter().await;
+        for minute in 0..61 {
+            c.jump(MIN);
+            c.ok(json!({"op": "ping"})).await;
+            if minute == 30 {
+                c.event("networkChanged").await;
+            }
+            c.ok(json!({"op": "syncNow", "record": record})).await;
+        }
+        c.jump(MIN);
+        let home = c.call(json!({"op": "subscribe", "view": "home"})).await;
+        assert_eq!(home["code"], "locked", "{home}");
+        assert!(!c.incognito());
+        assert_eq!(c.pushed("ended"), 1);
+    }
+
+    /// Progress reports every 5 seconds for two hours keep it.
+    #[tokio::test]
+    async fn playing_for_two_hours_keeps_it() {
+        let mut c = Client::new(device(None).await);
+        c.enter().await;
+        let core = c.session.core();
+        let playback = PlaybackView::open(&core, Vec::new(), PlayTarget::default());
+        lock(&c.session.shared).subs.insert(
+            7,
+            Subscription {
+                view: View::Playback(playback),
+                forward: tokio::spawn(async {}),
+            },
+        );
+        for _ in 0..(2 * 60 * 12) {
+            c.jump(5_000);
+            let report = json!({"op": "command", "sub": 7, "command":
+                {"type": "progress", "positionMs": 1, "durationMs": 9}});
+            c.ok(report).await;
+        }
+        assert!(c.incognito());
+    }
+
+    /// Outside Incognito `idle` and `active` do nothing: a PIN profile idle
+    /// for 31 minutes is still open, and `idle` never sets the away clock
+    /// of the PIN lock (C P2-14).
+    #[tokio::test]
+    async fn idle_and_active_do_nothing_outside_incognito() {
+        let mut c = Client::new(device(Some("1357")).await);
+        c.ok(json!({"op": "unlockProfile", "pin": "1357"})).await;
+        assert_eq!(c.event("idle").await, json!({}));
+        assert!(c.session.background_ms.is_none());
+        c.jump(31 * MIN);
+        assert_eq!(c.event("active").await, json!({}));
+        assert!(!lock(&c.session.shared).locked);
+    }
+
+    /// `active` never re-runs the addon refresh `foreground` runs.
+    #[tokio::test]
+    async fn active_never_refreshes_the_addons() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = format!("http://{}/manifest.json", listener.local_addr().unwrap());
+        let manifest =
+            r#"{"id":"x","version":"1.0.0","name":"X","resources":[],"types":["movie"]}"#;
+        let fetched = Arc::new(AtomicUsize::new(0));
+        let count = fetched.clone();
+        tokio::spawn(async move {
+            while let Ok((mut socket, _)) = listener.accept().await {
+                count.fetch_add(1, Ordering::SeqCst);
+                let mut buf = [0u8; 1024];
+                let _ = socket.read(&mut buf).await;
+                let reply = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{manifest}",
+                    manifest.len()
+                );
+                let _ = socket.write_all(reply.as_bytes()).await;
+            }
+        });
+        let core = Core::temporary(mq_library::OWNER).unwrap();
+        let row = mq_library::AddonRow {
+            transport_url: url,
+            manifest_json: manifest.into(),
+            position: 0,
+            enabled: true,
+            allow_private: true,
+        };
+        core.library()
+            .set_addons(mq_library::OWNER, &[row], core.clock())
+            .unwrap();
+        let mut c = Client::new(core);
+        c.enter().await;
+        let settle = || tokio::time::sleep(std::time::Duration::from_millis(300));
+        settle().await;
+        let start = fetched.load(Ordering::SeqCst);
+        c.event("active").await;
+        settle().await;
+        assert_eq!(fetched.load(Ordering::SeqCst), start);
+        c.event("foreground").await;
+        settle().await;
+        assert_eq!(fetched.load(Ordering::SeqCst), start + 1);
+    }
+
+    /// The ended notice is session state: automatic requests never clear it,
+    /// and each of the profile ops that read it does.
+    #[tokio::test]
+    async fn the_ended_notice_stays_until_a_person_reads_it() {
+        let reads = [
+            json!({"op": "switchProfile", "profile": "default"}),
+            json!({"op": "unlockProfile"}),
+            json!({"op": "leaveIncognito"}),
+            json!({"op": "createProfile", "name": "Ada", "avatar": "fox:amber"}),
+            json!({"op": "ackIncognitoEnded"}),
+        ];
+        for read in reads {
+            let mut c = Client::new(device(None).await);
+            let record = account(&mut c).await;
+            c.enter().await;
+            c.ok(json!({"op": "lockSession"})).await;
+            assert_eq!(c.pushed("ended"), 1);
+            c.ok(json!({"op": "syncNow", "record": record})).await;
+            c.ok(json!({"op": "ping"})).await;
+            c.event("foreground").await;
+            let view = c.ok(json!({"op": "subscribe", "view": "profiles"})).await;
+            assert_eq!(view["snapshot"]["incognitoEnded"], true, "{view}");
+            let _ = c.call(read.clone()).await;
+            let after = c.ok(json!({"op": "ackIncognitoEnded"})).await;
+            assert_eq!(after["incognitoEnded"], false, "{read}");
+        }
+    }
+
+    /// Every op is classified (the match has no wildcard); a sample of the
+    /// split the bound and the allowlist make.
+    #[test]
+    fn requests_are_classified() {
+        let request = |v: Value| serde_json::from_value::<Request>(v).unwrap();
+        let person = [
+            json!({"op": "subscribe", "id": 1, "view": "home"}),
+            json!({"op": "command", "id": 1, "sub": 1, "command": {"type": "setQuery"}}),
+            json!({"op": "command", "id": 1, "sub": 1, "command": {"type": "progress"}}),
+            json!({"op": "installAddon", "id": 1, "url": "x"}),
+            json!({"op": "leaveIncognito", "id": 1}),
+        ];
+        let automatic = [
+            json!({"op": "ping", "id": 1}),
+            json!({"op": "lifecycle", "id": 1, "event": "idle"}),
+            json!({"op": "unsubscribe", "id": 1, "sub": 1}),
+            json!({"op": "downloadsAllowed", "id": 1, "allowed": true}),
+            json!({"op": "command", "id": 1, "sub": 1, "command": {"type": "setToday"}}),
+            json!({"op": "command", "id": 1, "sub": 1, "command": {"type": "duration"}}),
+            json!({"op": "command", "id": 1, "sub": 1, "command": {"type": "progress", "paused": true}}),
+        ];
+        for r in person {
+            assert!(request(r.clone()).person_driven(), "{r}");
+        }
+        for r in automatic {
+            assert!(!request(r.clone()).person_driven(), "{r}");
+        }
     }
 }

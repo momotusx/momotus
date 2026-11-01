@@ -1263,10 +1263,11 @@ async fn the_incognito_contract_answers_outside_incognito() {
             json!({})
         );
     }
-    assert_eq!(
-        c.code(json!({"op": "leaveIncognito"})).await,
-        "notIncognito"
-    );
+    // Outside Incognito, Leave answers the snapshot: the clock may end it a
+    // moment before the person presses Leave.
+    let left = c.ok(json!({"op": "leaveIncognito"})).await;
+    assert_eq!(left["active"], "default", "{left}");
+    // A profile with no addon list has nothing to copy.
     let enter = json!({"op": "switchProfile", "profile": "incognito", "fromChooser": true});
     assert_eq!(c.code(enter).await, "incognitoFailed");
     // `idle` never acted as `background`: the session is still open.

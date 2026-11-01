@@ -2661,12 +2661,12 @@ async fn resolve_next(
                     let played_for = (target.season, target.episode);
                     s.snapshot.container = playing_container(
                         filename.as_deref(),
-                        || crate::speed::container_of(core.library(), &stream.key, played_for),
+                        || core.known(|l| crate::speed::container_of(l, &stream.key, played_for)),
                         stream.release.container.as_deref(),
                     );
                     s.snapshot.audio = audio_names(&stream.release.audio);
                     s.snapshot.engine =
-                        crate::speed::engine_of(core.library(), &stream.key, played_for);
+                        core.known(|l| crate::speed::engine_of(l, &stream.key, played_for));
                     s.snapshot.subtitles = own_tracks;
                     let own: Vec<String> =
                         s.snapshot.subtitles.iter().map(|t| t.url.clone()).collect();
@@ -3261,6 +3261,12 @@ async fn open_torrent(
             look_ahead(core, &engine, &mut lock(state), &hash);
         }
     };
+    // A torrent Incognito creates is recorded before its add, to go with
+    // the scope (plans/batch-10-incognito.md 2.5).
+    let record = core.record_torrent(&hash);
+    if matches!(record, crate::incognito::Record::Ended) {
+        return Err(INCOGNITO_ENDED.into());
+    }
     let add = async {
         // Fetched ahead: its answer first, so the swarm is asked once.
         if let Some(mut done) = ahead {
@@ -3310,6 +3316,9 @@ async fn open_torrent(
             "No peer sent the torrent's details in time".to_owned()
         })?
         .map_err(unsaid)?;
+    if matches!(record, crate::incognito::Record::Recorded) {
+        core.incognito_handles().insert(hash.clone(), torrent);
+    }
     // This profile's use of it, for as long as the playback lives: a hold
     // for another profile leaves the torrent running for it.
     let profile = core.profile();
@@ -3640,12 +3649,22 @@ fn look_ahead(core: &Core, engine: &mq_engine::Engine, s: &mut State, current: &
     let taken = Arc::new(std::sync::atomic::AtomicBool::new(false));
     let (engine, closing, kept) = (engine.clone(), s.closing.clone(), taken.clone());
     let (fetch, trackers) = (hash.clone(), trackers.clone());
+    let core = core.clone();
     tokio::spawn(async move {
+        // Recorded before its add, as a start's own torrent; after the end
+        // nothing is (plans/batch-10-incognito.md 2.5).
+        let record = core.record_torrent(&fetch);
+        if matches!(record, crate::incognito::Record::Ended) {
+            return;
+        }
         let add = tokio::time::timeout(AHEAD_FOR, engine.add_magnet(&fetch, &trackers, &[]));
         let added = tokio::select! {
             added = add => added.ok().and_then(Result::ok),
             () = closing.cancelled() => return,
         };
+        if let (Some(torrent), crate::incognito::Record::Recorded) = (added, &record) {
+            core.incognito_handles().insert(fetch.clone(), torrent);
+        }
         let _ = said.send(true);
         closing.cancelled().await;
         // `pieces_total` is 0 until a file choice starts the torrent: one
@@ -3662,6 +3681,10 @@ fn look_ahead(core: &Core, engine: &mq_engine::Engine, s: &mut State, current: &
     });
     s.ahead.push(Ahead { hash, done, taken });
 }
+
+/// A start asked after its Incognito ended.
+#[cfg(feature = "torrent")]
+const INCOGNITO_ENDED: &str = "Incognito ended";
 
 /// The start never reads 1 before `ready`.
 const START_MAX: f32 = 0.99;
@@ -4202,8 +4225,9 @@ fn spawn_sample(
             seeders,
         };
         let min = core.prefs().streams.min_seeders;
+        // Throughput by network and kind names no title: the device's.
         crate::speed::record(
-            core.library(),
+            core.device_library(),
             core.network(),
             &sample,
             min,
@@ -4253,8 +4277,9 @@ fn record_http_sample(core: &Core, (bytes, busy): (u64, Duration)) {
         seeders: None,
     };
     let min = core.prefs().streams.min_seeders;
+    // Throughput names no title: the device's.
     crate::speed::record(
-        core.library(),
+        core.device_library(),
         core.network(),
         &sample,
         min,

@@ -167,6 +167,10 @@ impl Core {
     /// A scrobble session for a playback view, or `None` when this build has
     /// no Trakt app. `report` gets Trakt's side now and as it changes.
     pub(crate) fn trakt_scrobble(&self, target: Target, report: Report) -> Option<Scrobble> {
+        // Incognito never reaches Trakt, not even its service.
+        if self.incognito() {
+            return None;
+        }
         let trakt = self.trakt();
         trakt.config()?;
         if super::kids(self) {

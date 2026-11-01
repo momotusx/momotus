@@ -627,7 +627,8 @@ impl Downloads {
         s.wifi_only = wifi_only.unwrap_or(s.wifi_only);
         s.smart = smart.unwrap_or(s.smart);
         let value = serde_json::to_string(&s).map_err(|e| CoreError::Downloads(e.to_string()))?;
-        core.library().set_device_value(SETTINGS_KEY, &value)?;
+        core.device_library()
+            .set_device_value(SETTINGS_KEY, &value)?;
         self.changed();
         Ok(())
     }
@@ -689,7 +690,10 @@ impl Downloads {
         id: &str,
         change: impl FnOnce(&mut DownloadRecord) -> bool,
     ) -> Option<DownloadRecord> {
-        core.library().update_download(id, change).ok().flatten()
+        core.device_library()
+            .update_download(id, change)
+            .ok()
+            .flatten()
     }
 
     /// Moves row `id` from `from` to `to` with `reason`; nothing when it is
@@ -728,7 +732,7 @@ impl Downloads {
                     .collect()
             })
             .unwrap_or_default();
-        let Ok(rows) = core.library().downloads() else {
+        let Ok(rows) = core.device_library().downloads() else {
             return;
         };
         for row in &rows {
@@ -823,7 +827,7 @@ impl Downloads {
         let Some(core) = self.core() else {
             return Vec::new();
         };
-        core.library()
+        core.device_library()
             .downloads()
             .unwrap_or_default()
             .iter()
@@ -851,7 +855,7 @@ impl Downloads {
     /// Recomputes what the screens show from the rows and the runs.
     fn publish(&self) {
         let Some(core) = self.core() else { return };
-        let rows = core.library().downloads().unwrap_or_default();
+        let rows = core.device_library().downloads().unwrap_or_default();
         let running = lock(&self.running);
         let images: HashMap<PathBuf, String> = lock(&self.images)
             .iter()
@@ -947,7 +951,7 @@ impl Downloads {
                 done_ms: None,
                 smart: None,
             };
-            let stored = core.library().add_download(&record)?;
+            let stored = core.device_library().add_download(&record)?;
             let state = DownloadState::read(&stored.state);
             if matches!(state, DownloadState::Failed | DownloadState::Missing) {
                 // A new pick replaces the old one: its torrent file, if
@@ -999,7 +1003,7 @@ impl Downloads {
                 Action::Remove => {
                     self.stop(id);
                     let Some(row) = core
-                        .library()
+                        .device_library()
                         .downloads()?
                         .into_iter()
                         .find(|r| &r.id == id)
@@ -1007,7 +1011,7 @@ impl Downloads {
                         continue;
                     };
                     let torrent = self.torrent_ref(&row);
-                    core.library().delete_download(id)?;
+                    core.device_library().delete_download(id)?;
                     lock(&self.versions).remove(id);
                     lock(&self.io_waits).remove(id);
                     self.room_came();
@@ -1053,7 +1057,7 @@ impl Downloads {
                 }
                 Action::Retry { mobile_data } => {
                     let again = core
-                        .library()
+                        .device_library()
                         .downloads()?
                         .into_iter()
                         .find(|r| &r.id == id)
@@ -1153,7 +1157,7 @@ impl Downloads {
     /// which its length does not show.
     pub(crate) fn bad_file(&self, item_id: &str, video_id: &str, unreadable: bool) {
         let Some(core) = self.core() else { return };
-        let Ok(Some(row)) = core.library().download_of(item_id, video_id) else {
+        let Ok(Some(row)) = core.device_library().download_of(item_id, video_id) else {
             return;
         };
         let gone = unreadable && !self.file_of(&row).is_some_and(|f| f.exists());
@@ -1177,7 +1181,10 @@ impl Downloads {
         key: &str,
     ) -> Option<InUse> {
         let core = self.core()?;
-        let row = core.library().download_of(item_id, video_id).ok()??;
+        let row = core
+            .device_library()
+            .download_of(item_id, video_id)
+            .ok()??;
         let version: Version = serde_json::from_str(row.version.as_deref()?).ok()?;
         if version.key != key {
             return None;
@@ -1257,7 +1264,7 @@ impl Downloads {
             return;
         };
         let port = server.addr().port();
-        let rows = core.library().downloads().unwrap_or_default();
+        let rows = core.device_library().downloads().unwrap_or_default();
         let mut added = false;
         for r in &rows {
             for name in ["poster", "still"] {
@@ -1335,7 +1342,7 @@ impl Downloads {
                     continue;
                 }
                 let ids: Vec<String> = core
-                    .library()
+                    .device_library()
                     .downloads()
                     .unwrap_or_default()
                     .into_iter()
@@ -1402,7 +1409,10 @@ impl Downloads {
     /// its file, whole, or still being written with what it holds.
     pub(crate) fn local(&self, item_id: &str, video_id: &str) -> Option<(String, Local)> {
         let core = self.core()?;
-        let row = core.library().download_of(item_id, video_id).ok()??;
+        let row = core
+            .device_library()
+            .download_of(item_id, video_id)
+            .ok()??;
         let version: Version = serde_json::from_str(row.version.as_deref()?).ok()?;
         // A torrent plays through the engine (`torrent_download`).
         if version.torrent.is_some() {
@@ -1475,7 +1485,10 @@ impl Downloads {
         video_id: &str,
     ) -> Option<(String, TorrentRef, bool)> {
         let core = self.core()?;
-        let row = core.library().download_of(item_id, video_id).ok()??;
+        let row = core
+            .device_library()
+            .download_of(item_id, video_id)
+            .ok()??;
         let version: Version = serde_json::from_str(row.version.as_deref()?).ok()?;
         let done = DownloadState::read(&row.state) == DownloadState::Done;
         Some((version.key, version.torrent?, done))
@@ -1489,7 +1502,10 @@ impl Downloads {
         video_id: &str,
     ) -> Option<(ParsedStream, DownloadRow)> {
         let core = self.core()?;
-        let row = core.library().download_of(item_id, video_id).ok()??;
+        let row = core
+            .device_library()
+            .download_of(item_id, video_id)
+            .ok()??;
         let version: Version = serde_json::from_str(row.version.as_deref()?).ok()?;
         let at = usize::try_from(row.moves)
             .ok()?
@@ -1563,7 +1579,7 @@ impl Downloads {
     /// counts itself).
     #[cfg(feature = "torrent")]
     fn http_committed(&self, core: &Core) -> u64 {
-        let rows = core.library().downloads().unwrap_or_default();
+        let rows = core.device_library().downloads().unwrap_or_default();
         lock(&self.running)
             .iter()
             .filter(|(id, _)| {
@@ -1662,7 +1678,7 @@ impl Downloads {
     /// paused, and starts queued jobs up to `RUNNING`.
     fn tick(self: &Arc<Self>) {
         let Some(core) = self.core() else { return };
-        let Ok(rows) = core.library().downloads() else {
+        let Ok(rows) = core.device_library().downloads() else {
             return;
         };
         self.settle_smart(&core, &rows);
@@ -1822,10 +1838,11 @@ impl Downloads {
     /// finished row, so a relaunch goes on with it, and a meta that cannot be
     /// read now (offline) is looked up again later (code review r1 P2-2).
     pub(crate) fn finished(self: &Arc<Self>, core: &Core, item_id: &str, video_id: &str) {
-        if !self.settings().smart || core.policy().kids() {
+        // Nothing watched in Incognito steps a smart download.
+        if !self.settings().smart || core.policy().kids() || core.incognito() {
             return;
         }
-        let Ok(Some(row)) = core.library().download_of(item_id, video_id) else {
+        let Ok(Some(row)) = core.device_library().download_of(item_id, video_id) else {
             return;
         };
         let step = serde_json::to_string(&SmartStep {
@@ -1949,7 +1966,7 @@ impl Downloads {
         let Some(core) = self.core() else {
             return Vec::new();
         };
-        let Ok(Some(row)) = core.library().download_of(item_id, video_id) else {
+        let Ok(Some(row)) = core.device_library().download_of(item_id, video_id) else {
             return Vec::new();
         };
         let same = row
@@ -2306,7 +2323,7 @@ async fn run_job(me: std::sync::Weak<Downloads>, core: Core, mut row: DownloadRe
 /// over the stored row's alone: a state set meanwhile stays (code review r1
 /// M5).
 pub(super) fn save_run(core: &Core, row: &DownloadRecord) {
-    let _ = core.library().update_download(&row.id, |r| {
+    let _ = core.device_library().update_download(&row.id, |r| {
         r.version = row.version.clone();
         r.bytes_done = row.bytes_done;
         r.bytes_total = row.bytes_total;
@@ -2320,7 +2337,7 @@ pub(super) fn save_run(core: &Core, row: &DownloadRecord) {
 #[cfg(feature = "torrent")]
 async fn forget_torrent(core: &Core, id: &str, t: TorrentRef) {
     let shared = core
-        .library()
+        .device_library()
         .downloads()
         .unwrap_or_default()
         .iter()
@@ -2512,8 +2529,10 @@ pub async fn add(core: &Core, req: AddRequest) -> Result<Vec<String>, CoreError>
         return Err(CoreError::Downloads("nothing to download".into()));
     }
     let pick = req.pick.filter(|_| videos.len() == 1);
+    // Asked in Incognito: the host's download, kept on the device for
+    // every profile (plans/batch-10-incognito.md 4).
     core.downloads().add(
-        core.profile(),
+        core.device().profile(),
         &req.kind,
         &req.item_id,
         videos,
@@ -2646,7 +2665,7 @@ async fn smart_next(core: &Core, row: &DownloadRecord) -> Next {
     if !crate::views::playback::aired(next, now) {
         return Next::None;
     }
-    match core.library().download_of(&row.item_id, &next.id) {
+    match core.device_library().download_of(&row.item_id, &next.id) {
         Ok(Some(existing)) => return Next::Has(existing.id),
         Ok(None) => {}
         Err(_) => return Next::Unreadable,
@@ -2669,15 +2688,30 @@ async fn smart_next(core: &Core, row: &DownloadRecord) -> Next {
 /// Another profile on the device has `row`'s video started and not
 /// finished: a smart download keeps it.
 fn part_way_elsewhere(core: &Core, row: &DownloadRecord, by: &str) -> bool {
-    let profiles = core.library().profiles().unwrap_or_default();
+    let profiles = core.device_library().profiles().unwrap_or_default();
     profiles.iter().filter(|p| p.id != by).any(|p| {
-        core.library()
+        core.device_library()
             .progress(&p.id, &row.video_id)
             .ok()
             .flatten()
             .is_some_and(|(pos, dur)| {
                 pos > 0 && (dur <= 0 || (pos as f64) < dur as f64 * mq_library::FINISHED_RATIO)
             })
+    })
+}
+
+/// Whether a download, in any state, names torrent `hash`: its folder,
+/// `.have` and `.torrent` are never Incognito's to remove
+/// (plans/batch-10-incognito.md 2.5). A read that fails keeps them.
+pub(crate) fn names_torrent(library: &mq_library::Library, hash: &str) -> bool {
+    library.downloads().map_or(true, |rows| {
+        rows.iter().any(|row| {
+            let version = row.version.as_deref();
+            version
+                .and_then(|text| serde_json::from_str::<Version>(text).ok())
+                .and_then(|v| torrent_of(&v))
+                .is_some_and(|h| h.eq_ignore_ascii_case(hash))
+        })
     })
 }
 

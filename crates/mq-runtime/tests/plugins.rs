@@ -455,3 +455,53 @@ async fn the_directory_lists_its_repositories() {
     lost.use_plugin_directory_at(page("/gone"));
     assert!(lost.plugin_directory().await.from_snapshot);
 }
+
+/// Incognito (plans/batch-10-incognito.md 7.1, C P2-8): a repository added
+/// inside runs its provider there, and leaves neither the repository nor
+/// its script on the device; one the host had is read from the device.
+#[tokio::test]
+async fn a_repository_added_in_incognito_leaves_no_code_behind() {
+    let fixture = Fixture::start();
+    let host = core();
+    let films = stream_addon(r#"{"streams":[]}"#.into()).await;
+    host.library()
+        .set_addons(OWNER, &[films], host.clock())
+        .unwrap();
+    let script = format!("{}/repo/test-film.js", fixture.base);
+    let scope = host.open_incognito().unwrap();
+    scope.add_plugin_repo(&fixture.repo()).await.unwrap();
+    let view = settled(&scope, film("tt0000001")).await;
+    // The positive control: the provider ran inside, its script kept there.
+    assert_eq!(
+        view.snapshot().plugins.rows.len(),
+        1,
+        "{:?}",
+        fixture.asked()
+    );
+    let inside = scope.library().plugin_code(&script).unwrap();
+    assert!(inside.is_some());
+    drop(view);
+    scope.end_incognito();
+    assert!(host.library().plugin_repos(OWNER).unwrap().is_empty());
+    assert!(host.library().plugin_code(&script).unwrap().is_none());
+
+    // A script the device keeps is found from inside, with no fetch.
+    host.library()
+        .put_plugin_code(&script, &inside.unwrap())
+        .unwrap();
+    host.add_plugin_repo(&fixture.repo()).await.unwrap();
+    let scope = host.open_incognito().unwrap();
+    let fetched = || {
+        fixture
+            .asked()
+            .iter()
+            .filter(|p| p.ends_with(".js"))
+            .count()
+    };
+    let before = fetched();
+    let view = settled(&scope, film("tt0000002")).await;
+    assert_eq!(view.snapshot().plugins.rows.len(), 1);
+    assert_eq!(fetched(), before, "read from the device");
+    drop(view);
+    scope.end_incognito();
+}

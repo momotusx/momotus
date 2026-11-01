@@ -11,6 +11,7 @@ use mq_protocol::{Manifest, MetaItem, ResourcePath, ResourceResponse, decode_met
 use mq_server::StreamServer;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::Ordering::SeqCst;
 use std::sync::{Arc, Weak};
 use std::time::Duration;
 use tokio::sync::{Mutex, OnceCell, OwnedMutexGuard};
@@ -123,21 +124,30 @@ pub struct Core {
     inner: Arc<Inner>,
     /// The profile this handle reads and writes.
     profile: Arc<str>,
+    /// Incognito: the scope `library` and `addons` answer with
+    /// (plans/batch-10-incognito.md 2.3).
+    scope: Option<Arc<crate::incognito::Scope>>,
 }
 
 /// A `Core` that does not keep the runtime alive: background work holds
-/// one and ends once every handle is gone.
+/// one and ends once every handle is gone, or once its Incognito ended.
 #[derive(Clone)]
 pub(crate) struct WeakCore {
     inner: Weak<Inner>,
+    scope: Option<Weak<crate::incognito::Scope>>,
     profile: Arc<str>,
 }
 
 impl WeakCore {
     pub(crate) fn upgrade(&self) -> Option<Core> {
+        let scope = match &self.scope {
+            Some(scope) => Some(scope.upgrade().filter(|s| !s.ended.load(SeqCst))?),
+            None => None,
+        };
         Some(Core {
             inner: self.inner.upgrade()?,
             profile: self.profile.clone(),
+            scope,
         })
     }
 }
@@ -151,8 +161,11 @@ struct Inner {
     addons: AddonClient,
     server: OnceCell<Arc<StreamServer>>,
     /// Torrent data and DHT state (full builds start the engine on first use).
-    #[cfg_attr(not(feature = "torrent"), allow(dead_code))]
     torrent_dir: PathBuf,
+    /// The torrents Incognito created in this run, by hash, for their
+    /// removal (plans/batch-10-incognito.md 2.5).
+    #[cfg(feature = "torrent")]
+    incognito_handles: std::sync::Mutex<HashMap<String, mq_engine::TorrentHandle>>,
     #[cfg(feature = "torrent")]
     engine: OnceCell<mq_engine::Engine>,
     debrid: Arc<crate::debrid::Accounts>,
@@ -197,6 +210,15 @@ struct Device {
     pins: std::sync::Mutex<crate::profiles::Throttle>,
     /// Trakt connections, sessions and rounds, started on first use.
     trakt: std::sync::OnceLock<Arc<crate::trakt::Trakt>>,
+    /// Incognito scopes alive on this device (`ping`'s `liveScopes`).
+    live_scopes: std::sync::atomic::AtomicUsize,
+    /// An Incognito end no session has shown yet (plans/batch-10-incognito.md
+    /// 5.4); sessions started behind a scope watch it.
+    ended_unseen: tokio::sync::watch::Sender<bool>,
+    /// Where scopes live: `<data_dir>/incognito`.
+    incognito_dir: PathBuf,
+    /// A pass loop over Incognito's torrent lines runs.
+    sweeping: std::sync::atomic::AtomicBool,
     /// A throwaway core's TMDB is off until a test points it at its fake
     /// (`set_tmdb_host`): a build with the token baked in never asks the
     /// real service. Kept here, not in Trakt's state, so pinning it does not
@@ -208,7 +230,11 @@ struct Device {
 static OPEN: std::sync::Mutex<Vec<(PathBuf, Weak<Device>)>> = std::sync::Mutex::new(Vec::new());
 
 impl Device {
-    fn new(library: Library, device_id: u64) -> Result<Arc<Self>, CoreError> {
+    fn new(
+        library: Library,
+        device_id: u64,
+        incognito_dir: PathBuf,
+    ) -> Result<Arc<Self>, CoreError> {
         let device_id = match device_id {
             0 => stored_device_id(&library)?,
             id => id,
@@ -237,6 +263,10 @@ impl Device {
             sync_gate: Arc::default(),
             pins: std::sync::Mutex::new(crate::profiles::Throttle::new(std::time::Instant::now())),
             trakt: std::sync::OnceLock::new(),
+            live_scopes: std::sync::atomic::AtomicUsize::new(0),
+            ended_unseen: tokio::sync::watch::Sender::new(false),
+            incognito_dir,
+            sweeping: std::sync::atomic::AtomicBool::new(false),
             no_tmdb: std::sync::atomic::AtomicBool::new(false),
         }))
     }
@@ -253,7 +283,20 @@ impl Device {
         {
             return Ok(device);
         }
-        let device = Self::new(Library::open(path.join("library.sqlite"))?, device_id)?;
+        let incognito = path.join("incognito");
+        let device = Self::new(
+            Library::open(path.join("library.sqlite"))?,
+            device_id,
+            incognito.clone(),
+        )?;
+        // What a killed run's Incognito left (plans/batch-10-incognito.md
+        // 2.3): the first session shows the ended line.
+        if crate::incognito::recover(&incognito) {
+            device.ended_unseen.send_replace(true);
+        }
+        // Before any engine of this run starts.
+        let torrents = path.join("torrents");
+        crate::incognito::recover_torrents(&incognito, &torrents, &device.library);
         open.push((path, Arc::downgrade(&device)));
         Ok(device)
     }
@@ -289,7 +332,9 @@ impl Core {
         let n = N.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         let downloads =
             std::env::temp_dir().join(format!("mq-downloads-{}-{n}", std::process::id()));
-        let device = Device::new(Library::temporary()?, 1)?;
+        let incognito =
+            std::env::temp_dir().join(format!("mq-incognito-{}-{n}", std::process::id()));
+        let device = Device::new(Library::temporary()?, 1, incognito)?;
         let core = Self::with_device(device, profile, (torrents, downloads), None)?;
         // A throwaway core never asks real trackers: no swarm has a live
         // count unless a test gives one.
@@ -326,6 +371,8 @@ impl Core {
                 torrent_dir,
                 #[cfg(feature = "torrent")]
                 engine: OnceCell::new(),
+                #[cfg(feature = "torrent")]
+                incognito_handles: std::sync::Mutex::default(),
                 debrid: crate::debrid::Accounts::new(http.clone()),
                 segments: crate::segments::Finder::new(http.clone()),
                 free_bytes: std::sync::Mutex::new(None),
@@ -340,22 +387,121 @@ impl Core {
                 walk,
             }),
             profile: profile.into(),
+            scope: None,
         })
     }
 
     pub(crate) fn downgrade(&self) -> WeakCore {
         WeakCore {
             inner: Arc::downgrade(&self.inner),
+            scope: self.scope.as_ref().map(Arc::downgrade),
             profile: self.profile.clone(),
         }
     }
 
-    /// A handle for another profile over the same runtime.
+    /// A handle for another profile over the same runtime, out of any
+    /// Incognito. Never Incognito itself: that is `open_incognito`.
     pub fn for_profile(&self, profile: &str) -> Core {
+        debug_assert_ne!(profile, crate::incognito::INCOGNITO);
         Core {
             inner: self.inner.clone(),
             profile: profile.into(),
+            scope: None,
         }
+    }
+
+    /// The same runtime out of Incognito (plans/batch-10-incognito.md 2.3):
+    /// the host's handle in Incognito, this one otherwise. Device work (sync,
+    /// Trakt, downloads, profiles, the Archive) starts here.
+    pub fn device(&self) -> Core {
+        match &self.scope {
+            Some(scope) => self.for_profile(&scope.host),
+            None => self.clone(),
+        }
+    }
+
+    /// The device's library, whatever this handle's scope.
+    pub(crate) fn device_library(&self) -> &Library {
+        &self.inner.device.library
+    }
+
+    pub(crate) fn scope(&self) -> Option<&Arc<crate::incognito::Scope>> {
+        self.scope.as_ref()
+    }
+
+    /// This runtime as Incognito over `scope`.
+    pub(crate) fn with_scope(&self, scope: Arc<crate::incognito::Scope>) -> Core {
+        Core {
+            inner: self.inner.clone(),
+            profile: crate::incognito::INCOGNITO.into(),
+            scope: Some(scope),
+        }
+    }
+
+    pub(crate) fn incognito_dir(&self) -> &Path {
+        &self.inner.device.incognito_dir
+    }
+
+    /// Tests: whether Trakt's service never started on this device.
+    #[cfg(test)]
+    pub(crate) fn inner_trakt_unstarted(&self) -> bool {
+        self.inner.device.trakt.get().is_none()
+    }
+
+    pub(crate) fn sweeping(&self) -> &std::sync::atomic::AtomicBool {
+        &self.inner.device.sweeping
+    }
+
+    /// The torrents Incognito created in this run, by hash.
+    #[cfg(feature = "torrent")]
+    #[doc(hidden)]
+    pub fn incognito_handles(
+        &self,
+    ) -> std::sync::MutexGuard<'_, HashMap<String, mq_engine::TorrentHandle>> {
+        self.inner
+            .incognito_handles
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+    }
+
+    pub(crate) fn live_scopes(&self) -> &std::sync::atomic::AtomicUsize {
+        &self.inner.device.live_scopes
+    }
+
+    /// Incognito scopes alive on this device.
+    pub fn live_scope_count(&self) -> usize {
+        self.live_scopes().load(SeqCst)
+    }
+
+    /// An Incognito end no session has shown yet; sessions watch it.
+    pub fn incognito_ended_unseen(&self) -> &tokio::sync::watch::Sender<bool> {
+        &self.inner.device.ended_unseen
+    }
+
+    /// What the device learned about streams (dead swarms, wrong files, no
+    /// picture, containers), merged with what this Incognito learned: picks
+    /// inside are as good as the host's, and what failed inside is not
+    /// offered again inside (plans/batch-10-incognito.md 2.3). Writes go to
+    /// `library()`.
+    pub(crate) fn knowledge<T: PartialEq>(&self, read: impl Fn(&Library) -> Vec<T>) -> Vec<T> {
+        let mut all = read(self.device_library());
+        if self.scope.is_some() {
+            for found in read(self.library()) {
+                if !all.contains(&found) {
+                    all.push(found);
+                }
+            }
+        }
+        all
+    }
+
+    /// One fact of `knowledge`: this Incognito's, else the device's.
+    pub(crate) fn known<T>(&self, read: impl Fn(&Library) -> Option<T>) -> Option<T> {
+        let found = read(self.library());
+        if found.is_some() || self.scope.is_none() {
+            return found;
+        }
+        read(self.device_library())
     }
 
     pub fn http(&self) -> &HttpClient {
@@ -418,8 +564,10 @@ impl Core {
     /// queue starts on the first call made on a runtime, and a launch's
     /// first call resumes what a kill or a reboot left.
     pub fn downloads(&self) -> Arc<crate::downloads::Downloads> {
+        // The keeper holds the device's handle, whatever profile asks first.
         let downloads = self.inner.downloads.get_or_init(|| {
-            crate::downloads::Downloads::new(self.downgrade(), self.inner.downloads_dir.clone())
+            let device = self.device().downgrade();
+            crate::downloads::Downloads::new(device, self.inner.downloads_dir.clone())
         });
         downloads.start();
         downloads.clone()
@@ -429,12 +577,22 @@ impl Core {
         &self.inner.segments
     }
 
+    /// The addon client: this Incognito's own, with its own cache, in
+    /// Incognito.
     pub fn addons(&self) -> &AddonClient {
-        &self.inner.addons
+        match &self.scope {
+            Some(scope) => &scope.addons,
+            None => &self.inner.addons,
+        }
     }
 
+    /// Where this handle's profile reads and writes: the scope's file in
+    /// Incognito, the device's otherwise.
     pub fn library(&self) -> &Library {
-        &self.inner.device.library
+        match &self.scope {
+            Some(scope) => &scope.library,
+            None => &self.inner.device.library,
+        }
     }
 
     pub fn profile(&self) -> &str {
@@ -471,7 +629,7 @@ impl Core {
         self.inner
             .device
             .trakt
-            .get_or_init(|| crate::trakt::Trakt::new(self.http().clone(), self.library()))
+            .get_or_init(|| crate::trakt::Trakt::new(self.http().clone(), self.device_library()))
     }
 
     /// A fresh hlc. Local library writes take `clock()` instead, so they are
@@ -491,23 +649,27 @@ impl Core {
         &self,
         config: &mq_sync::SyncConfig,
     ) -> Result<mq_sync::SyncReport, mq_sync::SyncError> {
-        let _gate = self.sync_gate().await;
-        self.note_sync_member(config);
-        let report = mq_sync::sync_once(self.library(), self.http(), config, self.clock()).await;
+        // The device's round from any profile, Incognito too: the scope's
+        // file never reaches the relay (wall 1, plans/batch-10-incognito.md
+        // 2.6).
+        let core = self.device();
+        let _gate = core.sync_gate().await;
+        core.note_sync_member(config);
+        let report = mq_sync::sync_once(core.library(), core.http(), config, core.clock()).await;
         // A synced switch, kids register or removal may leave no profile
         // that wants the Archive's list (plans/plugins-and-marketplace.md 5.1).
         if report.is_ok() {
-            crate::archive::forget_unwanted(self);
+            crate::archive::forget_unwanted(&core);
         }
         // The account's lists are here now: what a profile never had can be
         // given without overwriting newer edits made elsewhere.
         if report.is_ok()
-            && !self
+            && !core
                 .inner
                 .pulled
                 .swap(true, std::sync::atomic::Ordering::SeqCst)
         {
-            self.give_new_defaults();
+            core.give_new_defaults();
         }
         report
     }
@@ -571,11 +733,11 @@ impl Core {
     /// last reported (`versions`, `networkChanged`), kept in the device's
     /// store so a restart does not read "other" until the app reports again.
     pub fn network(&self) -> crate::speed::Network {
-        crate::speed::last_network(self.library())
+        crate::speed::last_network(self.device_library())
     }
 
     pub fn set_network(&self, network: crate::speed::Network) {
-        crate::speed::remember_network(self.library(), network);
+        crate::speed::remember_network(self.device_library(), network);
     }
 
     /// This build has the torrent engine.
@@ -606,7 +768,7 @@ impl Core {
     /// The measured speed of `kind` on the current network, or its prior.
     pub fn speed(&self, kind: crate::speed::Kind) -> mq_streams::Speed {
         let now = mq_library::hlc::now_ms();
-        crate::speed::estimate(self.library(), self.network(), kind, now)
+        crate::speed::estimate(self.device_library(), self.network(), kind, now)
     }
 
     /// Tests: the ranking, Settings and the engine's cache read `bytes` as
@@ -722,9 +884,9 @@ impl Core {
     }
 
     /// "Measure again": the current network's estimates go back to their
-    /// priors.
+    /// priors. The device's, from any profile (a setting like Wi-Fi's).
     pub fn reset_speed(&self) -> crate::speed::StreamConditions {
-        crate::speed::reset(self.library(), self.network());
+        crate::speed::reset(self.device_library(), self.network());
         self.stream_conditions()
     }
 
@@ -841,7 +1003,6 @@ impl Core {
     }
 
     /// Where the engine keeps torrents, running or not (tests read it).
-    #[cfg(feature = "torrent")]
     #[doc(hidden)]
     pub fn torrent_dir(&self) -> &std::path::Path {
         &self.inner.torrent_dir
@@ -1334,7 +1495,7 @@ impl Core {
     /// were here, for the apps to drop their keystore entries (each one's
     /// Trakt record). After the leave: nothing of it is sent.
     pub fn wipe(&self) -> Result<Vec<String>, CoreError> {
-        let library = self.library();
+        let library = self.device_library();
         let ids: Vec<String> = library.profiles()?.into_iter().map(|p| p.id).collect();
         // The downloaded files go with their rows, not at the next launch
         // (code review r3 N9).
@@ -1365,14 +1526,14 @@ impl Core {
     pub fn mark_removal(&self, debrid: bool) -> Result<(), CoreError> {
         let value = if debrid { "debrid" } else { "keep" };
         Ok(self
-            .library()
+            .device_library()
             .set_device_value_announced(REMOVAL, value, Table::Profiles)?)
     }
 
     /// The removal is off: its leave failed (the device still holds the
     /// account), or this device joined an account since.
     pub fn clear_removal(&self) {
-        let library = self.library();
+        let library = self.device_library();
         if library.device_value(REMOVAL).is_ok_and(|v| v.is_some())
             && let Err(e) = library.delete_device_value_announced(REMOVAL, Table::Profiles)
         {
@@ -1383,7 +1544,7 @@ impl Core {
     /// The removal this device recorded and has not finished: with the
     /// debrid connections or without.
     pub fn pending_removal(&self) -> Option<bool> {
-        let value = self.library().device_value(REMOVAL).ok().flatten()?;
+        let value = self.device_library().device_value(REMOVAL).ok().flatten()?;
         Some(value == "debrid")
     }
 
@@ -1397,12 +1558,15 @@ impl Core {
         // It takes the account's addon list: its first pull decides about
         // what it had only as untouched recommended defaults, before it
         // sends anything (plans/accounts-social-sync.md 13).
-        if let Err(e) = self.library().mark_join_defaults(self.clock().device()) {
+        if let Err(e) = self
+            .device_library()
+            .mark_join_defaults(self.clock().device())
+        {
             tracing::warn!("could not mark the join's defaults: {e}");
         }
         // Announced as an addons change: an open addons view drops `fresh`.
         if let Err(e) =
-            self.library()
+            self.device_library()
                 .set_device_value_announced(DEFAULTS_ERA, "joined", Table::Addons)
         {
             tracing::warn!("could not mark the sync join: {e}");
@@ -1412,7 +1576,7 @@ impl Core {
     /// This device belongs to a sync account: it holds the roster, or it
     /// joined or made one (the roster comes with its first sync).
     fn in_account(&self) -> bool {
-        let library = self.library();
+        let library = self.device_library();
         let marked = library
             .device_value(DEFAULTS_ERA)
             .ok()
@@ -1426,7 +1590,7 @@ impl Core {
     /// its roster is stored (plans/accounts.md 3.3).
     pub fn created_sync_account(&self) {
         self.clear_removal();
-        let library = self.library();
+        let library = self.device_library();
         let fresh = library
             .device_value(DEFAULTS_ERA)
             .is_ok_and(|era| era.as_deref() == Some("fresh"));
@@ -1627,7 +1791,7 @@ fn redact(transport_url: &str) -> String {
 
 /// Persists addon responses in the library database so Home can render from
 /// cache on the next launch while it revalidates.
-struct LibraryCache(Arc<Library>);
+pub(crate) struct LibraryCache(pub(crate) Arc<Library>);
 
 impl CacheStore for LibraryCache {
     fn load(&self, key: &str) -> Option<StoredResponse> {

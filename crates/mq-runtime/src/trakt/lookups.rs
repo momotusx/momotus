@@ -400,8 +400,8 @@ impl Core {
     /// or `series`). `None` as for `tmdb_find`.
     pub(crate) async fn trakt_score(&self, kind: &'static str, imdb: &str) -> Option<(f64, u64)> {
         // Before the memory, which is the device's: a kids profile never
-        // gets an answer another profile's page kept.
-        if kids(self) {
+        // gets an answer another profile's page kept. Incognito never asks.
+        if self.incognito() || kids(self) {
             return None;
         }
         let key = key(kind, imdb);
@@ -429,7 +429,7 @@ impl Core {
     /// empty as for `tmdb_find`.
     pub(crate) async fn trakt_related(&self, kind: &'static str, imdb: &str) -> Vec<Found> {
         // Before the memory, as `trakt_score`.
-        if kids(self) {
+        if self.incognito() || kids(self) {
             return Vec::new();
         }
         let key = key(kind, imdb);

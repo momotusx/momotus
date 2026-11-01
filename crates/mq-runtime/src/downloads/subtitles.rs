@@ -176,7 +176,7 @@ fn wanted_languages(core: &Core, row: &DownloadRecord) -> Vec<String> {
             tags.push(tag);
         }
     };
-    let profiles = core.library().profiles().unwrap_or_default();
+    let profiles = core.device_library().profiles().unwrap_or_default();
     for p in profiles {
         for code in core.for_profile(&p.id).prefs().subtitle_languages {
             push(&code);

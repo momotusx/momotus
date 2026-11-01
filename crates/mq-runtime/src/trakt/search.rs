@@ -87,12 +87,12 @@ impl Core {
     /// Whether search may ask Trakt: an app id is set and the profile is
     /// not a kids profile.
     pub(crate) fn trakt_search_ready(&self) -> bool {
-        !kids(self) && self.trakt().config().is_some()
+        !self.incognito() && !kids(self) && self.trakt().config().is_some()
     }
 
     /// The fresh answer memory holds for `key` (a folded query), with no call.
     pub(crate) fn trakt_titles_held(&self, key: &str) -> Option<Vec<Found>> {
-        if kids(self) {
+        if self.incognito() || kids(self) {
             return None;
         }
         match lock(&self.trakt().search).held(key, Instant::now()) {
@@ -107,7 +107,7 @@ impl Core {
     /// failed call, or one Trakt's quiet time holds back, gives the answer
     /// memory still has, however old.
     pub(crate) async fn trakt_titles(&self, query: &str, key: &str) -> Option<Vec<Found>> {
-        if kids(self) {
+        if self.incognito() || kids(self) {
             return None;
         }
         let trakt = self.trakt();

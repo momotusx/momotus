@@ -1537,6 +1537,11 @@ pub(crate) fn shows(policy: &Policy, kind: &str, id: &str, video: &str) -> bool 
 // newer plays of titles off the list never crowd out allowed ones. Answers
 // the titles the row shows, for their ratings.
 async fn refresh_continue(core: &Core, rows: &Mutex<ObservableVector<HomeRow>>) {
+    // Incognito shows no Continue Watching row (plans/batch-10-incognito.md
+    // 2.4); its resume points still work on the title.
+    if core.incognito() {
+        return;
+    }
     let library = core.library();
     let policy = core.policy();
     // Read once: the tiles below each read their kept IMDb id after their meta.

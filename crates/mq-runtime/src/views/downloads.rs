@@ -117,6 +117,8 @@ impl DownloadsView {
     }
 
     fn opened(core: &Core, locked: bool) -> Self {
+        // Rendered as the host in Incognito (plans/batch-10-incognito.md 4).
+        let core = &core.device();
         let downloads = core.downloads();
         let mut boards = downloads.board().subscribe();
         let snapshot = SharedObservable::new(render(core, &downloads.board().get(), locked));

@@ -1087,12 +1087,14 @@ impl VersionsView {
             },
             engine: core.has_engine(),
             debrid: core.debrid().is_some(),
-            dead_swarms: crate::speed::dead_swarms(core.library(), mq_library::hlc::now_ms()),
+            dead_swarms: core
+                .knowledge(|l| crate::speed::dead_swarms(l, mq_library::hlc::now_ms())),
             limit_chosen: core.size_limit_chosen(),
-            no_picture: crate::speed::no_picture(core.library()),
-            did_not_play: crate::speed::did_not_play(core.library(), mq_library::hlc::now_ms()),
-            wrong_file: crate::speed::wrong_file(core.library(), mq_library::hlc::now_ms()),
-            containers: crate::speed::containers(core.library()),
+            no_picture: core.knowledge(crate::speed::no_picture),
+            did_not_play: core
+                .knowledge(|l| crate::speed::did_not_play(l, mq_library::hlc::now_ms())),
+            wrong_file: core.knowledge(|l| crate::speed::wrong_file(l, mq_library::hlc::now_ms())),
+            containers: core.knowledge(crate::speed::containers),
             reclaimable_bytes,
             committed_bytes,
             metered: core.network() == crate::speed::Network::Cellular,
@@ -2620,12 +2622,12 @@ fn holding(rows: &[RankedRow], is: impl Fn(&ParsedStream) -> bool) -> Option<Ran
 /// again and the rows rank again; a frozen pick that just failed is let
 /// go, so the next one can lead (code review 2026-10-20 P2-1).
 fn relearn(core: &Core, s: &mut State, failed: Option<&str>) {
-    let (lib, now) = (core.library(), mq_library::hlc::now_ms());
-    s.rank.dead_swarms = crate::speed::dead_swarms(lib, now);
-    s.rank.no_picture = crate::speed::no_picture(lib);
-    s.rank.did_not_play = crate::speed::did_not_play(lib, now);
-    s.rank.wrong_file = crate::speed::wrong_file(lib, now);
-    s.rank.containers = crate::speed::containers(lib);
+    let now = mq_library::hlc::now_ms();
+    s.rank.dead_swarms = core.knowledge(|l| crate::speed::dead_swarms(l, now));
+    s.rank.no_picture = core.knowledge(crate::speed::no_picture);
+    s.rank.did_not_play = core.knowledge(|l| crate::speed::did_not_play(l, now));
+    s.rank.wrong_file = core.knowledge(|l| crate::speed::wrong_file(l, now));
+    s.rank.containers = core.knowledge(crate::speed::containers);
     let pick_failed = s
         .recommended
         .as_ref()

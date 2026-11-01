@@ -133,7 +133,7 @@ pub(crate) async fn streams(core: &Core, names: &[&str], year: Option<u16>) -> V
         .iter()
         .map(|n| norm(n))
         .filter(|n| !n.is_empty())
-        .find_map(|n| core.library().archive_film(&n, year).ok().flatten());
+        .find_map(|n| core.device_library().archive_film(&n, year).ok().flatten());
     // The profile may have changed while the list came.
     let Some(id) = found.filter(|_| wanted(core)) else {
         return Vec::new();
@@ -156,7 +156,7 @@ async fn ready(core: &Core) {
     if !due(core) {
         return;
     }
-    let first = core.library().archive_films().unwrap_or(0) == 0;
+    let first = core.device_library().archive_films().unwrap_or(0) == 0;
     let task = tokio::spawn({
         let core = core.clone();
         async move { refresh(&core).await }
@@ -167,7 +167,7 @@ async fn ready(core: &Core) {
 }
 
 fn fetched(core: &Core) -> Fetched {
-    (core.library().device_value(STATE).ok().flatten())
+    (core.device_library().device_value(STATE).ok().flatten())
         .and_then(|v| serde_json::from_str(&v).ok())
         .unwrap_or_default()
 }
@@ -179,7 +179,7 @@ fn due(core: &Core) -> bool {
     let f = fetched(core);
     // A list from the future (the clock moved back) is stale too.
     let stale = f.fetched_ms.is_none_or(|t| now >= t + WEEK_MS || t > now)
-        || core.library().archive_films().unwrap_or(0) == 0;
+        || core.device_library().archive_films().unwrap_or(0) == 0;
     let missed = lock(&core.archive().missed).is_some_and(|t| t.elapsed() < RETRY_SOON);
     stale && now >= f.retry_ms && !missed && core.network() != crate::speed::Network::Cellular
 }
@@ -200,7 +200,7 @@ async fn refresh(core: &Core) {
         // Switched off or away while it came: nothing is kept.
         Ok(_) if !wanted(core) => return,
         Ok(films) => {
-            if let Err(e) = core.library().put_archive_index(&films) {
+            if let Err(e) = core.device_library().put_archive_index(&films) {
                 tracing::warn!("archive list not stored: {e}");
                 *lock(&archive.missed) = Some(Instant::now());
                 return;
@@ -224,7 +224,7 @@ async fn refresh(core: &Core) {
         }
     }
     if let Ok(text) = serde_json::to_string(&f) {
-        let _ = core.library().set_device_value(STATE, &text);
+        let _ = core.device_library().set_device_value(STATE, &text);
     }
 }
 
@@ -625,7 +625,7 @@ fn clean(text: &str) -> String {
 /// Deletes the list when no profile on this device that may use it (a kids
 /// profile never does) has the source on (5.1).
 pub(crate) fn forget_unwanted(core: &Core) {
-    let Ok(profiles) = core.library().profiles() else {
+    let Ok(profiles) = core.device_library().profiles() else {
         return;
     };
     let any = profiles
@@ -633,7 +633,7 @@ pub(crate) fn forget_unwanted(core: &Core) {
         .filter(|p| !p.kids())
         .any(|p| core.for_profile(&p.id).prefs().archive);
     if !any {
-        let _ = core.library().clear_archive_index();
-        let _ = core.library().set_device_value(STATE, "{}");
+        let _ = core.device_library().clear_archive_index();
+        let _ = core.device_library().set_device_value(STATE, "{}");
     }
 }

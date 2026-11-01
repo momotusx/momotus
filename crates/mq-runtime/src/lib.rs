@@ -10,6 +10,7 @@ mod covers;
 mod debrid;
 pub mod defaults;
 pub mod downloads;
+pub mod incognito;
 pub mod languages;
 pub mod learn;
 pub mod live;

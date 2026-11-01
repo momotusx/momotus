@@ -3,7 +3,8 @@
 //! device's one attempt throttle.
 
 use crate::Core;
-use crate::views::profiles::{ProfileInfo, ProfilesSnapshot, WipePending};
+use crate::incognito::INCOGNITO;
+use crate::views::profiles::{ProfileInfo, ProfilesSnapshot, SessionState, WipePending};
 use argon2::password_hash::phc::PasswordHash;
 use argon2::password_hash::{PasswordHasher, PasswordVerifier};
 use argon2::{Algorithm, Argon2, Params, Version};
@@ -102,7 +103,7 @@ impl Core {
     /// stored or hinted profile that is gone, unknown or still syncing opens
     /// the owner; none is ever created.
     pub fn active(&self) -> Core {
-        let library = self.library();
+        let library = self.device_library();
         let usable = |id: &str| matches!(library.profile(id), Ok(Some(p)) if p.ready());
         let chosen = match library.active_profile() {
             Ok(Some(stored)) => stored,
@@ -113,21 +114,70 @@ impl Core {
 
     /// Remembers this handle's profile as the device's active one.
     pub fn make_active(&self) -> Result<(), ProfileError> {
-        Ok(self.library().set_active_profile(self.profile())?)
+        Ok(self.device_library().set_active_profile(self.profile())?)
     }
 
     /// Whether this handle's profile asks for a PIN (an unreadable hash
     /// counts: it fails closed).
     pub fn has_pin(&self) -> bool {
+        // Incognito has no PIN of its own (plans/batch-10-incognito.md 5.3).
+        if self.incognito() {
+            return false;
+        }
         // Open only when the profile is known to have none: a read error, an
         // unknown profile or a missing lock register all count as a PIN.
-        !matches!(self.library().profile(self.profile()), Ok(Some(p)) if p.lock == Some(None))
+        !matches!(self.device_library().profile(self.profile()), Ok(Some(p)) if p.lock == Some(None))
+    }
+
+    /// The picker's snapshot for a session in `state`
+    /// (plans/batch-10-incognito.md 2.7): the profiles from the device, the
+    /// session's active one, and in Incognito its host; outside it, whose
+    /// PIN entering Incognito asks for.
+    pub fn profiles_snapshot_for(&self, state: &SessionState) -> ProfilesSnapshot {
+        let (active, locked, host, ended) = state;
+        let mut snapshot = match host {
+            Some(host) => {
+                let mut snapshot = self.for_profile(host).profiles_snapshot(false);
+                snapshot.active = INCOGNITO.to_owned();
+                snapshot.kids = false;
+                snapshot.incognito_host = Some(host.clone());
+                snapshot
+            }
+            None => {
+                let session = self.for_profile(active);
+                let mut snapshot = session.profiles_snapshot(*locked);
+                snapshot.incognito_pin = session.incognito_pin(*locked);
+                snapshot
+            }
+        };
+        snapshot.incognito_ended = *ended;
+        snapshot
+    }
+
+    /// The profile whose PIN entering Incognito from this session asks
+    /// for (plans/batch-10-incognito.md 2.7): the owner's, when the owner
+    /// has one and the session is locked, or the device has a kids profile
+    /// and the host has no PIN of its own. A kids session asks none: it
+    /// cannot enter.
+    pub fn incognito_pin(&self, locked: bool) -> Option<String> {
+        let owner = self.for_profile(OWNER);
+        if !owner.has_pin() {
+            return None;
+        }
+        if locked {
+            return Some(OWNER.to_owned());
+        }
+        if self.policy().kids() {
+            return None;
+        }
+        let asked = self.kids_exist().unwrap_or(true) && !self.has_pin();
+        asked.then(|| OWNER.to_owned())
     }
 
     /// Every profile, with this handle's as the active one.
     pub fn profiles_snapshot(&self, locked: bool) -> ProfilesSnapshot {
         let profiles = self
-            .library()
+            .device_library()
             .profiles()
             .unwrap_or_default()
             .into_iter()
@@ -179,17 +229,17 @@ impl Core {
         if kids {
             self.owner_pin_checkable()?;
         }
-        if self.library().profiles()?.len() >= MAX_PROFILES {
+        if self.device_library().profiles()?.len() >= MAX_PROFILES {
             return Err(ProfileError::TooMany);
         }
         let mut bytes = [0u8; 16];
         getrandom::fill(&mut bytes).expect("os randomness");
         let id: String = bytes.iter().map(|b| format!("{b:02x}")).collect();
         if kids {
-            self.library()
+            self.device_library()
                 .create_kids_profile(&id, name, avatar, self.clock())?;
         } else {
-            self.library()
+            self.device_library()
                 .create_profile(&id, name, avatar, self.clock())?;
         }
         Ok(id)
@@ -198,7 +248,7 @@ impl Core {
     /// The owner has a PIN, and one this build can check.
     fn owner_pin_checkable(&self) -> Result<(), ProfileError> {
         let owner = self
-            .library()
+            .device_library()
             .profile(OWNER)?
             .ok_or(ProfileError::Unknown)?;
         match owner.lock {
@@ -212,7 +262,7 @@ impl Core {
 
     /// Whether any kids profile is here.
     fn kids_exist(&self) -> Result<bool, ProfileError> {
-        Ok(self.library().profiles()?.iter().any(|p| p.kids()))
+        Ok(self.device_library().profiles()?.iter().any(|p| p.kids()))
     }
 
     /// A profile edits its own name, avatar and position; the owner edits
@@ -227,10 +277,13 @@ impl Core {
         if id != self.profile() && self.profile() != OWNER {
             return Err(ProfileError::NotOwner);
         }
-        let row = self.library().profile(id)?.ok_or(ProfileError::Unknown)?;
+        let row = self
+            .device_library()
+            .profile(id)?
+            .ok_or(ProfileError::Unknown)?;
         let name = name.map(valid_name).transpose()?.unwrap_or(&row.name);
         avatar.map(valid_avatar).transpose()?;
-        self.library().update_profile(
+        self.device_library().update_profile(
             id,
             name,
             avatar.unwrap_or(&row.avatar),
@@ -248,8 +301,10 @@ impl Core {
         if id == OWNER {
             return Err(ProfileError::OwnerProfile);
         }
-        self.library().profile(id)?.ok_or(ProfileError::Unknown)?;
-        self.library().delete_profile(id, self.clock())?;
+        self.device_library()
+            .profile(id)?
+            .ok_or(ProfileError::Unknown)?;
+        self.device_library().delete_profile(id, self.clock())?;
         // Its Trakt rounds stop and its tokens leave memory.
         self.trakt().forget(id);
         crate::archive::forget_unwanted(self);
@@ -278,12 +333,15 @@ impl Core {
         current: Option<&str>,
         between: impl FnOnce(),
     ) -> Result<(), ProfileError> {
-        let row = self.library().profile(id)?.ok_or(ProfileError::Unknown)?;
+        let row = self
+            .device_library()
+            .profile(id)?
+            .ok_or(ProfileError::Unknown)?;
         if id != self.profile() {
             if self.profile() != OWNER || pin.is_some() {
                 return Err(ProfileError::NotOwner);
             }
-            self.library().set_pin_hash(id, None, self.clock())?;
+            self.device_library().set_pin_hash(id, None, self.clock())?;
             return self.forgive(id);
         }
         // Leaving a kids profile needs the owner's PIN: it stays while one
@@ -315,9 +373,9 @@ impl Core {
         if id == OWNER && hash.is_none() {
             // Checked again in the write: a kids profile created meanwhile
             // keeps the PIN.
-            self.library().clear_owner_pin(self.clock())?;
+            self.device_library().clear_owner_pin(self.clock())?;
         } else {
-            self.library()
+            self.device_library()
                 .set_pin_hash(id, hash.as_deref(), self.clock())?;
         }
         self.forgive(id)
@@ -327,7 +385,8 @@ impl Core {
     /// apps call it only after the device's own lock (an OS prompt), which
     /// the core cannot see, so it has the trust of removing a device.
     pub fn reset_owner_pin(&self) -> Result<(), ProfileError> {
-        self.library().set_pin_hash(OWNER, None, self.clock())?;
+        self.device_library()
+            .set_pin_hash(OWNER, None, self.clock())?;
         self.forgive(OWNER)
     }
 
@@ -336,7 +395,7 @@ impl Core {
     fn forgive(&self, id: &str) -> Result<(), ProfileError> {
         let mut throttle = self.pins().lock().unwrap_or_else(|p| p.into_inner());
         throttle.until.remove(id);
-        Ok(self.library().set_pin_failures(id, 0)?)
+        Ok(self.device_library().set_pin_failures(id, 0)?)
     }
 
     /// One PIN attempt for `profile` under the device's throttle. A profile
@@ -346,7 +405,7 @@ impl Core {
         let (profile, pin) = (profile.to_owned(), pin.map(str::to_owned));
         blocking(move || {
             attempt(
-                core.library(),
+                core.device_library(),
                 core.pins(),
                 &profile,
                 pin.as_deref(),
@@ -391,7 +450,7 @@ impl Core {
     ) -> Result<(), ProfileError> {
         let hlc = self.hlc();
         self.kids_target(profile)?;
-        let library = self.library();
+        let library = self.device_library();
         let allowed_now =
             allowed_entry(library, profile, id)?.is_some_and(|v| v["allowed"] == true);
         let list = library.allowed_list(profile)?;
@@ -416,7 +475,7 @@ impl Core {
     pub fn remove_title(&self, profile: &str, id: &str) -> Result<(), ProfileError> {
         let hlc = self.hlc();
         self.kids_target(profile)?;
-        let library = self.library();
+        let library = self.device_library();
         // Written even when nothing is stored yet: an Allow still fetching
         // (stamped earlier) then lands below it and changes nothing.
         let stored = allowed_entry(library, profile, id)?.unwrap_or_default();
@@ -442,7 +501,7 @@ impl Core {
     /// again: made standard meanwhile (by sync) is `notKids`.
     pub fn make_standard(&self, profile: &str) -> Result<(), ProfileError> {
         self.kids_target(profile)?;
-        self.library()
+        self.device_library()
             .make_standard(profile, self.clock())?
             .then_some(())
             .ok_or(ProfileError::NotKids)
@@ -454,7 +513,7 @@ impl Core {
             return Err(ProfileError::NotOwner);
         }
         let row = self
-            .library()
+            .device_library()
             .profile(profile)?
             .ok_or(ProfileError::Unknown)?;
         if !row.ready() {
@@ -539,7 +598,7 @@ impl Core {
         let pin = pin.map(str::to_owned);
         blocking(move || {
             exit_attempt(
-                core.library(),
+                core.device_library(),
                 core.pins(),
                 pin.as_deref(),
                 device_auth,

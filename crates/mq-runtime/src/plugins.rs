@@ -687,8 +687,10 @@ pub(crate) async fn providers_for(core: &Core, ask: &Ask) -> Vec<(String, Provid
 /// The script of `p`: the one kept while its version holds and it is under
 /// a day old, else fetched (2 MiB) and kept; the kept one when a fetch
 /// fails.
+/// In Incognito a script the host already has is read from the device,
+/// and one fetched inside is kept in the scope only.
 async fn script(core: &Core, p: &Provider) -> Option<String> {
-    let kept = core.library().plugin_code(p.script.as_str()).ok().flatten();
+    let kept = core.known(|l| l.plugin_code(p.script.as_str()).ok().flatten());
     let now = mq_library::hlc::now_ms() as i64;
     if let Some(k) = &kept
         && k.version == p.version

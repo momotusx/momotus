@@ -87,9 +87,10 @@ pub struct WipePending {
     pub debrid: bool,
 }
 
-/// A session's (active profile, locked, Incognito host), sent on every
-/// switch and lock. The host is set only while the session runs Incognito.
-pub type SessionState = (String, bool, Option<String>);
+/// A session's (active profile, locked, Incognito host, Incognito ended
+/// unseen), sent on every switch and lock. The host is set only while the
+/// session runs Incognito; the last is the snapshot's `incognitoEnded`.
+pub type SessionState = (String, bool, Option<String>, bool);
 
 pub struct ProfilesView {
     snapshot: SharedObservable<ProfilesSnapshot>,
@@ -99,6 +100,8 @@ pub struct ProfilesView {
 impl ProfilesView {
     pub fn open(core: &Core, session: watch::Receiver<SessionState>) -> Self {
         // Subscribe before the first read so no change slips in between.
+        // The device's profiles, in Incognito too.
+        let core = &core.device();
         let changes = core.library().subscribe();
         let snapshot = SharedObservable::new(read(core, &session));
         let task = tokio::spawn(watch(core.clone(), changes, session, snapshot.clone()));
@@ -126,8 +129,8 @@ impl Drop for ProfilesView {
 }
 
 fn read(core: &Core, session: &watch::Receiver<SessionState>) -> ProfilesSnapshot {
-    let (active, locked, _host) = session.borrow().clone();
-    core.for_profile(&active).profiles_snapshot(locked)
+    let state = session.borrow().clone();
+    core.profiles_snapshot_for(&state)
 }
 
 async fn watch(
