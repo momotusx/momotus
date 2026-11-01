@@ -583,3 +583,33 @@ test("profiles: the unload handler asks while edits are unsaved and stays quiet 
   await name.fill(was);
   expect(await asks()).toBe(false);
 });
+
+test("profiles: the browser's Back to another document asks before unsaved edits are lost", async ({ page }) => {
+  // Two documents: the edit page opened by its address (a deep link or a reload) over another page.
+  await page.goto("/library");
+  await page.goto("/profiles/edit/default");
+  const name = page.locator('[data-f="pedit:name"]');
+  await expect(name).toBeVisible({ timeout: 30_000 });
+  const was = await name.inputValue();
+  await name.click();
+  await page.keyboard.type(" edited");
+  const asked: string[] = [];
+  // Staying keeps the page and the edit.
+  page.once("dialog", (d) => {
+    asked.push(d.type());
+    void d.dismiss();
+  });
+  await page.goBack({ timeout: 3_000 }).catch(() => null);
+  expect(asked).toEqual(["beforeunload"]);
+  await expect(page).toHaveURL(/\/profiles\/edit\/default/);
+  await expect(name).toHaveValue(`${was} edited`);
+  // Leaving goes to the page before, and nothing was saved.
+  page.once("dialog", (d) => {
+    asked.push(d.type());
+    void d.accept();
+  });
+  await page.goBack();
+  expect(asked).toEqual(["beforeunload", "beforeunload"]);
+  await expect(page).toHaveURL(/\/library/);
+  expect((await picker()).profiles.find((p) => p.id === "default")?.name).toBe(was);
+});
