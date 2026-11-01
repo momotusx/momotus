@@ -146,18 +146,27 @@ fun MarqueeRoot(
 
             // Every Incognito entry opens on its intro (plans/batch-10-incognito.md 5.1).
             incognito && gate.intro -> {
-                IncognitoIntro(
-                    debrid =
+                // The debrid line never depends on timing: the intro waits for the debrid view (it opens at start).
+                val debrid =
+                    introDebrid(
                         session.debrid
                             .current()
                             ?.accounts
-                            ?.isNotEmpty() == true,
-                    onContinue = { gate.intro = false },
-                    onLeave = {
-                        gate.intro = false
-                        gate.startLeave()
-                    },
-                )
+                            ?.size,
+                        session.debrid.status is ViewStatus.Failed,
+                    )
+                if (debrid == null) {
+                    StartingScreen()
+                } else {
+                    IncognitoIntro(
+                        debrid = debrid,
+                        onContinue = { gate.intro = false },
+                        onLeave = {
+                            gate.intro = false
+                            gate.startLeave()
+                        },
+                    )
+                }
             }
 
             else -> {
@@ -228,6 +237,9 @@ internal fun ProfileKeyed(
  * The back stack of [profile]. The first one each profile composes in this state may be what the saved state
  * brought back after the process died (picked first, or later in the process): it does not reopen the player
  * (plans/m6-android.md 7.1, journey review r2 P2-1). [seen] holds the profiles already past that.
+ * [fresh]: an Incognito end the session has not read (`incognitoEnded`, also set for a scope found at launch): nothing
+ * saved comes back, so no screen of that Incognito can open under the profile it returns to (plans/batch-10-incognito.md
+ * 5.4). A stack saved under another profile never comes back here at all ([ProfileKeyed]).
  */
 @Composable
 internal fun rememberProfileStack(
@@ -236,11 +248,13 @@ internal fun rememberProfileStack(
     seen: MutableSet<String?>,
     /** The phone has no Calendar tab: a stored one opens Library. */
     phone: Boolean = false,
+    fresh: Boolean = false,
 ) = rememberNavBackStack(*initial.toTypedArray()).let { saved ->
     remember(saved) {
         if (seen.add(profile)) {
             val restored = saved.map { it as Route }
-            val kept = restoredStack(restored).let { if (phone) calendarInLibrary(it) else it }
+            val kept =
+                if (fresh) initial else restoredStack(restored).let { if (phone) calendarInLibrary(it) else it }
             if (kept != restored) {
                 saved.clear()
                 saved.addAll(kept)
@@ -262,7 +276,14 @@ private fun AppNav(
     val gate = (LocalContext.current.applicationContext as MarqueeApp).profiles
     val accessibility = LocalAccessibilityManager.current
     val incognito = ProfileCopy.inIncognito(gate.snapshot)
-    val backStack = rememberProfileStack(gate.snapshot?.active, initial, app.stacksSeen, phone = form == Form.Phone)
+    val backStack =
+        rememberProfileStack(
+            gate.snapshot?.active,
+            initial,
+            app.stacksSeen,
+            phone = form == Form.Phone,
+            fresh = gate.snapshot?.incognitoEnded == true,
+        )
     val routes = backStack.map { it as Route }
     val top = routes.last()
     val tv = form == Form.Tv

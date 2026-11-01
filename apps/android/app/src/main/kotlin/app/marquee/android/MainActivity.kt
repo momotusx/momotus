@@ -68,11 +68,12 @@ class MainActivity : ComponentActivity() {
         DebugEntry.launched(this)
         if (DebugEntry.show(this, form)) return
         val session = (application as MarqueeApp).session
-        // Incognito keeps its last frame out of Recents (plans/batch-10-incognito.md 5.5; Android 12 and older cannot).
+        // Incognito keeps its last frame out of Recents (plans/batch-10-incognito.md 5.5): from Android 13 by the Recents
+        // switch, before that by FLAG_SECURE, which also blocks screenshots there.
         val gate = (application as MarqueeApp).profiles
         lifecycleScope.launch {
             snapshotFlow { ProfileCopy.inIncognito(gate.snapshot) }.collect { on ->
-                recentsFrame(Build.VERSION.SDK_INT, on, ::recents)
+                recentsFrame(Build.VERSION.SDK_INT, on, ::recents, ::secure)
             }
         }
         // Debug and benchmark builds (never a store build): `title=movie:tt1727587` starts on that title page,
@@ -161,6 +162,11 @@ class MainActivity : ComponentActivity() {
         if (Build.VERSION.SDK_INT >= 33) setRecentsScreenshotEnabled(enabled)
     }
 
+    private fun secure(on: Boolean) {
+        val flag = WindowManager.LayoutParams.FLAG_SECURE
+        if (on) window.addFlags(flag) else window.clearFlags(flag)
+    }
+
     override fun onDestroy() {
         // Closing the app ends Incognito, also when a download keeps the process (plans/batch-10-incognito.md 5.3).
         if (isFinishing && !isChangingConfigurations) (application as MarqueeApp).profiles.leaveOnClose()
@@ -169,13 +175,17 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-/** Recents shows the app's last frame only outside Incognito, from Android 13 (API 33), where [set] exists. */
+/**
+ * Recents shows the app's last frame only outside Incognito: from Android 13 (API 33) by [recents], the Recents switch;
+ * before that by [secure], FLAG_SECURE on the window, the only way there.
+ */
 internal fun recentsFrame(
     sdk: Int,
     incognito: Boolean,
-    set: (Boolean) -> Unit,
+    recents: (Boolean) -> Unit,
+    secure: (Boolean) -> Unit,
 ) {
-    if (sdk >= 33) set(!incognito)
+    if (sdk >= 33) recents(!incognito) else secure(incognito)
 }
 
 /**

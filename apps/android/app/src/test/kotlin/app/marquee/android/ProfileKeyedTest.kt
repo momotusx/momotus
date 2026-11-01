@@ -62,6 +62,46 @@ class ProfileKeyedTest {
         compose.onNodeWithText("top: ${Route.Title("movie", "tt1")}").assertExists()
     }
 
+    // An unread Incognito end at the next launch (plain: it changes only for the restored composition).
+    private var ended = false
+
+    private fun restoreAfterIncognito(
+        saveAs: String,
+        next: String,
+    ) {
+        val tester = StateRestorationTester(compose)
+        profile = saveAs
+        tester.setContent {
+            val who = profile
+            ProfileKeyed(who) {
+                val stack = rememberProfileStack(who, listOf(Route.Home), seen, fresh = ended)
+                Column {
+                    BasicText("top: ${stack.last()}")
+                    BasicText("Open", Modifier.clickable { stack.add(Route.Title("movie", "tt0013442")) })
+                }
+            }
+        }
+        compose.onNodeWithText("Open").performClick()
+        compose.onNodeWithText("top: ${Route.Title("movie", "tt0013442")}").assertExists()
+        // The process dies in Incognito; the core ends the scope at launch and the session reads it as unread.
+        profile = next
+        ended = true
+        seen = HashSet()
+        tester.emulateSavedInstanceStateRestore()
+    }
+
+    @Test
+    fun `an Incognito title never comes back under the host after the process died`() {
+        restoreAfterIncognito(saveAs = "incognito", next = "dad")
+        compose.onNodeWithText("top: ${Route.Home}").assertExists()
+    }
+
+    @Test
+    fun `an unread Incognito end starts the profile on Home, whatever its saved stack holds`() {
+        restoreAfterIncognito(saveAs = "dad", next = "dad")
+        compose.onNodeWithText("top: ${Route.Home}").assertExists()
+    }
+
     // The profile picked later in the same process (state: a switch recomposes); null until then.
     private var switched by mutableStateOf<String?>(null)
 

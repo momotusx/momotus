@@ -138,6 +138,7 @@ object ProfileCopy {
     const val INCOGNITO_LIBRARY_EMPTY = "Nothing here yet. Titles you add in Incognito are gone when you leave."
     const val INCOGNITO_TRAILERS_OFF = "Off in Incognito."
     const val INCOGNITO_DEBRID = "Uses this device's debrid account"
+    const val INCOGNITO_SOURCES = "Addons and plugins"
 
     /** The intro's two groups (section 6); [debrid] adds the debrid line, [tv] picks the end line. */
     data class Intro(

@@ -604,7 +604,7 @@ fun PickerScreen(
         }
     LaunchedEffect(target, s.profiles) {
         if (target == ProfileCopy.INCOGNITO && chosen == null) {
-            // Incognito did not open (out of space, a core refusal): the chooser stays with the reason.
+            // Incognito did not open (a refusal at entry): the chooser stays with the reason.
             picked = null
             said = gate.switchProblem?.let { ProfileCopy.problem(it.code, ErrorCopy.words(it)) }.orEmpty()
             if (gate.switching != null) gate.cancelSwitch(toPicker = true)
@@ -1812,6 +1812,21 @@ private fun PinSteps(
         },
     )
 }
+
+/**
+ * Whether the intro says the debrid line ("Your debrid account keeps its own history."): with an account, yes; with none,
+ * no; and when the device's debrid view cannot answer, yes, since a missing disclosure is the worse mistake. Null while the
+ * view has not answered: the intro waits rather than drop the line by timing.
+ */
+internal fun introDebrid(
+    accounts: Int?,
+    failed: Boolean,
+): Boolean? =
+    when {
+        accounts != null -> accounts > 0
+        failed -> true
+        else -> null
+    }
 
 /**
  * The intro on every Incognito entry (plans/batch-10-incognito.md 5.1, 6): the mark, what is not kept, what is still

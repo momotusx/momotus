@@ -124,6 +124,12 @@ class IncognitoDesignTest {
     }
 
     @Test
+    fun `the app's image loader carries the Incognito interceptor`() {
+        val loader = createImageLoader(RuntimeEnvironment.getApplication()) { true }
+        assertTrue(loader.components.interceptors.any { it is PrivateDisk })
+    }
+
+    @Test
     fun `the trailer host plays nothing in Incognito, so no player is made`() {
         val state = TrailerState()
         var ended = false

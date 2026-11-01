@@ -361,15 +361,19 @@ class IncognitoScreensTest {
         var left = 0
         var chooser = 0
         open(snapshot(host = "ana"), Form.Phone) {
-            PhoneSettings(
-                ProfileCopy.incognito,
-                ProfileCopy.INCOGNITO_KEPT_NOTHING,
-                null,
-                { chooser++ },
-                emptyList(),
-                onLeave = { left++ },
-            )
+            CompositionLocalProvider(LocalIncognito provides true) {
+                PhoneSettings(
+                    ProfileCopy.incognito,
+                    ProfileCopy.INCOGNITO_KEPT_NOTHING,
+                    null,
+                    { chooser++ },
+                    listOf(SettingsPart(SettingsSection.Sources) {}),
+                    onLeave = { left++ },
+                )
+            }
         }
+        // Sources lists what Incognito has there: no debrid, Trakt or import.
+        compose.onNodeWithText(ProfileCopy.INCOGNITO_SOURCES).assertExists()
         compose.onNodeWithText("Incognito").assertExists()
         compose.onNode(hasText(ProfileCopy.INCOGNITO_LEAVE) and hasClickAction()).performClick()
         assertEquals(1, left)
@@ -412,11 +416,25 @@ class IncognitoScreensTest {
     }
 
     @Test
-    fun `Recents keeps the last frame only outside Incognito, from Android 13`() {
-        val set = mutableListOf<Boolean>()
-        recentsFrame(33, incognito = true) { set += it }
-        recentsFrame(33, incognito = false) { set += it }
-        recentsFrame(32, incognito = true) { set += it }
-        assertEquals(listOf(false, true), set)
+    fun `the intro waits for the debrid view, and says the line when it cannot know`() {
+        assertEquals(null, introDebrid(accounts = null, failed = false))
+        assertEquals(true, introDebrid(accounts = 1, failed = false))
+        assertEquals(false, introDebrid(accounts = 0, failed = false))
+        assertEquals(true, introDebrid(accounts = null, failed = true))
+    }
+
+    @Test
+    fun `Recents keeps no Incognito frame, by its switch from Android 13 and by FLAG_SECURE before`() {
+        val calls = mutableListOf<String>()
+
+        fun frame(
+            sdk: Int,
+            incognito: Boolean,
+        ) = recentsFrame(sdk, incognito, { calls += "recents $it" }, { calls += "secure $it" })
+        frame(33, incognito = true)
+        frame(33, incognito = false)
+        frame(32, incognito = true)
+        frame(24, incognito = false)
+        assertEquals(listOf("recents false", "recents true", "secure true", "secure false"), calls)
     }
 }

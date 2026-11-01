@@ -71,6 +71,7 @@ import app.marquee.design.Backdrop
 import app.marquee.design.FocusInk
 import app.marquee.design.Form
 import app.marquee.design.Icons
+import app.marquee.design.LocalIncognito
 import app.marquee.design.Marquee
 import app.marquee.design.MqIcon
 import app.marquee.design.MqText
@@ -404,7 +405,18 @@ internal fun PhoneSettings(
                     *sections
                         .map { part ->
                             val s = part.section
-                            @Composable { SettingsRow(s.icon, s.tone, s.label, s.summary, { onSection(s) }, lines = 2) }
+                            @Composable {
+                                // Incognito's Sources holds Addons and Plugins only.
+                                val line =
+                                    if (s == SettingsSection.Sources &&
+                                        LocalIncognito.current
+                                    ) {
+                                        ProfileCopy.INCOGNITO_SOURCES
+                                    } else {
+                                        s.summary
+                                    }
+                                SettingsRow(s.icon, s.tone, s.label, line, { onSection(s) }, lines = 2)
+                            }
                         }.toTypedArray(),
                 )
             }
