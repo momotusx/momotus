@@ -151,6 +151,8 @@ const DEFAULTED = new Map([
   ["PlaybackSnapshot.container", "null"],
   ["PlaybackSnapshot.audio", "emptyList()"],
   ["PlaybackSnapshot.engine", "null"],
+  // Incognito (plans/batch-10-incognito.md 2.8): an older core never reports an unread end.
+  ["ProfilesSnapshot.incognitoEnded", "false"],
 ]);
 const INT = new Set([
   // Tile.rank: a Top 10 tile's place, 1 to 10.

@@ -470,7 +470,9 @@ enum Request {
         screen_class: u32,
         choice: mq_runtime::learn::LearnedChoice,
     },
-    /// Answers at once from the request loop: the core is alive.
+    /// Answers at once from the request loop: the core is alive. Replies
+    /// `{liveScopes}`, the Incognito scopes alive on the device (the e2e
+    /// guard, plans/batch-10-incognito.md 2.7).
     Ping {
         id: u64,
     },
@@ -589,7 +591,9 @@ enum Request {
         free_bytes: Option<u64>,
     },
     /// The app's life as the OS reports it: `foreground`, `background`,
-    /// `memoryPressure` (frees caches) or `networkChanged` (drops pooled
+    /// `idle` and `active` (no input for a while, and input again: they feed
+    /// only the Incognito clock and answer `{}`), `memoryPressure` (frees
+    /// caches) or `networkChanged` (drops pooled
     /// connections; `network` is the new type when the app knows it:
     /// `wifi`, `ethernet`, `cellular`, `other`, or `none` with no
     /// connection; `metered` from the platform's cost flag, `lowData` for
@@ -666,11 +670,26 @@ enum Request {
         #[serde(rename = "currentPin")]
         current_pin: Option<String>,
     },
-    /// Moves the session to `profile`; only the picker may be open.
+    /// Moves the session to `profile`; only the picker may be open. With
+    /// `incognito` it enters Incognito from the session's profile, and
+    /// `fromChooser` says Leave goes back to the chooser
+    /// (plans/batch-10-incognito.md 2.7).
     SwitchProfile {
         id: u64,
         profile: String,
         pin: Option<String>,
+        #[serde(default, rename = "fromChooser")]
+        from_chooser: bool,
+    },
+    /// Leaves Incognito for the profile it was entered from, without a PIN.
+    /// Replies `ProfilesSnapshot`; `notIncognito` outside Incognito.
+    LeaveIncognito {
+        id: u64,
+    },
+    /// The person has read the Incognito ended notice: clears
+    /// `incognitoEnded`. Replies `ProfilesSnapshot`.
+    AckIncognitoEnded {
+        id: u64,
     },
     /// Unlocks a locked session with its profile's PIN.
     UnlockProfile {
@@ -712,6 +731,8 @@ impl Request {
             | Request::SetDebridKey { .. }
             | Request::DisconnectDebrid { .. }
             | Request::Ping { .. }
+            // The ended notice shows over the chooser too.
+            | Request::AckIncognitoEnded { .. }
             // The platform's say on downloads is the device's.
             | Request::DownloadsAllowed { .. }
             | Request::Lifecycle { .. } => true,
@@ -825,7 +846,7 @@ struct Shared {
     locked: bool,
     generation: u64,
     subs: HashMap<u64, Subscription>,
-    /// (active profile, locked) for the picker view.
+    /// (active profile, locked, Incognito host) for the picker view.
     state: watch::Sender<SessionState>,
     /// Native sign-in flows started and not yet finished, by flow id, with
     /// when they started: their verifiers stay here, in memory only, for as
@@ -863,7 +884,7 @@ impl Shared {
         self.subs = kept;
         self.locked = locked;
         self.state
-            .send_replace((self.core.profile().to_owned(), locked));
+            .send_replace((self.core.profile().to_owned(), locked, None));
         self.repoint_downloads();
         closed.into_values().collect()
     }
@@ -873,7 +894,7 @@ impl Shared {
         let changed = self.locked != locked;
         self.locked = locked;
         self.state
-            .send_replace((self.core.profile().to_owned(), locked));
+            .send_replace((self.core.profile().to_owned(), locked, None));
         if changed {
             self.repoint_downloads();
         }
@@ -988,7 +1009,7 @@ impl Session {
         for id in &gone {
             let _ = out.send(&json!({ "profile": "gone", "id": id }));
         }
-        let (state, _) = watch::channel((core.profile().to_owned(), locked));
+        let (state, _) = watch::channel((core.profile().to_owned(), locked, None));
         let shared = Arc::new_cyclic(|me| {
             Mutex::new(Shared {
                 core: core.clone(),
@@ -1665,7 +1686,9 @@ impl Session {
                     )
                 });
             }
-            Request::Ping { id } => self.reply(json!(id), Ok::<_, Failure>(json!({}))),
+            Request::Ping { id } => {
+                self.reply(json!(id), Ok::<_, Failure>(json!({ "liveScopes": 0 })))
+            }
             Request::RemoveFromContinue { id, item_id } => {
                 let result = core.remove_from_continue(&item_id);
                 self.reply(json!(id), done(result));
@@ -1846,6 +1869,9 @@ impl Session {
                         core.on_memory_pressure();
                         Ok(json!({}))
                     }
+                    // The Incognito clock's input only; outside Incognito
+                    // they do nothing.
+                    "idle" | "active" => Ok(json!({})),
                     "networkChanged" => {
                         let known = match network {
                             Some(NetworkWord::Known(n)) => Some(n),
@@ -2044,10 +2070,27 @@ impl Session {
                     .await;
                 self.reply_profiles(id, result);
             }
-            Request::SwitchProfile { id, profile, pin } => {
-                let result = self.switch(&profile, pin.as_deref()).await;
+            Request::SwitchProfile {
+                id,
+                profile,
+                pin,
+                from_chooser,
+            } => {
+                let result = if profile == "incognito" {
+                    self.enter_incognito(from_chooser, pin.as_deref()).await
+                } else {
+                    self.switch(&profile, pin.as_deref()).await
+                };
                 send_answer(&self.out, json!(id), result);
             }
+            Request::LeaveIncognito { id } => {
+                let result = Err(Failure::coded(
+                    "notIncognito",
+                    "the session is not in Incognito",
+                ));
+                send_answer(&self.out, json!(id), result);
+            }
+            Request::AckIncognitoEnded { id } => self.reply_profiles(id, Ok(())),
             Request::UnlockProfile { id, pin } => {
                 let result = self.unlock(pin.as_deref()).await;
                 self.reply_profiles(id, result);
@@ -2097,6 +2140,20 @@ impl Session {
         let target = self.core().for_profile(profile);
         target.check_pin(profile, pin).await?;
         self.commit_switch(target)
+    }
+
+    /// Enters Incognito (plans/batch-10-incognito.md 2.7). Answers
+    /// `incognitoFailed` until the scope is built; the entry also answers
+    /// `kids`, `noSpace`, `viewsOpen` and the PIN codes.
+    async fn enter_incognito(
+        &mut self,
+        _from_chooser: bool,
+        _pin: Option<&str>,
+    ) -> Result<Value, Failure> {
+        Err(Failure::coded(
+            "incognitoFailed",
+            "Incognito could not start",
+        ))
     }
 
     /// The switch, once its PIN passed. The target is checked again under
@@ -3121,7 +3178,7 @@ mod liveness {
             .await;
         assert_eq!(
             rx.recv().await.unwrap().json(),
-            json!({"id": 1, "ok": true, "result": {}})
+            json!({"id": 1, "ok": true, "result": {"liveScopes": 0}})
         );
 
         session.spawn(2, async {

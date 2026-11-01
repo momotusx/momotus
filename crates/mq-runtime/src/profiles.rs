@@ -150,6 +150,9 @@ impl Core {
             max: MAX_PROFILES as u32,
             kids,
             wipe_pending: self.pending_removal().map(|debrid| WipePending { debrid }),
+            incognito_host: None,
+            incognito_pin: None,
+            incognito_ended: false,
         }
     }
 

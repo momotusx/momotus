@@ -1242,3 +1242,35 @@ async fn the_downloads_view_goes_on_across_a_switch_a_lock_and_an_unlock() {
         .await;
     assert_eq!(titles(&pushed).unwrap()[0]["name"], "Title tt2", "{pushed}");
 }
+
+/// The Incognito contract before its behaviour (plans/batch-10-incognito.md
+/// 2.8): the snapshot fields, the ops and codes, `idle` and `active` doing
+/// nothing outside Incognito, and `ping`'s `liveScopes`.
+#[tokio::test]
+async fn the_incognito_contract_answers_outside_incognito() {
+    let mut c = Client::new(Core::temporary("default").unwrap());
+    let snapshot = c.ok(json!({"op": "ackIncognitoEnded"})).await;
+    assert_eq!(snapshot["incognitoHost"], Value::Null, "{snapshot}");
+    assert_eq!(snapshot["incognitoPin"], Value::Null, "{snapshot}");
+    assert_eq!(snapshot["incognitoEnded"], false, "{snapshot}");
+    let view = c.ok(json!({"op": "subscribe", "view": "profiles"})).await;
+    assert_eq!(view["snapshot"]["incognitoEnded"], false, "{view}");
+
+    assert_eq!(c.ok(json!({"op": "ping"})).await, json!({"liveScopes": 0}));
+    for event in ["idle", "active"] {
+        assert_eq!(
+            c.ok(json!({"op": "lifecycle", "event": event})).await,
+            json!({})
+        );
+    }
+    assert_eq!(
+        c.code(json!({"op": "leaveIncognito"})).await,
+        "notIncognito"
+    );
+    let enter = json!({"op": "switchProfile", "profile": "incognito", "fromChooser": true});
+    assert_eq!(c.code(enter).await, "incognitoFailed");
+    // `idle` never acted as `background`: the session is still open.
+    let snapshot = c.ok(json!({"op": "ackIncognitoEnded"})).await;
+    assert_eq!(snapshot["locked"], false);
+    assert_eq!(snapshot["active"], "default");
+}

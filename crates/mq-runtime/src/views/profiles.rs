@@ -61,6 +61,19 @@ pub struct ProfilesSnapshot {
     /// `signOut {removeAfter}` before the leave, cleared by a leave that
     /// failed, by any join and by the wipe.
     pub wipe_pending: Option<WipePending>,
+    /// The profile this session's Incognito copied, while it runs
+    /// (plans/batch-10-incognito.md 2.8). While it is set, `active` is
+    /// `incognito`, `locked` and `kids` are false, and `profiles` never
+    /// lists Incognito.
+    pub incognito_host: Option<String>,
+    /// The profile whose PIN entering Incognito asks for (the owner's on a
+    /// locked session, or on a device with a kids profile when the host has
+    /// no PIN of its own); null when no PIN is asked.
+    pub incognito_pin: Option<String>,
+    /// An Incognito end this session has not read yet: set until its next
+    /// profile op or `ackIncognitoEnded`; automatic requests never clear
+    /// it.
+    pub incognito_ended: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -74,8 +87,9 @@ pub struct WipePending {
     pub debrid: bool,
 }
 
-/// A session's (active profile, locked), sent on every switch and lock.
-pub type SessionState = (String, bool);
+/// A session's (active profile, locked, Incognito host), sent on every
+/// switch and lock. The host is set only while the session runs Incognito.
+pub type SessionState = (String, bool, Option<String>);
 
 pub struct ProfilesView {
     snapshot: SharedObservable<ProfilesSnapshot>,
@@ -112,7 +126,7 @@ impl Drop for ProfilesView {
 }
 
 fn read(core: &Core, session: &watch::Receiver<SessionState>) -> ProfilesSnapshot {
-    let (active, locked) = session.borrow().clone();
+    let (active, locked, _host) = session.borrow().clone();
     core.for_profile(&active).profiles_snapshot(locked)
 }
 

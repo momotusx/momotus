@@ -1500,6 +1500,12 @@ data class ProfilesSnapshot(
     val kids: Boolean,
     /** A sign-out that removes the library (D13) was asked here and its wipe has not answered yet: run steps two and three (on the owner profile, with the debrid connections when `debrid`). Set by `signOut {removeAfter}` before the leave, cleared by a leave that failed, by any join and by the wipe. */
     val wipePending: WipePending? = null,
+    /** The profile this session's Incognito copied, while it runs (plans/batch-10-incognito.md 2.8). While it is set, `active` is `incognito`, `locked` and `kids` are false, and `profiles` never lists Incognito. */
+    val incognitoHost: String? = null,
+    /** The profile whose PIN entering Incognito asks for (the owner's on a locked session, or on a device with a kids profile when the host has no PIN of its own); null when no PIN is asked. */
+    val incognitoPin: String? = null,
+    /** An Incognito end this session has not read yet: set until its next profile op or `ackIncognitoEnded`; automatic requests never clear it. */
+    val incognitoEnded: Boolean = false,
 )
 
 @Serializable(with = QualityPref.Serializer::class)
