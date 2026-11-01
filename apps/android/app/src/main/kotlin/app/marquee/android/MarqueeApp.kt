@@ -9,6 +9,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
+import app.marquee.core.ProfileCopy
 import app.marquee.core.client.CoreLog
 import app.marquee.core.client.DeviceCapsParams
 import app.marquee.core.session.CoreSession
@@ -169,7 +170,9 @@ class MarqueeApp :
         }
     }
 
-    override fun newImageLoader(context: PlatformContext): ImageLoader = createImageLoader(context)
+    // In Incognito no image reaches the disk cache (plans/batch-10-incognito.md 5.5).
+    override fun newImageLoader(context: PlatformContext): ImageLoader =
+        createImageLoader(context) { ::profiles.isInitialized && ProfileCopy.inIncognito(profiles.snapshot) }
 
     companion object {
         const val TAG = "marquee"

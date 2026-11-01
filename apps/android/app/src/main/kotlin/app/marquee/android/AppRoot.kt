@@ -50,6 +50,7 @@ import app.marquee.core.AccountCopy
 import app.marquee.core.AccountRules
 import app.marquee.core.Format
 import app.marquee.core.PendingRemoval
+import app.marquee.core.ProfileCopy
 import app.marquee.core.TileCopy
 import app.marquee.core.model.FirstRunStill
 import app.marquee.core.model.HomeCatalog
@@ -68,6 +69,7 @@ import app.marquee.core.route.switchedTo
 import app.marquee.core.session.CoreSession
 import app.marquee.core.views.ViewStatus
 import app.marquee.design.Form
+import app.marquee.design.LocalIncognito
 import app.marquee.design.LocalOverPicture
 import app.marquee.design.Marquee
 import app.marquee.design.MqText
@@ -125,6 +127,7 @@ fun MarqueeRoot(
     val accounts = marquee.accounts
     LaunchedEffect(gate.snapshot?.wipePending, gate.snapshot?.active, marquee.sync.joined) { accounts.resumeRemoval() }
     LaunchedEffect(accounts.removal.wiped) { if (accounts.removal.wiped) app.wiped() }
+    val incognito = ProfileCopy.inIncognito(gate.snapshot)
     Box(Modifier.fillMaxSize().semantics { testTagsAsResourceId = true }) {
         val locked = gate.snapshot?.locked == true
         when {
@@ -141,8 +144,27 @@ fun MarqueeRoot(
                 PickerScreen(gate, session, if (locked) PickerMode.Locked else PickerMode.Start)
             }
 
+            // Every Incognito entry opens on its intro (plans/batch-10-incognito.md 5.1).
+            incognito && gate.intro -> {
+                IncognitoIntro(
+                    debrid =
+                        session.debrid
+                            .current()
+                            ?.accounts
+                            ?.isNotEmpty() == true,
+                    onContinue = { gate.intro = false },
+                    onLeave = {
+                        gate.intro = false
+                        gate.startLeave()
+                    },
+                )
+            }
+
             else -> {
-                CompositionLocalProvider(LocalViewModelStoreOwner provides app.screens) {
+                CompositionLocalProvider(
+                    LocalViewModelStoreOwner provides app.screens,
+                    LocalIncognito provides incognito,
+                ) {
                     ProfileKeyed(gate.snapshot?.active) {
                         when (app.start) {
                             Start.Loading -> Unit
@@ -239,6 +261,7 @@ private fun AppNav(
     val sync = (LocalContext.current.applicationContext as MarqueeApp).sync
     val gate = (LocalContext.current.applicationContext as MarqueeApp).profiles
     val accessibility = LocalAccessibilityManager.current
+    val incognito = ProfileCopy.inIncognito(gate.snapshot)
     val backStack = rememberProfileStack(gate.snapshot?.active, initial, app.stacksSeen, phone = form == Form.Phone)
     val routes = backStack.map { it as Route }
     val top = routes.last()
@@ -528,7 +551,8 @@ private fun AppNav(
                         // Not beside an empty Home's setup, which offers the same addons.
                         val profile = gate.snapshot
                         LaunchedEffect(profile?.active) {
-                            app.defaultsCard.check(kids = profile?.kids != false) { defaultsSeen(session) }
+                            // Incognito offers no recommended addons: the core refuses them there.
+                            app.defaultsCard.check(kids = profile?.kids != false || incognito) { defaultsSeen(session) }
                         }
                         // Home's one account card slot comes first (plans/accounts.md 4.3): a scheduled deletion
                         // is the one thing that must not wait behind the addons card.
@@ -577,8 +601,11 @@ private fun AppNav(
                                     )
                                 }
                             }
+                        // An Incognito end this session has not read: first, until its OK (plans/batch-10-incognito.md 5.4).
+                        val endedCard: (@Composable () -> Unit)? =
+                            if (profile?.incognitoEnded == true) ({ IncognitoEndedCard(gate::ackEnded) }) else null
                         // Both show, the account card first, as on the web.
-                        val cards = listOfNotNull(accountCard, addonsCard)
+                        val cards = listOfNotNull(endedCard, accountCard, addonsCard)
                         val card: (@Composable () -> Unit)? =
                             cards.takeIf { it.isNotEmpty() }?.let {
                                 {
@@ -891,10 +918,12 @@ private fun AppNav(
         backStack.add(Route.Profiles)
     }
     var profileMenu by remember { mutableStateOf(false) }
-    val me = gate.snapshot?.let { s -> s.profiles.firstOrNull { it.id == s.active } }
+    val me = AccountRules.activeProfile(gate.snapshot)
     val phoneProfile =
         me?.let {
-            PhoneProfileTab("Profile: ${it.name}", { profileMenu = true }) { ProfileAvatar(it, 26.dp) }
+            // In Incognito the tab says so under its mark (plans/batch-10-incognito.md 5.2).
+            val label = if (it.id == ProfileCopy.INCOGNITO) it.name else PhoneProfileTab.LABEL
+            PhoneProfileTab("Profile: ${it.name}", { profileMenu = true }, label) { ProfileAvatar(it, 26.dp) }
         }
     if (profileMenu && !tv) ProfileMenu(gate, { profileMenu = false }, { choose(Route.Settings) }, ::pinFor)
     if (tv) {

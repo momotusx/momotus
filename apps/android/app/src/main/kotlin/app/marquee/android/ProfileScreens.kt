@@ -55,6 +55,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -64,6 +65,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
@@ -77,10 +79,12 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
+import app.marquee.core.AccountRules
 import app.marquee.core.ErrorCopy
 import app.marquee.core.ProfileCopy
 import app.marquee.core.client.CoreError
 import app.marquee.core.model.ProfileInfo
+import app.marquee.core.model.ProfilesSnapshot
 import app.marquee.core.session.CoreSession
 import app.marquee.design.ActionMenu
 import app.marquee.design.AvatarArt
@@ -160,6 +164,8 @@ internal fun Keypad(
     onSubmit: suspend (String) -> Tried,
     onCancel: () -> Unit,
     note: String? = null,
+    /** A line under the title: why this PIN is asked. */
+    lede: String? = null,
     cancelLabel: String = "Choose another profile",
     extra: (@Composable () -> Unit)? = null,
     initialProblem: Tried? = null,
@@ -291,6 +297,15 @@ internal fun Keypad(
         verticalArrangement = Arrangement.spacedBy(if (tv) 22.dp else 16.dp),
     ) {
         MqText(title, role = if (tv) TextRole.Title2 else TextRole.Title3, weight = FontWeight.Bold)
+        lede?.let {
+            MqText(
+                it,
+                role = TextRole.Callout,
+                color = colors.muted,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.widthIn(max = 720.dp),
+            )
+        }
         Row(
             Modifier.semantics(mergeDescendants = true) {
                 contentDescription = "${digits.length} of 4 digits entered"
@@ -417,7 +432,7 @@ fun PillProfile(
     onSettings: () -> Unit,
     onPin: (String) -> Unit,
 ) {
-    val me = gate.snapshot?.let { s -> s.profiles.firstOrNull { it.id == s.active } }
+    val me = AccountRules.activeProfile(gate.snapshot)
     if (me == null) {
         // No profile known for a moment: while Settings shows the slot still holds the bar's entry, so Up and Back find
         // a target; otherwise it takes no focus.
@@ -453,8 +468,10 @@ private val PILL_LIT = Color(0x33FFFFFF)
 
 /**
  * The profile's menu (plans/nav-profile.md): every profile, the current one checked and another with a PIN locked,
- * then Settings; nothing account-like. A row does what its picker tile does: the current one closes the menu, a
- * syncing one nothing, one with a PIN opens the picker on its keypad ([onPin]), any other switches.
+ * then Incognito (not in a kids session), then Settings; nothing account-like. A row does what its picker tile does:
+ * the current one closes the menu, a syncing one nothing, one with a PIN opens the picker on its keypad ([onPin]), any
+ * other switches. In Incognito its row is the checked one, with Leave Incognito right under it; focus starts on the
+ * current row, never on Leave (plans/batch-10-incognito.md 5.1).
  */
 @Composable
 fun ProfileMenu(
@@ -464,9 +481,37 @@ fun ProfileMenu(
     onPin: (String) -> Unit,
 ) {
     val s = gate.snapshot ?: return
+    val incognito = ProfileCopy.inIncognito(s)
+    val asks = s.incognitoPin != null && !incognito
+    val incognitoRows =
+        when {
+            incognito -> {
+                listOf(
+                    MenuAction("Incognito", Icons.Check, spoken = "Incognito, current profile") {},
+                    MenuAction(ProfileCopy.INCOGNITO_LEAVE, Icons.LogOut) { gate.startLeave() },
+                )
+            }
+
+            s.kids -> {
+                emptyList()
+            }
+
+            else -> {
+                listOf(
+                    MenuAction(
+                        "Incognito",
+                        Icons.Lock.takeIf { asks },
+                        spoken = if (asks) "Incognito, needs a PIN" else "Incognito",
+                    ) {
+                        // The menu leaves with this choice, as a profile's row: the switch runs on the session's scope.
+                        if (asks) onPin(ProfileCopy.INCOGNITO) else gate.startSwitch(ProfileCopy.INCOGNITO)
+                    },
+                )
+            }
+        }
     val rows =
         s.profiles.map { p ->
-            val current = p.id == s.active
+            val current = p.id == s.active && !incognito
             val locked = p.hasPin && !current && !p.syncing
             MenuAction(
                 if (p.syncing) "${p.name} · Syncing" else p.name,
@@ -496,9 +541,13 @@ fun ProfileMenu(
                     }
                 }
             }
-        } + MenuAction("Settings", Icons.Settings, onClick = onSettings)
-    ActionMenu("Profiles", rows, onDismiss, start = s.profiles.indexOfFirst { it.id == s.active }.coerceAtLeast(0))
+        } + incognitoRows + MenuAction("Settings", Icons.Settings, onClick = onSettings)
+    ActionMenu("Profiles", rows, onDismiss, start = menuStart(s))
 }
+
+/** The menu's first focus: the current row, Incognito's while it runs (the row after the profiles), never Leave. */
+internal fun menuStart(s: ProfilesSnapshot): Int =
+    if (ProfileCopy.inIncognito(s)) s.profiles.size else s.profiles.indexOfFirst { it.id == s.active }.coerceAtLeast(0)
 
 /** The modes of the picker: a cold start's question, a locked session, or opened over the app. */
 enum class PickerMode { Start, Locked, Switch }
@@ -531,14 +580,35 @@ fun PickerScreen(
     // Opened by the bar's menu on a profile with a PIN: its keypad first, and its Cancel goes back where the menu was.
     val asked by rememberSaveable { mutableStateOf(if (mode == PickerMode.Switch) gate.takeAsked() else null) }
     var picked by rememberSaveable { mutableStateOf<String?>(asked) }
+    // Incognito's keypad from its tile (Leave then returns to the chooser), not from the bar's menu (plans/batch-10-incognito.md 2.7).
+    var fromTile by rememberSaveable { mutableStateOf(false) }
     val target = picked ?: gate.switching.takeIf { gate.switchProblem != null }
     var said by remember { mutableStateOf("") }
     val first = remember { FocusRequester() }
-    val chosen = s.profiles.firstOrNull { it.id == target }
-    // Focus starts on the current profile, else on the first tile (the current one was removed).
-    val focusId = s.profiles.firstOrNull { it.id == s.active }?.id ?: s.profiles.firstOrNull()?.id
+    val incognito = ProfileCopy.inIncognito(s)
+    // Incognito asks for the PIN of the profile the core names; a refusal that is not about the PIN has no keypad.
+    val pinRefused = gate.switchProblem?.code.let { it == "wrongPin" || it == "locked" }
+    val chosen =
+        if (target == ProfileCopy.INCOGNITO) {
+            ProfileCopy.incognitoPinProfile(s)?.takeIf { picked == target || pinRefused }
+        } else {
+            s.profiles.firstOrNull { it.id == target }
+        }
+    // Focus starts on the current profile (the Incognito tile in Incognito), else on the first tile (the current one
+    // was removed).
+    val focusId =
+        if (incognito) {
+            ProfileCopy.INCOGNITO
+        } else {
+            s.profiles.firstOrNull { it.id == s.active }?.id ?: s.profiles.firstOrNull()?.id
+        }
     LaunchedEffect(target, s.profiles) {
-        if (target != null && chosen == null) {
+        if (target == ProfileCopy.INCOGNITO && chosen == null) {
+            // Incognito did not open (out of space, a core refusal): the chooser stays with the reason.
+            picked = null
+            said = gate.switchProblem?.let { ProfileCopy.problem(it.code, ErrorCopy.words(it)) }.orEmpty()
+            if (gate.switching != null) gate.cancelSwitch(toPicker = true)
+        } else if (target != null && chosen == null) {
             picked = null
             if (gate.switching != null) gate.cancelSwitch()
             said = "That profile was removed on another device."
@@ -582,6 +652,37 @@ fun PickerScreen(
         }
     }
 
+    /** Enters Incognito, with the PIN the core asked for (or none). */
+    suspend fun enterIncognito(pin: String?): Tried =
+        try {
+            if (gate.switchTo(ProfileCopy.INCOGNITO, pin, fromChooser = fromTile)) {
+                Tried.Ok
+            } else {
+                gate.switchProblem?.let(::tried) ?: Tried.Problem("That did not work.")
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            tried(e)
+        }
+
+    fun pickIncognito() {
+        said = ""
+        if (incognito) {
+            if (mode == PickerMode.Switch) onBack() else gate.markChosen()
+            return
+        }
+        fromTile = true
+        if (s.incognitoPin != null) {
+            picked = ProfileCopy.INCOGNITO
+            return
+        }
+        scope.launch {
+            val r = enterIncognito(null)
+            if (r is Tried.Problem) said = r.text
+        }
+    }
+
     fun pick(p: ProfileInfo) {
         if (p.syncing) return
         said = ""
@@ -613,6 +714,24 @@ fun PickerScreen(
             ),
         contentAlignment = Alignment.Center,
     ) {
+        if (chosen != null && target == ProfileCopy.INCOGNITO) {
+            Keypad(
+                title = ProfileCopy.incognitoPinTitle(chosen.name),
+                onSubmit = ::enterIncognito,
+                onCancel = {
+                    if (picked != null && picked == asked) {
+                        onBack()
+                    } else {
+                        picked = null
+                        if (gate.switching != null) gate.cancelSwitch()
+                    }
+                },
+                lede = ProfileCopy.INCOGNITO_KIDS_REASON.takeIf { ProfileCopy.incognitoKidsReason(s) },
+                cancelLabel = if (picked != null && picked == asked) "Cancel" else "Choose another profile",
+                initialProblem = gate.switchProblem?.takeIf { gate.switching == target }?.let(::tried),
+            )
+            return@Box
+        }
         if (chosen != null) {
             val problem = gate.switchProblem?.takeIf { gate.switching == chosen.id }
             Keypad(
@@ -648,8 +767,12 @@ fun PickerScreen(
             return@Box
         }
         if (gate.switching != null && gate.switchProblem == null) {
-            val name = s.profiles.firstOrNull { it.id == gate.switching }?.name ?: "the profile"
-            StatusWord("Opening $name", Status.Warn)
+            if (gate.switching == ProfileCopy.INCOGNITO) {
+                StatusWord(ProfileCopy.INCOGNITO_OPENING, Status.Warn)
+            } else {
+                val name = s.profiles.firstOrNull { it.id == gate.switching }?.name ?: "the profile"
+                StatusWord("Opening $name", Status.Warn)
+            }
             return@Box
         }
         Column(
@@ -661,9 +784,20 @@ fun PickerScreen(
                 role = if (tv) TextRole.Title1 else TextRole.Title2,
                 weight = FontWeight.ExtraBold,
             )
-            if (locked) {
+            // Only a profile with a PIN is locked (plans/batch-10-incognito.md 5.4): a Leave to the chooser from a
+            // host without one says nothing of a lock.
+            if (locked && me?.hasPin == true) {
                 MqText(
                     "This profile is locked. Choose a profile, then enter its PIN.",
+                    role = TextRole.Body,
+                    color = colors.muted,
+                )
+            }
+            // An Incognito end not read yet: the chooser's polite status, until the next profile choice.
+            if (s.incognitoEnded) {
+                MqText(
+                    ProfileCopy.INCOGNITO_ENDED,
+                    Modifier.semantics { liveRegion = LiveRegionMode.Polite },
                     role = TextRole.Body,
                     color = colors.muted,
                 )
@@ -679,6 +813,24 @@ fun PickerScreen(
                         active = p.id == s.active,
                         modifier = if (p.id == focusId) Modifier.focusRequester(first) else Modifier,
                         onClick = { pick(p) },
+                    )
+                }
+                // Incognito after the profiles, before Add profile; never a way out of a kids session (5.1).
+                if (!(s.kids && !locked)) {
+                    QuietTile(
+                        "Incognito",
+                        Icons.HatGlasses,
+                        ::pickIncognito,
+                        Modifier.then(
+                            if (focusId == ProfileCopy.INCOGNITO) Modifier.focusRequester(first) else Modifier,
+                        ),
+                        spoken =
+                            listOfNotNull(
+                                "Incognito",
+                                "current profile".takeIf { incognito },
+                                "needs a PIN".takeIf { s.incognitoPin != null && !incognito },
+                            ).joinToString(", "),
+                        glyph = Color.White,
                     )
                 }
                 if (onAdd != null && owner && !locked && s.profiles.size < s.max) AddTile(onAdd)
@@ -761,6 +913,19 @@ internal fun AddTile(
     onClick: () -> Unit,
     /** Shows the focused look without focus (screenshots, tests). */
     forceFocus: Boolean = false,
+) = QuietTile("Add profile", Icons.Plus, onClick, forceFocus = forceFocus)
+
+/** A tile that is not a profile (Add profile, Incognito): a glyph on a quiet circle over its word. */
+@Composable
+internal fun QuietTile(
+    label: String,
+    icon: ImageVector,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    spoken: String = label,
+    /** The glyph's ink at rest; Incognito's is white (plans/batch-10-incognito.md 5.1). */
+    glyph: Color? = null,
+    forceFocus: Boolean = false,
 ) {
     val tv = Marquee.form == Form.Tv
     val colors = Marquee.colors
@@ -770,10 +935,10 @@ internal fun AddTile(
     val look = hasFocus || forceFocus
     val focused = look && tv
     Column(
-        Modifier
+        modifier
             .width(if (tv) 200.dp else 140.dp)
             .onFocusChanged { hasFocus = it.isFocused }
-            .semantics(mergeDescendants = true) { contentDescription = "Add profile" }
+            .semantics(mergeDescendants = true) { contentDescription = spoken }
             .focusClickable(onClick, Role.Button),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(if (tv) 16.dp else 10.dp),
@@ -786,9 +951,9 @@ internal fun AddTile(
                 // A focused tile on TV turns white with a dark glyph, as a focused profile does.
                 .background(if (focused) colors.primary else colors.surface),
             contentAlignment = Alignment.Center,
-        ) { MqIcon(Icons.Plus, tint = if (focused) colors.onPrimary else colors.muted, size = size * 0.4f) }
+        ) { MqIcon(icon, tint = if (focused) colors.onPrimary else glyph ?: colors.muted, size = size * 0.4f) }
         MqText(
-            "Add profile",
+            label,
             role = TextRole.Headline,
             weight = FontWeight.Bold,
             color = if (focused) colors.accent else colors.muted,
@@ -1646,4 +1811,86 @@ private fun PinSteps(
             }
         },
     )
+}
+
+/**
+ * The intro on every Incognito entry (plans/batch-10-incognito.md 5.1, 6): the mark, what is not kept, what is still
+ * kept or seen, how it ends; Continue takes the TV's focus, and Leave Incognito or Back leaves.
+ */
+@Composable
+internal fun IncognitoIntro(
+    debrid: Boolean,
+    onContinue: () -> Unit,
+    onLeave: () -> Unit,
+) {
+    val tv = Marquee.form == Form.Tv
+    val colors = Marquee.colors
+    val intro = ProfileCopy.intro(debrid, tv)
+    val go = remember { FocusRequester() }
+    BackHandler(onBack = onLeave)
+    LaunchedEffect(Unit) { if (tv) focusSoon(go) }
+    Box(
+        Modifier
+            .fillMaxSize()
+            .background(colors.bg)
+            .verticalScroll(rememberScrollState())
+            .padding(
+                start = Marquee.safe.side,
+                end = Marquee.safe.side,
+                top = maxOf(if (tv) 64.dp else 48.dp, pageTop()),
+                bottom = if (tv) 64.dp else 48.dp,
+            ),
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(
+            Modifier.widthIn(max = if (tv) 960.dp else 560.dp),
+            verticalArrangement = Arrangement.spacedBy(if (tv) 28.dp else 20.dp),
+        ) {
+            ProfileAvatar(ProfileCopy.incognito, if (tv) 128.dp else 96.dp)
+            MqText(
+                "You're Incognito",
+                Modifier.semantics { heading() },
+                role = if (tv) TextRole.Title1 else TextRole.Title2,
+                weight = FontWeight.ExtraBold,
+            )
+            IntroGroup("Not kept", intro.notKept)
+            IntroGroup("Still kept or seen", intro.seen)
+            MqText(intro.ends, role = TextRole.Body, color = colors.muted)
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(if (tv) 20.dp else 12.dp),
+                verticalArrangement = Arrangement.spacedBy(if (tv) 20.dp else 12.dp),
+            ) {
+                PrimaryButton("Continue", onContinue, focusRequester = go)
+                SecondaryButton(ProfileCopy.INCOGNITO_LEAVE, onLeave)
+            }
+        }
+    }
+}
+
+@Composable
+private fun IntroGroup(
+    title: String,
+    lines: List<String>,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        MqText(title, Modifier.semantics { heading() }, role = TextRole.Headline, weight = FontWeight.Bold)
+        lines.forEach { MqText(it, role = TextRole.Body, color = Marquee.colors.muted) }
+    }
+}
+
+/**
+ * Over Home of a single profile, where no chooser shows: the Incognito ended line as a polite notice with OK, which
+ * marks it read ([onOk], `ackIncognitoEnded`). It stays until then (plans/batch-10-incognito.md 5.4).
+ */
+@Composable
+internal fun IncognitoEndedCard(onOk: () -> Unit) {
+    Column(
+        Modifier.padding(horizontal = Marquee.safe.side).widthIn(max = 900.dp),
+        verticalArrangement = Arrangement.spacedBy(Marquee.space.s),
+    ) {
+        Box(Modifier.semantics { liveRegion = LiveRegionMode.Polite }) {
+            Callout(Icons.Info, ProfileCopy.INCOGNITO_ENDED)
+        }
+        PrimaryButton("OK", onOk)
+    }
 }

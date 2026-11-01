@@ -126,13 +126,20 @@ class ProfileMenuTest {
     private fun row(said: String) = compose.onNode((hasContentDescription(said) or hasText(said)) and hasClickAction())
 
     @Test
-    fun `the menu lists the profiles, the current one first focused, then Settings, and nothing else`() {
+    fun `the menu lists the profiles, the current one first focused, then Incognito and Settings, and nothing else`() {
         showButton()
         compose.onNodeWithContentDescription("Profile: Ana").performClick()
         compose.waitForIdle()
         compose.onNode(isDialog()).assertExists()
         assertEquals(
-            listOf("Ana, current profile", "Kid", "Bo, locked with a PIN", "Cy, still syncing", "Settings"),
+            listOf(
+                "Ana, current profile",
+                "Kid",
+                "Bo, locked with a PIN",
+                "Cy, still syncing",
+                "Incognito",
+                "Settings",
+            ),
             menuRows(),
         )
         compose.onNodeWithText("Profiles").assertExists()
@@ -183,12 +190,19 @@ class ProfileMenuTest {
     }
 
     @Test
-    fun `the phone's menu holds the profiles, then Settings, and nothing account-like`() {
+    fun `the phone's menu holds the profiles, then Incognito and Settings, and nothing account-like`() {
         // The owner's rule (plans/owner-picks.md, 2026-10-29): account actions, Sign in another device among them,
         // stay inside Settings.
         open { ProfileMenu(gate, {}, {}, {}) }
         assertEquals(
-            listOf("Ana, current profile", "Kid", "Bo, locked with a PIN", "Cy, still syncing", "Settings"),
+            listOf(
+                "Ana, current profile",
+                "Kid",
+                "Bo, locked with a PIN",
+                "Cy, still syncing",
+                "Incognito",
+                "Settings",
+            ),
             menuRows(),
         )
     }

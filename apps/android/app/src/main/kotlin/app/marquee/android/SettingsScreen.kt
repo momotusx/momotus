@@ -67,6 +67,7 @@ import app.marquee.core.FindAddonsCopy
 import app.marquee.core.LanguagePicks
 import app.marquee.core.LinkInstall
 import app.marquee.core.PluginCopy
+import app.marquee.core.ProfileCopy
 import app.marquee.core.StreamChoiceCopy
 import app.marquee.core.SyncCopy
 import app.marquee.core.TraktCopy
@@ -86,6 +87,7 @@ import app.marquee.design.FocusInk
 import app.marquee.design.Form
 import app.marquee.design.Icons
 import app.marquee.design.LiveSpoken
+import app.marquee.design.LocalIncognito
 import app.marquee.design.Marks
 import app.marquee.design.Marquee
 import app.marquee.design.MqIcon
@@ -245,12 +247,16 @@ fun SettingsScreen(
     val downloads = !tv && downloadsView(session).current() != null
     val context = LocalContext.current
     val snapshot = gate.snapshot
-    val me = snapshot?.profiles?.firstOrNull { it.id == snapshot.active }
+    val me = AccountRules.activeProfile(snapshot)
+    // Incognito shows its header, Sources (Addons and Plugins), Home, Playback, Subtitles, This device (its trailer row
+    // says it is off) and About; nothing of the profiles, the account or Downloads (plans/batch-10-incognito.md 6).
+    val incognito = ProfileCopy.inIncognito(snapshot)
     // Edit and Manage need the owner's PIN on a kids profile (DECISION kids rules): a kids profile shows neither.
     val kids = me?.kids == true || snapshot?.kids == true
-    val editable = editableProfile(me, kids)
+    val editable = editableProfile(me, kids).takeUnless { incognito }
     val canManage = editable?.isOwner == true
-    val line = profileLine((snapshot?.profiles?.size ?: 1) > 1)
+    val line = if (incognito) ProfileCopy.INCOGNITO_KEPT_NOTHING else profileLine((snapshot?.profiles?.size ?: 1) > 1)
+    val onLeave = if (incognito) gate::startLeave else null
     // Sign in and Connect Google sit here, where people look for them; the Account page keeps the rest.
     val actions = accounts.actions
     val server = remember(sync.joined) { accounts.server(context) }
@@ -301,6 +307,7 @@ fun SettingsScreen(
                         holder,
                         session,
                         kids,
+                        incognito,
                         onDefaults,
                         onFindAddons,
                         onAddons,
@@ -398,7 +405,7 @@ fun SettingsScreen(
             // play the header trailer (plans/trailer-inline.md 4a).
             if (!tv || TrailerPreviews.headerOnTv(context)) add(SettingsPart(SettingsSection.Device) { DevicePrefs() })
             add(SettingsPart(SettingsSection.About) { About() })
-        }
+        }.filter { incognitoShows(incognito, it.section) }
     if (tv) {
         TvSettings(
             me,
@@ -410,9 +417,18 @@ fun SettingsScreen(
             { me?.let { onEditProfile(it.id) } },
             onManageProfiles,
             parts,
+            onLeave,
         )
     } else {
-        PhoneSettings(me, line, art, onProfiles, parts, settingsSection(section)) { onSection(it.name) }
+        PhoneSettings(
+            me,
+            line,
+            art,
+            onProfiles,
+            parts,
+            settingsSection(section),
+            onLeave = onLeave,
+        ) { onSection(it.name) }
     }
 }
 
@@ -444,6 +460,7 @@ private fun Sources(
     holder: SettingsHolder,
     session: CoreSession,
     kids: Boolean,
+    incognito: Boolean,
     onDefaults: () -> Unit,
     onFindAddons: () -> Unit,
     onAddons: () -> Unit,
@@ -470,6 +487,19 @@ private fun Sources(
             ?.accounts
             ?.size ?: 0
     val trakt = (LocalContext.current.applicationContext as MarqueeApp).trakt
+    val addonsRow: @Composable () -> Unit = { SettingsRow(Icons.Puzzle, Tone.Mint, "Addons", addonsLine, onAddons) }
+    val pluginsRow: (@Composable () -> Unit)? =
+        shownPlugins?.let { p ->
+            { SettingsRow(Icons.Power, Tone.Teal, PluginCopy.TITLE, PluginCopy.summary(p.repos), onPlugins) }
+        }
+    if (incognito) {
+        // Incognito: its own copy of the addons and plugins; the device's debrid account is used, never changed.
+        Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.s)) {
+            SettingsGroup(addonsRow, pluginsRow)
+            if (debrid > 0) Note(ProfileCopy.INCOGNITO_DEBRID, side = 0.dp)
+        }
+        return
+    }
     SettingsGroup(
         // A kids profile reads the owner's addons: the defaults are not its to change.
         if (kids) {
@@ -495,12 +525,8 @@ private fun Sources(
                 lines = Int.MAX_VALUE,
             )
         },
-        { SettingsRow(Icons.Puzzle, Tone.Mint, "Addons", addonsLine, onAddons) },
-        if (shownPlugins == null) {
-            null
-        } else {
-            { SettingsRow(Icons.Power, Tone.Teal, PluginCopy.TITLE, PluginCopy.summary(shownPlugins.repos), onPlugins) }
-        },
+        addonsRow,
+        pluginsRow,
         {
             SettingsRow(
                 Icons.KeyRound,
@@ -564,6 +590,7 @@ fun AddonsScreen(
             .filter { !sourcesOnly || "stream" in it.provides }
     // A remote types; only a phone can paste.
     val linkVerb = if (Marquee.form == Form.Tv) "Type" else "Paste"
+    val incognito = LocalIncognito.current
     if (sourcesOnly) {
         LaunchedEffect(Unit) {
             // The field is laid out in the first frame; focus it after that.
@@ -580,6 +607,8 @@ fun AddonsScreen(
         verticalArrangement = Arrangement.spacedBy(Marquee.space.m),
     ) {
         item(key = "head") { BrowseHeader(if (sourcesOnly) "Add a source" else "Addons") }
+        // Incognito works on its own copy of the addons (plans/batch-10-incognito.md 3).
+        if (incognito) item(key = "incognito") { Note(ProfileCopy.INCOGNITO_ADDONS_NOTE) }
         if (sourcesOnly) {
             item(key = "sources-why") {
                 Note(
@@ -1193,6 +1222,10 @@ internal fun DevicePrefs() {
             ) {
                 previews = !previews
                 TrailerPreviews.set(context, previews)
+            }
+            // The switch keeps its value; Incognito plays no trailer (plans/batch-10-incognito.md 5.5).
+            if (LocalIncognito.current) {
+                MqText(ProfileCopy.INCOGNITO_TRAILERS_OFF, role = TextRole.Caption, color = Marquee.colors.muted)
             }
         }
     }

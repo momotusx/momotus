@@ -13,15 +13,19 @@ import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Density
 import androidx.core.graphics.drawable.toDrawable
+import androidx.lifecycle.lifecycleScope
+import app.marquee.core.ProfileCopy
 import app.marquee.core.route.Route
 import app.marquee.design.MarqueeTheme
 import app.marquee.design.formPalette
 import app.marquee.player.WalkLog
 import app.marquee.player.WalkMute
+import kotlinx.coroutines.launch
 
 /**
  * The one activity. It decides the UI tree once (TV or phone, `FormFactor`), applies the theme
@@ -64,6 +68,13 @@ class MainActivity : ComponentActivity() {
         DebugEntry.launched(this)
         if (DebugEntry.show(this, form)) return
         val session = (application as MarqueeApp).session
+        // Incognito keeps its last frame out of Recents (plans/batch-10-incognito.md 5.5; Android 12 and older cannot).
+        val gate = (application as MarqueeApp).profiles
+        lifecycleScope.launch {
+            snapshotFlow { ProfileCopy.inIncognito(gate.snapshot) }.collect { on ->
+                recentsFrame(Build.VERSION.SDK_INT, on, ::recents)
+            }
+        }
         // Debug and benchmark builds (never a store build): `title=movie:tt1727587` starts on that title page,
         // with Home under it.
         val debugStack =
@@ -146,10 +157,25 @@ class MainActivity : ComponentActivity() {
         if (Build.VERSION.SDK_INT < 31) PipHooks.enter?.invoke()
     }
 
+    private fun recents(enabled: Boolean) {
+        if (Build.VERSION.SDK_INT >= 33) setRecentsScreenshotEnabled(enabled)
+    }
+
     override fun onDestroy() {
+        // Closing the app ends Incognito, also when a download keeps the process (plans/batch-10-incognito.md 5.3).
+        if (isFinishing && !isChangingConfigurations) (application as MarqueeApp).profiles.leaveOnClose()
         DebugEntry.destroy()
         super.onDestroy()
     }
+}
+
+/** Recents shows the app's last frame only outside Incognito, from Android 13 (API 33), where [set] exists. */
+internal fun recentsFrame(
+    sdk: Int,
+    incognito: Boolean,
+    set: (Boolean) -> Unit,
+) {
+    if (sdk >= 33) set(!incognito)
 }
 
 /**

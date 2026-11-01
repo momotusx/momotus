@@ -2,14 +2,17 @@ package app.marquee.android
 
 import android.app.Application
 import androidx.activity.ComponentActivity
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import app.marquee.core.ProfileCopy
 import app.marquee.core.client.CoreJson
 import app.marquee.core.session.CoreSession
 import app.marquee.design.Form
+import app.marquee.design.LocalIncognito
 import app.marquee.design.MarqueeTheme
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -36,7 +39,12 @@ class LibraryEmptyTest {
     fun stop() = session.client.close()
 
     @Test
-    fun `an empty library offers Discover, and it goes there`() {
+    fun `an empty library offers Discover, and it goes there`() = empty(incognito = false)
+
+    @Test
+    fun `Incognito's empty library says its titles go when it ends`() = empty(incognito = true)
+
+    private fun empty(incognito: Boolean) {
         session.client.attach { text ->
             val id =
                 CoreJson
@@ -48,7 +56,11 @@ class LibraryEmptyTest {
         }
         var discovered = 0
         compose.setContent {
-            MarqueeTheme(Form.Phone) { LibraryScreen(session, onOpen = {}, onDiscover = { discovered++ }) }
+            MarqueeTheme(Form.Phone) {
+                CompositionLocalProvider(LocalIncognito provides incognito) {
+                    LibraryScreen(session, onOpen = {}, onDiscover = { discovered++ })
+                }
+            }
         }
         val deadline = System.currentTimeMillis() + 60_000
         while (compose.onAllNodesWithText("Discover").fetchSemanticsNodes().isEmpty()) {
@@ -57,7 +69,14 @@ class LibraryEmptyTest {
             compose.waitForIdle()
             Thread.sleep(10)
         }
-        compose.onNodeWithText("Your library is empty. Add a title from its page and it shows here.").assertExists()
+        compose
+            .onNodeWithText(
+                if (incognito) {
+                    ProfileCopy.INCOGNITO_LIBRARY_EMPTY
+                } else {
+                    "Your library is empty. Add a title from its page and it shows here."
+                },
+            ).assertExists()
         compose.onNodeWithText("Discover").performClick()
         assertEquals(1, discovered)
     }

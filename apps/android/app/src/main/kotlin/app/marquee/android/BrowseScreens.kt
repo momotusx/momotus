@@ -62,6 +62,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import app.marquee.core.DiscoverCopy
+import app.marquee.core.ProfileCopy
 import app.marquee.core.SearchCopy
 import app.marquee.core.TileCopy
 import app.marquee.core.model.DiscoverSnapshot
@@ -86,6 +87,7 @@ import app.marquee.design.Icons
 import app.marquee.design.KeepInView
 import app.marquee.design.KeyPresses
 import app.marquee.design.LiveSpoken
+import app.marquee.design.LocalIncognito
 import app.marquee.design.Marquee
 import app.marquee.design.MarqueeFonts
 import app.marquee.design.MqIcon
@@ -1070,7 +1072,15 @@ fun LibraryScreen(
             snapshot.items.isEmpty() && snapshot.kind == null -> {
                 full("empty") {
                     Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.s)) {
-                        Note("Your library is empty. Add a title from its page and it shows here.", side = 0.dp)
+                        Note(
+                            // Incognito's Library is its own, and goes with it (plans/batch-10-incognito.md 6).
+                            if (LocalIncognito.current) {
+                                ProfileCopy.INCOGNITO_LIBRARY_EMPTY
+                            } else {
+                                "Your library is empty. Add a title from its page and it shows here."
+                            },
+                            side = 0.dp,
+                        )
                         onDiscover?.let { SecondaryButton("Discover", it, icon = Icons.Compass) }
                     }
                 }

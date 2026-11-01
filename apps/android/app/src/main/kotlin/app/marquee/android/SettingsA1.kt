@@ -61,6 +61,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import app.marquee.core.AccountCopy
+import app.marquee.core.ProfileCopy
 import app.marquee.core.TileCopy
 import app.marquee.core.model.Hero
 import app.marquee.core.model.HomeRow
@@ -330,6 +331,8 @@ internal fun PhoneSettings(
     onProfiles: () -> Unit,
     parts: List<SettingsPart>,
     section: SettingsSection? = null,
+    /** Incognito: the header's one button leaves it (plans/batch-10-incognito.md 5.2). */
+    onLeave: (() -> Unit)? = null,
     onSection: (SettingsSection) -> Unit = {},
 ) {
     if (section != null) {
@@ -365,7 +368,11 @@ internal fun PhoneSettings(
                         weight = FontWeight.Bold,
                         color = Color.White,
                     )
-                    if (me != null) ProfileCard(me, line, onProfiles)
+                    when {
+                        me == null -> Unit
+                        onLeave != null -> IncognitoCard(me, line, onLeave)
+                        else -> ProfileCard(me, line, onProfiles)
+                    }
                 }
             }
         }
@@ -435,6 +442,32 @@ private fun PhoneSection(
     }
 }
 
+/** The phone header in Incognito: the mark, its name and line on the glass, and Leave Incognito its one button. */
+@Composable
+private fun IncognitoCard(
+    me: ProfileInfo,
+    line: String,
+    onLeave: () -> Unit,
+) {
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(26.dp))
+            .background(PHONE_CARD)
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
+        Row(horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.CenterVertically) {
+            ProfileAvatar(me, 56.dp)
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                MqText(me.name, Modifier.semantics { heading() }, role = TextRole.Title3, weight = FontWeight.SemiBold)
+                MqText(line, role = TextRole.Caption, color = Marquee.colors.dim)
+            }
+        }
+        SecondaryButton(ProfileCopy.INCOGNITO_LEAVE, onLeave, icon = Icons.LogOut)
+    }
+}
+
 /** The phone header's profile: one glass card, one tap to the picker. */
 @Composable
 private fun ProfileCard(
@@ -487,6 +520,8 @@ internal fun TvSettings(
     onEdit: () -> Unit,
     onManage: () -> Unit,
     parts: List<SettingsPart>,
+    /** Incognito: Leave Incognito beside the block, which still opens the chooser (plans/batch-10-incognito.md 5.2). */
+    onLeave: (() -> Unit)? = null,
 ) {
     val profile = remember { FocusRequester() }
     val entries = remember { SettingsSection.entries.associateWith { FocusRequester() } }
@@ -528,6 +563,7 @@ internal fun TvSettings(
                     profile,
                     entries.getValue(SettingsSection.Profiles),
                     pad,
+                    onLeave,
                 )
             }
             Row(Modifier.fillMaxWidth().weight(1f).padding(horizontal = pad)) {
@@ -616,6 +652,7 @@ private fun TvHeader(
     profile: FocusRequester,
     down: FocusRequester,
     pad: Dp,
+    onLeave: (() -> Unit)?,
 ) {
     val room = TvNavRoom.current
     Box(Modifier.fillMaxSize().testTag(SETTINGS_HEADER)) {
@@ -640,6 +677,18 @@ private fun TvHeader(
             Column(Modifier.weight(1f)) {
                 if (me != null) {
                     ProfileBlock(me, line, onProfiles, profile, down)
+                    if (onLeave != null) {
+                        SecondaryButton(
+                            ProfileCopy.INCOGNITO_LEAVE,
+                            onLeave,
+                            Modifier
+                                .padding(
+                                    start = TV_AVATAR + 40.dp,
+                                    top = 28.dp,
+                                ).focusProperties { this.down = down },
+                            icon = Icons.LogOut,
+                        )
+                    }
                     if (canEdit) {
                         Row(
                             Modifier.padding(start = TV_AVATAR + 40.dp, top = 28.dp),
@@ -770,3 +819,10 @@ internal const val SETTINGS_MENU = "settings-menu"
 internal const val SETTINGS_LIST = "settings-list"
 internal const val SETTINGS_SECTIONS = "settings-sections"
 internal const val SETTINGS_PROFILE = "settings-profile"
+
+/** The sections Incognito hides (plans/batch-10-incognito.md 6): the profiles, the account and Downloads' settings. */
+internal fun incognitoShows(
+    incognito: Boolean,
+    section: SettingsSection,
+): Boolean =
+    !incognito || section !in setOf(SettingsSection.Profiles, SettingsSection.Account, SettingsSection.Downloads)

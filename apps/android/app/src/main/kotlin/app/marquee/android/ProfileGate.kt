@@ -81,6 +81,9 @@ class ProfileGate(
     /** A profile with a PIN the bar's menu chose: the picker it opens shows that keypad, once ([takeAsked]). */
     var asked: String? = null
 
+    /** Incognito was just entered: its intro shows over the app until Continue (plans/batch-10-incognito.md 5.1). */
+    var intro by mutableStateOf(false)
+
     /** The pushed picker, as it opens: the profile whose keypad to show, once. */
     fun takeAsked(): String? = asked.also { asked = null }
 
@@ -186,6 +189,26 @@ class ProfileGate(
     }
 
     /**
+     * Leaves Incognito (plans/batch-10-incognito.md 5.3): back to where it was entered, never with a PIN. It shuts the
+     * gate and closes the views as a switch does, on the session's scope, so the menu or page that asked can leave.
+     */
+    fun startLeave() {
+        val s = snapshot ?: return
+        val host = s.incognitoHost ?: return
+        session.scope.launch(Dispatchers.Main) { change(host) { session.ops.leaveIncognito() } }
+    }
+
+    /** The person read the Incognito ended notice over Home (5.4). */
+    fun ackEnded() {
+        session.scope.launch(Dispatchers.Main) {
+            runCatching { session.ops.ackIncognitoEnded() }.onFailure {
+                if (it is CancellationException) throw it
+                CoreLog.w("ackIncognitoEnded: ${CoreLog.describe(it)}")
+            }
+        }
+    }
+
+    /**
      * Shuts the gate, waits for the app to drop the old profile, then switches, waiting while views
      * finish closing (`viewsOpen`). A refusal leaves the gate shut, with the root picker showing
      * [switchProblem] on [profile]'s keypad; [cancelSwitch] goes back to the current profile. One
@@ -194,19 +217,30 @@ class ProfileGate(
     suspend fun switchTo(
         profile: String,
         pin: String?,
+        /** Incognito only: entered from the chooser, so Leave returns there (2.7). */
+        fromChooser: Boolean = false,
+    ): Boolean =
+        change(profile) {
+            session.ops.switchProfile(profile, pin, fromChooser)
+            if (profile == ProfileCopy.INCOGNITO) intro = true
+        }
+
+    /** A switch or a Leave: the gate shuts for [target] (the profile it opens), then [op] runs once the views closed. */
+    private suspend fun change(
+        target: String,
+        op: suspend () -> Unit,
     ): Boolean {
         if (inFlight) return false
         inFlight = true
         if (switching == null) chosenBefore = chosen
-        switching = profile
+        switching = target
         switchProblem = null
         val count = shut()
-        return session.scope.async(Dispatchers.Main) { runSwitch(profile, pin, count) }.await()
+        return session.scope.async(Dispatchers.Main) { runSwitch(op, count) }.await()
     }
 
     private suspend fun runSwitch(
-        profile: String,
-        pin: String?,
+        op: suspend () -> Unit,
         count: Int,
     ): Boolean {
         try {
@@ -217,23 +251,11 @@ class ProfileGate(
             snapshotFlow { resetCount }.first { it >= count }
             // A Trakt record already on its way reaches the core before the switch (TraktAccount.quiet).
             beforeSwitch()
-            for (attempt in 1..10) {
-                try {
-                    session.ops.switchProfile(profile, pin)
-                    chosen = true
-                    switching = null
-                    return true
-                } catch (e: CoreError) {
-                    if (e.code == "viewsOpen" && attempt < 10) {
-                        delay(100)
-                        continue
-                    }
-                    if (e.code == "viewsOpen") CoreLog.w("switch: views still open: ${e.views}")
-                    switchProblem = e
-                    return false
-                }
-            }
-            return false
+            switchProblem = whileViewsClose(op)
+            if (switchProblem != null) return false
+            chosen = true
+            switching = null
+            return true
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -244,14 +266,51 @@ class ProfileGate(
         }
     }
 
+    /** Runs [op], again while views still close (`viewsOpen`, up to a second); the refusal that stood, or null. */
+    private suspend fun whileViewsClose(op: suspend () -> Unit): CoreError? {
+        for (attempt in 1..10) {
+            try {
+                op()
+                return null
+            } catch (e: CoreError) {
+                if (e.code == "viewsOpen" && attempt < 10) {
+                    delay(100)
+                    continue
+                }
+                if (e.code == "viewsOpen") CoreLog.w("switch: views still open: ${e.views}")
+                return e
+            }
+        }
+        return null
+    }
+
+    /**
+     * The window closed for good while the process stays (a download keeps it): Incognito ends now, as closing the
+     * app ends it (plans/batch-10-incognito.md 5.3). No screen is left to reset, so the gate does not shut for it.
+     */
+    fun leaveOnClose() {
+        if (!ProfileCopy.inIncognito(snapshot)) return
+        intro = false
+        session.scope.launch(Dispatchers.Main) {
+            try {
+                whileViewsClose { session.ops.leaveIncognito() }?.let { CoreLog.w("leave on close: ${it.code}") }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                CoreLog.w("leave on close: ${CoreLog.describe(e)}")
+            }
+        }
+    }
+
     /**
      * A refused switch given up. From the app, the current profile opens again, on Home; from the
-     * start picker, the picker asks again. Not while a request is out.
+     * start picker, the picker asks again. Not while a request is out. [toPicker]: the picker stays (Incognito did not
+     * open, and its reason shows there).
      */
-    fun cancelSwitch() {
+    fun cancelSwitch(toPicker: Boolean = false) {
         if (inFlight) return
         switching = null
         switchProblem = null
-        chosen = chosenBefore
+        chosen = chosenBefore && !toPicker
     }
 }
