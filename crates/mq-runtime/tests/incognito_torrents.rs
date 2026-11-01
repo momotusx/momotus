@@ -85,8 +85,19 @@ async fn add_inside(core: &Core, engine: &Engine, s: &support::Swarm) -> Torrent
         .add_magnet(&s.info_hash, &[], &[s.seeder_addr])
         .await
         .unwrap();
-    core.incognito_handles().insert(hash, h);
+    core.added_torrent(&hash, h);
     h
+}
+
+/// Waits up to 10 s for `done`.
+async fn until(what: &str, done: impl Fn() -> bool) {
+    for _ in 0..500 {
+        if done() {
+            return;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    }
+    panic!("waited 10 s for {what}");
 }
 
 /// A torrent this device had before is never Incognito's; outside
@@ -130,9 +141,7 @@ async fn a_claimed_torrent_goes_on_a_later_pass() {
     let claim = engine.claim(h, "incognito").unwrap();
     core.end_incognito();
     // The end's own pass: the claimed one stays, the download's line goes.
-    while lines(dir.path()).contains(&kept) {
-        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
-    }
+    until("the end's pass", || !lines(dir.path()).contains(&kept)).await;
     assert_eq!(files_of(&host, &kept), [true; 3]);
     assert!(lines(dir.path()).contains(&hash));
     assert_eq!(host.sweep_torrents().await, 1);
@@ -252,4 +261,88 @@ fn download(hash: &str) -> DownloadRecord {
         done_ms: Some(1),
         smart: None,
     }
+}
+
+/// An end that lands while a stream's add still runs (a Leave while it
+/// starts): the end's pass finds no handle and drops the line, then the add
+/// completes. The add's own tail writes the line again and a pass removes
+/// the torrent: nothing outlives the scope (review P1).
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn an_add_that_finishes_after_the_end_is_removed() {
+    let s = support::swarm(true).await;
+    let dir = tempfile::tempdir().unwrap();
+    let host = open(dir.path());
+    let engine = engine(&host).await;
+    let core = host.open_incognito().unwrap();
+    let hash = s.info_hash.to_ascii_lowercase();
+    assert_eq!(core.record_torrent(&hash), Record::Recorded);
+    core.end_incognito();
+    until("the end's pass", || lines(dir.path()).is_empty()).await;
+    let h = engine
+        .add_magnet(&s.info_hash, &[], &[s.seeder_addr])
+        .await
+        .unwrap();
+    leave_files(&host, &hash);
+    core.added_torrent(&hash, h);
+    until("the add's own pass", || {
+        lines(dir.path()).is_empty() && files_of(&host, &hash) == [false; 3]
+    })
+    .await;
+    assert!(engine.stats(h).await.is_err(), "the engine let it go");
+}
+
+/// A pass loop finishing while another scope ends: that end found the loop
+/// running and started none, so the finishing loop looks again and goes on
+/// (review P2-2); the second scope's torrent does not wait for a launch.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_finishing_pass_loop_takes_a_later_ends_lines() {
+    let dir = tempfile::tempdir().unwrap();
+    let host = open(dir.path());
+    let core = host.open_incognito().unwrap();
+    let hash = "9".repeat(40);
+    assert_eq!(core.record_torrent(&hash), Record::Recorded);
+    leave_files(&host, &hash);
+    // A loop is running: this end starts none.
+    host.sweeping()
+        .store(true, std::sync::atomic::Ordering::SeqCst);
+    core.end_incognito();
+    assert!(lines(dir.path()).contains(&hash));
+    assert!(!host.sweep_done(), "the loop goes on");
+    assert_eq!(host.sweep_torrents().await, 0);
+    assert_eq!(files_of(&host, &hash), [false; 3]);
+    assert!(host.sweep_done());
+}
+
+/// Nothing from the list or a hash is joined into a path unless it is 40
+/// hex (a scope id 16): a `..` line never reaches the data folder, and a
+/// malformed line is dropped (review P2-3).
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_malformed_torrent_line_touches_nothing() {
+    let dir = tempfile::tempdir().unwrap();
+    {
+        let host = open(dir.path());
+        let core = host.open_incognito().unwrap();
+        for bad in [
+            "..",
+            "../..",
+            "",
+            "ABCDEF0123456789ABCDEF0123456789ABCDEF01",
+        ] {
+            assert_eq!(core.record_torrent(bad), Record::Not, "{bad:?}");
+        }
+        core.end_incognito();
+    }
+    let sentinel = dir.path().join("torrents").join("keep");
+    std::fs::create_dir_all(&sentinel).unwrap();
+    let scopes = dir.path().join("incognito");
+    std::fs::create_dir_all(&scopes).unwrap();
+    let lines = "00000000000000ff ..\n00000000000000ff ../..\n.. 0000000000000000000000000000000000000000\n00000000000000ff\n";
+    std::fs::write(scopes.join("torrents"), lines).unwrap();
+    let _host = open(dir.path());
+    assert!(sentinel.exists());
+    assert!(dir.path().join("library.sqlite").exists());
+    assert_eq!(
+        std::fs::read_to_string(scopes.join("torrents")).unwrap(),
+        ""
+    );
 }

@@ -3317,7 +3317,7 @@ async fn open_torrent(
         })?
         .map_err(unsaid)?;
     if matches!(record, crate::incognito::Record::Recorded) {
-        core.incognito_handles().insert(hash.clone(), torrent);
+        core.added_torrent(&hash, torrent);
     }
     // This profile's use of it, for as long as the playback lives: a hold
     // for another profile leaves the torrent running for it.
@@ -3663,7 +3663,7 @@ fn look_ahead(core: &Core, engine: &mq_engine::Engine, s: &mut State, current: &
             () = closing.cancelled() => return,
         };
         if let (Some(torrent), crate::incognito::Record::Recorded) = (added, &record) {
-            core.incognito_handles().insert(fetch.clone(), torrent);
+            core.added_torrent(&fetch, torrent);
         }
         let _ = said.send(true);
         closing.cancelled().await;

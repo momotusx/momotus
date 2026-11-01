@@ -448,7 +448,8 @@ impl Core {
         self.inner.device.trakt.get().is_none()
     }
 
-    pub(crate) fn sweeping(&self) -> &std::sync::atomic::AtomicBool {
+    #[doc(hidden)]
+    pub fn sweeping(&self) -> &std::sync::atomic::AtomicBool {
         &self.inner.device.sweeping
     }
 

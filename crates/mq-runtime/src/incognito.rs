@@ -51,7 +51,8 @@ pub enum IncognitoError {
     /// A kids profile never enters Incognito.
     #[error("a kids profile cannot open Incognito")]
     Kids,
-    #[error("this device is out of space")]
+    /// The words stay neutral; the code says why (`noSpace`).
+    #[error("Incognito could not start")]
     NoSpace,
     #[error("Incognito could not start: {0}")]
     Failed(String),
@@ -225,26 +226,50 @@ fn list_lock() -> std::sync::MutexGuard<'static, ()> {
     LIST.lock().unwrap_or_else(|p| p.into_inner())
 }
 
+/// A torrent's info hash as the engine names its folder: 40 lowercase hex.
+/// Nothing else is ever joined into a path.
+fn is_hash(hash: &str) -> bool {
+    hash.len() == 40 && hash.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'))
+}
+
+/// A scope folder's name: 16 lowercase hex.
+fn is_scope(id: &str) -> bool {
+    id.len() == 16 && id.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'))
+}
+
+/// The list's lines; a malformed one is dropped (and logged), never used.
 fn read_list(dir: &Path) -> Vec<(String, String)> {
     let text = std::fs::read_to_string(dir.join(TORRENTS)).unwrap_or_default();
     text.lines()
-        .filter_map(|l| l.split_once(' '))
-        .map(|(scope, hash)| (scope.to_owned(), hash.to_owned()))
+        .filter_map(|line| match line.split_once(' ') {
+            Some((scope, hash)) if is_scope(scope) && is_hash(hash) => {
+                Some((scope.to_owned(), hash.to_owned()))
+            }
+            _ => {
+                tracing::warn!("a malformed Incognito torrent line was dropped");
+                None
+            }
+        })
         .collect()
 }
 
-/// Takes `done` out of the list, keeping lines added meanwhile.
+/// Takes `done` out of the list, keeping lines added meanwhile; a
+/// malformed line goes too.
 fn drop_lines(dir: &Path, done: &[(String, String)]) {
-    if done.is_empty() {
+    let _list = list_lock();
+    if !dir.join(TORRENTS).exists() {
         return;
     }
-    let _list = list_lock();
     let left: String = read_list(dir)
         .into_iter()
         .filter(|line| !done.contains(line))
         .map(|(scope, hash)| format!("{scope} {hash}\n"))
         .collect();
-    if let Err(e) = std::fs::write(dir.join(TORRENTS), left) {
+    // Written aside then renamed: a kill mid-write loses no line.
+    let aside = dir.join(format!("{TORRENTS}.new"));
+    let written =
+        std::fs::write(&aside, left).and_then(|()| std::fs::rename(&aside, dir.join(TORRENTS)));
+    if let Err(e) = written {
         tracing::warn!("the Incognito torrent list was not written: {e}");
     }
 }
@@ -265,6 +290,9 @@ fn ended_lines(dir: &Path) -> Vec<(String, String)> {
 /// Deletes a torrent's folder, `.have` and `.torrent` as the engine does:
 /// the folder set aside first, then removed.
 pub(crate) fn delete_torrent_files(torrent_dir: &Path, hash: &str) {
+    if !is_hash(hash) {
+        return;
+    }
     let folder = torrent_dir.join(hash);
     // The engine's endings (mq-engine `HAVE`, `TORRENT`, `SET_ASIDE`).
     let _ = std::fs::remove_file(folder.with_extension("have"));
@@ -319,13 +347,30 @@ impl Core {
         if scope.ended.load(Ordering::SeqCst) {
             return Record::Ended;
         }
-        if self.torrent_dir().join(hash).exists()
+        if !is_hash(hash) {
+            tracing::warn!("a torrent with a malformed hash was not recorded");
+            return Record::Not;
+        }
+        // Kept here before (its folder, or its details the engine loads
+        // first): never Incognito's.
+        let folder = self.torrent_dir().join(hash);
+        let kept = [
+            folder.clone(),
+            folder.with_extension("torrent"),
+            folder.with_extension("have"),
+        ];
+        if kept.iter().any(|p| p.exists())
             || crate::downloads::names_torrent(self.device_library(), hash)
         {
             return Record::Not;
         }
+        self.append_line(&scope.id, hash);
+        Record::Recorded
+    }
+
+    fn append_line(&self, scope: &str, hash: &str) {
         let _list = list_lock();
-        let line = format!("{} {hash}\n", scope.id);
+        let line = format!("{scope} {hash}\n");
         let path = self.incognito_dir().join(TORRENTS);
         let written = std::fs::OpenOptions::new()
             .create(true)
@@ -335,7 +380,25 @@ impl Core {
         if let Err(e) = written {
             tracing::warn!("an Incognito torrent was not recorded: {e}");
         }
-        Record::Recorded
+    }
+
+    /// After the add of a torrent `record_torrent` recorded: its handle is
+    /// kept for the removal. An end that came while the add ran (a Leave
+    /// while a stream starts) has swept the line already, so the line is
+    /// written again and a pass runs: the torrent never outlives the scope.
+    #[cfg(feature = "torrent")]
+    #[doc(hidden)]
+    pub fn added_torrent(&self, hash: &str, handle: mq_engine::TorrentHandle) {
+        let Some(scope) = self.scope() else {
+            return;
+        };
+        let _record = scope.record.lock().unwrap_or_else(|p| p.into_inner());
+        self.incognito_handles().insert(hash.to_owned(), handle);
+        if scope.ended.load(Ordering::SeqCst) {
+            self.append_line(&scope.id, hash);
+            drop(_record);
+            self.sweep_torrents_soon();
+        }
     }
 
     /// Works through every line no live scope owns, at once and then every
@@ -350,19 +413,34 @@ impl Core {
         }
         let device = self.device().downgrade();
         tokio::spawn(async move {
+            // The first retry comes soon: a Leave from the player drops the
+            // stream's claim a moment after the end's pass.
+            let mut wait = SWEEP_SOON;
             loop {
                 let Some(core) = device.upgrade() else {
                     return;
                 };
                 let left = core.sweep_torrents().await;
                 if left == 0 {
-                    core.sweeping().store(false, Ordering::SeqCst);
-                    return;
+                    if core.sweep_done() {
+                        return;
+                    }
+                    continue;
                 }
                 drop(core);
-                tokio::time::sleep(SWEEP_EVERY).await;
+                tokio::time::sleep(wait).await;
+                wait = SWEEP_EVERY;
             }
         });
+    }
+
+    /// The pass loop is about to stop: true when it may. An end that came
+    /// while it finished found the flag still set and started no loop, so
+    /// its lines are looked for once more here.
+    #[doc(hidden)]
+    pub fn sweep_done(&self) -> bool {
+        self.sweeping().store(false, Ordering::SeqCst);
+        ended_lines(self.incognito_dir()).is_empty() || self.sweeping().swap(true, Ordering::SeqCst)
     }
 
     /// One pass over the lines no live scope owns; how many are left.
@@ -410,6 +488,8 @@ impl Core {
     }
 }
 
+/// The first retry after an end.
+const SWEEP_SOON: std::time::Duration = std::time::Duration::from_secs(2);
 /// A torrent line still claimed is tried again this often.
 const SWEEP_EVERY: std::time::Duration = std::time::Duration::from_secs(60);
 
