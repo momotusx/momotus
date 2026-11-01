@@ -1,4 +1,5 @@
 import { onCleanup, onMount } from "solid-js";
+import { screenChanged } from "./ghost-tap";
 
 /** While a modal is open, everything outside it is inert (no focus, no clicks, hidden from
  * screen readers); focus goes back where it was when it closes. Without `inside`, the modal is
@@ -18,6 +19,7 @@ export function holdModal(inside?: () => HTMLElement) {
     }
   });
   onCleanup(() => {
+    screenChanged();
     for (const el of held) el.inert = false;
     queueMicrotask(() => {
       const back = before?.isConnected ? before : key ? document.querySelector<HTMLElement>(`[data-f="${key}"]`) : null;

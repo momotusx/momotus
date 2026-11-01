@@ -7,6 +7,7 @@
  * before it writes history). */
 
 import { createSignal } from "solid-js";
+import { screenChanged } from "./focus/ghost-tap";
 
 // Back (the app's own or the browser's) is under way: the screen it lands on
 // restores the viewer's focus instead of placing its own first focus.
@@ -166,6 +167,7 @@ for (const name of ["pushState", "replaceState"] as const) {
     // The page this entry was opened from (`_from`): a push records the page
     // being left; a replace keeps what the entry had, since Back still goes there.
     const from = name === "pushState" ? pathOf(currentPath()) : (fields._from ?? entryFrom());
+    if (url != null && String(url) !== currentPath()) screenChanged();
     if (memory) writeMemory(name === "pushState", { ...fields, _profile: owner, _from: from }, url);
     else native({ ...fields, _profile: owner, _from: from }, unused, url);
     setEntryOwner(owner);
@@ -181,6 +183,7 @@ export function entryFrom(): string | null {
 // another profile reached with the browser's Back or Forward becomes Home
 // before the router reads the address, and the app's Back stops there.
 window.addEventListener("popstate", () => {
+  screenChanged();
   if (memory) {
     // A page from before Incognito (the browser's Back past its first entry): Incognito starts again at its first one.
     if (!ours()) {
