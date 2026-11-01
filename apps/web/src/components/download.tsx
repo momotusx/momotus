@@ -21,13 +21,15 @@ import { Dynamic } from "solid-js/web";
 import { displayCaps, liveView, online, op } from "../core/client";
 import type { DownloadBadge } from "../core/generated/DownloadBadge";
 import type { DownloadsSnapshot } from "../core/generated/DownloadsSnapshot";
-import { profiles } from "../core/profiles";
+import { incognito, profiles } from "../core/profiles";
+import { current } from "../lib/profiles";
 import { pushBack } from "../focus/back";
 import { focusEl } from "../focus/dom";
 import { form } from "../form";
 import { controlName, type DownloadControl, type DownloadGlyph, type DownloadItem, downloadWords, ITEM_LABEL, itemOp, kidsOf, offlineBanner, shownDownloads } from "../lib/download";
 import { downloadProblem, downloadWordsFailed, reported } from "../lib/download-status";
 import "./download.css";
+import { incognitoWords } from "./incognito";
 
 type Icon = Component<{ "aria-hidden"?: boolean; class?: string; style?: JSX.CSSProperties }>;
 
@@ -69,7 +71,7 @@ export function awayFromTv() {
 /** Unknown means kids: no download control until the active profile is known not to be one. */
 export const kidsProfile = () => kidsOf(profiles());
 /** Known to be a kids profile: its kept titles read "Downloaded". */
-export const knownKids = () => profiles()?.profiles.find((p) => p.id === profiles()?.active)?.kids === true;
+export const knownKids = () => current(profiles())?.kids === true;
 /** A touch screen has no secondary press everywhere (iOS Safari fires no contextmenu): a tap on Download
  * opens its menu there, with Choose a version to download beside Download. */
 export const touchFirst = () => typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches;
@@ -259,6 +261,10 @@ export function DownloadMenu(props: { ask: MenuAsk; onClose: () => void }) {
       <section class="dl-card" data-fgroup="dl-menu">
         <h2 id="dl-menu-title">{props.ask.title}</h2>
         <Show when={props.ask.detail}>{(d) => <p class="dl-detail">{d()}</p>}</Show>
+        {/* In Incognito every download menu says the file outlives it (plans/batch-10-incognito.md 4). */}
+        <Show when={incognito()}>
+          <p class="dl-detail">{incognitoWords.downloadNote}</p>
+        </Show>
         <div class="dl-items" role="menu" aria-labelledby="dl-menu-title" ref={list} onKeyDown={keys}>
           <For each={props.ask.entries}>
             {(entry) => (

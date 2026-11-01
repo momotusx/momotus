@@ -54,6 +54,7 @@ import {
 } from "../lib/words";
 import "./browse.css";
 import "./versions.css";
+import { setTitle } from "../incognito";
 
 const SHOWN = 3;
 // The sections the viewer opened ("Show all"), per video: Back from a play
@@ -165,7 +166,7 @@ export function VersionsPage(props: { kind: string; id: string; videoId: string;
   const ActIcon = () => (keeping ? <ArrowDownToLine aria-hidden /> : <Play aria-hidden class="fill" />);
   createEffect(() => {
     const name = ctx.label() ?? ctx.details()?.name;
-    if (name) document.title = `Versions · ${name} · Momotus`;
+    if (name) setTitle(`Versions · ${name} · Momotus`);
   });
   const snap = (): VersionsSnapshot | null => ctx.versions()?.state.data ?? null;
   // Why nothing can play (plans/play-every-version.md, the shared Step 3 table): the rows found, if

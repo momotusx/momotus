@@ -38,10 +38,12 @@ export interface TrailerSignals {
   capable: boolean;
   /** The page has a trailer and has not played it to its end this session or failed. */
   hasTrailer: boolean;
+  /** Incognito plays no trailer: YouTube's player keeps its cookies and cache after it (plans/batch-10-incognito.md 5.5). */
+  incognito: boolean;
 }
 
 export function trailerAllowed(s: TrailerSignals): boolean {
-  return s.enabled && s.capable && s.visible && !s.reducedMotion && !s.metered && !s.walk && s.layout !== "none" && s.hasTrailer;
+  return !s.incognito && s.enabled && s.capable && s.visible && !s.reducedMotion && !s.metered && !s.walk && s.layout !== "none" && s.hasTrailer;
 }
 
 const KEY = "mq.trailerPreviews";

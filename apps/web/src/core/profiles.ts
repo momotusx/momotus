@@ -4,9 +4,9 @@
 
 import { createEffect, createRoot, createSignal, on } from "solid-js";
 import { forgetFocus } from "../focus/dom";
-import { startsOnPicker } from "../lib/profiles";
+import { choiceToRemember, INCOGNITO, inIncognito, startsOnPicker } from "../lib/profiles";
 import { BridgeError } from "./bridge";
-import { closeProfileViews, liveView, op } from "./client";
+import { bridge, closeProfileViews, liveView, op } from "./client";
 import type { ProfilesSnapshot } from "./generated/ProfilesSnapshot";
 
 const view = createRoot(() => liveView<ProfilesSnapshot>("profiles", {}, true));
@@ -14,6 +14,8 @@ const view = createRoot(() => liveView<ProfilesSnapshot>("profiles", {}, true));
 /** The picker's snapshot, or null until the core sent it (nothing profile-bound opens before). */
 export const profiles = () => view.state.data;
 export const profilesFailed = () => (view.state.status.state === "failed" ? view.state.status.reason : null);
+/** The session runs Incognito (plans/batch-10-incognito.md). */
+export const incognito = () => inIncognito(profiles());
 
 /** The start picker was answered this launch (a cold start with more than one profile asks once).
  * A reload in the same tab is not a cold start: the tab remembers which profile it chose. */
@@ -22,7 +24,8 @@ const CHOSEN = "mq.profileChosen";
 function choose(active: string | undefined) {
   setChosen(true);
   try {
-    if (active) sessionStorage.setItem(CHOSEN, active);
+    const remembered = choiceToRemember(active);
+    if (remembered) sessionStorage.setItem(CHOSEN, remembered);
   } catch {
     // Remembered for this page only.
   }
@@ -76,22 +79,24 @@ export function takePick(): string | null {
 let switching = false;
 
 /** Tears down, then switches; a view still closing (`viewsOpen`) is waited for, up to five times.
- * One switch at a time: a second one while the first is out is refused. */
-export async function switchProfile(id: string, pin?: string): Promise<ProfilesSnapshot> {
+ * One switch at a time: a second one while the first is out is refused. Into Incognito, `fromChooser` says Leave goes
+ * back to the chooser. */
+export async function switchProfile(id: string, pin?: string, fromChooser = false): Promise<ProfilesSnapshot> {
   if (switching) throw new Error("A switch is already under way.");
   switching = true;
   try {
-    return await runSwitch(id, pin);
+    return await runSwitch(id, pin, fromChooser);
   } finally {
     switching = false;
   }
 }
 
-async function runSwitch(id: string, pin?: string): Promise<ProfilesSnapshot> {
+async function runSwitch(id: string, pin: string | undefined, fromChooser: boolean): Promise<ProfilesSnapshot> {
   await resetProfileState();
   for (let attempt = 1; ; attempt++) {
     try {
-      const s = await op<ProfilesSnapshot>("switchProfile", { profile: id, pin });
+      const s = await op<ProfilesSnapshot>("switchProfile", id === INCOGNITO ? { profile: id, pin, fromChooser } : { profile: id, pin });
+      if (id === INCOGNITO) setIntro(true);
       choose(s.active);
       return s;
     } catch (e) {
@@ -104,6 +109,38 @@ async function runSwitch(id: string, pin?: string): Promise<ProfilesSnapshot> {
     }
   }
 }
+
+/** Leaves Incognito for where it was entered, without a PIN (plans/batch-10-incognito.md 2.7): the host, or the
+ * chooser over it. */
+export async function leaveIncognito(): Promise<ProfilesSnapshot> {
+  setIntro(false);
+  await resetProfileState();
+  const s = await op<ProfilesSnapshot>("leaveIncognito");
+  choose(s.active);
+  return s;
+}
+
+/** The person read the Incognito ended notice (over Home, where no profile op follows). */
+export const ackIncognitoEnded = () => op<ProfilesSnapshot>("ackIncognitoEnded");
+
+// The intro shows on every entry until Continue (plans/batch-10-incognito.md 5.1).
+const [intro, setIntro] = createSignal(false);
+export { intro };
+export const closeIntro = () => setIntro(false);
+
+// The desktop's one-minute warning (2.7): from the core's `endsSoon` until the person is back or Incognito ends.
+const [endsSoon, setEndsSoon] = createSignal(false);
+export { endsSoon, setEndsSoon };
+bridge.onIncognito((what) => setEndsSoon(what === "endsSoon"));
+createRoot(() =>
+  createEffect(
+    on(incognito, (on) => {
+      if (on) return;
+      setIntro(false);
+      setEndsSoon(false);
+    }),
+  ),
+);
 
 /** Unlocks the locked session as its own profile. */
 export async function unlockProfile(pin?: string): Promise<ProfilesSnapshot> {

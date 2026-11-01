@@ -28,11 +28,12 @@ fake.subscribe = async (view, _params, handlers) => {
   return { sub: views.length, command: async () => undefined, close: async () => void ((v.closed = true), sent.push({ name: `close ${view}`, fields: {} })) };
 };
 
-const [session, setSession] = createSignal<{ active: string; locked: boolean } | null>(null);
+const [session, setSession] = createSignal<{ active: string; locked: boolean; incognitoHost?: string } | null>(null);
 const resets: (() => void | Promise<void>)[] = [];
 mock.module("./profiles", () => ({
   profiles: session,
   gateOpen: () => session() !== null && !session()?.locked,
+  incognito: () => session()?.incognitoHost != null,
   onProfileReset: (fn: () => void | Promise<void>) => void resets.push(fn),
 }));
 
@@ -112,7 +113,7 @@ const status = (extra: Record<string, unknown> = {}) => ({ state: "connected", u
 /** What the page told the core, in order, then forgotten. */
 const told = () => sent.splice(0).map((s) => (s.name === "setTrakt" ? `setTrakt ${(s.fields.record as { accessToken: string }).accessToken}` : s.name));
 /** A switch or a lock, as src/core/profiles.ts runs it: every reset, then the new session. */
-async function reset(next: { active: string; locked: boolean }) {
+async function reset(next: { active: string; locked: boolean; incognitoHost?: string }) {
   await Promise.all(resets.map((fn) => fn()));
   setSession(next);
   await settled();
@@ -150,6 +151,13 @@ test("a switch sends the other profile's record only if it has one; switching ba
   expect(told()).toEqual(["close trakt"]);
   setSession({ active: "p1", locked: false });
   await settled();
+  expect(told()).toEqual(["setTrakt t1", "subscribe trakt"]);
+});
+
+test("Incognito never opens Trakt; leaving it opens the host's again (plans/batch-10-incognito.md 5.6)", async () => {
+  await reset({ active: "incognito", locked: false, incognitoHost: "p1" });
+  expect(told()).toEqual(["close trakt"]);
+  await reset({ active: "p1", locked: false });
   expect(told()).toEqual(["setTrakt t1", "subscribe trakt"]);
 });
 

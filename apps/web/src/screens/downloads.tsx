@@ -3,7 +3,7 @@
  * plays it; a series' row opens its page, the episodes by season, with Delete all. A kids profile
  * sees its allowed titles with Play only. */
 
-import { A, useNavigate, useParams } from "@solidjs/router";
+import { useNavigate, useParams } from "@solidjs/router";
 import ArrowDownToLine from "lucide-solid/icons/arrow-down-to-line";
 import ChevronRight from "lucide-solid/icons/chevron-right";
 import Trash from "lucide-solid/icons/trash";
@@ -18,6 +18,8 @@ import { decoded, episodeLabel, playPath, seasonName, versionsPath } from "../li
 import { badgeOf, deleteSeason, downloadControl, type DownloadItem, downloadWords, episodeLine, episodeName, progressLine, shownDownloads, storageLine, subtitlesLine, titleLine } from "../lib/download";
 import "./browse.css";
 import "./settings.css";
+import { setTitle } from "../incognito";
+import { RouteA } from "../components/route-link";
 
 export const DOWNLOADS = "/library/downloads";
 /** After an inline confirmation opens or closes, the focus goes to its other side. */
@@ -68,7 +70,7 @@ function DlRow(props: { fkey: string; href: string; art: string | null; wide?: b
   const [broken, setBroken] = createSignal(false);
   return (
     <div class="dlrow" data-row>
-      <A class="dlrow-main" href={props.href} data-f={props.fkey} aria-label={props.label}>
+      <RouteA class="dlrow-main" href={props.href} data-f={props.fkey} aria-label={props.label}>
         <span class="dlrow-art" classList={{ wide: props.wide }} aria-hidden="true">
           <Show when={!broken() && props.art}>{(src) => <img src={src()} alt="" loading="lazy" decoding="async" onError={() => setBroken(true)} />}</Show>
         </span>
@@ -77,7 +79,7 @@ function DlRow(props: { fkey: string; href: string; art: string | null; wide?: b
           <small class="num">{props.line}</small>
           <Show when={props.extra}>{(x) => <small class="dlrow-subs">{x()}</small>}</Show>
         </span>
-      </A>
+      </RouteA>
       <Show when={props.end}>
         <span class="dlrow-acts">{props.end}</span>
       </Show>
@@ -250,7 +252,7 @@ export function DownloadedSeries() {
     if (shown() && rows().length === 0) navigate(DOWNLOADS, { replace: true });
   });
   createEffect(() => {
-    if (name()) document.title = `${name()} · Downloads · Momotus`;
+    if (name()) setTitle(`${name()} · Downloads · Momotus`);
   });
   return (
     <>

@@ -1,7 +1,6 @@
 /** Home's hero carousel (plans/appletv-polish.md 4.1 and 4.2): full-bleed pages that slide, the dots
  * with the active one a filling pill, auto-advance on input idle, and a muted trailer full bleed in the
  * hero's own frame, under the art until YouTube's start controls have faded. */
-import { A } from "@solidjs/router";
 import Info from "lucide-solid/icons/info";
 import Pause from "lucide-solid/icons/pause";
 import Play from "lucide-solid/icons/play";
@@ -20,6 +19,8 @@ import { Backdrop, Logo } from "./art";
 import { Ratings } from "./ratings";
 import { separators } from "./separators";
 import { muted, playTrailer, setMuted, stopTrailer, trailerPlaying } from "./yt-player";
+import { incognito } from "../core/profiles";
+import { RouteA } from "./route-link";
 
 // The owner's B2 (2026-10-24, design/tokens.json motion): a page stays 8 s, slides in 650 ms, its art moving at 0.85
 // of its words.
@@ -247,6 +248,7 @@ export function HeroCarousel(props: { heroes: Hero[]; waiting: boolean }) {
       layout: layout(),
       capable: capableNow(),
       hasTrailer: !!hero.trailer && !spent.has(hero.tile.id),
+      incognito: incognito(),
     };
     if (!trailerAllowed(signals) || !hero.trailer) return;
     // The player covers the whole frame, oversized so YouTube's bars fall outside the clip.
@@ -450,7 +452,7 @@ function HeroWords(props: { hero: Hero; active: boolean; labels: string[] }) {
           }
         >
           {(play) => (
-            <A
+            <RouteA
               class="btn primary"
               href={playPath(h().tile.kind, h().tile.id, play().videoId)}
               data-f={key("hero:play")}
@@ -459,14 +461,14 @@ function HeroWords(props: { hero: Hero; active: boolean; labels: string[] }) {
             >
               <Play aria-hidden class="fill" />
               <PlayWords label={play().label} labels={props.labels} />
-            </A>
+            </RouteA>
           )}
         </Show>
         {/* Details: a pill with its word on TV, as tvOS; the round button off the TV. */}
         <Show
           when={form() === "tv"}
           fallback={
-            <A
+            <RouteA
               class="rbtn"
               href={titlePath(h().tile.kind, h().tile.id)}
               data-f={key("hero:details")}
@@ -477,10 +479,10 @@ function HeroWords(props: { hero: Hero; active: boolean; labels: string[] }) {
                 <Info aria-hidden />
               </span>
               <span class="lbl">Details</span>
-            </A>
+            </RouteA>
           }
         >
-          <A
+          <RouteA
             class="btn"
             href={titlePath(h().tile.kind, h().tile.id)}
             data-f={key("hero:details")}
@@ -489,7 +491,7 @@ function HeroWords(props: { hero: Hero; active: boolean; labels: string[] }) {
           >
             <Info aria-hidden />
             Details
-          </A>
+          </RouteA>
         </Show>
       </div>
     </div>

@@ -171,6 +171,8 @@ test("a profile not yet known, or not found, gets no download controls, as a kid
   expect(kidsOf(p(false, "gone"))).toBe(true);
   expect(kidsOf(p(true))).toBe(true);
   expect(kidsOf(p(false))).toBe(false);
+  // Incognito is not among the profiles and is no kids profile (plans/batch-10-incognito.md 2.8).
+  expect(kidsOf({ ...p(false, "gone"), active: "incognito", incognitoHost: "default" })).toBe(false);
 });
 
 test("the subtitles kept with a download, by language name", () => {

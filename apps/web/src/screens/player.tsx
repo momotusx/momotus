@@ -1,4 +1,4 @@
-import { A, useLocation, useNavigate, useParams, useSearchParams } from "@solidjs/router";
+import { useLocation, useNavigate, useParams, useSearchParams } from "@solidjs/router";
 import ArrowLeft from "lucide-solid/icons/arrow-left";
 import AudioLines from "lucide-solid/icons/audio-lines";
 import Captions from "lucide-solid/icons/captions";
@@ -50,6 +50,8 @@ import { fileChoice, offSummary, pickerLanguages, sameLanguage, startOption } fr
 import { audioTrackName, choiceWords, emptyWords, languageName, nextVersion, qualityCell, qualityText, restartLine, subtitleNote, subtitleNoteLines } from "../lib/words";
 import { VersionsPage } from "./versions";
 import "./player.css";
+import { setTitle } from "../incognito";
+import { RouteA } from "../components/route-link";
 
 const SPEEDS = [1, 1.25, 1.5, 2, 0.75];
 const HIDE_MS = 4000;
@@ -216,7 +218,7 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
   const backWords = () => (entryFrom() === titlePath(props.kind, props.id) ? `Back to ${ctx.details()?.name ?? "the title"}` : "Back");
   createEffect(() => {
     const name = ctx.details()?.name;
-    if (name && !layer()) document.title = `${name} · Momotus`;
+    if (name && !layer()) setTitle(`${name} · Momotus`);
   });
   const prefs = prefsView();
   const versions = () => ctx.versions()?.state.data ?? null;
@@ -1022,7 +1024,7 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
   // after a failure, "Choose a version" when none plays here; primary and focused when nothing else is.
   const lone = (e?: EmptyVersions) => !!e && !emptyWords(e).steps.length;
   const chooseVersion = () => (
-    <A
+    <RouteA
       class="btn big"
       classList={{ primary: !snap()?.offer && !failed() }}
       href={versionsPath(props.kind, props.id, props.videoId)}
@@ -1033,7 +1035,7 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
     >
       <Layers aria-hidden />
       {failed() || openError() ? nextVersion.another : choiceWords.empty.nothingPlaysHere.action}
-    </A>
+    </RouteA>
   );
   const status = (): { tone: string; text: string; detail?: string; raw?: string; note?: string; busy: boolean; empty?: EmptyVersions } | null => {
     const t = titleError();
@@ -1141,10 +1143,10 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
 
   // Laid out from the start, hidden and inert until the offer, so nothing moves and nothing focuses it.
   const anotherButton = () => (
-    <A class="btn ld-another" classList={{ shown: another() }} href={layerHref()} on:click={openLayer} data-f="player:another" inert={!another()}>
+    <RouteA class="btn ld-another" classList={{ shown: another() }} href={layerHref()} on:click={openLayer} data-f="player:another" inert={!another()}>
       <Layers aria-hidden />
       {nextVersion.another}
-    </A>
+    </RouteA>
   );
   return (
     <>
@@ -1383,10 +1385,10 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
                     {episodeLabel(n().season, n().episode)} {n().title}
                   </h2>
                   <div class="acts">
-                    <A class="btn primary big" href={nextHref() ?? "#"} replace state={carried()} data-f="end:next" data-autofocus>
+                    <RouteA class="btn primary big" href={nextHref() ?? "#"} replace state={carried()} data-f="end:next" data-autofocus>
                       <SkipForward aria-hidden />
                       Next episode
-                    </A>
+                    </RouteA>
                     <button class="btn big" data-f="end:again" onClick={playAgain}>
                       <RotateCcw aria-hidden />
                       Play again
@@ -1471,6 +1473,7 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
                   value={volume()}
                   aria-label="Volume"
                   data-f="player:volume"
+                  autocomplete="off"
                   onInput={(e) => {
                     setVolumeLevel(Number(e.currentTarget.value));
                     setMuted(false);
@@ -1521,7 +1524,7 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
               </button>
               {/* Leaving for Versions or Episodes replaces this play in history:
                   Back from the next play goes to Versions, then the title, never to this one. */}
-              <A
+              <RouteA
                 class="pa"
                 href={versionsPath(props.kind, props.id, props.videoId)}
                 replace
@@ -1531,7 +1534,7 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
                 <Layers aria-hidden />
                 <b>Versions</b>
                 <small>{playing() ? qualityCell(playing()?.quality ?? "") : ""}</small>
-              </A>
+              </RouteA>
               <button class="pa" data-f="player:speed" onClick={cycleSpeed}>
                 <Gauge aria-hidden />
                 <b>Speed</b>
@@ -1539,11 +1542,11 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
               </button>
               <Show when={ctx.ref}>
                 {(r) => (
-                  <A class="pa" href={titlePath(props.kind, props.id)} replace on:click={toTitle} data-f="player:episodes">
+                  <RouteA class="pa" href={titlePath(props.kind, props.id)} replace on:click={toTitle} data-f="player:episodes">
                     <ListVideo aria-hidden />
                     <b>Episodes</b>
                     <small>{r().season === null ? "" : seasonName(r().season as number)}</small>
-                  </A>
+                  </RouteA>
                 )}
               </Show>
             </div>
@@ -1590,7 +1593,7 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
               </For>
             </Show>
             <p class="opt-note">Other languages come with other versions.</p>
-            <A
+            <RouteA
               class="opt"
               href={versionsPath(props.kind, props.id, props.videoId)}
               replace
@@ -1599,7 +1602,7 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
             >
               <b>Choose a version</b>
               <span>{versions()?.rows.length ? `${versions()?.rows.length} more listed` : "See what is listed"}</span>
-            </A>
+            </RouteA>
           </div>
         </aside>
       </Show>
@@ -1667,10 +1670,10 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
                 </Match>
               </Switch>
               <div class="next-acts">
-                <A class="btn primary" href={nextHref() ?? "#"} replace state={carried()} data-f="next:play">
+                <RouteA class="btn primary" href={nextHref() ?? "#"} replace state={carried()} data-f="next:play">
                   <SkipForward aria-hidden />
                   Play now
-                </A>
+                </RouteA>
                 <Show when={prefs.state.data?.autoplayNext}>
                   <button class="btn" data-f="next:cancel" onClick={stopAutoplay}>
                     Cancel

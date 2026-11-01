@@ -53,6 +53,7 @@ export function PluginDirectorySection() {
             class="fa-search"
             type="search"
             data-f="fa-plugins:search"
+            autocomplete="off"
             aria-label={w.directorySearch}
             placeholder={w.directorySearch}
             value={query()}

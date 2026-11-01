@@ -23,6 +23,7 @@ import { caption } from "../lib/words";
 import { wordFit } from "../lib/word-fit";
 import { visibleRange } from "../lib/range";
 import { rowWords } from "../lib/rows";
+import { RouteA } from "./route-link";
 
 export const CONTINUE_ROW = "continue-watching";
 
@@ -114,7 +115,7 @@ export function TileCard(props: {
   // slot that takes the tile's place.
   const slotted = !!props.onRemove;
   const card = (
-    <A
+    <RouteA
       href={titlePath(props.tile.kind, props.tile.id)}
       class="tile"
       classList={{ wide: props.wide }}
@@ -181,7 +182,7 @@ export function TileCard(props: {
           </Show>
         </p>
       </Show>
-    </A>
+    </RouteA>
   );
   if (!slotted) return card;
   return (

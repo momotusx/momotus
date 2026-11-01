@@ -1,4 +1,4 @@
-import { A, type RouteSectionProps, Route, Router, useLocation, useNavigate } from "@solidjs/router";
+import { A, MemoryRouter, type RouteSectionProps, Route, Router, useLocation, useNavigate } from "@solidjs/router";
 import CalendarDays from "lucide-solid/icons/calendar-days";
 import ChevronLeft from "lucide-solid/icons/chevron-left";
 import CircleAlert from "lucide-solid/icons/circle-alert";
@@ -18,12 +18,14 @@ import "./core/debrid";
 import "./core/trakt";
 // A sign-out with removal that a reload cut short goes on (D13).
 import "./core/wipe";
-import { gateOpen, profiles, profilesFailed } from "./core/profiles";
+import { gateOpen, incognito, intro, profiles, profilesFailed } from "./core/profiles";
+import { EndedNotice, IncognitoIntro, IncognitoWarning } from "./components/incognito";
+import { setTitle } from "./incognito";
 import { autoFocusSoon, focusRail, installFocus, move, railHasFocus, restoreSoon, viewerMoving } from "./focus/dom";
 import { type Form, form } from "./form";
 import { parentOf } from "./lib/parent";
 import { isSettingsPage } from "./lib/settings-sections";
-import { backThenReplace, entryOwner, historyBase, historyDepth, leaveGuarded, markBack, resetHistoryBase, stampEntriesWith, takeAfterBack, takeBack } from "./history";
+import { backThenReplace, endMemory, entryOwner, historyBase, historyDepth, leaveGuarded, markBack, resetHistoryBase, stampEntriesWith, startMemory, takeAfterBack, takeBack } from "./history";
 import Addons from "./screens/addons";
 import FindAddons from "./screens/find-addons";
 import Plugins from "./screens/plugins";
@@ -198,6 +200,8 @@ function Reload() {
 }
 
 let focusInstalled = false;
+// The shell's Back: a router swap (Incognito) mounts a new shell, whose Back the keys then reach.
+let shellBack = () => {};
 
 function Shell(props: RouteSectionProps) {
   const location = useLocation();
@@ -228,9 +232,10 @@ function Shell(props: RouteSectionProps) {
     markBack();
     navigate(parent, { replace: true });
   };
+  shellBack = back;
   if (!focusInstalled) {
     focusInstalled = true;
-    installFocus(back);
+    installFocus(() => shellBack());
   }
   // A route belongs to the profile its history entry was opened under
   // (`entryOwner`, written with the entry itself). An entry of another profile
@@ -305,7 +310,7 @@ function Shell(props: RouteSectionProps) {
         if (!path.startsWith("/title/") && !path.startsWith("/play/")) {
           // Downloads sits under Library but names itself (plans/offline-downloads.md 3.4).
           const named = path.startsWith(DOWNLOADS) ? "Downloads" : destinations.find((d) => d.path === section(path))?.label;
-          document.title = named ? `${named} · Momotus` : "Momotus";
+          setTitle(named ? `${named} · Momotus` : "Momotus");
         }
         // A new screen (a result was opened, or Back) leaves the palette.
         leaveSearch(location.pathname + location.search);
@@ -342,6 +347,8 @@ function Shell(props: RouteSectionProps) {
         >
           <Show when={gateOpen()} fallback={<Picker mode={profiles()?.locked ? "locked" : "start"} />}>
             <Show when={!foreign()}>
+            {/* Incognito's intro, on every entry, until Continue. */}
+            <Show when={!intro()} fallback={<IncognitoIntro />}>
             {/* Offline, on every page but TV's and the player's (plans/offline-downloads.md 3.5). */}
             <OfflineBanner />
             <Show when={nav() && form() !== "phone"}>
@@ -377,6 +384,9 @@ function Shell(props: RouteSectionProps) {
             </Show>
             {/* A refused download op says so here, whatever page sent it. */}
             <DownloadStatus />
+            <IncognitoWarning />
+            <EndedNotice />
+            </Show>
             </Show>
           </Show>
         </Show>
@@ -394,9 +404,27 @@ function Shell(props: RouteSectionProps) {
 
 const NotFound = () => <Stub title="Not found" text="This page does not exist in Momotus." />;
 
+/** Incognito runs the router from memory (plans/batch-10-incognito.md 5.5): the address stays "/", links say "/" and
+ * carry their route in `data-route`, and the browser's entries hold only a step. The bridge client lives outside the
+ * shell, so the session goes on through the swap. */
 export function App() {
   return (
-    <Router root={Shell}>
+    <Show when={incognito()} keyed fallback={<Router root={Shell}>{routes()}</Router>}>
+      {(_on) => {
+        onCleanup(endMemory);
+        return (
+          <MemoryRouter root={Shell} explicitLinks history={startMemory() as never}>
+            {routes()}
+          </MemoryRouter>
+        );
+      }}
+    </Show>
+  );
+}
+
+function routes() {
+  return (
+    <>
       <Route path="/" component={Home} />
       <Route path="/title/:kind/:id" component={Title} />
       <Route path="/title/:kind/:id/versions/:videoId" component={Versions} />
@@ -439,6 +467,6 @@ export function App() {
       <Route path="/profiles/new" component={EditProfile} />
       <Route path="/profiles/edit/:id" component={EditProfile} />
       <Route path="*" component={NotFound} />
-    </Router>
+    </>
   );
 }

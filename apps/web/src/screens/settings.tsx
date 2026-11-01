@@ -16,6 +16,7 @@ import ArrowDownToLine from "lucide-solid/icons/arrow-down-to-line";
 import Captions from "lucide-solid/icons/captions";
 import CirclePlay from "lucide-solid/icons/circle-play";
 import Info from "lucide-solid/icons/info";
+import LogOut from "lucide-solid/icons/log-out";
 import Link2 from "lucide-solid/icons/link-2";
 import LogIn from "lucide-solid/icons/log-in";
 import Monitor from "lucide-solid/icons/monitor";
@@ -56,11 +57,13 @@ import { onFirstLine, settingsHint, summary, tap, tapAction, tapWords } from "..
 import UserPen from "lucide-solid/icons/user-pen";
 import Users from "lucide-solid/icons/users";
 import { AvatarArt } from "../components/avatar";
-import { profiles } from "../core/profiles";
+import { incognito, profiles } from "../core/profiles";
+import { current } from "../lib/profiles";
 import { debridAccounts } from "../core/debrid";
 import { inUse } from "../lib/debrid";
 import { accountWords, connectGoogle, connectText, connectTitle } from "../lib/account";
 import { sectionId } from "../lib/settings-sections";
+import { incognitoWords, useLeave } from "../components/incognito";
 
 const clockTime = (ms: number) => new Date(ms).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 
@@ -335,7 +338,12 @@ export default function SettingsScreen() {
   // The phone's section page, or the section beside the menu.
   const open = () => (form() === "phone" ? sectionId(params.section) : undefined);
   const chosen = () => sectionId(params.section) ?? "sources";
-  const shows = (id: string) => (form() !== "phone" ? id === chosen() : open() ? id === open() : id === "profiles");
+  // Incognito keeps only what its own copy holds: no account, no Downloads settings, nothing of this device
+  // (plans/batch-10-incognito.md 6).
+  const hidden = (id: string) => incognito() && (id === "account" || id === "downloads" || id === "device");
+  const listed = (s: { id: string }) => (s.id !== "downloads" || downloadsHere()) && !hidden(s.id);
+  const shows = (id: string) => !hidden(id) && (form() !== "phone" ? id === chosen() : open() ? id === open() : id === "profiles");
+  const leaving = useLeave();
   const [previews, setPreviews] = createSignal(previewsOn());
   const prefs = prefsView();
   const addons = liveView<AddonsSnapshot>("addons");
@@ -355,10 +363,10 @@ export default function SettingsScreen() {
       },
     );
   };
-  const me = () => profiles()?.profiles.find((x) => x.id === profiles()?.active);
+  const me = () => current(profiles());
   const kids = () => me()?.kids === true;
   // Edit and Manage need the owner's PIN on a kids profile (DECISION kids rules): a kids profile shows neither.
-  const canEdit = () => !!me() && !kids();
+  const canEdit = () => !!me() && !kids() && !incognito();
   const canManage = () => me()?.isOwner === true;
   // Sign in and Connect Google sit here, where people look for them; the Account page keeps the rest.
   // Signed out: the sync service this device knows, where it offers sign-in (the Account page's rule).
@@ -421,10 +429,29 @@ export default function SettingsScreen() {
               <AvatarArt avatar={m().avatar} name={m().name} size="l" />
               <div class="set-name">
                 <h2>{m().name}</h2>
-                <small>{(profiles()?.profiles.length ?? 1) > 1 ? accountWords.switchProfile : "Add a profile for someone else, or switch"}</small>
+                <small>
+                  {incognito() ? incognitoWords.kept : (profiles()?.profiles.length ?? 1) > 1 ? accountWords.switchProfile : "Add a profile for someone else, or switch"}
+                </small>
               </div>
               <ChevronRight aria-hidden class="chev" />
             </A>
+            {/* Incognito: Leave is the header's one button, beside the block that opens the chooser. */}
+            <Show when={incognito()}>
+              <div class="acts set-acts">
+                <button class="btn" data-f="settings:leave-incognito" aria-disabled={leaving.busy()} onClick={leaving.leave}>
+                  <LogOut aria-hidden />
+                  {incognitoWords.leave}
+                </button>
+              </div>
+              <Show when={leaving.problem()}>
+                {(e) => (
+                  <p class="st bad" role="status">
+                    <i class="dot" />
+                    {e()}
+                  </p>
+                )}
+              </Show>
+            </Show>
             <Show when={form() !== "phone" && canEdit()}>
               <div class="acts set-acts">
                 <A class="btn" href={`/profiles/edit/${m().id}`} data-f="settings:profile-edit">
@@ -464,7 +491,7 @@ export default function SettingsScreen() {
             <span class="set-menu-title" aria-hidden="true">
               Settings
             </span>
-            <For each={SECTIONS.filter((s) => s.id !== "downloads" || downloadsHere())}>
+            <For each={SECTIONS.filter(listed)}>
               {(s) => (
                 <a
                   class="snav"
@@ -506,7 +533,7 @@ export default function SettingsScreen() {
           <Show when={form() === "phone" && !open()}>
             <section class="set-sec" aria-label="Sections">
               <div class="sgroup">
-                <For each={SECTIONS.filter((s) => s.id !== "profiles" && (s.id !== "downloads" || downloadsHere()))}>
+                <For each={SECTIONS.filter((s) => s.id !== "profiles" && listed(s))}>
                   {(s) => <Row href={`/settings/${s.id}`} fkey={`settings-sec:${s.id}`} tone={s.tone} icon={s.icon()} title={s.label} text={s.line} />}
                 </For>
               </div>
@@ -518,6 +545,23 @@ export default function SettingsScreen() {
               <h2 id="set-h-sources" tabindex="-1">
                 Sources
               </h2>
+              <Show
+                when={!incognito()}
+                fallback={
+                  <>
+                    {/* Incognito: its own copy of the addons and plugins; the device's debrid account is used, never changed. */}
+                    <div class="sgroup">
+                      <Row href="/addons" fkey="settings:addons" tone="mint" icon={<Puzzle />} title="Addons" text={addonsSummary(addons.state.data?.addons ?? [])} />
+                      <Show when={plugins()?.available}>
+                        <Row href="/plugins" fkey="settings:plugins" tone="teal" icon={<Plug />} title={pluginWords.title} text={pluginsSummary(plugins()?.repos ?? [])} />
+                      </Show>
+                    </div>
+                    <Show when={debridAccounts()?.accounts.length}>
+                      <p class="note small">{incognitoWords.debrid}</p>
+                    </Show>
+                  </>
+                }
+              >
               <div class="sgroup">
                 <Row
                   href="/recommended-addons"
@@ -558,6 +602,7 @@ export default function SettingsScreen() {
                 <Row href="/import" fkey="settings:import" tone="sea" icon={<Download />} title="Import from Stremio" text="Addons, library and progress, with a code. No password typed here." />
                 <Row href="/welcome?step=3" fkey="settings:setup" tone="grey" icon={<Wrench />} title="Setup check" text="Network, display, catalogs, sources and subtitles at a glance." />
               </div>
+              </Show>
             </section>
           </Show>
 
@@ -638,6 +683,10 @@ export default function SettingsScreen() {
                         />
                       </Show>
                     </div>
+                    {/* The switch keeps its value; Incognito plays no trailer (plans/batch-10-incognito.md 5.5). */}
+                    <Show when={incognito() && (form() !== "tv" || headerOnTvNow())}>
+                      <p class="note small">{incognitoWords.trailersOff}</p>
+                    </Show>
                     <Show when={form() !== "tv" || headerOnTvNow()}>
                       <p class="note small">Trailers play muted on {form() === "tv" ? "title pages" : "Home and title pages"}, from YouTube, when the connection is not metered.</p>
                     </Show>

@@ -15,6 +15,7 @@ import Popcorn from "lucide-solid/icons/popcorn";
 import Rocket from "lucide-solid/icons/rocket";
 import Tv from "lucide-solid/icons/tv";
 import Check from "lucide-solid/icons/check";
+import LogOut from "lucide-solid/icons/log-out";
 import Lock from "lucide-solid/icons/lock";
 import SettingsIcon from "lucide-solid/icons/settings";
 import { useNavigate } from "@solidjs/router";
@@ -22,6 +23,8 @@ import { type Component, createEffect, createSignal, For, on, onCleanup, Show } 
 import { Dynamic } from "solid-js/web";
 import type { ProfileInfo } from "../core/generated/ProfileInfo";
 import { pickOnOpen, profiles } from "../core/profiles";
+import { current, INCOGNITO } from "../lib/profiles";
+import { IncognitoMark, incognitoWords, useLeave } from "./incognito";
 import { pushBack } from "../focus/back";
 import { focusByViewer, focusEl } from "../focus/dom";
 import { type Glyph, initial, parseAvatar } from "../lib/avatar";
@@ -45,6 +48,7 @@ const ICONS: Record<Exclude<Glyph, "letter">, Component<{ "aria-hidden"?: boolea
 export function AvatarArt(props: { avatar: string; name: string; size?: "s" | "m" | "l" }) {
   const a = () => parseAvatar(props.avatar);
   return (
+    <Show when={props.avatar !== INCOGNITO} fallback={<IncognitoMark size={props.size} />}>
     <span
       class={`avatar avatar-${props.size ?? "m"}`}
       style={{ "--avatar-fill": a().color ? `var(--avatar-${a().color})` : "var(--raised)" }}
@@ -56,6 +60,7 @@ export function AvatarArt(props: { avatar: string; name: string; size?: "s" | "m
         <Dynamic component={ICONS[a().glyph as Exclude<Glyph, "letter">]} aria-hidden />
       )}
     </span>
+    </Show>
   );
 }
 
@@ -68,7 +73,11 @@ export function ProfileMenu(props: { lit: boolean; tab?: boolean; onSettings: ()
   let wrap!: HTMLDivElement;
   let button!: HTMLButtonElement;
   let list: HTMLDivElement | undefined;
-  const me = () => profiles()?.profiles.find((p) => p.id === profiles()?.active);
+  const me = () => current(profiles());
+  const incognito = () => me()?.id === INCOGNITO;
+  // Incognito is never a way out of a kids profile (plans/batch-10-incognito.md 5.1).
+  const offersIncognito = () => profiles()?.kids !== true;
+  const { leave } = useLeave();
   const close = (refocus = true) => {
     setOpen(false);
     // The viewer closed it (a choice, Back): the focus they get back is theirs, so a place shown from the menu leaves it
@@ -110,7 +119,7 @@ export function ProfileMenu(props: { lit: boolean; tab?: boolean; onSettings: ()
   };
   // A row: the picker's tile rule. The current profile closes the menu, a syncing one does nothing, any other opens
   // the picker, which picks it there (a PIN's keypad, or the switch once this profile's screens have gone).
-  const choose = (p: ProfileInfo) => {
+  const choose = (p: Pick<ProfileInfo, "id" | "syncing">) => {
     close();
     if (p.id === me()?.id || p.syncing) return;
     pickOnOpen(p.id);
@@ -132,7 +141,7 @@ export function ProfileMenu(props: { lit: boolean; tab?: boolean; onSettings: ()
           >
             <AvatarArt avatar={p().avatar} name={p().name} size="s" />
             <Show when={props.tab}>
-              <span>Profile</span>
+              <span>{incognito() ? incognitoWords.name : "Profile"}</span>
             </Show>
           </button>
           <Show when={open()}>
@@ -161,6 +170,36 @@ export function ProfileMenu(props: { lit: boolean; tab?: boolean; onSettings: ()
                   </button>
                 )}
               </For>
+              {/* Incognito after the profiles, the same rows in both states; Leave sits right under it while it runs. */}
+              <Show when={offersIncognito()}>
+                <button
+                  class="pmenu-row"
+                  role="menuitemradio"
+                  aria-checked={incognito()}
+                  aria-label={incognito() ? `${incognitoWords.name}, current profile` : incognitoWords.name}
+                  data-f={`pmenu:${INCOGNITO}`}
+                  onClick={() => choose({ id: INCOGNITO, syncing: false })}
+                >
+                  <Show when={incognito()}>
+                    <Check aria-hidden class="pmenu-check" />
+                  </Show>
+                  <b>{incognitoWords.name}</b>
+                </button>
+                <Show when={incognito()}>
+                  <button
+                    class="pmenu-row"
+                    role="menuitem"
+                    data-f="pmenu:leave-incognito"
+                    onClick={() => {
+                      close();
+                      leave();
+                    }}
+                  >
+                    <LogOut aria-hidden class="pmenu-check" />
+                    <b>{incognitoWords.leave}</b>
+                  </button>
+                </Show>
+              </Show>
               <div class="pmenu-line" role="separator" />
               <button
                 class="pmenu-row"

@@ -21,6 +21,7 @@ import { form } from "../form";
 import { episodeLabel, titlePath } from "../lib/format";
 import "./browse.css";
 import "./calendar.css";
+import { RouteA } from "../components/route-link";
 
 const pad = (n: number) => String(n).padStart(2, "0");
 /** The local calendar date, never shifted to UTC. */
@@ -248,7 +249,7 @@ function Day(props: { day: CalendarDay; today: string; first: boolean }) {
       <div class="cal-track" data-hscroll="80" data-fgroup={`cal:${props.day.date}`}>
         <For each={props.day.items}>
           {(it, i) => (
-            <A class="cal-card" href={itemHref(it)} data-f={itemKey(it)} data-autofocus={props.first && i() === 0 ? "" : undefined}>
+            <RouteA class="cal-card" href={itemHref(it)} data-f={itemKey(it)} data-autofocus={props.first && i() === 0 ? "" : undefined}>
               <Art item={it} />
               <span class="cal-text">
                 <b>{it.name}</b>
@@ -265,7 +266,7 @@ function Day(props: { day: CalendarDay; today: string; first: boolean }) {
                   </span>
                 </Show>
               </span>
-            </A>
+            </RouteA>
           )}
         </For>
       </div>

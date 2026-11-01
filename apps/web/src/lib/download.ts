@@ -11,6 +11,7 @@ import type { GroupDownload } from "../core/generated/GroupDownload";
 import type { ProfilesSnapshot } from "../core/generated/ProfilesSnapshot";
 import { bytes } from "./format";
 import { languageName } from "./words";
+import { current } from "./profiles";
 
 /** The control's Lucide glyph: `download` is arrow-down-to-line, `stop` the square in the ring. */
 export type DownloadGlyph = "download" | "stop" | "pause" | "wifiOff" | "clock" | "check" | "alert";
@@ -205,9 +206,9 @@ export function controlName(c: DownloadControl, subject: string): string {
 }
 
 /** Downloads are offered only to a profile known not to be a kids one: before the profiles answer, or
- * with the active profile not among them, it is treated as a kids profile (Play only). */
+ * with the active profile not among them, it is treated as a kids profile (Play only). Incognito is not one. */
 export function kidsOf(s: ProfilesSnapshot | null | undefined): boolean {
-  return s?.profiles.find((p) => p.id === s.active)?.kids !== false;
+  return current(s)?.kids !== false;
 }
 
 /** The subtitles kept with a download, by the app's language names: "Subtitles: English, Turkish". */

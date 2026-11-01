@@ -44,6 +44,67 @@ export const [leaveGuarded, setLeaveGuarded] = createSignal(false);
 
 export const historyDepth = () => (history.state as { _depth?: number } | null)?._depth ?? 0;
 
+// Incognito (plans/batch-10-incognito.md 5.5): the router runs from memory. Each entry's address and state live here,
+// and the browser's own entry holds only its step at "/": a browser keeps `history.state` and the address in its
+// session restore data on disk. Every read of `history.state` and every write through the history calls lands on the
+// memory entry of the browser's current step, so Back, Forward and the pages' own entries (an overlay, the palette)
+// work as they do outside Incognito.
+type MemoryEntry = { value: string; state: Record<string, unknown> };
+let memory: { entries: MemoryEntry[]; listeners: Set<(e: MemoryEntry) => void> } | null = null;
+const nativeState = Object.getOwnPropertyDescriptor(History.prototype, "state")?.get;
+const browserState = () => nativeState?.call(history) as Record<string, unknown> | null;
+const nativePush = history.pushState.bind(history);
+const step = () => {
+  const at = browserState()?._step;
+  return typeof at === "number" && memory && at < memory.entries.length ? at : 0;
+};
+const entryNow = () => memory?.entries[step()];
+Object.defineProperty(history, "state", { configurable: true, get: () => entryNow()?.state ?? browserState() });
+
+/** The app's address: the router's in Incognito, the browser's otherwise. */
+export const currentPath = () => entryNow()?.value ?? location.pathname + location.search;
+const pathOf = (value: string) => value.split(/[?#]/)[0] ?? value;
+
+/** Starts the memory the Incognito router runs from, at Home, as the history its `MemoryRouter` takes. */
+export function startMemory() {
+  const m = { entries: [{ value: "/", state: { _depth: 0, _profile: shown(), _from: null } as Record<string, unknown> }], listeners: new Set<(e: MemoryEntry) => void>() };
+  memory = m;
+  nativePush({ _step: 0 }, "", "/");
+  setEntryOwner(stampOf());
+  return {
+    get: () => ({ ...m.entries[step()] }) as unknown as string,
+    set: ({ value, replace, state }: { value: string; replace?: boolean; state?: unknown }) => history[replace ? "replaceState" : "pushState"](state ?? {}, "", value),
+    back: () => history.back(),
+    forward: () => history.forward(),
+    go: (n: number) => history.go(n),
+    listen: (fn: (value: string) => void) => {
+      const heard = (e: MemoryEntry) => fn({ ...e } as unknown as string);
+      m.listeners.add(heard);
+      return () => m.listeners.delete(heard);
+    },
+  };
+}
+
+/** Incognito ended: the browser's own history runs the router again. */
+export function endMemory() {
+  memory = null;
+  setEntryOwner(stampOf());
+}
+
+/** A write in Incognito: the memory entry, and only the step in the browser's. */
+function writeMemory(push: boolean, state: Record<string, unknown>, url: string | URL | null | undefined) {
+  const m = memory as NonNullable<typeof memory>;
+  const at = step();
+  const value = url == null ? (m.entries[at]?.value ?? "/") : String(url);
+  if (!push) {
+    m.entries[at] = { value, state: { ...state, _depth: at } };
+    return;
+  }
+  m.entries.length = at + 1;
+  m.entries.push({ value, state: { ...state, _depth: at + 1 } });
+  nativePush({ _step: at + 1 }, "", "/");
+}
+
 // Kept for the tab, so a reload does not reopen the old profile's entries.
 const BASE = "mq.historyBase";
 const stored = (() => {
@@ -60,7 +121,7 @@ const sameVisit = (() => {
   return nav?.type === "reload" || nav?.type === "back_forward";
 })();
 let base = stored === null || !sameVisit ? historyDepth() : Number(stored);
-export const historyBase = () => base;
+export const historyBase = () => (memory ? 0 : base);
 // A fresh visit's base is kept too, so its own reload finds it.
 try {
   sessionStorage.setItem(BASE, String(base));
@@ -89,8 +150,9 @@ for (const name of ["pushState", "replaceState"] as const) {
     const owner = shown() ?? (fields._profile as string | undefined);
     // The page this entry was opened from (`_from`): a push records the page
     // being left; a replace keeps what the entry had, since Back still goes there.
-    const from = name === "pushState" ? location.pathname : (fields._from ?? entryFrom());
-    native({ ...fields, _profile: owner, _from: from }, unused, url);
+    const from = name === "pushState" ? pathOf(currentPath()) : (fields._from ?? entryFrom());
+    if (memory) writeMemory(name === "pushState", { ...fields, _profile: owner, _from: from }, url);
+    else native({ ...fields, _profile: owner, _from: from }, unused, url);
     setEntryOwner(owner);
   };
 }
@@ -104,6 +166,17 @@ export function entryFrom(): string | null {
 // another profile reached with the browser's Back or Forward becomes Home
 // before the router reads the address, and the app's Back stops there.
 window.addEventListener("popstate", () => {
+  if (memory) {
+    // A page from before Incognito (the browser's Back past its first entry): Incognito starts again at its first one.
+    if (typeof browserState()?._step !== "number") {
+      memory.entries.length = 1;
+      nativePush({ _step: 0 }, "", "/");
+    }
+    setEntryOwner(stampOf());
+    const now = entryNow();
+    if (now) for (const fn of memory.listeners) fn(now);
+    return;
+  }
   const owner = stampOf();
   const active = shown();
   if (open() && owner && active && owner !== active) {

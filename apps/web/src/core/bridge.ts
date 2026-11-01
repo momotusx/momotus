@@ -60,6 +60,8 @@ export class Bridge {
   /** Who hears `{"profile": "gone", "id"}`: a profile removed here or by sync, whose keystore
    * entries the app drops. */
   private gone = new Set<(profile: string) => void>();
+  /** Who hears `{"incognito": "ended" | "endsSoon"}` (plans/batch-10-incognito.md 2.7). */
+  private incognito = new Set<(what: string) => void>();
   /** The transport closed for good: every later request fails at once instead of waiting forever. */
   private closed = false;
 
@@ -84,6 +86,11 @@ export class Bridge {
     if ((message as { profile?: unknown }).profile === "gone") {
       const { id } = message as unknown as { id: string };
       for (const fn of this.gone) fn(id);
+      return;
+    }
+    const incognito = (message as { incognito?: unknown }).incognito;
+    if (typeof incognito === "string") {
+      for (const fn of this.incognito) fn(incognito);
       return;
     }
     if ("sub" in message && "updates" in message) {
@@ -111,6 +118,12 @@ export class Bridge {
   onProfileGone(fn: (profile: string) => void): () => void {
     this.gone.add(fn);
     return () => this.gone.delete(fn);
+  }
+
+  /** Runs `fn` with each Incognito event the core pushes. Returns the way to stop listening. */
+  onIncognito(fn: (what: string) => void): () => void {
+    this.incognito.add(fn);
+    return () => this.incognito.delete(fn);
   }
 
   /** Pushes on a subscription the host owns rather than the core (a desktop

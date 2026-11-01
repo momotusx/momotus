@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { coverSize, heldStep, seekTarget, type TrailerSignals, trailerAllowed, youtubeId } from "./trailers";
 
-const ok: TrailerSignals = { enabled: true, visible: true, reducedMotion: false, metered: false, walk: false, layout: "cover", capable: true, hasTrailer: true };
+const ok: TrailerSignals = { enabled: true, visible: true, reducedMotion: false, metered: false, walk: false, layout: "cover", capable: true, hasTrailer: true, incognito: false };
 
 test("a preview plays only when every condition holds", () => {
   expect(trailerAllowed(ok)).toBe(true);
@@ -12,6 +12,7 @@ test("a preview plays only when every condition holds", () => {
     { reducedMotion: true },
     { metered: true },
     { walk: true },
+    { incognito: true },
     { layout: "none" },
     { hasTrailer: false },
   ];

@@ -7,7 +7,8 @@ import { readFileSync } from "node:fs";
 import ts from "typescript";
 import shared from "../../../shared/stream-choice-words.json";
 
-const SOURCES = ["screens/versions.tsx", "screens/title.tsx", "screens/player.tsx", "player/loading.tsx", "lib/words.ts", "components/empty-acts.tsx"];
+// Incognito's words too: a full disk at its entry says it could not open, never why (plans/no-space-warnings.md).
+const SOURCES = ["screens/versions.tsx", "screens/title.tsx", "screens/player.tsx", "player/loading.tsx", "lib/words.ts", "components/empty-acts.tsx", "components/incognito.tsx", "lib/profiles.ts"];
 // No free space or storage warning: only the parts watched are downloaded (the owner, plans/no-space-warnings.md).
 const SPACE = [/free space/i, /\{free\}/, /nearly full/i, /device is full/i, /storage full/i, /storage is full/i, /no room/i, /for this storage/i, /not enough (space|room|storage)/i, /out of space/i, /low on storage/i, /free some storage/i];
 // No account step off Settings: no link to the accounts screen and no service name (the owner, 2026-10-23).

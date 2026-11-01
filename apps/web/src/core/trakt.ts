@@ -14,7 +14,7 @@ import { type TraktRecord, TraktRecords, traktWords } from "../lib/trakt";
 import { bridge, op, privateLink } from "./client";
 import type { TraktReport } from "./generated/TraktReport";
 import type { TraktStatus } from "./generated/TraktStatus";
-import { gateOpen, onProfileReset, profiles } from "./profiles";
+import { gateOpen, incognito, onProfileReset, profiles } from "./profiles";
 import * as vault from "./vault";
 
 type Sub = Awaited<ReturnType<typeof bridge.subscribe>>;
@@ -151,13 +151,14 @@ onProfileReset(closeView);
 createRoot(() =>
   createEffect(
     on(
-      () => (traktLink && gateOpen() ? profiles()?.active : undefined),
+      // Incognito never opens Trakt (plans/batch-10-incognito.md 5.6).
+      () => (traktLink && gateOpen() && !incognito() ? profiles()?.active : undefined),
       (active) => {
         if (!active || current?.profile === active) return;
         // Two changes in a row: only the newest opens, once.
         track(
           closeView().then(() => {
-            if (current === null && gateOpen() && profiles()?.active === active) openFor(active);
+            if (current === null && gateOpen() && !incognito() && profiles()?.active === active) openFor(active);
           }),
         );
       },

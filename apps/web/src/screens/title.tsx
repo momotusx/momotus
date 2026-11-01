@@ -40,6 +40,9 @@ import { deleteSeason, type DownloadItem, downloadControl, downloadWords, series
 import { firstFocus } from "./title-focus";
 import "./home.css";
 import "./title.css";
+import { setTitle } from "../incognito";
+import { incognito } from "../core/profiles";
+import { RouteA } from "../components/route-link";
 
 export default function Title() {
   const params = useParams();
@@ -72,7 +75,7 @@ function TitlePage(props: { kind: string; id: string; retry: () => void }) {
   const target = () => header()?.playTarget ?? null;
   createEffect(() => {
     const name = d()?.name;
-    if (name) document.title = `${name} · Momotus`;
+    if (name) setTitle(`${name} · Momotus`);
   });
   const series = () => props.kind !== "movie" && (header()?.seasons.length ?? 0) > 0;
   const [trailerOpen, setTrailerOpen] = createSignal(false);
@@ -146,8 +149,9 @@ function TitlePage(props: { kind: string; id: string; retry: () => void }) {
    * (a right click, a long press, the menu key) on Download offers the version too. */
   const pressDownload = (from: string, title: string, videoId: string, badge: DownloadBadge | null, more = false) => {
     const c = downloadControl(badge);
-    // A tap starts it, except on touch, where no secondary press reaches the version: there it opens the menu.
-    if (!c.items.length && !more && !touchFirst()) return keep(videoId)("start");
+    // A tap starts it, except on touch, where no secondary press reaches the version: there it opens the menu. In
+    // Incognito the menu opens first too, so its note says the download stays.
+    if (!c.items.length && !more && !touchFirst() && !incognito()) return keep(videoId)("start");
     const items: DownloadItem[] = c.items.length ? c.items : ["start", "choose"];
     setMenu({ title, detail: c.detail, entries: itemEntries(items, badge, keep(videoId)), from });
   };
@@ -208,6 +212,7 @@ function TitlePage(props: { kind: string; id: string; retry: () => void }) {
       layout: "cover",
       capable: form() === "tv" ? headerOnTvNow() : capableNow(),
       hasTrailer: true,
+      incognito: incognito(),
     });
     if (!allowed) return;
     // ponytail: sized once at the start, as the hero's; a window resized while it plays keeps the first size.
@@ -319,13 +324,15 @@ function TitlePage(props: { kind: string; id: string; retry: () => void }) {
     return { href: playPath(props.kind, props.id, videoId) };
   };
 
+  // Offline, or in Incognito, no trailer plays (plans/batch-10-incognito.md 5.5).
+  const trailerButton = () => (d()?.trailers.length ?? 0) > 0 && !offline() && !incognito();
   const first = () =>
     firstFocus({
       ready: header()?.state.state === "ready",
       play: !!target() && !playInert(),
       versions: !!target() && !offline(),
       library: offersLibrary(header()),
-      trailer: (d()?.trailers.length ?? 0) > 0 && !offline(),
+      trailer: trailerButton(),
       synopsis: !!d()?.description,
     });
 
@@ -427,7 +434,7 @@ function TitlePage(props: { kind: string; id: string; retry: () => void }) {
                       </>
                     )}
                   </For>
-                  <TitleScores imdb={x().ratings?.imdb} scores={x().scores} imdbUrl={x().imdbUrl} links={form() !== "tv"} />
+                  <TitleScores imdb={x().ratings?.imdb} scores={x().scores} imdbUrl={x().imdbUrl} links={form() !== "tv" && !incognito()} />
                 </p>
                 <Show when={offline()}>
                   <p class="dl-offline" role="status">
@@ -468,23 +475,23 @@ function TitlePage(props: { kind: string; id: string; retry: () => void }) {
                       }
                     >
                       {(t) => (
-                        <A class="btn primary big" href={playTo(t().videoId).href} state={playTo(t().videoId).state} data-f="title:play" data-autofocus={first() === "title:play" ? "" : undefined}>
+                        <RouteA class="btn primary big" href={playTo(t().videoId).href} state={playTo(t().videoId).state} data-f="title:play" data-autofocus={first() === "title:play" ? "" : undefined}>
                           <Play aria-hidden class="fill" />
                           {t().label}
                           <Show when={t().resumeMs}>
                             {(ms) => <small class="num">{resumeText(ms(), t().leftMs, runtimeMinutes(x().runtime))}</small>}
                           </Show>
-                        </A>
+                        </RouteA>
                       )}
                     </Show>
                     {/* Part way in: the same video from its beginning (not in a Back-only state: it
                         would open the same dead end). */}
                     <Show when={!playInert() && target()?.resumeMs ? target() : null}>
                       {(t) => (
-                        <A class="btn big again" href={playPath(props.kind, props.id, t().videoId)} state={{ startOver: true }} data-f="title:startover" aria-label="Start over" title="Start over">
+                        <RouteA class="btn big again" href={playPath(props.kind, props.id, t().videoId)} state={{ startOver: true }} data-f="title:startover" aria-label="Start over" title="Start over">
                           <RotateCcw aria-hidden />
                           <span classList={{ sr: form() === "phone" }}>Start over</span>
-                        </A>
+                        </RouteA>
                       )}
                     </Show>
                   </div>
@@ -492,7 +499,7 @@ function TitlePage(props: { kind: string; id: string; retry: () => void }) {
                 <div class="acts">
                   <Show when={!offline() && target()}>
                     {(t) => (
-                      <A class="btn" href={versionsPath(props.kind, props.id, t().videoId)} data-f="title:versions" data-autofocus={first() === "title:versions" ? "" : undefined}>
+                      <RouteA class="btn" href={versionsPath(props.kind, props.id, t().videoId)} data-f="title:versions" data-autofocus={first() === "title:versions" ? "" : undefined}>
                         <Layers aria-hidden />
                         {/* One inline label, so the count never wraps apart from its word. The count comes with
                             the versions, after the first frame: under the label, unseen, the widest it shows holds
@@ -508,10 +515,10 @@ function TitlePage(props: { kind: string; id: string; retry: () => void }) {
                             Versions <span class="num">(000)</span>
                           </span>
                         </span>
-                      </A>
+                      </RouteA>
                     )}
                   </Show>
-                  <Show when={x().trailers.length > 0 && !offline()}>
+                  <Show when={trailerButton()}>
                     <button class="btn" data-f="title:trailer" data-autofocus={first() === "title:trailer" ? "" : undefined} onClick={openTrailer}>
                       <Film aria-hidden />
                       Trailer
@@ -965,18 +972,18 @@ function Episodes(props: {
                   </div>
                 }
               >
-                <A class="ep-main" href={playPath(props.kind, props.id, e.videoId)} data-f={`ep:${e.videoId}`}>
+                <RouteA class="ep-main" href={playPath(props.kind, props.id, e.videoId)} data-f={`ep:${e.videoId}`}>
                   {card()}
-                </A>
+                </RouteA>
                 {/* The row plays this episode; choosing its version or marking
                     it watched are the secondary actions beside it. */}
                 <div class="ep-acts" data-fentry data-fowner={`ep:${e.videoId}`}>
                   <Show when={!props.offline}>
-                    <A class="ep-act" href={versionsPath(props.kind, props.id, e.videoId)} data-f={`epv:${e.videoId}`} aria-label={`Choose a version of ${episodeLabel(e.season, e.episode)}`} title="Choose a version">
+                    <RouteA class="ep-act" href={versionsPath(props.kind, props.id, e.videoId)} data-f={`epv:${e.videoId}`} aria-label={`Choose a version of ${episodeLabel(e.season, e.episode)}`} title="Choose a version">
                       <Layers aria-hidden />
                       {/* A phone shows the icon in a circle; the word stays for screen readers. */}
                       <span classList={{ sr: form() === "phone" }}>Choose a version</span>
-                    </A>
+                    </RouteA>
                   </Show>
                   <button
                     class="ep-act"

@@ -1,0 +1,36 @@
+/* Incognito (plans/batch-10-incognito.md 5.2): the mark is a sea-blue circle with the white glyph at 60 percent. */
+.incog-mark { background-color: var(--tile-sea); color: #fff; }
+.avatar.incog-mark > svg, .nav.pavatar .avatar.incog-mark > svg, .tabs .ptab .avatar.incog-mark > svg { width: 60%; height: 60%; stroke-width: 2; }
+.avatar-intro { width: 128px; height: 128px; }
+[data-form="phone"] .avatar-intro { width: 96px; height: 96px; }
+
+/* The intro: full screen on `bg`, the mark, the heading, two groups, the end line and two buttons. */
+.incog-intro.page { position: absolute; inset: 0; z-index: 40; display: grid; align-content: center; justify-items: start; gap: 28px;
+  padding: var(--safe-top) max(var(--safe-side), calc((100% - 1400px) / 2)) var(--safe-bottom); background: var(--bg); overflow-y: auto; }
+.incog-intro h1 { font: var(--weight-display) var(--type-hero) / 1.04 var(--font-display); letter-spacing: var(--tracking-display); }
+.incog-groups { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 56px; width: 100%; }
+.incog-group h2 { margin-bottom: 12px; font: 700 var(--type-title3) / 1.15 var(--font-text); }
+.incog-group ul { display: grid; gap: 10px; padding-left: 1.1em; }
+.incog-group li, .incog-ends { font: 400 var(--type-callout) / 1.4 var(--font-text); color: var(--muted); }
+.incog-intro .acts { display: flex; flex-wrap: wrap; gap: 20px; margin-top: 8px; }
+.incog-intro .st:empty { display: none; }
+[data-form="phone"] .incog-intro.page { align-content: start; gap: 18px; padding: calc(env(safe-area-inset-top) + 48px) 16px calc(env(safe-area-inset-bottom) + 32px); }
+[data-form="phone"] .incog-groups { grid-template-columns: 1fr; gap: 20px; }
+[data-form="phone"] .incog-group h2 { margin-bottom: 6px; }
+[data-form="phone"] .incog-group ul { gap: 6px; }
+[data-form="phone"] .incog-intro .acts { gap: 10px; }
+
+/* The desktop's warning and the ended notice over Home: a quiet notice at the foot of the page, its button beside. */
+.incog-notice { position: absolute; left: 50%; bottom: var(--safe-bottom); translate: -50% 0; z-index: 60; display: flex; align-items: center; gap: 24px;
+  max-width: calc(100% - 2 * var(--safe-side)); padding: 14px 14px 14px 28px; border-radius: 20px; background: var(--raised);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, .35); font: 500 var(--type-callout) / 1.3 var(--font-text); }
+.incog-notice .btn { flex: none; height: 56px; }
+[data-form="phone"] .incog-notice { position: fixed; bottom: calc(96px + env(safe-area-inset-bottom)); max-width: calc(100% - 32px); width: max-content;
+  gap: 12px; padding: 10px 10px 10px 14px; border-radius: 14px; font-size: 14px; }
+[data-form="phone"] .incog-notice .btn { height: 40px; }
+
+/* The Settings header in Incognito: the mark, its name and line, and Leave. */
+.set-incog { display: flex; align-items: center; flex-wrap: wrap; gap: 40px; }
+.set-incog .set-name small { display: block; }
+[data-form="phone"] .set-incog { gap: 14px; }
+.incog-tile { color: #fff; }

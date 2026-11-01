@@ -3,10 +3,12 @@
 
 import { A, useBeforeLeave, useNavigate, useParams } from "@solidjs/router";
 import Delete from "lucide-solid/icons/delete";
+import HatGlasses from "lucide-solid/icons/hat-glasses";
 import Lock from "lucide-solid/icons/lock";
 import Plus from "lucide-solid/icons/plus";
 import { createEffect, createSignal, For, type JSX, on, onCleanup, onMount, Show } from "solid-js";
 import { AvatarArt } from "../components/avatar";
+import { incognitoWords } from "../components/incognito";
 import { BridgeError } from "../core/bridge";
 import { op, reasonOf } from "../core/client";
 import type { ProfileInfo } from "../core/generated/ProfileInfo";
@@ -16,7 +18,7 @@ import { autoFocusSoon, goBack } from "../focus/dom";
 import { holdModal } from "../focus/modal";
 import { markBack, setLeaveGuarded, takeAfterBack, takeBack } from "../history";
 import { type AvatarColor, formatAvatar, GLYPHS, type Glyph, nextAvatar, parseAvatar } from "../lib/avatar";
-import { profileProblem, waitText } from "../lib/profiles";
+import { INCOGNITO, inIncognito, profileProblem, waitText } from "../lib/profiles";
 import "./browse.css";
 import "./settings.css";
 import "./profiles.css";
@@ -38,7 +40,7 @@ function tried(e: unknown): Tried {
 }
 
 /** Four digits, one try at a time. The digits live only here and go when it closes or the app hides. */
-export function Keypad(props: { title: string; note?: string; onSubmit: (pin: string) => Promise<Tried>; onCancel: () => void; cancelLabel?: string }) {
+export function Keypad(props: { title: string; reason?: string; note?: string; onSubmit: (pin: string) => Promise<Tried>; onCancel: () => void; cancelLabel?: string }) {
   const [digits, setDigits] = createSignal("");
   const [busy, setBusy] = createSignal(false);
   const [shake, setShake] = createSignal(false);
@@ -131,6 +133,9 @@ export function Keypad(props: { title: string; note?: string; onSubmit: (pin: st
   return (
     <div class="keypad" ref={root} role="dialog" aria-modal="true" aria-label={props.title}>
       <h2>{props.title}</h2>
+      <Show when={props.reason}>
+        <p class="note small">{props.reason}</p>
+      </Show>
       <div class="pin-dots" classList={{ shake: shake() }} role="img" aria-label={`${digits().length} of 4 digits entered`}>
         <For each={[0, 1, 2, 3]}>{(i) => <i classList={{ on: digits().length > i }} />}</For>
       </div>
@@ -214,8 +219,17 @@ export function Picker(props: { mode: "start" | "locked" | "switch" }) {
   const s = () => profiles();
   const [target, setTarget] = createSignal<ProfileInfo | null>(null);
   const [said, setSaid] = createSignal("");
+  // The keypad asks the PIN that opens Incognito (`incognitoPin`), not the profile's own.
+  const [forIncognito, setForIncognito] = createSignal(false);
+  const [opening, setOpening] = createSignal(false);
   const owner = () => s()?.profiles.find((p) => p.id === s()?.active)?.isOwner === true;
   const locked = () => s()?.locked === true;
+  // "This profile is locked" only where its PIN is the way in: after an Incognito chooser entry, a host with no PIN of
+  // its own is locked with nothing to enter (plans/batch-10-incognito.md 5.4).
+  const lockLine = () => locked() && s()?.profiles.find((p) => p.id === s()?.active)?.hasPin === true;
+  const incognito = () => inIncognito(s());
+  // Never a way out of a kids profile (5.1).
+  const offersIncognito = () => !s()?.kids || locked();
 
   // A profile removed on another device while it was chosen.
   createEffect(() => {
@@ -241,8 +255,36 @@ export function Picker(props: { mode: "start" | "locked" | "switch" }) {
     if (same && props.mode === "switch") goBack();
     return { kind: "ok" };
   };
+  const enterIncognito = async (pin?: string): Promise<Tried> => {
+    setOpening(true);
+    try {
+      await switchProfile(INCOGNITO, pin, props.mode !== "switch");
+    } catch (e) {
+      return tried(e);
+    } finally {
+      setOpening(false);
+    }
+    setTarget(null);
+    return { kind: "ok" };
+  };
+  const pickIncognito = async () => {
+    setSaid("");
+    if (incognito()) {
+      if (props.mode === "switch") goBack();
+      return;
+    }
+    const pinOf = s()?.profiles.find((p) => p.id === s()?.incognitoPin);
+    if (pinOf) {
+      setForIncognito(true);
+      setTarget(pinOf);
+      return;
+    }
+    const r = await enterIncognito();
+    if (r.kind !== "ok") setSaid(r.kind === "problem" ? r.text : "That did not work. Try again.");
+  };
   const pick = async (p: ProfileInfo) => {
     setSaid("");
+    setForIncognito(false);
     // The current profile, unlocked, needs nothing: the start picker opens it, the switch picker closes.
     if (p.id === s()?.active && !locked()) {
       if (props.mode === "switch") goBack();
@@ -260,6 +302,7 @@ export function Picker(props: { mode: "start" | "locked" | "switch" }) {
   // where the menu was.
   const asked = props.mode === "switch" ? takePick() : null;
   onMount(() => {
+    if (asked === INCOGNITO) return void pickIncognito();
     const p = asked ? s()?.profiles.find((q) => q.id === asked) : undefined;
     if (p) void pick(p);
   });
@@ -276,11 +319,27 @@ export function Picker(props: { mode: "start" | "locked" | "switch" }) {
         fallback={
           <section class="picker" aria-label="Profiles">
             <h1>Who's watching?</h1>
-            <Show when={locked()}>
+            <Show when={lockLine()}>
               <p class="lede">This profile is locked. Choose a profile, then enter its PIN.</p>
             </Show>
             <div class="pgrid" data-fgroup="profiles">
               <For each={s()?.profiles ?? []}>{(p) => <Tile p={p} active={p.id === s()?.active} onPick={() => void pick(p)} />}</For>
+              {/* Incognito: quiet, drawn as Add profile is, after the profiles (plans/batch-10-incognito.md 5.1). */}
+              <Show when={offersIncognito()}>
+                <button
+                  class="ptile"
+                  data-f={`profile:${INCOGNITO}`}
+                  data-autofocus={incognito() ? "" : undefined}
+                  aria-label={incognito() ? `${incognitoWords.name}, current profile` : incognitoWords.name}
+                  aria-disabled={opening()}
+                  onClick={() => !opening() && void pickIncognito()}
+                >
+                  <span class="avatar avatar-l add-art incog-tile">
+                    <HatGlasses aria-hidden />
+                  </span>
+                  <span class="pname">{incognitoWords.name}</span>
+                </button>
+              </Show>
               <Show when={canAdd()}>
                 <A class="ptile add" href="/profiles/new" data-f="profile:add" aria-label="Add profile">
                   <span class="avatar avatar-l add-art">
@@ -290,8 +349,9 @@ export function Picker(props: { mode: "start" | "locked" | "switch" }) {
                 </A>
               </Show>
             </div>
-            <p class="st bad" role="status" aria-live="polite">
-              {said()}
+            {/* The polite status: a problem, the switch under way, or an Incognito end not read yet (5.4). */}
+            <p class="st" classList={{ bad: !!said() }} role="status" aria-live="polite">
+              {said() || (opening() ? incognitoWords.opening : s()?.incognitoEnded ? incognitoWords.ended : "")}
             </p>
             <Show when={manages()}>
               <A class="btn" href="/profiles/manage" data-f="profiles:manage">
@@ -303,14 +363,16 @@ export function Picker(props: { mode: "start" | "locked" | "switch" }) {
       >
         {(t) => (
           <Keypad
-            title={`Enter the PIN for ${t().name}`}
+            title={forIncognito() ? incognitoWords.pinTitle(t().name) : `Enter the PIN for ${t().name}`}
+            reason={forIncognito() && !locked() && s()?.profiles.some((p) => p.kids) ? incognitoWords.kidsReason : undefined}
             note={forgot()}
-            onSubmit={(pin) => enter(t(), pin)}
-            cancelLabel={t().id === asked ? "Cancel" : undefined}
+            onSubmit={(pin) => (forIncognito() ? enterIncognito(pin) : enter(t(), pin))}
+            cancelLabel={(forIncognito() ? INCOGNITO : t().id) === asked ? "Cancel" : undefined}
             onCancel={() => {
-              const id = t().id;
+              const id = forIncognito() ? INCOGNITO : t().id;
               if (id === asked) return goBack();
               setTarget(null);
+              setForIncognito(false);
               autoFocusSoon(() => document.querySelector<HTMLElement>(`[data-f="profile:${id}"]`));
             }}
           />

@@ -2,9 +2,10 @@
 
 import type { MemberInfo } from "../core/generated/MemberInfo";
 import type { ProfilesSnapshot } from "../core/generated/ProfilesSnapshot";
+import { current } from "./profiles";
 import { syncWords as w } from "./words";
 
-const onOwner = (s: ProfilesSnapshot | null | undefined) => s?.profiles.find((p) => p.id === s.active)?.isOwner === true;
+const onOwner = (s: ProfilesSnapshot | null | undefined) => current(s)?.isOwner === true;
 
 /** Delete account shows on the owner profile only: the account holds every profile (D15). */
 export const mayDeleteAccount = onOwner;

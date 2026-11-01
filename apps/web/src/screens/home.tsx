@@ -12,7 +12,8 @@ import { homeView, liveView, op, prefsView, retryHomeRow } from "../core/client"
 import type { AddonsSnapshot } from "../core/generated/AddonsSnapshot";
 import type { HomeRow } from "../core/generated/HomeRow";
 import type { DefaultAddons } from "../core/generated/DefaultAddons";
-import { onProfileReset, profiles } from "../core/profiles";
+import { incognito, onProfileReset, profiles } from "../core/profiles";
+import { current } from "../lib/profiles";
 import { BridgeError } from "../core/bridge";
 import * as sync from "../core/sync";
 import { removeHere, wipeState } from "../core/wipe";
@@ -35,6 +36,11 @@ onProfileReset(() => {
  * addons: Review opens the step for those, Not now only closes it. Both
  * mark the version seen (synced), so it shows on no other device. */
 function DefaultsCard() {
+  // Incognito changes no profile's addons for good: no offer there (plans/batch-10-incognito.md 2.7).
+  return <Show when={!incognito()}><OfferDefaults /></Show>;
+}
+
+function OfferDefaults() {
   const addons = liveView<AddonsSnapshot>("addons");
   const prefs = prefsView();
   const [defaults, setDefaults] = createSignal<DefaultAddons | null>(null);
@@ -45,7 +51,7 @@ function DefaultsCard() {
       () => void op<DefaultAddons>("defaultAddons").then(setDefaults, () => setDefaults(null)),
     ),
   );
-  const kids = () => profiles()?.profiles.find((p) => p.id === profiles()?.active)?.kids ?? false;
+  const kids = () => current(profiles())?.kids ?? false;
   const offer = () => cardOffer(defaults(), prefs.state.data?.defaultsSeen, kids());
   const seen = () => void op("setPrefs", { patch: { defaultsSeen: defaults()?.version } }).catch(() => undefined);
   return (
@@ -74,6 +80,11 @@ function DefaultsCard() {
 /** Home's one account card (plans/accounts.md 4.3), by priority: a scheduled deletion, the
  * account deleted elsewhere, an announcement, the nudge for a second way in. */
 function AccountCard() {
+  // The account is not Incognito's (Settings hides it there too).
+  return <Show when={!incognito()}><AccountNotice /></Show>;
+}
+
+function AccountNotice() {
   const navigate = useNavigate();
   // The members name the device in a line and tell whether this one is alone.
   createEffect(() => {

@@ -24,12 +24,13 @@ import type { Tile } from "../core/generated/Tile";
 import { onProfileReset } from "../core/profiles";
 import { pushBack } from "../focus/back";
 import { autoFocusSoon, focusEl, mayAutoFocus } from "../focus/dom";
-import { historyDepth } from "../history";
+import { currentPath, historyDepth } from "../history";
 import { ratingParts, titlePath } from "../lib/format";
 import { rowWords } from "../lib/rows";
 import { kindLabel, problemWords } from "../lib/words";
 import "./browse.css";
 import "./search.css";
+import { RouteA } from "../components/route-link";
 
 // The last query survives closing the palette, so reopening lands on the results.
 let lastQuery = "";
@@ -51,7 +52,8 @@ let opener: HTMLElement | null = null;
 // on its results, the opened result focused (as Apple TV and Stremio do).
 type Entry = { _palette?: boolean; _depth?: number } | null;
 const onPaletteEntry = () => !!(history.state as Entry)?._palette;
-const here = () => location.pathname + location.search;
+// The router's address, which in Incognito is not the browser's (history.ts).
+const here = currentPath;
 // The page the palette is over.
 let paletteAt = "";
 // Opened again by Back: the remembered result takes the focus, not the field.
@@ -372,7 +374,7 @@ function Panel(props: { dialog?: boolean; retry: () => void }) {
 function Hit(props: { tile: Tile; fkey: string; onOpen: () => void }) {
   const t = () => props.tile;
   return (
-    <A class="hit" href={titlePath(t().kind, t().id)} data-f={props.fkey} onClick={() => props.onOpen()}>
+    <RouteA class="hit" href={titlePath(t().kind, t().id)} data-f={props.fkey} onClick={() => props.onOpen()}>
       {/* No poster, or not yet: a film mark on the surface, never squeezed words. */}
       <span class="hit-art" aria-hidden="true">
         <Film class="hit-ph" />
@@ -394,6 +396,6 @@ function Hit(props: { tile: Tile; fkey: string; onOpen: () => void }) {
         </span>
       </span>
       <ChevronRight aria-hidden class="hit-chev" />
-    </A>
+    </RouteA>
   );
 }

@@ -96,7 +96,9 @@ export const deviceLanguage = () => (navigator.language || "en").split("-")[0]?.
 export const reasonOf = (e: unknown) =>
   e instanceof Error && e.message === "connection closed"
     ? `Cannot reach the core at ${bridgeUrl}. Start it with: bun run bridge (in apps/web)`
-    : failureWords(e);
+    : e instanceof BridgeError && e.code === "incognito"
+      ? "Not available in Incognito."
+      : failureWords(e);
 
 /** A view that could not open: the words, and the core's raw text behind Details (none when it is its own sentence). */
 const failedStatus = (e: unknown): ViewStatus => {

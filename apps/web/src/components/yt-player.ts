@@ -4,6 +4,7 @@
  * full screen (`full`) under our own controls, with its own sound. */
 import { batch, createSignal } from "solid-js";
 import { walkNow, youtubeId } from "../lib/trailers";
+import { incognito } from "../core/profiles";
 
 type YtPlayer = {
   unloadModule(name: string): void;
@@ -114,6 +115,11 @@ export function playTrailer(opts: {
   full?: { sound: () => boolean; onState: (s: TrailerTime) => void };
 }): TrailerControl {
   current?.stop("stopped");
+  // Incognito mounts no player: YouTube's frame keeps its cookies and cache on disk (plans/batch-10-incognito.md 5.5).
+  if (incognito()) {
+    queueMicrotask(() => opts.onEnd("error"));
+    return { stop: () => undefined, toggle: () => undefined, seek: () => undefined, sound: () => undefined };
+  }
   const id = youtubeId(opts.id);
   // Each play in a wrapper of its own, removed whole when it ends: its frame goes even when the player never got ready.
   const box = document.createElement("div");

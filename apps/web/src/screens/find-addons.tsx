@@ -235,6 +235,7 @@ function Lists(props: { fresh: boolean; picks: Picks; onPicks: (p: Partial<Picks
           class="fa-search"
           type="search"
           data-f="fa:search"
+          autocomplete="off"
           aria-label={w.searchLabel}
           placeholder={w.searchLabel}
           value={props.picks.query}

@@ -8,6 +8,7 @@ import shared from "../../../shared/account-words.json";
 import type { Announcement } from "../core/generated/Announcement";
 import type { MemberInfo } from "../core/generated/MemberInfo";
 import type { ProfilesSnapshot } from "../core/generated/ProfilesSnapshot";
+import { current } from "./profiles";
 import type { ScheduledDeletion } from "../core/generated/ScheduledDeletion";
 
 export const accountWords = shared;
@@ -166,7 +167,7 @@ export function sameRelay(fragment: string, server: string): boolean {
 }
 
 type Profile = { isOwner: boolean; kids: boolean };
-export const activeProfile = (s: ProfilesSnapshot | null | undefined): Profile | null => s?.profiles.find((p) => p.id === s.active) ?? null;
+export const activeProfile = (s: ProfilesSnapshot | null | undefined): Profile | null => current(s) ?? null;
 
 /** A join, a passkey, a recovery kit, or a trim that may have hidden one: a way into the account. */
 export const securityKind = (a: Pick<Announcement, "kind">) => a.kind !== "removed";

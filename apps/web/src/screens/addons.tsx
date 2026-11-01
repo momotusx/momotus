@@ -17,6 +17,8 @@ import { sheetWords } from "../lib/install-sheet";
 import { addonHost, findAddons, kindLabel, providesText, tokenInLink } from "../lib/words";
 import "./browse.css";
 import "./settings.css";
+import { incognito } from "../core/profiles";
+import { incognitoWords } from "../components/incognito";
 
 /** Installs an addon by URL with a status line under the field: the link is read first and the
  * install sheet shows what it is (plans/addon-install-sheet.md); only its Install installs. */
@@ -218,6 +220,10 @@ export default function Addons() {
     <main class="browse page settings-page column" data-vscroll>
       <h1>Addons</h1>
       <p class="lede">Addons bring catalogs, details, streams and subtitles. Order matters: earlier addons answer first.</p>
+      {/* Incognito works on its own copy of the addons (plans/batch-10-incognito.md 3). */}
+      <Show when={incognito()}>
+        <p class="note">{incognitoWords.addonsNote}</p>
+      </Show>
       <Show
         when={!tv() || paste()}
         fallback={

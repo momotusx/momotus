@@ -14,6 +14,8 @@ import { restoreSoon } from "../focus/dom";
 import { form } from "../form";
 import type { LibrarySort } from "../core/generated/LibrarySort";
 import "./browse.css";
+import { incognito } from "../core/profiles";
+import { incognitoWords } from "../components/incognito";
 
 const sorts: { value: LibrarySort; label: string }[] = [
   { value: "recent", label: "Last watched" },
@@ -86,7 +88,7 @@ function LibraryPage(props: { retry: () => void }) {
         <Match when={l() && total() === 0}>
           <section class="problem">
             <h2>Your library is empty</h2>
-            <p>Add titles with Add to Library on a title page, or import your Stremio library from Settings.</p>
+            <p>{incognito() ? incognitoWords.libraryEmpty : "Add titles with Add to Library on a title page, or import your Stremio library from Settings."}</p>
             <A class="btn primary" href="/discover" data-f="library:discover" data-autofocus>
               <Compass aria-hidden />
               Discover
