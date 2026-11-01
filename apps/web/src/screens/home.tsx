@@ -25,13 +25,12 @@ import { allFailed } from "../lib/rows";
 import { autoFocusSoon, inputCount } from "../focus/dom";
 import { form } from "../form";
 import { syncWords } from "../lib/words";
+import { keptScroll } from "../lib/kept-scroll";
 import "./home.css";
 
-const pageScroll = { top: 0 };
+const pageScroll = keptScroll();
 // Another profile's Home opens at the top (web journey review P3-14).
-onProfileReset(() => {
-  pageScroll.top = 0;
-});
+onProfileReset(pageScroll.reset);
 
 /** Once per list version, for a profile that misses some recommended
  * addons: Review opens the step for those, Not now only closes it. Both
@@ -293,12 +292,12 @@ export default function Home() {
 
   const attach = (el: HTMLElement) => {
     setPage(el);
-    if (pageScroll.top) queueMicrotask(() => el.scrollTo({ top: pageScroll.top }));
+    pageScroll.attach(el);
   };
 
   return (
     <div class="home">
-      <main class="page" data-vscroll ref={attach} onScroll={(e) => (pageScroll.top = e.currentTarget.scrollTop)}>
+      <main class="page" data-vscroll ref={attach}>
         <HeroCarousel heroes={home.heroes} waiting={waiting()} />
 
         {/* With no row to follow, the account's notices sit under the hero. */}

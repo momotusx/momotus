@@ -13,6 +13,7 @@ import { onProfileReset } from "../core/profiles";
 import { restoreSoon } from "../focus/dom";
 import { form } from "../form";
 import type { LibrarySort } from "../core/generated/LibrarySort";
+import { keptScroll } from "../lib/kept-scroll";
 import "./browse.css";
 import { incognito, profiles } from "../core/profiles";
 import { kidsSession, kidsWords } from "../lib/kids";
@@ -25,10 +26,8 @@ const sorts: { value: LibrarySort; label: string }[] = [
 ];
 
 // Where the page was scrolled to: the view is kept, so Back lands here too.
-const pageScroll = { top: 0 };
-onProfileReset(() => {
-  pageScroll.top = 0;
-});
+const pageScroll = keptScroll();
+onProfileReset(pageScroll.reset);
 
 export default function Library() {
   // Try again on a library that could not open: a new view, as the page anew.
@@ -47,14 +46,11 @@ export default function Library() {
 
 function LibraryPage(props: { retry: () => void }) {
   const view = libraryView();
-  const attach = (el: HTMLElement) => {
-    if (pageScroll.top) queueMicrotask(() => el.scrollTo({ top: pageScroll.top }));
-  };
   const l = () => view.state.data;
   const total = () => l()?.kinds.reduce((n, k) => n + k.count, 0) ?? 0;
 
   return (
-    <main class="browse page" data-vscroll ref={attach} onScroll={(e) => (pageScroll.top = e.currentTarget.scrollTop)}>
+    <main class="browse page" data-vscroll ref={pageScroll.attach}>
       <h1>Library</h1>
       {/* The phone's tab bar has five tabs: Calendar is a row here, and Library stays lit on it. */}
       <Show when={form() === "phone" && !kidsSession(profiles())}>

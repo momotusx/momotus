@@ -14,13 +14,12 @@ import { form } from "../form";
 import { defaultsWords } from "../lib/defaults";
 import { extends_ } from "../lib/discover-hold";
 import { listFailed, problemWords } from "../lib/words";
+import { keptScroll } from "../lib/kept-scroll";
 import "./browse.css";
 
 // Where the page was scrolled to: the view is kept, so Back lands here too.
-const pageScroll = { top: 0 };
-onProfileReset(() => {
-  pageScroll.top = 0;
-});
+const pageScroll = keptScroll();
+onProfileReset(pageScroll.reset);
 
 /** Movies, Series and Anime are the segmented control; any other kind goes in a More pull-down,
  * so the control keeps its shape (plans/discover-v2.md 6.1). */
@@ -110,9 +109,6 @@ function ServiceTile(props: { id: string; name: string; logo: string | null; on:
 
 function DiscoverPage(props: { retry: () => void }) {
   const view = discoverView();
-  const attach = (el: HTMLElement) => {
-    if (pageScroll.top) queueMicrotask(() => el.scrollTo({ top: pageScroll.top }));
-  };
   const d = () => view.state.data;
   const select = (c: Select) => void view.command({ type: "select", ...c });
   const loadMore = () => d()?.state.state === "ready" && void view.command({ type: "loadMore" });
@@ -120,7 +116,7 @@ function DiscoverPage(props: { retry: () => void }) {
   // genre, which the core reads as a link and starts from a clean slate (all services, any year,
   // the kind's first sort). Taken from the URL once and dropped with a replace.
   const [params, setParams] = useSearchParams();
-  if (params.kind || params.genre) pageScroll.top = 0;
+  if (params.kind || params.genre) pageScroll.reset();
   createEffect(() => {
     const kind = typeof params.kind === "string" ? params.kind : undefined;
     const genre = typeof params.genre === "string" ? params.genre : undefined;
@@ -180,7 +176,7 @@ function DiscoverPage(props: { retry: () => void }) {
   };
 
   return (
-    <main class="browse page discover" data-vscroll ref={attach} onScroll={(e) => (pageScroll.top = e.currentTarget.scrollTop)}>
+    <main class="browse page discover" data-vscroll ref={pageScroll.attach}>
       <Switch>
         <Match when={view.state.status.state === "failed"}>
           <h1>Discover</h1>
