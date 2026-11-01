@@ -262,7 +262,7 @@ import Testing
     // Its call sites: every ready ends the window before the first-play check, and the failed line ends it too.
     let model = try playerModel()
     #expect(model.contains("let startLine = startWindow.line(from: route.tapped)\n            if loadedURL == nil, !rendered {"))
-    #expect(model.contains("let startLine = startWindow.line(from: route.tapped)\n                coreLog.notice(\"metric playback_failed_ms="))
+    #expect(model.contains("let startLine = startWindow.line(from: route.tapped)\n                coreLog.named { $0.notice(\"metric playback_failed_ms="))
     // Code r10: a version move before the last start was ready starts the window over.
     #expect(model.contains("// A move before the last start was ready: the new start measures only itself.\n        startWindow = StartWindow()"))
 }

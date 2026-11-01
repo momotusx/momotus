@@ -1,6 +1,8 @@
+import AetherEngine
 import AppKit
 import Foundation
 import SwiftUI
+import Synchronization
 import Testing
 
 // Incognito on Apple (plans/batch-10-incognito.md 7.3): the face, the tile and the menu row, the lock line after Leave,
@@ -49,7 +51,7 @@ private let main = profile("main", owner: true)
     #expect(Incognito.tabWord(main) == "Profile")
     let inside = snapshot([main], active: Incognito.id, host: "main")
     // ProfileMenu's label on every bar (the iOS tab, the Mac ornament's end, the tvOS bar).
-    #expect("Profile: \(inside.current?.name ?? "")" == Incognito.spoken)
+    #expect("Profile: \(inside.current?.name ?? "")" == "Profile: Incognito")
 }
 
 @Test func theTileAndTheRowOpenTheKeypadOnlyWhenTheCoreAsks() {
@@ -79,6 +81,8 @@ private let main = profile("main", owner: true)
     #expect(!Incognito.offered(snapshot([main, kid], active: "kid")))
     #expect(Incognito.offered(snapshot([main, kid], active: "main")))
     #expect(Incognito.offered(snapshot([main], active: Incognito.id, host: "main")))
+    // A locked kids session: the core opens it from the owner, with the owner's PIN.
+    #expect(Incognito.offered(snapshot([main, kid], active: "kid", locked: true, pin: "main")))
 }
 
 @Test func theStartPickerIgnoresIncognito() {
@@ -280,4 +284,113 @@ private let main = profile("main", owner: true)
         session.ackEnded()
         withExtendedLifetime(core) {}
     }
+}
+
+@Test func theTileAndTheRowSayWhenAPinOpensIt() {
+    #expect(Incognito.spoken(snapshot([main])) == "Incognito")
+    #expect(Incognito.spoken(snapshot([main, profile("kid", kids: true)], pin: "main")) == "Incognito, needs a PIN")
+    #expect(Incognito.spoken(snapshot([main], active: Incognito.id, host: "main")) == "Incognito, current profile")
+}
+
+@MainActor @Test func anEpisodesDownloadMenuSaysTheNoteFirst() {
+    let episode = Episode(videoId: "tt5875444:6:1", season: 6, episode: 1, title: "One", overview: nil, thumbnail: nil,
+                          released: "2022-02-18", watched: false, progress: nil, leftMs: nil)
+    let downloads = EpisodeDownloads(entries: { _ in [] }, start: { _ in }, choose: { _ in }, note: Incognito.downloadNote)
+    let menu = downloads.menu(episode)
+    #expect(menu.first?.label == "This download stays on this device. Every profile can see it in Downloads.")
+    #expect(menu.first?.run == nil)
+    #expect(menu.dropFirst().map(\.id) == ["start", "choose"])
+    // The row's own control opens its menu, so a tap never starts a download before the note is read.
+    #expect(downloads.control(episode, look: .pill).note == Incognito.downloadNote)
+    let plain = EpisodeDownloads(entries: { _ in [] }, start: { _ in }, choose: { _ in })
+    #expect(plain.menu(episode).map(\.id) == ["start", "choose"])
+}
+
+@MainActor @Test func closingTheWindowItsOwnCloseEndsIncognito() {
+    var closed = 0
+    let watch = WindowClose()
+    let first = NSWindow(contentRect: CGRect(x: 0, y: 0, width: 200, height: 100), styleMask: [.titled, .closable], backing: .buffered, defer: true)
+    first.isReleasedWhenClosed = false
+    watch.watch(first) { closed += 1 }
+    // Never shown: closing posts its willClose all the same.
+    first.close()
+    #expect(closed == 1)
+    // A window the app moved to: only its close counts now.
+    let second = NSWindow(contentRect: CGRect(x: 0, y: 0, width: 200, height: 100), styleMask: [.titled, .closable], backing: .buffered, defer: true)
+    second.isReleasedWhenClosed = false
+    watch.watch(second) { closed += 1 }
+    first.close()
+    #expect(closed == 1)
+    second.close()
+    #expect(closed == 2)
+}
+
+@Test func aNamedLogLineIsNeverWrittenInIncognito() {
+    var written = 0
+    coreLog.named(incognito: true) { _ in written += 1 }
+    #expect(written == 0)
+    coreLog.named(incognito: false) { _ in written += 1 }
+    #expect(written == 1)
+}
+
+@Test func theEngineWritesNoLineWhileSilenced() {
+    let lines = Mutex<[String]>([])
+    let before = EngineLog.handler
+    EngineLog.handler = { line in lines.withLock { $0.append(line) } }
+    defer { EngineLog.handler = before }
+    EngineLog.silenced = true
+    EngineLog.emit("incognito-test-line http://127.0.0.1/stream/abc")
+    EngineLog.silenced = false
+    #expect(!lines.withLock { $0.contains { $0.hasPrefix("incognito-test-line") } })
+    EngineLog.emit("incognito-test-line again")
+    #expect(lines.withLock { $0.contains("incognito-test-line again") })
+}
+
+/// Every log line in the app that interpolates a value: either through `named` (dropped in Incognito) or one of these,
+/// which name no title, id, stream or a failure's own words. A new line fails here until it is one or the other.
+@Test func noLogLineNamesATitleOrAStreamInIncognito() throws {
+    let allowed: Set = [
+        "App/CoreBuild.swift: coreLog.notice(\"\\(line", "App/CoreBuild.swift: coreLog.error(\"core build ",
+        "App/DebugHooks.swift: coreLog.notice(\"snapshot ", "App/DebugHooks.swift: coreLog.notice(\"metric scroll ",
+        "App/Launch.swift: coreLog.notice(\"metric first_frame_s=", "App/MarqueeApp.swift: coreLog.notice(\"debug: players start ",
+        "App/RootView.swift: coreLog.notice(\"debug install from ", "App/WalkLog.swift: coreLog.notice(\"walk ",
+        "App/WalkSampler.swift: coreLog.notice(\"metric device ", "App/WalkSampler.swift: coreLog.notice(\"metric sample ",
+        "Core/CoreClient.swift: coreLog.fault(\"core could not open: ", "Core/CoreClient.swift: coreLog.notice(\"debug: subscribe ",
+        "Core/CoreRouter.swift: coreLog.error(\"unreadable core message, ",
+        "Downloads/DownloadKeeper.swift: coreLog.notice(\"downloads: the continued task was refused: ",
+        "Home/HeroTrailer.swift: coreLog.notice(\"trailer held: ", "Home/HeroTrailer.swift: coreLog.notice(\"trailer seek from ",
+        "Home/HeroTrailer.swift: coreLog.notice(\"trailer \\(", "Home/HomeModel.swift: coreLog.notice(\"metric home_snapshot_s=",
+        "Home/HomeModel.swift: coreLog.notice(\"metric home_first_tiles_s=",
+        "Player/AetherSession.swift: coreLog.notice(\"metric engine_start ",
+        "Player/PictureInPicture.swift: coreLog.error(\"picture in picture did not start: ",
+        "Player/PlayerModel.swift: coreLog.notice(\"debug: player muted ", "Player/PlayerModel.swift: coreLog.notice(\"metric soak step=",
+        "Player/PlayerModel.swift: coreLog.notice(\"metric first_frame_ms=", "Player/PlayerModel.swift: coreLog.notice(\"metric \\(",
+        "Player/PlayerModel.swift: coreLog.notice(\"metric start_subtitle_ms=",
+        "Player/PlayerModel.swift: coreLog.notice(\"metric subtitles_settled_ms=",
+        "Player/PlayerModel.swift: coreLog.notice(\"metric engine_fallback_ms=",
+        "Player/PlayerSwipe.swift: coreLog.notice(\"debug: walk ",
+        "Profiles/ProfileSession.swift: coreLog.error(\"leave on close: ", "Profiles/ProfileSession.swift: coreLog.error(\"switch: views still open: ",
+        "Settings/DebridSession.swift: coreLog.notice(\"\\($0", "Sync/SyncModel.swift: coreLog.error(\"sync: the Keychain did not give the record: ",
+        "Trakt/TraktModel.swift: coreLog.notice(\"trakt: the record was not handed over: ",
+    ]
+    let app = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appending(path: "../Marquee")
+    let files = try #require(FileManager.default.enumerator(atPath: app.path())).compactMap { $0 as? String }.filter { $0.hasSuffix(".swift") }
+    var seen: Set<String> = []
+    var named = 0
+    for file in files {
+        for line in try String(contentsOf: app.appending(path: file), encoding: .utf8).split(separator: "\n") {
+            if line.contains("coreLog.named {") { named += 1; continue }
+            guard let call = line.range(of: #"coreLog\.[a-z]+\(""#, options: .regularExpression), line.contains("\\(") else { continue }
+            let text = line[call.lowerBound...]
+            let match = allowed.first { $0.hasPrefix("\(file): ") && text.hasPrefix($0.dropFirst(file.count + 2)) }
+            #expect(match != nil, "\(file): \(text) interpolates a value outside coreLog.named")
+            if let match { seen.insert(match) }
+        }
+    }
+    // The lines that can name a title, a stream or the core's words all go through `named`.
+    #expect(named >= 14)
+    #expect(allowed.subtracting(seen).isEmpty, "\(allowed.subtracting(seen))")
+    // And Incognito silences the second engine, whose lines name the stream it plays.
+    let rules = try String(contentsOf: app.appending(path: "Profiles/Incognito.swift"), encoding: .utf8)
+    #expect(rules.contains("EngineLog.silenced = on"))
 }
