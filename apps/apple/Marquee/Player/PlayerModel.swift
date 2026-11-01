@@ -648,7 +648,7 @@ final class PlayerModel {
                 let playing = self.playback?.key ?? self.route.key
                 let at = rows.firstIndex { $0.key == playing } ?? -1
                 let next = rows[(at + 1) % rows.count]
-                coreLog.notice("metric soak step=\(step, privacy: .public) of=\(moves, privacy: .public) to=\(next.key, privacy: .public)")
+                coreLog.named { $0.notice("metric soak step=\(step, privacy: .public) of=\(moves, privacy: .public) to=\(next.key, privacy: .public)") }
                 self.switchVersion(next.key)
             }
         }
@@ -1119,7 +1119,7 @@ final class PlayerModel {
             if loadedURL == nil, !rendered {
                 let ms = Int((ContinuousClock.now - route.tapped) / .milliseconds(1))
                 let host = URL(string: url)?.host() ?? "?"
-                coreLog.notice("metric playback_ready_ms=\(ms, privacy: .public) host=\(host, privacy: .public) \(startLine, privacy: .public)")
+                coreLog.named { $0.notice("metric playback_ready_ms=\(ms, privacy: .public) host=\(host, privacy: .public) \(startLine, privacy: .public)") }
             }
             // The first source starts at the saved position; a failover resumes where the last one stopped.
             var start = loadedURL == nil
@@ -1153,7 +1153,7 @@ final class PlayerModel {
             // Once per failure, the core's own words for the last source (a walk reads why without the screen).
             if !wasFailed {
                 let startLine = startWindow.line(from: route.tapped)
-                coreLog.notice("metric playback_failed_ms=\(self.sinceTap, privacy: .public) \(startLine, privacy: .public) why=\(snapshot.attempts.last?.error ?? "none", privacy: .public)")
+                coreLog.named { $0.notice("metric playback_failed_ms=\(self.sinceTap, privacy: .public) \(startLine, privacy: .public) why=\(snapshot.attempts.last?.error ?? "none", privacy: .public)") }
             }
         default:
             break
@@ -1433,7 +1433,7 @@ final class PlayerModel {
     }
 
     private func fail(_ failure: PlayerFailure, notice words: String) {
-        coreLog.error("source failed: \(failure.error, privacy: .public)")
+        coreLog.named { $0.error("source failed: \(failure.error, privacy: .public)") }
         notice = words
         generation += 1
         aether?.stop()
@@ -1486,7 +1486,7 @@ final class PlayerModel {
         case .move(let key):
             heatHandled = true
             let quality = rows.first { $0.key == key }?.quality ?? "a lighter version"
-            coreLog.notice("metric heat_step move to=\(key, privacy: .public)")
+            coreLog.named { $0.notice("metric heat_step move to=\(key, privacy: .public)") }
             switchVersion(key)
             showStatus("Moved to \(quality) to keep the phone cool.")
             return atStart

@@ -28,6 +28,14 @@ public enum EngineLog {
     private static let handlerLock = NSLock()
     nonisolated(unsafe) private static var _handler: ((String) -> Void)?
 
+    /// Marquee patch 6: while set, no line reaches OSLog or `handler`. The host's private mode (Incognito) keeps
+    /// nothing on disk, and the engine's lines name the stream it plays. Thread-safe.
+    public static var silenced: Bool {
+        get { handlerLock.lock(); defer { handlerLock.unlock() }; return _silenced }
+        set { handlerLock.lock(); _silenced = newValue; handlerLock.unlock() }
+    }
+    nonisolated(unsafe) private static var _silenced = false
+
     /// Names a value that must never appear in a log line, such as an IPTV account password the host
     /// holds. Every line then has that exact value (and its percent-encoded form) replaced before it
     /// reaches OSLog or `handler`, wherever it sits. The engine already strips the credential shapes it
@@ -91,6 +99,8 @@ public enum EngineLog {
     /// `.public` privacy means a Console.app capture or a sysdiagnose would otherwise carry the token
     /// in clear text even for a host that scrubs its own log.
     private static func deliver(_ line: String, category: Category, level: Level) {
+        // Marquee patch 6.
+        if silenced { return }
         let line = LogRedaction.redact(line)
         switch level {
         case .info:

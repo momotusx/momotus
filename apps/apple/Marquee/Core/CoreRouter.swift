@@ -134,7 +134,7 @@ final class CoreRouter: CoreListener {
             // An overflow: the app fell behind the core's output budget and that
             // session ended (core backlog C20); a new core opens, as after a death.
             let reason = head.core == "overflow" ? "overflow: the app fell behind the core's messages" : head.reason ?? "unknown"
-            coreLog.fault("core died: \(reason, privacy: .public)")
+            coreLog.named { $0.fault("core died: \(reason, privacy: .public)") }
             let (waiters, onDied) = state.withLock { state in
                 defer { state.waiters.removeAll() }
                 return (Array(state.waiters.values), state.onDied)
@@ -142,7 +142,7 @@ final class CoreRouter: CoreListener {
             waiters.forEach { $0(.failure(CoreError("The core stopped: \(reason)", kind: "coreStopped"))) }
             onDied?(reason)
         } else if head.ok == false {
-            coreLog.error("core rejected a request: \(head.error ?? "", privacy: .public)")
+            coreLog.named { $0.error("core rejected a request: \(head.error ?? "", privacy: .public)") }
         }
     }
 

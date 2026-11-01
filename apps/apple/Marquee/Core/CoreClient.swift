@@ -154,7 +154,7 @@ final class CoreClient {
                     sink.yield(.updates(try JSONDecoder().decode(Push<U>.self, from: data).updates))
                 } catch {
                     // A lost batch would leave the view out of step with the core.
-                    coreLog.error("undecodable \(view, privacy: .public) update: \(error, privacy: .public)")
+                    coreLog.named { $0.error("undecodable \(view, privacy: .public) update: \(error, privacy: .public)") }
                     sink.finish()
                 }
             }

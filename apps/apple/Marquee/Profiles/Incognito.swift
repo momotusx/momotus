@@ -1,4 +1,6 @@
+import AetherEngine
 import Foundation
+import os
 import Synchronization
 import SwiftUI
 
@@ -17,14 +19,15 @@ enum Incognito {
     /// Whether the session runs Incognito, readable from any thread; `ProfileSession` keeps it.
     static var on: Bool { flag.load(ordering: .relaxed) }
 
+    /// The second engine's log goes quiet with it: its lines name the stream it plays.
     static func set(_ on: Bool) {
         flag.store(on, ordering: .relaxed)
+        EngineLog.silenced = on
     }
 
     // MARK: words (section 6)
 
     static let name = "Incognito"
-    static let spoken = "Profile: Incognito"
     static let opening = "Opening Incognito"
     static let heading = "You're Incognito"
     static let leave = "Leave Incognito"
@@ -35,6 +38,7 @@ enum Incognito {
     static let ended = "Incognito ended. Its history and addons were cleared."
     static let trailersOff = "Off in Incognito."
     static let debrid = "Uses this device's debrid account"
+    static let sourcesSummary = "Addons and plugins"
     static let endsSoon = "Incognito ends in 1 minute."
     static let stay = "Stay in Incognito"
     static let kidsReason = "Kids profiles use this device, so Incognito needs this PIN."
@@ -75,9 +79,16 @@ enum Incognito {
         profile?.id == id ? name : "Profile"
     }
 
-    /// The chooser's tile and the bar menu's row: never in a kids session (Incognito is no way out of one).
+    /// The chooser's tile and the bar menu's row: never in an open kids session (Incognito is no way out of one).
+    /// A locked one shows it, as the core opens it there from the owner, with the owner's PIN.
     static func offered(_ snapshot: ProfilesSnapshot) -> Bool {
-        snapshot.incognito || snapshot.current?.kids != true
+        snapshot.incognito || snapshot.locked || snapshot.current?.kids != true
+    }
+
+    /// The tile and the row as spoken: current while it runs, and when a PIN opens it, that it needs one.
+    static func spoken(_ snapshot: ProfilesSnapshot) -> String {
+        if snapshot.incognito { return "\(name), current profile" }
+        return pinProfile(snapshot) == nil ? name : "\(name), needs a PIN"
     }
 
     /// The profile whose PIN entering Incognito asks for, by the core's rule (2.7); nil when none is asked.
@@ -254,3 +265,54 @@ struct IncognitoEndsSoon: View {
     }
 }
 #endif
+
+#if os(macOS)
+/// Closing the window Incognito runs in ends it (5.3), on the window's own close, not on SwiftUI tearing its views
+/// down: the app stays in the Dock for downloads, and its window can come back.
+@MainActor final class WindowClose {
+    private var observer: NSObjectProtocol?
+
+    /// Runs `closed` when `window` closes; a later call watches its window instead.
+    func watch(_ window: NSWindow?, closed: @escaping @MainActor () -> Void) {
+        if let observer { NotificationCenter.default.removeObserver(observer) }
+        observer = window.map { window in
+            NotificationCenter.default.addObserver(forName: NSWindow.willCloseNotification, object: window, queue: .main) { _ in
+                MainActor.assumeIsolated { closed() }
+            }
+        }
+    }
+}
+
+/// Hands its window to `found` whenever it moves into one.
+struct WindowReader: NSViewRepresentable {
+    let found: @MainActor (NSWindow?) -> Void
+
+    func makeNSView(context: Context) -> Probe { Probe(found: found) }
+
+    func updateNSView(_ view: Probe, context: Context) {}
+
+    final class Probe: NSView {
+        let found: @MainActor (NSWindow?) -> Void
+
+        init(found: @escaping @MainActor (NSWindow?) -> Void) {
+            self.found = found
+            super.init(frame: .zero)
+        }
+
+        required init?(coder: NSCoder) { nil }
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            found(window)
+        }
+    }
+}
+#endif
+
+extension Logger {
+    /// A line that may name a title, its id, a stream or a failure's own words (which can carry a URL): never written
+    /// in Incognito, as the unified log is kept on disk (5.5). The app's every such line goes through here.
+    func named(incognito: Bool = Incognito.on, _ write: (Logger) -> Void) {
+        if !incognito { write(self) }
+    }
+}

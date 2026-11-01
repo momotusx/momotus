@@ -217,7 +217,7 @@ final class DownloadKeeper {
         failure = nil
         core.sendNow(op, fields) { [weak self] error in
             if let error {
-                coreLog.notice("downloads: \(op, privacy: .public) failed: \(String(describing: error), privacy: .public)")
+                coreLog.named { $0.notice("downloads: \(op, privacy: .public) failed: \(String(describing: error), privacy: .public)") }
                 let words = op == "downloadAdd" ? DownloadCopy.addFailed : DownloadCopy.actFailed
                 self?.failure = words
                 // Said once, here: every page showing the line is still mounted under the top one (review r4 N12).

@@ -69,7 +69,7 @@ final class TitleModel {
                     if !timed, header?.details != nil {
                         timed = true
                         let ms = Int((ContinuousClock.now - opened) / .milliseconds(1))
-                        coreLog.notice("metric title_details_ms=\(ms, privacy: .public) id=\(id, privacy: .public)")
+                        coreLog.named { $0.notice("metric title_details_ms=\(ms, privacy: .public) id=\(id, privacy: .public)") }
                     }
                 }
             } catch is CancellationError {

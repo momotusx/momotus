@@ -41,9 +41,9 @@ final class VersionsModel {
             let hidden = (snapshot.hidden?.byReason ?? []).map { "\($0.reason):\($0.count)" }.joined(separator: ",")
             // The title watched stays out of a shipped build's log; walk builds carry DEBUG and keep it.
             #if DEBUG
-            coreLog.notice("metric versions listed=\(listed, privacy: .public) hidden=\(hidden, privacy: .public) id=\(id, privacy: .public)")
+            coreLog.named { $0.notice("metric versions listed=\(listed, privacy: .public) hidden=\(hidden, privacy: .public) id=\(id, privacy: .public)") }
             #else
-            coreLog.notice("metric versions listed=\(listed, privacy: .public) hidden=\(hidden, privacy: .public) id=\(id, privacy: .private)")
+            coreLog.named { $0.notice("metric versions listed=\(listed, privacy: .public) hidden=\(hidden, privacy: .public) id=\(id, privacy: .private)") }
             #endif
         }
     }

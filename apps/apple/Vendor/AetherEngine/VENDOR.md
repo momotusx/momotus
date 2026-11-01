@@ -39,5 +39,9 @@ Patches (each marked "Marquee patch N" in the source):
    stride is segment 1 and the later cuts keep the grid. Unmeasured spacing keeps the stride. On a 153 KiB/s swarm
    the ISO's 4 s segment 0 took 7.1 s (bench IM-B1). Tested in `apps/apple/Tests/EnginePatchTests.swift`.
 
+6. `Sources/AetherEngine/Diagnostics/EngineLog.swift`: `EngineLog.silenced`, checked first in `deliver`, drops every line
+   (OSLog and `handler`) while it is set. Marquee sets it for the life of an Incognito session: the engine's lines name
+   the stream it plays, and the unified log is kept on disk. Tested in `apps/apple/Tests/IncognitoTests.swift`.
+
 To move to a newer tag: copy its `Sources/AetherEngine` and `LICENSE`, take the pins from its
 `Package.resolved`, apply the patches above again, and walk the player before it lands.

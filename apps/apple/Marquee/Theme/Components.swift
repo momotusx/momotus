@@ -578,7 +578,7 @@ func announce(_ words: String) {
     #if DEBUG
     // Every announcement goes through here: a walk reads them from the log
     // where no screen reader runs (the simulator has none).
-    coreLog.notice("debug: announce \(words, privacy: .public)")
+    coreLog.named { $0.notice("debug: announce \(words, privacy: .public)") }
     #endif
 }
 
