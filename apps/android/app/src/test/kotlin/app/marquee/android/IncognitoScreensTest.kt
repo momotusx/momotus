@@ -392,6 +392,26 @@ class IncognitoScreensTest {
     }
 
     @Test
+    fun `closing the app for good leaves Incognito at once, with no screen left to reset`() {
+        open(snapshot(host = "ana"), Form.Phone) {}
+        gate.intro = true
+        compose.runOnUiThread { gate.leaveOnClose() }
+        waitUntil("leaveIncognito") { "leaveIncognito" in ops() }
+        assertFalse(gate.intro)
+        // The gate never shut for it: nothing waits for a reset that will not come.
+        assertEquals(null, gate.switching)
+    }
+
+    @Test
+    fun `closing the app outside Incognito sends nothing`() {
+        open(snapshot(), Form.Phone) {}
+        compose.runOnUiThread { gate.leaveOnClose() }
+        compose.waitForIdle()
+        Thread.sleep(200)
+        assertFalse("leaveIncognito" in ops())
+    }
+
+    @Test
     fun `Recents keeps the last frame only outside Incognito, from Android 13`() {
         val set = mutableListOf<Boolean>()
         recentsFrame(33, incognito = true) { set += it }
