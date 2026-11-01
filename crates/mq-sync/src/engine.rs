@@ -740,9 +740,9 @@ pub(crate) async fn relay_info(http: &HttpClient, server: &str) -> Result<RelayI
 }
 
 /// Whether the relay answering at the record's URL is the one this device
-/// joined: the record's relay id (once known), pinned to the host. One relay
-/// id, one host: a relay answering with another relay's id cannot borrow
-/// what this device signs or sends for that one.
+/// joined: the record's relay id (once known), pinned to the host for the
+/// record's member. One member, one host: a relay answering with another
+/// relay's id cannot borrow what this member signs or sends for that one.
 pub(crate) fn pinned(
     library: &Library,
     config: &SyncConfig,
@@ -751,11 +751,30 @@ pub(crate) fn pinned(
     if config.relay_id != Id::default() && config.relay_id != info.relay_id {
         return Err(SyncError::WrongRelay);
     }
-    let pin = format!("{RELAY_PIN}{}", hex::encode(info.relay_id.0));
-    let host = host(&config.server);
+    pin_host(
+        library,
+        info.relay_id,
+        &host(&config.server),
+        config.secret().id(),
+    )
+}
+
+/// The pin is `"<host> <member>"` for the last member that reached the relay.
+/// A later record (a new sign-in, pairing or recovery: always a new member)
+/// re-pins, so a relay moved to a new name is reached again by signing in
+/// there. A record's server never changes, so the refusal catches a record
+/// pointed at another host by hand; joins themselves never read the pin. A
+/// pin from before members were named is a bare host, re-pinned by whichever
+/// member comes next.
+fn pin_host(library: &Library, relay_id: Id, host: &str, member: Id) -> Result<(), SyncError> {
+    let pin = format!("{RELAY_PIN}{}", hex::encode(relay_id.0));
+    let member = hex::encode(member.0);
     match library.sync_state(&pin)? {
-        Some(pinned) if !pinned.is_empty() && pinned != host => Err(SyncError::WrongRelay),
-        _ => Ok(library.set_sync_state(&pin, &host)?),
+        Some(pinned) if pinned.split_once(' ') == Some((host, member.as_str())) => Ok(()),
+        Some(pinned) if pinned.split_once(' ').is_some_and(|(_, m)| m == member) => {
+            Err(SyncError::WrongRelay)
+        }
+        _ => Ok(library.set_sync_state(&pin, &format!("{host} {member}"))?),
     }
 }
 
@@ -2428,5 +2447,26 @@ mod tests {
             SyncError::SignInRefused,
         ];
         assert!(!done.iter().any(SyncError::transient));
+    }
+
+    #[test]
+    fn a_member_keeps_its_host_and_a_new_member_follows_a_moved_relay() {
+        let library = Library::temporary().unwrap();
+        let (relay, joined, later): (Id, Id, Id) = (Hex([7; 16]), Hex([1; 16]), Hex([2; 16]));
+        let wrong = |r: Result<(), SyncError>| matches!(r, Err(SyncError::WrongRelay));
+        // A pin from before members were named: the joined record upgrades it.
+        let pin = format!("{RELAY_PIN}{}", hex::encode(relay.0));
+        library.set_sync_state(&pin, "old.example").unwrap();
+        pin_host(&library, relay, "old.example", joined).unwrap();
+        // The joined member never follows its relay id to another host.
+        assert!(wrong(pin_host(&library, relay, "new.example", joined)));
+        // A new sign-in at the relay's new name re-pins it there.
+        pin_host(&library, relay, "new.example", later).unwrap();
+        assert!(wrong(pin_host(&library, relay, "old.example", later)));
+        pin_host(&library, relay, "new.example", later).unwrap();
+        // A bare pin from an older build, met at the new name: re-pinned.
+        library.set_sync_state(&pin, "old.example").unwrap();
+        pin_host(&library, relay, "new.example", later).unwrap();
+        assert!(wrong(pin_host(&library, relay, "old.example", later)));
     }
 }

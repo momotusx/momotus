@@ -152,6 +152,36 @@ async fn a_refused_record_does_not_cut_a_device_off() {
 }
 
 #[tokio::test]
+async fn a_relay_moved_to_a_new_name_is_reached_by_signing_in_there() {
+    let dir = dir();
+    let old = serve(&dir.0.join("relay.sqlite"), Config::default()).await;
+    // The same relay under another name, as after a host move.
+    let new = old.replace("127.0.0.1", "localhost");
+    let (lib, clock) = (Library::temporary().unwrap(), HlcClock::new(1));
+    let joined = account(&old).await;
+    sync_once(&lib, &http(), &joined, &clock).await.unwrap();
+    let moved = SyncConfig {
+        server: new.clone(),
+        ..joined.clone()
+    };
+    assert!(
+        matches!(
+            sync_once(&lib, &http(), &moved, &clock).await,
+            Err(SyncError::WrongRelay)
+        ),
+        "a joined record never follows its relay to another host"
+    );
+    mq_sync::sign_out(&lib, &http(), &joined, &clock, true)
+        .await
+        .unwrap();
+    // Signing in again at the new name is a new member: it re-pins.
+    let again = account(&new).await;
+    progress(&lib, "v1", &clock.tick(now_ms()).encode());
+    let report = sync_once(&lib, &http(), &again, &clock).await.unwrap();
+    assert_eq!(report.pushed, 1, "{report:?}");
+}
+
+#[tokio::test]
 async fn a_write_from_a_clock_far_ahead_is_restamped_and_delivered() {
     let dir = dir();
     let server = serve(&dir.0.join("relay.sqlite"), Config::default()).await;
