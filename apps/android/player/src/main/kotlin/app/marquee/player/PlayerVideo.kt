@@ -1,8 +1,10 @@
 package app.marquee.player
 
 import android.content.Context
+import android.text.Layout
 import android.text.SpannableStringBuilder
 import android.text.Spanned
+import android.text.TextPaint
 import android.text.style.BackgroundColorSpan
 import android.text.style.RelativeSizeSpan
 import android.view.accessibility.CaptioningManager
@@ -134,9 +136,9 @@ fun PlayerVideo(
             }
         }
         // The system caption size (as setUserDefaultTextSize reads it) times the profile's size.
-        val context = LocalContext.current
-        val text = SubtitleView.DEFAULT_TEXT_SIZE_FRACTION * captionScale(context) * subtitleScale(subtitleSize)
-        val box = remember(context) { boxColor(captionStyle(context)) }
+        val captions = rememberCaptions()
+        val text = SubtitleView.DEFAULT_TEXT_SIZE_FRACTION * captions.scale * subtitleScale(subtitleSize)
+        val box = boxColor(captions.style)
         val height = if (constraints.hasBoundedHeight) constraints.maxHeight.toFloat() else 0f
         val width = if (constraints.hasBoundedWidth) constraints.maxWidth.toFloat() else 0f
         val top =
@@ -177,7 +179,7 @@ fun PlayerVideo(
                 }
             }
         // The view keeps the whole picture area, so the cues keep their size and a picture cue (PGS) its shape.
-        Subtitles(drawn, frame, Modifier.fillMaxSize().testTag(SUBTITLES_TAG))
+        Subtitles(drawn, frame, captions.style, width, height, Modifier.fillMaxSize().testTag(SUBTITLES_TAG))
     }
 }
 
@@ -369,6 +371,47 @@ private fun signFoot(
 internal fun boxColor(style: CaptionStyleCompat): Int =
     if (AndroidColor.alpha(style.windowColor) > 0) style.windowColor else style.backgroundColor
 
+/** The system caption style and text size ([captionStyle], [captionScale]). */
+internal data class Captions(
+    val style: CaptionStyleCompat,
+    val scale: Float,
+)
+
+internal fun captions(context: Context) = Captions(captionStyle(context), captionScale(context))
+
+/**
+ * The system captions, followed while the player shows: a change in the system settings draws at once, not only
+ * after the app restarts (the Pixel walk, 2026-11-01).
+ */
+@Composable
+private fun rememberCaptions(): Captions {
+    val context = LocalContext.current
+    var now by remember(context) { mutableStateOf(captions(context)) }
+    DisposableEffect(context) {
+        val stop = followCaptions(context) { now = it }
+        onDispose { stop() }
+    }
+    return now
+}
+
+/** Hands [changed] the system captions on each change of the system caption settings, until the call it returns. */
+internal fun followCaptions(
+    context: Context,
+    changed: (Captions) -> Unit,
+): () -> Unit {
+    val manager = context.getSystemService(CaptioningManager::class.java) ?: return {}
+    val listener =
+        object : CaptioningManager.CaptioningChangeListener() {
+            override fun onEnabledChanged(enabled: Boolean) = changed(captions(context))
+
+            override fun onUserStyleChanged(userStyle: CaptioningManager.CaptionStyle) = changed(captions(context))
+
+            override fun onFontScaleChanged(fontScale: Float) = changed(captions(context))
+        }
+    manager.addCaptioningChangeListener(listener)
+    return { manager.removeCaptioningChangeListener(listener) }
+}
+
 /** The system caption style, as [SubtitleView.setUserDefaultStyle] reads it: the default while captions are off. */
 private fun captionStyle(context: Context): CaptionStyleCompat {
     val captions = context.getSystemService(CaptioningManager::class.java)
@@ -440,17 +483,68 @@ fun subtitleScale(size: SubtitleSize): Float =
 private fun Subtitles(
     cues: List<Cue>,
     frame: CueFrame,
+    style: CaptionStyleCompat,
+    width: Float,
+    height: Float,
     modifier: Modifier,
 ) {
     AndroidView(
-        factory = { context -> SubtitleView(context).also { it.setUserDefaultStyle() } },
+        factory = { context -> SubtitleView(context) },
         update = {
+            it.setStyle(style)
             it.setFractionalTextSize(frame.text)
-            it.setCues(cues.map { cue -> frame.fit(cue) })
+            it.setCues(fitted(cues, frame, style, width, height))
         },
         modifier = modifier,
     )
 }
+
+/** The cues as the view draws them: in the [frame] ([CueFrame.fit]), One box's block fitted to its lines ([hugged]). */
+internal fun fitted(
+    cues: List<Cue>,
+    frame: CueFrame,
+    style: CaptionStyleCompat,
+    width: Float,
+    height: Float,
+): List<Cue> {
+    // Media3's painter measures at the view's text size in the style's typeface.
+    val paint =
+        TextPaint().apply {
+            isAntiAlias = true
+            isSubpixelText = true
+            textSize = frame.text * height
+            typeface = style.typeface
+        }
+    // Fitted to its lines first: the frame's narrowing beside a corner control then keeps the smaller of the two.
+    return cues.map { cue -> frame.fit(cue.hugged(paint, width)) }
+}
+
+/**
+ * One box's block (a foot cue with a window of its own) sized to its widest line, so its box fits both lines
+ * (plans/dual-subtitles.md 4 E): Media3 draws a cue's window across the cue's whole size, and a WebVTT line comes
+ * 100% wide, so the box was a band across the picture, or across the room a corner control leaves. Its place
+ * across stays: centred where it was centred, from its edge where its file put it. Unchanged while its widest line
+ * fills the room. [paint] measures as Media3's painter does; [width] is the view's, px.
+ */
+internal fun Cue.hugged(
+    paint: TextPaint,
+    width: Float,
+): Cue {
+    val words = text
+    if (!windowColorSet || words.isNullOrEmpty() || linesOverFoot(this) == null) return this
+    // Media3's SubtitlePainter: lines wrap in the view's width less an eighth of the text size on each side.
+    val room = width - 2 * (paint.textSize * PAINTER_PADDING + 0.5f).toInt()
+    if (room <= 0f) return this
+    val breaks = listOf(-1) + words.indices.filter { words[it] == '\n' } + words.length
+    val widest = breaks.zipWithNext { a, b -> Layout.getDesiredWidth(words, a + 1, b, paint) }.max()
+    // Two px over the widest line: Media3 rounds the room down, and the line must not wrap.
+    val fits = (ceil(widest) + 2f) / room
+    val now = if (size == Cue.DIMEN_UNSET) 1f else size
+    return if (fits < now) buildUpon().setSize(fits).build() else this
+}
+
+/** Media3's `SubtitlePainter.INNER_PADDING_RATIO`: a cue's padding each side, of the text size. */
+private const val PAINTER_PADDING = 0.125f
 
 /**
  * How many lines over the foot a text cue set from the foot sits: 0 with no line of its own (SubRip) or at the foot
