@@ -281,6 +281,8 @@ h1, h2, h3 { font-family: var(--font-display); font-weight: var(--weight-heading
 [data-form="phone"] .app { position: relative; min-height: 100dvh; overflow: visible; }
 /* The page flows under the offline banner, which stays at the top as the page scrolls under it. */
 [data-form="phone"] .screen { position: relative; inset: auto; margin-top: var(--offline-h, 0px); }
+/* The document scrolls a phone's page: a page that contained its overscroll would keep a wheel or a swipe from it. */
+[data-form="phone"] main[data-vscroll] { overscroll-behavior: auto; }
 [data-form="phone"] .btn { height: 46px; padding: 0 20px; gap: 8px; font-size: var(--type-body); }
 [data-form="phone"] .btn svg { width: 18px; height: 18px; }
 [data-form="phone"] .btn.big { height: 52px; padding: 0 24px; }
