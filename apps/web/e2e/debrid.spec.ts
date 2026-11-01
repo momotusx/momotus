@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixture";
 
 /** Debrid services on the web (plans/c10-handoff.md, phase 3a): a typed key
  * connects as a record the tab keeps, Settings counts it, a connected account

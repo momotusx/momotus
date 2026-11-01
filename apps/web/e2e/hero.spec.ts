@@ -4,7 +4,7 @@
  * plays, covering the hero's frame under the art until its controls fade, taking no input, and gone
  * on an error. */
 
-import { type Browser, type BrowserContext, expect, type Page, test } from "@playwright/test";
+import { type Browser, type BrowserContext, expect, type Page, test } from "./fixture";
 import { FAKE_API, ytLog } from "./yt-fake";
 
 const activePage = (page: Page) => page.evaluate(() => Number(document.querySelector<HTMLElement>(".hero-page.on")?.dataset.page ?? -1));

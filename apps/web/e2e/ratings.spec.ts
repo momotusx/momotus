@@ -7,7 +7,7 @@
  * only in the band (the owner, 2026-10-23). The measured widths are printed as
  * `ratings-measure` lines for bench/core/ratings.jsonl. */
 
-import { type Browser, expect, type Page, test } from "@playwright/test";
+import { type Browser, expect, type Page, test } from "./fixture";
 import type { ChildProcess } from "node:child_process";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";

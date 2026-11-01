@@ -2,7 +2,7 @@
  * TabRow's 250 ms debounce), with no Enter and nothing opened on the way across; the focus stays on the
  * bar, Down goes in, Back from the content comes back to the bar and Back on the bar goes Home. */
 
-import { expect, type Page, test } from "@playwright/test";
+import { expect, type Page, test } from "./fixture";
 
 const focused = (page: Page) => page.evaluate(() => (document.activeElement as HTMLElement | null)?.dataset.f ?? null);
 

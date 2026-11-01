@@ -8,7 +8,7 @@
  * they lead to are checked as sent; playback is never opened. Shots go to SHOTS (e2e/core.ts) at TV, desktop
  * and phone sizes. */
 
-import { type Browser, type BrowserContext, expect, type Page, test } from "@playwright/test";
+import { type Browser, type BrowserContext, expect, type Page, test } from "./fixture";
 import type { ChildProcess } from "node:child_process";
 import { readFileSync } from "node:fs";
 import type { EmptyAction } from "../src/core/generated/EmptyAction";

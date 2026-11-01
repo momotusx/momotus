@@ -9,7 +9,7 @@
  * offers the next one first; a hand-picked key rides in the history
  * entry's state, never the address. */
 
-import { type Browser, expect, test } from "@playwright/test";
+import { type Browser, expect, test } from "./fixture";
 import type { ChildProcess } from "node:child_process";
 import { createReadStream, readFileSync, statSync } from "node:fs";
 import { fileURLToPath } from "node:url";

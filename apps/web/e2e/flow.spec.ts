@@ -1,4 +1,4 @@
-import { expect, type Page, test } from "@playwright/test";
+import { expect, type Page, test } from "./fixture";
 import { Client, GOT, PORTS, reseedBbb, startIfPaused, watch } from "./core";
 import { patchedContext } from "./patch";
 import { BBB_ID, SAMPLE_EPISODE } from "./source";

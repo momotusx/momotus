@@ -1,4 +1,4 @@
-import { type Browser, expect, type Page, test } from "@playwright/test";
+import { type Browser, expect, type Page, test } from "./fixture";
 import { Client } from "./core";
 
 /** The profile in place of Settings (plans/nav-profile.md): the bar's far-right item is the current profile, its
@@ -70,7 +70,8 @@ for (const form of ["tv", "desktop", "phone"] as const) {
     expect(Math.min(box.width, box.height)).toBeGreaterThanOrEqual(47.5);
     await button(page).click();
     await expect(button(page)).toHaveAttribute("aria-expanded", "true");
-    await expect(rows(page)).toHaveText(["Main", "Kid", "Locked", "Settings"]);
+    // Incognito sits after the profiles (plans/batch-10-incognito.md 5.1).
+    await expect(rows(page)).toHaveText(["Main", "Kid", "Locked", "Incognito", "Settings"]);
     await expect(page.locator('[role="menu"] [aria-checked="true"]')).toHaveAttribute("aria-label", "Main, current profile");
     await expect(page.locator(`[data-f="pmenu:${locked}"]`)).toHaveAttribute("aria-label", "Locked, locked with a PIN");
     for (const r of await rows(page).all()) expect((await r.boundingBox())!.height).toBeGreaterThanOrEqual(47.5);
@@ -168,7 +169,8 @@ test("TV: the profile ends the bar, takes Up from Settings, and its menu keeps t
   // Settings: shown in the place of Library, the profile lit.
   await page.keyboard.press("Enter");
   await expect.poll(() => focused(page)).toBe("pmenu:default");
-  for (let i = 0; i < 3; i++) await page.keyboard.press("ArrowDown");
+  // Past the profiles and Incognito.
+  for (let i = 0; i < 4; i++) await page.keyboard.press("ArrowDown");
   expect(await focused(page)).toBe("pmenu:settings");
   await page.keyboard.press("Enter");
   await expect(page).toHaveURL(/\/settings/);

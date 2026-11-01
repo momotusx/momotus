@@ -4,7 +4,7 @@
  * Down through every hit of both rows; on a phone the row under Top results
  * stays where it is while Top results answers, fails or finds nothing. */
 
-import { type Browser, expect, type Page, test } from "@playwright/test";
+import { type Browser, expect, type Page, test } from "./fixture";
 import type { ChildProcess } from "node:child_process";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";

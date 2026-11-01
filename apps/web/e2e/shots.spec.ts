@@ -1,7 +1,7 @@
 /** Screenshots of every screen on live data, per form factor and theme,
  * written to SHOTS (e2e/core.ts) as JPEG (quality 80) for review. */
 
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixture";
 import { SHOTS } from "./core";
 import { type Form, FORMS, SCREENS } from "./screens";
 

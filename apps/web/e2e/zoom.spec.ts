@@ -4,7 +4,7 @@
  * over the zoom with that device pixel ratio and an unzoomed `outerWidth`, which is what Chromium reports; a saved
  * per-host zoom is also loaded as the browser itself would, in a Chrome profile. */
 
-import { chromium, expect, type Page, test } from "@playwright/test";
+import { chromium, expect, type Page, test } from "./fixture";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";

@@ -1,4 +1,4 @@
-import { expect, type Page, test } from "@playwright/test";
+import { expect, type Page, test } from "./fixture";
 import { Client } from "./core";
 
 /** Profiles on the remote (plans/m11-profiles.md, P1 apps): add, the start
@@ -43,6 +43,9 @@ test("profiles: add, pick, PIN, switch both ways, locked start", async ({ page }
   // Add Kid with a cat, from the picker's Add tile (the colour is the next grey step, never picked).
   await page.goto("/profiles?form=tv");
   await expect.poll(() => focused(page)).toBe("profile:default");
+  // Incognito sits between the profiles and Add profile (plans/batch-10-incognito.md 5.1).
+  await page.keyboard.press("ArrowRight");
+  await expect.poll(() => focused(page)).toBe("profile:incognito");
   await page.keyboard.press("ArrowRight");
   await expect.poll(() => focused(page)).toBe("profile:add");
   await page.keyboard.press("Enter");

@@ -12,7 +12,7 @@
  * before 3 s) and a fill that would go back (the core never sends one). A
  * stall is the element's own `waiting` event. Muted, headless. */
 
-import { type Browser, expect, type Page, test } from "@playwright/test";
+import { type Browser, expect, type Page, test } from "./fixture";
 import type { ChildProcess } from "node:child_process";
 import { createServer, get, type Server } from "node:http";
 import type { AddressInfo } from "node:net";

@@ -3,7 +3,7 @@
  * coming. The slow and late cases are made at the socket: the home view's first answer is
  * held back or stripped of its hero, then the real one follows. */
 
-import { type Browser, expect, type Page, test } from "@playwright/test";
+import { type Browser, expect, type Page, test } from "./fixture";
 import { BBB_ID } from "./source";
 
 const cw = (id: string) => `tile:home:continue-watching:${id}`;

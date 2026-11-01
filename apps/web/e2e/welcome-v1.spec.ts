@@ -1,4 +1,4 @@
-import { type BrowserContext, expect, type Page, test } from "@playwright/test";
+import { type BrowserContext, expect, type Page, test } from "./fixture";
 import { drawnContrast, WHITE_PNG } from "./contrast";
 import { PORTS } from "./core";
 import { patchedContext } from "./patch";

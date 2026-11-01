@@ -7,7 +7,7 @@
  * pass (design/audit-web-2026-10-19.md). */
 
 import { appendFileSync } from "node:fs";
-import { type Browser, expect, type Page, test } from "@playwright/test";
+import { type Browser, expect, type Page, test } from "./fixture";
 import { BROWSER_ARGS, GOT, SHOTS, startIfPaused } from "./core";
 import { BBB_ID } from "./source";
 

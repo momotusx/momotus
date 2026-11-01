@@ -1,4 +1,4 @@
-import { type Browser, expect, type Page, test } from "@playwright/test";
+import { type Browser, expect, type Page, test } from "./fixture";
 import { GOT } from "./core";
 import { BBB_ID } from "./source";
 import { fakeYouTube } from "./yt-fake";

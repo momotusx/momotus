@@ -7,7 +7,7 @@
  * and signing out ends it. The fake's tokens are looked for in storage, the
  * URL, history, the console and the page at every shot. */
 
-import { type Browser, expect, type Page, test } from "@playwright/test";
+import { type Browser, expect, type Page, test } from "./fixture";
 import type { ChildProcess } from "node:child_process";
 import { rmSync } from "node:fs";
 import { Client, PORTS, SHOTS, startBridge, TRAKT_PORTS } from "./core";

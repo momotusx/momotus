@@ -14,7 +14,7 @@
  * Every secret that crossed a socket is then looked for in storage, history,
  * the URL and the console. */
 
-import { type Browser, type CDPSession, chromium, expect, type Page, test } from "@playwright/test";
+import { type Browser, type CDPSession, chromium, expect, type Page, test } from "./fixture";
 import type { ChildProcess } from "node:child_process";
 import { once } from "node:events";
 import { copyFileSync, existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
@@ -589,6 +589,63 @@ test.describe.serial("sync across three devices", () => {
     await expect(phone.locator(".addon h2", { hasText: "Sample Source" })).toBeVisible({ timeout: 30_000 });
     await go(phone, "/settings/account");
     await expect(phone.locator('[data-f="settings:sync"]')).toContainText(/On\. Synced at/);
+  });
+
+  test("on a device in an account, an Incognito end stays said through Sync now and reloads until it is read", async ({ browser }) => {
+    // plans/batch-10-incognito.md 7.4: the web's own 60 s Sync now must never clear the ended line. A page of its own on
+    // Desk's core, which is in the account, so this run never touches Desk's tab.
+    const context = await browser.newContext({ ...FORMS.desktop, colorScheme: "dark", baseURL: `http://127.0.0.1:${PORTS.vite}` });
+    const cores: WebSocket[] = [];
+    await context.routeWebSocket(/\/ws$/, (ws) => {
+      const core = new WebSocket(`ws://127.0.0.1:${SYNC_PORTS.a}/ws`);
+      cores.push(core);
+      const early: string[] = [];
+      core.addEventListener("open", () => {
+        for (const m of early.splice(0)) core.send(m);
+      });
+      core.addEventListener("message", (e) => ws.send(String(e.data)));
+      core.addEventListener("close", () => ws.close());
+      ws.onMessage((m) => (core.readyState === WebSocket.OPEN ? core.send(String(m)) : early.push(String(m))));
+      ws.onClose(() => core.close());
+    });
+    let id = 9_100_000;
+    // A request as if the page sent it; the page drops the answer.
+    const ask = (op: string) => cores.at(-1)?.send(JSON.stringify({ id: id++, op }));
+    const ended = "Incognito ended. Its history and addons were cleared.";
+    const page = await context.newPage();
+    try {
+      await page.goto("/?form=desktop");
+      const main = page.locator('[data-f="profile:default"]');
+      const menu = page.locator('[data-f="nav:/profiles"]');
+      await expect(main.or(menu)).toBeVisible({ timeout: 30_000 });
+      if (await main.isVisible()) await main.click();
+      await menu.click();
+      await page.locator('[data-f="pmenu:incognito"]').click();
+      await page.locator('[data-f="incognito:continue"]').click();
+      await expect(menu).toHaveAttribute("aria-label", "Profile: Incognito");
+      // A loud end (a lock), then Sync now and two reloads before any click.
+      ask("lockSession");
+      await expect(page.getByText(ended)).toBeVisible();
+      ask("syncNow");
+      await page.reload();
+      await expect(page.getByText(ended)).toBeVisible({ timeout: 30_000 });
+      ask("syncNow");
+      await page.reload();
+      await expect(page.getByText(ended)).toBeVisible({ timeout: 30_000 });
+      // Read: OK over Home, or the profile on the chooser.
+      const ok = page.locator('[data-f="incognito:ended-ok"]');
+      if (await ok.isVisible()) await ok.click();
+      else await main.click();
+      await expect(page.getByText(ended)).toHaveCount(0);
+      await page.reload();
+      await expect(menu).toBeVisible({ timeout: 30_000 });
+      await expect(page.getByText(ended)).toHaveCount(0);
+    } finally {
+      ask("leaveIncognito");
+      ask("ackIncognitoEnded");
+      await page.waitForTimeout(300);
+      await context.close();
+    }
   });
 
   test("Phone makes a recovery kit, shown once, and the clipboard is emptied after", async () => {

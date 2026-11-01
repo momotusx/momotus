@@ -5,7 +5,7 @@
  * follows, and the good one shows. With all three broken, nothing is left: the player says so quietly,
  * naming no source. The film comes from a sample source of its own. */
 
-import { expect, type Page, test } from "@playwright/test";
+import { expect, type Page, test } from "./fixture";
 import type { ChildProcess } from "node:child_process";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";

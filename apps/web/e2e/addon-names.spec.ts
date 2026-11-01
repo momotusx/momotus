@@ -5,7 +5,7 @@
  * either addon's name; the later twin row waits off Home; Customize Home names each row's addon
  * on a quiet second line. */
 
-import { type Browser, expect, type Page, test } from "@playwright/test";
+import { type Browser, expect, type Page, test } from "./fixture";
 import type { ChildProcess } from "node:child_process";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";

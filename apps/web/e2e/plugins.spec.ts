@@ -5,7 +5,7 @@
  * repository is the recommended list's plugin row; Versions lists the provider's link under "From
  * plugins", saying where it plays from. Nothing asks a real repository. */
 
-import { expect, type Page, test } from "@playwright/test";
+import { expect, type Page, test } from "./fixture";
 import type { ChildProcess } from "node:child_process";
 import type { DefaultAddons } from "../src/core/generated/DefaultAddons";
 import { Client, cleanup, PLUGINS_PORT, PORTS, SHOTS, startBridge } from "./core";

@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { expect, type Page, test } from "@playwright/test";
+import { expect, type Page, test } from "./fixture";
 import { fakeYouTube, ytLog } from "./yt-fake";
 
 /** The native apps' trailer page (plans/trailer-inline.md 1): the same script in Android's HeroTrailer.kt and Apple's

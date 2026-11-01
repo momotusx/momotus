@@ -4,7 +4,7 @@
  * at the right, and no addon's name anywhere. A TV walks it with keys only. Shots go to SHOTS
  * (e2e/core.ts) at desktop, phone and TV sizes. */
 
-import { type Browser, expect, type Page, test } from "@playwright/test";
+import { type Browser, expect, type Page, test } from "./fixture";
 import type { ChildProcess } from "node:child_process";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";

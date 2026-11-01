@@ -5,7 +5,7 @@
 
 import { appendFileSync, mkdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixture";
 
 const BENCH = fileURLToPath(new URL("../../../bench/m3", import.meta.url));
 

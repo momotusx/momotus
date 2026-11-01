@@ -8,7 +8,7 @@
  * subtitle size is the profile's and the timing is per play; a foreground
  * whose stream server moved opens the playback again. */
 
-import { type Browser, expect, type Page, test } from "@playwright/test";
+import { type Browser, expect, type Page, test } from "./fixture";
 import type { ChildProcess } from "node:child_process";
 import { fakeYouTube, ytLog } from "./yt-fake";
 import { createServer, type Server } from "node:http";

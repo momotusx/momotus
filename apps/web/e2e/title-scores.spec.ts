@@ -7,7 +7,7 @@
  * series' episodes panel on TV and desktop, and gone when it fails; More like this lands late under the
  * hero without moving anything above, names no addon, and Back from one of its titles focuses its tile. */
 
-import { type Browser, expect, type Page, test } from "@playwright/test";
+import { type Browser, expect, type Page, test } from "./fixture";
 import type { ChildProcess } from "node:child_process";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
@@ -329,4 +329,38 @@ test("tv: Down on a More like this tile does not move the page", async ({ browse
   expect(await page.evaluate(() => !!document.activeElement?.closest(".title-more"))).toBe(true);
   expect(await scroller.evaluate((el) => el.scrollTop)).toBe(at);
   await page.context().close();
+});
+
+test("desktop: in Incognito the scores stay as plain text and open no outside page (plans/batch-10-incognito.md 5.5)", async ({ browser }) => {
+  const page = await open(browser, "desktop");
+  await page.goto("/?form=desktop");
+  const menu = page.locator('[data-f="nav:/profiles"]');
+  await menu.click({ timeout: 30_000 });
+  await page.locator('[data-f="pmenu:incognito"]').click();
+  await page.locator('[data-f="incognito:continue"]').click();
+  await expect(menu).toHaveAttribute("aria-label", "Profile: Incognito");
+  try {
+    // The address stays "/" in Incognito: the title opens as its in-app links do, through `data-route`.
+    await page.evaluate((to) => {
+      const a = document.createElement("a");
+      a.setAttribute("link", "");
+      a.href = "/";
+      a.dataset.route = to;
+      document.body.append(a);
+      a.click();
+      a.remove();
+    }, `/title/movie/${ROW_ID.desktop}`);
+    const scores = page.locator(".info .meta .scores");
+    await expect(scores.locator(".score").first()).toHaveAttribute("aria-label", "IMDb 9.3 out of 10", { timeout: 30_000 });
+    await expect(scores.locator(".score.pending")).toHaveCount(0, { timeout: 30_000 });
+    // IMDb and TMDB; Trakt never runs in Incognito, so it has no score there (plans/batch-10-incognito.md 2.4).
+    await expect(scores.locator(".score .num")).toHaveText(["9.3/10", "87%"]);
+    await expect(scores.locator("a")).toHaveCount(0);
+  } finally {
+    await page.locator('[data-f="back"]').click().catch(() => undefined);
+    await menu.click({ timeout: 5000 }).catch(() => undefined);
+    await page.locator('[data-f="pmenu:leave-incognito"]').click({ timeout: 5000 }).catch(() => undefined);
+    await expect(menu).toHaveAttribute("aria-label", "Profile: Main", { timeout: 5000 }).catch(() => undefined);
+    await page.context().close();
+  }
 });

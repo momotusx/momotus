@@ -1,4 +1,4 @@
-import { type Browser, expect, type Page, test } from "@playwright/test";
+import { type Browser, expect, type Page, test } from "./fixture";
 import { drawnContrast, WHITE_PNG } from "./contrast";
 import type { Prefs } from "../src/core/generated/Prefs";
 import { Client, PORTS, SHOTS } from "./core";

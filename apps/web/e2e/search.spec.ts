@@ -1,4 +1,4 @@
-import { type Browser, expect, type Page, test } from "@playwright/test";
+import { type Browser, expect, type Page, test } from "./fixture";
 
 /** Search is a palette over the screen you are on (design/DECISION.md):
  * the navigation opens it on every form, Back or the scrim closes it, the

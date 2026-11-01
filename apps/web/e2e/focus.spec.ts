@@ -1,4 +1,4 @@
-import { type Browser, type BrowserContext, expect, type Page, test } from "@playwright/test";
+import { type Browser, type BrowserContext, expect, type Page, test } from "./fixture";
 import { GOT } from "./core";
 import { type Form, FORMS, focusStop, SCREENS, type Screen, visible } from "./screens";
 

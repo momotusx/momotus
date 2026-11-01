@@ -3,7 +3,7 @@
  * profile's subtitle language Turkish. The first line is Turkish; the second line is the viewer's or the
  * profile's, drawn in the profile's layout. The film comes from a sample source of its own. */
 
-import { expect, type Page, test } from "@playwright/test";
+import { expect, type Page, test } from "./fixture";
 import type { ChildProcess } from "node:child_process";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";

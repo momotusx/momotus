@@ -3,7 +3,7 @@
  * /profiles. TV draws none (the remote's Back), and nothing that is not a pushed page gets one: the start picker, the
  * player. */
 
-import { expect, type Page, test } from "@playwright/test";
+import { expect, type Page, test } from "./fixture";
 import { Client, GOT } from "./core";
 
 const forms = [

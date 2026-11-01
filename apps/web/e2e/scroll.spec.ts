@@ -16,7 +16,7 @@
 
 import { appendFileSync, mkdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { type Browser, expect, type Page, test } from "@playwright/test";
+import { type Browser, expect, type Page, test } from "./fixture";
 
 const BENCH = fileURLToPath(new URL("../../../bench/web", import.meta.url));
 

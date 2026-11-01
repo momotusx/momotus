@@ -8,7 +8,7 @@
  * and its page groups them by season; a download held for Wi-Fi goes on over mobile data when asked; a
  * kids profile sees Play only. */
 
-import { type Browser, type BrowserContextOptions, expect, type Page, test } from "@playwright/test";
+import { type Browser, type BrowserContextOptions, expect, type Page, test } from "./fixture";
 import type { ChildProcess } from "node:child_process";
 import { createReadStream, statSync } from "node:fs";
 import { createServer, type Server, type ServerResponse } from "node:http";

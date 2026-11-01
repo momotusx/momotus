@@ -8,7 +8,7 @@
  * otherwise. While a slow subtitle addon is still asked, the Subtitles
  * button counts the languages that are in and marks the search. */
 
-import { type Browser, expect, type Page, test } from "@playwright/test";
+import { type Browser, expect, type Page, test } from "./fixture";
 import type { ChildProcess } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { createServer, type Server } from "node:http";

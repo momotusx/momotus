@@ -4,7 +4,7 @@
  * has no torrent engine, so the shared core's Versions of Game of Thrones
  * S2:E3 (a pick and one row) gets it on its way to the page (e2e/patch.ts). */
 
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixture";
 import { GOT, PORTS } from "./core";
 import { patchedContext } from "./patch";
 

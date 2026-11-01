@@ -6,7 +6,7 @@
 
 import { appendFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { expect, type Page, test } from "@playwright/test";
+import { expect, type Page, test } from "./fixture";
 import { GOT, PORTS } from "./core";
 import { type Json, patchedContext } from "./patch";
 

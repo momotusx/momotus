@@ -1,4 +1,4 @@
-import { type Browser, expect, test } from "@playwright/test";
+import { type Browser, expect, test } from "./fixture";
 import { GOT, PORTS, SHOTS } from "./core";
 
 /** Layout rules the design audit settled (design/audit-web-2026-10-19.md). */

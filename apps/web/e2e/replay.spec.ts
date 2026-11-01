@@ -2,7 +2,7 @@
  * never existing, what an unrecorded image becomes offline, and the stand-in
  * for the made-up debrid key. */
 
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixture";
 import { keeps, madeUp, placeholder, standIn } from "./replay";
 
 test("the recorder keeps answers, never a server's failure or a 429", () => {

@@ -5,7 +5,7 @@
  * that repainted whole rows (phase 1b) cost 178 to 288 ms of paint per wheel run; without it,
  * about 20 (baseline 25 to 29 with phase 1b on a543d87d). HOME_PERF_BENCH=1 prints the rows for bench/design-v3/perf.jsonl. */
 
-import { type Browser, expect, type Page, test } from "@playwright/test";
+import { type Browser, expect, type Page, test } from "./fixture";
 
 type TraceEvent = { name: string; ph: string; dur?: number; pid: number; tid: number; args?: { name?: string } };
 

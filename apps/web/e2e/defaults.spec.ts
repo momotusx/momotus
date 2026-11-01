@@ -10,7 +10,7 @@
  * everything else is the real core. Shots go to SHOTS (e2e/core.ts) at
  * desktop, phone and TV sizes. */
 
-import { type Browser, expect, type Page, test } from "@playwright/test";
+import { type Browser, expect, type Page, test } from "./fixture";
 import type { ChildProcess } from "node:child_process";
 import type { DefaultAddons } from "../src/core/generated/DefaultAddons";
 import type { Prefs } from "../src/core/generated/Prefs";
