@@ -72,7 +72,8 @@ autoSubtitle: string | null,
 autoSecondSubtitle: string | null, 
 /**
  * The tag the core reads the audio in (the probe's default audio track,
- * else the release name's first language), set with the start subtitle;
+ * else the release name's first language, else the title's original
+ * language as TMDB names it), set with the start subtitle;
  * null when not known: the picker's "Spoken language" row names it.
  */
 spokenLanguage: string | null, 

@@ -111,7 +111,8 @@ pub struct PlaybackSnapshot {
     /// when the first line changes. Draw it only while a first line is on.
     pub auto_second_subtitle: Option<String>,
     /// The tag the core reads the audio in (the probe's default audio track,
-    /// else the release name's first language), set with the start subtitle;
+    /// else the release name's first language, else the title's original
+    /// language as TMDB names it), set with the start subtitle;
     /// null when not known: the picker's "Spoken language" row names it.
     pub spoken_language: Option<String>,
     /// Every track the start subtitle could turn on failed to read: each
@@ -5070,7 +5071,8 @@ struct StartWants {
     audio: Vec<String>,
     /// The profile's second line: `AUDIO` or a tag (`Prefs::second_subtitle`).
     second: Option<String>,
-    /// The audio's first language, the one `AUDIO` reads as.
+    /// The audio's first language, the one `AUDIO` reads as; the title's
+    /// original language when neither the file nor the release names one.
     spoken: Option<String>,
 }
 
@@ -5087,7 +5089,14 @@ impl StartWants {
                     crate::languages::language(&l).tag
                 }
             }),
-            spoken: audio.first().cloned(),
+            // An untagged track ("AAC, stereo") speaks the original language
+            // as TMDB names it (the Pixel walk, 2026-11-01).
+            // ponytail: only an answer already held (the title page's or
+            // `spawn_original`'s); none held at the settle stays unknown.
+            spoken: audio.first().cloned().or_else(|| {
+                core.original_language_held(&target.item_id, &target.kind)
+                    .flatten()
+            }),
             audio,
         }
     }

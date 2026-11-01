@@ -1330,7 +1330,7 @@ data class PlaybackSnapshot(
     val autoSubtitle: String? = null,
     /** The track (its `url`) the apps show as the second subtitle line (plans/dual-subtitles.md 3.2), until the viewer picks one in this play (`secondSubtitleChosen`): the profile's `secondSubtitle` language, the spoken one for `"audio"`, never the first line's language. A level, not a one-time start: it changes, or goes null, when the first line changes. Draw it only while a first line is on. */
     val autoSecondSubtitle: String? = null,
-    /** The tag the core reads the audio in (the probe's default audio track, else the release name's first language), set with the start subtitle; null when not known: the picker's "Spoken language" row names it. */
+    /** The tag the core reads the audio in (the probe's default audio track, else the release name's first language, else the title's original language as TMDB names it), set with the start subtitle; null when not known: the picker's "Spoken language" row names it. */
     val spokenLanguage: String? = null,
     /** Every track the start subtitle could turn on failed to read: each one that failed handed over to the next best (its language's next, then the next language, as `autoSubtitle` changes) and none was left. A neutral state with no source: the apps show `player.subtitlesFailed` from apps/shared/stream-choice-words.json. */
     val startSubtitleFailed: Boolean = false,

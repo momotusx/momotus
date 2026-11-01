@@ -3111,6 +3111,36 @@ async fn a_second_line_follows_the_profile() {
     assert_eq!(kid.prefs().second_subtitle, None);
 }
 
+/// The Pixel walk, 2026-11-01: an audio track with no language ("AAC,
+/// stereo") in a release that names none speaks the title's original
+/// language, so "Spoken language" still starts a second line.
+#[tokio::test]
+async fn an_untagged_audio_speaks_the_original_language() {
+    let (video, _) = counted_origin().await;
+    let core = Core::temporary("p").unwrap();
+    core.set_tmdb_host(mq_runtime::TmdbHost {
+        url: tmdb_naming("ja").await,
+        token: Some("test-token".into()),
+        local: true,
+    });
+    core.set_prefs(&serde_json::json!({ "subtitleLanguages": ["tur"], "secondSubtitle": "audio" }))
+        .unwrap();
+    let subs: Vec<_> = ["jpn", "tur", "ger"]
+        .iter()
+        .map(|lang| serde_json::json!({"id": lang, "lang": lang, "url": format!("https://subs.test/{lang}.srt")}))
+        .collect();
+    let stream = serde_json::json!({"streams": [{"url": format!("{video}/v.mkv"), "title": "Sintel.2010.1080p.WEB", "subtitles": subs}]})
+        .to_string();
+    let view = PlaybackView::open(&core, setup(&core, &stream), target());
+    let s = settled_list(&view).await;
+    assert_eq!(s.spoken_language.as_deref(), Some("ja"), "{s:?}");
+    let second = s
+        .subtitles
+        .iter()
+        .find(|t| Some(&t.url) == s.auto_second_subtitle.as_ref());
+    assert_eq!(second.map(|t| t.lang.as_str()), Some("jpn"));
+}
+
 /// Plans/dual-subtitles.md 3.2: the second line waits for its own
 /// language. A source that lists it after the first line settled still
 /// turns it on; it never shows before the first line is decided.
