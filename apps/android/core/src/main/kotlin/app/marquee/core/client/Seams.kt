@@ -151,17 +151,51 @@ object CoreLog {
     @Volatile
     var sink: (level: Char, message: String, error: Throwable?) -> Unit = { _, _, _ -> }
 
-    fun d(message: String) = sink('d', message, null)
+    /**
+     * The session is in Incognito (plans/batch-10-incognito.md): logcat is a file on the device, so its lines name no
+     * title, address or stream then. Debug lines (titles and ids by design) are dropped, the rest go through [scrub]
+     * and keep only an error's class, since a message or a stack trace can carry the stream's address.
+     */
+    @Volatile
+    var quiet: () -> Boolean = { false }
+
+    fun d(message: String) {
+        if (!quiet()) sink('d', message, null)
+    }
 
     fun w(
         message: String,
         error: Throwable? = null,
-    ) = sink('w', message, error)
+    ) = say('w', message, error)
 
     fun e(
         message: String,
         error: Throwable? = null,
-    ) = sink('e', message, error)
+    ) = say('e', message, error)
+
+    private fun say(
+        level: Char,
+        message: String,
+        error: Throwable?,
+    ) = if (quiet()) {
+        sink(level, scrub(message) + error?.let { " (${it.javaClass.simpleName})" }.orEmpty(), null)
+    } else {
+        sink(level, message, error)
+    }
+
+    /** A log line with its addresses, title ids and info hashes taken out, as the core says them: "a title". */
+    fun scrub(text: String): String =
+        text
+            .replace(ADDRESS, "<address>")
+            .replace(STREAM_PATH, "<address>")
+            .replace(TITLE_ID, "a title")
+            .replace(HASH, "a hash")
+
+    private val ADDRESS = Regex("[A-Za-z][A-Za-z0-9+.-]*://\\S+")
+    private val STREAM_PATH = Regex("/stream/\\S+")
+    private val TITLE_ID =
+        Regex("\\b(?:tt\\d{4,}|(?:kitsu|tmdb|tvdb|mal|anilist|imdb|trakt)[:_]\\S+)", RegexOption.IGNORE_CASE)
+    private val HASH = Regex("\\b[0-9a-fA-F]{32,64}\\b")
 
     /**
      * An error for a log line without the input that caused it: kotlinx.serialization quotes a

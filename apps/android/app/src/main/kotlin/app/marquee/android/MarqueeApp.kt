@@ -134,6 +134,8 @@ class MarqueeApp :
         }
         sync = SyncController(session, this).also { it.start() }
         profiles = ProfileGate(session, beforeSwitch = { trakt.quiet() }).also { it.start() }
+        // Incognito's log lines name no title, address or stream (plans/batch-10-incognito.md).
+        CoreLog.quiet = { ProfileCopy.inIncognito(profiles.snapshot) }
         trakt =
             TraktAccount(session.ops, SecretTraktRecords(session.secrets), session.scope) { push ->
                 val view = session.trakt(push)
