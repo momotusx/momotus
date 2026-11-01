@@ -13,8 +13,19 @@ struct ProfilesSnapshot: Decodable, Hashable, Sendable {
     let max: Int
     /// A sign-out that removes the library waits for its steps 2 and 3 (D13): the core holds it.
     var wipePending: WipePending? = nil
+    /// Incognito runs, entered from this profile (plans/batch-10-incognito.md 2.8): `active` is `incognito` meanwhile,
+    /// and `profiles` never lists it.
+    var incognitoHost: String? = nil
+    /// The profile whose PIN entering Incognito asks for; nil when none is asked.
+    var incognitoPin: String? = nil
+    /// An Incognito end this session has not read yet (the ended line); it clears on the next profile op or
+    /// `ackIncognitoEnded`.
+    var incognitoEnded: Bool? = nil
 
-    var current: ProfileInfo? { profiles.first { $0.id == active } }
+    var incognito: Bool { incognitoHost != nil }
+
+    /// The session's profile: Incognito while it runs (the app face, 2.8), else the active one listed.
+    var current: ProfileInfo? { incognito ? Incognito.profile : profiles.first { $0.id == active } }
 }
 
 /// The removal the core holds (`signOut {removeAfter}`) until its wipe answers.
@@ -62,6 +73,8 @@ enum ProfileRules {
     /// (drawn on `raised`); never chosen (empty) is the letter on ember.
     static func parseAvatar(_ stored: String) -> Avatar {
         guard !stored.isEmpty else { return Avatar(glyph: "letter", color: "ember") }
+        // Incognito's mark: the hat-glasses glyph on sea (plans/batch-10-incognito.md 5.2).
+        if stored == Incognito.id { return Avatar(glyph: Incognito.id, color: Incognito.id) }
         let parts = stored.split(separator: ":", omittingEmptySubsequences: false).map(String.init)
         let glyph = parts.first.flatMap { glyphs.contains($0) ? $0 : nil } ?? "letter"
         let color = parts.count > 1 && colors.contains(parts[1]) ? parts[1] : nil
@@ -91,6 +104,12 @@ enum ProfileRules {
         if profile.syncing { return .none }
         if profile.id == snapshot.active && !snapshot.locked { return .close }
         return profile.hasPin ? .pin : .switchTo
+    }
+
+    /// "This profile is locked": only while the session is locked and its profile has a PIN, on every path (a Leave
+    /// from a chooser entry locks a host that may have none; plans/batch-10-incognito.md 5.4).
+    static func lockLine(_ snapshot: ProfilesSnapshot) -> Bool {
+        snapshot.locked && snapshot.current?.hasPin == true
     }
 
     /// At a cold start: the picker when the session is locked or more than
@@ -123,6 +142,9 @@ enum ProfileRules {
         case "viewsOpen": "Something is still open. Try again."
         case "unknownProfile": "That profile was removed on another device."
         case "pinUnreadable": "This PIN was set by a newer version. Remove it, then set a new one."
+        // A full disk at the entry reads as a quiet failure: no space words on any screen (plans/no-space-warnings.md).
+        case "noSpace", "incognitoFailed": Incognito.couldNotOpen
+        case "incognito": Incognito.notAvailable
         default: fallback
         }
     }

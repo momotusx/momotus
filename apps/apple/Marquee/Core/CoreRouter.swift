@@ -22,6 +22,7 @@ final class CoreRouter: CoreListener {
         var highestRouted: UInt64 = 0
         var onDied: (@Sendable (String) -> Void)?
         var onProfileGone: (@Sendable (String) -> Void)?
+        var onIncognito: (@Sendable (String) -> Void)?
     }
 
     private struct Head: Decodable {
@@ -38,8 +39,10 @@ final class CoreRouter: CoreListener {
         /// `{"profile": "gone", "id": "<profile>"}`: a profile removed on another device.
         let profile: String?
         let profileId: String?
+        /// `{"incognito": "ended" | "endsSoon"}` (plans/batch-10-incognito.md 2.7).
+        let incognito: String?
 
-        private enum Key: String, CodingKey { case id, ok, error, code, kind, sub, core, reason, retryAfterMs, views, profile }
+        private enum Key: String, CodingKey { case id, ok, error, code, kind, sub, core, reason, retryAfterMs, views, profile, incognito }
 
         init(from decoder: any Decoder) throws {
             let c = try decoder.container(keyedBy: Key.self)
@@ -56,6 +59,7 @@ final class CoreRouter: CoreListener {
             retryAfterMs = try c.decodeIfPresent(Int64.self, forKey: .retryAfterMs)
             views = try c.decodeIfPresent([String].self, forKey: .views)
             profile = try c.decodeIfPresent(String.self, forKey: .profile)
+            incognito = try? c.decodeIfPresent(String.self, forKey: .incognito)
         }
     }
 
@@ -96,6 +100,11 @@ final class CoreRouter: CoreListener {
         state.withLock { $0.onProfileGone = handler }
     }
 
+    /// An Incognito push: `ended` or `endsSoon`.
+    func onIncognito(_ handler: @escaping @Sendable (String) -> Void) {
+        state.withLock { $0.onIncognito = handler }
+    }
+
     /// Answers every waiting request with `error` (the core never opened).
     func fail(_ error: CoreError) {
         let waiters = state.withLock { state in
@@ -119,6 +128,8 @@ final class CoreRouter: CoreListener {
             waiter?(head.ok == true ? .success(data) : .failure(CoreError(head.error ?? "request failed", code: head.code, retryAfterMs: head.retryAfterMs, views: head.views, kind: head.kind)))
         } else if head.profile == "gone", let profile = head.profileId {
             state.withLock { $0.onProfileGone }?(profile)
+        } else if let event = head.incognito {
+            state.withLock { $0.onIncognito }?(event)
         } else if head.core == "died" || head.core == "overflow" {
             // An overflow: the app fell behind the core's output budget and that
             // session ended (core backlog C20); a new core opens, as after a death.

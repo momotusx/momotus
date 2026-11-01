@@ -970,7 +970,8 @@ final class PlayerModel {
 
     /// A core track's cues (always UTF-8 WebVTT); nil when it could not be read.
     private static func cues(_ url: URL) async -> [WebVTT.Cue]? {
-        guard let (data, _) = try? await URLSession.shared.data(from: url) else { return nil }
+        // Incognito keeps no copy on disk (plans/batch-10-incognito.md 5.5).
+        guard let (data, _) = try? await Incognito.subtitleSession(incognito: Incognito.on).data(from: url) else { return nil }
         return WebVTT.parse(String(decoding: data, as: UTF8.self))
     }
 
@@ -1592,6 +1593,8 @@ final class PlayerModel {
     private func report(paused: Bool? = nil) {
         guard rendered, let sub, duration > 0, position > 0 else { return }
         lastReport = .now
+        // A video playing is use: the Mac never sends Incognito's idle under it.
+        if !(paused ?? self.paused) { Incognito.videoPlaying() }
         let at = stoppedPosition(pendingStart: pendingStart, position: position)
         core.commandNow(sub, ["type": "progress", "positionMs": Int(at * 1000), "durationMs": Int(duration * 1000), "paused": paused ?? self.paused])
     }

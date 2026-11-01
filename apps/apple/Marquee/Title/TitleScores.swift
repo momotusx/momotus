@@ -22,25 +22,31 @@ extension ScoreMark {
     }
 }
 
-/// A badge's link: only an https page on IMDb, TMDB or Trakt; anything else is no link.
-func outLink(_ url: String?) -> URL? {
+/// An outside page (a score's service): none in Incognito, where the score stays as plain text so no browser or
+/// service app opens with the title's page (plans/batch-10-incognito.md 5.5).
+func outsideLink(_ url: URL?, incognito: Bool = Incognito.on) -> URL? {
+    incognito ? nil : url
+}
+
+/// A badge's link: only an https page on IMDb, TMDB or Trakt; anything else is no link (none in Incognito).
+func outLink(_ url: String?, incognito: Bool = Incognito.on) -> URL? {
     let hosts: Set<String> = ["imdb.com", "www.imdb.com", "themoviedb.org", "www.themoviedb.org", "trakt.tv"]
     guard let url, let parsed = URL(string: url), parsed.scheme == "https", let host = parsed.host(), hosts.contains(host) else {
         return nil
     }
-    return parsed
+    return outsideLink(parsed, incognito: incognito)
 }
 
 /// The title page's ratings row (plans/title-page-ratings-genres-similar.md): IMDb as x/10 (the addon's score),
 /// TMDB and Trakt as percentages, in that order. A pending slot keeps its place; a none slot and a missing IMDb
 /// score have none.
-func scoreItems(imdb: String?, scores: TitleScores?, imdbUrl: String? = nil) -> [ScoreItem] {
+func scoreItems(imdb: String?, scores: TitleScores?, imdbUrl: String? = nil, incognito: Bool = Incognito.on) -> [ScoreItem] {
     var items: [ScoreItem] = []
-    if let imdb { items.append(ScoreItem(mark: .imdb, text: "\(imdb)/10", spoken: "IMDb \(imdb) out of 10", url: outLink(imdbUrl))) }
+    if let imdb { items.append(ScoreItem(mark: .imdb, text: "\(imdb)/10", spoken: "IMDb \(imdb) out of 10", url: outLink(imdbUrl, incognito: incognito))) }
     func slot(_ mark: ScoreMark, _ name: String, _ slot: Slot?) {
         switch slot {
         case .shown(let text, let url):
-            items.append(ScoreItem(mark: mark, text: text, spoken: "\(name) \(text.replacingOccurrences(of: "%", with: " percent"))", url: outLink(url)))
+            items.append(ScoreItem(mark: mark, text: text, spoken: "\(name) \(text.replacingOccurrences(of: "%", with: " percent"))", url: outLink(url, incognito: incognito)))
         case .pending: items.append(ScoreItem(mark: mark, text: nil, spoken: ""))
         default: break
         }

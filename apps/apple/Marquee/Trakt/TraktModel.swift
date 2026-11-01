@@ -81,9 +81,11 @@ final class TraktModel {
     var memoryOnly: Bool { session.map { memory[$0.profile] != nil } ?? false }
 
     /// `profile` runs, unlocked: its record first (`setTrakt` is refused while
-    /// the session is locked), then the view.
+    /// the session is locked), then the view. Never for Incognito: the core refuses Trakt there and the record
+    /// is no one's (plans/batch-10-incognito.md 5.6).
     func begin(profile: String) async {
         end()
+        guard profile != Incognito.id else { return }
         // A sign-out whose delete was refused: tried again, and its record is never sent.
         deleteFailed = signedOut.contains(profile) && !forget(profile)
         let session = Session(profile: profile)

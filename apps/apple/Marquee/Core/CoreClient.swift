@@ -41,6 +41,8 @@ final class CoreClient {
     @ObservationIgnored private var queued: [String] = []
     /// A profile removed on another device (the session coordinator listens).
     @ObservationIgnored var onProfileGone: ((String) -> Void)?
+    /// An Incognito push, `ended` or `endsSoon` (the session coordinator listens).
+    @ObservationIgnored var onIncognito: ((String) -> Void)?
     @ObservationIgnored private let directory: URL
 
     /// Opens the core in the app's data directory; tests pass a directory of their own.
@@ -79,6 +81,9 @@ final class CoreClient {
         }
         router.onProfileGone { [weak self] profile in
             Task { @MainActor in self?.onProfileGone?(profile) }
+        }
+        router.onIncognito { [weak self] event in
+            Task { @MainActor in self?.onIncognito?(event) }
         }
         (self.router, core, queued, failure) = (router, nil, [], nil)
         let dir = directory
@@ -319,11 +324,17 @@ final class CoreClient {
         dataDirectory.appending(path: "downloads", directoryHint: .isDirectory)
     }
 
+    /// Where Incognito's scopes live while they run (plans/batch-10-incognito.md 2.3): the core never removes it.
+    nonisolated static func incognitoDirectory(in dataDirectory: URL) -> URL {
+        dataDirectory.appending(path: "incognito", directoryHint: .isDirectory)
+    }
+
     /// Torrent data is a cache, and downloads are videos the device can fetch again: both are made
     /// before the core opens and left out of iCloud and Time Machine backups (engine review r3 P3-9,
-    /// plans/offline-downloads.md 4.2). tvOS keeps the whole data directory under Caches already.
+    /// plans/offline-downloads.md 4.2), and so is Incognito's folder, which no backup may keep. tvOS keeps the
+    /// whole data directory under Caches already.
     nonisolated static func excludeFromBackup(dataDirectory: URL) {
-        for var folder in [torrentDirectory(in: dataDirectory), downloadDirectory(in: dataDirectory)] {
+        for var folder in [torrentDirectory(in: dataDirectory), downloadDirectory(in: dataDirectory), incognitoDirectory(in: dataDirectory)] {
             try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
             var values = URLResourceValues()
             values.isExcludedFromBackup = true

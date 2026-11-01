@@ -38,11 +38,13 @@ struct ProfileAvatar: View {
                     Text(ProfileRules.initial(name))
                         .textFont(size * 0.46, weight: .bold)
                 } else {
-                    Image(avatar.glyph == "gamepad" ? "gamepad-2" : avatar.glyph)
+                    // Incognito's hat-glasses at 60 percent of the circle (plans/batch-10-incognito.md 5.2).
+                    let mark = avatar.glyph == Incognito.id
+                    Image(mark ? "hat-glasses" : avatar.glyph == "gamepad" ? "gamepad-2" : avatar.glyph)
                         .renderingMode(.template)
                         .resizable()
                         .scaledToFit()
-                        .frame(width: size * 0.5, height: size * 0.5)
+                        .frame(width: size * (mark ? 0.6 : 0.5), height: size * (mark ? 0.6 : 0.5))
                 }
             }
             .foregroundStyle(lit ? Theme.Palette.onPrimary : .white)
@@ -60,6 +62,7 @@ struct ProfileAvatar: View {
         case "plum": Theme.Palette.avatarPlum
         case "rose": Theme.Palette.avatarRose
         case "graphite": Theme.Palette.avatarGraphite
+        case Incognito.id: Theme.Palette.tileSea
         default: Theme.Palette.raised
         }
     }

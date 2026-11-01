@@ -62,7 +62,7 @@ struct MetaLine: View {
         #if os(tvOS)
         nil
         #else
-        item.text == nil ? nil : item.url
+        item.text == nil ? nil : outsideLink(item.url)
         #endif
     }
 
@@ -70,7 +70,7 @@ struct MetaLine: View {
         #if os(tvOS)
         nil
         #else
-        imdbLink
+        outsideLink(imdbLink)
         #endif
     }
 

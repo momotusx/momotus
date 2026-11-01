@@ -46,6 +46,9 @@ struct TrailerSignals: Equatable {
     /// iOS's own Auto-Play Video Previews.
     var systemAutoplay: Bool
     var hasTrailer: Bool
+    /// Incognito: every trailer's player keeps state on disk, and a looping preview would keep the Mac from idling
+    /// (plans/batch-10-incognito.md 5.5).
+    var incognito = false
 
     /// What holds a preview back, by name; empty when it may play.
     var blocks: [String] {
@@ -58,6 +61,7 @@ struct TrailerSignals: Equatable {
         if screenReader { out.append("screen reader") }
         if !systemAutoplay { out.append("system autoplay off") }
         if !hasTrailer { out.append("no trailer") }
+        if incognito { out.append("incognito") }
         return out
     }
 
@@ -92,7 +96,7 @@ final class TrailerNetwork {
 extension TrailerSignals {
     /// The device's side of decision 5, read when a trailer is due.
     @MainActor
-    static func now(visible: Bool, reducedMotion: Bool, hasTrailer: Bool) -> TrailerSignals {
+    static func now(visible: Bool, reducedMotion: Bool, hasTrailer: Bool, incognito: Bool = Incognito.on) -> TrailerSignals {
         let defaults = UserDefaults.standard
         let enabled = defaults.object(forKey: HeroTrailers.previewsKey) as? Bool ?? true
         #if os(iOS)
@@ -115,7 +119,8 @@ extension TrailerSignals {
             lowPower: ProcessInfo.processInfo.isLowPowerModeEnabled,
             screenReader: screenReader,
             systemAutoplay: systemAutoplay,
-            hasTrailer: hasTrailer)
+            hasTrailer: hasTrailer,
+            incognito: incognito)
     }
 }
 
@@ -128,7 +133,7 @@ final class TrailerPlayer: NSObject {
     static let shared = TrailerPlayer()
 
     /// The web view lives only while a trailer may play: made on the first `play`, released with `release()`.
-    private var webView: WKWebView?
+    private(set) var webView: WKWebView?
     var web: WKWebView {
         if let webView { return webView }
         let made = makeWeb()
@@ -177,8 +182,10 @@ final class TrailerPlayer: NSObject {
     /// `full`: the full-screen trailer, its time read every 250 ms, its sound turned on once it plays when `loud`
     /// (never in a walk).
     func play(_ id: String, into state: TrailerState, cap: Int = HeroTrailers.capSeconds, full: Bool = false,
-              loud: Bool = false, onEnd: @escaping (String) -> Void) {
+              loud: Bool = false, incognito: Bool = Incognito.on, onEnd: @escaping (String) -> Void) {
         stop()
+        // No trailer in Incognito, whoever asks (the hero, a title's header, the full screen).
+        guard !incognito else { return onEnd("incognito") }
         guard let id = HeroTrailers.checkedId(id) else { return onEnd("error") }
         generation += 1
         self.state = state

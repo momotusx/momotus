@@ -14,13 +14,23 @@ final class DecodedArt: @unchecked Sendable {
 actor ArtLoader {
     static let shared = ArtLoader()
 
-    private let session: URLSession = {
+    private static let kept: URLSession = {
         let config = URLSessionConfiguration.default
         config.timeoutIntervalForRequest = 12
         config.urlCache = cache
         config.requestCachePolicy = .returnCacheDataElseLoad
         return URLSession(configuration: config)
     }()
+
+    /// Incognito's: nothing on disk, so no cover it showed is left in the art cache (plans/batch-10-incognito.md 5.5).
+    private static let unkept: URLSession = {
+        let config = URLSessionConfiguration.ephemeral
+        config.timeoutIntervalForRequest = 12
+        return URLSession(configuration: config)
+    }()
+
+    /// The session art is fetched through: the disk cache, except in Incognito.
+    static func session(incognito: Bool) -> URLSession { incognito ? unkept : kept }
 
     /// Its own disk cache, sized for covers: RPDB's are about 120 KB with a 45-day max-age and may be kept for
     /// personal use (its terms), and a rated cover costs a request on its free tier, so a scroll back never asks
@@ -53,7 +63,7 @@ actor ArtLoader {
         let key = "\(url.absoluteString)#\(maxPixels)"
         if let hit = memory.object(forKey: key as NSString) { return hit }
         if let running = inFlight[key] { return await running.value }
-        let session = session
+        let session = Self.session(incognito: Incognito.on)
         let task = Task.detached(priority: .userInitiated) {
             await Self.fetch(url, maxPixels: maxPixels, session: session)
         }
