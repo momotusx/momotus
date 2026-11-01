@@ -48,32 +48,47 @@ export const historyDepth = () => (history.state as { _depth?: number } | null)?
 // and the browser's own entry holds only its step at "/": a browser keeps `history.state` and the address in its
 // session restore data on disk. Every read of `history.state` and every write through the history calls lands on the
 // memory entry of the browser's current step, so Back, Forward and the pages' own entries (an overlay, the palette)
-// work as they do outside Incognito.
+// work as they do outside Incognito. Each run of Incognito has its own number (`_run`): a step left from an earlier run
+// is a page from before this one.
 type MemoryEntry = { value: string; state: Record<string, unknown> };
-let memory: { entries: MemoryEntry[]; listeners: Set<(e: MemoryEntry) => void> } | null = null;
+let memory: { entries: MemoryEntry[]; listeners: Set<(e: MemoryEntry) => void>; run: number } | null = null;
+let runs = 0;
 const nativeState = Object.getOwnPropertyDescriptor(History.prototype, "state")?.get;
 const browserState = () => nativeState?.call(history) as Record<string, unknown> | null;
 const nativePush = history.pushState.bind(history);
-const step = () => {
-  const at = browserState()?._step;
-  return typeof at === "number" && memory && at < memory.entries.length ? at : 0;
+/** The browser's entry is one of this run's steps. */
+const ours = () => {
+  const s = browserState();
+  return !!memory && typeof s?._step === "number" && s._run === memory.run && s._step < memory.entries.length;
 };
+const step = () => (ours() ? (browserState()?._step as number) : 0);
 const entryNow = () => memory?.entries[step()];
 Object.defineProperty(history, "state", { configurable: true, get: () => entryNow()?.state ?? browserState() });
 
 /** The app's address: the router's in Incognito, the browser's otherwise. */
 export const currentPath = () => entryNow()?.value ?? location.pathname + location.search;
 const pathOf = (value: string) => value.split(/[?#]/)[0] ?? value;
+/** The app's path, without its query: in Incognito the browser's is always "/". */
+export const currentPathname = () => pathOf(currentPath());
 
 /** Starts the memory the Incognito router runs from, at Home, as the history its `MemoryRouter` takes. */
 export function startMemory() {
-  const m = { entries: [{ value: "/", state: { _depth: 0, _profile: shown(), _from: null } as Record<string, unknown> }], listeners: new Set<(e: MemoryEntry) => void>() };
+  const m = { entries: [{ value: "/", state: { _depth: 0, _profile: shown(), _from: null } as Record<string, unknown> }], listeners: new Set<(e: MemoryEntry) => void>(), run: ++runs };
   memory = m;
-  nativePush({ _step: 0 }, "", "/");
+  nativePush({ _step: 0, _run: m.run }, "", "/");
   setEntryOwner(stampOf());
+  // The router's memory history is typed as strings, but its `createRouter` takes `{value, state}` too (it wraps a
+  // string itself), which is how the entries' state reaches `useLocation().state` here.
   return {
     get: () => ({ ...m.entries[step()] }) as unknown as string,
-    set: ({ value, replace, state }: { value: string; replace?: boolean; state?: unknown }) => history[replace ? "replaceState" : "pushState"](state ?? {}, "", value),
+    set: ({ value, replace, state, scroll }: { value: string; replace?: boolean; state?: unknown; scroll?: boolean }) => {
+      history[replace ? "replaceState" : "pushState"](state ?? {}, "", value);
+      // As the browser's router does: to the hash, else to the top (the phone's page scrolls the document).
+      const hash = value.split("#")[1];
+      const target = hash ? document.getElementById(decodeURIComponent(hash)) : null;
+      if (target) target.scrollIntoView();
+      else if (scroll) window.scrollTo(0, 0);
+    },
     back: () => history.back(),
     forward: () => history.forward(),
     go: (n: number) => history.go(n),
@@ -102,7 +117,7 @@ function writeMemory(push: boolean, state: Record<string, unknown>, url: string 
   }
   m.entries.length = at + 1;
   m.entries.push({ value, state: { ...state, _depth: at + 1 } });
-  nativePush({ _step: at + 1 }, "", "/");
+  nativePush({ _step: at + 1, _run: m.run }, "", "/");
 }
 
 // Kept for the tab, so a reload does not reopen the old profile's entries.
@@ -168,9 +183,9 @@ export function entryFrom(): string | null {
 window.addEventListener("popstate", () => {
   if (memory) {
     // A page from before Incognito (the browser's Back past its first entry): Incognito starts again at its first one.
-    if (typeof browserState()?._step !== "number") {
+    if (!ours()) {
       memory.entries.length = 1;
-      nativePush({ _step: 0 }, "", "/");
+      nativePush({ _step: 0, _run: memory.run }, "", "/");
     }
     setEntryOwner(stampOf());
     const now = entryNow();

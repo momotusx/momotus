@@ -78,7 +78,10 @@ export function IncognitoIntro() {
   const { leave, problem, busy } = useLeave();
   const lines = () => introLines(form(), (debridAccounts()?.accounts.length ?? 0) > 0);
   let cont!: HTMLButtonElement;
-  onMount(() => autoFocusSoon(() => cont));
+  let heading!: HTMLHeadingElement;
+  // TV starts on Continue. Elsewhere the heading takes the focus at once, whatever the last input was, so a screen
+  // reader reads where it is before any button (a heading shows no ring).
+  onMount(() => (form() === "tv" ? autoFocusSoon(() => cont) : heading.focus({ preventScroll: true })));
   // Back on TV leaves.
   if (form() === "tv") onCleanup(pushBack(leave));
   const group = (title: string, items: string[]) => (
@@ -92,14 +95,16 @@ export function IncognitoIntro() {
   return (
     <main class="incog-intro page" data-vscroll>
       <IncognitoMark size="intro" />
-      <h1 tabindex="-1">You're Incognito</h1>
+      <h1 tabindex="-1" ref={heading}>
+        You're Incognito
+      </h1>
       <div class="incog-groups">
         {group("Not kept", lines().notKept)}
         {group("Still kept or seen", lines().seen)}
       </div>
       <p class="incog-ends">{lines().ends}</p>
       <div class="acts" data-fgroup="incognito-intro">
-        <button class="btn primary" ref={cont} data-f="incognito:continue" data-autofocus onClick={closeIntro}>
+        <button class="btn primary" ref={cont} data-f="incognito:continue" data-autofocus={form() === "tv" ? "" : undefined} onClick={closeIntro}>
           Continue
         </button>
         <button class="btn" data-f="incognito:leave" aria-disabled={busy()} onClick={leave}>
@@ -120,7 +125,9 @@ export function IncognitoWarning() {
     <Show when={endsSoon()}>
       <div class="incog-notice" role="alert">
         <p>{incognitoWords.endsSoon}</p>
-        <button class="btn" data-f="incognito:stay" onClick={stayIncognito}>
+        {/* No focus key (data-f): the focus system would hand a lost focus to a later warning's button, and this button
+            never takes the focus by itself. The warning is the desktop's, where Tab reaches it. */}
+        <button class="btn incog-stay" onClick={stayIncognito}>
           {incognitoWords.stay}
         </button>
       </div>

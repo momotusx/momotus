@@ -55,11 +55,19 @@ export function stayIncognito() {
   arm();
 }
 
-const notice = () => document.querySelector<HTMLElement>('[data-f="incognito:stay"]');
+const notice = () => document.querySelector<HTMLElement>(".incog-stay");
+// A pointer resting still sends no input: a move must change its place (a page moving under it can send moves).
+let at = "";
 const input = (e: Event) => {
   if (!watching()) return;
-  // The warning's button is reached by Tab; moving there is not yet a return.
-  if (e.type === "focusin" && e.target === notice()) return;
+  // The warning's own button acts by its click; reaching it by Tab, or Tab on from it, is not yet a return.
+  if (e.target instanceof Node && notice()?.contains(e.target)) return;
+  if (e instanceof FocusEvent && e.relatedTarget && e.relatedTarget === notice()) return;
+  if (e instanceof PointerEvent && e.type === "pointermove") {
+    const here = `${e.clientX},${e.clientY}`;
+    if (here === at) return;
+    at = here;
+  }
   stayIncognito();
 };
 for (const type of ["pointermove", "pointerdown", "touchstart", "wheel", "focusin"]) window.addEventListener(type, input, { capture: true, passive: true });
@@ -70,7 +78,10 @@ window.addEventListener(
     // While the warning shows, Tab goes to its button first (it never takes the focus by itself), as the next stop
     // after the current focus.
     const stay = notice();
-    if (endsSoon() && stay && e.key === "Tab" && !e.shiftKey && document.activeElement !== stay) {
+    // On the button: its keys are the button's (Enter and Space press it, Tab moves on and the warning stays).
+    if (stay && document.activeElement === stay) return;
+    if (endsSoon() && stay && e.key === "Tab" && !e.shiftKey) {
+      // Once the button is used and goes, the focus system puts the focus back where the viewer had it.
       e.preventDefault();
       stay.focus();
       return;

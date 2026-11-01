@@ -77,7 +77,7 @@ export function ProfileMenu(props: { lit: boolean; tab?: boolean; onSettings: ()
   const incognito = () => me()?.id === INCOGNITO;
   // Incognito is never a way out of a kids profile (plans/batch-10-incognito.md 5.1).
   const offersIncognito = () => profiles()?.kids !== true;
-  const { leave } = useLeave();
+  const { leave, problem: leaveProblem } = useLeave();
   const close = (refocus = true) => {
     setOpen(false);
     // The viewer closed it (a choice, Back): the focus they get back is theirs, so a place shown from the menu leaves it
@@ -144,6 +144,14 @@ export function ProfileMenu(props: { lit: boolean; tab?: boolean; onSettings: ()
               <span>{incognito() ? incognitoWords.name : "Profile"}</span>
             </Show>
           </button>
+          {/* A Leave that failed says so under the bar's button (the menu is closed by then). */}
+          <Show when={leaveProblem()}>
+            {(e) => (
+              <p class="pmenu-said st bad" role="status">
+                {e()}
+              </p>
+            )}
+          </Show>
           <Show when={open()}>
             <div class="pmenu-list" role="menu" aria-label="Profiles" ref={list} onKeyDown={keys}>
               <For each={profiles()?.profiles ?? []}>

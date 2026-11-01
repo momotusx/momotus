@@ -1,6 +1,8 @@
 /* Incognito (plans/batch-10-incognito.md 5.2): the mark is a sea-blue circle with the white glyph at 60 percent. */
 .incog-mark { background-color: var(--tile-sea); color: #fff; }
-.avatar.incog-mark > svg, .nav.pavatar .avatar.incog-mark > svg, .tabs .ptab .avatar.incog-mark > svg { width: 60%; height: 60%; stroke-width: 2; }
+/* At least 2 px of stroke at every size: the bar's small circle would thin a stroke drawn in the glyph's own units. */
+.avatar.incog-mark > svg, .nav.pavatar .avatar.incog-mark > svg, .tabs .ptab .avatar.incog-mark > svg { width: 60%; height: 60%; }
+.avatar.incog-mark > svg * { stroke-width: 2px; vector-effect: non-scaling-stroke; }
 .avatar-intro { width: 128px; height: 128px; }
 [data-form="phone"] .avatar-intro { width: 96px; height: 96px; }
 
@@ -27,10 +29,13 @@
 .incog-notice .btn { flex: none; height: 56px; }
 [data-form="phone"] .incog-notice { position: fixed; bottom: calc(96px + env(safe-area-inset-bottom)); max-width: calc(100% - 32px); width: max-content;
   gap: 12px; padding: 10px 10px 10px 14px; border-radius: 14px; font-size: 14px; }
-[data-form="phone"] .incog-notice .btn { height: 40px; }
+[data-form="phone"] .incog-notice .btn { height: 44px; }
 
 /* The Settings header in Incognito: the mark, its name and line, and Leave. */
 .set-incog { display: flex; align-items: center; flex-wrap: wrap; gap: 40px; }
 .set-incog .set-name small { display: block; }
 [data-form="phone"] .set-incog { gap: 14px; }
 .incog-tile { color: #fff; }
+.pmenu-said { position: absolute; top: calc(100% + 12px); right: 0; z-index: 30; padding: 10px 14px; border-radius: var(--radius-m); background: var(--raised);
+  font: 500 var(--type-caption) / 1.3 var(--font-text); white-space: nowrap; }
+[data-form="phone"] .pmenu-said { top: auto; bottom: calc(100% + 14px); font-size: 14px; }

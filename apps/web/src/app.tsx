@@ -21,11 +21,11 @@ import "./core/wipe";
 import { gateOpen, incognito, intro, profiles, profilesFailed } from "./core/profiles";
 import { EndedNotice, IncognitoIntro, IncognitoWarning } from "./components/incognito";
 import { setTitle } from "./incognito";
-import { autoFocusSoon, focusRail, installFocus, move, railHasFocus, restoreSoon, viewerMoving } from "./focus/dom";
+import { autoFocusSoon, focusRail, installFocus, readPathFrom, move, railHasFocus, restoreSoon, viewerMoving } from "./focus/dom";
 import { type Form, form } from "./form";
 import { parentOf } from "./lib/parent";
 import { isSettingsPage } from "./lib/settings-sections";
-import { backThenReplace, endMemory, entryOwner, historyBase, historyDepth, leaveGuarded, markBack, resetHistoryBase, stampEntriesWith, startMemory, takeAfterBack, takeBack } from "./history";
+import { backThenReplace, currentPathname, endMemory, entryOwner, historyBase, historyDepth, leaveGuarded, markBack, resetHistoryBase, stampEntriesWith, startMemory, takeAfterBack, takeBack } from "./history";
 import Addons from "./screens/addons";
 import FindAddons from "./screens/find-addons";
 import Plugins from "./screens/plugins";
@@ -87,7 +87,7 @@ const TAB_SETTLE_MS = 250;
 /** Search opens as a palette over the screen you are on; its route stays for
  * deep links (and is where the palette lives when you are already there). */
 const paletteClick = (path: string) => (e: MouseEvent) => {
-  if (path !== "/search" || window.location.pathname === "/search") return;
+  if (path !== "/search" || currentPathname() === "/search") return;
   e.preventDefault();
   openSearch();
 };
@@ -236,6 +236,7 @@ function Shell(props: RouteSectionProps) {
   if (!focusInstalled) {
     focusInstalled = true;
     installFocus(() => shellBack());
+    readPathFrom(currentPathname);
   }
   // A route belongs to the profile its history entry was opened under
   // (`entryOwner`, written with the entry itself). An entry of another profile
@@ -263,7 +264,7 @@ function Shell(props: RouteSectionProps) {
       // A fresh tab's first entry, or one written before the core said who runs.
       if (!owner) return void history.replaceState(history.state, "");
       if (!isOpen || owner === active) return;
-      if (window.location.pathname === "/") {
+      if (currentPathname() === "/") {
         resetHistoryBase();
         history.replaceState(history.state, "");
       } else {
@@ -360,7 +361,7 @@ function Shell(props: RouteSectionProps) {
                 <div class="backbar" classList={{ bar: place() === "bar", under: scrolled() || docScrolled() }} inert={searchOpen() || undefined}>
                   <a
                     class="back"
-                    href={parentOf(location.pathname, form()) ?? "/"}
+                    href={incognito() ? "/" : (parentOf(location.pathname, form()) ?? "/")}
                     data-f="back"
                     on:click={(e) => {
                       e.preventDefault();

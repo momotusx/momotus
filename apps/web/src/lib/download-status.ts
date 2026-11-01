@@ -19,7 +19,8 @@ export async function reported(op: Promise<unknown>, words: string): Promise<voi
     await op;
     setProblem(null);
   } catch (e) {
-    console.warn("download op failed", e);
+    // Only the code: the core's text can name the title (Incognito downloads go through here too).
+    console.warn("download op failed", (e as { code?: unknown } | null)?.code ?? "");
     setProblem(words);
     clearTimeout(clear);
     clear = setTimeout(() => setProblem(null), 6000);

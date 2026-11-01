@@ -13,12 +13,12 @@ import { BridgeError } from "../core/bridge";
 import { op, reasonOf } from "../core/client";
 import type { ProfileInfo } from "../core/generated/ProfileInfo";
 import type { ProfilesSnapshot } from "../core/generated/ProfilesSnapshot";
-import { markChosen, profiles, switchProfile, takePick, unlockProfile } from "../core/profiles";
+import { ackIncognitoEnded, markChosen, profiles, switchProfile, takePick, unlockProfile } from "../core/profiles";
 import { autoFocusSoon, goBack } from "../focus/dom";
 import { holdModal } from "../focus/modal";
 import { markBack, setLeaveGuarded, takeAfterBack, takeBack } from "../history";
 import { type AvatarColor, formatAvatar, GLYPHS, type Glyph, nextAvatar, parseAvatar } from "../lib/avatar";
-import { INCOGNITO, inIncognito, profileProblem, waitText } from "../lib/profiles";
+import { current, INCOGNITO, inIncognito, profileProblem, waitText } from "../lib/profiles";
 import "./browse.css";
 import "./settings.css";
 import "./profiles.css";
@@ -131,10 +131,12 @@ export function Keypad(props: { title: string; reason?: string; note?: string; o
   onCleanup(() => window.removeEventListener("keydown", onKey, { capture: true }));
   const keys = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "", "0", "del"];
   return (
-    <div class="keypad" ref={root} role="dialog" aria-modal="true" aria-label={props.title}>
+    <div class="keypad" ref={root} role="dialog" aria-modal="true" aria-label={props.title} aria-describedby={props.reason ? "keypad-reason" : undefined}>
       <h2>{props.title}</h2>
       <Show when={props.reason}>
-        <p class="note small">{props.reason}</p>
+        <p class="note small" id="keypad-reason">
+          {props.reason}
+        </p>
       </Show>
       <div class="pin-dots" classList={{ shake: shake() }} role="img" aria-label={`${digits().length} of 4 digits entered`}>
         <For each={[0, 1, 2, 3]}>{(i) => <i classList={{ on: digits().length > i }} />}</For>
@@ -222,11 +224,11 @@ export function Picker(props: { mode: "start" | "locked" | "switch" }) {
   // The keypad asks the PIN that opens Incognito (`incognitoPin`), not the profile's own.
   const [forIncognito, setForIncognito] = createSignal(false);
   const [opening, setOpening] = createSignal(false);
-  const owner = () => s()?.profiles.find((p) => p.id === s()?.active)?.isOwner === true;
+  const owner = () => current(s())?.isOwner === true;
   const locked = () => s()?.locked === true;
   // "This profile is locked" only where its PIN is the way in: after an Incognito chooser entry, a host with no PIN of
   // its own is locked with nothing to enter (plans/batch-10-incognito.md 5.4).
-  const lockLine = () => locked() && s()?.profiles.find((p) => p.id === s()?.active)?.hasPin === true;
+  const lockLine = () => locked() && current(s())?.hasPin === true;
   const incognito = () => inIncognito(s());
   // Never a way out of a kids profile (5.1).
   const offersIncognito = () => !s()?.kids || locked();
@@ -285,8 +287,10 @@ export function Picker(props: { mode: "start" | "locked" | "switch" }) {
   const pick = async (p: ProfileInfo) => {
     setSaid("");
     setForIncognito(false);
-    // The current profile, unlocked, needs nothing: the start picker opens it, the switch picker closes.
+    // The current profile, unlocked, needs nothing: the start picker opens it, the switch picker closes. An Incognito
+    // end shown here was read by choosing (a switch or an unlock clears it in the core; this choice sends no op).
     if (p.id === s()?.active && !locked()) {
+      if (s()?.incognitoEnded) void ackIncognitoEnded().catch(() => undefined);
       if (props.mode === "switch") goBack();
       else markChosen();
       return;
@@ -390,7 +394,7 @@ export default function ProfilesScreen() {
 /** Manage profiles: every profile, each opening its edit page (the owner only). */
 export function ManageProfiles() {
   const s = () => profiles();
-  const owner = () => s()?.profiles.find((p) => p.id === s()?.active)?.isOwner === true;
+  const owner = () => current(s())?.isOwner === true;
   return (
     <main class="browse page settings-page column profiles-manage" data-vscroll>
       <h1>Manage profiles</h1>
@@ -438,7 +442,7 @@ export function EditProfile() {
   const isNew = () => !id();
   const p = () => (id() ? s()?.profiles.find((x) => x.id === id()) : undefined);
   const mine = () => !!p() && p()?.id === s()?.active;
-  const owner = () => s()?.profiles.find((x) => x.id === s()?.active)?.isOwner === true;
+  const owner = () => current(s())?.isOwner === true;
   const [name, setName] = createSignal("");
   const [glyph, setGlyph] = createSignal<Glyph>("letter");
   const [color, setColor] = createSignal<AvatarColor>("ember");

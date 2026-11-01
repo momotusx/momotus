@@ -14,7 +14,12 @@ const screens = new Map<string, string>(); // path -> last key
 const spots = new Map<string, { group: string; index: number }>(); // path -> that key's group and place in it
 const content = new Map<string, string>(); // path -> last key outside the rail
 
-const path = () => location.pathname;
+// The app's path, not the browser's: in Incognito the address stays "/" (history.ts gives the shell its own reader).
+let path = () => location.pathname;
+/** Where focus memory reads the screen's path from. */
+export const readPathFrom = (read: () => string) => {
+  path = read;
+};
 
 // The last kind of input: focus may move by itself (autofocus, restore, a
 // Skip button taking focus) only on a remote or after keys. On pointer and

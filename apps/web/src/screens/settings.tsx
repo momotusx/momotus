@@ -338,9 +338,9 @@ export default function SettingsScreen() {
   // The phone's section page, or the section beside the menu.
   const open = () => (form() === "phone" ? sectionId(params.section) : undefined);
   const chosen = () => sectionId(params.section) ?? "sources";
-  // Incognito keeps only what its own copy holds: no account, no Downloads settings, nothing of this device
-  // (plans/batch-10-incognito.md 6).
-  const hidden = (id: string) => incognito() && (id === "account" || id === "downloads" || id === "device");
+  // Incognito hides the account and Downloads' settings (plans/batch-10-incognito.md 6); the profile's own section is
+  // its header, and Sources leaves out Trakt and Import.
+  const hidden = (id: string) => incognito() && (id === "account" || id === "downloads");
   const listed = (s: { id: string }) => (s.id !== "downloads" || downloadsHere()) && !hidden(s.id);
   const shows = (id: string) => !hidden(id) && (form() !== "phone" ? id === chosen() : open() ? id === open() : id === "profiles");
   const leaving = useLeave();
