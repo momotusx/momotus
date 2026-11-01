@@ -2,8 +2,9 @@
 //! optional static directory for the web UI build. Binds loopback only.
 
 use axum::Router;
-use axum::extract::State;
 use axum::extract::ws::{CloseFrame, Message, WebSocket, WebSocketUpgrade, close_code};
+use axum::extract::{Request, State};
+use axum::handler::HandlerWithoutStateExt;
 use axum::http::{HeaderMap, StatusCode, header};
 use axum::response::IntoResponse;
 use axum::routing::get;
@@ -14,6 +15,7 @@ use std::collections::HashSet;
 use std::net::{IpAddr, SocketAddr};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
+use tower_http::services::{ServeDir, ServeFile};
 
 #[tokio::main]
 async fn main() {
@@ -42,7 +44,7 @@ async fn main() {
     }
     let mut app = router(core, origins.clone());
     if let Ok(dir) = std::env::var("MQ_STATIC") {
-        app = app.fallback_service(tower_http::services::ServeDir::new(dir));
+        app = with_static(app, PathBuf::from(dir));
     }
     let addr = SocketAddr::from(([127, 0, 0, 1], port));
     let listener = tokio::net::TcpListener::bind(addr).await.expect("bind");
@@ -65,6 +67,27 @@ fn router(core: Core, origins: Vec<String>) -> Router {
         origins,
         refused: Arc::default(),
     })
+}
+
+/// The web build at `dir`. A path that names no file and has no extension
+/// is a page of the app (a reload, a bookmark of /title/...): it gets
+/// index.html and the app routes it. A missing asset stays a 404.
+fn with_static(app: Router, dir: PathBuf) -> Router {
+    let index = ServeFile::new(dir.join("index.html"));
+    let page = move |request: Request| {
+        let mut index = index.clone();
+        async move {
+            let name = request.uri().path().rsplit('/').next().unwrap_or_default();
+            if name.contains('.') {
+                return StatusCode::NOT_FOUND.into_response();
+            }
+            match index.try_call(request).await {
+                Ok(response) => response.into_response(),
+                Err(_) => StatusCode::NOT_FOUND.into_response(),
+            }
+        }
+    };
+    app.fallback_service(ServeDir::new(dir).fallback(page.into_service()))
 }
 
 /// Origins already said refused: each is said once, so a page that keeps
@@ -210,7 +233,7 @@ async fn serve_socket(socket: WebSocket, core: Core, private: bool) {
 
 #[cfg(test)]
 mod tests {
-    use super::{allowed_origins, origin_allowed, router};
+    use super::{allowed_origins, origin_allowed, router, with_static};
     use futures_util::{SinkExt, StreamExt};
     use mq_runtime::Core;
     use tokio_tungstenite::tungstenite::{self, Message, client::IntoClientRequest};
@@ -369,6 +392,38 @@ mod tests {
             );
         }
         server.abort();
+    }
+
+    /// A reload or a link to an inner page gets the app; a missing asset is
+    /// still a 404, so a stale bundle name never loads the page as script.
+    #[tokio::test]
+    async fn an_app_page_gets_index_html_and_a_missing_asset_404() {
+        let dir = std::env::temp_dir().join(format!("mq-static-{}", std::process::id()));
+        std::fs::create_dir_all(dir.join("assets")).unwrap();
+        std::fs::write(dir.join("index.html"), "<!doctype html>app").unwrap();
+        std::fs::write(dir.join("assets/a.js"), "js").unwrap();
+        let core = Core::temporary("default").unwrap();
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let app = with_static(router(core, dev(port)), dir.clone());
+        let server = tokio::spawn(async move { axum::serve(listener, app).await });
+        for (path, status, body) in [
+            ("/", 200, "<!doctype html>app"),
+            ("/title/movie/tt0056923", 200, "<!doctype html>app"),
+            ("/welcome?step=2", 200, "<!doctype html>app"),
+            ("/settings/", 200, "<!doctype html>app"),
+            ("/assets/a.js", 200, "js"),
+            ("/assets/missing.js", 404, ""),
+            ("/favicon.ico", 404, ""),
+        ] {
+            let response = reqwest::get(format!("http://127.0.0.1:{port}{path}"))
+                .await
+                .unwrap();
+            assert_eq!(response.status(), status, "{path}");
+            assert_eq!(response.text().await.unwrap(), body, "{path}");
+        }
+        server.abort();
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]
