@@ -169,6 +169,20 @@ class PhoneBarFitTest {
     }
 
     @Test
+    fun `in Incognito the profile tab is still the fifth, said as Profile Incognito`() {
+        // plans/batch-10-incognito.md 5.2: spoken "Profile: Incognito", its word under the mark.
+        val tab = PhoneProfileTab("Profile: Incognito", {}, "Incognito") { Box(Modifier.size(26.dp)) }
+        compose.setContent {
+            MarqueeTheme(
+                Form.Phone,
+            ) { PhoneShell(selected = Route.Home, showTabs = true, onSelect = {}, profile = tab) {} }
+        }
+        compose.waitForIdle()
+        compose.onNodeWithContentDescription("Profile: Incognito").assertExists()
+        tabs.assertCountEquals(5)
+    }
+
+    @Test
     fun `the profile is the last tab, a button that opens its menu while lit on Settings`() {
         var opened = 0
         val tab = PhoneProfileTab("Profile: Main", { opened++ }) { Box(Modifier.size(26.dp)) }

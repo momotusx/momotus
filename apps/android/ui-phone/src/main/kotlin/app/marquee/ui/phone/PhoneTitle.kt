@@ -62,6 +62,7 @@ import app.marquee.core.Format
 import app.marquee.core.GroupAct
 import app.marquee.core.Mark
 import app.marquee.core.PlayTo
+import app.marquee.core.ProfileCopy
 import app.marquee.core.TitleCopy
 import app.marquee.core.VersionLine
 import app.marquee.core.VersionsCopy
@@ -83,6 +84,7 @@ import app.marquee.design.HeroTrailers
 import app.marquee.design.Icons
 import app.marquee.design.KeepInView
 import app.marquee.design.LightStatusBarIcons
+import app.marquee.design.LocalIncognito
 import app.marquee.design.Logo
 import app.marquee.design.Marks
 import app.marquee.design.Marquee
@@ -193,6 +195,7 @@ fun PhoneTitle(
             val hasArt = details.background != null || details.poster != null
             var menuFor by remember { mutableStateOf<Episode?>(null) }
             var downloadMenu by remember { mutableStateOf<DownloadAsk?>(null) }
+            val incognito = LocalIncognito.current
             val list = rememberLazyListState()
             val bar = WindowInsets.statusBars.getTop(LocalDensity.current)
             // The page reaches the status bar once the artwork has scrolled out from under it (without
@@ -223,6 +226,7 @@ fun PhoneTitle(
                             ) { title.setWatched(episode.videoId, !episode.watched) },
                         ) + episodeDownloadItems(episode, downloads),
                     onDismiss = { menuFor = null },
+                    detail = ProfileCopy.INCOGNITO_DOWNLOAD_NOTE.takeIf { incognito && downloads != null },
                 )
             }
             // The cover's sources in order: the large cover, then the addon's poster (the same 2:3); each that does not
@@ -327,12 +331,14 @@ fun PhoneTitle(
                             onPlay,
                             onVersions,
                             onGenre,
-                            onTrailer = {
-                                TitleTrailers.spent += details.id
-                                // Stopped here, before the full screen starts on the same player.
-                                if (headerTrailer.loading) trailers.stop()
-                                fullTrailer = true
-                            },
+                            // No Trailer in Incognito (plans/batch-10-incognito.md 5.5): its player keeps YouTube's state.
+                            onTrailer =
+                                {
+                                    TitleTrailers.spent += details.id
+                                    // Stopped here, before the full screen starts on the same player.
+                                    if (headerTrailer.loading) trailers.stop()
+                                    fullTrailer = true
+                                }.takeUnless { trailers.off },
                             downloads = downloads,
                             onUncontinue = onUncontinue,
                             onStartOver = onStartOver,
@@ -381,10 +387,18 @@ fun PhoneTitle(
                                 downloads?.takeIf { TitleCopy.airs(episode) == null }?.let { actions ->
                                     {
                                         val badge = episode.download
-                                        if (DownloadCopy.control(badge).items.isEmpty()) {
+                                        val none = DownloadCopy.control(badge).items.isEmpty()
+                                        // In Incognito a start goes by the menu, which says the file stays.
+                                        if (none && !incognito) {
                                             actions.item(DownloadItem.Start, episode.videoId, null)
                                         } else {
-                                            downloadMenu = DownloadAsk(episodeName(episode), episode.videoId, badge)
+                                            downloadMenu =
+                                                DownloadAsk(
+                                                    episodeName(episode),
+                                                    episode.videoId,
+                                                    badge,
+                                                    listOf(DownloadItem.Start).takeIf { none },
+                                                )
                                         }
                                     }
                                 },
@@ -781,7 +795,7 @@ private fun Info(
     onPlay: (String?, String) -> Unit,
     onVersions: (String) -> Unit,
     onGenre: (String, String) -> Unit,
-    onTrailer: () -> Unit,
+    onTrailer: (() -> Unit)?,
     downloads: TitleDownloads?,
     onUncontinue: (() -> Unit)?,
     onStartOver: ((String?, String) -> Unit)?,
@@ -792,6 +806,7 @@ private fun Info(
     val colors = Marquee.colors
     val target = header.playTarget
     val primary = TitleCopy.primary(target, versions, details.runtime)
+    val incognito = LocalIncognito.current
     Column(
         Modifier.padding(horizontal = Marquee.safe.side),
         verticalArrangement = Arrangement.spacedBy(Marquee.space.s),
@@ -803,7 +818,8 @@ private fun Info(
         TitleRatingLine(
             TitleCopy.meta(details, TitleCopy.seasonCount(header.seasons), genres = false),
             scores(details),
-            onOpen = { url -> openLink(context, url) },
+            // In Incognito the scores stay plain text: no outside page opens with the title (5.5).
+            onOpen = if (incognito) null else ({ url -> openLink(context, url) }),
         )
         // Under the meta line the primary across the page, then the other actions as equal circles in one
         // row, their words on up to two lines (Watched one of those small circles, never a big button: the
@@ -867,6 +883,7 @@ private fun Info(
                         }
                     },
                 onDismiss = { seriesMenu = false },
+                detail = ProfileCopy.INCOGNITO_DOWNLOAD_NOTE.takeIf { incognito },
             )
         }
         deleteSeason?.takeIf { downloads != null }?.let { kept ->
@@ -886,7 +903,7 @@ private fun Info(
         val labels =
             listOfNotNull(
                 "Versions".takeIf { target != null && !header.offline },
-                "Trailer".takeIf { details.trailers.isNotEmpty() && !header.offline },
+                "Trailer".takeIf { details.trailers.isNotEmpty() && !header.offline && onTrailer != null },
                 (if (header.inLibrary) "In Library" else "Add to Library").takeIf { header.librarySettable },
                 "Watched".takeIf { details.kind == "movie" },
                 "Download".takeIf { downloads != null },
@@ -906,7 +923,7 @@ private fun Info(
                         showLabel = words,
                     )
                 }
-                if (details.trailers.isNotEmpty() && !header.offline) {
+                if (details.trailers.isNotEmpty() && !header.offline && onTrailer != null) {
                     RoundButton(
                         Icons.Film,
                         "Trailer",
@@ -947,10 +964,18 @@ private fun Info(
                         DownloadButton(
                             control,
                             onClick = {
-                                if (control.items.isEmpty()) {
+                                // In Incognito a start goes by the menu, which says the file stays.
+                                if (control.items.isEmpty() && !incognito) {
                                     downloads.item(DownloadItem.Start, videoId, null)
                                 } else {
-                                    onDownloadMenu(DownloadAsk(details.name, videoId, badge))
+                                    onDownloadMenu(
+                                        DownloadAsk(
+                                            details.name,
+                                            videoId,
+                                            badge,
+                                            START_ITEMS.takeIf { control.items.isEmpty() },
+                                        ),
+                                    )
                                 }
                             },
                             modifier = Modifier.weight(1f),

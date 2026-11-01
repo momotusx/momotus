@@ -2,12 +2,16 @@ package app.marquee.ui.phone
 
 import android.os.Handler
 import android.os.Looper
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.isDialog
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
@@ -15,6 +19,7 @@ import androidx.compose.ui.test.performClick
 import app.marquee.core.DownloadCopy
 import app.marquee.core.DownloadItem
 import app.marquee.core.GroupAct
+import app.marquee.core.ProfileCopy
 import app.marquee.core.client.CoreClient
 import app.marquee.core.client.CoreJson
 import app.marquee.core.model.DownloadBadge
@@ -28,6 +33,7 @@ import app.marquee.core.model.TitleSnapshot
 import app.marquee.core.model.TitleState
 import app.marquee.core.views.TitleView
 import app.marquee.design.Form
+import app.marquee.design.LocalIncognito
 import app.marquee.design.MarqueeTheme
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
@@ -114,6 +120,7 @@ class PhoneDownloadTest {
         header: TitleHeader,
         actions: TitleDownloads? = downloads,
         episodes: List<Episode> = emptyList(),
+        incognito: Boolean = false,
     ) {
         val snapshot = CoreJson.encodeToString(TitleSnapshot.serializer(), TitleSnapshot(header, episodes))
         client.attach { text ->
@@ -132,7 +139,9 @@ class PhoneDownloadTest {
         val view = TitleView(client, scope, header.details!!.kind, "tt1")
         compose.setContent {
             MarqueeTheme(Form.Phone) {
-                PhoneTitle(view, null, { _, _ -> }, {}, {}, {}, downloads = actions)
+                CompositionLocalProvider(LocalIncognito provides incognito) {
+                    PhoneTitle(view, null, { _, _ -> }, {}, {}, {}, downloads = actions)
+                }
             }
         }
         compose.waitForIdle()
@@ -159,6 +168,17 @@ class PhoneDownloadTest {
         assertEquals(listOf("Start tt1 null"), calls)
         // No menu hint where a tap starts it.
         assertEquals(null, control("Download").fetchSemanticsNode().config[SemanticsActions.OnClick].label)
+    }
+
+    @Test
+    fun `in Incognito a film's download starts from the menu that says the file stays`() {
+        // plans/batch-10-incognito.md 4: downloads stay on the device and every profile sees them; said before a start.
+        show(film(), incognito = true)
+        control("Download").performClick()
+        assertEquals(emptyList(), calls)
+        compose.onNodeWithText(ProfileCopy.INCOGNITO_DOWNLOAD_NOTE).assertExists()
+        compose.onNode(hasText(DownloadItem.Start.label) and hasAnyAncestor(isDialog())).performClick()
+        assertEquals(listOf("Start tt1 null"), calls)
     }
 
     @Test

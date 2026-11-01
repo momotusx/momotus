@@ -2,6 +2,7 @@ package app.marquee.ui.tv
 
 import android.os.Handler
 import android.os.Looper
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -41,6 +42,7 @@ import app.marquee.core.model.VersionsConditions
 import app.marquee.core.model.VersionsSnapshot
 import app.marquee.core.views.TitleView
 import app.marquee.design.Form
+import app.marquee.design.LocalIncognito
 import app.marquee.design.MarqueeTheme
 import app.marquee.player.FULL_TRAILER_TAG
 import kotlinx.coroutines.CoroutineDispatcher
@@ -136,6 +138,7 @@ class TvTitleActionsTest {
     private fun show(
         first: VersionsSnapshot,
         page: TitleSnapshot = title,
+        incognito: Boolean = false,
     ) {
         shown = first
         client.attach { text ->
@@ -152,15 +155,17 @@ class TvTitleActionsTest {
         val view = TitleView(client, scope, "movie", "tt1")
         compose.setContent {
             MarqueeTheme(Form.Tv) {
-                TvTitle(
-                    view,
-                    shown,
-                    FocusMemory(),
-                    onPlay = { key, id -> calls += "play $key $id" },
-                    onVersions = { calls += "versions $it" },
-                    onEpisode = {},
-                    onEpisodeVersions = {},
-                )
+                CompositionLocalProvider(LocalIncognito provides incognito) {
+                    TvTitle(
+                        view,
+                        shown,
+                        FocusMemory(),
+                        onPlay = { key, id -> calls += "play $key $id" },
+                        onVersions = { calls += "versions $it" },
+                        onEpisode = {},
+                        onEpisodeVersions = {},
+                    )
+                }
             }
         }
         compose.waitForIdle()
@@ -277,6 +282,19 @@ class TvTitleActionsTest {
         compose.waitUntil(5_000) {
             compose.onAllNodes(hasContentDescription("Trailer").and(isFocused())).fetchSemanticsNodes().isNotEmpty()
         }
+    }
+
+    @Test
+    fun `in Incognito the page has no Trailer and plays none`() {
+        // plans/batch-10-incognito.md 5.5: YouTube's player keeps its state on disk, so no trailer runs.
+        val trailer = Trailer("Sintel", "eRsGyueVLvQ", "https://www.youtube.com/watch?v=eRsGyueVLvQ")
+        show(
+            versions(EmptyKind.Unreachable, EmptyAction.PlayFromDevice, key = "kept"),
+            title.copy(header = title.header.copy(details = title.header.details!!.copy(trailers = listOf(trailer)))),
+            incognito = true,
+        )
+        compose.onAllNodes(hasContentDescription("Trailer")).assertCountEquals(0)
+        compose.onAllNodesWithTag(FULL_TRAILER_TAG).assertCountEquals(0)
     }
 
     @Test

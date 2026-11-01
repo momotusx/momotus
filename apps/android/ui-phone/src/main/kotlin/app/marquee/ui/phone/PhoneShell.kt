@@ -282,19 +282,22 @@ private val places =
  */
 private val order = listOf(Route.Home, Route.Discover, Route.Library, Route.Search)
 
-/** The profile tab's word; the profile's name is in its spoken label. */
-private const val PROFILE_LABEL = "Profile"
-
 /**
- * The capsule's last tab (plans/nav-profile.md): the active profile's avatar over "Profile", lit while Settings shows.
- * A button, never a selected tab, so it still opens its menu when lit.
+ * The capsule's last tab (plans/nav-profile.md): the active profile's avatar over "Profile" ([label]; Incognito says
+ * its own name), lit while Settings shows. A button, never a selected tab, so it still opens its menu when lit.
  */
 class PhoneProfileTab(
     /** The spoken label: "Profile: <name>". */
     val spoken: String,
     val onClick: () -> Unit,
+    val label: String = LABEL,
     val avatar: @Composable () -> Unit,
-)
+) {
+    companion object {
+        /** The profile tab's word; the profile's name is in its spoken label. */
+        const val LABEL = "Profile"
+    }
+}
 
 @Composable
 private fun PhoneBar(
@@ -315,8 +318,8 @@ private fun PhoneBar(
     BoxWithConstraints(modifier) {
         val room = with(density) { ((maxWidth - 8.dp) / (order.size + 1) - LABEL_PAD * 2).toPx() }
         val labelSize =
-            remember(measurer, caption, density.density, density.fontScale, room) {
-                fitLabels(measurer, caption, room)
+            remember(measurer, caption, density.density, density.fontScale, room, profile?.label) {
+                fitLabels(measurer, caption, room, profile?.label ?: PhoneProfileTab.LABEL)
             }
         Row(
             Modifier
@@ -353,7 +356,7 @@ private fun PhoneBar(
             // Lit while Settings shows, which has no tab; still a button that opens the menu.
             if (profile != null) {
                 Slot(
-                    PROFILE_LABEL,
+                    profile.label,
                     lit == Route.Settings,
                     labelSize,
                     Modifier
@@ -423,12 +426,13 @@ private fun fitLabels(
     measurer: TextMeasurer,
     caption: TextUnit,
     room: Float,
+    profileLabel: String,
 ): TextUnit? {
     var size = caption
     while (true) {
         val style = TextStyle(fontSize = size, fontFamily = MarqueeFonts.text, fontWeight = FontWeight.SemiBold)
         val widest =
-            (order.map { places.getValue(it).label } + PROFILE_LABEL).maxOf {
+            (order.map { places.getValue(it).label } + profileLabel).maxOf {
                 measurer.measure(it, style, softWrap = false, maxLines = 1).size.width
             }
         if (widest <= room) return size

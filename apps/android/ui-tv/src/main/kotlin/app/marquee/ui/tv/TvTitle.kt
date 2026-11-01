@@ -301,11 +301,13 @@ fun TvTitle(
                                     onGenre,
                                     onUncontinue,
                                     onStartOver,
-                                    onTrailer = {
-                                        TitleTrailers.spent += details.id
-                                        if (headerTrailer.loading) trailers.stop()
-                                        fullTrailer = true
-                                    },
+                                    // No Trailer in Incognito (plans/batch-10-incognito.md 5.5).
+                                    onTrailer =
+                                        {
+                                            TitleTrailers.spent += details.id
+                                            if (headerTrailer.loading) trailers.stop()
+                                            fullTrailer = true
+                                        }.takeUnless { trailers.off },
                                     // The header trailer's sound, last in the row while it plays (never in a walk
                                     // unless the walk asks).
                                     sound =
@@ -580,7 +582,7 @@ private fun Info(
     onGenre: (String, String) -> Unit,
     onUncontinue: (() -> Unit)?,
     onStartOver: ((String?, String) -> Unit)?,
-    onTrailer: () -> Unit,
+    onTrailer: (() -> Unit)?,
     sound: (() -> Unit)?,
 ) {
     val header = checkNotNull(title.header)
@@ -638,7 +640,7 @@ private fun Info(
                     onFocusChange = focus.watch(ACTIONS, "startover"),
                 )
             }
-            if (details.trailers.isNotEmpty()) {
+            if (details.trailers.isNotEmpty() && onTrailer != null) {
                 RoundButton(
                     icon = Icons.Film,
                     label = "Trailer",

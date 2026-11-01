@@ -35,8 +35,10 @@ import app.marquee.core.model.TitleScores
 import app.marquee.core.model.TitleSnapshot
 import app.marquee.core.model.TitleState
 import app.marquee.core.model.TitleUpdate
+import app.marquee.core.model.Trailer
 import app.marquee.core.views.TitleView
 import app.marquee.design.Form
+import app.marquee.design.LocalIncognito
 import app.marquee.design.MarqueeTheme
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
@@ -275,6 +277,28 @@ class PhoneTitleScoresTest {
         compose.onNodeWithText("TR", useUnmergedTree = true).assertExists()
         compose.onNodeWithText("TR").assertDoesNotExist()
         assertEquals(1, compose.onAllNodesWithText("Starring").fetchSemanticsNodes().size)
+    }
+
+    @Test
+    fun `in Incognito every score is plain text, said without its service, and no Trailer shows`() {
+        // plans/batch-10-incognito.md 5.5: the core still sends the URLs; the page offers none of them.
+        val trailer = Trailer("Sintel", "eRsGyueVLvQ", "https://www.youtube.com/watch?v=eRsGyueVLvQ")
+        val scored = header(TitleScores(Slot.Shown("87%", "https://www.themoviedb.org/movie/278"), Slot.None))
+        val view = open(TitleSnapshot(scored.copy(details = scored.details!!.copy(trailers = listOf(trailer)))))
+        compose.setContent {
+            MarqueeTheme(Form.Phone) {
+                CompositionLocalProvider(
+                    LocalIncognito provides true,
+                ) { PhoneTitle(view, null, { _, _ -> }, {}, {}, {}) }
+            }
+        }
+        compose.waitForIdle()
+        view.open()
+        waitFor("Play")
+        compose.onNodeWithContentDescription("IMDb 9.3 out of 10").assertHasNoClickAction()
+        compose.onNodeWithContentDescription("TMDB 87 percent").assertHasNoClickAction()
+        compose.onAllNodes(hasContentDescription(", on ", substring = true)).assertCountEquals(0)
+        compose.onAllNodes(hasContentDescription("Trailer")).assertCountEquals(0)
     }
 
     @Test

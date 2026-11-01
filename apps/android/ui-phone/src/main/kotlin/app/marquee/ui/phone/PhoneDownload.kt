@@ -7,9 +7,11 @@ import app.marquee.core.DownloadControl
 import app.marquee.core.DownloadGlyph
 import app.marquee.core.DownloadItem
 import app.marquee.core.GroupAct
+import app.marquee.core.ProfileCopy
 import app.marquee.core.model.DownloadBadge
 import app.marquee.design.ActionMenu
 import app.marquee.design.Icons
+import app.marquee.design.LocalIncognito
 import app.marquee.design.MenuAction
 import app.marquee.design.RoundButton
 
@@ -104,6 +106,10 @@ fun DownloadMenu(
         title = title,
         actions = items.map { MenuAction(it.label, it.icon) { onItem(it) } },
         onDismiss = onDismiss,
-        detail = control.detail,
+        // In Incognito every download menu says the file outlives it (plans/batch-10-incognito.md 4).
+        detail =
+            listOfNotNull(control.detail, ProfileCopy.INCOGNITO_DOWNLOAD_NOTE.takeIf { LocalIncognito.current })
+                .joinToString("\n")
+                .ifEmpty { null },
     )
 }
