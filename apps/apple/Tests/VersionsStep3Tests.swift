@@ -241,6 +241,7 @@ private func literals(_ source: String) -> [String] {
 @Test func noViewerReadsTheOldDeadEndWordsOnVersionsTheTitleOrThePlayer() throws {
     let app = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appending(path: "../Marquee")
     // No free space or storage warning anywhere (plans/no-space-warnings.md): the same list as the web's.
+    // Profiles holds Incognito's full-disk refusal (plans/batch-10-incognito.md 6).
     let space = ["free space", "{free}", "nearly full", "device is full", "storage full", "storage is full", "no room",
                  "for this storage", "not enough space", "not enough room", "not enough storage", "out of space",
                  "low on storage", "free some storage"]
@@ -262,7 +263,7 @@ private func literals(_ source: String) -> [String] {
     // A pending key no longer said leaves the list.
     #expect(pending.subtracting(hits).isEmpty, "\(pending.subtracting(hits))")
     var scanned = 0
-    for folder in ["Versions", "Title", "Player"] {
+    for folder in ["Versions", "Title", "Player", "Profiles"] {
         for file in try FileManager.default.contentsOfDirectory(atPath: app.appending(path: folder).path()) where file.hasSuffix(".swift") {
             let source = try String(contentsOf: app.appending(path: "\(folder)/\(file)"), encoding: .utf8)
             for text in literals(source) {
