@@ -51,6 +51,9 @@ struct RootView: View {
     /// A film playing on in Picture in Picture while the viewer browses.
     @State private var floating = FloatingPlayer()
     #endif
+    #if os(macOS)
+    @State private var windowClose = WindowClose()
+    #endif
 
     var body: some View {
         Group {
@@ -90,7 +93,7 @@ struct RootView: View {
         .onAppear(perform: Launch.firstFrame)
         #if os(macOS)
         // Closing the main window ends Incognito (5.3); the app itself may stay for downloads.
-        .onDisappear { profiles.leaveOnClose() }
+        .background(WindowReader { window in windowClose.watch(window) { profiles.leaveOnClose() } })
         #endif
         #if os(iOS)
         .environment(floating)

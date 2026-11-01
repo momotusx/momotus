@@ -154,13 +154,18 @@ struct ProfilePicker: View {
                             .fill(Theme.Palette.raised)
                             .overlay(Glyph("hat-glasses", size: tile * 0.4))
                             .frame(width: tile, height: tile)
-                        Text(Incognito.name).textFont(Theme.type.headline, weight: .semibold, relativeTo: .headline)
+                        HStack(spacing: 6) {
+                            Text(Incognito.name)
+                            // As a profile with a PIN shows it: a keypad comes next.
+                            if Incognito.pinProfile(snapshot) != nil { Glyph("lock", size: 16) }
+                        }
+                        .textFont(Theme.type.headline, weight: .semibold, relativeTo: .headline)
                     }
                     .foregroundStyle(Theme.Palette.text)
                 }
                 .buttonStyle(TileButtonStyle())
                 .focused($focused, equals: Incognito.id)
-                .accessibilityLabel(snapshot.incognito ? "\(Incognito.name), current profile" : Incognito.name)
+                .accessibilityLabel(Incognito.spoken(snapshot))
             }
             if addable {
                 Button { showAdd = true } label: {
@@ -340,7 +345,7 @@ struct ProfileMenu<Face: View>: View {
                         Button(title(profile, snapshot)) { choose(profile, snapshot) }
                     }
                     if Incognito.offered(snapshot) {
-                        Button(snapshot.incognito ? "\(Incognito.name), current" : Incognito.name) { chooseIncognito(snapshot) }
+                        Button(snapshot.incognito ? "\(Incognito.name), current" : Incognito.pinProfile(snapshot) == nil ? Incognito.name : "\(Incognito.name), locked") { chooseIncognito(snapshot) }
                     }
                     if snapshot.incognito { Button(Incognito.leave) { profiles.leaveIncognito() } }
                     Button("Settings", action: onSettings)
@@ -357,7 +362,9 @@ struct ProfileMenu<Face: View>: View {
                     }
                     // The same rows in both states (5.1): Incognito after the profiles, checked while it runs.
                     if Incognito.offered(snapshot) {
-                        Label(Incognito.name, image: "hat-glasses").tag(Incognito.id)
+                        Label(Incognito.name, image: Incognito.pinProfile(snapshot) == nil ? "hat-glasses" : "lock")
+                            .accessibilityLabel(Incognito.spoken(snapshot))
+                            .tag(Incognito.id)
                     }
                 }
                 .pickerStyle(.inline)

@@ -710,7 +710,8 @@ struct TitleScreen: View {
                 episode.download.map { videoEntries($0, keeper: keeper, play: { play(episode) }, choose: { chooseDownload(videoId: episode.videoId) }) } ?? []
             },
             start: { keeper.add(kind: details.kind, itemId: details.id, scope: "video", videoId: $0.videoId) },
-            choose: { chooseDownload(videoId: $0.videoId) })
+            choose: { chooseDownload(videoId: $0.videoId) },
+            note: Incognito.on ? Incognito.downloadNote : nil)
     }
 
     /// "Choose a version to download": Versions ranked to keep on this device.

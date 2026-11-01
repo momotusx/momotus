@@ -131,6 +131,8 @@ struct IncognitoCovering: ViewModifier {
         content.onChange(of: phase) { _, phase in
             if on, Incognito.covers(phase, playerOnScreen: playerOnScreen) { cover() } else { uncover() }
         }
+        // Incognito ended while covered (its clock, a lock): the shell goes, and its cover with it.
+        .onDisappear { uncover() }
     }
 
     private func cover() {

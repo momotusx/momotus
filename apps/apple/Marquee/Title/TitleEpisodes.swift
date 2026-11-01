@@ -26,11 +26,15 @@ struct EpisodeActionsSet {
     let entries: (Episode) -> [DownloadMenuEntry]
     let start: (Episode) -> Void
     let choose: (Episode) -> Void
+    /// Said first in every download menu (Incognito: the file stays, and every profile sees it); a row with a note
+    /// opens its menu on a tap, so the note is read before a download starts.
+    var note: String?
 
     /// The items the "..." menu, the context menu and the accessibility actions carry.
     func menu(_ episode: Episode) -> [DownloadMenuEntry] {
-        guard episode.download == nil else { return entries(episode) }
-        return [
+        let said = note.map { [DownloadMenuEntry(id: "note", label: $0)] } ?? []
+        guard episode.download == nil else { return said + entries(episode) }
+        return said + [
             DownloadMenuEntry(id: "start", label: DownloadItem.start.label, glyph: DownloadItem.start.glyph) { start(episode) },
             DownloadMenuEntry(id: "choose", label: DownloadItem.choose.label, glyph: DownloadItem.choose.glyph) { choose(episode) },
         ]
@@ -41,7 +45,7 @@ struct EpisodeActionsSet {
         DownloadControlButton(
             control: DownloadCopy.control(episode.download), look: look,
             entries: episode.download == nil ? [] : entries(episode),
-            start: { start(episode) }, choose: { choose(episode) })
+            start: { start(episode) }, choose: { choose(episode) }, note: note)
     }
 }
 
@@ -53,6 +57,8 @@ struct DownloadMenuItems: View {
         ForEach(entries) { entry in
             if let run = entry.run {
                 if let glyph = entry.glyph { Button(entry.label, glyph: glyph, action: run) } else { Button(entry.label, action: run) }
+            } else {
+                Text(entry.label)
             }
         }
     }

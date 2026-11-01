@@ -200,7 +200,7 @@ struct SettingsScreen: View {
                 NavigationLink {
                     SettingsScreen(core: core, home: home, only: s)
                 } label: {
-                    A1Row(tone: s.tone, glyph: s.glyph, title: s.title, detail: s.summary, sizes: sizes)
+                    A1Row(tone: s.tone, glyph: s.glyph, title: s.title, detail: s == .sources && incognito ? Incognito.sourcesSummary : s.summary, sizes: sizes)
                 }
                 .buttonStyle(LitRowStyle(radius: sizes.radius))
             }
