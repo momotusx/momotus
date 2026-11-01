@@ -405,12 +405,30 @@ class CoreOps(
             profilesSnap,
         )
 
-    /** Only the picker may be open: the app closes every other view first. */
+    /**
+     * Only the picker may be open: the app closes every other view first. With `incognito`, [fromChooser] says Leave
+     * goes back to the chooser (plans/batch-10-incognito.md 2.7).
+     */
     suspend fun switchProfile(
         profile: String,
         pin: String?,
+        fromChooser: Boolean = false,
     ): ProfilesSnapshot =
-        call("switchProfile", mapOf("profile" to text(profile), "pin" to (pin?.let(::text) ?: JsonNull)), profilesSnap)
+        call(
+            "switchProfile",
+            buildMap {
+                put("profile", text(profile))
+                put("pin", pin?.let(::text) ?: JsonNull)
+                if (fromChooser) put("fromChooser", JsonPrimitive(true))
+            },
+            profilesSnap,
+        )
+
+    /** Back to where Incognito was entered, without a PIN; only the picker may be open. */
+    suspend fun leaveIncognito(): ProfilesSnapshot = call("leaveIncognito", emptyMap(), profilesSnap)
+
+    /** The person read the Incognito ended notice. */
+    suspend fun ackIncognitoEnded(): ProfilesSnapshot = call("ackIncognitoEnded", emptyMap(), profilesSnap)
 
     suspend fun unlockProfile(pin: String?): ProfilesSnapshot =
         call("unlockProfile", mapOf("pin" to (pin?.let(::text) ?: JsonNull)), profilesSnap)

@@ -303,7 +303,9 @@ object AccountRules {
         return runCatching { URI(server).host == named }.getOrDefault(false)
     }
 
-    fun activeProfile(s: ProfilesSnapshot?): ProfileInfo? = s?.profiles?.firstOrNull { it.id == s.active }
+    /** The session's profile: Incognito while it runs (plans/batch-10-incognito.md 2.8), else the active one listed. */
+    fun activeProfile(s: ProfilesSnapshot?): ProfileInfo? =
+        if (ProfileCopy.inIncognito(s)) ProfileCopy.incognito else s?.profiles?.firstOrNull { it.id == s.active }
 
     /** A join, a passkey, a recovery kit, or a trim that may have hidden one: a way into the account. */
     fun securityKind(a: Announcement) = a.kind != Announced.Removed
@@ -438,7 +440,8 @@ object AccountRules {
     fun homeCard(s: CardState): Card? {
         // A kids profile reaches no account page: it shows no account card at all.
         val profile = s.profile ?: return null
-        if (profile.kids) return null
+        // Incognito reaches no account page either (the core refuses every account op there).
+        if (profile.kids || profile.id == ProfileCopy.INCOGNITO) return null
         s.deletion?.let { d ->
             val date = s.date(d.dueMs)
             val provider = d.provider

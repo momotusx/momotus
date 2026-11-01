@@ -154,6 +154,20 @@ class TraktAccountTest {
         }
 
     @Test
+    fun `Incognito hands over no record and opens no view, and ends the profile it left`() =
+        runBlocking {
+            val records = Records().apply { held[ProfileCopy.INCOGNITO] = record("forged") }
+            val sync = account(records)
+            begin(sync, "p1")
+            until("open") { "open p1" in events }
+            events.clear()
+            begin(sync, ProfileCopy.INCOGNITO)
+            delay(150)
+            // plans/batch-10-incognito.md 5.6: the host's view closes, nothing reaches the core.
+            assertEquals(listOf("close p1"), events.toList())
+        }
+
+    @Test
     fun `two begins in a row leave one view open`() =
         runBlocking {
             val sync = account(Records())

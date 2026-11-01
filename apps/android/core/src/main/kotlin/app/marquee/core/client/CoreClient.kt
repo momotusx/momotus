@@ -474,6 +474,10 @@ class CoreClient(
                 if (message["profile"]?.jsonPrimitive?.contentOrNull == "gone" && gone != null) {
                     actions += { onProfileGone?.invoke(gone) }
                 }
+            } else if (message["incognito"] != null) {
+                // `{"incognito": "ended" | "endsSoon"}` (plans/batch-10-incognito.md 2.7): the profiles view's next
+                // snapshot carries the end, and the warning is the desktop's.
+                CoreLog.d("session event: incognito ${message["incognito"]?.jsonPrimitive?.contentOrNull}")
             } else {
                 CoreLog.w("reply without an id: ${message["error"]?.jsonPrimitive?.contentOrNull}")
             }

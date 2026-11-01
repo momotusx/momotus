@@ -3,6 +3,7 @@ package app.marquee.core.trakt
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import app.marquee.core.ProfileCopy
 import app.marquee.core.client.CoreLog
 import app.marquee.core.model.KeystoreRecord
 import app.marquee.core.model.TraktReport
@@ -94,6 +95,8 @@ class TraktAccount(
      * nothing is sent: the core keeps what it holds (a sign-in whose record is still on its way).
      */
     fun begin(profile: String) {
+        // Trakt never runs in Incognito (plans/batch-10-incognito.md 5.6): no record goes over, no view opens.
+        if (profile == ProfileCopy.INCOGNITO) return end()
         val turn =
             synchronized(this) {
                 end()

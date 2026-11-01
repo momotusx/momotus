@@ -1,5 +1,6 @@
 package app.marquee.core
 
+import app.marquee.core.model.ProfileInfo
 import app.marquee.core.model.ProfilesSnapshot
 import java.text.BreakIterator
 import java.util.Locale
@@ -39,6 +40,7 @@ object ProfileCopy {
 
     fun parseAvatar(stored: String): Avatar {
         if (stored.isEmpty()) return Avatar("letter", "ember")
+        if (stored == INCOGNITO) return Avatar(INCOGNITO, null)
         val parts = stored.split(":")
         val glyph = parts.getOrNull(0)?.takeIf { it in GLYPHS } ?: "letter"
         val color = parts.getOrNull(1)?.takeIf { it in COLORS }
@@ -89,8 +91,77 @@ object ProfileCopy {
             "viewsOpen" -> "Something is still open. Try again."
             "unknownProfile" -> "That profile was removed on another device."
             "pinUnreadable" -> "This PIN was set by a newer version. Remove it, then set a new one."
+            "noSpace" -> "Couldn't open Incognito: this device is out of space."
+            "incognitoFailed" -> "Couldn't open Incognito. Try again."
+            "incognito" -> "Not available in Incognito."
             else -> fallback
         }
+
+    // Incognito (plans/batch-10-incognito.md): a throwaway profile the core never lists among the profiles.
+
+    /** The session's profile id while Incognito runs; never a real id (those are 32 hex digits). */
+    const val INCOGNITO = "incognito"
+
+    /** Incognito as a profile, for every place that shows the current one (2.8, the app face). */
+    val incognito =
+        ProfileInfo(
+            id = INCOGNITO,
+            name = "Incognito",
+            avatar = INCOGNITO,
+            position = 0,
+            hasPin = false,
+            isOwner = false,
+            syncing = false,
+            kids = false,
+        )
+
+    fun inIncognito(s: ProfilesSnapshot?) = s?.incognitoHost != null
+
+    /** The keypad entering Incognito opens on, by the core's rule; null when no PIN is asked. */
+    fun incognitoPinProfile(s: ProfilesSnapshot): ProfileInfo? = s.profiles.firstOrNull { it.id == s.incognitoPin }
+
+    /** The PIN was asked by the kids rule, not because the session is locked: the keypad says why (5.1). */
+    fun incognitoKidsReason(s: ProfilesSnapshot) = s.incognitoPin != null && !s.locked && s.profiles.any { it.kids }
+
+    /** The keypad's title for entering Incognito with [name]'s PIN. */
+    fun incognitoPinTitle(name: String) = "Enter the PIN for $name to open Incognito"
+
+    const val INCOGNITO_KIDS_REASON = "Kids profiles use this device, so Incognito needs this PIN."
+    const val INCOGNITO_OPENING = "Opening Incognito"
+    const val INCOGNITO_LEAVE = "Leave Incognito"
+    const val INCOGNITO_ENDED = "Incognito ended. Its history and addons were cleared."
+    const val INCOGNITO_KEPT_NOTHING = "Nothing you watch here is kept."
+    const val INCOGNITO_ADDONS_NOTE = "Changes here last until you leave Incognito."
+    const val INCOGNITO_DOWNLOAD_NOTE = "This download stays on this device. Every profile can see it in Downloads."
+    const val INCOGNITO_LIBRARY_EMPTY = "Nothing here yet. Titles you add in Incognito are gone when you leave."
+    const val INCOGNITO_TRAILERS_OFF = "Off in Incognito."
+    const val INCOGNITO_DEBRID = "Uses this device's debrid account"
+
+    /** The intro's two groups (section 6); [debrid] adds the debrid line, [tv] picks the end line. */
+    data class Intro(
+        val notKept: List<String>,
+        val seen: List<String>,
+        val ends: String,
+    )
+
+    fun intro(
+        debrid: Boolean,
+        tv: Boolean,
+    ) = Intro(
+        notKept = listOf("What you watch and search.", "Addons and settings you change."),
+        seen =
+            listOfNotNull(
+                "Downloads stay on this device, and every profile can see them.",
+                "Your debrid account keeps its own history.".takeIf { debrid },
+                "Addons, your internet provider and torrent peers can still see what you play.",
+            ),
+        ends =
+            if (tv) {
+                "It ends when you leave, or after 30 minutes away."
+            } else {
+                "It ends when you leave, close the app, or after 30 minutes away."
+            },
+    )
 
     /** The spoken name of a glyph choice. */
     fun glyphName(glyph: String) =
