@@ -73,3 +73,7 @@ tracing-subscriber = { version = "0.3", default-features = false, features = ["f
 [[test]]
 name = "plugins"
 required-features = ["plugins"]
+
+[[test]]
+name = "incognito_torrents"
+required-features = ["torrent"]
