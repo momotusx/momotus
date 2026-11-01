@@ -22,6 +22,9 @@ val LocalForm = staticCompositionLocalOf { Form.Phone }
 val LocalPalette = staticCompositionLocalOf { Tokens.dark }
 val LocalReducedMotion = staticCompositionLocalOf { false }
 
+/** The session is in Incognito (plans/batch-10-incognito.md 5.5): no keyboard learning, no trailer, no outside link. */
+val LocalIncognito = staticCompositionLocalOf { false }
+
 /** Reads of the current theme, e.g. `Marquee.colors.accent`. */
 object Marquee {
     val form: Form

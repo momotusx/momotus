@@ -36,6 +36,7 @@ import coil3.disk.DiskCache
 import coil3.intercept.Interceptor
 import coil3.memory.MemoryCache
 import coil3.network.okhttp.OkHttpNetworkFetcherFactory
+import coil3.request.CachePolicy
 import coil3.request.ImageRequest
 import coil3.request.ImageResult
 import coil3.request.crossfade
@@ -57,7 +58,11 @@ private val posterClient: OkHttpClient by lazy {
  * decode work, so: the memory cache is a share of RAM (smaller on low-RAM devices), every request
  * has an exact pixel size, and there is no crossfade.
  */
-fun createImageLoader(context: Context): ImageLoader {
+fun createImageLoader(
+    context: Context,
+    /** The session is in Incognito now: images neither land in nor are read from the disk cache. */
+    incognito: () -> Boolean = { false },
+): ImageLoader {
     val lowRam = (context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager).isLowRamDevice
     return ImageLoader
         .Builder(context)
@@ -70,9 +75,29 @@ fun createImageLoader(context: Context): ImageLoader {
                 .build()
         }.components {
             add(HttpsUpgrade)
+            add(PrivateDisk(incognito))
             add(OkHttpNetworkFetcherFactory(callFactory = { posterClient }))
         }.crossfade(false)
         .build()
+}
+
+/**
+ * Incognito keeps no image on disk (plans/batch-10-incognito.md 5.5). DISABLED, not the design's READ_ONLY: a disk
+ * cache read appends `READ <key>` to its journal, and the key is the hash of the poster's URL, which names the title.
+ */
+internal class PrivateDisk(
+    private val incognito: () -> Boolean,
+) : Interceptor {
+    override suspend fun intercept(chain: Interceptor.Chain): ImageResult {
+        if (!incognito()) return chain.proceed()
+        return chain
+            .withRequest(
+                chain.request
+                    .newBuilder()
+                    .diskCachePolicy(CachePolicy.DISABLED)
+                    .build(),
+            ).proceed()
+    }
 }
 
 /**

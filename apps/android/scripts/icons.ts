@@ -53,6 +53,7 @@ export const ICONS = [
   "ghost",
   "grip-vertical",
   "hard-drive",
+  "hat-glasses",
   "headphones",
   "house",
   "info",

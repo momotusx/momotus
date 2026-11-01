@@ -310,6 +310,11 @@ private class NoTouchWebView(
  */
 class TrailerHost internal constructor(
     private val context: Context,
+    /**
+     * Incognito: no trailer at all (plans/batch-10-incognito.md 5.5), since YouTube's player keeps its cookies and
+     * cache in the app's WebView profile. [play] does nothing, so no WebView is ever made and the art stays.
+     */
+    val off: Boolean = false,
 ) {
     private var web: NoTouchWebView? = null
     private var state: TrailerState? = null
@@ -397,6 +402,7 @@ class TrailerHost internal constructor(
         loud: Boolean = false,
         onEnd: (String) -> Unit,
     ) {
+        if (off) return
         stop()
         val checked = HeroTrailers.checkedId(id) ?: return onEnd("error")
         this.state = state
@@ -572,7 +578,8 @@ class TrailerHost internal constructor(
 @Composable
 fun rememberTrailerHost(): TrailerHost {
     val context = LocalContext.current
-    val host = remember(context) { TrailerHost(context) }
+    val off = LocalIncognito.current
+    val host = remember(context, off) { TrailerHost(context, off) }
     // In the background the WebView's renderer goes too (review r1, L2); the next play makes a fresh one.
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     DisposableEffect(host, lifecycle) {

@@ -1,5 +1,7 @@
 package app.marquee.design
 
+import android.view.inputmethod.EditorInfo
+import android.view.inputmethod.InputConnection
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -19,6 +21,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.autofill.ContentType
 import androidx.compose.ui.draw.clip
@@ -31,6 +34,8 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.platform.InterceptPlatformTextInput
+import androidx.compose.ui.platform.PlatformTextInputMethodRequest
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.contentType
@@ -188,54 +193,83 @@ fun FieldInput(
         if (value.isEmpty()) {
             MqText(placeholder, color = colors.dim, maxLines = 1, modifier = Modifier.clearAndSetSemantics { })
         }
-        BasicTextField(
-            value = value,
-            onValueChange = onValueChange,
-            singleLine = true,
-            textStyle = textStyle,
-            cursorBrush = SolidColor(colors.accent),
-            keyboardOptions = keyboardOptions,
-            keyboardActions = keyboardActions,
-            visualTransformation = visualTransformation,
-            readOnly = readOnly,
-            modifier =
-                Modifier
-                    .fillMaxWidth()
-                    .semantics {
-                        contentType?.let { this.contentType = it }
-                        error?.let { this.error(it) }
-                    }.focusRequester(input)
-                    .onPreviewKeyEvent {
-                        // On a TV, Back in the editor (a Fire TV keyboard closes on it and lets it through) makes
-                        // the field a button again with the focus kept on it; unhandled, Compose would move the
-                        // focus out of the page's section (FocusDirection.Exit), to the nav pill or a result.
-                        if (!tv || it.key != Key.Back) return@onPreviewKeyEvent false
-                        if (it.type == KeyEventType.KeyUp) {
-                            backed = true
-                            editing = false
-                        }
-                        true
-                    }.dpadExits()
-                    .onFocusChanged {
-                        onFocus(it.isFocused)
-                        // On a TV, leaving the editor (Up, Down, or Back closing the keyboard) makes it a button
-                        // again.
-                        if (it.isFocused) {
-                            entered = true
-                        } else if (tv && entered) {
-                            entered = false
-                            editing = false
-                        }
-                    },
-            decorationBox = { inner ->
-                Box {
-                    inner()
-                    // The label as a child of the editor: the editor node always has a child of its own (its
-                    // clip), and Compose then drops the node's description, so TalkBack takes the name from the
-                    // children, as it does a button's.
-                    Box(Modifier.matchParentSize().semantics { contentDescription = label })
-                }
-            },
-        )
+        NoLearning(LocalIncognito.current) {
+            BasicTextField(
+                value = value,
+                onValueChange = onValueChange,
+                singleLine = true,
+                textStyle = textStyle,
+                cursorBrush = SolidColor(colors.accent),
+                keyboardOptions = keyboardOptions,
+                keyboardActions = keyboardActions,
+                visualTransformation = visualTransformation,
+                readOnly = readOnly,
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .semantics {
+                            contentType?.let { this.contentType = it }
+                            error?.let { this.error(it) }
+                        }.focusRequester(input)
+                        .onPreviewKeyEvent {
+                            // On a TV, Back in the editor (a Fire TV keyboard closes on it and lets it through) makes
+                            // the field a button again with the focus kept on it; unhandled, Compose would move the
+                            // focus out of the page's section (FocusDirection.Exit), to the nav pill or a result.
+                            if (!tv || it.key != Key.Back) return@onPreviewKeyEvent false
+                            if (it.type == KeyEventType.KeyUp) {
+                                backed = true
+                                editing = false
+                            }
+                            true
+                        }.dpadExits()
+                        .onFocusChanged {
+                            onFocus(it.isFocused)
+                            // On a TV, leaving the editor (Up, Down, or Back closing the keyboard) makes it a button
+                            // again.
+                            if (it.isFocused) {
+                                entered = true
+                            } else if (tv && entered) {
+                                entered = false
+                                editing = false
+                            }
+                        },
+                decorationBox = { inner ->
+                    Box {
+                        inner()
+                        // The label as a child of the editor: the editor node always has a child of its own (its
+                        // clip), and Compose then drops the node's description, so TalkBack takes the name from the
+                        // children, as it does a button's.
+                        Box(Modifier.matchParentSize().semantics { contentDescription = label })
+                    }
+                },
+            )
+        }
     }
+}
+
+/**
+ * In Incognito the keyboard learns nothing typed here (plans/batch-10-incognito.md 5.5):
+ * `IME_FLAG_NO_PERSONALIZED_LEARNING` on the editor every field opens, since every field is a [FieldInput].
+ */
+@OptIn(ExperimentalComposeUiApi::class)
+@Composable
+private fun NoLearning(
+    on: Boolean,
+    content: @Composable () -> Unit,
+) {
+    if (!on) return content()
+    InterceptPlatformTextInput(
+        interceptor = { request, next ->
+            next.startInputMethod(
+                object : PlatformTextInputMethodRequest {
+                    override fun createInputConnection(outAttributes: EditorInfo): InputConnection =
+                        request.createInputConnection(outAttributes).also {
+                            outAttributes.imeOptions =
+                                outAttributes.imeOptions or EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING
+                        }
+                },
+            )
+        },
+        content = content,
+    )
 }

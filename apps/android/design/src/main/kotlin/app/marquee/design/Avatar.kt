@@ -39,8 +39,14 @@ fun AvatarArt(
         modifier
             .size(size)
             .clip(CircleShape)
-            .background(if (lit) colors.primary else avatarColor(color) ?: colors.raised)
-            .clearAndSetSemantics { },
+            // Incognito's mark: the white hat-glasses on sea (plans/batch-10-incognito.md 5.2).
+            .background(
+                when {
+                    lit -> colors.primary
+                    glyph == INCOGNITO_GLYPH -> colors.tileSea
+                    else -> avatarColor(color) ?: colors.raised
+                },
+            ).clearAndSetSemantics { },
         contentAlignment = Alignment.Center,
     ) {
         val icon = avatarGlyph(glyph)
@@ -56,7 +62,7 @@ fun AvatarArt(
                     ),
             )
         } else {
-            MqIcon(icon, tint = ink, size = size * 0.46f)
+            MqIcon(icon, tint = ink, size = size * if (glyph == INCOGNITO_GLYPH) 0.6f else 0.46f)
         }
     }
 }
@@ -78,8 +84,12 @@ fun avatarColor(id: String?): Color? {
     }
 }
 
+/** Incognito's avatar id, as `ProfileCopy.INCOGNITO` stores it. */
+const val INCOGNITO_GLYPH = "incognito"
+
 private fun avatarGlyph(id: String): ImageVector? =
     when (id) {
+        INCOGNITO_GLYPH -> Icons.HatGlasses
         "popcorn" -> Icons.Popcorn
         "clapperboard" -> Icons.Clapperboard
         "tv" -> Icons.Tv
