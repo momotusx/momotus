@@ -930,14 +930,22 @@ test("the title's Play yields its white to a focused round action on TV, and the
     const strip = row.locator(".ep-acts");
     await expect(strip).toBeVisible();
     const edge = await strip.boundingBox();
-    for (const words of [".ep-t", ".ep-r", ".ep-ov"]) {
-      // The title and the overview are there to measure (the fixture gives its episodes an overview); the runtime line may not be.
-      if (words !== ".ep-r") await expect(row.locator(words)).toHaveCount(1);
-      const box = (await row.locator(words).count()) ? await row.locator(words).first().boundingBox() : null;
-      if (box) {
-        expect(box.x + box.width, `${at} ${words} ends before the strip`).toBeLessThanOrEqual((edge?.x ?? 0) + 1);
-        expect(box.width, `${at} ${words} keeps a positive line`).toBeGreaterThan(40);
-      }
+    // The title and the overview are always there to measure (the fixture gives its episodes an overview); the
+    // runtime line is empty for an episode out with no runtime, and is measured whenever it has words.
+    const lines = [".ep-t", ".ep-ov"];
+    if ((await row.locator(".ep-r").textContent())?.trim()) lines.push(".ep-r");
+    for (const words of lines) {
+      const line = row.locator(words);
+      await expect(line).toHaveCount(1);
+      await expect(line).toBeVisible();
+      const box = (await line.boundingBox())!;
+      expect(box.x + box.width, `${at} ${words} ends before the strip`).toBeLessThanOrEqual((edge?.x ?? 0) + 1);
+      expect(box.width, `${at} ${words} keeps a positive line`).toBeGreaterThan(40);
+    }
+    // The overview is the two-line block the strip once covered: in the narrow window it runs onto its second line.
+    if (size.width <= 768) {
+      const ovLines = await row.locator(".ep-ov").evaluate((el) => (el as HTMLElement).offsetHeight / Number.parseFloat(getComputedStyle(el).lineHeight));
+      expect(ovLines, `${at} the overview runs onto a second line`).toBeGreaterThanOrEqual(1.5);
     }
     expect(await width(), `${at}: the focused row's text is positive`).toBeGreaterThan(60);
   }
