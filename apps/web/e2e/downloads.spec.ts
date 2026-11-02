@@ -158,6 +158,13 @@ async function openPage(browser: Browser, path: string, options: BrowserContextO
 const control = (page: Page) => page.locator('[data-f="title:download"]');
 const item = (page: Page, name: string) => page.getByRole("menuitem", { name, exact: true });
 const banner = (page: Page) => page.locator(".offline-bar");
+/** How far `selector` starts under the banner's foot. Poll it: the banner's height reaches the pages on its
+ * ResizeObserver, at the next frame, and a busy machine can read the layout before that. */
+async function under(page: Page, selector: string) {
+  const bar = await banner(page).boundingBox();
+  const box = await page.locator(selector).boundingBox();
+  return (box?.y ?? 0) - ((bar?.y ?? 0) + (bar?.height ?? 0));
+}
 /** The browser's own offline or online event, without Playwright's offline (which also cuts the page
  * from the core's loopback stream server): the app tells the core and shows or hides its banner. */
 const goOnline = (page: Page, on: boolean) =>
@@ -295,9 +302,7 @@ test("offline, every page says so, Home once, a download plays from Downloads, t
   // Only the constant is live (code review r5 m6).
   await expect(page.getByRole("status").filter({ hasText: "You're offline." })).toHaveText("You're offline.");
   await expect(page.getByRole("status").filter({ hasText: "still play" })).toHaveCount(0);
-  const bar = await banner(page).boundingBox();
-  const nav = await page.locator(".topnav").boundingBox();
-  expect(bar && nav && bar.y + bar.height <= nav.y + 1).toBe(true);
+  await expect.poll(() => under(page, ".topnav")).toBeGreaterThanOrEqual(-1);
   // Another page shows it too.
   await page.locator('[data-f="nav:/discover"]').click();
   await expect(page).toHaveURL(/\/discover/);
@@ -399,16 +404,9 @@ test("on touch, a tap on Download offers the version too, since no secondary pre
     await expect(banner(page)).toContainText("You're offline. Your downloads still play.", { timeout: 30_000 });
     // From the page's top: the taps above scrolled the page under the fixed banner.
     await page.evaluate(() => window.scrollTo(0, 0));
-    // How far each starts under the banner's foot. Polled: the banner's height reaches the pages on its
-    // ResizeObserver, which runs at the next frame, and a busy machine can read the layout before it.
-    const under = async (selector: string) => {
-      const bar = await banner(page).boundingBox();
-      const box = await page.locator(selector).boundingBox();
-      return (box?.y ?? 0) - ((bar?.y ?? 0) + (bar?.height ?? 0));
-    };
-    await expect.poll(() => under(".title-bd")).toBeGreaterThanOrEqual(-1);
+    await expect.poll(() => under(page, ".title-bd")).toBeGreaterThanOrEqual(-1);
     // The fixed Back sits under the banner too, never under its cover (the iPhone's r5 M1, on the web).
-    await expect.poll(() => under(".backbar .back")).toBeGreaterThanOrEqual(-1);
+    await expect.poll(() => under(page, ".backbar .back")).toBeGreaterThanOrEqual(-1);
     await page.screenshot({ path: `${SHOTS}/offline-title-phone.jpg`, type: "jpeg", quality: 80 });
   } finally {
     await goOnline(page, true);
