@@ -32,6 +32,9 @@ import { allFailed, rowWords } from "../lib/rows";
 import { kindLabel, problemWords } from "../lib/words";
 import "./browse.css";
 import "./search.css";
+import { AllowSwitch, tileMenu } from "../components/kids";
+import { kidsKeys } from "../core/kids";
+import { kidsLine } from "../lib/words";
 import { RouteA } from "../components/route-link";
 
 // The last query survives closing the palette, so reopening lands on the results.
@@ -139,26 +142,41 @@ export default function Search() {
     lastQuery = params.q;
     setParams({ q: undefined }, { replace: true });
   }
+  // Add mode (`/search?add=<profile>`, from a kids profile's Add titles): an Allow switch on every result.
+  const add = () => (typeof params.add === "string" ? params.add : undefined);
   return (
     <main class="search-page">
-      <SearchPanel />
+      <SearchPanel add={add()} />
     </main>
   );
 }
 
-function SearchPanel(props: { dialog?: boolean }) {
+function SearchPanel(props: { dialog?: boolean; add?: string }) {
   // Try again on a search that could not open: a new panel, so a new view (one that failed to open drops its commands
   // for good). The query typed so far is `lastQuery`, sent again on mount.
   const [attempt, setAttempt] = createSignal(0);
   return (
     <Show when={attempt() + 1} keyed>
-      <Panel dialog={props.dialog} retry={() => setAttempt((n) => n + 1)} />
+      <Panel dialog={props.dialog} add={props.add} retry={() => setAttempt((n) => n + 1)} />
     </Show>
   );
 }
 
-function Panel(props: { dialog?: boolean; retry: () => void }) {
+function Panel(props: { dialog?: boolean; add?: string; retry: () => void }) {
   const view = liveView<SearchSnapshot>("search", {}, false, "id", searchIds);
+  // The kids profile Add titles chose, while the core lists it for the owner.
+  const adding = () => (props.add ? kidsKeys()?.profiles.find((k) => k.profile === props.add) : undefined);
+  const [addSaid, setAddSaid] = createSignal<string | null>(null);
+  const hit = (t: Tile, fkey: string, onOpen: () => void) => (
+    <Show when={adding()} fallback={<Hit tile={t} fkey={fkey} onOpen={onOpen} />}>
+      {(k) => (
+        <div class="hit-add">
+          <Hit tile={t} fkey={fkey} onOpen={onOpen} />
+          <AllowSwitch title={t} profile={k().profile} fkey={`${fkey}:allow`} onSaid={setAddSaid} />
+        </div>
+      )}
+    </Show>
+  );
   const [text, setText] = createSignal(lastQuery);
   const [scope, setScope] = createSignal<string | null>(null);
   const s = () => view.state.data;
@@ -264,6 +282,17 @@ function Panel(props: { dialog?: boolean; retry: () => void }) {
       <p class="sr" role="status">
         {status()}
       </p>
+      <Show when={adding()}>
+        {(k) => <h1 class="add-title">{kidsLine("addTitle", { name: k().name })}</h1>}
+      </Show>
+      <Show when={adding() && addSaid()}>
+        {(t) => (
+          <p class="st bad" role="status">
+            <i class="dot" />
+            {t()}
+          </p>
+        )}
+      </Show>
       <label class="field">
         <SearchIcon aria-hidden />
         <span class="sr">Search</span>
@@ -349,7 +378,7 @@ function Panel(props: { dialog?: boolean; retry: () => void }) {
                       <span class="kicker">{start().title}</span>
                     </h3>
                     <div class="hits-body">
-                      <For each={start().tiles.slice(0, START_TILES)}>{(t) => <Hit tile={t} fkey={`start:${t.id}`} onOpen={() => {}} />}</For>
+                      <For each={start().tiles.slice(0, START_TILES)}>{(t) => hit(t, `start:${t.id}`, () => {})}</For>
                     </div>
                   </section>
                 )}
@@ -423,7 +452,7 @@ function Panel(props: { dialog?: boolean; retry: () => void }) {
                               row below shows, and one key on two hits sends the
                               remote back up to the first. The core keeps its rows
                               as first shown, so a hit never changes rows. */}
-                          <For each={scoped(row)}>{(t) => <Hit tile={t} fkey={`hit:${row.rowId}:${t.id}`} onOpen={remember} />}</For>
+                          <For each={scoped(row)}>{(t) => hit(t, `hit:${row.rowId}:${t.id}`, remember)}</For>
                         </Match>
                       </Switch>
                     </div>
@@ -445,7 +474,7 @@ function Panel(props: { dialog?: boolean; retry: () => void }) {
 function Hit(props: { tile: Tile; fkey: string; onOpen: () => void }) {
   const t = () => props.tile;
   return (
-    <RouteA class="hit" href={titlePath(t().kind, t().id)} data-f={props.fkey} onClick={() => props.onOpen()}>
+    <RouteA class="hit" href={titlePath(t().kind, t().id)} data-f={props.fkey} onClick={() => props.onOpen()} {...tileMenu(t)}>
       {/* No poster, or not yet: a film mark on the surface, never squeezed words. */}
       <span class="hit-art" aria-hidden="true">
         <Film class="hit-ph" />

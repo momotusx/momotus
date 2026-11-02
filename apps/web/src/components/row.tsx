@@ -23,6 +23,7 @@ import { caption } from "../lib/words";
 import { wordFit } from "../lib/word-fit";
 import { visibleRange } from "../lib/range";
 import { rowWords } from "../lib/rows";
+import { tileMenu } from "./kids";
 import { RouteA } from "./route-link";
 
 export const CONTINUE_ROW = "continue-watching";
@@ -126,6 +127,7 @@ export function TileCard(props: {
       aria-label={posterLabel([props.tile.rank ? `Number ${props.tile.rank}` : null, props.tile.name, cap() ?? props.tile.genre], props.wide ? null : props.tile.ratings)}
       style={slotted ? { width: `${props.w}px` } : { width: `${props.w}px`, ...props.style }}
       onClick={() => props.onOpen?.()}
+      {...tileMenu(() => props.tile)}
     >
       <div class="pic" style={{ height: `${props.h}px` }}>
         <Show

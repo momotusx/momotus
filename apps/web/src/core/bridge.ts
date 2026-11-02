@@ -62,6 +62,10 @@ export class Bridge {
   private gone = new Set<(profile: string) => void>();
   /** Who hears `{"incognito": "ended" | "endsSoon"}` (plans/batch-10-incognito.md 2.7). */
   private incognito = new Set<(what: string) => void>();
+  /** Who hears `{"closed": "notAllowed", "subs"}` (a title left a kids list) and `{"profile": "access", "id"}` (the
+   * session's profile was made standard): plans/m11-kids.md 8. */
+  private closedSubs = new Set<(subs: number[]) => void>();
+  private access = new Set<() => void>();
   /** The transport closed for good: every later request fails at once instead of waiting forever. */
   private closed = false;
 
@@ -86,6 +90,15 @@ export class Bridge {
     if ((message as { profile?: unknown }).profile === "gone") {
       const { id } = message as unknown as { id: string };
       for (const fn of this.gone) fn(id);
+      return;
+    }
+    if ((message as { profile?: unknown }).profile === "access") {
+      for (const fn of this.access) fn();
+      return;
+    }
+    const closed = message as { closed?: unknown; subs?: unknown };
+    if (typeof closed.closed === "string" && Array.isArray(closed.subs)) {
+      for (const fn of this.closedSubs) fn(closed.subs as number[]);
       return;
     }
     const incognito = (message as { incognito?: unknown }).incognito;
@@ -124,6 +137,18 @@ export class Bridge {
   onIncognito(fn: (what: string) => void): () => void {
     this.incognito.add(fn);
     return () => this.incognito.delete(fn);
+  }
+
+  /** Runs `fn` with the subscriptions the core closed because their title left a kids list. */
+  onClosed(fn: (subs: number[]) => void): () => void {
+    this.closedSubs.add(fn);
+    return () => this.closedSubs.delete(fn);
+  }
+
+  /** Runs `fn` when the session's kids profile was made standard: its views are closed. */
+  onAccess(fn: () => void): () => void {
+    this.access.add(fn);
+    return () => this.access.delete(fn);
   }
 
   /** Pushes on a subscription the host owns rather than the core (a desktop

@@ -20,6 +20,7 @@ import { controlAria, downloadAct, downloadAdd, DownloadMark, DownloadMenu, down
 import { SynopsisDialog } from "../components/synopsis";
 import { TitleScores } from "../components/title-scores";
 import { KeyedPage } from "../components/keyed-page";
+import { TitleKids } from "../components/kids";
 import { Why } from "../components/why";
 import { leftOut, RemovalNote, removeSoon, Row } from "../components/row";
 import { separators } from "../components/separators";
@@ -141,6 +142,8 @@ function TitlePage(props: { kind: string; id: string; retry: () => void }) {
   const offline = () => header()?.offline ?? false;
   // The download menu over the page (components/download.tsx); downloads show off TV, never on a kids profile.
   const [menu, setMenu] = createSignal<MenuAsk | null>(null);
+  // An Allow the core refused, under the actions.
+  const [kidsSaid, setKidsSaid] = createSignal<string | null>(null);
   const downloads = () => downloadsHere() && !kidsProfile();
   const navigate = useNavigate();
   const keep = (videoId: string) => (item: DownloadItem) => {
@@ -572,6 +575,8 @@ function TitlePage(props: { kind: string; id: string; retry: () => void }) {
                       Watched
                     </button>
                   </Show>
+                  {/* The owner's kids profiles: Allow for one, or the "Who can watch this?" sheet (plans/m11-kids.md 6.1). */}
+                  <TitleKids title={{ kind: props.kind, id: props.id, name: x().name }} onSaid={setKidsSaid} />
                   {/* Download last, on the phone and desktop forms (design/DECISION.md, the title's action order):
                       a film's own control, a series' menu of seasons. A kids profile only sees "Downloaded". */}
                   <Show when={downloads() && props.kind === "movie"}>
@@ -627,6 +632,14 @@ function TitlePage(props: { kind: string; id: string; retry: () => void }) {
                     </button>
                   </Show>
                 </div>
+                <Show when={kidsSaid()}>
+                  {(t) => (
+                    <p class="st bad kids-title-said" role="status">
+                      <i class="dot" />
+                      {t()}
+                    </p>
+                  )}
+                </Show>
                 {/* Undo for a removal from Continue Watching, which TV makes here. */}
                 <Show when={form() === "tv"}>
                   <RemovalNote />

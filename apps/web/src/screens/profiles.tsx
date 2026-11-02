@@ -3,23 +3,31 @@
 
 import { A, useBeforeLeave, useNavigate, useParams } from "@solidjs/router";
 import Delete from "lucide-solid/icons/delete";
+import Eye from "lucide-solid/icons/eye";
+import ShieldCheck from "lucide-solid/icons/shield-check";
 import HatGlasses from "lucide-solid/icons/hat-glasses";
 import Lock from "lucide-solid/icons/lock";
 import Plus from "lucide-solid/icons/plus";
 import { createEffect, createSignal, For, type JSX, on, onCleanup, onMount, Show } from "solid-js";
+import { Poster } from "../components/art";
 import { AvatarArt } from "../components/avatar";
 import { incognitoWords } from "../components/incognito";
 import { BridgeError } from "../core/bridge";
-import { op, reasonOf } from "../core/client";
+import { liveView, op, reasonOf } from "../core/client";
+import { createKidsProfile, kidsKeys, makeStandard, removeTitle } from "../core/kids";
+import type { KidsTitlesSnapshot } from "../core/generated/KidsTitlesSnapshot";
 import type { ProfileInfo } from "../core/generated/ProfileInfo";
 import type { ProfilesSnapshot } from "../core/generated/ProfilesSnapshot";
-import { ackIncognitoEnded, markChosen, profiles, switchProfile, takePick, unlockProfile } from "../core/profiles";
+import { ackIncognitoEnded, markChosen, pickOnOpen, profiles, switchProfile, takePick, unlockProfile } from "../core/profiles";
 import { autoFocusSoon, goBack } from "../focus/dom";
 import { holdModal } from "../focus/modal";
 import { markBack, setLeaveGuarded, takeAfterBack, takeBack } from "../history";
 import { type AvatarColor, formatAvatar, GLYPHS, type Glyph, nextAvatar, parseAvatar } from "../lib/avatar";
 import { current, INCOGNITO, inIncognito, profileProblem, waitText } from "../lib/profiles";
+import { kidsSession, ownerOf, pinAsked } from "../lib/kids";
+import { kidsLine } from "../lib/words";
 import "./browse.css";
+import "./onboarding.css";
 import "./settings.css";
 import "./profiles.css";
 
@@ -40,7 +48,7 @@ function tried(e: unknown): Tried {
 }
 
 /** Four digits, one try at a time. The digits live only here and go when it closes or the app hides. */
-export function Keypad(props: { title: string; reason?: string; note?: string; onSubmit: (pin: string) => Promise<Tried>; onCancel: () => void; cancelLabel?: string }) {
+export function Keypad(props: { title: string; reason?: string; note?: string; waitNote?: string; onSubmit: (pin: string) => Promise<Tried>; onCancel: () => void; cancelLabel?: string }) {
   const [digits, setDigits] = createSignal("");
   const [busy, setBusy] = createSignal(false);
   const [shake, setShake] = createSignal(false);
@@ -148,6 +156,9 @@ export function Keypad(props: { title: string; reason?: string; note?: string; o
         <p class="pin-wait" aria-hidden="true">
           Try again in <span class="num">{waitText(until() - now())}</span>
         </p>
+        <Show when={props.waitNote}>
+          <p class="note small">{props.waitNote}</p>
+        </Show>
       </Show>
       <div class="pin-grid" data-fgroup="keypad">
         <For each={keys}>
@@ -190,7 +201,9 @@ export function Keypad(props: { title: string; reason?: string; note?: string; o
 /** One profile tile: its avatar, name, and lock or syncing state, spoken as one. */
 function Tile(props: { p: ProfileInfo; active: boolean; onPick: () => void }) {
   const spoken = () =>
-    [props.p.name, props.active ? "current profile" : "", props.p.syncing ? "still syncing" : props.p.hasPin ? "locked with a PIN" : ""].filter(Boolean).join(", ");
+    [props.p.kids ? kidsLine("pickerSpoken", { name: props.p.name }) : props.p.name, props.active ? "current profile" : "", props.p.syncing ? "still syncing" : props.p.hasPin ? "locked with a PIN" : ""]
+      .filter(Boolean)
+      .join(", ");
   return (
     <button
       class="ptile"
@@ -211,6 +224,9 @@ function Tile(props: { p: ProfileInfo; active: boolean; onPick: () => void }) {
       <Show when={props.p.syncing}>
         <small>Syncing</small>
       </Show>
+      <Show when={props.p.kids && !props.p.syncing}>
+        <small>{kidsLine("pickerKids")}</small>
+      </Show>
     </button>
   );
 }
@@ -223,6 +239,10 @@ export function Picker(props: { mode: "start" | "locked" | "switch" }) {
   const [said, setSaid] = createSignal("");
   // The keypad asks the PIN that opens Incognito (`incognitoPin`), not the profile's own.
   const [forIncognito, setForIncognito] = createSignal(false);
+  // Out of a kids session the keypad asks the main profile's PIN, whichever profile was picked (plans/m11-kids.md 7).
+  const [exiting, setExiting] = createSignal(false);
+  const main = () => ownerOf(s());
+  const mainName = () => main()?.name ?? "Main";
   const [opening, setOpening] = createSignal(false);
   const owner = () => current(s())?.isOwner === true;
   const locked = () => s()?.locked === true;
@@ -249,6 +269,8 @@ export function Picker(props: { mode: "start" | "locked" | "switch" }) {
       else if (same) markChosen();
       else await switchProfile(p.id, pin);
     } catch (e) {
+      // Out of a kids session with no main PIN to ask: the web has no device lock to stand in for it.
+      if (e instanceof BridgeError && e.code === "kidsNeedPin" && kidsSession(s())) return { kind: "problem", text: kidsLine("exitNoPin", { owner: mainName() }) };
       return tried(e);
     }
     setTarget(null);
@@ -287,6 +309,7 @@ export function Picker(props: { mode: "start" | "locked" | "switch" }) {
   const pick = async (p: ProfileInfo) => {
     setSaid("");
     setForIncognito(false);
+    setExiting(false);
     // The current profile, unlocked, needs nothing: the start picker opens it, the switch picker closes. An Incognito
     // end shown here was read by choosing (a switch or an unlock clears it in the core; this choice sends no op).
     if (p.id === s()?.active && !locked()) {
@@ -295,7 +318,10 @@ export function Picker(props: { mode: "start" | "locked" | "switch" }) {
       else markChosen();
       return;
     }
-    if (p.hasPin) {
+    // Leaving a kids profile, for any other profile: the main profile's PIN (the core checks it, never the target's).
+    const asks = pinAsked(s(), p);
+    if (asks) {
+      setExiting(asks === "main");
       setTarget(p);
       return;
     }
@@ -367,9 +393,10 @@ export function Picker(props: { mode: "start" | "locked" | "switch" }) {
       >
         {(t) => (
           <Keypad
-            title={forIncognito() ? incognitoWords.pinTitle(t().name) : `Enter the PIN for ${t().name}`}
+            title={forIncognito() ? incognitoWords.pinTitle(t().name) : exiting() ? kidsLine("exitTitle", { owner: mainName() }) : `Enter the PIN for ${t().name}`}
             reason={forIncognito() && !locked() && s()?.profiles.some((p) => p.kids) ? incognitoWords.kidsReason : undefined}
-            note={forgot()}
+            note={exiting() ? undefined : forgot()}
+            waitNote={exiting() ? kidsLine("exitWaitNote", { owner: mainName() }) : undefined}
             onSubmit={(pin) => (forIncognito() ? enterIncognito(pin) : enter(t(), pin))}
             cancelLabel={(forIncognito() ? INCOGNITO : t().id) === asked ? "Cancel" : undefined}
             onCancel={() => {
@@ -377,6 +404,7 @@ export function Picker(props: { mode: "start" | "locked" | "switch" }) {
               if (id === asked) return goBack();
               setTarget(null);
               setForIncognito(false);
+              setExiting(false);
               autoFocusSoon(() => document.querySelector<HTMLElement>(`[data-f="profile:${id}"]`));
             }}
           />
@@ -389,6 +417,12 @@ export function Picker(props: { mode: "start" | "locked" | "switch" }) {
 /** The voluntary picker, at /profiles. */
 export default function ProfilesScreen() {
   return <Picker mode="switch" />;
+}
+
+/** A kids profile's line in Manage profiles: "Kids", then how many titles it may watch once the core says. */
+function kidsRowLine(p: ProfileInfo) {
+  const n = kidsKeys()?.profiles.find((k) => k.profile === p.id)?.keys.length;
+  return [kidsLine("manageKind"), n === undefined ? "" : kidsLine(n === 1 ? "titleOne" : "titleMany", { n })].filter(Boolean).join(" · ");
 }
 
 /** Manage profiles: every profile, each opening its edit page (the owner only). */
@@ -406,7 +440,7 @@ export function ManageProfiles() {
                 <AvatarArt avatar={p.avatar} name={p.name} size="s" />
                 <span>
                   <b>{p.name}</b>
-                  <small>{[p.isOwner ? "Main profile" : "", p.syncing ? "Syncing" : p.hasPin ? "PIN set" : ""].filter(Boolean).join(" · ") || "No PIN"}</small>
+                  <small>{p.kids ? kidsRowLine(p) : [p.isOwner ? "Main profile" : "", p.syncing ? "Syncing" : p.hasPin ? "PIN set" : ""].filter(Boolean).join(" · ") || "No PIN"}</small>
                 </span>
               </A>
             )}
@@ -454,6 +488,10 @@ export function EditProfile() {
   // The stored PIN came from a newer version: it can only be removed (the core lets its owner do that without it).
   const [unreadable, setUnreadable] = createSignal(false);
   const [confirmDelete, setConfirmDelete] = createSignal(false);
+  // Add profile's "Kids profile" switch: off, and closed while the main profile has no PIN (plans/m11-kids.md 6.1).
+  const [kids, setKids] = createSignal(false);
+  const kidsOpen = () => ownerOf(s())?.hasPin === true;
+  createEffect(() => !kidsOpen() && setKids(false));
   // A PIN taken off with one tap asks first: another profile's, or one this version cannot read.
   const [confirmPin, setConfirmPin] = createSignal<"other" | "unreadable" | null>(null);
   // The name the page was opened with (empty for a new profile), what unsaved edits are measured against.
@@ -531,7 +569,8 @@ export function EditProfile() {
     try {
       if (isNew()) {
         const before = new Set(s()?.profiles.map((x) => x.id));
-        const after = await op<ProfilesSnapshot>("createProfile", { name: n, avatar: formatAvatar({ glyph: glyph(), color: color() }) });
+        const avatar = formatAvatar({ glyph: glyph(), color: color() });
+        const after = kids() ? await createKidsProfile(n, avatar) : await op<ProfilesSnapshot>("createProfile", { name: n, avatar });
         // The page is now an edit of what it made, with that as its saved state.
         setCreated(after.profiles.find((x) => !before.has(x.id) && x.name === n)?.id ?? after.profiles.find((x) => !before.has(x.id))?.id ?? null);
         setBase(n);
@@ -695,6 +734,37 @@ export function EditProfile() {
               </For>
             </div>
           </div>
+          <Show when={isNew()}>
+            <div class="sgroup pedit-kinds">
+              <button
+                type="button"
+                class="drow"
+                role="switch"
+                aria-checked={kids()}
+                aria-disabled={!kidsOpen()}
+                aria-describedby="pedit-kids-note"
+                data-f="pedit:kids"
+                onClick={() => kidsOpen() && setKids(!kids())}
+              >
+                <span class="dlogo" aria-hidden="true">
+                  <ShieldCheck />
+                </span>
+                <span class="dtext">
+                  <b>{kidsLine("switchLabel")}</b>
+                  <small id="pedit-kids-note">{kidsOpen() ? kidsLine("switchNote") : kidsLine("switchNeedsPin", { owner: ownerOf(s())?.name ?? "Main" })}</small>
+                </span>
+                <span class="switch" aria-hidden="true">
+                  <i />
+                </span>
+                <span class="dword" aria-hidden="true">
+                  {kids() ? "On" : "Off"}
+                </span>
+              </button>
+            </div>
+            <Show when={kids()}>
+              <p class="note small">{kidsLine("switchSource")}</p>
+            </Show>
+          </Show>
           <div class="acts">
             <button class="btn primary" type="submit" data-f="pedit:save" aria-disabled={saving()}>
               {isNew() ? "Add profile" : "Save"}
@@ -728,7 +798,9 @@ export function EditProfile() {
           </Confirm>
         </Show>
 
-        <Show when={!isNew() && p()}>
+        <Show when={!isNew() && owner() && p()?.kids ? p() : null}>{(cur) => <KidsSection p={cur()} />}</Show>
+
+        <Show when={!isNew() && !p()?.kids && p()}>
           {(cur) => (
             <section class="pedit-pin" aria-label="PIN">
               <h2 class="kicker">PIN</h2>
@@ -814,6 +886,122 @@ export function EditProfile() {
       </Show>
       </Show>
     </main>
+  );
+}
+
+/** A kids profile's edit section (plans/m11-kids.md 6.1): what it may watch, with Remove; Add titles (Search in add
+ * mode), View as, and Make standard behind a question. */
+function KidsSection(props: { p: ProfileInfo }) {
+  const navigate = useNavigate();
+  const view = liveView<KidsTitlesSnapshot>("kidsTitles", { profile: props.p.id });
+  const name = () => props.p.name;
+  const [said, setSaid] = createSignal<string | null>(null);
+  const [asking, setAsking] = createSignal(false);
+  const [busy, setBusy] = createSignal(false);
+  const remove = (id: string) => {
+    setSaid(null);
+    removeTitle(props.p.id, id).catch((e) => setSaid(reasonOf(e)));
+  };
+  // Entering a kids profile is free: the picker opens it, as the bar's menu does, once this page has gone.
+  const viewAs = () => {
+    pickOnOpen(props.p.id);
+    navigate("/profiles");
+  };
+  const standard = async () => {
+    if (busy()) return;
+    setBusy(true);
+    try {
+      await makeStandard(props.p.id);
+      setAsking(false);
+    } catch (e) {
+      setAsking(false);
+      setSaid(tried(e).kind === "problem" ? (tried(e) as { text: string }).text : reasonOf(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <>
+      <section class="pedit-pin pedit-kids" aria-labelledby="pedit-kids-h">
+        <h2 class="kicker" id="pedit-kids-h">
+          {kidsLine("listHeading", { name: name() })}
+        </h2>
+        <div class="acts">
+          <A class="btn" href={`/search?add=${encodeURIComponent(props.p.id)}`} data-f="pedit:kids:add">
+            <Plus aria-hidden />
+            {kidsLine("addTitles")}
+          </A>
+          <button class="btn" data-f="pedit:kids:view" onClick={viewAs}>
+            <Eye aria-hidden />
+            {kidsLine("viewAs", { name: name() })}
+          </button>
+        </div>
+        <Show when={view.state.status.state === "failed"}>
+          <p class="st bad" role="status">
+            <i class="dot" />
+            {(view.state.status as { reason: string }).reason}
+          </p>
+        </Show>
+        <Show when={view.state.data}>
+          {(d) => (
+            <Show when={d().titles.length} fallback={<p class="note">{kidsLine("empty", { name: name() })}</p>}>
+              <ul class="kids-list" data-fgroup="pedit-kids">
+                <For each={d().titles}>
+                  {(t) => (
+                    <li class="kids-row">
+                      <span class="kids-art" aria-hidden="true">
+                        <Poster src={t.poster} name={t.name} w={64} h={96} nameCard={false} />
+                      </span>
+                      <span class="kids-name">
+                        <b>{t.name}</b>
+                        <Show when={t.over}>
+                          <small>{kidsLine("over", { name: name() })}</small>
+                        </Show>
+                      </span>
+                      <button class="btn" data-f={`pedit:kids:remove:${t.kind}:${t.id}`} aria-label={`Remove ${t.name} from ${name()}'s list`} onClick={() => remove(t.id)}>
+                        {kidsLine("remove", { name: name() })}
+                      </button>
+                    </li>
+                  )}
+                </For>
+              </ul>
+            </Show>
+          )}
+        </Show>
+        <Show when={said()}>
+          {(t) => (
+            <p class="st bad" role="status">
+              <i class="dot" />
+              {t()}
+            </p>
+          )}
+        </Show>
+      </section>
+      <section class="pedit-danger">
+        <Show
+          when={asking()}
+          fallback={
+            <button class="btn" data-f="pedit:kids:standard" onClick={() => setAsking(true)}>
+              {kidsLine("makeStandard", { name: name() })}
+            </button>
+          }
+        >
+          <Confirm label={kidsLine("makeStandardAsk", { name: name() })} busy={busy()} onKeep={() => setAsking(false)}>
+            <p>
+              {kidsLine("makeStandardAsk", { name: name() })} {kidsLine("makeStandardBody", { name: name() })}
+            </p>
+            <div class="acts">
+              <button class="btn danger" data-f="pedit:kids:standard:yes" aria-disabled={busy()} onClick={() => void standard()}>
+                {kidsLine("makeStandardYes")}
+              </button>
+              <button class="btn" data-f="pedit:kids:standard:no" data-autofocus aria-disabled={busy()} onClick={() => !busy() && setAsking(false)}>
+                {kidsLine("keepKids")}
+              </button>
+            </div>
+          </Confirm>
+        </Show>
+      </section>
+    </>
   );
 }
 

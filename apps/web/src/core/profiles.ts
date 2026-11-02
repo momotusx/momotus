@@ -76,18 +76,21 @@ export function takePick(): string | null {
   return p && Date.now() - p.at < PICK_FRESH_MS ? p.id : null;
 }
 
-let switching = false;
+const [switching, setSwitching] = createSignal(false);
+/** A switch is under way: nothing opens a view of the old profile meanwhile (the core refuses the switch while one is
+ * open). */
+export { switching };
 
 /** Tears down, then switches; a view still closing (`viewsOpen`) is waited for, up to five times.
  * One switch at a time: a second one while the first is out is refused. Into Incognito, `fromChooser` says Leave goes
  * back to the chooser. */
 export async function switchProfile(id: string, pin?: string, fromChooser = false): Promise<ProfilesSnapshot> {
-  if (switching) throw new Error("A switch is already under way.");
-  switching = true;
+  if (switching()) throw new Error("A switch is already under way.");
+  setSwitching(true);
   try {
     return await runSwitch(id, pin, fromChooser);
   } finally {
-    switching = false;
+    setSwitching(false);
   }
 }
 

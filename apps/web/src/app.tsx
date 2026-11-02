@@ -6,26 +6,29 @@ import Compass from "lucide-solid/icons/compass";
 import House from "lucide-solid/icons/house";
 import LibraryBig from "lucide-solid/icons/library-big";
 import RefreshCw from "lucide-solid/icons/refresh-cw";
+import X from "lucide-solid/icons/x";
 import SearchIcon from "lucide-solid/icons/search";
 import Settings from "lucide-solid/icons/settings";
 import { type Component, createEffect, createMemo, createSignal, For, on, onCleanup, Show, untrack } from "solid-js";
 import { ProfileMenu } from "./components/avatar";
 import Brand from "./components/brand";
 import { DownloadStatus, OfflineBanner } from "./components/download";
-import { link, listEveryKind, lostWords } from "./core/client";
+import { KidsMenuHost } from "./components/kids";
+import { bridge, link, listEveryKind, lostWords, takenOff } from "./core/client";
 // The debrid accounts follow the core from the start, whatever screen is open.
 import "./core/debrid";
 import "./core/trakt";
 // A sign-out with removal that a reload cut short goes on (D13).
 import "./core/wipe";
-import { gateOpen, incognito, intro, profiles, profilesFailed } from "./core/profiles";
+import { gateOpen, incognito, intro, profiles, profilesFailed, resetProfileState } from "./core/profiles";
 import { EndedNotice, IncognitoIntro, IncognitoWarning } from "./components/incognito";
 import { setTitle } from "./incognito";
 import { autoFocusSoon, focusRail, installFocus, readPathFrom, move, railHasFocus, restoreSoon, viewerMoving } from "./focus/dom";
 import { screenChanged } from "./focus/ghost-tap";
 import { type Form, form } from "./form";
 import { parentOf } from "./lib/parent";
-import { kidsBlocked, kidsSession } from "./lib/kids";
+import { kidsBlocked, kidsSession, takenOffHere } from "./lib/kids";
+import { kidsLine } from "./lib/words";
 import { isSettingsPage } from "./lib/settings-sections";
 import { backThenReplace, currentPathname, endMemory, entryOwner, historyBase, historyDepth, leaveGuarded, markBack, resetHistoryBase, stampEntriesWith, startMemory, takeAfterBack, takeBack } from "./history";
 import Addons from "./screens/addons";
@@ -330,6 +333,28 @@ function Shell(props: RouteSectionProps) {
   // A page a kids session never opens, typed or linked, goes Home in its place: the core refuses its views anyway.
   const barred = () => kidsSession(profiles()) && kidsBlocked(location.pathname);
   createEffect(on(barred, (b) => b && navigate("/", { replace: true })));
+  // A title that left the kids list while its page or player was open (plans/m11-kids.md 8): the core closed its
+  // views, the screen goes Home and says why there, until the next screen.
+  const [takenOffSaid, setTakenOffSaid] = createSignal(false);
+  createEffect(
+    on(takenOff, (t) => {
+      if (!t || !takenOffHere(location.pathname, t.items)) return;
+      navigate("/", { replace: true });
+      setTakenOffSaid(true);
+    }, { defer: true }),
+  );
+  createEffect(on(() => location.pathname, (path) => path !== "/" && setTakenOffSaid(false), { defer: true }));
+  // The session's kids profile was made standard: the core closed its views and the session goes on unlocked as a
+  // standard profile, so every screen opens again from Home, as after a switch.
+  const [access, setAccess] = createSignal(0);
+  onCleanup(
+    bridge.onAccess(() => {
+      void resetProfileState().then(() => {
+        setAccess((n) => n + 1);
+        navigate("/", { replace: true });
+      });
+    }),
+  );
   const nav = () => hasNav(location.pathname);
   const backPlace = () => (form() === "tv" ? null : backAt(location.pathname, form()));
   // Nothing of a profile shows before the core says which one runs and
@@ -384,8 +409,18 @@ function Shell(props: RouteSectionProps) {
               )}
             </Show>
             <div class="screen" classList={{ barred: backPlace() === "bar" }} inert={searchOpen() || undefined}>
-              <Show when={!barred()}>{props.children}</Show>
+              <Show when={access() + 1} keyed>
+                <Show when={!barred()}>{props.children}</Show>
+              </Show>
             </div>
+            <Show when={takenOffSaid() && location.pathname === "/"}>
+              <p class="banner kids-taken" role="status">
+                {kidsLine("takenOff")}
+                <button class="banner-x" data-f="banner:taken-off" aria-label="Dismiss" onClick={() => setTakenOffSaid(false)}>
+                  <X aria-hidden />
+                </button>
+              </p>
+            </Show>
             <Show when={nav() && form() === "phone"}>
               <Tabs />
             </Show>
@@ -394,6 +429,7 @@ function Shell(props: RouteSectionProps) {
             </Show>
             {/* A refused download op says so here, whatever page sent it. */}
             <DownloadStatus />
+            <KidsMenuHost />
             <IncognitoWarning />
             <EndedNotice />
             </Show>

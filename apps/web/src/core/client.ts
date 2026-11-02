@@ -7,7 +7,7 @@ import { createStore, reconcile } from "solid-js/store";
 import { Bridge, BridgeError, ipcTransport, shellPost, webSocketTransport } from "./bridge";
 import { applyDiffs } from "./diff";
 import { isPrivateLink } from "../lib/sync";
-import { failureWords } from "../lib/words";
+import { failureWords, kidsCopy } from "../lib/words";
 import type { DiscoverSnapshot } from "./generated/DiscoverSnapshot";
 import type { Episode } from "./generated/Episode";
 import type { Hero } from "./generated/Hero";
@@ -142,6 +142,24 @@ export interface LiveView<S> {
 }
 
 type Subscription = Awaited<ReturnType<typeof bridge.subscribe>>;
+
+/** The open views of one title (title, versions, playback), by subscription: the core closes them when the title
+ * leaves a kids list (plans/m11-kids.md 8), and each then fails with that line. */
+const ofTitle = new Map<number, { item: string; fail: () => void }>();
+const [takenOff, setTakenOff] = createSignal<{ items: string[] } | null>(null);
+/** The titles whose open views the core last closed for a kids session: their screens leave. */
+export { takenOff };
+bridge.onClosed((subs) => {
+  const items = subs.flatMap((n) => {
+    const v = ofTitle.get(n);
+    if (!v) return [];
+    ofTitle.delete(n);
+    v.fail();
+    return [v.item];
+  });
+  if (items.length) setTakenOff({ items });
+});
+const closedStatus: ViewStatus = { state: "failed", reason: kidsCopy.takenOff };
 /** Closes a subscription once its opening settled; a failed or lost one has nothing to close. */
 const closeWhenOpen = (opening: Promise<Subscription | null>) =>
   opening.then((s) => s?.close()).catch(() => undefined);
@@ -175,6 +193,14 @@ export function liveView<S>(view: string, params: Record<string, unknown> = {}, 
       if (!closing) {
         setSub(s.sub);
         commands.open((c) => s.command(c));
+        if (typeof params.itemId === "string")
+          ofTitle.set(s.sub, {
+            item: params.itemId,
+            fail: () => {
+              commands.drop();
+              setState("status", closedStatus);
+            },
+          });
       } else commands.drop();
       return s;
     })
@@ -185,6 +211,7 @@ export function liveView<S>(view: string, params: Record<string, unknown> = {}, 
     });
   const close = () => {
     commands.drop();
+    ofTitle.delete(sub() ?? -1);
     return (closing ??= closeWhenOpen(opening));
   };
   if (!keep) onCleanup(() => void close());
@@ -259,9 +286,11 @@ export function titleView(kind: string, id: string): TitleView {
   const commands = commandQueue<object>();
   let close: (() => Promise<void>) | undefined;
   let disposed = false;
+  let opened: number | undefined;
   onCleanup(() => {
     disposed = true;
     commands.drop();
+    ofTitle.delete(opened ?? -1);
     void close?.();
   });
   bridge
@@ -283,6 +312,14 @@ export function titleView(kind: string, id: string): TitleView {
       if (disposed) return void sub.close();
       close = sub.close;
       commands.open((c) => sub.command(c));
+      opened = sub.sub;
+      ofTitle.set(sub.sub, {
+        item: id,
+        fail: () => {
+          commands.drop();
+          setState("status", closedStatus);
+        },
+      });
     })
     .catch((e) => {
       setState("status", failedStatus(e));

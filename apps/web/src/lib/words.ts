@@ -930,3 +930,52 @@ export function kindBest(kind: SourceKind, kinds: KindChip[]) {
   const service = kinds.find((k) => k.kind === kind)?.service;
   return kind === "debrid" && service ? choice.kind.best.service.replace("{service}", service) : choice.kind.best[kind];
 }
+
+/** Kids profiles, the owner's side and the way out (plans/m11-kids.md 6.4 and 7): `{name}` is the kids profile,
+ * `{owner}` the main profile, `{n}` a count. Android's KidsCopy.kt and Apple's KidsWords.swift say the same lines. */
+export const kidsCopy = {
+  switchLabel: "Kids profile",
+  switchNote: "Shows only the titles you allow. Leaving it needs your PIN.",
+  switchSource: "Videos come from your addons. Momotus checks titles and names, not what is inside a file.",
+  switchNeedsPin: "Set a PIN on {owner} first. A kids profile is only as safe as that PIN.",
+  allow: "Allow for {name}",
+  allowing: "Allowing…",
+  allowed: "Allowed for {name}",
+  allowedSpoken: "Allowed for {name}, select to remove",
+  remove: "Remove from {name}'s list",
+  kidsButton: "Kids",
+  sheetTitle: "Who can watch this?",
+  done: "Done",
+  addTitle: "Add titles for {name}",
+  addSwitch: "Allow",
+  mismatch: "This title's details came under another id. Open it from another row to allow it.",
+  noDetails: "Momotus could not read this title's details. Try again.",
+  listFull: "{name}'s list is full (1,000 titles). Remove some first.",
+  over: "Over the limit: {name} does not see this one.",
+  manageKind: "Kids",
+  titleOne: "{n} title",
+  titleMany: "{n} titles",
+  listHeading: "What {name} can watch",
+  addTitles: "Add titles",
+  viewAs: "View as {name}",
+  empty: "Nothing yet. Choose Add titles, or Allow for {name} on any show or movie.",
+  makeStandard: "Make {name} a standard profile",
+  makeStandardAsk: "Make {name} a standard profile?",
+  makeStandardBody: "{name} will see everything your addons show and can leave without your PIN.",
+  keepKids: "Keep it a kids profile",
+  makeStandardYes: "Make standard",
+  takenOff: "A grown-up took this off your list.",
+  exitTitle: "Ask a grown-up to enter {owner}'s PIN",
+  exitWaitNote: "Or set a new PIN for {owner} on another device.",
+  exitNoPin: "{owner} has no PIN. Set one on your phone or TV, then try again.",
+  pickerKids: "Kids",
+  pickerSpoken: "{name}, kids profile",
+  profileButton: "Profile: {name}. Switching needs a grown-up.",
+} as const;
+
+/** A kids line with its `{name}`, `{owner}` and `{n}` filled. */
+export const kidsLine = (key: keyof typeof kidsCopy, fill: { name?: string; owner?: string; n?: number } = {}) =>
+  kidsCopy[key]
+    .replaceAll("{name}", fill.name ?? "")
+    .replaceAll("{owner}", fill.owner ?? "")
+    .replaceAll("{n}", (fill.n ?? 0).toLocaleString("en-US"));

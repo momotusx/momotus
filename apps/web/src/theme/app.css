@@ -318,7 +318,7 @@ h1, h2, h3 { font-family: var(--font-display); font-weight: var(--weight-heading
  * inside it turns dark too. The title's round actions invert their circle
  * only, their word stays on the page. */
 [data-form="tv"] :is(.btn:not(.info .acts .btn), .chip, .tab, .nav, .scope, .palette-close, .fix, .skip, .dlink, .door, .drow, .link-row, .srow, .snav, .hrow-main, .glyph-pick,
-  .sync-check, .vrow, .fold, .hit, .ep-main, .ep-act, .fa-card, .pull-opt, .pmenu-row, .lp-row, .lp-chip, .lp-key, .lp-clear, .lp-retry, .lp-done, .lp-selector):focus,
+  .sync-check, .vrow, .fold, .hit, .ep-main, .ep-act, .fa-card, .pull-opt, .pmenu-row, .dl-item, .lp-row, .lp-chip, .lp-key, .lp-clear, .lp-retry, .lp-done, .lp-selector):focus,
 /* A text field turns white on TV only: elsewhere a click focuses it as visibly as a key does. */
 [data-form="tv"] .field-line input:focus,
 [data-form="tv"] .rbtn:focus .ring,

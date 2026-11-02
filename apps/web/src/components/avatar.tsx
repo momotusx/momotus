@@ -28,6 +28,7 @@ import { IncognitoMark, incognitoWords, useLeave } from "./incognito";
 import { pushBack } from "../focus/back";
 import { focusByViewer, focusEl } from "../focus/dom";
 import { type Glyph, initial, parseAvatar } from "../lib/avatar";
+import { kidsLine } from "../lib/words";
 import "./avatar.css";
 
 const ICONS: Record<Exclude<Glyph, "letter">, Component<{ "aria-hidden"?: boolean }>> = {
@@ -133,7 +134,7 @@ export function ProfileMenu(props: { lit: boolean; tab?: boolean; onSettings: ()
             class={props.tab ? "ptab" : "nav pavatar"}
             classList={{ on: props.lit }}
             data-f="nav:/profiles"
-            aria-label={`Profile: ${p().name}`}
+            aria-label={profiles()?.kids ? kidsLine("profileButton", { name: p().name }) : `Profile: ${p().name}`}
             aria-haspopup="menu"
             aria-expanded={open()}
             ref={button}
