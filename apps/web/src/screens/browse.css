@@ -73,7 +73,8 @@
 [data-form="phone"] .cal-row .chev { width: 18px; height: 18px; color: rgba(255, 255, 255, .4); }
 [data-form="phone"] .chips-row { flex-direction: column; align-items: stretch; gap: 6px; }
 [data-form="phone"] .chips-row > .kicker { width: auto; }
-[data-form="phone"] .chips-track { overflow-x: auto; gap: 8px; padding: 2px 16px; margin: 0 -16px; }
+/* Room inside the scroller for a chip's 48 px reach (app.css), the layout as before: 6 px more padding, 6 px less margin. */
+[data-form="phone"] .chips-track { overflow-x: auto; gap: 8px; padding: 8px 16px; margin: -6px -16px; }
 [data-form="phone"] .chips-track { --chip-fade: 40px; }
 [data-form="phone"] .chip { height: 36px; padding: 0 14px; border-radius: 18px; font-size: 14px; gap: 6px; }
 [data-form="phone"] .chip small { font-size: 12px; }
@@ -138,7 +139,7 @@
 [data-form="tv"] .tile .pic .corner img { height: 20px; }
 
 [data-form="phone"] .discover .dv-head { flex-direction: column; align-items: stretch; gap: 12px; margin: 8px 0 16px; }
-[data-form="phone"] .dv-kinds .chips-track { padding: 0; margin: 0; }
+[data-form="phone"] .dv-kinds .chips-track { padding: 6px 0; margin: -6px 0; }
 [data-form="phone"] .dv-rail { margin: 0 0 14px; }
 [data-form="phone"] .dv-rail-track { gap: 10px; padding: 9px 16px; margin: -9px -16px; scroll-padding-inline: 16px; }
 [data-form="phone"] .svc-tile { height: 48px; padding: 0 16px; font-size: 15px; }

@@ -341,3 +341,8 @@ h1, h2, h3 { font-family: var(--font-display); font-weight: var(--weight-heading
 [data-form="tv"] .tile:focus .pic::after, [data-form="tv"] .cal-card:focus .cal-art::after { opacity: 1; }
 [data-form="tv"] .ptile:focus .avatar {
   background-image: linear-gradient(125deg, rgba(255, 255, 255, .26), rgba(255, 255, 255, .06) 32%, rgba(255, 255, 255, 0) 52%); }
+
+/* A finger's 48 on the phone (QA r1): a control drawn shorter keeps its look and reaches 48 px tall with an invisible
+ * ::after centred on it. Only up and down: chips and buttons side by side never reach over a neighbour. */
+[data-form="phone"] :is(.chip, .btn, .tab, .syn-more)[data-f]::after {
+  content: ""; position: absolute; left: 0; right: 0; top: min(0px, (100% - 48px) / 2); bottom: min(0px, (100% - 48px) / 2); }

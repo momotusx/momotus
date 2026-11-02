@@ -335,3 +335,6 @@
 [data-form="tv"] .tile .rank { top: 10px; left: 16px; font-size: 57px; }
 [data-form="desktop"] .tile .rank { top: calc(6 * var(--px)); left: calc(12 * var(--px)); font-size: calc(40 * var(--px)); }
 [data-form="desktop"] .tile .rank-genre { margin-top: calc(6 * var(--px)); font-size: calc(13 * var(--px)); line-height: calc(16 * var(--px)); }
+/* The phone's reach (QA r1): the pager dots 48 px tall and edge to edge across their gaps, the remove X 48 px square. */
+[data-form="phone"] .hero-dots button.dot::after { content: ""; position: absolute; inset: -13.5px -1.5px; }
+[data-form="phone"] .tile-x::after { content: ""; position: absolute; inset: -8px; }
