@@ -1099,6 +1099,28 @@ test("a trailer YouTube refuses gives way to the next one, then to a quiet line,
   await context.close();
 });
 
+test("a trailer picked by its chip stays picked when YouTube refuses it, and says so (QA r2 Q4 row 50)", async ({ browser }) => {
+  const { context, p, leftApp } = await trailerRun(browser, { form: "desktop", fail: ["jrnyTrailr1"] });
+  await p.locator('[data-f="title:trailer"]').click();
+  // The layer's own first pick gives way to the next trailer.
+  await expect.poll(() => ytLog(p)).toContain("new jrnyTeaser1 https://www.youtube-nocookie.com");
+  await expect(p.locator('[data-f="trailer:1"]')).toHaveAttribute("aria-checked", "true");
+  // Main trailer, pressed: it is the one picked and tried, and the line says it cannot play, with no hand-back.
+  const main = p.locator('[data-f="trailer:0"]');
+  await main.click();
+  await expect(p.locator(".trailer-fail[role=alert]")).toHaveText("This trailer can't play here.");
+  await expect(main).toHaveAttribute("aria-checked", "true");
+  const log = await ytLog(p);
+  expect(log.filter((l) => l.startsWith("new jrnyTrailr1")).length).toBe(2);
+  expect(log.filter((l) => l.startsWith("new jrnyTeaser1")).length).toBe(1);
+  await expect.poll(() => p.evaluate(() => (document.activeElement as HTMLElement | null)?.dataset.f)).toBe("trailer:0");
+  // The other chip still plays its trailer.
+  await p.locator('[data-f="trailer:1"]').click();
+  await expect(p.locator(".trailer")).toHaveAttribute("data-state", "playing");
+  expect(await leftApp()).toEqual([]);
+  await context.close();
+});
+
 test("the header plays the trailer muted with a sound switch; the full-screen trailer has its own sound and stops it", async ({ browser }) => {
   const { context, p, leftApp } = await trailerRun(browser, { form: "desktop", e2e: true });
   // The header starts by itself, muted after the read-back, with the switch last in the row.

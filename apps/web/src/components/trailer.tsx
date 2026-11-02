@@ -37,7 +37,9 @@ export function TrailerOverlay(props: { trailers: Trailer[]; onClose: () => void
   // Repeats of the held arrow, for its growing step.
   let repeats = 0;
 
-  const start = (i: number) => {
+  // `auto`: the layer's own first pick, which gives way to the next trailer when refused. A trailer the viewer picked stays
+  // picked and says it cannot play (QA r2, Q4 row 50: a refused Main trailer handed its chip straight back to Trailer 2).
+  const start = (i: number, auto = false) => {
     const my = ++run;
     control?.stop();
     setIndex(i);
@@ -59,9 +61,11 @@ export function TrailerOverlay(props: { trailers: Trailer[]; onClose: () => void
         if (why !== "error" && why !== "timeout") return props.onClose();
         // Refused here (embedding off, gone): the next trailer, then the quiet line. Never ready (YouTube unreachable): the
         // line at once, not another 15 s wait per trailer.
-        if (why === "error" && i + 1 < props.trailers.length) return start(i + 1);
+        if (why === "error" && auto && i + 1 < props.trailers.length) return start(i + 1, true);
         setFailed(true);
         queueMicrotask(() => {
+          // The focus stays on a trailer the viewer picked; else Close, the way out.
+          if (document.activeElement?.closest(".trailer-picks")) return;
           const close = document.querySelector<HTMLElement>('[data-f="trailer:close"]');
           if (close) focusEl(close);
         });
@@ -113,7 +117,7 @@ export function TrailerOverlay(props: { trailers: Trailer[]; onClose: () => void
     // A tab in the background pauses it.
     const hide = () => document.hidden && time().state === "playing" && toggle();
     document.addEventListener("visibilitychange", hide);
-    start(0);
+    start(0, true);
     // TV: the bar, where Left and Right seek; elsewhere Play/Pause.
     queueMicrotask(() => {
       const first = document.querySelector<HTMLElement>(form() === "tv" ? '[data-f="trailer:scrub"]' : '[data-f="trailer:toggle"]');
