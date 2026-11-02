@@ -37,6 +37,7 @@ import { form, viewport } from "../form";
 import { airDate, clock, decoded, episodeLabel, initials, offersLibrary, parseVideo, pct, playPath, playState, runtimeMinutes, seasonName, versionsPath } from "../lib/format";
 import { capableNow, coverSize, headerOnTvNow, meteredNow, previewsOn, REVEAL_MS, trailerAllowed, walkNow } from "../lib/trailers";
 import { blockedWords, choiceWords, emptyEntry, problemWords } from "../lib/words";
+import { Stalled } from "../components/stalled";
 import { deleteSeason, type DownloadItem, downloadControl, downloadWords, seriesControl, seriesMenu } from "../lib/download";
 import { firstFocus } from "./title-focus";
 import "./home.css";
@@ -674,11 +675,13 @@ function TitlePage(props: { kind: string; id: string; retry: () => void }) {
         </Match>
         <Match when={true}>
           <section class="info" aria-busy="true">
-            <div class="title-skel" aria-hidden="true">
-              <div class="skel" />
-              <div class="skel" />
-              <div class="skel" />
-            </div>
+            <Stalled retry={props.retry} fkey="title:stalled">
+              <div class="title-skel" aria-hidden="true">
+                <div class="skel" />
+                <div class="skel" />
+                <div class="skel" />
+              </div>
+            </Stalled>
           </section>
         </Match>
       </Switch>

@@ -16,7 +16,7 @@ import { createEffect, createMemo, createSignal, For, Match, on, onCleanup, onMo
 import { Poster } from "../components/art";
 import { Ratings } from "../components/ratings";
 import { Why } from "../components/why";
-import { liveView } from "../core/client";
+import { liveView, online } from "../core/client";
 import { searchIds } from "../lib/ids";
 import type { HomeRow } from "../core/generated/HomeRow";
 import type { SearchSnapshot } from "../core/generated/SearchSnapshot";
@@ -27,7 +27,7 @@ import { pushBack } from "../focus/back";
 import { autoFocusSoon, focusEl, mayAutoFocus } from "../focus/dom";
 import { currentPath, historyDepth } from "../history";
 import { ratingParts, titlePath } from "../lib/format";
-import { rowWords } from "../lib/rows";
+import { allFailed, rowWords } from "../lib/rows";
 import { kindLabel, problemWords } from "../lib/words";
 import "./browse.css";
 import "./search.css";
@@ -197,6 +197,14 @@ function Panel(props: { dialog?: boolean; retry: () => void }) {
   const kids = () => kidsSession(profiles());
   const none = () => (kids() ? kidsWords.searchNone : s()?.searchable === 0 ? "None of your addons can search." : `No matches for "${text()}" in your catalogs.`);
   const remember = () => void view.command({ type: "remember" });
+  // Every list failed for the text on screen (no network, or one that hangs): one line and Try again in place of a
+  // line per list, and the search runs again by itself once the browser is back online (QA r1, Q4 row 40).
+  const failedAll = () => {
+    const snap = s();
+    return !!snap && snap.query === text().trim() && allFailed(rows());
+  };
+  const again = () => send(text());
+  createEffect(on(online, (on) => on && failedAll() && again(), { defer: true }));
   // One status region, there from the start, so a screen reader hears each change: Searching, the count, why
   // there is none, or why the search could not open. The visible lines below are not live: this is their voice.
   const status = () => {
@@ -313,6 +321,18 @@ function Panel(props: { dialog?: boolean; retry: () => void }) {
                   <ChevronRight aria-hidden />
                 </A>
               </Show>
+            </div>
+          </Match>
+          <Match when={failedAll()}>
+            <div class="none-search">
+              <p class="st bad palette-note">
+                <i class="dot" />
+                {rowWords.searchFailed} {problemWords((rows().find((r) => r.state.state === "failed")?.state as { reason: string }).reason).text}
+              </p>
+              <button class="btn" data-f="search:again" onClick={again}>
+                <RefreshCw aria-hidden />
+                Try again
+              </button>
             </div>
           </Match>
           <Match when={true}>

@@ -92,10 +92,13 @@ export type ViewStatus = { state: "opening" } | { state: "open" } | { state: "fa
 /** This browser's language as the core's codes begin ("nb" for "nb-NO"). */
 export const deviceLanguage = () => (navigator.language || "en").split("-")[0]?.toLowerCase() || "en";
 
+/** The link to the core is gone: plain words, never its address (QA r1, Q5 row 39). */
+export const lostWords = "Lost the connection to Momotus. Start it again, then reload.";
+
 /** What a screen says for a failure: its kind's words (apps/shared/error-words.json), never the raw text. */
 export const reasonOf = (e: unknown) =>
   e instanceof Error && e.message === "connection closed"
-    ? `Cannot reach the core at ${bridgeUrl}. Start it with: bun run bridge (in apps/web)`
+    ? lostWords
     : e instanceof BridgeError && e.code === "incognito"
       ? "Not available in Incognito."
       : failureWords(e);

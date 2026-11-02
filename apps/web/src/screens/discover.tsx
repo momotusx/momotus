@@ -15,6 +15,7 @@ import { defaultsWords } from "../lib/defaults";
 import { extends_ } from "../lib/discover-hold";
 import { listFailed, problemWords } from "../lib/words";
 import { keptScroll } from "../lib/kept-scroll";
+import { Stalled } from "../components/stalled";
 import "./browse.css";
 
 // Where the page was scrolled to: the view is kept, so Back lands here too.
@@ -364,7 +365,9 @@ function DiscoverPage(props: { retry: () => void }) {
         </Match>
         <Match when={true}>
           <h1>Discover</h1>
-          <SkeletonGrid />
+          <Stalled retry={props.retry} fkey="discover:stalled">
+            <SkeletonGrid />
+          </Stalled>
         </Match>
       </Switch>
     </main>

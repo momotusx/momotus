@@ -12,7 +12,7 @@ import { type Component, createEffect, createMemo, createSignal, For, on, onClea
 import { ProfileMenu } from "./components/avatar";
 import Brand from "./components/brand";
 import { DownloadStatus, OfflineBanner } from "./components/download";
-import { bridgeUrl, link, listEveryKind } from "./core/client";
+import { link, listEveryKind, lostWords } from "./core/client";
 // The debrid accounts follow the core from the start, whatever screen is open.
 import "./core/debrid";
 import "./core/trakt";
@@ -401,7 +401,7 @@ function Shell(props: RouteSectionProps) {
       <Show when={link() === "closed"}>
         <p class="banner bad" role="status">
           <CircleAlert aria-hidden />
-          Lost connection to the core at {bridgeUrl}. Restart it, then reload.
+          {lostWords}
           <Reload />
         </p>
       </Show>
