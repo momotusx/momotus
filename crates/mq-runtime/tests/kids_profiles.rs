@@ -340,7 +340,8 @@ async fn two_allows_racing_at_nine_hundred_ninety_nine_admit_one() {
 async fn the_picker_follows_the_access_register() {
     let core = owner().await;
     let kid = core.create_kids_profile("Kid", "fox").unwrap();
-    let (_session, state) = tokio::sync::watch::channel((OWNER.to_owned(), false, None, false));
+    let (_session, state) =
+        tokio::sync::watch::channel((OWNER.to_owned(), false, None, false, false));
     let view = mq_runtime::ProfilesView::open(&core, state);
     let info = |id: &str| view.subscribe().0.profiles.into_iter().find(|p| p.id == id);
     assert!(info(&kid).unwrap().kids);

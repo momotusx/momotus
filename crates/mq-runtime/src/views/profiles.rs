@@ -88,9 +88,12 @@ pub struct WipePending {
 }
 
 /// A session's (active profile, locked, Incognito host, Incognito ended
-/// unseen), sent on every switch and lock. The host is set only while the
-/// session runs Incognito; the last is the snapshot's `incognitoEnded`.
-pub type SessionState = (String, bool, Option<String>, bool);
+/// unseen, kids), sent on every switch and lock. The host is set only while
+/// the session runs Incognito; the fourth is the snapshot's
+/// `incognitoEnded`; `kids` says the session ran as a kids profile until
+/// its next switch (plans/m11-kids.md 7), so the picker still asks the
+/// owner's PIN after that profile is removed.
+pub type SessionState = (String, bool, Option<String>, bool, bool);
 
 pub struct ProfilesView {
     snapshot: SharedObservable<ProfilesSnapshot>,

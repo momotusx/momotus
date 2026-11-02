@@ -437,6 +437,12 @@ impl TitleView {
         self.denied
     }
 
+    /// The page's kind and id, which a kids session's watcher checks
+    /// against the list (plans/m11-kids.md 8).
+    pub fn target(&self) -> (&str, &str) {
+        (&self.kind, &self.id)
+    }
+
     fn ctx(&self) -> Ctx {
         Ctx {
             core: self.core.clone(),

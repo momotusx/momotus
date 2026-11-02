@@ -10,13 +10,14 @@
 //! "createSyncAccount" | "syncNow" | "approvePairing" | "createRecoveryKit" | "recover" |
 //! "syncDevices" | "lostPreview" | "removeDevice" | "reportLost" | "signOut" | "deleteAccount" |
 //! "cancelPairing" | "readPairingCode" |
-//! "forkPreview" | "useServerRoster" | "createProfile" | "allowTitle" | "updateProfile" | "deleteProfile" |
+//! "forkPreview" | "useServerRoster" | "createProfile" | "allowTitle" | "removeTitle" | "makeStandard" |
+//! "updateProfile" | "deleteProfile" |
 //! "setPin" | "switchProfile" | "unlockProfile" | "lockSession" | "removeFromContinue" |
 //! "languages" | "languagePicker" | "plugins" | "pluginDirectory" | "previewPluginRepo" | "addPluginRepo" | "removePluginRepo" |
 //! "setPluginRepoEnabled" | "setPluginEnabled",
 //! ...}`.
 //! Views: home, search, discover, library, title, versions, playback, addons, addonCatalog,
-//! import, settings, pairing, profiles, debrid, debridLogin.
+//! import, settings, pairing, profiles, debrid, debridLogin, kidsTitles, kidsKeys.
 //! Replies carry the request `id`; view pushes carry `sub` and `updates`.
 //!
 //! A session runs as one profile (plans/m11-profiles.md section 5): it opens
@@ -26,14 +27,15 @@
 //! old generation are dropped.
 
 use futures_util::StreamExt;
-use mq_library::Table;
+use mq_library::{Policy, Table};
 use mq_runtime::downloads::Action;
 use mq_runtime::{
     AddonCatalogView, AddonsView, CalendarView, Core, DebridLoginView, DebridRecord,
     DebridTombstone, DebridView, DiscoverView, DownloadsView, GenresView, HomeView, ImportView,
-    LibrarySort, LibraryView, ListedError, ListedFailure, PairingView, PlayTarget, PlaybackView,
-    ProfileError, ProfilesView, SearchView, SessionState, SettingsView, SignInSnapshot, SignInView,
-    StoreId, TitleView, TraktLoginView, TraktRecord, TraktView, VersionsParams, VersionsView,
+    KidsKeysView, KidsTitlesView, LibrarySort, LibraryView, ListedError, ListedFailure,
+    PairingView, PlayTarget, PlaybackView, ProfileError, ProfilesView, SearchView, SessionState,
+    SettingsView, SignInSnapshot, SignInView, StoreId, TitleView, TraktLoginView, TraktRecord,
+    TraktView, VersionsParams, VersionsView,
 };
 use mq_streams::StreamPrefs;
 use mq_sync::SyncConfig;
@@ -640,14 +642,29 @@ enum Request {
         #[serde(default)]
         kids: bool,
     },
-    /// The owner allows `kind` `itemId` for kids profile `profile`.
-    /// Replies `ProfilesSnapshot`.
+    /// The owner allows `kind` `itemId` for kids profile `profile`
+    /// (plans/m11-kids.md 9.2). Waits on the owner's meta addons, fenced
+    /// like `installAddon`. Replies `{}`.
     AllowTitle {
         id: u64,
         profile: String,
         kind: String,
         #[serde(rename = "itemId")]
         item_id: String,
+    },
+    /// The owner takes `itemId` off kids profile `profile`'s list.
+    /// Replies `{}`.
+    RemoveTitle {
+        id: u64,
+        profile: String,
+        #[serde(rename = "itemId")]
+        item_id: String,
+    },
+    /// The owner makes kids profile `profile` a standard one, with a copy
+    /// of the owner's addons; there is no way back.
+    MakeStandard {
+        id: u64,
+        profile: String,
     },
     /// Renames, re-avatars or moves `profile` (itself, or any as the owner).
     UpdateProfile {
@@ -674,12 +691,17 @@ enum Request {
     /// `incognito` it enters Incognito from the session's profile, and
     /// `fromChooser` says Leave goes back to the chooser
     /// (plans/batch-10-incognito.md 2.7).
+    /// From a kids session `pin` is the owner's; `deviceAuth` says the
+    /// device's own lock prompt passed, which lets a kids session out
+    /// while the owner has no PIN (plans/m11-kids.md 7).
     SwitchProfile {
         id: u64,
         profile: String,
         pin: Option<String>,
         #[serde(default, rename = "fromChooser")]
         from_chooser: bool,
+        #[serde(default, rename = "deviceAuth")]
+        device_auth: bool,
     },
     /// Leaves Incognito for the profile it was entered from, without a PIN.
     /// Replies `ProfilesSnapshot`; `notIncognito` outside Incognito.
@@ -845,6 +867,8 @@ impl Request {
             | Request::TraktSignOut { .. }
             | Request::CreateProfile { .. }
             | Request::AllowTitle { .. }
+            | Request::RemoveTitle { .. }
+            | Request::MakeStandard { .. }
             | Request::UpdateProfile { .. }
             | Request::DeleteProfile { .. }
             | Request::SetPin { .. }
@@ -958,6 +982,8 @@ impl Request {
             | Request::TraktSignOut { .. }
             | Request::CreateProfile { .. }
             | Request::AllowTitle { .. }
+            | Request::RemoveTitle { .. }
+            | Request::MakeStandard { .. }
             | Request::UpdateProfile { .. }
             | Request::DeleteProfile { .. }
             | Request::SetPin { .. }
@@ -1052,6 +1078,8 @@ impl Request {
             | Request::TraktSignOut { .. }
             | Request::CreateProfile { .. }
             | Request::AllowTitle { .. }
+            | Request::RemoveTitle { .. }
+            | Request::MakeStandard { .. }
             | Request::UpdateProfile { .. }
             | Request::DeleteProfile { .. }
             | Request::SetPin { .. }
@@ -1135,6 +1163,8 @@ enum View {
     Trakt { _view: TraktView },
     TraktLogin { _view: TraktLoginView },
     Downloads { _view: DownloadsView },
+    KidsTitles { _view: KidsTitlesView },
+    KidsKeys { _view: KidsKeysView },
 }
 
 impl View {
@@ -1161,7 +1191,27 @@ impl View {
             View::Trakt { .. } => "trakt",
             View::TraktLogin { .. } => "traktLogin",
             View::Downloads { .. } => "downloads",
+            View::KidsTitles { .. } => "kidsTitles",
+            View::KidsKeys { .. } => "kidsKeys",
         }
+    }
+
+    /// The title a view shows, which a kids session checks against its list
+    /// on every change (plans/m11-kids.md 8). A view opened denied has none:
+    /// it shows nothing and says so itself.
+    fn kids_target(&self) -> Option<(&str, &str)> {
+        match self {
+            View::Title(title) if !title.denied() => Some(title.target()),
+            View::Versions(versions) => versions.verified().map(|v| (v.kind(), v.item_id())),
+            View::Playback(playback) if !playback.denied() => Some(playback.target()),
+            _ => None,
+        }
+    }
+
+    /// Whether `policy` no longer lets this view show its title.
+    fn not_allowed(&self, policy: &Policy) -> bool {
+        self.kids_target()
+            .is_some_and(|(kind, id)| !policy.allows(kind, id))
     }
 }
 
@@ -1204,6 +1254,13 @@ struct Shared {
     ended: bool,
     /// Started while a scope lived: that scope's end is this session's too.
     behind: bool,
+    /// The session runs, or ran until its next switch, as a kids profile
+    /// (plans/m11-kids.md 7): leaving asks the owner's PIN. Set at start and
+    /// on each switch from the target's access register, cleared when the
+    /// profile is made standard.
+    kids: bool,
+    /// Views the kids watcher closed: `unsubscribe` answers ok for them.
+    closed: HashSet<u64>,
     /// Tests: added to the wall clock the Incognito clock reads.
     #[cfg(test)]
     skew_ms: u64,
@@ -1257,6 +1314,35 @@ fn clock_ran_out(incognito: &Incognito, now: u64) -> bool {
 const NATIVE_FLOW_LIFE: std::time::Duration = std::time::Duration::from_secs(10 * 60);
 
 impl Shared {
+    /// The session profile's policy and the access generation it was read
+    /// at; a read error fails closed (no titles).
+    fn kids_policy(&self) -> (Policy, u64) {
+        self.core
+            .library()
+            .policy_checked(self.core.profile())
+            .unwrap_or_else(|_| (Policy::Kids(HashMap::new()), 0))
+    }
+
+    /// Takes the views whose title left a kids session's list out of the
+    /// session; their ids stay for `unsubscribe`, which answers ok.
+    fn take_not_allowed(&mut self, policy: &Policy) -> Vec<(u64, Subscription)> {
+        let ids: Vec<u64> = self
+            .subs
+            .iter()
+            .filter(|(_, s)| s.view.not_allowed(policy))
+            .map(|(id, _)| *id)
+            .collect();
+        ids.into_iter()
+            .filter_map(|id| {
+                self.closed.insert(id);
+                // No push of it after the `closed` push.
+                let s = self.subs.remove(&id)?;
+                s.forward.abort();
+                Some((id, s))
+            })
+            .collect()
+    }
+
     /// A switch or a lock: every view but the picker, the device's debrid
     /// accounts and the downloads keeper's view leaves the session and older
     /// work is fenced off; the downloads view goes on for the new session
@@ -1302,6 +1388,7 @@ impl Shared {
             self.locked,
             host,
             self.ended,
+            self.kids,
         );
         self.state.send_replace(state);
     }
@@ -1520,7 +1607,8 @@ impl Session {
         for id in &gone {
             let _ = out.send(&json!({ "profile": "gone", "id": id }));
         }
-        let (state, _) = watch::channel((core.profile().to_owned(), locked, None, ended));
+        let kids = core.policy().kids();
+        let (state, _) = watch::channel((core.profile().to_owned(), locked, None, ended, kids));
         let shared = Arc::new_cyclic(|me| {
             Mutex::new(Shared {
                 core: core.clone(),
@@ -1535,6 +1623,8 @@ impl Session {
                 incognito: None,
                 ended,
                 behind,
+                kids,
+                closed: HashSet::new(),
                 #[cfg(test)]
                 skew_ms: 0,
             })
@@ -1654,8 +1744,11 @@ impl Session {
                 }
             }
             Request::Unsubscribe { id, sub } => {
-                let removed = lock(&self.shared).subs.remove(&sub);
-                let found = removed.is_some();
+                let mut shared = lock(&self.shared);
+                let removed = shared.subs.remove(&sub);
+                // One the kids watcher closed answers ok too.
+                let found = removed.is_some() || shared.closed.remove(&sub);
+                drop(shared);
                 self.reply(
                     json!(id),
                     if found {
@@ -2603,7 +2696,23 @@ impl Session {
                 kind,
                 item_id,
             } => {
-                let result = core.allow_title(&profile, &kind, &item_id).await;
+                // Bound to the profile, as installAddon: a switch first makes it `switched`.
+                self.spawn_fenced(id, async move {
+                    core.allow_title(&profile, &kind, &item_id)
+                        .await
+                        .map(|()| json!({}))
+                });
+            }
+            Request::RemoveTitle {
+                id,
+                profile,
+                item_id,
+            } => {
+                let result = core.remove_title(&profile, &item_id);
+                self.reply(json!(id), result.map(|()| json!({})));
+            }
+            Request::MakeStandard { id, profile } => {
+                let result = core.make_standard(&profile);
                 self.reply_profiles(id, result);
             }
             Request::UpdateProfile {
@@ -2637,11 +2746,12 @@ impl Session {
                 profile,
                 pin,
                 from_chooser,
+                device_auth,
             } => {
                 let result = if profile == mq_runtime::incognito::INCOGNITO {
                     self.enter_incognito(from_chooser, pin.as_deref()).await
                 } else {
-                    self.switch(&profile, pin.as_deref()).await
+                    self.switch(&profile, pin.as_deref(), device_auth).await
                 };
                 send_answer(&self.out, json!(id), result);
             }
@@ -2686,11 +2796,23 @@ impl Session {
 
     /// Moves the session to `profile` (its PIN when it has one). Refused
     /// while any view but the picker is open: the app closes them first, so
-    /// playback has saved its position.
-    async fn switch(&mut self, profile: &str, pin: Option<&str>) -> Result<Value, Failure> {
+    /// playback has saved its position. Out of a kids session, to any
+    /// profile, the PIN is the owner's under the kids exit throttle; with no
+    /// owner PIN only `device_auth` lets it out (plans/m11-kids.md 7).
+    async fn switch(
+        &mut self,
+        profile: &str,
+        pin: Option<&str>,
+        device_auth: bool,
+    ) -> Result<Value, Failure> {
         self.only_the_picker_open()?;
-        let target = self.core().for_profile(profile);
-        target.check_pin(profile, pin).await?;
+        let core = self.core();
+        let target = core.for_profile(profile);
+        if lock(&self.shared).kids {
+            core.kids_exit_attempt(pin, device_auth).await?;
+        } else {
+            target.check_pin(profile, pin).await?;
+        }
         self.commit_switch(target)
     }
 
@@ -2725,14 +2847,16 @@ impl Session {
         pin: Option<&str>,
     ) -> Result<Value, Failure> {
         self.only_the_picker_open()?;
-        let (core, locked) = {
+        let (core, locked, kids) = {
             let shared = lock(&self.shared);
             if shared.incognito.is_some() {
                 return Ok(shared.snapshot());
             }
-            (shared.core.clone(), shared.locked)
+            (shared.core.clone(), shared.locked, shared.kids)
         };
-        if !locked && core.policy().kids() {
+        // A kids session, locked too: leaving it is a switch with the
+        // owner's PIN (plans/m11-kids.md 7), never an Incognito entry.
+        if kids || (!locked && core.policy().kids()) {
             return Err(Failure::coded(
                 "kids",
                 "a kids profile cannot open Incognito",
@@ -2825,6 +2949,8 @@ impl Session {
             return Err(ProfileError::Unknown.into());
         }
         target.make_active()?;
+        // Read from the target's access register, kept until the next switch.
+        shared.kids = target.policy().kids();
         // From Incognito: its end, with nothing to tell.
         let closed = shared.end_incognito(false, target, false);
         let snapshot = shared.snapshot();
@@ -3119,11 +3245,46 @@ impl Session {
                 let forward = tokio::spawn(forward(sub, updates, out, fence));
                 (View::Playback(playback), to_value(&snapshot)?, forward)
             }
+            // The owner's views of kids profiles (plans/m11-kids.md 9.1).
+            "kidsTitles" => {
+                let titles = KidsTitlesView::open(&core, &param(params, "profile")?)?;
+                let (snapshot, updates) = titles.subscribe();
+                let forward = tokio::spawn(forward(sub, updates, out, fence));
+                (
+                    View::KidsTitles { _view: titles },
+                    to_value(&snapshot)?,
+                    forward,
+                )
+            }
+            "kidsKeys" => {
+                let keys = KidsKeysView::open(&core)?;
+                let (snapshot, updates) = keys.subscribe();
+                let forward = tokio::spawn(forward(sub, updates, out, fence));
+                (
+                    View::KidsKeys { _view: keys },
+                    to_value(&snapshot)?,
+                    forward,
+                )
+            }
             other => return Err(format!("unknown view: {other}").into()),
         };
-        lock(&self.shared)
-            .subs
-            .insert(sub, Subscription { view, forward });
+        let subscription = Subscription { view, forward };
+        let mut shared = lock(&self.shared);
+        // Checked again under the session lock (plans/m11-kids.md 8): a
+        // removal that committed while the view opened is seen here or by
+        // the kids watcher, which holds the same lock.
+        if shared.kids {
+            let (policy, generation) = shared.kids_policy();
+            if subscription.view.not_allowed(&policy) {
+                drop(shared);
+                tokio::spawn(stop_closed(vec![subscription], generation));
+                return Err(Failure::coded(
+                    "notAllowed",
+                    "this title is not on the list",
+                ));
+            }
+        }
+        shared.subs.insert(sub, subscription);
         Ok(json!({ "sub": sub, "snapshot": snapshot }))
     }
 
@@ -3652,10 +3813,16 @@ async fn watch_gone(
     out: Output,
 ) {
     loop {
-        tokio::select! {
+        let profiles = tokio::select! {
             change = changes.recv() => match change {
-                Ok(tables) if !tables.contains(&Table::Profiles) => continue,
-                Ok(_) | Err(RecvError::Lagged(_)) => {}
+                Ok(tables) => {
+                    let profiles = tables.contains(&Table::Profiles);
+                    if !profiles && !tables.contains(&Table::Access) {
+                        continue;
+                    }
+                    profiles
+                }
+                Err(RecvError::Lagged(_)) => true,
                 Err(RecvError::Closed) => return,
             },
             changed = ends.changed() => {
@@ -3675,6 +3842,15 @@ async fn watch_gone(
                 }
                 continue;
             }
+        };
+        let Some(session) = shared.upgrade() else {
+            return;
+        };
+        let (closed, generation) = watch_kids(&session, &out);
+        drop(session);
+        stop_closed(closed, generation).await;
+        if !profiles {
+            continue;
         }
         let Ok(gone) = core.library().gone_profiles() else {
             continue;
@@ -3700,6 +3876,55 @@ async fn watch_gone(
         drop(shared);
         drop(closed);
         known = gone.into_iter().collect();
+    }
+}
+
+/// A kids session after a policy change (plans/m11-kids.md 7 and 8): made
+/// standard, it moves to the same profile unlocked, with `{"profile":
+/// "access", "id"}`; otherwise every title, versions or playback view whose
+/// title left the list leaves the session under its lock, one
+/// `{"closed": "notAllowed", "subs"}` names them; the caller stops their
+/// playback for good after the lock (`stop_closed`).
+fn watch_kids(shared: &Mutex<Shared>, out: &Output) -> (Vec<Subscription>, u64) {
+    let none = (Vec::new(), 0);
+    let mut session = lock(shared);
+    if !session.kids || session.incognito.is_some() {
+        return none;
+    }
+    // A removed profile's session locks instead (`watch_gone`).
+    if !matches!(
+        session.core.library().is_gone(session.core.profile()),
+        Ok(false)
+    ) {
+        return none;
+    }
+    let (policy, generation) = session.kids_policy();
+    if !policy.kids() {
+        session.kids = false;
+        let core = session.core.clone();
+        let closed = session.transition(core.clone(), false);
+        drop(session);
+        drop(closed);
+        let _ = out.send(&json!({ "profile": "access", "id": core.profile() }));
+        return none;
+    }
+    let closed = session.take_not_allowed(&policy);
+    if closed.is_empty() {
+        return none;
+    }
+    let subs: Vec<u64> = closed.iter().map(|(id, _)| *id).collect();
+    let _ = out.send(&json!({ "closed": "notAllowed", "subs": subs }));
+    (closed.into_iter().map(|(_, s)| s).collect(), generation)
+}
+
+/// Closed kids views: playback saves its position, drops its lease and
+/// holds its torrents at `generation` (plans/m11-kids.md 4.4); the rest
+/// just close.
+async fn stop_closed(closed: Vec<Subscription>, generation: u64) {
+    for subscription in &closed {
+        if let View::Playback(playback) = &subscription.view {
+            playback.stop_forbidden(generation).await;
+        }
     }
 }
 

@@ -134,7 +134,7 @@ impl Core {
     /// session's active one, and in Incognito its host; outside it, whose
     /// PIN entering Incognito asks for.
     pub fn profiles_snapshot_for(&self, state: &SessionState) -> ProfilesSnapshot {
-        let (active, locked, host, ended) = state;
+        let (active, locked, host, ended, kids) = state;
         let mut snapshot = match host {
             Some(host) => {
                 let mut snapshot = self.for_profile(host).profiles_snapshot(false);
@@ -147,6 +147,7 @@ impl Core {
                 let session = self.for_profile(active);
                 let mut snapshot = session.profiles_snapshot(*locked);
                 snapshot.incognito_pin = session.incognito_pin(*locked);
+                snapshot.kids |= *kids;
                 snapshot
             }
         };

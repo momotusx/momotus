@@ -562,8 +562,13 @@ async fn a_download_in_incognito_is_the_hosts() {
 async fn the_picker_lists_the_real_profiles_in_incognito() {
     let (host, _dir) = device().await;
     let core = host.open_incognito().unwrap();
-    let (_state, rx) =
-        tokio::sync::watch::channel((INCOGNITO.to_owned(), false, Some(OWNER.to_owned()), false));
+    let (_state, rx) = tokio::sync::watch::channel((
+        INCOGNITO.to_owned(),
+        false,
+        Some(OWNER.to_owned()),
+        false,
+        false,
+    ));
     let view = ProfilesView::open(&core, rx);
     let (snapshot, _) = view.subscribe();
     assert_eq!(snapshot.active, INCOGNITO);

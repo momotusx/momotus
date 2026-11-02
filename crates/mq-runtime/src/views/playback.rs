@@ -1133,6 +1133,12 @@ impl PlaybackView {
         self.denied
     }
 
+    /// The kind and item id it plays, which a kids session's watcher
+    /// checks against the list (plans/m11-kids.md 8).
+    pub fn target(&self) -> (&str, &str) {
+        (&self.target.kind, &self.target.item_id)
+    }
+
     /// The title left the kids profile's list (plans/m11-kids.md 4.4, 8):
     /// the resolve stops (the subtitle hash reader with it), the position is
     /// saved, the lease drops (its URLs end and bodies being served stop),
