@@ -36,6 +36,13 @@ sealed interface PlayPick {
 }
 
 /**
+ * After [PlayPick.None]: whether the player keeps watching the versions, so a pick that lands later (a plugin row
+ * past the core's wait for the plugins) starts, as on the web. Play's own pick only: a version [chosen] by hand
+ * keeps its card.
+ */
+fun watchesAfterNone(chosen: String?): Boolean = chosen == null
+
+/**
  * Chooses the version to play, like the web player does. A version [chosen] on Versions or the
  * title page plays as soon as it is in the list, and once every addon answered without it, it is
  * opened by its key all the same ([PlayPick.Open]); it never turns into the recommendation (a new

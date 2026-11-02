@@ -29,6 +29,7 @@ import app.marquee.core.session.CoreSession
 import app.marquee.core.views.SettingsView
 import app.marquee.core.views.VersionsView
 import app.marquee.core.views.ViewStatus
+import app.marquee.core.watchesAfterNone
 import app.marquee.design.Form
 import app.marquee.player.PlaybackController
 import app.marquee.player.PlayerHost
@@ -206,6 +207,7 @@ class PlayerHolder(
             }
             return
         }
+        controller.pickArrived()
         controller.mark("versions")
         controller.showStatus(choice.row?.let(VersionsCopy::starting) ?: "Starting")
         val ref = Format.parseVideo(route.videoId)
@@ -267,10 +269,12 @@ class PlayerHolder(
                             is PlayPick.None -> {
                                 // The core's state names the card's actions; Try again asks the addons again.
                                 controller.fail(pick.reason, pick.kind, pick.key) {
+                                    chosen.complete(null)
                                     view.retry()
                                     viewModelScope.launch { start() }
                                 }
-                                chosen.complete(null)
+                                // Play's own pick keeps watching: a pick that lands later starts, as on the web.
+                                if (!watchesAfterNone(route.key)) chosen.complete(null)
                                 return@collectLatest
                             }
 

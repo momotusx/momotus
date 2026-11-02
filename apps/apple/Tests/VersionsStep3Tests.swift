@@ -479,6 +479,22 @@ private func row(_ json: String) throws -> VersionRow {
     #expect(StreamChoice.words.page.details == "Details")
 }
 
+@Test func aPickThatLandsAfterNoVersionStartsAsOnTheWeb() throws {
+    let found = try versions("shortcuts")
+    var none = found
+    none.recommended = nil
+    none.empty = EmptyVersions(kind: "noResults", count: 0, rows: [], key: nil)
+    // The wait ended with no version: the card shows, and nothing starts yet.
+    #expect(PickWait.ends(snapshot: none, failed: false, settled: false))
+    #expect(PickWait.key(none) == nil && PickWait.late(none) == nil)
+    // A plugin row lands past the core's wait for the plugins: the core picks it and the player starts it.
+    #expect(PickWait.late(found) == "bt:pick")
+    // The player keeps waiting for it on the card, and starts it in place of the card.
+    let run = try body(of: "func run() async", in: try playerModel())
+    #expect(run.contains("guard var late = await versions.latePick(tapped: route.tapped) else { return }"))
+    #expect(run.contains("(noPick, route) = (false, late)"))
+}
+
 @Test func tryAgainReallyAsksAgainAndAFailedOpenEndsTheWait() throws {
     let unreachable = try versions("unreachable")
     var noKept = unreachable

@@ -67,6 +67,13 @@ enum PickWait {
         return kept ?? snapshot?.recommended?.key ?? snapshot?.rows.first?.key
     }
 
+    /// After the wait ended with no version: the pick a later answer gives (a plugin row past the core's wait for
+    /// the plugins), as the web plays it. Only the core's pick, never another row or the kept version (the card
+    /// offers that).
+    static func late(_ snapshot: VersionsSnapshot?) -> String? {
+        snapshot?.recommended?.key
+    }
+
     /// Whether what the view holds came in after the last Try again (`retriedAt`, nil for none).
     static func fresh(landed: Int, retriedAt: Int?) -> Bool {
         retriedAt.map { landed > $0 } ?? true

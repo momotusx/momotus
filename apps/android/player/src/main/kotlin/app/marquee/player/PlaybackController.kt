@@ -447,6 +447,16 @@ class PlaybackController(
         status = null
     }
 
+    /** A pick that landed after the card said nothing can play (a plugin row past the core's wait): the card goes. */
+    fun pickArrived() {
+        if (stage != Stage.Failed) return
+        opener = null
+        problem = null
+        empty = null
+        keptKey = null
+        stage = Stage.Opening
+    }
+
     /** Try again on a version that could not be opened: it is opened again. */
     fun reopen() {
         val again = opener ?: return

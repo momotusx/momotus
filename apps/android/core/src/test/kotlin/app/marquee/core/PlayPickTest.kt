@@ -12,7 +12,9 @@ import app.marquee.core.model.VersionStatus
 import app.marquee.core.model.VersionsSnapshot
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
+import kotlin.test.assertTrue
 
 class PlayPickTest {
     private fun row(key: String) =
@@ -58,6 +60,18 @@ class PlayPickTest {
         val pick =
             pickVersion(snapshot(best = row("a"), rows = listOf(row("b")), pending = listOf("X")), "b", settled = false)
         assertEquals(PlayPick.Use(row("b")), pick)
+    }
+
+    @Test
+    fun `Play's own pick that found nothing keeps watching, and a pick that lands later plays`() {
+        val none = snapshot(done = true).copy(empty = EmptyVersions(EmptyKind.NoResults, EmptyAction.None, 0))
+        assertIs<PlayPick.None>(pickVersion(none, null, settled = false))
+        assertTrue(watchesAfterNone(null))
+        // A plugin row past the core's wait for the plugins: the core picks it and it plays.
+        val late = none.copy(empty = null, recommended = row("p"))
+        assertEquals(PlayPick.Use(row("p")), pickVersion(late, null, settled = false))
+        // A version chosen by hand keeps its card.
+        assertFalse(watchesAfterNone("k"))
     }
 
     @Test

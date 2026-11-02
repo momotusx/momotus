@@ -103,6 +103,16 @@ final class VersionsModel {
         PlayRoute(versionsSub: sub ?? 0, key: "", target: target, tapped: tapped, fromStart: fromStart)
     }
 
+    /// After the view ended with no pick: the pick a later answer gives (`PickWait.late`), at once, as the web
+    /// starts it. Nil once the task is cancelled (the viewer chose a version, tried again or left).
+    func latePick(tapped: ContinuousClock.Instant = .now) async -> PlayRoute? {
+        while !Task.isCancelled {
+            if let key = PickWait.late(snapshot) { return play(key, tapped: tapped) }
+            try? await Task.sleep(for: .milliseconds(100))
+        }
+        return nil
+    }
+
     /// The pick once it settles, as the web waits for it: every addon has
     /// answered, or 3 s have passed since the first pick; with no source in
     /// reach, the one kept on this device. Nil when there is none by then or

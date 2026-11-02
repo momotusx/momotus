@@ -587,7 +587,13 @@ final class PlayerModel {
             }
             // No app clock: the wait ends when the core's view does (done, or a settled pick).
             guard var pick = await versions.settledPick(tapped: route.tapped, limit: nil) else {
-                if !Task.isCancelled { noPick = true }
+                guard !Task.isCancelled else { return }
+                noPick = true
+                // The card stays until a pick lands later (a plugin row past the core's wait for the plugins),
+                // which starts as on the web; choosing a version, Try again or leaving cancels the wait.
+                guard var late = await versions.latePick(tapped: route.tapped) else { return }
+                late.fromStart = route.fromStart
+                (noPick, route) = (false, late)
                 return
             }
             pick.fromStart = route.fromStart
