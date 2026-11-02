@@ -25,6 +25,7 @@ import { onProfileReset, profiles } from "../core/profiles";
 import { kidsSession, kidsWords } from "../lib/kids";
 import { pushBack } from "../focus/back";
 import { autoFocusSoon, focusEl, mayAutoFocus } from "../focus/dom";
+import { form } from "../form";
 import { currentPath, historyDepth } from "../history";
 import { ratingParts, titlePath } from "../lib/format";
 import { allFailed, rowWords } from "../lib/rows";
@@ -46,6 +47,10 @@ const TOP = "top";
 /** The palette is over the page. */
 export const searchOpen = open;
 let opener: HTMLElement | null = null;
+/** The open palette's "clear the field": true when it had text in the focused field to clear. */
+let clearTyped: (() => boolean) | null = null;
+/** The most titles the empty state's shelf shows in the palette. */
+const START_TILES = 6;
 
 // The palette is a history entry on the page's address, so the browser's
 // Back closes it instead of leaving the page under it. A result opens over
@@ -114,8 +119,9 @@ function finish(refocus: boolean) {
 
 /** The palette over the screen: Back, the scrim or a result closes it. */
 export function SearchOverlay() {
-  // Back closes it through the one Back stack (focus/back.ts).
-  onMount(() => onCleanup(pushBack(() => closeSearch())));
+  // Back closes it through the one Back stack (focus/back.ts); with text in the focused field it clears the field
+  // first and keeps the cursor there.
+  onMount(() => onCleanup(pushBack(() => clearTyped?.() || closeSearch())));
   return (
     <div class="palette-layer">
       <div class="palette-scrim" aria-hidden="true" onClick={() => closeSearch()} />
@@ -162,6 +168,11 @@ function Panel(props: { dialog?: boolean; retry: () => void }) {
     void view.command({ type: "setQuery", query: q });
   };
   if (lastQuery) queueMicrotask(() => send(lastQuery));
+  // Emptying the field lands on the empty state, with the cursor still in the field.
+  const clear = () => {
+    send("");
+    input.focus();
+  };
   const searching = () => text().trim().length > 0;
   const rows = () => s()?.rows ?? [];
   // "Top results" (the core's row "top") holds its place for the query it
@@ -234,6 +245,15 @@ function Panel(props: { dialog?: boolean; retry: () => void }) {
 
   let input!: HTMLInputElement;
   onMount(() => {
+    if (props.dialog) {
+      // Escape or Back with text in the focused field clears it; the remote's Back past the keyboard's field closes.
+      clearTyped = () => {
+        if (form() === "tv" || document.activeElement !== input || !text()) return false;
+        clear();
+        return true;
+      };
+      onCleanup(() => (clearTyped = null));
+    }
     // Opened again by Back: the shell restores the result that was opened.
     if (props.dialog && !reopened) queueMicrotask(() => focusEl(input));
     reopened = false;
@@ -259,6 +279,12 @@ function Panel(props: { dialog?: boolean; retry: () => void }) {
           data-autofocus={failed() ? undefined : ""}
           onInput={(e) => send(e.currentTarget.value)}
         />
+        {/* A remote clears with its own keys; a pointer and touch need this. */}
+        <Show when={text() && form() !== "tv"}>
+          <button type="button" class="field-clear" data-f="search:clear" aria-label="Clear search" onClick={clear}>
+            <X aria-hidden />
+          </button>
+        </Show>
       </label>
       {/* One way in from the field: the scope pill first, then the results. */}
       <div class="palette-main" data-fentry>
@@ -294,20 +320,40 @@ function Panel(props: { dialog?: boolean; retry: () => void }) {
             </div>
           </Match>
           <Match when={!searching()}>
-            <Show when={s()?.recent.length} fallback={<p class="palette-note">{kids() ? "Type a title from your list." : "Type a title. Results come from every addon with a search catalog."}</p>}>
-              <section class="recent">
-                <h2 class="kicker">Recent searches</h2>
-                <div class="chips-track wrap" data-fgroup="recent">
-                  <For each={s()?.recent ?? []}>
-                    {(q) => (
-                      <button class="chip" data-f={`recent:${q}`} onClick={() => send(q)}>
-                        <History aria-hidden />
-                        {q}
-                      </button>
-                    )}
-                  </For>
-                </div>
-              </section>
+            <Show when={s()?.recent.length || s()?.start} fallback={<p class="palette-note">{kids() ? "Type a title from your list." : "Type a title. Results come from every addon with a search catalog."}</p>}>
+              <Show when={s()?.recent.length}>
+                <section class="recent">
+                  <div class="recent-head">
+                    <h2 class="kicker">Recent searches</h2>
+                    <button class="recent-clear" data-f="recent:clear" aria-label="Clear recent searches" onClick={() => void view.command({ type: "clearRecent" })}>
+                      Clear
+                    </button>
+                  </div>
+                  <div class="chips-track wrap" data-fgroup="recent">
+                    <For each={s()?.recent ?? []}>
+                      {(q) => (
+                        <button class="chip" data-f={`recent:${q}`} onClick={() => send(q)}>
+                          <History aria-hidden />
+                          {q}
+                        </button>
+                      )}
+                    </For>
+                  </div>
+                </section>
+              </Show>
+              {/* Titles to start from: the core's shelf, titled as Home titles it. */}
+              <Show when={s()?.start}>
+                {(start) => (
+                  <section class="hits start" aria-label={start().title}>
+                    <h3 class="hits-head">
+                      <span class="kicker">{start().title}</span>
+                    </h3>
+                    <div class="hits-body">
+                      <For each={start().tiles.slice(0, START_TILES)}>{(t) => <Hit tile={t} fkey={`start:${t.id}`} onOpen={() => {}} />}</For>
+                    </div>
+                  </section>
+                )}
+              </Show>
             </Show>
           </Match>
           {/* Nothing came back: no addon can search (core `searchable`) or none matched. Either way the

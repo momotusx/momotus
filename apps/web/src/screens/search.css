@@ -72,6 +72,15 @@
 .hit-skel { height: 116px; border-radius: var(--radius-card); }
 .palette-note { padding: 4px 14px; font: 400 var(--type-callout) / 1.4 var(--font-text); color: var(--muted); }
 .palette .recent { display: grid; gap: 18px; padding: 0 14px; }
+.recent-head { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+.recent-clear { min-height: 52px; padding: 0 18px; border-radius: var(--radius-pill); font: var(--weight-label) var(--type-callout) / 1 var(--font-text);
+  letter-spacing: var(--tracking-label); color: var(--muted); }
+[data-form="tv"] .recent-clear:focus { color: var(--text); transform: scale(var(--focus-scale-card)); }
+@media (hover: hover) { [data-form="desktop"] .recent-clear:hover { color: var(--text); background: var(--raised); } }
+/* The field's clear button: a round 48 target inside the pill. */
+.field-clear { flex: none; display: grid; place-items: center; width: 48px; height: 48px; margin-right: -12px; border-radius: var(--radius-pill); color: var(--muted); }
+.palette .field .field-clear svg { width: 26px; height: 26px; }
+@media (hover: hover) { [data-form="desktop"] .field-clear:hover { color: var(--text); background: var(--raised); } }
 
 /* Phone: a sheet near the top, thumb sized, the list scrolling inside. */
 [data-form="phone"] .palette-layer { position: fixed; z-index: 60; padding: calc(10px + env(safe-area-inset-top)) 10px calc(10px + env(safe-area-inset-bottom)); }
@@ -100,6 +109,9 @@
 [data-form="phone"] .hits.top .hits-body { min-height: calc(3 * 72px + 2 * 8px); }
 [data-form="phone"] .palette-note { padding: 2px 6px; font-size: 15px; }
 [data-form="phone"] .palette .recent { gap: 10px; padding: 0 6px; }
+[data-form="phone"] .recent-clear { min-height: 48px; font-size: 14px; }
+[data-form="phone"] .field-clear { margin-right: -14px; }
+[data-form="phone"] .palette .field .field-clear svg { width: 20px; height: 20px; }
 
 /* No addon can search, or the search could not open: the sentence, then the way on. */
 .none-search { display: grid; justify-items: start; gap: 16px; }

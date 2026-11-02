@@ -291,3 +291,96 @@ test("tv: the search field keeps its height under a long list of results", async
   expect(before).toBeGreaterThanOrEqual(84);
   await context.close();
 });
+
+/** An empty Search gives the user something to do (owner, 2026-11-02): the core's shelf of titles under the field,
+ * Recent with a Clear, and a cleared field (the button, Escape) lands on that page with the cursor still in the field. */
+test("desktop: an empty search shows a shelf and Recent, and clearing the field lands on them", async ({ browser }) => {
+  const { context, page, errors } = await open(browser, "desktop", "/");
+  await expect(page.locator(".hero-page.on .reason")).toBeVisible({ timeout: 30_000 });
+  await openFromNav(page, "desktop");
+  const input = page.locator('[data-f="search:input"]');
+  const shelf = page.locator(".hits.start");
+  // Titles to start from, titled as Home titles the row, never with an addon's name.
+  await expect(shelf.locator(".hit").first()).toBeVisible({ timeout: 30_000 });
+  await expect(shelf.locator(".kicker")).not.toHaveText(/cinemeta|trakt|stremio/i);
+  await expect(page.locator(".palette-body")).not.toContainText("Type a title");
+  await expect(page.locator('[data-f="search:clear"]')).toHaveCount(0);
+
+  // A query takes the shelf away; the field's clear button brings it back, the cursor still in the field.
+  await input.fill("thrones");
+  await expect(page.locator(".hit").first()).toBeVisible({ timeout: 30_000 });
+  await expect(shelf).toHaveCount(0);
+  await page.locator('[data-f="search:clear"]').click();
+  await expect(input).toHaveValue("");
+  await expect.poll(() => focused(page)).toBe("search:input");
+  await expect(shelf.locator(".hit").first()).toBeVisible();
+
+  // Escape with text clears the field and keeps the palette; on an empty field it closes.
+  await input.fill("thrones");
+  await expect(page.locator(".hits:not(.start) .hit").first()).toBeVisible({ timeout: 30_000 });
+  await page.keyboard.press("Escape");
+  await expect(input).toHaveValue("");
+  await expect(page.locator(".palette-layer")).toHaveCount(1);
+  await expect.poll(() => focused(page)).toBe("search:input");
+  await expect(shelf.locator(".hit").first()).toBeVisible();
+  // Select all and delete is the same: no blank page.
+  await input.fill("thrones");
+  await expect(page.locator(".hits:not(.start) .hit").first()).toBeVisible({ timeout: 30_000 });
+  await page.keyboard.press("ControlOrMeta+a");
+  await page.keyboard.press("Backspace");
+  await expect(shelf.locator(".hit").first()).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.locator(".palette-layer")).toHaveCount(0);
+
+  // A result opened keeps its query in Recent: a chip searches it again, Clear forgets them all.
+  await openFromNav(page, "desktop");
+  await input.fill("thrones");
+  await page.locator(".hits:not(.start) .hit").first().click();
+  await expect(page).toHaveURL(/\/title\//);
+  await page.goBack();
+  await expect(page.locator(".palette-layer .palette")).toBeVisible();
+  await page.locator('[data-f="search:clear"]').click();
+  const chip = page.locator('[data-f="recent:thrones"]');
+  await expect(chip).toBeVisible();
+  await expect(shelf.locator(".hit").first()).toBeVisible();
+  await chip.click();
+  await expect(input).toHaveValue("thrones");
+  await expect(page.locator(".hits:not(.start) .hit").first()).toBeVisible({ timeout: 30_000 });
+  await page.locator('[data-f="search:clear"]').click();
+  await page.locator('[data-f="recent:clear"]').click();
+  await expect(page.locator(".recent")).toHaveCount(0);
+  await expect(shelf.locator(".hit").first()).toBeVisible();
+  expect(errors).toEqual([]);
+  await context.close();
+});
+
+test("phone: the clear button and Clear are 48 px targets", async ({ browser }) => {
+  const { context, page } = await open(browser, "phone", "/");
+  await expect(page.locator(".hero-page.on .reason")).toBeVisible({ timeout: 30_000 });
+  await openFromNav(page, "phone");
+  await expect(page.locator(".hits.start .hit").first()).toBeVisible({ timeout: 30_000 });
+  await page.locator('[data-f="search:input"]').fill("thrones");
+  const clear = page.locator('[data-f="search:clear"]');
+  const box = await clear.boundingBox();
+  expect(box && Math.min(box.width, box.height)).toBeGreaterThanOrEqual(48);
+  await clear.tap();
+  await expect(page.locator('[data-f="search:input"]')).toHaveValue("");
+  await expect(page.locator(".hits.start .hit").first()).toBeVisible();
+  await context.close();
+});
+
+test("tv: the remote reaches the shelf, with focus on a title, and Back closes", async ({ browser }) => {
+  const { context, page } = await open(browser, "tv", "/");
+  await expect(page.locator(".hero-page.on .reason")).toBeVisible({ timeout: 30_000 });
+  await openFromNav(page, "tv");
+  await expect(page.locator(".hits.start .hit").first()).toBeVisible({ timeout: 30_000 });
+  await expect(page.locator('[data-f="search:clear"]')).toHaveCount(0);
+  await expect.poll(() => focused(page)).toBe("search:input");
+  await page.keyboard.press("ArrowDown");
+  await expect.poll(() => focused(page)).toBe("search:scope");
+  await page.keyboard.press("ArrowDown");
+  await expect.poll(() => focused(page)).toMatch(/^(start|recent):/);
+  await page.keyboard.press("Escape");
+  await expect(page.locator(".palette-layer")).toHaveCount(0);
+  await context.close();
+});
