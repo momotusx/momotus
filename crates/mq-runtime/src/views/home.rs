@@ -817,10 +817,27 @@ pub(crate) fn catalog_title(name: &str, kind: &str, source: &str) -> String {
         source,
     );
     match kind_label(kind) {
-        Some(label) if !has_words(&name, label) => format!("{name} {label}"),
+        Some(label) if !says_kind(&name, label) => format!("{name} {label}"),
         _ => name,
     }
 }
+
+/// Whether `name` already says the kind `label`, in its own word or the usual other one ("Fresh TV Shows" says
+/// Series, "Classic Films" says Movies).
+fn says_kind(name: &str, label: &str) -> bool {
+    let other = match label {
+        "Series" => "Shows",
+        "Movies" => "Films",
+        _ => "",
+    };
+    has_words(name, label) || has_words(name, other)
+}
+
+/// Words that only say a kind: what is left of a name after an addon's word must say more than these.
+const KIND_WORDS: [&str; 12] = [
+    "movie", "movies", "film", "films", "series", "show", "shows", "tv", "live", "channel",
+    "channels", "anime",
+];
 
 /// The hero's caption, never with the addon's name (the owner, 2026-10-22):
 /// "#3 in Popular Movies", the tile's real place, only in a ranked catalog;
@@ -863,11 +880,53 @@ fn has_words(text: &str, part: &str) -> bool {
 /// \u{2014} "), for a list that names the addon beside it (Home rows, Discover's catalogs). The addon's full
 /// name is tried first ("Trakt Tv - Popular"), then its own words ("trakt - Popular"); the name stays as it
 /// is unless what is left starts with a letter or digit ("Trakt's Picks", "Trakt.tv Popular").
+///
+/// Then two shorter marks of the addon (QA round 1: Home rows read "Kitsu Trending Anime" and "RT: Fresh TV Shows
+/// Series"): its initials before a separator ("RT: " of Rotten Tomatoes), and one of its own words at the start
+/// ("Kitsu " of Anime Kitsu) when what is left says more than a kind ("Trending", never "Movies" alone).
 pub(crate) fn without_source(name: &str, source: &str) -> String {
     [words(source), source_words(source)]
         .iter()
         .find_map(|own| past_words(name, own))
+        .or_else(|| past_initials(name, source))
+        .or_else(|| past_one_word(name, source))
         .unwrap_or_else(|| name.to_owned())
+}
+
+/// Separators between an addon's mark and the catalog's own name.
+const SEPARATORS: [char; 6] = ['-', ':', '|', '\u{b7}', '\u{2013}', '\u{2014}'];
+
+/// What follows the addon's initials and a separator ("RT: Certified Fresh"); two initials at least, and the
+/// separator is required, so a word that happens to spell them ("Up Next"'s "Un Certain Regard") stays.
+fn past_initials(name: &str, source: &str) -> Option<String> {
+    let initials: String = words(source)
+        .iter()
+        .filter_map(|w| w.chars().next())
+        .collect();
+    if initials.chars().count() < 2 {
+        return None;
+    }
+    let rest = name.trim_start();
+    let head = rest.get(..initials.len())?;
+    let after = rest[initials.len()..].trim_start();
+    if head.to_lowercase() != initials || !after.starts_with(SEPARATORS) {
+        return None;
+    }
+    let rest = after.trim_start_matches(SEPARATORS).trim();
+    rest.starts_with(char::is_alphanumeric)
+        .then(|| rest.to_owned())
+}
+
+/// What follows one of the addon's own words at the start ("Kitsu Trending" of Anime Kitsu), when it still
+/// says more than a kind.
+fn past_one_word(name: &str, source: &str) -> Option<String> {
+    source_words(source).into_iter().find_map(|word| {
+        let rest = past_words(name, std::slice::from_ref(&word))?;
+        words(&rest)
+            .iter()
+            .any(|w| !KIND_WORDS.contains(&w.as_str()))
+            .then_some(rest)
+    })
 }
 
 /// What follows `own` and one separator at the start of `name`, when it starts with a letter or digit.
@@ -884,9 +943,7 @@ fn past_words(name: &str, own: &[String]) -> Option<String> {
         }
         rest = after.trim_start();
     }
-    let rest = rest
-        .trim_start_matches(['-', ':', '|', '\u{b7}', '\u{2013}', '\u{2014}'])
-        .trim();
+    let rest = rest.trim_start_matches(SEPARATORS).trim();
     rest.starts_with(char::is_alphanumeric)
         .then(|| rest.to_owned())
 }
@@ -2172,10 +2229,58 @@ mod tests {
             catalog_title("Year", "movie", "The Movie Database Addon"),
             "Year Movies"
         );
+    }
+
+    /// No addon's mark on a row (QA round 1, Q1 rows 13, 14 and 24, Q4
+    /// rows 4 to 6): one of its words at the start, its initials before a
+    /// separator, and a kind the name already says in other words.
+    #[test]
+    fn a_row_title_carries_no_addon_mark() {
         assert_eq!(
             catalog_title("Kitsu Trending", "anime", "Anime Kitsu"),
-            "Kitsu Trending Anime"
+            "Trending Anime"
         );
+        assert_eq!(
+            catalog_title("Kitsu Top Airing", "anime", "Anime Kitsu"),
+            "Top Airing Anime"
+        );
+        assert_eq!(
+            catalog_title("RT: Certified Fresh", "movie", "Rotten Tomatoes"),
+            "Certified Fresh Movies"
+        );
+        assert_eq!(
+            catalog_title("RT: Fresh TV Shows", "series", "Rotten Tomatoes"),
+            "Fresh TV Shows"
+        );
+        // What is left must say more than a kind, and initials need their separator.
+        assert_eq!(
+            catalog_title("Kitsu Anime", "anime", "Anime Kitsu"),
+            "Kitsu Anime"
+        );
+        assert_eq!(
+            catalog_title("Un Certain Regard", "movie", "Up Next"),
+            "Un Certain Regard Movies"
+        );
+        // Every default addon's catalog Home can show: no addon name and no initials mark (a search-only
+        // catalog named just "Kitsu" stays "Kitsu Anime", as "Trakt" does).
+        for d in crate::defaults::list() {
+            let own = super::source_words(&d.manifest.name);
+            for c in d
+                .manifest
+                .catalogs
+                .iter()
+                .filter(|c| c.default_required_extra().is_some())
+            {
+                let title = catalog_title(
+                    c.name.as_deref().unwrap_or(&c.id),
+                    &c.r#type,
+                    &d.manifest.name,
+                );
+                let first = super::words(&title).into_iter().next().unwrap_or_default();
+                assert!(!own.contains(&first), "{}: {title}", d.manifest.name);
+                assert!(!title.contains(": "), "{}: {title}", d.manifest.name);
+            }
+        }
     }
 
     #[test]
