@@ -136,7 +136,9 @@ const sameVisit = (() => {
   const nav = performance.getEntriesByType?.("navigation")[0] as PerformanceNavigationTiming | undefined;
   return nav?.type === "reload" || nav?.type === "back_forward";
 })();
-let base = stored === null || !sameVisit ? historyDepth() : Number(stored);
+// A fresh entry's depth as the router stamps it (history.length - 1): a production build may run this module before
+// the router's, while the entry has no stamp yet, and a base of 0 let the app's Back leave the app (QA r2, Q7 row 20).
+let base = stored === null || !sameVisit ? ((history.state as { _depth?: number } | null)?._depth ?? history.length - 1) : Number(stored);
 export const historyBase = () => (memory ? 0 : base);
 // A fresh visit's base is kept too, so its own reload finds it.
 try {

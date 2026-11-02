@@ -20,8 +20,8 @@ if (location.pathname === "/auth") {
   root.textContent = words.returnClose;
   window.close();
 } else {
-  // The app first: loading it loads the router, which stamps this entry's depth, and only then
-  // history.ts, whose base reads that stamp (else Back from a first page leaves the app).
+  // The app first: loading it loads the router, which stamps this entry's depth. history.ts reads a
+  // missing stamp the router's way, since a production bundle may run it first.
   void import("./app").then(async ({ App }) => {
     const [{ markBack }, { startFitting }] = await Promise.all([import("./history"), import("./form")]);
     // Registered before the router's own listener so a browser Back is known
