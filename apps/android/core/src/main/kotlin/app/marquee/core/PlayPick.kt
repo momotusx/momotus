@@ -53,7 +53,8 @@ fun pickVersion(
     settled: Boolean,
 ): PlayPick {
     if (snapshot == null) return PlayPick.Wait("Opening")
-    val known = listOfNotNull(snapshot.recommended) + snapshot.rows
+    // The Archive's and the plugins' sections too: done can wait for the plugins' pass.
+    val known = listOfNotNull(snapshot.recommended) + snapshot.rows + snapshot.archive.rows + snapshot.plugins.rows
     if (chosen != null) {
         known.firstOrNull { it.key == chosen }?.let { return PlayPick.Use(it) }
         // Not in this list (a new view after the app restarted): wait for every addon, then let the core say.

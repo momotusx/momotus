@@ -9,6 +9,7 @@ use mq_runtime::defaults::{DefaultChoice, DefaultInstalled};
 use mq_runtime::{Core, RowOrigin, TitleFacts, VersionsParams, VersionsView};
 use mq_streams::{DeviceCaps, SourceKind, StreamPrefs, Target};
 use std::net::IpAddr;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -16,10 +17,12 @@ const MANIFEST: &str = include_str!("../../mq-plugins/tests/fixtures/plugin-repo
 const SCRIPT: &str = include_str!("../../mq-plugins/tests/fixtures/plugin-repo/test-film.js");
 const HOST: &str = "plugins.c-plugins.test";
 
-/// The repository on loopback, with every path it was asked.
+/// The repository on loopback, with every path it was asked; while `held`
+/// its provider's lookups wait (a slow provider).
 struct Fixture {
     base: String,
     asked: Arc<Mutex<Vec<String>>>,
+    held: Arc<AtomicBool>,
 }
 
 fn reply(status: u16, kind: &str, body: &str) -> Vec<u8> {
@@ -39,6 +42,8 @@ impl Fixture {
         }
         let asked: Arc<Mutex<Vec<String>>> = Arc::default();
         let log = asked.clone();
+        let held: Arc<AtomicBool> = Arc::default();
+        let hold = held.clone();
         let base: Arc<Mutex<String>> = Arc::default();
         let at = base.clone();
         let port = mq_http::test_dns::https_requests(move |r| {
@@ -66,6 +71,9 @@ impl Fixture {
                 // The provider finds nothing by the TMDB id `tmdb_77` gives.
                 "/lookup/movie/77" => reply(404, "text/plain", ""),
                 p if p.starts_with("/lookup/") => {
+                    while hold.load(Ordering::SeqCst) {
+                        std::thread::sleep(Duration::from_millis(10));
+                    }
                     reply(200, "application/json", r#"{"title": "Fixture Film"}"#)
                 }
                 _ => reply(404, "text/plain", ""),
@@ -73,7 +81,11 @@ impl Fixture {
         });
         let url = format!("https://{HOST}:{port}");
         *base.lock().unwrap() = url.clone();
-        Fixture { base: url, asked }
+        Fixture {
+            base: url,
+            asked,
+            held,
+        }
     }
 
     fn repo(&self) -> String {
@@ -123,6 +135,14 @@ async fn settled(core: &Core, params: VersionsParams) -> VersionsView {
     view
 }
 
+/// The plugins' rows the view lists: its section and, with no addon row,
+/// the pick.
+fn plugin_rows(view: &VersionsView) -> usize {
+    let s = view.snapshot();
+    let pick = s.recommended.filter(|r| r.origin == RowOrigin::Plugin);
+    s.plugins.rows.len() + usize::from(pick.is_some())
+}
+
 /// The plugin defaults in `defaultAddons`, with their state.
 async fn state(core: &Core) -> Vec<(String, DefaultInstalled)> {
     let all = core.default_addons().await.unwrap().addons;
@@ -138,8 +158,8 @@ fn core() -> Core {
 }
 
 /// A repository added after its sheet lists its providers on; Versions runs
-/// them and their links are rows of "From plugins", never the pick, each
-/// playing its own link.
+/// them, and with no addon row their best link is the pick, shown once as
+/// the pick, which Play starts (the owner, 2026-11-02).
 #[tokio::test]
 async fn a_repository_s_provider_lists_rows_from_plugins() {
     let fixture = Fixture::start();
@@ -162,16 +182,18 @@ async fn a_repository_s_provider_lists_rows_from_plugins() {
 
     let view = settled(&core, film("tt0000001")).await;
     let s = view.snapshot();
-    assert_eq!(s.plugins.rows.len(), 1, "{:?}", fixture.asked());
-    let row = &s.plugins.rows[0];
-    assert_eq!(row.origin, RowOrigin::Plugin);
+    let row = s.recommended.as_ref().expect("the pick");
+    assert_eq!(row.origin, RowOrigin::Plugin, "{:?}", fixture.asked());
     assert_eq!(row.source_name.as_deref(), Some("Test film"));
     assert_eq!(row.host.as_deref(), Some(HOST));
     assert!(row.key.starts_with(mq_runtime::plugins::KEY_PREFIX));
-    // No addon: nothing is picked, and the page is not empty.
-    assert!(s.recommended.is_none() && s.rows.is_empty());
+    // No addon: the plugin's row is the pick, listed once, and the page is
+    // not empty.
+    assert!(s.plugins.rows.is_empty() && s.rows.is_empty());
     assert!(s.empty.is_none());
-    let played = view.candidates(&row.key);
+    let pick = view.pick(&row.key);
+    assert!(pick.handle.recommended());
+    let played = pick.candidates;
     assert_eq!(played.len(), 1);
     let Source::Http { url } = &played[0].source else {
         panic!("{:?}", played[0].source)
@@ -269,6 +291,89 @@ async fn the_kind_chips_count_and_filter_the_plugin_rows() {
     assert!(s.recommended.is_some());
 }
 
+/// An addon answering `streams` and the fixture repository, on one core.
+async fn addon_and_plugins(fixture: &Fixture, streams: serde_json::Value) -> Core {
+    let core = core();
+    core.add_plugin_repo(&fixture.repo()).await.unwrap();
+    let addon = stream_addon(serde_json::json!({ "streams": streams }).to_string()).await;
+    core.library()
+        .set_addons(OWNER, &[addon], &core.hlc())
+        .unwrap();
+    core
+}
+
+/// A direct link an addon lists for the fixture film.
+fn addon_link() -> serde_json::Value {
+    serde_json::json!([{"name": "Films\n1080p", "title": "Fixture.Film.2001.1080p.WEB-DL.AAC.x264-GRP",
+        "url": "http://127.0.0.1:9/fixture-film.mp4"}])
+}
+
+/// With an addon row and a plugin row, the addon's is the pick and the
+/// plugin's stays listed under "From plugins" (the owner, 2026-11-02:
+/// plugin rows come after every addon row).
+#[tokio::test]
+async fn an_addon_row_is_picked_over_a_plugin_row() {
+    let fixture = Fixture::start();
+    let core = addon_and_plugins(&fixture, addon_link()).await;
+    let view = settled(&core, film("tt0000011")).await;
+    let s = view.snapshot();
+    let pick = s.recommended.as_ref().expect("the pick");
+    assert_eq!(pick.origin, RowOrigin::Addon);
+    assert_eq!(s.plugins.rows.len(), 1, "{:?}", fixture.asked());
+    assert_eq!(s.plugins.rows[0].origin, RowOrigin::Plugin);
+}
+
+/// The addon's row failed on this device: the version Play moves to is
+/// the plugin's row.
+#[tokio::test]
+async fn a_failed_addon_row_moves_on_to_a_plugin_row() {
+    let fixture = Fixture::start();
+    let core = addon_and_plugins(&fixture, addon_link()).await;
+    let view = settled(&core, film("tt0000012")).await;
+    let s = view.snapshot();
+    let addon = s.recommended.as_ref().expect("the pick").key.clone();
+    let plugin = s.plugins.rows[0].key.clone();
+    let pick = view.pick(&addon);
+    assert!(pick.handle.recommended());
+    let next =
+        (pick.handle.next_version(std::slice::from_ref(&addon), None)).expect("a next version");
+    assert_eq!(next.key, plugin);
+    assert_eq!(next.candidates.len(), 1);
+    // Nothing after the plugin's row.
+    assert!(pick.handle.next_version(&[addon, plugin], None).is_none());
+}
+
+/// Every addon answered with nothing while a provider still runs: the view
+/// is not done and says no "no source", so Play keeps looking; the
+/// provider's row, once in, is the pick.
+#[tokio::test]
+async fn play_waits_for_the_plugins_when_no_addon_lists_a_row() {
+    let fixture = Fixture::start();
+    fixture.held.store(true, Ordering::SeqCst);
+    let core = addon_and_plugins(&fixture, serde_json::json!([])).await;
+    let view = VersionsView::open(&core, film("tt0000013"));
+    until("the provider's lookup", || {
+        fixture.asked().iter().any(|p| p.starts_with("/lookup/"))
+    })
+    .await;
+    // The addon has answered by now; the provider has not.
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    let s = view.snapshot();
+    assert!(s.pending_addons.is_empty(), "{:?}", s.pending_addons);
+    assert!(s.plugins.pending);
+    assert!(!s.done, "done before the plugins");
+    assert!(s.empty.is_none() && s.recommended.is_none());
+    fixture.held.store(false, Ordering::SeqCst);
+    until("the plugin's pick", || {
+        view.snapshot().recommended.is_some()
+    })
+    .await;
+    until("done", || view.snapshot().done).await;
+    let s = view.snapshot();
+    assert_eq!(s.recommended.unwrap().origin, RowOrigin::Plugin);
+    assert!(s.empty.is_none());
+}
+
 /// A provider turned off runs nothing; turned on again it runs.
 #[tokio::test]
 async fn a_provider_turned_off_runs_nothing() {
@@ -280,12 +385,12 @@ async fn a_provider_turned_off_runs_nothing() {
     let repos = core.plugin_repos().await.unwrap().repos;
     assert!(!repos[0].providers[0].enabled);
     let view = settled(&core, film("tt0000002")).await;
-    assert!(view.snapshot().plugins.rows.is_empty());
+    assert_eq!(plugin_rows(&view), 0);
     assert!(!fixture.asked().iter().any(|p| p.starts_with("/lookup/")));
     core.set_plugin_enabled(&fixture.repo(), "test-film", true)
         .unwrap();
     let view = settled(&core, film("tt0000002")).await;
-    assert_eq!(view.snapshot().plugins.rows.len(), 1);
+    assert_eq!(plugin_rows(&view), 1);
     // The whole repository off.
     core.set_plugin_repo_enabled(&fixture.repo(), false)
         .unwrap();
@@ -329,7 +434,7 @@ async fn a_provider_empty_by_tmdb_is_asked_by_imdb() {
     core.add_plugin_repo(&fixture.repo()).await.unwrap();
     let view = settled(&core, film("tt0000004")).await;
     let asked = fixture.asked();
-    assert_eq!(view.snapshot().plugins.rows.len(), 1, "{asked:?}");
+    assert_eq!(plugin_rows(&view), 1, "{asked:?}");
     let lookups: Vec<&String> = asked.iter().filter(|p| p.starts_with("/lookup/")).collect();
     assert_eq!(
         lookups,
@@ -472,12 +577,7 @@ async fn a_repository_added_in_incognito_leaves_no_code_behind() {
     scope.add_plugin_repo(&fixture.repo()).await.unwrap();
     let view = settled(&scope, film("tt0000001")).await;
     // The positive control: the provider ran inside, its script kept there.
-    assert_eq!(
-        view.snapshot().plugins.rows.len(),
-        1,
-        "{:?}",
-        fixture.asked()
-    );
+    assert_eq!(plugin_rows(&view), 1, "{:?}", fixture.asked());
     let inside = scope.library().plugin_code(&script).unwrap();
     assert!(inside.is_some());
     drop(view);
@@ -500,7 +600,7 @@ async fn a_repository_added_in_incognito_leaves_no_code_behind() {
     };
     let before = fetched();
     let view = settled(&scope, film("tt0000002")).await;
-    assert_eq!(view.snapshot().plugins.rows.len(), 1);
+    assert_eq!(plugin_rows(&view), 1);
     assert_eq!(fetched(), before, "read from the device");
     drop(view);
     scope.end_incognito();

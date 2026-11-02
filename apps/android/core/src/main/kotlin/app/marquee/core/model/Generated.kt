@@ -1691,7 +1691,7 @@ data class RestoreAnswer(
     val tombstones: List<DebridTombstone> = emptyList(),
 )
 
-/** Where a row comes from: an installed addon, ranked for the pick, or a built-in source listed in a section of its own and never picked (plans/plugins-and-marketplace.md 4.4). */
+/** Where a row comes from: an installed addon, ranked for the pick, or a source listed in a section of its own: the Archive's is never picked, a plugin's only when no addon lists a version (plans/plugins-and-marketplace.md 4.4, 12). */
 @Serializable(with = RowOrigin.Serializer::class)
 enum class RowOrigin(
     val wire: String,
@@ -2530,7 +2530,7 @@ data class VersionsSnapshot(
     val nobodySharing: Boolean,
     /** "From the Internet Archive" (plans/plugins-and-marketplace.md 4.4, 5): its own pass, after the addons' rows, never the pick, never a failover; `done` never waits for it. */
     val archive: SourceRows = SourceRows(pending = false),
-    /** "From plugins" (plans/plugins-and-marketplace.md 4.4, 7.8): the Nuvio providers' rows, a pass of their own like the Archive's. */
+    /** "From plugins" (plans/plugins-and-marketplace.md 4.4, 7.8): the Nuvio providers' rows, a pass of their own like the Archive's, but the pick and the failover when no addon row is left (12), shown once, as the pick; `done` waits for it while no addon lists a row. */
     val plugins: SourceRows = SourceRows(pending = false),
     /** The kind chips (plans/plugins-and-marketplace.md 4.2): each kind the listed rows hold, with how many rows hold a source of it. The apps show them from two kinds on. */
     val kinds: List<KindChip> = emptyList(),

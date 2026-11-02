@@ -235,11 +235,13 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
       onCleanup(() => clearTimeout(t));
     }
   });
-  // A version picked by hand opens once Versions lists it or is done: after
-  // a reload the Versions view is new and has listed nothing yet.
+  // A version picked by hand opens once Versions lists it (the Archive's and
+  // the plugins' sections too) or is done: after a reload the Versions view
+  // is new and has listed nothing yet.
   const listed = (k: string) => {
     const v = versions();
-    return !!v && (v.done || v.recommended?.key === k || v.rows.some((r) => r.key === k));
+    const rows = v ? [...v.rows, ...v.archive.rows, ...v.plugins.rows] : [];
+    return !!v && (v.done || v.recommended?.key === k || rows.some((r) => r.key === k));
   };
   const key = createMemo<string | null>(
     (prev) => prev ?? (props.chosen ? (listed(props.chosen) ? props.chosen : null) : settled() ? (versions()?.recommended?.key ?? null) : null),

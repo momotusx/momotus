@@ -79,8 +79,9 @@ pub struct VersionRow {
 }
 
 /// Where a row comes from: an installed addon, ranked for the pick, or a
-/// built-in source listed in a section of its own and never picked
-/// (plans/plugins-and-marketplace.md 4.4).
+/// source listed in a section of its own: the Archive's is never picked, a
+/// plugin's only when no addon lists a version
+/// (plans/plugins-and-marketplace.md 4.4, 12).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[cfg_attr(
     feature = "ts",
@@ -185,7 +186,9 @@ pub struct VersionsSnapshot {
     /// failover; `done` never waits for it.
     pub archive: SourceRows,
     /// "From plugins" (plans/plugins-and-marketplace.md 4.4, 7.8): the
-    /// Nuvio providers' rows, a pass of their own like the Archive's.
+    /// Nuvio providers' rows, a pass of their own like the Archive's, but
+    /// the pick and the failover when no addon row is left (12), shown
+    /// once, as the pick; `done` waits for it while no addon lists a row.
     pub plugins: SourceRows,
     /// The kind chips (plans/plugins-and-marketplace.md 4.2): each kind the
     /// listed rows hold, with how many rows hold a source of it. The apps
@@ -608,10 +611,15 @@ impl PickHandle {
                 .chain(&r.failover)
                 .any(|st| tried.contains(&st.key))
         };
-        // Under a kind chip the next version is of that kind, from its own pass.
+        // Under a kind chip the next version is of that kind, from its own pass;
+        // else the addons' rows, then the plugins' once none is left (the
+        // owner, 2026-11-02).
+        let open_in =
+            |rows: &[RankedRow]| rows.iter().filter(|r| r.key.viable).any(|r| untried(&r));
         let rows = match s.kind {
             Some(_) => &s.kind_ranked.rows,
-            None => &s.ranked.rows,
+            None if open_in(&s.ranked.rows) => &s.ranked.rows,
+            None => &s.plugins_ranked.rows,
         };
         let mut open = rows.iter().filter(|r| r.key.viable).filter(untried);
         let first = open.next()?;
@@ -1648,8 +1656,9 @@ fn rank_archive(s: &mut State, ranking: &Ranking) {
 
 /// The Nuvio providers' rows for this video (plans/plugins-and-marketplace.md
 /// 7.8): every provider switched on runs in the device's pool, its rows
-/// ranked in a pass of their own as each one answers. `done` and the pick
-/// never wait for it; an addon change leaves it (`restart`).
+/// ranked in a pass of their own as each one answers. With no addon row
+/// its best row is the pick, and `done` waits for it (the owner,
+/// 2026-11-02); an addon change leaves it (`restart`).
 async fn plugin_pass(
     core: Core,
     ranking: Arc<Ranking>,
@@ -1683,7 +1692,7 @@ async fn plugin_pass(
         }
         let mut s = lock(&state);
         s.plugins.extend(found);
-        rank_plugins(&mut s, &ranking);
+        rerank(&mut s, &ranking);
         snapshot.set(render(&s));
     }
     let mut s = lock(&state);
@@ -2481,11 +2490,17 @@ fn input<'a>(ranking: &'a Ranking, conditions: &'a Conditions) -> RankInput<'a> 
 fn rerank(s: &mut State, ranking: &Ranking) {
     let params = &ranking.params;
     s.ranked = rank(s.streams.clone(), &input(ranking, &s.rank));
+    rank_archive(s, ranking);
+    rank_plugins(s, ranking);
     if let Some(download) = &s.download {
         // The kept file stays the pick, whatever the addons list.
         s.recommended = Some(download.clone());
     } else if !s.frozen {
-        s.recommended = preferred(&s.ranked.rows, ranking).or_else(|| s.ranked.best().cloned());
+        // A plugin row is the pick only when no addon lists a version (the
+        // owner, 2026-11-02); the Archive's never is.
+        let pick_of =
+            |rows: &Ranked| preferred(&rows.rows, ranking).or_else(|| rows.best().cloned());
+        s.recommended = pick_of(&s.ranked).or_else(|| pick_of(&s.plugins_ranked));
         let screen = screen_class(params.caps.display_height);
         let pick = s.recommended.as_ref();
         s.smaller = pick.and_then(|p| smaller(&s.ranked.rows, p));
@@ -2493,13 +2508,11 @@ fn rerank(s: &mut State, ranking: &Ranking) {
     } else if let Some(row) = s
         .recommended
         .as_ref()
-        .and_then(|p| follow(&s.ranked.rows, p))
+        .and_then(|p| follow(&s.ranked.rows, p).or_else(|| follow(&s.plugins_ranked.rows, p)))
     {
         // Frozen: the pick stays, its facts (live seeders, line) follow.
         s.recommended = Some(row);
     }
-    rank_archive(s, ranking);
-    rank_plugins(s, ranking);
     rank_kind(s, ranking);
     reblock(s, ranking);
 }
@@ -2731,7 +2744,9 @@ fn render(s: &State) -> VersionsSnapshot {
         pending_addons: names(&s.pending),
         slow_addons: names(&s.slow),
         failed_addons: names(&s.failed),
-        done: s.done,
+        // With no addon row the plugins may still give the pick: Play waits
+        // for their pass before it says nothing has the title.
+        done: s.done && !(s.plugins_pending && s.ranked.rows.is_empty() && s.download.is_none()),
         frozen: s.frozen,
         smaller: shortcut_row(&s.smaller),
         sharper: shortcut_row(&s.sharper),
@@ -2746,6 +2761,7 @@ fn render(s: &State) -> VersionsSnapshot {
         },
         plugins: SourceRows {
             rows: (s.plugins_ranked.rows.iter())
+                .filter(|r| !holds_pick(r))
                 .filter(|r| s.kind.is_none_or(|k| holds_kind(s, r, k)))
                 .map(|r| row_dto(r, kept, &s.rank))
                 .collect(),

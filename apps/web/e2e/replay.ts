@@ -94,6 +94,8 @@ export function pluginFixture(url: string): Kept | null {
   if (asked.pathname === "/repo/test-film.js")
     return answer("text/javascript", readFileSync(join(pluginRepo, "test-film.js"), "utf8").replaceAll("{{BASE}}", `https://${PLUGIN_HOST}`));
   if (asked.pathname.startsWith("/lookup/")) return answer("application/json", JSON.stringify({ title: "Fixture film" }));
+  // The provider's link: the suite's own generated test film (colour bars).
+  if (asked.pathname === "/media/test-film.webm") return answer("video/webm", readFileSync(fileURLToPath(new URL("fixtures/test-film.webm", import.meta.url))));
   return { url, status: 404, headers: {}, body: "" };
 }
 

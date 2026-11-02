@@ -65,7 +65,9 @@ nobodySharing: boolean,
 archive: SourceRows, 
 /**
  * "From plugins" (plans/plugins-and-marketplace.md 4.4, 7.8): the
- * Nuvio providers' rows, a pass of their own like the Archive's.
+ * Nuvio providers' rows, a pass of their own like the Archive's, but
+ * the pick and the failover when no addon row is left (12), shown
+ * once, as the pick; `done` waits for it while no addon lists a row.
  */
 plugins: SourceRows, 
 /**

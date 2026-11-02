@@ -2,8 +2,9 @@
 //! profile keeps repository links; each repository's manifest lists
 //! providers, each a script that `getStreams` runs in the sandboxed engine
 //! (`mq-plugins`) when Versions opens. Their links become rows of a pass of
-//! their own, "From plugins": never the pick, never a failover, played only
-//! on a tap, through a handle that reaches public addresses only.
+//! their own, "From plugins": the pick and the failover only when no addon
+//! row is left (owner, 2026-11-02), played through a handle that reaches
+//! public addresses only.
 //!
 //! Two repositories come as defaults, on (owner, 2026-10-30, R7). A kids
 //! profile has none and runs none.

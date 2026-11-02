@@ -2,8 +2,8 @@
  * a core of its own whose default repository is our inert fixture (crates/mq-plugins/tests/fixtures/
  * plugin-repo) on a made-up public name, answered by the recorder (e2e/replay.ts `pluginFixture`): a
  * pasted link is read and added only from the sheet's Add; a provider switches off and on; the
- * repository is the recommended list's plugin row; Versions lists the provider's link under "From
- * plugins", with any direct link's words. Nothing asks a real repository. */
+ * repository is the recommended list's plugin row; with no addon row the provider's link is Versions'
+ * pick, never with the provider's name or host. Nothing asks a real repository. */
 
 import { expect, type Page, test } from "./fixture";
 import type { ChildProcess } from "node:child_process";
@@ -79,18 +79,22 @@ test("a repository added from the sheet runs in Versions under From plugins", as
   expect(after.addons.find((a) => a.group === "plugins")?.installed).toBe("on");
 
   await p.goto(`/title/movie/${BBB_ID}/versions/${BBB_ID}`);
-  const section = p.locator('[data-group="plugins"]');
-  await expect(section.getByRole("heading")).toContainText("From plugins");
-  await expect(section.locator(".vrow")).toHaveCount(1);
-  // Any direct link's words: never the provider's name or the host (QA r1 Q5 row 6).
-  await expect(section.locator(".vrow .lt")).toHaveText("Direct link");
-  await expect(section.locator(".vrow")).not.toContainText(PLUGIN_HOST);
-  await expect(section.locator(".vrow")).not.toContainText("Test film");
-  // No addon here: the plugin's row is the page's one version, and the viewer chooses it (batch-2 walk F3).
+  // No addon lists it: the plugin's row is the pick, which Play plays, listed once (the owner, 2026-11-02).
+  const pick = p.locator('section.pick[aria-label="Recommended version"]');
+  await expect(pick.locator('[data-f="versions:play"]')).toBeVisible();
+  // Never the provider's name or the host (QA r1 Q5 row 6).
+  await expect(pick).not.toContainText(PLUGIN_HOST);
+  await expect(pick).not.toContainText("Test film");
+  await expect(p.locator('[data-group="plugins"]')).toHaveCount(0);
   await expect(p.locator(".vstate")).toHaveText("1 version");
-  await expect(p.locator(".vstatus")).toHaveText("Choose a version to play.");
   await expect(p.locator(".pick-wait")).toHaveCount(0);
   await p.screenshot({ path: `${SHOTS}/plugins-versions-desktop.png` });
+
+  // Play opens the player on that link, never on "No source has this yet" (owner, 2026-11-02).
+  await p.goto(`/play/movie/${BBB_ID}/${BBB_ID}`);
+  await expect(p.locator('[data-f="player:toggle"]')).toBeVisible({ timeout: 30_000 });
+  await expect.poll(() => p.evaluate(() => document.querySelector("video")?.src ?? ""), { timeout: 30_000 }).toMatch(/^http:\/\/127\.0\.0\.1:\d+\//);
+  await expect(p.getByText("No source has this yet")).toHaveCount(0);
   await p.context().close();
 });
 

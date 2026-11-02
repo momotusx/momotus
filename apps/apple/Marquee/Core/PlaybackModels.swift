@@ -29,7 +29,7 @@ struct VersionsSnapshot: Decodable, Hashable, Sendable {
     /// What was hidden and why, for the versions metric line only (plans/apple-second-engine.md section 4).
     var hidden: HiddenSummary?
     /// "From plugins" (plans/plugins-and-marketplace.md 4.4, 7.8): the Nuvio providers' rows, a pass of their
-    /// own after the addons', never the pick (optional for older cores).
+    /// own after the addons', the pick only when no addon lists a row (optional for older cores).
     var plugins: SourceRows?
     /// The kind chips (plans/plugins-and-marketplace.md 4.2): each kind the rows hold, with how many rows hold a
     /// source of it; none from an older core.

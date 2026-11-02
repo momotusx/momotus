@@ -2,7 +2,8 @@
 
 /**
  * Where a row comes from: an installed addon, ranked for the pick, or a
- * built-in source listed in a section of its own and never picked
- * (plans/plugins-and-marketplace.md 4.4).
+ * source listed in a section of its own: the Archive's is never picked, a
+ * plugin's only when no addon lists a version
+ * (plans/plugins-and-marketplace.md 4.4, 12).
  */
 export type RowOrigin = "addon" | "archive" | "plugin";

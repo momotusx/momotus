@@ -14,7 +14,7 @@ object PluginCopy {
     const val CHOOSE = "Choose a version to play."
     const val TITLE = "Plugins"
     const val LEDE =
-        "Nuvio plugin repositories. Their providers find direct links when you open Versions, and their rows play only when you choose them."
+        "Nuvio plugin repositories. Their providers find direct links when you open Versions, and Play uses them when no addon has the title."
     const val FIELD_LABEL = "Repository link"
     const val ADD = "Add"
     const val CHECKING = "Reading the repository"
@@ -25,7 +25,7 @@ object PluginCopy {
     const val SHEET_FROM = "From {host}."
     const val SHEET_ADDS = "Adds {what}."
     const val SHEET_NOTE =
-        "Plugins are made by other people. They run on this device when you open Versions, get the name and year of what you open, and can contact any public website. Their links play only when you choose them. They cannot read your files, accounts or keys."
+        "Plugins are made by other people. They run on this device when you open Versions, get the name and year of what you open, and can contact any public website. Play uses their links when no addon has the title. They cannot read your files, accounts or keys."
     const val PROVIDERS = "Providers"
     const val ON = "On"
     const val OFF = "Off"

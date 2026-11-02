@@ -6,6 +6,7 @@ import app.marquee.core.model.EmptyVersions
 import app.marquee.core.model.Group
 import app.marquee.core.model.HiddenSummary
 import app.marquee.core.model.Reason
+import app.marquee.core.model.SourceRows
 import app.marquee.core.model.VersionRow
 import app.marquee.core.model.VersionStatus
 import app.marquee.core.model.VersionsSnapshot
@@ -57,6 +58,12 @@ class PlayPickTest {
         val pick =
             pickVersion(snapshot(best = row("a"), rows = listOf(row("b")), pending = listOf("X")), "b", settled = false)
         assertEquals(PlayPick.Use(row("b")), pick)
+    }
+
+    @Test
+    fun `a plugin row chosen on Versions plays at once, while the plugins' pass keeps the view from done`() {
+        val plugins = snapshot().copy(plugins = SourceRows(rows = listOf(row("p")), pending = true))
+        assertEquals(PlayPick.Use(row("p")), pickVersion(plugins, "p", settled = false))
     }
 
     @Test
