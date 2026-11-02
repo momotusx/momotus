@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import type { DefaultAddonInfo } from "../core/generated/DefaultAddonInfo";
 import { readFileSync } from "node:fs";
-import { afterContinue, cardOffer, catalogMissing, choicesFor, defaultsWords, grouped, namesLine } from "./defaults";
+import { afterContinue, cardOffer, catalogMissing, choicesFor, defaultsWords, grouped } from "./defaults";
 
 const row = (key: string, group: string, installed: DefaultAddonInfo["installed"] = "absent"): DefaultAddonInfo => ({
   key,
@@ -53,8 +53,7 @@ test("the catalog note shows only when no catalog would be on", () => {
 
 test("the Home card offers the missing ones once per list version, never on a kids profile", () => {
   const defaults = { version: 1, addons: nine.map((a) => (a.key === "cinemeta" ? { ...a, installed: "on" as const } : a)) };
-  expect(cardOffer(defaults, 0, false)).toHaveLength(8);
-  expect(cardOffer(defaults, 0, false)).not.toContain("CINEMETA");
+  expect(cardOffer(defaults, 0, false)).toBe(8);
   expect(cardOffer(defaults, 1, false)).toBeNull();
   expect(cardOffer(defaults, 0, true)).toBeNull();
   expect(cardOffer({ version: 1, addons: nine.map((a) => ({ ...a, installed: "off" as const })) }, 0, false)).toBeNull();
@@ -62,10 +61,9 @@ test("the Home card offers the missing ones once per list version, never on a ki
   expect(cardOffer(defaults, undefined, false)).toBeNull();
 });
 
-test("names read as a sentence", () => {
-  expect(namesLine(["Torrentio"])).toBe("Torrentio");
-  expect(namesLine(["Torrentio", "Trakt"])).toBe("Torrentio and Trakt");
-  expect(namesLine(["A", "B", "C"])).toBe("A, B and C");
+test("the Home card says how many, never which", () => {
+  expect(defaultsWords.cardLine(1)).toBe("Momotus recommends 1 addon you do not have yet.");
+  expect(defaultsWords.cardLine(8)).toBe("Momotus recommends 8 addons you do not have yet.");
 });
 
 test("Browse first and Review go Home, the doors go to the setup check", () => {

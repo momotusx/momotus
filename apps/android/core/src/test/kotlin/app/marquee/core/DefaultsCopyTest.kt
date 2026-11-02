@@ -108,10 +108,8 @@ class DefaultsCopyTest {
     @Test
     fun `words for groups and the card`() {
         assertEquals("Catalogs and details", DefaultsCopy.group("catalogs"))
-        assertEquals("Momotus now also recommends Torrentio.", DefaultsCopy.cardLine(listOf("Torrentio")))
-        assertEquals(
-            "Momotus now also recommends Torrentio, SubSense and Trakt.",
-            DefaultsCopy.cardLine(listOf("Torrentio", "SubSense", "Trakt")),
-        )
+        // How many, never which: no addon is named on Home.
+        assertEquals("Momotus recommends 1 addon you do not have yet.", DefaultsCopy.cardLine(1))
+        assertEquals("Momotus recommends 3 addons you do not have yet.", DefaultsCopy.cardLine(3))
     }
 }

@@ -20,7 +20,7 @@ import * as sync from "../core/sync";
 import { removeHere, wipeState } from "../core/wipe";
 import { accountWords as aw, activeProfile, needsSecondWayIn, type Card, cancelUnlink, homeCard, urgentCard } from "../lib/account";
 import { Tick } from "./sign-in";
-import { cardOffer, defaultsWords, namesLine } from "../lib/defaults";
+import { cardOffer, defaultsWords } from "../lib/defaults";
 import { allFailed } from "../lib/rows";
 import { autoFocusSoon, inputCount } from "../focus/dom";
 import { form } from "../form";
@@ -56,12 +56,12 @@ function OfferDefaults() {
   const seen = () => void op("setPrefs", { patch: { defaultsSeen: defaults()?.version } }).catch(() => undefined);
   return (
     <Show when={offer()}>
-      {(names) => (
+      {(n) => (
         <section class="defaults-card" aria-label={defaultsWords.cardTitle} data-fgroup="defaults-card">
           <Sparkle aria-hidden class="dc-icon" />
           <div class="dc-text">
             <h2>{defaultsWords.cardTitle}</h2>
-            <p>{namesLine(names())}</p>
+            <p>{defaultsWords.cardLine(n())}</p>
           </div>
           <div class="acts">
             <A class="btn" href="/welcome?step=2&review=1" data-f="home:defaults:review" onClick={seen}>

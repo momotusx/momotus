@@ -4,6 +4,7 @@
 import type { DefaultAddonInfo } from "../core/generated/DefaultAddonInfo";
 import type { DefaultAddons } from "../core/generated/DefaultAddons";
 import type { DefaultChoice } from "../core/generated/DefaultChoice";
+import { count } from "./words";
 
 /** Group titles, in the order the core lists the groups. */
 export const groupTitles: Record<string, string> = {
@@ -21,6 +22,8 @@ export const defaultsWords = {
   settingsLede: "The addons Momotus recommends. A switch turned on adds the addon; Addons lists everything you have.",
   noCatalog: "Home and search need a catalog addon.",
   cardTitle: "New recommended addons",
+  // How many, never their names: no addon is named on Home (the owner's rule); Review names them.
+  cardLine: (n: number) => `Momotus recommends ${count(n, "addon", "addons")} you do not have yet.`,
   tvMore: "Add more later from your phone or computer.",
   // Set up Marquee opens the welcome steps, where the recommended addons are.
   emptyHome: "None of the addons you have on shows a catalog here. Set up Momotus offers the recommended addons, or add an addon yourself.",
@@ -53,19 +56,12 @@ export function catalogMissing(addons: DefaultAddonInfo[], off: ReadonlySet<stri
   return !addons.some((a) => a.group === "catalogs" && (a.installed === "absent" ? !off.has(a.key) : a.installed === "on"));
 }
 
-/** The names the Home card offers, or null when it does not show: the
+/** How many addons the Home card offers, or null when it does not show: the
  * profile answered this list version, has every default, or is a kids
  * profile (it reads the owner's list). */
-export function cardOffer(defaults: DefaultAddons | null, defaultsSeen: number | undefined, kids: boolean): string[] | null {
+export function cardOffer(defaults: DefaultAddons | null, defaultsSeen: number | undefined, kids: boolean): number | null {
   if (!defaults || defaultsSeen === undefined || kids || defaultsSeen >= defaults.version) return null;
-  const missing = switchable(defaults.addons).map((a) => a.name);
-  return missing.length ? missing : null;
-}
-
-/** "Torrentio, Trakt and OpenSubtitles v3". */
-export function namesLine(names: string[]): string {
-  if (names.length < 2) return names.join("");
-  return `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`;
+  return switchable(defaults.addons).length || null;
 }
 
 /** Where the step goes after Continue: Home for Browse first and Review,

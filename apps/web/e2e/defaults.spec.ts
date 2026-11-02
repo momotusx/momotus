@@ -323,8 +323,8 @@ test("a finished import leads to the step, and a restart before Continue gets th
   const card = page.locator(".defaults-card");
   await expect(card).toBeVisible();
   await expect(card.locator("h2")).toHaveText("New recommended addons");
-  await expect(card.locator("p")).toContainText("Torrentio");
-  await expect(card.locator("p")).not.toContainText("Cinemeta");
+  // How many, never which: no addon is named on Home.
+  await expect(card.locator("p")).toHaveText("Momotus recommends 10 addons you do not have yet.");
   await expect(page).not.toHaveURL(/welcome/);
   await shot(page, "defaults-card", "desktop");
   await page.locator('[data-f="home:defaults:review"]').click();

@@ -330,7 +330,7 @@ struct CatalogSetup: View {
 }
 
 /// The card that offers recommended addons a profile does not have yet:
-/// their names, Review (the addons step for them) and Not now.
+/// how many, Review (the addons step, which names them) and Not now.
 private struct RecommendedCard: View {
     let names: [String]
     let review: () -> Void
@@ -342,7 +342,7 @@ private struct RecommendedCard: View {
                 .display(Theme.type.title3)
                 .foregroundStyle(Theme.Palette.text)
                 .accessibilityAddTraits(.isHeader)
-            Text(DefaultsRules.namesLine(names))
+            Text(DefaultsRules.cardLine(names.count))
                 .textFont(Theme.type.callout, relativeTo: .callout)
                 .foregroundStyle(Theme.Palette.muted)
                 .fixedSize(horizontal: false, vertical: true)

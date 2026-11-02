@@ -895,7 +895,7 @@ internal fun RecommendedCard(
     onReview: () -> Unit,
     onNotNow: () -> Unit,
 ) {
-    val missing = answer.addons.filter { it.installed == DefaultInstalled.Absent }.map { it.name }
+    val missing = answer.addons.count { it.installed == DefaultInstalled.Absent }
     // A remote landing on a button brings the whole card into view, so its words are read first.
     val whole = remember { BringIntoViewRequester() }
     val scope = rememberCoroutineScope()

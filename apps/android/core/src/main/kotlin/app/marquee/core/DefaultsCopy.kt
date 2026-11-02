@@ -42,16 +42,9 @@ object DefaultsCopy {
             else -> key.replaceFirstChar { it.uppercase() }
         }
 
-    /** The card's line: the defaults this profile does not have yet. */
-    fun cardLine(missing: List<String>): String = "Momotus now also recommends ${names(missing)}."
-
-    private fun names(list: List<String>): String =
-        when (list.size) {
-            0 -> ""
-            1 -> list[0]
-            2 -> "${list[0]} and ${list[1]}"
-            else -> list.dropLast(1).joinToString(", ") + " and " + list.last()
-        }
+    /** The card's line: how many defaults this profile does not have yet, never which (no addon is named on Home). */
+    fun cardLine(missing: Int): String =
+        "Momotus recommends $missing ${if (missing == 1) "addon" else "addons"} you do not have yet."
 
     /**
      * A row's switch before the user touches it. Onboarding and Review offer a missing default on;

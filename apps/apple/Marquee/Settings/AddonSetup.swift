@@ -53,6 +53,11 @@ enum DefaultsRules {
         return names.isEmpty ? nil : names
     }
 
+    /// The Home card's line: how many, never which (no addon is named on Home); Review names them.
+    static func cardLine(_ missing: Int) -> String {
+        "Momotus recommends \(missing) \(missing == 1 ? "addon" : "addons") you do not have yet."
+    }
+
     /// "Torrentio, Trakt and OpenSubtitles v3".
     static func namesLine(_ names: [String]) -> String {
         guard let last = names.last, names.count > 1 else { return names.joined() }

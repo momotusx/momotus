@@ -47,7 +47,7 @@ private func on(_ choices: [DefaultChoice]) -> [String: Bool] {
     #expect(DefaultsRules.warns([addon("cinemeta", .off, group: "catalogs")], moved: [:], hasCatalog: false))
 }
 
-@Test func theCardShowsOncePerVersionAndNeverOnKidsOrAtFirstRun() {
+@Test func theCardShowsOncePerVersionAndNeverOnKidsOrAtFirstRun() throws {
     let list = DefaultAddons(version: 1, addons: mixed)
     #expect(DefaultsRules.cardNames(list, seen: 0, kids: false, fresh: false) == ["Torrentio", "Trakt"])
     #expect(DefaultsRules.cardNames(list, seen: 1, kids: false, fresh: false) == nil)
@@ -59,6 +59,11 @@ private func on(_ choices: [DefaultChoice]) -> [String: Bool] {
     #expect(DefaultsRules.cardNames(DefaultAddons(version: 1, addons: [mixed[0], mixed[2]]), seen: 0, kids: false, fresh: false) == nil)
     #expect(DefaultsRules.namesLine(["Torrentio", "Trakt", "OpenSubtitles v3"]) == "Torrentio, Trakt and OpenSubtitles v3")
     #expect(DefaultsRules.namesLine(["Trakt"]) == "Trakt")
+    // Home's card says how many, never which: no addon is named on Home.
+    #expect(DefaultsRules.cardLine(1) == "Momotus recommends 1 addon you do not have yet.")
+    #expect(DefaultsRules.cardLine(2) == "Momotus recommends 2 addons you do not have yet.")
+    let home = try String(contentsOf: URL(fileURLWithPath: #filePath).deletingLastPathComponent().appending(path: "../Marquee/Home/HomeScreen.swift"), encoding: .utf8)
+    #expect(!home.contains("namesLine"))
 }
 
 @Test func theChecksFixIsItsRecommendedAddonWhenMissingOrOff() {
