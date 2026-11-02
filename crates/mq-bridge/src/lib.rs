@@ -853,6 +853,118 @@ impl Request {
         }
     }
 
+    /// What a kids session answers (plans/m11-kids.md 4.5); everything else
+    /// is `kids`. Watching and the viewer's own player choices stay; no
+    /// addon, plugin, debrid, Trakt, import, download, account or profile
+    /// change, and no screen of them. The `addons` and `trakt` views stay
+    /// readable: every app opens them on its own, and they change nothing.
+    /// No wildcard: a new op does not compile until it is classified.
+    fn allowed_for_kids(&self) -> bool {
+        match self {
+            Request::Subscribe { view, .. } => matches!(
+                view.as_str(),
+                "profiles"
+                    | "debrid"
+                    | "downloads"
+                    | "home"
+                    | "title"
+                    | "versions"
+                    | "playback"
+                    | "search"
+                    | "library"
+                    | "settings"
+                    | "addons"
+                    | "trakt"
+            ),
+            // Only the app saying it holds no record: never a sign-in.
+            Request::SetTrakt { record, .. } => record.is_none(),
+            Request::Unsubscribe { .. }
+            | Request::Command { .. }
+            | Request::Ping { .. }
+            | Request::Lifecycle { .. }
+            | Request::SyncNow { .. }
+            | Request::AckAnnouncements { .. }
+            | Request::SwitchProfile { .. }
+            | Request::UnlockProfile { .. }
+            | Request::LockSession { .. }
+            | Request::LeaveIncognito { .. }
+            | Request::AckIncognitoEnded { .. }
+            // The device's keystore duty, as while locked.
+            | Request::SetDebridKeys { .. }
+            | Request::RestoreDebrid { .. }
+            | Request::AckDebrid { .. }
+            | Request::DownloadsAllowed { .. }
+            // The player's subtitle and stream choices, and the lists it reads.
+            | Request::SetPrefs { .. }
+            | Request::StreamConditions { .. }
+            | Request::Languages { .. }
+            | Request::LanguagePicker { .. }
+            | Request::RemoveFromContinue { .. } => true,
+            Request::PreviewAddon { .. }
+            | Request::InstallAddon { .. }
+            | Request::DefaultAddons { .. }
+            | Request::FirstRunStill { .. }
+            | Request::InstallDefaults { .. }
+            | Request::InstallListed { .. }
+            | Request::RemoveAddon { .. }
+            | Request::MoveAddon { .. }
+            | Request::SetAddonEnabled { .. }
+            | Request::Plugins { .. }
+            | Request::PluginDirectory { .. }
+            | Request::PreviewPluginRepo { .. }
+            | Request::AddPluginRepo { .. }
+            | Request::RemovePluginRepo { .. }
+            | Request::SetPluginRepoEnabled { .. }
+            | Request::SetPluginEnabled { .. }
+            | Request::SetDebridKey { .. }
+            | Request::DisconnectDebrid { .. }
+            | Request::CreateSyncAccount { .. }
+            | Request::RelayInfo { .. }
+            | Request::NativeSignInStart { .. }
+            | Request::NativeSignIn { .. }
+            | Request::EmailSignInStart { .. }
+            | Request::EmailSignIn { .. }
+            | Request::Identities { .. }
+            | Request::LinkIdentity { .. }
+            | Request::UnlinkIdentity { .. }
+            | Request::CancelDeletion { .. }
+            | Request::ApprovePairing { .. }
+            | Request::ReadPairingCode { .. }
+            | Request::CreateRecoveryKit { .. }
+            | Request::SavePasskey { .. }
+            | Request::Recover { .. }
+            | Request::SyncDevices { .. }
+            | Request::LostPreview { .. }
+            | Request::RemoveDevice { .. }
+            | Request::ReportLost { .. }
+            | Request::SignOut { .. }
+            | Request::DeleteAccount { .. }
+            | Request::CancelPairing { .. }
+            | Request::ForkPreview { .. }
+            | Request::UseServerRoster { .. }
+            | Request::ResetSpeed { .. }
+            | Request::ForgetLearned { .. }
+            | Request::UndoLearned { .. }
+            | Request::HomeCatalogs { .. }
+            | Request::SetHomeRow { .. }
+            | Request::MoveHomeRow { .. }
+            | Request::DownloadAdd { .. }
+            | Request::DownloadPause { .. }
+            | Request::DownloadResume { .. }
+            | Request::DownloadRemove { .. }
+            | Request::DownloadRetry { .. }
+            | Request::SetDownloadSettings { .. }
+            | Request::TraktSync { .. }
+            | Request::TraktSignOut { .. }
+            | Request::CreateProfile { .. }
+            | Request::AllowTitle { .. }
+            | Request::UpdateProfile { .. }
+            | Request::DeleteProfile { .. }
+            | Request::SetPin { .. }
+            | Request::ResetOwnerPin { .. } => false,
+        }
+    }
+
     /// Whether a person caused this request (plans/batch-10-incognito.md
     /// 2.7): only these keep Incognito's 60-minute bound from running out.
     /// What the apps send on their own never counts: the web's `syncNow`
@@ -1493,6 +1605,12 @@ impl Session {
         drop(closed);
         if lock(&self.shared).locked && !request.allowed_while_locked() {
             let refused = Failure::coded("locked", "the profile is locked: unlock it first");
+            send_answer(&self.out, id, Err(refused));
+            return;
+        }
+        // ponytail: one indexed read per refusable request, a cached flag if traces show it.
+        if !request.allowed_for_kids() && lock(&self.shared).core.policy().kids() {
+            let refused = Failure::coded("kids", "not available on a kids profile");
             send_answer(&self.out, id, Err(refused));
             return;
         }

@@ -1145,6 +1145,54 @@ async fn a_kids_profile_made_here_changes_no_download() {
         .await;
 }
 
+/// A kids session changes no addon, plugin, debrid, Trakt, import, account
+/// or profile, and opens none of their screens nor Discover or Calendar,
+/// each refused with `kids` (plans/m11-kids.md 4.5, QA round 1 Q7 rows 27,
+/// 32 and 33); what it watches with, and leaving, still answer. The owner
+/// is not held to it.
+#[tokio::test]
+async fn a_kids_session_changes_no_source_account_or_profile() {
+    let mut c = Client::new(Core::temporary("default").unwrap());
+    assert_eq!(c.set_pin("default", Some("1357"), None).await, "ok");
+    let snapshot = c
+        .ok(json!({"op": "createProfile", "name": "Kid", "avatar": "fox:amber", "kids": true}))
+        .await;
+    let kid = id_of(&snapshot, "Kid");
+    let manifest = "http://127.0.0.1:9/manifest.json";
+    // The owner's install goes past the gate (it fails on the dead address).
+    let owner = c.call(json!({"op": "installAddon", "url": manifest})).await;
+    assert_ne!(owner["code"], "kids", "{owner}");
+    c.switch(&kid, None).await;
+    for op in [
+        json!({"op": "installAddon", "url": manifest}),
+        json!({"op": "previewAddon", "url": manifest}),
+        json!({"op": "removeAddon", "url": manifest}),
+        json!({"op": "setAddonEnabled", "url": manifest, "enabled": false}),
+        json!({"op": "installDefaults"}),
+        json!({"op": "addPluginRepo", "url": manifest}),
+        json!({"op": "setDebridKey", "service": "realdebrid", "key": "k"}),
+        json!({"op": "relayInfo", "server": "http://127.0.0.1:9"}),
+        json!({"op": "emailSignInStart", "server": "http://127.0.0.1:9", "email": "a@b.c"}),
+        json!({"op": "createProfile", "name": "Mine", "avatar": "fox:amber"}),
+        json!({"op": "deleteProfile", "profile": "default"}),
+        json!({"op": "resetOwnerPin"}),
+        json!({"op": "traktSync"}),
+        json!({"op": "subscribe", "view": "discover"}),
+        json!({"op": "subscribe", "view": "calendar", "params": {"today": "2026-11-02"}}),
+        json!({"op": "subscribe", "view": "import"}),
+        json!({"op": "subscribe", "view": "addonCatalog"}),
+        json!({"op": "subscribe", "view": "traktLogin"}),
+        json!({"op": "subscribe", "view": "pairing", "params": {"server": "http://127.0.0.1:9", "name": "TV"}}),
+    ] {
+        assert_eq!(c.code(op.clone()).await, "kids", "{op}");
+    }
+    let addons = c.ok(json!({"op": "subscribe", "view": "addons"})).await;
+    assert!(addons["sub"].is_u64(), "{addons}");
+    c.ok(json!({"op": "subscribe", "view": "home"})).await;
+    c.ok(json!({"op": "setTrakt", "record": null})).await;
+    c.ok(json!({"op": "ping"})).await;
+}
+
 /// A download row as the library keeps it.
 fn download(id: &str, item: &str, state: &str) -> mq_library::DownloadRecord {
     mq_library::DownloadRecord {
