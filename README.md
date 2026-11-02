@@ -21,9 +21,9 @@
 <div align="center">
 <table>
   <tr>
-    <td align="center" width="200"><a href="https://github.com/momotusx/momotus/releases/latest/download/momotus-android-arm64.apk"><picture><source media="(prefers-color-scheme: light)" srcset="docs/readme/tile-android-light.svg"><img src="docs/readme/tile-android-dark.svg" alt="" width="44"></picture></a><br><b>Android</b><br><sub><a href="https://github.com/momotusx/momotus/releases/latest/download/momotus-android-arm64.apk">64-bit APK</a></sub></td>
-    <td align="center" width="200"><a href="https://github.com/momotusx/momotus/releases/latest/download/momotus-android-armv7.apk"><picture><source media="(prefers-color-scheme: light)" srcset="docs/readme/tile-androidtv-light.svg"><img src="docs/readme/tile-androidtv-dark.svg" alt="" width="44"></picture></a><br><b>Android TV</b><br><sub><a href="https://github.com/momotusx/momotus/releases/latest/download/momotus-android-armv7.apk">TV and Fire TV APK</a></sub></td>
-    <td align="center" width="200"><a href="https://github.com/momotusx/momotus/releases/latest/download/Momotus.dmg"><picture><source media="(prefers-color-scheme: light)" srcset="docs/readme/tile-mac-light.svg"><img src="docs/readme/tile-mac-dark.svg" alt="" width="44"></picture></a><br><b>Mac</b><br><sub><a href="https://github.com/momotusx/momotus/releases/latest/download/Momotus.dmg">DMG</a></sub></td>
+    <td align="center" width="200"><a href="https://github.com/momotusx/momotus/releases"><picture><source media="(prefers-color-scheme: light)" srcset="docs/readme/tile-android-light.svg"><img src="docs/readme/tile-android-dark.svg" alt="" width="44"></picture></a><br><b>Android</b><br><sub><a href="https://github.com/momotusx/momotus/releases">64-bit APK</a></sub></td>
+    <td align="center" width="200"><a href="https://github.com/momotusx/momotus/releases"><picture><source media="(prefers-color-scheme: light)" srcset="docs/readme/tile-androidtv-light.svg"><img src="docs/readme/tile-androidtv-dark.svg" alt="" width="44"></picture></a><br><b>Android TV</b><br><sub><a href="https://github.com/momotusx/momotus/releases">TV and Fire TV APK</a></sub></td>
+    <td align="center" width="200"><a href="#build-from-source"><picture><source media="(prefers-color-scheme: light)" srcset="docs/readme/tile-mac-light.svg"><img src="docs/readme/tile-mac-dark.svg" alt="" width="44"></picture></a><br><b>Mac</b><br><sub><a href="#build-from-source">Build with Xcode</a></sub></td>
   </tr>
   <tr>
     <td align="center" width="200"><a href="#build-from-source"><picture><source media="(prefers-color-scheme: light)" srcset="docs/readme/tile-ios-light.svg"><img src="docs/readme/tile-ios-dark.svg" alt="" width="44"></picture></a><br><b>iPhone and iPad</b><br><sub><a href="#build-from-source">Build with Xcode</a></sub></td>
@@ -49,7 +49,7 @@
 | Android TV and Fire TV | Yes | Yes | Yes |
 | iPhone and iPad | From source | App Store (Lite), sideload | Sideload |
 | Apple TV | From source | App Store (Lite), sideload | No |
-| Mac | Yes | Yes | Alpha |
+| Mac | From source | Yes | Alpha |
 | Web browser | From source | Yes | No |
 | End-to-end encrypted sync | **Yes** | No | No |
 | Torrent engine built in | Yes<sup>1</sup> | Yes | Yes, off by default |
@@ -74,9 +74,9 @@
 
 ## Install
 
-**Android, Android TV and Fire TV.** Open the APK on the device and allow installs from that source. The 64-bit APK is for phones, tablets and 64-bit TVs; the armv7 APK is for 32-bit devices such as Fire TV sticks.
+**Android, Android TV and Fire TV.** Download the APK from the newest release on the [Releases](https://github.com/momotusx/momotus/releases) page, open it on the device and allow installs from that source. `momotus-android-arm64-phone.apk` is for phones, tablets and 64-bit TVs; `momotus-android-armv7-firetv.apk` is for 32-bit devices such as Fire TV sticks.
 
-**Mac.** Open the DMG and drag Momotus to Applications. It needs macOS 15 or later.
+**Mac.** Build it with Xcode (below). It needs macOS 15 or later.
 
 ## Build from source
 
