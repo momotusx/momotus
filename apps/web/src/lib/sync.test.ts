@@ -285,6 +285,8 @@ test("sync copy uses no protocol words, dashes or emoji", () => {
     ...reportNotes({ clockGapMs: 9e6, waiting: 2, parked: 2, oldEpochWrites: 1, rotationWaitMs: 1, blocked: "relayDisagrees", refused: 1, unreadable: 1, newer: 1, again: true }),
     ...["dropped", "fork", "wrongRelay", "relayBehind", "notJoined", "unsent", "insecure", "passkey", "wrongRecord"].map((c) => syncProblem(c, "")),
     removeDeviceAsk("TV"),
+    removeDeviceAsk("TV", 1),
+    removeDeviceAsk("TV", 2),
     lostKits(2),
     failedSince(2, 2) ?? "",
   ];

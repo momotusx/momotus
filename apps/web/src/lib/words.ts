@@ -448,8 +448,10 @@ export const named = (line: string, name: string) => line.replaceAll("{name}", n
 /** "1 device" or "3 devices". */
 export const count = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
-/** The confirm line for removing another device. */
-export const removeDeviceAsk = (name: string) => `Remove ${name}? It stops syncing and cannot read anything you change from now on. Devices it added stay.`;
+/** The confirm line for removing another device, with the recovery kits made on it, which go with it. */
+export const removeDeviceAsk = (name: string, kits = 0) =>
+  `Remove ${name}? It stops syncing and cannot read anything you change from now on. Devices it added stay.` +
+  (kits === 0 ? "" : kits === 1 ? " The recovery kit made on it stops working too." : ` The ${kits} recovery kits made on it stop working too.`);
 
 /** The button that confirms a lost report: it names how many devices go. */
 export const lostButton = (devices: number) => (accountShared.reportLostRemove[devices === 1 ? 0 : 1] ?? "").replace("{n}", String(devices));

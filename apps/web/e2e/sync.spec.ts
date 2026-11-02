@@ -916,12 +916,20 @@ test.describe.serial("sync across three devices", () => {
     const row = member(desk, "Living room TV");
     await row.locator('[data-f$=":remove"]').click();
     await expect(row.locator(".sync-ask")).toContainText("Remove Living room TV? It stops syncing");
+    await expect(row.locator(".sync-ask")).not.toContainText("recovery kit");
     // The removal lands; reading the list after it fails: the removal still counts.
     failOnce.set(SYNC_PORTS.a, { op: "syncDevices" });
     await row.locator('[data-f$=":confirm"]').click();
     await expect(desk.getByText("Removed: Living room TV. Done, but the device list did not refresh. Try again to see it.")).toBeVisible();
     await syncNow(desk);
     await expect.poll(() => names(desk)).toEqual(["Desk", "Phone", "Recovery kit"]);
+    // Removing the device that made the recovery kit says the kit stops working too (QA round 2 Q2 row 31).
+    const phoneRow = member(desk, "Phone");
+    await phoneRow.locator('[data-f$=":remove"]').click();
+    await expect(phoneRow.locator(".sync-ask p").first()).toHaveText(
+      "Remove Phone? It stops syncing and cannot read anything you change from now on. Devices it added stay. The recovery kit made on it stops working too.",
+    );
+    await phoneRow.locator('[data-f$=":cancel"]').click();
     await tv.locator('[data-f="sync:now"]').focus();
     await tv.keyboard.press("Enter");
     await expect(tv.locator("main > .st.bad")).toContainText("This device was removed from your sync account.");

@@ -505,7 +505,7 @@ function Joined() {
                       }
                     >
                       <div class="sync-ask" role="group" aria-label={`${w.remove} ${memberName(m)}`}>
-                        <p>{m.kit ? w.removeKitAsk : removeDeviceAsk(memberName(m))}</p>
+                        <p>{m.kit ? w.removeKitAsk : removeDeviceAsk(memberName(m), members().filter((x) => x.kit && x.sponsor === m.id).length)}</p>
                         <Show when={sync.remembered()}>
                           <p class="note small">{w.passkeyAsk}</p>
                         </Show>
