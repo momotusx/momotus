@@ -68,7 +68,8 @@ private func shared() throws -> [String: String] {
     let sections = VersionWords.sections(s)
     #expect(sections.map(\.title) == [StreamChoice.words.page.sections["fhd"] ?? "fhd", PluginWords.section])
     let found = try #require(sections.last?.rows.first)
-    #expect(VersionWords.rowWords(found) == "Dizibox, plays from cdn.example.com")
+    // Any direct link's words: never the provider's name or the host (QA r1 Q5 row 6).
+    #expect(VersionWords.rowWords(found) == "Direct link")
     // An older core sends none.
     let older = try JSONDecoder().decode(VersionsSnapshot.self, from: Data(json.replacingOccurrences(of: "\"plugins\"", with: "\"ignored\"").utf8))
     #expect(VersionWords.sections(older).count == 1)

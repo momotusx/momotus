@@ -29,7 +29,7 @@ import { focusEl, goBack } from "../focus/dom";
 import { form } from "../form";
 import { bytes, decoded, playPath, playState, releaseParts, titlePath } from "../lib/format";
 import { downloadWords } from "../lib/download";
-import { pluginRowLine, pluginWords } from "../lib/plugins";
+import { pluginWords } from "../lib/plugins";
 import { entryFrom, ownState } from "../history";
 import { onProfileReset } from "../core/profiles";
 import {
@@ -650,7 +650,7 @@ export function VersionsPage(props: { kind: string; id: string; videoId: string;
                   }}
                 </For>
                 {/* "From plugins" (plans/plugins-and-marketplace.md 4.4, 7.8): their own pass, after the
-                    addons' rows, never the pick; a row plays only when chosen and says where it plays from. */}
+                    addons' rows, never the pick; a row plays only when chosen. Its line is any row's: never the plugin's name or the host (QA r1 Q5 row 6). */}
                 <Show when={!dimmed() && ((snap()?.plugins.rows.length ?? 0) > 0 || snap()?.plugins.pending)}>
                   <section class="vgroup" data-row data-group="plugins">
                     <div class="vghead">
@@ -667,7 +667,7 @@ export function VersionsPage(props: { kind: string; id: string; videoId: string;
                               <Badges row={r} />
                               <span class="st line">
                                 <span class="lt" dir="auto">
-                                  <bdi>{pluginRowLine(r)}</bdi>
+                                  <bdi>{rowWords(r)}</bdi>
                                 </span>
                               </span>
                             </button>

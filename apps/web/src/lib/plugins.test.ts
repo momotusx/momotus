@@ -2,7 +2,8 @@ import { expect, test } from "bun:test";
 import type { PluginRepoInfo } from "../core/generated/PluginRepoInfo";
 import type { VersionRow } from "../core/generated/VersionRow";
 import type { ListedRepo } from "../core/generated/ListedRepo";
-import { addsProviders, directoryLine, matchesRepo, pluginRowLine, pluginsSummary } from "./plugins";
+import { addsProviders, directoryLine, matchesRepo, pluginsSummary } from "./plugins";
+import { rowWords } from "./words";
 
 test("the sheet names five providers and counts the rest", () => {
   expect(addsProviders(["One"])).toBe("Adds 1 provider: One.");
@@ -10,9 +11,18 @@ test("the sheet names five providers and counts the rest", () => {
   expect(addsProviders(["A", "B", "C", "D", "E", "F", "G", "H"])).toBe("Adds 8 providers: A, B, C, D, E and 3 more.");
 });
 
-test("a plugin row says what it is and where it plays from", () => {
-  const row = { quality: "1080p", sourceName: "Dizibox", host: "cdn.example.com" } as VersionRow;
-  expect(pluginRowLine(row)).toBe("Dizibox, plays from cdn.example.com");
+test("a plugin row says what any direct link says, never the plugin's name or its host (QA r1 Q5 row 6)", () => {
+  const row = {
+    quality: "1080p",
+    sizeBytes: null,
+    status: { kind: "direct" },
+    line: { kind: "quick" },
+    onDevice: null,
+    origin: "plugin",
+    sourceName: "Dizibox",
+    host: "cdn.example.com",
+  } as unknown as VersionRow;
+  expect(rowWords(row)).toBe("Direct link");
 });
 
 test("a listed repository says its providers, kinds and languages, and is found by any of them", () => {

@@ -336,7 +336,8 @@ class VersionsCopyTest {
         // An older core sends no sections: the groups as before.
         val older = VersionsCopy.sections(shown.copy(sections = emptyList()), shown.rows)
         assertEquals(listOf("Best quality"), older.map { it.title })
-        // The plugins' rows come last, under From plugins, each naming its provider and host.
+        // The plugins' rows come last, under From plugins, with any direct link's words: never the
+        // provider's name or the host (QA r1 Q5 row 6).
         val found =
             row().copy(
                 key = "plugin:r/p:h1",
@@ -355,7 +356,7 @@ class VersionsCopyTest {
             PluginCopy.SECTION to listOf(found.key),
             withPlugins.last().title to withPlugins.last().rows.map(VersionRow::key),
         )
-        assertEquals("Dizibox, plays from cdn.example.com", VersionsCopy.quiet(found))
+        assertEquals("Direct link", VersionsCopy.quiet(found))
     }
 
     @Test

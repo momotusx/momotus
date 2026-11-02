@@ -2,7 +2,6 @@ package app.marquee.core
 
 import app.marquee.core.model.ListedRepo
 import app.marquee.core.model.PluginRepoInfo
-import app.marquee.core.model.VersionRow
 
 /**
  * Nuvio plugin repositories' words (plans/plugins-and-marketplace.md 7.7, 7.8): the same as
@@ -13,7 +12,6 @@ object PluginCopy {
     const val SECTION = "From plugins"
     const val LOOKING = "Plugins are still looking."
     const val CHOOSE = "Choose a version to play."
-    const val ROW = "{source}, plays from {host}"
     const val TITLE = "Plugins"
     const val LEDE =
         "Nuvio plugin repositories. Their providers find direct links when you open Versions, and their rows play only when you choose them."
@@ -54,7 +52,6 @@ object PluginCopy {
             "section" to SECTION,
             "looking" to LOOKING,
             "choose" to CHOOSE,
-            "row" to ROW,
             "title" to TITLE,
             "lede" to LEDE,
             "fieldLabel" to FIELD_LABEL,
@@ -92,9 +89,6 @@ object PluginCopy {
         template: String,
         vararg values: Pair<String, Any>,
     ): String = values.fold(template) { s, (k, v) -> s.replace("{$k}", v.toString()) }
-
-    /** "Dizibox, plays from cdn.example.com": the row's quality is its badge. */
-    fun rowLine(row: VersionRow): String = fill(ROW, "source" to (row.sourceName ?: ""), "host" to (row.host ?: ""))
 
     /** "Adds 8 providers: A, B, C, D, E and 3 more." */
     fun adds(names: List<String>): String {

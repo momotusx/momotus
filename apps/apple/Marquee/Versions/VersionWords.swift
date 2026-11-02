@@ -291,10 +291,9 @@ enum VersionWords {
         let said: String? = if let dimmed { dimmed }
             else if let kept = row.onDevice { kept }
             else if line.map({ $0.tone != .ok }) == true { line?.text }
-            // A plugin's row names its provider and the host it plays from (4.4).
-            else if row.origin == "plugin" { PluginWords.rowLine(row) }
             else { source(row.status) ?? line?.text }
-        guard let size = bytes(row) else { return said ?? "" }
+        // With no size first, the line starts with a capital, as on the web and Android.
+        guard let size = bytes(row) else { return said.map { $0.prefix(1).uppercased() + $0.dropFirst() } ?? "" }
         return ([size] + [said.map(StreamChoice.lowerFirst)].compactMap { $0 }).joined(separator: ", ")
     }
 

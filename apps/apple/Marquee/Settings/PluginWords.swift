@@ -67,7 +67,6 @@ enum PluginWords {
     static let section = "From plugins"
     static let looking = "Plugins are still looking."
     static let choose = "Choose a version to play."
-    static let row = "{source}, plays from {host}"
     static let title = "Plugins"
     static let lede = "Nuvio plugin repositories. Their providers find direct links when you open Versions, and their rows play only when you choose them."
     static let fieldLabel = "Repository link"
@@ -101,7 +100,7 @@ enum PluginWords {
 
     /// Every word by its key in the shared file.
     static let all: [String: String] = [
-        "group": group, "section": section, "looking": looking, "choose": choose, "row": row, "title": title, "lede": lede,
+        "group": group, "section": section, "looking": looking, "choose": choose, "title": title, "lede": lede,
         "fieldLabel": fieldLabel, "add": add, "checking": checking, "adding": adding, "added": added, "couldNotAdd": couldNotAdd,
         "sheetTitle": sheetTitle, "sheetFrom": sheetFrom, "sheetAdds": sheetAdds, "sheetNote": sheetNote, "providers": providers,
         "on": on, "off": off, "remove": remove, "removeConfirm": removeConfirm, "empty": empty, "unread": unread,
@@ -113,11 +112,6 @@ enum PluginWords {
     /// `template` with each `{name}` replaced by its value.
     static func fill(_ template: String, _ values: [String: String]) -> String {
         values.reduce(template) { $0.replacingOccurrences(of: "{\($1.key)}", with: $1.value) }
-    }
-
-    /// "Dizibox, plays from cdn.example.com": the row's quality is its badge.
-    static func rowLine(_ row: VersionRow) -> String {
-        fill(Self.row, ["source": row.sourceName ?? "", "host": row.host ?? ""])
     }
 
     /// "Adds 8 providers: A, B, C, D, E and 3 more."

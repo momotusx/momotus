@@ -4,17 +4,12 @@
 import words from "../../../shared/plugin-words.json";
 import type { ListedRepo } from "../core/generated/ListedRepo";
 import type { PluginRepoInfo } from "../core/generated/PluginRepoInfo";
-import type { VersionRow } from "../core/generated/VersionRow";
 
 export const pluginWords = words;
 
 /** `template` with each `{name}` replaced by its value as plain text. */
 export const fill = (template: string, values: Record<string, string | number>) =>
   template.replace(/\{(\w+)\}/g, (all, key: string) => (key in values ? String(values[key]) : all));
-
-/** "Dizibox, plays from cdn.example.com" (4.4; the quality is the row's badge): a plugin row says where it plays from. */
-export const pluginRowLine = (row: VersionRow) =>
-  fill(words.row, { quality: row.quality, source: row.sourceName ?? "", host: row.host ?? "" });
 
 /** "Adds 8 providers: A, B, C, D, E and 3 more." for the consent sheet. */
 export function addsProviders(names: string[]): string {

@@ -407,7 +407,7 @@ class TvVersionsTest {
         compose.onNodeWithText(PluginCopy.CHOOSE).assertExists()
         compose.onNodeWithText("1 version").assertExists()
         compose.onAllNodesWithText("Play this version").assertCountEquals(0)
-        val castle = hasContentDescription("Castle, plays from cdn.example.com", substring = true)
+        val castle = hasContentDescription("1080p", substring = true)
         compose.waitUntil(5_000) { compose.onAllNodes(castle and isFocused()).fetchSemanticsNodes().isNotEmpty() }
         press(Key.DirectionLeft)
         compose.onNode(castle).assertIsFocused()

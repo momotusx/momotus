@@ -6,7 +6,6 @@ import app.marquee.core.model.EmptyVersions
 import app.marquee.core.model.Group
 import app.marquee.core.model.KindChip
 import app.marquee.core.model.Reason
-import app.marquee.core.model.RowOrigin
 import app.marquee.core.model.SectionQuality
 import app.marquee.core.model.SourceKind
 import app.marquee.core.model.VersionRow
@@ -218,8 +217,6 @@ object VersionsCopy {
         val size = row.sizeBytes?.let(Format::bytes)
         if (row.onDevice != null) return sized(size, row.onDevice)
         if (line.tone != Tone.Ok) return null
-        // A plugin's row names its provider and the host it plays from (4.4).
-        if (row.origin == RowOrigin.Plugin) return sized(size, PluginCopy.rowLine(row))
         val source =
             when (val s = row.status) {
                 is VersionStatus.Ready -> {

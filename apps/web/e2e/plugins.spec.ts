@@ -3,7 +3,7 @@
  * plugin-repo) on a made-up public name, answered by the recorder (e2e/replay.ts `pluginFixture`): a
  * pasted link is read and added only from the sheet's Add; a provider switches off and on; the
  * repository is the recommended list's plugin row; Versions lists the provider's link under "From
- * plugins", saying where it plays from. Nothing asks a real repository. */
+ * plugins", with any direct link's words. Nothing asks a real repository. */
 
 import { expect, type Page, test } from "./fixture";
 import type { ChildProcess } from "node:child_process";
@@ -82,7 +82,10 @@ test("a repository added from the sheet runs in Versions under From plugins", as
   const section = p.locator('[data-group="plugins"]');
   await expect(section.getByRole("heading")).toContainText("From plugins");
   await expect(section.locator(".vrow")).toHaveCount(1);
-  await expect(section.locator(".vrow")).toContainText(`Test film, plays from ${PLUGIN_HOST}`);
+  // Any direct link's words: never the provider's name or the host (QA r1 Q5 row 6).
+  await expect(section.locator(".vrow .lt")).toHaveText("Direct link");
+  await expect(section.locator(".vrow")).not.toContainText(PLUGIN_HOST);
+  await expect(section.locator(".vrow")).not.toContainText("Test film");
   // No addon here: the plugin's row is the page's one version, and the viewer chooses it (batch-2 walk F3).
   await expect(p.locator(".vstate")).toHaveText("1 version");
   await expect(p.locator(".vstatus")).toHaveText("Choose a version to play.");
@@ -118,4 +121,42 @@ test("Find addons lists the directory's repositories, searched on the device, ad
   expect(repos).toContain(LISTED_REPO);
   await p.screenshot({ path: `${SHOTS}/plugins-directory-desktop.png` });
   await p.context().close();
+});
+
+test("tv: the remote goes down from each repository's switches through its providers to the next one (QA r1 Q6 row 53)", async ({ browser }) => {
+  // Two repositories by now (the two tests above), one provider each.
+  expect((await client.req<{ repos: unknown[] }>("plugins")).repos).toHaveLength(2);
+  const context = await browser.newContext({ viewport: { width: 1920, height: 1080 }, colorScheme: "dark", baseURL: `http://127.0.0.1:${PORTS.vite}` });
+  await context.routeWebSocket(/\/ws$/, (ws) => {
+    const upstream = new WebSocket(`ws://127.0.0.1:${PLUGINS_PORT}/ws`);
+    const early: string[] = [];
+    upstream.addEventListener("open", () => {
+      for (const m of early.splice(0)) upstream.send(m);
+    });
+    upstream.addEventListener("message", (e) => ws.send(String(e.data)));
+    upstream.addEventListener("close", () => ws.close());
+    ws.onMessage((m) => (upstream.readyState === WebSocket.OPEN ? upstream.send(String(m)) : early.push(String(m))));
+  });
+  const p = await context.newPage();
+  await p.goto("/plugins?form=tv");
+  const active = () => p.evaluate(() => (document.activeElement as HTMLElement | null)?.dataset.f);
+  await expect(p.locator('[data-f="plugin:1:0"]')).toBeVisible();
+  await p.locator('[data-f="plugin-repo:0:enabled"]').focus();
+  const walk: (string | undefined)[] = [];
+  for (let i = 0; i < 3; i++) {
+    await p.keyboard.press("ArrowDown");
+    walk.push(await active());
+  }
+  expect(walk[0]).toBe("plugin:0:0");
+  expect(walk[1]).toMatch(/^plugin-repo:1:(enabled|remove)$/);
+  expect(walk[2]).toBe("plugin:1:0");
+  // Up comes back the same way, and Remove reaches the providers too.
+  await p.keyboard.press("ArrowUp");
+  await p.keyboard.press("ArrowUp");
+  expect(await active()).toBe("plugin:0:0");
+  await p.locator('[data-f="plugin-repo:0:remove"]').focus();
+  await p.keyboard.press("ArrowDown");
+  expect(await active()).toBe("plugin:0:0");
+  await p.screenshot({ path: `${SHOTS}/plugins-tv.png` });
+  await context.close();
 });

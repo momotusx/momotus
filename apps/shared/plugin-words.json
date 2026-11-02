@@ -3,7 +3,6 @@
   "section": "From plugins",
   "looking": "Plugins are still looking.",
   "choose": "Choose a version to play.",
-  "row": "{source}, plays from {host}",
   "title": "Plugins",
   "lede": "Nuvio plugin repositories. Their providers find direct links when you open Versions, and their rows play only when you choose them.",
   "fieldLabel": "Repository link",
