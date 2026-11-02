@@ -918,8 +918,13 @@ fn past_initials(name: &str, source: &str) -> Option<String> {
 }
 
 /// What follows one of the addon's own words at the start ("Kitsu Trending" of Anime Kitsu), when it still
-/// says more than a kind.
+/// says more than a kind. A name made only of the addon's words is its whole name ("Rotten Tomatoes" of Rotten
+/// Tomatoes): it stays whole, never cut to "Tomatoes".
 fn past_one_word(name: &str, source: &str) -> Option<String> {
+    let own = words(source);
+    if words(name).iter().all(|w| own.contains(w)) {
+        return None;
+    }
     source_words(source).into_iter().find_map(|word| {
         let rest = past_words(name, std::slice::from_ref(&word))?;
         words(&rest)
@@ -2260,6 +2265,15 @@ mod tests {
         assert_eq!(
             catalog_title("Un Certain Regard", "movie", "Up Next"),
             "Un Certain Regard Movies"
+        );
+        // A catalog named as its addon keeps the whole name, never a cut one.
+        assert_eq!(
+            catalog_title("Rotten Tomatoes", "movie", "Rotten Tomatoes"),
+            "Rotten Tomatoes Movies"
+        );
+        assert_eq!(
+            catalog_title("Journey Shelf", "movie", "Journey Shelf"),
+            "Journey Shelf Movies"
         );
         // Every default addon's catalog Home can show: no addon name and no initials mark (a search-only
         // catalog named just "Kitsu" stays "Kitsu Anime", as "Trakt" does).
