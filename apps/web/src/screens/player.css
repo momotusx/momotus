@@ -393,7 +393,7 @@ html[data-engine="mpv"] .player-scr.started .player-bd { opacity: 0; }
 [data-form="phone"] .sub-switch[aria-checked="true"] .knob i { transform: translateX(20px); background: var(--on-key); }
 /* First line / Second line (plans/dual-subtitles.md 5.1): a two-part switch under the heading. */
 .subp-switch { display: flex; gap: 4px; margin: 0 0 10px; padding: 3px; border-radius: var(--radius-pill); background: var(--track); }
-.subp-switch .seg { flex: 1; min-height: 44px; border-radius: var(--radius-pill); font: 600 var(--type-caption) / 1.2 var(--font-text); color: var(--dim); }
+.subp-switch .seg { flex: 1; min-height: 44px; text-align: center; border-radius: var(--radius-pill); font: 600 var(--type-caption) / 1.2 var(--font-text); color: var(--dim); }
 .subp-switch .seg.on { background: color-mix(in srgb, var(--text) 16%, transparent); color: var(--text); }
 /* A keyboard keeps the ring (app.css); a remote's focus inverts the segment, as the panel's rows do. */
 [data-form="tv"] .subp-switch .seg:focus { outline: none; background: var(--primary); color: var(--on-primary); }
@@ -402,9 +402,9 @@ html[data-engine="mpv"] .player-scr.started .player-bd { opacity: 0; }
 .subp .opt:disabled { cursor: default; }
 .subp .opt:disabled :is(.flag, .nm, .ct) { opacity: .5; }
 [data-form="phone"] .subp-switch { margin: 4px 12px 6px; }
-[data-form="phone"] .subp-switch .seg { min-height: 38px; }
 .subp-tune .sub-delay, .subp-tune .sub-size { margin: 0; }
-[data-form="tv"] .subp { top: 96px; bottom: auto; width: 1160px; height: 736px; display: grid; grid-template-columns: 500px 660px; border-radius: 24px; }
+/* Clear of the "Ends at" clock above it (QA r1 Q5 row 32), its foot where it was. */
+[data-form="tv"] .subp { top: 112px; bottom: auto; width: 1160px; height: 720px; display: grid; grid-template-columns: 500px 660px; border-radius: 24px; }
 [data-form="tv"] .subp-col + .subp-col { box-shadow: inset 1px 0 0 var(--line); }
 /* TV: the chosen row's quiet words at 92 percent on its grey fill (5.37:1; 64 percent there is 3.54:1). */
 [data-form="tv"] .subp .opt.on :is(.own, .ct, small, .sep) { color: var(--text); }

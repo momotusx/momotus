@@ -296,6 +296,14 @@ test("TV: Up from the search reaches the switch, Left and Right move on it, OK l
   await page.keyboard.press("Enter");
   const focused = () => page.evaluate(() => document.activeElement?.getAttribute("data-f"));
   await expect.poll(focused).toMatch(/^sub/);
+  // The switch's labels sit centred in their segments, and the panel clears the "Ends at" clock (QA r1 Q5 rows 17, 32).
+  const placed = await page.evaluate(() => {
+    const seg = document.querySelector('[data-f="sub:line1"]') as HTMLElement;
+    const clock = document.querySelector(".clock")?.getBoundingClientRect();
+    const panel = document.querySelector(".subp")?.getBoundingClientRect();
+    return { align: getComputedStyle(seg).textAlign, clock: !!clock, clear: !!clock && !!panel && panel.top >= clock.bottom };
+  });
+  expect(placed).toEqual({ align: "center", clock: true, clear: true });
   // Up through the rows, Off and the search field to the switch.
   for (let i = 0; i < 8 && !(await focused())?.startsWith("sub:line"); i++) await page.keyboard.press("ArrowUp");
   expect(await focused()).toMatch(/^sub:line[12]$/);
