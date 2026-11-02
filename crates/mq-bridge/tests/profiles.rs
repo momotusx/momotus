@@ -1193,6 +1193,70 @@ async fn a_kids_session_changes_no_source_account_or_profile() {
     c.ok(json!({"op": "ping"})).await;
 }
 
+/// A kids profile plays a title on its list: the `versions` subscribe for
+/// playback passes `itemId` (not only for a download), so the core asks the
+/// addons; a title off the list, or no `itemId`, stays refused (QA round 2
+/// Q7 rows 31 to 33).
+#[tokio::test]
+async fn a_kids_profile_opens_versions_for_a_title_on_its_list() {
+    let core = Core::temporary("default").unwrap();
+    core.set_pin("default", Some("1357"), None).await.unwrap();
+    let manifest = json!({
+        "id": "fixture", "version": "1.0.0", "name": "Fixture",
+        "types": ["movie"], "resources": ["stream"], "idPrefixes": ["tt"], "catalogs": []
+    });
+    let addon = mq_library::AddonRow {
+        transport_url: "http://127.0.0.1:9/manifest.json".into(),
+        manifest_json: manifest.to_string(),
+        position: 0,
+        enabled: true,
+        allow_private: true,
+    };
+    core.library()
+        .set_addons("default", &[addon], &core.hlc())
+        .unwrap();
+    let kid = core.create_kids_profile("Kid", "fox").unwrap();
+    let row = mq_library::AllowedRow {
+        item_id: "tt1254207".into(),
+        kind: "movie".into(),
+        name: "Big Buck Bunny".into(),
+        names: vec![],
+        poster: None,
+        allowed: true,
+        added_ms: 1,
+    };
+    core.library()
+        .write_allowed(&kid, &row, &core.hlc())
+        .unwrap();
+    let mut c = Client::new(core);
+    c.switch(&kid, None).await;
+    assert_ne!(
+        versions_empty(&mut c, "tt1254207", Some("tt1254207")).await,
+        "kidsNothing"
+    );
+    assert_eq!(
+        versions_empty(&mut c, "tt0000001", Some("tt0000001")).await,
+        "kidsNothing"
+    );
+    assert_eq!(
+        versions_empty(&mut c, "tt1254207", None).await,
+        "kidsNothing"
+    );
+}
+
+/// The empty kind of a playback `versions` subscribe's first snapshot.
+async fn versions_empty(c: &mut Client, video: &str, item: Option<&str>) -> String {
+    let params =
+        json!({"kind": "movie", "videoId": video, "title": "Big Buck Bunny", "itemId": item});
+    let reply = c
+        .ok(json!({"op": "subscribe", "view": "versions", "params": params}))
+        .await;
+    reply["snapshot"]["empty"]["kind"]
+        .as_str()
+        .unwrap_or("none")
+        .to_owned()
+}
+
 /// A download row as the library keeps it.
 fn download(id: &str, item: &str, state: &str) -> mq_library::DownloadRecord {
     mq_library::DownloadRecord {

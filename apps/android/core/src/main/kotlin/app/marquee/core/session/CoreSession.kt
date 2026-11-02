@@ -322,11 +322,12 @@ class CoreSession(
     /**
      * Ranked stream choices for one video. `title` is the movie or series name, never an episode
      * title (ranking uses it to hide wrong content); `season` and `episode` come from the
-     * selected episode or from the video id. [downloadFor] (the title's id) ranks the versions to keep for a
-     * download instead (`purpose: "download"`, plans/offline-downloads.md 4.5).
+     * selected episode or from the video id. [itemId] is the title's id. [download] ranks the versions to
+     * keep for a download instead (`purpose: "download"`, plans/offline-downloads.md 4.5).
      */
     fun versions(
         kind: String,
+        itemId: String,
         videoId: String,
         title: String,
         caps: DeviceCapsParams,
@@ -334,12 +335,12 @@ class CoreSession(
         episode: Int? = null,
         bingeGroup: String? = null,
         facts: TitleFacts? = null,
-        downloadFor: String? = null,
+        download: Boolean = false,
     ): VersionsView =
         VersionsView(
             client,
             scope,
-            versionsParams(kind, videoId, title, caps, season, episode, bingeGroup, facts, downloadFor),
+            versionsParams(kind, itemId, videoId, title, caps, season, episode, bingeGroup, facts, download),
         ).also { it.open() }
 
     /** Starts playback of one row of an open Versions view; the Versions view must stay open until this one is. */

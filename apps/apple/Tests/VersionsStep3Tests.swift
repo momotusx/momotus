@@ -686,3 +686,14 @@ private func kinds(_ kinds: [(String, Int)], service: String? = nil, selected: S
     #expect(PlayerLayout.noPickActions(empty("noSource"), canChoose: true, kids: true) == [.back])
     #expect(VersionWords.emptyActs(empty("noSource"), kids: false) == [.settingsAddons, .back])
 }
+
+/// Every Versions open names the title, not only a download's: a kids profile's core refuses a
+/// Versions open without `itemId`, so a kid could play nothing (QA round 2 Q7 rows 31 to 33).
+@MainActor @Test func everyVersionsOpenNamesItsTitle() {
+    let target = PlayTargetInfo(kind: "series", itemId: "tt0903747", videoId: "tt0903747:5:16", title: "Breaking Bad", poster: nil, resumeMs: nil)
+    let play = VersionsModel.params(target: target, bingeGroup: nil, purpose: nil)
+    #expect(play["itemId"] as? String == "tt0903747")
+    #expect(play["purpose"] == nil)
+    let keep = VersionsModel.params(target: target, bingeGroup: nil, purpose: "download")
+    #expect(keep["itemId"] as? String == "tt0903747" && keep["purpose"] as? String == "download")
+}

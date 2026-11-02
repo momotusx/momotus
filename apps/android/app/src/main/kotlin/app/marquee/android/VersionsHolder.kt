@@ -13,6 +13,8 @@ import kotlinx.coroutines.launch
 /** What the ranking needs to know about one video; screens asking for the same share one view. */
 data class VersionsKey(
     val kind: String,
+    /** The title's id: a kids profile is refused without it. */
+    val itemId: String,
     val videoId: String,
     /** The movie or series name, never an episode title (ranking uses it to hide wrong content). */
     val title: String,
@@ -20,8 +22,8 @@ data class VersionsKey(
     val episode: Int? = null,
     /** The release line of the episode that just played, so the next one is picked from the same line. */
     val bingeGroup: String? = null,
-    /** The title's id when the versions are ranked to keep for a download. */
-    val downloadFor: String? = null,
+    /** The versions are ranked to keep for a download. */
+    val download: Boolean = false,
 )
 
 /**
@@ -63,6 +65,7 @@ class VersionsHolder(
             views[key] =
                 session.versions(
                     kind = key.kind,
+                    itemId = key.itemId,
                     videoId = key.videoId,
                     title = key.title,
                     caps = params,
@@ -71,7 +74,7 @@ class VersionsHolder(
                     bingeGroup = key.bingeGroup,
                     // Read once at open: what arrives later is the core's to read from the meta.
                     facts = facts[key.videoId],
-                    downloadFor = key.downloadFor,
+                    download = key.download,
                 )
             opening.remove(key)
         } catch (e: CancellationException) {

@@ -107,12 +107,21 @@ class VersionsFocus : ViewModel() {
 
 internal fun keyFor(
     kind: String,
+    itemId: String,
     videoId: String,
     title: String,
     bingeGroup: String? = null,
 ): VersionsKey {
     val ref = Format.parseVideo(videoId)
-    return VersionsKey(kind, videoId, title, season = ref?.season, episode = ref?.episode, bingeGroup = bingeGroup)
+    return VersionsKey(
+        kind,
+        itemId,
+        videoId,
+        title,
+        season = ref?.season,
+        episode = ref?.episode,
+        bingeGroup = bingeGroup,
+    )
 }
 
 @Composable
@@ -167,7 +176,7 @@ fun TitleScreen(
     ReportDrawnWhen { name != null }
     val videoId = header?.playTarget?.videoId
     // The line under Play is the recommended version of what Play starts, so open it early.
-    val playKey = if (videoId != null && name != null) keyFor(route.kind, videoId, name) else null
+    val playKey = if (videoId != null && name != null) keyFor(route.kind, route.id, videoId, name) else null
     // The runtime and dates go with each video's view, so the bitrate and year checks need not wait for the meta.
     val facts = TitleFacts.of(header?.details, videoId, holder.view.episodes.toList())
     LaunchedEffect(playKey, facts) {
@@ -318,9 +327,7 @@ fun VersionsScreen(
     held: Boolean = false,
 ) {
     val key =
-        keyFor(route.kind, route.videoId, route.title).let {
-            if (route.download) it.copy(downloadFor = route.id) else it
-        }
+        keyFor(route.kind, route.id, route.videoId, route.title).copy(download = route.download)
     LaunchedEffect(key) { app.versions.use(key) }
     val view = app.versions.view(key)
     // A download's pick is added with this view's subscription, and the page gives way to the title.

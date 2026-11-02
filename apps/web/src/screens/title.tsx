@@ -302,6 +302,7 @@ function TitlePage(props: { kind: string; id: string; retry: () => void }) {
     const ref = parseVideo(props.id, t.videoId);
     return versionsView({
       kind: props.kind,
+      itemId: props.id,
       videoId: t.videoId,
       title: name,
       season: ref?.season ?? undefined,

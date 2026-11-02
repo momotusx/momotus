@@ -13,7 +13,7 @@ import type { ChildProcess } from "node:child_process";
 import { createReadStream, statSync } from "node:fs";
 import { createServer, type Server, type ServerResponse } from "node:http";
 import type { AddressInfo, Socket } from "node:net";
-import { Client, cleanup, DOWNLOADS_PORT, SHOTS, startBridge } from "./core";
+import { Client, cleanup, DOWNLOADS_PORT, SHOTS, startBridge, startIfPaused } from "./core";
 import { patchedContext } from "./patch";
 import { BBB_ID, FILM_FILE, NAME } from "./source";
 
@@ -526,6 +526,19 @@ test("a kids profile sees its downloaded title with Play only, and no control on
   // A plain word, nothing to press.
   await expect(page.locator(".info .acts span.dl")).toHaveText("Downloaded");
   await expect(page.locator(".info .acts button.dl")).toHaveCount(0);
+  // The kid plays the film on its list: Play is live and the player starts it (QA round 2 Q7 rows 31 to 33,
+  // a Versions open that named no title was refused for every kids profile).
+  const play = page.locator('a[data-f="title:play"]');
+  await expect(play).toBeVisible({ timeout: 30_000 });
+  await play.click();
+  await expect(page).toHaveURL(/\/play\/movie\//);
+  await startIfPaused(page);
+  await expect.poll(() => page.evaluate(() => document.querySelector("video")?.currentTime ?? 0), { timeout: 30_000 }).toBeGreaterThan(1);
+  await page.evaluate(() => document.querySelector("video")?.pause());
+  // A title off the kid's list stays refused, with no Play.
+  await page.goto(`/title/series/${SERIES}?form=desktop`);
+  await expect(page.locator(".problem h2")).toHaveText("That isn't on your list", { timeout: 15_000 });
+  await expect(page.locator('[data-f="title:play"]')).toHaveCount(0);
   expect(errors).toEqual([]);
   await context.close();
 });

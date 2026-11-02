@@ -36,7 +36,8 @@ export function videoContext(kind: string, id: string, videoId: string, bingeGro
       releaseInfo: d.releaseInfo ?? undefined,
       released: episode()?.released ?? undefined,
       episodesInSeason: season || undefined,
-      ...(purpose ? { purpose, itemId: id } : {}),
+      itemId: id,
+      ...(purpose ? { purpose } : {}),
     });
   });
   const label = () => (ref ? `${episodeLabel(ref.season, ref.episode)}${episode()?.title ? ` ${episode()?.title}` : ""}` : null);

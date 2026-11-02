@@ -396,9 +396,10 @@ export interface VersionsParams {
   releaseInfo?: string;
   released?: string;
   episodesInSeason?: number;
-  /** `download`: the versions to keep on this device (plans/offline-downloads.md 4.5), with `itemId`. */
+  /** `download`: the versions to keep on this device (plans/offline-downloads.md 4.5). */
   purpose?: "download";
-  itemId?: string;
+  /** The title the video belongs to: a kids profile is refused without it. */
+  itemId: string;
 }
 
 let versions: { key: string; view: LiveView<VersionsSnapshot> } | null = null;

@@ -2973,14 +2973,16 @@ impl Session {
                     core.set_network(network);
                 }
                 let parsed = versions_params(params, core.prefs().streams)?;
-                // `purpose: "download"`: the Versions screen that picks a
-                // version to keep (plans/offline-downloads.md 3.2).
+                // `itemId`: the title the video belongs to; a kids profile
+                // is refused without it. `purpose: "download"`: the Versions
+                // screen that picks a version to keep
+                // (plans/offline-downloads.md 3.2).
+                let item = params.get("itemId").and_then(Value::as_str);
                 let versions = if params.get("purpose").and_then(Value::as_str) == Some("download")
                 {
-                    let item = params.get("itemId").and_then(Value::as_str);
                     VersionsView::open_to_download(&core, parsed, item)
                 } else {
-                    VersionsView::open(&core, parsed)
+                    VersionsView::open_checked(&core, parsed, item)
                 };
                 let (snapshot, updates) = versions.subscribe();
                 let forward = tokio::spawn(forward(sub, updates, out, fence));

@@ -103,15 +103,18 @@ class StreamChoiceWireTest {
     @Test
     fun `the versions params carry the network and what the app knows of the title`() {
         val facts = TitleFacts("52 min", "2008-2013", "2013-09-29", 16)
-        val params = versionsParams("series", "tt1:5:16", "Breaking Bad", caps, 5, 16, facts = facts)
+        val params = versionsParams("series", "tt1", "tt1:5:16", "Breaking Bad", caps, 5, 16, facts = facts)
         assertEquals("ethernet", params.text("network"))
+        // The title's id goes with every open, not only a download's: a kids profile is refused without it.
+        assertEquals("tt1", params.text("itemId"))
+        assertFalse("purpose" in params)
         assertEquals("52 min", params.text("runtime"))
         assertEquals("2008-2013", params.text("releaseInfo"))
         assertEquals("2013-09-29", params.text("released"))
         assertEquals(JsonPrimitive(16), params["episodesInSeason"])
         assertEquals(JsonPrimitive(2160), params["displayHeight"])
         // Nothing known: the core reads the meta, so nothing is sent rather than an empty value.
-        val bare = versionsParams("movie", "tt2", "Sintel", caps.copy(network = null))
+        val bare = versionsParams("movie", "tt2", "tt2", "Sintel", caps.copy(network = null))
         for (key in listOf("network", "runtime", "releaseInfo", "released", "episodesInSeason")) {
             assertFalse(key in bare, key)
         }

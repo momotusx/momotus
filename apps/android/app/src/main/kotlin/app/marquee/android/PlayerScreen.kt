@@ -180,7 +180,7 @@ class PlayerHolder(
         viewModelScope.launch { session.serverMoved.collect { controller.serverMoved() } }
         // The Versions button names the quality of what plays, also after a failover.
         viewModelScope.launch {
-            val key = keyFor(route.kind, route.videoId, route.title, route.binge)
+            val key = keyFor(route.kind, route.id, route.videoId, route.title, route.binge)
             snapshotFlow {
                 val playing = controller.playingKey
                 val snapshot = versions.view(key)?.snapshot
@@ -192,7 +192,7 @@ class PlayerHolder(
     }
 
     private suspend fun start() {
-        val key = keyFor(route.kind, route.videoId, route.title, route.binge)
+        val key = keyFor(route.kind, route.id, route.videoId, route.title, route.binge)
         versions.use(key)
         val view = snapshotFlow { versions.view(key) }.filterNotNull().first()
         // After an episode the next one should start by itself: if no pick shows up in time, say so.

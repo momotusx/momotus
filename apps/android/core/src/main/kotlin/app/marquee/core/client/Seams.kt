@@ -114,9 +114,14 @@ data class TitleFacts(
     }
 }
 
-/** The `versions` subscription's params: the video, what the device plays, and what the app knows of the title. */
+/**
+ * The `versions` subscription's params: the video and its title's [itemId] (a kids profile is refused
+ * without it), what the device plays, and what the app knows of the title. [download] ranks the
+ * versions to keep for a download (`purpose: "download"`).
+ */
 fun versionsParams(
     kind: String,
+    itemId: String,
     videoId: String,
     title: String,
     caps: DeviceCapsParams,
@@ -124,14 +129,12 @@ fun versionsParams(
     episode: Int? = null,
     bingeGroup: String? = null,
     facts: TitleFacts? = null,
-    downloadFor: String? = null,
+    download: Boolean = false,
 ): JsonObject =
     JsonObject(
         buildMap {
-            downloadFor?.let {
-                put("purpose", JsonPrimitive("download"))
-                put("itemId", JsonPrimitive(it))
-            }
+            if (download) put("purpose", JsonPrimitive("download"))
+            put("itemId", JsonPrimitive(itemId))
             put("kind", JsonPrimitive(kind))
             put("videoId", JsonPrimitive(videoId))
             put("title", JsonPrimitive(title))
