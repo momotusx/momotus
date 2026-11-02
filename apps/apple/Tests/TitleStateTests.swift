@@ -35,3 +35,11 @@ private func header(_ state: TitleState) -> TitleHeader {
     #expect(failureTop(safeTop: 0) == Theme.Space.xl)
     #expect(failureTop(safeTop: 20) >= Theme.Space.xl)
 }
+
+/// A kids profile's title off its list says so at once, never Loading (QA round 1, Q7 row 28).
+@Test func aTitleOffAKidsListSaysSoAtOnce() throws {
+    #expect(titleFallback(header: .notAllowed, failure: nil) == .notAllowed)
+    let decoded = try JSONDecoder().decode(TitleState.self, from: Data(#"{"state":"notAllowed"}"#.utf8))
+    #expect(decoded == .notAllowed)
+    #expect(TitleFallback.refused == "That isn't on your list. Ask a grown-up.")
+}

@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import type { ProfilesSnapshot } from "../core/generated/ProfilesSnapshot";
-import { KIDS_HIDDEN_SECTIONS, kidsBlocked, kidsSession, kidsWords } from "./kids";
+import { KIDS_HIDDEN_SECTIONS, kidsBlocked, kidsSession, kidsWords, titleRefused } from "./kids";
 
 const snap = (kids: boolean, profileKids = kids) =>
   ({ active: "k", kids, profiles: [{ id: "k", name: "Kid", kids: profileKids }] }) as unknown as ProfilesSnapshot;
@@ -25,4 +25,12 @@ test("a kids session opens no Discover, Calendar, source, account or profile pag
 test("a kids search speaks of its list, never of addons", () => {
   expect(kidsWords.searchNone).toBe("That isn't on your list. Ask a grown-up.");
   expect(Object.values(kidsWords).join(" ")).not.toMatch(/addon/i);
+});
+
+test("a title the core refused for a kids profile is said at once (QA r1 Q7 row 28)", () => {
+  expect(titleRefused({ state: "notAllowed" })).toBe(true);
+  expect(titleRefused({ state: "loading" })).toBe(false);
+  expect(titleRefused({ state: "failed", reason: "x" })).toBe(false);
+  expect(titleRefused(undefined)).toBe(false);
+  expect(`${kidsWords.titleRefused}. ${kidsWords.ask}`).toBe("That isn't on your list. Ask a grown-up.");
 });

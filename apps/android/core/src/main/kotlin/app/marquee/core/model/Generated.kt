@@ -2262,6 +2262,10 @@ sealed interface TitleState {
     data class Failed(
         val reason: String,
     ) : TitleState
+
+    @Serializable
+    @SerialName("notAllowed")
+    data object NotAllowed : TitleState
 }
 
 @Serializable

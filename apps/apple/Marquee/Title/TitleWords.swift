@@ -263,13 +263,19 @@ enum TitlePlay: Equatable {
 }
 
 /// What the title page shows while it has no details: Loading, or the reason it failed
-/// (the header's own failure, else the failed open, which leaves no header at all).
+/// (the header's own failure, else the failed open, which leaves no header at all); a kids
+/// profile's title off its list says so at once, with Back only (QA round 1, Q7 row 28).
 enum TitleFallback: Equatable {
     case loading
     case failed(String)
+    case notAllowed
+
+    /// What a kids profile reads for a title off its list.
+    static let refused = "That isn't on your list. Ask a grown-up."
 }
 
 func titleFallback(header: TitleState?, failure: String?) -> TitleFallback {
+    if case .notAllowed = header { return .notAllowed }
     if case .failed(let reason) = header { return .failed(reason) }
     if header == nil, let failure { return .failed(failure) }
     return .loading

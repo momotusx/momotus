@@ -6,6 +6,8 @@ struct TitleScreen: View {
     @State private var model: TitleModel
     let core: CoreClient
     @Environment(\.metrics) private var metrics
+    /// Back from a title a kids profile may not open.
+    @Environment(\.dismiss) private var dismiss
     @Environment(\.tabShown) private var shown
     /// The place is on screen now: a start that settles later reads it.
     @State private var placeShown = true
@@ -410,6 +412,10 @@ struct TitleScreen: View {
                 }
                 .ignoresSafeArea(edges: metrics.wide ? [] : .top)
             }
+        } else if fallback == .notAllowed {
+            StateLine(symbol: "triangle-alert", text: TitleFallback.refused, action: ("Back", { dismiss() }), primary: true, spoken: true)
+                .padding(.horizontal, metrics.gutter)
+                .padding(.top, failureTop(safeTop: safeTop))
         } else if case .failed(let reason) = fallback {
             StateLine(symbol: "triangle-alert", text: reason, action: ("Try again", model.retry), spoken: true)
                 .padding(.horizontal, metrics.gutter)
@@ -918,6 +924,8 @@ struct TitleScreen: View {
                     runtime: details.runtime, versions: versions?.snapshot, failure: versions?.failure, wide: metrics.wide,
                     play: { play(fromStart: $0) }, focus: $primaryFocused)
                 actions(details)
+            } else if fallback == .notAllowed {
+                StateLine(symbol: "triangle-alert", text: TitleFallback.refused, action: ("Back", { dismiss() }), primary: true, spoken: true)
             } else if case .failed(let reason) = fallback {
                 StateLine(symbol: "triangle-alert", text: reason, action: ("Try again", model.retry), spoken: true)
             } else {

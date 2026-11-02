@@ -845,6 +845,7 @@ private fun AppNav(
                             session,
                             app,
                             form,
+                            onBack = ::pop,
                             onPlay = { key, videoId, title ->
                                 backStack.add(Route.Player(route.kind, route.id, videoId, title, key))
                             },

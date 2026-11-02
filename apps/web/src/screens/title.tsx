@@ -3,6 +3,7 @@ import BookmarkCheck from "lucide-solid/icons/bookmark-check";
 import BookmarkPlus from "lucide-solid/icons/bookmark-plus";
 import CalendarClock from "lucide-solid/icons/calendar-clock";
 import Check from "lucide-solid/icons/check";
+import ChevronLeft from "lucide-solid/icons/chevron-left";
 import CircleAlert from "lucide-solid/icons/circle-alert";
 import CircleX from "lucide-solid/icons/circle-x";
 import Film from "lucide-solid/icons/film";
@@ -31,7 +32,7 @@ import type { EmptyKind } from "../core/generated/EmptyKind";
 import type { HomeRow } from "../core/generated/HomeRow";
 import type { Episode } from "../core/generated/Episode";
 import type { VersionsSnapshot } from "../core/generated/VersionsSnapshot";
-import { focusEl, reducedMotion, remember } from "../focus/dom";
+import { focusEl, goBack, reducedMotion, remember } from "../focus/dom";
 import { form, viewport } from "../form";
 import { airDate, clock, decoded, episodeLabel, initials, offersLibrary, parseVideo, pct, playPath, playState, runtimeMinutes, seasonName, versionsPath } from "../lib/format";
 import { capableNow, coverSize, headerOnTvNow, meteredNow, previewsOn, REVEAL_MS, trailerAllowed, walkNow } from "../lib/trailers";
@@ -42,7 +43,7 @@ import "./home.css";
 import "./title.css";
 import { setTitle } from "../incognito";
 import { incognito, profiles } from "../core/profiles";
-import { kidsSession } from "../lib/kids";
+import { kidsSession, kidsWords, titleRefused } from "../lib/kids";
 import { RouteA } from "../components/route-link";
 
 export default function Title() {
@@ -389,6 +390,21 @@ function TitlePage(props: { kind: string; id: string; retry: () => void }) {
       <Show when={menu()}>{(m) => <DownloadMenu ask={m()} onClose={() => setMenu(null)} />}</Show>
       <div class="title-main" inert={trailerShown() || !!synText() || !!menu() || undefined}>
       <Switch>
+        <Match when={titleRefused(header()?.state)}>
+          <section class="info">
+            <div class="problem" role="status">
+              <CircleAlert aria-hidden class="problem-icon" />
+              <h2>{kidsWords.titleRefused}</h2>
+              <p>{kidsWords.ask}</p>
+              <div class="problem-acts">
+                <button class="btn primary" data-f="title:back" data-autofocus onClick={() => goBack()}>
+                  <ChevronLeft aria-hidden />
+                  Back
+                </button>
+              </div>
+            </div>
+          </section>
+        </Match>
         <Match when={view.state.status.state === "failed" || header()?.state.state === "failed"}>
           <section class="info">
             <div class="problem">

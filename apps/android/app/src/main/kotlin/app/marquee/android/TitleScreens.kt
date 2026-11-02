@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
@@ -32,6 +33,8 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import app.marquee.core.Format
+import app.marquee.core.KidsCopy
+import app.marquee.core.StreamChoiceCopy
 import app.marquee.core.TitleCopy
 import app.marquee.core.client.TitleFacts
 import app.marquee.core.model.Episode
@@ -45,6 +48,7 @@ import app.marquee.core.views.ViewStatus
 import app.marquee.design.Form
 import app.marquee.design.Icons
 import app.marquee.design.Marquee
+import app.marquee.design.StateMessage
 import app.marquee.design.Toast
 import app.marquee.design.actionWindow
 import app.marquee.ui.phone.PhoneTitle
@@ -129,6 +133,7 @@ fun TitleScreen(
     canDownload: Boolean = false,
     /** Versions, to pick the version a download keeps. */
     onDownloadVersion: (videoId: String, title: String) -> Unit = { _, _ -> },
+    onBack: () -> Unit = {},
 ) {
     val holder =
         viewModel<TitleHolder>(
@@ -140,6 +145,23 @@ fun TitleScreen(
         )
     TitleVisibility(holder.view)
     val header = holder.view.header
+    // A kids profile opened a title off its list: the core's line and Back, nothing that loads or adds a source.
+    KidsCopy.titleRefusal(header)?.let { (line, ask) ->
+        val back = remember { FocusRequester() }
+        StateMessage(
+            title = line,
+            body = ask,
+            icon = Icons.CircleAlert,
+            actionLabel = StreamChoiceCopy.BACK,
+            onAction = onBack,
+            actionIcon = Icons.ArrowLeft,
+            actionFocus = back,
+            spoken = true,
+            modifier = Modifier.windowInsetsPadding(WindowInsets.statusBars).padding(Marquee.safe.side),
+        )
+        if (form == Form.Tv) LaunchedEffect(Unit) { runCatching { back.requestFocus() } }
+        return
+    }
     val name = header?.details?.name
     // Fully drawn once the details show, when a start opens on a title page.
     ReportDrawnWhen { name != null }

@@ -426,3 +426,19 @@ test("TV: the remote goes from the menu into Subtitles and audio and walks to th
   await context.close();
   await restore();
 });
+
+// QA round 1, Q7 row 28: a kids profile that opens a title off its list reads the refusal at once, with Back only.
+test("desktop: a title the core refuses for a kids profile says so with Back only", async ({ browser }) => {
+  const { context } = await patchedContext(browser, PORTS.bridge, { viewport: { width: 1440, height: 900 }, reducedMotion: "reduce" }, (view, s) => {
+    if (view === "profiles") return kidsProfiles(s);
+    if (view === "title" && s?.header) return { ...s, header: { ...s.header, state: { state: "notAllowed" } } };
+    return s;
+  });
+  const page = await context.newPage();
+  await page.goto("/title/movie/tt0000001?form=desktop");
+  await expect(page.locator(".problem h2")).toHaveText("That isn't on your list", { timeout: 15_000 });
+  await expect(page.locator(".problem p")).toHaveText("Ask a grown-up.");
+  await expect(page.locator('[data-f="title:back"]')).toBeVisible();
+  await expect(page.locator('[data-f="title:retry"], [data-f="title:addons"]')).toHaveCount(0);
+  await context.close();
+});

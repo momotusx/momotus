@@ -158,7 +158,13 @@ pub struct TitleScores {
 pub enum TitleState {
     Loading,
     Ready,
-    Failed { reason: String },
+    Failed {
+        reason: String,
+    },
+    /// A kids profile opened a title off its list (plans/m11-kids.md 6.4):
+    /// nothing loads; say "That isn't on your list. Ask a grown-up." with
+    /// Back only.
+    NotAllowed,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -367,8 +373,14 @@ impl TitleView {
     /// denied: no work, an empty snapshot, and `denied()` says so.
     pub fn open(core: &Core, kind: &str, id: &str) -> Self {
         let policy = core.policy();
+        let denied = !policy.allows(kind, id);
         let header = SharedObservable::new(TitleHeader {
-            state: TitleState::Loading,
+            // Said at once: a refused page never sits on Loading (QA round 1, Q7 row 28).
+            state: if denied {
+                TitleState::NotAllowed
+            } else {
+                TitleState::Loading
+            },
             details: None,
             in_library: false,
             library_settable: !policy.kids(),
@@ -390,7 +402,7 @@ impl TitleView {
             kind: kind.to_owned(),
             id: id.to_owned(),
             kids: policy.kids(),
-            denied: !policy.allows(kind, id),
+            denied,
             header,
             episodes: Arc::new(Mutex::new(ObservableVector::new())),
             state: Arc::new(Mutex::new(State {

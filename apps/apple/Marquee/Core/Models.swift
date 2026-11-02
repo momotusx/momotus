@@ -237,6 +237,8 @@ enum TitleState: Decodable, Hashable, Sendable {
     case loading
     case ready
     case failed(reason: String)
+    /// A kids profile opened a title off its list: nothing loads (plans/m11-kids.md 6.4).
+    case notAllowed
 
     private enum Key: String, CodingKey { case state, reason }
 
@@ -246,6 +248,7 @@ enum TitleState: Decodable, Hashable, Sendable {
         case "loading": self = .loading
         case "ready": self = .ready
         case "failed": self = .failed(reason: try c.decode(String.self, forKey: .reason))
+        case "notAllowed": self = .notAllowed
         case let state:
             throw DecodingError.dataCorruptedError(forKey: .state, in: c, debugDescription: "unknown title state \(state)")
         }

@@ -4,6 +4,7 @@
 //! its title left the list. Open profiles are checked to be as before.
 
 use mq_library::{AddonRow, AllowedRow, OWNER};
+use mq_runtime::views::title::TitleState;
 use mq_runtime::views::versions::Verified;
 use mq_runtime::{
     Core, EmptyAction, EmptyKind, PlayTarget, PlaybackPhase, PlaybackView, TitleView,
@@ -203,6 +204,8 @@ async fn a_title_off_the_list_opens_denied_and_trailers_never_show() {
     allow(&kid, "tt1", "movie", "Up", &[]);
     let off = TitleView::open(&kid, "movie", "tt2");
     assert!(off.denied());
+    // Said at once, never Loading (QA round 1, Q7 row 28).
+    assert_eq!(off.snapshot().header.state, TitleState::NotAllowed);
     let page = TitleView::open(&kid, "movie", "tt1");
     assert!(!page.denied());
     until("the details", || page.snapshot().header.details.is_some()).await;

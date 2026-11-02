@@ -3,6 +3,7 @@
  * these keep them off screen. */
 
 import type { ProfilesSnapshot } from "../core/generated/ProfilesSnapshot";
+import type { TitleState } from "../core/generated/TitleState";
 import { current } from "./profiles";
 import type { SectionId } from "./settings-sections";
 
@@ -28,4 +29,10 @@ export const kidsWords = {
   searchField: "Search your shows",
   searchNone: "That isn't on your list. Ask a grown-up.",
   empty: "Nothing here yet. Ask a grown-up to pick some shows for you.",
+  titleRefused: "That isn't on your list",
+  ask: "Ask a grown-up.",
 };
+
+/** A title the core refused for a kids profile (`notAllowed`): said at once with Back only, never Loading and never
+ * a way to sources (QA round 1, Q7 row 28). */
+export const titleRefused = (state: TitleState | undefined) => state?.state === "notAllowed";
