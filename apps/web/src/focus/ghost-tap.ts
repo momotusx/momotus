@@ -20,6 +20,12 @@ export const screenChanged = () => {
   changedBy = lastTouch && changedAt - lastTouch.t < 500 ? lastTouch : null;
 };
 
+/** The touch going down just changed what lies under it (a player's hidden controls came up): its own click
+ * presses nothing there (QA r2, Q5 row 32). */
+export const touchChangedScreen = () => {
+  if (lastTouch && performance.now() - lastTouch.t < 100) ghost = true;
+};
+
 window.addEventListener(
   "pointerdown",
   (e) => {

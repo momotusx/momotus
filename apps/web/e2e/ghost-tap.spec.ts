@@ -5,6 +5,8 @@
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { expect, type Page, test } from "./fixture";
+import { reseedBbb, startIfPaused } from "./core";
+import { BBB_ID } from "./source";
 
 const PHONE = { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true } as const;
 
@@ -101,4 +103,37 @@ test("phone: a double tap on Continue answers no question on the next step", asy
   expect(ops).not.toContain("setPrefs");
   await expect(page).toHaveURL(/step=choice/);
   await context.close();
+});
+
+test("phone: a tap on the playing picture with the controls hidden only brings them back (QA r2 Q5 row 32)", async ({ browser }) => {
+  const context = await browser.newContext(PHONE);
+  const page = await context.newPage();
+  try {
+    await page.goto(`/play/movie/${BBB_ID}/${BBB_ID}?form=phone`);
+    const toggle = page.locator('[data-f="player:toggle"]');
+    await expect(toggle).toBeVisible({ timeout: 30_000 });
+    await page.evaluate(() => {
+      const v = document.querySelector("video");
+      if (v) v.muted = true;
+    });
+    await startIfPaused(page);
+    await expect(toggle).toHaveAttribute("aria-label", "Pause", { timeout: 30_000 });
+    await expect(page.locator(".player-scr")).toHaveClass(/idle/, { timeout: 10_000 });
+    // The play toggle sits in the middle, under the finger, hidden.
+    const at = await centre(page, '[data-f="player:toggle"]');
+    await page.touchscreen.tap(at.x, at.y);
+    await expect(page.locator(".player-scr")).not.toHaveClass(/idle/);
+    await page.waitForTimeout(300);
+    expect(await page.evaluate(() => document.querySelector("video")?.paused)).toBe(false);
+    await expect(toggle).toHaveAttribute("aria-label", "Pause");
+    // With the controls up, the same tap is the toggle's.
+    await page.touchscreen.tap(at.x, at.y);
+    await expect(toggle).toHaveAttribute("aria-label", "Play");
+  } finally {
+    await context.close();
+    // The play saved progress: Continue Watching gets its seeded place back for the specs after this one.
+    const clean = await browser.newPage();
+    await reseedBbb(clean);
+    await clean.close();
+  }
 });

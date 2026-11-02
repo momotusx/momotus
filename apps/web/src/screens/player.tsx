@@ -35,6 +35,7 @@ import type { SubtitleSize } from "../core/generated/SubtitleSize";
 import type { SubtitleTrack } from "../core/generated/SubtitleTrack";
 import { videoContext } from "../core/video";
 import { autoFocusSoon, goBack, isBackKey, restoreSoon } from "../focus/dom";
+import { touchChangedScreen } from "../focus/ghost-tap";
 import { form } from "../form";
 import { backThenReplace, entryFrom, historyBase, historyDepth, markBack, ownState, takeBack } from "../history";
 import { setMuted as setTrailerMuted } from "../components/yt-player";
@@ -1177,11 +1178,13 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
       // A control taking focus (a Tab, a click) brings the controls up, so it is never focused out of sight.
       on:focusin={(e) => (e.target as Element).closest(".osd, .ptitle") && wake()}
       onPointerDown={(e) => {
-        // While the controls are hidden, a click only brings them back.
+        // While the controls are hidden, a click only brings them back. A touch's click would land on the control that
+        // just came up under the finger; one on Skip or Up Next, which stay up, is theirs.
         woke = !osd();
         if (woke) {
           e.preventDefault();
           wake();
+          if (!onControls(e)) touchChangedScreen();
         }
       }}
       onClick={(e) => {
