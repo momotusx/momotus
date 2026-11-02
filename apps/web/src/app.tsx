@@ -22,6 +22,7 @@ import { gateOpen, incognito, intro, profiles, profilesFailed } from "./core/pro
 import { EndedNotice, IncognitoIntro, IncognitoWarning } from "./components/incognito";
 import { setTitle } from "./incognito";
 import { autoFocusSoon, focusRail, installFocus, readPathFrom, move, railHasFocus, restoreSoon, viewerMoving } from "./focus/dom";
+import { screenChanged } from "./focus/ghost-tap";
 import { type Form, form } from "./form";
 import { parentOf } from "./lib/parent";
 import { kidsBlocked, kidsSession } from "./lib/kids";
@@ -210,6 +211,8 @@ function Shell(props: RouteSectionProps) {
   const location = useLocation();
   // Off a video's Versions page and its player, every kind is listed again (plans/plugins-and-marketplace.md 4.2).
   createEffect(on(() => location.pathname, (path) => !/\/versions\/|^\/play\//.test(path) && listEveryKind()));
+  // A new page under the finger: the second tap of a double tap presses nothing on it (focus/ghost-tap.ts).
+  createEffect(on(() => location.pathname, () => screenChanged(), { defer: true }));
   const navigate = useNavigate();
   const back = () => {
     // TV: Back in a place's content puts the focus on its tab first, as Menu does on Apple TV; Back on the bar goes on.

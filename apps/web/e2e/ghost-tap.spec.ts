@@ -71,3 +71,34 @@ test("phone: the second tap of a double tap on a link presses nothing on the nex
   expect(await clicks(page)).toBe(1);
   await context.close();
 });
+
+test("phone: a double tap on Continue answers no question on the next step", async ({ browser }) => {
+  const context = await browser.newContext(PHONE);
+  const page = await context.newPage();
+  const ops: string[] = [];
+  // The addons step's install is answered here: the shared core keeps its addons.
+  await page.routeWebSocket(/\/ws$/, (ws) => {
+    const server = ws.connectToServer();
+    ws.onMessage((raw) => {
+      const m = JSON.parse(String(raw));
+      ops.push(m.op);
+      if (m.op === "installDefaults") ws.send(JSON.stringify({ id: m.id, ok: true, result: null }));
+      else server.send(raw);
+    });
+  });
+  await page.goto("/welcome?step=2&form=phone");
+  const next = page.locator('[data-f="welcome:next"]');
+  await expect(next).toHaveAttribute("aria-disabled", "false", { timeout: 30_000 });
+  await next.scrollIntoViewIfNeeded();
+  await page.waitForTimeout(300);
+  const at = await centre(page, '[data-f="welcome:next"]');
+  await page.touchscreen.tap(at.x, at.y);
+  await page.waitForTimeout(150);
+  await page.touchscreen.tap(at.x, at.y);
+  await expect(page).toHaveURL(/step=choice/);
+  await page.waitForTimeout(600);
+  // The stream question is still asked: no door was pressed for the viewer.
+  expect(ops).not.toContain("setPrefs");
+  await expect(page).toHaveURL(/step=choice/);
+  await context.close();
+});

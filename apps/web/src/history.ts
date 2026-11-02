@@ -167,7 +167,6 @@ for (const name of ["pushState", "replaceState"] as const) {
     // The page this entry was opened from (`_from`): a push records the page
     // being left; a replace keeps what the entry had, since Back still goes there.
     const from = name === "pushState" ? pathOf(currentPath()) : (fields._from ?? entryFrom());
-    if (url != null && String(url) !== currentPath()) screenChanged();
     if (memory) writeMemory(name === "pushState", { ...fields, _profile: owner, _from: from }, url);
     else native({ ...fields, _profile: owner, _from: from }, unused, url);
     setEntryOwner(owner);

@@ -24,6 +24,7 @@ import type { AddonsSnapshot } from "../core/generated/AddonsSnapshot";
 import type { DefaultAddonInfo } from "../core/generated/DefaultAddonInfo";
 import type { DefaultAddons } from "../core/generated/DefaultAddons";
 import { autoFocusSoon, goBack } from "../focus/dom";
+import { screenChanged } from "../focus/ghost-tap";
 import type { FirstRunStill } from "../core/generated/FirstRunStill";
 import { form } from "../form";
 import { resetHistoryBase } from "../history";
@@ -88,6 +89,8 @@ export default function Onboarding() {
   // A new step puts focus on its first action (on a remote or after keys). Off the TV a step change puts it on
   // the step's heading, so a screen reader starts at the question.
   createEffect(on(step, () => autoFocusSoon(() => document.querySelector<HTMLElement>(".welcome [data-autofocus]"))));
+  // A new step under the finger: a double tap answers one question, never the next (QA r1, Q1 row 30).
+  createEffect(on(step, () => screenChanged(), { defer: true }));
   createEffect(
     on(step, () => form() !== "tv" && requestAnimationFrame(focusHeading), { defer: true }),
   );
