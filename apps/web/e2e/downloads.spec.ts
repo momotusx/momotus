@@ -399,12 +399,16 @@ test("on touch, a tap on Download offers the version too, since no secondary pre
     await expect(banner(page)).toContainText("You're offline. Your downloads still play.", { timeout: 30_000 });
     // From the page's top: the taps above scrolled the page under the fixed banner.
     await page.evaluate(() => window.scrollTo(0, 0));
-    const bar = await banner(page).boundingBox();
-    const art = await page.locator(".title-bd").boundingBox();
-    expect(art?.y, JSON.stringify({ bar, art })).toBeGreaterThanOrEqual((bar?.y ?? 0) + (bar?.height ?? 0) - 1);
+    // How far each starts under the banner's foot. Polled: the banner's height reaches the pages on its
+    // ResizeObserver, which runs at the next frame, and a busy machine can read the layout before it.
+    const under = async (selector: string) => {
+      const bar = await banner(page).boundingBox();
+      const box = await page.locator(selector).boundingBox();
+      return (box?.y ?? 0) - ((bar?.y ?? 0) + (bar?.height ?? 0));
+    };
+    await expect.poll(() => under(".title-bd")).toBeGreaterThanOrEqual(-1);
     // The fixed Back sits under the banner too, never under its cover (the iPhone's r5 M1, on the web).
-    const back = await page.locator(".backbar .back").boundingBox();
-    expect(back?.y, JSON.stringify({ bar, back })).toBeGreaterThanOrEqual((bar?.y ?? 0) + (bar?.height ?? 0) - 1);
+    await expect.poll(() => under(".backbar .back")).toBeGreaterThanOrEqual(-1);
     await page.screenshot({ path: `${SHOTS}/offline-title-phone.jpg`, type: "jpeg", quality: 80 });
   } finally {
     await goOnline(page, true);
