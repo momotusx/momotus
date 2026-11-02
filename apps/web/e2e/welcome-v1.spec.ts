@@ -140,3 +140,30 @@ test("phone: Back and Skip are 48 px targets with room between them", async ({ b
   expect(skip.left - back.right).toBeGreaterThanOrEqual(8);
   await context.close();
 });
+
+// QA r1, Q1 rows 34 and 35: Browse first is a step of its own in history (a `replace={false}` wrote a `replace`
+// attribute, which the router reads as a replace), so Back from the addons step returns to the sign-in step.
+for (const form of ["desktop", "tv"] as const) {
+  test(`${form}: Back after Browse first returns to the sign-in step`, async ({ browser }) => {
+    const { context } = await patchedContext(browser, PORTS.bridge, { viewport: { width: SIZE[form][0], height: SIZE[form][1] } }, (view, s) =>
+      view === "addons" ? { ...s, fresh: true } : s,
+    );
+    const page = await context.newPage();
+    await page.goto(`/welcome?form=${form}`);
+    const skip = page.locator('[data-f="welcome:skip"]');
+    await expect(skip).toHaveAttribute("href", "/welcome?step=2&then=home", { timeout: 30_000 });
+    await expect(skip).not.toHaveAttribute("replace");
+    const before = await page.evaluate(() => history.length);
+    if (form === "tv") {
+      await skip.focus();
+      await page.keyboard.press("Enter");
+    } else await skip.click();
+    await expect(page).toHaveURL(/step=2/);
+    expect(await page.evaluate(() => history.length)).toBe(before + 1);
+    if (form === "tv") await page.keyboard.press("Escape");
+    else await page.locator('[data-f="welcome:back"]').click();
+    await expect(page).toHaveURL(/\/welcome\?form=/);
+    await expect(skip).toBeVisible();
+    await context.close();
+  });
+}

@@ -139,7 +139,7 @@ export default function Onboarding() {
           <A
             class="skip"
             href={fresh() ? "/welcome?step=2&then=home" : "/"}
-            replace={!fresh()}
+            replace={!fresh() || undefined}
             onClick={() => !fresh() && resetHistoryBase()}
             data-f="welcome:skip"
             // On a TV's sign-in screen it is the one focus stop (plans/tv-qr-login.md 5.5); over the doors, Stremio is.
