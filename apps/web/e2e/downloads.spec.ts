@@ -511,7 +511,7 @@ test("a kids profile sees its downloaded title with Play only, and no control on
   }
   const { context, page, errors } = await openPage(browser, "/library/downloads?form=desktop");
   // The picker asks who is watching on this browser's first open: the kid.
-  await page.getByRole("button", { name: "Kid, current profile" }).click();
+  await page.getByRole("button", { name: "Kid, kids profile, current profile" }).click();
   await page.goto("/library/downloads?form=desktop");
   const row = page.locator(".dlrow", { hasText: "Big Buck Bunny" });
   await expect(row).toBeVisible({ timeout: 30_000 });
@@ -569,7 +569,7 @@ test("a downloads view open across a profile switch lets the switch through and 
   }
   // The web app, opened as the kid, lists the kid's rows only.
   const { context, page, errors } = await openPage(browser, "/library/downloads?form=desktop");
-  await page.getByRole("button", { name: "Kid, current profile" }).click();
+  await page.getByRole("button", { name: "Kid, kids profile, current profile" }).click();
   await page.goto("/library/downloads?form=desktop");
   await expect(page.locator(".dlrow", { hasText: "Big Buck Bunny" })).toBeVisible({ timeout: 30_000 });
   await expect(page.locator(".dlrow", { hasText: "Download Series" })).toHaveCount(0);
