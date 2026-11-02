@@ -1,7 +1,8 @@
 /** An urgent account alert is seen without a scroll (QA r1, Q2 row 31; the owner, 2026-11-02): a new device, a
  * deletion on its way or the account gone comes first on Home, above the hero, compact and wholly on the first screen,
- * on every form. With no alert nothing is kept for one, and one that lands late moves no focus. The second-way nudge
- * stays after the first row. ALERT_SHOTS=<dir> keeps the shots (alerts-<label>-<form>.png). */
+ * on every form, over the hero's art. With no alert nothing is kept for one, and one that lands late moves neither the
+ * hero nor the focus (QA r2, Q2 row 33). The second-way
+ * nudge stays after the first row. ALERT_SHOTS=<dir> keeps the shots (alerts-<label>-<form>.png). */
 
 import { expect, type Page, test } from "./fixture";
 
@@ -45,6 +46,8 @@ for (const [form, options] of Object.entries(FORMS)) {
     await expect(page.locator(".account-card.urgent")).toHaveCount(0);
     expect(await page.locator(".home main > *").first().evaluate((el) => el.classList.contains("hero"))).toBe(true);
     const heroTop = (await page.locator(".home .hero").boundingBox())?.y ?? 0;
+    const play = page.locator('.hero-page.on [data-f="hero:play"]');
+    const playTop = (await play.boundingBox())?.y ?? -1;
     if (form === "tv") await expect.poll(() => focused(page)).toMatch(/^hero:/);
     const before = await focused(page);
 
@@ -56,14 +59,19 @@ for (const [form, options] of Object.entries(FORMS)) {
     const view = page.viewportSize() as { width: number; height: number };
     expect(box && box.y >= 0 && box.y + box.height <= view.height, JSON.stringify(box)).toBe(true);
     // Compact: a band, not a panel.
-    expect(box?.height ?? 0).toBeLessThan(form === "phone" ? 200 : 160);
+    expect(box?.height ?? 0).toBeLessThan(form === "phone" ? 100 : 160);
+    // It lands over the hero's art: the hero, its Play and its title stay where they were (QA r2, Q2 row 33).
+    expect((await page.locator(".home .hero").boundingBox())?.y).toBe(heroTop);
+    expect((await play.boundingBox())?.y).toBe(playTop);
+    const title = await page.locator(".hero-page.on .hero-logo:not(.sr), .hero-page.on .logo-text").first().boundingBox();
+    expect((box?.y ?? 0) + (box?.height ?? 0), JSON.stringify({ box, title })).toBeLessThanOrEqual(title?.y ?? 0);
     // An alert that lands after Home opened takes no focus from where the viewer is.
     expect(await focused(page)).toBe(before);
     if (process.env.ALERT_SHOTS) await page.screenshot({ path: `${process.env.ALERT_SHOTS}/alerts-${process.env.ALERT_LABEL ?? "after"}-${form}.png` });
-    // OK clears it, and the hero is back where it was.
+    // OK clears it, and the hero has not moved.
     await card.locator('[data-f="home:account:ok"]').click();
     await expect(card).toHaveCount(0);
-    await expect.poll(async () => (await page.locator(".home .hero").boundingBox())?.y ?? -1).toBeCloseTo(heroTop, 0);
+    expect((await play.boundingBox())?.y).toBe(playTop);
     await context.close();
   });
 }
