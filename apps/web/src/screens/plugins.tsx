@@ -142,32 +142,6 @@ function RepoRow(props: { repo: PluginRepoInfo; index: number; reload: () => voi
             {error()}
           </p>
         </Show>
-        <Show when={r().providers.length > 0}>
-          <ul class="plugin-providers" aria-label={`${w.providers}, ${r().name ?? r().host}`}>
-            <For each={r().providers}>
-              {(p, i) => (
-                <li classList={{ off: !p.enabled || !r().enabled }}>
-                  <span class="pname" dir="auto">
-                    {p.name}
-                    <Show when={p.languages.length}>
-                      <small class="num"> {p.languages.join(", ")}</small>
-                    </Show>
-                  </span>
-                  <button
-                    class="btn"
-                    aria-pressed={p.enabled}
-                    aria-label={`${p.name}: ${p.enabled ? w.on : w.off}`}
-                    data-f={`plugin:${props.index}:${i()}`}
-                    onClick={() => void run("setPluginEnabled", { plugin: p.id, enabled: !p.enabled })}
-                  >
-                    <Power aria-hidden />
-                    {p.enabled ? w.on : w.off}
-                  </button>
-                </li>
-              )}
-            </For>
-          </ul>
-        </Show>
       </div>
       <div class="addon-acts">
         <button
@@ -185,6 +159,34 @@ function RepoRow(props: { repo: PluginRepoInfo; index: number; reload: () => voi
           {confirm() ? w.removeConfirm : w.remove}
         </button>
       </div>
+      {/* Under the repository's own switches, each provider's switch in their column, so a remote goes down
+          from them through its providers to the next repository (QA r1 Q6 row 53). */}
+      <Show when={r().providers.length > 0}>
+        <ul class="plugin-providers" aria-label={`${w.providers}, ${r().name ?? r().host}`}>
+          <For each={r().providers}>
+            {(p, i) => (
+              <li classList={{ off: !p.enabled || !r().enabled }}>
+                <span class="pname" dir="auto">
+                  {p.name}
+                  <Show when={p.languages.length}>
+                    <small class="num"> {p.languages.join(", ")}</small>
+                  </Show>
+                </span>
+                <button
+                  class="btn"
+                  aria-pressed={p.enabled}
+                  aria-label={`${p.name}: ${p.enabled ? w.on : w.off}`}
+                  data-f={`plugin:${props.index}:${i()}`}
+                  onClick={() => void run("setPluginEnabled", { plugin: p.id, enabled: !p.enabled })}
+                >
+                  <Power aria-hidden />
+                  {p.enabled ? w.on : w.off}
+                </button>
+              </li>
+            )}
+          </For>
+        </ul>
+      </Show>
     </li>
   );
 }

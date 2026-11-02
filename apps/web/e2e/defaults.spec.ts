@@ -790,3 +790,23 @@ test("the addon directory is a default: Find addons lists it out of the box", as
   await expect(page.getByRole("button", { name: /^Install / }).first()).toBeVisible();
   await shot(page, "find-addons-directory-default", "desktop");
 });
+
+test("tv: removing the last addon leaves the focus on the row above, not the first one (QA r1 Q6 row 51)", async ({ browser }) => {
+  await client.req("installDefaults", {
+    choices: [
+      { key: "cinemeta", on: true },
+      { key: "turkcealtyazi", on: true },
+    ],
+  });
+  await client.req("setPrefs", { patch: { defaultsSeen: 1 } });
+  const page = await device(browser, "tv");
+  await page.goto("/addons?form=tv");
+  const active = () => page.evaluate(() => (document.activeElement as HTMLElement | null)?.dataset.f);
+  await expect(page.locator("li.addon")).toHaveCount(2);
+  await page.locator('[data-f="addon:1:remove"]').focus();
+  await page.keyboard.press("Enter");
+  await expect(page.locator('[data-f="addon:1:remove"]')).toHaveText("Press again to remove");
+  await page.keyboard.press("Enter");
+  await expect(page.locator("li.addon")).toHaveCount(1);
+  await expect.poll(active).toBe("addon:0:remove");
+});

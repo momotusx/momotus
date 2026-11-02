@@ -6,7 +6,7 @@ import Plus from "lucide-solid/icons/plus";
 import Power from "lucide-solid/icons/power";
 import Trash2 from "lucide-solid/icons/trash";
 import { A } from "@solidjs/router";
-import { createSignal, For, Match, Show, Switch } from "solid-js";
+import { createSignal, For, Match, onCleanup, Show, Switch } from "solid-js";
 import { isTokenInLink, liveView, op, reasonOf } from "../core/client";
 import type { AddonInfo } from "../core/generated/AddonInfo";
 import { InstallSheet } from "../components/install-sheet";
@@ -135,6 +135,7 @@ function AddonRow(props: { addon: AddonInfo; index: number; count: number }) {
     op("moveAddon", { url: a().url, to })
       .then(() => autoFocus(document.querySelector<HTMLElement>(`[data-f="addon:${to}:${button}"]`)))
       .catch((e) => setError(reasonOf(e)));
+  let removing = false;
   const remove = () => {
     if (!confirm()) {
       setConfirm(true);
@@ -142,8 +143,17 @@ function AddonRow(props: { addon: AddonInfo; index: number; count: number }) {
       timer = setTimeout(() => setConfirm(false), 4000);
       return;
     }
+    removing = true;
     void run("removeAddon", {});
   };
+  // Removed by its own Remove: the remote stays where the row was, on the next row's Remove, or the one above
+  // when it was the last, never back on the first row (QA r1 Q6 row 51).
+  onCleanup(() => {
+    if (!removing) return;
+    const at = props.index;
+    const button = (i: number) => document.querySelector<HTMLElement>(`[data-f="addon:${i}:remove"]`);
+    requestAnimationFrame(() => autoFocus(button(at) ?? button(at - 1)));
+  });
   return (
     <li class="addon" classList={{ off: !a().enabled }} data-fgroup={`addon:${a().host}:${props.index}`}>
       <div class="addon-logo" aria-hidden="true">
