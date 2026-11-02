@@ -67,7 +67,8 @@ archive: SourceRows,
  * "From plugins" (plans/plugins-and-marketplace.md 4.4, 7.8): the
  * Nuvio providers' rows, a pass of their own like the Archive's, but
  * the pick and the failover when no addon row is left (12), shown
- * once, as the pick; `done` waits for it while no addon lists a row.
+ * once, as the pick; while no addon lists a row `done` waits for it,
+ * for 20 s at most from the view's open.
  */
 plugins: SourceRows, 
 /**

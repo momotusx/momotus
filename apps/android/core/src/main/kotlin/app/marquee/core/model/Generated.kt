@@ -2532,7 +2532,7 @@ data class VersionsSnapshot(
     val nobodySharing: Boolean,
     /** "From the Internet Archive" (plans/plugins-and-marketplace.md 4.4, 5): its own pass, after the addons' rows, never the pick, never a failover; `done` never waits for it. */
     val archive: SourceRows = SourceRows(pending = false),
-    /** "From plugins" (plans/plugins-and-marketplace.md 4.4, 7.8): the Nuvio providers' rows, a pass of their own like the Archive's, but the pick and the failover when no addon row is left (12), shown once, as the pick; `done` waits for it while no addon lists a row. */
+    /** "From plugins" (plans/plugins-and-marketplace.md 4.4, 7.8): the Nuvio providers' rows, a pass of their own like the Archive's, but the pick and the failover when no addon row is left (12), shown once, as the pick; while no addon lists a row `done` waits for it, for 20 s at most from the view's open. */
     val plugins: SourceRows = SourceRows(pending = false),
     /** The kind chips (plans/plugins-and-marketplace.md 4.2): each kind the listed rows hold, with how many rows hold a source of it. The apps show them from two kinds on. */
     val kinds: List<KindChip> = emptyList(),

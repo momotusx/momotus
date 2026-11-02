@@ -562,6 +562,17 @@ impl Core {
         let _ = (self.inner.plugins).set(crate::plugins::Plugins::new(Some(defaults)));
     }
 
+    /// Tests: how long Play waits for the plugin pass. Development builds
+    /// only.
+    #[doc(hidden)]
+    #[cfg(debug_assertions)]
+    pub fn use_plugin_wait(&self, wait: Duration) {
+        (self.plugins().play_wait_ms).store(
+            wait.as_millis() as u64,
+            std::sync::atomic::Ordering::Relaxed,
+        );
+    }
+
     /// The built-in Internet Archive source (plans/plugins-and-marketplace.md 5).
     pub(crate) fn archive(&self) -> &crate::archive::Archive {
         self.inner.archive.get_or_init(|| {

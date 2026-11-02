@@ -23,6 +23,7 @@ use serde::Serialize;
 use serde_json::Value;
 use std::collections::HashMap;
 use std::sync::Mutex;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
 /// A row key's prefix: `plugin:{repo}/{provider}:{url digest}` (4.4).
@@ -74,6 +75,13 @@ const MAX_ENTRIES: usize = 200;
 const ASK_WAIT: Duration = Duration::from_secs(10);
 /// Plugin calls running at once on the device (6.2's pool).
 const POOL: usize = 3;
+/// How long Play waits for the plugins when no addon lists a version, from
+/// the moment Versions opens: twice an addon's request timeout (10 s) and
+/// two full rounds of the pool at each provider's own `ASK_WAIT`, so quick
+/// providers have answered by then, never the slowest of a hundred (QA r2
+/// Q9: 80 s of "Finding the best version"). Rows that land later still list
+/// and may still be the pick.
+const PLAY_WAIT: Duration = Duration::from_secs(20);
 /// A plugin's answer for one video is kept this long, in memory only (6.2).
 const RESULT_KEPT: Duration = Duration::from_secs(600);
 const NAME_MAX: usize = 80;
@@ -87,14 +95,22 @@ pub(crate) struct Plugins {
     defaults: Vec<PluginDefault>,
     /// The directory page's links and the manifests read from it, each kept a day (`directory`).
     pub(crate) listed: crate::plugin_directory::Kept,
+    /// `PLAY_WAIT` in milliseconds, shorter in tests (`Core::use_plugin_wait`).
+    pub(crate) play_wait_ms: AtomicU64,
 }
 
 impl Plugins {
+    /// How long Play waits for the plugin pass (`PLAY_WAIT`).
+    pub(crate) fn play_wait(&self) -> Duration {
+        Duration::from_millis(self.play_wait_ms.load(Ordering::Relaxed))
+    }
+
     pub(crate) fn new(defaults: Option<Vec<PluginDefault>>) -> Self {
         Self {
             pool: tokio::sync::Semaphore::new(POOL),
             results: Mutex::default(),
             listed: crate::plugin_directory::Kept::default(),
+            play_wait_ms: AtomicU64::new(PLAY_WAIT.as_millis() as u64),
             defaults: defaults
                 .or_else(dev_defaults)
                 .unwrap_or_else(builtin_defaults),

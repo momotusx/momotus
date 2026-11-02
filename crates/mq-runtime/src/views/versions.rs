@@ -188,7 +188,8 @@ pub struct VersionsSnapshot {
     /// "From plugins" (plans/plugins-and-marketplace.md 4.4, 7.8): the
     /// Nuvio providers' rows, a pass of their own like the Archive's, but
     /// the pick and the failover when no addon row is left (12), shown
-    /// once, as the pick; `done` waits for it while no addon lists a row.
+    /// once, as the pick; while no addon lists a row `done` waits for it,
+    /// for 20 s at most from the view's open.
     pub plugins: SourceRows,
     /// The kind chips (plans/plugins-and-marketplace.md 4.2): each kind the
     /// listed rows hold, with how many rows hold a source of it. The apps
@@ -462,6 +463,8 @@ struct State {
     plugins: Vec<ParsedStream>,
     plugins_ranked: Ranked,
     plugins_pending: bool,
+    /// Play's wait for the plugin pass has passed (`plugins::PLAY_WAIT`).
+    plugins_waited: bool,
     /// The kind chip the viewer chose (`setKind`), its own pass over that
     /// kind's streams, and the card of that pass, which follows its source
     /// as the pick does (plans/plugins-and-marketplace.md 4.2).
@@ -1169,6 +1172,7 @@ impl VersionsView {
                 && core.plugins_wanted(),
             plugins: Vec::new(),
             plugins_ranked: Ranked::default(),
+            plugins_waited: false,
             kind: None,
             kind_ranked: Ranked::default(),
             kind_pick: None,
@@ -1217,6 +1221,11 @@ impl VersionsView {
             tasks.spawn(plugin_pass(
                 core.clone(),
                 ranking.clone(),
+                state.clone(),
+                snapshot.clone(),
+            ));
+            tasks.spawn(plugin_wait(
+                core.plugins().play_wait(),
                 state.clone(),
                 snapshot.clone(),
             ));
@@ -1283,6 +1292,7 @@ impl VersionsView {
             plugins: Vec::new(),
             plugins_ranked: Ranked::default(),
             plugins_pending: false,
+            plugins_waited: false,
             kind: None,
             kind_ranked: Ranked::default(),
             kind_pick: None,
@@ -1658,7 +1668,7 @@ fn rank_archive(s: &mut State, ranking: &Ranking) {
 /// 7.8): every provider switched on runs in the device's pool, its rows
 /// ranked in a pass of their own as each one answers. With no addon row
 /// its best row is the pick, and `done` waits for it (the owner,
-/// 2026-11-02); an addon change leaves it (`restart`).
+/// 2026-11-02) within `plugin_wait`; an addon change leaves it (`restart`).
 async fn plugin_pass(
     core: Core,
     ranking: Arc<Ranking>,
@@ -1698,6 +1708,26 @@ async fn plugin_pass(
     let mut s = lock(&state);
     s.plugins_pending = false;
     snapshot.set(render(&s));
+}
+
+/// Play's wait for the plugin pass ends: a view with no addon row is done
+/// and may say nothing has the title, while the pass goes on and a late row
+/// still lists and may still be the pick.
+async fn plugin_wait(
+    wait: Duration,
+    state: Arc<Mutex<State>>,
+    snapshot: SharedObservable<VersionsSnapshot>,
+) {
+    tokio::time::sleep(wait).await;
+    let mut s = lock(&state);
+    s.plugins_waited = true;
+    snapshot.set(render(&s));
+}
+
+/// The plugin pass may still give the pick: it runs, Play's wait for it has
+/// not passed, and no addon lists a row.
+fn plugins_may_pick(s: &State) -> bool {
+    s.plugins_pending && !s.plugins_waited && s.ranked.rows.is_empty() && s.download.is_none()
 }
 
 /// The plugin pass: its streams ranked alone, with the view's input.
@@ -2745,8 +2775,9 @@ fn render(s: &State) -> VersionsSnapshot {
         slow_addons: names(&s.slow),
         failed_addons: names(&s.failed),
         // With no addon row the plugins may still give the pick: Play waits
-        // for their pass before it says nothing has the title.
-        done: s.done && !(s.plugins_pending && s.ranked.rows.is_empty() && s.download.is_none()),
+        // for their pass, within its bound, before it says nothing has the
+        // title.
+        done: s.done && !plugins_may_pick(s),
         frozen: s.frozen,
         smaller: shortcut_row(&s.smaller),
         sharper: shortcut_row(&s.sharper),
@@ -2844,10 +2875,11 @@ fn empty(s: &State) -> Option<EmptyVersions> {
     if s.kids && s.addons == 0 {
         return named(EmptyKind::KidsNothing, EmptyAction::None);
     }
-    // The Archive or a plugin may still list it, or lists it (4.4).
+    // The Archive may still list it, a plugin within Play's wait for it, or
+    // either lists it (4.4).
     if s.archive_pending
         || !s.archive_ranked.rows.is_empty()
-        || s.plugins_pending
+        || (s.plugins_pending && !s.plugins_waited)
         || !s.plugins_ranked.rows.is_empty()
     {
         return None;

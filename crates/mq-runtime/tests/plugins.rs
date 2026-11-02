@@ -6,7 +6,7 @@
 use mq_library::{AddonRow, OWNER};
 use mq_protocol::Source;
 use mq_runtime::defaults::{DefaultChoice, DefaultInstalled};
-use mq_runtime::{Core, RowOrigin, TitleFacts, VersionsParams, VersionsView};
+use mq_runtime::{Core, EmptyKind, RowOrigin, TitleFacts, VersionsParams, VersionsView};
 use mq_streams::{DeviceCaps, SourceKind, StreamPrefs, Target};
 use std::net::IpAddr;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -369,6 +369,34 @@ async fn play_waits_for_the_plugins_when_no_addon_lists_a_row() {
     })
     .await;
     until("done", || view.snapshot().done).await;
+    let s = view.snapshot();
+    assert_eq!(s.recommended.unwrap().origin, RowOrigin::Plugin);
+    assert!(s.empty.is_none());
+}
+
+/// A provider slower than Play's wait for the plugins: once it passes the
+/// view is done and says no source has the title, long before the provider
+/// gives up; its row, landing later, is listed and becomes the pick.
+#[tokio::test]
+async fn play_stops_waiting_for_the_plugins_at_its_bound() {
+    let fixture = Fixture::start();
+    fixture.held.store(true, Ordering::SeqCst);
+    let core = addon_and_plugins(&fixture, serde_json::json!([])).await;
+    core.use_plugin_wait(Duration::from_secs(2));
+    let opened = std::time::Instant::now();
+    let view = VersionsView::open(&core, film("tt0000014"));
+    until("Play's wait for the plugins", || view.snapshot().done).await;
+    let waited = opened.elapsed();
+    assert!(
+        waited >= Duration::from_secs(2) && waited < Duration::from_secs(5),
+        "{waited:?}"
+    );
+    let s = view.snapshot();
+    assert!(s.plugins.pending, "the provider still runs");
+    assert!(s.recommended.is_none());
+    assert_eq!(s.empty.map(|e| e.kind), Some(EmptyKind::NoResults));
+    fixture.held.store(false, Ordering::SeqCst);
+    until("the late row", || view.snapshot().recommended.is_some()).await;
     let s = view.snapshot();
     assert_eq!(s.recommended.unwrap().origin, RowOrigin::Plugin);
     assert!(s.empty.is_none());
