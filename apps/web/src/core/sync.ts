@@ -28,6 +28,9 @@ const [syncing, setSyncing] = createSignal(false);
 /** Rounds finished since the page opened, whatever their outcome (for "this round is done"). */
 const [rounds, setRounds] = createSignal(0);
 const [problem, setProblem] = createSignal<{ code?: string; words: string } | null>(null);
+// A development build lets an e2e show Home's account card with no relay behind it: a round's report, or the
+// account gone (e2e/account-alerts.spec.ts). A production build has no such door.
+if (import.meta.env.DEV) Object.assign(window, { mqDevSync: { setReport, setProblem } });
 /** What the last action here did, when it ended the account on purpose ("no longer syncs"). */
 const [notice, setNotice] = createSignal<string | null>(null);
 const [devices, setDevices] = createSignal<Devices | null>(null);

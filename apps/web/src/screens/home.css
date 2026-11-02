@@ -338,3 +338,14 @@
 /* The phone's reach (QA r1): the pager dots 48 px tall and edge to edge across their gaps, the remove X 48 px square. */
 [data-form="phone"] .hero-dots button.dot::after { content: ""; position: absolute; inset: -13.5px -1.5px; }
 [data-form="phone"] .tile-x::after { content: ""; position: absolute; inset: -8px; }
+/* An urgent account card (the owner, 2026-11-02): first on Home, above the hero, under the navigation, compact. The
+ * hero under it gives up its own room for the navigation, which the card already clears. */
+.account-card.urgent { margin-top: calc(var(--nav-top) + var(--nav-h) + 16px); padding: 16px 28px; gap: 20px; }
+.account-card.urgent .dc-icon { width: 28px; height: 28px; }
+.account-card.urgent + .hero { margin-top: 24px; }
+[data-form="desktop"] .account-card.urgent { margin-top: calc(var(--nav-h) + 12 * var(--px)); padding: calc(12 * var(--px)) calc(20 * var(--px)); }
+[data-form="desktop"] .account-card.urgent + .hero { margin-top: calc(16 * var(--px)); }
+[data-form="phone"] .account-card.urgent { margin-top: calc(var(--notch, env(safe-area-inset-top)) + 12px); padding: 12px 14px; }
+[data-form="phone"] .account-card.urgent + .hero { margin-top: 12px; }
+/* One white per screen on TV (design/DECISION.md): the alert's OK takes the secondary fill until it has the focus. */
+[data-form="tv"] .account-card.urgent .btn.primary:not(:focus) { background: var(--fill); color: #fff; }

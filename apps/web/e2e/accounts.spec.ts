@@ -690,14 +690,9 @@ test.describe.serial("accounts on the web", () => {
     const card = tv.locator(".account-card");
     await expect(card).toHaveAttribute("data-card", "announcement");
     await expect(card).toContainText("A new device joined: Momotus phone.");
-    // Its place: after the first row (or under the hero when there is no row), never between the hero and
-    // the row that rises into it (plans/design-v3-phase2-web.md, the account card).
-    const before = await card.evaluate((el) => {
-      const prev = el.previousElementSibling as HTMLElement | null;
-      return { prev: prev?.classList.contains("row") ? "row" : prev?.classList.contains("hero") ? "hero" : (prev?.className ?? null), rows: document.querySelectorAll(".row").length, first: el.parentElement?.querySelector(".row") === prev };
-    });
-    if (before.rows > 0) expect(before).toMatchObject({ prev: "row", first: true });
-    else expect(before.prev).toBe("hero");
+    // Its place: an urgent alert comes first on Home, above the hero, whole on the first screen (the owner,
+    // 2026-11-02; plans/design-v3-phase2-web.md, the account card). e2e/account-alerts.spec.ts checks every form.
+    expect(await card.evaluate((el) => el.classList.contains("urgent") && el.parentElement?.firstElementChild === el)).toBe(true);
     await shot(tv, "accounts-announcement-tv");
     await press(tv, "home:account:ok");
     await expect(card).toHaveCount(0);

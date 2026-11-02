@@ -237,6 +237,10 @@ export interface CardState {
   date: (ms: number) => string;
 }
 
+/** The cards that cannot wait for a scroll (the owner, 2026-11-02): a deletion on its way, the account gone, a device
+ * or key added. They come first on Home, above the hero; the rest stay after the first row. */
+export const urgentCard = (c: Pick<Card, "kind">) => c.kind === "deletion" || c.kind === "gone" || c.kind === "announcement";
+
 export function homeCard(s: CardState): Card | null {
   // A kids profile reaches no account page: it shows no account card at all.
   if (!s.profile || s.profile.kids) return null;

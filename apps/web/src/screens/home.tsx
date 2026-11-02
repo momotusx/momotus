@@ -18,7 +18,7 @@ import { current } from "../lib/profiles";
 import { BridgeError } from "../core/bridge";
 import * as sync from "../core/sync";
 import { removeHere, wipeState } from "../core/wipe";
-import { accountWords as aw, activeProfile, needsSecondWayIn, type Card, cancelUnlink, homeCard } from "../lib/account";
+import { accountWords as aw, activeProfile, needsSecondWayIn, type Card, cancelUnlink, homeCard, urgentCard } from "../lib/account";
 import { Tick } from "./sign-in";
 import { cardOffer, defaultsWords, namesLine } from "../lib/defaults";
 import { allFailed } from "../lib/rows";
@@ -78,26 +78,28 @@ function OfferDefaults() {
 }
 
 /** Home's one account card (plans/accounts.md 4.3), by priority: a scheduled deletion, the
- * account deleted elsewhere, an announcement, the nudge for a second way in. */
-function AccountCard() {
+ * account deleted elsewhere, an announcement, the nudge for a second way in. `top`: the place above the hero, for
+ * the urgent ones (`urgentCard`, the owner 2026-11-02); the others sit after the first row. */
+function AccountCard(props: { top?: boolean }) {
   // The account is not Incognito's (Settings hides it there too).
-  return <Show when={!incognito()}><AccountNotice /></Show>;
+  return <Show when={!incognito()}><AccountNotice top={props.top} /></Show>;
 }
 
-function AccountNotice() {
+function AccountNotice(props: { top?: boolean }) {
   const navigate = useNavigate();
-  // The members name the device in a line and tell whether this one is alone.
+  // The members name the device in a line and tell whether this one is alone. Once per Home: the top place is
+  // always there, the lower one not on a Home that could not load.
   createEffect(() => {
-    if (sync.joined() && !sync.devices()) void sync.loadDevices().catch(() => undefined);
+    if (props.top && sync.joined() && !sync.devices()) void sync.loadDevices().catch(() => undefined);
   });
   // Right after a pairing, "Signed in from" the device that approved it, for 8 s: a line with no button, so
   // nothing takes focus from Home (plans/tv-qr-login.md 5.5).
   createEffect(() => {
-    if (!sync.joinedBy()) return;
+    if (!props.top || !sync.joinedBy()) return;
     const timer = setTimeout(() => sync.setJoinedBy(null), 8000);
     onCleanup(() => clearTimeout(timer));
   });
-  const card = () =>
+  const any = () =>
     homeCard({
       deletion: sync.report()?.deletion ?? null,
       gone: sync.problem()?.code === "accountGone",
@@ -108,6 +110,11 @@ function AccountNotice() {
       signedInFrom: sync.joinedBy(),
       date: (ms) => new Date(ms).toLocaleDateString(undefined, { dateStyle: "medium" }),
     });
+  // This place's card: nothing at all when it is the other place's, so no room is kept for it.
+  const card = () => {
+    const c = any();
+    return c && urgentCard(c) === !!props.top ? c : null;
+  };
   const [problem, setProblem] = createSignal<string | null>(null);
   const [removing, setRemoving] = createSignal(false);
   const [removingPasskey, setRemovingPasskey] = createSignal(false);
@@ -123,7 +130,7 @@ function AccountNotice() {
   return (
     <Show when={card()}>
       {(c) => (
-        <section class="defaults-card account-card" data-card={c().kind} aria-label={c().kind === "secondWay" ? aw.secondWayIn : c().text} data-fgroup="account-card">
+        <section class="defaults-card account-card" classList={{ urgent: !!props.top }} data-card={c().kind} aria-label={c().kind === "secondWay" ? aw.secondWayIn : c().text} data-fgroup="account-card">
           <ShieldAlert aria-hidden class="dc-icon" />
           <div class="dc-text">
             <Show when={c().kind === "secondWay"}>
@@ -298,6 +305,8 @@ export default function Home() {
   return (
     <div class="home">
       <main class="page" data-vscroll ref={attach}>
+        {/* A deletion, the account gone, a new device: first, before the hero, never kept for later. */}
+        <AccountCard top />
         <HeroCarousel heroes={home.heroes} waiting={waiting()} />
 
         {/* With no row to follow, the account's notices sit under the hero. */}
