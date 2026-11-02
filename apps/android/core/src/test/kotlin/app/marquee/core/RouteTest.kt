@@ -13,7 +13,9 @@ import app.marquee.core.route.calendarInLibrary
 import app.marquee.core.route.choosingVideos
 import app.marquee.core.route.hasBackLink
 import app.marquee.core.route.isTopLevel
+import app.marquee.core.route.kidsStack
 import app.marquee.core.route.linkedTo
+import app.marquee.core.route.openToKids
 import app.marquee.core.route.restoredStack
 import app.marquee.core.route.switchedTo
 import kotlin.test.Test
@@ -196,5 +198,44 @@ class RouteTest {
         assertEquals(emptySet(), choosingVideos(listOf(Route.Home, title)))
         // Settings opened from Versions (a source to add) keeps it.
         assertEquals(setOf("tt1:1:1"), choosingVideos(listOf(Route.Home, title, versions, Route.Settings)))
+    }
+
+    @Test
+    fun `a kids session opens no Discover, Calendar, source, account or profile page`() {
+        for (route in listOf(
+            Route.Discover,
+            Route.Calendar,
+            Route.Addons,
+            Route.FindAddons,
+            Route.Sources,
+            Route.Plugins,
+            Route.Debrid,
+            Route.Trakt,
+            Route.Import,
+            Route.Sync,
+            Route.Pairing,
+            Route.SignIn(firstRun = false),
+            Route.HomeRows,
+            Route.Defaults(app.marquee.core.route.DefaultsMode.Settings),
+            Route.ManageProfiles,
+            Route.EditProfile(null),
+            Route.SettingsSection("Sources"),
+            Route.SettingsSection("Account"),
+        )) {
+            assertFalse(route.openToKids, "$route")
+        }
+        for (route in listOf(
+            Route.Home,
+            Route.Search,
+            Route.Library,
+            Route.Settings,
+            title,
+            Route.Profiles,
+            Route.SettingsSection("Playback"),
+        )) {
+            assertTrue(route.openToKids, "$route")
+        }
+        assertEquals(listOf(Route.Home, title), kidsStack(listOf(Route.Home, Route.Discover, title, Route.Addons)))
+        assertEquals(listOf(Route.Home), kidsStack(listOf(Route.Calendar)))
     }
 }

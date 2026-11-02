@@ -329,6 +329,22 @@ class IncognitoScreensTest {
     }
 
     @Test
+    fun `Settings on a kids profile hides Sources, the account, Home rows and Downloads`() {
+        val shown = SettingsSection.entries.filter { kidsShows(true, it) }
+        assertEquals(
+            listOf(
+                SettingsSection.Profiles,
+                SettingsSection.Playback,
+                SettingsSection.Subtitles,
+                SettingsSection.Device,
+                SettingsSection.About,
+            ),
+            shown,
+        )
+        assertTrue(SettingsSection.entries.all { kidsShows(false, it) })
+    }
+
+    @Test
     fun `TV Settings in Incognito starts on its block, with Leave beside it`() {
         var left = 0
         var chooser = 0

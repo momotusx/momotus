@@ -64,4 +64,42 @@ class SearchNoMatchTest {
         compose.onNodeWithText("Recommended addons").performClick()
         assertEquals(1, addons)
     }
+
+    @Test
+    fun `a kids session that finds nothing says so, with no addons button`() {
+        session.client.attach { text ->
+            val id =
+                CoreJson
+                    .parseToJsonElement(text)
+                    .jsonObject["id"]
+                    ?.jsonPrimitive
+                    ?.longOrNull ?: return@attach
+            session.client.onMessage(
+                """{"id":$id,"ok":true,"result":{"sub":4,"snapshot":{"query":"matrix","rows":[],"recent":[],"searchable":0}}}""",
+            )
+        }
+        compose.setContent {
+            MarqueeTheme(Form.Phone) {
+                SearchScreen(session, onOpen = {}, request = "matrix", onAddons = { error("no addons") }, kids = true)
+            }
+        }
+        val line = "That isn't on your list. Ask a grown-up."
+        val deadline = System.currentTimeMillis() + 60_000
+        while (compose.onAllNodesWithText(line, useUnmergedTree = true).fetchSemanticsNodes().isEmpty()) {
+            check(System.currentTimeMillis() < deadline) { "the kids line never drew" }
+            Snapshot.sendApplyNotifications()
+            compose.waitForIdle()
+            Thread.sleep(10)
+        }
+        assertEquals(0, compose.onAllNodesWithText("Recommended addons").fetchSemanticsNodes().size)
+        assertEquals(
+            0,
+            compose
+                .onAllNodesWithText(
+                    "None of your addons can search.",
+                    useUnmergedTree = true,
+                ).fetchSemanticsNodes()
+                .size,
+        )
+    }
 }

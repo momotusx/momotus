@@ -47,6 +47,17 @@ private func hero(_ id: String, background: String?) throws -> Hero {
     #expect(SettingsSection.shown(tv: true, downloads: true) == [.profiles, .sources, .account, .home, .playback, .subtitles, .about])
 }
 
+/// A kids profile's Settings has no sources, account, Home rows or Downloads' settings (plans/m11-kids.md 5, QA round 1
+/// Q7 row 32), and the section beside the menu is one it has.
+@Test func aKidsProfileHasNoSourcesAccountHomeRowsOrDownloads() {
+    let kids = SettingsSection.shown(tv: false, downloads: true, kids: true)
+    #expect(kids == [.profiles, .playback, .subtitles, .device, .about])
+    #expect(SettingsSection.shown(tv: true, downloads: false, kids: true) == [.profiles, .playback, .subtitles, .about])
+    #expect(SettingsSection.beside(.sources, in: kids) == .playback)
+    #expect(SettingsSection.beside(.subtitles, in: kids) == .subtitles)
+    #expect(SettingsSection.beside(.sources, in: SettingsSection.shown(tv: false, downloads: false)) == .sources)
+}
+
 @Test(arguments: SettingsTone.allCases) func everyTileIsABlueToGreenStepItsWhiteGlyphReads(_ tone: SettingsTone) throws {
     // The fill drawn is the token's, never red or orange, and the white glyph keeps 3:1 on it (green the lowest, 3.13).
     let hex = try #require(tokens[tone.token], "no token \(tone.token)")

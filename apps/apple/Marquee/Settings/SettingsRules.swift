@@ -67,16 +67,26 @@ enum SettingsSection: String, CaseIterable, Identifiable {
 
     /// This device holds the trailer previews switch; tvOS has none, so it has no such section (as Android TV).
     /// Downloads shows where the device downloads (plans/offline-downloads.md 3.7), never on TV. Incognito has
-    /// nothing of the profiles, the account or Downloads' settings (plans/batch-10-incognito.md 6).
-    static func shown(tv: Bool, downloads: Bool, incognito: Bool = false) -> [SettingsSection] {
+    /// nothing of the profiles, the account or Downloads' settings (plans/batch-10-incognito.md 6). A kids profile
+    /// has no sources, account, Home rows or Downloads' settings: none is its to change, and the core refuses each
+    /// with `kids` (plans/m11-kids.md 5).
+    static func shown(tv: Bool, downloads: Bool, incognito: Bool = false, kids: Bool = false) -> [SettingsSection] {
         allCases.filter { s in
             switch s {
-            case .profiles, .account: !incognito
+            case .profiles: !incognito
+            case .account: !incognito && !kids
+            case .sources, .home: !kids
             case .device: !tv
-            case .downloads: downloads && !tv && !incognito
+            case .downloads: downloads && !tv && !incognito && !kids
             default: true
             }
         }
+    }
+
+    /// The section beside the menu: the one chosen while it shows, else the first after the header (a kids
+    /// profile's Settings opens on Playback, not on a Sources it has not got).
+    static func beside(_ chosen: SettingsSection, in shown: [SettingsSection]) -> SettingsSection {
+        shown.contains(chosen) ? chosen : shown.first { $0 != .profiles } ?? .about
     }
 }
 

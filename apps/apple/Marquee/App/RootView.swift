@@ -415,7 +415,9 @@ struct MainShell: View {
         showProfiles = true
     }
 
-    private func select(_ item: AppTab, link: Bool = false) {
+    private func select(_ asked: AppTab, link: Bool = false) {
+        // Discover and Calendar are not a kids profile's, from a bar, a menu key or a chip.
+        let item = asked.opened(kids: profiles.snapshot?.current?.kids == true)
         if item.opensAtRoot(from: tab, link: link) { popToRoot(item) }
         opened.insert(item)
         tab = item
@@ -657,7 +659,7 @@ private struct TabBar: View {
     var body: some View {
         let iconsOnly = tabBarIconsOnly(width: width, type: type)
         HStack(spacing: 0) {
-            ForEach(AppTab.bar, id: \.self) { item in
+            ForEach(AppTab.bar(kids: profiles.snapshot?.current?.kids == true), id: \.self) { item in
                 let on = item == selection.lit
                 Button { select(item) } label: {
                     VStack(spacing: 1) {
@@ -788,15 +790,18 @@ private struct TopNav: View {
     var focused: FocusState<AppTab?>.Binding
     /// The avatar has focus (Menu there goes Home, as on a link).
     var avatar: FocusState<Bool>.Binding
+    @Environment(ProfileSession.self) private var profiles
+
+    private var places: [AppTab] { AppTab.bar(kids: profiles.snapshot?.current?.kids == true) }
 
     var body: some View {
         HStack(spacing: 2) {
             BrandMark(size: Self.mark * 1.5)
                 .padding(.leading, Self.mark * 0.6)
                 .padding(.trailing, Self.mark * 0.4)
-            ForEach(AppTab.bar.filter { !$0.isTool }, id: \.self) { link($0) }
+            ForEach(places.filter { !$0.isTool }, id: \.self) { link($0) }
             Capsule().fill(Theme.Palette.lineStrong).frame(width: 1.5, height: Self.mark).padding(.horizontal, 8)
-            ForEach(AppTab.bar.filter(\.isTool), id: \.self) { link($0) }
+            ForEach(places.filter(\.isTool), id: \.self) { link($0) }
             // Settings has no link: the profile stands for it, lit while it shows.
             // Settings, chosen while it shows, leaves focus on the avatar: the dialog hands focus back to it as it closes.
             ProfileMenu(onSettings: settings, onPin: pin, focus: avatar) {

@@ -20,6 +20,7 @@ struct SearchScreen: View {
     @State private var width: CGFloat = 0
     /// Recommended addons, pushed from the line that says no addon can search.
     @State private var addons = false
+    @Environment(ProfileSession.self) private var profiles: ProfileSession?
     private let core: CoreClient
 
     init(core: CoreClient) {
@@ -29,6 +30,9 @@ struct SearchScreen: View {
     }
 
     private var query: String { input.text }
+    /// A kids profile searches its own list: no addon line, no genres (plans/m11-kids.md 6.4).
+    private var kids: Bool { profiles?.snapshot?.current?.kids == true }
+    private var prompt: String { kids ? SearchWords.kidsPrompt : Self.prompt }
     private var typed: Bool { !query.trimmingCharacters(in: .whitespaces).isEmpty }
 
     var body: some View {
@@ -48,7 +52,7 @@ struct SearchScreen: View {
         #if os(tvOS)
         // The system's inline keyboard with the results live under it, and
         // dictation, as the TV's own apps search (review apple-journey P2-8).
-        .searchable(text: Bindable(input).text, prompt: Self.prompt)
+        .searchable(text: Bindable(input).text, prompt: prompt)
         .searchSuggestions {
             ForEach(search.snapshot?.recent ?? [], id: \.self) { Label($0, glyph: "history").searchCompletion($0) }
         }
@@ -56,7 +60,7 @@ struct SearchScreen: View {
         .navigationDestination(isPresented: $addons) { RecommendedAddonsPage(core: core, scope: .all) }
         .task(id: search.taskId) { search.start() }
         #if os(iOS)
-        .task(id: genres.taskId) { if !metrics.wide { genres.start() } }
+        .task(id: genres.taskId) { if !metrics.wide && !kids { genres.start() } }
         #endif
         .onChange(of: input.text) { _, value in setQuery(value) }
         // A query typed or linked before the view could take it (a director chip opening Search).
@@ -112,7 +116,7 @@ struct SearchScreen: View {
 
     /// No addon can search: the line's way on is one that does (the web's and Android's Recommended addons).
     private var addonsAction: (title: String, run: () -> Void)? {
-        SearchWords.offersAddons(search.snapshot) ? (SearchWords.addons, { addons = true }) : nil
+        SearchWords.offersAddons(search.snapshot, kids: kids) ? (SearchWords.addons, { addons = true }) : nil
     }
 
     /// The page's edge (the token's on the phone): the field, Recent, the lists and the genre tiles sit on it.
@@ -123,7 +127,7 @@ struct SearchScreen: View {
         tvContent
         #else
         if !metrics.wide { ScreenTitle(text: "Search").padding(.horizontal, margin) }
-        SearchField(input: input, prompt: Self.prompt, focused: $fieldFocused).padding(.horizontal, margin)
+        SearchField(input: input, prompt: prompt, focused: $fieldFocused).padding(.horizontal, margin)
         if search.failure != nil {
             // The core's words can name a host or an addon: the shared line instead.
             StateLine(symbol: "triangle-alert", text: SearchWords.failed, action: ("Try again", search.retry), spoken: true)
@@ -132,7 +136,7 @@ struct SearchScreen: View {
         if !typed {
             idle.padding(.horizontal, margin)
         } else {
-            if let line = SearchWords.answered(search.snapshot, query: query) {
+            if let line = SearchWords.answered(search.snapshot, query: query, kids: kids) {
                 StateLine(symbol: "search", text: line, action: addonsAction, spoken: true).padding(.horizontal, margin)
             }
             if metrics.wide { wideResults } else { phoneResults }
@@ -144,7 +148,7 @@ struct SearchScreen: View {
     /// No query: the hint (or that no addon can search), then Recent.
     @ViewBuilder private var idle: some View {
         VStack(alignment: .leading, spacing: metrics.wide ? 24 : 20) {
-            Text(SearchWords.idle(search.snapshot))
+            Text(SearchWords.idle(search.snapshot, kids: kids))
                 .textFont(metrics.wide ? 13 : 15, relativeTo: .footnote)
                 .foregroundStyle(Theme.Palette.dim)
             if let addonsAction {
@@ -155,7 +159,7 @@ struct SearchScreen: View {
             }
             #if os(iOS)
             // The phone's genre tiles; a failed grid is not drawn (Search's own words cover the page).
-            if !metrics.wide, genres.failure == nil {
+            if !metrics.wide, !kids, genres.failure == nil {
                 GenreGrid(snapshot: genres.snapshot) { kind, genre in
                     // The genre chip's path: one select of the kind and the genre (C40).
                     links?.discover = DiscoverRequest(kind: kind, genre: genre)
@@ -245,8 +249,8 @@ struct SearchScreen: View {
                 .padding(.horizontal, metrics.gutter)
         }
         if !typed {
-            StateLine(symbol: "search", text: SearchWords.idle(search.snapshot), action: addonsAction).padding(.horizontal, metrics.gutter)
-        } else if let line = SearchWords.answered(search.snapshot, query: query) {
+            StateLine(symbol: "search", text: SearchWords.idle(search.snapshot, kids: kids), action: addonsAction).padding(.horizontal, metrics.gutter)
+        } else if let line = SearchWords.answered(search.snapshot, query: query, kids: kids) {
             StateLine(symbol: "search", text: line, action: addonsAction, spoken: true).padding(.horizontal, metrics.gutter)
         }
         ForEach(search.snapshot?.rows ?? [], id: \.rowId) { row in

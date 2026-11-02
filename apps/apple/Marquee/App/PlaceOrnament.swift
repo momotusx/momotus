@@ -23,10 +23,11 @@ struct PlaceOrnament<Profile: View>: View {
     var strong = false
     let select: (AppTab) -> Void
     let profile: Profile
+    @Environment(ProfileSession.self) private var profiles: ProfileSession?
 
     var body: some View {
         HStack(spacing: 2) {
-            ForEach(OrnamentLayout.places, id: \.self) { item in
+            ForEach(OrnamentLayout.places.filter { profiles?.snapshot?.current?.kids != true || !$0.adultOnly }, id: \.self) { item in
                 Button { select(item) } label: { Label(item.title, glyph: item.symbol, size: 16) }
                     .buttonStyle(OrnamentItemStyle(on: item == selection))
                     .accessibilityAddTraits(item == selection ? .isSelected : [])

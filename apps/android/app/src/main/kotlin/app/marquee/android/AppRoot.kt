@@ -63,6 +63,7 @@ import app.marquee.core.route.calendarInLibrary
 import app.marquee.core.route.choosingVideos
 import app.marquee.core.route.hasBackLink
 import app.marquee.core.route.isTopLevel
+import app.marquee.core.route.kidsStack
 import app.marquee.core.route.linkedTo
 import app.marquee.core.route.restoredStack
 import app.marquee.core.route.switchedTo
@@ -287,6 +288,16 @@ private fun AppNav(
     val routes = backStack.map { it as Route }
     val top = routes.last()
     val tv = form == Form.Tv
+    // A kids session opens no Discover, Calendar, source, account or profile page (plans/m11-kids.md 5): every way
+    // there is hidden, and a stack that holds one (saved, or pushed by a link) drops it.
+    val kids = gate.snapshot?.kids == true || AccountRules.activeProfile(gate.snapshot)?.kids == true
+    LaunchedEffect(kids, routes) {
+        val kept = if (kids) kidsStack(routes) else routes
+        if (kept != routes) {
+            backStack.clear()
+            backStack.addAll(kept)
+        }
+    }
     // The phone's back link is the system Back: a page that guards leaving (an edited profile) is asked first.
     val systemBack = LocalOnBackPressedDispatcherOwner.current?.onBackPressedDispatcher
 
@@ -648,6 +659,7 @@ private fun AppNav(
                                 onAddons = ::addAnAddon,
                                 rowsHidden = rowsHidden,
                                 onHomeRows = onHomeRows,
+                                kids = kids,
                                 card = card,
                                 removal = app.removal,
                             )
@@ -660,6 +672,7 @@ private fun AppNav(
                                 onAddons = ::addAnAddon,
                                 rowsHidden = rowsHidden,
                                 onHomeRows = onHomeRows,
+                                kids = kids,
                                 card = card,
                                 onRemove = { app.removal.remove(it, accessibility::actionWindow) },
                                 removing = app.removal.removing?.id,
@@ -674,6 +687,7 @@ private fun AppNav(
                             request = app.searchRequest,
                             onRequestSent = { app.searchRequest = null },
                             onAddons = { backStack.add(Route.Defaults(DefaultsMode.Settings)) },
+                            kids = kids,
                         )
                     }
                     entry<Route.Discover> {
@@ -692,8 +706,8 @@ private fun AppNav(
                         LibraryScreen(
                             session,
                             ::open,
-                            onCalendar = if (tv) null else ({ backStack.add(Route.Calendar) }),
-                            onDiscover = { choose(Route.Discover) },
+                            onCalendar = if (tv || kids) null else ({ backStack.add(Route.Calendar) }),
+                            onDiscover = if (kids) null else ({ choose(Route.Discover) }),
                             onDownloads = if (tv) null else ({ backStack.add(Route.Downloads) }),
                         )
                     }
@@ -974,6 +988,7 @@ private fun AppNav(
             onKey = { app.tvHome.focus.interacted() },
             nav = tvNav,
             profileButton = { lit, bar -> PillProfile(gate, lit, bar, { choose(Route.Settings) }, ::pinFor) },
+            kids = kids,
             content = content,
         )
     } else {
@@ -1002,6 +1017,7 @@ private fun AppNav(
                         )
                     }
                 },
+            kids = kids,
             content = content,
         )
     }

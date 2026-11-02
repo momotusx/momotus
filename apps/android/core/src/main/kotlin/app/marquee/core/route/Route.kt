@@ -211,6 +211,35 @@ val TOP_LEVEL: List<Route> =
 val Route.isTopLevel: Boolean get() = this in TOP_LEVEL
 
 /**
+ * The Settings sections a kids session never shows (plans/m11-kids.md 5): the sources, the account, Home's rows and
+ * downloads. The core refuses what they change with `kids`.
+ */
+val KIDS_HIDDEN_SECTIONS: Set<String> = setOf("Sources", "Account", "Home", "Downloads")
+
+/**
+ * Whether a kids session may open this place (plans/m11-kids.md 5, QA round 1 Q7 rows 27 and 32): no Discover or
+ * Calendar, no addon, debrid, Trakt, import, account or profile page, and no hidden Settings section. Approving a
+ * scan stays: that page says to ask a grown-up.
+ */
+val Route.openToKids: Boolean
+    get() =
+        when (this) {
+            Route.Discover, Route.Calendar, Route.Import, Route.Pairing, Route.TvSignIn, Route.Sync,
+            Route.RecoveryKit, Route.SyncFork, Route.Debrid, Route.Trakt, Route.HomeRows, Route.Sources,
+            Route.Addons, Route.FindAddons, Route.Plugins, Route.PluginDirectory, Route.ManageProfiles,
+            -> false
+
+            is Route.Defaults, is Route.SignIn, is Route.SyncJoin, is Route.ReportLost, is Route.EditProfile -> false
+
+            is Route.SettingsSection -> id !in KIDS_HIDDEN_SECTIONS
+
+            else -> true
+        }
+
+/** The back stack a kids session keeps: the places it may open, Home when none is left. */
+fun kidsStack(stack: List<Route>): List<Route> = stack.filter { it.openToKids }.ifEmpty { listOf(Route.Home) }
+
+/**
  * The pushed pages a phone gives the blue back link (design/DECISION.md, Navigation), Calendar among them: the phone
  * pushes it over Library (D6), and only TV has it as a tab, which draws no link. The Downloads pages have it too
  * (plans/offline-downloads.md 3.4). The player, the first run and the Settings sub-pages keep the way out they have.

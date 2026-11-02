@@ -45,12 +45,17 @@ enum SearchWords {
     /// The core's Top results row (`TOP_ROW_ID`).
     static let topRowId = "top"
 
-    /// Under the field before a query: the hint, or that no addon can search.
-    static func idle(_ s: SearchSnapshot?) -> String { s?.searchable == 0 ? noAddons : hint }
+    /// A kids profile's Search looks over its own list only (plans/m11-kids.md 6.4): its field and its no-match line.
+    static let kidsPrompt = "Search your shows"
+    static let kidsNoMatch = "That isn't on your list. Ask a grown-up."
+
+    /// Under the field before a query: the hint, or that no addon can search (never on a kids profile, which asks none).
+    static func idle(_ s: SearchSnapshot?, kids: Bool = false) -> String { !kids && s?.searchable == 0 ? noAddons : hint }
 
     /// After the core answered `query`: that no addon can search, or that nothing matched; nil otherwise.
-    static func answered(_ s: SearchSnapshot?, query: String) -> String? {
+    static func answered(_ s: SearchSnapshot?, query: String, kids: Bool = false) -> String? {
         guard let s, s.query == query.trimmingCharacters(in: .whitespaces) else { return nil }
+        if kids { return s.rows.isEmpty ? kidsNoMatch : nil }
         if s.searchable == 0 { return noAddons }
         return s.rows.isEmpty ? noMatches(s.query) : nil
     }
@@ -58,8 +63,8 @@ enum SearchWords {
     /// Nothing came back for `query`: said with the query, as the web and Android say it.
     static func noMatches(_ query: String) -> String { "No matches for \"\(query)\" in your catalogs." }
 
-    /// No addon can search, so nothing could match: the line offers the recommended addons.
-    static func offersAddons(_ s: SearchSnapshot?) -> Bool { s?.searchable == 0 }
+    /// No addon can search, so nothing could match: the line offers the recommended addons. Never to a kids profile.
+    static func offersAddons(_ s: SearchSnapshot?, kids: Bool = false) -> Bool { !kids && s?.searchable == 0 }
 
     enum Top: Equatable {
         case loading

@@ -24,6 +24,7 @@ import { setTitle } from "./incognito";
 import { autoFocusSoon, focusRail, installFocus, readPathFrom, move, railHasFocus, restoreSoon, viewerMoving } from "./focus/dom";
 import { type Form, form } from "./form";
 import { parentOf } from "./lib/parent";
+import { kidsBlocked, kidsSession } from "./lib/kids";
 import { isSettingsPage } from "./lib/settings-sections";
 import { backThenReplace, currentPathname, endMemory, entryOwner, historyBase, historyDepth, leaveGuarded, markBack, resetHistoryBase, stampEntriesWith, startMemory, takeAfterBack, takeBack } from "./history";
 import Addons from "./screens/addons";
@@ -68,6 +69,8 @@ const barPlaces = destinations.filter((d) => d.path !== "/settings");
 // The phone has five tabs, the profile last: Calendar is a row at the top of Library, lit as Library (design/DECISION.md, Navigation).
 const phoneTabs = barPlaces.filter((d) => d.path !== "/calendar");
 const lit = (path: string) => (form() === "phone" && path === "/calendar" ? "/library" : section(path));
+/** A kids session's bar has no Discover or Calendar (plans/m11-kids.md section 5). */
+const forKids = (places: Destination[]) => (kidsSession(profiles()) ? places.filter((d) => !kidsBlocked(d.path)) : places);
 
 /** Where a pushed page draws its back link (phone and desktop; TV has the remote's Back): over the title's art, or as a
  * bar of its own above Versions and the profile switcher (design/DECISION.md, Navigation). */
@@ -153,7 +156,7 @@ function TopNav() {
         <Brand alone />
       </span>
       <div class="tabbar">
-        <For each={tv() ? barPlaces : barPlaces.filter((d) => d !== search)}>{link}</For>
+        <For each={forKids(tv() ? barPlaces : barPlaces.filter((d) => d !== search))}>{link}</For>
         <Show when={tv()}>{profile()}</Show>
       </div>
       <Show when={!tv()}>
@@ -175,7 +178,7 @@ function Tabs() {
   const navigate = useNavigate();
   return (
     <nav class="tabs" aria-label="Main" inert={searchOpen() || undefined}>
-      <For each={phoneTabs}>
+      <For each={forKids(phoneTabs)}>
         {(d) => (
           <A href={d.path} end classList={{ on: lit(location.pathname) === d.path }} on:click={paletteClick(d.path)}>
             <d.icon aria-hidden />
@@ -321,6 +324,9 @@ function Shell(props: RouteSectionProps) {
       },
     ),
   );
+  // A page a kids session never opens, typed or linked, goes Home in its place: the core refuses its views anyway.
+  const barred = () => kidsSession(profiles()) && kidsBlocked(location.pathname);
+  createEffect(on(barred, (b) => b && navigate("/", { replace: true })));
   const nav = () => hasNav(location.pathname);
   const backPlace = () => (form() === "tv" ? null : backAt(location.pathname, form()));
   // Nothing of a profile shows before the core says which one runs and
@@ -375,7 +381,7 @@ function Shell(props: RouteSectionProps) {
               )}
             </Show>
             <div class="screen" classList={{ barred: backPlace() === "bar" }} inert={searchOpen() || undefined}>
-              {props.children}
+              <Show when={!barred()}>{props.children}</Show>
             </div>
             <Show when={nav() && form() === "phone"}>
               <Tabs />

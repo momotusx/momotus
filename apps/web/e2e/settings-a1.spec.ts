@@ -37,8 +37,10 @@ async function open(browser: Browser, form: Form, opts: { size?: [number, number
   const page = await context.newPage();
   await page.goto(`/settings?form=${form}`);
   await expect(page.locator('[data-f="settings:profiles"]')).toBeVisible({ timeout: 30_000 });
-  // The phone lists the sections; TV and desktop show Sources first.
-  if (form === "phone") await expect(page.locator('[data-f="settings-sec:sources"]')).toBeVisible();
+  // The phone lists the sections; TV and desktop show Sources first, a kids profile Playback.
+  const kids = opts.profiles === kidsProfiles;
+  if (form === "phone") await expect(page.locator(`[data-f="settings-sec:${kids ? "playback" : "sources"}"]`)).toBeVisible();
+  else if (kids) await expect(page.locator('[data-f="settings-nav:playback"]')).toBeVisible();
   else await expect(page.locator('[data-f="settings:addons"] small')).toContainText(/installed/);
   await expect(page.locator('.set-head[data-home="ready"]')).toHaveCount(1, { timeout: 30_000 });
   return { context, page };
@@ -129,6 +131,30 @@ for (const form of ["tv", "desktop", "phone"] as const) {
     await expect(kids.page.locator('[data-f="settings:profile-edit"]')).toHaveCount(0);
     await expect(kids.page.locator('[data-f="settings:profiles-manage"]')).toHaveCount(0);
     await kids.context.close();
+  });
+
+  // QA round 1, Q7 rows 27 and 32: no sources, account, Home rows or Downloads, no Discover or Calendar, and
+  // their addresses go Home.
+  test(`${form}: a kids profile has no Sources, Account, Discover or Calendar, and their pages go Home`, async ({ browser }) => {
+    const { context, page } = await open(browser, form, { profiles: kidsProfiles });
+    for (const id of ["sources", "account", "home", "downloads"]) {
+      await expect(page.locator(`[data-f="settings-nav:${id}"], [data-f="settings-sec:${id}"]`)).toHaveCount(0);
+    }
+    for (const key of ["settings:addons", "settings:debrid", "settings:trakt", "settings:import", "settings:sync", "settings:find-addons"]) {
+      await expect(page.locator(`[data-f="${key}"]`)).toHaveCount(0);
+    }
+    if (form !== "phone") {
+      await expect(page.locator('[data-f="nav:/"]')).toBeVisible();
+      await expect(page.locator('[data-f="nav:/discover"], [data-f="nav:/calendar"]')).toHaveCount(0);
+    } else {
+      await expect(page.locator('.tabs a[href="/"]')).toBeVisible();
+      await expect(page.locator('.tabs a[href="/discover"], .tabs a[href="/calendar"]')).toHaveCount(0);
+    }
+    for (const path of ["/discover", "/sign-in", "/addons", `/settings/sources?form=${form}`]) {
+      await page.goto(path.includes("?") ? path : `${path}?form=${form}`);
+      await expect(page).toHaveURL(/\/(\?.*)?$/, { timeout: 15_000 });
+    }
+    await context.close();
   });
 }
 

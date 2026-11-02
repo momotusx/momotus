@@ -13,6 +13,7 @@ import type { AddonsSnapshot } from "../core/generated/AddonsSnapshot";
 import type { HomeRow } from "../core/generated/HomeRow";
 import type { DefaultAddons } from "../core/generated/DefaultAddons";
 import { incognito, onProfileReset, profiles } from "../core/profiles";
+import { kidsSession, kidsWords } from "../lib/kids";
 import { current } from "../lib/profiles";
 import { BridgeError } from "../core/bridge";
 import * as sync from "../core/sync";
@@ -256,7 +257,7 @@ export default function Home() {
   const navigate = useNavigate();
   const addons = liveView<AddonsSnapshot>("addons");
   createEffect(() => {
-    if (addons.state.data?.fresh) navigate("/welcome", { replace: true });
+    if (addons.state.data?.fresh && !kidsSession(profiles())) navigate("/welcome", { replace: true });
   });
   const [page, setPage] = createSignal<HTMLElement | null>(null);
   const hasContinue = () => home.rows[0]?.rowId === CONTINUE_ROW;
@@ -319,7 +320,13 @@ export default function Home() {
           )}
         </Show>
 
-        <Show when={empty()}>
+        {/* A kids profile's Home is its list: a grown-up fills it (plans/m11-kids.md 6.4). */}
+        <Show when={empty() && kidsSession(profiles())}>
+          <section class="problem home-problem">
+            <p>{kidsWords.empty}</p>
+          </section>
+        </Show>
+        <Show when={empty() && !kidsSession(profiles())}>
           <section class="problem home-problem">
             <h2>Home fills up from your addons</h2>
             <p>{defaultsWords.emptyHome}</p>

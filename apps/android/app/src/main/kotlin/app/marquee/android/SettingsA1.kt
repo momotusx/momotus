@@ -67,6 +67,7 @@ import app.marquee.core.model.Hero
 import app.marquee.core.model.HomeRow
 import app.marquee.core.model.ProfileInfo
 import app.marquee.core.model.Tile
+import app.marquee.core.route.KIDS_HIDDEN_SECTIONS
 import app.marquee.design.Backdrop
 import app.marquee.design.FocusInk
 import app.marquee.design.Form
@@ -838,3 +839,9 @@ internal fun incognitoShows(
     section: SettingsSection,
 ): Boolean =
     !incognito || section !in setOf(SettingsSection.Profiles, SettingsSection.Account, SettingsSection.Downloads)
+
+/** The sections a kids session hides (plans/m11-kids.md 5): Sources, the account, Home's rows and Downloads. */
+internal fun kidsShows(
+    kids: Boolean,
+    section: SettingsSection,
+): Boolean = !kids || section.name !in KIDS_HIDDEN_SECTIONS

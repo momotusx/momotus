@@ -62,7 +62,8 @@ import { current } from "../lib/profiles";
 import { debridAccounts } from "../core/debrid";
 import { inUse } from "../lib/debrid";
 import { accountWords, connectGoogle, connectText, connectTitle } from "../lib/account";
-import { sectionId } from "../lib/settings-sections";
+import { KIDS_HIDDEN_SECTIONS, kidsSession } from "../lib/kids";
+import { type SectionId, sectionId } from "../lib/settings-sections";
 import { incognitoWords, useLeave } from "../components/incognito";
 
 const clockTime = (ms: number) => new Date(ms).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
@@ -337,10 +338,15 @@ export default function SettingsScreen() {
   const navigate = useNavigate();
   // The phone's section page, or the section beside the menu.
   const open = () => (form() === "phone" ? sectionId(params.section) : undefined);
-  const chosen = () => sectionId(params.section) ?? "sources";
   // Incognito hides the account and Downloads' settings (plans/batch-10-incognito.md 6); the profile's own section is
-  // its header, and Sources leaves out Trakt and Import.
-  const hidden = (id: string) => incognito() && (id === "account" || id === "downloads");
+  // its header, and Sources leaves out Trakt and Import. A kids profile has no Sources, Account, Home rows or
+  // Downloads (plans/m11-kids.md section 5), and opens on Playback.
+  const hidden = (id: string) =>
+    (incognito() && (id === "account" || id === "downloads")) || (kidsSession(profiles()) && KIDS_HIDDEN_SECTIONS.includes(id as SectionId));
+  const chosen = () => {
+    const id = sectionId(params.section);
+    return id && !hidden(id) ? id : hidden("sources") ? "playback" : "sources";
+  };
   const listed = (s: { id: string }) => (s.id !== "downloads" || downloadsHere()) && !hidden(s.id);
   const shows = (id: string) => !hidden(id) && (form() !== "phone" ? id === chosen() : open() ? id === open() : id === "profiles");
   const leaving = useLeave();

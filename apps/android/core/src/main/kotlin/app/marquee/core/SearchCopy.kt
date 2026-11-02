@@ -8,9 +8,18 @@ object SearchCopy {
     /** The way on when nothing came back, from [NONE_CAN_SEARCH] or no match. */
     const val RECOMMENDED = "Recommended addons"
 
-    /** Nothing came back for [query]: no addon can search ([searchable] 0), or none of them matched. */
+    /**
+     * Nothing came back for [query]: no addon can search ([searchable] 0), or none of them matched. A kids session
+     * searches its own list, and never hears of addons ([KidsCopy.SEARCH_NONE]).
+     */
     fun empty(
         query: String,
         searchable: Int,
-    ): String = if (searchable == 0) NONE_CAN_SEARCH else "No matches for \"$query\" in your catalogs."
+        kids: Boolean = false,
+    ): String =
+        when {
+            kids -> KidsCopy.SEARCH_NONE
+            searchable == 0 -> NONE_CAN_SEARCH
+            else -> "No matches for \"$query\" in your catalogs."
+        }
 }

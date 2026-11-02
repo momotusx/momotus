@@ -6,6 +6,7 @@ struct LibraryScreen: View {
     let core: CoreClient
     @State private var library: LiveRecord<LibrarySnapshot>
     @Environment(\.metrics) private var metrics
+    @Environment(ProfileSession.self) private var profiles: ProfileSession?
     #if !os(tvOS)
     @Environment(DownloadKeeper.self) private var keeper: DownloadKeeper?
     @Environment(\.linkRequests) private var links
@@ -32,7 +33,8 @@ struct LibraryScreen: View {
                 }
                 #endif
                 #if os(iOS)
-                CalendarRow()
+                // No Calendar on a kids profile (plans/m11-kids.md 5).
+                if profiles?.snapshot?.current?.kids != true { CalendarRow() }
                 #endif
                 if let failure = library.stage.failure {
                     StateLine(symbol: "triangle-alert", text: failure, action: ("Try again", tryAgain), spoken: true)

@@ -26,6 +26,18 @@ private func snapshot(query: String = "dune", rows: [[String: Any]] = [], search
     return try JSONDecoder().decode(SearchSnapshot.self, from: JSONSerialization.data(withJSONObject: json))
 }
 
+/// A kids profile's Search looks over its own list (plans/m11-kids.md 6.4, QA round 1 Q7 row 31): its no-match line asks a
+/// grown-up, never that no addon can search, and it offers no addons.
+@Test func aKidsSearchSaysItsOwnListAndOffersNoAddons() throws {
+    let none = try snapshot(rows: [], searchable: 0)
+    #expect(SearchWords.answered(none, query: "dune", kids: true) == "That isn't on your list. Ask a grown-up.")
+    let found = try snapshot(rows: [row("kids-titles", title: "Your shows and movies", source: "Your list", state: "ready", tiles: 1)], searchable: 0)
+    #expect(SearchWords.answered(found, query: "dune", kids: true) == nil)
+    #expect(SearchWords.idle(none, kids: true) == SearchWords.hint)
+    #expect(!SearchWords.offersAddons(none, kids: true))
+    #expect(SearchWords.kidsPrompt == "Search your shows")
+}
+
 @Test func theFieldSaysWhatSearchFinds() throws {
     #expect(SearchWords.idle(nil) == "Search movies and series by title.")
     #expect(SearchWords.idle(try snapshot(searchable: 2)) == "Search movies and series by title.")
@@ -49,7 +61,7 @@ private func snapshot(query: String = "dune", rows: [[String: Any]] = [], search
     let screen = try source("Search/SearchScreen.swift")
     // The answered line on every form, and TV's idle line.
     #expect(screen.components(separatedBy: "StateLine(symbol: \"search\", text: line, action: addonsAction, spoken: true)").count - 1 == 2, "an answered line lost its action")
-    #expect(screen.contains("StateLine(symbol: \"search\", text: SearchWords.idle(search.snapshot), action: addonsAction)"), "TV's idle line lost its action")
+    #expect(screen.contains("StateLine(symbol: \"search\", text: SearchWords.idle(search.snapshot, kids: kids), action: addonsAction)"), "TV's idle line lost its action")
     #expect(screen.contains("if let addonsAction {\n                Button(addonsAction.title, action: addonsAction.run)"), "the idle line lost its action")
     #expect(screen.contains(".navigationDestination(isPresented: $addons) { RecommendedAddonsPage(core: core, scope: .all) }"))
 }

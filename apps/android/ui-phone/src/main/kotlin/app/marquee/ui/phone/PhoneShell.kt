@@ -63,6 +63,7 @@ import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.marquee.core.route.Route
+import app.marquee.core.route.openToKids
 import app.marquee.design.Icons
 import app.marquee.design.Marquee
 import app.marquee.design.MarqueeFonts
@@ -114,6 +115,8 @@ fun PhoneShell(
      * status bar, with the page moved down by its height, so it covers nothing at rest and the page scrolls under it.
      */
     banner: (@Composable () -> Unit)? = null,
+    /** A kids session: no Discover tab (plans/m11-kids.md 5). */
+    kids: Boolean = false,
     content: @Composable () -> Unit,
 ) {
     val showBar = showTabs && !WindowInsets.isImeVisible
@@ -208,6 +211,7 @@ fun PhoneShell(
                 selected,
                 onSelect,
                 profile,
+                kids,
                 Modifier
                     .align(Alignment.BottomCenter)
                     .navigationBarsPadding()
@@ -304,6 +308,7 @@ private fun PhoneBar(
     selected: Route,
     onSelect: (Route) -> Unit,
     profile: PhoneProfileTab?,
+    kids: Boolean,
     modifier: Modifier,
 ) {
     val colors = Marquee.colors
@@ -341,7 +346,7 @@ private fun PhoneBar(
                 }.padding(horizontal = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            for (route in order) {
+            for (route in order.filter { !kids || it.openToKids }) {
                 val place = places.getValue(route)
                 val isSelected = route == lit
                 Slot(

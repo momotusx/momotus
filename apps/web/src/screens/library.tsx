@@ -14,7 +14,8 @@ import { restoreSoon } from "../focus/dom";
 import { form } from "../form";
 import type { LibrarySort } from "../core/generated/LibrarySort";
 import "./browse.css";
-import { incognito } from "../core/profiles";
+import { incognito, profiles } from "../core/profiles";
+import { kidsSession, kidsWords } from "../lib/kids";
 import { incognitoWords } from "../components/incognito";
 
 const sorts: { value: LibrarySort; label: string }[] = [
@@ -56,7 +57,7 @@ function LibraryPage(props: { retry: () => void }) {
     <main class="browse page" data-vscroll ref={attach} onScroll={(e) => (pageScroll.top = e.currentTarget.scrollTop)}>
       <h1>Library</h1>
       {/* The phone's tab bar has five tabs: Calendar is a row here, and Library stays lit on it. */}
-      <Show when={form() === "phone"}>
+      <Show when={form() === "phone" && !kidsSession(profiles())}>
         <A class="cal-row" href="/calendar">
           <CalendarDays aria-hidden />
           <span>Calendar</span>
@@ -88,11 +89,13 @@ function LibraryPage(props: { retry: () => void }) {
         <Match when={l() && total() === 0}>
           <section class="problem">
             <h2>Your library is empty</h2>
-            <p>{incognito() ? incognitoWords.libraryEmpty : "Add titles with Add to Library on a title page, or import your Stremio library from Settings."}</p>
-            <A class="btn primary" href="/discover" data-f="library:discover" data-autofocus>
-              <Compass aria-hidden />
-              Discover
-            </A>
+            <p>{kidsSession(profiles()) ? kidsWords.empty : incognito() ? incognitoWords.libraryEmpty : "Add titles with Add to Library on a title page, or import your Stremio library from Settings."}</p>
+            <Show when={!kidsSession(profiles())}>
+              <A class="btn primary" href="/discover" data-f="library:discover" data-autofocus>
+                <Compass aria-hidden />
+                Discover
+              </A>
+            </Show>
           </section>
         </Match>
         <Match when={l()}>

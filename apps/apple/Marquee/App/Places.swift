@@ -30,6 +30,15 @@ enum AppTab: String, CaseIterable, Hashable {
         #endif
     }
 
+    /// A kids profile's bar (plans/m11-kids.md 5): no Discover and no Calendar, whose catalogs are the owner's addons'.
+    static func bar(kids: Bool) -> [AppTab] { bar.filter { !kids || !$0.adultOnly } }
+
+    /// A place a kids profile never opens; the core refuses its views (`kids`).
+    var adultOnly: Bool { self == .discover || self == .calendar }
+
+    /// The place opened when this one is asked for: Home in its stead on a kids profile.
+    func opened(kids: Bool) -> AppTab { kids && adultOnly ? .home : self }
+
     /// Where TV focus enters the top bar for this place (Up from its page, Menu, a place changed from elsewhere): its
     /// link, or the profile at the bar's end for a place with no link (Settings).
     var barFocus: AppTab? { AppTab.bar.contains(self) ? self : nil }

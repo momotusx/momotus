@@ -62,6 +62,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import app.marquee.core.DiscoverCopy
+import app.marquee.core.KidsCopy
 import app.marquee.core.ProfileCopy
 import app.marquee.core.SearchCopy
 import app.marquee.core.TileCopy
@@ -296,6 +297,8 @@ fun SearchScreen(
     onRequestSent: () -> Unit = {},
     /** Nothing came back: the recommended addons, which include ones that search. */
     onAddons: () -> Unit,
+    /** A kids session: its own list only, never a word of addons (plans/m11-kids.md 6.4). */
+    kids: Boolean = false,
 ) {
     val holder =
         viewModel<SearchHolder>(key = "search", factory = viewModelFactory { initializer { SearchHolder(session) } })
@@ -322,7 +325,7 @@ fun SearchScreen(
         verticalArrangement = Arrangement.spacedBy(Marquee.space.m),
     ) {
         item(key = "head") { BrowseHeader("Find a title") }
-        item(key = "field") { SearchField(holder.query, ::send) }
+        item(key = "field") { SearchField(holder.query, if (kids) KidsCopy.SEARCH_FIELD else "Search titles", ::send) }
         when {
             view.status is ViewStatus.Failed -> {
                 val reason = (view.status as ViewStatus.Failed).reason
@@ -333,8 +336,13 @@ fun SearchScreen(
 
             !searching -> {
                 val recent = snapshot?.recent.orEmpty()
+                // A kid has no recent searches (the core keeps none) and searches no addon.
                 if (recent.isEmpty()) {
-                    item(key = "hint") { Note("Type a title. Results come from every addon with a search catalog.") }
+                    if (!kids) {
+                        item(
+                            key = "hint",
+                        ) { Note("Type a title. Results come from every addon with a search catalog.") }
+                    }
                 } else {
                     item(key = "recent") {
                         Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.xs)) {
@@ -360,14 +368,16 @@ fun SearchScreen(
             snapshot != null && snapshot.query == holder.query && !loading && snapshot.rows.isEmpty() -> {
                 item(key = "none") {
                     Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.s)) {
-                        Note(SearchCopy.empty(holder.query, snapshot.searchable), spoken = true)
-                        // No addon can search, or none matched: either way the way on is more addons.
-                        SecondaryButton(
-                            SearchCopy.RECOMMENDED,
-                            onAddons,
-                            Modifier.padding(start = Marquee.safe.side),
-                            icon = Icons.ChevronRight,
-                        )
+                        Note(SearchCopy.empty(holder.query, snapshot.searchable, kids), spoken = true)
+                        // No addon can search, or none matched: either way the way on is more addons (not a kid's).
+                        if (!kids) {
+                            SecondaryButton(
+                                SearchCopy.RECOMMENDED,
+                                onAddons,
+                                Modifier.padding(start = Marquee.safe.side),
+                                icon = Icons.ChevronRight,
+                            )
+                        }
                     }
                 }
             }
@@ -389,6 +399,7 @@ fun SearchScreen(
 @Composable
 internal fun SearchField(
     text: String,
+    label: String = "Search titles",
     onText: (String) -> Unit,
 ) {
     // The keyboard's Search key puts the keyboard away: the results come as the text changes.
@@ -419,8 +430,8 @@ internal fun SearchField(
             FieldInput(
                 text,
                 onText,
-                label = "Search titles",
-                placeholder = "Search titles",
+                label = label,
+                placeholder = label,
                 textStyle =
                     TextStyle(
                         color = colors.text,

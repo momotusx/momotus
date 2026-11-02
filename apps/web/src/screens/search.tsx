@@ -21,7 +21,8 @@ import { searchIds } from "../lib/ids";
 import type { HomeRow } from "../core/generated/HomeRow";
 import type { SearchSnapshot } from "../core/generated/SearchSnapshot";
 import type { Tile } from "../core/generated/Tile";
-import { onProfileReset } from "../core/profiles";
+import { onProfileReset, profiles } from "../core/profiles";
+import { kidsSession, kidsWords } from "../lib/kids";
 import { pushBack } from "../focus/back";
 import { autoFocusSoon, focusEl, mayAutoFocus } from "../focus/dom";
 import { currentPath, historyDepth } from "../history";
@@ -192,7 +193,9 @@ function Panel(props: { dialog?: boolean; retry: () => void }) {
   const scopeLabel = () => (current() ? kindLabel(current() as string) : "All");
   const count = () => rows().reduce((n, r) => n + scoped(r).length, 0);
   // Why nothing came back: no addon can search, or none matched this query.
-  const none = () => (s()?.searchable === 0 ? "None of your addons can search." : `No matches for "${text()}" in your catalogs.`);
+  // A kids profile searches its own list, never an addon (plans/m11-kids.md 6.4).
+  const kids = () => kidsSession(profiles());
+  const none = () => (kids() ? kidsWords.searchNone : s()?.searchable === 0 ? "None of your addons can search." : `No matches for "${text()}" in your catalogs.`);
   const remember = () => void view.command({ type: "remember" });
   // One status region, there from the start, so a screen reader hears each change: Searching, the count, why
   // there is none, or why the search could not open. The visible lines below are not live: this is their voice.
@@ -240,7 +243,7 @@ function Panel(props: { dialog?: boolean; retry: () => void }) {
           ref={input}
           type="search"
           value={text()}
-          placeholder="Search titles"
+          placeholder={kids() ? kidsWords.searchField : "Search titles"}
           autocomplete="off"
           spellcheck={false}
           enterkeyhint="search"
@@ -283,7 +286,7 @@ function Panel(props: { dialog?: boolean; retry: () => void }) {
             </div>
           </Match>
           <Match when={!searching()}>
-            <Show when={s()?.recent.length} fallback={<p class="palette-note">Type a title. Results come from every addon with a search catalog.</p>}>
+            <Show when={s()?.recent.length} fallback={<p class="palette-note">{kids() ? "Type a title from your list." : "Type a title. Results come from every addon with a search catalog."}</p>}>
               <section class="recent">
                 <h2 class="kicker">Recent searches</h2>
                 <div class="chips-track wrap" data-fgroup="recent">
@@ -304,10 +307,12 @@ function Panel(props: { dialog?: boolean; retry: () => void }) {
           <Match when={s() && s()?.query === text() && !loading() && rows().length === 0}>
             <div class="palette-note none-search">
               <p>{none()}</p>
-              <A class="btn" href="/recommended-addons" data-f="search:addons">
-                Recommended addons
-                <ChevronRight aria-hidden />
-              </A>
+              <Show when={!kids()}>
+                <A class="btn" href="/recommended-addons" data-f="search:addons">
+                  Recommended addons
+                  <ChevronRight aria-hidden />
+                </A>
+              </Show>
             </div>
           </Match>
           <Match when={true}>

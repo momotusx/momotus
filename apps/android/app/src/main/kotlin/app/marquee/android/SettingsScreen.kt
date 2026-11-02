@@ -405,7 +405,7 @@ fun SettingsScreen(
             // play the header trailer (plans/trailer-inline.md 4a).
             if (!tv || TrailerPreviews.headerOnTv(context)) add(SettingsPart(SettingsSection.Device) { DevicePrefs() })
             add(SettingsPart(SettingsSection.About) { About() })
-        }.filter { incognitoShows(incognito, it.section) }
+        }.filter { incognitoShows(incognito, it.section) && kidsShows(kids, it.section) }
     if (tv) {
         TvSettings(
             me,

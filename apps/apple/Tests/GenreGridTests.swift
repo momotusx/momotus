@@ -48,7 +48,7 @@ private func source(_ path: String) throws -> String {
     #expect(tile.contains("ArtImage(url: tile.art)") && tile.contains(".lineLimit(2)"))
     #expect(tile.contains(".init(color: .black.opacity(GenreGridRules.rampFloor), location: 38 / 90)"))
     // The iPhone only, not drawn when the core's grid failed; a tap takes the genre chip's path.
-    #expect(screen.contains("if !metrics.wide, genres.failure == nil {"))
+    #expect(screen.contains("if !metrics.wide, !kids, genres.failure == nil {"))
     #expect(screen.contains("links?.discover = DiscoverRequest(kind: kind, genre: genre)") && screen.contains("openTab(.discover, link: true)"))
     #expect(!parts.contains(".source"))
 }

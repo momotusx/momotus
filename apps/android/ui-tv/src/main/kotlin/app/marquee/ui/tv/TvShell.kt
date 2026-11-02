@@ -47,6 +47,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import app.marquee.core.route.Route
 import app.marquee.core.route.TOP_LEVEL
+import app.marquee.core.route.openToKids
 import app.marquee.design.BrandMark
 import app.marquee.design.Icons
 import app.marquee.design.KeyPresses
@@ -90,6 +91,8 @@ fun TvShell(
      * which has no tab of its own: then `modifier` carries the bar's entry, so Up and Back land on it.
      */
     profileButton: (@Composable (lit: Boolean, modifier: Modifier) -> Unit)? = null,
+    /** A kids session: no Discover or Calendar tab (plans/m11-kids.md 5). */
+    kids: Boolean = false,
     content: @Composable () -> Unit,
 ) {
     // A bar that left (a pushed page) holds nothing; one that comes back reports its focus again.
@@ -124,6 +127,7 @@ fun TvShell(
                 nav,
                 Modifier.zIndex(1f).fillMaxWidth().padding(top = NAV_TOP),
                 profileButton,
+                kids,
             )
         }
         Box(
@@ -220,6 +224,7 @@ private fun TvTopNav(
     nav: TvNavFocus,
     modifier: Modifier,
     profileButton: (@Composable (lit: Boolean, modifier: Modifier) -> Unit)?,
+    kids: Boolean,
 ) {
     val current = nav.current
     val pill = RoundedCornerShape(Marquee.radius.pill)
@@ -271,7 +276,7 @@ private fun TvTopNav(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             // Settings has no tab: the profile's menu at the end opens it.
-            val tabs = TOP_LEVEL - Route.Settings
+            val tabs = (TOP_LEVEL - Route.Settings).filter { !kids || it.openToKids }
             for (route in tabs.filter { it !in tools } + tabs.filter { it in tools }) {
                 NavItem(route, route == selected, current, choose, onNavFocus) { gained ->
                     if (gained) {

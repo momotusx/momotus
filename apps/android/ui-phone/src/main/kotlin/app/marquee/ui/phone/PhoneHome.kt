@@ -60,6 +60,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.currentStateAsState
+import app.marquee.core.KidsCopy
 import app.marquee.core.TileCopy
 import app.marquee.core.model.Hero
 import app.marquee.core.model.HomeRow
@@ -130,6 +131,8 @@ fun PhoneHome(
     /** Catalogs exist and every one is hidden: the empty state points to Home rows, not setup. */
     rowsHidden: Boolean = false,
     onHomeRows: () -> Unit = {},
+    /** A kids session: its empty Home asks for a grown-up, never for addons (plans/m11-kids.md 6.4). */
+    kids: Boolean = false,
     /** A one-time card (new recommended addons): under Continue Watching, or first when there is none. */
     card: (@Composable () -> Unit)? = null,
     /** "Remove from Continue Watching", from a press and hold on one of its tiles; null offers no menu. */
@@ -182,7 +185,11 @@ fun PhoneHome(
         ) {
             item(key = "hero") { PhoneHeroCarousel(home.heroes, onOpen, onPlay, trailers) { heroVisible } }
         }
-        if (home.rows.isEmpty()) item(key = "state") { HomeState(home, onSetup, onAddons, rowsHidden, onHomeRows) }
+        if (home.rows.isEmpty()) {
+            item(
+                key = "state",
+            ) { HomeState(home, onSetup, onAddons, rowsHidden, onHomeRows, kids) }
+        }
         if (hero == null && home.rows.toList().allFailed()) {
             item(key = "failed") { AllFailed(home, Modifier.padding(horizontal = Marquee.safe.side)) }
         } else {
@@ -208,6 +215,7 @@ private fun HomeState(
     onAddons: () -> Unit,
     rowsHidden: Boolean,
     onHomeRows: () -> Unit,
+    kids: Boolean,
 ) {
     val side = Marquee.safe.side
     when (val status = home.status) {
@@ -227,6 +235,10 @@ private fun HomeState(
         }
 
         ViewStatus.Open -> {
+            if (kids) {
+                StateMessage(KidsCopy.HOME_EMPTY_TITLE, KidsCopy.HOME_EMPTY, Modifier.padding(horizontal = side))
+                return
+            }
             if (rowsHidden) {
                 // Catalogs exist and every one is hidden: setup would change nothing.
                 StateMessage(

@@ -67,7 +67,9 @@ struct SettingsScreen: View {
     }
 
     private var sizes: SettingsRules.Sizes { tvForm ? .tv : metrics.wide ? .wide : .phone }
-    private var sections: [SettingsSection] { SettingsSection.shown(tv: tvForm, downloads: downloadsShown, incognito: incognito) }
+    private var sections: [SettingsSection] { SettingsSection.shown(tv: tvForm, downloads: downloadsShown, incognito: incognito, kids: kids) }
+    /// The section beside the menu, one this profile has.
+    private var beside: SettingsSection { SettingsSection.beside(chosen, in: sections) }
     /// Incognito: its header with Leave, and only what its own copy may change (plans/batch-10-incognito.md 6).
     private var incognito: Bool { profiles.snapshot?.incognito == true }
     /// Settings' Downloads (plans/offline-downloads.md 3.7): iOS and macOS, never a kids profile.
@@ -190,7 +192,7 @@ struct SettingsScreen: View {
     /// Settings, only the header's edits (the sections are its rows).
     private func shows(_ s: SettingsSection) -> Bool {
         if let only { return s == only }
-        return metrics.wide ? s == chosen : s == .profiles
+        return metrics.wide ? s == beside : s == .profiles
     }
 
     /// The phone: one row per section, each opening its page.
@@ -367,9 +369,9 @@ struct SettingsScreen: View {
                 Button { jump(s) } label: {
                     MenuEntry(section: s, sizes: sizes)
                 }
-                .buttonStyle(LitRowStyle(radius: tvForm ? Theme.Radius.l : 10, selected: chosen == s))
+                .buttonStyle(LitRowStyle(radius: tvForm ? Theme.Radius.l : 10, selected: beside == s))
                 .focused($focus, equals: .menu(s))
-                .accessibilityAddTraits(chosen == s ? .isSelected : [])
+                .accessibilityAddTraits(beside == s ? .isSelected : [])
             }
         }
     }

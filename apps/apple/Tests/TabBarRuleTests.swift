@@ -125,3 +125,15 @@ import Testing
     #expect(AppTab.settings.barFocus == nil)
     for tab in AppTab.bar { #expect(tab.barFocus == tab) }
 }
+
+/// A kids profile's bar has no Discover and no Calendar, on every form, and asking for either opens Home (plans/m11-kids.md
+/// 5, QA round 1 Q7 row 27).
+@Test func aKidsProfileHasNoDiscoverOrCalendar() {
+    #expect(!AppTab.bar(kids: true).contains(.discover))
+    #expect(!AppTab.bar(kids: true).contains(.calendar))
+    #expect(AppTab.bar(kids: false) == AppTab.bar)
+    #expect(AppTab.discover.opened(kids: true) == .home)
+    #expect(AppTab.calendar.opened(kids: true) == .home)
+    #expect(AppTab.library.opened(kids: true) == .library)
+    #expect(AppTab.discover.opened(kids: false) == .discover)
+}

@@ -40,7 +40,7 @@ private func source(_ path: String) throws -> String {
     #expect(tools.contains("Button(action: find)") && tools.contains(".buttonStyle(GlassCircleStyle())"))
     #expect(!root.contains("HeaderSearchField") && !root.contains("headerSearchField"))
     // So the page always draws its field, on the one query.
-    #expect(search.contains("SearchField(input: input, prompt: Self.prompt, focused: $fieldFocused)"))
+    #expect(search.contains("SearchField(input: input, prompt: prompt, focused: $fieldFocused)"))
     #expect(try source("Search/SearchParts.swift").contains("TextField(prompt, text: $input.text)"))
     // Cmd-F and the button pop Search to its root and put the cursor in that field.
     let find = try body(of: "private func find()", in: root)
