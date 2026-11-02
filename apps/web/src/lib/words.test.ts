@@ -360,3 +360,8 @@ test("an audio track that names no language reads Audio alone, by its place amon
   expect(audioTrackName({ lang: "en", label: "" }, 0, 3)).toBe("English");
   expect(audioTrackName({ lang: null, label: "Commentary" }, 1, 3)).toBe("Commentary");
 });
+
+test("a kids session gets no Settings to add a source: no dead end to a page it cannot open", () => {
+  expect(emptyWords({ kind: "noSource", action: "settingsAddons" }, false, true).steps).toEqual([]);
+  expect(emptyWords({ kind: "noSource", action: "settingsAddons" }, false, false).steps.map((s) => s.step)).toEqual(["settingsAddons"]);
+});

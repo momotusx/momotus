@@ -500,13 +500,17 @@ object VersionsCopy {
     /**
      * A zero-playable state's actions on the Versions page, in order (plans/play-every-version.md, "Shared Step 3
      * decisions"): Back always last. "Choose a version" is the player's and the title's action; here the rows are
-     * listed.
+     * listed. Settings only where a source can be added ([addSource]): never on a kids profile, whose sources are not
+     * its own (plans/m11-kids.md 5).
      */
-    fun emptySteps(empty: EmptyVersions): List<EmptyStep> =
+    fun emptySteps(
+        empty: EmptyVersions,
+        addSource: Boolean = true,
+    ): List<EmptyStep> =
         when (empty.action) {
             EmptyAction.PlayFromDevice -> listOf(EmptyStep.PlayFromDevice, EmptyStep.TryAgain)
             EmptyAction.TryAgain -> listOf(EmptyStep.TryAgain)
-            EmptyAction.SettingsAddons -> listOf(EmptyStep.Settings)
+            EmptyAction.SettingsAddons -> if (addSource) listOf(EmptyStep.Settings) else emptyList()
             else -> emptyList()
         } + EmptyStep.Back
 

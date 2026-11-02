@@ -12,6 +12,8 @@ extension FocusedValues {
     @Entry var startOver: StartOverAction?
     /// The page in front, when Back can leave it (`canGoBack`).
     @Entry var goBack: GoBackAction?
+    /// The window runs a kids profile: the Go menu leaves out its adult places.
+    @Entry var kidsSession: Bool?
 }
 
 extension EnvironmentValues {
@@ -50,6 +52,7 @@ struct AppCommands: Commands {
     @FocusedValue(\.playerKeys) private var player
     @FocusedValue(\.startOver) private var startOver
     @FocusedValue(\.goBack) private var goBack
+    @FocusedValue(\.kidsSession) private var kids
 
     var body: some Commands {
         CommandGroup(replacing: .newItem) {}
@@ -68,7 +71,7 @@ struct AppCommands: Commands {
                 .keyboardShortcut("[")
                 .disabled(goBack == nil)
             Divider()
-            ForEach(Array(AppTab.allCases.enumerated()), id: \.element) { index, tab in
+            ForEach(Array(AppTab.goMenu(kids: kids == true).enumerated()), id: \.element) { index, tab in
                 Button(tab.title) { places?(tab) }
                     .keyboardShortcut(KeyEquivalent(Character(String(index + 1))))
             }

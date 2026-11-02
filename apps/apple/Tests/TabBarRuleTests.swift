@@ -137,3 +137,10 @@ import Testing
     #expect(AppTab.library.opened(kids: true) == .library)
     #expect(AppTab.discover.opened(kids: false) == .discover)
 }
+
+/// The Mac's Go menu lists no Discover or Calendar on a kids profile.
+@Test func theGoMenuOfAKidsProfileHasNoDiscoverOrCalendar() {
+    #expect(!AppTab.goMenu(kids: true).contains(.discover))
+    #expect(!AppTab.goMenu(kids: true).contains(.calendar))
+    #expect(AppTab.goMenu(kids: false) == AppTab.allCases)
+}

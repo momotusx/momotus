@@ -325,8 +325,8 @@ fun PlayerScreen(
     onTitle: (() -> Unit)?,
     onNext: (NextEpisode, String?) -> Unit,
     onOffer: (String) -> Unit,
-    /** The failure card's Settings: the addons or the accounts, by the core's state. */
-    onSettings: (EmptyKind) -> Unit = {},
+    /** The failure card's Settings: the addons or the accounts, by the core's state; null leaves it out (kids). */
+    onSettings: ((EmptyKind) -> Unit)? = null,
 ) {
     val context = LocalContext.current
     val holder =

@@ -124,7 +124,7 @@ private const val SHOWN = 3
  *
  * @param heading what the screen is about ("Sintel" or "Sintel, S1:E2").
  * @param onPlay a version was chosen, by its key.
- * @param onAddSource no addon is installed: go where one is added.
+ * @param onAddSource no addon is installed: go where one is added; null (a kids profile) leaves Settings out.
  * @param onBack the empty state's Back.
  * @param onUndo Undo on the learned note.
  * @param held the page is open over the player: rows keep the order they opened in, new ones after them.
@@ -135,7 +135,7 @@ fun TvVersions(
     versions: VersionsView?,
     focus: FocusMemory,
     onPlay: (String) -> Unit,
-    onAddSource: () -> Unit,
+    onAddSource: (() -> Unit)?,
     onBack: () -> Unit,
     onUndo: suspend (LearnedNote) -> Unit,
     modifier: Modifier = Modifier,
@@ -158,7 +158,7 @@ fun TvVersions(
             EmptyStep.Settings -> {
                 // Back from Settings, the page asks again: an addon just added shows by itself.
                 versions?.askAgain = true
-                onAddSource()
+                onAddSource?.invoke()
             }
 
             EmptyStep.Back -> {
@@ -245,7 +245,18 @@ fun TvVersions(
                 Pick(snapshot, VersionsCopy.kicker(snapshot, StreamChoiceCopy.BEST_TV), failure, {
                     versions?.retry()
                 }, focus, onPlay) {
-                    if (empty != null) Empty(empty, step, focus, list.takeIf { empty.rows.isNotEmpty() })
+                    if (empty !=
+                        null
+                    ) {
+                        Empty(
+                            empty,
+                            step,
+                            focus,
+                            list.takeIf { empty.rows.isNotEmpty() },
+                            addSource =
+                                onAddSource != null,
+                        )
+                    }
                 }
                 Shortcuts(snapshot, focus, list.takeIf { !snapshot?.rows.isNullOrEmpty() }, onPlay)
             }
@@ -516,6 +527,7 @@ private fun Empty(
     onStep: (EmptyStep) -> Unit,
     focus: FocusMemory,
     list: FocusRequester?,
+    addSource: Boolean,
 ) {
     val text = StreamChoiceCopy.emptyLine(empty.kind)
     val right = Modifier.focusProperties { if (list != null) right = list }
@@ -523,7 +535,7 @@ private fun Empty(
         LiveSpoken(text, ON_ARRIVAL_MS) {
             MqText(text, role = TextRole.Headline, weight = FontWeight.SemiBold, maxLines = 4)
         }
-        for ((i, step) in VersionsCopy.emptySteps(empty).withIndex()) {
+        for ((i, step) in VersionsCopy.emptySteps(empty, addSource).withIndex()) {
             if (i == 0) {
                 PrimaryButton(
                     step.label,

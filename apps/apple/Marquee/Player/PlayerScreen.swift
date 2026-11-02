@@ -808,6 +808,7 @@ private struct StatusOverlay: View {
     /// The way on takes focus when the failure shows, so a remote is on it;
     /// after a Try again, Try again keeps it.
     @FocusState private var focus: FailureAction?
+    @Environment(ProfileSession.self) private var profiles: ProfileSession?
 
     /// The card's actions, the first the way on with focus. A view that could
     /// not open has no offer, and its Try again opens it again.
@@ -904,7 +905,7 @@ private struct StatusOverlay: View {
                  order: PlayerLayout.failureActions(empty: playback?.empty, offer: playback?.offer != nil, kept: kept != nil, canChoose: canChoose))
         case .noPick:
             let empty = PlayerLayout.noPickState(model.versions?.snapshot?.empty, failed: model.versions?.failure != nil)
-            card(PlayerLayout.noPickHeadline(empty), lines: [], order: PlayerLayout.noPickActions(empty, canChoose: canChoose))
+            card(PlayerLayout.noPickHeadline(empty), lines: [], order: PlayerLayout.noPickActions(empty, canChoose: canChoose, kids: profiles?.snapshot?.current?.kids == true))
         case .cannotOpen:
             card(PlayerLayout.cannotOpenHeadline, lines: [model.openError ?? ""],
                  order: PlayerLayout.cannotOpenActions(canChoose: canChoose), cannotOpen: true)

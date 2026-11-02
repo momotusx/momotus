@@ -300,9 +300,10 @@ private struct EmptyCard: View {
     let empty: EmptyVersions
     let act: (VersionWords.EmptyAct) -> Void
     var focus: FocusState<Bool>.Binding
+    @Environment(ProfileSession.self) private var profiles: ProfileSession?
 
     var body: some View {
-        let acts = VersionWords.emptyActs(empty)
+        let acts = VersionWords.emptyActs(empty, kids: profiles?.snapshot?.current?.kids == true)
         VStack(alignment: .leading, spacing: 12) {
             Text(VersionWords.emptyLine(empty.kind) ?? StreamChoice.words.empty["noResults"]?.text ?? "")
                 .display(Theme.type.title2)

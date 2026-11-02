@@ -117,7 +117,7 @@ private const val SHOWN = 3
  *
  * @param heading what the screen is about ("Sintel" or "Sintel, S1:E2").
  * @param onPlay a version was chosen, by its key.
- * @param onAddSource no addon is installed: go where one is added.
+ * @param onAddSource no addon is installed: go where one is added; null (a kids profile) leaves Settings out.
  * @param onBack the empty state's Back.
  * @param onUndo Undo on the learned note.
  * @param held the page is open over the player: rows keep the order they opened in, new ones after them.
@@ -129,7 +129,7 @@ fun PhoneVersions(
     heading: String,
     versions: VersionsView?,
     onPlay: (String) -> Unit,
-    onAddSource: () -> Unit,
+    onAddSource: (() -> Unit)?,
     onBack: () -> Unit,
     onUndo: suspend (LearnedNote) -> Unit,
     modifier: Modifier = Modifier,
@@ -154,7 +154,7 @@ fun PhoneVersions(
             EmptyStep.Settings -> {
                 // Back from Settings, the page asks again: an addon just added shows by itself.
                 versions?.askAgain = true
-                onAddSource()
+                onAddSource?.invoke()
             }
 
             EmptyStep.Back -> {
@@ -264,7 +264,7 @@ fun PhoneVersions(
                     Modifier.padding(vertical = Marquee.space.s),
                     action,
                 ) {
-                    if (empty != null) Empty(empty, step)
+                    if (empty != null) Empty(empty, step, addSource = onAddSource != null)
                 }
             }
             // The shortcuts under the card, each one tap to play; keyed apart from the section rows they may repeat.
@@ -484,11 +484,12 @@ private fun Pick(
 private fun Empty(
     empty: EmptyVersions,
     onStep: (EmptyStep) -> Unit,
+    addSource: Boolean,
 ) {
     val text = StreamChoiceCopy.emptyLine(empty.kind)
     Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.s)) {
         LiveSpoken(text, ON_ARRIVAL_MS) { MqText(text, role = TextRole.Headline, weight = FontWeight.SemiBold) }
-        for ((i, step) in VersionsCopy.emptySteps(empty).withIndex()) {
+        for ((i, step) in VersionsCopy.emptySteps(empty, addSource).withIndex()) {
             val icon =
                 when (step) {
                     EmptyStep.PlayFromDevice -> PlayFilled

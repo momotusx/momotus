@@ -9,13 +9,15 @@ import RefreshCw from "lucide-solid/icons/refresh-cw";
 import Settings from "lucide-solid/icons/settings";
 import { For, type JSX, Match, Switch } from "solid-js";
 import type { EmptyVersions } from "../core/generated/EmptyVersions";
+import { profiles } from "../core/profiles";
+import { kidsSession } from "../lib/kids";
 import { emptyWords } from "../lib/words";
 
 export function EmptyActs(props: { empty: EmptyVersions; at: string; big?: boolean; onVersions?: boolean; retry: () => void; play: (key: string) => void; choose?: JSX.Element }) {
   const cls = (i: number) => ({ btn: true, big: !!props.big, primary: i === 0 });
   const first = (i: number) => (i === 0 ? "" : undefined);
   return (
-    <For each={emptyWords(props.empty, props.onVersions).steps}>
+    <For each={emptyWords(props.empty, props.onVersions, kidsSession(profiles())).steps}>
       {(s, i) => (
         <Switch>
           <Match when={s.step === "settingsAddons"}>

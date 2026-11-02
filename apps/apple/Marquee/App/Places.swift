@@ -33,6 +33,9 @@ enum AppTab: String, CaseIterable, Hashable {
     /// A kids profile's bar (plans/m11-kids.md 5): no Discover and no Calendar, whose catalogs are the owner's addons'.
     static func bar(kids: Bool) -> [AppTab] { bar.filter { !kids || !$0.adultOnly } }
 
+    /// The Mac's Go menu, numbered in order: every place, less Discover and Calendar on a kids profile.
+    static func goMenu(kids: Bool) -> [AppTab] { allCases.filter { !kids || !$0.adultOnly } }
+
     /// A place a kids profile never opens; the core refuses its views (`kids`).
     var adultOnly: Bool { self == .discover || self == .calendar }
 

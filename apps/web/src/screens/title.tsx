@@ -41,7 +41,8 @@ import { firstFocus } from "./title-focus";
 import "./home.css";
 import "./title.css";
 import { setTitle } from "../incognito";
-import { incognito } from "../core/profiles";
+import { incognito, profiles } from "../core/profiles";
+import { kidsSession } from "../lib/kids";
 import { RouteA } from "../components/route-link";
 
 export default function Title() {
@@ -399,9 +400,11 @@ function TitlePage(props: { kind: string; id: string; retry: () => void }) {
                   <RefreshCw aria-hidden />
                   Try again
                 </button>
-                <A class="btn" href="/addons" data-f="title:addons">
-                  Check addons
-                </A>
+                <Show when={!kidsSession(profiles())}>
+                  <A class="btn" href="/addons" data-f="title:addons">
+                    Check addons
+                  </A>
+                </Show>
               </div>
             </div>
           </section>

@@ -330,9 +330,10 @@ enum PlayerLayout {
 
     /// Play opened the player while versions were found and the core's view ended empty: the shared
     /// table's actions for its state, Back last (Choose a version for the rows that may still start).
-    static func noPickActions(_ empty: EmptyVersions?, canChoose: Bool) -> [FailureAction] {
+    /// A kids profile gets no Settings: its sources are not its own (plans/m11-kids.md 5).
+    static func noPickActions(_ empty: EmptyVersions?, canChoose: Bool, kids: Bool = false) -> [FailureAction] {
         let first: [FailureAction] = switch empty?.kind {
-        case "noSource": [.settingsAddons]
+        case "noSource": kids ? [] : [.settingsAddons]
         case "unreachable": (empty?.key == nil ? [] : [.playFromDevice]) + [.retry]
         case "nothingPlaysHere": canChoose ? [.versions] : []
         default: []

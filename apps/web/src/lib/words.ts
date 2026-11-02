@@ -779,13 +779,14 @@ export function emptyEntry(kind: EmptyKind): { text: string; action?: string; ro
 /** Why nothing can play, and its actions in order (plans/play-every-version.md, the shared Step 3
  * table): Play from this device with a kept source and Try again when no source answered, else the
  * kind's one action. Back follows every list. Choose a version is the player's and the title's,
- * never Versions' own (`onVersions`). */
-export function emptyWords(e: Pick<EmptyVersions, "kind" | "action">, onVersions = false) {
+ * never Versions' own (`onVersions`). A kids session never gets Settings: its sources are not its own
+ * (plans/m11-kids.md 5). */
+export function emptyWords(e: Pick<EmptyVersions, "kind" | "action">, onVersions = false, kids = false) {
   const w = emptyEntry(e.kind);
   const steps: { step: Exclude<EmptyAction, "none">; text: string }[] = [];
   if (e.action === "playFromDevice") steps.push({ step: "playFromDevice", text: choice.empty.unreachable.playFromDevice });
   if (e.kind === "unreachable") steps.push({ step: "tryAgain", text: choice.empty.unreachable.action });
-  else if (e.action !== "none" && e.action !== "playFromDevice" && w.action && !(onVersions && e.action === "chooseVersion")) steps.push({ step: e.action, text: w.action });
+  else if (e.action !== "none" && e.action !== "playFromDevice" && w.action && !(onVersions && e.action === "chooseVersion") && !(kids && e.action === "settingsAddons")) steps.push({ step: e.action, text: w.action });
   return { text: w.text, steps };
 }
 

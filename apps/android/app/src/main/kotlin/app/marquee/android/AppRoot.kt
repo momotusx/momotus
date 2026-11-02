@@ -886,7 +886,8 @@ private fun AppNav(
                                 backStack.clear()
                                 backStack.addAll(next)
                             },
-                            onAddSource = { backStack.add(Route.Sources) },
+                            // A kids profile adds no source: no Settings to a page it cannot open.
+                            onAddSource = if (kids) null else ({ backStack.add(Route.Sources) }),
                             onBack = ::pop,
                             onUndo = { session.ops.undoLearned(it.screenClass, it.choice) },
                             // Over the paused player its attempt keeps resolving: the rows hold their order.
@@ -936,7 +937,7 @@ private fun AppNav(
                                 // Another version mid-play goes on from where it was, never from the start again.
                                 onOffer = { key -> replacePlayer(route, route.copy(key = key, startOver = false)) },
                                 // Where an addon is added (noSource). Accounts are set up in Settings only.
-                                onSettings = { backStack.add(Route.Sources) },
+                                onSettings = if (kids) null else ({ backStack.add(Route.Sources) }),
                             )
                         }
                     }

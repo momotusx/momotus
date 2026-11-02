@@ -289,7 +289,7 @@ fun VersionsScreen(
     app: AppState,
     form: Form,
     onPlay: (String) -> Unit,
-    onAddSource: () -> Unit,
+    onAddSource: (() -> Unit)?,
     onBack: () -> Unit,
     onUndo: suspend (LearnedNote) -> Unit,
     /** Open over the paused player: rows keep the order they opened in. */

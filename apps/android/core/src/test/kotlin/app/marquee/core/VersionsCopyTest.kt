@@ -241,6 +241,13 @@ class VersionsCopyTest {
     }
 
     @Test
+    fun `a kids profile gets no Settings to add a source, only Back`() {
+        val noSource = EmptyVersions(EmptyKind.NoSource, EmptyAction.SettingsAddons, 0)
+        assertEquals(listOf(EmptyStep.Back), VersionsCopy.emptySteps(noSource, addSource = false))
+        assertEquals(listOf(EmptyStep.Settings, EmptyStep.Back), VersionsCopy.emptySteps(noSource))
+    }
+
+    @Test
     fun `each zero-playable state offers its actions in the shared order, Back last`() {
         val steps = { action: EmptyAction -> VersionsCopy.emptySteps(EmptyVersions(EmptyKind.Unknown, action, 0)) }
         assertEquals(

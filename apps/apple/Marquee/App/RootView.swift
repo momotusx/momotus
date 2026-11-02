@@ -351,6 +351,7 @@ struct MainShell: View {
             // The Go menu and its keys, off while the player covers the places.
             .focusedSceneValue(\.places, immersion.active ? nil : OpenTabAction { tab, _ in select(tab) })
             .focusedSceneValue(\.find, immersion.active ? nil : OpenTabAction { _, _ in find() })
+            .focusedSceneValue(\.kidsSession, profiles.snapshot?.current?.kids == true)
         #else
         places.safeAreaInset(edge: .top, spacing: 0) {
             // Top-level places only, as on Android: a pushed page has no pill to wander into.

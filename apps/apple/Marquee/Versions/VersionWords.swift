@@ -126,10 +126,11 @@ enum VersionWords {
     }
 
     /// nothingPlaysHere offers Back only: its rows are listed dimmed, each startable, and Choose a
-    /// version belongs to the title and the player.
-    static func emptyActs(_ empty: EmptyVersions) -> [EmptyAct] {
+    /// version belongs to the title and the player. A kids profile gets no Settings: its sources are
+    /// not its own (plans/m11-kids.md 5).
+    static func emptyActs(_ empty: EmptyVersions, kids: Bool = false) -> [EmptyAct] {
         let first: [EmptyAct] = switch empty.kind {
-        case "noSource": [.settingsAddons]
+        case "noSource": kids ? [] : [.settingsAddons]
         case "unreachable": (empty.key.map { [.playFromDevice(key: $0)] } ?? []) + [.tryAgain]
         default: []
         }

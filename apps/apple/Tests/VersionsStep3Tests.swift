@@ -678,3 +678,11 @@ private func kinds(_ kinds: [(String, Int)], service: String? = nil, selected: S
     #expect(try body(of: "private var table", in: page).contains("kindRow"))
     #expect(chipRow.contains(".accessibilityLabel(StreamChoice.words.kind.label)") && chipRow.contains("guard chip.kind != on"))
 }
+
+/// A kids profile gets no Settings to add a source, on Versions or in the player: its sources are
+/// not its own, and that page is not open to it (plans/m11-kids.md 5).
+@Test func aKidsProfileGetsNoSettingsToAddASource() {
+    #expect(VersionWords.emptyActs(empty("noSource"), kids: true) == [.back])
+    #expect(PlayerLayout.noPickActions(empty("noSource"), canChoose: true, kids: true) == [.back])
+    #expect(VersionWords.emptyActs(empty("noSource"), kids: false) == [.settingsAddons, .back])
+}
