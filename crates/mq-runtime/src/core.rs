@@ -1175,6 +1175,13 @@ impl Core {
                         );
                         last_error = "Details came back for another title".to_owned();
                     }
+                    // A meta with no name is no details: the title page would show a nameless
+                    // page, and Versions and the player could not ask for it (QA r1 Q5 rows
+                    // 36, 37). The next addon may know it.
+                    Ok(ResourceResponse::Meta { meta }) if meta.preview.name.trim().is_empty() => {
+                        tracing::debug!("{name} sent details with no name for {}", self.logged(id));
+                        last_error = NO_DETAILS.to_owned();
+                    }
                     Ok(ResourceResponse::Meta { mut meta }) => {
                         if kids {
                             meta.videos.retain(|v| Policy::belongs(id, &v.id));

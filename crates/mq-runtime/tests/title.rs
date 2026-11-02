@@ -444,6 +444,12 @@ async fn a_title_that_cannot_load_says_why() {
         reason(&[meta_addon(r#"{"metas":[]}"#).await]).await,
         "Details for this title are not available right now"
     );
+    // A meta with no name is no details (QA r1 Q5 rows 36, 37).
+    assert_eq!(
+        reason(&[meta_addon(r#"{"meta":{"id":"tt0944947","type":"series","name":" "}}"#).await])
+            .await,
+        "Details for this title are not available right now"
+    );
     // `{}` is an empty answer only for a catalog: a meta has no empty form.
     assert_eq!(
         reason(&[meta_addon("{}").await]).await,
