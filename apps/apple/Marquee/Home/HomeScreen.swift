@@ -35,16 +35,14 @@ struct HomeScreen: View {
     var body: some View {
         ScrollView(.vertical) {
             LazyVStack(alignment: .leading, spacing: metrics.rowSpacing) {
-                // A deletion, the account gone, a new device: first, above the hero (the owner, 2026-11-02). Nothing
-                // when there is none, so the hero keeps its place.
-                AccountCard(top: true) { showAccount = true }
-                    .padding(.horizontal, metrics.gutter)
-                    // Clear of the Mac's toolbar and the TV's tabs, as the setup line is; the phone's list starts under its bar.
-                    .padding(.top, metrics.wide ? Theme.Space.xxl : 0)
-                // Without catalogs, or with none answering, there is no art to show.
+                // Without catalogs, or with none answering, there is no art to show: the alert is the list's first.
+                if model.needsSetup || model.allFailed { alert }
                 if !model.needsSetup && !model.allFailed {
                     // The profile is the bar's (plans/nav-profile.md): the tab bar's last tab, the Mac's toolbar.
                     hero
+                        // Over the top of the hero's art, so one that lands after Home opened moves nothing (QA r2,
+                        // Q2 row 33); on the phone it lies over the large title.
+                        .overlay(alignment: .topLeading) { alert }
                         #if !os(tvOS)
                         // The trailer's sound switch at the hero's bottom trailing corner, level with the dots, on
                         // every screen that plays trailers (the owner, 2026-10-26; plans/appletv-polish.md 18). From
@@ -184,6 +182,15 @@ struct HomeScreen: View {
         // Back alone would be a dead end: nothing opens, as the title's inert Play.
         case .inert: break
         }
+    }
+
+    /// A deletion, the account gone, a new device: first on Home, above the hero (the owner, 2026-11-02). Nothing when
+    /// there is none, so nothing is kept for one.
+    private var alert: some View {
+        AccountCard(top: true) { showAccount = true }
+            .padding(.horizontal, metrics.gutter)
+            // Clear of the Mac's toolbar and the TV's tabs, as the setup line is; the phone's hero starts under its bar.
+            .padding(.top, metrics.wide ? Theme.Space.xxl : Theme.Space.xs)
     }
 
     /// The carousel on the phone and the Mac; tvOS keeps its single hero, so its start focus and Menu-back stay

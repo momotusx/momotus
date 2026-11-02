@@ -149,3 +149,14 @@ private func source(_ path: String) throws -> String {
     #expect(dots.contains(".accessibilityElement(children: .ignore)"))
     #expect(dots.contains(".accessibilityAdjustableAction"))
 }
+
+/// QA r2, Q2 row 33: an urgent account alert that lands after Home opened moved the hero down. It lies over the hero's
+/// top instead, and is the list's first item only where there is no hero to lie over.
+@Test func theUrgentAlertLiesOverTheHeroAndTakesNoRoom() throws {
+    let home = try source("Home/HomeScreen.swift")
+    let stack = try body(of: "var body: some View", in: home)
+    #expect(stack.contains("hero\n                        // Over the top of the hero's art"))
+    #expect(stack.contains(".overlay(alignment: .topLeading) { alert }"))
+    #expect(stack.contains("if model.needsSetup || model.allFailed { alert }"))
+    #expect(!stack.contains("AccountCard(top: true)"))
+}
