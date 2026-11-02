@@ -65,6 +65,7 @@ import { accountWords, connectGoogle, connectText, connectTitle } from "../lib/a
 import { KIDS_HIDDEN_SECTIONS, kidsSession } from "../lib/kids";
 import { type SectionId, sectionId } from "../lib/settings-sections";
 import { incognitoWords, useLeave } from "../components/incognito";
+import pkg from "../../package.json";
 
 const clockTime = (ms: number) => new Date(ms).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 
@@ -803,7 +804,12 @@ export default function SettingsScreen() {
                 About
               </h2>
               <div class="sgroup notes">
-                <p class="note">The name is drawn from Unbounded, SIL Open Font License 1.1.</p>
+                {/* What the row promises (QA r1, Q7 row 69): the version, the app's licence and those of what ships in it. */}
+                <p class="note">{`Momotus ${pkg.version}`}</p>
+                <p class="note">Momotus is free software under the GNU GPL, version 3 or later.</p>
+                <p class="note">
+                  {`Icons: Lucide ${pkg.dependencies["lucide-solid"]}, ISC licence. Fonts: Inter and IBM Plex Mono, SIL Open Font License 1.1; the name is drawn from Unbounded, same licence. Solid, Solid Router and uqr, MIT licence.`}
+                </p>
                 <p class="note credit">
                   <img class="credit-mark" src={markSrc("tmdb")} alt="" />
                   {tmdbCredit}
