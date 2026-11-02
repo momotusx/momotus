@@ -158,6 +158,9 @@ test("the terms page keeps the strict policy, and the privacy and deletion pages
   expect(html).toContain("as is");
   expect(html).toContain('href="/delete"');
   expect(html).toContain("hey@normalisdead.mom");
+  // The sign-ins the privacy page lists (QA round 2 Q2): email is one.
+  expect(read("privacy/index.html")).toContain("For a sign-in with your email address");
+  expect(html).toContain("You sign in with Google, Facebook or your email address");
   expect(read("privacy/index.html")).toContain('href="/terms"');
   expect(read("delete/index.html")).toContain('href="/terms"');
 });
