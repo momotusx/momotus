@@ -164,3 +164,17 @@ test("tv: the remote goes down from each repository's switches through its provi
   await p.screenshot({ path: `${SHOTS}/plugins-tv.png` });
   await context.close();
 });
+
+test("Settings > Recommended addons: the plugin repository's switch turns at once, both ways (QA r2 Q6 row 18)", async ({ browser }) => {
+  const p = await page(browser);
+  await p.goto("/recommended-addons?form=desktop");
+  // The default repository, given in the first test: on.
+  const row = p.getByRole("switch", { name: /Test plugins/ });
+  await expect(row).toHaveAttribute("aria-checked", "true");
+  // A repository changes no addon, so the screen used to wait for an addon change to read the list again.
+  await row.click();
+  await expect(row).toHaveAttribute("aria-checked", "false", { timeout: 3_000 });
+  await row.click();
+  await expect(row).toHaveAttribute("aria-checked", "true", { timeout: 3_000 });
+  await p.context().close();
+});

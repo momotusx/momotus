@@ -66,7 +66,7 @@ function useDefaults() {
     );
   // The store keeps its objects across pushes, so the list is watched by value.
   createEffect(on(() => addons.state.data?.addons.map((a) => `${a.url} ${a.enabled}`).join("|"), () => void load()));
-  return { addons, defaults, error };
+  return { addons, defaults, error, reload: load };
 }
 
 /** Leaving the welcome steps: the step never stays under the next one, and
@@ -738,11 +738,12 @@ function SetupCheck(props: {
 /** Settings: the same switches, applied at once. A switch turned on adds a
  * missing default; one the profile has turns on or off where it is. */
 export function RecommendedAddons() {
-  const { defaults, error } = useDefaults();
+  const { defaults, error, reload } = useDefaults();
   const [problem, setProblem] = createSignal<string | null>(null);
+  // Read again once applied: a plugin repository changes no addon, so the addon list never says so (QA r2, Q6 row 18).
   const flip = (a: DefaultAddonInfo) => {
     setProblem(null);
-    op("installDefaults", { choices: [{ key: a.key, on: a.installed !== "on" }] }).catch((e) => setProblem(`Could not change ${a.name}: ${reasonOf(e)}`));
+    op("installDefaults", { choices: [{ key: a.key, on: a.installed !== "on" }] }).then(reload, (e) => setProblem(`Could not change ${a.name}: ${reasonOf(e)}`));
   };
   return (
     <main class="browse page settings-page column" data-vscroll>
