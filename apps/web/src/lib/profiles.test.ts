@@ -48,6 +48,7 @@ test("the wait reads as minutes and seconds and never shows zero while waiting",
 
 test("the core's profile codes read as words, and an unknown one keeps its own message", () => {
   expect(profileProblem("pinUnreadable", "x")).toBe("This PIN was set by a newer version. Remove it, then set a new one.");
+  expect(profileProblem("kidsNeedPin", "x")).toBe("Kids profiles need this PIN. Remove them first, then remove the PIN.");
   expect(profileProblem("weakPin", "x")).toBe("Pick a less obvious PIN: no repeats, runs or 1234.");
   expect(profileProblem("somethingNew", "the core's text")).toBe("the core's text");
 });

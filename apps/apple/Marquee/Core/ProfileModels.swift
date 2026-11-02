@@ -141,6 +141,8 @@ enum ProfileRules {
         case "notOwner": "Only the main profile can do that."
         case "viewsOpen": "Something is still open. Try again."
         case "unknownProfile": "That profile was removed on another device."
+        // The owner's PIN guards the kids profiles: it stays while one exists.
+        case "kidsNeedPin": "Kids profiles need this PIN. Remove them first, then remove the PIN."
         case "pinUnreadable": "This PIN was set by a newer version. Remove it, then set a new one."
         // A full disk at the entry reads as a quiet failure: no space words on any screen (plans/no-space-warnings.md).
         case "noSpace", "incognitoFailed": Incognito.couldNotOpen

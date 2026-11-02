@@ -52,6 +52,9 @@ export function profileProblem(code: string | undefined, fallback: string): stri
       return "Something is still open. Try again.";
     case "unknownProfile":
       return "That profile was removed on another device.";
+    // The owner's PIN guards the kids profiles: it stays while one exists.
+    case "kidsNeedPin":
+      return "Kids profiles need this PIN. Remove them first, then remove the PIN.";
     case "pinUnreadable":
       return "This PIN was set by a newer version. Remove it, then set a new one.";
     // A full disk reads as any other failure to open (plans/no-space-warnings.md).

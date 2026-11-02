@@ -102,6 +102,7 @@ private let main = profile("main", owner: true)
     #expect(ProfileRules.problem("noSpace", fallback: "x") == "Couldn't open Incognito. Try again.")
     #expect(ProfileRules.problem("incognitoFailed", fallback: "x") == "Couldn't open Incognito. Try again.")
     #expect(ProfileRules.problem("incognito", fallback: "x") == "Not available in Incognito.")
+    #expect(ProfileRules.problem("kidsNeedPin", fallback: "x") == "Kids profiles need this PIN. Remove them first, then remove the PIN.")
     #expect(KeypadResult.of(code: "noSpace", retryAfterMs: nil, message: "disk full") == .problem(Incognito.couldNotOpen))
 }
 

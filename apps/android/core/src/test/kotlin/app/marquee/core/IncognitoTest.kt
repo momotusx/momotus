@@ -124,6 +124,10 @@ class IncognitoTest {
         assertEquals("Couldn't open Incognito. Try again.", ProfileCopy.problem("noSpace", "x"))
         assertEquals("Couldn't open Incognito. Try again.", ProfileCopy.problem("incognitoFailed", "x"))
         assertEquals("Not available in Incognito.", ProfileCopy.problem("incognito", "x"))
+        assertEquals(
+            "Kids profiles need this PIN. Remove them first, then remove the PIN.",
+            ProfileCopy.problem("kidsNeedPin", "x"),
+        )
     }
 
     private val executor = Executors.newSingleThreadExecutor { Thread(it, "test-state") }

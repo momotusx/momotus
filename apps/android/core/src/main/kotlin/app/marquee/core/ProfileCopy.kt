@@ -93,6 +93,7 @@ object ProfileCopy {
             "notOwner" -> "Only the main profile can do that."
             "viewsOpen" -> "Something is still open. Try again."
             "unknownProfile" -> "That profile was removed on another device."
+            "kidsNeedPin" -> "Kids profiles need this PIN. Remove them first, then remove the PIN."
             "pinUnreadable" -> "This PIN was set by a newer version. Remove it, then set a new one."
             "noSpace", "incognitoFailed" -> "Couldn't open Incognito. Try again."
             "incognito" -> "Not available in Incognito."
