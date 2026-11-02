@@ -91,9 +91,19 @@ impl CoreError {
     /// words in apps/shared/error-words.json stand for it.
     pub fn failure_kind(&self) -> &'static str {
         match self {
+            // A JSON answer at an addon link that is not a manifest (QA r1
+            // Q6 row 13).
+            CoreError::Addon(AddonError::Http(mq_http::HttpError::Decode(_))) => "notAddon",
             CoreError::Http(e) | CoreError::Addon(AddonError::Http(e)) => e.failure_kind(),
             CoreError::Addon(AddonError::TimedOut) => "timeout",
-            CoreError::Addon(AddonError::InvalidTransportUrl(_)) => "invalidUrl",
+            CoreError::Addon(AddonError::InvalidTransportUrl(why))
+                if *why == mq_addons::NOT_A_WEB_ADDRESS =>
+            {
+                "invalidUrl"
+            }
+            // A web address, most often the addon's home page, that is not
+            // its manifest link (QA r1 Q6 row 12).
+            CoreError::Addon(AddonError::InvalidTransportUrl(_)) => "notAddonLink",
             CoreError::Addon(AddonError::LegacyTransport) | CoreError::BadManifest(_) => {
                 "unreadable"
             }
@@ -1213,7 +1223,7 @@ impl Core {
 
     /// Fetches the manifest and appends the addon to the profile's list, on.
     /// A link already installed gets the new manifest in place instead, its
-    /// position and whether it is on kept (Stremio's `UpgradeAddon`).
+    /// position kept and turned on (Stremio's `UpgradeAddon`).
     pub async fn install_addon(&self, transport_url: &str) -> Result<InstalledAddon, CoreError> {
         let addon = self.addons().fetch_manifest(transport_url).await?;
         let manifest_json = serde_json::to_string(&addon.manifest)
@@ -1221,6 +1231,11 @@ impl Core {
         let url = addon.transport_url.to_string();
         self.edit_addons(|rows| {
             put_addon(rows, &url, manifest_json);
+            // Installed by the user: a copy already there that was off is on
+            // again, so "Installed" is true (QA r1 Q6 row 44).
+            if let Ok(at) = position(rows, &url) {
+                rows[at].enabled = true;
+            }
             Ok(())
         })?;
         Ok(addon)
@@ -2148,8 +2163,18 @@ mod tests {
                 "blockedAddress",
             ),
             (
-                CoreError::Addon(AddonError::InvalidTransportUrl("no host")),
+                CoreError::Addon(AddonError::InvalidTransportUrl(
+                    mq_addons::NOT_A_WEB_ADDRESS,
+                )),
                 "invalidUrl",
+            ),
+            (
+                CoreError::Addon(AddonError::InvalidTransportUrl("no host")),
+                "notAddonLink",
+            ),
+            (
+                CoreError::Addon(AddonError::Http(HttpError::Decode("eof".into()))),
+                "notAddon",
             ),
             (
                 CoreError::Plugins("Kids profiles never run plugins.".into()),

@@ -18,6 +18,10 @@ pub enum AddonError {
     TimedOut,
 }
 
+/// The reason a link that does not parse as a URL is refused; every other
+/// `InvalidTransportUrl` is a web address that is not an addon link.
+pub const NOT_A_WEB_ADDRESS: &str = "it is not a web address";
+
 /// Accepts `stremio://` and `http(s)://` manifest URLs and returns the https
 /// form ending in `/manifest.json`, without a fragment (one link, one addon:
 /// a fragment never reaches the server).
@@ -28,7 +32,7 @@ pub fn normalize_transport_url(raw: &str) -> Result<Url, AddonError> {
         None => raw.to_owned(),
     };
     let mut url =
-        Url::parse(&raw).map_err(|_| AddonError::InvalidTransportUrl("it is not a web address"))?;
+        Url::parse(&raw).map_err(|_| AddonError::InvalidTransportUrl(NOT_A_WEB_ADDRESS))?;
     url.set_fragment(None);
     if !matches!(url.scheme(), "http" | "https") {
         return Err(AddonError::InvalidTransportUrl(

@@ -21,6 +21,8 @@ object ErrorCopy {
     const val UNREADABLE = "It sent something Momotus cannot read."
     const val BLOCKED_ADDRESS = "It points to a private network address, which Momotus does not open."
     const val INVALID_URL = "That is not a web address."
+    const val NOT_ADDON_LINK = "That is not an addon link. An addon link ends with /manifest.json."
+    const val NOT_ADDON = "It answered, but not with an addon."
     const val CORE_STOPPED = "Momotus stopped unexpectedly. Open it again to carry on."
     const val CORE_NOT_STARTED = "Momotus could not start. Open it again to try once more."
 
@@ -39,6 +41,8 @@ object ErrorCopy {
             "unreadable" to UNREADABLE,
             "blockedAddress" to BLOCKED_ADDRESS,
             "invalidUrl" to INVALID_URL,
+            "notAddonLink" to NOT_ADDON_LINK,
+            "notAddon" to NOT_ADDON,
             "coreStopped" to CORE_STOPPED,
             "coreNotStarted" to CORE_NOT_STARTED,
         )

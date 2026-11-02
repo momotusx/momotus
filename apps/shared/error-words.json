@@ -12,6 +12,8 @@
   "unreadable": "It sent something Momotus cannot read.",
   "blockedAddress": "It points to a private network address, which Momotus does not open.",
   "invalidUrl": "That is not a web address.",
+  "notAddonLink": "That is not an addon link. An addon link ends with /manifest.json.",
+  "notAddon": "It answered, but not with an addon.",
   "coreStopped": "Momotus stopped unexpectedly. Open it again to carry on.",
   "coreNotStarted": "Momotus could not start. Open it again to try once more."
 }

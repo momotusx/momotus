@@ -97,14 +97,15 @@ async fn installing_an_installed_link_replaces_its_manifest_in_place() {
     core.install_addon(&url_a).await.unwrap();
     core.install_addon(&url_b).await.unwrap();
     core.set_addon_enabled(&url_a, false).unwrap();
-    // The addon now serves series too; installing its link again takes them.
+    // The addon now serves series too; installing its link again takes them,
+    // in place, and turns it on: the user asked for it (QA r1 Q6 row 44).
     a.serve("a", &["movie", "series"]);
     let again = core.install_addon(&url_a).await.unwrap();
     assert_eq!(again.manifest.types, ["movie", "series"]);
     assert_eq!(core.library().addons("p").unwrap().len(), 2);
     assert_eq!(
         row(&core, &url_a),
-        (0, false, vec!["movie".into(), "series".into()])
+        (0, true, vec!["movie".into(), "series".into()])
     );
     assert_eq!(row(&core, &url_b), (1, true, vec!["movie".into()]));
 }

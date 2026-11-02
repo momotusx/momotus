@@ -243,7 +243,8 @@ async fn failures_carry_a_kind() {
         ("429", "rateLimited"),
         ("503", "serverError"),
         ("418", "httpError"),
-        ("200", "unreadable"),
+        // An answer that is not a manifest is not an addon (QA r1 Q6 row 13).
+        ("200", "notAddon"),
     ];
     for (n, (status, kind)) in cases.into_iter().enumerate() {
         let url = format!("{base}/{status}/manifest.json");
@@ -256,6 +257,20 @@ async fn failures_carry_a_kind() {
         .await;
         assert_eq!(reply["ok"], false, "{reply}");
         assert_eq!(reply["kind"], kind, "{status}: {reply}");
+    }
+    // A web address that is not a manifest link, most often the addon's home page
+    // (QA r1 Q6 row 12); a link that is no web address at all keeps its words.
+    for (id, url, kind) in [
+        (10, format!("{base}/"), "notAddonLink"),
+        (11, "not a link".to_owned(), "invalidUrl"),
+    ] {
+        let reply = ask(
+            &mut session,
+            &mut rx,
+            json!({"id": id, "op": "installAddon", "url": url}),
+        )
+        .await;
+        assert_eq!(reply["kind"], kind, "{url}: {reply}");
     }
     let reply = ask(
         &mut session,

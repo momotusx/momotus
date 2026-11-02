@@ -7,7 +7,8 @@ import Testing
 @Test func theFailureWordsAreTheSharedFile() {
     let kinds: Set = [
         "failed", "network", "timeout", "notFound", "unauthorized", "forbidden", "rateLimited", "serverError",
-        "httpError", "unreadable", "blockedAddress", "invalidUrl", "coreStopped", "coreNotStarted",
+        "httpError", "unreadable", "blockedAddress", "invalidUrl", "notAddonLink", "notAddon", "coreStopped",
+        "coreNotStarted",
     ]
     #expect(Set(ErrorWords.table.keys) == kinds)
     for (kind, words) in ErrorWords.table {

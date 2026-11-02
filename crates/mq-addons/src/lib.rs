@@ -9,7 +9,9 @@ mod transport;
 pub use cache::{CacheControl, CacheStore, ResponseCache, StoredResponse};
 pub use fanout::{AddonEvent, Deadlines, Fanout};
 pub use health::{AddonHealth, HealthBook};
-pub use transport::{AddonError, configure_url, normalize_transport_url, resource_url};
+pub use transport::{
+    AddonError, NOT_A_WEB_ADDRESS, configure_url, normalize_transport_url, resource_url,
+};
 
 use bytes::Bytes;
 use mq_http::{HttpClient, Priority, RequestOptions};
