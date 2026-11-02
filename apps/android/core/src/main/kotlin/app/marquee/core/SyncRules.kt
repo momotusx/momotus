@@ -182,6 +182,15 @@ object SyncRules {
     fun plainAddress(url: String) =
         runCatching { URI(url.trim()).let { it.host != null && it.rawUserInfo == null } }.getOrDefault(false)
 
+    /**
+     * How long a new device's first pairing code may take before its screen says the sync service is out of reach
+     * (QA round 1, Q1 row 42). The core keeps asking every 5 s meanwhile.
+     */
+    const val PAIRING_LATE_MS = 15_000L
+
+    /** The pairing screen's line while its first code starts: never the relay's host; once [late], the plain failure. */
+    fun pairingStarting(late: Boolean) = if (late) AccountCopy.UNREACHABLE else "Getting a code ready"
+
     /** The server's host name only: never a path, a query or a user name. */
     fun hostOf(url: String) = runCatching { URI(url).host }.getOrNull() ?: "the sync server"
 }

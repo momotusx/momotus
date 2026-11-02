@@ -176,6 +176,11 @@ class AccountRulesTest {
     ) = ProfileInfo("p", "Robin", "a", 0, false, owner, false, kids)
 
     @Test
+    fun `Stop syncing starts with the library kept, as its words say`() {
+        assertFalse(AccountRules.REMOVE_LIBRARY_FIRST)
+    }
+
+    @Test
     fun `the rows by profile and form, D13 to D17`() {
         val owner = AccountRules.rows(profile(), tv = false, locked = false)
         assertTrue(owner.links && owner.delete && owner.makeKit && owner.savePasskey && owner.approve)

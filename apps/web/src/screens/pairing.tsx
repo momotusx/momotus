@@ -2,6 +2,7 @@ import Check from "lucide-solid/icons/check";
 import Copy from "lucide-solid/icons/copy";
 import LoaderCircle from "lucide-solid/icons/loader-circle";
 import QrCode from "lucide-solid/icons/qr-code";
+import RefreshCw from "lucide-solid/icons/refresh-cw";
 import Settings2 from "lucide-solid/icons/settings-2";
 import { createEffect, createResource, createSignal, Match, on, onCleanup, Show, Switch } from "solid-js";
 import { Qr } from "../components/qr";
@@ -12,8 +13,8 @@ import type { PairingSnapshot as Pairing } from "../core/generated/PairingSnapsh
 import { form } from "../form";
 import { signInServer } from "../core/sign-in";
 import * as sync from "../core/sync";
-import { accountWords as aw, fill } from "../lib/account";
-import { pairingProblem, plainAddress, serverHost, syncWords } from "../lib/words";
+import { accountWords as aw, fill, PAIRING_LATE_MS, pairingStarting } from "../lib/account";
+import { pairingProblem, plainAddress, syncWords } from "../lib/words";
 import "./browse.css";
 import "./settings.css";
 
@@ -42,20 +43,47 @@ export function Session(props: { server: string; name: string; onJoined: (by: st
     if (sync.joinPaired(JSON.parse(JSON.stringify(s.record)), claim, s.by)) props.onJoined(s.by);
     else setRefused(true);
   });
+  // No code yet past PAIRING_LATE_MS (a relay out of reach): one plain line and Try again, which waits once more
+  // while the core keeps asking.
+  const [late, setLate] = createSignal(false);
+  let lateTimer: ReturnType<typeof setTimeout> | undefined;
+  const waitForCode = () => {
+    setLate(false);
+    clearTimeout(lateTimer);
+    lateTimer = setTimeout(() => setLate(true), PAIRING_LATE_MS);
+  };
+  waitForCode();
+  onCleanup(() => clearTimeout(lateTimer));
+  const starting = () => pairingStarting(late());
   // The step that asks something takes focus: on a TV the remote is never left on a button that went.
   createEffect(
     on(
-      () => p()?.phase ?? view?.state.status.state,
+      () => [p()?.phase ?? view?.state.status.state, late()],
       () => autoFocusSoon(() => document.querySelector<HTMLElement>("main :is(.summary, .problem) [data-autofocus]")),
     ),
   );
   return (
     <Switch
       fallback={
-        <p class="st warn live big-state">
-          <LoaderCircle aria-hidden class="spin" />
-          Contacting {serverHost(props.server)}
-        </p>
+        <Show
+          when={starting().retry}
+          fallback={
+            <p class="st warn live big-state">
+              <LoaderCircle aria-hidden class="spin" />
+              {starting().text}
+            </p>
+          }
+        >
+          {(retry) => (
+            <section class="problem" role="status">
+              <p>{starting().text}</p>
+              <button class="btn" data-f="pair:retry" data-autofocus onClick={waitForCode}>
+                <RefreshCw aria-hidden />
+                {retry()}
+              </button>
+            </section>
+          )}
+        </Show>
       }
     >
       <Match when={refused()}>

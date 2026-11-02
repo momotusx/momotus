@@ -261,6 +261,14 @@ private func announcement(_ kind: String, member: String? = "m", by: String? = "
     #expect(!AccountRules.removesLibrary(asked: false, tv: false))
 }
 
+/// Stop syncing says the library stays: its removal starts off off a TV (QA round 1, Q2 row 28).
+@Test func stopSyncingKeepsTheLibraryUnlessAsked() throws {
+    #expect(!AccountRules.removesLibrary(asked: AccountRules.removesLibraryAtFirst, tv: false))
+    #expect(AccountRules.removesLibrary(asked: AccountRules.removesLibraryAtFirst, tv: true))
+    let screen = try String(contentsOf: URL(fileURLWithPath: #filePath).deletingLastPathComponent().appending(path: "../Marquee/Sync/SyncScreen.swift"), encoding: .utf8)
+    #expect(screen.contains("@State private var removeLibrary = AccountRules.removesLibraryAtFirst"))
+}
+
 @Test func theCoresAccountAnswersDecode() throws {
     let base = #"{"pushed":0,"stale":0,"refused":0,"waiting":0,"pulled":0,"applied":0,"unreadable":0,"newer":0,"parked":0,"oldEpochWrites":0,"clockGapMs":0,"rotationWaitMs":0,"blocked":null,"fingerprint":"F","record":null,"again":false"#
     let extras = #","deletion":{"dueMs":5,"provider":"google"},"announcements":[{"id":"7.m","kind":"passkey","member":"m","kit":true,"passkey":true,"by":"b","name":"Passkey, saved on X","count":null}]"#

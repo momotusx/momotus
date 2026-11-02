@@ -448,8 +448,8 @@ private struct LeaveSync: View {
     @Environment(SyncModel.self) private var sync
     @Environment(AccountWipe.self) private var wipe
     @Environment(ProfileSession.self) private var profiles
-    /// D13: the library goes too; on by default, always on a TV.
-    @State private var removeLibrary = true
+    /// D13: the library goes too when asked; off at first, always on a TV.
+    @State private var removeLibrary = AccountRules.removesLibraryAtFirst
     /// And each debrid connection, ticked by default.
     @State private var disconnectDebrid = true
     @State private var unsent = false

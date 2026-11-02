@@ -107,6 +107,7 @@ import app.marquee.design.marqueeFocus
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -885,9 +886,10 @@ private fun Leave(
     var busy by remember { mutableStateOf(false) }
     val leaveFocus = remember { FocusRequester() }
 
-    // D13: the owner is asked to remove the profiles and library too, ticked; a TV always removes, so only its
-    // owner signs out there. The debrid accounts go with them, ticked.
-    var removeLibrary by remember { mutableStateOf(true) }
+    // D13: the owner is asked to remove the profiles and library too, not ticked, since the line above says the
+    // library stays (QA round 1, Q2 row 28); a TV always removes, so only its owner signs out there. Once it is
+    // ticked, the debrid accounts go with them, ticked.
+    var removeLibrary by remember { mutableStateOf(AccountRules.REMOVE_LIBRARY_FIRST) }
     var debrid by remember { mutableStateOf(true) }
     val removing = choice.always || (choice.ask && removeLibrary)
 
@@ -2164,7 +2166,7 @@ fun PairingScreen(
         holder.view?.let { view ->
             item(key = "session") {
                 Column(Modifier.padding(horizontal = Marquee.safe.side)) {
-                    Session(view, sync, server, onDone = onDone)
+                    Session(view, sync, onDone = onDone)
                 }
             }
         }
@@ -2211,7 +2213,6 @@ fun PairingScreen(
 internal fun Session(
     view: PairingView,
     sync: SyncController,
-    server: String,
     onDone: () -> Unit,
     how: String = AccountCopy.TV_SCAN_HOW,
 ) {
@@ -2221,8 +2222,32 @@ internal fun Session(
         return
     }
     when (val p = view.current()) {
+        // Never the relay's host (QA round 1, Q1 row 42). The core asks for a code again every 5 s; one that has not
+        // come after PAIRING_LATE_MS ends in one plain line with Try again, which waits that long again.
         null, PairingSnapshot.Starting -> {
-            StatusWord("Contacting ${SyncRules.hostOf(server)}", Status.Warn)
+            var attempt by remember { mutableIntStateOf(0) }
+            var late by remember { mutableStateOf(false) }
+            LaunchedEffect(attempt) {
+                late = false
+                delay(SyncRules.PAIRING_LATE_MS)
+                late = true
+            }
+            if (late) {
+                val again = remember { FocusRequester() }
+                Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.s)) {
+                    Said(SyncRules.pairingStarting(late = true), Status.Bad)
+                    SecondaryButton(
+                        AccountCopy.UNREACHABLE_ACTIONS[0],
+                        { attempt++ },
+                        icon = Icons.RefreshCw,
+                        focusRequester = again,
+                    )
+                }
+                // The remote is never left on a line that went.
+                if (tv) LaunchedEffect(Unit) { runCatching { again.requestFocus() } }
+            } else {
+                StatusWord(SyncRules.pairingStarting(late = false), Status.Warn)
+            }
         }
 
         is PairingSnapshot.Waiting -> {

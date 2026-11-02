@@ -965,7 +965,7 @@ test.describe.serial("sync across three devices", () => {
     // The browser aborts the delete of the sealed copy after 1.5 s.
     await hold(desk, "delete", 1500);
     const left = desk.getByText("This device no longer syncs. Your library stays here.");
-    await desk.locator('[data-f="sync:remove-library"]').click();
+    await expect(desk.locator('[data-f="sync:remove-library"]')).toHaveAttribute("aria-checked", "false");
     await desk.locator('[data-f="sync:leave"]').click();
     await expect(desk.locator('[data-f="sync:start"]')).toBeVisible();
     // Nothing says it left before the delete was tried.

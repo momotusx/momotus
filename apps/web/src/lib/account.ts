@@ -143,8 +143,12 @@ export const revokeFailure = (code: string, anyway: string, cancel: string): Fai
       };
 
 /** Sign out on a profile and form (D13). The removal is the owner's: a TV's Sign out always
- * removes, so it shows on the owner profile only; elsewhere the owner is asked, ticked by
- * default, and any other profile signs out plainly. */
+ * removes, so it shows on the owner profile only; elsewhere the owner is asked, unticked at
+ * first (`REMOVE_LIBRARY_FIRST`), and any other profile signs out plainly. */
+/** Whether "Remove your profiles and library from this device?" starts ticked: never, since the page above it says
+ * the library stays (QA round 1, Q2 row 28). */
+export const REMOVE_LIBRARY_FIRST = false;
+
 export function leaveChoice(profile: Profile | null, tv: boolean): { show: boolean; ask: boolean; always: boolean } {
   const owner = !!profile?.isOwner;
   return tv ? { show: owner, ask: false, always: owner } : { show: true, ask: owner, always: false };
@@ -257,3 +261,11 @@ export function homeCard(s: CardState): Card | null {
  * tablet, the only devices that sign others in. The web saves no passkey (D11). */
 export const needsSecondWayIn = (members: readonly MemberInfo[] | null) =>
   !!members && !members.some((m) => m.kit || (!m.thisDevice && (m.form === "phone" || m.form === "tablet")));
+
+/** How long a pairing code may take to start before the screen says the sync service is out of reach: the core asks
+ * again every 5 s by itself, so Try again only waits this long once more. */
+export const PAIRING_LATE_MS = 15_000;
+
+/** A pairing code on its way: a plain line, never the relay's host; once late, the unreachable line and Try again. */
+export const pairingStarting = (late: boolean): { text: string; retry: string | null } =>
+  late ? { text: w.unreachable, retry: w.unreachableActions[0] ?? null } : { text: "Getting a code ready", retry: null };

@@ -18,6 +18,9 @@ import {
   homeCard,
   leaveChoice,
   needsSecondWayIn,
+  PAIRING_LATE_MS,
+  pairingStarting,
+  REMOVE_LIBRARY_FIRST,
   providerAccount,
   providerName,
   providerOrder,
@@ -289,4 +292,15 @@ test("Settings offers Connect Google only when the relay has Google and the read
   expect(connectGoogle(["google"], undefined)).toBe(false);
   expect(connectTitle("google")).toBe("Connect Google");
   expect(connectText("google")).toBe("Sign in with your Google account too.");
+});
+
+test("Stop syncing starts with the library kept, as its words say (QA r1 Q2 row 28)", () => {
+  expect(REMOVE_LIBRARY_FIRST).toBe(false);
+});
+
+test("a pairing code on its way never names the relay, and a late one ends in one plain line with Try again", () => {
+  expect(pairingStarting(false)).toEqual({ text: "Getting a code ready", retry: null });
+  expect(pairingStarting(true)).toEqual({ text: shared.unreachable, retry: "Try again" });
+  expect(pairingStarting(false).text).not.toMatch(/\.[a-z]{2,}|Contacting/);
+  expect(PAIRING_LATE_MS).toBeLessThanOrEqual(15_000);
 });

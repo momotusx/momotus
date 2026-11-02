@@ -270,8 +270,11 @@ enum AccountRules {
 
     // MARK: Sign out (D13)
 
-    /// "Remove your profiles and library from this device?": on by default,
-    /// always on for a TV, and offered on the owner profile only.
+    /// "Remove your profiles and library from this device?" starts off: Stop syncing says "Your library stays here",
+    /// so one press never empties the device (QA round 1, Q2 row 28). Always on for a TV, and offered on the owner
+    /// profile only.
+    static let removesLibraryAtFirst = false
+
     static func removesLibrary(asked: Bool, tv: Bool) -> Bool {
         tv || asked
     }

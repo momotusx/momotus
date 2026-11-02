@@ -186,4 +186,11 @@ class SyncRulesTest {
         assertEquals(listOf("k1", "k3"), SyncRules.forkKits(p, drop = listOf("tv", "tablet")))
         assertEquals(emptyList(), SyncRules.forkKits(p, drop = emptyList()))
     }
+
+    @Test
+    fun `a pairing code that does not start never names the relay and ends in one plain line`() {
+        assertEquals("Getting a code ready", SyncRules.pairingStarting(late = false))
+        assertEquals("Momotus can't reach its sync service right now.", SyncRules.pairingStarting(late = true))
+        assertEquals(15_000L, SyncRules.PAIRING_LATE_MS)
+    }
 }

@@ -143,7 +143,7 @@ private fun SignInPairing(
             onJoined()
         }
     }
-    Session(view, sync, server, onDone = onJoined, how = AccountCopy.PHONE_SCAN_HOW)
+    Session(view, sync, onDone = onJoined, how = AccountCopy.PHONE_SCAN_HOW)
 }
 
 /**
@@ -453,7 +453,7 @@ fun TvSignInScreen(
         holder.view?.let { view ->
             item(key = "session") {
                 Column(Modifier.padding(horizontal = Marquee.safe.side).widthIn(max = 1100.dp)) {
-                    Session(view, sync, server, onDone = onIn)
+                    Session(view, sync, onDone = onIn)
                 }
             }
         }

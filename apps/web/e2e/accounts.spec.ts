@@ -594,12 +594,12 @@ test.describe.serial("accounts on the web", () => {
 
   test("Phone signs out and removes its profiles and library: leave, then Trakt and debrid, then the wipe", async () => {
     await go(phone, "/sync");
-    // D13: asked on the owner profile, both ticked by default.
-    await expect(phone.locator('[data-f="sync:remove-library"]')).toHaveAttribute("aria-checked", "true");
-    await expect(phone.locator('[data-f="sync:remove-debrid"]')).toHaveAttribute("aria-checked", "true");
-    await phone.locator('[data-f="sync:remove-library"]').click();
+    // D13: asked on the owner profile, unticked at first as the page says the library stays; ticked, the debrid
+    // accounts go too, ticked.
+    await expect(phone.locator('[data-f="sync:remove-library"]')).toHaveAttribute("aria-checked", "false");
     await expect(phone.locator('[data-f="sync:remove-debrid"]')).toHaveCount(0);
     await phone.locator('[data-f="sync:remove-library"]').click();
+    await expect(phone.locator('[data-f="sync:remove-debrid"]')).toHaveAttribute("aria-checked", "true");
     await shot(phone, "accounts-sign-out-phone");
     const from = asked.length;
     await phone.locator('[data-f="sync:leave"]').click();
@@ -808,7 +808,7 @@ test.describe.serial("accounts on the web", () => {
 
     // Mail signs out and keeps its library, then signs in by email again: `found`.
     await go(mail, "/sync");
-    await mail.locator('[data-f="sync:remove-library"]').click();
+    await expect(mail.locator('[data-f="sync:remove-library"]')).toHaveAttribute("aria-checked", "false");
     await mail.locator('[data-f="sync:leave"]').click();
     const signIn = mail.locator('[data-f="sync:sign-in"]');
     await expect(signIn.or(mail.locator('[data-f="sync:leave-again"]'))).toBeVisible();

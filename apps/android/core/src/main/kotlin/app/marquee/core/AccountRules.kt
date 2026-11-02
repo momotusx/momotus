@@ -244,6 +244,12 @@ object AccountRules {
         val always: Boolean,
     )
 
+    /**
+     * Whether "Remove your profiles and library from this device?" starts ticked where it is asked: no, since the page
+     * says the library stays (QA round 1, Q2 row 28). A TV removes always ([LeaveChoice.always]).
+     */
+    const val REMOVE_LIBRARY_FIRST = false
+
     fun leaveChoice(
         profile: ProfileInfo?,
         tv: Boolean,

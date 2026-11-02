@@ -30,7 +30,7 @@ import { privateLink } from "../core/client";
 import type { IdentityLink } from "../core/generated/IdentityLink";
 import { relayProviders, signInServer } from "../core/sign-in";
 import { pendingWipe, removeHere, wipeState } from "../core/wipe";
-import { type Act, accountWords as aw, activeProfile, needsSecondWayIn, continueWith, continueWithEmail, EMAIL, type Failure, fill, leaveChoice, providerName, providerOrder, revokeFailure, signInFailure } from "../lib/account";
+import { type Act, accountWords as aw, activeProfile, needsSecondWayIn, continueWith, continueWithEmail, EMAIL, type Failure, fill, leaveChoice, providerName, providerOrder, REMOVE_LIBRARY_FIRST, revokeFailure, signInFailure } from "../lib/account";
 import type { MemberInfo } from "../core/generated/MemberInfo";
 import { profiles } from "../core/profiles";
 import * as sync from "../core/sync";
@@ -926,10 +926,10 @@ function Leave() {
   const [error, setError] = createSignal<string | null>(null);
   const [busy, setBusy] = createSignal(false);
   const [refused, setRefused] = createSignal(false);
-  // D13: the owner is asked to remove the profiles and library too, ticked by default (a TV
+  // D13: the owner is asked to remove the profiles and library too, unticked as the page says the library stays (a TV
   // always removes, so only its owner signs out there); the debrid accounts go with them, ticked.
   const choice = () => leaveChoice(activeProfile(profiles()), tv());
-  const [removeLibrary, setRemoveLibrary] = createSignal(true);
+  const [removeLibrary, setRemoveLibrary] = createSignal(REMOVE_LIBRARY_FIRST);
   const [debrid, setDebrid] = createSignal(true);
   const removing = () => choice().always || (choice().ask && removeLibrary());
   const leave = async (force: boolean) => {
