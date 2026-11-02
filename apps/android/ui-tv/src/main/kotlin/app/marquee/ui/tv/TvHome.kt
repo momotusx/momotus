@@ -180,6 +180,12 @@ fun TvHome(
     onHomeRows: () -> Unit = {},
     /** A kids session: its empty Home asks for a grown-up, never for addons (plans/m11-kids.md 6.4). */
     kids: Boolean = false,
+    /**
+     * An urgent account alert (a deletion, the account gone, a new device): first, above the hero (the owner,
+     * 2026-11-02). One that comes while Home shows lands above what the viewer sees: the list keeps the hero and
+     * the focus where they are, and Up reaches it.
+     */
+    alert: (@Composable () -> Unit)? = null,
     /** A one-time card (new recommended addons): under Continue Watching, or first when there is none. */
     card: (@Composable () -> Unit)? = null,
     /**
@@ -224,7 +230,7 @@ fun TvHome(
         }
     }
     // Read in a derived state: a row move recomposes nothing here (review r1, M3).
-    val atTop by remember(state.page) { derivedStateOf { state.page.firstVisibleItemIndex == 0 } }
+    val atTop by remember(state.page) { derivedStateOf { state.page.firstVisibleItemIndex <= state.heroItem } }
     // A key pressed holds the pages for 5 s after it, so nothing slides while the viewer moves; focus resting on a
     // hero button does not hold them (the owner, 2026-10-26).
     var keyAt by remember { mutableLongStateOf(0L) }
@@ -333,6 +339,8 @@ fun TvHome(
     // that move to this alone, so two scrolls never take turns; it runs again when the hero arrives
     // (the list keeps the first lane in place, so a hero that arrives later starts out of view).
     val hasHero = home.hero != null
+    // Read by the art and the scrolls below, which find the hero one item lower under an alert.
+    state.alertShown = alert != null
     LaunchedEffect(state, hasHero) {
         // Nobody has scrolled yet: a hero that arrives now belongs in view.
         if (hasHero && state.page.firstVisibleItemIndex <= 1 && state.page.firstVisibleItemScrollOffset == 0) {
@@ -340,7 +348,7 @@ fun TvHome(
         }
         // The one scroll of this move: the page's anchor holds while focus is on the first row.
         snapshotFlow { state.focus.onFirstRow.value }.collectLatest { onFirst ->
-            if (onFirst) state.page.animateScrollToItem(0)
+            if (onFirst) state.page.animateScrollToItem(state.heroItem)
         }
     }
 
@@ -354,10 +362,14 @@ fun TvHome(
         },
     ) {
         heroFrom?.let { gone ->
-            key(gone.tile.id) { TopShelfArt(gone.tile, state.page) { heroPageAt(false, heroDir, heroSlide.value) } }
+            key(gone.tile.id) {
+                TopShelfArt(gone.tile, state.page, { state.heroItem }) { heroPageAt(false, heroDir, heroSlide.value) }
+            }
         }
         heroes.getOrNull(heroPage)?.let { shown ->
-            key(shown.tile.id) { TopShelfArt(shown.tile, state.page) { heroPageAt(true, heroDir, heroSlide.value) } }
+            key(shown.tile.id) {
+                TopShelfArt(shown.tile, state.page, { state.heroItem }) { heroPageAt(true, heroDir, heroSlide.value) }
+            }
         }
         // A focused card's art is what the page brings into view; its lines under it must show too, so the
         // page moves whenever they would be cut (a card under the top shelf).
@@ -374,6 +386,7 @@ fun TvHome(
                 contentPadding = PaddingValues(top = tvContentTop(), bottom = safe.bottom),
                 verticalArrangement = Arrangement.spacedBy(Marquee.space.s),
             ) {
+                if (alert != null) item(key = "alert") { alert() }
                 val hero = heroes.getOrNull(heroPage)
                 if (hero != null) {
                     item(key = "hero") {
@@ -521,6 +534,8 @@ private fun AllFailed(
 private fun TopShelfArt(
     tile: Tile,
     page: LazyListState,
+    /** The hero's page item (under an alert, the second), read while drawing. */
+    lead: () -> Int,
     /** Where the page sits in a slide, in page widths (heroPageAt), read while drawing. */
     at: () -> Float = { 0f },
 ) {
@@ -540,8 +555,8 @@ private fun TopShelfArt(
                 // hero item, behind the first row, so it follows the hero's real place, and once the hero has left the
                 // list's layout, the first row's; it goes only when both have.
                 val items = page.layoutInfo.visibleItemsInfo
-                val top = items.firstOrNull { it.index == 0 }
-                val next = items.firstOrNull { it.index == 1 }
+                val top = items.firstOrNull { it.index == lead() }
+                val next = items.firstOrNull { it.index == lead() + 1 }
                 translationY =
                     when {
                         top != null -> top.offset.toFloat()
@@ -1112,13 +1127,15 @@ private val PLAY_WIDEST = listOf("Resume S12:E10", "Play S12:E10", "Play again")
 /** Where Home's one-time card goes: under Continue Watching, else first. */
 internal fun cardSplit(rows: List<HomeRow>): Int = rows.indexOfFirst { it.rowId == TileCopy.CONTINUE_ROW } + 1
 
-/** The page item of lane [rowIndex]: after the hero, and one lower under the card. */
+/** The page item of lane [rowIndex]: after the alert and the hero, and one lower under the card. */
 internal fun pageIndex(
     rows: List<HomeRow>,
     rowIndex: Int,
     hasHero: Boolean,
     card: Boolean,
-): Int = rowIndex + (if (hasHero) 1 else 0) + (if (card && rowIndex >= cardSplit(rows)) 1 else 0)
+    alert: Boolean = false,
+): Int =
+    rowIndex + (if (alert) 1 else 0) + (if (hasHero) 1 else 0) + (if (card && rowIndex >= cardSplit(rows)) 1 else 0)
 
 /** Scrolls the page and the key's lane until the key's node is composed. False when the key is not in the data (yet). */
 private suspend fun reveal(
@@ -1134,12 +1151,12 @@ private suspend fun reveal(
     for ((rowIndex, row) in rows.withIndex()) {
         val tileIndex = row.tileKeys().indexOf(key)
         if (tileIndex < 0) continue
-        val itemIndex = pageIndex(rows, rowIndex, hasHero, state.cardShown)
+        val itemIndex = pageIndex(rows, rowIndex, hasHero, state.cardShown, state.alertShown)
         if (state.page.layoutInfo.visibleItemsInfo
                 .none { it.index == itemIndex }
         ) {
             // The first lane shows with the hero above it, so its page position is the top.
-            state.page.scrollToItem(if (rowIndex == 0) 0 else itemIndex)
+            state.page.scrollToItem(if (rowIndex == 0) state.heroItem else itemIndex)
         }
         val lane = state.rowState(row.rowId)
         if (lane.layoutInfo.visibleItemsInfo.none { it.index == tileIndex }) lane.scrollToItem(tileIndex)

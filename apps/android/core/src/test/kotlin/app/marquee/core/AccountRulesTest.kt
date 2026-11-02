@@ -289,6 +289,14 @@ class AccountRulesTest {
     }
 
     @Test
+    fun `a deletion, the account gone and a notice come first on Home, the nudge after the first row`() {
+        assertTrue(AccountRules.urgent(card(ScheduledDeletion(5))!!))
+        assertTrue(AccountRules.urgent(card(gone = true)!!))
+        assertTrue(AccountRules.urgent(card(notes = listOf(note(Announced.Device)))!!))
+        assertFalse(AccountRules.urgent(card(alone = true)!!))
+    }
+
+    @Test
     fun `a second way in is a recovery kit, a passkey that opened, or another phone or tablet`() {
         val me = MemberInfo("me", kit = false, addedMs = 1, thisDevice = true, form = "phone")
         assertTrue(AccountRules.needsSecondWayIn(listOf(me)))

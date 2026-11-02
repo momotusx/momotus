@@ -29,4 +29,20 @@ class PageIndexTest {
             withContinue.indices.map { pageIndex(withContinue, it, hasHero = false, card = false) },
         )
     }
+
+    @Test
+    fun `an alert above the hero puts the hero and every lane one item lower`() {
+        // alert, hero, Continue Watching, card, popular, new
+        assertEquals(
+            listOf(2, 4, 5),
+            withContinue.indices.map { pageIndex(withContinue, it, hasHero = true, card = true, alert = true) },
+        )
+        // alert, popular, new: no hero
+        assertEquals(
+            listOf(1, 2),
+            noContinue.indices.map {
+                pageIndex(noContinue, it, hasHero = false, card = false, alert = true)
+            },
+        )
+    }
 }

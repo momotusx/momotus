@@ -133,6 +133,11 @@ fun PhoneHome(
     onHomeRows: () -> Unit = {},
     /** A kids session: its empty Home asks for a grown-up, never for addons (plans/m11-kids.md 6.4). */
     kids: Boolean = false,
+    /**
+     * An urgent account alert (a deletion, the account gone, a new device): first, above the hero, under the status
+     * bar (the owner, 2026-11-02).
+     */
+    alert: (@Composable () -> Unit)? = null,
     /** A one-time card (new recommended addons): under Continue Watching, or first when there is none. */
     card: (@Composable () -> Unit)? = null,
     /** "Remove from Continue Watching", from a press and hold on one of its tiles; null offers no menu. */
@@ -166,8 +171,12 @@ fun PhoneHome(
     }
     // The list keeps the first lane where it is when a hero arrives above it; someone who has not
     // scrolled yet should see the hero.
-    LaunchedEffect(hasHero) {
-        if (hasHero && listState.firstVisibleItemIndex <= 1 && listState.firstVisibleItemScrollOffset == 0) {
+    // An alert that lands above the hero is seen the same way, by someone who has not scrolled yet.
+    val hasAlert = alert != null
+    LaunchedEffect(hasHero, hasAlert) {
+        if ((hasHero || hasAlert) && listState.firstVisibleItemIndex <= 1 &&
+            listState.firstVisibleItemScrollOffset == 0
+        ) {
             listState.scrollToItem(0)
         }
     }
@@ -179,6 +188,21 @@ fun PhoneHome(
         contentPadding = PaddingValues(top = top, bottom = Marquee.space.l + LocalBarSpace.current),
         verticalArrangement = Arrangement.spacedBy(Marquee.space.m),
     ) {
+        if (alert != null) {
+            item(key = "alert") {
+                // The page runs up under the status bar for its hero; the alert over it starts below the bar.
+                val under =
+                    if (hasHero) {
+                        Modifier
+                            .windowInsetsPadding(
+                                WindowInsets.statusBars,
+                            ).padding(top = Marquee.space.s)
+                    } else {
+                        Modifier
+                    }
+                Box(under) { alert() }
+            }
+        }
         val hero = home.hero
         if (hero !=
             null

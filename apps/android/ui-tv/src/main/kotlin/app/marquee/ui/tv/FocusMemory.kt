@@ -172,6 +172,12 @@ class TvHomeState(
     /** Home shows a card between its lanes (the recommended addons card): the lanes under it sit one item lower. */
     var cardShown = false
 
+    /** Home shows an urgent account alert above the hero: the hero and every lane sit one item lower. */
+    var alertShown by mutableStateOf(false)
+
+    /** The hero's page item: first, or under the alert. */
+    val heroItem: Int get() = if (alertShown) 1 else 0
+
     /** The hero page shown, by its title: start focus and Back aim at its buttons (review r1, H1). */
     var heroId by mutableStateOf<String?>(null)
 }

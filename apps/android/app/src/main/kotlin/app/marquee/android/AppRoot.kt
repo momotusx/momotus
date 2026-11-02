@@ -599,6 +599,23 @@ private fun AppNav(
                                 sync.joinedBy = null
                             }
                         }
+                        // A deletion, the account gone, a new device: first on Home, above the hero (the owner,
+                        // 2026-11-02); "Signed in from" and the second way in stay after the first row.
+                        val alertCard = shownCard?.takeIf { signedInFrom == null && AccountRules.urgent(it) }
+                        val alert: (@Composable () -> Unit)? =
+                            alertCard?.let { shown ->
+                                {
+                                    AccountCard(
+                                        marquee.accounts,
+                                        sync,
+                                        shown,
+                                        onSignIn = {
+                                            backStack.add(if (tv) Route.TvSignIn else Route.SignIn(firstRun = false))
+                                        },
+                                        onMakeKit = { backStack.add(Route.RecoveryKit) },
+                                    )
+                                }
+                            }
                         val accountCard: (@Composable () -> Unit)? =
                             signedInFrom?.let { by ->
                                 {
@@ -607,7 +624,7 @@ private fun AppNav(
                                         Status.Ok,
                                     )
                                 }
-                            } ?: shownCard?.let { shown ->
+                            } ?: shownCard?.takeIf { alertCard == null }?.let { shown ->
                                 {
                                     AccountCard(
                                         marquee.accounts,
@@ -660,6 +677,7 @@ private fun AppNav(
                                 rowsHidden = rowsHidden,
                                 onHomeRows = onHomeRows,
                                 kids = kids,
+                                alert = alert,
                                 card = card,
                                 removal = app.removal,
                             )
@@ -673,6 +691,7 @@ private fun AppNav(
                                 rowsHidden = rowsHidden,
                                 onHomeRows = onHomeRows,
                                 kids = kids,
+                                alert = alert,
                                 card = card,
                                 onRemove = { app.removal.remove(it, accessibility::actionWindow) },
                                 removing = app.removal.removing?.id,

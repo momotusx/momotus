@@ -443,6 +443,12 @@ object AccountRules {
         val date: (Long) -> String,
     )
 
+    /**
+     * The cards that cannot wait for a scroll (the owner, 2026-11-02): a deletion on its way, the account gone, a
+     * device or key added. They come first on Home, above the hero; the second way in stays after the first row.
+     */
+    fun urgent(card: Card): Boolean = card is Card.Deletion || card is Card.Gone || card is Card.Notice
+
     fun homeCard(s: CardState): Card? {
         // A kids profile reaches no account page: it shows no account card at all.
         val profile = s.profile ?: return null
