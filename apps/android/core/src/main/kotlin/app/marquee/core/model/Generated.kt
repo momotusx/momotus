@@ -1760,6 +1760,8 @@ data class SearchSnapshot(
     val recent: List<String> = emptyList(),
     /** The installed search catalogs a query goes to ("Top results" not counted). With none, empty `rows` mean no installed addon can search, not that nothing matched (web journey review P3-10). Always 0 for a kids profile, whose search reads its own list. */
     val searchable: Int = 0,
+    /** The empty state's shelf of titles to start from: the first Home catalog that answers, titled as Home titles it, or a kids profile's list. Null while it loads, offline, with a query typed and when there is nothing to show. */
+    val start: HomeRow? = null,
 )
 
 @Serializable(with = SectionQuality.Serializer::class)

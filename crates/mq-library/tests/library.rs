@@ -254,6 +254,18 @@ fn search_history_newest_first_and_capped() {
 }
 
 #[test]
+fn clearing_searches_forgets_one_profiles_only() {
+    let lib = Library::temporary().unwrap();
+    lib.ensure_profile("p", "p", "0").unwrap();
+    lib.ensure_profile("q", "q", "0").unwrap();
+    lib.record_search("p", "dune", 1).unwrap();
+    lib.record_search("q", "cars", 1).unwrap();
+    lib.clear_searches("p").unwrap();
+    assert!(lib.recent_searches("p", 10).unwrap().is_empty());
+    assert_eq!(lib.recent_searches("q", 10).unwrap(), ["cars"]);
+}
+
+#[test]
 fn library_lists_added_titles_with_their_newest_progress() {
     let lib = Library::temporary().unwrap();
     lib.ensure_profile("p", "p", "0").unwrap();

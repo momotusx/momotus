@@ -800,3 +800,75 @@ async fn with_only_unknown_types_the_other_group_carries_loading_and_failure() {
     let rows: Vec<&str> = s.rows.iter().map(|r| r.row_id.as_str()).collect();
     assert_eq!(rows, ["movies:movie:top"]);
 }
+
+/// A Home catalog (no required extra) answering with `ids`, named "Popular"
+/// by an addon called "secret-addon".
+async fn home_addon(ids: &'static [&'static str]) -> AddonRow {
+    let metas: Vec<_> = ids
+        .iter()
+        .map(|id| serde_json::json!({"id": id, "type": "movie", "name": id}))
+        .collect();
+    let (mut row, _) = answering_search_addon(
+        "secret-addon",
+        serde_json::json!({ "metas": metas }).to_string(),
+        Duration::ZERO,
+    )
+    .await;
+    row.manifest_json = serde_json::json!({
+        "id": "secret-addon", "version": "1.0.0", "name": "secret-addon", "types": ["movie"],
+        "resources": ["catalog"],
+        "catalogs": [{"type": "movie", "id": "pop", "name": "Popular"}]
+    })
+    .to_string();
+    row
+}
+
+/// An empty Search gives the user titles to start from (owner, 2026-11-02):
+/// the first Home catalog, titled as Home titles it with no addon's name. A
+/// typed query takes it away, clearing the field brings it back at once, and
+/// an addon that cannot be reached leaves no shelf and no error row.
+#[tokio::test]
+async fn an_empty_search_offers_the_first_home_catalog() {
+    let core = Core::temporary("p").unwrap();
+    let view = SearchView::open(&core);
+    assert!(view.snapshot().start.is_none(), "no addon, no shelf");
+    let addon = home_addon(&["tt1", "tt2"]).await;
+    core.library()
+        .set_addons(core.profile(), &[addon], &core.hlc())
+        .unwrap();
+    until(&view, |s| s.start.is_some()).await;
+    let start = view.snapshot().start.unwrap();
+    assert_eq!(start.title, "Popular Movies");
+    assert!(!start.title.contains("secret"));
+    let ids: Vec<_> = start.tiles.iter().map(|t| t.id.as_str()).collect();
+    assert_eq!(ids, ["tt1", "tt2"]);
+    view.set_query("sintel");
+    until(&view, |s| s.query == "sintel").await;
+    assert!(view.snapshot().start.is_none(), "results show alone");
+    view.set_query("");
+    assert!(view.snapshot().start.is_some(), "back at once");
+
+    view.set_query("dune");
+    until(&view, |s| s.query == "dune").await;
+    view.remember(None).unwrap();
+    view.set_query("");
+    assert_eq!(view.snapshot().recent, ["dune"]);
+    view.clear_recent().unwrap();
+    assert!(view.snapshot().recent.is_empty(), "cleared on screen");
+    assert!(
+        SearchView::open(&core).snapshot().recent.is_empty(),
+        "and for good"
+    );
+
+    let offline = Core::temporary("p").unwrap();
+    let mut gone = home_addon(&["tt1"]).await;
+    gone.transport_url = "http://127.0.0.1:9/manifest.json".into();
+    offline
+        .library()
+        .set_addons(offline.profile(), &[gone], &offline.hlc())
+        .unwrap();
+    let view = SearchView::open(&offline);
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    let s = view.snapshot();
+    assert!(s.start.is_none() && s.rows.is_empty(), "{s:?}");
+}

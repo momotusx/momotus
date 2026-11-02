@@ -1412,6 +1412,17 @@ impl Library {
         })
     }
 
+    /// Forgets the profile's recent searches.
+    pub fn clear_searches(&self, profile: &str) -> Result<(), LibraryError> {
+        self.write(|c| {
+            c.execute(
+                "DELETE FROM search_history WHERE profile_id = ?1",
+                params![profile],
+            )
+            .map(drop)
+        })
+    }
+
     pub fn recent_searches(
         &self,
         profile: &str,

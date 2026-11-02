@@ -662,6 +662,42 @@ fn install_tag(transport_url: &str) -> String {
     format!("{:08x}", hash >> 32)
 }
 
+/// How many Home catalogs Search's shelf tries before giving up.
+const START_TRIES: usize = 3;
+
+/// Search's shelf to start from when nothing is typed: a kids profile's own
+/// list, else the first Home catalog that answers with titles, as the row
+/// Home shows it (its title, never an addon's name). None offline, with no
+/// catalog and with an empty kids list.
+pub(crate) async fn start_row(core: &Core) -> Option<HomeRow> {
+    if core.policy().kids() {
+        return kids_start(core);
+    }
+    for slot in board(core).into_iter().take(START_TRIES) {
+        let result = core
+            .addons()
+            .fetch(&slot.addon, &slot.path, SOFT_DEADLINE)
+            .await;
+        let mut one = ObservableVector::new();
+        one.push_back(loading_row(&slot));
+        let rows = Mutex::new(one);
+        apply_catalog(core, &rows, &slot.row_id, result);
+        let ready = lock(&rows)
+            .iter()
+            .find(|r| r.state == RowState::Ready)
+            .cloned();
+        if ready.is_some() {
+            return ready;
+        }
+    }
+    None
+}
+
+/// A kids profile's list as a shelf; None while it is empty.
+pub(crate) fn kids_start(core: &Core) -> Option<HomeRow> {
+    Some(kids_row(core)).filter(|r| r.state == RowState::Ready)
+}
+
 fn loading_row(slot: &CatalogSlot) -> HomeRow {
     HomeRow {
         row_id: slot.row_id.clone(),

@@ -779,3 +779,31 @@ async fn a_kids_tiles_show_the_rated_cover() {
     })
     .await;
 }
+
+/// A kids profile's empty Search offers its own list and nothing an addon
+/// would give (owner, 2026-11-02); the shelf follows the list.
+#[tokio::test]
+async fn a_kids_empty_search_offers_its_list() {
+    let fixture = Fixture::default();
+    let (_owner, kid) = kid(&fixture).await;
+    let search = SearchView::open(&kid);
+    assert!(search.snapshot().start.is_none(), "an empty list, no shelf");
+    allow(&kid, "tt1", "movie", "Up", 1);
+    until("the list shows", || {
+        search
+            .snapshot()
+            .start
+            .is_some_and(|r| r.tiles.len() == 1 && r.tiles[0].id == "tt1")
+    })
+    .await;
+    search.set_query("up");
+    until("results", || search_ids(&search) == ["tt1"]).await;
+    assert!(search.snapshot().start.is_none());
+    search.set_query("");
+    assert!(search.snapshot().start.is_some());
+    assert!(
+        fixture.asked("/catalog/").is_empty(),
+        "{:?}",
+        fixture.asked("")
+    );
+}

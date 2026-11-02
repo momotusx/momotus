@@ -3398,6 +3398,9 @@ impl Session {
                 }
             }
             // `query`, when given, is the field's text now (the debounce may not have caught up).
+            (View::Search(search), "clearRecent") => {
+                search.clear_recent().map_err(|e| e.to_string())?
+            }
             (View::Search(search), "remember") => search
                 .remember(command.get("query").and_then(Value::as_str))
                 .map_err(|e| e.to_string())?,

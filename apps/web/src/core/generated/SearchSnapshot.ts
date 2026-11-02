@@ -16,4 +16,11 @@ recent: Array<string>,
  * search, not that nothing matched (web journey review P3-10). Always
  * 0 for a kids profile, whose search reads its own list.
  */
-searchable: number, };
+searchable: number, 
+/**
+ * The empty state's shelf of titles to start from: the first Home
+ * catalog that answers, titled as Home titles it, or a kids profile's
+ * list. Null while it loads, offline, with a query typed and when
+ * there is nothing to show.
+ */
+start: HomeRow | null, };

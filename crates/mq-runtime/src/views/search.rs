@@ -17,7 +17,8 @@
 use crate::Core;
 use crate::live::{FRAME, coalesce};
 use crate::views::home::{
-    HomeRow, KIDS_ROW_ID, OTHER_KIND, RowState, Tile, kids_tile, kind_label, tile_from_preview,
+    HomeRow, KIDS_ROW_ID, OTHER_KIND, RowState, Tile, kids_start, kids_tile, kind_label, start_row,
+    tile_from_preview,
 };
 use eyeball::SharedObservable;
 use futures_util::{Stream, StreamExt};
@@ -64,11 +65,18 @@ pub struct SearchSnapshot {
     /// search, not that nothing matched (web journey review P3-10). Always
     /// 0 for a kids profile, whose search reads its own list.
     pub searchable: u32,
+    /// The empty state's shelf of titles to start from: the first Home
+    /// catalog that answers, titled as Home titles it, or a kids profile's
+    /// list. Null while it loads, offline, with a query typed and when
+    /// there is nothing to show.
+    pub start: Option<HomeRow>,
 }
 
 pub struct SearchView {
     core: Core,
     snapshot: SharedObservable<SearchSnapshot>,
+    /// The last shelf read, shown at once when the field is cleared.
+    shelf: Arc<Mutex<Option<HomeRow>>>,
     task: Arc<Mutex<Option<JoinHandle<()>>>>,
     watch: JoinHandle<()>,
 }
@@ -90,18 +98,27 @@ impl SearchView {
             rows: Vec::new(),
             recent: recent(core),
             searchable: searchable(core),
+            start: kids_start_for(core),
         });
-        let task = Arc::default();
+        let task: Arc<Mutex<Option<JoinHandle<()>>>> = Arc::default();
+        let shelf = Arc::default();
+        *lock(&task) = Some(tokio::spawn(fill_start(
+            core.clone(),
+            snapshot.clone(),
+            Arc::clone(&shelf),
+        )));
         let changes = core.library().subscribe();
         let watch = tokio::spawn(watch_addons(
             core.clone(),
             snapshot.clone(),
             Arc::clone(&task),
+            Arc::clone(&shelf),
             changes,
         ));
         Self {
             core: core.clone(),
             snapshot,
+            shelf,
             task,
             watch,
         }
@@ -136,11 +153,29 @@ impl SearchView {
                 rows: Vec::new(),
                 recent: recent(&self.core),
                 searchable: searchable(&self.core),
+                start: kids_start_for(&self.core).or_else(|| lock(&self.shelf).clone()),
             });
+            *lock(&self.task) = Some(tokio::spawn(fill_start(
+                self.core.clone(),
+                self.snapshot.clone(),
+                Arc::clone(&self.shelf),
+            )));
             return;
         }
         let task = tokio::spawn(run(self.core.clone(), query, self.snapshot.clone()));
         *lock(&self.task) = Some(task);
+    }
+
+    /// "Clear" on the recent searches: the profile forgets them, and the
+    /// empty state shows without the list.
+    pub fn clear_recent(&self) -> Result<(), crate::CoreError> {
+        self.core.library().clear_searches(self.core.profile())?;
+        self.snapshot.update_if(|s| {
+            let had = !s.recent.is_empty();
+            s.recent.clear();
+            had
+        });
+        Ok(())
     }
 
     /// The user opened a result: keep the query in recent searches. With
@@ -175,6 +210,7 @@ async fn watch_addons(
     core: Core,
     snapshot: SharedObservable<SearchSnapshot>,
     task: Arc<Mutex<Option<JoinHandle<()>>>>,
+    shelf: Arc<Mutex<Option<HomeRow>>>,
     mut changes: Receiver<Vec<Table>>,
 ) {
     while let Some(tables) = crate::views::next_change(&mut changes).await {
@@ -196,6 +232,14 @@ async fn watch_addons(
                     ..shown
                 });
             }
+            let again = tokio::spawn(fill_start(
+                core.clone(),
+                snapshot.clone(),
+                Arc::clone(&shelf),
+            ));
+            if let Some(old) = lock(&task).replace(again) {
+                old.abort();
+            }
             continue;
         }
         let again = tokio::spawn(run(core.clone(), query, snapshot.clone()));
@@ -207,6 +251,30 @@ async fn watch_addons(
 
 fn lock<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
     m.lock().unwrap_or_else(|p| p.into_inner())
+}
+
+/// A kids profile's list as the shelf, at once; None for anyone else, whose
+/// shelf is read by `fill_start`.
+fn kids_start_for(core: &Core) -> Option<HomeRow> {
+    core.policy().kids().then(|| kids_start(core)).flatten()
+}
+
+/// Reads the shelf and puts it on the empty state; a query typed meanwhile
+/// aborts this task, and the check keeps a late answer off a results page.
+async fn fill_start(
+    core: Core,
+    snapshot: SharedObservable<SearchSnapshot>,
+    shelf: Arc<Mutex<Option<HomeRow>>>,
+) {
+    let row = start_row(&core).await;
+    *lock(&shelf) = row.clone();
+    snapshot.update_if(|s| {
+        let fresh = s.query.is_empty() && s.start != row;
+        if fresh {
+            s.start = row.clone();
+        }
+        fresh
+    });
 }
 
 /// Recent searches, none for a kids profile: an old query can name a title
@@ -267,6 +335,7 @@ async fn run(core: Core, query: String, snapshot: SharedObservable<SearchSnapsho
             query,
             recent: Vec::new(),
             searchable: 0,
+            start: None,
         });
         return;
     }
@@ -284,6 +353,7 @@ async fn run(core: Core, query: String, snapshot: SharedObservable<SearchSnapsho
             rows,
             recent: Vec::new(),
             searchable: slots.len() as u32,
+            start: None,
         })
     };
     publish(&top, &rows);
