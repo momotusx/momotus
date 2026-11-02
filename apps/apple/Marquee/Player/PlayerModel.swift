@@ -182,6 +182,8 @@ final class PlayerModel {
     /// when the play fails again at once and the snapshot reads as before.
     private(set) var tryingAgain = false
     @ObservationIgnored private var lastRetries: Int?
+    /// The open view's last `resumeMs`.
+    @ObservationIgnored private var resumeSeen: Int64?
     /// The start window's bytes as the core counted them, for the ready and failed metrics (the bar's swarm figure).
     @ObservationIgnored private var startWindow = StartWindow()
     /// The heat step was taken this play (once: a move's new version keeps playing however warm the phone stays).
@@ -601,8 +603,9 @@ final class PlayerModel {
         Task { await nowPlaying.loadArtwork(route.target.poster) }
         defer { if run == runs { stop() } }
         openError = nil
-        // A new view counts its own Try again presses.
+        // A new view counts its own Try again presses, and has its own saved position.
         lastRetries = nil
+        resumeSeen = nil
         let target = route.target
         var params: [String: any Sendable] = [
             "versionsSub": route.versionsSub, "key": route.key, "kind": target.kind,
@@ -1081,6 +1084,8 @@ final class PlayerModel {
         if startAudioChanged, !viewerPickedAudio { startAudio() }
         if PlayerLayout.retryRose(old: lastRetries, new: snapshot.retries) { showTryingAgain() }
         lastRetries = snapshot.retries ?? lastRetries
+        if PlayerLayout.resumeWithdrawn(old: resumeSeen, new: snapshot.resumeMs), loadedURL != nil { seek(to: 0) }
+        resumeSeen = snapshot.resumeMs
         if let start = snapshot.start { startWindow.saw(start.haveBytes, at: .now) }
         tryingAgain = PlayerLayout.keepsTryingAgain(showing: tryingAgain, phase: snapshot.phase)
         // The core's start subtitle, once, as if picked, sending nothing.

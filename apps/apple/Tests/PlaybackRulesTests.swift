@@ -567,6 +567,10 @@ private func phase(_ phase: String, _ extra: String = "") throws -> PlaybackSnap
     #expect(!PlayerLayout.retryRose(old: 1, new: 1))
     // A view's first snapshot, or an older core without the field: nothing to say.
     #expect(!PlayerLayout.retryRose(old: nil, new: 2))
+    // The saved position the core takes away (a file far off the runtime) sends the file to its start.
+    #expect(PlayerLayout.resumeWithdrawn(old: 300_000, new: nil))
+    #expect(!PlayerLayout.resumeWithdrawn(old: nil, new: nil))
+    #expect(!PlayerLayout.resumeWithdrawn(old: 300_000, new: 300_000))
     #expect(!PlayerLayout.retryRose(old: 1, new: nil))
     // A refail keeps the card, with the line under its headline and Try again focused.
     #expect(PlayerLayout.status(phase: "failed", cannotOpen: false, firstFrameShown: true, waiting: false) == .failed)

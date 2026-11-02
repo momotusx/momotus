@@ -520,6 +520,30 @@ test("Calendar: days in order, today's day first, an episode opens its season", 
   expect(await focused(page)).toBe(opened);
 });
 
+test("a file the core finds far off the title's runtime leaves the saved position for its start", async ({ browser }) => {
+  // The core drops resumeMs once the first progress reports show a file far off the runtime (the Rust test
+  // a_file_far_off_the_runtime_does_not_start_at_the_saved_position, QA r2 Q5 row 10). Here the page is told
+  // S1:E5 resumes at 300 s until the core's own snapshot (no resume) comes again.
+  let resumed = true;
+  const { context, repush } = await patchedContext(browser, PORTS.bridge, { viewport: { width: 1440, height: 900 } }, (view, s) =>
+    view === "playback" && s && resumed ? { ...s, resumeMs: 300_000 } : s,
+  );
+  const page = await context.newPage();
+  const time = () => page.evaluate(() => document.querySelector("video")?.currentTime ?? 0);
+  try {
+    await page.goto(`/play/series/${GOT.id}/${SAMPLE_EPISODE}?form=desktop`);
+    await expect(page.locator('[data-f="player:toggle"]')).toBeVisible({ timeout: 30_000 });
+    await startIfPaused(page);
+    await expect.poll(time, { timeout: 30_000 }).toBeGreaterThan(299);
+    resumed = false;
+    repush("playback");
+    await expect.poll(time, { timeout: 10_000 }).toBeLessThan(30);
+  } finally {
+    await page.evaluate(() => document.querySelector("video")?.pause());
+    await context.close();
+  }
+});
+
 test("Calendar: each series that could not load has its own Try again, which asks the core for that one", async ({ browser }) => {
   // The shared core loads both series; the page is told two of them failed until one is retried.
   let retried: string[] = [];

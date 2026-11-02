@@ -84,7 +84,9 @@ pub struct PlaybackSnapshot {
     pub filename: Option<String>,
     #[cfg_attr(feature = "ts", ts(type = "number | null"))]
     pub size_bytes: Option<u64>,
-    /// Where to start, from saved progress.
+    /// Where to start, from saved progress. Goes null when the first
+    /// reports of the file's length show it far off the title's runtime
+    /// (another title): the player then goes to the file's start.
     #[cfg_attr(feature = "ts", ts(type = "number | null"))]
     pub resume_ms: Option<u64>,
     /// Sources that failed, in order, each with a plain reason.
@@ -629,6 +631,9 @@ struct State {
     /// (plans/streaming-window.md 2.2).
     known_duration_ms: Option<u64>,
     runtime_s: Option<u32>,
+    /// The saved position the view opened with, as against one a stall
+    /// carried over.
+    saved_resume_ms: Option<u64>,
     candidates: Vec<ParsedStream>,
     next: usize,
     /// A source of the version failed for a reason of the version's own,
@@ -820,6 +825,7 @@ impl State {
         Self {
             known_duration_ms: None,
             runtime_s: None,
+            saved_resume_ms: resume_ms,
             snapshot: PlaybackSnapshot {
                 phase: PlaybackPhase::Resolving,
                 url: None,
@@ -1628,6 +1634,17 @@ impl PlaybackView {
             }
             s.last = Some((position_ms, duration_ms));
             s.dirty = !off;
+            // Nor where it starts (QA r2 Q5 row 10): the saved position is
+            // gone once its length is known, and the apps go to its start. A
+            // position a stall carried over to the next version stays.
+            if off
+                && !s.progressed
+                && s.snapshot.resume_ms.is_some()
+                && s.snapshot.resume_ms == s.saved_resume_ms
+            {
+                s.snapshot.resume_ms = None;
+                self.snapshot.set(s.snapshot.clone());
+            }
             let changed = s.paused != paused;
             s.paused = paused;
             #[cfg(feature = "torrent")]

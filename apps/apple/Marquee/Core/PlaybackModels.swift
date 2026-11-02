@@ -221,7 +221,9 @@ struct PlaybackSnapshot: Decodable, Hashable, Sendable {
     let attempt: Int64?
     let filename: String?
     let sizeBytes: Int64?
-    /// Where to start, from saved progress.
+    /// Where to start, from saved progress. Goes nil when the first reports of
+    /// the file's length show it far off the title's runtime (another title):
+    /// the player then goes to the file's start.
     let resumeMs: Int64?
     /// Sources that failed, in order, each with a plain reason.
     let attempts: [Attempt]

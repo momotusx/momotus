@@ -32,7 +32,9 @@ attempt: number,
  */
 manifest: boolean, filename: string | null, sizeBytes: number | null, 
 /**
- * Where to start, from saved progress.
+ * Where to start, from saved progress. Goes null when the first
+ * reports of the file's length show it far off the title's runtime
+ * (another title): the player then goes to the file's start.
  */
 resumeMs: number | null, 
 /**

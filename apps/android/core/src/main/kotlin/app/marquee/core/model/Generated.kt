@@ -1316,7 +1316,7 @@ data class PlaybackSnapshot(
     val manifest: Boolean,
     val filename: String? = null,
     val sizeBytes: Long? = null,
-    /** Where to start, from saved progress. */
+    /** Where to start, from saved progress. Goes null when the first reports of the file's length show it far off the title's runtime (another title): the player then goes to the file's start. */
     val resumeMs: Long? = null,
     /** Sources that failed, in order, each with a plain reason. */
     val attempts: List<Attempt> = emptyList(),

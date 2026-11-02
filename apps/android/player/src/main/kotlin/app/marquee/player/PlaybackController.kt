@@ -148,6 +148,9 @@ class PlaybackController(
 
     /** The core's count of Try again taken (`PlaybackSnapshot.retries`), from the first snapshot on. */
     private var retriesSeen: Int? = null
+
+    /** The open view's last `PlaybackSnapshot.resumeMs`. */
+    private var resumeSeen: Long? = null
     private var tryingAgainJob: Job? = null
 
     var positionMs by mutableLongStateOf(0L)
@@ -408,6 +411,7 @@ class PlaybackController(
     /** The core's playback view is open: follow it. */
     fun attach(playback: PlaybackView) {
         view = playback
+        resumeSeen = null
         mark("playback open")
         scope.launch { snapshotFlow { playback.snapshot }.filterNotNull().collect(::snapshotChanged) }
         // The core going away takes the view with it (a restart subscribes again with ids that no longer
@@ -496,6 +500,8 @@ class PlaybackController(
         // and the snapshot is otherwise the one before (code review 2026-10-20 r2 P3-6).
         val retried = retriedSince(retriesSeen, s.retries)
         retriesSeen = s.retries
+        if (resumeWithdrawn(resumeSeen, s.resumeMs) && loadedUrl != null) seekTo(0L)
+        resumeSeen = s.resumeMs
         start = s.start
         // While a source is being found its list is still to come: not "None found".
         subtitlesPending = s.subtitlesPending || s.phase == PlaybackPhase.Resolving

@@ -176,6 +176,15 @@ const val CANNOT_OPEN = "This version could not be opened"
 /** What the player says while the core plays the same versions again (Try again). */
 const val TRYING_AGAIN = "Trying again"
 
+/**
+ * Whether the core took the saved position away since [seen] (the last snapshot's `resumeMs`): the file's length
+ * shows another title, far off the title's runtime (QA r2 Q5 row 10), and the player goes to its start.
+ */
+fun resumeWithdrawn(
+    seen: Long?,
+    now: Long?,
+): Boolean = seen != null && now == null
+
 /** Whether the core took a Try again since [seen] (the count of the last snapshot; null before the first one). */
 fun retriedSince(
     seen: Int?,

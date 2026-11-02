@@ -261,6 +261,13 @@ enum PlayerLayout {
         return fileSubtitle ? "Subtitles from the file do not show in Picture in Picture" : nil
     }
 
+    /// The core took the saved position away within one view: the file's
+    /// length shows another title, far off the title's runtime (QA r2 Q5
+    /// row 10), and the player goes to its start.
+    static func resumeWithdrawn(old: Int64?, new: Int64?) -> Bool {
+        old != nil && new == nil
+    }
+
     /// The core took a Try again: `retries` rose within one view. The first
     /// snapshot of a view counts nothing (review r2 P3-6).
     static func retryRose(old: Int?, new: Int?) -> Bool {

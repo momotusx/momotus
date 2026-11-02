@@ -2273,6 +2273,50 @@ async fn a_file_far_off_the_runtime_saves_no_progress() {
     assert!(resumes(50 * 60_000).await.is_some());
 }
 
+/// QA r2 Q5 row 10: the saved position is this title's, so a file far off
+/// its runtime (52 min here) does not start there either: the first report
+/// of its length takes `resumeMs` away and the apps go to the file's start.
+/// One near the runtime keeps it.
+#[tokio::test]
+async fn a_file_far_off_the_runtime_does_not_start_at_the_saved_position() {
+    let (core, _server, keys) = direct_rows(vec![(
+        "Show.S01E01.1080p.WEB-DL.x264-ONE",
+        media_fixture("h264.mp4"),
+    )])
+    .await;
+    let target = || mq_runtime::PlayTarget {
+        kind: "series".into(),
+        item_id: "tt1".into(),
+        video_id: "tt1:1:1".into(),
+        season: Some(1),
+        episode: Some(1),
+        ..mq_runtime::PlayTarget::default()
+    };
+    let open = || async {
+        let view = versions_for(&core, DeviceCaps::basic_1080p()).await;
+        let play = mq_runtime::PlaybackView::open_picked(
+            &core,
+            view.pick(&keys[0]),
+            target(),
+            &view.plays(),
+        );
+        until("ready", || play.snapshot().url.is_some()).await;
+        (play, view)
+    };
+    // A saved position, from a file of the title's length.
+    let (play, view) = open().await;
+    play.report_progress(600_000, 50 * 60_000, false);
+    drop((play, view));
+    let (play, _view) = open().await;
+    assert_eq!(play.snapshot().resume_ms, Some(600_000));
+    play.report_progress(600_000, 50 * 60_000, false);
+    assert_eq!(play.snapshot().resume_ms, Some(600_000), "near the runtime");
+    drop(play);
+    let (play, _view) = open().await;
+    play.report_progress(600_000, 4 * 52 * 60_000, false);
+    assert_eq!(play.snapshot().resume_ms, None, "four times the runtime");
+}
+
 /// 2e: with the network lost (every connection dropped, the addon's too)
 /// a stalled recommendation waits instead of moving, the button showing;
 /// once a source answers again it moves on.

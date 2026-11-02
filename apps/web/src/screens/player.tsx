@@ -665,6 +665,16 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
       engine.load(u, prev ? engine.position() : start.next(props.startOver ? 0 : (snap()?.resumeMs ?? 0) / 1000), untrack(layer));
     }),
   );
+  // The core takes the saved position away once this file's length shows another title (far off the
+  // title's runtime, QA r2 Q5 row 10): the file goes to its start. Within one playback view only.
+  createEffect(
+    on(
+      () => [playback(), snap()?.resumeMs] as const,
+      ([view, now], before) => {
+        if (before && before[0] === view && typeof before[1] === "number" && now === null) engine.seek(0);
+      },
+    ),
+  );
 
   const toggle = () => {
     engine.toggle();

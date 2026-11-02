@@ -21,6 +21,13 @@ class PlayerLogicTest {
     }
 
     @Test
+    fun `a saved position the core takes away sends the file to its start`() {
+        assertEquals(true, resumeWithdrawn(seen = 300_000L, now = null))
+        assertEquals(false, resumeWithdrawn(seen = null, now = null))
+        assertEquals(false, resumeWithdrawn(seen = 300_000L, now = 300_000L))
+    }
+
+    @Test
     fun `a Try again counts from the first snapshot on`() {
         assertEquals(false, retriedSince(seen = null, retries = 3))
         assertEquals(true, retriedSince(seen = 0, retries = 1))
