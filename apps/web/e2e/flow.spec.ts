@@ -365,9 +365,12 @@ test("an episode row plays that episode, not the resume target", async ({ page }
     const time = () => page.evaluate(() => document.querySelector("video")?.currentTime ?? 0);
     await expect.poll(time, { timeout: 30_000 }).toBeGreaterThan(3);
     await toTitle();
-    // Back lands on the season being browsed, and the saved progress is S1:E5's.
+    // Back lands on the season being browsed. The test film (10:34) is more than three times shorter than the
+    // series' runtime, so the core takes it for another title and saves no progress for S1:E5 (3eb55d088, QA r1
+    // Q5 row 23): the resume target stays S2:E3's.
     await expect(page.locator('[data-f="season:1"]')).toHaveAttribute("aria-selected", "true");
-    await expect(page.locator("li.ep.now", { has: row })).toHaveCount(1, { timeout: 15_000 });
+    await page.waitForTimeout(2_000);
+    await expect(page.locator("li.ep.now", { has: row })).toHaveCount(0);
 
     // Secondary action: this episode's Versions, to choose another release.
     await row.focus();
