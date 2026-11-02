@@ -1,5 +1,5 @@
 import { type Browser, expect, test } from "./fixture";
-import { GOT, PORTS, SHOTS } from "./core";
+import { GOT, PORTS, SHOTS, startIfPaused } from "./core";
 
 /** Layout rules the design audit settled (design/audit-web-2026-10-19.md). */
 
@@ -327,18 +327,32 @@ test("desktop and phone players say Back on screen; a desktop adds volume and fu
     await expect(back).toBeVisible({ timeout: 30_000 });
     await expect(back).toHaveAttribute("aria-label", "Back");
     await page.waitForFunction(() => (document.querySelector("video")?.readyState ?? 0) >= 1, null, { timeout: 30_000 });
+    // The element stays silent here (a walk makes no sound); the player's own level is what is checked.
     await page.evaluate(() => {
       const v = document.querySelector("video");
       if (v) v.muted = true;
     });
     const volume = () => page.evaluate(() => document.querySelector("video")?.volume ?? -1);
+    const paused = () => page.evaluate(() => document.querySelector("video")?.paused);
     if (form === "desktop") {
       const mute = page.locator('[data-f="player:mute"]');
-      await mute.dispatchEvent("click");
+      await startIfPaused(page);
+      await expect.poll(paused).toBe(false);
+      // Real clicks land on the icon, which each click swaps: the surface
+      // must not take them for a click on the picture (QA r1 Q5 rows 8, 9).
+      await page.mouse.move(400, 300);
+      await mute.click();
       await expect.poll(volume).toBe(0);
       await expect(mute).toHaveAttribute("aria-label", "Unmute");
-      await mute.dispatchEvent("click");
+      expect(await paused()).toBe(false);
+      await mute.click();
       await expect.poll(volume).toBe(1);
+      expect(await paused()).toBe(false);
+      const toggle = page.locator('[data-f="player:toggle"]');
+      await toggle.click();
+      await expect.poll(paused).toBe(true);
+      await toggle.click();
+      await expect.poll(paused).toBe(false);
       await page.locator('[data-f="player:volume"]').evaluate((el) => {
         (el as HTMLInputElement).value = "30";
         el.dispatchEvent(new Event("input", { bubbles: true }));

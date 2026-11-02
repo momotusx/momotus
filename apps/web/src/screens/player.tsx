@@ -672,8 +672,11 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
   };
   // Whether the pointer press under way only woke the controls.
   let woke = false;
-  // A click on a control or a card, not on the picture.
-  const onControls = (e: MouseEvent) => !!(e.target as Element).closest("button, a, input, [role=slider], aside, .endcard, .skip-wrap, .next, .osd");
+  // A click on a control or a card, not on the picture. Read on the event's path, not its target: a button's
+  // click can swap its icon (Play to Pause, Mute to Unmute), and the old icon, the target, has left the page by
+  // the time the click reaches the surface (QA r1 Q5 rows 8, 9).
+  const onControls = (e: MouseEvent) =>
+    e.composedPath().some((n) => n instanceof Element && n.matches("button, a, input, [role=slider], aside, .endcard, .skip-wrap, .next, .osd"));
   const seek = (delta: number) => {
     if (!duration()) return;
     engine.seek(Math.min(Math.max(0, engine.position() + delta), duration() - 0.5));
