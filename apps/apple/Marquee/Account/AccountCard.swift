@@ -4,6 +4,9 @@ import SwiftUI
 /// deletion, the account deleted, an announcement, the second-way-in nudge.
 /// On every device, TVs included. Built from the app's own pieces.
 struct AccountCard: View {
+    /// `top`: Home's first place, above the hero, for the urgent cards (`AccountRules.urgent`, the owner
+    /// 2026-11-02); the other place, under the hero, holds the rest and "Signed in from".
+    var top = false
     /// Sign in, or the nudge: the Account page.
     let openAccount: () -> Void
     @Environment(SyncModel.self) private var sync
@@ -41,22 +44,28 @@ struct AccountCard: View {
         // Right after a pairing, "Signed in from" the device that approved it,
         // for 8 s: a line nothing focuses (plans/tv-qr-login.md 5.5).
         // A scheduled deletion still comes first.
-        if let by = sync.joinedBy, !isDeletion {
+        if top {
+            if let card, AccountRules.urgent(card), sync.joinedBy == nil || isDeletion { box(card) }
+        } else if let by = sync.joinedBy, !isDeletion {
             Said(tone: .ok, text: AccountRules.fill(words.tvSignedInFrom, ["device": by]))
                 .task {
                     try? await Task.sleep(for: .seconds(8))
                     sync.joinedBy = nil
                 }
-        } else if let card {
-            VStack(alignment: .leading, spacing: Theme.Space.xs) {
-                content(card)
-                if let error { Said(tone: .bad, text: error) }
-            }
-            .padding(Theme.Space.s)
-            .frame(maxWidth: 760, alignment: .leading)
-            // A solid surface with no edge: content, not glass (design/DECISION.md, Surfaces).
-            .background(Theme.Palette.surface, in: RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
+        } else if let card, !AccountRules.urgent(card) {
+            box(card)
         }
+    }
+
+    private func box(_ card: AccountRules.HomeCard) -> some View {
+        VStack(alignment: .leading, spacing: Theme.Space.xs) {
+            content(card)
+            if let error { Said(tone: .bad, text: error) }
+        }
+        .padding(Theme.Space.s)
+        .frame(maxWidth: 760, alignment: .leading)
+        // A solid surface with no edge: content, not glass (design/DECISION.md, Surfaces).
+        .background(Theme.Palette.surface, in: RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
     }
 
     @ViewBuilder private func content(_ card: AccountRules.HomeCard) -> some View {

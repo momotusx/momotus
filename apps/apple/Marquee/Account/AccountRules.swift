@@ -126,6 +126,10 @@ enum AccountRules {
         case secondWayIn
     }
 
+    /// The cards that cannot wait for a scroll (the owner, 2026-11-02): a deletion on its way, the account gone, a
+    /// device or key added. They come first on Home, above the hero; the nudge stays under it.
+    static func urgent(_ card: HomeCard) -> Bool { card != .secondWayIn }
+
     /// A kids profile sees none (Account is hidden from it); the nudge leads
     /// to the owner's rows, so only the owner sees it.
     static func homeCard(deletion: ScheduledDeletion?, gone: Bool, announcements: [Announcement], secondWayIn: Bool,

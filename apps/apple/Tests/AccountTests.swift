@@ -113,6 +113,14 @@ private func announcement(_ kind: String, member: String? = "m", by: String? = "
     #expect(AccountRules.shows(removed, kids: true))
 }
 
+@Test func urgentCardsComeAboveTheHero() {
+    let deletion = ScheduledDeletion(dueMs: 1_800_000_000_000, provider: nil)
+    #expect(AccountRules.urgent(.deletion(deletion)))
+    #expect(AccountRules.urgent(.gone))
+    #expect(AccountRules.urgent(.announcement(announcement("device", name: "TV"))))
+    #expect(!AccountRules.urgent(.secondWayIn))
+}
+
 @Test func homesAccountCardGoesByPriority() {
     let deletion = ScheduledDeletion(dueMs: 1_800_000_000_000, provider: "google")
     let notice = announcement("device", name: "TV")

@@ -35,6 +35,12 @@ struct HomeScreen: View {
     var body: some View {
         ScrollView(.vertical) {
             LazyVStack(alignment: .leading, spacing: metrics.rowSpacing) {
+                // A deletion, the account gone, a new device: first, above the hero (the owner, 2026-11-02). Nothing
+                // when there is none, so the hero keeps its place.
+                AccountCard(top: true) { showAccount = true }
+                    .padding(.horizontal, metrics.gutter)
+                    // Clear of the Mac's toolbar and the TV's tabs, as the setup line is; the phone's list starts under its bar.
+                    .padding(.top, metrics.wide ? Theme.Space.xxl : 0)
                 // Without catalogs, or with none answering, there is no art to show.
                 if !model.needsSetup && !model.allFailed {
                     // The profile is the bar's (plans/nav-profile.md): the tab bar's last tab, the Mac's toolbar.
@@ -56,7 +62,7 @@ struct HomeScreen: View {
                         // screen, none on the phone, where the ramp has reached the black page.
                         .padding(.bottom, (metrics.wide ? 12 : 0) - metrics.rowSpacing)
                 }
-                // One account card, by priority (plans/accounts.md 4.3).
+                // The other account cards, by priority (plans/accounts.md 4.3): the nudge, "Signed in from".
                 AccountCard { showAccount = true }
                     .padding(.horizontal, metrics.gutter)
                 content
