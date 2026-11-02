@@ -1579,7 +1579,11 @@ impl PlaybackView {
         if self.denied {
             return;
         }
-        if let Some(trakt) = &self.trakt {
+        // A file far off the title's runtime is another title (a plugin's
+        // link to the wrong film, QA r1 Q5 row 23): it plays on, but its
+        // position is not this title's progress, here or on Trakt.
+        let off = off_runtime(lock(&self.state).runtime_s, duration_ms);
+        if let Some(trakt) = self.trakt.as_ref().filter(|_| !off) {
             trakt.progress(position_ms, duration_ms, paused);
         }
         let due = {
@@ -1623,7 +1627,7 @@ impl PlaybackView {
                 s.failed_as = None;
             }
             s.last = Some((position_ms, duration_ms));
-            s.dirty = true;
+            s.dirty = !off;
             let changed = s.paused != paused;
             s.paused = paused;
             #[cfg(feature = "torrent")]
@@ -2863,6 +2867,23 @@ const PLAYED_PAST_START: Duration = Duration::from_secs(30);
 /// The apps report progress every few seconds; a larger step forward is a
 /// seek or a source that started further on, not playback.
 const PLAYED_STEP: Duration = Duration::from_secs(15);
+
+/// A played file more than this many times longer or shorter than the
+/// title's runtime is taken for another title, and its position is not
+/// saved as the title's progress. Wide on purpose: a series' runtime is
+/// one typical episode's (a double pilot runs 2x) and a film's cut may
+/// run long; the wrong film for a 10 min short ran 13x (QA r1 Q5 row 23).
+const OFF_RUNTIME: u64 = 3;
+
+/// Whether a file of `duration_ms` is too far off the title's runtime to
+/// be it (`OFF_RUNTIME`); never when either is not known.
+fn off_runtime(runtime_s: Option<u32>, duration_ms: u64) -> bool {
+    let Some(runtime_ms) = runtime_s.filter(|&r| r > 0).map(|r| u64::from(r) * 1000) else {
+        return false;
+    };
+    duration_ms > 0
+        && (duration_ms > runtime_ms * OFF_RUNTIME || duration_ms * OFF_RUNTIME < runtime_ms)
+}
 
 /// One "Try again" run gives up after this, however many sources are left
 /// (code review 2026-10-20 r3 P3-11).

@@ -2224,6 +2224,55 @@ async fn a_stall_of_the_resume_release_never_moves() {
     assert_eq!(resume.snapshot().key.as_ref(), Some(&keys[0]));
 }
 
+/// QA r1 Q5 row 23: a file far off the title's runtime (52 min here) is
+/// another title, and its position is not saved as the title's progress;
+/// one near it is.
+#[tokio::test]
+async fn a_file_far_off_the_runtime_saves_no_progress() {
+    let (core, _server, keys) = direct_rows(vec![(
+        "Show.S01E01.1080p.WEB-DL.x264-ONE",
+        media_fixture("h264.mp4"),
+    )])
+    .await;
+    let target = || mq_runtime::PlayTarget {
+        kind: "series".into(),
+        item_id: "tt1".into(),
+        video_id: "tt1:1:1".into(),
+        season: Some(1),
+        episode: Some(1),
+        ..mq_runtime::PlayTarget::default()
+    };
+    let resumes = |duration_ms: u64| {
+        let core = &core;
+        let key = &keys[0];
+        async move {
+            let view = versions_for(core, DeviceCaps::basic_1080p()).await;
+            let play = mq_runtime::PlaybackView::open_picked(
+                core,
+                view.pick(key),
+                target(),
+                &view.plays(),
+            );
+            until("ready", || play.snapshot().url.is_some()).await;
+            play.report_progress(600_000, duration_ms, false);
+            drop((play, view));
+            let view = versions_for(core, DeviceCaps::basic_1080p()).await;
+            let again = mq_runtime::PlaybackView::open_picked(
+                core,
+                view.pick(key),
+                target(),
+                &view.plays(),
+            );
+            until("ready", || again.snapshot().url.is_some()).await;
+            again.snapshot().resume_ms
+        }
+    };
+    // Four times the runtime: not saved.
+    assert_eq!(resumes(4 * 52 * 60_000).await, None);
+    // A 50 min file: saved.
+    assert!(resumes(50 * 60_000).await.is_some());
+}
+
 /// 2e: with the network lost (every connection dropped, the addon's too)
 /// a stalled recommendation waits instead of moving, the button showing;
 /// once a source answers again it moves on.

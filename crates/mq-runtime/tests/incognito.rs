@@ -280,7 +280,8 @@ async fn nothing_incognito_wrote_is_on_the_device_after_it() {
         played.snapshot().phase == PlaybackPhase::Ready
     })
     .await;
-    played.report_progress(890_000, 900_000, false);
+    // Near the end of the film's 94 min (a file far off its runtime saves nothing).
+    played.report_progress(5_590_000, 5_640_000, false);
     drop((played, versions));
     let half = PlaybackView::open(&core, Vec::new(), target(OTHER));
     half.report_progress(450_000, 900_000, false);
