@@ -342,7 +342,11 @@ h1, h2, h3 { font-family: var(--font-display); font-weight: var(--weight-heading
 [data-form="tv"] .ptile:focus .avatar {
   background-image: linear-gradient(125deg, rgba(255, 255, 255, .26), rgba(255, 255, 255, .06) 32%, rgba(255, 255, 255, 0) 52%); }
 
-/* A finger's 48 on the phone (QA r1): a control drawn shorter keeps its look and reaches 48 px tall with an invisible
- * ::after centred on it. Only up and down: chips and buttons side by side never reach over a neighbour. */
-[data-form="phone"] :is(.chip, .btn, .tab, .syn-more)[data-f]::after {
-  content: ""; position: absolute; left: 0; right: 0; top: min(0px, (100% - 48px) / 2); bottom: min(0px, (100% - 48px) / 2); }
+/* A finger's 48 on the phone (QA r1, r2): a control drawn smaller than 48 keeps its look and reaches 48 px each way with an
+ * invisible ::after centred on it. Chips and tabs are 48 wide at least (browse.css, title.css), so beside each other they
+ * reach up and down only; a narrower text button grows sideways too. Stacked, controls sit 12 px apart or more, so
+ * no two reaches meet. */
+[data-form="phone"] :is(.chip, .btn, .tab, .syn-more, .back, .pback, .subp-back, .subp-done, .lr-open)[data-f]::after {
+  content: ""; position: absolute; inset: min(0px, (100% - 48px) / 2) min(0px, (100% - 48px) / 2); }
+/* Chips that wrap onto a second line sit 12 px apart, so the reach of one meets the next and never crosses it. */
+[data-form="phone"] .acts:has(> .chip) { row-gap: 12px; }

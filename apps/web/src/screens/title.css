@@ -230,7 +230,7 @@
 [data-form="phone"] .eps-head h2 { font-size: 22px; }
 [data-form="phone"] .seasons { justify-content: flex-start; gap: 6px; }
 [data-form="phone"] .tab { height: 36px; padding: 0 14px; font-size: 14px; }
-[data-form="phone"] .seasons.compact .tab { min-width: 36px; padding: 0 10px; }
+[data-form="phone"] .seasons.compact .tab { min-width: 48px; padding: 0 10px; }
 [data-form="phone"] .toc { margin: 0; padding: 6px 0 0; gap: 10px; }
 /* The two secondary actions are round icon buttons beside the card, not a
  * line of words under every episode (as Netflix and Apple TV on phones). */

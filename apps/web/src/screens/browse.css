@@ -76,7 +76,8 @@
 /* Room inside the scroller for a chip's 48 px reach (app.css), the layout as before: 6 px more padding, 6 px less margin. */
 [data-form="phone"] .chips-track { overflow-x: auto; gap: 8px; padding: 8px 16px; margin: -6px -16px; }
 [data-form="phone"] .chips-track { --chip-fade: 40px; }
-[data-form="phone"] .chip { height: 36px; padding: 0 14px; border-radius: 18px; font-size: 14px; gap: 6px; }
+[data-form="phone"] .chips-track.wrap { row-gap: 12px; }
+[data-form="phone"] .chip { height: 36px; padding: 0 14px; border-radius: 18px; font-size: 14px; gap: 6px; min-width: 48px; justify-content: center; }
 [data-form="phone"] .chip small { font-size: 12px; }
 [data-form="phone"] .chip svg { width: 16px; height: 16px; }
 [data-form="phone"] .pull { align-self: flex-start; }

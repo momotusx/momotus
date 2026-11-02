@@ -318,9 +318,9 @@
 /* The platter is 32 tall from 36 up: the switch matches it. */
 [data-form="desktop"] .trailer-mute { right: calc(40 * var(--px)); bottom: calc(36 * var(--px)); width: calc(32 * var(--px)); height: calc(32 * var(--px)); }
 [data-form="desktop"] .trailer-mute svg { width: calc(16 * var(--px)); height: calc(16 * var(--px)); }
-/* One 44 px tall control (iOS's page control) around dots that stay where they were: the padding reaches past them,
- * the negative margin takes it back out of the layout. */
-[data-form="phone"] .hero-dots { bottom: 22px; padding: 18.5px 12px; margin-bottom: -18.5px; }
+/* One 48 px tall control (Material's 48, past iOS's page control) around dots that stay where they were: the padding reaches
+ * past them, the negative margin takes it back out of the layout. */
+[data-form="phone"] .hero-dots { bottom: 22px; padding: 20.5px 12px; margin-bottom: -20.5px; }
 /* The dots' middle is 25.5 up (22 plus half of 7): a 36 switch sits 7.5 up, at the words' 20 side margin. */
 [data-form="phone"] .trailer-mute { right: 20px; bottom: 7.5px; width: 36px; height: 36px; }
 [data-form="phone"] .trailer-mute svg { width: 18px; height: 18px; }
