@@ -31,7 +31,8 @@ struct SearchField: View {
                     return .handled
                 }
             if !input.text.isEmpty {
-                Button { input.text = "" } label: {
+                // The cursor stays in the field, on the idle page the empty text shows.
+                Button { input.text = ""; focused.wrappedValue = true } label: {
                     Glyph("circle-x", size: 17).foregroundStyle(Theme.Palette.muted).frame(width: 44, height: 44)
                 }
                 .buttonStyle(.plain)
@@ -51,14 +52,25 @@ struct SearchField: View {
 struct RecentList: View {
     let recent: [String]
     let input: SearchInput
+    let clear: () -> Void
     @Environment(\.metrics) private var metrics
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(SearchWords.recent)
-                .display(metrics.wide ? 17 : 20)
-                .foregroundStyle(Theme.Palette.text)
-                .accessibilityAddTraits(.isHeader)
+            HStack {
+                Text(SearchWords.recent)
+                    .display(metrics.wide ? 17 : 20)
+                    .foregroundStyle(Theme.Palette.text)
+                    .accessibilityAddTraits(.isHeader)
+                Spacer(minLength: 0)
+                Button(SearchWords.clearRecent, action: clear)
+                    .buttonStyle(.plain)
+                    .textFont(metrics.wide ? 13 : 15, relativeTo: .footnote)
+                    .foregroundStyle(Theme.Palette.dim)
+                    .frame(minWidth: 44, minHeight: 44)
+                    .contentShape(Rectangle())
+                    .accessibilityLabel(SearchWords.clearRecentLabel)
+            }
             ForEach(recent.prefix(8), id: \.self) { query in
                 Button { input.text = query } label: {
                     HStack(spacing: 10) {

@@ -134,7 +134,7 @@ struct SearchScreen: View {
                 .padding(.horizontal, margin)
         }
         if !typed {
-            idle.padding(.horizontal, margin)
+            idle
         } else {
             if let line = SearchWords.answered(search.snapshot, query: query, kids: kids) {
                 StateLine(symbol: "search", text: line, action: addonsAction, spoken: true).padding(.horizontal, margin)
@@ -145,17 +145,27 @@ struct SearchScreen: View {
     }
 
     #if !os(tvOS)
-    /// No query: the hint (or that no addon can search), then Recent.
+    /// No query: Recent, then a shelf of titles to start from; the hint only where neither shows (or that no
+    /// addon can search). Never a blank page.
     @ViewBuilder private var idle: some View {
         VStack(alignment: .leading, spacing: metrics.wide ? 24 : 20) {
-            Text(SearchWords.idle(search.snapshot, kids: kids))
-                .textFont(metrics.wide ? 13 : 15, relativeTo: .footnote)
-                .foregroundStyle(Theme.Palette.dim)
-            if let addonsAction {
-                Button(addonsAction.title, action: addonsAction.run).buttonStyle(PillButtonStyle())
+            VStack(alignment: .leading, spacing: metrics.wide ? 24 : 20) {
+                if let line = SearchWords.idleLine(search.snapshot, kids: kids) {
+                    Text(line)
+                        .textFont(metrics.wide ? 13 : 15, relativeTo: .footnote)
+                        .foregroundStyle(Theme.Palette.dim)
+                }
+                if let addonsAction {
+                    Button(addonsAction.title, action: addonsAction.run).buttonStyle(PillButtonStyle())
+                }
+                if let recent = search.snapshot?.recent, !recent.isEmpty {
+                    RecentList(recent: recent, input: input) { search.command(SearchRules.clearRecentCommand) }
+                }
             }
-            if let recent = search.snapshot?.recent, !recent.isEmpty {
-                RecentList(recent: recent, input: input)
+            .padding(.horizontal, margin)
+            // The shelf pads itself to the page's edge.
+            if let start = search.snapshot?.start {
+                RowView(row: start, retry: {})
             }
             #if os(iOS)
             // The phone's genre tiles; a failed grid is not drawn (Search's own words cover the page).
@@ -165,6 +175,7 @@ struct SearchScreen: View {
                     links?.discover = DiscoverRequest(kind: kind, genre: genre)
                     openTab(.discover, link: true)
                 }
+                .padding(.horizontal, margin)
             }
             #endif
         }
@@ -249,7 +260,15 @@ struct SearchScreen: View {
                 .padding(.horizontal, metrics.gutter)
         }
         if !typed {
-            StateLine(symbol: "search", text: SearchWords.idle(search.snapshot, kids: kids), action: addonsAction).padding(.horizontal, metrics.gutter)
+            if let line = SearchWords.idleLine(search.snapshot, kids: kids) {
+                StateLine(symbol: "search", text: line, action: addonsAction).padding(.horizontal, metrics.gutter)
+            }
+            // Recent shows as the keyboard's suggestions; Clear and the shelf of titles sit under it.
+            if let recent = search.snapshot?.recent, !recent.isEmpty {
+                Button(SearchWords.clearRecentLabel) { search.command(SearchRules.clearRecentCommand) }
+                    .padding(.horizontal, metrics.gutter)
+            }
+            if let start = search.snapshot?.start { RowView(row: start, retry: {}) }
         } else if let line = SearchWords.answered(search.snapshot, query: query, kids: kids) {
             StateLine(symbol: "search", text: line, action: addonsAction, spoken: true).padding(.horizontal, metrics.gutter)
         }

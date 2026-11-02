@@ -21,8 +21,9 @@ private func row(_ id: String, title: String, source: String, state: String, til
      "tiles": (0..<tiles).map { tile($0) }]
 }
 
-private func snapshot(query: String = "dune", rows: [[String: Any]] = [], searchable: Int = 2) throws -> SearchSnapshot {
-    let json: [String: Any] = ["query": query, "rows": rows, "recent": ["heat"], "searchable": searchable]
+private func snapshot(query: String = "dune", rows: [[String: Any]] = [], searchable: Int = 2, recent: [String] = ["heat"], start: [String: Any]? = nil) throws -> SearchSnapshot {
+    var json: [String: Any] = ["query": query, "rows": rows, "recent": recent, "searchable": searchable]
+    if let start { json["start"] = start } else { json["start"] = NSNull() }
     return try JSONDecoder().decode(SearchSnapshot.self, from: JSONSerialization.data(withJSONObject: json))
 }
 
@@ -33,16 +34,20 @@ private func snapshot(query: String = "dune", rows: [[String: Any]] = [], search
     #expect(SearchWords.answered(none, query: "dune", kids: true) == "That isn't on your list. Ask a grown-up.")
     let found = try snapshot(rows: [row("kids-titles", title: "Your shows and movies", source: "Your list", state: "ready", tiles: 1)], searchable: 0)
     #expect(SearchWords.answered(found, query: "dune", kids: true) == nil)
-    #expect(SearchWords.idle(none, kids: true) == SearchWords.hint)
+    #expect(SearchWords.idleLine(try snapshot(searchable: 0, recent: []), kids: true) == SearchWords.hint)
     #expect(!SearchWords.offersAddons(none, kids: true))
     #expect(SearchWords.kidsPrompt == "Search your shows")
 }
 
 @Test func theFieldSaysWhatSearchFinds() throws {
-    #expect(SearchWords.idle(nil) == "Search movies and series by title.")
-    #expect(SearchWords.idle(try snapshot(searchable: 2)) == "Search movies and series by title.")
+    // The hint shows only where nothing else does: no Recent and no shelf of titles (owner, 2026-11-02).
+    #expect(SearchWords.idleLine(nil) == nil, "nothing before the core's first snapshot")
+    #expect(SearchWords.idleLine(try snapshot(recent: [])) == "Search movies and series by title.")
+    #expect(SearchWords.idleLine(try snapshot(recent: ["heat"])) == nil)
+    let shelf = row("cinemeta:movie:top", title: "Popular Movies", source: "Cinemeta", state: "ready", tiles: 3)
+    #expect(SearchWords.idleLine(try snapshot(recent: [], start: shelf)) == nil)
     // No addon can search: said before any query, and after one.
-    #expect(SearchWords.idle(try snapshot(searchable: 0)) == "None of your addons can search")
+    #expect(SearchWords.idleLine(try snapshot(searchable: 0)) == "None of your addons can search")
     #expect(SearchWords.answered(try snapshot(searchable: 0), query: "dune") == "None of your addons can search")
     // Nothing matched: the line says the query, as the web and Android do (trimmed, as the core keeps it).
     #expect(SearchWords.answered(try snapshot(rows: []), query: "dune ") == "No matches for \"dune\" in your catalogs.")
@@ -61,8 +66,8 @@ private func snapshot(query: String = "dune", rows: [[String: Any]] = [], search
     let screen = try source("Search/SearchScreen.swift")
     // The answered line on every form, and TV's idle line.
     #expect(screen.components(separatedBy: "StateLine(symbol: \"search\", text: line, action: addonsAction, spoken: true)").count - 1 == 2, "an answered line lost its action")
-    #expect(screen.contains("StateLine(symbol: \"search\", text: SearchWords.idle(search.snapshot, kids: kids), action: addonsAction)"), "TV's idle line lost its action")
-    #expect(screen.contains("if let addonsAction {\n                Button(addonsAction.title, action: addonsAction.run)"), "the idle line lost its action")
+    #expect(screen.contains("StateLine(symbol: \"search\", text: line, action: addonsAction).padding(.horizontal, metrics.gutter)"), "TV's idle line lost its action")
+    #expect(screen.contains("if let addonsAction {\n                    Button(addonsAction.title, action: addonsAction.run)"), "the idle line lost its action")
     #expect(screen.contains(".navigationDestination(isPresented: $addons) { RecommendedAddonsPage(core: core, scope: .all) }"))
 }
 
@@ -104,7 +109,7 @@ private func snapshot(query: String = "dune", rows: [[String: Any]] = [], search
                                 row("cinemeta:movie:top", title: "Movies", source: "Cinemeta", state: "failed", tiles: 0)])
     let groups: [String?] = SearchWords.groups(s.rows).flatMap { [$0.title, $0.stateWords] }
     let metas: [String?] = s.rows.flatMap(\.tiles).map(SearchWords.meta)
-    let words: [String?] = [SearchWords.idle(s), SearchWords.answered(s, query: "dune"), SearchWords.topResults] + groups + metas
+    let words: [String?] = [SearchWords.idleLine(s), SearchWords.answered(s, query: "dune"), SearchWords.topResults] + groups + metas
     let shown = words.compactMap { $0 }.joined(separator: " ")
     #expect(!shown.contains("Cinemeta") && !shown.contains("Trakt") && !shown.contains("strem.io"))
     for path in ["Search/SearchScreen.swift", "Search/SearchParts.swift"] {
@@ -133,4 +138,27 @@ private func snapshot(query: String = "dune", rows: [[String: Any]] = [], search
     // Return in a field moves to the first result.
     #expect(screen.contains(".onChange(of: input.submit) { firstResult = true }"))
     #expect(field.contains(".onSubmit { input.submit += 1 }"))
+}
+
+/// An empty Search gives the user something to do (owner, 2026-11-02): Recent with a way to clear it, then the core's
+/// shelf of titles with its Home title, on the Mac, iPad, iPhone and TV; the field clears to that page and keeps the cursor.
+@Test func anEmptySearchShowsRecentAndAShelfOfTitles() throws {
+    let shelf = row("cinemeta:movie:top", title: "Popular Movies", source: "Cinemeta", state: "ready", tiles: 4)
+    let s = try snapshot(recent: ["heat"], start: shelf)
+    #expect(s.start?.title == "Popular Movies" && s.start?.tiles.count == 4)
+    #expect(try snapshot().start == nil, "offline or none: no shelf, no error block")
+    #expect(SearchRules.clearRecentCommand["type"] as? String == "clearRecent")
+    let screen = try source("Search/SearchScreen.swift")
+    let parts = try source("Search/SearchParts.swift")
+    // The wide and phone pages draw the shelf as a Home row; the TV page too.
+    #expect(screen.components(separatedBy: "RowView(row: start, retry: {})").count - 1 == 2, "a form lost the shelf")
+    #expect(screen.components(separatedBy: "SearchRules.clearRecentCommand").count - 1 == 2, "a form lost Clear")
+    // The clear button keeps the cursor in the field.
+    let field = try body(of: "struct SearchField: View", in: parts)
+    #expect(field.contains("input.text = \"\"; focused.wrappedValue = true"))
+    // Clear is a 44 pt target with its own words.
+    let recent = try body(of: "struct RecentList: View", in: parts)
+    #expect(recent.contains(".frame(minWidth: 44, minHeight: 44)") && recent.contains("SearchWords.clearRecentLabel"))
+    // The shelf shows no addon's name.
+    #expect(!screen.contains("start.source") && !screen.contains("start?.source"))
 }

@@ -57,6 +57,9 @@ enum SearchRules {
         #endif
     }
 
+    /// "Clear" on Recent: the profile forgets its recent searches.
+    static let clearRecentCommand: [String: any Sendable] = ["type": "clearRecent"]
+
     /// The field's text for Recent, sent with `remember` so the core keeps it rather than its debounced
     /// query (G9; core a1697990).
     static func rememberCommand(text: String) -> [String: any Sendable] {

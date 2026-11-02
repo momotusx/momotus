@@ -12,6 +12,9 @@ struct SearchSnapshot: Decodable, Hashable, Sendable {
     /// The installed search catalogs a query goes to ("Top results" not counted). With none,
     /// empty `rows` mean no installed addon can search, not "No matches". Always 0 for kids.
     let searchable: Int
+    /// The empty state's shelf of titles to start from (Home's first catalog that answers, titled as Home titles
+    /// it; a kids profile's own list). nil while it loads, offline, with a query typed and with nothing to show.
+    let start: HomeRow?
 }
 
 /// The genre grid (core view `genres`, C43): Discover's kinds, each with its catalogs' genres and one art each.
@@ -39,6 +42,8 @@ enum SearchWords {
     /// The way on from `noAddons`: the recommended addons, which search.
     static let addons = DefaultsRules.title
     static let recent = "Recent"
+    static let clearRecent = "Clear"
+    static let clearRecentLabel = "Clear recent searches"
     static let topResults = "Top results"
     /// The view could not open: the core's words can name a host or an addon, so these instead.
     static let failed = "Search did not load."
@@ -49,8 +54,13 @@ enum SearchWords {
     static let kidsPrompt = "Search your shows"
     static let kidsNoMatch = "That isn't on your list. Ask a grown-up."
 
-    /// Under the field before a query: the hint, or that no addon can search (never on a kids profile, which asks none).
-    static func idle(_ s: SearchSnapshot?, kids: Bool = false) -> String { !kids && s?.searchable == 0 ? noAddons : hint }
+    /// The line under the field before a query: that no addon can search, else the hint, and the hint only where
+    /// nothing else shows (no Recent, no shelf of titles). nil until the core's first snapshot.
+    static func idleLine(_ s: SearchSnapshot?, kids: Bool = false) -> String? {
+        guard let s else { return nil }
+        if !kids && s.searchable == 0 { return noAddons }
+        return s.recent.isEmpty && s.start == nil ? hint : nil
+    }
 
     /// After the core answered `query`: that no addon can search, or that nothing matched; nil otherwise.
     static func answered(_ s: SearchSnapshot?, query: String, kids: Bool = false) -> String? {
