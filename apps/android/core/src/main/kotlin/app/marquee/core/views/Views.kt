@@ -276,6 +276,9 @@ class SearchView(
 
     /** The user opened a result: remember the query. */
     fun remember() = post(command("remember"))
+
+    /** "Clear" on the recent searches: the profile forgets them. */
+    fun clearRecent() = post(command("clearRecent"))
 }
 
 /** What `select` does with the genre: leave it, clear it, or set it. */

@@ -3,8 +3,10 @@ package app.marquee.android
 import androidx.activity.compose.LocalActivity
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
@@ -27,6 +29,7 @@ import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -52,6 +55,9 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -336,14 +342,10 @@ fun SearchScreen(
 
             !searching -> {
                 val recent = snapshot?.recent.orEmpty()
-                // A kid has no recent searches (the core keeps none) and searches no addon.
-                if (recent.isEmpty()) {
-                    if (!kids) {
-                        item(
-                            key = "hint",
-                        ) { Note("Type a title. Results come from every addon with a search catalog.") }
-                    }
-                } else {
+                val start = snapshot?.start
+                // Recent searches (a kid has none: the core keeps none), a shelf of titles to start from, and the
+                // hint only where neither shows.
+                if (recent.isNotEmpty()) {
                     item(key = "recent") {
                         Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.xs)) {
                             Kicker("Recent searches")
@@ -360,7 +362,21 @@ fun SearchScreen(
                                     Chip(query, selected = false, onClick = { send(query) })
                                 }
                             }
+                            SecondaryButton(
+                                SearchCopy.CLEAR_RECENT,
+                                view::clearRecent,
+                                Modifier.padding(start = Marquee.safe.side),
+                                icon = Icons.X,
+                            )
                         }
+                    }
+                }
+                if (start != null) {
+                    item(key = "start") { ResultRow(start, onOpen) }
+                }
+                if (snapshot != null) {
+                    SearchCopy.idleHint(recent, start != null, kids)?.let { hint ->
+                        item(key = "hint") { Note(hint) }
                     }
                 }
             }
@@ -407,8 +423,11 @@ internal fun SearchField(
     val tv = Marquee.form == Form.Tv
     val shape = RoundedCornerShape(Marquee.radius.pill)
     var focused by remember { mutableStateOf(false) }
+    val input = remember { FocusRequester() }
     // On TV the focused field turns white with dark words (focusPalette).
     val colors = focusPalette(focused)
+    // A touch screen clears with a button; a remote deletes with its keys.
+    val clearable = text.isNotEmpty() && !tv
     Row(
         Modifier
             .padding(horizontal = Marquee.safe.side)
@@ -420,7 +439,17 @@ internal fun SearchField(
             .background(colors.raised)
             // A phone field shows a 2 dp key edge on any focus (a tap included), as the web; no ring.
             .then(if (focused && !tv) Modifier.border(2.dp, colors.key, shape) else Modifier)
-            .padding(horizontal = if (tv) 28.dp else 18.dp),
+            .padding(
+                start = if (tv) 28.dp else 18.dp,
+                end =
+                    if (tv) {
+                        28.dp
+                    } else if (clearable) {
+                        2.dp
+                    } else {
+                        18.dp
+                    },
+            ),
         horizontalArrangement = Arrangement.spacedBy(if (tv) 18.dp else 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -442,7 +471,22 @@ internal fun SearchField(
                 modifier = Modifier.weight(1f),
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                 keyboardActions = KeyboardActions(onSearch = { keyboard?.hide() }),
+                focusRequester = input,
             )
+        }
+        if (clearable) {
+            // Emptying the field lands on the empty state, the cursor still in the field.
+            Box(
+                Modifier
+                    .size(48.dp)
+                    .clip(CircleShape)
+                    .semantics { contentDescription = "Clear search" }
+                    .clickable(onClickLabel = "Clear search", role = Role.Button) {
+                        onText("")
+                        runCatching { input.requestFocus() }
+                    },
+                contentAlignment = Alignment.Center,
+            ) { MqIcon(Icons.CircleX, tint = colors.muted) }
         }
     }
 }

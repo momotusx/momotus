@@ -20,6 +20,7 @@ import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.test.requestFocus
@@ -33,6 +34,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
+import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
@@ -77,5 +79,22 @@ class SearchFieldTest {
         field.performKeyInput { pressKey(Key.DirectionCenter) }
         compose.waitForIdle()
         assertTrue(keyboardShown(), "select did not open the keyboard")
+    }
+
+    @Test
+    fun `on a phone the clear button empties the field and keeps the cursor in it`() {
+        var text by mutableStateOf("sintel")
+        compose.setContent { MarqueeTheme(Form.Phone) { SearchField(text) { text = it } } }
+        compose.onNodeWithContentDescription("Clear search").performClick()
+        compose.waitForIdle()
+        assertEquals("", text)
+        compose.onNodeWithContentDescription("Clear search").assertDoesNotExist()
+        compose.onNodeWithContentDescription("Search titles").assertIsFocused()
+    }
+
+    @Test
+    fun `on a TV there is no clear button, the remote deletes with its keys`() {
+        compose.setContent { MarqueeTheme(Form.Tv) { SearchField("sintel") {} } }
+        compose.onNodeWithContentDescription("Clear search").assertDoesNotExist()
     }
 }

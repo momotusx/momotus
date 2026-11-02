@@ -132,6 +132,8 @@ fun FieldInput(
     readOnly: Boolean = false,
     contentType: ContentType? = null,
     error: String? = null,
+    /** The editor's focus, for a screen that puts the cursor back in it (a clear button). */
+    focusRequester: FocusRequester? = null,
 ) {
     val colors = Marquee.colors
     val tv = Marquee.form == Form.Tv
@@ -139,7 +141,7 @@ fun FieldInput(
     var entered by remember { mutableStateOf(false) }
     // Back left the editor: the button takes the focus once it is there.
     var backed by remember { mutableStateOf(false) }
-    val input = remember { FocusRequester() }
+    val input = focusRequester ?: remember { FocusRequester() }
     val button = remember { FocusRequester() }
     // Back from the editor on a TV where it comes as a back event, not a key (Android 16 and later, predictive
     // back; the player pairs the two the same way): the key handler below covers the older ones.

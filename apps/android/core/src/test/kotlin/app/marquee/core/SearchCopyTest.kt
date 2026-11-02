@@ -20,4 +20,13 @@ class SearchCopyTest {
             )
         }
     }
+
+    @Test
+    fun `the hint shows only where nothing else does`() {
+        assertEquals(SearchCopy.HINT, SearchCopy.idleHint(emptyList(), hasStart = false))
+        assertEquals(SearchCopy.KIDS_HINT, SearchCopy.idleHint(emptyList(), hasStart = false, kids = true))
+        assertEquals(null, SearchCopy.idleHint(listOf("heat"), hasStart = false))
+        assertEquals(null, SearchCopy.idleHint(emptyList(), hasStart = true))
+        assertEquals(null, SearchCopy.idleHint(emptyList(), hasStart = true, kids = true))
+    }
 }
