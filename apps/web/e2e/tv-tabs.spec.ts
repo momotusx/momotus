@@ -173,3 +173,22 @@ test("TV: Select during the settle navigates once", async ({ browser }) => {
   expect(replaced).toHaveLength(1);
   await context.close();
 });
+
+test("TV: Calendar shown from its tab keeps the focus on the tab while its episodes arrive (QA r2 Q4 row 40)", async ({ browser }) => {
+  const context = await browser.newContext({ viewport: { width: 1920, height: 1080 }, reducedMotion: "reduce" });
+  const page = await context.newPage();
+  await page.goto("/library?form=tv");
+  const library = page.locator('[data-f="nav:/library"]');
+  await expect(library).toBeVisible({ timeout: 30_000 });
+  await library.focus();
+  await page.keyboard.press("ArrowRight");
+  await expect(page).toHaveURL(/\/calendar/, { timeout: 2_000 });
+  // The library's series on the air: the schedule has episodes, which used to take the focus as they came.
+  await expect(page.locator('[data-f^="cal:"]').first()).toBeVisible({ timeout: 30_000 });
+  await page.waitForTimeout(600);
+  expect(await focused(page)).toBe("nav:/calendar");
+  // Down goes in.
+  await page.keyboard.press("ArrowDown");
+  await expect.poll(() => focused(page)).toMatch(/^cal:/);
+  await context.close();
+});

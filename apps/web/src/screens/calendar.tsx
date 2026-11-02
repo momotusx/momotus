@@ -10,7 +10,7 @@ import LoaderCircle from "lucide-solid/icons/loader-circle";
 import RefreshCw from "lucide-solid/icons/refresh-cw";
 import { createEffect, createSignal, For, onCleanup, onMount, Show } from "solid-js";
 import { liveView } from "../core/client";
-import { restoreSoon } from "../focus/dom";
+import { railHasFocus, restoreSoon } from "../focus/dom";
 import { calendarIds } from "../lib/ids";
 import { Why } from "../components/why";
 import { cameBack } from "../history";
@@ -114,7 +114,8 @@ function CalendarPage(props: { retry: () => void }) {
       const section = document.querySelector<HTMLElement>(`[data-day="${day}"]`);
       section?.scrollIntoView({ block: "start" });
       const first = section?.querySelector<HTMLElement>("[data-f]");
-      if (first && form() !== "phone") first.focus({ preventScroll: true });
+      // A TV tab keeps the focus until the viewer goes down (QA r2, Q4 row 40).
+      if (first && form() !== "phone" && !railHasFocus()) first.focus({ preventScroll: true });
     });
   });
 
