@@ -483,6 +483,7 @@ private func row(_ json: String) throws -> VersionRow {
     let found = try versions("shortcuts")
     var none = found
     none.recommended = nil
+    none.rows = []
     none.empty = EmptyVersions(kind: "noResults", count: 0, rows: [], key: nil)
     // The wait ended with no version: the card shows, and nothing starts yet.
     #expect(PickWait.ends(snapshot: none, failed: false, settled: false))
