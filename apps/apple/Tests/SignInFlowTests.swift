@@ -1,4 +1,5 @@
 import Foundation
+import AuthenticationServices
 import Testing
 
 // The sign-in screens' steps (plans/accounts.md 4.1, 5) at the flow's level,
@@ -461,3 +462,25 @@ private let nobody = "http://127.0.0.1:9"
     }
 }
 
+
+/// macOS answers a browser session on an XPC reply queue, never the main
+/// thread (the Mac app trapped there on 2026-11-03 after a Google sign-in).
+@Suite struct BrowserReturnTests {
+    @Test func a_return_off_the_main_thread_resumes_the_sign_in() async throws {
+        let url = try #require(URL(string: "momotus://auth#state=s&code=c"))
+        let got: URL = try await withCheckedThrowingContinuation { continuation in
+            let done = SignInSheets.returned(continuation)
+            DispatchQueue.global().async { done(url, nil) }
+        }
+        #expect(got == url)
+    }
+
+    @Test func a_closed_window_off_the_main_thread_is_a_cancel() async {
+        await #expect(throws: SignInSheets.Failure.cancelled) {
+            let _: URL = try await withCheckedThrowingContinuation { continuation in
+                let done = SignInSheets.returned(continuation)
+                DispatchQueue.global().async { done(nil, ASWebAuthenticationSessionError(.canceledLogin)) }
+            }
+        }
+    }
+}

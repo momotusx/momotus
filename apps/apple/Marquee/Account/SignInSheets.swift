@@ -155,12 +155,7 @@ enum SignInSheets {
         // Held until its callback: a session nothing holds can end its sheet at once.
         var session: ASWebAuthenticationSession?
         let callback: URL = try await withCheckedThrowingContinuation { continuation in
-            let opened = ASWebAuthenticationSession(url: url, callback: .customScheme("momotus")) { url, error in
-                if let url { continuation.resume(returning: url) } else {
-                    let cancelled = (error as? ASWebAuthenticationSessionError)?.code == .canceledLogin
-                    continuation.resume(throwing: cancelled ? Failure.cancelled : Failure.other(error?.localizedDescription ?? "no return"))
-                }
-            }
+            let opened = ASWebAuthenticationSession(url: url, callback: .customScheme("momotus"), completionHandler: returned(continuation))
             opened.presentationContextProvider = anchor
             session = opened
             if !opened.start() { continuation.resume(throwing: Failure.other("the browser did not open")) }
@@ -168,6 +163,18 @@ enum SignInSheets {
         withExtendedLifetime((session, anchor)) {}
         guard let fragment = AccountRules.returnedFragment(callback) else { throw Failure.other("not a sign-in return") }
         return fragment
+    }
+
+    /// The browser session's completion. macOS calls it on an XPC reply queue,
+    /// so it is built outside the main actor: a closure written inside
+    /// `browser` would be main-actor isolated and trap there.
+    nonisolated static func returned(_ continuation: CheckedContinuation<URL, any Error>) -> @Sendable (URL?, (any Error)?) -> Void {
+        { url, error in
+            if let url { continuation.resume(returning: url) } else {
+                let cancelled = (error as? ASWebAuthenticationSessionError)?.code == .canceledLogin
+                continuation.resume(throwing: cancelled ? Failure.cancelled : Failure.other(error?.localizedDescription ?? "no return"))
+            }
+        }
     }
 
     // MARK: Running a controller
