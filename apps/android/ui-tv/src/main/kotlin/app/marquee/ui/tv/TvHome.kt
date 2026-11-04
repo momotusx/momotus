@@ -182,8 +182,8 @@ fun TvHome(
     kids: Boolean = false,
     /**
      * An urgent account alert (a deletion, the account gone, a new device): first, above the hero (the owner,
-     * 2026-11-02). One that comes while Home shows lands above what the viewer sees: the list keeps the hero and
-     * the focus where they are, and Up reaches it.
+     * 2026-11-02). It lies over the top of the hero's art, under the tabs, so one that comes while Home shows is
+     * seen at once and moves neither the hero nor the focus (QA r2, Q2 row 33); Up reaches it.
      */
     alert: (@Composable () -> Unit)? = null,
     /** A one-time card (new recommended addons): under Continue Watching, or first when there is none. */
@@ -339,8 +339,9 @@ fun TvHome(
     // that move to this alone, so two scrolls never take turns; it runs again when the hero arrives
     // (the list keeps the first lane in place, so a hero that arrives later starts out of view).
     val hasHero = home.hero != null
-    // Read by the art and the scrolls below, which find the hero one item lower under an alert.
-    state.alertShown = alert != null
+    // Read by the art and the scrolls below, which find the hero one item lower under an alert of its own: one with no
+    // hero to lie over is the page's first item.
+    state.alertShown = alert != null && heroes.getOrNull(heroPage) == null
     LaunchedEffect(state, hasHero) {
         // Nobody has scrolled yet: a hero that arrives now belongs in view.
         if (hasHero && state.page.firstVisibleItemIndex <= 1 && state.page.firstVisibleItemScrollOffset == 0) {
@@ -386,25 +387,29 @@ fun TvHome(
                 contentPadding = PaddingValues(top = tvContentTop(), bottom = safe.bottom),
                 verticalArrangement = Arrangement.spacedBy(Marquee.space.s),
             ) {
-                if (alert != null) item(key = "alert") { alert() }
                 val hero = heroes.getOrNull(heroPage)
+                if (alert != null && hero == null) item(key = "alert") { alert() }
                 if (hero != null) {
                     item(key = "hero") {
-                        TvHero(
-                            hero,
-                            state,
-                            onOpen,
-                            onPlay,
-                            heroPage,
-                            heroes.size,
-                            heroClock,
-                            heroFrom,
-                            at = { heroPageAt(it, heroDir, heroSlide.value) },
-                            hasPlay = { heroes.getOrNull(it)?.playable() == true },
-                            playWords = PLAY_WIDEST + heroes.mapNotNull { it.play?.label }.distinct(),
-                        ) { to ->
-                            heroClock.manual()
-                            pageHero(to, if (to > heroPage) 1 else -1)
+                        Box {
+                            TvHero(
+                                hero,
+                                state,
+                                onOpen,
+                                onPlay,
+                                heroPage,
+                                heroes.size,
+                                heroClock,
+                                heroFrom,
+                                at = { heroPageAt(it, heroDir, heroSlide.value) },
+                                hasPlay = { heroes.getOrNull(it)?.playable() == true },
+                                playWords = PLAY_WIDEST + heroes.mapNotNull { it.play?.label }.distinct(),
+                            ) { to ->
+                                heroClock.manual()
+                                pageHero(to, if (to > heroPage) 1 else -1)
+                            }
+                            // Over the top of the hero's art, under the tabs: it takes no room of its own.
+                            if (alert != null) alert()
                         }
                     }
                 }

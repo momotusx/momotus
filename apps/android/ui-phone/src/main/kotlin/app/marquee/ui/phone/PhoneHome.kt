@@ -135,7 +135,8 @@ fun PhoneHome(
     kids: Boolean = false,
     /**
      * An urgent account alert (a deletion, the account gone, a new device): first, above the hero, under the status
-     * bar (the owner, 2026-11-02).
+     * bar (the owner, 2026-11-02). It lies over the hero's art, so one that lands after Home opened moves nothing
+     * (QA r2, Q2 row 33).
      */
     alert: (@Composable () -> Unit)? = null,
     /** A one-time card (new recommended addons): under Continue Watching, or first when there is none. */
@@ -188,26 +189,29 @@ fun PhoneHome(
         contentPadding = PaddingValues(top = top, bottom = Marquee.space.l + LocalBarSpace.current),
         verticalArrangement = Arrangement.spacedBy(Marquee.space.m),
     ) {
-        if (alert != null) {
-            item(key = "alert") {
-                // The page runs up under the status bar for its hero; the alert over it starts below the bar.
-                val under =
-                    if (hasHero) {
-                        Modifier
-                            .windowInsetsPadding(
-                                WindowInsets.statusBars,
-                            ).padding(top = Marquee.space.s)
-                    } else {
-                        Modifier
-                    }
-                Box(under) { alert() }
-            }
-        }
         val hero = home.hero
+        // Without a hero the alert is the page's first item.
+        if (alert != null && hero == null) item(key = "alert") { alert() }
         if (hero !=
             null
         ) {
-            item(key = "hero") { PhoneHeroCarousel(home.heroes, onOpen, onPlay, trailers) { heroVisible } }
+            item(key = "hero") {
+                Box {
+                    PhoneHeroCarousel(
+                        home.heroes,
+                        onOpen,
+                        onPlay,
+                        trailers,
+                        titleHidden = alert != null,
+                    ) { heroVisible }
+                    // Over the hero's top, under the status bar, where the page title was.
+                    if (alert != null) {
+                        Box(
+                            Modifier.windowInsetsPadding(WindowInsets.statusBars).padding(top = Marquee.space.s),
+                        ) { alert() }
+                    }
+                }
+            }
         }
         if (home.rows.isEmpty()) {
             item(
@@ -319,6 +323,8 @@ private fun PhoneHeroCarousel(
     onOpen: (Tile) -> Unit,
     onPlay: (Tile) -> Unit,
     trailers: TrailerHost,
+    /** An alert lies over the page title: the title gives way (unseen, still the heading to TalkBack). */
+    titleHidden: Boolean = false,
     visible: () -> Boolean,
 ) {
     val n = heroes.size
@@ -431,7 +437,12 @@ private fun PhoneHeroCarousel(
                 .padding(start = 16.dp, end = 16.dp, top = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            MqText("Home", Modifier.weight(1f).semantics { heading() }, role = TextRole.Hero, maxLines = 1)
+            MqText(
+                "Home",
+                Modifier.weight(1f).alpha(if (titleHidden) 0f else 1f).semantics { heading() },
+                role = TextRole.Hero,
+                maxLines = 1,
+            )
         }
         if (heroes.size > 1) {
             HeroDots(

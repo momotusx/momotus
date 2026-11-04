@@ -191,7 +191,7 @@ class TvHomeAlertTest {
     }
 
     @Test
-    fun `an alert that comes later moves neither the focus nor Play`() {
+    fun `an alert that comes later shows at once and moves neither the focus nor Play`() {
         show()
         compose.onNodeWithContentDescription(play).performSemanticsAction(SemanticsActions.RequestFocus)
         waitFor("Play takes the focus") { focusedOn(play) }
@@ -204,5 +204,8 @@ class TvHomeAlertTest {
         compose.waitForIdle()
         assertTrue(focusedOn(play), "the focus stays on Play")
         assertEquals(before, compose.onNodeWithContentDescription(play).fetchSemanticsNode().boundsInRoot)
+        // Seen at once, over the hero's art above Play, not above the screen's top (QA r2, Q2 row 33).
+        val said = compose.onNodeWithText("A new device joined: QA device B.").fetchSemanticsNode().boundsInRoot
+        assertTrue(said.top >= 0f && said.bottom <= before.top, "the alert is on the screen, above Play: $said")
     }
 }

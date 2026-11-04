@@ -44,11 +44,12 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import kotlin.coroutines.CoroutineContext
+import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
  * An urgent account alert on the phone's Home (the owner, 2026-11-02): first, above the hero and on the first screen when Home
- * opens with it, under the status bar.
+ * opens with it, under the status bar; one that lands later lies over the hero's art and moves nothing.
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [36], qualifiers = "w390dp-h844dp-xxhdpi")
@@ -172,5 +173,24 @@ class PhoneHomeAlertTest {
                 .boundsInRoot
         assertTrue(said.top >= 0f && said.bottom <= root.bottom, "the alert is on the first screen: $said")
         assertTrue(said.bottom <= button.top, "the alert sits above the hero's Play")
+    }
+
+    @Test
+    fun `an alert that lands after Home opened lies over the hero and moves nothing`() {
+        show()
+        val playAt = {
+            compose
+                .onNodeWithContentDescription(
+                    play,
+                    useUnmergedTree = true,
+                ).fetchSemanticsNode()
+                .boundsInRoot
+        }
+        val before = playAt()
+        alert = "A new device joined: QA device B."
+        compose.waitForIdle()
+        val said = compose.onNodeWithText("A new device joined: QA device B.").fetchSemanticsNode().boundsInRoot
+        assertEquals(before, playAt(), "the hero's Play stays where it was (QA r2, Q2 row 33)")
+        assertTrue(said.top >= 0f && said.bottom <= before.top, "the alert is on the first screen, above Play: $said")
     }
 }

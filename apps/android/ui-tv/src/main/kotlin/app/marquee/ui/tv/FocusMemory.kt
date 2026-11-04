@@ -172,7 +172,7 @@ class TvHomeState(
     /** Home shows a card between its lanes (the recommended addons card): the lanes under it sit one item lower. */
     var cardShown = false
 
-    /** Home shows an urgent account alert above the hero: the hero and every lane sit one item lower. */
+    /** Home shows an urgent account alert as its first item (with no hero to lie over): every lane sits one item lower. */
     var alertShown by mutableStateOf(false)
 
     /** The hero's page item: first, or under the alert. */
