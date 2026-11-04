@@ -338,6 +338,7 @@ private fun NewAccount(
         SignInPairing(session, sync, server, onJoined = signIn::joined)
         SecondaryButton(SyncCopy.CANCEL, { pairing = false })
     } else {
+        MqText(AccountCopy.NO_ACCOUNT_YET, color = Marquee.colors.muted)
         PrimaryButton(AccountCopy.CREATE_ACCOUNT, signIn::create, icon = Icons.Plus, focusRequester = stepFocus())
         SecondaryButton(AccountCopy.ALREADY_USE, { pairing = true }, icon = Icons.QrCode)
     }

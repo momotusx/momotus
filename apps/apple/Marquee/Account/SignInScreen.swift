@@ -90,7 +90,7 @@ struct SignInScreen: View {
         SignInStage {
             VStack(alignment: .leading, spacing: 0) {
                 Wordmark(size: 22)
-                Text(words.signInTitle)
+                Text(isNew ? words.createAccount : words.signInTitle)
                     .textFont(52, weight: .bold, relativeTo: .largeTitle)
                     .foregroundStyle(.white)
                     .accessibilityAddTraits(.isHeader)
@@ -142,7 +142,7 @@ struct SignInScreen: View {
                 Wordmark(size: 22)
                 Spacer()
             }
-            Text(words.signInTitle)
+            Text(isNew ? words.createAccount : words.signInTitle)
                 .display(metrics.wide ? 44 : Theme.type.title1 + 4)
                 .foregroundStyle(Theme.Palette.text)
                 .accessibilityAddTraits(.isHeader)
@@ -172,6 +172,9 @@ struct SignInScreen: View {
     #endif
 
     // MARK: Stages
+
+    /// No account uses the sign-in yet: the heading names the step, as on Android and the web.
+    private var isNew: Bool { if case .new = flow.stage { true } else { false } }
 
     @ViewBuilder private var stage: some View {
         switch flow.stage {
@@ -312,6 +315,10 @@ struct SignInScreen: View {
     /// `new` once no passkey here opened an account (the probe's sheet was 4.1.4's line).
     private func newAccount(_ ticket: String) -> some View {
         VStack(alignment: .leading, spacing: Theme.Space.s) {
+            Text(words.noAccountYet)
+                .textFont(Theme.type.body)
+                .foregroundStyle(Theme.Palette.muted)
+                .fixedSize(horizontal: false, vertical: true)
             ways {
                 Button { Task { await flow.create(ticket: ticket, name: DeviceName.current, userName: userName) } } label: {
                     Label(words.createAccount, glyph: "plus")

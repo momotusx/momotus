@@ -45,6 +45,7 @@ object AccountCopy {
     const val CREATE_ACCOUNT = "Create your Momotus account"
     const val ALREADY_USE = "I already use Momotus on another device"
     const val LIBRARY_ADDED = "This device's library will be added to your account."
+    const val NO_ACCOUNT_YET = "This sign-in has no Momotus account yet."
     const val CANT_USE_ANY = "I can't use any of these"
     const val TV_SIGN_IN = "Sign in with your phone"
     const val TV_SIGN_IN_HOW = "On your phone, open Momotus and tap Sign in another device"
@@ -226,6 +227,7 @@ object AccountCopy {
             "createAccount" to CREATE_ACCOUNT,
             "alreadyUse" to ALREADY_USE,
             "libraryAdded" to LIBRARY_ADDED,
+            "noAccountYet" to NO_ACCOUNT_YET,
             "cantUseAny" to CANT_USE_ANY,
             "tvSignIn" to TV_SIGN_IN,
             "tvSignInHow" to TV_SIGN_IN_HOW,

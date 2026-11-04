@@ -912,7 +912,7 @@ export function NewAccount() {
     <Show when={held()} fallback={<Navigate href={firstScreen(from)} />}>
       {(h) => (
         <Page>
-          <Stage label={w.createAccount} title={w.createAccount} lead={from === "account" ? w.libraryAdded : undefined}>
+          <Stage label={w.createAccount} title={w.createAccount} lead={from === "account" ? `${w.noAccountYet} ${w.libraryAdded}` : w.noAccountYet}>
             <Create server={h().server} from={from} />
           </Stage>
         </Page>

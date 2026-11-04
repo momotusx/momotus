@@ -42,6 +42,7 @@
   "createAccount": "Create your Momotus account",
   "alreadyUse": "I already use Momotus on another device",
   "libraryAdded": "This device's library will be added to your account.",
+  "noAccountYet": "This sign-in has no Momotus account yet.",
   "cantUseAny": "I can't use any of these",
   "tvSignIn": "Sign in with your phone",
   "tvSignInHow": "On your phone, open Momotus and tap Sign in another device",

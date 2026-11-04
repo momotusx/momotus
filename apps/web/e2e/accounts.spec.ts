@@ -480,6 +480,8 @@ test.describe.serial("accounts on the web", () => {
     await again.getByText("Sign in as alice").click();
     await expect(desk).toHaveURL(/\/sign-in\/new\?from=welcome$/);
     await expect(desk.locator("h1")).toHaveText("Create your Momotus account");
+    // The provider sign-in worked; the line says why the next step is an account to make or join.
+    await expect(desk.getByText("This sign-in has no Momotus account yet.", { exact: true })).toBeVisible();
     await expect(desk.locator('[data-f="signin:already"]')).toHaveText("I already use Momotus on another device");
     await shot(desk, "accounts-create-desktop");
     await desk.locator('[data-f="signin:create"]').click();

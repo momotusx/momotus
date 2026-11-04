@@ -205,7 +205,7 @@ test.describe.serial("desktop sign-in stage", () => {
     await expect(page).toHaveURL(/\/sign-in\/new$/);
     const stage = page.locator(".sign-in-stage");
     await expect(stage.locator("h1")).toHaveText("Create your Momotus account");
-    await expect(stage.locator(".lead")).toHaveText("This device's library will be added to your account.");
+    await expect(stage.locator(".lead")).toHaveText("This sign-in has no Momotus account yet. This device's library will be added to your account.");
     await expect(page.locator(".sign-in-stage > .acts .btn")).toHaveText(["Create your Momotus account", "I already use Momotus on another device"]);
     await expect(page.locator("#sign-in-qr .qrbox svg")).toBeVisible({ timeout: 30_000 });
     const c = await box(page, "#sign-in-qr");
