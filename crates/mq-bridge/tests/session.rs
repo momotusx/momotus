@@ -943,10 +943,11 @@ async fn defaults_and_links_with_a_sign_in_over_the_protocol() {
         .await;
     let listed = next(&mut rx).await;
     let addons = listed["result"]["addons"].as_array().unwrap();
-    // The eleven addons, then the two plugin repositories (R7).
-    assert_eq!(addons.len(), 13, "{listed}");
+    // The eleven addons, then the three plugin repositories (R7).
+    assert_eq!(addons.len(), 14, "{listed}");
     assert_eq!(addons[11]["group"], "plugins");
-    assert_eq!(addons[12]["key"], "nuvio-world");
+    assert_eq!(addons[12]["key"], "nuvio-tr-pro");
+    assert_eq!(addons[13]["key"], "nuvio-niakvio");
     assert_eq!(addons[1]["key"], "torrentio");
     assert_eq!(addons[1]["installed"], "absent");
     session

@@ -23,17 +23,14 @@ const KEPT: Duration = Duration::from_secs(86_400);
 const PAGE_BYTES: usize = 2 << 20;
 const MAX_LISTED: usize = 50;
 
-/// The page's links as of 2026-10-30, in its order: what the section lists when the page cannot
-/// be read or lists none.
-const SNAPSHOT: [&str; 11] = [
+/// The page's links as of 2026-10-30, in its order, less three that answered 404 on 2026-11-02:
+/// what the section lists when the page cannot be read or lists none.
+const SNAPSHOT: [&str; 8] = [
     "https://raw.githubusercontent.com/yoruix/nuvio-providers/refs/heads/main/manifest.json",
     "https://raw.githubusercontent.com/D3adlyRocket/All-in-One-Nuvio/refs/heads/main/manifest.json",
-    "https://raw.githubusercontent.com/phisher98/phisher-nuvio-providers/refs/heads/main/manifest.json",
     "https://raw.githubusercontent.com/michat88/nuvio-providers/refs/heads/main/manifest.json",
     "https://raw.githubusercontent.com/Abinanthankv/NuvioRepo/refs/heads/master/manifest.json",
-    "https://raw.githubusercontent.com/nvmindl/nuvio-providers/refs/heads/main/manifest.json",
     "https://raw.githubusercontent.com/saimuelbr/saimuel-nuvio-repo/refs/heads/main/manifest.json",
-    "https://raw.githubusercontent.com/realbestia1/nuvio-providers-it/refs/heads/main/manifest.json",
     "https://raw.githubusercontent.com/Gowaru/gowaru-nuvio-providers/refs/heads/main/manifest.json",
     "https://raw.githubusercontent.com/mooncrown04/nuviotr/refs/heads/main/manifest.json",
     "https://raw.githubusercontent.com/KennethJYS/Nuvio-Providers-Latino/refs/heads/main/manifest.json",

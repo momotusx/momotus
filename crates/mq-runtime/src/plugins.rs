@@ -6,8 +6,8 @@
 //! row is left (owner, 2026-11-02), played through a handle that reaches
 //! public addresses only.
 //!
-//! Two repositories come as defaults, on (owner, 2026-10-30, R7). A kids
-//! profile has none and runs none.
+//! Three repositories come as defaults, on (owner, 2026-11-03, from
+//! plans/plugin-defaults-research.md). A kids profile has none and runs none.
 //!
 //! As built, against the plan: a repository's consent covers all of its
 //! providers, which may contact any public website (7.5's any-site words);
@@ -38,16 +38,26 @@ pub struct PluginDefault {
     pub url: String,
     pub name: String,
     pub line: String,
+    /// The provider ids this default switches on, the repository's other
+    /// providers starting off; none means every provider (a provider its
+    /// repository lists as `enabled: false` stays off either way).
+    pub providers: Option<Vec<String>>,
+    /// A repository this one replaces: when the profile first gets this
+    /// default, that repository goes if the profile never touched it.
+    pub replaces: Option<String>,
 }
 
-/// The defaults: Turkish streams and streams from abroad, as Nuvio
-/// repositories (the lead's pick, checked live 2026-10-30).
+/// The defaults, Nuvio repositories picked from the measurement of
+/// 2026-11-02 (plans/plugin-defaults-research.md): Turkish streams, and one
+/// provider of a global repository.
 fn builtin_defaults() -> Vec<PluginDefault> {
     let one = |key: &str, url: &str, name: &str, line: &str| PluginDefault {
         key: key.into(),
         url: url.into(),
         name: name.into(),
         line: line.into(),
+        providers: None,
+        replaces: None,
     };
     vec![
         one(
@@ -56,14 +66,36 @@ fn builtin_defaults() -> Vec<PluginDefault> {
             "Manitux",
             "Direct links to Turkish films and series from Turkish sites.",
         ),
-        one(
-            "nuvio-world",
-            "https://raw.githubusercontent.com/yoruix/nuvio-providers/refs/heads/main/manifest.json",
-            "Yoru's Repo",
-            "Direct links to films and series from sites abroad.",
-        ),
+        // Four of its five providers (filmmakinesi, hdfilmcehennemi, dizibox,
+        // diziyou) scrape the same sites as Manitux's; the pass fits with all
+        // five on (7 s median), so they stay on for now.
+        PluginDefault {
+            replaces: Some(YORU.into()),
+            ..one(
+                "nuvio-tr-pro",
+                "https://raw.githubusercontent.com/ttuloglu/nuvio-tr-plugins/main/manifest.json",
+                "Nuvio TR Pro",
+                "More direct links to Turkish films and series.",
+            )
+        },
+        // 41 providers, one of which answered in the measurement; all of
+        // them on would stretch the pass from 7 s to 21 s.
+        PluginDefault {
+            providers: Some(vec!["PLAYIMDB".into()]),
+            ..one(
+                "nuvio-niakvio",
+                "https://raw.githubusercontent.com/niakw/NiakVIO/main/manifest.json",
+                "NiakVIO",
+                "Direct links to films and series from a site abroad.",
+            )
+        },
     ]
 }
+
+/// The global default of 2026-10-30, no longer one (stale since 2026-06-07,
+/// 34 s passes); `nuvio-tr-pro` replaces it.
+const YORU: &str =
+    "https://raw.githubusercontent.com/yoruix/nuvio-providers/refs/heads/main/manifest.json";
 
 /// A manifest is read again once this old (7.6).
 const STALE_MS: i64 = 6 * 3_600_000;
@@ -133,6 +165,8 @@ fn dev_defaults() -> Option<Vec<PluginDefault>> {
                     url: url.to_owned(),
                     name: "Test plugins".into(),
                     line: "Direct links from the test repository.".into(),
+                    providers: None,
+                    replaces: None,
                 })
                 .collect(),
         )
@@ -465,11 +499,31 @@ impl Core {
             return Ok(());
         }
         let url = Url::parse(&row.url).map_err(|_| "A bad link.".to_owned())?;
-        let (_, json) = fetch_manifest(self, &url).await?;
+        let (repo, json) = fetch_manifest(self, &url).await?;
+        if row.manifest_json.is_none() {
+            self.start_providers(&row.url, &repo);
+        }
         let _ = self
             .library()
             .set_plugin_manifest(self.profile(), &row.url, &json, now);
         Ok(())
+    }
+
+    /// A default with a provider list starts with the other providers of its
+    /// repository off, once, when its manifest is first read: later the
+    /// user's switches rule.
+    fn start_providers(&self, url: &str, repo: &Repo) {
+        let Some(only) = (self.plugin_defaults().iter())
+            .find(|d| d.url == url)
+            .and_then(|d| d.providers.as_ref())
+        else {
+            return;
+        };
+        for p in repo.providers.iter().filter(|p| !only.contains(&p.id)) {
+            let _ = self
+                .library()
+                .set_plugin_off(self.profile(), url, &p.id, true);
+        }
     }
 
     /// The profile's repositories and their providers, each manifest read
@@ -641,11 +695,20 @@ impl Core {
         if !self.has_plugins() || self.policy().kids() {
             return Ok(());
         }
+        let (lib, profile) = (self.library(), self.profile());
         for d in self.plugin_defaults() {
-            if !self.library().plugin_repo_known(self.profile(), &d.url)? {
-                self.library()
-                    .put_plugin_repo(self.profile(), &d.url, true)?;
+            if lib.plugin_repo_known(profile, &d.url)? {
+                continue;
             }
+            // The repository this one replaces goes with it when the
+            // profile never touched it: still on, no provider switch moved.
+            let untouched = |r: &PluginRepoRow| r.enabled && r.off.is_empty();
+            if let Some(old) = &d.replaces
+                && (lib.plugin_repos(profile)?.iter()).any(|r| &r.url == old && untouched(r))
+            {
+                lib.remove_plugin_repo(profile, old)?;
+            }
+            lib.put_plugin_repo(profile, &d.url, true)?;
         }
         Ok(())
     }
@@ -1242,6 +1305,55 @@ mod tests {
         assert!(!provider_on(&row(&["one"]), &p(true)));
         assert!(!provider_on(&row(&[]), &p(false)));
         assert!(provider_on(&row(&["+one"]), &p(false)));
+    }
+
+    const OLD: &str = "https://example.com/old/manifest.json";
+    const NEW: &str = "https://example.com/new/manifest.json";
+
+    /// A profile that had `OLD` as a default, ran `touch` on it, then gets
+    /// `NEW`, which replaces it: its repositories after the update.
+    #[cfg(feature = "plugins")]
+    fn update_with(touch: impl Fn(&Core)) -> (Core, Vec<String>) {
+        let core = Core::temporary(mq_library::OWNER).unwrap();
+        core.use_plugin_defaults(vec![PluginDefault {
+            key: "new".into(),
+            url: NEW.into(),
+            name: "New".into(),
+            line: String::new(),
+            providers: None,
+            replaces: Some(OLD.into()),
+        }]);
+        let lib = core.library();
+        lib.put_plugin_repo(core.profile(), OLD, true).unwrap();
+        touch(&core);
+        core.give_plugin_defaults().unwrap();
+        let kept = (lib.plugin_repos(core.profile()).unwrap().into_iter())
+            .map(|r| r.url.rsplit('/').nth(1).unwrap().to_owned())
+            .collect();
+        (core, kept)
+    }
+
+    #[cfg(feature = "plugins")]
+    #[test]
+    fn a_replaced_default_goes_when_never_touched() {
+        let (core, kept) = update_with(|_| {});
+        assert_eq!(kept, ["new"]);
+        // It goes once: a manual re-add stays through the next start.
+        core.library()
+            .put_plugin_repo(core.profile(), OLD, true)
+            .unwrap();
+        core.give_plugin_defaults().unwrap();
+        let rows = core.library().plugin_repos(core.profile()).unwrap();
+        assert!(rows.iter().any(|r| r.url == OLD));
+    }
+
+    #[cfg(feature = "plugins")]
+    #[test]
+    fn a_replaced_default_the_user_changed_stays() {
+        let (_, kept) = update_with(|c| c.set_plugin_enabled(OLD, "p", false).unwrap());
+        assert_eq!(kept, ["old", "new"]);
+        let (_, kept) = update_with(|c| c.set_plugin_repo_enabled(OLD, false).unwrap());
+        assert_eq!(kept, ["old", "new"]);
     }
 
     #[cfg(feature = "plugins")]

@@ -6,6 +6,7 @@
 use mq_library::{AddonRow, OWNER};
 use mq_protocol::Source;
 use mq_runtime::defaults::{DefaultChoice, DefaultInstalled};
+use mq_runtime::plugins::PluginDefault;
 use mq_runtime::{Core, EmptyKind, RowOrigin, TitleFacts, VersionsParams, VersionsView};
 use mq_streams::{DeviceCaps, SourceKind, StreamPrefs, Target};
 use std::net::IpAddr;
@@ -64,6 +65,14 @@ impl Fixture {
                         "<a href=\"{ours}\">ours</a> <code>{ours}</code> <a href=\"https://{HOST}:{port}/repo/manifest.json\">elsewhere</a>"
                     );
                     reply(200, "text/html", &page)
+                }
+                // The same repository with a second provider, for a default's provider list.
+                "/repo/two.json" => {
+                    let mut m: serde_json::Value = serde_json::from_str(MANIFEST).unwrap();
+                    let mut second = m["scrapers"][0].clone();
+                    second["id"] = "other-film".into();
+                    m["scrapers"].as_array_mut().unwrap().push(second);
+                    reply(200, "application/json", &m.to_string())
                 }
                 "/repo/test-film.js" => {
                     reply(200, "text/javascript", &SCRIPT.replace("{{BASE}}", &base))
@@ -471,6 +480,64 @@ async fn a_provider_empty_by_tmdb_is_asked_by_imdb() {
     );
 }
 
+/// A default with a provider list starts with the repository's other providers
+/// off, once: the user's switches rule after the first read, also when the
+/// manifest is read again.
+#[tokio::test]
+async fn a_default_s_provider_list_switches_the_others_off_once() {
+    let fixture = Fixture::start();
+    let core = Core::temporary(OWNER).unwrap();
+    let default = |key: &str, providers: Option<Vec<String>>| PluginDefault {
+        key: key.into(),
+        url: format!("{}/repo/two.json", fixture.base),
+        name: "Two".into(),
+        line: String::new(),
+        providers,
+        replaces: None,
+    };
+    core.use_plugin_defaults(vec![default("two", Some(vec!["test-film".into()]))]);
+    let on = |core: &Core| {
+        let core = core.clone();
+        async move {
+            let repo = core.plugin_repos().await.unwrap().repos.remove(0);
+            (repo.providers.iter())
+                .map(|p| (p.id.clone(), p.enabled))
+                .collect::<Vec<_>>()
+        }
+    };
+    core.install_defaults(&[DefaultChoice {
+        key: "two".into(),
+        on: true,
+    }])
+    .unwrap();
+    assert_eq!(
+        on(&core).await,
+        [("test-film".into(), true), ("other-film".into(), false)]
+    );
+    // The user turns the other on; a read of a stale manifest keeps it.
+    let url = format!("{}/repo/two.json", fixture.base);
+    core.set_plugin_enabled(&url, "other-film", true).unwrap();
+    core.library()
+        .set_plugin_manifest(OWNER, &url, "{}", 0)
+        .unwrap();
+    assert_eq!(
+        on(&core).await,
+        [("test-film".into(), true), ("other-film".into(), true)]
+    );
+    // No list: every provider the repository lists on.
+    let all = Core::temporary(OWNER).unwrap();
+    all.use_plugin_defaults(vec![default("two", None)]);
+    all.install_defaults(&[DefaultChoice {
+        key: "two".into(),
+        on: true,
+    }])
+    .unwrap();
+    assert_eq!(
+        on(&all).await,
+        [("test-film".into(), true), ("other-film".into(), true)]
+    );
+}
+
 /// A link that is no repository writes nothing.
 #[tokio::test]
 async fn a_bad_repository_writes_nothing() {
@@ -486,7 +553,7 @@ async fn a_bad_repository_writes_nothing() {
     assert!(core.plugin_repos().await.unwrap().repos.is_empty());
 }
 
-/// R7: both repositories come on for a profile with addons, once; one the
+/// R7: the three repositories come on for a profile with addons, once; one the
 /// user removes stays removed; the onboarding list carries them with a
 /// switch; a kids profile gets none and runs none. Nothing is fetched to
 /// give them.
@@ -509,7 +576,8 @@ async fn the_default_repositories_come_on_once() {
         state(&core).await,
         [
             ("nuvio-tr".to_owned(), DefaultInstalled::Absent),
-            ("nuvio-world".to_owned(), DefaultInstalled::Absent)
+            ("nuvio-tr-pro".to_owned(), DefaultInstalled::Absent),
+            ("nuvio-niakvio".to_owned(), DefaultInstalled::Absent)
         ]
     );
     let choice = |key: &str, on| DefaultChoice {
@@ -522,7 +590,8 @@ async fn the_default_repositories_come_on_once() {
         state(&core).await,
         [
             ("nuvio-tr".to_owned(), DefaultInstalled::Off),
-            ("nuvio-world".to_owned(), DefaultInstalled::Absent)
+            ("nuvio-tr-pro".to_owned(), DefaultInstalled::Absent),
+            ("nuvio-niakvio".to_owned(), DefaultInstalled::Absent)
         ]
     );
     // The next start gives the one never answered, on; the one turned off
@@ -533,14 +602,16 @@ async fn the_default_repositories_come_on_once() {
         state(&core).await,
         [
             ("nuvio-tr".to_owned(), DefaultInstalled::Off),
-            ("nuvio-world".to_owned(), DefaultInstalled::On)
+            ("nuvio-tr-pro".to_owned(), DefaultInstalled::On),
+            ("nuvio-niakvio".to_owned(), DefaultInstalled::On)
         ]
     );
-    let world = core.plugin_defaults()[1].url.clone();
-    core.remove_plugin_repo(&world).unwrap();
+    let pro = core.plugin_defaults()[1].url.clone();
+    core.remove_plugin_repo(&pro).unwrap();
     drop(core);
     let core = start();
     assert_eq!(state(&core).await[1].1, DefaultInstalled::Absent);
+    assert_eq!(state(&core).await[2].1, DefaultInstalled::On);
     // A kids profile: none listed, none given, every change refused.
     core.set_pin(OWNER, Some("1357"), None).await.unwrap();
     let kid = core.for_profile(&core.create_kids_profile("Kid", "owl").unwrap());
