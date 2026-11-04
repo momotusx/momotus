@@ -6,7 +6,7 @@ use mq_library::hlc::{Hlc, HlcClock, now_ms};
 use mq_library::{Library, ProgressRow, SyncCursor};
 use mq_sync::roster::{Entry, Hex, MemberSecret, Roster};
 use mq_sync::wire::{MAX_CLOCK_AHEAD_MS, RosterHead};
-use mq_sync::{SyncConfig, SyncError, sync_once};
+use mq_sync::{SyncConfig, SyncError, sync_from, sync_once};
 use mq_sync_server::{Config, router};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -179,6 +179,79 @@ async fn a_relay_moved_to_a_new_name_is_reached_by_signing_in_there() {
     progress(&lib, "v1", &clock.tick(now_ms()).encode());
     let report = sync_once(&lib, &http(), &again, &clock).await.unwrap();
     assert_eq!(report.pushed, 1, "{report:?}");
+}
+
+/// An address where nothing answers, as a relay's old name after a move.
+async fn dead() -> String {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    format!("http://{}", listener.local_addr().unwrap())
+}
+
+#[tokio::test]
+async fn a_relay_moved_to_the_builds_server_is_followed_when_its_old_name_is_gone() {
+    let dir = dir();
+    let relay = serve(&dir.0.join("relay.sqlite"), Config::default()).await;
+    // The same relay under the build's name; the joined name now answers nothing.
+    let home = relay.replace("127.0.0.1", "localhost");
+    let (lib, clock) = (Library::temporary().unwrap(), HlcClock::new(1));
+    let joined = account(&relay).await;
+    sync_once(&lib, &http(), &joined, &clock).await.unwrap();
+    let stale = SyncConfig {
+        server: dead().await,
+        ..joined.clone()
+    };
+    progress(&lib, "v1", &clock.tick(now_ms()).encode());
+
+    // Without the build's server, nothing is followed: the record stays.
+    let err = sync_from(&lib, &http(), &stale, &clock, None)
+        .await
+        .unwrap_err();
+    assert!(err.transient(), "{err:?}");
+
+    let report = sync_from(&lib, &http(), &stale, &clock, Some(&home))
+        .await
+        .unwrap();
+    assert_eq!(report.pushed, 1, "{report:?}");
+    let moved = report
+        .record
+        .expect("the record moves to the build's server");
+    assert_eq!(moved.server, home);
+    assert!(report.again);
+    // The pin moved with it: the stored record syncs there on its own.
+    sync_once(&lib, &http(), &moved, &clock).await.unwrap();
+}
+
+#[tokio::test]
+async fn a_build_server_with_another_relay_is_never_followed() {
+    let (a, b) = (dir(), dir());
+    let relay = serve(&a.0.join("relay.sqlite"), Config::default()).await;
+    let other = serve(&b.0.join("relay.sqlite"), Config::default()).await;
+    let (lib, clock) = (Library::temporary().unwrap(), HlcClock::new(1));
+    let joined = account(&relay).await;
+    sync_once(&lib, &http(), &joined, &clock).await.unwrap();
+    let stale = SyncConfig {
+        server: dead().await,
+        ..joined.clone()
+    };
+    let err = sync_from(&lib, &http(), &stale, &clock, Some(&other))
+        .await
+        .unwrap_err();
+    assert!(matches!(err, SyncError::RelayGone), "{err:?}");
+    assert_eq!(err.code(), Some("relayGone"));
+    // A relay that still answers at its own name is never left for the build's.
+    let report = sync_from(&lib, &http(), &joined, &clock, Some(&other))
+        .await
+        .unwrap();
+    assert!(report.record.is_none(), "{report:?}");
+    // Another relay at the joined name: it is not followed anywhere either.
+    let wrong = SyncConfig {
+        server: other.replace("127.0.0.1", "localhost"),
+        ..joined.clone()
+    };
+    let err = sync_from(&lib, &http(), &wrong, &clock, Some(&other))
+        .await
+        .unwrap_err();
+    assert!(matches!(err, SyncError::RelayGone), "{err:?}");
 }
 
 #[tokio::test]

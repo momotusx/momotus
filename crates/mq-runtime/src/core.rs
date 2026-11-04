@@ -678,13 +678,24 @@ impl Core {
         &self,
         config: &mq_sync::SyncConfig,
     ) -> Result<mq_sync::SyncReport, mq_sync::SyncError> {
+        self.sync_from(config, None).await
+    }
+
+    /// `sync` from a build whose own sync server is `home`: a record whose
+    /// server is gone follows its relay there (`mq_sync::sync_from`).
+    pub async fn sync_from(
+        &self,
+        config: &mq_sync::SyncConfig,
+        home: Option<&str>,
+    ) -> Result<mq_sync::SyncReport, mq_sync::SyncError> {
         // The device's round from any profile, Incognito too: the scope's
         // file never reaches the relay (wall 1, plans/batch-10-incognito.md
         // 2.6).
         let core = self.device();
         let _gate = core.sync_gate().await;
         core.note_sync_member(config);
-        let report = mq_sync::sync_once(core.library(), core.http(), config, core.clock()).await;
+        let report =
+            mq_sync::sync_from(core.library(), core.http(), config, core.clock(), home).await;
         // A synced switch, kids register or removal may leave no profile
         // that wants the Archive's list (plans/plugins-and-marketplace.md 5.1).
         if report.is_ok() {

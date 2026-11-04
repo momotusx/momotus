@@ -397,6 +397,11 @@ pub enum SyncError {
     NotJoined,
     #[error("this is not the relay this device joined")]
     WrongRelay,
+    /// The record's server gives no answer (or another relay's) and the
+    /// build's own server serves another relay: nothing reaches the relay
+    /// this device joined.
+    #[error("this device's sync server is gone")]
+    RelayGone,
     #[error("the relay is behind this device; it needs a device that still holds the account")]
     RelayBehind,
     #[error("some changes are not sent yet; sync again or sign out anyway")]
@@ -547,6 +552,7 @@ impl SyncError {
             SyncError::Dropped => "dropped",
             SyncError::NotJoined => "notJoined",
             SyncError::WrongRelay => "wrongRelay",
+            SyncError::RelayGone => "relayGone",
             SyncError::RelayBehind => "relayBehind",
             SyncError::Unsent => "unsent",
             SyncError::WrongRecord => "wrongRecord",
@@ -603,8 +609,20 @@ pub async fn sync_once(
     config: &SyncConfig,
     clock: &HlcClock,
 ) -> Result<SyncReport, SyncError> {
+    sync_from(library, http, config, clock, None).await
+}
+
+/// `sync_once` from a build whose own sync server is `home`: a record whose
+/// server is lost follows the relay it joined there (`reach`).
+pub async fn sync_from(
+    library: &Library,
+    http: &HttpClient,
+    config: &SyncConfig,
+    clock: &HlcClock,
+    home: Option<&str>,
+) -> Result<SyncReport, SyncError> {
     let mut report = SyncReport::default();
-    let mut session = Session::open(library, http, config, clock).await?;
+    let mut session = Session::open_from(library, http, config, clock, home).await?;
     session.upkeep(&mut report).await?;
     let pushed = match session.may_publish() {
         true => session.push(&mut report).await,
@@ -759,6 +777,44 @@ pub(crate) fn pinned(
     )
 }
 
+/// The relay at the record's server, checked as `pinned` does, and the
+/// server to use. When that server gives no answer or is not the relay this
+/// device joined, and `home` (the build's own server, never an address the
+/// network gave) serves the same relay id, the device follows the relay
+/// there: its pin moves to `home` for this member. `home` serving another
+/// relay is `RelayGone`.
+async fn reach(
+    library: &Library,
+    http: &HttpClient,
+    config: &SyncConfig,
+    home: Option<&str>,
+) -> Result<(String, RelayInfo), SyncError> {
+    let lost = match relay_info(http, &config.server).await {
+        Ok(info) => match pinned(library, config, &info) {
+            Ok(()) => return Ok((config.server.clone(), info)),
+            Err(e) => e,
+        },
+        Err(e) => e,
+    };
+    let gone = matches!(
+        lost,
+        SyncError::Http(HttpError::Network(_) | HttpError::Timeout(_)) | SyncError::WrongRelay
+    );
+    let home = match home {
+        Some(home) if gone && home != config.server && config.relay_id != Id::default() => home,
+        _ => return Err(lost),
+    };
+    require_secure(home)?;
+    let Ok(info) = relay_info(http, home).await else {
+        return Err(lost);
+    };
+    if info.relay_id != config.relay_id {
+        return Err(SyncError::RelayGone);
+    }
+    pin(library, info.relay_id, &host(home), config.secret().id())?;
+    Ok((home.to_owned(), info))
+}
+
 /// The pin is `"<host> <member>"` for the last member that reached the relay.
 /// A later record (a new sign-in, pairing or recovery: always a new member)
 /// re-pins, so a relay moved to a new name is reached again by signing in
@@ -776,6 +832,12 @@ fn pin_host(library: &Library, relay_id: Id, host: &str, member: Id) -> Result<(
         }
         _ => Ok(library.set_sync_state(&pin, &format!("{host} {member}"))?),
     }
+}
+
+/// Pins `relay_id` to `host` for `member`, whatever it held.
+fn pin(library: &Library, relay_id: Id, host: &str, member: Id) -> Result<(), SyncError> {
+    let key = format!("{RELAY_PIN}{}", hex::encode(relay_id.0));
+    Ok(library.set_sync_state(&key, &format!("{host} {}", hex::encode(member.0)))?)
 }
 
 /// The relay's host, as relay pins and token requests name it (its port may
@@ -978,6 +1040,17 @@ impl<'a> Session<'a> {
         config: &SyncConfig,
         clock: &'a HlcClock,
     ) -> Result<Session<'a>, SyncError> {
+        Session::open_from(library, http, config, clock, None).await
+    }
+
+    /// `open`, following a lost relay to `home` (`reach`).
+    async fn open_from(
+        library: &'a Library,
+        http: &'a HttpClient,
+        config: &SyncConfig,
+        clock: &'a HlcClock,
+        home: Option<&str>,
+    ) -> Result<Session<'a>, SyncError> {
         require_secure(&config.server)?;
         if library.sync_state(FORK)?.is_some_and(|f| !f.is_empty()) {
             return Err(SyncError::Fork);
@@ -993,7 +1066,8 @@ impl<'a> Session<'a> {
                 (Vec::new(), Roster::default())
             }
         };
-        let mut session = Session::connect(library, http, config, clock, entries, roster).await?;
+        let mut session =
+            Session::connect(library, http, config, clock, entries, roster, home).await?;
         session.catch_up().await?;
         session.joined()?;
         session.adopt()?;
@@ -1001,7 +1075,8 @@ impl<'a> Session<'a> {
     }
 
     /// Checks the relay is the one `config` joined and makes a session on
-    /// `entries` (verified as `roster`).
+    /// `entries` (verified as `roster`). A relay followed to `home` moves
+    /// the record there (`reach`).
     async fn connect(
         library: &'a Library,
         http: &'a HttpClient,
@@ -1009,14 +1084,17 @@ impl<'a> Session<'a> {
         clock: &'a HlcClock,
         entries: Vec<Entry>,
         roster: Roster,
+        home: Option<&str>,
     ) -> Result<Session<'a>, SyncError> {
         require_secure(&config.server)?;
-        let info = relay_info(http, &config.server).await?;
-        let mut record = config.clone();
+        let (server, info) = reach(library, http, config, home).await?;
+        let mut record = SyncConfig {
+            server,
+            ..config.clone()
+        };
         if record.relay_id == Id::default() {
             record.relay_id = info.relay_id;
         }
-        pinned(library, config, &info)?;
         prepare(library, &info, &config.keys.account)?;
         Ok(Session {
             library,
@@ -2366,6 +2444,7 @@ pub async fn use_server_roster(
         clock,
         Vec::new(),
         Roster::default(),
+        None,
     )
     .await?;
     session.persist = false;

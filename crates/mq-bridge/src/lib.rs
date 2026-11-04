@@ -291,10 +291,14 @@ enum Request {
         unlink: bool,
     },
     /// One sync round. `record` is the keystore record; a reply carrying a
-    /// new `record` must be stored, then sync again (`again`).
+    /// new `record` must be stored, then sync again (`again`). `home`: the
+    /// build's own sync server, where a record whose server is gone follows
+    /// the relay it joined (same relay id only).
     SyncNow {
         id: u64,
         record: Box<SyncConfig>,
+        #[serde(default)]
+        home: Option<String>,
     },
     /// The user saw these announcements (their `id`s from `SyncReport`):
     /// no round reports them again. Replies `{}`.
@@ -2034,8 +2038,10 @@ impl Session {
                     answer(mq_sync::ack_announcements(core.library(), &ids).map(|()| json!({})))
                 });
             }
-            Request::SyncNow { id, record } => {
-                self.spawn(id, async move { answer(core.sync(&record).await) });
+            Request::SyncNow { id, record, home } => {
+                self.spawn(id, async move {
+                    answer(core.sync_from(&record, home.as_deref()).await)
+                });
             }
             Request::ApprovePairing {
                 id,
