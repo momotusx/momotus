@@ -4,7 +4,16 @@ import SwiftUI
 
 /// Full-screen playback with an OSD that hides itself while playing.
 struct PlayerScreen: View {
-    @State private var model: PlayerModel
+    /// The model, made on first use and kept. The page under the player builds a new PlayerScreen on each of its
+    /// renders: a model made in `init` was a new AVPlayer and its observers each time (thrown away, but made).
+    @State private var made = Made()
+    private let make: @MainActor () -> PlayerModel
+    private var model: PlayerModel {
+        if let model = made.model { return model }
+        let model = make()
+        made.model = model
+        return model
+    }
     @Environment(\.dismiss) private var dismiss
     @Environment(Immersion.self) private var immersion
     @Environment(SyncModel.self) private var sync
@@ -35,6 +44,13 @@ struct PlayerScreen: View {
     /// Skip's and Up Next's measured heights, which the phone's subtitle keeps over.
     @State private var skipHeight: CGFloat = 0
     @State private var upNextHeight: CGFloat = 0
+    #if os(macOS)
+    /// The player holds the keyboard focus itself: pushed over a page whose plain buttons take none (no Full
+    /// Keyboard Access), it would inherit none, and its keys and the Playback menu's would reach nothing.
+    @FocusState private var keysFocused: Bool
+    /// The window's mouse moves, which bring the controls back with the pointer.
+    @State private var pointerMoves: Any?
+    #endif
     #if os(iOS)
     @State private var pip = PictureInPicture()
     @Environment(FloatingPlayer.self) private var floating
@@ -56,14 +72,14 @@ struct PlayerScreen: View {
     let core: CoreClient
 
     init(route: PlayRoute, versions: VersionsModel?, core: CoreClient) {
-        _model = State(initialValue: PlayerModel(route: route, versions: versions, core: core))
+        make = { PlayerModel(route: route, versions: versions, core: core) }
         self.core = core
     }
 
     #if os(iOS)
     /// The film brought back from Picture in Picture, with its own player and window.
     init(held: FloatingPlayer.Held, core: CoreClient) {
-        _model = State(initialValue: held.model)
+        make = { held.model }
         _pip = State(initialValue: held.pip)
         self.core = core
     }
@@ -334,7 +350,7 @@ struct PlayerScreen: View {
                 VersionsScreen(model: versions, heading: "S\(next.season):E\(next.episode) \(next.title)", core: core)
             }
         }
-        #if !os(tvOS)
+        #if os(iOS)
         .onContinuousHover { _ in touched(toggle: false) }
         #endif
         .task(id: model.taskId) { await model.drive() }
@@ -366,9 +382,22 @@ struct PlayerScreen: View {
             WalkLevels.begin(volume)
             #endif
             #endif
+            #if os(macOS)
+            keysFocused = true
+            // Every move in the window is over the player, which fills it: the controls follow the same moves that
+            // bring back the pointer, whatever view lies under it.
+            pointerMoves = NSEvent.addLocalMonitorForEvents(matching: .mouseMoved) { event in
+                touched(toggle: false)
+                return event
+            }
+            #endif
         }
         .onDisappear {
             immersion.active = false
+            #if os(macOS)
+            if let pointerMoves { NSEvent.removeMonitor(pointerMoves) }
+            pointerMoves = nil
+            #endif
             #if os(iOS)
             if let across = PlayerOrientation.leave() { model.lastAcross = across }
             keeper.restore()
@@ -403,6 +432,9 @@ struct PlayerScreen: View {
         .toolbarVisibility(.hidden, for: .windowToolbar)
         .focusable()
         .focusEffectDisabled()
+        .focused($keysFocused)
+        // The keys come back to the player as a track picker or Versions lets them go; Tab elsewhere keeps its way.
+        .onChange(of: model.pickerOpen || showVersions) { _, covered in if !covered { keysFocused = true } }
         // Under Versions the keys are the page's: Escape goes back to the player. With a track picker open the keys
         // are its own: these pass them on.
         .onKeyPress(.space) { playerKey { model.togglePlay() } }
@@ -414,7 +446,7 @@ struct PlayerScreen: View {
             return .handled
         }
         // A new value as a picker opens or closes, so the menu's bare keys follow it.
-        .focusedSceneValue(\.playerKeys, PlayerKeys(model: model, close: close, pickerOpen: model.pickerOpen))
+        .focusedSceneValue(\.playerKeys, PlayerKeys(model: model, close: close, pickerOpen: model.pickerOpen || showVersions))
         #elseif os(tvOS)
         // Back one step at a time, as Leanback and the Android TV app do: an
         // open menu closes itself first, then the controls hide, then the player leaves.
@@ -666,7 +698,7 @@ struct PlayerScreen: View {
             // A walk's picker shot keeps the controls (and the picker in them) up.
             if DebugHooks.openPicker != nil { continue }
             #endif
-            if controls, model.playing, !menuOpen, !assistiveTechRunning, ContinuousClock.now - lastTouch > .seconds(3) {
+            if controls, model.playing, !menuOpen, !model.pickerOpen, !assistiveTechRunning, ContinuousClock.now - lastTouch > .seconds(3) {
                 withAnimation(Theme.Motion.panel) { controls = false }
                 #if os(macOS)
                 // The pointer goes with the controls and comes back with them on the next move;
@@ -685,6 +717,11 @@ struct PlayerScreen: View {
         UIAccessibility.isVoiceOverRunning || UIAccessibility.isSwitchControlRunning
         #endif
     }
+}
+
+/// The one model a player screen keeps across its re-creations.
+@MainActor private final class Made {
+    var model: PlayerModel?
 }
 
 /// "Skip intro" and the like: it says only what it skips, never where its times came from. It takes focus when

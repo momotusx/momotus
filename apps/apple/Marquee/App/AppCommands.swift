@@ -39,7 +39,7 @@ struct GoBackAction {
 struct PlayerKeys {
     let model: PlayerModel
     let close: @MainActor () -> Void
-    /// A track picker is open: its rows and search take the bare keys.
+    /// A track picker or Versions is over the player: its rows and search take the bare keys (Esc leaves Versions).
     var pickerOpen = false
 }
 

@@ -125,6 +125,8 @@ struct PlayerControls: View {
             hold(open != nil)
             model.pickerOpen = open != nil
         }
+        // A picker goes with the controls (a click on the picture hides both): the keys go back to the player.
+        .onDisappear { model.pickerOpen = false }
         #if DEBUG
         .task {
             // A walk's shot: the picker once the core's subtitles are in (or the file's audio).

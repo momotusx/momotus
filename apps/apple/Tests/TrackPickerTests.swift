@@ -220,7 +220,8 @@ private let klingon = track(5, "tlh", "tlh", "Klingon")
     let controls = try String(contentsOf: app.appending(path: "Player/PlayerControls.swift"), encoding: .utf8)
     let picker = try String(contentsOf: app.appending(path: "Player/SubtitlePicker.swift"), encoding: .utf8)
     #expect(try body(of: "private func playerKey(", in: commands).contains("guard let player, !player.pickerOpen else { return nil }"))
-    #expect(screen.contains("PlayerKeys(model: model, close: close, pickerOpen: model.pickerOpen)"))
+    // Versions over the player holds them too: the menu's Esc would close the player under it.
+    #expect(screen.contains("PlayerKeys(model: model, close: close, pickerOpen: model.pickerOpen || showVersions)"))
     #expect(try body(of: "private func playerKey(", in: screen).contains("guard !showVersions, !model.pickerOpen else { return .ignored }"))
     // Esc is the picker's while it is open; else it leaves Versions, then the player.
     #expect(screen.contains(".onKeyPress(.escape) {\n            guard !model.pickerOpen else { return .ignored }\n            escape()"))
@@ -228,6 +229,46 @@ private let klingon = track(5, "tlh", "tlh", "Klingon")
     // The panel itself holds the focus (a plain button takes none without Full Keyboard Access), again after a level change.
     #expect(picker.contains(".focusable(interactions: .edit)\n            .focusEffectDisabled()\n            .focused($panelFocused)"))
     #expect(try body(of: "private func setRow(", in: picker).contains("Task { @MainActor in panelFocused = true }"))
+}
+
+@Test func onTheMacThePlayerHoldsTheKeysItWasPushedWithout() throws {
+    // The owner's Mac (53312e49b): Space, Left and Right did nothing in the player. Pushed over a title page whose
+    // Play is a plain button (no focus without Full Keyboard Access), the window's first responder stayed the
+    // NSWindow itself, so `.focusable()` alone never took the keys. The player takes them as it shows, and again
+    // as a picker or Versions lets them go.
+    let app = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appending(path: "../Marquee")
+    let screen = try String(contentsOf: app.appending(path: "Player/PlayerScreen.swift"), encoding: .utf8)
+    let controls = try String(contentsOf: app.appending(path: "Player/PlayerControls.swift"), encoding: .utf8)
+    #expect(screen.contains(".focusable()\n        .focusEffectDisabled()\n        .focused($keysFocused)"))
+    #expect(screen.contains("#endif\n            #if os(macOS)\n            keysFocused = true\n"))
+    #expect(screen.contains(".onChange(of: model.pickerOpen || showVersions) { _, covered in if !covered { keysFocused = true } }"))
+    // A picker hidden with the controls (a click on the picture) never leaves the keys with a picker that is gone,
+    // and the controls never hide from under an open one.
+    #expect(controls.contains(".onDisappear { model.pickerOpen = false }"))
+    #expect(try body(of: "private func autoHide(", in: screen).contains("!menuOpen, !model.pickerOpen,"))
+}
+
+@Test func onTheMacEveryMouseMoveBringsTheControlsBack() throws {
+    // The owner's Mac: moving the pointer over the video brought nothing back. The controls follow the window's own
+    // mouse moves, as the pointer does, not SwiftUI's hover over the video; the monitor goes with the player.
+    let screen = try String(contentsOf: URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+        .appending(path: "../Marquee/Player/PlayerScreen.swift"), encoding: .utf8)
+    #expect(screen.contains("pointerMoves = NSEvent.addLocalMonitorForEvents(matching: .mouseMoved) { event in\n                touched(toggle: false)\n                return event"))
+    #expect(screen.contains(".onDisappear {\n            immersion.active = false\n            #if os(macOS)\n            if let pointerMoves { NSEvent.removeMonitor(pointerMoves) }"))
+    // The iPad's pointer keeps the hover.
+    #expect(screen.contains("#if os(iOS)\n        .onContinuousHover { _ in touched(toggle: false) }"))
+}
+
+@Test func aPageRenderedUnderThePlayerNeverMakesASecondPlayer() throws {
+    // The owner's Mac (53312e49b, `sample`): VersionsScreen.body under the player ran PlayerScreen.init, which made a
+    // PlayerModel (an AVPlayer and its observers) on every render; the log held 22 AVPlayer init and dealloc pairs.
+    // The model is made on first use in the body and kept in state.
+    let screen = try String(contentsOf: URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+        .appending(path: "../Marquee/Player/PlayerScreen.swift"), encoding: .utf8)
+    let initBody = try body(of: "init(route: PlayRoute, versions: VersionsModel?, core: CoreClient)", in: screen)
+    #expect(initBody.contains("make = { PlayerModel(route: route, versions: versions, core: core) }"))
+    #expect(!screen.contains("State(initialValue: PlayerModel("))
+    #expect(try body(of: "private var model: PlayerModel", in: screen).contains("if let model = made.model { return model }"))
 }
 
 @Test func skipSaysOnlyWhatItSkipsAndStaysOffAnOpenPicker() throws {
