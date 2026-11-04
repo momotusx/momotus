@@ -445,7 +445,9 @@ fun SyncScreen(
             ) { LinkRow(Icons.LifeBuoy, SyncCopy.RECOVER_TITLE, SyncCopy.RECOVER_TEXT, { onJoin(true) }) }
         } else {
             val kit = onKit.takeIf { rows.makeKit }
-            joined(sync, flows, rows, tv, onAdd, kit, onLost, onCompare, onLeft = { left = true }, addFocus)
+            // A gone server's way back: sign in again (a TV with the phone, by pairing).
+            val again = if (tv) onPair else onSignIn
+            joined(sync, flows, rows, tv, onAdd, kit, onLost, onCompare, again, onLeft = { left = true }, addFocus)
         }
     }
 }
@@ -479,10 +481,11 @@ private fun LazyListScope.joined(
     onKit: (() -> Unit)?,
     onLost: (String) -> Unit,
     onCompare: () -> Unit,
+    onSignInAgain: () -> Unit,
     onLeft: () -> Unit,
     addFocus: FocusRequester,
 ) {
-    item(key = "state") { StateCard(sync, onCompare) }
+    item(key = "state") { StateCard(sync, onCompare, onSignInAgain) }
     block("sign-in-rows") { AccountRows(flows, sync, rows) }
     // Sign in another device: a phone or tablet's scanner; a TV approves nothing (D6).
     item(key = "add") {
@@ -511,6 +514,7 @@ private fun LazyListScope.joined(
 private fun StateCard(
     sync: SyncController,
     onCompare: () -> Unit,
+    onSignInAgain: () -> Unit,
 ) {
     val tv = Marquee.form == Form.Tv
     val now = remember { FocusRequester() }
@@ -587,8 +591,12 @@ private fun StateCard(
                     SecondaryButton(SyncCopy.DISMISS, sync::dismissFailed, icon = Icons.Check)
                 }
             }
-            // Forgetting is for a relay that cannot take this device back: it keeps the library.
-            if (sync.stuck) LeaveHere(sync)
+            // Forgetting is for a relay that cannot take this device back: it keeps the library. A gone server's
+            // one way out leaves here the same way, then signs in again.
+            when {
+                problem?.code == SyncAccount.RELAY_GONE -> SignInAgain(sync, onSignInAgain)
+                sync.stuck -> LeaveHere(sync)
+            }
             // From whichever answer came last, a round or the list; the device list says when it is stale.
             sync.fingerprint?.let { Fingerprint(it) }
         }
@@ -1057,6 +1065,40 @@ private fun LeaveHere(
             }, icon = Icons.LogOut, busy = busy)
             SecondaryButton(SyncCopy.CANCEL, { asking = false }, focusRequester = stepFocus())
         }
+    }
+}
+
+/** The sync server is gone: leave here (the library stays) and open sign-in, in one press. */
+@Composable
+private fun SignInAgain(
+    sync: SyncController,
+    onSignIn: () -> Unit,
+) {
+    val tv = Marquee.form == Form.Tv
+    val scope = rememberCoroutineScope()
+    val owner = rememberOwnerCheck()
+    var busy by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+    Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.s)) {
+        error?.let { Said(it, Status.Bad) }
+        SecondaryButton(AccountCopy.RELAY_GONE_ACTIONS.first(), {
+            if (busy) return@SecondaryButton
+            busy = true
+            error = null
+            scope.launch {
+                try {
+                    // Leaving ends access, so a device with no screen lock still may.
+                    error = guarded(owner, tv, SyncCopy.AUTH_LEAVE, askAgain = null) { sync.leaveHere() }
+                    if (error == null) onSignIn()
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    error = wordsOf(e, Action.Leave)
+                } finally {
+                    busy = false
+                }
+            }
+        }, icon = Icons.DoorOpen, busy = busy)
     }
 }
 

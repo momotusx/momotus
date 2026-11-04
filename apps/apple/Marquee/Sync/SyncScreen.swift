@@ -11,7 +11,10 @@ struct SyncScreen: View {
     /// A provider to link at once (Settings' Connect Google).
     var connect: String?
     @Environment(SyncModel.self) private var sync
+    @Environment(CoreClient.self) private var core
     @Environment(\.metrics) private var metrics
+    /// Left a gone server here: sign-in opens (a TV's with the phone).
+    @State private var signingIn = false
 
     var body: some View {
         ScrollView(.vertical) {
@@ -21,7 +24,13 @@ struct SyncScreen: View {
                     .textFont(Theme.type.body)
                     .foregroundStyle(Theme.Palette.muted)
                     .fixedSize(horizontal: false, vertical: true)
-                if sync.keyUnreadable { KeyUnreadable() } else if sync.joined { JoinedSync(connect: connect) } else { NotJoined() }
+                if sync.keyUnreadable {
+                    KeyUnreadable()
+                } else if sync.joined {
+                    JoinedSync(connect: connect) { signingIn = true }
+                } else {
+                    NotJoined()
+                }
             }
             .frame(maxWidth: 760, alignment: .leading)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -31,6 +40,20 @@ struct SyncScreen: View {
         .scrollIndicators(.hidden)
         .background(Theme.Palette.bg)
         .topScrim()
+        .navigationDestination(isPresented: $signingIn) { signIn }
+    }
+
+    /// The build's sign-in, where Sign in again leads; without one, pairing.
+    @ViewBuilder private var signIn: some View {
+        if let server = AccountServer.default {
+            #if os(tvOS)
+            PairingScreen(core: core, autostart: server, heading: AccountWords.shared.tvSignIn, lede: AccountWords.shared.tvSignInHow)
+            #else
+            LaterSignIn(server: server)
+            #endif
+        } else {
+            PairingScreen(core: core)
+        }
     }
 }
 
@@ -104,6 +127,8 @@ struct KeyUnreadable: View {
 
 private struct JoinedSync: View {
     let connect: String?
+    /// Left a gone server here: open sign-in.
+    let signInAgain: () -> Void
     @Environment(SyncModel.self) private var sync
     @Environment(ProfileSession.self) private var profiles
     @Environment(\.metrics) private var metrics
@@ -123,7 +148,8 @@ private struct JoinedSync: View {
             devices
             links
             // A TV's Sign out always removes the library: the owner's only (D13).
-            if !isTV || SyncRules.mayDeleteAccount(profiles.snapshot) { LeaveSync() }
+            // A gone server's one way out is Sign in again, on the state card.
+            if (!isTV || SyncRules.mayDeleteAccount(profiles.snapshot)) && sync.problem?.code != "relayGone" { LeaveSync() }
             if SyncRules.mayDeleteAccount(profiles.snapshot) { DeleteSync() }
         }
         .task { await load() }
@@ -248,7 +274,11 @@ private struct JoinedSync: View {
             }
             // The sync server will not let this device leave (a different list it may not
             // settle, another server, lost entries): stopping here only is the way out.
-            if let code = sync.problem?.code, ["fork", "wrongRelay", "relayBehind", "notJoined"].contains(code) { LeaveHere() }
+            if sync.problem?.code == "relayGone" {
+                SignInAgain(then: signInAgain)
+            } else if let code = sync.problem?.code, ["fork", "wrongRelay", "relayBehind", "notJoined"].contains(code) {
+                LeaveHere()
+            }
             if let fingerprint {
                 VStack(alignment: .leading, spacing: Theme.Space.xs) {
                     Text(caps: W.compareLabel)
@@ -767,6 +797,37 @@ struct LeaveHere: View {
             let problem = SyncProblem(error, action: .leave)
             notHere = problem.code == "wrongRecord"
             self.error = problem.words
+        }
+    }
+}
+
+/// The sync server is gone: leave here (the library stays) and open sign-in, in one press.
+struct SignInAgain: View {
+    let then: () -> Void
+    @Environment(SyncModel.self) private var sync
+    @State private var error: String?
+    @State private var busy = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Theme.Space.xs) {
+            if let error { Said(tone: .bad, text: error) }
+            Button { Task { await go() } } label: { Label(AccountWords.shared.relayGoneActions[0], glyph: "door-open") }
+                .buttonStyle(PillButtonStyle())
+                .disabled(busy)
+        }
+    }
+
+    private func go() async {
+        guard !busy else { return }
+        busy = true
+        defer { busy = false }
+        error = nil
+        do {
+            // Leaving ends access, so a device with no passcode still may.
+            try await sync.leaveHere(askedAgain: true)
+            then()
+        } catch {
+            self.error = SyncProblem(error, action: .leave).words
         }
     }
 }

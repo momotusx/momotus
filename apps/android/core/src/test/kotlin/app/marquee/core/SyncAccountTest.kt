@@ -211,6 +211,45 @@ class SyncAccountTest {
         }
 
     @Test
+    fun `a round names the build's server, and a gone server keeps the account with its own way out`() =
+        runBlocking {
+            val store = Store(JsonObject(mapOf("revision" to JsonPrimitive(1), "server" to JsonPrimitive("https://a"))))
+            val sent = CopyOnWriteArrayList<JsonObject>()
+            val sync = SyncAccount(CoreOps(client), store, scope, io = Dispatchers.IO, home = "https://home")
+            assertEquals("https://a", sync.server)
+            sync.startRounds()
+            answers["syncNow"] = {
+                sent += it
+                fail("relayGone", "this device's sync server is gone")
+            }
+            sync.request()
+            until("said") { sync.problem != null }
+            assertEquals("https://home", sent.first()["home"]?.jsonPrimitive?.content)
+            assertEquals(AccountCopy.RELAY_GONE, sync.problem?.words)
+            assertTrue(sync.stuck)
+            assertTrue(sync.joined)
+            // The log names a fixed word, never a class name R8 renames.
+            assertEquals("relayGone", SyncAccount.failureKind(CoreError("x", code = "relayGone")))
+            assertEquals("network", SyncAccount.failureKind(CoreError("x", kind = "network")))
+            assertEquals("unexpected", SyncAccount.failureKind(IllegalStateException()))
+        }
+
+    @Test
+    fun `a build without a server of its own sends none`() =
+        runBlocking {
+            val sent = CopyOnWriteArrayList<JsonObject>()
+            val sync = account(Store(record(1)))
+            sync.startRounds()
+            answers["syncNow"] = {
+                sent += it
+                ok(report())
+            }
+            sync.request()
+            until("a round ran") { sent.isNotEmpty() && !sync.syncing }
+            assertFalse("home" in sent.first())
+        }
+
+    @Test
     fun `accountGone forgets the account here and says so until OK, across a restart`() =
         runBlocking {
             val store = Store(record(1))

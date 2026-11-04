@@ -96,6 +96,9 @@ object AccountCopy {
     const val DELETE_ANYWAY = "Delete anyway"
     const val ACCOUNT_GONE = "Your Momotus account was deleted. Your library stays on this device."
     val ACCOUNT_GONE_ACTIONS = listOf("Sign in", "Remove from this device", "OK")
+    const val RELAY_GONE =
+        "The server this device signed in to is gone. Your library stays here. Sign in again to keep syncing."
+    val RELAY_GONE_ACTIONS = listOf("Sign in again")
     const val DELETION_SCHEDULED = "Your account will be deleted on {date}."
     const val DELETION_SCHEDULED_BY =
         "Someone signed in with your {provider} account and asked to delete your Momotus account on " +
@@ -268,6 +271,8 @@ object AccountCopy {
             "deleteAnyway" to DELETE_ANYWAY,
             "accountGone" to ACCOUNT_GONE,
             "accountGoneActions" to ACCOUNT_GONE_ACTIONS,
+            "relayGone" to RELAY_GONE,
+            "relayGoneActions" to RELAY_GONE_ACTIONS,
             "deletionScheduled" to DELETION_SCHEDULED,
             "deletionScheduledBy" to DELETION_SCHEDULED_BY,
             "deletionCancel" to DELETION_CANCEL,

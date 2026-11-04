@@ -40,7 +40,7 @@ struct MarqueeApp: App {
         #if !os(tvOS)
         _downloads = State(initialValue: DownloadKeeper(core: core))
         #endif
-        let sync = SyncModel(core: core, leftover: leftover)
+        let sync = SyncModel(core: core, leftover: leftover, home: AccountServer.default)
         _sync = State(initialValue: sync)
         #if DEBUG
         if DebugHooks.kitPreview { sync.kits.hold(DebugHooks.previewKit) }

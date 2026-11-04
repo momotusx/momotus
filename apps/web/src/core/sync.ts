@@ -18,6 +18,9 @@ import type { SyncReport } from "./generated/SyncReport";
 import * as vault from "./vault";
 
 let record: SyncRecord | null = null;
+/** The build's own sync server (`VITE_MARQUEE_SYNC_SERVER`), empty without one: a record whose server is gone
+ * follows its relay there. */
+export const buildServer = (import.meta.env.VITE_MARQUEE_SYNC_SERVER as string | undefined) ?? "";
 /** Bumped by every join and sign-out: an answer from before it stores nothing. */
 let account = 0;
 
@@ -226,7 +229,7 @@ async function roundsOnce() {
     for (let i = 0; i < 5 && record; i++) {
       const mine = account;
       try {
-        const r = await withRecord<SyncReport>("syncNow", {}, (x) => x.record);
+        const r = await withRecord<SyncReport>("syncNow", buildServer ? { home: buildServer } : {}, (x) => x.record);
         if (mine !== account) return;
         setReport(r);
         setFingerprint(r.fingerprint);

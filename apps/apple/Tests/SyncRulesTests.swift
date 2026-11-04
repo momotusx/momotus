@@ -164,7 +164,7 @@ private func report(_ changes: [String: Any] = [:]) throws -> SyncReport {
     }
 
     @Test func everyCodeHasPlainWords() {
-        for code in ["dropped", "accountGone", "fork", "wrongRelay", "relayBehind", "notJoined", "unsent", "insecure", "storage", "unconfirmed", "noPasscode", "rosterChanged", "wrongRecord"] {
+        for code in ["dropped", "accountGone", "fork", "wrongRelay", "relayGone", "relayBehind", "notJoined", "unsent", "insecure", "storage", "unconfirmed", "noPasscode", "rosterChanged", "wrongRecord"] {
             let words = SyncProblem(code: code, message: "raw").words
             // No protocol name in the words ("storage" is a plain word there).
             #expect(words != "raw" && (code == "storage" || !words.contains(code)), "\(code)")
@@ -172,6 +172,13 @@ private func report(_ changes: [String: Any] = [:]) throws -> SyncReport {
         // An error with a code wins over the action's own reading.
         #expect(SyncProblem(code: "dropped", message: "http status 404", action: .approve).words.hasPrefix("This device was removed"))
         #expect(SyncProblem(CoreError("x", code: "unsent"), action: .leave).code == "unsent")
+    }
+
+    @Test func aGoneServerKeepsTheAccountAndSaysTheSharedWords() {
+        // Not forgotten: Sign in again leaves here, the library kept.
+        #expect(!SyncRules.forgets("relayGone"))
+        #expect(SyncProblem(code: "relayGone", message: "this device's sync server is gone").words == AccountWords.shared.relayGone)
+        #expect(AccountWords.shared.relayGoneActions == ["Sign in again"])
     }
 
     @Test func aDeletedAccountIsForgottenHereAndSaidPlainly() {

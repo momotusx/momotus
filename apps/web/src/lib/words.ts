@@ -490,6 +490,8 @@ export function syncProblem(code: string | undefined, message: string, kind?: st
       return "The sync server lists different devices than this device knows. Compare the lists to keep syncing.";
     case "wrongRelay":
       return "This is not the sync server this device joined. Pair this device again.";
+    case "relayGone":
+      return accountShared.relayGone;
     case "relayBehind":
       return "The sync server lost device changes it cannot get back. Pair this device again from one that still syncs.";
     case "notJoined":

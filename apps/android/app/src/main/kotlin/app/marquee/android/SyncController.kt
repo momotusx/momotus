@@ -41,6 +41,7 @@ class SyncController(
         savePendingKits = { context.prefs().edit { putString(PENDING_KITS, it.joinToString(",")) } },
         goneAtStart = context.prefs().getBoolean(GONE_LINE, false),
         saveGone = { context.prefs().edit { putBoolean(GONE_LINE, it) } },
+        home = BuildConfig.SYNC_SERVER,
     ) {
     private var timer: Job? = null
 

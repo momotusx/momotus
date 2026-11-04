@@ -9,17 +9,18 @@ import { createSignal } from "solid-js";
 import { sameRelay } from "../lib/account";
 import { bridge, op } from "./client";
 import type { SignInSnapshot } from "./generated/SignInSnapshot";
-import { rememberedServer } from "./sync";
+import { accountServer, buildServer, rememberedServer } from "./sync";
 
 export const AUTH_CHANNEL = "mq-auth";
 
 /** How a sign-in ended: an account found, none yet, a revoke's receipt, or the core's code. */
 export type SignInEnd = Extract<SignInSnapshot, { phase: "found" | "new" | "receipt" | "failed" }>;
 
-/** The sync service sign-in goes to: the one this device used, else the build's hosted default
- * (`VITE_MARQUEE_SYNC_SERVER`, the web's `MARQUEE_SYNC_SERVER`, plans/accounts.md 9.2; unset keeps
- * today's onboarding). */
-export const signInServer = (): string => rememberedServer() || ((import.meta.env.VITE_MARQUEE_SYNC_SERVER as string | undefined) ?? "");
+/** The sync service sign-in goes to: the joined record's while joined, else the build's hosted default
+ * (`VITE_MARQUEE_SYNC_SERVER`, the web's `MARQUEE_SYNC_SERVER`, plans/accounts.md 9.2), so a relay moved
+ * to a new name is signed in to there; the one this device used last only in a build without one (unset
+ * keeps today's onboarding). Android's `AccountFlows.server`. */
+export const signInServer = (): string => accountServer() || buildServer || rememberedServer();
 
 /** The providers a sync service offers (none: no sign-in there, only the pairing and kit doors). */
 export const relayProviders = async (server: string) => (await op<{ providers: string[] }>("relayInfo", { server })).providers;

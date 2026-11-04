@@ -87,6 +87,8 @@
   "deleteAnyway": "Delete anyway",
   "accountGone": "Your Momotus account was deleted. Your library stays on this device.",
   "accountGoneActions": ["Sign in", "Remove from this device", "OK"],
+  "relayGone": "The server this device signed in to is gone. Your library stays here. Sign in again to keep syncing.",
+  "relayGoneActions": ["Sign in again"],
   "deletionScheduled": "Your account will be deleted on {date}.",
   "deletionScheduledBy": "Someone signed in with your {provider} account and asked to delete your Momotus account on {date}. Not you? Cancel, and turn off {provider} sign-in.",
   "deletionCancel": "Cancel deletion",

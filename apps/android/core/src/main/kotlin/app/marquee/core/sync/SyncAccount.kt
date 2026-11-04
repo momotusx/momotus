@@ -29,6 +29,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.JsonPrimitive
 
 /** Where the account's record lives. It holds a token and keys: never logged or shown. */
 interface RecordStore {
@@ -79,12 +80,17 @@ open class SyncAccount(
     goneAtStart: Boolean = false,
     /** Keeps that across launches until OK or a join. */
     private val saveGone: (Boolean) -> Unit = {},
+    /** The build's own sync server: a record whose server is gone follows its relay there. */
+    private val home: String = "",
 ) {
     /** A failure in words, with the core's code when it has one (the page offers a fix for some). */
     data class Problem(
         val code: String?,
         val words: String,
     )
+
+    /** The sync server of the stored record, empty without one: where a joined device's account lives. */
+    val server: String get() = (store.load()?.get("server") as? JsonPrimitive)?.content.orEmpty()
 
     /** A record is stored, or held for this session: this device is in a sync account. */
     var joined by mutableStateOf(store.load() != null)
@@ -235,12 +241,12 @@ open class SyncAccount(
                 val mine = account
                 val report =
                     try {
-                        withRecord("syncNow", { ops.syncNow(it) }) { it.record }
+                        withRecord("syncNow", { ops.syncNow(it, home) }) { it.record }
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
                         if (account == mine) problem = problemOf(e, SyncCopy.Action.Round)
-                        CoreLog.w("sync did not finish: ${(e as? CoreError)?.code ?: e.javaClass.simpleName}")
+                        CoreLog.w("sync did not finish: ${failureKind(e)}")
                         return
                     }
                 // A join or a leave replaced the account while this round ran: its answer is not ours.
@@ -738,7 +744,13 @@ open class SyncAccount(
         const val KIT_HOLD_MS = 5 * 60_000L
 
         /** Codes after which the sync server will not let this device leave (the web's). */
-        private val STUCK = setOf("fork", "wrongRelay", "relayBehind", "notJoined")
+        private val STUCK = setOf("fork", "wrongRelay", "relayBehind", "notJoined", RELAY_GONE)
+
+        /** This device's sync server is gone: leaving here and signing in again is the way back. */
+        const val RELAY_GONE = "relayGone"
+
+        /** A failure as a fixed word for the log: the core's code, else its kind; never a class name R8 renames. */
+        fun failureKind(e: Throwable): String = (e as? CoreError)?.let { it.code ?: it.kind } ?: "unexpected"
 
         fun stuck(code: String?) = code in STUCK
 

@@ -369,6 +369,10 @@ object SyncCopy {
                     "pair again."
             }
 
+            "relayGone" -> {
+                return AccountCopy.RELAY_GONE
+            }
+
             "relayBehind" -> {
                 return "The sync server lost device changes it cannot get back. Pair this device again from one " +
                     "that still syncs."

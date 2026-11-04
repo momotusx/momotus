@@ -71,6 +71,8 @@ final class SyncModel {
     @ObservationIgnored private let core: CoreClient
     @ObservationIgnored private let records: SyncRecord
     @ObservationIgnored private let defaults: UserDefaults
+    /// The build's own sync server: a record whose server is gone follows its relay there.
+    @ObservationIgnored private let home: String?
     /// How long a made kit's letters stay once its page is left.
     @ObservationIgnored var kitHold = KitLedger.hold
     @ObservationIgnored private var holdTimer: Task<Void, Never>?
@@ -100,10 +102,12 @@ final class SyncModel {
     /// `leftover`: a record left by a deleted install could not be removed yet
     /// (`SyncRecord.forgetLeftover`): it is never loaded, and the page offers
     /// to delete it.
-    init(core: CoreClient, records: SyncRecord = .keychain, defaults: UserDefaults = .standard, leftover: Bool = false) {
+    init(core: CoreClient, records: SyncRecord = .keychain, defaults: UserDefaults = .standard, leftover: Bool = false,
+         home: String? = nil) {
         self.core = core
         self.records = records
         self.defaults = defaults
+        self.home = home
         recovered = defaults.bool(forKey: "syncRecovered")
         kits = KitLedger(pending: defaults.stringArray(forKey: "syncPendingKits") ?? [])
         if defaults.bool(forKey: Self.goneKey) { problem = SyncProblem(code: "accountGone", message: "") }
@@ -173,7 +177,7 @@ final class SyncModel {
             guard joined else { return }
             let mine = account
             do {
-                let report: SyncReport = try await withRecord("syncNow") { $0.record }
+                let report: SyncReport = try await withRecord("syncNow", home.map { ["home": $0] } ?? [:]) { $0.record }
                 // A join or a leave replaced the account while this round ran: its answer is not ours.
                 guard account == mine else { return }
                 lastReport = report
@@ -265,10 +269,7 @@ final class SyncModel {
         keyLeft = nil
         unstored = stored ? nil : record
         joinStored = stored
-        // The account pages reach the relay this join used, also when it moved to a new name.
-        if case .object(let fields) = record, case .string(let server)? = fields["server"] {
-            defaults.set(server, forKey: SyncRecord.serverKey)
-        }
+        remember(record)
         joined = true
         notice = nil
         defaults.set(false, forKey: Self.goneKey)
@@ -706,7 +707,15 @@ final class SyncModel {
             return false
         }
         unstored = nil
+        remember(record)
         return true
+    }
+
+    /// The account pages reach the relay the record names: the one a join used, or one a round followed to a new name.
+    private func remember(_ record: JSONValue) {
+        if case .object(let fields) = record, case .string(let server)? = fields["server"] {
+            defaults.set(server, forKey: SyncRecord.serverKey)
+        }
     }
 
     /// Forgets the account here. When the Keychain refuses to delete the

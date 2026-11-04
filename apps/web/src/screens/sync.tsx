@@ -441,6 +441,9 @@ function Joined() {
             </A>
           </Show>
         </div>
+        <Show when={sync.problem()?.code === "relayGone"}>
+          <SignInAgain />
+        </Show>
         <Show when={sync.fingerprint()}>
           {(fp) => (
             <div class="sync-compare">
@@ -888,6 +891,37 @@ function Remember() {
 /** Codes after which the sync server will not let this device leave: only a local leave helps. */
 const stuck = (code: string | undefined) => code === "fork" || code === "wrongRelay" || code === "relayBehind";
 
+/** The sync server is gone: leave here (nothing sent, the library stays) and open sign-in, in one press. */
+function SignInAgain() {
+  const navigate = useNavigate();
+  const [busy, setBusy] = createSignal(false);
+  const [error, setError] = createSignal<string | null>(null);
+  const go = async () => {
+    if (busy()) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await sync.signOut(true, true);
+      navigate("/sign-in");
+    } catch (e) {
+      setError(say(e, "leave"));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div class="sync-leave-here">
+      <Show when={error()}>{(e) => <Said tone="bad">{e()}</Said>}</Show>
+      <div class="acts">
+        <button class="btn" data-f="sync:sign-in-again" aria-busy={busy() || undefined} onClick={() => void go()}>
+          <LogIn aria-hidden />
+          {aw.relayGoneActions[0]}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 /** Stop syncing here only: nothing sent, this device forgets the account. */
 function LeaveHere(props: { fkey: string }) {
   const [busy, setBusy] = createSignal(false);
@@ -954,7 +988,8 @@ function Leave() {
     }
   };
   return (
-    <Show when={choice().show}>
+    // A gone server's one way out is Sign in again, on the device card.
+    <Show when={choice().show && sync.problem()?.code !== "relayGone"}>
       <section class="set">
         <h2>{w.leaveTitle}</h2>
         <p class="note small sync-lead">{w.leaveText}</p>

@@ -663,9 +663,19 @@ class CoreOps(
             SavedPasskey.serializer(),
         )
 
-    /** One sync round. When the report carries a `record`, store it and call again at once (`again`). */
-    suspend fun syncNow(record: SyncRecord): SyncReport =
-        call("syncNow", mapOf("record" to record), SyncReport.serializer())
+    /**
+     * One sync round. When the report carries a `record`, store it and call again at once (`again`). [home]: the
+     * build's own sync server, where a record whose server is gone follows the relay it joined (same relay only).
+     */
+    suspend fun syncNow(
+        record: SyncRecord,
+        home: String = "",
+    ): SyncReport =
+        call(
+            "syncNow",
+            if (home.isEmpty()) mapOf("record" to record) else mapOf("record" to record, "home" to text(home)),
+            SyncReport.serializer(),
+        )
 
     /**
      * Vouches for the device showing [qr] (plans/tv-qr-login.md Q2): [scanned] when this app's camera

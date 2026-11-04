@@ -290,6 +290,7 @@ struct SyncProblem: Equatable {
         case "rosterChanged": return SyncWords.forkChanged
         case "wrongRecord": return SyncWords.wrongRecord
         case "wrongRelay": return "This is not the sync server this device joined. Try again, or forget the account here and pair again."
+        case "relayGone": return AccountWords.shared.relayGone
         case "relayBehind": return "The sync server lost device changes it cannot get back. Pair this device again from one that still syncs."
         case "notJoined": return "This device has not joined a sync account yet."
         case "unsent": return "Some changes have not been sent yet. Sync again first, or stop anyway and they stay only here."

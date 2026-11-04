@@ -16,6 +16,8 @@ const calls: Call[] = [];
 const QUIET = { record: null, fingerprint: "ABCD", again: false, refused: 0, unreadable: 0, newer: 0 };
 /** The next round hears from the core that the account was deleted. */
 let goneNext = false;
+/** The next round hears from the core that this device's sync server is gone. */
+let relayGoneNext = false;
 mock.module("./client", clientMock);
 fake.op = (name, fields) =>
   new Promise((answer, fail) => {
@@ -23,6 +25,9 @@ fake.op = (name, fields) =>
     if (name === "syncNow" && goneNext) {
       goneNext = false;
       fail(new BridgeError("this account was deleted", "accountGone"));
+    } else if (name === "syncNow" && relayGoneNext) {
+      relayGoneNext = false;
+      fail(new BridgeError("this device's sync server is gone", "relayGone"));
     } else if (name === "syncNow") answer(QUIET);
     if (name === "signOut") answer({});
   });
@@ -44,7 +49,10 @@ g.indexedDB = {
   },
 };
 
+// This build's own sync server, read as the module loads.
+process.env.VITE_MARQUEE_SYNC_SERVER = "https://home.example";
 const sync = await import("./sync");
+const { signInServer } = await import("./sign-in");
 await sync.vaultReady;
 
 const account = (name: string) => ({ deviceToken: name }) as unknown as SyncRecord;
@@ -145,6 +153,31 @@ test("accountGone from a round forgets the account and keeps the line until OK",
     sync.clearProblem();
     expect(sync.problem()).toBeNull();
     expect(kept.has("mq.syncGone")).toBe(false);
+  } finally {
+    delete g.localStorage;
+  }
+});
+
+test("a round names the build's server, and a gone server keeps the account with the shared words", async () => {
+  await started("moved");
+  relayGoneNext = true;
+  await sync.syncNow();
+  expect(calls.filter((c) => c.name === "syncNow").every((c) => c.fields.home === "https://home.example")).toBe(true);
+  expect(sync.joined()).toBe(true);
+  expect(sync.problem()?.code).toBe("relayGone");
+  expect(sync.problem()?.words).toBe("The server this device signed in to is gone. Your library stays here. Sign in again to keep syncing.");
+});
+
+test("sign-in goes to the joined account's server, else the build's, never an older remembered one", async () => {
+  const kept = new Map([["mq.syncServer", "https://old.example"]]);
+  g.localStorage = { getItem: (k: string) => kept.get(k) ?? null, setItem: (k: string, v: string) => kept.set(k, v), removeItem: (k: string) => kept.delete(k) };
+  try {
+    expect(signInServer()).toBe("https://home.example");
+    const creating = sync.createAccount("https://sync.example", "Desk", "");
+    await until(asked("createSyncAccount"));
+    calls.find((c) => c.name === "createSyncAccount")?.answer({ deviceToken: "here", server: "https://moved.example" });
+    await creating;
+    expect(signInServer()).toBe("https://moved.example");
   } finally {
     delete g.localStorage;
   }
