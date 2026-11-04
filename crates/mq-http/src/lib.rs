@@ -109,6 +109,12 @@ impl HttpError {
         matches!(self, HttpError::BlockedPrivate(m) if m == OUT_OF_HOPS)
     }
 
+    /// The name did not resolve (no such name, or no address for it): unlike
+    /// a refused or silent connection, nothing answers to it at all.
+    pub fn unresolved(&self) -> bool {
+        matches!(self, HttpError::Network(m) if m.contains("dns error"))
+    }
+
     /// What went wrong as a fixed word, for logs that must not name an
     /// address (a sync relay's host is the user's own).
     pub fn kind(&self) -> &'static str {

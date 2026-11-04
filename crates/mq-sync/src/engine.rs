@@ -782,7 +782,8 @@ pub(crate) fn pinned(
 /// device joined, and `home` (the build's own server, never an address the
 /// network gave) serves the same relay id, the device follows the relay
 /// there: its pin moves to `home` for this member. `home` serving another
-/// relay is `RelayGone`.
+/// relay is `RelayGone` when the record's host does not resolve or serves
+/// another relay; a host that is silent or refuses only gives no answer.
 async fn reach(
     library: &Library,
     http: &HttpClient,
@@ -808,8 +809,13 @@ async fn reach(
     let Ok(info) = relay_info(http, home).await else {
         return Err(lost);
     };
+    // Gone only when nothing answers to that name, or another relay does: a
+    // server down for a while (silent, refusing) is only not answering.
     if info.relay_id != config.relay_id {
-        return Err(SyncError::RelayGone);
+        return Err(match lost {
+            SyncError::Http(e) if !e.unresolved() => SyncError::Http(e),
+            _ => SyncError::RelayGone,
+        });
     }
     pin(library, info.relay_id, &host(home), config.secret().id())?;
     Ok((home.to_owned(), info))

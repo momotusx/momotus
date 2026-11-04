@@ -1,7 +1,7 @@
 //! The device side against a real relay: recovery after a restore, records
 //! the relay refuses, clocks that ran ahead.
 
-use mq_http::{ClientConfig, HttpClient};
+use mq_http::{ClientConfig, HttpClient, HttpError};
 use mq_library::hlc::{Hlc, HlcClock, now_ms};
 use mq_library::{Library, ProgressRow, SyncCursor};
 use mq_sync::roster::{Entry, Hex, MemberSecret, Roster};
@@ -229,8 +229,9 @@ async fn a_build_server_with_another_relay_is_never_followed() {
     let (lib, clock) = (Library::temporary().unwrap(), HlcClock::new(1));
     let joined = account(&relay).await;
     sync_once(&lib, &http(), &joined, &clock).await.unwrap();
+    // A joined name that no longer resolves: gone.
     let stale = SyncConfig {
-        server: dead().await,
+        server: "https://mq-relay-moved.invalid".into(),
         ..joined.clone()
     };
     let err = sync_from(&lib, &http(), &stale, &clock, Some(&other))
@@ -252,6 +253,40 @@ async fn a_build_server_with_another_relay_is_never_followed() {
         .await
         .unwrap_err();
     assert!(matches!(err, SyncError::RelayGone), "{err:?}");
+}
+
+#[tokio::test]
+async fn a_server_down_for_a_while_is_never_said_to_be_gone() {
+    let (a, b) = (dir(), dir());
+    let relay = serve(&a.0.join("relay.sqlite"), Config::default()).await;
+    let other = serve(&b.0.join("relay.sqlite"), Config::default()).await;
+    let (lib, clock) = (Library::temporary().unwrap(), HlcClock::new(1));
+    let joined = account(&relay).await;
+    sync_once(&lib, &http(), &joined, &clock).await.unwrap();
+    // Silent: takes the connection and never answers, until the timeout.
+    let silent = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let silent_at = format!("http://{}", silent.local_addr().unwrap());
+    tokio::spawn(async move {
+        let mut held = Vec::new();
+        while let Ok((socket, _)) = silent.accept().await {
+            held.push(socket);
+        }
+    });
+    for (server, timeout) in [(silent_at, true), (dead().await, false)] {
+        let down = SyncConfig {
+            server,
+            ..joined.clone()
+        };
+        let err = sync_from(&lib, &http(), &down, &clock, Some(&other))
+            .await
+            .unwrap_err();
+        assert!(err.transient() && err.code().is_none(), "{err:?}");
+        assert_eq!(
+            matches!(err, SyncError::Http(HttpError::Timeout(_))),
+            timeout,
+            "{err:?}"
+        );
+    }
 }
 
 #[tokio::test]
