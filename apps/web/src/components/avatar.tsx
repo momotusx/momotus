@@ -18,9 +18,9 @@ import Check from "lucide-solid/icons/check";
 import LogOut from "lucide-solid/icons/log-out";
 import Lock from "lucide-solid/icons/lock";
 import SettingsIcon from "lucide-solid/icons/settings";
-import { useNavigate } from "@solidjs/router";
+import { useLocation, useNavigate } from "@solidjs/router";
 import { type Component, createEffect, createSignal, For, on, onCleanup, Show } from "solid-js";
-import { Dynamic } from "solid-js/web";
+import { Dynamic, Portal } from "solid-js/web";
 import type { ProfileInfo } from "../core/generated/ProfileInfo";
 import { pickOnOpen, profiles } from "../core/profiles";
 import { current, INCOGNITO } from "../lib/profiles";
@@ -29,6 +29,9 @@ import { pushBack } from "../focus/back";
 import { focusByViewer, focusEl } from "../focus/dom";
 import { type Glyph, initial, parseAvatar } from "../lib/avatar";
 import { kidsLine } from "../lib/words";
+import { form } from "../form";
+import { searchOpen } from "../screens/search";
+import { ProfilePanel } from "./profile-panel";
 import "./avatar.css";
 
 const ICONS: Record<Exclude<Glyph, "letter">, Component<{ "aria-hidden"?: boolean }>> = {
@@ -67,10 +70,15 @@ export function AvatarArt(props: { avatar: string; name: string; size?: "s" | "m
 
 /** The bar's far-right item (plans/nav-profile.md): the active profile's avatar, opening a menu of the profiles,
  * then Settings. At the end of the TV tab bar and the desktop header; on the phone, the capsule's last tab with the
- * word "Profile". `lit` while Settings shows: the bar's current-place look, and the TV rail enters on it (`.on`). */
+ * word "Profile". `lit` while Settings shows: the bar's current-place look, and the TV rail enters on it (`.on`).
+ * On the desktop the avatar opens the profile panel from the right instead (plans/profile-panel.md). */
 export function ProfileMenu(props: { lit: boolean; tab?: boolean; onSettings: () => void }) {
   const navigate = useNavigate();
+  const location = useLocation();
   const [open, setOpen] = createSignal(false);
+  const panel = () => form() === "desktop" && !props.tab;
+  // A new page, a form change (a window dragged narrow) or the Search palette closes either.
+  createEffect(on([() => location.pathname, form, searchOpen], () => setOpen(false), { defer: true }));
   let wrap!: HTMLDivElement;
   let button!: HTMLButtonElement;
   let list: HTMLDivElement | undefined;
@@ -88,7 +96,7 @@ export function ProfileMenu(props: { lit: boolean; tab?: boolean; onSettings: ()
   // Opened: focus on the current profile's row. Back closes it, ahead of the app's own Back (the rail's Home).
   createEffect(
     on(open, (o) => {
-      if (!o || !list) return;
+      if (!o || !list || panel()) return;
       const on = list.querySelector<HTMLElement>('[aria-checked="true"]') ?? list.querySelector<HTMLElement>("[role^=menuitem]");
       if (on) focusEl(on);
       onCleanup(pushBack(() => close()));
@@ -98,7 +106,7 @@ export function ProfileMenu(props: { lit: boolean; tab?: boolean; onSettings: ()
     if (!wrap.contains(e.target as Node)) close(false);
   };
   createEffect(() => {
-    if (!open()) return;
+    if (!open() || panel()) return;
     document.addEventListener("pointerdown", outside, true);
     onCleanup(() => document.removeEventListener("pointerdown", outside, true));
   });
@@ -106,7 +114,7 @@ export function ProfileMenu(props: { lit: boolean; tab?: boolean; onSettings: ()
   // in Safari (the blur then names no element), and a press outside is the pointer listener's.
   const tabbedOut = (e: FocusEvent) => {
     const to = e.relatedTarget as Node | null;
-    if (open() && to && !wrap.contains(to)) close(false);
+    if (open() && !panel() && to && !wrap.contains(to)) close(false);
   };
   // The list keeps the arrows, as a pull-down does: Up and Down stop at its ends, the page under it does not move.
   const keys = (e: KeyboardEvent) => {
@@ -132,11 +140,12 @@ export function ProfileMenu(props: { lit: boolean; tab?: boolean; onSettings: ()
         <div class="pmenu" ref={wrap} on:focusout={tabbedOut}>
           <button
             class={props.tab ? "ptab" : "nav pavatar"}
-            classList={{ on: props.lit }}
+            classList={{ on: props.lit, opened: open() && panel() }}
             data-f="nav:/profiles"
             aria-label={profiles()?.kids ? kidsLine("profileButton", { name: p().name }) : `Profile: ${p().name}`}
-            aria-haspopup="menu"
+            aria-haspopup={panel() ? "dialog" : "menu"}
             aria-expanded={open()}
+            aria-controls={open() && panel() ? "profile-panel" : undefined}
             ref={button}
             onClick={() => setOpen((o) => !o)}
           >
@@ -145,15 +154,36 @@ export function ProfileMenu(props: { lit: boolean; tab?: boolean; onSettings: ()
               <span>{incognito() ? incognitoWords.name : "Profile"}</span>
             </Show>
           </button>
-          {/* A Leave that failed says so under the bar's button (the menu is closed by then). */}
-          <Show when={leaveProblem()}>
+          {/* A Leave that failed says so under the bar's button (the menu is closed by then; the panel says it inside). */}
+          <Show when={!(open() && panel()) && leaveProblem()}>
             {(e) => (
               <p class="pmenu-said st bad" role="status">
                 {e()}
               </p>
             )}
           </Show>
-          <Show when={open()}>
+          <Show when={open() && panel()}>
+            <Portal mount={document.querySelector(".app") ?? document.body}>
+              <ProfilePanel
+                me={p()}
+                incognito={incognito()}
+                offersIncognito={offersIncognito()}
+                leave={leave}
+                leaveProblem={leaveProblem()}
+                onClose={() => close()}
+                onChoose={(q) => !q.syncing && choose(q)}
+                onManage={() => {
+                  close();
+                  navigate("/profiles/manage");
+                }}
+                onSettings={() => {
+                  close();
+                  props.onSettings();
+                }}
+              />
+            </Portal>
+          </Show>
+          <Show when={open() && !panel()}>
             <div class="pmenu-list" role="menu" aria-label="Profiles" ref={list} onKeyDown={keys}>
               <For each={profiles()?.profiles ?? []}>
                 {(q) => (

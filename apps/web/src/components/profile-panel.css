@@ -1,0 +1,62 @@
+/* The desktop profile panel (plans/profile-panel.md, variant 7 of design/exploration/profile-menu): sizes are the
+ * variant's at the desktop scale (`--px`). It sits under the header, so the avatar that toggles it stays in view. */
+.pp-layer { position: absolute; left: 0; right: 0; bottom: 0; top: calc(var(--offline-h, 0px) + var(--nav-h)); z-index: 25; animation: pp-in var(--motion-panel) var(--ease); }
+/* The web moves by opacity only (design/DECISION.md, Motion). */
+@keyframes pp-in { from { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .pp-layer { animation: none; } }
+/* The variant's dim layer over the page. */
+.pp-scrim { position: absolute; inset: 0; background: rgba(0, 0, 0, 0.35); }
+/* Narrow windows keep at least 48 of the page beside it. */
+.pp { position: absolute; top: 0; right: 0; bottom: 0; width: min(calc(420 * var(--px)), calc(100% - 48 * var(--px))); display: flex; flex-direction: column;
+  padding: calc(18 * var(--px)) calc(20 * var(--px)) calc(24 * var(--px)); border-radius: 0; color: var(--text); }
+@media (prefers-reduced-transparency: reduce) { .pp { background: var(--surface); -webkit-backdrop-filter: none; backdrop-filter: none; } }
+.pp-head { display: flex; align-items: center; justify-content: space-between; flex: none; height: calc(36 * var(--px)); }
+.pp-head h2 { font: 700 calc(28 * var(--px)) / calc(34 * var(--px)) var(--font-display); letter-spacing: -0.01em; }
+.pp-x { display: grid; place-items: center; width: calc(32 * var(--px)); height: calc(32 * var(--px)); border-radius: 50%; background: rgba(255, 255, 255, 0.12); color: var(--text); }
+.pp-x svg { width: calc(16 * var(--px)); height: calc(16 * var(--px)); }
+/* The middle scrolls (a long list, a short window); the header and the foot stay. Room for the focus ring. */
+.pp-body { flex: 1; min-height: 0; overflow-y: auto; margin: 0 calc(-6 * var(--px)); padding: 0 calc(6 * var(--px)) calc(8 * var(--px)); overscroll-behavior: contain; }
+
+/* The current profile, on the backdrop of what it last watched. The ramp is darker than the variant's: its words
+ * keep 4.5:1 over a white sky. */
+.pp-card { position: relative; display: flex; flex-direction: column; justify-content: flex-end; min-height: calc(196 * var(--px)); margin-top: calc(18 * var(--px));
+  padding: calc(16 * var(--px)); border-radius: calc(16 * var(--px)); overflow: hidden; background: var(--raised); }
+.pp-card-art { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.pp-card.art::before { content: ""; position: absolute; inset: 0; z-index: 1; background: linear-gradient(0deg, rgba(0, 0, 0, 0.88), rgba(0, 0, 0, 0.7) 60%, rgba(0, 0, 0, 0.25)); }
+.pp-card > :not(.pp-card-art) { position: relative; z-index: 2; }
+.pp-me { display: flex; align-items: center; gap: calc(14 * var(--px)); }
+.pp-me .avatar { width: calc(64 * var(--px)); height: calc(64 * var(--px)); font-size: calc(28 * var(--px)); }
+.pp-me b { display: block; font: 700 calc(22 * var(--px)) / calc(26 * var(--px)) var(--font-text); overflow-wrap: anywhere; }
+.pp-sub { font-size: calc(13 * var(--px)); color: var(--muted); }
+.pp-last { margin-top: calc(10 * var(--px)); font-size: calc(13 * var(--px)); color: var(--muted); }
+.pp-last b { color: var(--text); font-weight: 600; }
+.pp-leave { align-self: flex-start; margin-top: calc(12 * var(--px)); }
+.pp-said { margin-top: calc(8 * var(--px)); font-size: calc(13 * var(--px)); }
+
+.pp-label { margin: calc(18 * var(--px)) calc(4 * var(--px)) calc(8 * var(--px)); font: 600 calc(13 * var(--px)) / calc(16 * var(--px)) var(--font-text); color: var(--dim); }
+.pp-rows { display: grid; gap: calc(6 * var(--px)); }
+.pp-row { display: flex; align-items: center; gap: calc(14 * var(--px)); width: 100%; height: calc(76 * var(--px)); padding: 0 calc(12 * var(--px));
+  border-radius: calc(14 * var(--px)); background: rgba(255, 255, 255, 0.06); color: var(--text); text-align: left; }
+@media (hover: hover) { .pp-row:not([aria-disabled="true"]):hover { background: rgba(255, 255, 255, 0.12); } }
+.pp-row[aria-disabled="true"] .pp-name { color: var(--dim); }
+.pp-row .avatar { width: calc(48 * var(--px)); height: calc(48 * var(--px)); font-size: calc(21 * var(--px)); }
+/* Incognito at rest: a raised circle with the white glyph (design/DECISION.md, Profiles); sea blue only while it runs. */
+.pp-incog { background: var(--raised); }
+.pp-two { display: grid; gap: calc(2 * var(--px)); min-width: 0; }
+.pp-two b { display: flex; align-items: center; gap: calc(8 * var(--px)); min-width: 0; font: 600 calc(16 * var(--px)) / calc(20 * var(--px)) var(--font-text); }
+.pp-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pp-two small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 400 calc(13 * var(--px)) / calc(16 * var(--px)) var(--font-text); color: var(--dim); }
+.pp-lock { flex: none; width: calc(14 * var(--px)); height: calc(14 * var(--px)); color: var(--dim); }
+.pp-kb { flex: none; display: inline-flex; align-items: center; height: calc(18 * var(--px)); padding: 0 calc(7 * var(--px)); border-radius: 999px;
+  background: rgba(255, 255, 255, 0.92); color: rgba(0, 0, 0, 0.88); font: 700 calc(11 * var(--px)) / 1 var(--font-text); }
+.pp-thumb { flex: none; margin-left: auto; width: calc(84 * var(--px)); height: calc(48 * var(--px)); border-radius: calc(8 * var(--px)); object-fit: cover; }
+
+/* Two pills at the foot; they wrap to two rows when a narrow window has no room for both. */
+.pp-foot { flex: none; display: flex; flex-wrap: wrap; gap: calc(10 * var(--px)); padding-top: calc(12 * var(--px)); }
+.pp-pill { display: inline-flex; align-items: center; justify-content: center; gap: calc(8 * var(--px)); height: calc(44 * var(--px)); padding: 0 calc(18 * var(--px));
+  border-radius: 999px; background: rgba(255, 255, 255, 0.16); color: var(--text); font: 600 calc(14 * var(--px)) / 1 var(--font-text); white-space: nowrap; }
+.pp-foot .pp-pill { flex: 1 1 calc(150 * var(--px)); }
+.pp-pill svg { width: calc(16 * var(--px)); height: calc(16 * var(--px)); }
+@media (hover: hover) { .pp-pill:hover, .pp-x:hover { background: rgba(255, 255, 255, 0.24); } }
+/* The avatar rings while its panel is open (the variant's open capsule item). */
+[data-form="desktop"] .nav.pavatar.opened .avatar { box-shadow: 0 0 0 calc(2 * var(--px)) var(--bg), 0 0 0 calc(4 * var(--px)) var(--text); }

@@ -67,3 +67,35 @@ export function profileProblem(code: string | undefined, fallback: string): stri
       return fallback;
   }
 }
+
+/** The desktop profile panel's words (plans/profile-panel.md, the owner's pick 7). */
+export const panelWords = {
+  title: "Profiles",
+  close: "Close",
+  watchingNow: "Watching now",
+  syncing: "Syncing",
+  lastWatched: "Last watched",
+  switchTo: "Switch to",
+  kids: "Kids",
+  incognitoLine: "Watch without keeping anything",
+  manage: "Manage profiles",
+  settings: "Settings",
+};
+
+/** What a screen reader hears for a "Switch to" row: the name, then what the row shows in words. A kids session
+ * hears that a grown-up's PIN comes next. */
+export function panelRowLabel(
+  p: Pick<ProfileInfo, "name" | "kids" | "hasPin" | "syncing">,
+  spoken: string | undefined,
+  kidsSession: boolean,
+): string {
+  return [
+    p.name,
+    p.kids ? "kids profile" : "",
+    p.syncing ? "still syncing" : p.hasPin ? "locked with a PIN" : "",
+    !p.syncing && spoken ? `last watched ${spoken}` : "",
+    kidsSession && !p.syncing ? "needs a grown-up's PIN" : "",
+  ]
+    .filter(Boolean)
+    .join(", ");
+}

@@ -169,6 +169,10 @@ test("desktop: a kids profile made, filled, watched as the kid, left with the PI
 
   // Leaving asks Main's PIN, whatever profile is picked: a wrong one, then the right one.
   await page.locator('[data-f="nav:/profiles"]').click();
+  // The panel shows a kid names and avatars only: no one's last title, no Incognito, no Manage profiles.
+  await expect(page.locator(`[data-f="pmenu:default"]`)).toHaveAttribute("aria-label", "Main, locked with a PIN, needs a grown-up's PIN");
+  await expect(page.locator(".pp-last, .pp-row small, .pp img")).toHaveCount(0);
+  await expect(page.locator('[data-f="pmenu:incognito"], [data-f="pmenu:manage"]')).toHaveCount(0);
   await page.locator('[data-f="pmenu:default"]').click();
   await expect(page.locator(".keypad h2")).toHaveText("Ask a grown-up to enter Main's PIN");
   await page.keyboard.type("2580");

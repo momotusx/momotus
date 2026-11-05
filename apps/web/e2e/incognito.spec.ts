@@ -144,9 +144,15 @@ for (const form of ["tv", "desktop", "phone"] as const) {
   test(`${form}: the menu enters Incognito; its mark takes the bar's slot, which opens the menu and Settings`, async ({ browser }) => {
     const { page } = await open(browser, form);
     await menuButton(page).click();
-    // The same rows in both states: the profiles, Incognito, then Settings.
-    await expect(page.locator('[role="menu"] [role^="menuitem"]').last()).toHaveText("Settings");
-    await expect(page.locator('[data-f="pmenu:incognito"]')).toHaveAttribute("aria-checked", "false");
+    if (form === "desktop") {
+      // The panel (plans/profile-panel.md): Incognito the last row to switch to, Settings at the foot.
+      await expect(page.locator(".pp-row").last()).toHaveAttribute("data-f", "pmenu:incognito");
+      await expect(page.locator(".pp-foot .pp-pill").last()).toHaveText("Settings");
+    } else {
+      // The same rows in both states: the profiles, Incognito, then Settings.
+      await expect(page.locator('[role="menu"] [role^="menuitem"]').last()).toHaveText("Settings");
+      await expect(page.locator('[data-f="pmenu:incognito"]')).toHaveAttribute("aria-checked", "false");
+    }
     await page.locator('[data-f="pmenu:incognito"]').click();
     // The intro, every entry: the two groups, this form's end line, Continue first.
     const intro = page.locator(".incog-intro");
@@ -164,11 +170,23 @@ for (const form of ["tv", "desktop", "phone"] as const) {
     await expect(menuButton(page).locator(".incog-mark")).toBeVisible();
     if (form === "phone") await expect(menuButton(page)).toContainText("Incognito");
     expect(await live()).toBe(1);
-    // The menu: Incognito checked, Leave right under it, the focus on the current row.
     await menuButton(page).click();
-    await expect.poll(() => focused(page)).toBe("pmenu:incognito");
-    const rows = await page.locator('[role="menu"] [role^="menuitem"]').evaluateAll((els) => els.map((e) => (e as HTMLElement).dataset.f));
-    expect(rows.slice(-3)).toEqual(["pmenu:incognito", "pmenu:leave-incognito", "pmenu:settings"]);
+    if (form === "desktop") {
+      // The panel: Incognito's card with Leave, no Incognito row, the host by name only (no title, no art), the focus
+      // on the first profile to switch to.
+      const card = page.locator(".pp-card");
+      await expect(card).toHaveAttribute("aria-label", "Incognito, current profile");
+      await expect(card.locator(".pp-sub")).toHaveText("Nothing you watch here is kept.");
+      await expect(card.locator('[data-f="pmenu:leave-incognito"]')).toBeVisible();
+      await expect(page.locator('[data-f="pmenu:incognito"]')).toHaveCount(0);
+      await expect.poll(() => focused(page)).toBe("pmenu:default");
+      await expect(page.locator(".pp-last, .pp-row small, .pp img")).toHaveCount(0);
+    } else {
+      // The menu: Incognito checked, Leave right under it, the focus on the current row.
+      await expect.poll(() => focused(page)).toBe("pmenu:incognito");
+      const rows = await page.locator('[role="menu"] [role^="menuitem"]').evaluateAll((els) => els.map((e) => (e as HTMLElement).dataset.f));
+      expect(rows.slice(-3)).toEqual(["pmenu:incognito", "pmenu:leave-incognito", "pmenu:settings"]);
+    }
     await page.locator('[data-f="pmenu:settings"]').click();
     // Settings: the Incognito header, Leave its button, nothing of the account, Downloads, Trakt or Import; This
     // device stays.

@@ -1,5 +1,6 @@
 import { type Browser, expect, type Page, test } from "./fixture";
-import { Client } from "./core";
+import { Client, GOT, SHOTS, watch } from "./core";
+import { BBB_ID } from "./source";
 
 /** The profile in place of Settings (plans/nav-profile.md): the bar's far-right item is the current profile, its
  * menu lists the profiles (the current one checked), then Settings, and nothing else. */
@@ -21,8 +22,12 @@ test.beforeAll(async () => {
   try {
     kid = (await c.req<Snapshot>("createProfile", { name: "Kid", avatar: "letter:sky" })).profiles.find((p) => p.name === "Kid")!.id;
     locked = (await c.req<Snapshot>("createProfile", { name: "Locked", avatar: "letter:mint" })).profiles.find((p) => p.name === "Locked")!.id;
+    // What each last watched, for the desktop panel: Kid an episode, Locked a film.
+    await c.req("switchProfile", { profile: kid });
+    await watch(c, { kind: "series", itemId: GOT.id, videoId: GOT.resume, title: "Game of Thrones", season: 2, episode: 3 }, 21 * 60_000, 57 * 60_000);
     // A PIN is set from its own profile.
     await c.req("switchProfile", { profile: locked });
+    await watch(c, { kind: "movie", itemId: BBB_ID, videoId: BBB_ID, title: "Big Buck Bunny", via: "Sample Source" }, 150_000, 596_000);
     await c.req("setPin", { profile: locked, pin: PIN });
     await c.req("switchProfile", { profile: "default" });
   } finally {
@@ -59,7 +64,7 @@ async function open(browser: Browser, form: Form, path: string) {
   return { context, page };
 }
 
-for (const form of ["tv", "desktop", "phone"] as const) {
+for (const form of ["tv", "phone"] as const) {
   test(`${form}: no Settings in the bar; the profile's menu holds the profiles, then Settings`, async ({ browser }) => {
     const { context, page } = await open(browser, form, "/");
     await expect(page.locator('[data-f="nav:/settings"], nav a[href="/settings"]')).toHaveCount(0);
@@ -84,45 +89,110 @@ for (const form of ["tv", "desktop", "phone"] as const) {
   });
 }
 
-test("desktop: the menu by keyboard, Escape, Tab and a click outside close it", async ({ browser }) => {
+/** The desktop profile panel (plans/profile-panel.md, the owner's pick 7). */
+const panel = (page: Page) => page.locator('[role="dialog"][aria-labelledby="pp-title"]');
+const shot = (page: Page, name: string) => page.screenshot({ path: `${SHOTS}/profile-panel-${name}.jpg`, type: "jpeg", quality: 80 });
+
+test("desktop: the avatar opens the profile panel from the right; each profile with what it last watched", async ({ browser }) => {
+  const { context, page } = await open(browser, "desktop", "/library");
+  await expect(page.locator('[data-f="nav:/settings"], nav a[href="/settings"]')).toHaveCount(0);
+  await expect(button(page)).toHaveAttribute("aria-label", "Profile: Main");
+  await expect(button(page)).toHaveAttribute("aria-haspopup", "dialog");
+  const box = (await button(page).boundingBox())!;
+  expect(Math.min(box.width, box.height)).toBeGreaterThanOrEqual(47.5);
+  await button(page).click();
+  await expect(button(page)).toHaveAttribute("aria-expanded", "true");
+  await expect(panel(page)).toBeVisible();
+  await expect(panel(page).locator("h2")).toHaveText("Profiles");
+  // 420 wide at the right edge, under the 52 high header, full height below it.
+  const side = (await page.locator(".pp").boundingBox())!;
+  expect(Math.round(side.width)).toBe(420);
+  expect(Math.round(side.x + side.width)).toBe(1440);
+  expect(Math.round(side.y)).toBe(52);
+  expect(Math.round(side.y + side.height)).toBe(900);
+  // The avatar and Search stay live above it; the page under it is inert.
+  expect(await page.locator(".topnav").evaluate((el) => (el as HTMLElement).inert)).toBe(false);
+  expect(await page.locator(".screen").evaluate((el) => (el as HTMLElement).inert)).toBe(true);
+  // The current profile on the card, its last title from the seed; the others to switch to, then Incognito.
+  const card = page.locator(".pp-card");
+  await expect(card).toHaveAttribute("aria-label", "Main, current profile");
+  await expect(card.locator(".pp-sub")).toHaveText("Watching now");
+  await expect(card.locator(".pp-last")).toContainText("Last watched Big Buck Bunny", { timeout: 15_000 });
+  const keys = await page.locator(".pp-row").evaluateAll((els) => els.map((e) => (e as HTMLElement).dataset.f));
+  expect(keys).toEqual([`pmenu:${kid}`, `pmenu:${locked}`, "pmenu:incognito"]);
+  await expect(page.locator(`[data-f="pmenu:${kid}"] small`)).toHaveText("Game of Thrones, S2:E3");
+  await expect(page.locator(`[data-f="pmenu:${kid}"]`)).toHaveAttribute("aria-label", "Kid, last watched Game of Thrones, season 2, episode 3");
+  // Main is the owner: a PIN profile's title shows to it.
+  await expect(page.locator(`[data-f="pmenu:${locked}"] small`)).toHaveText("Big Buck Bunny");
+  await expect(page.locator(`[data-f="pmenu:${locked}"]`)).toHaveAttribute("aria-label", "Locked, locked with a PIN, last watched Big Buck Bunny");
+  await expect(page.locator('[data-f="pmenu:incognito"] small')).toHaveText("Watch without keeping anything");
+  for (const r of await page.locator(".pp-row").all()) expect(Math.round((await r.boundingBox())!.height)).toBe(76);
+  await expect(page.locator(".pp-foot .pp-pill")).toHaveText(["Manage profiles", "Settings"]);
+  await shot(page, "1440");
+  await context.close();
+});
+
+test("desktop: the panel by keyboard; Escape, Close, the dim layer and the avatar close it", async ({ browser }) => {
   const { context, page } = await open(browser, "desktop", "/library");
   await button(page).focus();
   await page.keyboard.press("Enter");
-  // Focus starts on the current profile; Up stops at the top, Down at the bottom.
-  await expect.poll(() => focused(page)).toBe("pmenu:default");
-  await page.keyboard.press("ArrowUp");
-  expect(await focused(page)).toBe("pmenu:default");
-  for (let i = 0; i < 5; i++) await page.keyboard.press("ArrowDown");
+  // Focus starts on the first profile to switch to; Tab stays inside, wrapping at both ends.
+  await expect.poll(() => focused(page)).toBe(`pmenu:${kid}`);
+  await page.keyboard.press("Shift+Tab");
+  expect(await focused(page)).toBe("pmenu:close");
+  await page.keyboard.press("Shift+Tab");
   expect(await focused(page)).toBe("pmenu:settings");
-  await page.keyboard.press("ArrowLeft");
-  expect(await focused(page)).toBe("pmenu:settings");
-  // Escape closes, focus back on the profile, and the page stays.
+  await page.keyboard.press("Tab");
+  expect(await focused(page)).toBe("pmenu:close");
+  await page.keyboard.press("ArrowDown");
+  expect(await focused(page)).toBe(`pmenu:${kid}`);
+  // Escape closes, focus back on the avatar, and the page stays, live again.
   await page.keyboard.press("Escape");
-  await expect(page.locator('[role="menu"]')).toHaveCount(0);
-  expect(await focused(page)).toBe("nav:/profiles");
+  await expect(panel(page)).toHaveCount(0);
+  await expect.poll(() => focused(page)).toBe("nav:/profiles");
   await expect(page).toHaveURL(/\/library/);
-  // Tab out of it closes it.
-  await page.keyboard.press("Enter");
-  await expect.poll(() => focused(page)).toBe("pmenu:default");
-  await page.keyboard.press("Shift+Tab");
-  await page.keyboard.press("Shift+Tab");
-  await expect(page.locator('[role="menu"]')).toHaveCount(0);
-  // A click outside closes it.
+  expect(await page.locator(".screen").evaluate((el) => (el as HTMLElement).inert)).toBe(false);
+  // Space opens it too; the Close button closes it.
+  await page.keyboard.press("Space");
+  await expect(panel(page)).toBeVisible();
+  await page.locator('[data-f="pmenu:close"]').click();
+  await expect(panel(page)).toHaveCount(0);
+  // A click on the dim layer closes it, and so does the avatar a second time.
   await button(page).click();
-  await expect(page.locator('[role="menu"]')).toHaveCount(1);
-  await page.mouse.click(700, 600);
-  await expect(page.locator('[role="menu"]')).toHaveCount(0);
-  // The current profile closes it and changes nothing.
+  await page.mouse.click(400, 600);
+  await expect(panel(page)).toHaveCount(0);
   await button(page).click();
-  await page.locator('[data-f="pmenu:default"]').click();
-  await expect(page.locator('[role="menu"]')).toHaveCount(0);
+  await expect(panel(page)).toBeVisible();
+  await button(page).click();
+  await expect(panel(page)).toHaveCount(0);
   await expect(page).toHaveURL(/\/library/);
+  // Manage profiles opens the profile manager; Settings opens Settings and lights the avatar.
+  await button(page).click();
+  await page.locator('[data-f="pmenu:manage"]').click();
+  await expect(page).toHaveURL(/\/profiles\/manage/);
+  await expect(panel(page)).toHaveCount(0);
+  await page.goto("/library?form=desktop");
+  await button(page).click();
+  await page.locator('[data-f="pmenu:settings"]').click();
+  await expect(page).toHaveURL(/\/settings/);
+  await expect(panel(page)).toHaveCount(0);
+  await expect(button(page)).toHaveClass(/\bon\b/);
+  // A narrower window keeps the panel's sizes on the smaller scale, the foot pills side by side.
+  await page.setViewportSize({ width: 1024, height: 768 });
+  await button(page).click();
+  await expect(page.locator(".pp-card .pp-last")).toBeVisible({ timeout: 15_000 });
+  await shot(page, "1024");
+  // A move to another page leaves nothing behind: no layer, nothing inert.
+  await page.locator('[data-f="nav:/library"]').click();
+  await expect(page).toHaveURL(/\/library/);
+  await expect(panel(page)).toHaveCount(0);
+  await expect(page.locator("[inert]")).toHaveCount(0);
   await context.close();
 });
 
 test("a profile without a PIN switches; one with a PIN opens its keypad, and Cancel goes back", async ({ browser }) => {
   const { context, page } = await open(browser, "desktop", "/library");
-  // A PIN: its keypad, then Cancel leaves the picker for the page the menu was on.
+  // A PIN: its keypad, then Cancel leaves the picker for the page the panel was on.
   await button(page).click();
   await page.locator(`[data-f="pmenu:${locked}"]`).click();
   await expect(page.locator(".keypad h2")).toHaveText("Enter the PIN for Locked");
@@ -139,9 +209,13 @@ test("a profile without a PIN switches; one with a PIN opens its keypad, and Can
   await page.locator(`[data-f="pmenu:${kid}"]`).click();
   await expect(button(page)).toHaveAttribute("aria-label", "Profile: Kid");
   await expect(page).toHaveURL(/\/(\?form=desktop)?$/);
-  // Back to Main through the menu.
+  // Kid's panel: its own card and Main's title; Locked's PIN keeps its title off it; no Manage profiles.
   await button(page).click();
-  await expect(page.locator('[role="menu"] [aria-checked="true"]')).toHaveAttribute("aria-label", "Kid, current profile");
+  await expect(page.locator(".pp-card")).toHaveAttribute("aria-label", "Kid, current profile");
+  await expect(page.locator(".pp-card .pp-last")).toContainText("Game of Thrones, S2:E3", { timeout: 15_000 });
+  await expect(page.locator('[data-f="pmenu:default"] small')).toHaveText("Big Buck Bunny");
+  await expect(page.locator(`[data-f="pmenu:${locked}"] small`)).toHaveCount(0);
+  await expect(page.locator('[data-f="pmenu:manage"]')).toHaveCount(0);
   await page.locator('[data-f="pmenu:default"]').click();
   await expect(button(page)).toHaveAttribute("aria-label", "Profile: Main");
   await context.close();

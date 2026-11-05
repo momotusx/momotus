@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { choiceToRemember, current, INCOGNITO, inIncognito, profileProblem, startsOnPicker, waitText } from "./profiles";
+import { choiceToRemember, current, INCOGNITO, inIncognito, panelRowLabel, profileProblem, startsOnPicker, waitText } from "./profiles";
 
 const one = [{ id: "default" }];
 const two = [{ id: "default" }, { id: "p2" }];
@@ -51,4 +51,12 @@ test("the core's profile codes read as words, and an unknown one keeps its own m
   expect(profileProblem("kidsNeedPin", "x")).toBe("Kids profiles need this PIN. Remove them first, then remove the PIN.");
   expect(profileProblem("weakPin", "x")).toBe("Pick a less obvious PIN: no repeats, runs or 1234.");
   expect(profileProblem("somethingNew", "the core's text")).toBe("the core's text");
+});
+
+test("a panel row says its name, its marks and its last title in words; a kid hears that a grown-up's PIN comes next", () => {
+  const p = { name: "Robin", kids: false, hasPin: true, syncing: false };
+  expect(panelRowLabel(p, "Slow Horses, season 4, episode 2", false)).toBe("Robin, locked with a PIN, last watched Slow Horses, season 4, episode 2");
+  expect(panelRowLabel({ ...p, hasPin: false, kids: true }, undefined, false)).toBe("Robin, kids profile");
+  expect(panelRowLabel({ ...p, syncing: true }, "Silo", false)).toBe("Robin, still syncing");
+  expect(panelRowLabel({ ...p, hasPin: false }, undefined, true)).toBe("Robin, needs a grown-up's PIN");
 });
