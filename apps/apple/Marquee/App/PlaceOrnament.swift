@@ -110,7 +110,7 @@ private struct OrnamentItemStyle: ButtonStyle {
                 .labelStyle(ItemLabel())
                 .textFont(14, weight: .semibold, relativeTo: .callout)
                 .foregroundStyle(on ? Theme.Palette.onPrimary : hovered ? Theme.Palette.text : Theme.Palette.muted)
-                .padding(.horizontal, 13)
+                .padding(.horizontal, 11)
                 .frame(height: OrnamentLayout.itemHeight)
                 .background { if on { Capsule().fill(Theme.Palette.primary) } }
                 .contentShape(Capsule())
