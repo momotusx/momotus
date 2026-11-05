@@ -2171,3 +2171,228 @@ async fn a_hero_backdrop_becomes_tmdbs_textless_frame_without_waiting_for_it() {
         "B has only titled backdrops on TMDB"
     );
 }
+
+/// CPU time this process has used, user and system, in ms.
+fn cpu_ms() -> f64 {
+    // SAFETY: getrusage fills the struct it is given.
+    let mut usage: libc::rusage = unsafe { std::mem::zeroed() };
+    unsafe { libc::getrusage(libc::RUSAGE_SELF, &mut usage) };
+    let ms = |t: libc::timeval| t.tv_sec as f64 * 1000.0 + t.tv_usec as f64 / 1000.0;
+    ms(usage.ru_utime) + ms(usage.ru_stime)
+}
+
+/// A meta for any title id: a series of two seasons of 20 episodes, each
+/// with a still, as Cinemeta answers.
+fn series_meta(id: &str) -> String {
+    let videos: Vec<serde_json::Value> = (1..=2)
+        .flat_map(|season| (1..=20).map(move |episode| (season, episode)))
+        .map(|(season, episode)| {
+            serde_json::json!({
+                "id": format!("{id}:{season}:{episode}"), "season": season, "episode": episode,
+                "title": format!("Episode {episode} of a season that goes on"),
+                "released": "2020-01-01T00:00:00.000Z",
+                "thumbnail": format!("https://images.example/{id}/{season}/{episode}.jpg"),
+                "overview": "A long enough episode overview, as the real ones are, for a fair decode.",
+            })
+        })
+        .collect();
+    serde_json::json!({"meta": {
+        "id": id, "type": "series", "name": format!("Series {id}"),
+        "poster": format!("https://images.example/{id}/poster.jpg"),
+        "background": format!("https://images.example/{id}/background.jpg"),
+        "logo": format!("https://images.example/{id}/logo.png"),
+        "description": "A series description of a few sentences, as Cinemeta gives one.",
+        "releaseInfo": "2020-", "imdbRating": "8.1", "genres": ["Drama", "Crime"],
+        "videos": videos,
+    }})
+    .to_string()
+}
+
+/// Eight addons with Cinemeta's manifest (catalogs and metas), served on
+/// loopback with a day's cache, as a real profile's list might be.
+async fn cinemeta_like_addons() -> Vec<AddonRow> {
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    tokio::spawn(async move {
+        while let Ok((mut socket, _)) = listener.accept().await {
+            tokio::spawn(async move {
+                let mut buf = [0u8; 4096];
+                let n = socket.read(&mut buf).await.unwrap_or(0);
+                let head = String::from_utf8_lossy(&buf[..n]);
+                let path = head.split_whitespace().nth(1).unwrap_or_default();
+                let body = if let Some(rest) = path.split("/meta/").nth(1) {
+                    let id = rest.split('/').nth(1).unwrap_or_default();
+                    series_meta(id.trim_end_matches(".json"))
+                } else {
+                    let metas: Vec<serde_json::Value> = (0..20)
+                        .map(|n| serde_json::json!({
+                            "id": format!("tt20000{n:02}"), "type": "movie", "name": format!("Film {n}"),
+                            "poster": format!("https://images.example/tt20000{n:02}/poster.jpg"),
+                            "releaseInfo": "2019", "imdbRating": "7.2"
+                        }))
+                        .collect();
+                    serde_json::json!({ "metas": metas }).to_string()
+                };
+                let resp = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nCache-Control: max-age=86400\r\nContent-Length: {}\r\n\r\n{}",
+                    body.len(),
+                    body
+                );
+                let _ = socket.write_all(resp.as_bytes()).await;
+            });
+        }
+    });
+    let cinemeta: serde_json::Value = serde_json::from_str(include_str!(
+        "../../mq-protocol/tests/fixtures/cinemeta_manifest.json"
+    ))
+    .unwrap();
+    (0..8)
+        .map(|i| {
+            let mut manifest = cinemeta.clone();
+            manifest["id"] = format!("cinemeta.{i}").into();
+            manifest["name"] = format!("Cinemeta {i}").into();
+            AddonRow {
+                transport_url: format!("http://{addr}/a{i}/manifest.json"),
+                manifest_json: manifest.to_string(),
+                position: i,
+                enabled: true,
+                allow_private: true,
+            }
+        })
+        .collect()
+}
+
+/// Twenty series under way and twenty with a finished episode (Next Up).
+fn continue_watching(core: &Core) {
+    let library = core.library();
+    for n in 0..40 {
+        let id = format!("tt10000{n:02}");
+        let item = LibraryItemRow {
+            item_id: id.clone(),
+            kind: "series".into(),
+            name: format!("Series {id}"),
+            poster: None,
+            poster_shape: None,
+            added_ms: 1,
+        };
+        library.upsert_item("p", &item, true, &core.hlc()).unwrap();
+        let video = format!("{id}:1:3");
+        let duration_ms = 2_400_000;
+        let position_ms = if n < 20 { 600_000 } else { 2_300_000 };
+        let row = ProgressRow {
+            video_id: &video,
+            item_id: &id,
+            position_ms,
+            duration_ms,
+            updated_ms: 1_000 + n,
+        };
+        library.set_progress("p", row, &core.hlc()).unwrap();
+    }
+}
+
+/// Waits until no meta has been read for `quiet`.
+async fn metas_settle(quiet: Duration) {
+    let mut last = (Core::meta_reads(), tokio::time::Instant::now());
+    for _ in 0..600 {
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        let now = Core::meta_reads();
+        if now != last.0 {
+            last = (now, tokio::time::Instant::now());
+        } else if last.1.elapsed() >= quiet {
+            return;
+        }
+    }
+    panic!("metas never settled");
+}
+
+/// Perf (plans/batch-13-perf.md, core-perf C1 and C2): Home open, the
+/// installed addon list, and a simulated play of `MQ_PERF_PLAY_S` seconds
+/// (300 by default) reporting progress every 5 s as the apps do, on two
+/// core threads as the apps run them. Prints one JSON line. Run alone:
+/// `cargo test -p mq-runtime --test home perf_ -- --ignored --nocapture`.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "perf measurement, minutes long"]
+async fn perf_home_and_a_play() {
+    let play_s: u64 = std::env::var("MQ_PERF_PLAY_S")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(300);
+    let core = Core::temporary("p").unwrap();
+    core.library()
+        .set_addons("p", &cinemeta_like_addons().await, &core.hlc())
+        .unwrap();
+    continue_watching(&core);
+
+    let (cpu, reads) = (cpu_ms(), Core::meta_reads());
+    let view = HomeView::open(&core);
+    for _ in 0..600 {
+        let rows = view.snapshot().rows;
+        if rows
+            .iter()
+            .any(|r| r.row_id == CONTINUE_ROW_ID && r.tiles.len() >= 20)
+        {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+    metas_settle(Duration::from_secs(2)).await;
+    let open_cpu_ms = cpu_ms() - cpu;
+    let open_meta_reads = Core::meta_reads() - reads;
+
+    let started = std::time::Instant::now();
+    let calls = 1000;
+    for _ in 0..calls {
+        assert_eq!(core.installed_addons().unwrap().len(), 8);
+    }
+    let addons_us_per_call = started.elapsed().as_secs_f64() * 1e6 / f64::from(calls);
+
+    let (_, mut updates) = view.subscribe();
+    let pushes = Arc::new(AtomicUsize::new(0));
+    let counted = pushes.clone();
+    let counter = tokio::spawn(async move {
+        while let Some(batch) = updates.next().await {
+            if batch.iter().any(|u| matches!(u, HomeUpdate::Rows { .. })) {
+                counted.fetch_add(1, Ordering::SeqCst);
+            }
+        }
+    });
+    let target = mq_runtime::PlayTarget {
+        kind: "series".into(),
+        item_id: "tt1000000".into(),
+        video_id: "tt1000000:1:3".into(),
+        name: Some("Series tt1000000".into()),
+        ..Default::default()
+    };
+    let (cpu, reads) = (cpu_ms(), Core::meta_reads());
+    let play = mq_runtime::PlaybackView::open(&core, Vec::new(), target);
+    let mut position = 600_000;
+    for _ in 0..play_s / 5 {
+        play.report_progress(position, 2_400_000, false);
+        position += 5_000;
+        tokio::time::sleep(Duration::from_secs(5)).await;
+    }
+    let play_cpu_ms = cpu_ms() - cpu;
+    let play_meta_reads = Core::meta_reads() - reads;
+    let play_pushes = pushes.load(Ordering::SeqCst);
+    drop(play);
+    metas_settle(Duration::from_secs(2)).await;
+    let shown = view
+        .snapshot()
+        .rows
+        .into_iter()
+        .find(|r| r.row_id == CONTINUE_ROW_ID)
+        .and_then(|r| r.tiles.into_iter().find(|t| t.id == "tt1000000"))
+        .and_then(|t| t.progress);
+    counter.abort();
+    println!(
+        "{}",
+        serde_json::json!({
+            "home_open_cpu_ms": open_cpu_ms.round(), "home_open_meta_reads": open_meta_reads,
+            "installed_addons_us_per_call": (addons_us_per_call * 10.0).round() / 10.0,
+            "play_s": play_s, "play_cpu_ms": play_cpu_ms.round(),
+            "play_meta_reads": play_meta_reads, "play_row_pushes": play_pushes,
+            "after_close_progress": shown,
+            "expected_progress": (position - 5_000) as f32 / 2_400_000.0,
+        })
+    );
+}

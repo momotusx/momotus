@@ -240,6 +240,9 @@ struct Device {
 /// Devices open in this process, by canonical data directory.
 static OPEN: std::sync::Mutex<Vec<(PathBuf, Weak<Device>)>> = std::sync::Mutex::new(Vec::new());
 
+/// `Core::meta_reads`.
+static META_READS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
 impl Device {
     fn new(
         library: Library,
@@ -1081,6 +1084,13 @@ impl Core {
             .collect())
     }
 
+    /// Metas read in this process, from the network or a cache (the perf
+    /// checks in tests/home.rs count them).
+    #[doc(hidden)]
+    pub fn meta_reads() -> u64 {
+        META_READS.load(std::sync::atomic::Ordering::Relaxed)
+    }
+
     /// Details for one title: the first answer in addon order wins, as in
     /// Stremio; later addons are asked only when earlier ones fail. Returns the
     /// meta and the name of the addon that gave it.
@@ -1179,6 +1189,7 @@ impl Core {
     /// that addon failing, and videos not of the title are dropped, so no
     /// consumer ever sees them.
     async fn fetch_meta_body(&self, kind: &str, id: &str) -> Result<(MetaItem, String), MetaMiss> {
+        META_READS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         let path = ResourcePath {
             resource: "meta".into(),
             r#type: kind.to_owned(),

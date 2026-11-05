@@ -3,6 +3,7 @@
 //! repository (`mq-plugins/tests/fixtures/plugin-repo`) served over https on
 //! loopback. No third-party repository is asked.
 
+use futures_util::StreamExt;
 use mq_library::{AddonRow, OWNER};
 use mq_protocol::Source;
 use mq_runtime::defaults::{DefaultChoice, DefaultInstalled};
@@ -24,6 +25,8 @@ struct Fixture {
     base: String,
     asked: Arc<Mutex<Vec<String>>>,
     held: Arc<AtomicBool>,
+    /// Lookups answer after 0.3 to 1.2 s (perf).
+    spread: Arc<AtomicBool>,
 }
 
 fn reply(status: u16, kind: &str, body: &str) -> Vec<u8> {
@@ -45,6 +48,8 @@ impl Fixture {
         let log = asked.clone();
         let held: Arc<AtomicBool> = Arc::default();
         let hold = held.clone();
+        let spread: Arc<AtomicBool> = Arc::default();
+        let slow = spread.clone();
         let base: Arc<Mutex<String>> = Arc::default();
         let at = base.clone();
         let port = mq_http::test_dns::https_requests(move |r| {
@@ -74,6 +79,19 @@ impl Fixture {
                     m["scrapers"].as_array_mut().unwrap().push(second);
                     reply(200, "application/json", &m.to_string())
                 }
+                // 36 providers, as the default repository pair has (perf).
+                "/repo/many.json" => {
+                    let mut m: serde_json::Value = serde_json::from_str(MANIFEST).unwrap();
+                    let one = m["scrapers"][0].clone();
+                    m["scrapers"] = (0..36)
+                        .map(|i| {
+                            let mut s = one.clone();
+                            s["id"] = format!("film-{i}").into();
+                            s
+                        })
+                        .collect();
+                    reply(200, "application/json", &m.to_string())
+                }
                 "/repo/test-film.js" => {
                     reply(200, "text/javascript", &SCRIPT.replace("{{BASE}}", &base))
                 }
@@ -82,6 +100,11 @@ impl Fixture {
                 p if p.starts_with("/lookup/") => {
                     while hold.load(Ordering::SeqCst) {
                         std::thread::sleep(Duration::from_millis(10));
+                    }
+                    // A real provider answers in a second or so, each at its own pace.
+                    if spread.load(Ordering::SeqCst) {
+                        let n = log.lock().unwrap().len() as u64;
+                        std::thread::sleep(Duration::from_millis(300 + n * 397 % 900));
                     }
                     reply(200, "application/json", r#"{"title": "Fixture Film"}"#)
                 }
@@ -94,6 +117,7 @@ impl Fixture {
             base: url,
             asked,
             held,
+            spread: slow,
         }
     }
 
@@ -703,4 +727,91 @@ async fn a_repository_added_in_incognito_leaves_no_code_behind() {
     assert_eq!(fetched(), before, "read from the device");
     drop(view);
     scope.end_incognito();
+}
+
+/// Perf (plans/batch-13-perf.md, core-perf C3): what Versions sends while
+/// 36 providers answer one by one over an addon's 60 rows. Every push is
+/// written as the bridge writes it (`{"sub", "updates"}`); prints one JSON
+/// line with the pushes, the snapshots in them and their bytes, and the cost
+/// of writing the last push through a `Value` tree or straight. Run alone:
+/// `cargo test -p mq-runtime --features plugins --test plugins perf_ -- --ignored --nocapture`.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "perf measurement"]
+async fn perf_versions_plugin_pass() {
+    let fixture = Fixture::start();
+    fixture.spread.store(true, Ordering::SeqCst);
+    let core = core();
+    let many = format!("{}/repo/many.json", fixture.base);
+    core.add_plugin_repo(&many).await.unwrap();
+    let qualities = ["2160p", "1080p", "720p", "480p"];
+    let streams: Vec<serde_json::Value> = (0..60)
+        .map(|i| {
+            let q = qualities[i % 4];
+            serde_json::json!({
+                "name": format!("Films\n{q}"),
+                "title": format!("Fixture.Film.2001.{q}.WEB-DL.DDP5.1.x264-GRP{i} {}.{} GB", 1 + i % 9, i % 10),
+                "url": format!("http://127.0.0.1:9/fixture-film-{i}.mkv"),
+                "behaviorHints": {"bingeGroup": format!("films-{q}-{i}"), "videoSize": 1_000_000_000u64 + i as u64 * 7_000_000},
+            })
+        })
+        .collect();
+    let addon = stream_addon(serde_json::json!({ "streams": streams }).to_string()).await;
+    core.library()
+        .set_addons(OWNER, &[addon], &core.hlc())
+        .unwrap();
+    let started = std::time::Instant::now();
+    let view = VersionsView::open(&core, film("tt0000099"));
+    let (first, mut updates) = view.subscribe();
+    let snapshot_bytes = serde_json::to_vec(&first).unwrap().len();
+    let (mut pushes, mut snapshots, mut bytes) = (0usize, 0usize, 0usize);
+    let mut last = Vec::new();
+    while let Ok(Some(batch)) = tokio::time::timeout(Duration::from_secs(60), updates.next()).await
+    {
+        pushes += 1;
+        snapshots += batch.len();
+        bytes += serde_json::to_vec(&serde_json::json!({ "sub": 1, "updates": &batch }))
+            .unwrap()
+            .len();
+        let over = batch.last().is_some_and(|s| s.done && !s.plugins.pending);
+        last = batch;
+        if over {
+            break;
+        }
+    }
+    let pass_ms = started.elapsed().as_millis();
+    let rounds = 200;
+    let t = std::time::Instant::now();
+    for _ in 0..rounds {
+        let updates = serde_json::to_value(&last).unwrap();
+        let push = serde_json::json!({ "sub": 1, "updates": updates });
+        std::hint::black_box(serde_json::to_vec(&push).unwrap());
+    }
+    let via_value_us = t.elapsed().as_secs_f64() * 1e6 / f64::from(rounds);
+    #[derive(serde::Serialize)]
+    struct Push<'a, U> {
+        sub: u64,
+        updates: &'a [U],
+    }
+    let t = std::time::Instant::now();
+    for _ in 0..rounds {
+        std::hint::black_box(
+            serde_json::to_vec(&Push {
+                sub: 1,
+                updates: &last,
+            })
+            .unwrap(),
+        );
+    }
+    let direct_us = t.elapsed().as_secs_f64() * 1e6 / f64::from(rounds);
+    let s = view.snapshot();
+    println!(
+        "{}",
+        serde_json::json!({
+            "providers": 36, "plugin_rows": s.plugins.rows.len(), "addon_rows": s.rows.len(),
+            "pass_ms": pass_ms, "open_snapshot_bytes": snapshot_bytes,
+            "pushes": pushes, "snapshots_pushed": snapshots, "pushed_bytes": bytes,
+            "last_push_bytes": serde_json::to_vec(&Push { sub: 1, updates: &last }).unwrap().len(),
+            "write_via_value_us": via_value_us.round(), "write_direct_us": direct_us.round(),
+        })
+    );
 }
