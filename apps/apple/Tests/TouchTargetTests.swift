@@ -37,7 +37,7 @@ private func source(_ path: String) throws -> String {
     #expect(tools.components(separatedBy: "ToolbarItem(placement: .primaryAction) { search }").count - 1 == 2, "Search keeps its item on both macOS paths")
     #expect(!tools.contains("Profile"), "the profile is back in the toolbar")
     let ornament = try #require(root.range(of: "PlaceOrnament(selection: tab, strong: ornamentStrong")).lowerBound
-    #expect(root[ornament...].prefix(400).contains("ProfileMenu(onSettings: { select(.settings, link: true) }, onPin: pin)"), "the ornament lost the profile's menu")
+    #expect(root[ornament...].prefix(400).contains("ProfileMenu(onSettings: { select(.settings, link: true) }, onPin: pin, panel: $showPanel)"), "the ornament lost the profile's panel")
     #expect(root.contains("OrnamentProfile(lit: tab == .settings)"), "the ornament's profile is not lit on Settings")
 }
 

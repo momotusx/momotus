@@ -271,6 +271,7 @@ targets:
       - path: Marquee/Settings/PluginWords.swift
       - path: Marquee/Core/ProfileModels.swift
       - path: Marquee/Profiles/Incognito.swift
+      - path: Marquee/Profiles/ProfilePanelModel.swift
       - path: Marquee/Core/DebridModels.swift
       - path: Marquee/Core/DebridStore.swift
       - path: Marquee/Core/DebridAccounts.swift

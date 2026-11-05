@@ -156,6 +156,10 @@ struct MainShell: View {
     /// The profile picker over the places: the profile's menu opens it on a profile's keypad (`pinFor`).
     @State private var showProfiles = false
     @State private var pinFor: ProfileInfo?
+    /// The picker opens on Manage profiles (the Mac panel's pill).
+    @State private var manageFirst = false
+    /// The Mac's profile panel is open (plans/profile-panel.md); never on the other forms.
+    @State private var showPanel = false
     #if os(tvOS)
     /// Places whose root page has another page over it: Back pops that first.
     @State private var covered: Set<AppTab> = []
@@ -327,24 +331,31 @@ struct MainShell: View {
             .background(Theme.Palette.bg)
             // Content under the traffic lights and the top buttons gets a soft blurred edge once it scrolls there.
             .overlay(alignment: .top) { ScrollTopEdge().opacity(ornamentStrong && !immersion.active ? 1 : 0).animation(Theme.Motion.panel, value: ornamentStrong) }
+            // The profile panel from the right; the page under it is out of VoiceOver's reach while it shows.
+            .accessibilityHidden(showPanel)
+            .overlay { ProfilePanelLayer(open: $showPanel, onPin: pin, onManage: manage, onSettings: { select(.settings, link: true) }) }
+            // The player never opens over it.
+            .onChange(of: immersion.active) { _, on in if on { showPanel = false } }
             // The places in a glass ornament in the toolbar row, centred between Back and Search (the owner,
             // 2026-11-04: the places at the top on desktop).
             .toolbar {
-                TopTools(find: find, shown: !immersion.active) {
+                // The panel leaves the capsule and Search live (a place or Search closes it) but out of VoiceOver's reach.
+                TopTools(find: find, shown: !immersion.active, covered: showPanel) {
                     // Settings' first page, from any of its pages too (a link opens a place at its root).
                     PlaceOrnament(selection: tab, strong: ornamentStrong, select: { select($0) }, profile:
-                        ProfileMenu(onSettings: { select(.settings, link: true) }, onPin: pin) { me in
-                            OrnamentProfile(lit: tab == .settings) { BarAvatar(profile: me, size: OrnamentLayout.itemHeight - 8) }
+                        ProfileMenu(onSettings: { select(.settings, link: true) }, onPin: pin, panel: $showPanel) { me in
+                            OrnamentProfile(lit: tab == .settings) { BarAvatar(profile: me, size: OrnamentLayout.itemHeight - 8, lit: showPanel) }
                         }
-                        .help("Profiles and Settings")
+                        .help("Profiles")
                         .accessibilityAddTraits(tab == .settings ? .isSelected : []))
+                    .accessibilityHidden(showPanel)
                 }
             }
             // No strip: the window's toolbar draws nothing of its own, and Home's art runs under it.
             .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
             .modifier(FullScreen(isPresented: $showProfiles, closesOnBack: true) {
                 NavigationStack {
-                    ProfilePicker(mode: .push, core: core, pinFor: pinFor)
+                    ProfilePicker(mode: .push, core: core, pinFor: pinFor, manage: manageFirst)
                         // A sheet: Escape or Done leaves it as it was.
                         .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Done") { showProfiles = false } } }
                 }
@@ -415,13 +426,24 @@ struct MainShell: View {
 
     /// The profile's menu chose a profile with a PIN: the picker opens over the places on its keypad.
     private func pin(_ profile: ProfileInfo) {
+        showPanel = false
+        manageFirst = false
         pinFor = profile
+        showProfiles = true
+    }
+
+    /// The panel's Manage profiles: the picker over the places, opened on the manager.
+    private func manage() {
+        pinFor = nil
+        manageFirst = true
         showProfiles = true
     }
 
     private func select(_ asked: AppTab, link: Bool = false) {
         // Discover and Calendar are not a kids profile's, from a bar, a menu key or a chip.
         let item = asked.opened(kids: profiles.snapshot?.current?.kids == true)
+        // A place chosen from the capsule, a menu key or the panel closes the panel.
+        showPanel = false
         if item.opensAtRoot(from: tab, link: link) { popToRoot(item) }
         opened.insert(item)
         tab = item
@@ -485,7 +507,7 @@ struct MainShell: View {
         case .home:
             NavigationStack(path: $homePath) {
                 HomeScreen(model: home, topRequest: homeTop, scrolled: $homeScrolled)
-                    .environment(\.heroCovered, immersion.active || !homePath.isEmpty || showProfiles)
+                    .environment(\.heroCovered, immersion.active || !homePath.isEmpty || showProfiles || showPanel)
                     .root(of: .home, covered: coveredBinding)
                     .withTitleRoutes(core: core)
                     #if os(iOS)
@@ -752,6 +774,9 @@ private struct TabBar: View {
 private struct TopTools<Places: View>: ToolbarContent {
     let find: () -> Void
     let shown: Bool
+    /// The profile panel is open: Search stays for the pointer, hidden from VoiceOver (the panel is modal); the shell
+    /// hides the places the same way.
+    var covered = false
     @ViewBuilder let places: Places
 
     var body: some ToolbarContent {
@@ -779,6 +804,7 @@ private struct TopTools<Places: View>: ToolbarContent {
             .buttonStyle(GlassCircleStyle())
             .help("Search")
             .padding(.trailing, Self.edge)
+            .accessibilityHidden(covered)
     }
 }
 #endif

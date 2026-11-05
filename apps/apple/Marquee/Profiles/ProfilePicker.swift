@@ -20,12 +20,14 @@ struct ProfilePicker: View {
     /// The profile whose PIN is asked.
     @State private var keypad: ProfileInfo?
 
-    init(mode: Mode, core: CoreClient, pinFor: ProfileInfo? = nil) {
+    /// `manage`: opened on Manage profiles (the Mac panel's pill), Back to the tiles.
+    init(mode: Mode, core: CoreClient, pinFor: ProfileInfo? = nil, manage: Bool = false) {
         (self.mode, self.core, self.pinFor) = (mode, core, pinFor)
         _keypad = State(initialValue: pinFor)
+        _showManage = State(initialValue: manage)
     }
     @State private var said: String?
-    @State private var showManage = false
+    @State private var showManage: Bool
     @State private var showAdd = false
     @FocusState private var focused: String?
 
@@ -325,6 +327,9 @@ struct ProfileMenu<Face: View>: View {
     #if os(tvOS)
     /// The bar's focus on the avatar, set on the button itself (Menu on the avatar goes Home; Up enters on it for Settings).
     var focus: FocusState<Bool>.Binding? = nil
+    #elseif os(macOS)
+    /// The Mac's profile panel (plans/profile-panel.md): the avatar opens it and closes it again.
+    let panel: Binding<Bool>
     #endif
     @ViewBuilder let face: (ProfileInfo) -> Face
     @Environment(ProfileSession.self) private var profiles
@@ -332,6 +337,9 @@ struct ProfileMenu<Face: View>: View {
     @State private var open = false
     /// Stands in when the bar passes no focus binding.
     @FocusState private var unfocused: Bool
+    #elseif os(macOS)
+    /// Back on the avatar when the panel closes.
+    @FocusState private var avatar: Bool
     #endif
 
     var body: some View {
@@ -342,20 +350,28 @@ struct ProfileMenu<Face: View>: View {
                 .accessibilityLabel("Profile: \(me.name)")
                 .confirmationDialog("Profiles", isPresented: $open, titleVisibility: .visible) {
                     ForEach(snapshot.profiles) { profile in
-                        Button(title(profile, snapshot)) { choose(profile, snapshot) }
+                        Button(title(profile, snapshot)) { profiles.choose(profile, snapshot, onPin: onPin) }
                     }
                     if Incognito.offered(snapshot) {
-                        Button(snapshot.incognito ? "\(Incognito.name), current" : Incognito.pinProfile(snapshot) == nil ? Incognito.name : "\(Incognito.name), locked") { chooseIncognito(snapshot) }
+                        Button(snapshot.incognito ? "\(Incognito.name), current" : Incognito.pinProfile(snapshot) == nil ? Incognito.name : "\(Incognito.name), locked") { profiles.chooseIncognito(snapshot, onPin: onPin) }
                     }
                     if snapshot.incognito { Button(Incognito.leave) { profiles.leaveIncognito() } }
                     Button("Settings", action: onSettings)
                 }
+            #elseif os(macOS)
+            // No menu on the Mac: the avatar toggles the panel from the right, which the shell draws over the window.
+            Button { panel.wrappedValue.toggle() } label: { face(me) }
+                .buttonStyle(.plain)
+                .focused($avatar)
+                .accessibilityLabel("Profile: \(me.name)")
+                .accessibilityValue(panel.wrappedValue ? "Open" : "")
+                .onChange(of: panel.wrappedValue) { _, open in if !open { avatar = true } }
             #else
             Menu {
                 // An inline picker: the system draws the current profile's check and says it is selected.
                 Picker("Profiles", selection: Binding { snapshot.active } set: { id in
-                    if id == Incognito.id { return chooseIncognito(snapshot) }
-                    if let profile = snapshot.profiles.first(where: { $0.id == id }) { choose(profile, snapshot) }
+                    if id == Incognito.id { return profiles.chooseIncognito(snapshot, onPin: onPin) }
+                    if let profile = snapshot.profiles.first(where: { $0.id == id }) { profiles.choose(profile, snapshot, onPin: onPin) }
                 }) {
                     ForEach(snapshot.profiles) { profile in
                         row(profile, snapshot).tag(profile.id).disabled(profile.syncing)
@@ -391,7 +407,7 @@ struct ProfileMenu<Face: View>: View {
         return profile.hasPin ? "\(profile.name), locked" : profile.name
     }
 
-    #if !os(tvOS)
+    #if os(iOS)
     @ViewBuilder private func row(_ profile: ProfileInfo, _ snapshot: ProfilesSnapshot) -> some View {
         let words = profile.syncing ? "\(profile.name), syncing" : profile.name
         Group {
@@ -404,21 +420,25 @@ struct ProfileMenu<Face: View>: View {
         .accessibilityLabel(ProfileRules.spoken(profile, active: snapshot.active))
     }
     #endif
+}
 
-    /// The Incognito row: as its tile does, but Leave goes back to this profile (`fromChooser` false).
-    private func chooseIncognito(_ snapshot: ProfilesSnapshot) {
-        switch Incognito.choice(snapshot) {
-        case .none, .close: break
-        case .pin: onPin(Incognito.profile)
-        case .switchTo: Task { await profiles.enterIncognito(pin: nil, fromChooser: false) }
-        }
-    }
-
-    private func choose(_ profile: ProfileInfo, _ snapshot: ProfilesSnapshot) {
+/// What choosing a profile in a bar's menu or the Mac's panel does (plans/nav-profile.md, plans/profile-panel.md):
+/// one rule for both, shared with the picker's tiles (`ProfileRules.choice`).
+extension ProfileSession {
+    func choose(_ profile: ProfileInfo, _ snapshot: ProfilesSnapshot, onPin: (ProfileInfo) -> Void) {
         switch ProfileRules.choice(profile, in: snapshot) {
         case .none, .close: break
         case .pin: onPin(profile)
-        case .switchTo: Task { await profiles.switchTo(profile.id, pin: nil) }
+        case .switchTo: Task { await switchTo(profile.id, pin: nil) }
+        }
+    }
+
+    /// The Incognito row: as its tile does, but Leave goes back to this profile (`fromChooser` false).
+    func chooseIncognito(_ snapshot: ProfilesSnapshot, onPin: (ProfileInfo) -> Void) {
+        switch Incognito.choice(snapshot) {
+        case .none, .close: break
+        case .pin: onPin(Incognito.profile)
+        case .switchTo: Task { await enterIncognito(pin: nil, fromChooser: false) }
         }
     }
 }

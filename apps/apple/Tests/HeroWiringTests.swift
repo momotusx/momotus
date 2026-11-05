@@ -31,8 +31,9 @@ private func source(_ path: String) throws -> String {
 
 @Test func theShellAndHomeSayWhatCoversTheHero() throws {
     let root = try source("App/RootView.swift")
-    // The profile picker the bar's menu opens over the places covers it too (plans/nav-profile.md).
-    #expect(root.contains(".environment(\\.heroCovered, immersion.active || !homePath.isEmpty || showProfiles)"))
+    // The profile picker the bar's menu opens over the places covers it too (plans/nav-profile.md), and so does the
+    // Mac's profile panel under its dim layer (plans/profile-panel.md).
+    #expect(root.contains(".environment(\\.heroCovered, immersion.active || !homePath.isEmpty || showProfiles || showPanel)"))
     #expect(root.contains(".environment(\\.tabShown, item == tab)"))
     let home = try source("Home/HomeScreen.swift")
     #expect(home.contains(".environment(\\.heroCovered, covered || showAccount || showHeroVersions || playing != nil || reviewing || onboarding)"))
