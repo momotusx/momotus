@@ -708,9 +708,9 @@ private func kinds(_ kinds: [(String, Int)], service: String? = nil, selected: S
 /// Versions open without `itemId`, so a kid could play nothing (QA round 2 Q7 rows 31 to 33).
 @MainActor @Test func everyVersionsOpenNamesItsTitle() {
     let target = PlayTargetInfo(kind: "series", itemId: "tt0903747", videoId: "tt0903747:5:16", title: "Breaking Bad", poster: nil, resumeMs: nil)
-    let play = VersionsModel.params(target: target, bingeGroup: nil, purpose: nil)
+    let play = StreamChoice.versionsParams(target: target, bingeGroup: nil, purpose: nil)
     #expect(play["itemId"] as? String == "tt0903747")
     #expect(play["purpose"] == nil)
-    let keep = VersionsModel.params(target: target, bingeGroup: nil, purpose: "download")
+    let keep = StreamChoice.versionsParams(target: target, bingeGroup: nil, purpose: "download")
     #expect(keep["itemId"] as? String == "tt0903747" && keep["purpose"] as? String == "download")
 }

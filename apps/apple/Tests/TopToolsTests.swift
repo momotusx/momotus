@@ -8,7 +8,7 @@ import Testing
 @Test func theMacsTopToolsKeepThePagesGutterFromTheWindowsEdge() throws {
     let app = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appending(path: "../Marquee")
     let root = try String(contentsOf: app.appending(path: "App/RootView.swift"), encoding: .utf8)
-    #expect(root.contains("static let edge = Metrics.regular.gutter - 4.5"))
+    #expect(root.contains("static var edge: CGFloat { Metrics.regular.gutter - 4.5 }"))
     #expect(root.contains(".help(\"Search\")\n            .padding(.trailing, Self.edge)"))
     #expect(Metrics.regular.gutter == 40)
 }

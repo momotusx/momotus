@@ -718,6 +718,7 @@ private struct PhoneCorner: View {
 }
 #endif
 
+#if !os(tvOS)
 private extension View {
     /// A way's label fills the column's width; on the Mac's stage the ways share a row at their own widths.
     @ViewBuilder func columnWide() -> some View {
@@ -728,3 +729,4 @@ private extension View {
         #endif
     }
 }
+#endif

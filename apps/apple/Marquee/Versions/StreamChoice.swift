@@ -489,6 +489,22 @@ enum StreamChoice {
         return [hdr10 ? "hdr10" : nil, hlg ? "hlg" : nil, dolbyVision ? "dolby_vision" : nil].compactMap { $0 }
     }
 
+    /// The `versions` params besides the device's: the video and its title's `itemId`, which a kids
+    /// profile is refused without (QA round 2 Q7 rows 31 to 33).
+    static func versionsParams(target: PlayTargetInfo, bingeGroup: String?, purpose: String?) -> [String: any Sendable] {
+        var params: [String: any Sendable] = [
+            "kind": target.kind, "itemId": target.itemId, "videoId": target.videoId, "title": target.title,
+        ]
+        if let bingeGroup { params["bingeGroup"] = bingeGroup }
+        if let purpose { params["purpose"] = purpose }
+        if let season = target.season { params["season"] = season }
+        if let episode = target.episode { params["episode"] = episode }
+        params.merge(versionsFacts(
+            runtime: target.runtime, releaseInfo: target.releaseInfo, released: target.released,
+            episodesInSeason: target.episodesInSeason)) { _, fact in fact }
+        return params
+    }
+
     /// What the title and the episode say, for the ranking's bitrate, year and
     /// pack checks (4.3); the core reads the meta for whatever is left out.
     static func versionsFacts(runtime: String?, releaseInfo: String?, released: String?, episodesInSeason: Int?) -> [String: any Sendable] {

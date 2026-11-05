@@ -772,7 +772,7 @@ private struct TopTools<Places: View>: ToolbarContent {
     /// The window's edge to the last button's (Search, now the profile is in the ornament): the page's gutter, as
     /// tv.apple.com and the Apple TV app keep their top right on the content's column (the owner, 2026-10-28: flush in the
     /// corner). The toolbar's own margin makes up the last 4.5 pt (measured in the window on macOS 27).
-    static let edge = Metrics.regular.gutter - 4.5
+    static var edge: CGFloat { Metrics.regular.gutter - 4.5 }
 
     private var search: some View {
         Button(action: find) { Label("Search", glyph: "search", size: 17) }

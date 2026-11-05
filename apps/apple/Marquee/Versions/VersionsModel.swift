@@ -12,28 +12,12 @@ final class VersionsModel {
     /// `purpose` "download": the versions to keep on this device (plans/offline-downloads.md 3.2).
     let purpose: String?
 
-    /// The `versions` params besides the device's: the video and its title's `itemId`, which a kids
-    /// profile is refused without (QA round 2 Q7 rows 31 to 33).
-    static func params(target: PlayTargetInfo, bingeGroup: String?, purpose: String?) -> [String: any Sendable] {
-        var params: [String: any Sendable] = [
-            "kind": target.kind, "itemId": target.itemId, "videoId": target.videoId, "title": target.title,
-        ]
-        if let bingeGroup { params["bingeGroup"] = bingeGroup }
-        if let purpose { params["purpose"] = purpose }
-        if let season = target.season { params["season"] = season }
-        if let episode = target.episode { params["episode"] = episode }
-        params.merge(StreamChoice.versionsFacts(
-            runtime: target.runtime, releaseInfo: target.releaseInfo, released: target.released,
-            episodesInSeason: target.episodesInSeason)) { _, fact in fact }
-        return params
-    }
-
     /// `bingeGroup`: the playing stream's, so the next episode keeps its release line.
     init(target: PlayTargetInfo, core: CoreClient, bingeGroup: String? = nil, purpose: String? = nil) {
         self.target = target
         self.purpose = purpose
         var params = DeviceCaps.params()
-        params.merge(Self.params(target: target, bingeGroup: bingeGroup, purpose: purpose)) { _, own in own }
+        params.merge(StreamChoice.versionsParams(target: target, bingeGroup: bingeGroup, purpose: purpose)) { _, own in own }
         record = LiveRecord("versions", params: params, core: core)
         // Once per settled list, the listed share's figures (plans/apple-second-engine.md section 4).
         var said = false
