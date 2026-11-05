@@ -10,7 +10,7 @@ use argon2::password_hash::{PasswordHasher, PasswordVerifier};
 use argon2::{Algorithm, Argon2, Params, Version};
 use futures_util::StreamExt;
 use futures_util::stream::FuturesUnordered;
-use mq_library::{AllowedRow, Library, LibraryError, MAX_ALLOWED, OWNER};
+use mq_library::{AllowedRow, ContinueItem, Library, LibraryError, MAX_ALLOWED, OWNER};
 use mq_protocol::{ResourcePath, ResourceResponse};
 use std::collections::HashMap;
 use std::sync::Mutex;
@@ -416,6 +416,112 @@ impl Core {
         })
         .await?
     }
+
+    /// Each profile's last title for the desktop profile panel
+    /// (`profilesLastWatched`, plans/profile-panel.md 6): one entry per
+    /// usable profile that played something with a name, in picker order.
+    /// A PIN profile shows only to itself and the owner; a kids profile only
+    /// what its list allows. Nothing for a kids session or Incognito (the
+    /// bridge refuses both first). Art comes from this session's meta
+    /// addons within `ART_BUDGET` for the whole call, else none.
+    pub async fn profiles_last_watched(&self) -> Vec<LastWatched> {
+        if self.incognito() || self.policy().kids() {
+            return Vec::new();
+        }
+        let viewer = self.profile();
+        let plays: Vec<(String, ContinueItem)> = self
+            .device_library()
+            .profiles()
+            .unwrap_or_default()
+            .into_iter()
+            .filter(|p| p.ready() && (p.pin_hash().is_none() || viewer == OWNER || p.id == viewer))
+            .filter_map(|p| Some((p.id.clone(), self.last_play_of(&p.id)?)))
+            .collect();
+        let deadline = tokio::time::Instant::now() + ART_BUDGET;
+        futures_util::future::join_all(plays.into_iter().map(|(profile, item)| async move {
+            let meta =
+                tokio::time::timeout_at(deadline, self.fetch_meta(&item.kind, &item.item_id))
+                    .await
+                    .ok()
+                    .and_then(Result::ok);
+            let art = meta.and_then(|(m, _)| {
+                let still = || {
+                    m.videos
+                        .iter()
+                        .find(|v| v.id == item.video_id)
+                        .and_then(|v| v.thumbnail.clone())
+                };
+                m.preview.background.map(|u| u.to_string()).or_else(still)
+            });
+            let episode = crate::views::home::episode_of(&item.kind, &item.video_id);
+            let (label, spoken) = match episode {
+                Some((s, e)) => (
+                    format!("{}, S{s}:E{e}", item.name),
+                    format!("{}, season {s}, episode {e}", item.name),
+                ),
+                None => (item.name.clone(), item.name.clone()),
+            };
+            LastWatched {
+                profile,
+                item_id: item.item_id,
+                label,
+                spoken,
+                art,
+            }
+        }))
+        .await
+    }
+
+    /// `profile`'s newest play, when it has a name: for a kids profile the
+    /// newest its list allows, under the list's name for it, as its Home
+    /// shows it.
+    fn last_play_of(&self, profile: &str) -> Option<ContinueItem> {
+        let library = self.device_library();
+        let policy = self.for_profile(profile).policy();
+        let read = if policy.kids() { usize::MAX >> 1 } else { 1 };
+        let mut item = library
+            .last_played(profile, read)
+            .ok()?
+            .into_iter()
+            .find(|i| crate::views::home::shows(&policy, &i.kind, &i.item_id, &i.video_id))?;
+        if policy.kids()
+            && let Some(entry) = library
+                .allowed_list(profile)
+                .ok()?
+                .counted
+                .into_iter()
+                .find(|r| r.item_id == item.item_id)
+        {
+            item.name = entry.name;
+        }
+        // Never a raw id where a title's name belongs.
+        let named = !item.name.trim().is_empty() && item.name != item.item_id;
+        named.then_some(item)
+    }
+}
+
+/// How long `profilesLastWatched` waits for art, for every profile at once,
+/// before it answers without it.
+const ART_BUDGET: Duration = Duration::from_millis(1500);
+
+/// One profile's last title (`profilesLastWatched`).
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+#[cfg_attr(
+    feature = "ts",
+    derive(ts_rs::TS),
+    ts(export, export_to = "../../../apps/web/src/core/generated/")
+)]
+#[serde(rename_all = "camelCase")]
+pub struct LastWatched {
+    pub profile: String,
+    pub item_id: String,
+    /// "Slow Horses, S4:E2" for an episode of a series, else the name.
+    pub label: String,
+    /// The label as a screen reader says it: "Slow Horses, season 4,
+    /// episode 2".
+    pub spoken: String,
+    /// The title's backdrop, else the episode's still; never a poster.
+    pub art: Option<String>,
 }
 
 /// The longest `allowTitle` waits for the owner's meta addons, all of them.

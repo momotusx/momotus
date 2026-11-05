@@ -1307,6 +1307,33 @@ impl Library {
         })
     }
 
+    /// The profile's newest plays, newest first: one row per progress write,
+    /// finished films and episodes included, a title removed from Continue
+    /// Watching left out. Rides `progress_recent` and stops at `limit`. The
+    /// name is empty while the title's own row has not arrived.
+    pub fn last_played(
+        &self,
+        profile: &str,
+        limit: usize,
+    ) -> Result<Vec<ContinueItem>, LibraryError> {
+        self.read(|c| {
+            let mut stmt = c.prepare(LAST_PLAYED)?;
+            stmt.query_map(params![profile, limit as i64], |r| {
+                Ok(ContinueItem {
+                    item_id: r.get(0)?,
+                    video_id: r.get(1)?,
+                    name: r.get(2)?,
+                    poster: r.get(3)?,
+                    kind: r.get(4)?,
+                    position_ms: r.get(5)?,
+                    duration_ms: r.get(6)?,
+                    updated_ms: r.get(7)?,
+                })
+            })?
+            .collect()
+        })
+    }
+
     /// Remembers the stream played for a title, so its next episode can
     /// prefer the same release line.
     pub fn set_stream_memory<'a>(
@@ -1605,9 +1632,60 @@ fn continue_sql(condition: &str, one_title: bool) -> String {
     )
 }
 
+/// `Library::last_played`: the newest progress rows of one profile.
+const LAST_PLAYED: &str =
+    "SELECT p.item_id, p.video_id, COALESCE(i.name, ''), i.poster, COALESCE(i.kind, 'movie'),
+        p.position_ms, p.duration_ms, p.updated_ms
+ FROM progress p
+ LEFT JOIN library_items i ON i.profile_id = p.profile_id AND i.item_id = p.item_id
+ WHERE p.profile_id = ?1 AND p.position_ms > 0
+   AND NOT EXISTS (SELECT 1 FROM dismissed d
+                   WHERE d.profile_id = p.profile_id AND d.item_id = p.item_id
+                     AND d.hlc > p.hlc)
+ ORDER BY p.updated_ms DESC, p.video_id DESC
+ LIMIT ?2";
+
 #[cfg(test)]
 mod continue_tests {
     use super::Library;
+
+    /// The last play is read from the newest end of `progress_recent`,
+    /// never by sorting the profile's whole progress; 5,000 rows answer in
+    /// well under a millisecond.
+    #[test]
+    fn last_played_walks_the_recent_index_and_skips_removed_titles() {
+        let lib = Library::temporary().unwrap();
+        let clock = crate::HlcClock::new(1);
+        let plan: Vec<String> = lib
+            .read(|c| {
+                let mut stmt = c.prepare(&format!("EXPLAIN QUERY PLAN {}", super::LAST_PLAYED))?;
+                stmt.query_map(rusqlite::params!["p", 1i64], |r| r.get(3))?
+                    .collect()
+            })
+            .unwrap();
+        assert!(
+            plan.iter().any(|l| l.contains("progress_recent")),
+            "{plan:?}"
+        );
+        for n in 0..5_000i64 {
+            let id = format!("tt{n}");
+            let row = super::ProgressRow {
+                video_id: &id,
+                item_id: &id,
+                position_ms: 1_000,
+                duration_ms: 2_000,
+                updated_ms: n,
+            };
+            lib.set_progress("p", row, &clock).unwrap();
+        }
+        lib.dismiss("p", "tt4999", &clock).unwrap();
+        let started = std::time::Instant::now();
+        let last = lib.last_played("p", 1).unwrap();
+        let took = started.elapsed();
+        assert_eq!(last[0].item_id, "tt4998", "the removed title is skipped");
+        assert_eq!(last[0].name, "", "no name before the title's row");
+        eprintln!("last_played over 5,000 rows: {took:?}");
+    }
 
     /// One title's Continue Watching entry finds its row by profile and
     /// title (or video), never by walking the profile's whole progress.

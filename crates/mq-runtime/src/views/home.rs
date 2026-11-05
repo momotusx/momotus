@@ -1832,13 +1832,19 @@ fn continue_caption(item: &ContinueItem) -> String {
 
 /// "S2:E3 · <rest>" for an episode of a series, else `rest`.
 pub(crate) fn with_episode(kind: &str, video_id: &str, rest: String) -> String {
-    let mut parts = video_id.rsplit(':');
-    let episode = parts.next().and_then(|e| e.parse::<u32>().ok());
-    let season = parts.next().and_then(|s| s.parse::<u32>().ok());
-    match (season, episode) {
-        (Some(s), Some(e)) if kind == "series" => format!("S{s}:E{e} \u{b7} {rest}"),
-        _ => rest,
+    match episode_of(kind, video_id) {
+        Some((s, e)) => format!("S{s}:E{e} \u{b7} {rest}"),
+        None => rest,
     }
+}
+
+/// A series video id's season and episode (its last two `:` parts); none
+/// for a film or an anime, whose ids carry no season.
+pub(crate) fn episode_of(kind: &str, video_id: &str) -> Option<(u32, u32)> {
+    let mut parts = video_id.rsplit(':');
+    let episode = parts.next()?.parse::<u32>().ok()?;
+    let season = parts.next()?.parse::<u32>().ok()?;
+    (kind == "series").then_some((season, episode))
 }
 
 fn tile_from_continue(
@@ -1902,7 +1908,17 @@ fn is_imdb_host(url: &url::Url) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{catalog_title, without_source, year_line};
+    use super::{catalog_title, episode_of, without_source, year_line};
+
+    /// A series' last two id parts are its season and episode; a film and a
+    /// Kitsu anime have none.
+    #[test]
+    fn only_a_series_video_has_an_episode() {
+        assert_eq!(episode_of("series", "tt1:4:2"), Some((4, 2)));
+        assert_eq!(episode_of("movie", "tt1"), None);
+        assert_eq!(episode_of("anime", "kitsu:123:4"), None);
+        assert_eq!(episode_of("series", "tt1"), None);
+    }
 
     /// Review r2: a kept hero page takes its row's reason afresh, so a title
     /// that moved from #3 to #5 in a ranked catalog says #5, as its Top 10

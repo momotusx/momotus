@@ -104,6 +104,12 @@ enum Request {
     FirstRunStill {
         id: u64,
     },
+    /// Each profile's last title for the desktop profile panel
+    /// (`Core::profiles_last_watched`), within 1.5 s. Refused locked, for
+    /// kids and in Incognito. Replies `[LastWatched]`.
+    ProfilesLastWatched {
+        id: u64,
+    },
     /// Installs the defaults with the user's switches (a key left out is
     /// installed on when absent and left as it is when present).
     InstallDefaults {
@@ -837,6 +843,7 @@ impl Request {
             | Request::AckDebrid { .. } => true,
             Request::DefaultAddons { .. }
             | Request::FirstRunStill { .. }
+            | Request::ProfilesLastWatched { .. }
             | Request::InstallDefaults { .. }
             | Request::SetDebridKey { .. }
             | Request::DisconnectDebrid { .. }
@@ -932,6 +939,8 @@ impl Request {
             | Request::InstallAddon { .. }
             | Request::DefaultAddons { .. }
             | Request::FirstRunStill { .. }
+            // Other profiles' history is not a kid's to read.
+            | Request::ProfilesLastWatched { .. }
             | Request::InstallDefaults { .. }
             | Request::InstallListed { .. }
             | Request::RemoveAddon { .. }
@@ -1021,6 +1030,7 @@ impl Request {
             | Request::InstallAddon { .. }
             | Request::DefaultAddons { .. }
             | Request::FirstRunStill { .. }
+            | Request::ProfilesLastWatched { .. }
             | Request::InstallDefaults { .. }
             | Request::InstallListed { .. }
             | Request::RemoveAddon { .. }
@@ -1820,6 +1830,12 @@ impl Session {
             }
             Request::FirstRunStill { id } => {
                 self.spawn_fenced(id, async move { to_value(&core.first_run_still().await) });
+            }
+            Request::ProfilesLastWatched { id } => {
+                self.spawn_fenced(
+                    id,
+                    async move { to_value(&core.profiles_last_watched().await) },
+                );
             }
             Request::InstallDefaults { id, choices } => {
                 let result = core.install_defaults(&choices);

@@ -355,6 +355,7 @@ async fn a_locked_session_answers_only_the_picker_unlocking_and_sync() {
         json!({"op": "deleteProfile", "profile": "x"}),
         json!({"op": "setPin", "profile": "default", "pin": null, "currentPin": "2580"}),
         json!({"op": "lockSession"}),
+        json!({"op": "profilesLastWatched"}),
     ];
     for request in refused {
         assert_eq!(c.code(request.clone()).await, "locked", "{request}");
@@ -580,6 +581,62 @@ async fn work_started_before_a_switch_or_a_lock_answers_switched() {
     )
     .await;
     assert!(late.is_err(), "pushed after the lock: {late:?}");
+}
+
+/// `profilesLastWatched` answers the session that asked: a switch while its
+/// art is on the way turns the answer into `switched`.
+#[tokio::test]
+async fn last_watched_asked_before_a_switch_answers_switched() {
+    let base = slow_addon().await;
+    let core = Core::temporary("default").unwrap();
+    let mut c = Client::new(core.clone());
+    let kid = c.create("Kid").await;
+    let manifest = json!({
+        "id": "meta", "version": "1.0.0", "name": "Meta", "types": ["movie"],
+        "resources": ["meta"], "catalogs": [], "idPrefixes": ["tt"]
+    });
+    let addon = mq_library::AddonRow {
+        transport_url: format!("{base}/manifest.json"),
+        manifest_json: manifest.to_string(),
+        position: 0,
+        enabled: true,
+        allow_private: true,
+    };
+    core.library()
+        .set_addons("default", &[addon], &core.hlc())
+        .unwrap();
+    let item = mq_library::LibraryItemRow {
+        item_id: "tt1".into(),
+        kind: "movie".into(),
+        name: "One".into(),
+        poster: None,
+        poster_shape: None,
+        added_ms: 1,
+    };
+    core.library()
+        .upsert_item("default", &item, true, &core.hlc())
+        .unwrap();
+    let progress = mq_library::ProgressRow {
+        video_id: "tt1",
+        item_id: "tt1",
+        position_ms: 1_000,
+        duration_ms: 2_000,
+        updated_ms: 1,
+    };
+    core.library()
+        .set_progress("default", progress, &core.hlc())
+        .unwrap();
+    let answer = c.ok(json!({"op": "profilesLastWatched"})).await;
+    assert_eq!(answer[0]["label"], "One", "{answer}");
+
+    let started = c.next_id;
+    c.session
+        .handle_text(&json!({"id": started, "op": "profilesLastWatched"}).to_string())
+        .await;
+    c.next_id += 1;
+    c.switch(&kid, None).await;
+    let reply = c.push_where(|m| m["id"] == started).await;
+    assert_eq!(reply["code"], "switched", "{reply}");
 }
 
 #[tokio::test]

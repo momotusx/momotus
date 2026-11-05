@@ -270,3 +270,273 @@ async fn a_removal_through_one_open_retires_another_opens_cache() {
     a.delete_profile(&kid).unwrap();
     assert!(!cached().await, "b's memory copy went too");
 }
+
+/// A meta addon on loopback answering every title with `meta` after `delay`.
+async fn meta_addon(meta: serde_json::Value, delay: Duration) -> mq_library::AddonRow {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    let body = serde_json::json!({ "meta": meta }).to_string();
+    tokio::spawn(async move {
+        while let Ok((mut socket, _)) = listener.accept().await {
+            let body = body.clone();
+            tokio::spawn(async move {
+                let mut buf = [0u8; 2048];
+                let _ = socket.read(&mut buf).await;
+                tokio::time::sleep(delay).await;
+                let reply = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                    body.len()
+                );
+                let _ = socket.write_all(reply.as_bytes()).await;
+            });
+        }
+    });
+    let manifest = serde_json::json!({
+        "id": "meta", "version": "1.0.0", "name": "Meta", "types": ["movie", "series"],
+        "resources": ["meta"], "catalogs": [], "idPrefixes": ["tt"]
+    });
+    mq_library::AddonRow {
+        transport_url: format!("http://{addr}/manifest.json"),
+        manifest_json: manifest.to_string(),
+        position: 0,
+        enabled: true,
+        allow_private: true,
+    }
+}
+
+/// `profile` played `video` of `item` (named `name` when given) at `at`.
+fn play(
+    core: &Core,
+    profile: &str,
+    kind: &str,
+    video: &str,
+    name: Option<&str>,
+    done: bool,
+    at: i64,
+) {
+    let item = video.split(':').next().unwrap();
+    if let Some(name) = name {
+        let row = mq_library::LibraryItemRow {
+            item_id: item.into(),
+            kind: kind.into(),
+            name: name.into(),
+            poster: Some("https://img.example/poster.jpg".into()),
+            poster_shape: None,
+            added_ms: 1,
+        };
+        core.library()
+            .upsert_item(profile, &row, true, &core.hlc())
+            .unwrap();
+    }
+    let progress = mq_library::ProgressRow {
+        video_id: video,
+        item_id: item,
+        position_ms: if done { 3_000_000 } else { 600_000 },
+        duration_ms: 3_000_000,
+        updated_ms: at,
+    };
+    core.library()
+        .set_progress(profile, progress, &core.hlc())
+        .unwrap();
+}
+
+/// plans/profile-panel.md 6: each profile's newest play (a finished film
+/// too), its label and spoken line from the core; nothing for a profile
+/// with no play or no name; a PIN profile only to itself and the owner; a
+/// kids profile only what its list allows, under the list's name; nothing
+/// at all for a kids session.
+#[tokio::test]
+async fn each_profile_gives_its_last_title_to_whom_may_see_it() {
+    let core = Core::temporary(OWNER).unwrap();
+    core.set_pin(OWNER, Some("1357"), None).await.unwrap();
+    let art = "https://img.example/background.jpg";
+    let meta = serde_json::json!({"id": "tt0", "type": "series", "name": "From the addon", "background": art});
+    let addon = meta_addon(meta, Duration::ZERO).await;
+    core.library()
+        .set_addons(OWNER, &[addon], &core.hlc())
+        .unwrap();
+    // The owner: an episode, then a film finished after it.
+    play(
+        &core,
+        OWNER,
+        "series",
+        "tt5875444:4:2",
+        Some("Slow Horses"),
+        false,
+        10,
+    );
+    play(&core, OWNER, "movie", "tt0113277", Some("Heat"), true, 20);
+    let std = core.create_profile("Std", "fox").unwrap();
+    play(
+        &core,
+        &std,
+        "series",
+        "tt14688458:2:4",
+        Some("Silo"),
+        false,
+        30,
+    );
+    let _empty = core.create_profile("Empty", "fox").unwrap();
+    // Progress that synced before its title's row: no raw id as a name.
+    let raw = core.create_profile("Raw", "fox").unwrap();
+    play(&core, &raw, "movie", "tt9", None, false, 40);
+    let pinned = core.create_profile("Pinned", "fox").unwrap();
+    play(
+        &core,
+        &pinned,
+        "series",
+        "tt10986410:1:3",
+        Some("Ted Lasso"),
+        false,
+        50,
+    );
+    core.for_profile(&pinned)
+        .set_pin(&pinned, Some("2468"), None)
+        .await
+        .unwrap();
+    // A kid: an allowed film, then a newer play of one off the list.
+    let kid = core.create_kids_profile("Kid", "fox").unwrap();
+    let allowed = mq_library::AllowedRow {
+        item_id: "tt0317219".into(),
+        kind: "movie".into(),
+        name: "Cars".into(),
+        names: vec![],
+        poster: None,
+        allowed: true,
+        added_ms: 1,
+    };
+    core.library()
+        .write_allowed(&kid, &allowed, &core.hlc())
+        .unwrap();
+    play(
+        &core,
+        &kid,
+        "movie",
+        "tt0317219",
+        Some("Another name"),
+        false,
+        60,
+    );
+    play(
+        &core,
+        &kid,
+        "movie",
+        "tt0110912",
+        Some("Pulp Fiction"),
+        false,
+        70,
+    );
+    // A profile still arriving from another device (no access register yet).
+    let record = |coll, value: serde_json::Value| mq_library::SyncRecord {
+        coll,
+        key: "y".into(),
+        value,
+        hlc: core.hlc(),
+    };
+    core.library()
+        .apply(&[
+            record(
+                mq_library::coll::PROFILES,
+                serde_json::json!({"profile": "y", "name": "Y"}),
+            ),
+            record(
+                mq_library::coll::PROFILE_LOCK,
+                serde_json::json!({"profile": "y", "pinHash": null}),
+            ),
+        ])
+        .unwrap();
+    play(
+        &core,
+        "y",
+        "movie",
+        "tt0133093",
+        Some("The Matrix"),
+        false,
+        80,
+    );
+
+    let seen = |of: &Core| {
+        let of = of.clone();
+        async move {
+            of.profiles_last_watched()
+                .await
+                .into_iter()
+                .map(|w| (w.profile, w.label, w.spoken, w.art))
+                .collect::<Vec<_>>()
+        }
+    };
+    let entry = |p: &str, label: &str, spoken: &str| {
+        (
+            p.to_owned(),
+            label.to_owned(),
+            spoken.to_owned(),
+            Some(art.to_owned()),
+        )
+    };
+    let owner_sees = seen(&core).await;
+    assert_eq!(
+        owner_sees,
+        vec![
+            entry(OWNER, "Heat", "Heat"),
+            entry(&std, "Silo, S2:E4", "Silo, season 2, episode 4"),
+            entry(
+                &pinned,
+                "Ted Lasso, S1:E3",
+                "Ted Lasso, season 1, episode 3"
+            ),
+            entry(&kid, "Cars", "Cars"),
+        ]
+    );
+    // Std sees no PIN profile's title, the owner's included.
+    let std_sees = seen(&core.for_profile(&std)).await;
+    assert_eq!(
+        std_sees.iter().map(|e| e.0.as_str()).collect::<Vec<_>>(),
+        [std.as_str(), kid.as_str()]
+    );
+    // A PIN profile sees its own.
+    let pinned_sees = seen(&core.for_profile(&pinned)).await;
+    assert!(pinned_sees.iter().any(|e| e.0 == pinned), "{pinned_sees:?}");
+    assert!(seen(&core.for_profile(&kid)).await.is_empty());
+}
+
+/// The art: the title's backdrop, else the episode's still, never the
+/// poster; a meta that has not answered within 1.5 s leaves the entry
+/// without it, and the answer never waits for it.
+#[tokio::test]
+async fn art_is_the_backdrop_else_the_still_and_never_waits_long() {
+    let core = Core::temporary(OWNER).unwrap();
+    play(
+        &core,
+        OWNER,
+        "series",
+        "tt5875444:4:2",
+        Some("Slow Horses"),
+        false,
+        10,
+    );
+    let still = "https://img.example/still.jpg";
+    let meta = serde_json::json!({
+        "id": "tt5875444", "type": "series", "name": "Slow Horses",
+        "poster": "https://img.example/poster.jpg",
+        "videos": [{"id": "tt5875444:4:2", "title": "E2", "season": 4, "episode": 2, "thumbnail": still}]
+    });
+    let quick = meta_addon(meta.clone(), Duration::ZERO).await;
+    core.library()
+        .set_addons(OWNER, &[quick], &core.hlc())
+        .unwrap();
+    let art = core.profiles_last_watched().await[0].art.clone();
+    assert_eq!(art.as_deref(), Some(still));
+
+    let slow = meta_addon(meta, Duration::from_secs(8)).await;
+    core.library()
+        .set_addons(OWNER, &[slow], &core.hlc())
+        .unwrap();
+    let started = std::time::Instant::now();
+    let answer = core.profiles_last_watched().await;
+    let took = started.elapsed();
+    assert_eq!(answer[0].label, "Slow Horses, S4:E2");
+    assert_eq!(answer[0].art, None);
+    assert!(took < Duration::from_millis(2_500), "{took:?}");
+    eprintln!("profiles_last_watched with a silent addon: {took:?}");
+}

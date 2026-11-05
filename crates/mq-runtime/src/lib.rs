@@ -30,7 +30,7 @@ pub use crate::debrid::{
     AccountState, DebridAccount, DebridCredential, DebridLoginSnapshot, DebridLoginView,
     DebridRecord, DebridSnapshot, DebridTombstone, DebridView, RestoreAnswer,
 };
-pub use crate::profiles::{MAX_PROFILES, ProfileError};
+pub use crate::profiles::{LastWatched, MAX_PROFILES, ProfileError};
 pub use crate::trakt::{
     TmdbHost, TraktConfig, TraktImporting, TraktLoginSnapshot, TraktLoginView, TraktPlayback,
     TraktReport, TraktState, TraktStatus, TraktUnmapped, TraktView,
