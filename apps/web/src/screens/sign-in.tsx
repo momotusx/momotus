@@ -957,6 +957,10 @@ function Create(props: { server: string; from: From }) {
       setBusy(false);
     }
   };
+  // After a provider sign-in the account is created at once, as any app's does; the choice stays only when that failed.
+  onMount(() => {
+    if (held()) void create();
+  });
   const joined = () => {
     if (!held()) return void homeAfterPull(navigate);
     void t.run(async (ticket) => {

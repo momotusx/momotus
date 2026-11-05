@@ -313,6 +313,8 @@ struct SignInScreen: View {
     }
 
     /// `new` once no passkey here opened an account (the probe's sheet was 4.1.4's line).
+    /// The account is created at once, as any app's provider sign-in does; Create and
+    /// "I already use" stay on screen only when that create failed.
     private func newAccount(_ ticket: String) -> some View {
         VStack(alignment: .leading, spacing: Theme.Space.s) {
             Text(words.noAccountYet)
@@ -328,6 +330,9 @@ struct SignInScreen: View {
                     .buttonStyle(PillButtonStyle())
             }
             back
+        }
+        .task(id: ticket) {
+            if flow.trouble == nil { await flow.create(ticket: ticket, name: DeviceName.current, userName: userName) }
         }
     }
 

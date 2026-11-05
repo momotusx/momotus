@@ -197,9 +197,11 @@ test.describe.serial("desktop sign-in stage", () => {
     await page.context().close();
   });
 
-  test("desktop: new after a provider is the same stage, Create and the corner's way in, Escape back to the first step", async ({ browser }) => {
+  test("desktop: a failed create after a provider leaves the same stage, Create and the corner's way in, Escape back to the first step", async ({ browser }) => {
     const page = await device(browser, "desktop");
     await go(page, "/sign-in");
+    // The account is created at once after a provider sign-in; only a failed create shows this stage.
+    failNext = "createSyncAccount";
     const [popup] = await Promise.all([page.waitForEvent("popup"), page.locator('[data-f="signin:mock"]').click()]);
     await popup.getByText("Sign in as alice").click();
     await expect(page).toHaveURL(/\/sign-in\/new$/);
@@ -207,6 +209,7 @@ test.describe.serial("desktop sign-in stage", () => {
     await expect(stage.locator("h1")).toHaveText("Create your Momotus account");
     await expect(stage.locator(".lead")).toHaveText("This sign-in has no Momotus account yet. This device's library will be added to your account.");
     await expect(page.locator(".sign-in-stage > .acts .btn")).toHaveText(["Create your Momotus account", "I already use Momotus on another device"]);
+    await expect(page.locator(".sign-in-failure")).toBeVisible();
     await expect(page.locator("#sign-in-qr .qrbox svg")).toBeVisible({ timeout: 30_000 });
     const c = await box(page, "#sign-in-qr");
     expect(Math.abs(c.x + c.width - (1440 - 56))).toBeLessThanOrEqual(2);

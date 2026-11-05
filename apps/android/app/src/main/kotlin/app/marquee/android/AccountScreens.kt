@@ -325,7 +325,10 @@ fun SignInScreen(
     }
 }
 
-/** `new`: Create your Marquee account, or the pairing QR for "I already use Marquee on another device". */
+/**
+ * `new`: Create your Marquee account, or the pairing QR for "I already use Marquee on another device". After a
+ * provider sign-in the account is created at once, as any app's does; the choice stays only when that failed.
+ */
 @Composable
 private fun NewAccount(
     session: CoreSession,
@@ -334,6 +337,9 @@ private fun NewAccount(
     signIn: AccountSignIn,
 ) {
     var pairing by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(signIn.held) {
+        if (signIn.held != null && signIn.failure == null) signIn.create()
+    }
     if (pairing) {
         SignInPairing(session, sync, server, onJoined = signIn::joined)
         SecondaryButton(SyncCopy.CANCEL, { pairing = false })

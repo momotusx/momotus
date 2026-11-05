@@ -406,10 +406,9 @@ test.describe.serial("accounts on the web", () => {
     await expect(field).toHaveValue(code);
     expect(codeTries(P.d)).toBe(2);
     await mail.locator('[data-f="signin:email:retry"]').click();
-    await expect(mail).toHaveURL(/\/sign-in\/new\?from=welcome$/);
-    expect(codeTries(P.d)).toBe(3);
-    await mail.locator('[data-f="signin:create"]').click();
+    // No account uses the address yet: it is created at once.
     await expect(mail).toHaveURL(/\/sync\/kit\?first=1&then=doors$/);
+    expect(codeTries(P.d)).toBe(3);
     await mail.locator('[data-f="sync-kit:cancel"]').click();
     await expect(mail).toHaveURL(/\/welcome\?step=doors$/);
 
@@ -478,13 +477,7 @@ test.describe.serial("accounts on the web", () => {
     // Try again opens the provider page again, from the click.
     const [again] = await Promise.all([desk.waitForEvent("popup"), desk.locator('[data-f="signin:retry"]').click()]);
     await again.getByText("Sign in as alice").click();
-    await expect(desk).toHaveURL(/\/sign-in\/new\?from=welcome$/);
-    await expect(desk.locator("h1")).toHaveText("Create your Momotus account");
-    // The provider sign-in worked; the line says why the next step is an account to make or join.
-    await expect(desk.getByText("This sign-in has no Momotus account yet.", { exact: true })).toBeVisible();
-    await expect(desk.locator('[data-f="signin:already"]')).toHaveText("I already use Momotus on another device");
-    await shot(desk, "accounts-create-desktop");
-    await desk.locator('[data-f="signin:create"]').click();
+    // No account uses the sign-in yet: it is created at once, as any app's provider sign-in does.
     // The web has no account passkey (D11): the recovery kit step comes next, then the doors.
     await expect(desk).toHaveURL(/\/sync\/kit\?first=1&then=doors$/);
     await desk.locator('[data-f="sync-kit:make"]').click();
@@ -576,8 +569,6 @@ test.describe.serial("accounts on the web", () => {
   test("Phone signs in as bob and skips the kit: Home nudges for a second way in", async () => {
     await go(phone, "/welcome");
     await providerPage(phone, "signin:mock", "bob");
-    await expect(phone).toHaveURL(/\/sign-in\/new\?from=welcome$/);
-    await phone.locator('[data-f="signin:create"]').click();
     await expect(phone).toHaveURL(/\/sync\/kit\?first=1&then=doors$/);
     await phone.locator('[data-f="sync-kit:cancel"]').click();
     // The web states its form: neither it nor a TV approves another device (D6).
