@@ -331,8 +331,10 @@ struct MainShell: View {
             .background(Theme.Palette.bg)
             // Content under the traffic lights and the top buttons gets a soft blurred edge once it scrolls there.
             .overlay(alignment: .top) { ScrollTopEdge().opacity(ornamentStrong && !immersion.active ? 1 : 0).animation(Theme.Motion.panel, value: ornamentStrong) }
-            // The profile panel from the right; the page under it is out of VoiceOver's reach while it shows.
+            // The profile panel from the right; the page under it is out of VoiceOver's and the keyboard's reach
+            // while it shows (Tab never leaves the panel, a title page's own Escape never fires under it).
             .accessibilityHidden(showPanel)
+            .disabled(showPanel)
             .overlay { ProfilePanelLayer(open: $showPanel, onPin: pin, onManage: manage, onSettings: { select(.settings, link: true) }) }
             // The player never opens over it.
             .onChange(of: immersion.active) { _, on in if on { showPanel = false } }

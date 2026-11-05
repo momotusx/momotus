@@ -187,6 +187,13 @@ test("desktop: the panel by keyboard; Escape, Close, the dim layer and the avata
   await expect(page).toHaveURL(/\/library/);
   await expect(panel(page)).toHaveCount(0);
   await expect(page.locator("[inert]")).toHaveCount(0);
+  // Search from the header closes the panel, and the page under Search stays inert (the panel's cleanup never clears it).
+  await button(page).click();
+  await expect(panel(page)).toBeVisible();
+  await page.locator('[data-f="nav:/search"]').click();
+  await expect(panel(page)).toHaveCount(0);
+  await expect(page.locator('[data-f="search:input"]')).toBeVisible();
+  await expect.poll(() => page.locator(".screen").evaluate((el) => (el as HTMLElement).inert)).toBe(true);
   await context.close();
 });
 

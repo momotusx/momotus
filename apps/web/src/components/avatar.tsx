@@ -19,7 +19,7 @@ import LogOut from "lucide-solid/icons/log-out";
 import Lock from "lucide-solid/icons/lock";
 import SettingsIcon from "lucide-solid/icons/settings";
 import { useLocation, useNavigate } from "@solidjs/router";
-import { type Component, createEffect, createSignal, For, on, onCleanup, Show } from "solid-js";
+import { type Component, createComputed, createEffect, createSignal, For, on, onCleanup, Show } from "solid-js";
 import { Dynamic, Portal } from "solid-js/web";
 import type { ProfileInfo } from "../core/generated/ProfileInfo";
 import { pickOnOpen, profiles } from "../core/profiles";
@@ -77,8 +77,9 @@ export function ProfileMenu(props: { lit: boolean; tab?: boolean; onSettings: ()
   const location = useLocation();
   const [open, setOpen] = createSignal(false);
   const panel = () => form() === "desktop" && !props.tab;
-  // A new page, a form change (a window dragged narrow) or the Search palette closes either.
-  createEffect(on([() => location.pathname, form, searchOpen], () => setOpen(false), { defer: true }));
+  // A new page, a form change (a window dragged narrow) or the Search palette closes either. A computation, not an
+  // effect: the panel's cleanup runs before Search makes the page inert, so it never clears Search's inert.
+  createComputed(on([() => location.pathname, form, searchOpen], () => setOpen(false), { defer: true }));
   let wrap!: HTMLDivElement;
   let button!: HTMLButtonElement;
   let list: HTMLDivElement | undefined;
