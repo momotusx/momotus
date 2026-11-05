@@ -271,8 +271,7 @@ fn timers() {
             const never = setTimeout(() => order.push("never"), 10);
             clearTimeout(never);
             let ticks = 0;
-            const every = setInterval(() => { if (++ticks === 3) { clearInterval(every); order.push("i3"); } }, 10);
-            setTimeout(done, 80);
+            const every = setInterval(() => { if (++ticks === 3) { clearInterval(every); order.push("i3"); done(); } }, 10);
         });
         let refused;
         try { for (let i = 0; i < 2000; i++) setTimeout(() => {}, 1); } catch (e) { refused = e.message; }
