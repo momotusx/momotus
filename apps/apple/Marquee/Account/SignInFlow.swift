@@ -476,6 +476,17 @@ final class SignInFlow {
         linkAfterJoin = ticket.map { HeldLink(ticket: $0, provider: provider ?? "") }
     }
 
+    /// The Mac stage's own code joined this device: a held sign-in (`new`, `cannotOpen`) goes to that account, as
+    /// "I already use Momotus on another device" takes it.
+    func joinedByCode() async {
+        switch stage {
+        case .new(let ticket): joinAnotherWay(ticket: ticket)
+        case .cannotOpen(let ticket): joinAnotherWay(ticket: ticket)
+        default: break
+        }
+        await linkHeld()
+    }
+
     /// The join another way has landed: the held identity goes to this account.
     func linkHeld() async {
         guard let held = linkAfterJoin, sync.joined else { return }

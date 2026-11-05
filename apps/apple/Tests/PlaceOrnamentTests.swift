@@ -1,78 +1,44 @@
 import AppKit
+import Foundation
 import SwiftUI
 import Testing
 
-// The Mac's ornament (the owner's variant 4, plans/owner-picks.md 2026-10-25), laid out for real: the five
-// places with no wordmark, inside the narrowest window, centred at any width, and a page's last row ending
-// above it.
-
-@MainActor private final class Frames {
-    var ornament = CGRect.zero
-    var lastRow = CGRect.zero
-}
+// The Mac's ornament (plans/owner-picks.md): the four places and the profile, no wordmark, in the window's toolbar
+// row at the top, centred between Back and Search (the owner, 2026-11-04: the places at the top on desktop; the
+// capsule sat at the window's foot from 2026-10-25). Its size is laid out for real; where it sits is read from the
+// sources, since a toolbar is not laid out in a hosted view.
 
 @MainActor @Test func theOrnamentHoldsThePlacesButSettingsAndNoWordmark() {
-    // Settings opens from the profile's menu at the top right (plans/nav-profile.md).
+    // Settings opens from the profile's menu at the ornament's end (plans/nav-profile.md).
     #expect(OrnamentLayout.places == [.home, .discover, .library, .calendar])
-    #expect(OrnamentLayout.height == 44)
+    // 40 tall, inside the toolbar row's 52 beside the 36 pt Search.
+    #expect(OrnamentLayout.height == 40)
 }
 
-@MainActor @Test func theOrnamentFitsTheNarrowestWindow() {
+@MainActor @Test func theOrnamentFitsTheToolbarRowOfTheNarrowestWindow() {
     // With the profile at its end, as the shell draws it (a stand-in of the avatar item's size).
     let profile = Color.clear.frame(width: OrnamentLayout.itemHeight + 8, height: OrnamentLayout.itemHeight)
     let size = NSHostingView(rootView: PlaceOrnament(selection: .home, select: { _ in }, profile: profile)).fittingSize
     #expect(abs(size.height - OrnamentLayout.height) < 1, "the ornament is \(size)")
-    // 16 pt clear of each side of the narrowest window the app allows.
-    #expect(size.width + 32 <= BackdropStops.macMinWidth, "the ornament is \(size.width) wide")
+    // Centred, it keeps clear of the traffic lights and Back at the left and of Search at the right.
+    #expect(size.width + 2 * OrnamentLayout.sideClear <= BackdropStops.macMinWidth, "the ornament is \(size.width) wide")
 }
 
-/// A page of rows scrolled to its end under the shell's ornament, in a `width` by 700 window.
-@MainActor private func scrolledToTheEnd(width: CGFloat) -> Frames {
-    let frames = Frames()
-    let page = ScrollView {
-        VStack(spacing: 20) {
-            ForEach(0..<12, id: \.self) { i in
-                Color.gray.frame(height: 120)
-                    .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { if i == 11 { frames.lastRow = $0 } }
-            }
-        }
-        .frame(maxWidth: .infinity)
-    }
-    .defaultScrollAnchor(.bottom)
-    .placeOrnament(.library, strong: true, shown: true, placed: { frames.ornament = $0 }) { _ in }
-    let host = NSHostingView(rootView: page.frame(width: width, height: 700))
-    host.frame = CGRect(x: 0, y: 0, width: width, height: 700)
-    host.layoutSubtreeIfNeeded()
-    RunLoop.main.run(until: Date().addingTimeInterval(0.3))
-    return frames
+private func source(_ path: String) throws -> String {
+    let app = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appending(path: "../Marquee")
+    return try String(contentsOf: app.appending(path: path), encoding: .utf8)
 }
 
-@MainActor @Test func aPagesLastRowEndsAboveTheOrnamentAtAnyWidth() {
-    for width in [BackdropStops.macMinWidth, 1100, 1440] {
-        let frames = scrolledToTheEnd(width: width)
-        #expect(frames.lastRow.height == 120, "the rows were not laid out at \(width): \(frames.lastRow)")
-        #expect(frames.ornament.height > 0, "the ornament was not laid out at \(width)")
-        #expect(frames.lastRow.maxY <= frames.ornament.minY, "at \(width) the last row \(frames.lastRow) runs under the ornament \(frames.ornament)")
-    }
-}
-
-@MainActor @Test func theOrnamentStaysCentredAtTheFootAsTheWindowResizes() {
-    let frames = Frames()
-    let host = NSHostingView(rootView: Color.clear.placeOrnament(.home, strong: false, shown: true, placed: { frames.ornament = $0 }) { _ in })
-    for width in [BackdropStops.macMinWidth, 1000, 1600] {
-        host.frame = CGRect(x: 0, y: 0, width: width, height: 800)
-        host.layoutSubtreeIfNeeded()
-        RunLoop.main.run(until: Date().addingTimeInterval(0.2))
-        #expect(abs(frames.ornament.midX - width / 2) < 1, "at \(width) the ornament's centre is \(frames.ornament.midX)")
-        #expect(abs(frames.ornament.maxY - (800 - OrnamentLayout.gap)) < 1, "at \(width) the ornament's foot is \(frames.ornament.maxY)")
-    }
-}
-
-@MainActor @Test func thePlayerHasNoOrnament() {
-    let frames = Frames()
-    let host = NSHostingView(rootView: Color.clear.placeOrnament(.home, strong: false, shown: false, placed: { frames.ornament = $0 }) { _ in })
-    host.frame = CGRect(x: 0, y: 0, width: 1000, height: 800)
-    host.layoutSubtreeIfNeeded()
-    RunLoop.main.run(until: Date().addingTimeInterval(0.2))
-    #expect(frames.ornament == .zero)
+@Test func theOrnamentIsTheToolbarsCentreAtTheTopNotAtTheFoot() throws {
+    let root = try source("App/RootView.swift")
+    let tools = try body(of: "private struct TopTools<Places: View>: ToolbarContent", in: root)
+    // The centre is the places on both macOS paths, so Back stays at the left and Search at the right.
+    #expect(tools.components(separatedBy: "ToolbarItem(placement: .principal) { centre }").count - 1 == 2, "the centre is not the places")
+    #expect(tools.contains("if shown { places }"), "the centre does not hold the places")
+    // The shell hands the ornament to the toolbar, hidden while the player covers the places.
+    #expect(root.contains("TopTools(find: find, shown: !immersion.active) {\n                    // Settings' first page"))
+    #expect(root.contains("PlaceOrnament(selection: tab, strong: ornamentStrong, select: { select($0) }, profile:"))
+    // Nothing is left at the window's foot.
+    #expect(!root.contains(".placeOrnament("), "the ornament is back at the window's foot")
+    #expect(!(try source("App/PlaceOrnament.swift")).contains("safeAreaInset(edge: .bottom"), "the ornament is back at the window's foot")
 }

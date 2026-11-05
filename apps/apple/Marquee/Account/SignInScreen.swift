@@ -4,7 +4,9 @@ import SwiftUI
 /// Sign in, first run's first step on a phone, tablet or Mac when the build
 /// has a hosted relay (plans/accounts.md 4.1): Continue with each provider
 /// the relay lists, Other ways to sign in, and Not now. Then what `found` and
-/// `new` lead to. Built from the app's own pieces; the design pick restyles it.
+/// `new` lead to. Built from the app's own pieces. The Mac draws it as a stage (`SignInStage`, variant 4 of
+/// 2026-11-04): the first run's still, the step at the lower left with its ways in one row, and the phone's live
+/// QR at the lower right while the step offers a join.
 struct SignInScreen: View {
     @State private var flow: SignInFlow
     /// Not now, or Use my own sync server: today's doors.
@@ -13,6 +15,8 @@ struct SignInScreen: View {
     let joined: () -> Void
     /// Made a new account: the first-run steps go on.
     let created: () -> Void
+    /// The line under the heading (Account's later sign-in: the library goes into the account).
+    var lead: String?
     @State private var showOther = false
     @State private var showPairing = false
     @State private var showKit = false
@@ -23,40 +27,43 @@ struct SignInScreen: View {
     @Environment(ProfileSession.self) private var profiles
     @Environment(CoreClient.self) private var core
     @Environment(\.metrics) private var metrics
+    #if os(macOS)
+    /// The first run's still behind the stage.
+    @State private var still: FirstRunStill?
+    #endif
 
     private typealias W = AccountWords
     private var words: AccountWords { .shared }
 
-    init(server: String, sync: SyncModel, notNow: @escaping () -> Void, joined: @escaping () -> Void, created: @escaping () -> Void) {
+    init(server: String, sync: SyncModel, lead: String? = nil, notNow: @escaping () -> Void, joined: @escaping () -> Void, created: @escaping () -> Void) {
         _flow = State(initialValue: SignInFlow(server: server, sync: sync))
+        self.lead = lead
         self.notNow = notNow
         self.joined = joined
         self.created = created
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: Theme.Space.m) {
-            HStack(alignment: .firstTextBaseline) {
-                Wordmark(size: 22)
-                Spacer()
-            }
-            Text(words.signInTitle)
-                .display(metrics.wide ? 44 : Theme.type.title1 + 4)
-                .foregroundStyle(Theme.Palette.text)
-                .accessibilityAddTraits(.isHeader)
-            if let trouble = flow.trouble, !flow.onEmail { troubleLine(trouble) }
-            stage
-        }
+        layout
         // The native flow is renewed while this runs: it stops when the screen closes.
         .task(id: flow.attempt) { await flow.open() }
         .onChange(of: flow.stage) { _, stage in
             if stage == .joined { joined() }
             if stage == .done { created() }
         }
-        // A join another way (the QR) lands: the held sign-in goes to its account.
+        // A join another way (the QR) lands: the held sign-in goes to its account. The stage's own code (the Mac)
+        // is that way too, and the join goes on as the step's joined.
         .onChange(of: sync.joined) { _, now in
             guard now else { return }
-            Task { await flow.linkHeld() }
+            let byCorner = cornerJoined
+            Task {
+                if byCorner {
+                    await flow.joinedByCode()
+                    joined()
+                } else {
+                    await flow.linkHeld()
+                }
+            }
         }
         .navigationDestination(isPresented: $showOther) { otherWays }
         .navigationDestination(isPresented: $showPairing) {
@@ -77,6 +84,92 @@ struct SignInScreen: View {
             showOther = true
         }
     }
+
+    #if os(macOS)
+    private var layout: some View {
+        SignInStage {
+            VStack(alignment: .leading, spacing: 0) {
+                Wordmark(size: 22)
+                Text(words.signInTitle)
+                    .textFont(52, weight: .bold, relativeTo: .largeTitle)
+                    .foregroundStyle(.white)
+                    .accessibilityAddTraits(.isHeader)
+                    .padding(.top, 14)
+                if let lead {
+                    Text(lead)
+                        .textFont(17, relativeTo: .body)
+                        .foregroundStyle(Theme.Palette.muted)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.top, 8)
+                }
+                if let trouble = flow.trouble, !flow.onEmail { troubleLine(trouble).padding(.top, Theme.Space.m) }
+                stage.padding(.top, 28)
+            }
+        } corner: {
+            if cornerShows { PhoneCorner(server: flow.server) }
+        }
+        .background { GeometryReader { page in FilmStill(still: still, wide: true, insets: page.safeAreaInsets) } }
+        .background(Color.black)
+        .task { still = await StillOnce.shared.get { [core] in try await core.call("firstRunStill", as: FirstRunStill?.self) } }
+        // Escape is Not now on the first step, Cancel on the steps after a sign-in.
+        .onExitCommand {
+            switch flow.stage {
+            case .choose: notNow()
+            case .new, .cannotOpen, .startOver: flow.back()
+            default: break
+            }
+        }
+    }
+
+    /// The steps that offer a join by another device show the code: the first, `new` and `cannotOpen`.
+    private var cornerShows: Bool {
+        guard !sync.keyUnreadable else { return false }
+        switch flow.stage {
+        case .choose, .new, .cannotOpen: return !flow.onEmail
+        default: return false
+        }
+    }
+
+    /// The corner's code joined this device (not the pushed pairing page's).
+    private var cornerJoined: Bool {
+        guard !showPairing, case .joined? = sync.pairing?.snapshot else { return false }
+        return true
+    }
+    #else
+    private var layout: some View {
+        VStack(alignment: .leading, spacing: Theme.Space.m) {
+            HStack(alignment: .firstTextBaseline) {
+                Wordmark(size: 22)
+                Spacer()
+            }
+            Text(words.signInTitle)
+                .display(metrics.wide ? 44 : Theme.type.title1 + 4)
+                .foregroundStyle(Theme.Palette.text)
+                .accessibilityAddTraits(.isHeader)
+            if let trouble = flow.trouble, !flow.onEmail { troubleLine(trouble) }
+            stage
+        }
+    }
+
+    private var cornerJoined: Bool { false }
+    #endif
+
+    /// A step's ways: one row on the Mac's stage, wrapping when the window is narrow; a column elsewhere.
+    @ViewBuilder private func ways<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
+        #if os(macOS)
+        FlowRow(spacing: Theme.Space.xs) { content() }
+        #else
+        VStack(alignment: .leading, spacing: Theme.Space.s) { content() }
+        #endif
+    }
+
+    /// The Mac's stage draws Google's and Facebook's buttons by their own rules, and offers the phone's way in on
+    /// the first step whatever the relay lists (the code is in the corner too).
+    #if os(macOS)
+    private static let stageWays = true
+    #else
+    private static let stageWays = false
+    #endif
 
     // MARK: Stages
 
@@ -109,36 +202,58 @@ struct SignInScreen: View {
                         .buttonStyle(PillButtonStyle())
                 }
             }
-            ForEach(flow.providers, id: \.self) { id in
-                Button { Task { await press(id) } } label: {
-                    Label(AccountRules.fill(words.continueWith, ["provider": AccountRules.providerName(id)]), glyph: "door-open")
-                        .frame(maxWidth: .infinity)
+            ways {
+                ForEach(flow.providers, id: \.self) { id in providerButton(id) }
+                if flow.offersEmail {
+                    // Its own row under the provider buttons; the primary when it is the only way listed.
+                    Button { flow.openEmail() } label: {
+                        Label(words.continueWithEmail, glyph: "mail").columnWide()
+                    }
+                    .buttonStyle(PillButtonStyle(prominent: flow.providers.isEmpty))
                 }
-                .buttonStyle(PillButtonStyle(prominent: id == flow.providers.first))
-            }
-            if flow.offersEmail {
-                // Its own row under the provider buttons; the primary when it is the only way listed.
-                Button { flow.openEmail() } label: {
-                    Label(words.continueWithEmail, glyph: "mail").frame(maxWidth: .infinity)
+                // No provider on this sync service: Create, or join by a phone's scan (plans/tv-qr-login.md 5.4); under
+                // email when email is the way in.
+                if flow.providers.isEmpty, !flow.unreachable {
+                    Button { Task { await flow.createHere(name: DeviceName.current, userName: userName) } } label: {
+                        Label(words.createAccount, glyph: "plus").columnWide()
+                    }
+                    .buttonStyle(PillButtonStyle(prominent: !flow.offersEmail))
                 }
-                .buttonStyle(PillButtonStyle(prominent: flow.providers.isEmpty))
-            }
-            // No provider on this sync service: Create, or join by a phone's scan (plans/tv-qr-login.md 5.4); under
-            // email when email is the way in.
-            if flow.providers.isEmpty, !flow.unreachable {
-                Button { Task { await flow.createHere(name: DeviceName.current, userName: userName) } } label: {
-                    Label(words.createAccount, glyph: "plus").frame(maxWidth: .infinity)
+                if flow.providers.isEmpty || Self.stageWays, !flow.unreachable {
+                    Button { showPairing = true } label: { Label(words.alreadyUse, glyph: "qr-code").columnWide() }
+                        .buttonStyle(PillButtonStyle())
                 }
-                .buttonStyle(PillButtonStyle(prominent: !flow.offersEmail))
-                Button { showPairing = true } label: { Label(words.alreadyUse, glyph: "qr-code").frame(maxWidth: .infinity) }
-                    .buttonStyle(PillButtonStyle())
             }
+            #if os(macOS)
+            HStack(spacing: 28) {
+                Button { showOther = true } label: { Label(words.otherWays, glyph: "key-round") }
+                Button(words.notNow, action: notNow)
+                    .foregroundStyle(Theme.Palette.muted)
+            }
+            .buttonStyle(.textLink)
+            .textFont(15, weight: .semibold, relativeTo: .callout)
+            .foregroundStyle(Theme.Palette.text)
+            .padding(.top, 6)
+            #else
             Button { showOther = true } label: { Label(words.otherWays, glyph: "key-round") }
                 .buttonStyle(PillButtonStyle())
             Button(words.notNow, action: notNow)
                 .buttonStyle(.textLink)
                 .textFont(Theme.type.callout, weight: .semibold, relativeTo: .callout)
                 .foregroundStyle(Theme.Palette.text)
+            #endif
+        }
+    }
+
+    /// Continue with a provider: Google and Facebook in their own buttons on the Mac's stage, the pill elsewhere.
+    @ViewBuilder private func providerButton(_ id: String) -> some View {
+        let title = AccountRules.fill(words.continueWith, ["provider": AccountRules.providerName(id)])
+        if Self.stageWays, ProviderButtonStyle.draws(id) {
+            Button { Task { await press(id) } } label: { Text(title) }
+                .buttonStyle(ProviderButtonStyle(provider: id))
+        } else {
+            Button { Task { await press(id) } } label: { Label(title, glyph: "door-open").columnWide() }
+                .buttonStyle(PillButtonStyle(prominent: id == flow.providers.first))
         }
     }
 
@@ -179,10 +294,12 @@ struct SignInScreen: View {
     private func cannotOpen(_ ticket: String?) -> some View {
         VStack(alignment: .leading, spacing: Theme.Space.s) {
             if flow.trouble == nil { Said(tone: .warn, text: words.kitUnknownPasskey) }
-            Button { flow.joinAnotherWay(ticket: ticket); showPairing = true } label: { Label(words.scanFromDevice, glyph: "qr-code") }
-                .buttonStyle(PillButtonStyle(prominent: true))
-            Button { showKit = true } label: { Label(words.kitUnknownPasskeyActions[0], glyph: "life-buoy") }
-                .buttonStyle(PillButtonStyle())
+            ways {
+                Button { flow.joinAnotherWay(ticket: ticket); showPairing = true } label: { Label(words.scanFromDevice, glyph: "qr-code") }
+                    .buttonStyle(PillButtonStyle(prominent: true))
+                Button { showKit = true } label: { Label(words.kitUnknownPasskeyActions[0], glyph: "life-buoy") }
+                    .buttonStyle(PillButtonStyle())
+            }
             if let ticket {
                 Button(words.kitUnknownPasskeyActions[1]) { flow.goStartOver(ticket: ticket) }
                     .buttonStyle(.textLink)
@@ -195,12 +312,14 @@ struct SignInScreen: View {
     /// `new` once no passkey here opened an account (the probe's sheet was 4.1.4's line).
     private func newAccount(_ ticket: String) -> some View {
         VStack(alignment: .leading, spacing: Theme.Space.s) {
-            Button { Task { await flow.create(ticket: ticket, name: DeviceName.current, userName: userName) } } label: {
-                Label(words.createAccount, glyph: "plus")
+            ways {
+                Button { Task { await flow.create(ticket: ticket, name: DeviceName.current, userName: userName) } } label: {
+                    Label(words.createAccount, glyph: "plus")
+                }
+                .buttonStyle(PillButtonStyle(prominent: true))
+                Button { flow.joinAnotherWay(ticket: ticket); showPairing = true } label: { Label(words.alreadyUse, glyph: "qr-code") }
+                    .buttonStyle(PillButtonStyle())
             }
-            .buttonStyle(PillButtonStyle(prominent: true))
-            Button { flow.joinAnotherWay(ticket: ticket); showPairing = true } label: { Label(words.alreadyUse, glyph: "qr-code") }
-                .buttonStyle(PillButtonStyle())
             back
         }
     }
@@ -503,6 +622,10 @@ struct LaterSignIn: View {
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
+        #if os(macOS)
+        // The Mac's stage says it under its heading.
+        SignInScreen(server: server, sync: sync, lead: AccountWords.shared.libraryAdded, notNow: { dismiss() }, joined: { dismiss() }, created: { dismiss() })
+        #else
         ScrollView(.vertical) {
             VStack(alignment: .leading, spacing: Theme.Space.m) {
                 Callout(glyph: "info", text: AccountWords.shared.libraryAdded)
@@ -516,6 +639,92 @@ struct LaterSignIn: View {
         .scrollIndicators(.hidden)
         .background(Theme.Palette.bg)
         .topScrim()
+        #endif
     }
 }
 #endif
+
+#if os(macOS)
+/// The stage's corner (`SignInStage`): "Sign in with your phone", how, and the live code, asked as the step opens
+/// and renewed by the core while it shows, on a dark panel that keeps its words at 4.5:1 over any still; its own line
+/// while the code is asked for or the join runs, and why it stopped with Start again. Leaving the step ends it.
+private struct PhoneCorner: View {
+    let server: String
+    @Environment(SyncModel.self) private var sync
+
+    private var words: AccountWords { .shared }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(words.tvSignIn)
+                .textFont(17, weight: .bold, relativeTo: .headline)
+                .foregroundStyle(Theme.Palette.text)
+                .accessibilityAddTraits(.isHeader)
+            phase
+        }
+        .padding(20)
+        .frame(width: SignInStage<EmptyView, EmptyView>.cornerWidth, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: Theme.Radius.l).fill(.black.opacity(0.62)))
+        .accessibilityElement(children: .contain)
+        .task { start() }
+        // Opens it again after a core restart.
+        .task(id: sync.pairing?.taskId) { sync.pairing?.start() }
+        .onDisappear { if !joined { sync.endPairing() } }
+    }
+
+    @ViewBuilder private var phase: some View {
+        if let failure = sync.pairing?.failure {
+            Label(PairingWords.problem(failure), glyph: "triangle-alert")
+                .textFont(14, relativeTo: .callout)
+                .foregroundStyle(Theme.Palette.text)
+                .fixedSize(horizontal: false, vertical: true)
+            Button { sync.endPairing(); start() } label: { Label("Start again", glyph: "refresh-cw") }
+                .buttonStyle(PillButtonStyle())
+        } else {
+            switch sync.pairing?.snapshot {
+            case .waiting(let qr, _)?:
+                HStack(alignment: .top, spacing: 18) {
+                    // A new code takes the old one's place, at the same size.
+                    QRCode(text: qr, pairing: true)
+                        .frame(width: 140, height: 140)
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                    Text(words.tvSignInHow)
+                        .textFont(14, relativeTo: .callout)
+                        .foregroundStyle(Theme.Palette.text)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            case .joining?, .joined?:
+                Label(words.approveSigningIn, glyph: "clock")
+                    .textFont(14, relativeTo: .callout)
+                    .foregroundStyle(Theme.Palette.text)
+            default:
+                Label("Asking the sync server for a code", glyph: "clock")
+                    .textFont(14, relativeTo: .callout)
+                    .foregroundStyle(Theme.Palette.muted)
+            }
+        }
+    }
+
+    private var joined: Bool {
+        if case .joined? = sync.pairing?.snapshot { return true }
+        return false
+    }
+
+    private func start() {
+        guard sync.pairing == nil, !sync.joined, !sync.keyUnreadable else { return }
+        UserDefaults.standard.set(server, forKey: SyncRecord.serverKey)
+        sync.startPairing(server: server, name: DeviceName.current)
+    }
+}
+#endif
+
+private extension View {
+    /// A way's label fills the column's width; on the Mac's stage the ways share a row at their own widths.
+    @ViewBuilder func columnWide() -> some View {
+        #if os(macOS)
+        self
+        #else
+        frame(maxWidth: .infinity)
+        #endif
+    }
+}

@@ -1,18 +1,20 @@
 import SwiftUI
 
 #if os(macOS)
-/// The Mac's navigation, the owner's variant 4 (plans/owner-picks.md, 2026-10-25): no toolbar strip, the
-/// places in one glass capsule floating at the window's bottom centre, over every page.
+/// The Mac's navigation (plans/owner-picks.md): no toolbar strip, the places in one glass capsule, which sits in
+/// the window's toolbar row, centred between Back and Search, over every page (the owner, 2026-11-04: the places
+/// at the top on desktop; the capsule was at the window's foot from 2026-10-25).
 enum OrnamentLayout {
     /// Search is the glass button at the top right, so the ornament holds the other places, with no wordmark, and
     /// ends with the profile, whose menu opens Settings (plans/nav-profile.md).
     static let places: [AppTab] = AppTab.bar.filter { $0 != .search }
-    /// The capsule's edge to its items, and an item's height.
-    static let inset: CGFloat = 5
-    static let itemHeight: CGFloat = 34
-    /// The capsule's foot above the window's.
-    static let gap: CGFloat = 22
+    /// The capsule's edge to its items, and an item's height: 40 tall, inside the toolbar row's 52.
+    static let inset: CGFloat = 4
+    static let itemHeight: CGFloat = 32
     static var height: CGFloat { itemHeight + 2 * inset }
+    /// What the toolbar row holds beside the centred capsule on each side: the traffic lights and Back at the left
+    /// (Search and the gutter mirror it at the right), with a clear gap.
+    static let sideClear: CGFloat = 136
 }
 
 /// The capsule: each place as its icon and word, the current one on a white fill, then `profile` at its end (the
@@ -71,32 +73,6 @@ struct OrnamentProfile<Avatar: View>: View {
     }
 }
 
-extension View {
-    /// The ornament at the window's foot, as a bottom safe-area inset: a page's scrolling content runs under it
-    /// and ends above it, so the last row is never hidden there. `shown` false (the player) leaves no room.
-    /// `placed` hears where the ornament lands, in the window (PlaceOrnamentTests).
-    func placeOrnament(
-        _ selection: AppTab, strong: Bool, shown: Bool, placed: ((CGRect) -> Void)? = nil, select: @escaping (AppTab) -> Void
-    ) -> some View {
-        placeOrnament(selection, strong: strong, shown: shown, placed: placed, select: select) { EmptyView() }
-    }
-
-    func placeOrnament<Profile: View>(
-        _ selection: AppTab, strong: Bool, shown: Bool, placed: ((CGRect) -> Void)? = nil, select: @escaping (AppTab) -> Void,
-        @ViewBuilder profile: () -> Profile
-    ) -> some View {
-        let end = profile()
-        return safeAreaInset(edge: .bottom, spacing: 0) {
-            if shown {
-                PlaceOrnament(selection: selection, strong: strong, select: select, profile: end)
-                    .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { placed?($0) }
-                    .padding(.bottom, OrnamentLayout.gap)
-                    .frame(maxWidth: .infinity)
-            }
-        }
-    }
-}
-
 /// The ornament's glass and the top right buttons': solid under Reduce Transparency.
 struct OrnamentGlass<S: InsettableShape>: ViewModifier {
     let shape: S
@@ -134,7 +110,7 @@ private struct OrnamentItemStyle: ButtonStyle {
                 .labelStyle(ItemLabel())
                 .textFont(14, weight: .semibold, relativeTo: .callout)
                 .foregroundStyle(on ? Theme.Palette.onPrimary : hovered ? Theme.Palette.text : Theme.Palette.muted)
-                .padding(.horizontal, 15)
+                .padding(.horizontal, 13)
                 .frame(height: OrnamentLayout.itemHeight)
                 .background { if on { Capsule().fill(Theme.Palette.primary) } }
                 .contentShape(Capsule())

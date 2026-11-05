@@ -333,17 +333,26 @@ struct OnboardingScreen: View {
         doorsStep
         #else
         if let server = AccountServer.default {
-            column {
-                SignInScreen(server: server, sync: sync,
-                             notNow: { step = .doors },
-                             joined: { if let close { close() } else { step = .doors } },
-                             created: { step = .doors })
-            }
+            #if os(macOS)
+            // The Mac's sign-in is a stage of its own (SignInStage): the still and the window's whole size.
+            signIn(server)
+            #else
+            column { signIn(server) }
+            #endif
         } else {
             doorsStep
         }
         #endif
     }
+
+    #if !os(tvOS)
+    private func signIn(_ server: String) -> some View {
+        SignInScreen(server: server, sync: sync,
+                     notNow: { step = .doors },
+                     joined: { if let close { close() } else { step = .doors } },
+                     created: { step = .doors })
+    }
+    #endif
 
     private var doorsStep: some View {
         let skip = close.map { close in { browseFirst(close) } }

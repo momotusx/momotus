@@ -92,12 +92,19 @@ struct FramedStep<Bar: View>: View {
 /// Motion); with none the screen stays black. Wide screens take Apple's wash (from the leading edge, the foot and
 /// under the header); the phone a light wash under the header and black under the home indicator, where the
 /// block's own ramp ends.
-private struct FilmStill: View {
+struct FilmStill: View {
     let still: FirstRunStill?
     let wide: Bool
     let insets: EdgeInsets
     @State private var art: DecodedArt?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    /// The Mac's sign-in stage draws it too (SignInScreen).
+    init(still: FirstRunStill?, wide: Bool, insets: EdgeInsets) {
+        self.still = still
+        self.wide = wide
+        self.insets = insets
+    }
 
     var body: some View {
         GeometryReader { box in

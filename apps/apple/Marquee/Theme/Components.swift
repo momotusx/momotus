@@ -296,6 +296,50 @@ struct PillButtonStyle: ButtonStyle {
     #endif
 }
 
+/// A sign-in provider's own button where the provider draws it (design/DECISION.md, design/marks/README.md), at the
+/// pill's size: Google's dark theme (fill #131314, a 1 pt #8E918F stroke inside, an #E3E3E3 title, the G on white)
+/// and Facebook's #1877F2 with its white mark and title. Other providers keep the pill.
+struct ProviderButtonStyle: ButtonStyle {
+    let provider: String
+
+    static func draws(_ provider: String) -> Bool { provider == "google" || provider == "facebook" }
+
+    func makeBody(configuration: Configuration) -> some View {
+        let google = provider == "google"
+        return Interactive(
+            configuration: configuration,
+            shape: Capsule(),
+            focusScale: Theme.Focus.scaleTile,
+            content: AnyView(
+                HStack(spacing: 10) {
+                    mark
+                    configuration.label
+                }
+                .labelFont(PillButtonStyle.label)
+                .foregroundStyle(google ? Self.googleTitle : .white)
+                .padding(.horizontal, PillButtonStyle.horizontal)
+                .padding(.vertical, PillButtonStyle.vertical)
+                .background { Capsule().fill(google ? Self.googleFill : Self.facebookFill) }
+                .overlay { if google { Capsule().strokeBorder(Self.googleStroke, lineWidth: 1) } }
+                .contentShape(Capsule())
+            )
+        )
+    }
+
+    @ViewBuilder private var mark: some View {
+        if provider == "google" {
+            Image("mark-google").resizable().frame(width: 14, height: 14).padding(3).background(Circle().fill(.white))
+        } else {
+            Image("mark-facebook").resizable().frame(width: 20, height: 20)
+        }
+    }
+
+    static let googleFill = Color(red: 19 / 255, green: 19 / 255, blue: 20 / 255)
+    static let googleStroke = Color(red: 142 / 255, green: 145 / 255, blue: 143 / 255)
+    static let googleTitle = Color(red: 227 / 255, green: 227 / 255, blue: 227 / 255)
+    static let facebookFill = Color(red: 24 / 255, green: 119 / 255, blue: 242 / 255)
+}
+
 /// The width of a control's edge: 2 pt on TV, 1.5 pt elsewhere.
 #if os(tvOS)
 let edgeWidth: CGFloat = 2

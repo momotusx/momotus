@@ -31,12 +31,12 @@ private func source(_ path: String) throws -> String {
 
 @Test func theMacToolbarHoldsSearchAloneAndTheOrnamentEndsWithTheProfile() throws {
     // Read from the sources: a toolbar is not laid out in a hosted view. The profile took Settings' place in the
-    // ornament (plans/nav-profile.md), so it shows once.
+    // ornament (plans/nav-profile.md), so it shows once: at the ornament's end, never as a toolbar item of its own.
     let root = try source("App/RootView.swift")
-    let tools = try body(of: "private struct TopTools: ToolbarContent", in: root)
+    let tools = try body(of: "private struct TopTools<Places: View>: ToolbarContent", in: root)
     #expect(tools.components(separatedBy: "ToolbarItem(placement: .primaryAction) { search }").count - 1 == 2, "Search keeps its item on both macOS paths")
     #expect(!tools.contains("Profile"), "the profile is back in the toolbar")
-    let ornament = try #require(root.range(of: ".placeOrnament(tab, strong: ornamentStrong")).lowerBound
+    let ornament = try #require(root.range(of: "PlaceOrnament(selection: tab, strong: ornamentStrong")).lowerBound
     #expect(root[ornament...].prefix(400).contains("ProfileMenu(onSettings: { select(.settings, link: true) }, onPin: pin)"), "the ornament lost the profile's menu")
     #expect(root.contains("OrnamentProfile(lit: tab == .settings)"), "the ornament's profile is not lit on Settings")
 }

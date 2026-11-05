@@ -37,7 +37,7 @@ extension EnvironmentValues {
 }
 
 /// The navigation: the floating glass capsule at the bottom on iPhone and iPad,
-/// the glass ornament at the window's foot on the Mac, the pill at the top on TV.
+/// the glass ornament in the window's toolbar row on the Mac, the pill at the top on TV.
 ///
 /// The profile gate: nothing of a profile shows before the core says which
 /// one runs and whether it is locked. While the gate is shut only the picker
@@ -325,18 +325,21 @@ struct MainShell: View {
             .modifier(offline)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(Theme.Palette.bg)
-            // The owner's variant 4: the places in a glass ornament at the window's foot; pages end above it.
-            .placeOrnament(tab, strong: ornamentStrong, shown: !immersion.active, select: { select($0) }) {
-                // Settings' first page, from any of its pages too (a link opens a place at its root).
-                ProfileMenu(onSettings: { select(.settings, link: true) }, onPin: pin) { me in
-                    OrnamentProfile(lit: tab == .settings) { BarAvatar(profile: me, size: OrnamentLayout.itemHeight - 8) }
-                }
-                .help("Profiles and Settings")
-                .accessibilityAddTraits(tab == .settings ? .isSelected : [])
-            }
             // Content under the traffic lights and the top buttons gets a soft blurred edge once it scrolls there.
             .overlay(alignment: .top) { ScrollTopEdge().opacity(ornamentStrong && !immersion.active ? 1 : 0).animation(Theme.Motion.panel, value: ornamentStrong) }
-            .toolbar { TopTools(find: find) }
+            // The places in a glass ornament in the toolbar row, centred between Back and Search (the owner,
+            // 2026-11-04: the places at the top on desktop).
+            .toolbar {
+                TopTools(find: find, shown: !immersion.active) {
+                    // Settings' first page, from any of its pages too (a link opens a place at its root).
+                    PlaceOrnament(selection: tab, strong: ornamentStrong, select: { select($0) }, profile:
+                        ProfileMenu(onSettings: { select(.settings, link: true) }, onPin: pin) { me in
+                            OrnamentProfile(lit: tab == .settings) { BarAvatar(profile: me, size: OrnamentLayout.itemHeight - 8) }
+                        }
+                        .help("Profiles and Settings")
+                        .accessibilityAddTraits(tab == .settings ? .isSelected : []))
+                }
+            }
             // No strip: the window's toolbar draws nothing of its own, and Home's art runs under it.
             .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
             .modifier(FullScreen(isPresented: $showProfiles, closesOnBack: true) {
@@ -743,20 +746,27 @@ private struct TabBar: View {
 #endif
 
 #if os(macOS)
-/// The window toolbar's only item, top right over the art: Search as a round glass button. The profile ends the
-/// ornament at the window's foot, in Settings' old place (plans/nav-profile.md).
-private struct TopTools: ToolbarContent {
+/// The window toolbar's items over the art: the places' ornament in the centre (its own glass, so the toolbar draws
+/// none behind it), and Search as a round glass button at the top right. The profile ends the ornament, in
+/// Settings' old place (plans/nav-profile.md). `shown` false (the player) leaves the centre empty.
+private struct TopTools<Places: View>: ToolbarContent {
     let find: () -> Void
+    let shown: Bool
+    @ViewBuilder let places: Places
 
     var body: some ToolbarContent {
-        // An empty centre: without one the toolbar packs its actions at the left, beside the traffic lights.
+        // The centre is never left out: without it the toolbar packs its actions at the left, beside the traffic lights.
         if #available(macOS 26, *) {
-            ToolbarItem(placement: .principal) { Color.clear.frame(width: 1, height: 1) }.sharedBackgroundVisibility(.hidden)
+            ToolbarItem(placement: .principal) { centre }.sharedBackgroundVisibility(.hidden)
             ToolbarItem(placement: .primaryAction) { search }.sharedBackgroundVisibility(.hidden)
         } else {
-            ToolbarItem(placement: .principal) { Color.clear.frame(width: 1, height: 1) }
+            ToolbarItem(placement: .principal) { centre }
             ToolbarItem(placement: .primaryAction) { search }
         }
+    }
+
+    @ViewBuilder private var centre: some View {
+        if shown { places } else { Color.clear.frame(width: 1, height: 1) }
     }
 
     /// The window's edge to the last button's (Search, now the profile is in the ornament): the page's gutter, as
