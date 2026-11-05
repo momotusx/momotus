@@ -211,10 +211,15 @@ extension AetherSession.Events {
     let mkv = try Data(contentsOf: fixtures.appending(path: "tiny.mkv"))
     session.load(.custom(DataReader(mkv), formatHint: "matroska"), container: "mkv", at: 0, rate: 1.5, volume: 0,
                  autoplay: false, openWithin: .seconds(30), events: .none)
-    // The rate is set once the source is open, just before the play that autoplay false leaves out.
-    for _ in 0..<100 where session.engine.desiredRate == nil { try await Task.sleep(for: .milliseconds(100)) }
+    // Open, it waits: the speed is held for the first play, as a speed handed to the engine before its state says
+    // paused plays it (`avPlayer.rate = x`).
+    for _ in 0..<100 where session.engine.duration == 0 { try await Task.sleep(for: .milliseconds(100)) }
     try await Task.sleep(for: .seconds(1))
+    #expect(session.engine.duration > 0)
     #expect(session.engine.state != .playing)
+    #expect(session.engine.desiredRate == nil)
+    session.play()
+    #expect(session.engine.desiredRate == 1.5)
     session.stop()
 }
 

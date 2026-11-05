@@ -53,6 +53,9 @@ final class AetherSession {
     /// The open's bound, held while a paused load waits (under Versions, after a server move): it runs from the first
     /// play, never while the viewer browses or sits paused.
     private var heldBound: (within: Duration, failed: (String) -> Void)?
+    /// The speed a paused load plays at once played: handed to the engine before its state says paused, a speed is a
+    /// play press (`avPlayer.rate = x`), so it waits for the first play.
+    private var heldRate: Float?
 
     /// Nil when the engine cannot start on this device.
     init?() {
@@ -173,7 +176,7 @@ final class AetherSession {
                 if let probe, probe.videoWidth > 0, probe.videoHeight > 0 {
                     events.videoSize(CGSize(width: Int(probe.videoWidth), height: Int(probe.videoHeight)))
                 }
-                if rate != 1 { engine.setRate(rate) }
+                if rate != 1 { if autoplay { engine.setRate(rate) } else { self?.heldRate = rate } }
                 if autoplay { engine.play() }
             } catch is CancellationError {
             } catch {
@@ -291,11 +294,17 @@ final class AetherSession {
             heldBound = nil
             armBound(bound.within, failed: bound.failed)
         }
+        if let rate = heldRate {
+            heldRate = nil
+            engine.setRate(rate)
+        }
         engine.play()
     }
     func pause() { engine.pause() }
     func seek(to seconds: Double) async { await engine.seek(to: seconds) }
-    func setRate(_ rate: Float) { engine.setRate(rate) }
+    func setRate(_ rate: Float) {
+        if heldBound != nil { heldRate = rate } else { engine.setRate(rate) }
+    }
 
     /// Ends the session: its events stop, the engine tears down.
     func stop() {
@@ -307,6 +316,7 @@ final class AetherSession {
     private func release() {
         load += 1
         heldBound = nil
+        heldRate = nil
         bag = []
         opening?.cancel()
         opening = nil
