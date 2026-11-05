@@ -5,7 +5,10 @@
 
 import { For, Show } from "solid-js";
 import type { TitleScores as Scores } from "../core/generated/TitleScores";
-import { type Mark, markSrc } from "./marks";
+import { markSrc } from "./marks";
+
+/** The ratings row's services (the sign-in providers' marks live beside them in marks.ts). */
+type Mark = "imdb" | "tmdb" | "trakt";
 
 export type ScoreItem = { mark: Mark; text: string | null; spoken: string; href: string | null };
 

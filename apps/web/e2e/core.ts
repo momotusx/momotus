@@ -56,6 +56,8 @@ export const PLUGINS_PORT = 17831 + shift;
 /** The dual subtitles spec's own: a core whose one addon names Turkish, English and German files. */
 export const DUAL_PORT = 17832 + shift;
 
+/** The desktop sign-in stage spec's own: a relay listing Google, Facebook, email and the mock, the mock, and a core. */
+export const SIGN_IN_PORTS = { relay: 17833 + shift, mock: 17834 + shift, core: 17835 + shift };
 /** The kind chips' own: a core with a streaming account, so a title lists debrid torrents beside direct links. */
 export const KINDS_PORT = 17836 + shift;
 /** The zoom spec's saved zooms, each on its own host in one Chrome profile (Chrome keeps a zoom per host and sends every

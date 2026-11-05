@@ -234,7 +234,7 @@ const firstStill = () =>
  * the step, its question and lead and the choices on a dark ramp at the foot (phone) or in a column at the lower left
  * (TV and desktop), in thumb reach. The still is the core's scene frame (`firstRunStill`); with none (offline, slow)
  * the screen stays black. The still is decorative; the question is the step's real heading. */
-function Film(props: { title: string; lead?: string }) {
+export function Film(props: { title: string; lead?: string }) {
   const [art, setArt] = createSignal<string | null>(null);
   onMount(() => void firstStill().then((s) => setArt(s?.background ?? null)));
   return (

@@ -13,9 +13,11 @@ import QrCode from "lucide-solid/icons/qr-code";
 import Server from "lucide-solid/icons/server";
 import { createEffect, createResource, createSignal, For, type JSX, on, onCleanup, onMount, Show } from "solid-js";
 import { Dynamic } from "solid-js/web";
+import { markSrc } from "../components/marks";
 import { profiles } from "../core/profiles";
 import { type EmailFlow, emailCode, emailStart, held, openSignInWindow, relayProviders, runSignIn, type SignInEnd, type SignInRun, setHeld, signInServer } from "../core/sign-in";
 import * as sync from "../core/sync";
+import { pushBack } from "../focus/back";
 import { autoFocusSoon } from "../focus/dom";
 import { form } from "../form";
 import { resetHistoryBase } from "../history";
@@ -37,6 +39,7 @@ import {
 } from "../lib/account";
 import { mayMakeKit } from "../lib/sync";
 import { plainAddress, syncWords } from "../lib/words";
+import { Film } from "./onboarding";
 import { Session } from "./pairing";
 import "./browse.css";
 import Brand from "../components/brand";
@@ -145,8 +148,8 @@ export function SignInState(props: { said: { waiting: boolean; failure: Failure 
   );
 }
 
-/** The welcome steps' frame, for the sign-in pages outside them. */
-function Frame(props: { label: string; children: JSX.Element }) {
+/** The welcome steps' page, for the sign-in pages outside them. */
+function Page(props: { children: JSX.Element }) {
   onMount(() => autoFocusSoon(() => document.querySelector<HTMLElement>(".welcome [data-autofocus]")));
   return (
     <main class="welcome page" data-vscroll>
@@ -155,12 +158,70 @@ function Frame(props: { label: string; children: JSX.Element }) {
           <Brand />
         </div>
       </header>
-      <section class="step-body" aria-label={props.label}>
-        {props.children}
-      </section>
+      {props.children}
     </main>
   );
 }
+
+/** The welcome steps' frame, for the sign-in pages outside them. */
+function Frame(props: { label: string; children: JSX.Element }) {
+  return (
+    <Page>
+      <section class="step-body" aria-label={props.label}>
+        {props.children}
+      </section>
+    </Page>
+  );
+}
+
+/** A sign-in step with its heading and line. Desktop draws the stage (variant 4, the owner's pick of 2026-11-04,
+ * design/exploration/desktop-signin): the first run's still full bleed under its washes, the step at the lower
+ * left with its ways in one row, the phone's QR at the lower right (`PhoneCorner`). The phone and the TV keep the
+ * welcome steps' column. */
+function Stage(props: { label: string; title: string; lead?: string; busy?: boolean; children: JSX.Element }) {
+  return (
+    <Show
+      when={form() === "desktop"}
+      fallback={
+        <section class="step-body" aria-label={props.label} aria-busy={props.busy || undefined}>
+          <h1>{props.title}</h1>
+          <Show when={props.lead}>
+            <p class="lead">{props.lead}</p>
+          </Show>
+          {props.children}
+        </section>
+      }
+    >
+      <section class="step-body framed sign-in-stage" aria-label={props.label} aria-busy={props.busy || undefined}>
+        <Film title={props.title} lead={props.lead} />
+        {props.children}
+      </section>
+    </Show>
+  );
+}
+
+/** The stage's live QR on desktop, as the page opens (the core renews the code while it shows): "Sign in with your
+ * phone" and how. One per page, since a page holds one pairing; `false` where this browser may not pair. */
+const cornerShows = () => form() === "desktop" && sync.mayPair();
+
+function PhoneCorner(props: { server: string; how?: string; onJoined: () => void }) {
+  return (
+    <aside class="stage-qr" id="sign-in-qr" tabindex="-1" aria-labelledby="sign-in-qr-title">
+      <h2 id="sign-in-qr-title">{w.tvSignIn}</h2>
+      <Session server={props.server} name={sync.defaultDeviceName()} how={props.how ?? w.tvSignInHow} onJoined={props.onJoined} />
+    </aside>
+  );
+}
+
+/** "I already use Momotus on another device" beside a corner: the corner's code is that way in. */
+function toCorner() {
+  const corner = document.getElementById("sign-in-qr");
+  corner?.focus({ preventScroll: true });
+  corner?.scrollIntoView({ block: "nearest" });
+}
+
+/** Desktop draws Google's and Facebook's buttons by their own rules (design/DECISION.md, design/marks). */
+const branded = (p: string): "google" | "facebook" | null => (form() === "desktop" && (p === "google" || p === "facebook") ? p : null);
 
 /** Home, the root, once this device joined; after the first pull, so Home opens with the account's addons. */
 async function homeAfterPull(navigate: (to: string, o?: { replace?: boolean }) => void) {
@@ -190,6 +251,11 @@ export function SignInStart(props: { from: From; doors: () => JSX.Element }) {
     },
   );
   const leave = () => navigate(props.from === "welcome" ? "/welcome?step=doors" : "/sync");
+  // Escape is Not now, from the first run too (its address's own Back would go Home).
+  onCleanup(pushBack(leave));
+  const corner = cornerShows();
+  // The corner and its way in once the sync service answered with a way to sign in here.
+  const offered = () => providers.state === "ready" && !none();
   const act = (a: Act) => {
     if (a === "retry") s.again();
     else if (a === "other") navigate(`/sign-in/other${tail(props.from)}`);
@@ -204,11 +270,7 @@ export function SignInStart(props: { from: From; doors: () => JSX.Element }) {
   const email = () => form() !== "tv" && providers.state === "ready" && providers().includes(EMAIL);
   return (
     <Show when={!doors()} fallback={props.doors()}>
-      <section class="step-body" aria-label={w.signInTitle} aria-busy={providers.loading || undefined}>
-        <h1>{w.signInTitle}</h1>
-        <Show when={props.from === "account"}>
-          <p class="lead">{w.libraryAdded}</p>
-        </Show>
+      <Stage label={w.signInTitle} title={w.signInTitle} lead={props.from === "account" ? w.libraryAdded : undefined} busy={providers.loading}>
         <Show
           when={providers.state !== "errored"}
           fallback={<FailureNote failure={signInFailure("unreachable") as Failure} fkey="signin:relay" onAct={(a) => (a === "retry" ? void refetch() : leave())} />}
@@ -216,35 +278,55 @@ export function SignInStart(props: { from: From; doors: () => JSX.Element }) {
           <Show when={none()}>
             <Create server={server} from={props.from} />
           </Show>
-          <div class="acts sign-in-providers" data-fgroup="providers">
-            <For each={buttons()}>
-              {(p, i) => (
-                <button class="btn" classList={{ primary: i() === 0 }} data-f={`signin:${p}`} data-provider={p} data-autofocus={i() === 0 ? "" : undefined} onClick={() => s.go(p)}>
-                  {continueWith(p)}
-                </button>
-              )}
-            </For>
-          </div>
-          {/* Below the providers, above Other ways; the primary when it is the only way. */}
-          <Show when={email()}>
-            <div class="acts">
-              <button
-                class="btn"
-                classList={{ primary: buttons().length === 0 }}
-                data-f="signin:email"
-                data-autofocus={buttons().length === 0 ? "" : undefined}
-                onClick={() => {
-                  resume = null;
-                  navigate(emailPath("address", props.from));
-                }}
-              >
-                <Mail aria-hidden />
-                {continueWithEmail}
-              </button>
+          {/* One row on desktop's stage: the providers, email and the corner's way in; a column elsewhere. */}
+          <div class="stage-row">
+            <div class="acts sign-in-providers" data-fgroup="providers">
+              <For each={buttons()}>
+                {(p, i) => (
+                  <button
+                    class="btn"
+                    classList={{ primary: i() === 0 && !branded(p) }}
+                    data-f={`signin:${p}`}
+                    data-provider={p}
+                    data-brand={branded(p) ?? undefined}
+                    data-autofocus={i() === 0 ? "" : undefined}
+                    onClick={() => s.go(p)}
+                  >
+                    <Show when={branded(p)}>{(b) => <img class="provider-mark" src={markSrc(b())} alt="" />}</Show>
+                    {continueWith(p)}
+                  </button>
+                )}
+              </For>
             </div>
-          </Show>
+            {/* Below the providers, above Other ways; the primary when it is the only way. */}
+            <Show when={email()}>
+              <div class="acts">
+                <button
+                  class="btn"
+                  classList={{ primary: buttons().length === 0 }}
+                  data-f="signin:email"
+                  data-autofocus={buttons().length === 0 ? "" : undefined}
+                  onClick={() => {
+                    resume = null;
+                    navigate(emailPath("address", props.from));
+                  }}
+                >
+                  <Mail aria-hidden />
+                  {continueWithEmail}
+                </button>
+              </div>
+            </Show>
+            <Show when={corner && offered()}>
+              <div class="acts">
+                <button class="btn" data-f="signin:already" aria-controls="sign-in-qr" onClick={toCorner}>
+                  <QrCode aria-hidden />
+                  {w.alreadyUse}
+                </button>
+              </div>
+            </Show>
+          </div>
           <SignInState said={s.said()} fkey="signin" onAct={act} />
-          <div class="acts">
+          <div class="acts stage-links">
             <A class="btn" href={`/sign-in/other${tail(props.from)}`} data-f="signin:other">
               {w.otherWays}
             </A>
@@ -252,8 +334,11 @@ export function SignInStart(props: { from: From; doors: () => JSX.Element }) {
               {w.notNow}
             </button>
           </div>
+          <Show when={corner && offered()}>
+            <PhoneCorner server={server} onJoined={() => void homeAfterPull(navigate)} />
+          </Show>
         </Show>
-      </section>
+      </Stage>
     </Show>
   );
 }
@@ -826,13 +911,11 @@ export function NewAccount() {
   return (
     <Show when={held()} fallback={<Navigate href={firstScreen(from)} />}>
       {(h) => (
-        <Frame label={w.createAccount}>
-          <h1>{w.createAccount}</h1>
-          <Show when={from === "account"}>
-            <p class="lead">{w.libraryAdded}</p>
-          </Show>
-          <Create server={h().server} from={from} />
-        </Frame>
+        <Page>
+          <Stage label={w.createAccount} title={w.createAccount} lead={from === "account" ? w.libraryAdded : undefined}>
+            <Create server={h().server} from={from} />
+          </Stage>
+        </Page>
       )}
     </Show>
   );
@@ -845,6 +928,8 @@ function Create(props: { server: string; from: From }) {
   const navigate = useNavigate();
   const name = sync.defaultDeviceName();
   const t = useHeldTicket(props.from);
+  // Desktop's stage shows the code in its corner from the start, and "I already use" points there.
+  const corner = cornerShows();
   const [pairing, setPairing] = createSignal(false);
   const [busy, setBusy] = createSignal(false);
   const [failure, setFailure] = createSignal<Failure | null>(null);
@@ -889,7 +974,10 @@ function Create(props: { server: string; from: From }) {
             <button class="btn primary" data-f="signin:create" data-autofocus aria-busy={t.busy() || busy() || undefined} onClick={() => void create()}>
               {w.createAccount}
             </button>
-            <button class="btn" data-f="signin:already" onClick={() => setPairing(true)}>
+            <button class="btn" data-f="signin:already" aria-controls={corner ? "sign-in-qr" : undefined} onClick={() => (corner ? toCorner() : setPairing(true))}>
+              <Show when={corner}>
+                <QrCode aria-hidden />
+              </Show>
               {w.alreadyUse}
             </button>
           </div>
@@ -899,6 +987,10 @@ function Create(props: { server: string; from: From }) {
       </Show>
       <Show when={failure()}>{(f) => <FailureNote failure={f()} fkey="signin:create" onAct={(a) => (a === "retry" ? void create() : a === "other" ? navigate(`/sign-in/other${tail(props.from)}`) : setFailure(null))} />}</Show>
       <SignInState said={t.said()} fkey="signin:new" onAct={(a) => t.act(a)} />
+      {/* A create needs the slot the code holds: the code goes while it runs, and comes back if it fails. */}
+      <Show when={corner && !t.busy() && !busy()}>
+        <PhoneCorner server={props.server} onJoined={joined} />
+      </Show>
     </>
   );
 }
@@ -929,12 +1021,14 @@ export function Found() {
   return (
     <Show when={held()} fallback={<Navigate href={firstScreen(from)} />}>
       {(h) => (
-        <Frame label={w.signInTitle}>
-          <h1>{w.signInTitle}</h1>
-          <p class="lead">{w.foundWeb}</p>
-          {/* Start over needs the account slot the code holds: asked, the code goes; Cancel makes a new one. */}
+        <Page>
+          <Stage label={w.signInTitle} title={w.signInTitle} lead={w.foundWeb}>
+          {/* Start over needs the account slot the code holds: asked, the code goes; Cancel makes a new one.
+              Desktop's stage draws the code in its corner. */}
           <Show when={!asking()}>
-            <Session server={h().server} name={name} how={w.tvScanHow} onJoined={joined} />
+            <Show when={form() === "desktop"} fallback={<Session server={h().server} name={name} how={w.tvScanHow} onJoined={joined} />}>
+              <PhoneCorner server={h().server} how={w.tvScanHow} onJoined={joined} />
+            </Show>
           </Show>
           <div class="acts">
             <A class="btn" href="/sync/recover" data-f="signin:found-kit" data-autofocus>
@@ -958,7 +1052,8 @@ export function Found() {
             </div>
           </Show>
           <SignInState said={t.said()} fkey="signin:found" onAct={(a) => t.act(a)} />
-        </Frame>
+          </Stage>
+        </Page>
       )}
     </Show>
   );
