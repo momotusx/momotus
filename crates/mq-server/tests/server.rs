@@ -2665,7 +2665,7 @@ async fn hls_opens_only_for_a_player_that_plays_it() {
             server.open_for(upstream, "v.mkv", Duration::from_secs(5), plays)
         };
         let refused = open(&[]).await.unwrap_err();
-        assert_eq!(refused, "This player cannot play HLS streams", "{path}");
+        assert_eq!(refused, mq_server::FORMAT_NOT_HERE, "{path}");
         let lease = open(&[mq_server::Format::Hls]).await.unwrap();
         assert_eq!(lease.format, Some(mq_server::Format::Hls), "{path}");
     }
@@ -2712,7 +2712,7 @@ async fn chunk_split_signatures_are_found() {
             Duration::from_secs(5),
         )
         .await;
-    assert_eq!(dash.unwrap_err(), "This player cannot play DASH streams");
+    assert_eq!(dash.unwrap_err(), mq_server::FORMAT_NOT_HERE);
 }
 
 #[tokio::test]
@@ -3031,7 +3031,7 @@ async fn dash_opens_only_for_a_player_that_plays_it() {
         };
         for plays in [&[][..], &[mq_server::Format::Hls][..]] {
             let refused = open(plays).await.unwrap_err();
-            assert_eq!(refused, "This player cannot play DASH streams", "{path}");
+            assert_eq!(refused, mq_server::FORMAT_NOT_HERE, "{path}");
         }
         let lease = open(&[mq_server::Format::Dash]).await.unwrap();
         assert_eq!(lease.format, Some(mq_server::Format::Dash), "{path}");
@@ -3346,4 +3346,180 @@ async fn an_archive_playback_keeps_every_hop_on_archive_org() {
     );
     let (head, _) = raw_full(&server, &lease.url, "bytes=0-").await;
     assert!(head.starts_with("http/1.1 20"), "{head}");
+}
+
+// ------------------------------------------------------- DASH served as HLS
+
+/// The real MovieBox init section (2026-11-05): an `hev1` entry whose
+/// `hvcC` holds VPS, SPS and PPS.
+fn moviebox_init() -> Vec<u8> {
+    let dir = env!("CARGO_MANIFEST_DIR");
+    std::fs::read(format!("{dir}/tests/corpus/dash/moviebox-init-hev1.m4s")).unwrap()
+}
+
+/// A player without DASH gets a static `SegmentTemplate` MPD as HLS: the
+/// master and its media playlists typed as HLS, `hev1` named `hvc1`, and
+/// the init sections through the init role: the `hev1` one served as
+/// `hvc1`, an H.264 one and one over 1 MiB byte for byte.
+#[tokio::test]
+async fn dash_plays_as_hls_for_a_player_without_dash() {
+    let hev1 = moviebox_init();
+    let h264 = fixture("h264.mp4").to_vec();
+    let mut big = hev1.clone();
+    big.resize(2 << 20, 0);
+    let mpd = "<?xml version=\"1.0\"?><MPD xmlns=\"urn:mpeg:dash:schema:mpd:2011\" type=\"static\" \
+               mediaPresentationDuration=\"PT4S\"><Period><AdaptationSet mimeType=\"video/mp4\" \
+               segmentAlignment=\"true\"><SegmentTemplate timescale=\"1000\" duration=\"2000\" \
+               initialization=\"init-$RepresentationID$.m4s\" media=\"s-$RepresentationID$-$Number$.m4s\"/>\
+               <Representation id=\"hev\" codecs=\"hev1.1.6.L93.90\" bandwidth=\"3000\" width=\"64\" height=\"64\"/>\
+               <Representation id=\"avc\" codecs=\"avc1.64001f\" bandwidth=\"2000\"/>\
+               <Representation id=\"big\" codecs=\"hev1.1.6.L93.90\" bandwidth=\"1000\"/>\
+               </AdaptationSet></Period></MPD>";
+    let inits = [hev1.clone(), h264.clone(), big.clone()];
+    let served = inits.clone();
+    let (base, log) = hls_origin(move |asked| match asked.path.as_str() {
+        "/v/main.mpd" => Reply::ok("application/dash+xml", mpd),
+        "/v/init-hev.m4s" => Reply::ranged(asked, "video/mp4", &served[0]),
+        "/v/init-avc.m4s" => Reply::ranged(asked, "video/mp4", &served[1]),
+        "/v/init-big.m4s" => Reply::ranged(asked, "video/mp4", &served[2]),
+        "/v/locked.mpd" => Reply::ok("application/dash+xml", mpd.replace(
+            "segmentAlignment=\"true\">",
+            "segmentAlignment=\"true\"><ContentProtection schemeIdUri=\"urn:mpeg:dash:mp4protection:2011\" value=\"cenc\"/>",
+        )),
+        path if path.starts_with("/v/s-") => Reply::ok("video/mp4", path.as_bytes()),
+        _ => Reply::status(404),
+    })
+    .await;
+    let http = HttpClient::new(ClientConfig::default()).unwrap();
+    let server = StreamServer::start(http.clone()).await.unwrap();
+    // The stream's signed cookie, as MovieBox's rows carry one.
+    let cookie = ("Cookie".to_owned(), "CloudFront-Signature=s".to_owned());
+    let signed = |path: &str| Upstream::Http {
+        url: format!("{base}{path}"),
+        headers: vec![cookie.clone()],
+        addon_url: Some(local_addon()),
+    };
+    let upstream = signed("/v/main.mpd");
+    let plays = [mq_server::Format::Hls];
+    let lease = server
+        .open_for(upstream, "v.mpd", Duration::from_secs(5), &plays)
+        .await
+        .unwrap();
+    assert_eq!(lease.format, Some(mq_server::Format::Hls));
+    assert!(lease.url.ends_with("/v.m3u8"), "{}", lease.url);
+    let get = |url: String| {
+        let http = http.clone();
+        async move {
+            let response = http.get(&url, &local()).await.unwrap();
+            assert_eq!(response.status, 200, "{url}");
+            response
+        }
+    };
+    let master = get(lease.url.clone()).await;
+    assert_eq!(
+        master.header("content-type"),
+        Some("application/vnd.apple.mpegurl")
+    );
+    let master = text(&master);
+    assert!(master.contains("CODECS=\"hvc1.1.6.L93.90\""), "{master}");
+    let variants: Vec<String> = master
+        .lines()
+        .filter(|l| !l.starts_with('#'))
+        .map(str::to_owned)
+        .collect();
+    assert_eq!(variants.len(), 3, "{master}");
+    for (i, variant) in variants.into_iter().enumerate() {
+        let media = get(variant).await;
+        assert_eq!(
+            media.header("content-type"),
+            Some("application/vnd.apple.mpegurl")
+        );
+        let media = text(&media);
+        let init = media
+            .lines()
+            .find_map(|l| l.strip_prefix("#EXT-X-MAP:URI=\""))
+            .unwrap();
+        let init_url = init.trim_end_matches('"').to_owned();
+        let init = get(init_url.clone()).await.body.to_vec();
+        let want = if i == 0 {
+            let at = type_at(&hev1, b"hev1");
+            let mut want = hev1.clone();
+            want[at..at + 4].copy_from_slice(b"hvc1");
+            want
+        } else {
+            inits[i].clone()
+        };
+        assert!(
+            init == want,
+            "init {i} is served as {}",
+            ["hvc1", "it is", "it is"][i]
+        );
+        // A range from the start keeps the relabel at its offset; one from
+        // inside the section is passed through as the origin sent it.
+        let (head, body) = raw_full(&server, &init_url, "bytes=0-").await;
+        assert!(head.starts_with("http/1.1 206"), "{head}");
+        assert!(body == want, "init {i} from 0");
+        let (_, body) = raw_full(&server, &init_url, "bytes=100-").await;
+        assert!(body == inits[i][100..], "init {i} from 100");
+        let segment = media
+            .lines()
+            .find(|l| !l.starts_with('#'))
+            .unwrap()
+            .to_owned();
+        let ids = ["hev", "avc", "big"];
+        let want = format!("/v/s-{}-1.m4s", ids[i]);
+        assert_eq!(get(segment).await.body[..], *want.as_bytes());
+    }
+    // The cookie went with every request to the stream's origin.
+    for asked in log.lock().unwrap().iter() {
+        assert!(
+            asked.head.contains("cookie: cloudfront-signature=s"),
+            "{}",
+            asked.head
+        );
+    }
+    // A player with neither format gets the format words, a DRM set the
+    // copy-protected ones.
+    let open = |path: &str, plays: &'static [mq_server::Format]| {
+        server.open_for(signed(path), "v.mpd", Duration::from_secs(5), plays)
+    };
+    let refused = open("/v/main.mpd", &[]).await;
+    assert_eq!(refused.unwrap_err(), mq_server::FORMAT_NOT_HERE);
+    let refused = open("/v/locked.mpd", &[mq_server::Format::Hls]).await;
+    assert_eq!(refused.unwrap_err(), mq_server::COPY_PROTECTED);
+}
+
+/// An `EXT-X-MAP` of an HLS source goes through the init role too: its
+/// `hev1` entry is served as `hvc1`.
+#[tokio::test]
+async fn an_hls_init_section_is_served_as_hvc1() {
+    let hev1 = moviebox_init();
+    let served = hev1.clone();
+    let playlist = "#EXTM3U\n#EXT-X-VERSION:7\n#EXT-X-TARGETDURATION:4\n#EXT-X-MAP:URI=\"init.mp4\"\n\
+                    #EXTINF:4,\ns1.m4s\n#EXT-X-ENDLIST\n";
+    let (base, _log) = hls_origin(move |asked| match asked.path.as_str() {
+        "/index.m3u8" => Reply::playlist(playlist),
+        "/init.mp4" => Reply::ok("video/mp4", served.clone()),
+        _ => Reply::status(404),
+    })
+    .await;
+    let http = HttpClient::new(ClientConfig::default()).unwrap();
+    let server = StreamServer::start(http.clone()).await.unwrap();
+    let upstream = local_upstream(format!("{base}/index.m3u8"));
+    let lease = server
+        .open(upstream, "v.mkv", Duration::from_secs(5))
+        .await
+        .unwrap();
+    let media = text(&http.get(&lease.url, &local()).await.unwrap());
+    let init = media
+        .lines()
+        .find_map(|l| l.strip_prefix("#EXT-X-MAP:URI=\""))
+        .unwrap();
+    let init = http
+        .get(init.trim_end_matches('"'), &local())
+        .await
+        .unwrap();
+    let at = type_at(&hev1, b"hev1");
+    assert_eq!(&init.body[at..at + 4], b"hvc1");
+    assert_eq!(init.body.len(), hev1.len());
 }

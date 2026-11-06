@@ -2586,7 +2586,15 @@ async fn resolve_next(
                         Ok(lease) => shows_picture(&core, &stream, &lease, hvc1_only, &state)
                             .await
                             .map(|()| (upstream, filename, size, lease)),
-                        Err(e) => Err(e),
+                        // A format or a copy protection the player cannot
+                        // play is the version's, never the source's reach.
+                        Err(e) => {
+                            let words = [mq_server::FORMAT_NOT_HERE, mq_server::COPY_PROTECTED];
+                            if words.contains(&e.as_str()) {
+                                not_here(&state);
+                            }
+                            Err(e)
+                        }
                     }
                 }
                 Err(e) => Err(e),
@@ -2686,11 +2694,21 @@ async fn resolve_next(
                     s.snapshot.filename = filename.clone();
                     s.snapshot.size_bytes = size.or(stream.size_bytes);
                     let played_for = (target.season, target.episode);
-                    s.snapshot.container = playing_container(
-                        filename.as_deref(),
-                        || core.known(|l| crate::speed::container_of(l, &stream.key, played_for)),
-                        stream.release.container.as_deref(),
-                    );
+                    // A manifest is what the player opens (DASH served as HLS
+                    // is `m3u8`), whatever the release is named.
+                    let served = s.lease.as_ref().and_then(|l| l.format);
+                    s.snapshot.container = match served {
+                        Some(format) => Some(format.extension().to_owned()),
+                        None => playing_container(
+                            filename.as_deref(),
+                            || {
+                                core.known(|l| {
+                                    crate::speed::container_of(l, &stream.key, played_for)
+                                })
+                            },
+                            stream.release.container.as_deref(),
+                        ),
+                    };
                     s.snapshot.audio = audio_names(&stream.release.audio);
                     s.snapshot.engine =
                         core.known(|l| crate::speed::engine_of(l, &stream.key, played_for));

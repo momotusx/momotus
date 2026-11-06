@@ -8,7 +8,16 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 mod dash;
+mod dash_hls;
 pub(crate) use dash::{rewrite_dash, template_url};
+pub(crate) use dash_hls::dash_to_hls;
+
+/// The attempt list's words for a stream that is DRM protected.
+pub const COPY_PROTECTED: &str = "This stream is copy-protected";
+/// The attempt list's words for a manifest this player cannot play: DASH
+/// on a player without HLS or DASH, HLS on one without HLS, and every DASH
+/// shape the HLS conversion does not take.
+pub const FORMAT_NOT_HERE: &str = "This stream's format does not play on this device";
 
 /// Bytes read at open to tell a playlist from a file.
 pub(crate) const SNIFF: usize = 64 * 1024;
@@ -174,8 +183,12 @@ pub(crate) enum Role {
     Playlist,
     /// A DASH manifest (`Location`): parsed and rewritten.
     Dash,
-    /// Segments, init sections and parts: bytes, `Range` passed through.
+    /// Segments and parts: bytes, `Range` passed through.
     Media,
+    /// Init sections (`EXT-X-MAP`, DASH `initialization`): as media, and an
+    /// `hev1` entry with parameter sets is served as `hvc1` (Apple decodes
+    /// HEVC only from those).
+    Init,
     /// Keys: bytes up to `SMALL_MAX`.
     Small,
 }
@@ -297,7 +310,14 @@ impl Table {
         );
         if let Some(&id) = self.ids.get(&probe) {
             let entry = self.entries.get_mut(&id).expect("indexed");
-            if entry.role != role {
+            // One file holding the init and the segments (byte ranges) is
+            // served as media, unchanged.
+            if matches!(
+                (entry.role, role),
+                (Role::Init, Role::Media) | (Role::Media, Role::Init)
+            ) {
+                entry.role = Role::Media;
+            } else if entry.role != role {
                 return Err("a resource named in two roles");
             }
             entry.used = self.tick;
@@ -521,7 +541,7 @@ const KEPT: [Kept; 27] = [
     kept("EXT-X-I-FRAME-STREAM-INF", true, Some(Role::Playlist)),
     kept("EXT-X-KEY", true, Some(Role::Small)),
     kept("EXT-X-SESSION-KEY", true, Some(Role::Small)),
-    kept("EXT-X-MAP", true, Some(Role::Media)),
+    kept("EXT-X-MAP", true, Some(Role::Init)),
     kept("EXT-X-SERVER-CONTROL", true, None),
     kept("EXT-X-PART-INF", true, None),
     kept("EXT-X-PART", true, Some(Role::Media)),

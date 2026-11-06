@@ -1107,14 +1107,17 @@ async fn a_player_without_hls_never_gets_a_playlist() {
     assert_eq!(s.phase, PlaybackPhase::Failed, "{s:?}");
     assert_eq!(s.url, None);
     let words: Vec<&str> = s.attempts.iter().map(|a| a.error.as_str()).collect();
-    assert_eq!(words, ["This player cannot play HLS streams"]);
+    assert_eq!(words, [mq_server::FORMAT_NOT_HERE]);
+    // A format the player lacks is the version's: none of these plays here.
+    assert_eq!(format!("{:?}", s.empty), "Some(NothingPlaysHere)");
 }
 
 #[tokio::test]
-async fn apple_refuses_dash() {
-    // Apple's caps list m3u8 and no mpd: the DASH candidate fails with the
-    // words and the file after it plays.
-    let dash = dash_origin().await;
+async fn apple_refuses_dash_it_cannot_convert() {
+    // Apple's caps list m3u8 and no mpd: a DASH candidate the core cannot
+    // serve as HLS (no init section) fails with the words and the file
+    // after it plays.
+    let dash = dash_origin(NO_INIT).await;
     let (file, _) = file_and_subtitles().await;
     let streams = format!(
         r#"{{"streams":[{{"name":"DASH","url":"{dash}/dash/main.mpd"}},{{"name":"File","url":"{file}/video.mkv"}}]}}"#
@@ -1125,7 +1128,7 @@ async fn apple_refuses_dash() {
     let s = settled(&view).await;
     assert_eq!(s.phase, PlaybackPhase::Ready, "{s:?}");
     let words: Vec<&str> = s.attempts.iter().map(|a| a.error.as_str()).collect();
-    assert_eq!(words, ["This player cannot play DASH streams"]);
+    assert_eq!(words, [mq_server::FORMAT_NOT_HERE]);
     assert!(!s.manifest);
     assert!(!s.url.unwrap().ends_with(".mpd"));
     // A player whose caps list mpd plays the DASH candidate.
@@ -1143,8 +1146,51 @@ async fn apple_refuses_dash() {
     );
 }
 
-/// A DASH origin: an MPD whose segments sit beside it.
-async fn dash_origin() -> String {
+/// Apple plays a static `SegmentTemplate` MPD as HLS: a manifest lease
+/// ending in `.m3u8`, its container `m3u8` for the engine choice.
+#[tokio::test]
+async fn apple_plays_dash_as_hls() {
+    let dash = dash_origin(WITH_INIT).await;
+    let streams = format!(r#"{{"streams":[{{"name":"DASH","url":"{dash}/dash/main.mpd"}}]}}"#);
+    let core = Core::temporary("p").unwrap();
+    let hls = [mq_server::Format::Hls];
+    let view = PlaybackView::open_for(&core, setup(&core, &streams), target(), &hls);
+    let s = settled(&view).await;
+    assert_eq!(s.phase, PlaybackPhase::Ready, "{s:?}");
+    assert!(s.attempts.is_empty(), "{s:?}");
+    assert!(s.manifest);
+    assert!(s.url.unwrap().ends_with(".m3u8"));
+    assert_eq!(s.container.as_deref(), Some("m3u8"));
+}
+
+/// A copy-protected MPD is the version's, as a format is: with nothing
+/// after it, none of these plays here.
+#[tokio::test]
+async fn a_copy_protected_dash_plays_nowhere_here() {
+    let dash = dash_origin(PROTECTED).await;
+    let streams = format!(r#"{{"streams":[{{"name":"DASH","url":"{dash}/dash/main.mpd"}}]}}"#);
+    let core = Core::temporary("p").unwrap();
+    let hls = [mq_server::Format::Hls];
+    let view = PlaybackView::open_for(&core, setup(&core, &streams), target(), &hls);
+    let s = settled(&view).await;
+    assert_eq!(s.phase, PlaybackPhase::Failed, "{s:?}");
+    let words: Vec<&str> = s.attempts.iter().map(|a| a.error.as_str()).collect();
+    assert_eq!(words, [mq_server::COPY_PROTECTED]);
+    assert_eq!(format!("{:?}", s.empty), "Some(NothingPlaysHere)");
+}
+
+/// A video set's inner XML for `dash_origin`: one with no init section
+/// (the core cannot serve it as HLS), one with, one DRM protected.
+const NO_INIT: &str = "<SegmentTemplate media=\"s-$Number$.m4s\" duration=\"4\"/><Representation id=\"v\" bandwidth=\"1\"/>";
+const WITH_INIT: &str = "<SegmentTemplate media=\"s-$Number$.m4s\" initialization=\"i.mp4\" duration=\"4\"/>\
+                         <Representation id=\"v\" bandwidth=\"1\"/>";
+const PROTECTED: &str = "<ContentProtection schemeIdUri=\"urn:mpeg:dash:mp4protection:2011\" value=\"cenc\"/>\
+                         <SegmentTemplate media=\"s-$Number$.m4s\" initialization=\"i.mp4\" duration=\"4\"/>\
+                         <Representation id=\"v\" bandwidth=\"1\"/>";
+
+/// A DASH origin: an MPD of one video set holding `set`, its segments
+/// beside it.
+async fn dash_origin(set: &'static str) -> String {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
     tokio::spawn(async move {
@@ -1152,11 +1198,11 @@ async fn dash_origin() -> String {
             tokio::spawn(async move {
                 let mut buf = vec![0u8; 4096];
                 let _ = socket.read(&mut buf).await;
-                let mpd = "<?xml version=\"1.0\"?><MPD xmlns=\"urn:mpeg:dash:schema:mpd:2011\" \
-                           type=\"static\" mediaPresentationDuration=\"PT4S\"><Period>\
-                           <AdaptationSet mimeType=\"video/mp4\"><SegmentTemplate media=\"s-$Number$.m4s\" \
-                           duration=\"4\"/><Representation id=\"v\" bandwidth=\"1\"/></AdaptationSet>\
-                           </Period></MPD>";
+                let mpd = format!(
+                    "<?xml version=\"1.0\"?><MPD xmlns=\"urn:mpeg:dash:schema:mpd:2011\" \
+                     type=\"static\" mediaPresentationDuration=\"PT4S\"><Period>\
+                     <AdaptationSet mimeType=\"video/mp4\">{set}</AdaptationSet></Period></MPD>"
+                );
                 let reply = format!(
                     "HTTP/1.1 200 OK\r\nContent-Type: application/dash+xml\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{mpd}",
                     mpd.len()

@@ -461,7 +461,7 @@ impl Rewrite<'_> {
             return Err(if local == "PatchLocation" {
                 "a PatchLocation"
             } else {
-                "protected content"
+                super::COPY_PROTECTED
             });
         }
         // Media3 ends a descriptor at the first end tag of its name and a
@@ -558,7 +558,10 @@ impl Rewrite<'_> {
                 if template {
                     identifiers(&value)?;
                 }
-                let rewritten = self.reference(&value, template, children)?;
+                // An init section is served with its `hev1` entries as `hvc1`.
+                let init = name == "initialization" || kept.name == "Initialization";
+                let role = if init { Role::Init } else { Role::Media };
+                let rewritten = self.reference(&value, template, role, children)?;
                 if template && is_relative(value.trim()) && value.contains("$RepresentationID$") {
                     self.by_id()?;
                 }
@@ -625,6 +628,7 @@ impl Rewrite<'_> {
         &mut self,
         value: &str,
         template: bool,
+        role: Role,
         children: &mut Children<'_>,
     ) -> Result<String, &'static str> {
         let v = value.trim();
@@ -643,7 +647,7 @@ impl Rewrite<'_> {
         if template && url.as_str().contains('$') {
             return template_link(&url, children);
         }
-        children.link(&url, Role::Media)
+        children.link(&url, role)
     }
 
     /// A relative template naming `$RepresentationID$` (rule 9): every
@@ -995,7 +999,7 @@ fn dot_segments(reference: &str) -> Result<(), &'static str> {
 /// summed in seconds as doubles in that order (a year 31,556,908 s, a month
 /// 2,629,739 s), times 1,000, cast. Another value Media3 reads as hours with
 /// `Double.parseDouble`, which the core does not repeat: refused.
-fn xs_duration_ms(value: &str) -> Result<i64, &'static str> {
+pub(super) fn xs_duration_ms(value: &str) -> Result<i64, &'static str> {
     const BAD: &str = "a duration the core does not read as Media3 does";
     let (negated, rest) = match value.strip_prefix('-') {
         Some(rest) => (true, rest),

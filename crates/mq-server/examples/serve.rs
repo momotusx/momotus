@@ -5,7 +5,8 @@
 //! raw, as the gate's backstop run needs; with it, it is opened as the apps
 //! open it for a player that plays HLS, so a playlist is found and rewritten.
 //! The URL's own host is in scope, as an install's is, so a loopback or LAN
-//! literal plays. The second line is the whole mpv command for that URL:
+//! literal plays. `MQ_SERVE_HEADERS` holds the stream's request headers, one
+//! `Name: value` per line. The second line is the whole mpv command for that URL:
 //! the app's options on every instance (m3-desktop 4.3, `ytdl=no` and
 //! `load-unsafe-playlists=no` included), the file's options and the
 //! environment of 3.3. Leaving any of them out leaves mpv uncontained.
@@ -29,10 +30,18 @@ async fn main() {
     let name = args.next().unwrap_or_else(|| "video.mp4".into());
     let http = HttpClient::new(ClientConfig::default()).expect("http client");
     let server = StreamServer::start(http).await.expect("bind");
+    // A stream's `proxyHeaders`, one `Name: value` per line, as an addon
+    // lists them (a signed cookie, a referer).
+    let headers = std::env::var("MQ_SERVE_HEADERS").unwrap_or_default();
+    let headers = headers
+        .lines()
+        .filter_map(|line| line.split_once(": "))
+        .map(|(name, value)| (name.to_owned(), value.to_owned()))
+        .collect();
     let upstream = Upstream::Http {
         addon_url: url.parse().ok(),
         url,
-        headers: Vec::new(),
+        headers,
     };
     let (lease, playlist) = if open {
         let lease = server.open(upstream, &name, Duration::from_secs(10)).await;
