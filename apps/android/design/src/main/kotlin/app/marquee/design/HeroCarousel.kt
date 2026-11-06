@@ -41,6 +41,7 @@ import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.delay
 import kotlin.math.abs
 
 /**
@@ -118,6 +119,9 @@ class HeroClock(
 
         /** The smallest change of [progress] that reaches the dot. */
         const val STEP = 0.01f
+
+        /** How often a running clock wakes: one [STEP] of the dwell. */
+        const val TICK_MS = (DWELL_MS * STEP).toLong()
     }
 }
 
@@ -201,14 +205,17 @@ fun RunHeroClock(
 ) {
     val advance by rememberUpdatedState(onAdvance)
     val on = running()
-    // Frames are asked for only while the clock runs: an idle hero asks for none (and a test can settle).
+    // Frames are asked for only while the clock runs: an idle hero asks for none (and a test can settle). It wakes once
+    // per step of the dot (8 s over 100 steps), not on every vsync: the dot moves by whole steps anyway, and a page
+    // turns at most a step late. The frame clock still times each step.
     LaunchedEffect(clock, on) {
         if (!on) return@LaunchedEffect
-        var last = -1L
+        var last = withFrameNanos { it }
         while (true) {
+            delay(HeroClock.TICK_MS)
             withFrameNanos { now ->
-                val dt = if (last < 0) 0L else (now - last) / 1_000_000
-                last = now
+                val dt = (now - last) / 1_000_000
+                last += dt * 1_000_000
                 if (clock.tick(dt, true)) advance()
             }
         }
