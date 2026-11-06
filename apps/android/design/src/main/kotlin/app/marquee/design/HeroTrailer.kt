@@ -4,8 +4,11 @@ import android.annotation.SuppressLint
 import android.app.ActivityManager
 import android.content.ComponentCallbacks2
 import android.content.Context
+import android.content.ContextWrapper
 import android.content.res.Configuration
 import android.net.ConnectivityManager
+import android.os.Looper
+import android.os.MessageQueue
 import android.os.PowerManager
 import android.util.Log
 import android.view.MotionEvent
@@ -27,6 +30,7 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.layout.layout
@@ -35,6 +39,7 @@ import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.currentStateAsState
 import kotlinx.coroutines.delay
@@ -44,7 +49,7 @@ import kotlin.math.roundToInt
 
 /**
  * The hero's muted trailer (plans/appletv-polish.md 4.2, the owner's pick of 2026-10-24): YouTube's own embedded
- * player in one WebView per Home visit, oversized to cover the hero's frame so YouTube's bars fall outside the
+ * player in the app's one WebView, oversized to cover the hero's frame so YouTube's bars fall outside the
  * clip, under the page's art, which fades away only once YouTube's start controls have gone. It is muted and read
  * back before it plays, takes no touch or focus, and goes back to the art a second before its cap.
  */
@@ -304,9 +309,10 @@ private class NoTouchWebView(
 }
 
 /**
- * The one player of a Home visit, or of a title page (its header, then its full-screen trailer): created on first use,
- * reused, destroyed when the screen goes. [play] starts a trailer into [state]; [stop] ends it. Each play has its own
- * generation, so a late message of the one before (its `end stopped`) never reaches the next (review r1-A 1).
+ * The trailers of one screen: Home's hero, or a title page (its header, then its full-screen trailer). [play] starts a
+ * trailer into [state]; [stop] ends it. Every host plays on the app's one player page ([Page]), which hears the host
+ * that played last. Each play has its own generation across hosts, so a late message of the one before (its `end
+ * stopped`) never reaches the next (review r1-A 1).
  */
 class TrailerHost internal constructor(
     private val context: Context,
@@ -316,79 +322,158 @@ class TrailerHost internal constructor(
      */
     val off: Boolean = false,
 ) {
-    private var web: NoTouchWebView? = null
     private var state: TrailerState? = null
     private var onEnd: ((String) -> Unit)? = null
     private var generation = 0
     private val main = android.os.Handler(android.os.Looper.getMainLooper())
     private val reveal = Runnable { state?.shown = true }
 
+    /** The page plays this host's trailer: only then do its calls reach it. */
+    private val mine get() = Page.owner === this
+
+    private fun run(js: String) = Page.run(js)
+
+    internal fun view(): WebView = Page.view(context)
+
     /**
-     * The player's page has loaded: until then calls wait, in order, since a call that reached the page before its
-     * script would run nothing, or worse, the browser's own `stop()`, which cancels the page's load.
+     * The player's page, one WebView for the whole app while it is in front (batch 13 perf): made at the first play and
+     * handed from screen to screen, never built again for each Home or title visit, since a WebView is built on the main
+     * thread. It goes when the app goes to the background (its renderer too, review r1, L2), when the system asks for
+     * memory back, or when its renderer dies; whoever plays hears it, and the next play makes a fresh one.
      */
-    private var loaded = false
-    private val waiting = mutableListOf<String>()
+    internal object Page {
+        var web: WebView? = null
 
-    /** Before the page loads, calls wait in order: a press of Sound while it loads must not drop the play itself. */
-    private fun run(js: String) {
-        val view = web
-        if (loaded && view != null) view.evaluateJavascript(js, null) else waiting += js
-    }
+        /** The host whose trailer plays: it hears the page's messages. */
+        var owner: TrailerHost? = null
 
-    @SuppressLint("SetJavaScriptEnabled")
-    internal fun view(): WebView =
-        web ?: NoTouchWebView(context).also { view ->
-            view.setBackgroundColor(android.graphics.Color.TRANSPARENT)
-            view.settings.javaScriptEnabled = true
-            view.settings.mediaPlaybackRequiresUserGesture = false
-            view.settings.allowFileAccess = false
-            view.settings.allowContentAccess = false
-            view.webChromeClient =
-                object : WebChromeClient() {
-                    override fun onConsoleMessage(message: ConsoleMessage): Boolean {
-                        // Only the page this app wrote speaks to it.
-                        if (message.sourceId().startsWith(BASE)) {
-                            message
-                                .message()
-                                .removePrefix("MQT ")
-                                .takeIf { it != message.message() }
-                                ?.let(::onMessage)
-                        }
-                        return true
-                    }
-                }
-            view.webViewClient =
-                object : WebViewClient() {
-                    // Nothing navigates inside it; a tap never reaches it anyway.
-                    override fun shouldOverrideUrlLoading(
-                        view: WebView,
-                        request: WebResourceRequest,
-                    ): Boolean = request.isForMainFrame
+        /** The last play's number, across every host. */
+        var generation = 0
 
-                    override fun onPageFinished(
-                        view: WebView,
-                        url: String?,
-                    ) {
-                        loaded = true
-                        val calls = waiting.toList()
-                        waiting.clear()
-                        calls.forEach { view.evaluateJavascript(it, null) }
-                    }
+        /**
+         * The player's page has loaded: until then calls wait, in order, since a call that reached the page before its
+         * script would run nothing, or worse, the browser's own `stop()`, which cancels the page's load.
+         */
+        private var loaded = false
+        private val waiting = mutableListOf<String>()
+        private var release: (() -> Unit)? = null
 
-                    // The renderer died (memory on a small TV): whoever plays hears it stopped, the next play makes a
-                    // fresh one.
-                    override fun onRenderProcessGone(
-                        view: WebView,
-                        detail: RenderProcessGoneDetail,
-                    ): Boolean {
-                        main.post { destroy(LOST) }
-                        return true
-                    }
-                }
-            view.loadDataWithBaseURL(BASE, PAGE, "text/html", "utf-8", null)
-            web = view
+        /** Before the page loads, calls wait in order: a press of Sound while it loads must not drop the play itself. */
+        fun run(js: String) {
+            val view = web
+            if (loaded && view != null) view.evaluateJavascript(js, null) else waiting += js
         }
+
+        fun destroy(why: String) {
+            val playing = owner
+            owner = null
+            playing?.lost(why)
+            release?.invoke()
+            release = null
+            web?.let {
+                (it.parent as? ViewGroup)?.removeView(it)
+                it.destroy()
+            }
+            web = null
+            loaded = false
+            waiting.clear()
+        }
+
+        @SuppressLint("SetJavaScriptEnabled")
+        fun view(context: Context): WebView =
+            web ?: NoTouchWebView(context).also { view ->
+                view.setBackgroundColor(android.graphics.Color.TRANSPARENT)
+                view.settings.javaScriptEnabled = true
+                view.settings.mediaPlaybackRequiresUserGesture = false
+                view.settings.allowFileAccess = false
+                view.settings.allowContentAccess = false
+                view.webChromeClient =
+                    object : WebChromeClient() {
+                        override fun onConsoleMessage(message: ConsoleMessage): Boolean {
+                            // Only the page this app wrote speaks to it.
+                            if (message.sourceId().startsWith(BASE)) {
+                                message
+                                    .message()
+                                    .removePrefix("MQT ")
+                                    .takeIf { it != message.message() }
+                                    ?.let { owner?.onMessage(it) }
+                            }
+                            return true
+                        }
+                    }
+                view.webViewClient =
+                    object : WebViewClient() {
+                        // Nothing navigates inside it; a tap never reaches it anyway.
+                        override fun shouldOverrideUrlLoading(
+                            view: WebView,
+                            request: WebResourceRequest,
+                        ): Boolean = request.isForMainFrame
+
+                        override fun onPageFinished(
+                            view: WebView,
+                            url: String?,
+                        ) {
+                            loaded = true
+                            val calls = waiting.toList()
+                            waiting.clear()
+                            calls.forEach { view.evaluateJavascript(it, null) }
+                        }
+
+                        // The renderer died (memory on a small TV): whoever plays hears it lost, the next play makes a
+                        // fresh one.
+                        override fun onRenderProcessGone(
+                            view: WebView,
+                            detail: RenderProcessGoneDetail,
+                        ): Boolean {
+                            val main = android.os.Handler(android.os.Looper.getMainLooper())
+                            main.post { if (web === view) destroy(LOST) }
+                            return true
+                        }
+                    }
+                view.loadDataWithBaseURL(BASE, PAGE, "text/html", "utf-8", null)
+                web = view
+                release = watch(context)
+            }
+
+        /** The page goes with the app in the background and when the system asks for memory back; returns the undo. */
+        private fun watch(context: Context): () -> Unit {
+            // The activity's own lifecycle, not a screen's: the page outlives the screen that made it.
+            val lifecycle =
+                generateSequence(context) { (it as? ContextWrapper)?.baseContext }
+                    .firstNotNullOfOrNull { it as? LifecycleOwner }
+                    ?.lifecycle
+            val stopped =
+                LifecycleEventObserver { _, event ->
+                    if (event ==
+                        Lifecycle.Event.ON_STOP
+                    ) {
+                        destroy("stopped")
+                    }
+                }
+            lifecycle?.addObserver(stopped)
+            val trim =
+                object : ComponentCallbacks2 {
+                    override fun onTrimMemory(level: Int) {
+                        @Suppress("DEPRECATION")
+                        if (level >= ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW &&
+                            level < ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN
+                        ) {
+                            destroy(LOST)
+                        }
+                    }
+
+                    override fun onConfigurationChanged(newConfig: Configuration) = Unit
+
+                    @Deprecated("Deprecated in Java")
+                    override fun onLowMemory() = destroy(LOST)
+                }
+            context.applicationContext.registerComponentCallbacks(trim)
+            return {
+                lifecycle?.removeObserver(stopped)
+                context.applicationContext.unregisterComponentCallbacks(trim)
+            }
+        }
+    }
 
     /**
      * Plays [id] into [state], muted, capped at [cap] seconds (0: its own length, still ended a second early). [full]: the
@@ -407,7 +492,8 @@ class TrailerHost internal constructor(
         val checked = HeroTrailers.checkedId(id) ?: return onEnd("error")
         this.state = state
         this.onEnd = onEnd
-        generation += 1
+        generation = ++Page.generation
+        Page.owner = this
         state.loading = true
         state.buffering = true
         state.paused = false
@@ -422,19 +508,30 @@ class TrailerHost internal constructor(
 
     /** Pauses a playing trailer, plays a paused one. */
     fun toggle() {
-        if (state != null) run("toggle()")
+        if (state != null && mine) run("toggle()")
+    }
+
+    /**
+     * Holds a preview still while a list under it scrolls, and lets it play on after: a playing video redraws the window
+     * on each of its frames, a scroll on each of its own.
+     */
+    fun hold(on: Boolean) {
+        // The page's own `player`: holding is this app's, so the page shared with the Apple app stays as it is.
+        val call = if (on) "pauseVideo" else "playVideo"
+        if (state != null && mine) run("player&&player.$call&&player.$call()")
     }
 
     /** To [seconds] in the trailer. */
     fun seek(seconds: Float) {
-        if (state != null) run("seek($seconds)")
+        if (state != null && mine) run("seek($seconds)")
     }
 
     /** The full-screen trailer's own sound, never the session's ([HeroTrailers.sound]); never in a walk. */
     fun loud(on: Boolean) {
-        if (state != null && !HeroTrailers.walk) run(if (on) "sound(true)" else "sound(false)")
+        if (state != null && mine && !HeroTrailers.walk) run(if (on) "sound(true)" else "sound(false)")
     }
 
+    /** Ends this host's trailer; another host's, playing on the same page, plays on. */
     fun stop() {
         main.removeCallbacks(reveal)
         state?.let {
@@ -444,33 +541,32 @@ class TrailerHost internal constructor(
         }
         state = null
         onEnd = null
-        if (web != null) run("halt()")
+        if (mine) {
+            Page.owner = null
+            if (Page.web != null) run("halt()")
+        }
     }
 
     /** The switch was pressed: sound for this session ([HeroTrailers.sound]); never in a walk. */
     fun sound(on: Boolean) {
         HeroTrailers.sound = on
         if (HeroTrailers.walk) return
-        if (web != null) run(if (on) "sound(true)" else "sound(false)")
+        if (mine && Page.web != null) run(if (on) "sound(true)" else "sound(false)")
     }
 
-    /**
-     * Lets the web view and its renderer go; the next play makes a fresh one. Whoever plays hears [why]: `stopped` (the
-     * app in the background: a full-screen trailer closes rather than stay black, review r1-A 5) or [LOST] (the
-     * renderer died, or the system asked for memory back: the full screen says it cannot play, a header does not play
-     * again this session).
-     */
-    fun destroy(why: String = "stopped") {
+    /** Builds the player page before a play needs it; never in Incognito, whose hosts play nothing. */
+    internal fun warm() {
+        if (!off) view()
+    }
+
+    /** Lets the player page go now, whoever plays on it (Incognito). */
+    internal fun dropPage() = Page.destroy("stopped")
+
+    /** The page went while it played this host's trailer: [why] is `stopped` (the app in the background) or [LOST]. */
+    private fun lost(why: String) {
         val done = onEnd
         stop()
         done?.invoke(why)
-        web?.let {
-            (it.parent as? ViewGroup)?.removeView(it)
-            it.destroy()
-        }
-        web = null
-        loaded = false
-        waiting.clear()
     }
 
     private fun onMessage(json: String) {
@@ -492,7 +588,7 @@ class TrailerHost internal constructor(
                 if (!m.optBoolean("full") && HeroTrailers.sound &&
                     !HeroTrailers.walk
                 ) {
-                    web?.evaluateJavascript("sound(true)", null)
+                    run("sound(true)")
                 }
             }
 
@@ -574,42 +670,53 @@ class TrailerHost internal constructor(
     }
 }
 
-/** One player per Home visit (the lead, 2026-10-24: never created per scroll); it goes when Home goes. */
+/** The trailers of one screen (the lead, 2026-10-24: never created per scroll); its trailer ends when the screen goes. */
 @Composable
 fun rememberTrailerHost(): TrailerHost {
     val context = LocalContext.current
     val off = LocalIncognito.current
     val host = remember(context, off) { TrailerHost(context, off) }
-    // In the background the WebView's renderer goes too (review r1, L2); the next play makes a fresh one.
-    val lifecycle = LocalLifecycleOwner.current.lifecycle
-    DisposableEffect(host, lifecycle) {
-        val stopped = LifecycleEventObserver { _, event -> if (event == Lifecycle.Event.ON_STOP) host.destroy() }
-        lifecycle.addObserver(stopped)
-        // The system asks for memory back while the app is in front: the player goes, whoever plays hears it lost.
-        val trim =
-            object : ComponentCallbacks2 {
-                override fun onTrimMemory(level: Int) {
-                    @Suppress("DEPRECATION")
-                    if (level >= ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW &&
-                        level < ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN
-                    ) {
-                        host.destroy(LOST)
-                    }
-                }
-
-                override fun onConfigurationChanged(newConfig: Configuration) = Unit
-
-                @Deprecated("Deprecated in Java")
-                override fun onLowMemory() = host.destroy(LOST)
-            }
-        context.applicationContext.registerComponentCallbacks(trim)
-        onDispose {
-            lifecycle.removeObserver(stopped)
-            context.applicationContext.unregisterComponentCallbacks(trim)
-            host.destroy()
-        }
+    DisposableEffect(host) {
+        // Incognito keeps no player page from before it either: YouTube's player holds its cookies there.
+        if (off) host.dropPage()
+        onDispose { host.stop() }
     }
     return host
+}
+
+/**
+ * Builds the app's player page at the first idle moment after this screen's first frame, when this screen has a
+ * preview ([wanted]) and the device may play one now (decision 5, a phone's floor). A WebView is built on the main
+ * thread: the first play then finds it made, not built during the hero's settle.
+ */
+@Composable
+fun WarmTrailerPage(
+    trailers: TrailerHost,
+    wanted: Boolean,
+) {
+    val context = LocalContext.current
+    val reduced = LocalReducedMotion.current
+    DisposableEffect(trailers, wanted) {
+        if (!wanted) return@DisposableEffect onDispose {}
+        val queue = Looper.myQueue()
+        val warm =
+            MessageQueue.IdleHandler {
+                val signals = TrailerPreviews.signals(context, true, reduced, tv = false, hasTrailer = true)
+                if (trailerAllowed(signals)) trailers.warm()
+                false
+            }
+        queue.addIdleHandler(warm)
+        onDispose { queue.removeIdleHandler(warm) }
+    }
+}
+
+/** Holds [trailers] still while [scrolling] (a list under the preview moves), and lets it play on after. */
+@Composable
+fun HoldTrailerWhileScrolling(
+    trailers: TrailerHost,
+    scrolling: () -> Boolean,
+) {
+    LaunchedEffect(trailers) { snapshotFlow(scrolling).collect { trailers.hold(it) } }
 }
 
 /**

@@ -78,6 +78,7 @@ import app.marquee.design.Backdrop
 import app.marquee.design.HeroClock
 import app.marquee.design.HeroDots
 import app.marquee.design.HeroTrailers
+import app.marquee.design.HoldTrailerWhileScrolling
 import app.marquee.design.Icons
 import app.marquee.design.LocalReducedMotion
 import app.marquee.design.Logo
@@ -101,6 +102,7 @@ import app.marquee.design.TrailerHost
 import app.marquee.design.TrailerPreviews
 import app.marquee.design.TrailerState
 import app.marquee.design.TrailerSurface
+import app.marquee.design.WarmTrailerPage
 import app.marquee.design.describe
 import app.marquee.design.heroClockRuns
 import app.marquee.design.heroNearestPage
@@ -161,8 +163,11 @@ fun PhoneHome(
     val hold: ((Tile) -> Unit)? = onRemove?.let { { tile -> menuFor = tile } }
     val listState = rememberLazyListState()
     val hasHero = home.hero != null
-    // One trailer player per Home visit, above the list, so a scroll never makes a new one (plans/appletv-polish.md 4.2).
+    // Home's trailers, above the list, so a scroll never makes a new host; every host plays on the app's one player
+    // page (plans/appletv-polish.md 4.2, batch 13 perf).
     val trailers = rememberTrailerHost()
+    HoldTrailerWhileScrolling(trailers) { listState.isScrollInProgress }
+    WarmTrailerPage(trailers, home.heroes.any { HeroTrailers.checkedId(it.trailer) != null })
     // At least half the hero on screen: the carousel's clock and its trailer run only then.
     val heroVisible by remember(listState) {
         derivedStateOf {

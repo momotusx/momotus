@@ -81,6 +81,7 @@ import app.marquee.design.Chip
 import app.marquee.design.ChosenVersion
 import app.marquee.design.FactsTable
 import app.marquee.design.HeroTrailers
+import app.marquee.design.HoldTrailerWhileScrolling
 import app.marquee.design.Icons
 import app.marquee.design.KeepInView
 import app.marquee.design.LightStatusBarIcons
@@ -238,6 +239,7 @@ fun PhoneTitle(
             // The header's muted trailer, as the hero's (plans/trailer-inline.md 3, 4), and Trailer full screen, on one
             // player for the page.
             val trailers = rememberTrailerHost()
+            HoldTrailerWhileScrolling(trailers) { list.isScrollInProgress }
             val headerTrailer = remember { TrailerState() }
             var fullTrailer by remember { mutableStateOf(false) }
             val artVisible by remember(list) {

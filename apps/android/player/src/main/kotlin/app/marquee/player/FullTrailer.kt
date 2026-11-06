@@ -102,8 +102,8 @@ fun TrailerDialog(
             }
         }
     }
-    // Closed: the player and its renderer go too (the header does not play again this visit).
-    DisposableEffect(host) { onDispose { host.destroy() } }
+    // Closed: the trailer ends (the header does not play again this visit); the app keeps its one player page.
+    DisposableEffect(host) { onDispose { host.stop() } }
     val density = LocalDensity.current
     Dialog(
         onDismissRequest = onClose,
