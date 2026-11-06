@@ -31,6 +31,9 @@ const PARALLAX = tokens.motion.heroParallax;
 const TRAILER_DELAY_MS = 700;
 // TV: how long after the last key the timed pages wait.
 const KEY_HOLD_MS = 5000;
+// The clock's step. A timer, not a frame loop: the fill moves on its own animation, and a frame asked for by the clock
+// would make the page update that animation on the main thread each frame.
+const TICK_MS = 100;
 const TRAILER_CAP_S = 45;
 const ease = bezier(0.22, 1, 0.36, 1);
 
@@ -93,9 +96,12 @@ export function HeroCarousel(props: { heroes: Hero[]; waiting: boolean }) {
   /** B2's depth: a page's art moves at PARALLAX of its words, so it lags `(1 - PARALLAX)` of the page's offset. */
   const depth = () => {
     if (!track || reducedMotion()) return;
-    for (const page of track.querySelectorAll<HTMLElement>(".hero-page")) {
-      const offset = page.offsetLeft - track.scrollLeft;
-      if (Math.abs(offset) > width() * 1.5) continue;
+    // Every offset read before any art moves: a read after a write lays the page out again, once per page.
+    const left = track.scrollLeft;
+    const w = width();
+    const pages = [...track.querySelectorAll<HTMLElement>(".hero-page")].map((page) => [page, page.offsetLeft - left] as const);
+    for (const [page, offset] of pages) {
+      if (Math.abs(offset) > w * 1.5) continue;
       const art = page.querySelector<HTMLElement>(".hero-bd");
       if (art) art.style.transform = `translateX(${(-offset * (1 - PARALLAX)).toFixed(1)}px)`;
     }
@@ -155,10 +161,34 @@ export function HeroCarousel(props: { heroes: Hero[]; waiting: boolean }) {
 
   // The clock: one progress value for the pill and the advance (decision 7), only while nothing holds it.
   let keyAt = -Infinity;
+  // The pill's fill is an animation over the dwell, told only when the clock starts, holds or jumps: a style write at
+  // each step of the clock repainted the whole page under it 12 times a second (the phone fling's paint went from 1.5
+  // to 7.5 ms with the carousel).
+  let filling: Animation | null = null;
+  const showFill = (running: boolean) => {
+    if (!fill) return;
+    if (filling?.effect instanceof KeyframeEffect && filling.effect.target !== fill) {
+      filling.cancel();
+      filling = null;
+    }
+    filling ??= fill.animate([{ transform: "scaleX(0)" }, { transform: "scaleX(1)" }], { duration: DWELL_MS, fill: "both" });
+    const at = pager.progress * DWELL_MS;
+    // Off by more than a few ticks (an input, a trailer's time, a held clock): moved to the clock's place.
+    if (Math.abs(Number(filling.currentTime ?? 0) - at) > TICK_MS * 3) filling.currentTime = at;
+    if (running && filling.playState === "paused") filling.play();
+    if (!running && filling.playState === "running") filling.pause();
+  };
+  onCleanup(() => filling?.cancel());
   onMount(() => {
     let last = performance.now();
-    let written = -1;
-    let frame = requestAnimationFrame(function loop(now) {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const loop = () => {
+      const now = performance.now();
+      // Off screen the clock holds (`running` needs `visible`) and stops ticking; `seen` starts it again.
+      if (!visible) {
+        showFill(false);
+        return void (timer = undefined);
+      }
       const dt = frameStep(now, last);
       last = now;
       // TV: a key pressed holds the pages until 5 s after it, so nothing slides while the viewer moves.
@@ -167,14 +197,11 @@ export function HeroCarousel(props: { heroes: Hero[]; waiting: boolean }) {
         visible && !document.hidden && !hovered && !pressing && !sliding && !keyHeld && !paused() && !trailerOn() && !reducedMotion() && untrack(list).length > 1;
       const next = pager.tick(dt, running);
       if (next !== null) slideTo(next);
-      // The 24 px pill moves 3 px a second: a write each 1 percent is as smooth and spares the frames between.
-      if (fill && Math.abs(pager.progress - written) >= 0.01) {
-        written = pager.progress;
-        fill.style.setProperty("--fill", String(written));
-      }
-      frame = requestAnimationFrame(loop);
-    });
-    onCleanup(() => cancelAnimationFrame(frame));
+      showFill(running);
+      timer = setTimeout(loop, TICK_MS);
+    };
+    timer = setTimeout(loop, TICK_MS);
+    onCleanup(() => clearTimeout(timer));
     // Any key, pointer move or touch starts the dwell over (input idle, not focus).
     const restart = (e: Event) => {
       pager.input();
@@ -186,6 +213,10 @@ export function HeroCarousel(props: { heroes: Hero[]; waiting: boolean }) {
     });
     const seen = new IntersectionObserver(([e]) => {
       visible = !!e && e.intersectionRatio >= 0.5;
+      if (visible && !timer) {
+        last = performance.now();
+        timer = setTimeout(loop, TICK_MS);
+      }
       if (!visible) stopTrailer();
     }, { threshold: [0, 0.5, 1] });
     seen.observe(section);

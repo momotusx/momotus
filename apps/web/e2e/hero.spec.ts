@@ -49,7 +49,8 @@ for (const form of ["phone", "desktop", "tv"] as const) {
     // Half the dwell: the pill is half full and nothing moved.
     await page.clock.runFor(4000);
     expect(await activePage(page)).toBe(base);
-    const fill = await page.locator(".hero-dots .dot.on i").evaluate((el) => Number(getComputedStyle(el).getPropertyValue("--fill") || (el as HTMLElement).style.getPropertyValue("--fill")));
+    // The fill's horizontal scale: its compositor animation's matrix(a, 0, 0, 1, 0, 0).
+    const fill = await page.locator(".hero-dots .dot.on i").evaluate((el) => new DOMMatrixReadOnly(getComputedStyle(el).transform).a);
     expect(fill).toBeGreaterThan(0.4);
     expect(fill).toBeLessThan(0.6);
     await page.clock.runFor(5000);

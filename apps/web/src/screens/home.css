@@ -270,7 +270,7 @@
 .hero-track::-webkit-scrollbar { display: none; }
 .hero-page { position: relative; flex: 0 0 100%; height: 100%; overflow: hidden; isolation: isolate; scroll-snap-align: start; scroll-snap-stop: always; }
 .hero-page .hero-bd { transition: opacity 600ms var(--ease); }
-/* The dots: the active one a pill whose white fill grows over the page's time (one value, --fill). */
+/* The dots: the active one a pill whose white fill grows over the page's time (the clock's one value). */
 .hero-dots { position: absolute; left: 50%; transform: translateX(-50%); z-index: 2; display: flex; align-items: center; gap: 9px; transition: opacity 400ms var(--ease); }
 .hero-dots .dot { position: relative; flex: none; width: 7px; height: 7px; padding: 0; border: 0; border-radius: 999px; background: rgba(255, 255, 255, .6); box-shadow: none;
   transition: width 350ms var(--ease), background-color 350ms var(--ease); }
@@ -280,8 +280,9 @@
 .hero-dots button.dot::before { content: ""; position: absolute; inset: 7px 3px; border-radius: 999px; background: rgba(255, 255, 255, .6); transition: background-color 350ms var(--ease); }
 .hero-dots button.dot.on::before { background-color: rgba(255, 255, 255, .35); }
 .hero-dots .dot.on { width: 24px; background-color: rgba(255, 255, 255, .35); }
-.hero-dots .dot i { display: none; position: absolute; top: 0; bottom: 0; left: 0; width: calc(var(--fill, 0) * 100%); border-radius: 999px; background: #fff; }
-.hero-dots button.dot i { top: 7px; bottom: 7px; left: 3px; width: calc(var(--fill, 0) * (100% - 6px)); }
+/* The fill scales over the dwell as a compositor animation (components/hero.tsx, showFill): no style write per step. */
+.hero-dots .dot i { display: none; position: absolute; inset: 0; border-radius: 999px; background: #fff; transform: scaleX(0); transform-origin: left; }
+.hero-dots button.dot i { inset: 7px 3px; }
 .hero-dots .dot.on i { display: block; }
 .dots-pause { display: grid; place-items: center; padding: 0; border: 0; background: none; color: rgba(255, 255, 255, .7); cursor: pointer; }
 /* The trailer full bleed in the hero's frame (plans/appletv-polish.md 4.2): the player oversized and
