@@ -389,9 +389,9 @@ fun TvHome(
                 verticalArrangement = Arrangement.spacedBy(Marquee.space.s),
             ) {
                 val hero = heroes.getOrNull(heroPage)
-                if (alert != null && hero == null) item(key = "alert") { alert() }
+                if (alert != null && hero == null) item(key = "alert", contentType = "alert") { alert() }
                 if (hero != null) {
-                    item(key = "hero") {
+                    item(key = "hero", contentType = "hero") {
                         Box {
                             TvHero(
                                 hero,
@@ -417,10 +417,14 @@ fun TvHome(
                 if (home.rows.isEmpty()) {
                     item(
                         key = "state",
+                        contentType = "state",
                     ) { HomeState(home, onSetup, onAddons, rowsHidden, onHomeRows, kids) }
                 }
                 if (hero == null && home.rows.toList().allFailed()) {
-                    item(key = "failed") { AllFailed(home, Modifier.padding(start = Marquee.safe.side)) }
+                    item(
+                        key = "failed",
+                        contentType = "failed",
+                    ) { AllFailed(home, Modifier.padding(start = Marquee.safe.side)) }
                 } else {
                     val rows = home.rows.toList().withoutRemoved(removing?.id)
                     val split = cardSplit(rows)
@@ -429,10 +433,11 @@ fun TvHome(
                     items(
                         rows.subList(0, split),
                         key = { it.rowId },
+                        contentType = { "row" },
                     ) { row -> TvRow(row, state, onOpen, hold, retry, room) }
                     val said = removing?.let { TileCopy.removed(it.name) } ?: removal?.failed
                     if (said != null) {
-                        item(key = "notice") {
+                        item(key = "notice", contentType = "notice") {
                             RemovalNote(said, removing != null, undoFocus, state) {
                                 undone = true
                                 actedAt = state.focus.interactions
@@ -440,10 +445,11 @@ fun TvHome(
                             }
                         }
                     }
-                    if (card != null) item(key = "card") { card() }
+                    if (card != null) item(key = "card", contentType = "card") { card() }
                     items(
                         rows.subList(split, rows.size),
                         key = { it.rowId },
+                        contentType = { "row" },
                     ) { row -> TvRow(row, state, onOpen, hold, retry, room) }
                 }
             }

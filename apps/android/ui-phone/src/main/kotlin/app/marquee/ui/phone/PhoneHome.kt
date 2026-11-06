@@ -197,11 +197,11 @@ fun PhoneHome(
     ) {
         val hero = home.hero
         // Without a hero the alert is the page's first item.
-        if (alert != null && hero == null) item(key = "alert") { alert() }
+        if (alert != null && hero == null) item(key = "alert", contentType = "alert") { alert() }
         if (hero !=
             null
         ) {
-            item(key = "hero") {
+            item(key = "hero", contentType = "hero") {
                 Box {
                     PhoneHeroCarousel(
                         home.heroes,
@@ -222,21 +222,28 @@ fun PhoneHome(
         if (home.rows.isEmpty()) {
             item(
                 key = "state",
+                contentType = "state",
             ) { HomeState(home, onSetup, onAddons, rowsHidden, onHomeRows, kids) }
         }
         if (hero == null && home.rows.toList().allFailed()) {
-            item(key = "failed") { AllFailed(home, Modifier.padding(horizontal = Marquee.safe.side)) }
+            item(
+                key = "failed",
+                contentType = "failed",
+            ) { AllFailed(home, Modifier.padding(horizontal = Marquee.safe.side)) }
         } else {
             val rows = home.rows.toList().withoutRemoved(removing)
             val split = rows.indexOfFirst { it.rowId == TileCopy.CONTINUE_ROW } + 1
-            items(rows.subList(0, split), key = {
-                it.rowId
-            }) { row -> PhoneRow(row, onOpen, hold, home::retryRow) }
-            if (notice != null) item(key = "notice") { notice() }
-            if (card != null) item(key = "card") { card() }
+            items(
+                rows.subList(0, split),
+                key = { it.rowId },
+                contentType = { "row" },
+            ) { row -> PhoneRow(row, onOpen, hold, home::retryRow) }
+            if (notice != null) item(key = "notice", contentType = "notice") { notice() }
+            if (card != null) item(key = "card", contentType = "card") { card() }
             items(
                 rows.subList(split, rows.size),
                 key = { it.rowId },
+                contentType = { "row" },
             ) { row -> PhoneRow(row, onOpen, hold, home::retryRow) }
         }
     }
