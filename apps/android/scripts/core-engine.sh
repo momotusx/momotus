@@ -1,23 +1,21 @@
 #!/bin/bash
 # Which core build-core.sh makes, shared with its test (scripts/core-engine.test.ts). Every own build carries
-# the torrent engine on arm64-v8a (plans/play-every-version.md, Step 0); armeabi-v7a stays without it until an
-# engine slice is shown to work there (Step 0b): MQ_ARMV7_ENGINE=1 builds that slice with it, off by default
-# until the device walk. STORE=1 builds the store core without it, on purpose (plans/architecture.md, App Store
-# note).
+# the torrent engine on arm64-v8a and armeabi-v7a (plans/play-every-version.md, Steps 0 and 0b: the armeabi-v7a
+# slice played a torrent on the Fire TV Stick on 2026-11-06). STORE=1 builds the store core without it, on
+# purpose (plans/architecture.md, App Store note).
 
 # What the app is told it is (BuildConfig.CORE_BUILD): "own" or "store".
 core_kind() {
   if [ "${STORE:-}" = 1 ]; then echo store; else echo own; fi
 }
 
-# Whether the core for one ABI must carry the engine: an own build's arm64-v8a slice, and its armeabi-v7a slice
-# with MQ_ARMV7_ENGINE=1.
+# Whether the core for one ABI must carry the engine: every slice of an own build.
 core_wants_engine() {
-  [ "$(core_kind)" = own ] && { [ "$1" = arm64-v8a ] || { [ "$1" = armeabi-v7a ] && [ "${MQ_ARMV7_ENGINE:-}" = 1 ]; }; }
+  [ "$(core_kind)" = own ] && { [ "$1" = arm64-v8a ] || [ "$1" = armeabi-v7a ]; }
 }
 
 # The ABIs of this build whose core carries the engine, comma-separated (BuildConfig.CORE_ENGINE_ABIS): the app
-# expects the engine only on those, so an armeabi-v7a device is no mismatch.
+# expects the engine only on those.
 core_engine_abis() {
   local abi abis=()
   for abi in "$@"; do
@@ -30,7 +28,7 @@ core_engine_abis() {
 }
 
 # The cargo features for one ABI: MQ_FEATURES (default torrent) where the engine belongs, else MQ_FEATURES in a
-# store build and none on armeabi-v7a.
+# store build.
 core_features() {
   if core_wants_engine "$1"; then
     echo "${MQ_FEATURES-torrent}"
@@ -50,8 +48,8 @@ core_has_engine() {
   [ "${found:-0}" -gt 0 ]
 }
 
-# Fails when the library for an ABI is not the core it should be: the engine in an own arm64-v8a build, none in
-# a store build or on armeabi-v7a.
+# Fails when the library for an ABI is not the core it should be: the engine in an own build, none in a store
+# build.
 core_check_engine() {
   local lib=$1 abi=$2
   if core_wants_engine "$abi"; then
@@ -63,7 +61,7 @@ core_check_engine() {
     if [ "$(core_kind)" = store ]; then
       echo "build-core.sh: $lib carries the torrent engine, but STORE=1 builds the store core" >&2
     else
-      echo "build-core.sh: $lib carries the torrent engine; $abi stays without it until its slice is shown to work (MQ_ARMV7_ENGINE=1 builds it)" >&2
+      echo "build-core.sh: $lib carries the torrent engine, but $abi is not an ABI this build knows" >&2
     fi
     return 1
   fi

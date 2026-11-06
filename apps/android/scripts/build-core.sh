@@ -19,10 +19,10 @@
 #   this machine, `MQ_DEV_TRAKT`, for walks), in its own target dir, into src/debug/jniLibs: only debug
 #   builds of the app package it. It builds arm64, or armv7 when named. The plain build has no debug
 #   assertions and so no hook.
-# The torrent engine is in every own build's arm64-v8a core (plans/play-every-version.md, Step 0); armeabi-v7a
-# stays without it until its engine slice is shown to work (Step 0b). Its size is measured against its own
+# The torrent engine is in every own build's core, arm64-v8a and armeabi-v7a (plans/play-every-version.md, Steps 0
+# and 0b). Its size is measured against its own
 # budget (plans/core-backlog.md C11). STORE=1 builds the store core without it, on purpose; MQ_FEATURES names
-# the arm64 features outright. The build fails when a library is not the core it should be, and it tells the
+# the features outright. The build fails when a library is not the core it should be, and it tells the
 # app which it is in core-build.properties (BuildConfig.CORE_BUILD, and CORE_ENGINE_ABIS for the ABIs whose core
 # carries the engine). Rules: scripts/core-engine.sh.
 set -euo pipefail
@@ -135,8 +135,7 @@ if [ "$DEV_ASSERTIONS" = false ]; then
   done
 fi
 
-# The engine in an own build's arm64-v8a core, none in a store build or on armeabi-v7a: checked on each library
-# before it is stripped.
+# The engine in an own build's core, none in a store build: checked on each library before it is stripped.
 for pair in "${TRIPLES[@]}"; do
   core_check_engine "$TARGET/${pair%%:*}/release/libmarquee_core.so" "${pair##*:}"
 done

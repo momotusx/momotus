@@ -5,8 +5,8 @@ import app.marquee.core.client.CoreLog
 /**
  * Which core the build was made with (BuildConfig.CORE_BUILD: own or store, and CORE_ENGINE_ABIS, the ABIs whose
  * core carries the engine, from scripts/build-core.sh) beside what the core says it carries (`hasEngine()`). Every
- * own build carries the torrent engine on arm64-v8a (plans/play-every-version.md, Phase 0; armeabi-v7a stays
- * without it by design until its slice is shown to work), so a mismatch is a mis-built core: the viewer sees the core's quiet
+ * own build carries the torrent engine on arm64-v8a and armeabi-v7a (plans/play-every-version.md, Steps 0 and 0b), so
+ * a mismatch is a mis-built core: the viewer sees the core's quiet
  * account state, as on a store build, and the owner gets [ABOUT_LINE] in Settings, About, a log line and, in a
  * debug build, a failed assertion. As on Apple (CoreBuild.swift).
  */
@@ -15,7 +15,7 @@ internal object CoreBuild {
 
     /**
      * An own build whose core on this device's [abi] should carry the engine and has none; a store build has none on
-     * purpose, and an ABI outside [engineAbis] (comma-separated, an armeabi-v7a stick) too.
+     * purpose, and an ABI outside [engineAbis] (comma-separated) too.
      */
     fun missingEngine(
         field: String,

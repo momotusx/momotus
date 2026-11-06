@@ -16,37 +16,24 @@ function run(
   return { out: done.stdout.toString().trim(), code: done.exitCode };
 }
 
-test("an own build carries the engine on arm64-v8a only; STORE=1 builds without it", () => {
+test("an own build carries the engine on every ABI; STORE=1 builds without it", () => {
   expect(run("core_kind").out).toBe("own");
   expect(run("core_kind", { STORE: "1" }).out).toBe("store");
   expect(run("core_features arm64-v8a").out).toBe("torrent");
-  expect(run("core_features armeabi-v7a").out).toBe("");
+  // The armeabi-v7a slice too (Step 0b: it played a torrent on the Fire TV Stick).
+  expect(run("core_features armeabi-v7a").out).toBe("torrent");
   expect(
     run("core_features arm64-v8a", { MQ_FEATURES: "torrent test-hooks" }).out,
   ).toBe("torrent test-hooks");
-  // armeabi-v7a stays engine-less until its slice is shown to work, whatever MQ_FEATURES says.
-  expect(run("core_features armeabi-v7a", { MQ_FEATURES: "torrent" }).out).toBe(
-    "",
-  );
   expect(run("core_features arm64-v8a", { STORE: "1" }).out).toBe("");
+  expect(run("core_features armeabi-v7a", { STORE: "1" }).out).toBe("");
   // The ABIs whose core carries the engine, for the app (BuildConfig.CORE_ENGINE_ABIS).
-  expect(run("core_engine_abis arm64-v8a armeabi-v7a").out).toBe("arm64-v8a");
-  expect(run("core_engine_abis armeabi-v7a").out).toBe("");
-  expect(
-    run("core_engine_abis arm64-v8a armeabi-v7a", { STORE: "1" }).out,
-  ).toBe("");
-});
-
-test("MQ_ARMV7_ENGINE=1 builds the armeabi-v7a slice with the engine; off by default (Step 0b)", () => {
-  const on = { MQ_ARMV7_ENGINE: "1" };
-  expect(run("core_features armeabi-v7a", on).out).toBe("torrent");
-  expect(run("core_engine_abis arm64-v8a armeabi-v7a", on).out).toBe(
+  expect(run("core_engine_abis arm64-v8a armeabi-v7a").out).toBe(
     "arm64-v8a,armeabi-v7a",
   );
-  // A store build stays without it, and any other value is off.
-  expect(run("core_features armeabi-v7a", { ...on, STORE: "1" }).out).toBe("");
+  expect(run("core_engine_abis armeabi-v7a").out).toBe("armeabi-v7a");
   expect(
-    run("core_features armeabi-v7a", { MQ_ARMV7_ENGINE: "yes" }).out,
+    run("core_engine_abis arm64-v8a armeabi-v7a", { STORE: "1" }).out,
   ).toBe("");
 });
 
@@ -99,14 +86,10 @@ test.skipIf(!hasNdk)(
       expect(check(full, "arm64-v8a").code).toBe(0);
       expect(check(store, "arm64-v8a").out).toContain("has no torrent engine");
       expect(check(refers, "arm64-v8a").out).toContain("has no torrent engine");
-      expect(check(store, "armeabi-v7a").code).toBe(0);
-      expect(check(full, "armeabi-v7a").out).toContain(
-        "stays without it until its slice is shown to work",
-      );
-      // With the armeabi-v7a slice turned on, that ABI must carry it too.
-      const on = { MQ_ARMV7_ENGINE: "1" };
-      expect(check(full, "armeabi-v7a", on).code).toBe(0);
-      expect(check(store, "armeabi-v7a", on).out).toContain("has no torrent engine");
+      // The armeabi-v7a slice must carry it too.
+      expect(check(full, "armeabi-v7a").code).toBe(0);
+      expect(check(store, "armeabi-v7a").out).toContain("has no torrent engine");
+      expect(check(store, "armeabi-v7a", { STORE: "1" }).code).toBe(0);
       expect(check(store, "arm64-v8a", { STORE: "1" }).code).toBe(0);
       const extra = check(full, "arm64-v8a", { STORE: "1" });
       expect(extra.code).toBe(1);

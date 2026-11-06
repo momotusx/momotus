@@ -31,11 +31,12 @@ class CoreBuildTest {
     }
 
     @Test
-    fun `an armeabi-v7a device has no engine by design, so nothing is missing`() {
+    fun `an armeabi-v7a stick expects the engine too, unless its build did not carry it there`() {
         CoreLog.sink = { level, message, _ -> logs += "$level $message" }
-        assertFalse(CoreBuild.missingEngine("own", ENGINE_ABIS, "armeabi-v7a", hasEngine = false))
-        // A 32-bit stick: no log line, no About line, and a debug build goes on.
-        CoreBuild.check("own", ENGINE_ABIS, "armeabi-v7a", hasEngine = false, debug = true)
+        assertTrue(CoreBuild.missingEngine("own", ENGINE_ABIS, "armeabi-v7a", hasEngine = false))
+        assertFalse(CoreBuild.missingEngine("own", ENGINE_ABIS, "armeabi-v7a", hasEngine = true))
+        // A build whose script left that ABI out: no log line, no About line, and a debug build goes on.
+        CoreBuild.check("own", ARM64, "armeabi-v7a", hasEngine = false, debug = true)
         assertFalse(CoreBuild.missing)
         assertEquals(emptyList(), logs)
     }
@@ -75,6 +76,6 @@ class CoreBuildTest {
         const val ARM64 = "arm64-v8a"
 
         /** As scripts/build-core.sh writes it for an own build of both ABIs. */
-        const val ENGINE_ABIS = "arm64-v8a"
+        const val ENGINE_ABIS = "arm64-v8a,armeabi-v7a"
     }
 }
