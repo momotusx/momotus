@@ -9,7 +9,7 @@ import RefreshCw from "lucide-solid/icons/refresh-cw";
 import Wrench from "lucide-solid/icons/wrench";
 import Undo2 from "lucide-solid/icons/undo-2";
 import X from "lucide-solid/icons/x";
-import { createEffect, createMemo, createSignal, For, type JSX, Match, on, onCleanup, onMount, Show, Switch } from "solid-js";
+import { createEffect, createMemo, createRoot, createSignal, For, type JSX, Match, on, onCleanup, onMount, Show, Switch } from "solid-js";
 import tokens from "../../../../design/tokens.json";
 import { Poster } from "./art";
 import { Why } from "./why";
@@ -206,24 +206,45 @@ export function TileCard(props: {
 // The text face draws wider than its fallback: lines measured before a face loaded are measured again.
 const [fonts, setFonts] = createSignal(0);
 document.fonts?.addEventListener("loadingdone", () => setFonts((n) => n + 1));
+// Captions change with the window's width only: the phone's URL bar showing or hiding mid-fling sets a new height.
+const windowWidth = createRoot(() => createMemo(() => viewport().w));
+
+// Every caption waiting for its frame. One frame reads every line's width and style first, then measures the words
+// on a canvas and writes the lines: one layout for all of them, none per word or per line.
+const fitting = new Map<HTMLElement, string>();
+let fitFrame = 0;
+let pen: CanvasRenderingContext2D | null | undefined;
+
+function fitAll() {
+  fitFrame = 0;
+  const lines = [...fitting].map(([el, text]) => {
+    const s = getComputedStyle(el);
+    return { el, text, w: el.clientWidth, font: `${s.fontStyle} ${s.fontWeight} ${s.fontSize} ${s.fontFamily}`, spacing: parseFloat(s.letterSpacing) || 0 };
+  });
+  fitting.clear();
+  pen ??= document.createElement("canvas").getContext("2d");
+  for (const { el, text, w, font, spacing } of lines) {
+    // A line not laid out (its row folded, a hidden page) keeps its words until it is measured again.
+    if (!pen || w === 0) continue;
+    pen.font = font;
+    // CSS spaces every character, the last one too.
+    el.textContent = wordFit(text, (line) => pen!.measureText(line).width + spacing * [...line].length <= w);
+  }
+}
 
 /** Keeps a caption line (`nowrap`, `overflow: hidden`) at whole words of `text`, again when the window changes. */
 function fitWords(el: HTMLElement, text: () => string) {
   let last: string | null = null;
   createEffect(() => {
     const t = text();
-    void viewport();
+    void windowWidth();
     void fonts();
     // New words show at once; a resize keeps the fitted line until it is measured again (no flash of the cut one).
     if (t !== last) el.textContent = t;
     last = t;
-    const frame = requestAnimationFrame(() => {
-      el.textContent = wordFit(t, (line) => {
-        el.textContent = line;
-        return el.scrollWidth <= el.clientWidth;
-      });
-    });
-    onCleanup(() => cancelAnimationFrame(frame));
+    fitting.set(el, t);
+    fitFrame ||= requestAnimationFrame(fitAll);
+    onCleanup(() => fitting.delete(el));
   });
 }
 
