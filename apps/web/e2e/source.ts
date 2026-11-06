@@ -47,6 +47,17 @@ const LISTED: Record<string, string[]> = {
 };
 const SERVED = new Set(Object.values(LISTED).flat().map((n) => `/media/${n}`));
 
+/** The episode whose one stream is DASH: the first 40 s of the test film as
+ * ffmpeg's `-f dash` writes it (e2e/fixtures/dash, VP9 and Opus in fMP4, as
+ * MovieBox's rows are shaped), which the core serves a browser as HLS:
+ *
+ *   ffmpeg -t 40 -i test-film.webm -map 0:v -map 0:a -c copy -f dash -dash_segment_type mp4 -seg_duration 4 \
+ *     -use_timeline 0 -use_template 1 -init_seg_name 'init-$RepresentationID$.m4s' \
+ *     -media_seg_name 'chunk-$RepresentationID$-$Number%05d$.m4s' film.mpd */
+export const DASH_EPISODE = "tt0944947:1:6";
+const DASH_NAME = "Game.of.Thrones.S01E06.Sample.240p.WEB.VP9.mpd";
+const DASH_DIR = fileURLToPath(new URL("./fixtures/dash/", import.meta.url));
+
 /** Skip segments the core asks for (MQ_DEV_SEGMENTS points it here), as
  * synthetic answers in TheIntroDB's and IntroDB's shapes (their terms allow no stored copy):
  * `bun run e2e:live` checks that the live answers still have those shapes. */
@@ -96,6 +107,22 @@ export function startSource(port: number): Promise<Server> {
           behaviorHints: { filename: file, videoSize: size },
         })),
       });
+    }
+    if (path === `/stream/series/${DASH_EPISODE}.json`) {
+      const url = `http://127.0.0.1:${port}/dash/film.mpd`;
+      return json(200, { streams: [{ name: "Sample Source\n240p", title: DASH_NAME, url, behaviorHints: { filename: DASH_NAME } }] });
+    }
+    const dash = /^\/dash\/([\w.-]+\.(?:mpd|m4s))$/.exec(asked.pathname);
+    if (dash) {
+      const file = DASH_DIR + dash[1];
+      let body: Buffer;
+      try {
+        body = readFileSync(file);
+      } catch {
+        return json(404, { error: "not found" });
+      }
+      res.writeHead(200, { "content-type": file.endsWith(".mpd") ? "application/dash+xml" : "video/mp4", "content-length": String(body.length) });
+      return res.end(body);
     }
     if (SERVED.has(req.url ?? "")) {
       const size = statSync(FILM_FILE).size;
