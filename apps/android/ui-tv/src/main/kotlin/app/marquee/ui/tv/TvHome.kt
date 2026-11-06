@@ -95,6 +95,7 @@ import app.marquee.design.MqText
 import app.marquee.design.PlayFilled
 import app.marquee.design.PosterTile
 import app.marquee.design.PrimaryButton
+import app.marquee.design.ProvideCaptionMeasurer
 import app.marquee.design.RatingLine
 import app.marquee.design.RowHeader
 import app.marquee.design.RunHeroClock
@@ -901,18 +902,21 @@ private fun Lane(
     shape: TileShape,
     keys: List<String>,
 ) {
-    LazyRow(
-        state = state.rowState(row.rowId),
-        modifier =
-            Modifier
-                .height(Marquee.tiles.laneHeight(shape))
-                .focusProperties { enter = { state.focus.rowEntry(row.rowId) ?: FocusRequester.Default } }
-                .focusGroup(),
-        contentPadding = PaddingValues(horizontal = Marquee.safe.side),
-        horizontalArrangement = Arrangement.spacedBy(metrics.gap),
-    ) {
-        itemsIndexed(row.tiles, key = { index, _ -> keys[index] }) { index, tile ->
-            TvTile(row.rowId, keys[index], tile, shape, state, onOpen, onHold)
+    // One caption measurer for the lane's tiles, not two per tile.
+    ProvideCaptionMeasurer {
+        LazyRow(
+            state = state.rowState(row.rowId),
+            modifier =
+                Modifier
+                    .height(Marquee.tiles.laneHeight(shape))
+                    .focusProperties { enter = { state.focus.rowEntry(row.rowId) ?: FocusRequester.Default } }
+                    .focusGroup(),
+            contentPadding = PaddingValues(horizontal = Marquee.safe.side),
+            horizontalArrangement = Arrangement.spacedBy(metrics.gap),
+        ) {
+            itemsIndexed(row.tiles, key = { index, _ -> keys[index] }) { index, tile ->
+                TvTile(row.rowId, keys[index], tile, shape, state, onOpen, onHold)
+            }
         }
     }
 }

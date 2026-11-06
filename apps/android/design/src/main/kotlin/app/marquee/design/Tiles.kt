@@ -13,10 +13,12 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -35,10 +37,14 @@ import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.testTag
+import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import kotlin.math.abs
+import kotlin.math.ceil
 import kotlin.math.roundToInt
 
 /** The tile shapes of `design/tokens.json` (poster, landscape, square). */
@@ -226,16 +232,50 @@ private fun WordLine(
     color: Color,
     weight: FontWeight,
 ) {
-    val measurer = rememberTextMeasurer()
+    // The lane's one measurer when it gives one ([ProvideCaptionMeasurer]), else the tile's own. The result is
+    // remembered, so neither keeps a cache.
+    val measurer = LocalCaptionMeasurer.current ?: rememberTextMeasurer(cacheSize = 0)
     val style = mqTextStyle(role, color, weight)
     val density = LocalDensity.current
     val room = with(density) { width.roundToPx() }
     // The density carries the font scale too: a larger text size fits fewer words.
     val shown =
         remember(text, style, room, density) {
-            wordFit(text) { measurer.measure(it, style, maxLines = 1, softWrap = false).size.width <= room }
+            fitLine(text, room) { measurer.measure(it, style, maxLines = 1, softWrap = false) }
         }
     MqText(shown, role = role, color = color, weight = weight, maxLines = 1)
+}
+
+/** A lane's one caption measurer, shared by every tile in it ([ProvideCaptionMeasurer]). */
+private val LocalCaptionMeasurer = staticCompositionLocalOf<TextMeasurer?> { null }
+
+/** Gives the tiles of one lane ([content]) one caption measurer between them, not two each. */
+@Composable
+fun ProvideCaptionMeasurer(content: @Composable () -> Unit) =
+    CompositionLocalProvider(LocalCaptionMeasurer provides rememberTextMeasurer(cacheSize = 0), content = content)
+
+private const val ELLIPSIS = "…"
+
+/** The last character of each word that has more after it. */
+private val WORD_END = Regex("""\S(?=\s)""")
+
+/**
+ * [wordFit] for a line [room] pixels wide, with one [measure] of the text and an ellipsis after it: every cut's width is
+ * read off that one line, never measured again for each shorter run of words (a lane brings in several tiles at once).
+ */
+internal fun fitLine(
+    text: String,
+    room: Int,
+    measure: (String) -> TextLayoutResult,
+): String {
+    val line = measure(text + ELLIPSIS)
+    val x = { offset: Int -> line.getHorizontalPosition(offset, usePrimaryDirection = true) }
+    val dots = abs(x(text.length + 1) - x(text.length))
+    return wordFit(text) { cut ->
+        val whole = cut == text
+        val end = if (whole) text.length else cut.length - ELLIPSIS.length
+        ceil(abs(x(end) - x(0)) + if (whole) 0f else dots) <= room
+    }
 }
 
 /** The longest run of whole words of [text], then "…", that [fits]; [text] itself when it fits or is one word. */
@@ -244,10 +284,13 @@ internal fun wordFit(
     fits: (String) -> Boolean,
 ): String {
     if (fits(text)) return text
-    val words = text.split(' ').filter { it.isNotEmpty() }
-    for (n in words.size - 1 downTo 1) {
+    // Each cut is the text up to the end of a word, so [fits] can read its width off the whole line.
+    val ends = WORD_END.findAll(text).map { it.range.last + 1 }.toList()
+    for (end in ends.asReversed()) {
         // A separator left at the end ("S2:E3 ·") goes with the words after it.
-        val cut = words.take(n).joinToString(" ").trimEnd(' ', '·', ',', ':', ';', '-') + "…"
+        val kept = text.substring(0, end).trimEnd(' ', '·', ',', ':', ';', '-')
+        if (kept.isEmpty()) continue
+        val cut = kept + ELLIPSIS
         if (fits(cut)) return cut
     }
     return text

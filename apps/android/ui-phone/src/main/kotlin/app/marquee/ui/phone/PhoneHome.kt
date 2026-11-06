@@ -88,6 +88,7 @@ import app.marquee.design.MqText
 import app.marquee.design.PlayFilled
 import app.marquee.design.PosterTile
 import app.marquee.design.PrimaryButton
+import app.marquee.design.ProvideCaptionMeasurer
 import app.marquee.design.RatingsRow
 import app.marquee.design.RoundButton
 import app.marquee.design.RowHeader
@@ -724,41 +725,44 @@ private fun TileLane(
     val shape = shapeOf(row)
     val keys = remember(row.tiles) { row.tileKeys() }
     val captioned = captioned(row)
-    LazyRow(
-        // A Top 10 row gives each poster its genre, one line under the art.
-        modifier =
-            Modifier.height(
-                Marquee.tiles.laneHeight(shape, captioned) + if (row.ranked && !captioned) RANK_GENRE else 0.dp,
-            ),
-        contentPadding = PaddingValues(horizontal = Marquee.safe.side),
-        horizontalArrangement = Arrangement.spacedBy(metrics.gap),
-    ) {
-        itemsIndexed(row.tiles, key = { index, _ -> keys[index] }) { _, tile ->
-            val (art, fallback) = TileCopy.art(tile, wide = shape == TileShape.Landscape)
-            PosterTile(
-                title = tile.name,
-                imageUrl = art,
-                fallbackImageUrl = fallback,
-                onClick = { onOpen(tile) },
-                modifier = Modifier.padding(top = metrics.pad),
-                shape = shape,
-                progress = tile.progress,
-                caption = TileCopy.caption(row.rowId, tile) ?: tile.releaseInfo,
-                // Continue Watching carries the core's line alone: no scores, no badges.
-                captioned = captioned,
-                artAlignment =
-                    if (shape == TileShape.Landscape &&
-                        tile.background == null
-                    ) {
-                        Alignment.TopCenter
-                    } else {
-                        Alignment.Center
-                    },
-                onLongClick = onHold?.let { { it(tile) } },
-                longClickLabel = "More options".takeIf { onHold != null },
-                rank = tile.rank,
-                genre = tile.genre,
-            )
+    // One caption measurer for the lane's tiles, not two per tile.
+    ProvideCaptionMeasurer {
+        LazyRow(
+            // A Top 10 row gives each poster its genre, one line under the art.
+            modifier =
+                Modifier.height(
+                    Marquee.tiles.laneHeight(shape, captioned) + if (row.ranked && !captioned) RANK_GENRE else 0.dp,
+                ),
+            contentPadding = PaddingValues(horizontal = Marquee.safe.side),
+            horizontalArrangement = Arrangement.spacedBy(metrics.gap),
+        ) {
+            itemsIndexed(row.tiles, key = { index, _ -> keys[index] }) { _, tile ->
+                val (art, fallback) = TileCopy.art(tile, wide = shape == TileShape.Landscape)
+                PosterTile(
+                    title = tile.name,
+                    imageUrl = art,
+                    fallbackImageUrl = fallback,
+                    onClick = { onOpen(tile) },
+                    modifier = Modifier.padding(top = metrics.pad),
+                    shape = shape,
+                    progress = tile.progress,
+                    caption = TileCopy.caption(row.rowId, tile) ?: tile.releaseInfo,
+                    // Continue Watching carries the core's line alone: no scores, no badges.
+                    captioned = captioned,
+                    artAlignment =
+                        if (shape == TileShape.Landscape &&
+                            tile.background == null
+                        ) {
+                            Alignment.TopCenter
+                        } else {
+                            Alignment.Center
+                        },
+                    onLongClick = onHold?.let { { it(tile) } },
+                    longClickLabel = "More options".takeIf { onHold != null },
+                    rank = tile.rank,
+                    genre = tile.genre,
+                )
+            }
         }
     }
 }
