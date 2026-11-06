@@ -39,6 +39,7 @@ import coil3.network.okhttp.OkHttpNetworkFetcherFactory
 import coil3.request.CachePolicy
 import coil3.request.ImageRequest
 import coil3.request.ImageResult
+import coil3.request.allowRgb565
 import coil3.request.crossfade
 import coil3.size.Size
 import okhttp3.Dispatcher
@@ -63,7 +64,9 @@ fun createImageLoader(
     /** The session is in Incognito now: images neither land in nor are read from the disk cache. */
     incognito: () -> Boolean = { false },
 ): ImageLoader {
-    val lowRam = (context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager).isLowRamDevice
+    val am = context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+    val lowRam = am.isLowRamDevice
+    val memory = ActivityManager.MemoryInfo().also(am::getMemoryInfo)
     return ImageLoader
         .Builder(context)
         .memoryCache { MemoryCache.Builder().maxSizePercent(context, if (lowRam) 0.08 else 0.15).build() }
@@ -78,8 +81,13 @@ fun createImageLoader(
             add(PrivateDisk(incognito))
             add(OkHttpNetworkFetcherFactory(callFactory = { posterClient }))
         }.crossfade(false)
+        // A stick under 2 GB (the Fire TV Stick 4K has 1.3) decodes art without alpha at half the bytes per pixel.
+        .allowRgb565(memory.totalMem < RGB565_BELOW)
         .build()
 }
+
+/** Devices with less memory than this decode opaque art as RGB_565. */
+internal const val RGB565_BELOW = 2L * 1024 * 1024 * 1024
 
 /**
  * Incognito keeps no image on disk (plans/batch-10-incognito.md 5.5). DISABLED, not the design's READ_ONLY: a disk
