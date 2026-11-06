@@ -366,7 +366,8 @@ export default function Home() {
                   <>
                     {/* A Continue Watching whose every title was just removed leaves with them. */}
                     <Show when={row.rowId !== CONTINUE_ROW || row.tiles.length === 0 || shown(row).tiles.length > 0}>
-                      <Row row={shown(row)} root={page} onRetry={retryHomeRow} />
+                      {/* Home opens at its top, where the hero leaves room for a row or two: the rows past those start far. */}
+                      <Row row={shown(row)} root={page} onRetry={retryHomeRow} startNear={i() < 3} />
                     </Show>
                     <Show when={i() === 0 && row.rowId === CONTINUE_ROW}>
                       <RemovalNote />

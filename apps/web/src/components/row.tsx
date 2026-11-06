@@ -81,7 +81,13 @@ const RANK_GENRE = 22;
 // Survives the Home screen unmounting, so Back lands on the same offsets;
 // another profile's Home starts at the start of each row.
 const offsets = new Map<string, number>();
-onProfileReset(() => offsets.clear());
+// Whether each row was near the viewport when last seen: the rows Back brings into view mount their tiles at once
+// (the focus it restores waits for them), the far ones mount none.
+const wasNear = new Map<string, boolean>();
+onProfileReset(() => {
+  offsets.clear();
+  wasNear.clear();
+});
 
 export function TileCard(props: {
   tile: TileData;
@@ -353,6 +359,9 @@ export function Row(props: {
   onOpen?: () => void;
   scope?: string;
   onRetry?: (rowId: string) => Promise<unknown> | undefined;
+  /** Whether the row may be on screen before its first look at the viewport: false for a row far down a page that
+   * opens at its top, so it mounts no tiles only to tear them down a frame later. */
+  startNear?: boolean;
 }) {
   let section!: HTMLElement;
   let track: HTMLDivElement | undefined;
@@ -372,7 +381,7 @@ export function Row(props: {
   const [scroll, setScroll] = createSignal(offsets.get(id()) ?? 0);
   const [viewport, setViewport] = createSignal(1920);
   const [focused, setFocused] = createSignal(-1);
-  const [near, setNear] = createSignal(true);
+  const [near, setNear] = createSignal(wasNear.get(id()) ?? props.startNear ?? true);
   const range = createMemo(
     () => (near() ? visibleRange(scroll() - m().inset, viewport(), stride(), props.row.tiles.length, focused()) : ([0, 0] as const)),
     [0, 0] as const,
@@ -387,7 +396,14 @@ export function Row(props: {
     const measure = () => track && setViewport(track.clientWidth);
     measure();
     window.addEventListener("resize", measure, { passive: true });
-    const io = new IntersectionObserver(([e]) => e && setNear(e.isIntersecting), { root: props.root(), rootMargin: "100% 0px" });
+    const io = new IntersectionObserver(
+      ([e]) => {
+        if (!e) return;
+        setNear(e.isIntersecting);
+        wasNear.set(id(), e.isIntersecting);
+      },
+      { root: props.root(), rootMargin: "100% 0px" },
+    );
     io.observe(section);
     onCleanup(() => {
       window.removeEventListener("resize", measure);
