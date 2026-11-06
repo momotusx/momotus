@@ -1,14 +1,27 @@
 /** The browser's engine: one `<video>` element. The core serves every source
  * and subtitle on loopback URLs any origin may read, and the element is
- * crossorigin, so both load directly. */
+ * crossorigin, so both load directly. An HLS source in a browser without HLS
+ * of its own plays through hls.js (./hls.ts). */
 
-import { createSignal, Show } from "solid-js";
-import { earlyFailure, mediaFailure, pendingStart } from "../lib/failover";
+import type Hls from "hls.js";
+import { createSignal, onCleanup, Show } from "solid-js";
+import { earlyFailure, hlsFailure, mediaFailure, pendingStart } from "../lib/failover";
 import { startAudio } from "../lib/words";
 import type { Engine, EngineEvents, Track } from "./engine";
+import { needsHlsJs } from "./hls";
 
 export function createVideoEngine(events: EngineEvents): Engine {
   let video!: HTMLVideoElement;
+  // The loaded source plays through hls.js: its errors are hls.js's to
+  // report, never the element's (a `blob:` source says nothing true).
+  let hls: Hls | null = null;
+  let viaHls = false;
+  let loads = 0;
+  const dropHls = () => {
+    hls?.destroy();
+    hls = null;
+  };
+  onCleanup(dropHls);
   const [time, setTime] = createSignal(0);
   const [duration, setDuration] = createSignal(0);
   const [paused, setPaused] = createSignal(true);
@@ -24,7 +37,22 @@ export function createVideoEngine(events: EngineEvents): Engine {
   // flag); subtitles are the core's WebVTT list, kept by the player.
   const [tracks, setTracks] = createSignal<Track[]>([]);
   type AudioTrackLike = { id: string; language: string; label: string; enabled: boolean };
-  const audioList = () => (video as unknown as { audioTracks?: ArrayLike<AudioTrackLike> }).audioTracks;
+  const audioList = (): ArrayLike<AudioTrackLike> | undefined => {
+    const h = hls;
+    if (!h) return (video as unknown as { audioTracks?: ArrayLike<AudioTrackLike> }).audioTracks;
+    // hls.js's renditions, as the element's list reads: one enabled at a time.
+    return h.audioTracks.map((t, i) => ({
+      id: String(i),
+      language: t.lang ?? "",
+      label: t.name,
+      get enabled() {
+        return h.audioTrack === i;
+      },
+      set enabled(on: boolean) {
+        if (on) h.audioTrack = i;
+      },
+    }));
+  };
   const readTracks = () => {
     const list = audioList();
     setTracks(
@@ -127,6 +155,7 @@ export function createVideoEngine(events: EngineEvents): Engine {
       }}
       onEnded={() => events.onEnded()}
       onError={() => {
+        if (viaHls) return;
         const error = video.error;
         // Before the metadata, the element cannot tell a failed fetch from a file it cannot read.
         if (video.readyState >= HTMLMediaElement.HAVE_METADATA || !video.currentSrc) events.onError(mediaFailure(error));
@@ -158,7 +187,31 @@ export function createVideoEngine(events: EngineEvents): Engine {
       if (onMetadata) video.removeEventListener("loadedmetadata", onMetadata);
       picked = false;
       start.set(startSec);
-      video.src = url;
+      const load = ++loads;
+      dropHls();
+      viaHls = needsHlsJs(url);
+      if (viaHls) {
+        video.removeAttribute("src");
+        void import("hls.js").then(({ default: Hls }) => {
+          if (load !== loads) return;
+          const h = new Hls();
+          hls = h;
+          h.on(Hls.Events.ERROR, (_, data) => {
+            if (!data.fatal || hls !== h) return;
+            dropHls();
+            events.onError(hlsFailure(data));
+          });
+          h.on(Hls.Events.AUDIO_TRACKS_UPDATED, () => {
+            applyStartAudio();
+            readTracks();
+          });
+          h.on(Hls.Events.MANIFEST_PARSED, () => {
+            if (!hold) play();
+          });
+          h.loadSource(url);
+          h.attachMedia(video);
+        });
+      } else video.src = url;
       const applyStart = () => {
         onMetadata = null;
         const at = start.take();

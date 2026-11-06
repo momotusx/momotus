@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import type { PlaybackSnapshot } from "../core/generated/PlaybackSnapshot";
-import { earlyFailure, loadedSource, mediaFailure, pendingStart, sourceStart, tryingAgain } from "./failover";
+import { earlyFailure, hlsFailure, loadedSource, mediaFailure, pendingStart, sourceStart, tryingAgain } from "./failover";
 
 test("a failover names the source the engine loaded, not the one the core moved to", () => {
   let snapshot = { attempt: 1 } as PlaybackSnapshot;
@@ -101,4 +101,14 @@ test("Trying again shows while the core starts over, and a moment at least when 
   expect(tryingAgain("failed", retry, 2600)).toBe(false);
   // Started: nothing to say.
   expect(tryingAgain("ready", retry, 1200)).toBe(false);
+});
+
+test("an hls.js failure says whose it is", () => {
+  const network = (details: string, code?: number) =>
+    hlsFailure({ type: "networkError", details, ...(code === undefined ? {} : { response: { code } }) });
+  expect(network("fragLoadError", 403)).toEqual({ kind: "http", status: 403, error: "hls.js fragLoadError" });
+  expect(network("manifestLoadTimeOut")).toEqual({ kind: "timeout", error: "hls.js manifestLoadTimeOut" });
+  expect(network("fragLoadError", 0)).toEqual({ kind: "network", error: "hls.js fragLoadError" });
+  expect(hlsFailure({ type: "mediaError", details: "bufferAppendError" })).toEqual({ kind: "decode", error: "hls.js bufferAppendError" });
+  expect(hlsFailure({ type: "otherError", details: "internalException" }).kind).toBe("other");
 });

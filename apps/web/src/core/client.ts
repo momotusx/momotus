@@ -7,6 +7,7 @@ import { createStore, reconcile } from "solid-js/store";
 import { Bridge, BridgeError, ipcTransport, shellPost, webSocketTransport } from "./bridge";
 import { applyDiffs } from "./diff";
 import { isPrivateLink } from "../lib/sync";
+import { mediaSource } from "../player/hls";
 import { failureWords, kidsCopy } from "../lib/words";
 import type { DiscoverSnapshot } from "./generated/DiscoverSnapshot";
 import type { Episode } from "./generated/Episode";
@@ -355,7 +356,8 @@ const AUDIO: [name: string, type: string][] = [
 const CONTAINERS: [name: string, type: string][] = [
   ["mp4", "video/mp4"],
   ["webm", "video/webm"],
-  // HLS where the browser plays it natively (Safari; others answer "").
+  // HLS: natively (Safari, Chrome 142+), else through hls.js where Media
+  // Source Extensions exist (player/hls.ts). DASH comes as HLS from the core.
   ["m3u8", "application/vnd.apple.mpegurl"],
 ];
 
@@ -405,7 +407,7 @@ export function displayCaps(): DeviceCaps {
     decoders: DECODERS.filter(([, type]) => decodes(type)).map(([name]) => name),
     tenBitHevc: decodes('video/mp4; codecs="hvc1.2.4.L120.90"'),
     audioDecoders: AUDIO.filter(([, type]) => plays(type)).map(([name]) => name),
-    containers: CONTAINERS.filter(([, type]) => plays(type)).map(([name]) => name),
+    containers: CONTAINERS.filter(([name, type]) => plays(type) || (name === "m3u8" && mediaSource())).map(([name]) => name),
     passthrough: [],
     hasFallbackEngine: false,
     language: deviceLanguage(),

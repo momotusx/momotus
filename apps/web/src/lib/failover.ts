@@ -33,6 +33,20 @@ export function mediaFailure(error: { code: number; message: string } | null): P
   }
 }
 
+/** An hls.js fatal error (where the browser has no HLS of its own, the
+ * element plays through hls.js and its own errors say little): a failed
+ * request is the source's (`http` with its status, `timeout`, `network`),
+ * media that would not play is `decode`. */
+export function hlsFailure(data: { type: string; details: string; response?: { code?: number } }): PlayerFailure {
+  const said = `hls.js ${data.details}`;
+  if (data.type === "networkError") {
+    const status = data.response?.code ?? 0;
+    if (status > 0) return { kind: "http", status, error: said };
+    return { kind: /timeout/i.test(data.details) ? "timeout" : "network", error: said };
+  }
+  return { kind: data.type === "mediaError" ? "decode" : "other", error: said };
+}
+
 /** A `<video>` error before the file's metadata loaded. The element calls a
  * failed fetch (a loopback 404, an upstream 5xx, a refused answer) a format
  * error too, so the source is asked once: an error answer or none is the
