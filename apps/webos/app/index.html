@@ -1,0 +1,30 @@
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>Momotus</title>
+<style>html,body{margin:0;background:#06121a;color:#cfe;font:32px sans-serif}p{margin:80px}</style></head>
+<body><p id="m"></p>
+<script>
+// The stub (plans/webos.md section 1): start the service over Luna, then hand
+// the page to the service's origin with the token in the fragment. The bridge
+// stays referenced in a global until it answers, or its callback never runs.
+var bridge;
+function fail() {
+  document.getElementById('m').textContent = 'Momotus could not start. Close the app and open it again.';
+}
+try {
+  bridge = new PalmServiceBridge();
+  bridge.onservicecallback = function (raw) {
+    var r;
+    try {
+      r = JSON.parse(raw);
+    } catch (e) {}
+    if (!r || !r.returnValue) return fail();
+    location.replace('http://127.0.0.1:47801/#t=' + r.token + '&stub=' + encodeURIComponent(location.href));
+  };
+  bridge.call('luna://app.momotus.webos.service/start', '{}');
+} catch (e) {
+  fail();
+}
+</script>
+</body>
+</html>

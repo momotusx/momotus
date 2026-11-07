@@ -1,0 +1,12 @@
+{
+  "id": "app.momotus.webos",
+  "version": "0.0.1",
+  "vendor": "Momotus",
+  "type": "web",
+  "main": "index.html",
+  "title": "Momotus",
+  "icon": "icon.png",
+  "largeIcon": "largeIcon.png",
+  "disableBackHistoryAPI": true,
+  "resolution": "1920x1080"
+}

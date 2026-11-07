@@ -1,0 +1,5 @@
+{
+  "id": "app.momotus.webos.service",
+  "description": "Momotus service",
+  "services": [{ "name": "app.momotus.webos.service" }]
+}
