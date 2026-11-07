@@ -117,3 +117,15 @@ export function headerOnTvNow(): boolean {
 export function youtubeId(raw: string | null | undefined): string | null {
   return raw && /^[A-Za-z0-9_-]{11}$/.test(raw) ? raw : null;
 }
+
+/** A trailer's name on its chip: Main trailer, then Trailer 2, 3 and on. */
+export const trailerName = (i: number) => (i === 0 ? "Main trailer" : `Trailer ${i + 1}`);
+
+/** Said when the layer's own pick moved past the first `n` trailers because YouTube refused them here, so the one
+ * playing is never a silent swap (QA r3, R3-2); none when it moved past none. */
+export function skippedLine(n: number): string | null {
+  if (n <= 0) return null;
+  const names = Array.from({ length: n }, (_, i) => trailerName(i));
+  const list = names.length === 1 ? names[0] : `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`;
+  return `${list} can't play here.`;
+}

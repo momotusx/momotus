@@ -16,7 +16,7 @@ import { pushBack } from "../focus/back";
 import { focusEl } from "../focus/dom";
 import { form } from "../form";
 import { clock, pct } from "../lib/format";
-import { heldStep, seekTarget, walkNow } from "../lib/trailers";
+import { heldStep, seekTarget, skippedLine, trailerName, walkNow } from "../lib/trailers";
 import { isWebOS, mediaKey } from "../lib/webos";
 import { playTrailer, type TrailerControl, type TrailerTime } from "./yt-player";
 
@@ -30,6 +30,8 @@ export function TrailerOverlay(props: { trailers: Trailer[]; onClose: () => void
   // Where a drag holds the bar until it is let go.
   const [held, setHeld] = createSignal<number | null>(null);
   const [failed, setFailed] = createSignal(false);
+  // How many leading trailers the layer's own pick moved past (refused here): the bar says so.
+  const [skipped, setSkipped] = createSignal(0);
   // Sound on: the viewer asked for this trailer. Its own, never the session's (the hero and headers stay muted).
   const [sound, setSound] = createSignal(!walkNow());
   let host!: HTMLDivElement;
@@ -62,7 +64,10 @@ export function TrailerOverlay(props: { trailers: Trailer[]; onClose: () => void
         if (why !== "error" && why !== "timeout") return props.onClose();
         // Refused here (embedding off, gone): the next trailer, then the quiet line. Never ready (YouTube unreachable): the
         // line at once, not another 15 s wait per trailer.
-        if (why === "error" && auto && i + 1 < props.trailers.length) return start(i + 1, true);
+        if (why === "error" && auto && i + 1 < props.trailers.length) {
+          setSkipped(i + 1);
+          return start(i + 1, true);
+        }
         setFailed(true);
         queueMicrotask(() => {
           // The focus stays on a trailer the viewer picked; else Close, the way out.
@@ -221,7 +226,7 @@ export function TrailerOverlay(props: { trailers: Trailer[]; onClose: () => void
             <For each={props.trailers}>
               {(_, i) => (
                 <button class="chip" classList={{ on: i() === index() }} role="radio" aria-checked={i() === index()} data-f={`trailer:${i()}`} onClick={() => start(i())}>
-                  {i() === 0 ? "Main trailer" : `Trailer ${i() + 1}`}
+                  {trailerName(i())}
                 </button>
               )}
             </For>
@@ -244,6 +249,9 @@ export function TrailerOverlay(props: { trailers: Trailer[]; onClose: () => void
           Close
         </button>
       </div>
+      <p class="trailer-skip" role="status">
+        {failed() ? "" : (skippedLine(skipped()) ?? "")}
+      </p>
     </div>
   );
 }

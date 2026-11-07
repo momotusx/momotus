@@ -1088,6 +1088,8 @@ test("a trailer YouTube refuses gives way to the next one, then to a quiet line,
   await expect.poll(() => ytLog(p)).toContain("new jrnyTeaser1 https://www.youtube-nocookie.com");
   await expect(p.locator(".trailer")).toHaveAttribute("data-state", "playing");
   await expect(p.locator(".trailer-fail")).toHaveCount(0);
+  // The swap is said, never silent (QA r3 R3-2).
+  await expect(p.locator(".trailer-skip[role=status]")).toHaveText("Main trailer can't play here.");
   await p.locator('[data-f="trailer:close"]').click();
   // Both refused: the line, announced, and Close to leave by.
   await p.evaluate(() => ((window as unknown as { ytFailIds: string[] }).ytFailIds = ["jrnyTrailr1", "jrnyTeaser1"]));

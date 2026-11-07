@@ -21,6 +21,16 @@ private func source(_ path: String) throws -> String {
     }
 }
 
+#if !os(tvOS)
+/// A trailer the layer moved past is named, never a silent swap (QA r3 R3-2); the web's words.
+@Test func aTrailerTheLayerMovedPastIsNamed() {
+    #expect(FullTrailer.skippedLine(0) == nil)
+    #expect(FullTrailer.skippedLine(1) == "Main trailer can't play here.")
+    #expect(FullTrailer.skippedLine(2) == "Main trailer and Trailer 2 can't play here.")
+    #expect(FullTrailer.skippedLine(3) == "Main trailer, Trailer 2 and Trailer 3 can't play here.")
+}
+#endif
+
 @Test func aSeekStaysInsideTheTrailerShortOfItsClose() {
     #expect(trailerSeekTarget(30, 150, by: 10) == 40)
     #expect(trailerSeekTarget(30, 150, by: -10) == 20)

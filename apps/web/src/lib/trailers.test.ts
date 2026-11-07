@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { coverSize, heldStep, seekTarget, type TrailerSignals, trailerAllowed, youtubeId } from "./trailers";
+import { coverSize, heldStep, seekTarget, skippedLine, type TrailerSignals, trailerAllowed, trailerName, youtubeId } from "./trailers";
 
 const ok: TrailerSignals = { enabled: true, visible: true, reducedMotion: false, metered: false, walk: false, layout: "cover", capable: true, hasTrailer: true, incognito: false };
 
@@ -49,4 +49,13 @@ test("a held arrow's step grows as the film player's, held to a tenth of the tra
   expect([0, 2, 3, 6, 10].map((r) => heldStep(r, 600))).toEqual([10, 10, 20, 30, 60]);
   expect([0, 3, 6, 10].map((r) => heldStep(r, 150))).toEqual([10, 15, 15, 15]);
   expect(heldStep(10, 40)).toBe(10);
+});
+
+test("a trailer the layer moved past is named, never a silent swap", () => {
+  expect(skippedLine(0)).toBeNull();
+  expect(skippedLine(1)).toBe("Main trailer can't play here.");
+  expect(skippedLine(2)).toBe("Main trailer and Trailer 2 can't play here.");
+  expect(skippedLine(3)).toBe("Main trailer, Trailer 2 and Trailer 3 can't play here.");
+  expect(trailerName(0)).toBe("Main trailer");
+  expect(trailerName(2)).toBe("Trailer 3");
 });

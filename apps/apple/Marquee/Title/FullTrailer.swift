@@ -13,6 +13,8 @@ struct FullTrailer: View {
     @State private var state = TrailerState()
     @State private var index = 0
     @State private var failed = false
+    /// How many leading trailers YouTube refused here before this one: said under the bar, never a silent swap.
+    @State private var skipped = 0
     /// On at open (the viewer asked for it), except in a walk build, which plays every trailer silent.
     @State private var loud = !TrailerPlayer.walk
     /// Where a drag on the bar will land, until it is let go.
@@ -26,6 +28,14 @@ struct FullTrailer: View {
     private enum Control: Hashable { case page, toggle, close }
     private static let seekStep: Double = 10
     private static let failedLine = "This trailer can't play here."
+
+    /// The line for the first `n` trailers moved past (the web's `skippedLine`); none when none was.
+    static func skippedLine(_ n: Int) -> String? {
+        guard n > 0 else { return nil }
+        let names = (0..<n).map { $0 == 0 ? "Main trailer" : "Trailer \($0 + 1)" }
+        let list = names.count == 1 ? names[0] : names.dropLast().joined(separator: ", ") + " and " + names[names.count - 1]
+        return "\(list) can't play here."
+    }
 
     var body: some View {
         VStack(spacing: 16) {
@@ -71,6 +81,12 @@ struct FullTrailer: View {
                     .buttonStyle(PillButtonStyle())
                     .focused($focus, equals: .close)
                     .keyboardShortcut(.cancelAction)
+            }
+            if !failed, let line = Self.skippedLine(skipped) {
+                Text(line)
+                    .textFont(Theme.type.callout, relativeTo: .callout)
+                    .foregroundStyle(Theme.Palette.muted)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
         .padding(16)
@@ -149,6 +165,7 @@ struct FullTrailer: View {
             if why != "error", why != "timeout", why != "lost" {
                 close()
             } else if why == "error", index + 1 < trailers.count {
+                skipped = index + 1
                 index += 1
             } else {
                 failed = true
