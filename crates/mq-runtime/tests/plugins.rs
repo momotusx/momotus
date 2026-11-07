@@ -247,6 +247,15 @@ async fn a_repository_s_provider_lists_rows_from_plugins() {
 
 /// An addon on loopback that answers every stream request with `body`.
 async fn stream_addon(body: String) -> AddonRow {
+    let manifest = serde_json::json!({
+        "id": "films", "version": "1.0.0", "name": "Films",
+        "types": ["movie"], "resources": ["stream"], "catalogs": [], "idPrefixes": ["tt"]
+    });
+    loopback_addon(body, manifest).await
+}
+
+/// An addon on loopback with `manifest` that answers every request with `body`.
+async fn loopback_addon(body: String, manifest: serde_json::Value) -> AddonRow {
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
@@ -258,10 +267,6 @@ async fn stream_addon(body: String) -> AddonRow {
                 .write_all(&reply(200, "application/json", &body))
                 .await;
         }
-    });
-    let manifest = serde_json::json!({
-        "id": "films", "version": "1.0.0", "name": "Films",
-        "types": ["movie"], "resources": ["stream"], "catalogs": [], "idPrefixes": ["tt"]
     });
     AddonRow {
         transport_url: format!("http://{addr}/manifest.json"),
@@ -460,6 +465,73 @@ async fn a_provider_turned_off_runs_nothing() {
     // Removed, it is gone from the list.
     core.remove_plugin_repo(&fixture.repo()).unwrap();
     assert!(core.plugin_repos().await.unwrap().repos.is_empty());
+}
+
+/// A series video that is not one of its episodes (S99:E99, a bad link)
+/// asks no plugin, whose scripts answer any episode with links that never
+/// play: the view says no source has it (QA R3-16). A listed episode, and
+/// one of the next season the meta does not list yet, ask them.
+#[tokio::test]
+async fn plugins_are_asked_only_for_an_episode_the_series_has() {
+    let fixture = Fixture::start();
+    let core = core();
+    core.add_plugin_repo(&fixture.repo()).await.unwrap();
+    let meta = serde_json::json!({"meta": {
+        "id": "tt0000020", "type": "series", "name": "Fixture Show",
+        "videos": [
+            {"id": "tt0000020:1:1", "title": "One", "season": 1, "episode": 1},
+            {"id": "tt0000020:1:2", "title": "Two", "season": 1, "episode": 2}
+        ]
+    }});
+    let manifest = serde_json::json!({
+        "id": "shows", "version": "1.0.0", "name": "Shows",
+        "types": ["series"], "resources": ["meta"], "catalogs": [], "idPrefixes": ["tt"]
+    });
+    let meta = loopback_addon(meta.to_string(), manifest).await;
+    // A stream addon that has nothing for it, as an episode that does not exist gets.
+    let mut streams = stream_addon(r#"{"streams": []}"#.into()).await;
+    streams.manifest_json = streams
+        .manifest_json
+        .replace(r#"["movie"]"#, r#"["series"]"#);
+    streams.position = 1;
+    core.library()
+        .set_addons(OWNER, &[meta, streams], &core.hlc())
+        .unwrap();
+    let episode = |video: &str, season: Option<u32>, episode: Option<u32>| {
+        let mut params = film(video);
+        params.kind = "series".into();
+        params.target.season = season;
+        params.target.episode = episode;
+        params
+    };
+    let lookups = || {
+        (fixture.asked().iter())
+            .filter(|p| p.starts_with("/lookup/"))
+            .count()
+    };
+    for (video, s, e) in [
+        ("tt0000020:99:99", Some(99), Some(99)),
+        ("tt0000020:garbage", None, None),
+    ] {
+        let view = VersionsView::open_checked(&core, episode(video, s, e), Some("tt0000020"));
+        until("done", || {
+            let s = view.snapshot();
+            s.done && !s.plugins.pending
+        })
+        .await;
+        let s = view.snapshot();
+        assert_eq!(
+            s.empty.map(|e| e.kind),
+            Some(EmptyKind::NoResults),
+            "{video}"
+        );
+        assert_eq!(lookups(), 0, "{video}: {:?}", fixture.asked());
+    }
+    for (video, s, e) in [("tt0000020:1:2", 1, 2), ("tt0000020:2:1", 2, 1)] {
+        let view = settled(&core, episode(video, Some(s), Some(e))).await;
+        assert_eq!(plugin_rows(&view), 1, "{video}: {:?}", fixture.asked());
+    }
+    assert_eq!(lookups(), 2);
 }
 
 /// A TMDB on loopback that answers every lookup with the film 77.

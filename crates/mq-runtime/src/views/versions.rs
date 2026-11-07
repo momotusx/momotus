@@ -1696,7 +1696,11 @@ async fn plugin_pass(
         year: p.target.year.or(p.facts.title_year),
         video_id: p.video_id.clone(),
     };
-    let providers = crate::plugins::providers_for(&core, &ask).await;
+    let providers = if an_episode(&core, &ask).await {
+        crate::plugins::providers_for(&core, &ask).await
+    } else {
+        Vec::new()
+    };
     let tmdb = if providers.is_empty() {
         None
     } else {
@@ -1719,6 +1723,33 @@ async fn plugin_pass(
     let mut s = lock(&state);
     s.plugins_pending = false;
     snapshot.set(render(&s));
+}
+
+/// Whether the plugins may be asked for this video: a film, or an episode
+/// the series has. Their scripts answer any season and episode, a bad link
+/// or S99:E99 too, with links that never play, and Play would try them
+/// instead of saying no source has it (QA R3-16). An episode the meta does
+/// not list yet is asked in its latest season and the one after (a meta
+/// kept from before a release); a meta that does not answer in
+/// `SIDE_WAIT`, or lists no episodes, stops nothing.
+async fn an_episode(core: &Core, ask: &crate::plugins::Ask) -> bool {
+    if ask.kind != "series" {
+        return true;
+    }
+    let (Some(season), Some(episode)) = (ask.season, ask.episode) else {
+        return false;
+    };
+    let meta = tokio::time::timeout(SIDE_WAIT, core.fetch_meta("series", &ask.imdb)).await;
+    let Ok(Ok((meta, _))) = meta else {
+        return true;
+    };
+    let listed: Vec<(u32, u32)> = (meta.videos.iter())
+        .filter_map(|v| v.series_info.as_ref().map(|i| (i.season, i.episode)))
+        .collect();
+    let Some(&(last, _)) = listed.iter().max() else {
+        return true;
+    };
+    listed.contains(&(season, episode)) || (last..=last.saturating_add(1)).contains(&season)
 }
 
 /// Play's wait for the plugin pass ends: a view with no addon row is done
