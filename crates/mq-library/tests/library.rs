@@ -197,6 +197,31 @@ async fn one_notification_per_transaction_with_touched_tables() {
     assert_eq!(rx.recv().await.unwrap(), vec![Table::LibraryItems]);
 }
 
+/// A table's version moves with each committed write that touches it, and
+/// only then; two libraries never share one.
+#[test]
+fn a_table_version_moves_only_with_its_writes() {
+    let lib = Library::temporary().unwrap();
+    let other = Library::temporary().unwrap();
+    assert_ne!(lib.version(Table::Addons), other.version(Table::Addons));
+    let (addons, played) = (lib.version(Table::Addons), lib.version(Table::Progress));
+    lib.set_progress("p", progress("v", "i", 1, 2, 3), "0001")
+        .unwrap();
+    assert_eq!(lib.version(Table::Addons), addons);
+    assert_ne!(lib.version(Table::Progress), played);
+    lib.set_addons("p", &[], "0002").unwrap(); // deletes nothing, inserts nothing
+    assert_eq!(lib.version(Table::Addons), addons);
+    let row = AddonRow {
+        transport_url: "https://a.example/manifest.json".into(),
+        manifest_json: "{}".into(),
+        position: 0,
+        enabled: true,
+        allow_private: false,
+    };
+    lib.set_addons("p", &[row], "0003").unwrap();
+    assert_ne!(lib.version(Table::Addons), addons);
+}
+
 #[test]
 fn reopen_persists_data() {
     let dir = std::env::temp_dir().join(format!("mq-lib-reopen-{}", std::process::id()));

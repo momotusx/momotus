@@ -201,6 +201,9 @@ struct Inner {
     /// Each genre's art for the genre grids, by catalog and genre (core
     /// backlog C43), with when it was looked up.
     genre_art: std::sync::Mutex<HashMap<String, crate::views::genres::Looked>>,
+    /// Each profile's enabled addons as `installed_addons` read them, with
+    /// the library versions of the addons and access tables they were read at.
+    addon_lists: std::sync::Mutex<HashMap<String, KeptAddons>>,
     /// Offline downloads' files (plans/offline-downloads.md 4.2).
     downloads_dir: PathBuf,
     downloads: std::sync::OnceLock<Arc<crate::downloads::Downloads>>,
@@ -239,6 +242,10 @@ struct Device {
 
 /// Devices open in this process, by canonical data directory.
 static OPEN: std::sync::Mutex<Vec<(PathBuf, Weak<Device>)>> = std::sync::Mutex::new(Vec::new());
+
+/// A profile's parsed addon list, with the addons and access table
+/// versions it was read at (`Core::installed_addons`).
+type KeptAddons = ((u64, u64), Vec<InstalledAddon>);
 
 /// `Core::meta_reads`.
 static META_READS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
@@ -396,6 +403,7 @@ impl Core {
                 archive: std::sync::OnceLock::new(),
                 plugins: std::sync::OnceLock::new(),
                 genre_art: std::sync::Mutex::default(),
+                addon_lists: std::sync::Mutex::default(),
                 downloads_dir,
                 downloads: std::sync::OnceLock::new(),
                 walk,
@@ -1060,16 +1068,30 @@ impl Core {
     /// reads the owner's list without adult-flagged addons; its own list is
     /// unused (plans/m11-kids.md 4.6). When the profile cannot be read it
     /// reads its own list: the owner's, whose addresses can hold keys, only
-    /// for a profile known to be kids.
+    /// for a profile known to be kids. The parsed list is kept until the
+    /// addons or the profile's access change (batch 13 perf C1): every
+    /// view, catalog row and meta read asks for it.
     pub fn installed_addons(&self) -> Result<Vec<InstalledAddon>, CoreError> {
-        let kids = matches!(
-            self.library().policy_checked(self.profile()),
-            Ok((policy, _)) if policy.kids()
+        let library = self.library();
+        // Read before the rows: a write in between leaves an older version
+        // here, so the next call reads again.
+        let at = (
+            library.version(Table::Addons),
+            library.version(Table::Access),
         );
-        let rows = self
-            .library()
-            .addons(if kids { OWNER } else { self.profile() })?;
-        Ok(rows
+        let lists = &self.inner.addon_lists;
+        if let Some((kept_at, list)) = lists
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .get(self.profile())
+            && *kept_at == at
+        {
+            return Ok(list.clone());
+        }
+        let policy = library.policy_checked(self.profile());
+        let kids = matches!(&policy, Ok((policy, _)) if policy.kids());
+        let rows = library.addons(if kids { OWNER } else { self.profile() })?;
+        let list: Vec<InstalledAddon> = rows
             .into_iter()
             .filter(|r| r.enabled)
             .filter_map(|r| {
@@ -1081,7 +1103,14 @@ impl Core {
                 })
             })
             .filter(|a| !(kids && a.manifest.behavior_hints.adult))
-            .collect())
+            .collect();
+        if policy.is_ok() {
+            lists
+                .lock()
+                .unwrap_or_else(|p| p.into_inner())
+                .insert(self.profile().to_owned(), (at, list.clone()));
+        }
+        Ok(list)
     }
 
     /// Metas read in this process, from the network or a cache (the perf

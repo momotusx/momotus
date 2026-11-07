@@ -185,6 +185,8 @@ pub struct Library {
     scrub_pending: AtomicBool,
     /// Set when an Incognito scope ends: every later write is refused.
     closed: AtomicBool,
+    /// Each table's version (`Library::version`), by `Table as usize`.
+    versions: [AtomicU64; Table::ALL.len()],
 }
 
 impl Library {
@@ -237,6 +239,7 @@ impl Library {
             removing: AtomicBool::new(false),
             scrub_pending: AtomicBool::new(false),
             closed: AtomicBool::new(false),
+            versions: std::array::from_fn(|_| AtomicU64::new(next_version())),
         };
         // Rows a migration dropped, or a removal whose scrub a crash cut
         // short, leave the files now.
@@ -265,6 +268,13 @@ impl Library {
     /// Receives the set of tables touched by each committed write transaction.
     pub fn subscribe(&self) -> broadcast::Receiver<Vec<Table>> {
         self.changes.subscribe()
+    }
+
+    /// A number that changes whenever a committed write touches `table`.
+    /// Versions are unique in the process, so no two libraries share one: a
+    /// value read before the rows tells whether they can still be current.
+    pub fn version(&self, table: Table) -> u64 {
+        self.versions[table as usize].load(Ordering::SeqCst)
     }
 
     /// Forgets everything this device held of its account and profiles (a
@@ -360,6 +370,9 @@ impl Library {
                     self.removals.fetch_add(1, Ordering::SeqCst);
                 }
                 if !touched.is_empty() {
+                    for table in &touched {
+                        self.versions[*table as usize].store(next_version(), Ordering::SeqCst);
+                    }
                     let _ = self.changes.send(touched);
                 }
             }
@@ -1013,6 +1026,12 @@ fn commit<T>(
     let out = f(&tx)?;
     tx.commit()?;
     Ok(out)
+}
+
+/// The next table version (`Library::version`), from one count for the process.
+fn next_version() -> u64 {
+    static NEXT: AtomicU64 = AtomicU64::new(1);
+    NEXT.fetch_add(1, Ordering::SeqCst)
 }
 
 fn lock<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
