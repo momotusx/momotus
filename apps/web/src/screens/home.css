@@ -157,7 +157,10 @@
 .tile-slot:hover .tile-x, .tile-slot:focus-within .tile-x { opacity: 1; }
 .tile-x:focus-visible { outline: var(--focus-ring) solid var(--key); outline-offset: 2px; }
 @media (hover: none) { .tile-x { opacity: 1; } }
-[data-form="phone"] .tile-x { opacity: 1; top: 6px; right: 6px; width: 32px; height: 32px; }
+/* The box is 48 x 48 at the still's corner (a hit area from a pseudo-element did not hold: the row clips it and QA measured the
+ * box); the 32 px disc is drawn inside it, 6 px from the corner, the X centered on it (the padding is the 4 px the disc sits off). */
+[data-form="phone"] .tile-x { opacity: 1; top: 0; right: 0; width: 48px; height: 48px; padding: 0 4px 4px 0; box-sizing: border-box;
+  background: radial-gradient(circle at 22px 22px, rgba(0, 0, 0, .62) 15.5px, transparent 16px); }
 [data-form="phone"] .tile-x svg { width: 18px; height: 18px; }
 /* After Remove from Continue Watching: one line with Undo under the row (TV: under the title's actions). Empty, it
    takes no room, and it is there from the start so its words are heard. */
@@ -336,9 +339,9 @@
 [data-form="tv"] .tile .rank { top: 10px; left: 16px; font-size: 57px; }
 [data-form="desktop"] .tile .rank { top: calc(6 * var(--px)); left: calc(12 * var(--px)); font-size: calc(40 * var(--px)); }
 [data-form="desktop"] .tile .rank-genre { margin-top: calc(6 * var(--px)); font-size: calc(13 * var(--px)); line-height: calc(16 * var(--px)); }
-/* The phone's reach (QA r1): the pager dots 48 px tall and edge to edge across their gaps, the remove X 48 px square. */
-[data-form="phone"] .hero-dots button.dot::after { content: ""; position: absolute; inset: -13.5px -1.5px; }
-[data-form="phone"] .tile-x::after { content: ""; position: absolute; inset: -8px; }
+/* The phone's pager is its strip alone (components/hero.tsx pageNearest): the dots sit 16 px apart, too close for 48 px each.
+ * A finger lands on the strip, 48 tall and as wide as the dots; the buttons stay for the keyboard and a screen reader. */
+[data-form="phone"] .hero-dots button.dot { pointer-events: none; }
 /* An urgent account card (the owner, 2026-11-02): first on Home, above the hero, under the navigation, compact. It lies
  * over the hero's top, which is art, so a card that arrives after Home opened moves nothing (QA r2, Q2 row 33). */
 .home main { position: relative; }

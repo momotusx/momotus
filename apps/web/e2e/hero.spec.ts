@@ -30,6 +30,8 @@ async function home(context: BrowserContext, form: "phone" | "desktop" | "tv") {
   return page;
 }
 
+// A phone dot is not a target of its own (home.css): a finger lands on the strip, which pages to the nearest dot, so the
+// dots are clicked by position (force) and the strip answers.
 for (const form of ["phone", "desktop", "tv"] as const) {
   test(`${form}: the timer pages on, the pill fills, a page by hand stops it`, async ({ browser }) => {
     const size = form === "phone" ? { width: 390, height: 844 } : { width: 1440, height: 900 };
@@ -63,7 +65,7 @@ for (const form of ["phone", "desktop", "tv"] as const) {
     if (form !== "tv") {
       // A dot by hand: that page, and the timer stops for the session.
       const target = ((await activePage(page)) + 2) % pages;
-      await page.locator(".hero-dots .dot").nth(target).click();
+      await page.locator(".hero-dots .dot").nth(target).click({ force: true });
       await expect.poll(() => activePage(page)).toBe(target);
       // A page chosen by hand is said, as the slide's own label reads.
       const label = await page.locator(".hero-page").nth(target).getAttribute("aria-label");
@@ -200,14 +202,14 @@ test("phone: the trailer plays muted, after the read-back, full bleed under the 
   await expect(mute).toHaveAttribute("aria-pressed", "true");
   expect(await ytLog(page)).toContain("unMute");
   // A page by hand stops it at once, the art comes back and the switch goes with the trailer.
-  await page.locator(".hero-dots .dot").nth(1).click();
+  await page.locator(".hero-dots .dot").nth(1).click({ force: true });
   await expect(page.locator(".hero.trailer-on")).toHaveCount(0);
   expect((await ytLog(page)).at(-1)).toBe("destroy");
   await expect(mute).toHaveCount(0);
   // The next page's trailer keeps the session's choice: sound on as soon as it plays, the switch pressed.
   const before = (await ytLog(page)).length;
   for (let i = 2; i < (await page.locator(".hero-dots .dot").count()) && !(await ytLog(page)).slice(before).some((l) => l.startsWith("new")); i++) {
-    await page.locator(".hero-dots .dot").nth(i).click();
+    await page.locator(".hero-dots .dot").nth(i).click({ force: true });
     await page.clock.runFor(1500);
   }
   await expect.poll(async () => (await ytLog(page)).slice(before).filter((l) => l.startsWith("new") || l === "unMute"), { timeout: 10_000 }).toEqual([expect.stringMatching(/^new /), "unMute"]);
@@ -266,7 +268,7 @@ test("desktop: a series page plays the core's episode, its label as the title pa
   await expect(play).toHaveText(/^((Play|Resume) S\d+:E\d+|Play again)$/, { timeout: 10_000 });
   const href = (await play.getAttribute("href")) ?? "";
   expect(href).toMatch(new RegExp(`^/play/series/${id}/${id}:\\d+:\\d+$`));
-  await page.locator(".hero-dots .dot").nth(i).click();
+  await page.locator(".hero-dots .dot").nth(i).click({ force: true });
   await expect.poll(() => activePage(page)).toBe(i);
   await page.locator(".hero-page.on .acts a.btn.primary").click();
   await expect.poll(() => new URL(page.url()).pathname).toBe(href);
@@ -312,7 +314,7 @@ for (const form of ["phone", "desktop"] as const) {
     const hold = await holdSeriesPlay(context);
     const page = await home(context, form);
     const { i } = await seriesPage(page);
-    await page.locator(".hero-dots .dot").nth(i).click();
+    await page.locator(".hero-dots .dot").nth(i).click({ force: true });
     await expect.poll(() => activePage(page)).toBe(i);
     const on = page.locator(".hero-page.on");
     // While the episodes are read: Play's place is kept, hidden, out of focus and of the accessibility tree.
@@ -409,7 +411,7 @@ test("phone: a film played mutes the trailers again; Home after it is never loud
   // The next trailer plays muted, the switch unpressed.
   const before = (await ytLog(page)).length;
   for (let i = 0; i < (await page.locator(".hero-dots .dot").count()) && !(await ytLog(page)).slice(before).some((l) => l.startsWith("playVideo")); i++) {
-    await page.locator(".hero-dots .dot").nth(i).click();
+    await page.locator(".hero-dots .dot").nth(i).click({ force: true });
     await page.clock.runFor(1500);
   }
   await expect.poll(async () => (await ytLog(page)).slice(before).some((l) => l.startsWith("playVideo")), { timeout: 10_000 }).toBe(true);
