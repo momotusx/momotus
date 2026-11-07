@@ -92,6 +92,8 @@ cd "$ROOT"
 PACKED="-C link-arg=-Wl,--pack-dyn-relocs=android"
 # Panic locations and debug paths name ~ instead of this Mac's home folder.
 PACKED="$PACKED --remap-path-prefix=$HOME=~"
+# The same for C file names (assert and __FILE__) in the C parts build scripts compile (rquickjs, SQLite, ring).
+export CFLAGS="${CFLAGS:+$CFLAGS }-ffile-prefix-map=$HOME=~"
 # `rustc --crate-type cdylib`: with mq-ffi's three crate types (lib, staticlib, cdylib) cargo passes
 # no `-C lto`, so the profile's thin LTO never applied; the cdylib alone gets it. At 39e3b7ae the
 # store library went from 12,123,488 to 10,989,256 bytes and the full one from 15,362,864 to
