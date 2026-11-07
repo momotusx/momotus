@@ -7,7 +7,6 @@
 //! output with `overflow`: the consumer gets one [`Outgoing::Overflow`] and
 //! ends the session; every later send fails at once without queueing.
 
-use serde::Serialize;
 use serde_json::Value;
 use std::io;
 use std::sync::Arc;
@@ -110,7 +109,7 @@ impl Output {
     }
 
     /// Serializes `value` once, reserves its length and queues it.
-    pub fn send<T: Serialize + ?Sized>(&self, value: &T) -> Result<(), SendError> {
+    pub fn send(&self, value: &Value) -> Result<(), SendError> {
         if self.budget.closed.load(Ordering::Acquire) {
             return Err(SendError::Closed);
         }
@@ -172,7 +171,7 @@ impl io::Write for Capped {
     }
 }
 
-fn serialize<T: Serialize + ?Sized>(value: &T, max: usize) -> Result<String, SendError> {
+fn serialize(value: &Value, max: usize) -> Result<String, SendError> {
     let mut out = Capped(Vec::new(), max);
     serde_json::to_writer(&mut out, value).map_err(|_| SendError::TooLarge)?;
     // serde_json writes UTF-8 only.

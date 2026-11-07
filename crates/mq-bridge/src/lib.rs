@@ -3794,22 +3794,15 @@ where
     S: futures_util::Stream<Item = Vec<U>> + Unpin,
     U: serde::Serialize,
 {
-    /// `{"sub", "updates"}`, written straight from the view's own values
-    /// (no `Value` tree in between: batch 13 perf C3).
-    #[derive(serde::Serialize)]
-    struct Push<'a, U> {
-        sub: u64,
-        updates: &'a [U],
-    }
     while let Some(batch) = updates.next().await {
-        let push = Push {
-            sub,
-            updates: &batch,
+        let Ok(updates) = serde_json::to_value(&batch) else {
+            continue;
         };
+        let push = json!({ "sub": sub, "updates": updates });
         // A push over the size limit ends the session as an overflow does:
         // the next session's snapshot of the view fails with `tooLarge`
         // instead of looping.
-        let send = |push: &Push<U>| match out.send(push) {
+        let send = |push: &Value| match out.send(push) {
             Ok(()) => true,
             Err(SendError::TooLarge) => {
                 out.overflow();
@@ -4004,6 +3997,30 @@ fn refuse_token_link(out: &Output, id: u64, url: &str, acknowledged: bool) -> bo
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A push's keys go out sorted, as every snapshot's do, never in the
+    /// struct's order: the web store applies a push key by key, and the
+    /// player's effects run in that order (subtitleNotes before subtitles:
+    /// a dropped track's note still finds it picked).
+    #[tokio::test]
+    async fn a_push_writes_its_keys_sorted() {
+        #[derive(serde::Serialize)]
+        #[serde(rename_all = "camelCase")]
+        struct Snap {
+            subtitles: u8,
+            subtitle_notes: u8,
+        }
+        let (out, mut rx) = Output::channel();
+        let pushes = futures_util::stream::iter([vec![Snap {
+            subtitles: 1,
+            subtitle_notes: 2,
+        }]]);
+        forward(7, pushes, out, None).await;
+        assert_eq!(
+            rx.try_recv().unwrap().text(),
+            Some(r#"{"sub":7,"updates":[{"subtitleNotes":2,"subtitles":1}]}"#)
+        );
+    }
 
     /// The caps the Apple app sends with its second engine on, read from the
     /// file its own test reads too (plans/apple-second-engine.md 2.5): every
