@@ -282,7 +282,7 @@ struct TrackPickerPanel: View {
             #if !os(tvOS)
             if let l = spokenLanguage, !spokenDisabled {
                 Button { show(l) } label: {
-                    Glyph("chevron-right", size: 15).foregroundStyle(Theme.Palette.muted).frame(width: 36, height: 40)
+                    Glyph("chevron-right", size: 15).foregroundStyle(Theme.Palette.muted).frame(width: Theme.minTarget, height: Theme.minTarget)
                 }
                 .buttonStyle(FocusPlainStyle(shape: Circle()))
                 .accessibilityHidden(true)
@@ -324,7 +324,7 @@ struct TrackPickerPanel: View {
             #if !os(tvOS)
             if !l.disabled {
                 Button { show(l) } label: {
-                    Glyph("chevron-right", size: 15).foregroundStyle(Theme.Palette.muted).frame(width: 36, height: 40)
+                    Glyph("chevron-right", size: 15).foregroundStyle(Theme.Palette.muted).frame(width: Theme.minTarget, height: Theme.minTarget)
                 }
                 .buttonStyle(FocusPlainStyle(shape: Circle()))
                 .focused($focus, equals: .opener(l.language))

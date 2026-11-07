@@ -409,7 +409,7 @@ private fun HoldButton(
 ) {
     Box(
         Modifier
-            .size(44.dp)
+            .size(48.dp)
             .clip(CircleShape)
             .background(SECONDARY)
             .semantics {

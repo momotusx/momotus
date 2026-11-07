@@ -491,7 +491,7 @@ private fun LineSwitch(
                         },
                     ).focusClickable({ if (!on) onTab(two) }, Role.Tab)
                     .semantics { selected = on }
-                    .heightIn(min = if (tv) 52.dp else 44.dp),
+                    .heightIn(min = if (tv) 52.dp else 48.dp),
                 contentAlignment = Alignment.Center,
             ) {
                 MqText(
@@ -545,7 +545,7 @@ private fun PhoneSpokenRow(
                 {
                     Box(
                         Modifier
-                            .size(44.dp)
+                            .size(48.dp)
                             .marqueeFocus(Marquee.radius.m, scale = 1f)
                             .semantics { contentDescription = "${StreamChoiceCopy.SPOKEN_LANGUAGE} options" }
                             .focusClickable({ onOpen(lang.key) }),
@@ -626,7 +626,7 @@ private fun SheetHeader(
                     .marqueeFocus(Marquee.radius.m, scale = 1f)
                     .semantics { contentDescription = "Back to languages" }
                     .focusClickable(onBack)
-                    .heightIn(min = 44.dp)
+                    .heightIn(min = 48.dp)
                     .padding(start = 4.dp, end = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -647,7 +647,7 @@ private fun SheetHeader(
                 .align(Alignment.CenterEnd)
                 .marqueeFocus(Marquee.radius.m, scale = 1f)
                 .focusClickable(onDone)
-                .heightIn(min = 44.dp)
+                .heightIn(min = 48.dp)
                 .padding(horizontal = 14.dp, vertical = 11.dp),
             role = TextRole.Headline,
             color = key,
@@ -676,7 +676,7 @@ private fun PhoneLanguageRow(
     val end: @Composable () -> Unit = {
         Box(
             Modifier
-                .size(44.dp)
+                .size(48.dp)
                 .marqueeFocus(Marquee.radius.m, scale = 1f)
                 .semantics { contentDescription = "${lang.name} options" }
                 .focusClickable({ onOpen(lang.key) }),
@@ -740,7 +740,7 @@ private fun PhoneRow(
         Row(
             Modifier
                 .weight(1f)
-                .heightIn(min = 44.dp)
+                .heightIn(min = 48.dp)
                 .marqueeFocus(Marquee.radius.m, scale = 1f)
                 // The click first: what is cleared after it is the row's words, said once as [spoken].
                 .focusClickable(onClick, Role.RadioButton, enabled = enabled)
