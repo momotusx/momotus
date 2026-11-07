@@ -129,6 +129,9 @@ async fn kids_profiles_need_a_checkable_owner_pin() {
 async fn the_owner_pin_stays_while_kids_exist() {
     let core = owner().await;
     let kid = core.create_kids_profile("Kid", "fox").unwrap();
+    // A mistyped PIN is named first, not the kids rule.
+    let mistyped = core.set_pin(OWNER, None, Some("2468")).await;
+    assert_eq!(code(mistyped), Some("wrongPin"));
     let cleared = core.set_pin(OWNER, None, Some(PIN)).await;
     assert_eq!(code(cleared), Some("kidsNeedPin"));
     assert!(core.has_pin());

@@ -345,11 +345,6 @@ impl Core {
             self.device_library().set_pin_hash(id, None, self.clock())?;
             return self.forgive(id);
         }
-        // Leaving a kids profile needs the owner's PIN: it stays while one
-        // exists (plans/m11-kids.md 6.1).
-        if id == OWNER && pin.is_none() && self.kids_exist()? {
-            return Err(ProfileError::KidsNeedPin);
-        }
         if pin.is_some_and(weak) {
             return Err(ProfileError::WeakPin);
         }
@@ -362,6 +357,12 @@ impl Core {
                 }
             }
             Some(Some(_)) => self.check_pin(id, current).await?,
+        }
+        // Leaving a kids profile needs the owner's PIN: it stays while one
+        // exists (plans/m11-kids.md 6.1). Checked after the PIN itself, so a
+        // mistyped PIN says so first.
+        if id == OWNER && pin.is_none() && self.kids_exist()? {
+            return Err(ProfileError::KidsNeedPin);
         }
         let hash = match pin {
             Some(pin) => {
