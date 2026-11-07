@@ -199,7 +199,7 @@ class SettingsA1Test {
                 SettingsGroup({ SettingsRow(Icons.Captions, Tone.Sky, "Second line", "Spoken language.", {}) })
             },
             SettingsPart(SettingsSection.About) {
-                SettingsGroup({ SettingsRow(Icons.Info, Tone.Grey, "Momotus", "Free software under the GPL 3.", {}) })
+                SettingsGroup({ SettingsRow(Icons.Info, Tone.Grey, "Momotus", "Free software under the AGPL 3.", {}) })
             },
         )
 

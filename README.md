@@ -37,7 +37,7 @@
 
 - **A torrent plays in seconds.** On an iPhone 13 Pro, a public-domain film was ready in 5.8 s and showed its first frame at 6.2 s. [Measurement](bench/local-network/prompt.jsonl)
 - **Light on an old TV stick.** On a 2018 Fire TV Stick 4K, cold starts took 0.791 to 1.751 s, Home used 127 MB of memory and playback 160.6 MB (debug build). [Measurement](bench/m6/journey-android.jsonl)
-- **Smooth in a browser.** Home scrolls at 60 fps in Chromium, in the desktop and TV layouts: p99 frame time 16.8 ms, no frame over 33 ms. [Measurement](bench/web/scroll.jsonl)
+- **Smooth in a browser.** Home scrolls at 60 fps in Chromium, in the desktop and TV layouts: p99 frame time 16.8 ms. [Measurement](bench/web/scroll.jsonl)
 
 ## Compared
 
@@ -57,7 +57,7 @@
 | Dual subtitles | In progress | Not found | Not found |
 | TV sign-in by QR code | Yes | Yes | Yes |
 | Account needed | No | No (guest mode) | No (anonymous sign-in) |
-| Licence | GPL-3.0-or-later | Web app GPL-2.0, core MIT | GPL-3.0 |
+| Licence | AGPL-3.0-or-later | Web app GPL-2.0, core MIT | GPL-3.0 |
 
 <sub>1. Not yet in 32-bit (armv7) builds, such as the Fire TV one. Checked on 27 October 2026 against each project's own site, docs and source code. [Sources](docs/readme/comparison-sources.md)</sub>
 
@@ -125,6 +125,17 @@ The APKs land in `apps/android/app/build/outputs/apk/release/`.
 cargo run --release -p mq-sync-server -- --db relay.db --listen 0.0.0.0:8787 --invite <code>
 ```
 
+If you run a modified relay for other people, the licence requires you to offer them its source code.
+
 ## Licence
 
-GPL-3.0-or-later, see [LICENSE](LICENSE). Momotus is not affiliated with Stremio.
+AGPL-3.0-or-later, see [LICENSE](LICENSE). Momotus is not affiliated with Stremio.
+
+Code under `vendor/` and `apps/apple/Vendor/` keeps its own licence (Apache-2.0, LGPL-3.0); see the LICENSE and NOTICE files there.
+
+Additional permissions under section 7 of the GNU AGPL version 3:
+
+- If you modify Momotus, or any covered work, by linking or combining it with the Google Play services and Google Identity Services client libraries for Android (or a modified version of those libraries), containing parts covered by the terms of their own licence, the licensors of Momotus grant you additional permission to convey the resulting work.
+- You may convey Momotus, or a work based on it, through an application store whose terms add restrictions on the recipient's use of the software, such as Apple's App Store or Google Play, provided its Corresponding Source stays available as the licence requires.
+
+Bug reports are welcome in Issues. Code contributions are not accepted yet.

@@ -57,7 +57,7 @@ Every cell of the README's comparison table, with the primary source it was chec
 | Dual subtitles | In progress | not on the trunk |
 | TV sign-in by QR code | Yes | a new device shows a pairing code that a phone scans (`apps/android/app/src/main/kotlin/app/marquee/android/SyncDevice.kt`) |
 | Account needed | No | first run offers Start fresh and Browse first (bench/m6/journey-android.jsonl FTV3); sync is optional |
-| Licence | GPL-3.0-or-later | `LICENSE`, `Cargo.toml` (`license = "GPL-3.0-or-later"`) |
+| Licence | AGPL-3.0-or-later | `LICENSE`, `Cargo.toml` (`license = "AGPL-3.0-or-later"`) |
 
 ## Rows left out
 

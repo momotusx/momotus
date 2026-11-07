@@ -27,7 +27,7 @@ ssh "$MQ_RELAY_SSH" 'sudo python3 -I - create' < deploy/relay/identity.py
 MQ_RELAY_SSH=... deploy/relay/deploy.sh
 ```
 
-`deploy.sh` builds the checked-out commit, which must be on the trunk with no uncommitted change under `crates` or here, as a static `x86_64-unknown-linux-musl` binary (`cargo zigbuild`, its own target dir under `~/.cargo-targets/`). The relay has no schema migration: a commit that changes `SCHEMA_VERSION` fails the preflight on a copy of the database, and nothing switches until a migration exists.
+`deploy.sh` builds the checked-out commit, which must be on the trunk and already published to GitHub with publish.sh (the hosted terms page points users at the published source), with no uncommitted change under `crates` or here, as a static `x86_64-unknown-linux-musl` binary (`cargo zigbuild`, its own target dir under `~/.cargo-targets/`). The relay has no schema migration: a commit that changes `SCHEMA_VERSION` fails the preflight on a copy of the database, and nothing switches until a migration exists.
 
 ## Cloudflare
 

@@ -1,5 +1,5 @@
 # Dependency policy: every license must be compatible with distributing the
-# app under GPL-3.0-or-later, and known advisories fail the build.
+# app under AGPL-3.0-or-later, and known advisories fail the build.
 
 [graph]
 all-features = true
@@ -20,7 +20,7 @@ allow = [
     "Unicode-3.0",
     "MPL-2.0",
     "CDLA-Permissive-2.0",
-    "GPL-3.0-or-later",
+    "AGPL-3.0-or-later",
 ]
 
 [advisories]

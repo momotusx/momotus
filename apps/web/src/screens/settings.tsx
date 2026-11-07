@@ -806,7 +806,7 @@ export default function SettingsScreen() {
               <div class="sgroup notes">
                 {/* What the row promises (QA r1, Q7 row 69): the version, the app's licence and those of what ships in it. */}
                 <p class="note">{`Momotus ${pkg.version}`}</p>
-                <p class="note">Momotus is free software under the GNU GPL, version 3 or later.</p>
+                <p class="note">Copyright 2026 the Momotus authors. Momotus is free software under the GNU Affero General Public License, version 3 or later, and comes with no warranty. Licence and source code: github.com/momotusx/momotus</p>
                 <p class="note">
                   {`Icons: Lucide ${pkg.dependencies["lucide-solid"]}, ISC licence. Fonts: Inter and IBM Plex Mono, SIL Open Font License 1.1; the name is drawn from Unbounded, same licence. Solid, Solid Router and uqr, MIT licence.`}
                 </p>

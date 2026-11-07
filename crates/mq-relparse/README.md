@@ -1,7 +1,7 @@
 # mq-relparse
 
 Turns torrent and release names, and the text Stremio addons put in a stream entry, into
-structured facts. Part of Marquee (GPL-3.0-or-later). Rust, edition 2024.
+structured facts. Part of Momotus (AGPL-3.0-or-later). Rust, edition 2024.
 
 ```rust
 use mq_relparse::{parse, parse_addon_stream, Resolution};

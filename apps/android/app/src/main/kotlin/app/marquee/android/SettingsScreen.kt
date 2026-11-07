@@ -1368,7 +1368,13 @@ private fun About() {
                 spoken = false,
             )
             MqText("Momotus ${version.orEmpty()}", role = TextRole.Headline, weight = FontWeight.Bold)
-            MqText("Free software under the GPL 3.", role = TextRole.Caption, color = Marquee.colors.muted)
+            MqText(
+                "Copyright 2026 the Momotus authors. Momotus is free software under the GNU Affero General " +
+                    "Public License, version 3 or later, and comes with no warranty. " +
+                    "Licence and source code: github.com/momotusx/momotus",
+                role = TextRole.Caption,
+                color = Marquee.colors.muted,
+            )
             MqText(
                 "Type: Inter and Unbounded (SIL Open Font License). " +
                     "Icons: Lucide (ISC). Flags: circle-flags (MIT).",

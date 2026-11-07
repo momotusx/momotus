@@ -449,7 +449,7 @@ test("About shows the version and the licences", async ({ page }) => {
   await page.goto("/settings/about?form=desktop");
   const about = page.locator("#set-about");
   await expect(about).toContainText(/Momotus \d+\.\d+\.\d+/);
-  await expect(about).toContainText("GNU GPL, version 3 or later");
+  await expect(about).toContainText("GNU Affero General Public License, version 3 or later");
   await expect(about).toContainText(/Lucide \d+\.\d+\.\d+, ISC licence/);
   await expect(about).toContainText("SIL Open Font License 1.1");
   await expect(about).toContainText("not endorsed or certified by TMDB");

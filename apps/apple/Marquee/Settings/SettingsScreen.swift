@@ -552,6 +552,8 @@ struct SettingsScreen: View {
             if CoreBuild.missingEngine(field: CoreBuild.field, hasEngine: hasEngine()) {
                 Text(CoreBuild.aboutLine).modifier(Note())
             }
+            Text("Copyright 2026 the Momotus authors. Momotus is free software under the GNU Affero General Public License, version 3 or later, and comes with no warranty. Licence and source code: github.com/momotusx/momotus")
+                .modifier(Note())
             // The licences ship in the app: LICENSE-lucide.txt and each font's OFL.txt.
             // TMDB's terms: its logo and this line wherever its data shows.
             HStack(spacing: Theme.Space.xs) {
