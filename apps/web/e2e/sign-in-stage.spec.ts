@@ -230,6 +230,10 @@ test.describe.serial("desktop sign-in stage", () => {
     await expect(page.locator("#sign-in-qr")).toHaveCount(0);
     await expect(page.locator('[data-f="signin:already"]')).toHaveCount(0);
     await expect(page.locator("[data-brand]")).toHaveCount(0);
+    // Every button of the column is a 48 dp target (QA r3, Q2: the provider buttons and Not now were 46).
+    const heights = await page.locator(".step-body .btn").evaluateAll((els) => els.map((e) => e.getBoundingClientRect().height));
+    expect(heights.length).toBeGreaterThan(2);
+    expect(heights.filter((h) => h < 48)).toEqual([]);
     await page.context().close();
   });
 });

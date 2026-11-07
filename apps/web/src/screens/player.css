@@ -71,7 +71,7 @@ html[data-engine="mpv"] .player-scr.started .player-bd { opacity: 0; }
 .pback { width: 68px; height: 68px; margin-bottom: 18px; border-radius: 50%; display: grid; place-items: center; color: var(--text); background: var(--glass); }
 .pback svg { width: 34px; height: 34px; }
 [data-form="phone"] .pback-row { gap: 12px; margin-bottom: 10px; }
-[data-form="phone"] .pback { width: 44px; height: 44px; margin-bottom: 10px; }
+[data-form="phone"] .pback { width: 48px; height: 48px; margin-bottom: 10px; }
 [data-form="phone"] .pback-row .pback { margin-bottom: 0; }
 [data-form="phone"] .pback svg { width: 24px; height: 24px; }
 .round { position: relative; width: 84px; height: 84px; border-radius: 50%; display: grid; place-items: center; color: var(--text);
@@ -402,6 +402,7 @@ html[data-engine="mpv"] .player-scr.started .player-bd { opacity: 0; }
 .subp .opt:disabled { cursor: default; }
 .subp .opt:disabled :is(.flag, .nm, .ct) { opacity: .5; }
 [data-form="phone"] .subp-switch { margin: 4px 12px 6px; }
+[data-form="phone"] .subp-switch .seg { min-height: 48px; }
 .subp-tune .sub-delay, .subp-tune .sub-size { margin: 0; }
 /* Clear of the "Ends at" clock above it (QA r1 Q5 row 32), its foot where it was. */
 [data-form="tv"] .subp { top: 112px; bottom: auto; width: 1160px; height: 720px; display: grid; grid-template-columns: 500px 660px; border-radius: 24px; }
@@ -434,7 +435,7 @@ html[data-engine="mpv"] .player-scr.started .player-bd { opacity: 0; }
 [data-form="phone"] .subp-col { flex: 1; padding: 0 0 12px; }
 [data-form="phone"] .subp-head { position: relative; justify-content: center; height: 48px; margin: 0; }
 [data-form="phone"] .subp-head h2 { gap: 8px; font: 600 17px / 22px var(--font-text); color: var(--text); }
-[data-form="phone"] .subp-back, [data-form="phone"] .subp-done { position: absolute; top: 2px; height: 44px; display: flex; align-items: center; font-size: 17px; }
+[data-form="phone"] .subp-back, [data-form="phone"] .subp-done { position: absolute; top: 0; height: 48px; display: flex; align-items: center; font-size: 17px; }
 [data-form="phone"] .subp-back { left: 4px; }
 [data-form="phone"] .subp-back svg { width: 22px; height: 22px; }
 [data-form="phone"] .subp-done { right: 8px; padding: 0 6px; }
@@ -446,7 +447,7 @@ html[data-engine="mpv"] .player-scr.started .player-bd { opacity: 0; }
 [data-form="phone"] .subp .opt { gap: 10px; min-height: 48px; padding: 8px 14px; border-radius: 0; font: 400 15px / 20px var(--font-text); }
 [data-form="phone"] .subp .opt.on { background: none; }
 [data-form="phone"] .lrow { gap: 0; }
-[data-form="phone"] .lr-open { width: 44px; height: 44px; margin-right: 2px; }
+[data-form="phone"] .lr-open { width: 48px; height: 48px; margin-right: 2px; }
 [data-form="phone"] .lr-open svg { width: 16px; height: 16px; }
 [data-form="phone"] .flag { width: 24px; height: 24px; }
 [data-form="phone"] .flag.none { font-size: 11px; }
