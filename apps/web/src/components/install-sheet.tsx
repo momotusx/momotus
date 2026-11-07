@@ -67,7 +67,7 @@ export function InstallSheet(props: { addon: SheetAddon; onInstall: () => void; 
         aria-modal="true"
         data-armed={armed() ? "" : undefined}
         aria-labelledby={`${id}-title`}
-        aria-describedby={[`${id}-from`, adds() ? `${id}-adds` : "", `${id}-note`].filter(Boolean).join(" ")}
+        aria-describedby={[adds() ? `${id}-adds` : "", `${id}-note`].filter(Boolean).join(" ")}
         // A held key repeats: only its first press counts, so a held Enter or OK never installs.
         onKeyDown={(e) => {
           if (e.repeat && (e.key === "Enter" || e.key === " ")) {
@@ -84,13 +84,17 @@ export function InstallSheet(props: { addon: SheetAddon; onInstall: () => void; 
           <h2 id={`${id}-title`} dir="auto">
             {props.words?.title ?? sheetTitle(props.addon.name)}
           </h2>
-          <p class="is-from" id={`${id}-from`}>{props.words?.from ?? sheetFrom(props.addon.host)}</p>
           <Show when={adds()}>
             <p class="is-adds" id={`${id}-adds`}>{adds()}</p>
           </Show>
           <p class="is-note" id={`${id}-note`}>
             {props.words?.note ?? sheetWords.note}
           </p>
+          {/* Where it comes from is a raw host: only behind Details. */}
+          <details class="why-raw is-details">
+            <summary data-f="sheet:details">Details</summary>
+            <p class="is-from">{props.words?.from ?? sheetFrom(props.addon.host)}</p>
+          </details>
           <div class="is-acts">{tv() ? [cancel, install] : form() === "phone" ? [install, cancel] : [cancel, install]}</div>
         </section>
       </div>

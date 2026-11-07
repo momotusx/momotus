@@ -219,6 +219,10 @@ private struct AddonCard: View {
                 .accessibilityLabel("Move \(addon.name) down")
             Button(addon.enabled ? "Turn off" : "Turn on", glyph: "power", action: toggle)
                 .accessibilityLabel(addon.enabled ? "Turn \(addon.name) off" : "Turn \(addon.name) on")
+            // Where it comes from, only here behind the card's press: never on the card itself.
+            if addon.builtIn != true {
+                Section(InstallSheetRules.details) { Text(addon.host) }
+            }
             Divider()
             Button("Remove", glyph: "trash", role: .destructive, action: remove)
                 .accessibilityLabel("Remove \(addon.name)")
@@ -253,10 +257,12 @@ private struct AddonCard: View {
                         Text(addon.name).textFont(Theme.type.headline + 1, weight: .semibold, relativeTo: .headline)
                         Text(addon.version).textFont(Theme.type.caption + 1, relativeTo: .caption).foregroundStyle(Theme.Palette.muted)
                     }
-                    // A source Marquee runs itself has no host to name.
-                    Text(addon.hostLine)
-                        .font(addon.builtIn == true ? .text(Theme.type.caption + 1, relativeTo: .caption) : .mono(Theme.type.caption + 1))
-                        .foregroundStyle(Theme.Palette.muted)
+                    // A source Marquee runs itself says so; no card shows a raw host.
+                    if let line = addon.hostLine {
+                        Text(line)
+                            .textFont(Theme.type.caption + 1, relativeTo: .caption)
+                            .foregroundStyle(Theme.Palette.muted)
+                    }
                     if let description = addon.description {
                         Text(description)
                             .textFont(Theme.type.callout, relativeTo: .callout)

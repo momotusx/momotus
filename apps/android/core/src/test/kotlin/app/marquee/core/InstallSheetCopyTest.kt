@@ -65,14 +65,16 @@ class InstallSheetCopyTest {
 
     @Test
     fun `the lines leave out an empty Adds line`() {
+        // Where it comes from is a raw host: never one of the lines (the sheet keeps it behind Details).
         assertEquals(
-            listOf("From a.example", "Adds subtitles.", InstallSheetCopy.NOTE),
-            InstallSheetCopy.lines("a.example", listOf("subtitles"), emptyList()),
+            listOf("Adds subtitles.", InstallSheetCopy.NOTE),
+            InstallSheetCopy.lines(listOf("subtitles"), emptyList()),
         )
         assertEquals(
-            listOf("From a.example", InstallSheetCopy.NOTE),
-            InstallSheetCopy.lines("a.example", listOf("something_new"), listOf("movie")),
+            listOf(InstallSheetCopy.NOTE),
+            InstallSheetCopy.lines(listOf("something_new"), listOf("movie")),
         )
+        assertEquals("From a.example", InstallSheetCopy.from("a.example"))
         assertEquals("Install Torrentio?", InstallSheetCopy.title("Torrentio"))
     }
 }

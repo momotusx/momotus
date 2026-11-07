@@ -24,6 +24,7 @@ import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.test.requestFocus
 import androidx.test.platform.app.InstrumentationRegistry
+import app.marquee.core.AddonsCopy
 import app.marquee.core.InstallSheetCopy
 import app.marquee.design.ARM_MS
 import app.marquee.design.Form
@@ -113,12 +114,14 @@ class InstallSheetTest {
     }
 
     @Test
-    fun `the sheet says the name, where it comes from, what it adds and the note`() {
+    fun `the sheet says the name, what it adds and the note, and where it comes from only behind Details`() {
         show(Form.Phone)
         compose.onNodeWithText("Install OpenSubtitles v3?").assertIsDisplayed()
-        compose.onNodeWithText("From opensubtitles-v3.strem.io").assertIsDisplayed()
         compose.onNodeWithText("Adds subtitles for movies and series.").assertIsDisplayed()
         compose.onNodeWithText(InstallSheetCopy.NOTE).assertIsDisplayed()
+        compose.onNodeWithText("From opensubtitles-v3.strem.io").assertDoesNotExist()
+        compose.onNodeWithText(AddonsCopy.DETAILS).performClick()
+        compose.onNodeWithText("From opensubtitles-v3.strem.io").assertIsDisplayed()
     }
 
     @Test

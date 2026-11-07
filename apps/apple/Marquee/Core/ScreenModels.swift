@@ -473,8 +473,9 @@ struct AddonInfo: Decodable, Hashable, Sendable, Identifiable {
 
     var id: String { url }
 
-    /// What the card shows under the name: the host, or that it runs here.
-    var hostLine: String { builtIn == true ? "Built into Momotus, runs on this device" : host }
+    /// What the card shows under the name: that it runs here, else nothing (the host
+    /// waits in the card's actions, behind Details: never a raw host on the card).
+    var hostLine: String? { builtIn == true ? "Built into Momotus, runs on this device" : nil }
 }
 
 /// Find addons: Cinemeta's two lists, Official then Community, then the lists

@@ -67,6 +67,8 @@
 .addon-text h2 { font: 600 var(--type-headline) / 1.2 var(--font-text); }
 .addon-text h2 small { font: 400 var(--type-caption) var(--font-text); color: var(--muted); margin-left: 12px; }
 .addon-text .host { font: 400 var(--type-caption) / 1.3 var(--font-mono); color: var(--muted); margin-top: 4px; }
+.addon-text .addon-host { margin-top: 4px; }
+.addon-text .addon-host summary { width: fit-content; min-height: 24px; padding-block: 4px; }
 .addon-text .desc { font: 400 var(--type-callout) / 1.35 var(--font-text); color: var(--muted); margin-top: 10px;
   display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
 .addon-text .provides { font: 500 var(--type-caption) / 1.35 var(--font-text); margin-top: 10px; }

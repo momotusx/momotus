@@ -78,6 +78,7 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import app.marquee.core.FindAddons
 import app.marquee.core.FindAddons.Action
+import app.marquee.core.AddonsCopy
 import app.marquee.core.FindAddonsCopy
 import app.marquee.core.FindAddonsPage
 import app.marquee.core.InstallCards
@@ -708,12 +709,14 @@ internal fun InstallSheet(
     opener: FocusRequester? = null,
 ) = ConfirmSheet(
     InstallSheetCopy.title(name),
-    InstallSheetCopy.lines(host, provides, types),
+    InstallSheetCopy.lines(provides, types),
     InstallSheetCopy.INSTALL,
     InstallSheetCopy.CANCEL,
     onConfirm = onInstall,
     onCancel = onCancel,
     opener = opener,
+    details = InstallSheetCopy.from(host),
+    detailsLabel = AddonsCopy.DETAILS,
 )
 
 /** Frames a focus landing tries for (about 1.5 s): the list may still be on its way. */

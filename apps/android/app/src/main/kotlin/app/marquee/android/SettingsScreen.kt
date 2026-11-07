@@ -808,6 +808,9 @@ private fun AddonRow(
                     )
                 }
             }
+            // The host only behind Details: the row names the addon by its own name.
+            var details by remember(addon.url) { mutableStateOf(false) }
+            if (details) MqText(addon.host, role = TextRole.Caption, color = colors.dim, maxLines = 2)
             addon.description?.let { MqText(it, role = TextRole.Caption, color = colors.muted, maxLines = 2) }
             // Wraps on a small phone or a large font instead of cutting a label.
             FlowRow(
@@ -832,6 +835,17 @@ private fun AddonRow(
                     enabled = !last && !busy,
                     spoken = "Move $name down",
                 )
+                if (!addon.builtIn) {
+                    RoundButton(
+                        Icons.Info,
+                        AddonsCopy.DETAILS,
+                        { details = !details },
+                        showLabel = true,
+                        selected = details,
+                        spoken = "$name ${AddonsCopy.DETAILS.lowercase()}",
+                        toggle = true,
+                    )
+                }
                 // Removing takes a second press within 4 s, as on the web (Apple asks in a dialog).
                 var armed by remember(addon.url) { mutableStateOf(false) }
                 LaunchedEffect(armed) {

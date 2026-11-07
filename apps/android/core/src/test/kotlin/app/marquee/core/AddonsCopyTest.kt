@@ -16,8 +16,8 @@ class AddonsCopyTest {
         val builtIn = CoreJson.decodeFromString(AddonInfo.serializer(), "$json,\"builtIn\":true}")
         assertEquals("Built into Momotus, runs on this device · 1.1.1", AddonsCopy.caption(builtIn))
         assertFalse("tta.example" in AddonsCopy.caption(builtIn))
-        // Any other row names its host.
-        assertEquals("tta.example · 1.1.1", AddonsCopy.caption(builtIn.copy(builtIn = false)))
+        // Any other row names no host either: it waits behind Details.
+        assertEquals("1.1.1", AddonsCopy.caption(builtIn.copy(builtIn = false)))
     }
 
     @Test

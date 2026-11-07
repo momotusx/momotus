@@ -7,8 +7,11 @@ object AddonsCopy {
     /** In place of the host on a row the core runs itself (TurkceAltyazi.org). */
     const val BUILT_IN = "Built into Momotus, runs on this device"
 
-    /** A row's second line: where the addon runs and its version; the host stands in for the URL, which may hold keys. */
-    fun caption(addon: AddonInfo): String = "${if (addon.builtIn) BUILT_IN else addon.host} · ${addon.version}"
+    /** Opens a row's host: the row itself names the addon by its own name, never a raw host. */
+    const val DETAILS = "Details"
+
+    /** A row's second line: where a built-in addon runs and the version; never a host (the URL may hold keys). */
+    fun caption(addon: AddonInfo): String = if (addon.builtIn) "$BUILT_IN · ${addon.version}" else addon.version
 
     /**
      * Settings' Addons row (A1): how many are installed and how many of the ones on find streams, with no addon's

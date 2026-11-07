@@ -25,6 +25,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import app.marquee.core.AddonsCopy
 import app.marquee.core.ErrorCopy
 import app.marquee.core.PluginCopy
 import app.marquee.core.model.ListedRepo
@@ -67,13 +68,11 @@ fun PluginDirectoryScreen(session: CoreSession) {
     asking?.let { p ->
         ConfirmSheet(
             PluginCopy.fill(PluginCopy.SHEET_TITLE, "name" to p.name),
-            listOf(
-                PluginCopy.fill(PluginCopy.SHEET_FROM, "host" to p.host),
-                PluginCopy.adds(p.providers),
-                PluginCopy.SHEET_NOTE,
-            ),
+            listOf(PluginCopy.adds(p.providers), PluginCopy.SHEET_NOTE),
             PluginCopy.ADD,
             "Cancel",
+            details = PluginCopy.fill(PluginCopy.SHEET_FROM, "host" to p.host),
+            detailsLabel = AddonsCopy.DETAILS,
             onConfirm = {
                 asking = null
                 scope.launch {
@@ -229,13 +228,11 @@ fun PluginsScreen(session: CoreSession) {
     asking?.let { p ->
         ConfirmSheet(
             PluginCopy.fill(PluginCopy.SHEET_TITLE, "name" to p.name),
-            listOf(
-                PluginCopy.fill(PluginCopy.SHEET_FROM, "host" to p.host),
-                PluginCopy.adds(p.providers),
-                PluginCopy.SHEET_NOTE,
-            ),
+            listOf(PluginCopy.adds(p.providers), PluginCopy.SHEET_NOTE),
             PluginCopy.ADD,
             "Cancel",
+            details = PluginCopy.fill(PluginCopy.SHEET_FROM, "host" to p.host),
+            detailsLabel = AddonsCopy.DETAILS,
             onConfirm = {
                 asking = null
                 said = Said(Place.Addons, PluginCopy.ADDING, failed = false, pending = true)

@@ -121,7 +121,8 @@ test("a card's Install opens the sheet: Cancel installs nothing, Install install
   const button = card(page, "WatchHub").getByRole("button", { name: /WatchHub/ });
   await button.click();
   await expect(sheet(page)).toHaveAccessibleName("Install WatchHub?");
-  await expect(sheet(page).locator(".is-from")).toHaveText(/^From \S+/);
+  // The host is a raw address: only behind Details.
+  await expect(sheet(page).locator(".is-from")).toBeHidden();
   await expect(sheet(page).locator(".is-adds")).toHaveText(/^Adds sources/);
   await expect(sheet(page).locator(".is-note")).toHaveText("It comes from a third party. Momotus does not check it.");
   await expect(page.locator('[data-f="sheet:install"]')).toBeFocused();
@@ -219,6 +220,8 @@ test("a pasted link is read, shown in the sheet, and installed only from it", as
     await page.locator('[data-f="install:url"]').fill(url);
     await page.locator('[data-f="install:go"]').click();
     await expect(sheet(page)).toHaveAccessibleName("Install Sheet Test?");
+    await expect(sheet(page).locator(".is-from")).toBeHidden();
+    await sheet(page).locator('[data-f="sheet:details"]').click();
     await expect(sheet(page).locator(".is-from")).toHaveText("From 127.0.0.1");
     await expect(sheet(page).locator(".is-adds")).toHaveText("Adds subtitles for movies and series.");
     // The phone's page sheet: Install first, the key fill, Cancel under it.

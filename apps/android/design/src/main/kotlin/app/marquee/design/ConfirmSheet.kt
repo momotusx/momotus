@@ -70,6 +70,9 @@ fun ConfirmSheet(
     onCancel: () -> Unit,
     /** The control that opened the sheet: it takes the focus back when the sheet closes. */
     opener: FocusRequester? = null,
+    /** A line shown only behind [detailsLabel] (where an addon comes from: a raw host is never on screen at once). */
+    details: String? = null,
+    detailsLabel: String = "Details",
 ) {
     val tv = Marquee.form == Form.Tv
     // A dialog is its own window: it does not inherit the TV canvas density (as ActionMenu).
@@ -157,6 +160,11 @@ fun ConfirmSheet(
                         weight = FontWeight.Bold,
                     )
                     for (line in lines) MqText(line, role = TextRole.Callout, color = colors.muted)
+                    if (details != null) {
+                        var open by remember { mutableStateOf(false) }
+                        SecondaryButton(detailsLabel, { open = !open }, selected = open)
+                        if (open) MqText(details, role = TextRole.Callout, color = colors.muted)
+                    }
                 }
                 if (tv) {
                     Row(

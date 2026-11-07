@@ -117,9 +117,10 @@ struct PluginsScreen: View {
                 said = nil
                 gate.ask(InstallAsk(
                     title: PluginWords.fill(PluginWords.sheetTitle, ["name": p.name]),
-                    lines: [PluginWords.fill(PluginWords.sheetFrom, ["host": p.host]), PluginWords.adds(p.providers), PluginWords.sheetNote],
+                    lines: [PluginWords.adds(p.providers), PluginWords.sheetNote],
                     run: { add(p) },
-                    action: PluginWords.add))
+                    action: PluginWords.add,
+                    details: PluginWords.fill(PluginWords.sheetFrom, ["host": p.host])))
             } catch {
                 said = (.bad, PluginWords.fill(PluginWords.couldNotAdd, ["reason": ErrorWords.of(error)]))
             }
@@ -249,9 +250,10 @@ struct PluginDirectoryScreen: View {
                 said = nil
                 gate.ask(InstallAsk(
                     title: PluginWords.fill(PluginWords.sheetTitle, ["name": p.name]),
-                    lines: [PluginWords.fill(PluginWords.sheetFrom, ["host": p.host]), PluginWords.adds(p.providers), PluginWords.sheetNote],
+                    lines: [PluginWords.adds(p.providers), PluginWords.sheetNote],
                     run: { add(p) },
-                    action: PluginWords.add))
+                    action: PluginWords.add,
+                    details: PluginWords.fill(PluginWords.sheetFrom, ["host": p.host])))
             } catch {
                 said = (r.url, .bad, PluginWords.fill(PluginWords.couldNotAdd, ["reason": ErrorWords.of(error)]))
             }

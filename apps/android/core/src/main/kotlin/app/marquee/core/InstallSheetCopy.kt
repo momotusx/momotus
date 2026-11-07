@@ -64,12 +64,12 @@ object InstallSheetCopy {
         return ADDS_FOR.replace("{what}", joined(what)).replace("{kinds}", joined(kinds))
     }
 
-    /** The sheet's lines under its title: where it comes from, what it adds (when it says), the note. */
+    /** The sheet's lines under its title: what it adds (when it says), the note. Where it comes from ([from]) is a raw
+     * host: the sheet keeps it behind Details. */
     fun lines(
-        host: String,
         provides: List<String>,
         types: List<String>,
-    ): List<String> = listOfNotNull(from(host), adds(provides, types).ifEmpty { null }, NOTE)
+    ): List<String> = listOfNotNull(adds(provides, types).ifEmpty { null }, NOTE)
 
     /** "a", "a and b", "a, b and c". */
     private fun joined(words: List<String>): String =

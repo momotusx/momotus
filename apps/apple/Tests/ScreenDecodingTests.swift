@@ -89,8 +89,9 @@ private func fixture<T: Decodable>(_ name: String, as type: T.Type) throws -> T 
     #expect(builtIn.hostLine == "Built into Momotus, runs on this device")
     #expect(builtIn.configureUrl == nil)
     let fetched = try JSONDecoder().decode(AddonInfo.self, from: Data((base + #", "builtIn": false}"#).utf8))
-    #expect(fetched.hostLine == "5a0d1888fa64-turkcealtyaziorg.baby-beamup.club")
-    // An older core sends no field: the host, as before.
+    // Any other card names no host: it waits behind Details.
+    #expect(fetched.hostLine == nil)
+    // An older core sends no field: an addon of its own, as before.
     let older = try JSONDecoder().decode(AddonInfo.self, from: Data((base + "}").utf8))
-    #expect(older.builtIn == nil && older.hostLine == older.host)
+    #expect(older.builtIn == nil && older.hostLine == nil)
 }

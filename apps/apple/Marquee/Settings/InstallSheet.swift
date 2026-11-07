@@ -15,6 +15,8 @@ enum InstallSheetRules {
     static let install = "Install"
     static let cancel = "Cancel"
     static let checking = "Checking"
+    /// Opens where an addon comes from: a raw host is never on screen at once.
+    static let details = "Details"
 
     /// Every word by its key in the shared file, for the parity test.
     static let table: [String: String] = [
@@ -46,8 +48,10 @@ enum InstallSheetRules {
 
     /// The sheet for one addon; its Install runs `run`.
     static func ask(name: String, host: String, provides: [String], types: [String], run: @escaping @MainActor () -> Void) -> InstallAsk {
-        let lines = [from.replacingOccurrences(of: "{host}", with: host), addsLine(provides: provides, types: types), note]
-        return InstallAsk(title: title.replacingOccurrences(of: "{name}", with: name), lines: lines.compactMap { $0 }, run: run)
+        let lines = [addsLine(provides: provides, types: types), note]
+        var ask = InstallAsk(title: title.replacingOccurrences(of: "{name}", with: name), lines: lines.compactMap { $0 }, run: run)
+        ask.details = from.replacingOccurrences(of: "{host}", with: host)
+        return ask
     }
 
     private static func unique(_ words: [String]) -> [String] {
@@ -64,6 +68,8 @@ struct InstallAsk: Identifiable {
     let run: @MainActor () -> Void
     /// The answer that runs it: Install, or Add for a plugin repository.
     var action = InstallSheetRules.install
+    /// Where it comes from (a raw host): shown only behind Details.
+    var details: String?
 }
 
 /// The question waiting for an answer. Install runs it once; Cancel, or
@@ -102,7 +108,7 @@ extension View {
         let shown = Binding(get: { gate.asking }, set: { if $0 == nil { gate.cancel() } })
         let sheet = { (ask: InstallAsk) in
             ConfirmSheet(title: ask.title, lines: ask.lines, action: ask.action, cancel: InstallSheetRules.cancel,
-                         confirm: gate.confirm, dismiss: gate.cancel)
+                         confirm: gate.confirm, dismiss: gate.cancel, details: ask.details)
                 .onAppear { gate.presented() }
         }
         #if os(tvOS)
@@ -125,6 +131,20 @@ struct ConfirmSheet: View {
     let cancel: String
     let confirm: @MainActor () -> Void
     let dismiss: @MainActor () -> Void
+    /// A line shown only behind Details.
+    var details: String?
+    @State private var detailsShown = false
+
+    init(title: String, lines: [String], action: String, cancel: String, confirm: @escaping @MainActor () -> Void,
+         dismiss: @escaping @MainActor () -> Void, details: String? = nil) {
+        self.title = title
+        self.lines = lines
+        self.action = action
+        self.cancel = cancel
+        self.confirm = confirm
+        self.dismiss = dismiss
+        self.details = details
+    }
 
     var body: some View {
         #if os(tvOS)
@@ -172,6 +192,17 @@ struct ConfirmSheet: View {
                     .textFont(Theme.type.body)
                     .foregroundStyle(Theme.Palette.muted)
                     .fixedSize(horizontal: false, vertical: true)
+            }
+            if let details {
+                Button { detailsShown.toggle() } label: { Text(InstallSheetRules.details) }
+                    .buttonStyle(PillButtonStyle())
+                    .accessibilityAddTraits(detailsShown ? .isSelected : [])
+                if detailsShown {
+                    Text(details)
+                        .textFont(Theme.type.body)
+                        .foregroundStyle(Theme.Palette.muted)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)

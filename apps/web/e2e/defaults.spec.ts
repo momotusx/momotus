@@ -765,7 +765,12 @@ test("the built-in TurkceAltyazi.org row says where it runs instead of a host", 
   await expect(builtIn.locator(".host")).toHaveText("Built into Momotus, runs on this device");
   // Never configurable: its old host is never opened.
   await expect(builtIn).not.toContainText("Settings live on its website");
-  await expect(page.locator("li.addon", { hasText: "Cinemeta" }).locator(".host")).toHaveText("v3-cinemeta.strem.io");
+  // Other rows keep their host behind Details: no raw host in the row itself.
+  const cinemeta = page.locator("li.addon", { hasText: "Cinemeta" });
+  await expect(cinemeta.locator(".host")).toBeHidden();
+  await cinemeta.locator("summary").click();
+  await expect(cinemeta.locator(".host")).toHaveText("v3-cinemeta.strem.io");
+  await cinemeta.locator("summary").click();
   await shot(page, "addons-built-in", "desktop");
   // The site's credit lives with its own row; About names no addon (the owner, 2026-10-30).
   await expect(builtIn).toContainText("Turkish subtitles from TurkceAltyazi.org.");

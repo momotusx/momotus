@@ -78,10 +78,12 @@ private let tokenRefusal = CoreError("this link carries a sign-in in its setting
     @Test func theSheetSaysTheNameTheHostWhatItAddsAndTheNote() {
         let ask = R.ask(name: "Torrentio", host: "torrentio.strem.fun", provides: ["stream"], types: ["movie", "series"]) {}
         #expect(ask.title == "Install Torrentio?")
-        #expect(ask.lines == ["From torrentio.strem.fun", "Adds sources for movies and series.", R.note])
+        // The host is a raw address: only behind Details, never one of the lines.
+        #expect(ask.lines == ["Adds sources for movies and series.", R.note])
+        #expect(ask.details == "From torrentio.strem.fun")
         // Nothing it has words for: no Adds line, the addon still installs.
         let bare = R.ask(name: "X", host: "x.example", provides: ["something_new"], types: ["movie"]) {}
-        #expect(bare.lines == ["From x.example", R.note])
+        #expect(bare.lines == [R.note])
     }
 
     @Test func aNameIsPlainTextInTheTitle() throws {
@@ -129,7 +131,7 @@ private let tokenRefusal = CoreError("this link carries a sign-in in its setting
         page.perform(entry, entry.action)
         #expect(calls.sent.isEmpty)
         #expect(page.gate.asking?.title == "Install OpenSubtitles v3?")
-        #expect(page.gate.asking?.lines == ["From opensubtitles-v3.strem.io", "Adds subtitles for movies and series.", R.note])
+        #expect(page.gate.asking?.lines == ["Adds subtitles for movies and series.", R.note])
         page.gate.cancel()
         #expect(page.gate.asking == nil)
         #expect(calls.sent.isEmpty)
@@ -157,7 +159,7 @@ private let tokenRefusal = CoreError("this link carries a sign-in in its setting
         #expect(calls.previews.map(\.url) == [url])
         #expect(calls.installs.isEmpty)
         #expect(link.gate.asking?.title == "Install Local?")
-        #expect(link.gate.asking?.lines == ["From addon.example", "Adds sources and subtitles for movies and series.", R.note])
+        #expect(link.gate.asking?.lines == ["Adds sources and subtitles for movies and series.", R.note])
         link.gate.cancel()
         #expect(link.link == url)
         #expect(calls.installs.isEmpty)
