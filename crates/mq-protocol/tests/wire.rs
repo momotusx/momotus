@@ -3,7 +3,7 @@ use serde_json::json;
 
 #[test]
 fn torrentio_streams_classify_as_torrents() {
-    let bytes = include_bytes!("fixtures/torrentio_movie.json");
+    let bytes = include_bytes!("fixtures/torrentio_answer.json");
     let resp = decode_streams(bytes).expect("decodes");
     assert_eq!(resp.skipped, 0);
     assert!(resp.streams.len() > 10);

@@ -1,11 +1,11 @@
 //! Golden picks over the recorded corpus (plans/m13-stream-choice.md 6.1):
 //! every title of both Torrentio recordings, ranked for each device profile.
-//! The table of picks is `tests/corpus/picks.txt`; a change to any pick fails
+//! The table of picks is `tests/streams/picks.txt`; a change to any pick fails
 //! this test and lists the changed lines. When the change is meant, write the
 //! table again with `UPDATE_PICKS=1 cargo test -p mq-streams --test corpus`
 //! and read the picks in `git diff`.
 //!
-//! Each line also carries the plan's expectation (`tests/corpus/expected.json`).
+//! Each line also carries the plan's expectation (`tests/streams/expected.json`).
 //! Pending ones are reported, not asserted: a person confirms a pick before
 //! it becomes an assertion, and a pick never changes to match the code.
 
@@ -17,7 +17,7 @@ use std::collections::BTreeMap;
 use std::fmt::Write as _;
 use std::path::Path;
 
-const DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/corpus");
+const DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/streams");
 
 #[derive(Deserialize)]
 struct Corpus {
@@ -166,7 +166,7 @@ fn parsed(t: &Title) -> Vec<ParsedStream> {
         .collect()
 }
 
-/// "1080p 3.3 GB 271 seeds bt:922d55b4:1" for a row.
+/// "1080p 3.3 GB 271 seeds bt:f5679c3a:1" for a row.
 fn describe(s: &ParsedStream) -> String {
     let res = serde_json::to_value(s.release.resolution)
         .ok()
@@ -211,7 +211,7 @@ fn hidden_counts(r: &Ranked) -> String {
     format!("hidden {}", parts.join(", "))
 }
 
-/// The Cinemeta facts of a title (`tests/corpus/meta.json`).
+/// The Cinemeta facts of a title (`tests/streams/meta.json`).
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct Meta {

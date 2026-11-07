@@ -1,0 +1,27 @@
+{
+  "recorded": "2026-10-19",
+  "source": "Cinemeta meta, the facts the ranking reads",
+  "titles": [
+    {"id":"tt0047478","name":"Seven Samurai","year":"1954","releaseInfo":"1954","released":"1956-11-19T00:00:00.000Z","runtime":"207 min","country":"Japan","episodeReleased":null,"episodesInSeason":null},
+    {"id":"tt0111161","name":"The Shawshank Redemption","year":"1994","releaseInfo":"1994","released":"1994-10-14T00:00:00.000Z","runtime":"142 min","country":"United States","episodeReleased":null,"episodesInSeason":null},
+    {"id":"tt0317248","name":"City of God","year":"2004","releaseInfo":"2004","released":"2004-02-13T00:00:00.000Z","runtime":"129 min","country":"Brazil","episodeReleased":null,"episodesInSeason":null},
+    {"id":"tt0386676:2:1","name":"The Office","year":"2005–2013","releaseInfo":"2005–2013","released":"2005-03-24T00:00:00.000Z","runtime":"22 min","country":"United States","episodeReleased":"2001-01-31T22:00:00.000Z","episodesInSeason":22},
+    {"id":"tt0388629:1:1","name":"One Piece","year":"1999–","releaseInfo":"1999–","released":"1999-10-20T00:00:00.000Z","runtime":"25 min","country":"Japan","episodeReleased":"1999-10-20T14:15:00.000Z","episodesInSeason":8},
+    {"id":"tt0468569","name":"The Dark Knight","year":"2008","releaseInfo":"2008","released":"2008-07-18T00:00:00.000Z","runtime":"152 min","country":"United States, United Kingdom","episodeReleased":null,"episodesInSeason":null},
+    {"id":"tt0816692","name":"Interstellar","year":"2014","releaseInfo":"2014","released":"2014-11-07T00:00:00.000Z","runtime":"169 min","country":"United States, United Kingdom, Canada","episodeReleased":null,"episodesInSeason":null},
+    {"id":"tt0903747:5:14","name":"Breaking Bad","year":"2008–2013","releaseInfo":"2008–2013","released":"2008-01-20T00:00:00.000Z","runtime":"49 min","country":"United States","episodeReleased":"2013-09-16T05:00:00.000Z","episodesInSeason":16},
+    {"id":"tt0944947:1:1","name":"Game of Thrones","year":"2011–2019","releaseInfo":"2011–2019","released":"2011-04-17T00:00:00.000Z","runtime":"57 min","country":"United States, United Kingdom","episodeReleased":"2011-04-18T05:00:00.000Z","episodesInSeason":10},
+    {"id":"tt11280740:2:1","name":"Severance","year":"2022–","releaseInfo":"2022–","released":"2022-02-18T00:00:00.000Z","runtime":"49 min","country":"United States","episodeReleased":"2025-01-17T05:00:00.000Z","episodesInSeason":10},
+    {"id":"tt1375666","name":"Inception","year":"2010","releaseInfo":"2010","released":"2010-07-16T00:00:00.000Z","runtime":"148 min","country":"United Kingdom, United States","episodeReleased":null,"episodesInSeason":null},
+    {"id":"tt15239678","name":"Dune: Part Two","year":"2024","releaseInfo":"2024","released":"2024-03-01T00:00:00.000Z","runtime":"167 min","country":"United States, Canada, United Arab Emirates, Hungary, Italy, New Zealand, Jordan","episodeReleased":null,"episodesInSeason":null},
+    {"id":"tt15398776","name":"Oppenheimer","year":"2023","releaseInfo":"2023","released":"2023-07-21T00:00:00.000Z","runtime":"181 min","country":"United States, United Kingdom","episodeReleased":null,"episodesInSeason":null},
+    {"id":"tt1757678","name":"Avatar: Fire and Ash","year":"2025","releaseInfo":"2025","released":"2025-12-19T00:00:00.000Z","runtime":"198 min","country":"United States, Canada","episodeReleased":null,"episodesInSeason":null},
+    {"id":"tt2758880","name":"Winter Sleep","year":"2014","releaseInfo":"2014","released":"2014-06-13T00:00:00.000Z","runtime":"196 min","country":"Turkey, France, Germany, Japan","episodeReleased":null,"episodesInSeason":null},
+    {"id":"tt31193180","name":"Sinners","year":"2025","releaseInfo":"2025","released":"2025-04-18T00:00:00.000Z","runtime":"138 min","country":"United States","episodeReleased":null,"episodesInSeason":null},
+    {"id":"tt3581920:2:3","name":"The Last of Us","year":"2023–","releaseInfo":"2023–","released":"2023-01-15T00:00:00.000Z","runtime":"56 min","country":"Canada, United States","episodeReleased":"2025-04-27T21:00:00.000Z","episodesInSeason":7},
+    {"id":"tt4520988","name":"Frozen II","year":"2019","releaseInfo":"2019","released":"2019-11-22T00:00:00.000Z","runtime":"103 min","country":"United States, Japan","episodeReleased":null,"episodesInSeason":null},
+    {"id":"tt5491994:1:1","name":"Planet Earth II","year":"2016","releaseInfo":"2016","released":"2017-02-18T00:00:00.000Z","runtime":"58 min","country":"United Kingdom, Germany, France, China, United States","episodeReleased":"2016-11-06T20:00:00.000Z","episodesInSeason":6},
+    {"id":"tt6751668","name":"Parasite","year":"2019","releaseInfo":"2019","released":"2019-11-08T00:00:00.000Z","runtime":"133 min","country":"South Korea","episodeReleased":null,"episodesInSeason":null},
+    {"id":"tt9253284:2:1","name":"Andor","year":"2022–2025","releaseInfo":"2022–2025","released":"2022-09-21T00:00:00.000Z","runtime":"48 min","country":"United States","episodeReleased":"2025-04-23T05:00:00.000Z","episodesInSeason":12}
+  ]
+}
