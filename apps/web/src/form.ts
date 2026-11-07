@@ -6,6 +6,7 @@
  * detection and is remembered on this device. */
 
 import { createSignal } from "solid-js";
+import { isWebOS } from "./lib/webos";
 import { browserZoom, desktopScale, isWebKit } from "./lib/zoom";
 import { pageColor } from "./theme/page";
 
@@ -42,7 +43,8 @@ function detect(): Form {
   return window.innerWidth <= 720 ? "phone" : "desktop";
 }
 
-let pin = forced();
+// webOS is always the TV form: no stored or `?form=` choice applies there.
+let pin: Form | null = isWebOS() ? "tv" : forced();
 const [form, setForm] = createSignal<Form>(pin ?? detect());
 // The form chosen for this device, or null for Automatic (detected).
 const [pinned, setPinned] = createSignal<Form | null>(pin);

@@ -6,6 +6,7 @@
  * Focus moves only on input: arrows, Back restoring the previous screen, or
  * the first focus of a screen. */
 
+import { isWebOS } from "../lib/webos";
 import { type Candidate, type Direction, pick } from "./spatial";
 
 const SEL = "[data-f]";
@@ -29,6 +30,8 @@ let lastInput: "keys" | "pointer" | null = null;
 // never takes over the one the viewer moved since.
 let inputs = 0;
 export const mayAutoFocus = () => document.documentElement.dataset.form === "tv" || lastInput === "keys";
+/** The pointer is in use (a mouse, or the Magic Remote's cursor showing): focus that follows it moves nothing. */
+export const pointerInUse = () => lastInput === "pointer";
 /** Key and pointer presses so far: a screen compares two readings to know the viewer has not moved. */
 export const inputCount = () => inputs;
 /** Focuses `el` when focus may move by itself; see `mayAutoFocus`. */
@@ -508,6 +511,18 @@ export function restoreSoon(back: boolean) {
   requestAnimationFrame(() => restore(back, asked));
 }
 
+/** LG's Magic Remote: the pointer focuses what it is over, without scrolling (a shelf scrolls on the wheel or at its
+ * edge, not on hover), and the system's `cursorStateChange` says whether the pointer or the 5-way keys are in use. */
+function magicRemote() {
+  document.addEventListener("pointerover", (e) => {
+    const el = e.target instanceof Element ? e.target.closest<HTMLElement>(SEL) : null;
+    if (el && el !== document.activeElement && !el.matches("input, textarea, select")) el.focus({ preventScroll: true });
+  });
+  document.addEventListener("cursorStateChange", (e) => {
+    lastInput = (e as CustomEvent<{ visibility?: boolean }>).detail?.visibility ? "pointer" : "keys";
+  });
+}
+
 export function installFocus(onBack: () => void) {
   backHandler = onBack;
   window.addEventListener(
@@ -526,6 +541,7 @@ export function installFocus(onBack: () => void) {
     },
     { capture: true },
   );
+  if (isWebOS()) magicRemote();
   // Live data can replace the focused element (a chip rebuilt, a row that
   // moved, Play becoming "Add a source" once every addon answered). Focus
   // then falls to the page; on a remote that is a dead end, so it goes to

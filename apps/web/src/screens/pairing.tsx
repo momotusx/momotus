@@ -17,6 +17,7 @@ import { accountWords as aw, fill, PAIRING_LATE_MS, pairingStarting } from "../l
 import { pairingProblem, plainAddress, syncWords } from "../lib/words";
 import "./browse.css";
 import "./settings.css";
+import { isWebOS } from "../lib/webos";
 
 /** A pairing code and its steps (plans/tv-qr-login.md 5.5): the QR and `how`, the next code in its
  * place as each ends, then the join, with nothing asked here (the phone checked this screen). The
@@ -173,7 +174,9 @@ function PairForm() {
               This device joined the account
             </h2>
             <Show when={j().by}>{(by) => <p>{fill(aw.tvSignedInFrom, { device: by() })}</p>}</Show>
-            <p class="note small">{syncWords.tabOnly}</p>
+            <Show when={!isWebOS()}>
+              <p class="note small">{syncWords.tabOnly}</p>
+            </Show>
             <div class="acts">
               <A class="btn primary" href="/sync" data-f="pair:done" data-autofocus>
                 Done

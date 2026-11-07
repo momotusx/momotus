@@ -15,7 +15,12 @@ import { bridge, op, privateLink } from "./client";
 import type { TraktReport } from "./generated/TraktReport";
 import type { TraktStatus } from "./generated/TraktStatus";
 import { gateOpen, incognito, onProfileReset, profiles } from "./profiles";
-import * as vault from "./vault";
+import * as browserVault from "./vault";
+import * as webosVault from "./webos-vault";
+import { isWebOS } from "../lib/webos";
+
+// A TV keeps the record in its service's keystore instead (src/core/webos-vault.ts).
+const vault: typeof browserVault = isWebOS() ? webosVault : browserVault;
 
 type Sub = Awaited<ReturnType<typeof bridge.subscribe>>;
 
@@ -102,7 +107,8 @@ function openFor(profile: string) {
   const session: Session = { profile, sub: Promise.resolve(null) };
   current = session;
   setLockedHere(false);
-  if (!vault.active())
+  // A TV opens its records at start with no unlock (src/core/webos-vault.ts): never "unlock to use" there.
+  if (!vault.active() && !isWebOS())
     track(
       vault.holdsTrakt(profile).then(
         (held) => current === session && setLockedHere(held),
@@ -184,7 +190,9 @@ async function meetSealed() {
   try {
     const changed = await records.restored(sealed, session?.profile ?? "");
     if (storage()?.words === traktWords.readFailed) setStorage(null);
-    if (session && changed) await records.resend(session.profile, still(session));
+    // At start no profile was open yet; one opened while the read ran gets its record now.
+    const open = session ?? current;
+    if (open && changed) await records.resend(open.profile, still(open));
   } catch {
     setStorage({ words: traktWords.saveFailed, retry: saveAgain });
     return;
@@ -192,6 +200,8 @@ async function meetSealed() {
   if (pending) await store(pending.session, pending.record);
 }
 vault.onOpened(() => track(meetSealed()));
+// A TV reads its Trakt records at start, with or without a sync account kept there.
+if (isWebOS()) track(meetSealed());
 
 // A profile removed here or by sync: its record goes from memory and its sealed copy from this
 // browser (no key needed). A delete that fails is tried again: the core names removed profiles

@@ -26,6 +26,9 @@ import type { TitleSnapshot } from "./generated/TitleSnapshot";
 import type { TitleUpdate } from "./generated/TitleUpdate";
 import type { VersionsSnapshot } from "./generated/VersionsSnapshot";
 import type { Network } from "./generated/Network";
+import { webosDeviceCaps } from "./webos-caps";
+import { webosTransport } from "./webos-transport";
+import { isWebOS } from "../lib/webos";
 
 export const bridgeUrl: string = import.meta.env.VITE_MQ_BRIDGE ?? `ws://${location.hostname || "127.0.0.1"}:7777/ws`;
 
@@ -35,10 +38,16 @@ export const bridgeUrl: string = import.meta.env.VITE_MQ_BRIDGE ?? `ws://${locat
 const shellHandler = window.__MQ_SHELL__ ? shellPost() : null;
 // The shell's player capabilities, from its `ready`, in the core's names.
 let shellCaps: DeviceCaps | null = null;
-const transport = shellHandler ? ipcTransport(shellHandler, (r) => (shellCaps = asCaps(r.caps))) : webSocketTransport(bridgeUrl);
+// On webOS the service serves this page and its socket on one origin (a walk build has its own port).
+const webosSocket = `ws://${location.host}/ws`;
+const transport = shellHandler
+  ? ipcTransport(shellHandler, (r) => (shellCaps = asCaps(r.caps)))
+  : isWebOS()
+    ? webosTransport(webosSocket)
+    : webSocketTransport(bridgeUrl);
 export const bridge = new Bridge(transport);
 /** Whether the sync record may travel this link: the shell's IPC, or a socket that is encrypted or stays on this machine. */
-export const privateLink = shellHandler !== null || isPrivateLink(bridgeUrl);
+export const privateLink = shellHandler !== null || isPrivateLink(isWebOS() ? webosSocket : bridgeUrl);
 
 export type Link = "connecting" | "open" | "closed";
 const [link, setLink] = createSignal<Link>("connecting");
@@ -398,6 +407,8 @@ function asCaps(x: unknown): DeviceCaps | null {
  * audio itself (no passthrough) and has no second engine. */
 export function displayCaps(): DeviceCaps {
   if (shellCaps) return shellCaps;
+  const webos = webosDeviceCaps(deviceLanguage());
+  if (webos) return webos;
   // The display, never the window: a small window on a 1080p screen still
   // shows 1080p when it goes full screen. Taller than 720 lines counts as 1080.
   const lines = screen.height * (window.devicePixelRatio || 1);

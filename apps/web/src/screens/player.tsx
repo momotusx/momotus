@@ -51,6 +51,7 @@ import { fileChoice, offSummary, pickerLanguages, sameLanguage, startOption } fr
 import { audioTrackName, choiceWords, emptyWords, languageName, nextVersion, qualityCell, qualityText, restartLine, subtitleNote, subtitleNoteLines } from "../lib/words";
 import { VersionsPage } from "./versions";
 import "./player.css";
+import { isWebOS, mediaKey } from "../lib/webos";
 import { setTitle } from "../incognito";
 import { RouteA } from "../components/route-link";
 
@@ -103,7 +104,8 @@ function cut(node: Node): Node[] {
 type Placed = { spot: NonNullable<ReturnType<typeof cueSpot>>; lines: Node[][] };
 
 // The viewer's sound for this app run: one episode's level and mute are the next one's.
-const sound = { volume: 100, muted: false };
+// A walk build starts muted (VITE_MQ_MUTE=1, the web twin of Apple's -MQMute).
+const sound = { volume: 100, muted: import.meta.env.VITE_MQ_MUTE === "1" };
 
 export default function Player() {
   const params = useParams();
@@ -576,9 +578,18 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
       // Backspace in the subtitle search deletes a letter.
       const typing = e.target instanceof HTMLInputElement && e.target.type !== "range";
       const back = e.key === "Escape" || (e.key === "Backspace" && !typing) || e.key === "GoBack" || e.keyCode === 10009 || e.keyCode === 461;
-      if (e.key === "MediaPlayPause" || e.key === "MediaPlay" || e.key === "MediaPause") {
+      const webos = isWebOS();
+      const media = mediaKey(e, webos);
+      if (media === "MediaPlayPause" || media === "MediaPlay" || media === "MediaPause" || (webos && media === "MediaStop")) {
         e.preventDefault();
-        toggle();
+        // The LG remote has its own Play, Pause and Stop: each does only that. Elsewhere they toggle, as before.
+        if (!webos || media === "MediaPlayPause" || (media === "MediaPlay") === paused()) toggle();
+        else wake();
+        return;
+      }
+      if (media === "MediaFastForward" || media === "MediaRewind") {
+        e.preventDefault();
+        seek(media === "MediaRewind" ? -10 : 10);
         return;
       }
       // Back in a language's options steps back to the languages (off the TV).

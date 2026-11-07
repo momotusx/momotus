@@ -17,6 +17,7 @@ import { focusEl } from "../focus/dom";
 import { form } from "../form";
 import { clock, pct } from "../lib/format";
 import { heldStep, seekTarget, walkNow } from "../lib/trailers";
+import { isWebOS, mediaKey } from "../lib/webos";
 import { playTrailer, type TrailerControl, type TrailerTime } from "./yt-player";
 
 const PLAY_KEYS = new Set(["MediaPlayPause", "MediaPlay", "MediaPause", "k", "K", " "]);
@@ -103,14 +104,23 @@ export function TrailerOverlay(props: { trailers: Trailer[]; onClose: () => void
     const removeBack = pushBack(() => props.onClose(), { entry: true });
     const onKey = (e: KeyboardEvent) => {
       // Space on one of the bar's buttons stays that button's press.
-      if (PLAY_KEYS.has(e.key) && !(e.key === " " && (e.target as Element | null)?.closest?.("button"))) {
+      const webos = isWebOS();
+      const key = mediaKey(e, webos);
+      // The LG remote has its own Play, Pause and Stop: each does only that.
+      if (webos && (key === "MediaPlay" || key === "MediaPause" || key === "MediaStop")) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        if (!e.repeat && (key === "MediaPlay") !== (time().state === "playing")) toggle();
+        return;
+      }
+      if (PLAY_KEYS.has(key) && !(key === " " && (e.target as Element | null)?.closest?.("button"))) {
         e.preventDefault();
         e.stopImmediatePropagation();
         // Once a press: a held key never flickers it.
         if (!e.repeat) toggle();
-      } else if ((e.key === "MediaRewind" || e.key === "MediaFastForward") && !e.repeat) {
+      } else if ((key === "MediaRewind" || key === "MediaFastForward") && !e.repeat) {
         e.preventDefault();
-        seekBy(e.key === "MediaRewind" ? -SEEK_S : SEEK_S);
+        seekBy(key === "MediaRewind" ? -SEEK_S : SEEK_S);
       }
     };
     window.addEventListener("keydown", onKey, { capture: true });

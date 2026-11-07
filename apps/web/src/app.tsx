@@ -27,6 +27,7 @@ import { autoFocusSoon, focusRail, installFocus, readPathFrom, move, railHasFocu
 import { screenChanged } from "./focus/ghost-tap";
 import { type Form, form } from "./form";
 import { parentOf } from "./lib/parent";
+import { couldNotStart, platformBack, startFailed } from "./lib/webos";
 import { kidsBlocked, kidsSession, takenOffHere } from "./lib/kids";
 import { kidsLine } from "./lib/words";
 import { isSettingsPage } from "./lib/settings-sections";
@@ -237,7 +238,7 @@ function Shell(props: RouteSectionProps) {
       return;
     }
     const parent = parentOf(location.pathname, form());
-    if (!parent) return; // Home is the root: the platform shell owns exit.
+    if (!parent) return platformBack(); // Home is the root: the platform shell owns exit (a no-op off webOS).
     markBack();
     navigate(parent, { replace: true });
   };
@@ -438,11 +439,22 @@ function Shell(props: RouteSectionProps) {
         </Show>
       </Show>
       <Show when={link() === "closed"}>
-        <p class="banner bad" role="status">
-          <CircleAlert aria-hidden />
-          {lostWords}
-          <Reload />
-        </p>
+        {/* A TV whose service could not be started again: a reload cannot help, reopening the app can. */}
+        <Show
+          when={startFailed()}
+          fallback={
+            <p class="banner bad" role="status">
+              <CircleAlert aria-hidden />
+              {lostWords}
+              <Reload />
+            </p>
+          }
+        >
+          <p class="banner bad" role="alert">
+            <CircleAlert aria-hidden />
+            {couldNotStart}
+          </p>
+        </Show>
       </Show>
     </div>
   );

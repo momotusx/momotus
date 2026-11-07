@@ -7,6 +7,8 @@
 import { createSignal } from "solid-js";
 import { bridge, op } from "./client";
 import { DebridStore, type DebridKeystore } from "./debrid-store";
+import { WebosKeystore } from "./webos-debrid";
+import { isWebOS } from "../lib/webos";
 import type { DebridRecord } from "./generated/DebridRecord";
 import type { DebridSnapshot } from "./generated/DebridSnapshot";
 import type { DebridTombstone } from "./generated/DebridTombstone";
@@ -35,7 +37,8 @@ class TabKeystore implements DebridKeystore {
   }
 }
 
-export const debridStore = new DebridStore(new TabKeystore(), {
+// A TV keeps them in its service's keystore (src/core/webos-debrid.ts).
+export const debridStore = new DebridStore(isWebOS() ? new WebosKeystore() : new TabKeystore(), {
   restore: (records, tombstones) => op<RestoreAnswer>("restoreDebrid", { records, tombstones }),
   ack: (service, generation, revision) => op("ackDebrid", { service, generation, revision }).then(() => undefined),
   disconnect: (service, generation) => op("disconnectDebrid", { service, generation }).then(() => undefined),

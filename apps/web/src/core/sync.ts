@@ -15,7 +15,12 @@ import type { ForkPreview } from "./generated/ForkPreview";
 import type { IdentityLink } from "./generated/IdentityLink";
 import type { LostPreview } from "./generated/LostPreview";
 import type { SyncReport } from "./generated/SyncReport";
-import * as vault from "./vault";
+import * as browserVault from "./vault";
+import * as webosVault from "./webos-vault";
+import { isWebOS } from "../lib/webos";
+
+// A TV keeps the record in its service's keystore instead (src/core/webos-vault.ts).
+const vault: typeof browserVault = isWebOS() ? webosVault : browserVault;
 
 let record: SyncRecord | null = null;
 /** The build's own sync server (`VITE_MARQUEE_SYNC_SERVER`), empty without one: a record whose server is gone
@@ -97,6 +102,8 @@ function savedNewest() {
 
 /** "Save again" after a failed sealed write. */
 export async function saveAgain() {
+  // A TV whose first keep failed has not opened its store yet: keeping it is the save.
+  if (record && isWebOS() && !vault.active()) return void (await remember().catch(saveFailed));
   if (record && vault.active()) await vault.save(record).then(savedNewest, saveFailed);
 }
 
@@ -198,6 +205,8 @@ export function join(next: SyncRecord, recoveredWithKit = false) {
   // ponytail: a round a minute while the tab is visible (and on coming back to it, below); the
   // apps sync a few seconds after each edit, add that here when the web gets an edit signal.
   minute = setInterval(() => !document.hidden && void syncNow(), 60_000);
+  // A TV keeps every joined account without asking (no passkey there).
+  if (isWebOS() && !vault.active()) void remember().catch(saveFailed);
   void syncNow();
 }
 
@@ -534,11 +543,14 @@ export function continueWithout() {
   setMemoryProblem(null);
 }
 
+/** Checks for a remembered account; a TV opens what its keystore holds at once. */
+const discoverAndOpen = () => discover().then(() => (isWebOS() && locked() ? unlock().catch(() => undefined) : undefined));
+
 /** Settles once this browser was checked for a remembered account. */
-export const vaultReady: Promise<void> = discover().finally(() => setSettled(true));
+export const vaultReady: Promise<void> = discoverAndOpen().finally(() => setSettled(true));
 
 /** "Check again" after a storage that could not be read. */
-export const recheckVault = discover;
+export const recheckVault = discoverAndOpen;
 
 const SERVER_KEY = "mq.syncServer";
 const NAME_KEY = "mq.syncName";

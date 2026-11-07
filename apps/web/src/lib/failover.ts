@@ -63,7 +63,8 @@ export async function earlyFailure(
     void answer.body?.cancel().catch(() => undefined);
     if (!answer.ok) return { kind: "http", status: answer.status, error: answer.statusText || `HTTP ${answer.status}` };
   } catch (e) {
-    const timedOut = e instanceof DOMException && e.name === "TimeoutError";
+    // The timeout is the only abort: without AbortSignal.timeout (Chromium below 103) it ends as an AbortError.
+    const timedOut = e instanceof DOMException && (e.name === "TimeoutError" || e.name === "AbortError");
     return { kind: timedOut ? "timeout" : "network", error: String(e) };
   }
   return mediaFailure(error);

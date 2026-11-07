@@ -85,6 +85,9 @@ test("an error before the metadata asks the source: a failed fetch is never deco
   expect((await earlyFailure("u", error, async () => Promise.reject(new TypeError("Failed to fetch")))).kind).toBe("network");
   const late = async () => Promise.reject(new DOMException("The operation timed out.", "TimeoutError"));
   expect((await earlyFailure("u", error, late)).kind).toBe("timeout");
+  // Chromium below 103 has no AbortSignal.timeout: the fallback aborts, and the fetch ends as an AbortError.
+  const aborted = async () => Promise.reject(new DOMException("The user aborted a request.", "AbortError"));
+  expect((await earlyFailure("u", error, aborted)).kind).toBe("timeout");
   // The bytes came and the browser still cannot play them: the file's own.
   expect((await earlyFailure("u", error, answering(206))).kind).toBe("decode");
 });

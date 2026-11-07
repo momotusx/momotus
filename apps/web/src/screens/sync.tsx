@@ -73,6 +73,7 @@ import { createMail, EmailStages, FailureNote, type MailStage, SignInState, Tick
 import "./browse.css";
 import "./settings.css";
 import "./sync.css";
+import { isWebOS } from "../lib/webos";
 
 const tv = () => form() === "tv";
 /** A removal that stopped: again with what it was asked for (the debrid accounts ticked by default). */
@@ -319,7 +320,9 @@ function NotJoined() {
           <LinkRow href="/sync/start" fkey="sync:start" icon={<Plus aria-hidden />} title={w.startTitle} text={w.startText} />
           <LinkRow href="/sync/recover" fkey="sync:recover" icon={<LifeBuoy aria-hidden />} title={w.recoverTitle} text={w.recoverText} />
         </div>
-        <p class="note small">{w.tabOnly}</p>
+        <Show when={!isWebOS()}>
+          <p class="note small">{w.tabOnly}</p>
+        </Show>
       </section>
     </>
   );
@@ -550,7 +553,10 @@ function Joined() {
         </div>
       </section>
 
-      <Remember />
+      {/* A TV keeps the account in its own store, with no passkey and nothing to choose (src/core/webos-vault.ts). */}
+      <Show when={!isWebOS()}>
+        <Remember />
+      </Show>
       <Leave />
       <Show when={mayDeleteAccount(profiles())}>
         <DeleteAccount apple={links.state === "ready" && links().some((l) => l.provider === "apple")} />
@@ -1118,7 +1124,9 @@ function JoinForm(props: { kit: boolean }) {
             {busy() ? (props.kit ? w.recovering : w.starting) : props.kit ? w.recoverButton : w.startButton}
           </button>
         </form>
-        <p class="note small">{w.tabOnly}</p>
+        <Show when={!isWebOS()}>
+          <p class="note small">{w.tabOnly}</p>
+        </Show>
       </NoSecondAccount>
     </main>
   );

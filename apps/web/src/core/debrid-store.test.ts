@@ -3,12 +3,48 @@ import vectors from "../../../shared/debrid-storage-vectors.json";
 import { type DebridCore, type DebridKeystore, DebridStore } from "./debrid-store";
 import type { DebridRecord } from "./generated/DebridRecord";
 import type { DebridTombstone } from "./generated/DebridTombstone";
+import { WebosKeystore, type Wire } from "./webos-debrid";
 
 type Call = "writeRecord" | "deleteRecord" | "writeTombstone" | "deleteTombstone";
 
-class FakeKeystore implements DebridKeystore {
+/** The tab's keystore (src/core/debrid.ts): records in memory. */
+class MemoryKeystore implements DebridKeystore {
   readonly stored = new Map<string, DebridRecord>();
   stones: DebridTombstone[] = [];
+  async records() {
+    return [...this.stored.values()];
+  }
+  async tombstones() {
+    return [...this.stones];
+  }
+  async writeRecord(record: DebridRecord) {
+    this.stored.set(record.service, record);
+  }
+  async deleteRecord(service: string, generation: string) {
+    if (this.stored.get(service)?.generation === generation) this.stored.delete(service);
+  }
+  async writeTombstone(tombstone: DebridTombstone) {
+    this.stones.push(tombstone);
+  }
+  async deleteTombstone(tombstone: DebridTombstone) {
+    this.stones = this.stones.filter((t) => t.generation !== tombstone.generation);
+  }
+}
+
+/** The webOS service's keystore: one JSON entry that outlives the page (a `restart` reads it again). */
+class FakeWire implements Wire {
+  all: Record<string, unknown> = {};
+  async read() {
+    return JSON.parse(JSON.stringify(this.all)) as Record<string, unknown>;
+  }
+  async write(key: string, value: unknown) {
+    this.all = { ...this.all, [key]: JSON.parse(JSON.stringify(value)) };
+  }
+}
+
+/** Holds and fails calls by kind, logs the ones that finished, and passes them to the keystore under test. */
+class FakeKeystore implements DebridKeystore {
+  constructor(public inner: DebridKeystore) {}
   readonly log: string[] = [];
   readonly failing = new Map<Call, number>();
   holding: Call | null = null;
@@ -29,30 +65,30 @@ class FakeKeystore implements DebridKeystore {
     }
   }
 
-  async records() {
-    return [...this.stored.values()];
+  records() {
+    return this.inner.records();
   }
-  async tombstones() {
-    return [...this.stones];
+  tombstones() {
+    return this.inner.tombstones();
   }
   async writeRecord(record: DebridRecord) {
     await this.gate("writeRecord");
-    this.stored.set(record.service, record);
+    await this.inner.writeRecord(record);
     this.log.push(`writeRecord ${record.generation} ${record.revision}`);
   }
   async deleteRecord(service: string, generation: string) {
     await this.gate("deleteRecord");
-    if (this.stored.get(service)?.generation === generation) this.stored.delete(service);
+    await this.inner.deleteRecord(service, generation);
     this.log.push(`deleteRecord ${generation}`);
   }
   async writeTombstone(tombstone: DebridTombstone) {
     await this.gate("writeTombstone");
-    this.stones.push(tombstone);
+    await this.inner.writeTombstone(tombstone);
     this.log.push(`writeTombstone ${tombstone.generation}`);
   }
   async deleteTombstone(tombstone: DebridTombstone) {
     await this.gate("deleteTombstone");
-    this.stones = this.stones.filter((t) => t.generation !== tombstone.generation);
+    await this.inner.deleteTombstone(tombstone);
     this.log.push(`deleteTombstone ${tombstone.generation}`);
   }
 }
@@ -90,11 +126,25 @@ const stone = (t: DebridTombstone) => `${t.service} ${t.generation}`;
 
 type Step = Record<string, unknown> & { op: string };
 
+// Each case runs over the tab's keystore and over the webOS one, whose `restart` reads the service's entry again.
+const kinds = {
+  tab: () => {
+    const inner = new MemoryKeystore();
+    return { inner, again: () => inner as DebridKeystore };
+  },
+  webos: () => {
+    const wire = new FakeWire();
+    return { inner: new WebosKeystore(wire) as DebridKeystore, again: () => new WebosKeystore(wire) };
+  },
+};
+
+for (const [kind, make] of Object.entries(kinds))
 for (const vector of vectors.cases) {
-  test(vector.name, async () => {
-    const keystore = new FakeKeystore();
-    for (const r of vector.keystore.records as DebridRecord[]) keystore.stored.set(r.service, r);
-    keystore.stones = [...(vector.keystore.tombstones as DebridTombstone[])];
+  test(`${kind}: ${vector.name}`, async () => {
+    const made = make();
+    for (const r of vector.keystore.records as DebridRecord[]) await made.inner.writeRecord(r);
+    for (const t of vector.keystore.tombstones as DebridTombstone[]) await made.inner.writeTombstone(t);
+    const keystore = new FakeKeystore(made.inner);
     const core = new FakeCore();
     const errors: string[] = [];
     let store = new DebridStore(keystore, core);
@@ -125,14 +175,15 @@ for (const vector of vectors.cases) {
           await Bun.sleep(0);
           break;
         case "restart":
+          keystore.inner = made.again();
           store = new DebridStore(keystore, core);
           await store.start();
           break;
         case "expect": {
           const want = step as Record<string, unknown>;
           if ("log" in want) expect(keystore.log).toEqual(want.log as string[]);
-          if ("records" in want) expect([...keystore.stored.values()].map(id)).toEqual(want.records as string[]);
-          if ("tombstones" in want) expect(keystore.stones.map(stone)).toEqual(want.tombstones as string[]);
+          if ("records" in want) expect((await keystore.records()).map(id)).toEqual(want.records as string[]);
+          if ("tombstones" in want) expect((await keystore.tombstones()).map(stone)).toEqual(want.tombstones as string[]);
           if ("acks" in want) expect(core.acks).toEqual(want.acks as string[]);
           if ("disconnects" in want) expect(core.disconnects).toEqual(want.disconnects as string[]);
           if ("restores" in want) expect(core.restores).toEqual(want.restores as never);

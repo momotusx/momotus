@@ -33,7 +33,8 @@ import type { EmptyKind } from "../core/generated/EmptyKind";
 import type { HomeRow } from "../core/generated/HomeRow";
 import type { Episode } from "../core/generated/Episode";
 import type { VersionsSnapshot } from "../core/generated/VersionsSnapshot";
-import { focusEl, goBack, reducedMotion, remember } from "../focus/dom";
+import { focusEl, goBack, pointerInUse, reducedMotion, remember } from "../focus/dom";
+import { isWebOS } from "../lib/webos";
 import { form, viewport } from "../form";
 import { airDate, clock, decoded, episodeLabel, initials, offersLibrary, parseVideo, pct, playPath, playState, runtimeMinutes, seasonName, versionsPath } from "../lib/format";
 import { capableNow, coverSize, headerOnTvNow, meteredNow, previewsOn, REVEAL_MS, trailerAllowed, walkNow } from "../lib/trailers";
@@ -105,7 +106,7 @@ function TitlePage(props: { kind: string; id: string; retry: () => void }) {
   // TV and desktop scroll the page below the hero for More like this; the phone scrolls the document.
   let page: HTMLDivElement | undefined;
   const toTop = () => {
-    if (page && page.scrollTop > 0) page.scrollTo({ top: 0, behavior: "smooth" });
+    if (page && page.scrollTop > 0 && !(isWebOS() && pointerInUse())) page.scrollTo({ top: 0, behavior: "smooth" });
   };
   // The core asks TMDB and Trakt only while the page shows (`titleVisible`): a tab in the
   // background asks nothing, and leaving the page closes the view.

@@ -43,6 +43,7 @@ import type { SubtitleSize } from "../core/generated/SubtitleSize";
 import { chooseForm, type Form, form, pinned } from "../form";
 import { headerOnTvNow, previewsOn, setPreviewsOn } from "../lib/trailers";
 import { defaultsWords } from "../lib/defaults";
+import { isWebOS } from "../lib/webos";
 import { addonsSummary, choiceSummary, choiceWords, findAddons, languageName, syncSummary, syncWords, tmdbCredit } from "../lib/words";
 import * as sync from "../core/sync";
 import { traktLink, traktLockedHere, traktStatus, traktStorage } from "../core/trakt";
@@ -343,7 +344,10 @@ export default function SettingsScreen() {
   // its header, and Sources leaves out Trakt and Import. A kids profile has no Sources, Account, Home rows or
   // Downloads (plans/m11-kids.md section 5), and opens on Playback.
   const hidden = (id: string) =>
-    (incognito() && (id === "account" || id === "downloads")) || (kidsSession(profiles()) && KIDS_HIDDEN_SECTIONS.includes(id as SectionId));
+    (incognito() && (id === "account" || id === "downloads")) ||
+    (kidsSession(profiles()) && KIDS_HIDDEN_SECTIONS.includes(id as SectionId)) ||
+    // This device's only row is the layout, which webOS pins to TV.
+    (isWebOS() && id === "device");
   const chosen = () => {
     const id = sectionId(params.section);
     return id && !hidden(id) ? id : hidden("sources") ? "playback" : "sources";
