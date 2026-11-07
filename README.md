@@ -52,14 +52,14 @@
 | Mac | From source | Yes | Alpha |
 | Web browser | From source | Yes | No |
 | End-to-end encrypted sync | **Yes** | No | No |
-| Torrent engine built in | Yes<sup>1</sup> | Yes | Yes, off by default |
+| Torrent engine built in | Yes | Yes | Yes, off by default |
 | Offline downloads | In progress | No (planned) | Yes, on mobile |
 | Dual subtitles | In progress | Not found | Not found |
 | TV sign-in by QR code | Yes | Yes | Yes |
 | Account needed | No | No (guest mode) | No (anonymous sign-in) |
 | Licence | AGPL-3.0-or-later | Web app GPL-2.0, core MIT | GPL-3.0 |
 
-<sub>1. Not yet in 32-bit (armv7) builds, such as the Fire TV one. Checked on 27 October 2026 against each project's own site, docs and source code. [Sources](docs/readme/comparison-sources.md)</sub>
+<sub>Checked on 27 October 2026 against each project's own site, docs and source code. [Sources](docs/readme/comparison-sources.md)</sub>
 
 ## Features
 
@@ -68,7 +68,7 @@
 | **Addons** | Works with Stremio addons. Add one by its link; Home, Discover and Search fill from the addons you have. |
 | **Sync** | Your library, progress and addons follow you to every device, end-to-end encrypted. Add a device by scanning the code it shows. |
 | **Player** | Picks a version that plays and moves on when one stalls. Subtitles with search, timing and the languages you use. |
-| **Torrents** | A built-in engine plays torrent sources inside the app, with no separate streaming server. Not yet in 32-bit (armv7) builds. |
+| **Torrents** | A built-in engine plays torrent sources inside the app, with no separate streaming server, on phones and on Fire TV alike. |
 | **Trakt** | Sign in with a code, even on a TV. What you watch is scrobbled as you watch it. |
 | **Import** | Bring your library over from a Stremio account. |
 

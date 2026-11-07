@@ -52,7 +52,7 @@ Every cell of the README's comparison table, with the primary source it was chec
 | Web browser | From source | `apps/web` with `crates/mq-bridge` (a local core over a loopback socket) |
 | End-to-end encrypted sync | Yes | `crates/mq-sync/src/lib.rs` ("End-to-end encrypted sync of library registers through a blind relay"), `crates/mq-sync/src/seal.rs` |
 | Installable plugins | In progress | plans only, nothing on the trunk |
-| Torrent engine built in | Yes, not yet in armv7 builds | `crates/mq-engine`; own builds carry it (`apps/apple/scripts/build-core.sh`; `apps/android/scripts/build-core.sh` keeps armeabi-v7a without it until its walk) |
+| Torrent engine built in | Yes | `crates/mq-engine`; own builds carry it on every slice (`apps/apple/scripts/build-core.sh`, `apps/android/scripts/build-core.sh` for arm64-v8a and armeabi-v7a) |
 | Offline downloads | In progress | not on the trunk |
 | Dual subtitles | In progress | not on the trunk |
 | TV sign-in by QR code | Yes | a new device shows a pairing code that a phone scans (`apps/android/app/src/main/kotlin/app/marquee/android/SyncDevice.kt`) |
