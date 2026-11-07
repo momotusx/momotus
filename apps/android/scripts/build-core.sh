@@ -90,6 +90,8 @@ cd "$ROOT"
 # Android's packed relocations (APS2, read by the loader since API 23; minSdk is 24): the relocation
 # table drops from 538,776 to 72,626 bytes, which keeps the library inside its 12 MB budget.
 PACKED="-C link-arg=-Wl,--pack-dyn-relocs=android"
+# Panic locations and debug paths name ~ instead of this Mac's home folder.
+PACKED="$PACKED --remap-path-prefix=$HOME=~"
 # `rustc --crate-type cdylib`: with mq-ffi's three crate types (lib, staticlib, cdylib) cargo passes
 # no `-C lto`, so the profile's thin LTO never applied; the cdylib alone gets it. At 39e3b7ae the
 # store library went from 12,123,488 to 10,989,256 bytes and the full one from 15,362,864 to

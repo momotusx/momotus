@@ -70,7 +70,8 @@ export MACOSX_DEPLOYMENT_TARGET=15.0 IPHONEOS_DEPLOYMENT_TARGET=18.0 TVOS_DEPLOY
 cd "$root"
 for target in aarch64-apple-darwin "${targets[@]}"; do
   echo "building mq-ffi for $target"
-  CARGO_TARGET_DIR="$target_dir" CARGO_INCREMENTAL=0 \
+  # Panic locations and debug paths name ~ instead of this Mac's home folder.
+  CARGO_TARGET_DIR="$target_dir" CARGO_INCREMENTAL=0 RUSTFLAGS="--remap-path-prefix=$HOME=~" \
     cargo rustc -p mq-ffi --lib --release --target "$target" -j 4 ${features[@]+"${features[@]}"} --crate-type staticlib
 done
 
