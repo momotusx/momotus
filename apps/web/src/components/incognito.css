@@ -29,7 +29,7 @@
 .incog-notice .btn { flex: none; height: 56px; }
 [data-form="phone"] .incog-notice { position: fixed; bottom: calc(96px + env(safe-area-inset-bottom)); max-width: calc(100% - 32px); width: max-content;
   gap: 12px; padding: 10px 10px 10px 14px; border-radius: 14px; font-size: 14px; }
-[data-form="phone"] .incog-notice .btn { height: 44px; }
+[data-form="phone"] .incog-notice .btn { height: 48px; }
 
 /* The Settings header in Incognito: the mark, its name and line, and Leave. */
 .set-incog { display: flex; align-items: center; flex-wrap: wrap; gap: 40px; }

@@ -163,5 +163,13 @@ test("phone: Continue Watching's remove X, the profile menu's rows and the share
   await expect(page.locator(".btn").first()).toBeVisible({ timeout: 30_000 });
   const buttons = await page.locator(".btn").evaluateAll((els) => els.map((e) => e.getBoundingClientRect().height));
   expect(buttons.filter((h) => h < 48)).toEqual([]);
+  // The page-specific phone overrides of .btn (QA r3: 44): Addons' find link, Find addons' tools, the sync page's actions.
+  // The Calendar failed card and the incognito notice need a failure or a toggle: src/phone-btn.test.ts reads their rules.
+  for (const [path, selector] of [["/addons", ".btn.find-link"], ["/find-addons", ".fa-tools .btn, .fa-acts .btn"], ["/sync/start", ".sync-page .acts .btn, .sync-form .btn"], ["/sync/recover", ".sync-page .acts .btn, .sync-form .btn"]] as const) {
+    await page.goto(`${path}?form=phone`);
+    await expect(page.locator(selector).first()).toBeVisible({ timeout: 30_000 });
+    const heights = await page.locator(selector).evaluateAll((els) => els.map((e) => e.getBoundingClientRect().height));
+    expect(heights.filter((h) => h < 48), `${path} ${selector}`).toEqual([]);
+  }
   await context.close();
 });

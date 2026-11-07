@@ -208,7 +208,7 @@
 .btn.find-link { margin: -12px 0 44px; }
 /* TV: Paste a link and the lists share a line. */
 .btn.disclose + .btn.find-link { margin-left: 16px; }
-[data-form="phone"] .btn.find-link { margin: -4px 0 20px; height: 44px; padding: 0 18px; font-size: 15px; }
+[data-form="phone"] .btn.find-link { margin: -4px 0 20px; height: 48px; padding: 0 18px; font-size: 15px; }
 [data-form="phone"] .btn.find-link svg { width: 18px; height: 18px; }
 
 /* The first subtitle language, under its row's label. */

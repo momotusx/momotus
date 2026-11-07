@@ -80,7 +80,7 @@
 [data-form="phone"] .fa-provides { margin-top: 8px; }
 [data-form="phone"] .fa-desc, [data-form="phone"] .fa-help, [data-form="phone"] .fa-text .st { font-size: 13px; }
 [data-form="phone"] .fa-acts { width: 100%; justify-content: flex-start; gap: 8px; }
-[data-form="phone"] .fa-acts .btn, [data-form="phone"] .fa-tools .btn { height: 44px; padding: 0 16px; font-size: 14px; gap: 8px; }
+[data-form="phone"] .fa-acts .btn, [data-form="phone"] .fa-tools .btn { height: 48px; padding: 0 16px; font-size: 14px; gap: 8px; }
 [data-form="phone"] .fa-acts .btn svg, [data-form="phone"] .fa-state svg { width: 18px; height: 18px; }
 [data-form="phone"] .fa-state { height: 44px; font-size: 14px; gap: 8px; }
 [data-form="phone"] .fa-tools { min-height: 44px; margin-top: 14px; }

@@ -67,7 +67,7 @@
 [data-form="phone"] .sync-callout { margin-bottom: 24px; }
 [data-form="phone"] .sync-member { gap: 10px 14px; padding: 14px 16px; border-radius: 14px; }
 [data-form="phone"] .sync-mtext { flex-basis: 200px; }
-[data-form="phone"] .sync-page .acts .btn, [data-form="phone"] .sync-form .btn { height: 44px; padding: 0 16px; gap: 8px; }
+[data-form="phone"] .sync-page .acts .btn, [data-form="phone"] .sync-form .btn { height: 48px; padding: 0 16px; gap: 8px; }
 [data-form="phone"] .sync-page .acts .btn svg, [data-form="phone"] .sync-form .btn svg { width: 18px; height: 18px; }
 [data-form="phone"] .sync-box { width: 26px; height: 26px; border-radius: 7px; }
 [data-form="phone"] .sync-box svg { width: 18px; height: 18px; }
