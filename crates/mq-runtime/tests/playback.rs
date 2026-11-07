@@ -890,6 +890,36 @@ async fn a_late_fail_over_never_drops_the_next_source() {
     );
 }
 
+/// A segment the source answers with 502, which the player calls a decode
+/// error (Chrome's own HLS does): the attempt says the source had an error
+/// and the card says no source could be reached, never that this device
+/// cannot decode it (QA R3-16).
+#[tokio::test]
+async fn a_segment_the_source_failed_is_never_the_devices_decode() {
+    let hls = hls_origin().await;
+    let core = Core::temporary("p").unwrap();
+    let streams = format!(r#"{{"streams":[{{"name":"HLS","url":"{hls}/hls/bad.m3u8"}}]}}"#);
+    let view = PlaybackView::open(&core, setup(&core, &streams), target());
+    let s = settled(&view).await;
+    assert_eq!(s.phase, PlaybackPhase::Ready, "{s:?}");
+    let http = HttpClient::new(ClientConfig::default()).unwrap();
+    let local = RequestOptions {
+        allow_private: true,
+        ..Default::default()
+    };
+    let playlist = http.get(s.url.as_ref().unwrap(), &local).await.unwrap();
+    let playlist = String::from_utf8(playlist.body.to_vec()).unwrap();
+    let segment = playlist.lines().find(|l| !l.starts_with('#')).unwrap();
+    let failed = http.get(segment, &local).await.unwrap_err();
+    assert!(failed.to_string().contains("502"), "{failed}");
+    view.fail_over(Some(s.attempt), Some("decode"), None, "MEDIA_ERR_DECODE");
+    let last = settled(&view).await;
+    assert_eq!(last.phase, PlaybackPhase::Failed);
+    let said: Vec<_> = last.attempts.iter().map(|a| a.error.as_str()).collect();
+    assert_eq!(said, ["The source had an error"]);
+    assert_eq!(format!("{:?}", last.empty), "Some(Unreachable)");
+}
+
 /// A 200 KiB file with Range support plus a subtitles addon that records the
 /// path it was asked for.
 /// Logs the subtitles paths asked for, and the video's `Range` values.
@@ -1214,7 +1244,8 @@ async fn dash_origin(set: &'static str) -> String {
     format!("http://{addr}")
 }
 
-/// An HLS origin: a media playlist naming one segment.
+/// An HLS origin: a media playlist naming one segment, and `bad.m3u8`
+/// naming one the origin answers with 502.
 async fn hls_origin() -> String {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
@@ -1228,11 +1259,20 @@ async fn hls_origin() -> String {
                     let playlist =
                         "#EXTM3U\n#EXT-X-TARGETDURATION:4\n#EXTINF:4,\nseg.ts\n#EXT-X-ENDLIST\n";
                     ("application/vnd.apple.mpegurl", playlist)
+                } else if head.starts_with("GET /hls/bad.m3u8") {
+                    let playlist =
+                        "#EXTM3U\n#EXT-X-TARGETDURATION:4\n#EXTINF:4,\nbad.ts\n#EXT-X-ENDLIST\n";
+                    ("application/vnd.apple.mpegurl", playlist)
                 } else {
                     ("video/mp2t", "segment")
                 };
+                let status = if head.starts_with("GET /hls/bad.ts") {
+                    "502 Bad Gateway"
+                } else {
+                    "200 OK"
+                };
                 let reply = format!(
-                    "HTTP/1.1 200 OK\r\nContent-Type: {kind}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                    "HTTP/1.1 {status}\r\nContent-Type: {kind}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
                     body.len()
                 );
                 let _ = socket.write_all(reply.as_bytes()).await;

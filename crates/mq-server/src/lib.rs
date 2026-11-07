@@ -177,6 +177,34 @@ struct Playback {
     /// File offsets of `hev1` and `dvhe` types and the types they are
     /// served as, found by the first body of a file (`relabels`).
     relabel: tokio::sync::OnceCell<Scan>,
+    /// The source's last failure behind an answer to the player, and when
+    /// (`Lease::source_failure`).
+    fault: Mutex<Option<(Instant, SourceFault)>>,
+}
+
+/// What the source did when an answer to the player failed: its error
+/// status, or `None` when it sent no answer. Kept on the response by the
+/// fetch that saw it, and by the playback from there (`Playback::note`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct SourceFault(Option<u16>);
+
+/// How long a source's failure explains the player's: a player gives a
+/// source up within seconds of the read that failed it.
+const FAULT_FRESH: Duration = Duration::from_secs(30);
+
+/// The source's error status in a failed fetch; `None` for no answer.
+fn error_status(e: &HttpError) -> Option<u16> {
+    match e {
+        HttpError::Status { status, .. } => Some(*status),
+        _ => None,
+    }
+}
+
+/// `answer` for the player, with the source's failure behind it kept.
+fn faulted(answer: impl IntoResponse, fault: Option<u16>) -> Response {
+    let mut response = answer.into_response();
+    response.extensions_mut().insert(SourceFault(fault));
+    response
 }
 
 /// Why a subtitle was answered with an empty WebVTT instead of its cues.
@@ -198,6 +226,14 @@ impl Playback {
         if let Content::Http(source) = &self.body {
             source.shutdown();
         }
+    }
+
+    /// Keeps the source's failure behind `response`, if one is.
+    fn note(&self, response: Response) -> Response {
+        if let Some(fault) = response.extensions().get::<SourceFault>() {
+            *lock(&self.fault) = Some((Instant::now(), *fault));
+        }
+        response
     }
 }
 
@@ -444,6 +480,7 @@ impl StreamServer {
                     subtitles: Mutex::default(),
                     trouble: Mutex::default(),
                     relabel: Default::default(),
+                    fault: Mutex::default(),
                 });
                 let name = manifest_name(filename, kind);
                 Ok(self.lease(token, playback, &name, Some(kind)))
@@ -610,6 +647,7 @@ impl StreamServer {
             subtitles: Mutex::default(),
             trouble: Mutex::default(),
             relabel: Default::default(),
+            fault: Mutex::default(),
         })
     }
 
@@ -848,6 +886,19 @@ impl Lease {
     pub fn picture_missing_on_apple(&self) -> futures_util::future::BoxFuture<'static, bool> {
         let playback = self.playback.clone();
         Box::pin(async move { scan(&playback).await.bare })
+    }
+
+    /// How the source failed an answer to the player in the last
+    /// `FAULT_FRESH`, as a player's `failOver` says it (`http` with the
+    /// status, or `network` for no answer), for `failure_words`: a player
+    /// that calls a failed segment a format or decode error then says what
+    /// really failed.
+    pub fn source_failure(&self) -> Option<(&'static str, Option<u16>)> {
+        let (at, SourceFault(status)) = (*lock(&self.playback.fault))?;
+        (at.elapsed() < FAULT_FRESH).then_some(match status {
+            Some(status) => ("http", Some(status)),
+            None => ("network", None),
+        })
     }
 }
 
@@ -1174,12 +1225,12 @@ async fn serve(
     match &playback.body {
         Content::Http(source) => {
             let relabel = relabels(playback.clone());
-            serve_http(source.clone(), range, head_only, relabel).await
+            playback.note(serve_http(source.clone(), range, head_only, relabel).await)
         }
         Content::Hls(hls) => {
             let query = request.uri().query();
             let main = hls.url.clone();
-            cors(serve_playlist(&playback, hls, None, main, query).await)
+            cors(playback.note(serve_playlist(&playback, hls, None, main, query).await))
         }
         // A web page plays it in a `<video crossorigin>`, as it does the others.
         #[cfg(feature = "torrent")]
@@ -1403,7 +1454,7 @@ async fn serve_child(
         }
         Role::Small => serve_small(hls, &url, &released).await,
     };
-    cors(out)
+    cors(playback.note(out))
 }
 
 /// A media playlist of DASH served as HLS: the `n`th the last master named.
@@ -1425,7 +1476,7 @@ async fn serve_rendition(
     if lock(&hls.media).is_empty() {
         let master = serve_playlist(&playback, hls, None, hls.url.clone(), None).await;
         if !master.status().is_success() {
-            return cors(master);
+            return cors(playback.note(master));
         }
     }
     let Some(text) = lock(&hls.media).get(n).cloned() else {
@@ -1477,16 +1528,18 @@ async fn serve_template(
     let released = playback.released.clone();
     let opts = hls.options();
     cors(
-        proxy(
-            &hls.http,
-            url.as_str(),
-            opts,
-            released,
-            range,
-            head_only,
-            false,
-        )
-        .await,
+        playback.note(
+            proxy(
+                &hls.http,
+                url.as_str(),
+                opts,
+                released,
+                range,
+                head_only,
+                false,
+            )
+            .await,
+        ),
     )
 }
 
@@ -1595,7 +1648,7 @@ async fn serve_playlist(
         Some(Ok(fetched)) => fetched,
         Some(Err(e)) => {
             tracing::warn!("playlist upstream failed: {}", e.kind());
-            return StatusCode::BAD_GATEWAY.into_response();
+            return faulted(StatusCode::BAD_GATEWAY, error_status(&e));
         }
     };
     let released = &playback.released;
@@ -2133,10 +2186,11 @@ async fn serve_http(
         Err(ahead::Refusal::Passthrough) => {
             return proxy_http(&source, range, head_only).await;
         }
-        Err(ahead::Refusal::Status(status, headers)) => return (status, headers).into_response(),
-        Err(ahead::Refusal::Blocked | ahead::Refusal::Failed(_)) => {
-            return StatusCode::BAD_GATEWAY.into_response();
+        Err(ahead::Refusal::Status(status, headers)) => {
+            return faulted((status, headers), Some(status.as_u16()));
         }
+        Err(ahead::Refusal::Blocked) => return StatusCode::BAD_GATEWAY.into_response(),
+        Err(ahead::Refusal::Failed(_)) => return faulted(StatusCode::BAD_GATEWAY, None),
     };
     let mut out = meta.headers.clone();
     out.insert(header::ACCEPT_RANGES, HeaderValue::from_static("bytes"));
@@ -2206,11 +2260,11 @@ async fn proxy(
         Some(Ok(Ok(response))) => response,
         Some(Ok(Err(e))) => {
             tracing::warn!("plain proxy upstream failed: {}", e.kind());
-            return StatusCode::BAD_GATEWAY.into_response();
+            return faulted(StatusCode::BAD_GATEWAY, error_status(&e));
         }
         Some(Err(_)) => {
             tracing::warn!("plain proxy upstream sent no answer in {:?}", ahead::OPEN);
-            return StatusCode::BAD_GATEWAY.into_response();
+            return faulted(StatusCode::BAD_GATEWAY, None);
         }
     };
     let status = StatusCode::from_u16(upstream.status).unwrap_or(StatusCode::BAD_GATEWAY);
@@ -2223,7 +2277,7 @@ async fn proxy(
         if let Some(value) = upstream.headers.get(header::CONTENT_RANGE) {
             out.insert(header::CONTENT_RANGE, value.clone());
         }
-        return (status, out).into_response();
+        return faulted((status, out), Some(status.as_u16()));
     }
     let mut out = HeaderMap::new();
     for name in PASSTHROUGH {
@@ -2258,7 +2312,7 @@ async fn proxy(
             }
             Some(Err(e)) => {
                 tracing::warn!("init upstream failed: {}", e.kind());
-                StatusCode::BAD_GATEWAY.into_response()
+                faulted(StatusCode::BAD_GATEWAY, error_status(&e))
             }
         };
     }

@@ -1222,6 +1222,13 @@ impl PlaybackView {
         status: Option<u16>,
         error: &str,
     ) {
+        // A player calls a segment or file the source failed a format or
+        // decode error (Chrome's own HLS, AVPlayer): the stream server saw
+        // the source fail, so that is what failed, never the device.
+        let fault = matches!(kind, None | Some("decode" | "unreadable" | "other"))
+            .then(|| lock(&self.state).lease.as_ref()?.source_failure())
+            .flatten();
+        let (kind, status) = fault.map_or((kind, status), |(k, s)| (Some(k), s));
         let error = mq_server::failure_words(kind, status, error);
         let error = error.as_str();
         // A download's own file that fails goes on to the same version
