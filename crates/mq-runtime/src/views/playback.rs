@@ -2965,7 +2965,8 @@ const DEAD_LATER: Duration = Duration::from_secs(12);
 /// An attempt with peers unchoked runs this long after its add, then ends
 /// unless its window grows (what it received rose in the last `GROWING`).
 /// One that begins with less than this left of the budget, or with nothing
-/// else to play after it, is the last: it runs to the budget's end.
+/// else to play after it for as long as that lasts (`Attempting::last_now`),
+/// is the last: it runs to the budget's end.
 #[cfg(any(test, feature = "torrent"))]
 const LIVE: Duration = Duration::from_secs(30);
 #[cfg(any(test, feature = "torrent"))]
@@ -3344,25 +3345,30 @@ async fn open_torrent(
         stage: StartStage::Details,
         ..Sample::default()
     };
-    // A first play's attempt has its details within its own window; a "Try
-    // again" run's gets the full wait, cut to its budget.
-    let (wait, full) = match policy {
-        Some(p) => {
-            let window = p.window();
-            (window, window >= METADATA_TIMEOUT)
-        }
-        None => {
-            let wait = within_budget(state, METADATA_TIMEOUT);
-            (wait, wait == METADATA_TIMEOUT)
-        }
-    };
     let tick = || {
         publish_start(run, details);
         ahead_now();
     };
-    let torrent = tokio::time::timeout(wait, ticking(add, tick))
-        .await
-        .map_err(|_| {
+    // A first play's attempt has its details within its own window, read
+    // each second (a version listed meanwhile shortens it); a "Try again"
+    // run's gets the full wait, cut to its budget. `full`: the wait it
+    // ended on was the whole details wait.
+    let torrent = match policy {
+        Some(p) => {
+            let window = || p.window_now(|| may_cut_early(&lock(state)));
+            within_live(ticking(add, tick), p.added, window)
+                .await
+                .map_err(|_| p.added.elapsed() >= METADATA_TIMEOUT)
+        }
+        None => {
+            let wait = within_budget(state, METADATA_TIMEOUT);
+            tokio::time::timeout(wait, ticking(add, tick))
+                .await
+                .map_err(|_| wait == METADATA_TIMEOUT)
+        }
+    };
+    let torrent = torrent
+        .map_err(|full| {
             did_not_start();
             // Stale seeder counts fail this way: dead, once the chain shows
             // the connection works, and only when it had the full wait (a
@@ -3503,7 +3509,7 @@ async fn open_torrent(
         };
         let rule = start_rule(&lock(state));
         let ready = match policy {
-            Some(p) => watch_policy(ready, progress, p).await,
+            Some(p) => watch_policy(ready, progress, p, || may_cut_early(&lock(state))).await,
             None => watch_start(ready, progress, STALL, rule).await,
         };
         Ok::<_, mq_engine::EngineError>((file, info, ready))
@@ -3906,6 +3912,31 @@ fn sample(stats: &mq_engine::TorrentStats) -> Sample {
     }
 }
 
+/// `work`, until it ends or `added` plus `window()`, read each second, has
+/// passed: then Err with the window that ended it.
+#[cfg(any(test, feature = "torrent"))]
+#[cfg_attr(not(feature = "torrent"), allow(dead_code))]
+async fn within_live<T>(
+    work: impl std::future::Future<Output = T>,
+    added: tokio::time::Instant,
+    mut window: impl FnMut() -> Duration,
+) -> Result<T, Duration> {
+    tokio::pin!(work);
+    let mut every = tokio::time::interval(Duration::from_secs(1));
+    loop {
+        tokio::select! {
+            biased;
+            out = &mut work => return Ok(out),
+            _ = every.tick() => {
+                let window = window();
+                if tokio::time::Instant::now() >= added + window {
+                    return Err(window);
+                }
+            }
+        }
+    }
+}
+
 /// `work`, with `tick` once a second while it runs (the first at once).
 #[cfg(feature = "torrent")]
 async fn ticking<T>(work: impl std::future::Future<Output = T>, mut tick: impl FnMut()) -> T {
@@ -3999,7 +4030,8 @@ struct Progress {
 /// How a first play's attempt is judged (plans/play-every-version.md 2e),
 /// from its add: with no unchoke it ends at `dead`; with one, at `LIVE`
 /// unless its window grows; never past `until`, the budget's end. The last
-/// attempt that fits runs to `until`.
+/// attempt that fits runs to `until`; one that is last only because nothing
+/// else was listed at its add stops being the last once something is.
 #[cfg(any(test, feature = "torrent"))]
 #[cfg_attr(not(feature = "torrent"), allow(dead_code))]
 #[derive(Clone, Copy, Debug)]
@@ -4008,6 +4040,9 @@ struct Attempting {
     dead: Duration,
     until: tokio::time::Instant,
     last: bool,
+    /// Under `LIVE` of the budget was left at its add: the last whatever
+    /// else is listed later.
+    short: bool,
     /// The trackers counted no seeder for it before Play: even as the last
     /// attempt it ends at `dead` with no peer and no unchoke by then.
     none_counted: bool,
@@ -4016,11 +4051,19 @@ struct Attempting {
 #[cfg(any(test, feature = "torrent"))]
 #[cfg_attr(not(feature = "torrent"), allow(dead_code))]
 impl Attempting {
-    /// How long its details may take: its dead window, or to the budget's
-    /// end for the last attempt the trackers did not count empty.
-    fn window(&self) -> Duration {
+    /// Whether it is the last attempt now: a start begun while the Versions
+    /// list was still loading learns of a next version only later, and from
+    /// then on is cut like any other (`more`: something else can play now).
+    fn last_now(&self, more: impl FnOnce() -> bool) -> bool {
+        self.short || (self.last && !more())
+    }
+
+    /// How long its details may take as it stands now (`last_now`): its
+    /// dead window, or to the budget's end for the last attempt the trackers
+    /// did not count empty.
+    fn window_now(&self, more: impl FnOnce() -> bool) -> Duration {
         let left = self.until.saturating_duration_since(self.added);
-        if self.last && !self.none_counted {
+        if self.last_now(more) && !self.none_counted {
             left
         } else {
             self.dead.min(left)
@@ -4031,8 +4074,9 @@ impl Attempting {
 /// The policy of a first play's attempt added at `added`; None in a "Try
 /// again" run, which waits patiently (`start_rule`). The first attempt of
 /// the start gets `DEAD_FIRST`, every later one `DEAD_LATER`; it is the
-/// last when less than `LIVE` is left or nothing else can play after it.
-/// The Versions view says whether the trackers counted no seeder for
+/// last when less than `LIVE` is left or nothing else can play after it
+/// (read again each second while it runs, `Attempting::last_now`). The
+/// Versions view says whether the trackers counted no seeder for
 /// `stream` before Play.
 #[cfg(feature = "torrent")]
 fn attempt_policy(
@@ -4058,11 +4102,13 @@ fn attempting(
     more: bool,
 ) -> Attempting {
     let until = start + START_BUDGET;
+    let short = until.saturating_duration_since(added) < LIVE;
     Attempting {
         added,
         dead: if tries <= 1 { DEAD_FIRST } else { DEAD_LATER },
         until,
-        last: until.saturating_duration_since(added) < LIVE || !more,
+        last: short || !more,
+        short,
         none_counted: false,
     }
 }
@@ -4076,6 +4122,7 @@ async fn watch_policy<T, P, F>(
     ready: impl std::future::Future<Output = T>,
     mut progress: P,
     p: Attempting,
+    mut more: impl FnMut() -> bool,
 ) -> Started<T>
 where
     P: FnMut() -> F,
@@ -4105,15 +4152,16 @@ where
                     seen.pop_front();
                 }
                 let age = now - p.added;
+                let last = p.last_now(&mut more);
                 // With no unchoke by its dead window a swarm is dead; the
                 // last attempt waits on to the budget's end, unless the
                 // trackers counted no seeder before Play and no peer has
                 // come since (plans/play-every-version.md 2e).
                 let silent = !unchoked && age >= p.dead;
-                if silent && (!p.last || (p.none_counted && !peer)) {
+                if silent && (!last || (p.none_counted && !peer)) {
                     return Started::Late { unchoked: false };
                 }
-                if p.last {
+                if last {
                     continue;
                 }
                 let growing = seen.front().zip(seen.back()).is_some_and(|(a, b)| b.1 > a.1);
@@ -6553,7 +6601,7 @@ mod tests {
                 None => std::future::pending::<()>().await,
             }
         };
-        let started = watch_policy(ready, fake(at), policy).await;
+        let started = watch_policy(ready, fake(at), policy, move || more).await;
         (started, added.elapsed())
     }
 
@@ -6619,6 +6667,54 @@ mod tests {
         assert_eq!(took.as_secs(), 40, "growing, cut at the budget's end");
     }
 
+    /// Play pressed while the Versions list was still loading (South Park,
+    /// 2026-11-07): the first attempt began as the last, with nothing else
+    /// listed. Once a next version is listed (here at 10 s) it is cut like
+    /// any other, so the start can still move on within its budget: a swarm
+    /// that unchoked and sent nothing ends at 30 s and a silent one at 20 s,
+    /// not at the budget's end. With nothing listed it stays the last.
+    #[tokio::test(start_paused = true)]
+    async fn a_version_listed_after_play_cuts_the_first_attempt() {
+        let run = |at: fn(u64) -> (u64, usize), listed_at: u64| async move {
+            let added = tokio::time::Instant::now();
+            let policy = attempting(added, 1, added, false);
+            let listed = move || added.elapsed() >= Duration::from_secs(listed_at);
+            let never = std::future::pending::<()>();
+            let started = watch_policy(never, fake(at), policy, listed).await;
+            (started, added.elapsed().as_secs())
+        };
+        let (started, took) = run(|_| (0, 3), 10).await;
+        assert!(matches!(started, Started::Stalled { nothing: true }));
+        assert_eq!(took, 30);
+        let (started, took) = run(|_| (0, 0), 10).await;
+        assert!(matches!(started, Started::Late { unchoked: false }));
+        assert_eq!(took, 20);
+        let (started, took) = run(|_| (0, 3), 1000).await;
+        assert!(matches!(started, Started::Late { unchoked: true }));
+        assert_eq!(took, 90, "nothing listed: the last attempt");
+    }
+
+    /// The same for the torrent's details: the wait of a start begun as the
+    /// last shrinks to its dead window once a next version is listed.
+    #[tokio::test(start_paused = true)]
+    async fn the_details_wait_shrinks_once_a_version_is_listed() {
+        let added = tokio::time::Instant::now();
+        let policy = attempting(added, 1, added, false);
+        let window = || policy.window_now(|| added.elapsed() >= Duration::from_secs(10));
+        let ended = within_live(std::future::pending::<()>(), added, window).await;
+        assert_eq!(ended, Err(DEAD_FIRST));
+        assert_eq!(added.elapsed().as_secs(), 20);
+        let ended = within_live(std::future::pending::<()>(), added, || {
+            policy.window_now(|| false)
+        })
+        .await;
+        assert_eq!(
+            ended,
+            Err(START_BUDGET),
+            "nothing listed: to the budget's end"
+        );
+    }
+
     /// 2e: the loading screen offers "Choose another version" 20 s into a
     /// start, and not before.
     #[tokio::test(start_paused = true)]
@@ -6673,7 +6769,7 @@ mod tests {
                 ..attempting(added, 1, added, false)
             };
             assert_eq!(
-                policy.window(),
+                policy.window_now(|| false),
                 if none_counted {
                     DEAD_FIRST
                 } else {
@@ -6688,7 +6784,7 @@ mod tests {
                 }))
             };
             let never = std::future::pending::<()>();
-            let started = watch_policy(never, progress, policy).await;
+            let started = watch_policy(never, progress, policy, || false).await;
             (
                 matches!(started, Started::Late { unchoked: false }),
                 added.elapsed().as_secs(),
@@ -6713,7 +6809,7 @@ mod tests {
             begun.push((added - start).as_secs());
             let policy = attempting(start, tries, added, true);
             let never = std::future::pending::<()>();
-            watch_policy(never, fake(|_| (0, 0)), policy).await;
+            watch_policy(never, fake(|_| (0, 0)), policy, || true).await;
         }
         assert_eq!(begun, [0, 20, 32, 44, 56, 68]);
         assert_eq!((tokio::time::Instant::now() - start).as_secs(), 90);
