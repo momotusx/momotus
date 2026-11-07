@@ -291,6 +291,7 @@ export const syncWords = {
   recoverLede: "Joins your account as a new device. The kit is the 32 letters and digits you saved when you made it.",
   server: "Sync server",
   serverHint: "https://sync.example.org",
+  advanced: "Advanced",
   device: "This device",
   deviceHint: "Your other devices list it by this name.",
   invite: "Invite code",

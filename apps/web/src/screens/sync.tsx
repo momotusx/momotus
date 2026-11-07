@@ -22,6 +22,7 @@ import MonitorSmartphone from "lucide-solid/icons/monitor-smartphone";
 import Plus from "lucide-solid/icons/plus";
 import QrCode from "lucide-solid/icons/qr-code";
 import RefreshCw from "lucide-solid/icons/refresh-cw";
+import Settings2 from "lucide-solid/icons/settings-2";
 import ShieldAlert from "lucide-solid/icons/shield-alert";
 import Trash from "lucide-solid/icons/trash";
 import TriangleAlert from "lucide-solid/icons/triangle-alert";
@@ -1070,10 +1071,14 @@ function NoSecondAccount(props: { children: JSX.Element }) {
   );
 }
 
-/** Start an account (the first device) or join one with a kit: both take the server and this device's name. */
+/** Start an account (the first device) or join one with a kit: both take the server and this device's name.
+ * The server is the build's hosted relay (else the one used before), under Advanced: open only while none is
+ * known, so the normal flow never shows a host (Android and Apple do the same). */
 function JoinForm(props: { kit: boolean }) {
   const navigate = useNavigate();
-  const [server, setServer] = createSignal(sync.rememberedServer());
+  const known = signInServer();
+  const [server, setServer] = createSignal(known);
+  const [advanced, setAdvanced] = createSignal(!known);
   const [name, setName] = createSignal(sync.defaultDeviceName());
   const [extra, setExtra] = createSignal("");
   const [busy, setBusy] = createSignal(false);
@@ -1085,7 +1090,10 @@ function JoinForm(props: { kit: boolean }) {
     if (busy()) return;
     const s = server().trim();
     // An address with a user name or password is never kept or sent.
-    if (!plainAddress(s)) return setError(w.badAddress);
+    if (!plainAddress(s)) {
+      setAdvanced(true);
+      return setError(w.badAddress);
+    }
     if (props.kit && !extra().trim()) return setError(w.enterKit);
     setBusy(true);
     setError(null);
@@ -1108,13 +1116,19 @@ function JoinForm(props: { kit: boolean }) {
       <p class="lede">{props.kit ? w.recoverLede : w.startText}</p>
       <NoSecondAccount>
         <form class="install sync-form" onSubmit={(e) => void submit(e)}>
-          <Field label={w.server} type="url" placeholder={w.serverHint} value={server()} onInput={setServer} fkey="sync-form:server" />
           <Show when={props.kit}>
             <Field label={w.kit} placeholder={w.kitHint} value={extra()} onInput={setExtra} fkey="sync-form:kit" mono secret />
           </Show>
           <Field label={w.device} value={name()} onInput={setName} fkey="sync-form:name" hint={w.deviceHint} />
           <Show when={!props.kit}>
             <Field label={w.invite} placeholder={w.inviteHint} value={extra()} onInput={setExtra} fkey="sync-form:invite" />
+          </Show>
+          <button type="button" class="btn disclose" data-f="sync-form:advanced" aria-expanded={advanced()} onClick={() => setAdvanced(!advanced())}>
+            <Settings2 aria-hidden />
+            {w.advanced}
+          </button>
+          <Show when={advanced()}>
+            <Field label={w.server} type="url" placeholder={w.serverHint} value={server()} onInput={setServer} fkey="sync-form:server" />
           </Show>
           <Show when={error()}>{(e) => <Said tone="bad">{e()}</Said>}</Show>
           <button class="btn primary" type="submit" data-f="sync-form:go" aria-busy={busy() || undefined} aria-disabled={busy() || undefined}>

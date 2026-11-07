@@ -1079,7 +1079,10 @@ test.describe.serial("sync across three devices", () => {
     await expect(tv.locator(".qrbox svg")).toBeVisible();
     // A new account, in this tab only.
     await go(tv, "/sync/start");
-    await tv.locator('[data-f="sync-form:server"]').fill(SERVER);
+    // The server this TV used before is filled in and kept under Advanced: no host on the form.
+    await expect(tv.locator('[data-f="sync-form:server"]')).toHaveCount(0);
+    await tv.locator('[data-f="sync-form:advanced"]').click();
+    await expect(tv.locator('[data-f="sync-form:server"]')).toHaveValue(SERVER);
     await tv.locator('[data-f="sync-form:name"]').fill("Kitchen TV");
     await tv.locator('[data-f="sync-form:go"]').click();
     await expect(tv).toHaveURL(/\/sync$/);
@@ -1105,7 +1108,6 @@ test.describe.serial("sync across three devices", () => {
     const gone = tv.getByText("Your Momotus account was deleted. Your library stays on this device.");
     const start = async () => {
       await go(tv, "/sync/start");
-      await tv.locator('[data-f="sync-form:server"]').fill(SERVER);
       await tv.locator('[data-f="sync-form:name"]').fill("Kitchen TV");
       await tv.locator('[data-f="sync-form:go"]').click();
       await expect(tv).toHaveURL(/\/sync$/);

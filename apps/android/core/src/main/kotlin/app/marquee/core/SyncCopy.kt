@@ -30,6 +30,7 @@ object SyncCopy {
         "Joins your account as a new device. The kit is the 32 letters and digits you saved when you made it."
     const val SERVER = "Sync server"
     const val SERVER_HINT = "https://sync.example.org"
+    const val ADVANCED = "Advanced"
     const val DEVICE = "This device"
     const val DEVICE_HELP = "Your other devices list it by this name."
     const val INVITE = "Invite code"

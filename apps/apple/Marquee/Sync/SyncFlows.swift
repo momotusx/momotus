@@ -18,11 +18,15 @@ struct SyncJoinScreen: View {
     @Environment(\.metrics) private var metrics
     @Environment(\.dismiss) private var dismiss
     @State private var server: String
+    /// The server field, open only while no server is known: the normal flow never shows a host.
+    @State private var advanced: Bool
 
-    /// `server`: the build's hosted relay, filled in from sign-in; else the last one used.
+    /// `server`: the build's hosted relay, filled in from sign-in; else the build's own, else the last one used.
     init(kit: Bool, server: String? = nil) {
         self.kit = kit
-        _server = State(initialValue: server ?? SyncJoinScreen.rememberedServer)
+        let known = server ?? AccountServer.default ?? SyncJoinScreen.rememberedServer
+        _server = State(initialValue: known.isEmpty ? "https://" : known)
+        _advanced = State(initialValue: known.isEmpty)
     }
     @State private var name = UserDefaults.standard.string(forKey: "syncName") ?? DeviceName.current
     /// The invite code, or the kit: it stays in this page only.
@@ -40,10 +44,13 @@ struct SyncJoinScreen: View {
                     .textFont(Theme.type.body)
                     .foregroundStyle(Theme.Palette.muted)
                     .fixedSize(horizontal: false, vertical: true)
-                SyncField(label: W.server, text: $server, prompt: W.serverHint, typing: $typing, url: true)
                 if kit { SyncField(label: W.kit, text: $extra, prompt: W.kitHint, typing: $typing, mono: true, secret: true) }
                 SyncField(label: W.device, text: $name, prompt: DeviceName.current, typing: $typing, help: W.deviceHelp)
                 if !kit { SyncField(label: W.invite, text: $extra, prompt: W.inviteHint, typing: $typing) }
+                Button { advanced.toggle() } label: { Label(W.advanced, glyph: "settings") }
+                    .buttonStyle(PillButtonStyle())
+                    .accessibilityAddTraits(advanced ? .isSelected : [])
+                if advanced { SyncField(label: W.server, text: $server, prompt: W.serverHint, typing: $typing, url: true) }
                 if let error { Said(tone: .bad, text: error) }
                 Button { submit(confirmed: false) } label: {
                     Label(busy ? (kit ? W.recovering : W.starting) : (kit ? W.recoverButton : W.startButton), glyph: kit ? "life-buoy" : "check")
@@ -75,7 +82,7 @@ struct SyncJoinScreen: View {
         let address = server.trimmingCharacters(in: .whitespacesAndNewlines)
         let text = extra.trimmingCharacters(in: .whitespacesAndNewlines)
         // An address with a user name or password is never kept or sent.
-        guard PairingWords.plainAddress(address) else { error = W.badAddress; return }
+        guard PairingWords.plainAddress(address) else { advanced = true; error = W.badAddress; return }
         if kit, text.isEmpty { error = W.noKitEntered; return }
         // A live account is replaced only after the user says so.
         if sync.joined, !confirmed { replacing = true; return }
@@ -100,10 +107,10 @@ struct SyncJoinScreen: View {
         }
     }
 
-    /// The sync server used before, when it is a plain address.
+    /// The sync server used before, when it is a plain address, else empty.
     private static var rememberedServer: String {
         let saved = UserDefaults.standard.string(forKey: SyncRecord.serverKey) ?? ""
-        return PairingWords.plainAddress(saved) ? saved : "https://"
+        return PairingWords.plainAddress(saved) ? saved : ""
     }
 }
 

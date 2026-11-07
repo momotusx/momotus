@@ -15,6 +15,7 @@ enum SyncWords {
     static let recoverLede = "Joins your account as a new device. The kit is the 32 letters and digits you saved when you made it."
     static let server = "Sync server"
     static let serverHint = "https://sync.example.org"
+    static let advanced = "Advanced"
     static let device = "This device"
     static let deviceHelp = "Your other devices list it by this name."
     static let invite = "Invite code"

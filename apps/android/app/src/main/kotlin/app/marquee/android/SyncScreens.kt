@@ -1131,7 +1131,11 @@ fun SyncJoinScreen(
     val context = LocalContext.current
     val tv = Marquee.form == Form.Tv
     val scope = rememberCoroutineScope()
-    var server by rememberSaveable { mutableStateOf(context.knownServer()) }
+    // The build's hosted relay, else the one used before: kept under Advanced, open only while none is known, so the
+    // normal flow never shows a host.
+    val known = remember(context) { BuildConfig.SYNC_SERVER.ifEmpty { context.knownServer() } }
+    var server by rememberSaveable { mutableStateOf(known) }
+    var advanced by rememberSaveable { mutableStateOf(known.isEmpty()) }
     var name by rememberSaveable { mutableStateOf(context.deviceName(tv)) }
     // The kit or the invite: the kit stays out of saved state, which can outlive the page.
     var extra by remember { mutableStateOf("") }
@@ -1170,6 +1174,7 @@ fun SyncJoinScreen(
         val s = server.trim()
         // An address with a user name or password is never kept or sent.
         if (!SyncRules.plainAddress(s)) {
+            advanced = true
             error = SyncCopy.BAD_ADDRESS
             return
         }
@@ -1197,16 +1202,6 @@ fun SyncJoinScreen(
         item(key = "head") { BrowseHeader(if (kit) SyncCopy.RECOVER_TITLE else SyncCopy.START_TITLE) }
         block("lede") { MqText(if (kit) SyncCopy.RECOVER_LEDE else SyncCopy.START_TEXT, color = Marquee.colors.muted) }
         block("form") {
-            Labeled(SyncCopy.SERVER) {
-                MqTextField(
-                    server,
-                    { server = it },
-                    label = SyncCopy.SERVER,
-                    placeholder = SyncCopy.SERVER_HINT,
-                    modifier = Modifier.focusRequester(first),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, imeAction = ImeAction.Next),
-                )
-            }
             if (kit) {
                 Labeled(SyncCopy.KIT) {
                     MqTextField(
@@ -1214,6 +1209,7 @@ fun SyncJoinScreen(
                         { extra = it },
                         label = SyncCopy.KIT,
                         placeholder = SyncCopy.KIT_HINT,
+                        modifier = Modifier.focusRequester(first),
                         // Dots, not letters, unless the user asks: a TV room or a shoulder can read a kit.
                         visualTransformation =
                             if (showLetters) VisualTransformation.None else PasswordVisualTransformation(),
@@ -1234,7 +1230,13 @@ fun SyncJoinScreen(
                 )
             }
             Labeled(SyncCopy.DEVICE) {
-                MqTextField(name, { name = it }, label = SyncCopy.DEVICE, placeholder = "Momotus")
+                MqTextField(
+                    name,
+                    { name = it },
+                    label = SyncCopy.DEVICE,
+                    placeholder = "Momotus",
+                    modifier = if (kit) Modifier else Modifier.focusRequester(first),
+                )
             }
             MqText(SyncCopy.DEVICE_HELP, role = TextRole.Caption, color = Marquee.colors.muted)
             if (!kit) {
@@ -1245,6 +1247,18 @@ fun SyncJoinScreen(
                         label = SyncCopy.INVITE,
                         placeholder = SyncCopy.INVITE_HINT,
                         keyboardOptions = KeyboardOptions(autoCorrectEnabled = false, imeAction = ImeAction.Done),
+                    )
+                }
+            }
+            SecondaryButton(SyncCopy.ADVANCED, { advanced = !advanced }, icon = Icons.Settings, selected = advanced)
+            if (advanced) {
+                Labeled(SyncCopy.SERVER) {
+                    MqTextField(
+                        server,
+                        { server = it },
+                        label = SyncCopy.SERVER,
+                        placeholder = SyncCopy.SERVER_HINT,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, imeAction = ImeAction.Next),
                     )
                 }
             }
