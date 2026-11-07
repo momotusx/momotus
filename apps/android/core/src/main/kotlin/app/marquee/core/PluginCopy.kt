@@ -45,6 +45,9 @@ object PluginCopy {
     const val FOR_KINDS = "for {kinds}"
     const val LANGUAGES = "Languages: {languages}."
 
+    /** A repository with no name of its own: never its host. */
+    const val UNNAMED = "Plugin repository"
+
     /** Every word by its key in the shared file. */
     val ALL: Map<String, String> =
         mapOf(
@@ -82,6 +85,7 @@ object PluginCopy {
             "directoryNoMatch" to DIRECTORY_NO_MATCH,
             "forKinds" to FOR_KINDS,
             "languages" to LANGUAGES,
+            "unnamed" to UNNAMED,
         )
 
     /** `template` with each `{name}` replaced by its value as plain text. */

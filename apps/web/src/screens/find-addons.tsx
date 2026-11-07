@@ -91,7 +91,13 @@ function Card(props: { entry: ListedAddon; fkey: string; sameName: boolean; onAs
         </div>
         <div class="fa-text">
           <h2 dir="auto">{e().name}</h2>
-          <p class="fa-host">{e().host}</p>
+          {/* The addon by its own name; its host only behind Details (a TV card is one focus stop: none). */}
+          <Show when={!tv()}>
+            <details class="why-raw fa-details">
+              <summary data-f={`${props.fkey}:details`}>Details</summary>
+              <code class="fa-host">{e().host}</code>
+            </details>
+          </Show>
           <p class="fa-provides">{providesLine(e())}</p>
           <Show when={e().description}>
             <p class="fa-desc" dir="auto">
@@ -177,8 +183,10 @@ function Lists(props: { fresh: boolean; picks: Picks; onPicks: (p: Partial<Picks
   createEffect(() => {
     if (lists().length > 0 && !current()) props.onPicks({ list: "official", shown: PAGE, query: "" });
   });
-  // A publisher's list (an addon the user installed) names where it comes from.
+  // A publisher's list (an addon the user installed) names where it comes from: by the list's name, its host only
+  // behind Details and in the link's address.
   const host = () => current()?.host ?? null;
+  const source = () => (host() ? (current()?.name ?? null) : null);
   const repeated = createMemo(() => repeatedNames(current()?.entries ?? []));
   // The card whose Install asked, by key: one sheet for the page, held across the list's pushes,
   // which rebuild the cards.
@@ -248,22 +256,30 @@ function Lists(props: { fresh: boolean; picks: Picks; onPicks: (p: Partial<Picks
       <div class="fa-tools">
         <Show when={host()}>
           {(from) => (
+            <>
             <p class="fa-from">
               {/* The core sends hosts of enabled addons on public hosts only: a link there leaves the app on purpose. */}
-              <Show when={!tv()} fallback={w.fromList.replace("{host}", from())}>
+              <Show when={!tv()} fallback={w.fromList.replace("{host}", source() ?? "")}>
                 <a href={`https://${from()}/`} target="_blank" rel="noopener noreferrer" data-f="fa:from" title={w.fromHint}>
-                  {w.fromList.replace("{host}", from())}
+                  {w.fromList.replace("{host}", source() ?? "")}
                   <ExternalLink aria-hidden />
                 </a>
               </Show>
             </p>
+            <Show when={!tv()}>
+              <details class="why-raw fa-from-details">
+                <summary data-f="fa:from-details">Details</summary>
+                <code>{from()}</code>
+              </details>
+            </Show>
+            </>
           )}
         </Show>
         <Switch>
           <Match when={!failure() && (!current() || current()?.state.state === "loading")}>
             <p class="st warn live" role="status">
               <i class="dot" />
-              {host() ? w.loadingFrom.replace("{host}", host() ?? "") : w.loading}
+              {source() ? w.loadingFrom.replace("{host}", source() ?? "") : w.loading}
             </p>
           </Match>
           <Match when={ready(props.picks.list)}>
@@ -303,7 +319,7 @@ function Lists(props: { fresh: boolean; picks: Picks; onPicks: (p: Partial<Picks
           <p class="note">{w.noRoom}</p>
         </Match>
         <Match when={current()?.entries.length === 0}>
-          <p class="note">{host() ? w.emptyFrom.replace("{host}", host() ?? "") : w.empty}</p>
+          <p class="note">{source() ? w.emptyFrom.replace("{host}", source() ?? "") : w.empty}</p>
         </Match>
         <Match when={visible().length === 0 && props.picks.query.trim() !== ""}>
           <p class="note">{w.searchEmpty}</p>

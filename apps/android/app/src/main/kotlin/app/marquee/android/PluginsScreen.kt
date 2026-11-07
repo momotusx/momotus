@@ -360,7 +360,9 @@ private fun RepoRow(
     onRemove: () -> Unit,
 ) {
     val colors = Marquee.colors
-    val name = repo.name ?: repo.host
+    val name = repo.name ?: PluginCopy.UNNAMED
+    // The repository by its own name; its host only behind Details.
+    var details by remember(repo.url) { mutableStateOf(false) }
     Section {
         Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.xs)) {
             SwitchRow(
@@ -372,9 +374,10 @@ private fun RepoRow(
             ) {
                 Column(Modifier.weight(1f)) {
                     MqText(name, role = TextRole.Headline, weight = FontWeight.Bold, maxLines = 2)
-                    MqText(repo.host, role = TextRole.Caption, color = colors.dim, maxLines = 1)
                 }
             }
+            SecondaryButton(AddonsCopy.DETAILS, { details = !details }, selected = details, spoken = "$name ${AddonsCopy.DETAILS.lowercase()}")
+            if (details) MqText(repo.host, role = TextRole.Caption, color = colors.dim, maxLines = 2)
             if (repo.description.isNotEmpty()) {
                 MqText(
                     repo.description,

@@ -19,7 +19,8 @@ struct PluginRepoInfo: Decodable, Hashable, Sendable, Identifiable {
     let providers: [PluginInfo]
 
     var id: String { url }
-    var shownName: String { name ?? host }
+    /// Its own name, never its host.
+    var shownName: String { name ?? PluginWords.unnamed }
 }
 
 struct PluginInfo: Decodable, Hashable, Sendable, Identifiable {
@@ -97,6 +98,7 @@ enum PluginWords {
     static let directoryNoMatch = "No repository matches."
     static let forKinds = "for {kinds}"
     static let languages = "Languages: {languages}."
+    static let unnamed = "Plugin repository"
 
     /// Every word by its key in the shared file.
     static let all: [String: String] = [
@@ -107,6 +109,7 @@ enum PluginWords {
         "loading": loading, "kids": kids, "notAvailable": notAvailable, "summaryNone": summaryNone,
         "directoryTitle": directoryTitle, "directoryFrom": directoryFrom, "directorySearch": directorySearch,
         "installed": installed, "directoryNoMatch": directoryNoMatch, "forKinds": forKinds, "languages": languages,
+        "unnamed": unnamed,
     ]
 
     /// `template` with each `{name}` replaced by its value.

@@ -24,6 +24,8 @@ struct FindAddonsScreen: View {
     @State private var filter = FindFilter.all
     /// The search over the open list (not on a TV); a new list starts with none.
     @State private var query = ""
+    /// The list's host, shown only on Details.
+    @State private var sourceHostShown = false
     @FocusState private var searchFocused: Bool
     @FocusState private var focus: FindFocus?
     /// The Nuvio plugins row shows where plugins run (full builds, not kids).
@@ -43,7 +45,7 @@ struct FindAddonsScreen: View {
                 header
                 paste
                 chips
-                if let host = current?.host { from(host) }
+                if let current, let host = current.host { from(host, name: current.name) }
                 if list != "official" { communityNote }
                 search
                 content
@@ -156,19 +158,26 @@ struct FindAddonsScreen: View {
         return lists.map { Chip(id: FindFocus.list($0.id), title: $0.name, detail: count($0.id)) }
     }
 
-    /// Where a publisher's list comes from: a link to its site, plain text on a TV.
-    @ViewBuilder private func from(_ host: String) -> some View {
-        let words = W.with(W.fromList, host: host)
+    /// Where a publisher's list comes from, by the list's name: a link to its site, plain text on a TV. The host
+    /// itself only behind Details.
+    @ViewBuilder private func from(_ host: String, name: String) -> some View {
+        let words = W.with(W.fromList, host: name)
         #if os(tvOS)
         note(words)
         #else
-        if let site = URL(string: "https://\(host)/") {
-            // The core sends hosts of enabled addons on public hosts only.
-            Link(destination: site) { Label(words, glyph: "external-link") }
-                .accessibilityHint(W.fromHint)
+        HStack(spacing: Theme.Space.s) {
+            if let site = URL(string: "https://\(host)/") {
+                // The core sends hosts of enabled addons on public hosts only.
+                Link(destination: site) { Label(words, glyph: "external-link") }
+                    .accessibilityHint(W.fromHint)
+                    .buttonStyle(PillButtonStyle())
+            } else {
+                note(words)
+            }
+            Button(InstallSheetRules.details) { sourceHostShown.toggle() }
                 .buttonStyle(PillButtonStyle())
-        } else {
-            note(words)
+                .accessibilityAddTraits(sourceHostShown ? .isSelected : [])
+            if sourceHostShown { Text(host).font(.mono(Theme.type.caption)).foregroundStyle(Theme.Palette.dim) }
         }
         #endif
     }
@@ -236,7 +245,7 @@ struct FindAddonsScreen: View {
     /// Asking Cinemeta while the list loads, Refresh once it is in.
     @ViewBuilder private var tools: some View {
         if failure == nil, current == nil || current?.state == .loading {
-            StatusDot(tone: .warn, text: current?.host.map { W.with(W.loadingFrom, host: $0) } ?? W.loading)
+            StatusDot(tone: .warn, text: current.flatMap { $0.host == nil ? nil : W.with(W.loadingFrom, host: $0.name) } ?? W.loading)
                 .padding(.bottom, Theme.Space.xs)
         } else if current?.state == .ready {
             // On a phone the word would push the Community chip under the edge fade.
@@ -259,7 +268,7 @@ struct FindAddonsScreen: View {
             if current.entries.isEmpty, current.more == true {
                 note(W.noRoom)
             } else if current.entries.isEmpty {
-                note(current.host.map { W.with(W.emptyFrom, host: $0) } ?? W.empty)
+                note(current.host == nil ? W.empty : W.with(W.emptyFrom, host: current.name))
             } else if visible.isEmpty, !query.trimmingCharacters(in: .whitespaces).isEmpty {
                 note(W.searchEmpty)
             } else if visible.isEmpty, let words = filter.emptyWords {
@@ -382,6 +391,8 @@ private struct FindAddonCard: View {
     @Environment(\.metrics) private var metrics
     @Environment(\.openURL) private var openURL
     @ScaledMetric(relativeTo: .headline) private var markScale: CGFloat = 1
+    /// The host, only behind Details (phone and Mac; a TV card is one focus stop and shows none).
+    @State private var hostShown = false
 
     private var cards: InstallCards { .shared }
     private var card: InstallCards.Card { cards[entry.key] }
@@ -470,18 +481,26 @@ private struct FindAddonCard: View {
 
     private var text: some View {
         VStack(alignment: .leading, spacing: Theme.Space.xs) {
-            // The name and its host read as one pair: the host's own leading is their gap.
+            // The name and, behind Details, its host read as one pair: the host's own leading is their gap.
             VStack(alignment: .leading, spacing: 0) {
                 Text(entry.name)
                     .textFont(Theme.type.headline, weight: .bold, relativeTo: .headline)
                     .natural(entry.name)
                 // Two lines at most, the end kept: it tells same-name entries apart.
-                Text(entry.host)
-                    .font(.mono(Theme.type.caption))
-                    .foregroundStyle(Theme.Palette.dim)
-                    .lineLimit(2)
-                    .truncationMode(.middle)
+                if hostShown {
+                    Text(entry.host)
+                        .font(.mono(Theme.type.caption))
+                        .foregroundStyle(Theme.Palette.dim)
+                        .lineLimit(2)
+                        .truncationMode(.middle)
+                }
             }
+            #if !os(tvOS)
+            Button(InstallSheetRules.details) { hostShown.toggle() }
+                .buttonStyle(PillButtonStyle())
+                .accessibilityLabel("\(entry.name) \(InstallSheetRules.details.lowercased())")
+                .accessibilityAddTraits(hostShown ? .isSelected : [])
+            #endif
             if let description = entry.description, !description.isEmpty {
                 Text(description)
                     .textFont(Theme.type.callout, relativeTo: .callout)

@@ -284,13 +284,19 @@ private struct RepoCard: View {
     let toggle: () -> Void
     let provider: (PluginInfo) -> Void
     let remove: () -> Void
+    @State private var hostShown = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Space.s) {
             HStack(alignment: .firstTextBaseline) {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(repo.shownName).textFont(Theme.type.headline, weight: .semibold, relativeTo: .headline)
-                    Text(repo.host).textFont(Theme.type.caption).foregroundStyle(Theme.Palette.muted)
+                    // The repository by its own name; its host only behind Details.
+                    Button(InstallSheetRules.details) { hostShown.toggle() }
+                        .buttonStyle(PillButtonStyle())
+                        .accessibilityLabel("\(repo.shownName) \(InstallSheetRules.details.lowercased())")
+                        .accessibilityAddTraits(hostShown ? .isSelected : [])
+                    if hostShown { Text(repo.host).textFont(Theme.type.caption).foregroundStyle(Theme.Palette.muted) }
                 }
                 Spacer(minLength: 12)
                 switchButton(on: repo.enabled, name: repo.shownName, action: toggle)

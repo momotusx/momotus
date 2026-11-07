@@ -99,6 +99,7 @@ function AddField(props: { onAdded: (answer: PluginsAnswer) => void; autofocus?:
 
 function RepoRow(props: { repo: PluginRepoInfo; index: number; reload: () => void }) {
   const r = () => props.repo;
+  const shownName = () => r().name ?? w.unnamed;
   const [confirm, setConfirm] = createSignal(false);
   const [error, setError] = createSignal<string | null>(null);
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -118,11 +119,17 @@ function RepoRow(props: { repo: PluginRepoInfo; index: number; reload: () => voi
   return (
     <li class="addon" classList={{ off: !r().enabled }} data-fgroup={`plugin-repo:${props.index}`}>
       <div class="addon-logo" aria-hidden="true">
-        <span>{(r().name ?? r().host).charAt(0)}</span>
+        <span>{shownName().charAt(0)}</span>
       </div>
       <div class="addon-text">
-        <h2 dir="auto">{r().name ?? r().host}</h2>
-        <p class="host">{r().host}</p>
+        <h2 dir="auto">{shownName()}</h2>
+        {/* The repository by its own name; its host only behind Details, never on a TV. */}
+        <Show when={form() !== "tv"}>
+          <details class="why-raw addon-host">
+            <summary data-f={`plugin-repo:${props.index}:details`}>Details</summary>
+            <code class="host">{r().host}</code>
+          </details>
+        </Show>
         <Show when={r().description}>
           <p class="desc" dir="auto">
             {r().description}
@@ -162,7 +169,7 @@ function RepoRow(props: { repo: PluginRepoInfo; index: number; reload: () => voi
       {/* Under the repository's own switches, each provider's switch in their column, so a remote goes down
           from them through its providers to the next repository (QA r1 Q6 row 53). */}
       <Show when={r().providers.length > 0}>
-        <ul class="plugin-providers" aria-label={`${w.providers}, ${r().name ?? r().host}`}>
+        <ul class="plugin-providers" aria-label={`${w.providers}, ${shownName()}`}>
           <For each={r().providers}>
             {(p, i) => (
               <li classList={{ off: !p.enabled || !r().enabled }}>

@@ -44,7 +44,8 @@ private func shared() throws -> [String: String] {
     let repos = try JSONDecoder().decode([PluginRepoInfo].self, from: Data(json.utf8))
     #expect(PluginWords.summary([]) == PluginWords.summaryNone)
     #expect(PluginWords.summary(repos) == "2 repositories, 1 provider on")
-    #expect(repos[0].shownName == "h")
+    // A repository with no name is never named by its host.
+    #expect(repos[0].shownName == PluginWords.unnamed)
 }
 
 @Test func pluginRowsComeLastUnderFromPlugins() throws {

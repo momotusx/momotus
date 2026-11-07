@@ -90,11 +90,13 @@ export function InstallSheet(props: { addon: SheetAddon; onInstall: () => void; 
           <p class="is-note" id={`${id}-note`}>
             {props.words?.note ?? sheetWords.note}
           </p>
-          {/* Where it comes from is a raw host: only behind Details. */}
-          <details class="why-raw is-details">
-            <summary data-f="sheet:details">Details</summary>
-            <p class="is-from">{props.words?.from ?? sheetFrom(props.addon.host)}</p>
-          </details>
+          {/* Where it comes from is a raw host: only behind Details, never on a TV. */}
+          <Show when={!tv()}>
+            <details class="why-raw is-details">
+              <summary data-f="sheet:details">Details</summary>
+              <p class="is-from">{props.words?.from ?? sheetFrom(props.addon.host)}</p>
+            </details>
+          </Show>
           <div class="is-acts">{tv() ? [cancel, install] : form() === "phone" ? [install, cancel] : [cancel, install]}</div>
         </section>
       </div>

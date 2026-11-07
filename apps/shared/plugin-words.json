@@ -32,5 +32,6 @@
   "installed": "Installed",
   "directoryNoMatch": "No repository matches.",
   "forKinds": "for {kinds}",
-  "languages": "Languages: {languages}."
+  "languages": "Languages: {languages}.",
+  "unnamed": "Plugin repository"
 }

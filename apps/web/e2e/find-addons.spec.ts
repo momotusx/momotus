@@ -297,6 +297,11 @@ test.describe("a directory addon's list", () => {
     await expect(from).toHaveAttribute("href", "https://stremio-addons.net/");
     await expect(page.locator(".fa-note")).toContainText("Community addons are made by other people");
     await expect(page.locator(".fa-card:not(.skel)").first()).toBeVisible({ timeout: 20_000 });
+    // Hosts wait behind Details: the list's and each card's (the list's name here is its directory's own).
+    await expect(page.locator(".fa-from-details code")).toBeHidden();
+    await expect(page.locator(".fa-card .fa-host").first()).toBeHidden();
+    await page.locator('[data-f="fa:from-details"]').click();
+    await expect(page.locator(".fa-from-details code")).toHaveText("stremio-addons.net");
     // The chip counts what the list shows: hundreds of addons.
     const count = async () => Number((await chip.textContent())?.match(/(\d+)\s*$/)?.[1] ?? 0);
     await expect.poll(count).toBeGreaterThan(100);

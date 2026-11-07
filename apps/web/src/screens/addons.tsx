@@ -166,15 +166,14 @@ function AddonRow(props: { addon: AddonInfo; index: number; count: number }) {
           {a().name}
           <small class="num">{a().version}</small>
         </h2>
-        {/* The row names the addon by its own name and logo; its host only behind Details. */}
-        <Show
-          when={!a().builtIn}
-          fallback={<p class="host">{addonHost(a())}</p>}
-        >
+        {/* The row names the addon by its own name and logo; its host only behind Details, never on a TV. */}
+        <Show when={!a().builtIn} fallback={<p class="host">{addonHost(a())}</p>}>
+          <Show when={form() !== "tv"}>
           <details class="why-raw addon-host">
             <summary data-f={`addon:${props.index}:details`}>Details</summary>
             <code class="host">{a().host}</code>
           </details>
+          </Show>
         </Show>
         <Show when={a().description}>
           <p class="desc">{a().description}</p>

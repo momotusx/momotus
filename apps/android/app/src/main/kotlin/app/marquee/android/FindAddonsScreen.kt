@@ -351,8 +351,11 @@ fun FindAddonsScreen(
         delay(600)
         value = visible.size
     }
-    // A publisher's list (an addon the user installed) names where it comes from.
+    // A publisher's list (an addon the user installed) names where it comes from: by the list's name, its host only
+    // behind Details and in the link's address.
     val host = current?.host
+    val source = current?.name?.takeIf { host != null }
+    var sourceHostShown by remember(host) { mutableStateOf(false) }
     val context = LocalContext.current
     val repeated = remember(entries) { FindAddons.repeatedNames(entries) }
     val visibleKeys = remember(visible) { visible.map { it.key } }
@@ -554,7 +557,7 @@ fun FindAddonsScreen(
                 loading -> {
                     item(key = "loading") {
                         StatusNote(
-                            host?.let(FindAddonsCopy::loadingFrom) ?: FindAddonsCopy.LOADING,
+                            source?.let(FindAddonsCopy::loadingFrom) ?: FindAddonsCopy.LOADING,
                             tone = Status.Warn,
                             busy = true,
                         )
@@ -588,17 +591,23 @@ fun FindAddonsScreen(
                             verticalArrangement = Arrangement.spacedBy(Marquee.space.xs),
                             itemVerticalAlignment = Alignment.CenterVertically,
                         ) {
-                            if (host != null && !tv) {
+                            if (host != null && source != null && !tv) {
                                 SecondaryButton(
-                                    FindAddonsCopy.fromList(host),
+                                    FindAddonsCopy.fromList(source),
                                     { openLink(context, "https://$host/") },
                                     icon = Icons.ExternalLink,
-                                    spoken = "${FindAddonsCopy.fromList(host)}. ${FindAddonsCopy.FROM_HINT}",
+                                    spoken = "${FindAddonsCopy.fromList(source)}. ${FindAddonsCopy.FROM_HINT}",
                                 )
+                                SecondaryButton(
+                                    AddonsCopy.DETAILS,
+                                    { sourceHostShown = !sourceHostShown },
+                                    selected = sourceHostShown,
+                                )
+                                if (sourceHostShown) MqText(host, role = TextRole.Caption, color = Marquee.colors.dim)
                             }
-                            if (host != null && tv) {
+                            if (source != null && tv) {
                                 MqText(
-                                    FindAddonsCopy.fromList(host),
+                                    FindAddonsCopy.fromList(source),
                                     role = TextRole.Callout,
                                     color = Marquee.colors.muted,
                                 )
@@ -628,7 +637,7 @@ fun FindAddonsScreen(
                         entries.isEmpty() -> {
                             item(
                                 key = "empty",
-                            ) { Note(host?.let(FindAddonsCopy::emptyFrom) ?: FindAddonsCopy.EMPTY, side = 0.dp) }
+                            ) { Note(source?.let(FindAddonsCopy::emptyFrom) ?: FindAddonsCopy.EMPTY, side = 0.dp) }
                         }
 
                         visible.isEmpty() && query.isNotBlank() -> {
@@ -893,6 +902,8 @@ private fun Card(
     // sheet gives the focus back to it.
     val button = remember { FocusRequester() }
     val stop = if (tv) requester else button
+    // The host only behind Details (a phone card's own button; a TV card is one stop and shows none).
+    var hostShown by remember(entry.key) { mutableStateOf(false) }
     DisposableEffect(entry.key, stop) {
         focus[entry.key] = stop
         onDispose { if (focus[entry.key] === stop) focus.remove(entry.key) }
@@ -959,16 +970,18 @@ private fun Card(
                             weight = FontWeight.Bold,
                             textDirection = TextDirection.Content,
                         )
-                        // The link may hold keys: the host stands in for it, cut in the middle so the
-                        // owner's domain at its end always shows.
-                        MqText(
-                            entry.host,
-                            role = TextRole.Caption,
-                            color = colors.dim,
-                            maxLines = 1,
-                            fontFamily = FontFamily.Monospace,
-                            overflow = TextOverflow.MiddleEllipsis,
-                        )
+                        // Behind Details only: the link may hold keys, so the host stands in for it, cut in the
+                        // middle so the owner's domain at its end always shows.
+                        if (hostShown) {
+                            MqText(
+                                entry.host,
+                                role = TextRole.Caption,
+                                color = colors.dim,
+                                maxLines = 1,
+                                fontFamily = FontFamily.Monospace,
+                                overflow = TextOverflow.MiddleEllipsis,
+                            )
+                        }
                         MqText(
                             FindAddons.providesLine(entry),
                             modifier = Modifier.padding(top = if (tv) 8.dp else 4.dp),
@@ -1020,7 +1033,7 @@ private fun Card(
             } else {
                 about(Modifier)
             }
-            if (!tv && (word != null || pressable || configure)) {
+            if (!tv) {
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -1063,6 +1076,12 @@ private fun Card(
                             spoken = FindAddons.spoken(entry, Action.Configure, sameName),
                         )
                     }
+                    SecondaryButton(
+                        AddonsCopy.DETAILS,
+                        { hostShown = !hostShown },
+                        selected = hostShown,
+                        spoken = "${entry.name} ${AddonsCopy.DETAILS.lowercase()}",
+                    )
                 }
             }
         }
