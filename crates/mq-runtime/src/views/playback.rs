@@ -818,6 +818,9 @@ pub struct PlaybackView {
     trakt: Option<crate::trakt::Scrobble>,
     /// A kids policy refused the target: the view does no work.
     denied: bool,
+    /// Counted as a play while it is open (Home's Continue Watching waits
+    /// for its end, `watch_continue`).
+    _playing: crate::core::Playing,
 }
 
 impl State {
@@ -978,7 +981,8 @@ impl PlaybackView {
                 task: Arc::default(),
                 trakt: None,
                 denied: true,
-                };
+                _playing: core.playing(),
+            };
         }
         let progress = core
             .library()
@@ -1028,6 +1032,7 @@ impl PlaybackView {
             task: Arc::default(),
             trakt,
             denied: false,
+            _playing: core.playing(),
         };
         view.spawn_resolve();
         view

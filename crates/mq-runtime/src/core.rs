@@ -204,6 +204,8 @@ struct Inner {
     /// Each profile's enabled addons as `installed_addons` read them, with
     /// the library versions of the addons and access tables they were read at.
     addon_lists: std::sync::Mutex<HashMap<String, KeptAddons>>,
+    /// Playbacks open now (`Core::playing`), whichever profile.
+    plays: tokio::sync::watch::Sender<usize>,
     /// Offline downloads' files (plans/offline-downloads.md 4.2).
     downloads_dir: PathBuf,
     downloads: std::sync::OnceLock<Arc<crate::downloads::Downloads>>,
@@ -246,6 +248,15 @@ static OPEN: std::sync::Mutex<Vec<(PathBuf, Weak<Device>)>> = std::sync::Mutex::
 /// A profile's parsed addon list, with the addons and access table
 /// versions it was read at (`Core::installed_addons`).
 type KeptAddons = ((u64, u64), Vec<InstalledAddon>);
+
+/// An open playback, counted in `Core::plays` while it lives.
+pub(crate) struct Playing(tokio::sync::watch::Sender<usize>);
+
+impl Drop for Playing {
+    fn drop(&mut self) {
+        self.0.send_modify(|n| *n -= 1);
+    }
+}
 
 /// `Core::meta_reads`.
 static META_READS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
@@ -404,6 +415,7 @@ impl Core {
                 plugins: std::sync::OnceLock::new(),
                 genre_art: std::sync::Mutex::default(),
                 addon_lists: std::sync::Mutex::default(),
+                plays: tokio::sync::watch::Sender::new(0),
                 downloads_dir,
                 downloads: std::sync::OnceLock::new(),
                 walk,
@@ -1118,6 +1130,17 @@ impl Core {
     #[doc(hidden)]
     pub fn meta_reads() -> u64 {
         META_READS.load(std::sync::atomic::Ordering::Relaxed)
+    }
+
+    /// Counts an open playback until the guard drops (`plays`).
+    pub(crate) fn playing(&self) -> Playing {
+        self.inner.plays.send_modify(|n| *n += 1);
+        Playing(self.inner.plays.clone())
+    }
+
+    /// How many playbacks are open, and each change of it.
+    pub(crate) fn plays(&self) -> tokio::sync::watch::Receiver<usize> {
+        self.inner.plays.subscribe()
     }
 
     /// Details for one title: the first answer in addon order wins, as in

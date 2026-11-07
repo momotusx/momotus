@@ -1515,28 +1515,54 @@ async fn watch_continue(
     // A streaming account coming or going changes " · On this device"
     // (`kept_here`): the row is read again then too.
     let (mut accounts, mut open) = (core.account_changes(), true);
+    // While something plays, its progress saves (every few seconds) show
+    // here at most once per `PLAYING_REFRESH`, and at once when the play
+    // ends (batch 13 perf C2): each refresh reads every tile's meta.
+    let (mut plays, mut counting) = (core.plays(), true);
+    let mut waiting: Option<tokio::time::Instant> = None;
     refresh_continue(&core, &rows).await;
     maybe_pick_hero(&rows, &header);
+    let mut last = tokio::time::Instant::now();
     loop {
         let refresh = tokio::select! {
             tables = crate::views::next_change(&mut changes) => {
                 let Some(tables) = tables else { return };
-                tables.iter().any(|t| {
-                    matches!(t, Table::Progress | Table::Watched | Table::LibraryItems)
+                let now = tables.iter().any(|t| {
+                    matches!(t, Table::Watched | Table::LibraryItems)
                         || (kids && *t == Table::Access)
-                })
+                });
+                if now || !tables.contains(&Table::Progress) {
+                    now
+                } else if *plays.borrow() == 0 || last.elapsed() >= PLAYING_REFRESH {
+                    true
+                } else {
+                    waiting.get_or_insert(last + PLAYING_REFRESH);
+                    false
+                }
             }
             moved = accounts.changed(), if open => {
                 open = moved.is_ok();
                 open
             }
+            ended = plays.changed(), if counting => {
+                counting = ended.is_ok();
+                let open_plays = *plays.borrow_and_update();
+                waiting.is_some() && open_plays == 0
+            }
+            () = tokio::time::sleep_until(waiting.unwrap_or_else(tokio::time::Instant::now)),
+                if waiting.is_some() => true,
         };
         if refresh {
+            waiting = None;
             refresh_continue(&core, &rows).await;
             maybe_pick_hero(&rows, &header);
+            last = tokio::time::Instant::now();
         }
     }
 }
+
+/// How often Continue Watching shows a play's progress while it plays.
+const PLAYING_REFRESH: Duration = Duration::from_secs(60);
 
 /// A kids Home follows the list at once, before any network work: its own
 /// row is read again, and Continue Watching and Next Up tiles off the list
