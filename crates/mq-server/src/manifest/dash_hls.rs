@@ -1081,6 +1081,8 @@ mod corpus {
             converted.push(name.replace(".mpd", ".txt"));
         }
         assert!(converted.contains(&"moviebox_number.txt".to_owned()));
+        // A relative MPD BaseURL (`./`, Akamai's reference stream, QA R3-15).
+        assert!(converted.contains(&"relative_dot_base.txt".to_owned()));
         let mut kept: Vec<String> = std::fs::read_dir(dir.join("hls"))
             .unwrap()
             .map(|e| e.unwrap().file_name().into_string().unwrap())

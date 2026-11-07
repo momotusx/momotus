@@ -56,6 +56,18 @@ async fn reads_json_and_sends_range() {
     let head = head.await.unwrap().to_ascii_lowercase();
     assert!(head.contains("range: bytes=100-149"), "{head}");
     assert!(head.contains("user-agent: momotus/"), "{head}");
+    // A range counts the file's bytes: never a compressed body's (QA R3-15).
+    assert!(head.contains("accept-encoding: identity"), "{head}");
+    assert!(!head.contains("gzip"), "{head}");
+    // A whole body may still come compressed.
+    let (base, head) = serve(
+        b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok",
+        Duration::ZERO,
+    )
+    .await;
+    client.get(&base, &local_opts()).await.unwrap();
+    let head = head.await.unwrap().to_ascii_lowercase();
+    assert!(head.contains("accept-encoding: gzip"), "{head}");
 }
 
 #[tokio::test]

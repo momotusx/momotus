@@ -14,7 +14,9 @@ use budget::Budget;
 use bytes::{Bytes, BytesMut};
 use futures_util::StreamExt;
 use net::Device;
-use reqwest::header::{CONTENT_TYPE, HeaderName, HeaderValue, LOCATION, RANGE, RETRY_AFTER};
+use reqwest::header::{
+    ACCEPT_ENCODING, CONTENT_TYPE, HeaderName, HeaderValue, LOCATION, RANGE, RETRY_AFTER,
+};
 use std::collections::HashMap;
 use std::net::{IpAddr, SocketAddr};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -1685,6 +1687,11 @@ fn build_headers(pairs: &[(String, String)], range: Option<String>) -> HeaderMap
     }
     if let Some(range) = range.and_then(|r| HeaderValue::try_from(r).ok()) {
         headers.insert(RANGE, range);
+        // A range counts the bytes of the file, never of a compressed body:
+        // the decompression layer would ask for gzip even with a range, and
+        // an origin that obliges (Akamai) answers 206 with a Content-Range
+        // over the gzip bytes, which the reader cannot place (QA R3-15).
+        headers.insert(ACCEPT_ENCODING, HeaderValue::from_static("identity"));
     }
     headers
 }
