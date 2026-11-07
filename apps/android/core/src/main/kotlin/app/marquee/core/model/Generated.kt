@@ -1030,6 +1030,19 @@ data class LanguageList(
     val results: List<LanguageChoice> = emptyList(),
 )
 
+/** One profile's last title (`profilesLastWatched`). */
+@Serializable
+data class LastWatched(
+    val profile: String,
+    val itemId: String,
+    /** "Slow Horses, S4:E2" for an episode of a series, else the name. */
+    val label: String,
+    /** The label as a screen reader says it: "Slow Horses, season 4, episode 2". */
+    val spoken: String,
+    /** The title's backdrop, else the episode's still; never a poster. */
+    val art: String? = null,
+)
+
 /** The counters of one screen class, each in -5..5. A counter stamped with an older epoch than the profile's reads as zero. */
 @Serializable
 data class Learned(
