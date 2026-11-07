@@ -6,9 +6,9 @@
 //! stays in memory, and the code in the fragment is used here only.
 
 use crate::Core;
-use crate::live::{FRAME, coalesce};
+use crate::live::{FRAME, snapshots};
 use eyeball::SharedObservable;
-use futures_util::{Stream, StreamExt};
+use futures_util::Stream;
 use mq_sync::identity::start_brokered;
 use mq_sync::wire::Taken;
 use serde::Serialize;
@@ -131,10 +131,9 @@ impl SignInView {
         SignInSnapshot,
         Pin<Box<dyn Stream<Item = Vec<SignInSnapshot>> + Send>>,
     ) {
-        let updates = self.snapshot.subscribe().map(|s| vec![s]);
         (
             self.snapshot.get(),
-            Box::pin(coalesce(Box::pin(updates), FRAME)),
+            snapshots(self.snapshot.subscribe(), FRAME),
         )
     }
 }

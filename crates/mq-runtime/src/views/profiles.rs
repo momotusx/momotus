@@ -3,9 +3,9 @@
 //! changes (sync included) and on the session's switches and locks.
 
 use crate::Core;
-use crate::live::{FRAME, coalesce};
+use crate::live::{FRAME, snapshots};
 use eyeball::SharedObservable;
-use futures_util::{Stream, StreamExt};
+use futures_util::Stream;
 use mq_library::Table;
 use serde::Serialize;
 use std::pin::Pin;
@@ -117,10 +117,9 @@ impl ProfilesView {
         ProfilesSnapshot,
         Pin<Box<dyn Stream<Item = Vec<ProfilesSnapshot>> + Send>>,
     ) {
-        let updates = self.snapshot.subscribe().map(|s| vec![s]);
         (
             self.snapshot.get(),
-            Box::pin(coalesce(Box::pin(updates), FRAME)),
+            snapshots(self.snapshot.subscribe(), FRAME),
         )
     }
 }

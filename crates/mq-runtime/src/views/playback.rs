@@ -6,12 +6,12 @@
 //! (the same release from other addons or services).
 
 use crate::Core;
-use crate::live::{FRAME, coalesce};
+use crate::live::{FRAME, snapshots};
 use crate::segments::{self, Segment, Target};
 use crate::turkcealtyazi::{self, NAME as BUILT_IN};
 use crate::views::versions::{EmptyKind, FailedOn, version_label};
 use eyeball::SharedObservable;
-use futures_util::{FutureExt, Stream, StreamExt};
+use futures_util::{FutureExt, Stream};
 use mq_addons::{AddonEvent, Deadlines, InstalledAddon};
 use mq_debrid::{ResolveRequest, Resolver, StoreId};
 use mq_library::{Authorization, FINISHED_RATIO, LibraryItemRow, Policy, ProgressRow};
@@ -978,7 +978,7 @@ impl PlaybackView {
                 task: Arc::default(),
                 trakt: None,
                 denied: true,
-            };
+                };
         }
         let progress = core
             .library()
@@ -1196,10 +1196,9 @@ impl PlaybackView {
         PlaybackSnapshot,
         Pin<Box<dyn Stream<Item = Vec<PlaybackSnapshot>> + Send>>,
     ) {
-        let updates = self.snapshot.subscribe().map(|s| vec![s]);
         (
             self.snapshot.get(),
-            Box::pin(coalesce(Box::pin(updates), FRAME)),
+            snapshots(self.snapshot.subscribe(), FRAME),
         )
     }
 

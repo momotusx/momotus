@@ -3,10 +3,10 @@
 //! writer wins per field, by HLC).
 
 use crate::learn::{self, Learned, LearnedChoice};
-use crate::live::{FRAME, coalesce};
+use crate::live::{FRAME, snapshots};
 use crate::{Core, CoreError};
 use eyeball::SharedObservable;
-use futures_util::{Stream, StreamExt};
+use futures_util::Stream;
 use mq_library::Table;
 use mq_streams::{QualityPref, StreamPrefs};
 use serde::{Deserialize, Serialize};
@@ -360,10 +360,9 @@ impl SettingsView {
     }
 
     pub fn subscribe(&self) -> (Prefs, Pin<Box<dyn Stream<Item = Vec<Prefs>> + Send>>) {
-        let updates = self.snapshot.subscribe().map(|s| vec![s]);
         (
             self.snapshot.get(),
-            Box::pin(coalesce(Box::pin(updates), FRAME)),
+            snapshots(self.snapshot.subscribe(), FRAME),
         )
     }
 }

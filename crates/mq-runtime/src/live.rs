@@ -4,6 +4,7 @@
 use eyeball_im::VectorDiff;
 use futures_util::{Stream, StreamExt};
 use serde::Serialize;
+use std::pin::Pin;
 use std::time::Duration;
 
 /// Index-based list change, serializable for traces and every binding.
@@ -103,6 +104,46 @@ where
     })
 }
 
+/// A whole-snapshot view's pushes: at most one per `window`, carrying the
+/// newest snapshot only. Every app keeps only the last snapshot of a push,
+/// so older ones would be written and read for nothing (batch 13 perf C3).
+pub fn snapshots<S, T>(updates: S, window: Duration) -> Pin<Box<dyn Stream<Item = Vec<T>> + Send>>
+where
+    S: Stream<Item = T> + Unpin + Send + 'static,
+    T: Send + 'static,
+{
+    paced(updates, move |_| window)
+}
+
+/// `snapshots`, each push's window chosen by the first snapshot in it.
+pub fn paced<S, T>(
+    updates: S,
+    window: impl Fn(&T) -> Duration + Send + 'static,
+) -> Pin<Box<dyn Stream<Item = Vec<T>> + Send>>
+where
+    S: Stream<Item = T> + Unpin + Send + 'static,
+    T: Send + 'static,
+{
+    Box::pin(futures_util::stream::unfold(
+        (updates, window),
+        |(mut updates, window)| async move {
+            let mut newest = updates.next().await?;
+            let deadline = tokio::time::sleep(window(&newest));
+            tokio::pin!(deadline);
+            loop {
+                tokio::select! {
+                    _ = &mut deadline => break,
+                    next = updates.next() => match next {
+                        Some(snapshot) => newest = snapshot,
+                        None => break,
+                    },
+                }
+            }
+            Some((vec![newest], (updates, window)))
+        },
+    ))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -125,5 +166,41 @@ mod tests {
         }
         assert_eq!(mirror, vec![5, 9]);
         assert_eq!(source.iter().copied().collect::<Vec<_>>(), mirror);
+    }
+
+    #[tokio::test]
+    async fn a_burst_of_snapshots_goes_out_as_its_newest() {
+        let source = eyeball::SharedObservable::new(0);
+        let mut pushes = snapshots(source.subscribe(), FRAME);
+        let burst = async {
+            for n in 1..=3 {
+                source.set(n);
+                tokio::time::sleep(Duration::from_millis(2)).await;
+            }
+        };
+        let (push, ()) = tokio::join!(pushes.next(), burst);
+        assert_eq!(push, Some(vec![3]), "one push, the newest only");
+        source.set(4);
+        assert_eq!(pushes.next().await, Some(vec![4]));
+    }
+
+    #[tokio::test]
+    async fn a_push_waits_as_long_as_its_first_snapshot_asks() {
+        let source = eyeball::SharedObservable::new(0);
+        let slow = |n: &i32| {
+            if *n >= 10 {
+                Duration::from_millis(200)
+            } else {
+                FRAME
+            }
+        };
+        let mut pushes = paced(source.subscribe(), slow);
+        let later = async {
+            source.set(10);
+            tokio::time::sleep(Duration::from_millis(60)).await;
+            source.set(11);
+        };
+        let (push, ()) = tokio::join!(pushes.next(), later);
+        assert_eq!(push, Some(vec![11]), "the slow window took both");
     }
 }

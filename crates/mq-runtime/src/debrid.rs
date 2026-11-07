@@ -9,10 +9,10 @@
 //! sign-in bump it, and a sign-in that finishes under an older epoch is
 //! discarded. Device codes, keys, tokens and secrets are never logged.
 
-use crate::live::{FRAME, coalesce};
+use crate::live::{FRAME, snapshots};
 use crate::{Core, CoreError};
 use eyeball::SharedObservable;
-use futures_util::{Stream, StreamExt};
+use futures_util::Stream;
 use mq_debrid::{
     AllDebrid, Auth, BoxFuture, Credential, Credentials, DebridError, Login, LoginPoll, Premiumize,
     RealDebrid, Resolver, ResolverConfig, StoreId, TorBox,
@@ -1028,10 +1028,9 @@ impl DebridView {
         DebridSnapshot,
         Pin<Box<dyn Stream<Item = Vec<DebridSnapshot>> + Send>>,
     ) {
-        let updates = self.snapshot.subscribe().map(|s| vec![s]);
         (
             self.snapshot.get(),
-            Box::pin(coalesce(Box::pin(updates), FRAME)),
+            snapshots(self.snapshot.subscribe(), FRAME),
         )
     }
 }
@@ -1059,10 +1058,9 @@ impl DebridLoginView {
         DebridLoginSnapshot,
         Pin<Box<dyn Stream<Item = Vec<DebridLoginSnapshot>> + Send>>,
     ) {
-        let updates = self.snapshot.subscribe().map(|s| vec![s]);
         (
             self.snapshot.get(),
-            Box::pin(coalesce(Box::pin(updates), FRAME)),
+            snapshots(self.snapshot.subscribe(), FRAME),
         )
     }
 }

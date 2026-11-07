@@ -7,7 +7,7 @@
 
 use crate::Core;
 use crate::learn::LearnedNote;
-use crate::live::{FRAME, coalesce};
+use crate::live::{FRAME, paced};
 use crate::speed::Network;
 use crate::views::addons_changed;
 use eyeball::SharedObservable;
@@ -380,6 +380,9 @@ pub enum EmptyAction {
 /// How long `done` waits for the meta, for each cache check (4.2, r4 N4)
 /// and for the live counts once the rest is in: the apps play at `done`.
 const SIDE_WAIT: Duration = Duration::from_secs(3);
+/// The pushes' spacing while only the plugins are still answering
+/// (batch 13 perf C3).
+const PLUGIN_PUSHES: Duration = Duration::from_millis(250);
 /// How long Versions looks for the title page's TMDB answer: the page asks
 /// once it has shown for a second.
 const ORIGINAL_WAIT: Duration = Duration::from_secs(30);
@@ -1338,10 +1341,18 @@ impl VersionsView {
         VersionsSnapshot,
         Pin<Box<dyn Stream<Item = Vec<VersionsSnapshot>> + Send>>,
     ) {
-        let updates = self.snapshot.subscribe().map(|s| vec![s]);
+        // Once every addon answered, the plugins' answers trickle in for half
+        // a minute or more, each a whole list: a quarter second apart is enough.
+        let window = |s: &VersionsSnapshot| {
+            if s.done && s.plugins.pending {
+                PLUGIN_PUSHES
+            } else {
+                FRAME
+            }
+        };
         (
             self.snapshot.get(),
-            Box::pin(coalesce(Box::pin(updates), FRAME)),
+            paced(self.snapshot.subscribe(), window),
         )
     }
 

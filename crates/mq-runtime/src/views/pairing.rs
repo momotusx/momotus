@@ -11,9 +11,9 @@
 //! ends only joined.
 
 use crate::Core;
-use crate::live::{FRAME, coalesce};
+use crate::live::{FRAME, snapshots};
 use eyeball::SharedObservable;
-use futures_util::{Stream, StreamExt};
+use futures_util::Stream;
 use mq_sync::SyncConfig;
 use mq_sync::pair::{Offer, PairingRequest, start_pairing_as};
 use serde::Serialize;
@@ -94,10 +94,9 @@ impl PairingView {
         PairingSnapshot,
         Pin<Box<dyn Stream<Item = Vec<PairingSnapshot>> + Send>>,
     ) {
-        let updates = self.snapshot.subscribe().map(|s| vec![s]);
         (
             self.snapshot.get(),
-            Box::pin(coalesce(Box::pin(updates), FRAME)),
+            snapshots(self.snapshot.subscribe(), FRAME),
         )
     }
 }

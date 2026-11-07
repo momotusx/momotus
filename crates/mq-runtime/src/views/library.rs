@@ -3,10 +3,10 @@
 //! counted list (plans/m11-kids.md 4.6).
 
 use crate::Core;
-use crate::live::{FRAME, coalesce};
+use crate::live::{FRAME, snapshots};
 use crate::views::home::{OTHER_KIND, Tile, kind_label, type_label};
 use eyeball::SharedObservable;
-use futures_util::{Stream, StreamExt};
+use futures_util::Stream;
 use mq_library::{LibraryEntry, Table};
 use serde::{Deserialize, Serialize};
 use std::pin::Pin;
@@ -103,10 +103,9 @@ impl LibraryView {
         LibrarySnapshot,
         Pin<Box<dyn Stream<Item = Vec<LibrarySnapshot>> + Send>>,
     ) {
-        let updates = self.snapshot.subscribe().map(|s| vec![s]);
         (
             self.snapshot.get(),
-            Box::pin(coalesce(Box::pin(updates), FRAME)),
+            snapshots(self.snapshot.subscribe(), FRAME),
         )
     }
 

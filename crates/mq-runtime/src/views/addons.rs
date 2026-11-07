@@ -2,9 +2,9 @@
 //! list changes (install, remove, move, enable, import, sync).
 
 use crate::Core;
-use crate::live::{FRAME, coalesce};
+use crate::live::{FRAME, snapshots};
 use eyeball::SharedObservable;
-use futures_util::{Stream, StreamExt};
+use futures_util::Stream;
 use mq_library::Table;
 use mq_protocol::Manifest;
 use serde::Serialize;
@@ -81,10 +81,9 @@ impl AddonsView {
         AddonsSnapshot,
         Pin<Box<dyn Stream<Item = Vec<AddonsSnapshot>> + Send>>,
     ) {
-        let updates = self.snapshot.subscribe().map(|s| vec![s]);
         (
             self.snapshot.get(),
-            Box::pin(coalesce(Box::pin(updates), FRAME)),
+            snapshots(self.snapshot.subscribe(), FRAME),
         )
     }
 }

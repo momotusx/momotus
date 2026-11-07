@@ -3794,15 +3794,22 @@ where
     S: futures_util::Stream<Item = Vec<U>> + Unpin,
     U: serde::Serialize,
 {
+    /// `{"sub", "updates"}`, written straight from the view's own values
+    /// (no `Value` tree in between: batch 13 perf C3).
+    #[derive(serde::Serialize)]
+    struct Push<'a, U> {
+        sub: u64,
+        updates: &'a [U],
+    }
     while let Some(batch) = updates.next().await {
-        let Ok(updates) = serde_json::to_value(&batch) else {
-            continue;
+        let push = Push {
+            sub,
+            updates: &batch,
         };
-        let push = json!({ "sub": sub, "updates": updates });
         // A push over the size limit ends the session as an overflow does:
         // the next session's snapshot of the view fails with `tooLarge`
         // instead of looping.
-        let send = |push: &Value| match out.send(push) {
+        let send = |push: &Push<U>| match out.send(push) {
             Ok(()) => true,
             Err(SendError::TooLarge) => {
                 out.overflow();

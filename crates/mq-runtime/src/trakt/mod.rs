@@ -16,10 +16,10 @@ pub use pull::TraktReport;
 pub use scrobble::TraktPlayback;
 pub(crate) use scrobble::{Scrobble, Target as ScrobbleTarget};
 
-use crate::live::{FRAME, coalesce};
+use crate::live::{FRAME, snapshots};
 use crate::{Core, CoreError};
 use eyeball::SharedObservable;
-use futures_util::{Stream, StreamExt};
+use futures_util::Stream;
 use mq_http::HttpClient;
 use mq_library::TrackerKey;
 use mq_library::hlc::now_ms;
@@ -888,10 +888,9 @@ impl TraktView {
         TraktStatus,
         Pin<Box<dyn Stream<Item = Vec<TraktStatus>> + Send>>,
     ) {
-        let updates = self.snapshot.subscribe().map(|s| vec![s]);
         (
             self.snapshot.get(),
-            Box::pin(coalesce(Box::pin(updates), FRAME)),
+            snapshots(self.snapshot.subscribe(), FRAME),
         )
     }
 }

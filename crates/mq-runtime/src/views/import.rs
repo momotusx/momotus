@@ -6,7 +6,7 @@
 //! raw import is applied once more.
 
 use crate::Core;
-use crate::live::{FRAME, coalesce};
+use crate::live::{FRAME, snapshots};
 use eyeball::SharedObservable;
 use futures_util::{Stream, StreamExt};
 use mq_import::{
@@ -93,10 +93,9 @@ impl ImportView {
         ImportSnapshot,
         Pin<Box<dyn Stream<Item = Vec<ImportSnapshot>> + Send>>,
     ) {
-        let updates = self.snapshot.subscribe().map(|s| vec![s]);
         (
             self.snapshot.get(),
-            Box::pin(coalesce(Box::pin(updates), FRAME)),
+            snapshots(self.snapshot.subscribe(), FRAME),
         )
     }
 }

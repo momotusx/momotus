@@ -6,7 +6,7 @@
 //! shows it a window at a time.
 
 use crate::Core;
-use crate::live::{FRAME, coalesce};
+use crate::live::{FRAME, snapshots};
 use crate::services::{self, Service};
 use crate::views::discover_sets::{
     DECADES, Item, Order, arrange, genre_label, genres_of, tile_in_decade, today,
@@ -506,10 +506,9 @@ impl DiscoverView {
         DiscoverSnapshot,
         Pin<Box<dyn Stream<Item = Vec<DiscoverSnapshot>> + Send>>,
     ) {
-        let updates = self.inner.snapshot.subscribe().map(|s| vec![s]);
         (
             self.inner.snapshot.get(),
-            Box::pin(coalesce(Box::pin(updates), FRAME)),
+            snapshots(self.inner.snapshot.subscribe(), FRAME),
         )
     }
 

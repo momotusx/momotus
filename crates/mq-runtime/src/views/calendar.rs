@@ -4,10 +4,10 @@
 //! no time zone moves an episode to another day.
 
 use crate::Core;
-use crate::live::{FRAME, coalesce};
+use crate::live::{FRAME, snapshots};
 use chrono::{Days, NaiveDate};
 use eyeball::SharedObservable;
-use futures_util::{Stream, StreamExt};
+use futures_util::Stream;
 use mq_library::Table;
 use serde::Serialize;
 use std::collections::{HashMap, HashSet, VecDeque};
@@ -179,10 +179,9 @@ impl CalendarView {
         CalendarSnapshot,
         Pin<Box<dyn Stream<Item = Vec<CalendarSnapshot>> + Send>>,
     ) {
-        let updates = self.snapshot.subscribe().map(|s| vec![s]);
         (
             self.snapshot.get(),
-            Box::pin(coalesce(Box::pin(updates), FRAME)),
+            snapshots(self.snapshot.subscribe(), FRAME),
         )
     }
 

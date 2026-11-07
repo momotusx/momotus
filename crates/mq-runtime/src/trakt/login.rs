@@ -6,9 +6,9 @@
 
 use crate::Core;
 use crate::core::WeakCore;
-use crate::live::{FRAME, coalesce};
+use crate::live::{FRAME, snapshots};
 use eyeball::SharedObservable;
-use futures_util::{Stream, StreamExt};
+use futures_util::Stream;
 use mq_library::hlc::now_ms;
 use mq_tracking::trakt::auth::{self, Poll};
 use mq_tracking::trakt::{Gate, Ticket, call};
@@ -99,10 +99,9 @@ impl TraktLoginView {
         TraktLoginSnapshot,
         Pin<Box<dyn Stream<Item = Vec<TraktLoginSnapshot>> + Send>>,
     ) {
-        let updates = self.snapshot.subscribe().map(|s| vec![s]);
         (
             self.snapshot.get(),
-            Box::pin(coalesce(Box::pin(updates), FRAME)),
+            snapshots(self.snapshot.subscribe(), FRAME),
         )
     }
 }

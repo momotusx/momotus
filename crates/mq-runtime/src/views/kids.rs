@@ -5,10 +5,10 @@
 //! owner only.
 
 use crate::Core;
-use crate::live::{FRAME, coalesce};
+use crate::live::{FRAME, snapshots};
 use crate::profiles::ProfileError;
 use eyeball::SharedObservable;
-use futures_util::{Stream, StreamExt};
+use futures_util::Stream;
 use mq_library::{AllowedRow, MAX_ALLOWED, OWNER, Table};
 use serde::Serialize;
 use std::pin::Pin;
@@ -100,10 +100,9 @@ impl<T: Clone + PartialEq + Send + Sync + 'static> Live<T> {
     }
 
     fn subscribe(&self) -> (T, Pin<Box<dyn Stream<Item = Vec<T>> + Send>>) {
-        let updates = self.snapshot.subscribe().map(|s| vec![s]);
         (
             self.snapshot.get(),
-            Box::pin(coalesce(Box::pin(updates), FRAME)),
+            snapshots(self.snapshot.subscribe(), FRAME),
         )
     }
 }

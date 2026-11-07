@@ -15,13 +15,13 @@
 //! such as Sintel).
 
 use crate::Core;
-use crate::live::{FRAME, coalesce};
+use crate::live::{FRAME, snapshots};
 use crate::views::home::{
     HomeRow, KIDS_ROW_ID, OTHER_KIND, RowState, Tile, kids_start, kids_tile, kind_label, start_row,
     tile_from_preview,
 };
 use eyeball::SharedObservable;
-use futures_util::{Stream, StreamExt};
+use futures_util::Stream;
 use mq_addons::InstalledAddon;
 use mq_library::Table;
 use mq_protocol::{ResourcePath, ResourceResponse, decode_catalog};
@@ -134,10 +134,9 @@ impl SearchView {
         SearchSnapshot,
         Pin<Box<dyn Stream<Item = Vec<SearchSnapshot>> + Send>>,
     ) {
-        let updates = self.snapshot.subscribe().map(|s| vec![s]);
         (
             self.snapshot.get(),
-            Box::pin(coalesce(Box::pin(updates), FRAME)),
+            snapshots(self.snapshot.subscribe(), FRAME),
         )
     }
 

@@ -4,9 +4,9 @@
 
 use crate::Core;
 use crate::downloads::{Board, DownloadRow, DownloadSettings, DownloadState};
-use crate::live::{FRAME, coalesce};
+use crate::live::{FRAME, snapshots};
 use eyeball::SharedObservable;
-use futures_util::{Stream, StreamExt};
+use futures_util::Stream;
 use serde::Serialize;
 use std::pin::Pin;
 use tokio::task::JoinHandle;
@@ -154,10 +154,9 @@ impl DownloadsView {
         DownloadsSnapshot,
         Pin<Box<dyn Stream<Item = Vec<DownloadsSnapshot>> + Send>>,
     ) {
-        let updates = self.snapshot.subscribe().map(|s| vec![s]);
         (
             self.snapshot.get(),
-            Box::pin(coalesce(Box::pin(updates), FRAME)),
+            snapshots(self.snapshot.subscribe(), FRAME),
         )
     }
 }

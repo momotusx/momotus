@@ -5,7 +5,7 @@
 //! genre and kept for a day, so a grid opened again asks nothing.
 
 use crate::Core;
-use crate::live::{FRAME, coalesce};
+use crate::live::{FRAME, snapshots};
 use crate::views::discover::{Catalog, browsable, kinds};
 use crate::views::home::home_changed;
 use eyeball::SharedObservable;
@@ -171,10 +171,9 @@ impl GenresView {
         GenresSnapshot,
         Pin<Box<dyn Stream<Item = Vec<GenresSnapshot>> + Send>>,
     ) {
-        let updates = self.inner.snapshot.subscribe().map(|s| vec![s]);
         (
             self.inner.snapshot.get(),
-            Box::pin(coalesce(Box::pin(updates), FRAME)),
+            snapshots(self.inner.snapshot.subscribe(), FRAME),
         )
     }
 }
