@@ -6,7 +6,8 @@
 //! while the device allows it (a connection, Wi-Fi when asked, the app's
 //! say, no stream playing from the network). Rows live in the library's
 //! `downloads` table; what changes by the second (bytes, speed) lives here
-//! and is published with them at most twice a second.
+//! and is read with them each second; bytes inside one percent step show
+//! at most every five seconds.
 
 mod http;
 mod subtitles;
@@ -34,8 +35,11 @@ const RUNNING: usize = 2;
 pub(crate) const RESERVE: u64 = 1 << 30;
 /// Under this much free space a running download waits (4.9).
 const FLOOR: u64 = 512 << 20;
-/// How often the board is published while bytes move.
-const PUBLISH_EVERY: Duration = Duration::from_millis(500);
+/// How often the board is read again while bytes move.
+const PUBLISH_EVERY: Duration = Duration::from_secs(1);
+/// Bytes that move inside one percent step show at most this often: each
+/// new board is a whole Downloads push (batch 13 perf C5).
+const BYTES_EVERY: Duration = Duration::from_secs(5);
 /// A reported free-space figure older than this is unknown (4.9).
 const REPORT_FRESH: Duration = Duration::from_secs(120);
 /// Moves to the next source of a pick before a job fails (4.3).
@@ -357,6 +361,31 @@ pub struct Board {
     pub needed_bytes: Option<u64>,
 }
 
+/// Boards that differ only in bytes moved inside one percent step, and in
+/// the speed and time left that follow them. A first byte is a change.
+fn same_steps(old: &Board, new: &Board) -> bool {
+    fn step(row: &DownloadRow) -> DownloadRow {
+        let mut row = row.clone();
+        row.bytes_done = match row.bytes_total.filter(|t| *t > 0) {
+            _ if row.bytes_done == 0 => 0,
+            Some(total) => 1 + row.bytes_done.saturating_mul(100) / total,
+            None => 1,
+        };
+        row.speed_bps = row.speed_bps.map(|_| 0);
+        row.eta_secs = row.eta_secs.map(|_| 0);
+        row
+    }
+    old.settings == new.settings
+        && old.link == new.link
+        && old.needed_bytes == new.needed_bytes
+        && old.rows.len() == new.rows.len()
+        && old
+            .rows
+            .iter()
+            .zip(&new.rows)
+            .all(|(a, b)| step(a) == step(b))
+}
+
 /// `Link` as the board carries it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct LinkWords {
@@ -448,6 +477,8 @@ pub struct Downloads {
     subtitle_waits: Mutex<HashMap<String, (std::time::Instant, Duration)>>,
     /// Smart steps whose next episode is being looked up (4.14).
     smart_looking: Mutex<std::collections::HashSet<String>>,
+    /// When the board last changed.
+    shown_at: Mutex<std::time::Instant>,
     /// The loopback URLs of downloads' posters and stills (4.11), by file,
     /// with the server port they were made on.
     images: Mutex<HashMap<PathBuf, (u16, String, mq_server::Lease)>>,
@@ -459,7 +490,7 @@ pub struct Downloads {
     /// Smart steps whose meta could not be read: when each looks again.
     smart_waits: Mutex<HashMap<String, std::time::Instant>>,
     /// Each row's version as last parsed, with the text it came from: the
-    /// queue reads every row twice a second (code review r1 m9).
+    /// queue reads every row each second (code review r1 m9).
     versions: Mutex<HashMap<String, (String, Arc<Version>)>>,
     /// Torrent files being let go, by hash: a run of the same torrent
     /// waits for every release of it (code review r3 N2, r5 R5-2).
@@ -567,6 +598,7 @@ impl Downloads {
             subtitling: Mutex::default(),
             subtitle_waits: Mutex::default(),
             smart_looking: Mutex::default(),
+            shown_at: Mutex::new(std::time::Instant::now()),
             images: Mutex::default(),
             in_use: Mutex::default(),
             pending: Mutex::default(),
@@ -891,9 +923,17 @@ impl Downloads {
             },
             needed_bytes: needed,
         };
-        if self.board.get() != board {
-            self.board.set(board);
+        let old = self.board.get();
+        if old == board {
+            return;
         }
+        let mut shown_at = lock(&self.shown_at);
+        if same_steps(&old, &board) && shown_at.elapsed() < BYTES_EVERY {
+            return;
+        }
+        *shown_at = std::time::Instant::now();
+        drop(shown_at);
+        self.board.set(board);
     }
 
     /// Adds `videos` of a title for the session's profile, each at the end
@@ -2191,7 +2231,7 @@ fn row_of(r: &DownloadRecord, version: Option<&Version>, live: Option<&Running>)
 }
 
 /// The queue's task: a look at every wake, every minute (a space wait
-/// looks again), and the board twice a second while bytes move.
+/// looks again), and the board each second while bytes move.
 async fn run_queue(me: std::sync::Weak<Downloads>) {
     loop {
         let Some(d) = me.upgrade() else { return };

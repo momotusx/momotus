@@ -37,6 +37,8 @@ struct How {
     html: bool,
     /// The body in 64 KiB pieces 20 ms apart.
     slow: bool,
+    /// `slow`'s pieces this far apart instead (perf).
+    pace: Option<Duration>,
     /// Every answer after the first serves this file instead: a link
     /// resolved again that names another file.
     then: Option<Arc<Vec<u8>>>,
@@ -144,7 +146,7 @@ async fn origin(data: Arc<Vec<u8>>, how: How) -> (String, Seen) {
                         if socket.write_all(chunk).await.is_err() {
                             return;
                         }
-                        tokio::time::sleep(Duration::from_millis(20)).await;
+                        tokio::time::sleep(how.pace.unwrap_or(Duration::from_millis(20))).await;
                     }
                     return;
                 }
@@ -2546,4 +2548,57 @@ async fn a_removed_addon_takes_its_header_with_it() {
     })
     .await;
     assert!(core.downloads().file_path(&ids[0]).is_none());
+}
+
+/// Perf (plans/batch-13-perf.md, core-perf C5): what one download sends
+/// while its bytes move, a 64 MiB film at 320 KiB/s (a percent every 2 s)
+/// over `MQ_PERF_S` seconds (60 by default): the board's changes and the
+/// Downloads view's pushes. Prints one JSON line. Run alone:
+/// `cargo test -p mq-runtime --test downloads perf_ -- --ignored --nocapture`.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "perf measurement, a minute long"]
+async fn perf_a_download_moving_bytes() {
+    use futures_util::StreamExt;
+    let secs: u64 = std::env::var("MQ_PERF_S")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(60);
+    let (url, _) = origin(
+        video(64 << 20),
+        How {
+            slow: true,
+            pace: Some(Duration::from_millis(200)),
+            ..How::default()
+        },
+    )
+    .await;
+    let core = core_with(addon(&url, Duration::ZERO).await).await;
+    let view = mq_runtime::DownloadsView::open(&core);
+    let id = mq_runtime::downloads::add(&core, movie()).await.unwrap()[0].clone();
+    until(&core, &id, "bytes move", |r| r.bytes_done > 0).await;
+    let (_, mut pushes) = view.subscribe();
+    let mut boards = core.downloads().board().subscribe();
+    let (mut pushed, mut changed) = (0u32, 0u32);
+    let end = tokio::time::sleep(Duration::from_secs(secs));
+    tokio::pin!(end);
+    loop {
+        tokio::select! {
+            () = &mut end => break,
+            Some(_) = pushes.next() => pushed += 1,
+            Some(_) = boards.next() => changed += 1,
+        }
+    }
+    let row = row_of(&core, &id).unwrap();
+    assert_eq!(
+        row.state,
+        DownloadState::Running,
+        "still downloading: {row:?}"
+    );
+    println!(
+        "{}",
+        serde_json::json!({
+            "secs": secs, "board_changes": changed, "downloads_pushes": pushed,
+            "bytes_done": row.bytes_done, "bytes_total": row.bytes_total,
+        })
+    );
 }
