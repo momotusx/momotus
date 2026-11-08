@@ -29,14 +29,6 @@ struct FullTrailer: View {
     private static let seekStep: Double = 10
     private static let failedLine = "This trailer can't play here."
 
-    /// The line for the first `n` trailers moved past (the web's `skippedLine`); none when none was.
-    static func skippedLine(_ n: Int) -> String? {
-        guard n > 0 else { return nil }
-        let names = (0..<n).map { $0 == 0 ? "Main trailer" : "Trailer \($0 + 1)" }
-        let list = names.count == 1 ? names[0] : names.dropLast().joined(separator: ", ") + " and " + names[names.count - 1]
-        return "\(list) can't play here."
-    }
-
     var body: some View {
         VStack(spacing: 16) {
             ZStack {
@@ -82,7 +74,7 @@ struct FullTrailer: View {
                     .focused($focus, equals: .close)
                     .keyboardShortcut(.cancelAction)
             }
-            if !failed, let line = Self.skippedLine(skipped) {
+            if !failed, let line = trailerSkippedLine(skipped) {
                 Text(line)
                     .textFont(Theme.type.callout, relativeTo: .callout)
                     .foregroundStyle(Theme.Palette.muted)

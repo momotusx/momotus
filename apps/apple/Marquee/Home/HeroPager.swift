@@ -71,6 +71,15 @@ func trailerSeekTarget(_ t: Double, _ d: Double, by: Double) -> Double {
     max(0, min(t + by, max(0, d - 2)))
 }
 
+/// The full-screen trailer's line for the first `n` trailers YouTube refused here and the layer moved past, so the
+/// one playing is never a silent swap (the web's `skippedLine`); none when it moved past none.
+func trailerSkippedLine(_ n: Int) -> String? {
+    guard n > 0 else { return nil }
+    let names = (0..<n).map { $0 == 0 ? "Main trailer" : "Trailer \($0 + 1)" }
+    let list = names.count == 1 ? names[0] : names.dropLast().joined(separator: ", ") + " and " + names[names.count - 1]
+    return "\(list) can't play here."
+}
+
 /// The full-screen bar's Slider (plans/trailer-inline.md 7): a drag holds its place until it is let go; any other
 /// move (VoiceOver's adjust, the arrow keys) seeks at once.
 func trailerSliderMove(_ value: Double, dragging: Bool) -> (held: Double?, seek: Double?) {

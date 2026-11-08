@@ -43,6 +43,7 @@ import app.marquee.design.MqText
 import app.marquee.design.MqTextField
 import app.marquee.design.PrimaryButton
 import app.marquee.design.RoundButton
+import app.marquee.design.SecondaryButton
 import app.marquee.design.SwitchRow
 import app.marquee.design.TextRole
 import app.marquee.design.Tokens
@@ -376,7 +377,12 @@ private fun RepoRow(
                     MqText(name, role = TextRole.Headline, weight = FontWeight.Bold, maxLines = 2)
                 }
             }
-            SecondaryButton(AddonsCopy.DETAILS, { details = !details }, selected = details, spoken = "$name ${AddonsCopy.DETAILS.lowercase()}")
+            SecondaryButton(
+                AddonsCopy.DETAILS,
+                { details = !details },
+                selected = details,
+                spoken = "$name ${AddonsCopy.DETAILS.lowercase()}",
+            )
             if (details) MqText(repo.host, role = TextRole.Caption, color = colors.dim, maxLines = 2)
             if (repo.description.isNotEmpty()) {
                 MqText(
