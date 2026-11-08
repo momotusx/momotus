@@ -115,7 +115,7 @@ private actor Asks {
     }
 }
 
-@MainActor @Test func theStillIsAskedOnceAndAFailedAskIsAskedAgain() async {
+@MainActor @Test func theStillIsKeptOnceItCameAndNoneOrAFailedAskIsAskedAgain() async {
     let asks = Asks()
     let still = StillOnce()
     let answer = FirstRunStill(background: "https://art.example/b.jpg", logo: nil, name: "B")
@@ -125,11 +125,13 @@ private actor Asks {
     // Kept for every framed step after: no third ask.
     #expect(await still.get { _ = await asks.add(); return nil } == answer)
     #expect(await asks.count == 2)
-    // The core's "none" (offline, past its budget) is kept too: the screen stays black.
+    // The core's "none" (a phone's first requests past its budget) is not kept: the next step asks again and the
+    // still comes late instead of never (batch 15, E images).
     let none = StillOnce()
     #expect(await none.get { _ = await asks.add(); return nil } == nil)
-    #expect(await none.get { _ = await asks.add(); return answer } == nil)
-    #expect(await asks.count == 3)
+    #expect(await none.get { _ = await asks.add(); return answer } == answer)
+    #expect(await none.get { _ = await asks.add(); return nil } == answer)
+    #expect(await asks.count == 4)
 }
 
 @Test func theStillDecodesAndNullIsNone() throws {

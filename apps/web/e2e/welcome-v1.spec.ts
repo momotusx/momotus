@@ -110,6 +110,28 @@ test("no still: the screen stays black with its question", async ({ browser }) =
   await context.close();
 });
 
+test("no still at first (a phone's first requests past the core's budget): the next step asks again and shows it", async ({ browser }) => {
+  const context = await device(browser, "desktop", SIZE.desktop, true);
+  let asks = 0;
+  await context.routeWebSocket(/\/ws$/, (ws) => {
+    const server = ws.connectToServer();
+    ws.onMessage((raw) => {
+      const m = JSON.parse(String(raw));
+      if (m.op === "firstRunStill" && ++asks === 1) ws.send(JSON.stringify({ id: m.id, ok: true, result: null }));
+      else server.send(String(raw));
+    });
+  });
+  const page = await open(context, "desktop", "doors");
+  await page.waitForTimeout(500);
+  await expect(page.locator(".framed .still img")).toHaveCount(0);
+  await page.locator('[data-f="welcome:fresh"]').click();
+  await expect(page).toHaveURL(/step=2/);
+  await page.locator('[data-f="welcome:back"]').click();
+  await expect(page.locator(".framed .still img")).toHaveAttribute("src", /./, { timeout: 30_000 });
+  expect(asks).toBe(2);
+  await context.close();
+});
+
 for (const [form, size] of [["tv", SIZE.tv], ["desktop", SIZE.desktop], ["desktop", [1024, 768]], ["phone", SIZE.phone]] as const) {
   test(`${form} ${size.join("x")}: every word keeps 4.5:1 over a white still`, async ({ browser }) => {
     const context = await device(browser, form, size as unknown as [number, number]);

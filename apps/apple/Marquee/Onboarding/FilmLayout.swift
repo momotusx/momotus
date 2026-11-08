@@ -76,8 +76,9 @@ enum FilmRules {
     }
 }
 
-/// The still every framed step shows (`firstRunStill`), asked once per app run: the core's "none" (offline, past
-/// its budget) is kept; an ask that failed (the core not ready yet) is asked again by the next step.
+/// The still every framed step shows (`firstRunStill`): a still, once it came, is kept for the app run; no still
+/// (the core's "none": offline, or past its budget on a phone's first requests) or an ask that failed (the core not
+/// ready yet) is asked again by the next step, so the art comes late instead of never.
 @MainActor final class StillOnce {
     static let shared = StillOnce()
     private var asked: Task<FirstRunStill?, any Error>?
@@ -85,11 +86,8 @@ enum FilmRules {
     func get(_ fetch: @escaping @Sendable () async throws -> FirstRunStill?) async -> FirstRunStill? {
         let task = asked ?? Task { try await fetch() }
         asked = task
-        do {
-            return try await task.value
-        } catch {
-            if asked == task { asked = nil }
-            return nil
-        }
+        let still = try? await task.value
+        if still == nil, asked == task { asked = nil }
+        return still
     }
 }

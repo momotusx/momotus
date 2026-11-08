@@ -77,16 +77,18 @@ class AppState(
     val defaultsCard = DefaultsCard(session.ops, viewModelScope)
 
     /**
-     * The still first run frames its question steps with (`firstRunStill`, B4): asked once, at the first framed step,
-     * and kept for the others; null for none (the frame stays black).
+     * The still first run frames its question steps with (`firstRunStill`, B4): asked at the first framed step and
+     * kept for the others once it came; null for none (the frame stays black). None (a phone's first requests past
+     * the core's budget, offline) or a failed ask is asked again by the next framed step: late art, never none for
+     * the whole run.
      */
     var still: FirstRunStill? by mutableStateOf(null)
         private set
-    private var stillAsked = false
+    private var stillAsking = false
 
     fun askStill() {
-        if (stillAsked) return
-        stillAsked = true
+        if (still != null || stillAsking) return
+        stillAsking = true
         viewModelScope.launch {
             still =
                 try {
@@ -96,6 +98,8 @@ class AppState(
                 } catch (e: Exception) {
                     CoreLog.w("first-run still: ${CoreLog.describe(e)}")
                     null
+                } finally {
+                    stillAsking = false
                 }
         }
     }

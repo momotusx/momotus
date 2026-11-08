@@ -221,14 +221,17 @@ function focusHeading() {
   h?.focus({ preventScroll: true });
 }
 
-// The still every framed step shows (`firstRunStill`): asked once per app run. The core's "none" (offline, past
-// its budget) is kept for the run; a request that failed (the core not ready yet) is asked again by the next step.
+// The still every framed step shows (`firstRunStill`): kept for the app run once it came. The core's "none"
+// (offline, or past its budget on a phone's first requests) and a request that failed (the core not ready yet) are
+// asked again by the next step, so the art comes late instead of never.
 let still: Promise<FirstRunStill | null> | undefined;
-const firstStill = () =>
-  (still ??= op<FirstRunStill | null>("firstRunStill").catch(() => {
-    still = undefined;
-    return null;
-  }));
+const firstStill = () => {
+  const asked = (still ??= op<FirstRunStill | null>("firstRunStill").catch(() => null));
+  void asked.then((s) => {
+    if (!s && still === asked) still = undefined;
+  });
+  return asked;
+};
 
 /** V1, Full Bleed (the pick of 2026-10-30, design/exploration/onboarding-v2): one film still fills the screen behind
  * the step, its question and lead and the choices on a dark ramp at the foot (phone) or in a column at the lower left

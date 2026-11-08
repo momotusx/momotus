@@ -45,7 +45,7 @@ struct OnboardingScreen: View {
     @State private var note: (ok: Bool, text: String)?
     @State private var showImport = false
     @State private var showPairing = false
-    /// The still the framed steps show (V1), asked once as first run opens.
+    /// The still the framed steps show (V1), asked as first run opens and at each step until one came.
     @State private var still: FirstRunStill?
     /// TV: the doors step enters on the first door, not on Browse first.
     @FocusState private var firstDoor: Bool
@@ -131,8 +131,11 @@ struct OnboardingScreen: View {
             case .check: column { checkStep }
             }
         }
-        // The still is asked as first run opens, so a step rarely waits for it.
-        .task { still = await StillOnce.shared.get { [core] in try await core.call("firstRunStill", as: FirstRunStill?.self) } }
+        // The still is asked as first run opens, so a step rarely waits for it, and again at each step while none came.
+        .task(id: step) {
+            guard still == nil else { return }
+            still = await StillOnce.shared.get { [core] in try await core.call("firstRunStill", as: FirstRunStill?.self) }
+        }
         .navigationDestination(isPresented: $showImport) {
             ImportScreen(core: core) {
                 showImport = false

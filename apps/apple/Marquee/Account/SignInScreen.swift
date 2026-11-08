@@ -110,7 +110,11 @@ struct SignInScreen: View {
         }
         .background { GeometryReader { page in FilmStill(still: still, wide: true, insets: page.safeAreaInsets) } }
         .background(Color.black)
-        .task { still = await StillOnce.shared.get { [core] in try await core.call("firstRunStill", as: FirstRunStill?.self) } }
+        // Asked again at each stage while none came (StillOnce).
+        .task(id: flow.stage) {
+            guard still == nil else { return }
+            still = await StillOnce.shared.get { [core] in try await core.call("firstRunStill", as: FirstRunStill?.self) }
+        }
         // Escape is Not now on the first step, Cancel on the steps after a sign-in.
         .onExitCommand {
             switch flow.stage {
