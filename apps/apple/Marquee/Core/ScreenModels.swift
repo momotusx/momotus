@@ -584,7 +584,7 @@ struct DefaultAddonInfo: Decodable, Hashable, Sendable, Identifiable {
 }
 
 /// The still first run frames its question steps with (`firstRunStill`): a title's backdrop, its logo
-/// when it has one, and its name. The core answers null when none came within 1.5 s: the frame stays black.
+/// when it has one, and its name. The core answers null when none came within its budget: the frame stays black.
 struct FirstRunStill: Decodable, Hashable, Sendable {
     let background: String
     let logo: String?

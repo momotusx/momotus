@@ -420,8 +420,12 @@ impl Core {
 }
 
 /// How long first run waits for its still before it keeps the frame black:
-/// for the catalog, then for TMDB.
-const STILL_BUDGET: Duration = Duration::from_millis(1500);
+/// for the catalog, then for TMDB. No screen waits on it (each fades the
+/// still in when it lands), and a none is kept for the whole run, so the
+/// budget is sized for a phone's first requests after install: cold DNS and
+/// TLS to the catalog, its redirect host and TMDB. 1.5 s gave none on most
+/// cold starts with 150 ms of round trip (plans/batch-15.md, E images).
+const STILL_BUDGET: Duration = Duration::from_secs(6);
 
 /// How many of the catalog's top titles TMDB is asked for a textless still.
 const STILL_TRIES: usize = 5;

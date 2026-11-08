@@ -280,7 +280,7 @@ class CoreOps(
 
     /**
      * The still first run frames its questions with: a title of the default catalog's first catalog, asked
-     * without installing it. Null when none came within 1.5 s: the frame then stays black.
+     * without installing it. Null when none came within its budget: the frame then stays black.
      */
     suspend fun firstRunStill(): FirstRunStill? = call("firstRunStill", emptyMap(), FirstRunStill.serializer().nullable)
 

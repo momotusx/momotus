@@ -1359,8 +1359,20 @@ async fn first_run_still_is_the_first_backdrop_of_the_default_catalog_or_nothing
         );
     }
 
-    // A slow catalog: nothing, once the budget is spent.
-    mq_http::set_dev_replay(&still_host(Duration::from_secs(5), 200, metas).await);
+    // A catalog as slow as a phone's first request after install (cold DNS and TLS, 150 ms round trips): the still
+    // still comes. With a 1.5 s budget every framed first-run step stayed black for the run.
+    mq_http::set_dev_replay(&still_host(Duration::from_millis(2500), 200, metas).await);
+    assert_eq!(
+        Core::temporary(OWNER)
+            .unwrap()
+            .first_run_still()
+            .await
+            .map(|s| s.name),
+        Some("Second".into())
+    );
+
+    // A catalog that does not answer: nothing, once the budget is spent.
+    mq_http::set_dev_replay(&still_host(Duration::from_secs(30), 200, metas).await);
     let started = Instant::now();
     assert_eq!(
         Core::temporary(OWNER).unwrap().first_run_still().await,
@@ -1368,7 +1380,7 @@ async fn first_run_still_is_the_first_backdrop_of_the_default_catalog_or_nothing
     );
     let waited = started.elapsed();
     assert!(
-        waited >= Duration::from_millis(1400) && waited < Duration::from_millis(2500),
+        waited >= Duration::from_millis(5800) && waited < Duration::from_millis(7500),
         "waited {waited:?}"
     );
 
