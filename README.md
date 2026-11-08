@@ -49,6 +49,7 @@
 | Android TV and Fire TV | Yes | Yes | Yes |
 | iPhone and iPad | From source | Sideload, AltStore PAL in the EU, Brazil and Japan | Sideload |
 | Apple TV | From source | Sideload | No |
+| LG TV | In progress | Yes, 2020 and later models | Sideload, with its own installer |
 | Mac | From source | Yes | Alpha |
 | Web browser | From source | Yes | No |
 | End-to-end encrypted sync | **Yes** | No | No |

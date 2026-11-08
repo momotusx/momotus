@@ -11,6 +11,7 @@ Every cell of the README's comparison table, with the primary source it was chec
 | Android phone, Android TV | Yes | https://www.stremio.com/downloads, https://www.stremio.com/ ("dedicated apps for Android Mobile and Android TV") |
 | iPhone and iPad | Sideload, AltStore PAL in the EU, Brazil and Japan | https://blog.stremio.com/stremio-fully-featured-sideloadable-ipa-release-for-ios-ipados-apple-tv-tvos (2026-02-02: full IPA for iOS, iPadOS, tvOS; still waiting for Apple on Stremio Lite); https://blog.stremio.com/stremio-released-on-apple-altstore-for-europe-and-japan (2026-06-09); https://unarr.app/guides/stremio-on-iphone (2026-09-14: Stremio Lite was removed and the downloads page has no App Store link) |
 | Apple TV | Sideload | the IPA post above; https://blog.stremio.com/stremio-tech-update-86-stremio-update-for-macos-and-ios (2026-10-22: Stremio 2.1 for tvOS); https://docs.elfhosted.com/guides/media/stremio-on-apple-tv (Stremio Lite reached the tvOS App Store in October 2025 and was pulled in January 2026) |
+| LG TV | Yes, 2020 and later models | https://blog.stremio.com/stremio-for-lg-tv-is-back-2020-models-including-2026-models (2026-08-25: relisted in the LG TV store for 2020 and later models, 2026 models included) |
 | Mac | Yes | https://www.stremio.com/downloads (Stremio 5 ARM and Intel) |
 | Web browser | Yes | https://www.stremio.com/downloads ("Web version", "Stremio Web - Source Code"), https://web.strem.io |
 | End-to-end encrypted sync | No | https://github.com/Stremio/stremio-core/blob/029301839c86/src/types/api/request.rs#L301-L344 (the library syncs as `datastorePut` with plain `LibraryItem` values to Stremio's API); https://www.stremio.com/ (FAQ, privacy: data "to create and sync your account") |
@@ -31,6 +32,7 @@ Every cell of the README's comparison table, with the primary source it was chec
 | Android TV and Fire TV | Yes | https://github.com/NuvioMedia/NuvioTV (README: Google Play, APK) |
 | iPhone and iPad | Sideload | https://github.com/NuvioMedia/NuvioMobile (README: "iOS via AltStore or SideStore"); https://nuvio.tv/ ("TestFlight unavailable right now") |
 | Apple TV | No | https://nuvio.tv/ (the platform list: Android, iOS, Android TV, Windows, macOS, Linux, Samsung Tizen, LG webOS); no tvOS target in NuvioMobile |
+| LG TV | Sideload, with its own installer | https://github.com/NuvioMedia/NuvioTVWebOS (README, read 2026-11-08: the Nuvio WebTV Installer for Windows, macOS and Linux installs the `.ipk` on an LG webOS TV); https://nuvio.tv/ (the platform list names LG webOS) |
 | Mac | Alpha | https://github.com/NuvioMedia/NuvioDesktop (README: "Alpha Software, Slow Development, Testers Only", macOS DMG) |
 | Web browser | No | https://nuvio.tv/ (platform list above; the web dashboard manages the account, it does not play) |
 | End-to-end encrypted sync | No | https://github.com/NuvioMedia/self-host/blob/30f156807ae7/docs/architecture.md ("PostgreSQL stores accounts, profiles, add-ons, plugins, library items, watch progress ..."; access rules separate accounts) |
@@ -48,6 +50,7 @@ Every cell of the README's comparison table, with the primary source it was chec
 | Stremio addons | Yes | `crates/mq-addons` |
 | Android phone, Android TV and Fire TV | Yes | the release assets; `apps/android/app/src/main/AndroidManifest.xml` (LEANBACK_LAUNCHER) |
 | iPhone and iPad, Apple TV | From source | `apps/apple/project.yml` (iOS 18, tvOS 18 targets); no released build |
+| LG TV | In progress | the TV layout of `apps/web` on webOS (`apps/web/src/lib/webos.ts`) and the TV app with its local service in `apps/webos`; no released build |
 | Mac | From source | `apps/apple/project.yml` (macOS 15 target); the releases carry Android APKs only |
 | Web browser | From source | `apps/web` with `crates/mq-bridge` (a local core over a loopback socket) |
 | End-to-end encrypted sync | Yes | `crates/mq-sync/src/lib.rs` ("End-to-end encrypted sync of library registers through a blind relay"), `crates/mq-sync/src/seal.rs` |
