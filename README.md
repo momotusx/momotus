@@ -44,22 +44,22 @@
 | | Momotus | Stremio | Nuvio |
 |---|---|---|---|
 | Stremio addons | Yes | Yes | Yes |
-| Installable plugins | In progress | No (addons run no local code) | Yes, sideloaded builds |
+| Installable plugins | Yes, Nuvio plugin repositories | No (addons run no local code) | Yes, sideloaded builds |
 | Android phone | Yes | Yes | Yes |
 | Android TV and Fire TV | Yes | Yes | Yes |
-| iPhone and iPad | From source | App Store (Lite), sideload | Sideload |
-| Apple TV | From source | App Store (Lite), sideload | No |
+| iPhone and iPad | From source | Sideload, AltStore PAL in the EU, Brazil and Japan | Sideload |
+| Apple TV | From source | Sideload | No |
 | Mac | From source | Yes | Alpha |
 | Web browser | From source | Yes | No |
 | End-to-end encrypted sync | **Yes** | No | No |
 | Torrent engine built in | Yes | Yes | Yes, off by default |
-| Offline downloads | In progress | No (planned) | Yes, on mobile |
-| Dual subtitles | In progress | Not found | Not found |
+| Offline downloads | Yes, on phones and computers | Yes, with the paid Supporter plan | Yes, on mobile |
+| Dual subtitles | Yes | Not found | Not found |
 | TV sign-in by QR code | Yes | Yes | Yes |
 | Account needed | No | No (guest mode) | No (anonymous sign-in) |
 | Licence | AGPL-3.0-or-later | Web app GPL-2.0, core MIT | GPL-3.0 |
 
-<sub>Checked on 27 October 2026 against each project's own site, docs and source code. [Sources](docs/readme/comparison-sources.md)</sub>
+<sub>Checked on 8 November 2026 against each project's own site, docs and source code. [Sources](docs/readme/comparison-sources.md)</sub>
 
 ## Features
 

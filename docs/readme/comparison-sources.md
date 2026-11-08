@@ -1,6 +1,6 @@
 # Comparison sources
 
-Every cell of the README's comparison table, with the primary source it was checked against on 2026-10-27. Competitor code links are pinned to the commit read that day.
+Every cell of the README's comparison table, with the primary source it was checked against on 2026-10-27, and again on 2026-11-08. Competitor code links are pinned to the commit read that day.
 
 ## Stremio
 
@@ -9,13 +9,13 @@ Every cell of the README's comparison table, with the primary source it was chec
 | Stremio addons | Yes | https://www.stremio.com/ (FAQ, "How does it work?": install addons from the addon catalog) |
 | Installable plugins | No (addons run no local code) | https://www.stremio.com/ (FAQ, "Is Stremio safe?": "The addons do not run any code locally") |
 | Android phone, Android TV | Yes | https://www.stremio.com/downloads, https://www.stremio.com/ ("dedicated apps for Android Mobile and Android TV") |
-| iPhone and iPad | App Store (Lite), sideload | https://blog.stremio.com/stremio-fully-featured-sideloadable-ipa-release-for-ios-ipados-apple-tv-tvos (2026-02-02: full IPA for iOS, iPadOS, tvOS; Stremio Lite waiting on App Store review); https://www.stremio.com/downloads ("Stremio for iOS (limited version)", AltStore PAL in the EU, Brazil and Japan) |
-| Apple TV | App Store (Lite), sideload | https://blog.stremio.com/stremio-lite-for-apple-tv-tvos-is-now-in-app-store (2025-10-29); the IPA post above |
+| iPhone and iPad | Sideload, AltStore PAL in the EU, Brazil and Japan | https://blog.stremio.com/stremio-fully-featured-sideloadable-ipa-release-for-ios-ipados-apple-tv-tvos (2026-02-02: full IPA for iOS, iPadOS, tvOS; still waiting for Apple on Stremio Lite); https://blog.stremio.com/stremio-released-on-apple-altstore-for-europe-and-japan (2026-06-09); https://unarr.app/guides/stremio-on-iphone (2026-09-14: Stremio Lite was removed and the downloads page has no App Store link) |
+| Apple TV | Sideload | the IPA post above; https://blog.stremio.com/stremio-tech-update-86-stremio-update-for-macos-and-ios (2026-10-22: Stremio 2.1 for tvOS); https://docs.elfhosted.com/guides/media/stremio-on-apple-tv (Stremio Lite reached the tvOS App Store in October 2025 and was pulled in January 2026) |
 | Mac | Yes | https://www.stremio.com/downloads (Stremio 5 ARM and Intel) |
 | Web browser | Yes | https://www.stremio.com/downloads ("Web version", "Stremio Web - Source Code"), https://web.strem.io |
 | End-to-end encrypted sync | No | https://github.com/Stremio/stremio-core/blob/029301839c86/src/types/api/request.rs#L301-L344 (the library syncs as `datastorePut` with plain `LibraryItem` values to Stremio's API); https://www.stremio.com/ (FAQ, privacy: data "to create and sync your account") |
 | Torrent engine built in | Yes | https://www.stremio.com/ (FAQ: "Can Stremio play magnet links? Yes, and it can also play normal HTTP links and torrent files") |
-| Offline downloads | No (planned) | https://www.stremio.com/ (FAQ: "Available offline is an upcoming feature", with a cache setting meanwhile) |
+| Offline downloads | Yes, with the paid Supporter plan | https://www.stremio.com/plans (Download Manager, a Supporter feature: $39.99, or $199.99 lifetime); the FAQ on https://www.stremio.com/ still calls offline "upcoming" |
 | Dual subtitles | Not found | https://github.com/Stremio/stremio-core/blob/029301839c86/src/types/profile/settings.rs#L26 (`secondary_subtitles_language` is a second preferred language, not a second track on screen); nothing else found in the Stremio organization's code |
 | TV sign-in by QR code | Yes | https://github.com/Stremio/stremio-bugs/issues/1924 (Android TV shows a QR code; a Stremio maintainer: "you scan the code on android tv from your phone and log in"); https://github.com/Stremio/stremio-bugs/issues/720 (Samsung TV QR login) |
 | Account needed | No (guest mode) | https://www.stremio.com/ (FAQ, privacy: "There is also a Guest mode at signup ... no calls are made to our backend", without library sync) |
@@ -41,20 +41,20 @@ Every cell of the README's comparison table, with the primary source it was chec
 | Account needed | No (anonymous sign-in) | https://github.com/NuvioMedia/NuvioMobile/blob/61658f366f98/composeApp/src/commonMain/kotlin/com/nuvio/app/features/auth/AuthScreen.kt#L307-L310 ("Continue without account" calls `AuthRepository.signInAnonymously()`) |
 | Licence | GPL-3.0 | https://github.com/NuvioMedia/NuvioMobile, https://github.com/NuvioMedia/NuvioTV, https://nuvio.tv/ ("Free and open source under GNU GPLv3") |
 
-## Momotus (the trunk, feat/protocol-wire, 2026-10-27)
+## Momotus (the trunk, feat/protocol-wire, 2026-11-08)
 
 | Row | Cell | Source |
 |---|---|---|
 | Stremio addons | Yes | `crates/mq-addons` |
 | Android phone, Android TV and Fire TV | Yes | the release assets; `apps/android/app/src/main/AndroidManifest.xml` (LEANBACK_LAUNCHER) |
 | iPhone and iPad, Apple TV | From source | `apps/apple/project.yml` (iOS 18, tvOS 18 targets); no released build |
-| Mac | Yes | the release asset `Momotus.dmg`; `apps/apple/project.yml` (macOS 15 target) |
+| Mac | From source | `apps/apple/project.yml` (macOS 15 target); the releases carry Android APKs only |
 | Web browser | From source | `apps/web` with `crates/mq-bridge` (a local core over a loopback socket) |
 | End-to-end encrypted sync | Yes | `crates/mq-sync/src/lib.rs` ("End-to-end encrypted sync of library registers through a blind relay"), `crates/mq-sync/src/seal.rs` |
-| Installable plugins | In progress | plans only, nothing on the trunk |
+| Installable plugins | Yes, Nuvio plugin repositories | `crates/mq-plugins`; plugin repositories in Settings and "From plugins" in Versions on every app (`apps/web/src/screens/settings.tsx`, `apps/android/app/src/main/kotlin/app/marquee/android/PluginsScreen.kt`, `apps/apple/Marquee/Settings/PluginsScreen.swift`) |
 | Torrent engine built in | Yes | `crates/mq-engine`; own builds carry it on every slice (`apps/apple/scripts/build-core.sh`, `apps/android/scripts/build-core.sh` for arm64-v8a and armeabi-v7a) |
-| Offline downloads | In progress | not on the trunk |
-| Dual subtitles | In progress | not on the trunk |
+| Offline downloads | Yes, on phones and computers | `apps/web/src/screens/downloads.tsx`, `apps/android/app/src/main/kotlin/app/marquee/android/DownloadsScreen.kt`, `apps/apple/Marquee/Downloads/DownloadsScreen.swift`; TVs show no downloads (`AppRoot.kt`, `onDownloads = if (tv) null`) |
+| Dual subtitles | Yes | a second subtitle line in another language, a profile setting with three layouts (`secondSubtitle` in `crates/mq-runtime`, the player and Settings on every app); plans/dual-subtitles.md |
 | TV sign-in by QR code | Yes | a new device shows a pairing code that a phone scans (`apps/android/app/src/main/kotlin/app/marquee/android/SyncDevice.kt`) |
 | Account needed | No | first run offers Start fresh and Browse first (bench/m6/journey-android.jsonl FTV3); sync is optional |
 | Licence | AGPL-3.0-or-later | `LICENSE`, `Cargo.toml` (`license = "AGPL-3.0-or-later"`) |
