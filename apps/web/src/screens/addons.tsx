@@ -154,11 +154,24 @@ function AddonRow(props: { addon: AddonInfo; index: number; count: number }) {
     const button = (i: number) => document.querySelector<HTMLElement>(`[data-f="addon:${i}:remove"]`);
     requestAnimationFrame(() => autoFocus(button(at) ?? button(at - 1)));
   });
+  // A logo that does not load gives way to the letter, never an empty tile (QA r3 Q6).
+  const [broken, setBroken] = createSignal<string | null>(null);
   return (
     <li class="addon" classList={{ off: !a().enabled }} data-fgroup={`addon:${a().host}:${props.index}`}>
       <div class="addon-logo" aria-hidden="true">
-        <Show when={a().logo} fallback={<span>{a().name.charAt(0)}</span>}>
-          <img src={a().logo as string} alt="" width={64} height={64} loading="lazy" decoding="async" onError={(e) => e.currentTarget.remove()} />
+        <Show when={a().logo !== broken() && a().logo} fallback={<span>{a().name.charAt(0)}</span>}>
+          {/* No Referer, as the native apps send none: imgur, where several addons keep their logo, answers 403
+              to a page's. */}
+          <img
+            src={a().logo as string}
+            alt=""
+            width={64}
+            height={64}
+            loading="lazy"
+            decoding="async"
+            referrerpolicy="no-referrer"
+            onError={() => setBroken(a().logo)}
+          />
         </Show>
       </div>
       <div class="addon-text">

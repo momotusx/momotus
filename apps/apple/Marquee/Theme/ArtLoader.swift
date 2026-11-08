@@ -59,7 +59,8 @@ actor ArtLoader {
 
     /// The image at `url`, its longest side at most `maxPixels`, or nil when it
     /// cannot be loaded.
-    func image(_ url: URL, maxPixels: Int) async -> DecodedArt? {
+    func image(_ given: URL, maxPixels: Int) async -> DecodedArt? {
+        let url = Self.secure(given)
         let key = "\(url.absoluteString)#\(maxPixels)"
         if let hit = memory.object(forKey: key as NSString) { return hit }
         if let running = inFlight[key] { return await running.value }
@@ -74,6 +75,18 @@ actor ArtLoader {
             memory.setObject(art, forKey: key as NSString, cost: art.image.bytesPerRow * art.image.height)
         }
         return art
+    }
+
+    /// Art an addon gives as `http://`, asked over `https://`: App Transport Security refuses plain HTTP to a
+    /// public host (NSURLErrorDomain -1022; OpenSubtitles' logo is one), as Android's network config does
+    /// (HttpsUpgrade there). Loopback stays as it is: the core serves the bundled addon logos on 127.0.0.1.
+    static func secure(_ url: URL) -> URL {
+        guard url.scheme?.lowercased() == "http", let host = url.host(),
+              host != "localhost", host != "::1", !host.hasPrefix("127."),
+              var parts = URLComponents(url: url, resolvingAgainstBaseURL: false)
+        else { return url }
+        parts.scheme = "https"
+        return parts.url ?? url
     }
 
     private static func fetch(_ url: URL, maxPixels: Int, session: URLSession) async -> DecodedArt? {

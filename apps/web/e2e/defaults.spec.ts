@@ -15,6 +15,7 @@ import type { ChildProcess } from "node:child_process";
 import type { DefaultAddons } from "../src/core/generated/DefaultAddons";
 import type { Prefs } from "../src/core/generated/Prefs";
 import { Client, cleanup, DEFAULTS_PORT, PORTS, SHOTS, startBridge } from "./core";
+import { WHITE_PNG } from "./contrast";
 
 type Form = "tv" | "desktop" | "phone";
 const FORMS = {
@@ -778,6 +779,29 @@ test("the built-in TurkceAltyazi.org row says where it runs instead of a host", 
   await expect(page.locator("#set-about")).toBeVisible();
   await expect(page.locator("#set-about")).not.toContainText("TurkceAltyazi");
   await expect(page.locator("#set-about")).not.toContainText("Turkish");
+});
+
+test("Settings > Addons: a logo is asked with no Referer, and one that does not load leaves its letter", async ({ browser }) => {
+  // imgur, where SubSense and Anime Kitsu keep their logos, answers 403 to a page's Referer (QA r3 Q6: empty tiles).
+  await client.req("installDefaults", { choices: ["cinemeta", "subsense", "kitsu"].map((key) => ({ key, on: true })) });
+  await client.req("setPrefs", { patch: { defaultsSeen: 1 } });
+  const page = await device(browser, "desktop");
+  const referers: string[] = [];
+  await page.route("https://i.imgur.com/**", async (route) => {
+    const referer = route.request().headers().referer;
+    if (referer) referers.push(referer);
+    // SubSense's logo as imgur serves it; Kitsu's host is down.
+    if (route.request().url().endsWith("/FaDbQAp.png") && !referer) await route.fulfill({ contentType: "image/png", body: WHITE_PNG });
+    else if (route.request().url().endsWith("/FaDbQAp.png")) await route.fulfill({ status: 403 });
+    else await route.abort();
+  });
+  await page.goto("/addons?form=desktop");
+  const tile = (name: string) => page.locator("li.addon", { hasText: name }).locator(".addon-logo");
+  await expect.poll(() => tile("SubSense").locator("img").evaluate((i: HTMLImageElement) => i.complete && i.naturalWidth > 0)).toBe(true);
+  await expect(tile("Anime Kitsu").locator("img")).toHaveCount(0);
+  await expect(tile("Anime Kitsu")).toHaveText("A");
+  await expect(tile("Cinemeta")).toHaveText("C");
+  expect(referers).toEqual([]);
 });
 
 test("the addon directory is a default: Find addons lists it out of the box", async ({ browser }) => {

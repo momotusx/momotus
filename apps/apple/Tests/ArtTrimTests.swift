@@ -1,4 +1,5 @@
 import CoreGraphics
+import Foundation
 import Testing
 
 // Logos come with transparent margins (metahub's Breaking Bad logo starts 170
@@ -33,4 +34,16 @@ private func context(width: Int, height: Int) throws -> CGContext {
     let ctx = try context(width: 8, height: 8)
     let image = try #require(ctx.makeImage())
     #expect(ArtLoader.trimmed(image, context: ctx) === image)
+}
+
+// App Transport Security refuses plain HTTP to a public host, so art an addon gives as http:// is asked over https://
+// (OpenSubtitles' logo is http://www.strem.io/...); the core's loopback logos stay as they are.
+@Test func plainHTTPArtIsAskedOverHTTPSExceptOnLoopback() throws {
+    let secure = { (s: String) in ArtLoader.secure(URL(string: s)!).absoluteString }
+    #expect(secure("http://www.strem.io/images/addons/opensubtitles-logo.png") == "https://www.strem.io/images/addons/opensubtitles-logo.png")
+    #expect(secure("HTTP://s.ytimg.com/vi/x/hq.jpg?a=1") == "https://s.ytimg.com/vi/x/hq.jpg?a=1")
+    #expect(secure("https://image.tmdb.org/t/p/w1280/a.jpg") == "https://image.tmdb.org/t/p/w1280/a.jpg")
+    for local in ["http://127.0.0.1:7781/logo/0123abcd/torrentio", "http://localhost:9/a.png", "http://[::1]:9/a.png"] {
+        #expect(secure(local) == local)
+    }
 }

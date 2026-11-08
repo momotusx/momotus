@@ -295,7 +295,8 @@ private struct AddonCard: View {
             .fill(Theme.Palette.raised)
             .overlay {
                 if addon.logo != nil {
-                    ArtImage(url: addon.logo, mode: .fit, maxPixels: 160).padding(6)
+                    // The letter when the logo does not load, never an empty tile (QA r3 Q6).
+                    ArtImage(url: addon.logo, mode: .fit, maxPixels: 160, fallback: DefaultsRules.initial(addon.name)).padding(6)
                 } else {
                     Text(addon.name.prefix(1).uppercased()).display(Theme.type.title3)
                 }
