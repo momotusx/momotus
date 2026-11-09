@@ -63,12 +63,15 @@ final class PlayerModel {
     private(set) var firstFrameMs: Int?
     /// A local player error the core has not answered yet.
     private(set) var notice: String?
-    /// A few seconds of words over the video: why the picked subtitle file did not load, or why the play moved or paused.
+    /// A few seconds of words over the video: why the picked subtitle file did not load, why the play moved or paused,
+    /// or that Trakt needs a new sign in (`notices`, the one slot they share).
     private(set) var statusLine: String?
+    @ObservationIgnored private var notices: NoticeSlot!
     /// When this play's Trakt notice first showed (`TraktRules.noticeSince`), kept for the play.
     @ObservationIgnored private var traktNoticeAt: Date?
-    /// The Trakt notice is in sight: once per play, `TraktRules.noticeSeconds`, never again on pause, seek or resume.
-    private(set) var traktNotice = false
+    /// The strip open over the bar, and its Style row (plans/player-bar.md section 5): one at a time.
+    var strip: BarStrip? { didSet { if strip != .subtitles { styleOpen = false } } }
+    var styleOpen = false
     /// The picture's size, for placing subtitles on it rather than on the screen.
     private(set) var videoSize: CGSize = .zero
     private(set) var subtitle: SubtitleTrack?
@@ -262,7 +265,8 @@ final class PlayerModel {
             self.core.commandNow(sub, command)
             return true
         }
-        outbox.settled = { AccessibilityNotification.Announcement(PlayerLayout.delayWords($0)).post() }
+        outbox.settled = { AccessibilityNotification.Announcement(PlayerLayout.shiftSaid($0)).post() }
+        notices = NoticeSlot { [weak self] in self?.statusLine = $0 }
     }
 
     var taskId: [String] { [route.key, "\(route.versionsSub)", "\(core.generation)", "\(opens)"] }
@@ -484,6 +488,22 @@ final class PlayerModel {
     /// `secondOnPause`), synced; an older core sends neither.
     var subtitleLayout: SubtitleLayout { prefs.snapshot?.subtitleLayout ?? .stacked }
     var secondOnPause: Bool { prefs.snapshot?.secondOnPause ?? false }
+
+    /// The profile's subtitle position and background (plans/player-bar.md D7, D8), synced; an older core sends
+    /// neither (8 and Box, today's look).
+    var subtitlePosition: Int { prefs.snapshot?.subtitlePosition ?? PlayerLayout.defaultPosition }
+    var subtitleBackground: SubtitleBackground { prefs.snapshot?.subtitleBackground ?? .box }
+
+    /// The strip's Style row writes the profile's values on each press, as Settings does, and they show at once.
+    func setSubtitleSize(_ size: SubtitleSize) { setPrefs(["subtitleSize": size.rawValue]) }
+    func setSubtitlePosition(_ position: Int) { setPrefs(["subtitlePosition": position]) }
+    func setSubtitleBackground(_ background: SubtitleBackground) { setPrefs(["subtitleBackground": background.rawValue]) }
+
+    /// The quick shift (D2): the timing on moved by `by`, sent and said as the picker's stepper does.
+    func shiftSubtitles(by: Double, spoken: Bool = true) {
+        guard timingKey != nil else { return }
+        setSubtitleDelay(PlayerLayout.nudge(subtitleDelay, by: by), spoken: spoken)
+    }
 
     /// The picker's Layout and Only when paused rows write the profile's values at once, as Settings does.
     func setSubtitleLayout(_ layout: SubtitleLayout) { setPrefs(["subtitleLayout": layout.rawValue]) }
@@ -740,7 +760,7 @@ final class PlayerModel {
 
     func togglePlay() {
         // Playing again answers a line that waited for it (a heat pause).
-        if !playing, statusLine == Self.heatPaused { statusLine = nil }
+        if !playing { notices.clear(Self.heatPaused) }
         if backend == .aether, let aether {
             if playing { aether.pause(); report(paused: true) } else { if ended { seek(to: 0) }; aether.play() }
             return
@@ -1058,26 +1078,17 @@ final class PlayerModel {
     var spokenOn: Bool { spokenPick ?? (secondSubtitle != nil && prefs.snapshot?.secondSubtitle == "audio") }
 
     /// `untilPlay`: the line stays until the viewer plays again (a heat pause), not for a few seconds.
-    private func showStatus(_ words: String, untilPlay: Bool = false) {
-        statusLine = words
-        guard !untilPlay else { return }
-        Task {
-            try? await Task.sleep(for: .seconds(5))
-            if statusLine == words { statusLine = nil }
-        }
+    private func showStatus(_ words: String, untilPlay: Bool = false, seconds: Double = 5, priority: Bool = false) {
+        notices.show(words, seconds: untilPlay ? nil : seconds, priority: priority)
     }
 
-    /// The first Trakt warning of the play shows for a few seconds, then never again in this play.
+    /// Trakt's `reconnect`, once per play (plans/player-bar.md D9 and 5.1): its words for 4 s with priority in the
+    /// notice slot, never again on a pause, seek or resume. No other Trakt state shows in the player.
     private func showTraktNotice(_ trakt: TraktPlayback?) {
-        let now = Date.now
-        let since = TraktRules.noticeSince(traktNoticeAt, trakt: trakt, now: now)
-        guard since != traktNoticeAt, let since else { return }
+        let since = TraktRules.noticeSince(traktNoticeAt, trakt: trakt, now: .now)
+        guard since != traktNoticeAt, since != nil else { return }
         traktNoticeAt = since
-        traktNotice = TraktRules.noticeShows(since: since, now: now)
-        Task {
-            try? await Task.sleep(for: .seconds(TraktRules.noticeSeconds))
-            traktNotice = TraktRules.noticeShows(since: since, now: .now)
-        }
+        showStatus(TraktWords.playerReconnect, seconds: TraktRules.noticeSeconds, priority: true)
     }
 
     // MARK: core and player plumbing

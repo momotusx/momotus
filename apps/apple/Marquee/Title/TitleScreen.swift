@@ -42,6 +42,9 @@ struct TitleScreen: View {
     /// The episodes panel beside the info (Mac, iPad) and the Episodes page (iPhone).
     @State private var panelOpen = false
     @State private var showEpisodes = false
+    /// The episode a player's Episodes came back for: the panel shows it.
+    @State private var episodeShown: String?
+    @Environment(\.openTitle) private var parentOpenTitle
     #if !os(tvOS)
     /// What opened the panel, which takes keyboard focus back when it closes.
     @State private var opener: PanelOpener?
@@ -159,6 +162,24 @@ struct TitleScreen: View {
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
         #endif
+        // Both of its players (its own and the one under its Versions) answer Episodes here.
+        .environment(\.openTitle, OpenTitleAction { titleOpened($0) })
+    }
+
+    /// Episodes from a player over this page (plans/player-bar.md section 5, Apple Episodes): its own title pops back
+    /// here and shows the season and episode, with no second copy of the page; any other title goes on the place's way.
+    private func titleOpened(_ route: TitleRoute) {
+        switch BarRules.episodes(playing: route.id, page: model.route.id) {
+        case .selectInPlace:
+            (playing, showVersions, showEpisodeVersions) = (nil, false, false)
+            if let season = route.season { model.selectSeason(season) }
+            episodeShown = route.videoId
+            #if !os(tvOS)
+            openEpisodes()
+            #endif
+        case .push:
+            parentOpenTitle(route)
+        }
     }
 
     @ViewBuilder private var page: some View {
@@ -532,7 +553,7 @@ struct TitleScreen: View {
         EpisodePanel(
             seasons: model.header?.seasons ?? [], selected: model.header?.selectedSeason, episodes: model.episodes,
             minutes: minutes(details?.runtime), select: model.selectSeason, actions: episodeActions,
-            scrollTo: model.route.videoId, close: close)
+            scrollTo: episodeShown ?? model.route.videoId, close: close)
     }
 
     /// The Mac's action row: the primary, Trailer, the Library and Watched capsule, Versions.

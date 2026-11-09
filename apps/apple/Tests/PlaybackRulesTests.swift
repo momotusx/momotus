@@ -119,10 +119,6 @@ private func snapshot(next: String = next, nextAtMs: String = "null", segments: 
 }
 
 @Test func thePhonePlayerPlacesItsPartsByTheRealWindow() {
-    // A 320 pt class phone in landscape: the transport joins the actions; from 360 it stays centered.
-    #expect(PlayerLayout.joinsTransport(windowHeight: 320))
-    #expect(!PlayerLayout.joinsTransport(windowHeight: 360))
-    #expect(!PlayerLayout.joinsTransport(windowHeight: 0), "before the window is measured")
     // Up Next waits while the controls show on a short window, and while a track menu is open.
     #expect(!PlayerLayout.showsUpNext(due: true, controlsShown: true, menuOpen: false, windowHeight: 402))
     #expect(PlayerLayout.showsUpNext(due: true, controlsShown: false, menuOpen: false, windowHeight: 402))
@@ -724,8 +720,11 @@ private func route(_ key: String, sub: UInt64 = 3) -> PlayRoute {
     #expect(PlayerLayout.subtitleStep == 0.1)
     #expect(PlayerLayout.firstRepeatMs == 350 && PlayerLayout.repeatMs == 100 && PlayerLayout.delaySettleMs == 700)
     #expect([350, 999, 1000, 2500, 3000, 9000].map { PlayerLayout.holdStep(heldMs: $0) }.map { ($0 * 10).rounded() / 10 } == [0.3, 0.3, 0.4, 0.5, 0.6, 0.6])
-    // Snapped to tenths, within a minute either way, never a negative zero.
-    #expect(PlayerLayout.nudge(0.25, by: 0.1) == 0.4)
+    // Snapped to the 0.05 s grid both steps share (plans/player-bar.md D3), within a minute either way, never a
+    // negative zero.
+    #expect(PlayerLayout.nudge(0.25, by: 0.1) == 0.35)
+    #expect(PlayerLayout.nudge(0.3, by: 0.25) == 0.55)
+    #expect(PlayerLayout.nudge(0.03, by: 0) == 0.05)
     #expect(PlayerLayout.nudge(59.8, by: 0.6) == 60)
     #expect(PlayerLayout.nudge(-59.9, by: -0.6) == -60)
     #expect(PlayerLayout.nudge(0.1, by: -0.1).sign == .plus)
@@ -836,6 +835,34 @@ private func route(_ key: String, sub: UInt64 = 3) -> PlayRoute {
     #expect(abs(PlayerLayout.subtitleFoot(screenHeight: 874, pictureHeight: 226, safeBottom: 34, controlsShown: true, controlsHeight: 92) - 531.92) < 0.001)
     // A Mac window: no safe area; 8% of the picture over its foot, over the title-safe line (5%).
     #expect(PlayerLayout.subtitleFoot(screenHeight: 900, pictureHeight: 900, safeBottom: 0, controlsShown: false, controlsHeight: 200) == 828)
+}
+
+@Test func thePositionMovesTheFootAndTheDefaultChangesNothing() {
+    // plans/player-bar.md D7: a Mac window 900 pt tall whose picture fills it. Hidden controls: position percent of
+    // the picture over its foot, never under the title-safe line (5%, 45 pt over the foot).
+    let foot = { (position: Int, shown: Bool) in
+        PlayerLayout.subtitleFoot(screenHeight: 900, pictureHeight: 900, safeBottom: 0, controlsShown: shown, controlsHeight: 96, position: position)
+    }
+    #expect(foot(8, false) == 828, "8 is today's rule")
+    #expect(foot(8, false) == PlayerLayout.subtitleFoot(screenHeight: 900, pictureHeight: 900, safeBottom: 0, controlsShown: false, controlsHeight: 96))
+    #expect(foot(5, false) == 855, "5% sits on the title-safe line")
+    #expect(foot(25, false) == 675)
+    // Shown: the lifted foot (over the bar), plus what the position asks over 8, so a change shows live.
+    let lifted: CGFloat = 900 - 96 - 16
+    #expect(foot(8, true) == lifted, "over the bar and its 16 pt")
+    #expect(foot(5, true) == foot(8, true), "under 8 the bar's clearance wins")
+    #expect(foot(25, true) == foot(8, true) - 153, "17% of the picture higher")
+    // The iPhone across: the same rule on its own foot; upright in the band, Position does nothing.
+    let across = { (position: Int, shown: Bool) in
+        PhoneFrame.subtitle(screenHeight: 402, pictureHeight: 402, safeBottom: 21, controlsShown: shown, scrubberTop: 296, boxHeight: 36, position: position).foot
+    }
+    #expect(across(8, false) == PhoneFrame.subtitle(screenHeight: 402, pictureHeight: 402, safeBottom: 21, controlsShown: false, scrubberTop: 296, boxHeight: 36).foot)
+    #expect(across(25, false) < across(8, false))
+    #expect(across(25, true) < across(8, true))
+    for position in [5, 8, 25] {
+        let band = PhoneFrame.subtitle(screenHeight: 874, pictureHeight: 226, safeBottom: 34, controlsShown: true, scrubberTop: 755, boxHeight: 60, position: position)
+        #expect(band.foot == 618, "upright, the band holds it at \(position)")
+    }
 }
 
 @Test func drawnSubtitlesKeepOverTheTitleSafeLine() {
@@ -965,11 +992,14 @@ private func route(_ key: String, sub: UInt64 = 3) -> PlayRoute {
     #expect(PlayerLayout.startDelay(track) == 0)
     track.delayMs = 300
     #expect(PlayerLayout.startDelay(track) == 0.3)
-    // To the tenth the stepper shows: 40 ms is 0.0 s, with no Reset.
-    track.delayMs = 40
+    // On the 0.05 s grid the controls show (plans/player-bar.md D3): 20 ms is 0.0 s, with nothing to reset; a
+    // quick shift's 250 ms comes back as it went.
+    track.delayMs = 20
     #expect(PlayerLayout.startDelay(track) == 0)
     track.delayMs = 260
-    #expect(PlayerLayout.startDelay(track) == 0.3)
+    #expect(PlayerLayout.startDelay(track) == 0.25)
+    track.delayMs = 250
+    #expect(PlayerLayout.startDelay(track) == 0.25)
     track.delayMs = 300
     // Earlier in this play wins: the core keeps one track's delay, the play each track's.
     #expect(PlayerLayout.startDelay(track, kept: [track.url: -1.5]) == -1.5)

@@ -597,6 +597,7 @@ struct SettingsScreen: View {
             } label: { Label("More languages", glyph: "search") }
             .buttonStyle(.textLink)
             subtitleSize(p)
+            subtitlePosition(p)
             Text("Languages are listed in the order you turn them on; the first one wins. A subtitle you pick while watching moves its language first.")
                 .modifier(Note())
             audio(p)
@@ -675,6 +676,16 @@ struct SettingsScreen: View {
         let chips = SubtitleSize.allCases.map { Chip(id: $0, title: CaptionStyle.words($0)) }
         return ChipRow(label: "Subtitle size", chips: chips, isSelected: { $0 == p.subtitleSize }) { value in
             set(["subtitleSize": value.rawValue])
+        }
+    }
+
+    /// Where subtitles sit over the picture's foot (plans/player-bar.md D7, the owner's 2026-10-31 note), on every
+    /// device of the profile; the player's Style row writes the same value.
+    private func subtitlePosition(_ p: Prefs) -> ChipRow<Int> {
+        let chips = PlayerLayout.positions.map { Chip(id: $0, title: BarRules.positionText($0)) }
+        let position = p.subtitlePosition ?? PlayerLayout.defaultPosition
+        return ChipRow(label: StreamChoice.words.player.bar.position, chips: chips, isSelected: { $0 == position }) { value in
+            set(["subtitlePosition": value])
         }
     }
 

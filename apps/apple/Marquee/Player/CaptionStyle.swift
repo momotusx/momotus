@@ -73,6 +73,31 @@ struct CaptionStyle {
             edge: MACaptionAppearanceGetTextEdgeStyle(.user, nil))
     }
 
+    /// The profile's background (plans/player-bar.md D8) over the viewer's style: Box keeps it as it is (today's
+    /// look); Outline and Shadow draw no box, only an edge. A style whose background, window or edge the viewer
+    /// set to win over content (`systemInsists`) stays as the viewer set it.
+    func with(_ background: SubtitleBackground, systemInsists: Bool) -> CaptionStyle {
+        guard !systemInsists, background != .box else { return self }
+        var style = self
+        (style.highlight, style.window, style.oneBoxFill) = (.clear, .clear, .clear)
+        style.edge = background == .outline ? .uniform : .dropShadow
+        return style
+    }
+
+    /// The viewer's caption settings decide the background: its colour, its window or its edge is set to win over
+    /// what a video (here the profile) asks.
+    static var systemInsists: Bool {
+        var behavior = MACaptionAppearanceBehavior.useContentIfAvailable
+        _ = MACaptionAppearanceGetBackgroundOpacity(.user, &behavior)
+        var insists = behavior == .useValue
+        _ = MACaptionAppearanceGetWindowOpacity(.user, &behavior)
+        insists = insists || behavior == .useValue
+        _ = MACaptionAppearanceGetTextEdgeStyle(.user, &behavior)
+        insists = insists || behavior == .useValue
+        MACaptionAppearanceCopyBackgroundColor(.user, &behavior).release()
+        return insists || behavior == .useValue
+    }
+
     /// System faces have private names (".AppleSystemUIFont"): the app's own
     /// face stands in for them, so the default style keeps the app's look.
     static func face(named name: String?) -> String? {

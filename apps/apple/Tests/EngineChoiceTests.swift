@@ -334,8 +334,8 @@ import Testing
     #expect(try body(of: "    private func heatCheck(", in: model).contains("togglePlay") == false)
     #expect(model.contains("heatHandled = false\n        selectSubtitle(nil)"))
     // The heat pause's line stays until the viewer plays again.
-    #expect(model.contains("guard !untilPlay else { return }"))
-    #expect(model.contains("if !playing, statusLine == Self.heatPaused { statusLine = nil }"))
+    #expect(model.contains("notices.show(words, seconds: untilPlay ? nil : seconds, priority: priority)"))
+    #expect(model.contains("if !playing { notices.clear(Self.heatPaused) }"))
     #expect(model.contains(".filter { $0.key == playingKey || $0.key != route.key }"))
 }
 

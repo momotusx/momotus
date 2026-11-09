@@ -9,9 +9,10 @@ struct PipControl {
     let start: () -> Void
 }
 
-/// The OSD: title top left, end time top right, the scrubber, transport in
-/// the middle and the track and version actions on the right, each a word
-/// with its current value.
+/// The OSD (plans/player-bar.md, the owner's "Toolbar strip"): the title top left and the end time top right; at
+/// the foot one slim bar, the scrubber's row and then Audio, Speed and Versions on the left, Back 10, Play and
+/// Forward 10 in the middle, and Subtitles, the quick shift, Episodes, Next and Full screen on the right. Subtitles
+/// and Audio open their strips over the bar's ends.
 struct PlayerControls: View {
     let model: PlayerModel
     let versions: VersionsModel?
@@ -22,18 +23,22 @@ struct PlayerControls: View {
     var activity: () -> Void = {}
     /// iOS: Picture in Picture, when the system says it is possible.
     var pip: PipControl?
-    /// The real window's height: below `PlayerLayout.shortHeight` the transport joins the actions.
+    /// The real window's height.
     var windowHeight: CGFloat = 0
-    /// The bottom controls' height with their foot padding, for Skip and Up Next.
+    /// The bottom controls' height with their foot padding (and an open strip's), for Skip, Up Next and the subtitles.
     var measured: (CGFloat) -> Void = { _ in }
     /// The top bar's foot from the window's top, for a second subtitle line hung from the top (Split).
     var measuredTop: (CGFloat) -> Void = { _ in }
-    @State private var actionsWidth: CGFloat = 0
-    @State private var moreAfter = false
-    /// The subtitle or audio picker over the picture (a sheet on the iPhone).
+    /// This title's Versions over the player: the audio strip's Choose a version.
+    var chooseVersion: (() -> Void)?
+    /// A series: its title page on the current season and episode (section 5, Apple Episodes).
+    var episodes: (() -> Void)?
+    /// The subtitle picker over the picture (a sheet on the iPhone): More languages; on tvOS the subtitle and audio pickers.
     @State private var picker: TrackPickerPanel.Kind?
-    /// The bottom controls' height, which the picker panel sits over.
-    @State private var bottomHeight: CGFloat = 200
+    /// The bar's width and height, and an open strip's height.
+    @State private var barWidth: CGFloat = 0
+    @State private var barHeight: CGFloat = 120
+    @State private var stripHeight: CGFloat = 0
     /// TV seeking: how many quick presses in a row, and the last one's direction and time.
     @State private var seekRun = 0
     @State private var lastSeek: (direction: Int, at: ContinuousClock.Instant)?
@@ -41,16 +46,15 @@ struct PlayerControls: View {
     @State private var scrub: Double?
     /// Which control has focus: TV enters on Play/Pause, and every move keeps the controls up.
     @FocusState private var focus: Control?
+    /// The bar's text sizes, following Dynamic Type as the text does.
+    @ScaledMetric(relativeTo: .callout) private var wideText = Theme.type.callout
+    @ScaledMetric(relativeTo: .caption) private var phoneWord: CGFloat = 14
+    @ScaledMetric(relativeTo: .caption) private var phoneTime = Theme.type.caption
+    #if os(macOS)
+    @State private var fullScreen = false
+    #endif
 
-    enum Control: Hashable { case back, rewind, play, forward, scrub, audio, subtitles, versions, speed }
-
-    private static var ios: Bool {
-        #if os(iOS)
-        true
-        #else
-        false
-        #endif
-    }
+    enum Control: Hashable { case back, rewind, play, forward, scrub, audio, subtitles, versions, speed, episodes, next, fullScreen }
 
     /// The iPhone lays the OSD out as the system player does (`PhoneFrame`).
     private static var phone: Bool {
@@ -64,6 +68,9 @@ struct PlayerControls: View {
     /// The phone's safe area and turn, read from the layout.
     @State private var safe = EdgeInsets()
     @State private var landscape = false
+
+    private var bar: StreamChoiceWords.Player.Bar { StreamChoice.words.player.bar }
+    private var names: StreamChoiceWords.Player.Bar.Names { bar.names }
 
     var body: some View {
         Group {
@@ -85,31 +92,31 @@ struct PlayerControls: View {
         .onAppear { focus = .play }
         #endif
         .background {
-            // Full-bleed scrims, never boxes, so every OSD word holds 4.5:1 on
-            // any picture. The phone's bottom one reaches above the scrubber.
+            // Full-bleed scrims, never boxes, so every OSD word holds 4.5:1 on any picture. The bottom one reaches
+            // over an open strip too (whose rows also sit on strong glass).
             VStack {
                 LinearGradient(colors: [.black.opacity(0.6), .clear], startPoint: .top, endPoint: .bottom)
                     .frame(height: metrics.wide ? 200 : 120)
                 Spacer()
                 LinearGradient(colors: [.clear, .black.opacity(0.72)], startPoint: .top, endPoint: .bottom)
-                    .frame(height: metrics.wide ? 320 : 300)
+                    .frame(height: max(metrics.wide ? 320 : 300, barHeight + stripRoom + 160))
             }
             .ignoresSafeArea()
             .allowsHitTesting(false)
         }
         .foregroundStyle(.white)
-        // Mac, iPad and TV: the picker is a panel over the picture, just over the controls.
+        // Mac, iPad and TV: the full picker is a panel over the picture, just over the controls.
         .overlay(alignment: metrics.wide ? .bottomTrailing : .bottom) {
             if let picker, !Self.phone {
                 TrackPickerPanel(kind: picker, model: model, close: closePicker)
                     #if !os(tvOS)
                     .frame(width: 400)
-                    .frame(maxHeight: TrackPicker.panelHeight(window: windowHeight, below: bottomHeight + footPadding + Theme.Space.s))
+                    .frame(maxHeight: TrackPicker.panelHeight(window: windowHeight, below: barHeight + footPadding + Theme.Space.s))
                     .fixedSize(horizontal: false, vertical: true)
                     .glass(RoundedRectangle(cornerRadius: Theme.Radius.l, style: .continuous), strong: true)
                     #endif
                     .padding(.trailing, metrics.wide ? metrics.gutter : 0)
-                    .padding(.bottom, bottomHeight + footPadding + Theme.Space.s)
+                    .padding(.bottom, barHeight + footPadding + Theme.Space.s)
                     .transition(.opacity)
             }
         }
@@ -125,8 +132,17 @@ struct PlayerControls: View {
             hold(open != nil)
             model.pickerOpen = open != nil
         }
+        // The controls' foot block, an open strip included, for Skip, Up Next and the drawn subtitles.
+        .onChange(of: barHeight + stripRoom, initial: true) { _, height in
+            measured(height + (Self.phone ? PhoneFrame.bottomGap : footPadding))
+        }
+        // A strip that closes gives the keyboard back to the button that opened it.
+        .onChange(of: model.strip) { old, now in
+            if now == nil, let old, KeyboardNavigation.on { focus = old == .audio ? .audio : .subtitles }
+        }
         // A picker goes with the controls (a click on the picture hides both): the keys go back to the player.
         .onDisappear { model.pickerOpen = false }
+        .onDisappear { model.strip = nil }
         #if DEBUG
         .task {
             // A walk's shot: the picker once the core's subtitles are in (or the file's audio).
@@ -147,6 +163,30 @@ struct PlayerControls: View {
     private func closePicker() {
         withAnimation(Theme.Motion.panel) { picker = nil }
     }
+
+    /// Subtitles or Audio: its strip opens, or closes when it is open; only one is open at a time. tvOS keeps its
+    /// full pickers.
+    private func toggle(_ kind: BarStrip) {
+        #if os(tvOS)
+        openPicker(kind == .audio ? .audio : .subtitles)
+        #else
+        activity()
+        withAnimation(Theme.Motion.panel) { model.strip = model.strip == kind ? nil : kind }
+        #endif
+    }
+
+    private func closeStrip() {
+        withAnimation(Theme.Motion.panel) { model.strip = nil }
+    }
+
+    /// More languages: today's full picker, in place of the strip.
+    private func moreLanguages() {
+        model.strip = nil
+        openPicker(.subtitles)
+    }
+
+    private var stripRoom: CGFloat { model.strip == nil ? 0 : stripHeight + stripGap }
+    private var stripGap: CGFloat { Self.phone ? 8 : 12 }
 
     private var target: PlayTargetInfo { model.route.target }
 
@@ -174,7 +214,6 @@ struct PlayerControls: View {
                         .foregroundStyle(.white.opacity(0.75))
                         .accessibilityLabel(spokenEpisode(season: season, episode: episode))
                 }
-                TraktMark(trakt: model.playback?.trakt, notice: model.traktNotice)
             }
             Spacer()
             // Right: Picture in Picture, AirPlay when the stream allows it, then the end time.
@@ -225,8 +264,9 @@ struct PlayerControls: View {
         .now.addingTimeInterval(max(0, model.duration - model.position) / Double(max(model.rate, 0.25)))
     }
 
+    /// Mac, iPad and TV: the scrubber's row, then the control row (D16).
     private var bottom: some View {
-        VStack(spacing: 14) {
+        VStack(spacing: 8) {
             #if os(tvOS)
             // The whole row takes focus, so nothing lies left or right of it:
             // Left and Right seek 10 s a press instead of moving focus.
@@ -267,65 +307,144 @@ struct PlayerControls: View {
             scrubRow(spacing: 12)
                 .textFont(Theme.type.callout, relativeTo: .callout)
             #endif
-            if metrics.wide {
-                HStack(alignment: .center) {
-                    Spacer().frame(maxWidth: .infinity)
-                    transport
-                    actions.frame(maxWidth: .infinity)
-                }
-            } else if PlayerLayout.joinsTransport(windowHeight: windowHeight) {
-                // A short window (a small phone in landscape): one row, so the
-                // controls stay clear of the title and the status line.
-                HStack(spacing: 16) {
-                    transport
-                    actions
-                }
-            } else {
+            controlRows(BarFit.desktop(width: barWidth, left: leftPills, right: rightPills, type: wideType))
+        }
+        .onGeometryChange(for: CGSize.self) { $0.size } action: { (barWidth, barHeight) = ($0.width, $0.height) }
+        .overlay(alignment: model.strip == .audio ? .bottomLeading : .bottomTrailing) { strip(chevrons: false) }
+    }
+
+    /// The control row as the plan lays it: beside the transport, or a second row under it (D16 c).
+    @ViewBuilder private func controlRows(_ plan: BarFit.Desktop) -> some View {
+        let left = leftGroup(words: plan.leftWords)
+        let right = rightGroup(words: plan.rightWords, chevrons: plan.chevrons)
+        switch plan.under {
+        case .none:
+            HStack(spacing: BarFit.columnGap) {
+                left.frame(maxWidth: .infinity, alignment: .leading)
                 transport
-                actions.padding(.top, 6)
+                right.frame(maxWidth: .infinity, alignment: .trailing)
+            }
+        case .right:
+            VStack(spacing: 8) {
+                HStack(spacing: BarFit.columnGap) {
+                    left.frame(maxWidth: .infinity, alignment: .leading)
+                    transport
+                    Color.clear.frame(maxWidth: .infinity, maxHeight: 1)
+                }
+                right
+            }
+        case .both:
+            VStack(spacing: 8) {
+                transport
+                // Narrower than even the icons (a compact iPad window): the row scrolls, its targets whole.
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: BarFit.columnGap) { left; Spacer(minLength: 0); right }
+                    ScrollView(.horizontal) { HStack(spacing: BarFit.columnGap) { left; right }.padding(.vertical, 4) }
+                        .scrollIndicators(.hidden)
+                }
             }
         }
-        // Skip and Up Next sit just over this, the controls' own height and their foot padding.
-        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: {
-            measured($0 + footPadding)
-            bottomHeight = $0
+    }
+
+    /// An open strip over the bar's right end (Subtitles) or left end (Audio), `stripGap` over it.
+    @ViewBuilder private func strip(chevrons: Bool) -> some View {
+        #if !os(tvOS)
+        Group {
+            switch model.strip {
+            case .subtitles:
+                SubtitleStrip(model: model, phone: Self.phone, upright: Self.phone && !landscape, chevrons: chevrons,
+                              moreLanguages: moreLanguages, close: closeStrip, holding: hold)
+            case .audio:
+                AudioStrip(model: model, chooseVersion: chooseVersion, close: closeStrip)
+            case nil:
+                EmptyView()
+            }
         }
+        .frame(maxWidth: max(barWidth, 0), alignment: model.strip == .audio ? .leading : .trailing)
+        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { stripHeight = $0 }
+        .padding(.bottom, barHeight + stripGap)
+        .transition(.opacity)
+        #endif
     }
 
     private var footPadding: CGFloat { metrics.wide ? Theme.Space.m : Theme.Space.s }
 
-    /// The iPhone, as the system player: the top bar under the safe area's
-    /// top, the transport in the screen's middle, the scrubber and the actions
-    /// just over the safe area's foot, the bars `PhoneFrame.edge` from the
-    /// screen, upright and across alike.
+    /// The iPhone, as the system player: the top bar under the safe area's top, the transport in the screen's middle
+    /// (stepping aside while a strip is open, so the strip has the room), the bar just over the safe area's foot.
     private var phoneLayout: some View {
         ZStack {
             PhoneOSD { top } bottom: { phoneBottom }
                 .padding(.leading, PhoneFrame.side(safe: safe.leading))
                 .padding(.trailing, PhoneFrame.side(safe: safe.trailing))
-            transport(gap: PhoneFrame.transportGap(landscape: landscape))
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .ignoresSafeArea()
+            if model.strip == nil {
+                transport(gap: PhoneFrame.transportGap(landscape: landscape), skip: 50, play: 68)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .ignoresSafeArea()
+            }
         }
         .onGeometryChange(for: EdgeInsets.self) { $0.safeAreaInsets } action: { safe = $0 }
         .onGeometryChange(for: Bool.self) { $0.size.width > $0.size.height } action: { landscape = $0 }
     }
 
-    /// The scrubber in its bar, the times inside it, then the actions in one
-    /// compact row under it.
-    private var phoneBottom: some View {
-        VStack(spacing: 6) {
-            #if !os(tvOS)
-            scrubRow(spacing: 8)
-                .textFont(Theme.type.caption, relativeTo: .caption)
-                .padding(.horizontal, PhoneFrame.barInset)
-                .frame(height: PhoneFrame.barHeight)
-                .glass(Capsule())
-            #endif
-            actions
+    private var phoneType: BarFit.TextSizes { BarFit.TextSizes(word: phoneWord, value: phoneTime) }
+    private var wideType: BarFit.TextSizes { BarFit.TextSizes(word: wideText, value: wideText) }
+
+    /// Across: one row (D17), or the scrubber's row over the controls' when the scrubber would be too short.
+    /// Upright: three rows (D15). Every pill an icon at 44 pt.
+    @ViewBuilder private var phoneBottom: some View {
+        Group {
+            if !landscape {
+                let chevrons = BarFit.uprightChevrons(width: barWidth, type: phoneType)
+                VStack(spacing: 6) {
+                    phoneScrubber
+                    HStack(spacing: BarFit.phoneGap) {
+                        leftGroup(words: false)
+                        Spacer(minLength: BarFit.phoneGap)
+                        episodesAndNext(words: false)
+                    }
+                    HStack(spacing: BarFit.phoneGap) {
+                        Spacer(minLength: 0)
+                        subtitlesPill(words: false)
+                        shift(chevrons: chevrons)
+                    }
+                }
+            } else {
+                let plan = BarFit.phone(
+                    width: barWidth, left: 3, right: target.season == nil ? 1 : 3,
+                    times: BarFit.phoneTimes(type: phoneType) + 2 * PhoneFrame.barInset + 16, type: phoneType)
+                if plan.twoRows {
+                    VStack(spacing: 6) {
+                        phoneScrubber
+                        HStack(spacing: BarFit.phoneGap) {
+                            leftGroup(words: false)
+                            Spacer(minLength: BarFit.phoneRowGap)
+                            rightGroup(words: false, chevrons: plan.chevrons)
+                        }
+                    }
+                } else {
+                    HStack(spacing: BarFit.phoneRowGap) {
+                        leftGroup(words: false)
+                        phoneScrubber.frame(maxWidth: .infinity)
+                        rightGroup(words: false, chevrons: plan.chevrons)
+                    }
+                }
+            }
         }
-        // Skip, Up Next and the drawn subtitles sit just over this.
-        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { measured($0 + PhoneFrame.bottomGap) }
+        .onGeometryChange(for: CGSize.self) { $0.size } action: { (barWidth, barHeight) = ($0.width, $0.height) }
+        .overlay(alignment: model.strip == .audio ? .bottomLeading : .bottomTrailing) {
+            strip(chevrons: landscape ? true : BarFit.uprightChevrons(width: barWidth, type: phoneType))
+        }
+    }
+
+    /// The scrubber in its glass capsule, the times inside it.
+    @ViewBuilder private var phoneScrubber: some View {
+        #if !os(tvOS)
+        scrubRow(spacing: 8)
+            .textFont(Theme.type.caption, relativeTo: .caption)
+            .padding(.horizontal, PhoneFrame.barInset)
+            .frame(height: PhoneFrame.barHeight)
+            .glass(Capsule())
+        #endif
     }
 
     #if !os(tvOS)
@@ -364,12 +483,12 @@ struct PlayerControls: View {
         activity()
     }
 
-    private var transport: some View { transport(gap: metrics.wide ? 28 : 20) }
+    private var transport: some View { transport(gap: BarFit.transportGap, skip: BarFit.skip, play: BarFit.play) }
 
-    private func transport(gap: CGFloat) -> some View {
+    private func transport(gap: CGFloat, skip: CGFloat, play: CGFloat) -> some View {
         // Play/Pause is the white circle; only focus draws a ring.
         HStack(spacing: gap) {
-            Button { model.skip(-10) } label: { SkipGlyph(name: "rotate-ccw", wide: metrics.wide) }
+            Button { model.skip(-10) } label: { SkipGlyph(name: "rotate-ccw", size: skip) }
                 .focused($focus, equals: .rewind)
                 .accessibilityLabel("Back 10 seconds")
             Button(action: model.togglePlay) {
@@ -378,77 +497,60 @@ struct PlayerControls: View {
                     if Self.phone, waitingNow {
                         ProgressView().tint(Theme.Palette.onPrimary)
                     } else {
-                        Glyph(model.playing ? "pause-fill" : "play-fill", size: 26)
+                        Glyph(model.playing ? "pause-fill" : "play-fill", size: play * 0.38)
                     }
                 }
                 .foregroundStyle(Theme.Palette.onPrimary)
-                .frame(width: 68, height: 68)
+                .frame(width: play, height: play)
                 .background(Circle().fill(Theme.Palette.primary))
             }
             .focused($focus, equals: .play)
             .accessibilityLabel(model.playing ? "Pause" : "Play")
-            Button { model.skip(10) } label: { SkipGlyph(name: "rotate-cw", wide: metrics.wide) }
+            Button { model.skip(10) } label: { SkipGlyph(name: "rotate-cw", size: skip) }
                 .focused($focus, equals: .forward)
                 .accessibilityLabel("Forward 10 seconds")
         }
         .buttonStyle(.round)
     }
 
-    /// Audio, Subtitles, Versions, Speed: each a word with its current value.
-    /// The actions keep their spread when they fit; past the width (a small
-    /// phone, a large text size, long track names) the row scrolls, with a
-    /// fade at the end while more is out of sight. On the iPhone a word is
-    /// never cut: when the row is short the values go first (Default, 720p,
-    /// 1x), then it scrolls (the iPhone walk, round 3: "Vers...", "S...").
-    @ViewBuilder private var actions: some View {
-        Group {
-            if Self.phone {
-                ViewThatFits(in: .horizontal) {
-                    padded(actionRow(values: true)).fixedSize()
-                    padded(actionRow(values: false)).fixedSize()
-                    scrolling(actionRow(values: false))
-                }
-            } else {
-                scrolling(actionRow(values: true))
-            }
-        }
+    // MARK: the groups
+
+    /// The pills as the fit rule measures them: every one the bar may show, Versions and Next included before they
+    /// are known, and Subtitles' value with its subtitle off too, so the layout never jumps (D16).
+    private var leftPills: [BarFit.Pill] {
+        [BarFit.Pill(word: names.audio, value: audioValue), BarFit.Pill(word: names.speed, value: speedText(model.rate)),
+         BarFit.Pill(word: names.versions, value: versions?.snapshot.map(currentQuality) ?? "Picked")]
     }
 
-    /// Room for a focus ring and the lift, which a scroll view would clip.
-    private func padded(_ row: some View) -> some View {
-        row
-            .padding(.vertical, metrics.wide ? 14 : 4)
-            .padding(.horizontal, metrics.wide ? 14 : 2)
+    private var rightPills: [BarFit.Pill] {
+        let off = PlayerLayout.subtitleValue(
+            picked: nil, found: (model.playback?.subtitles.count ?? 0) + model.textTracks.count,
+            pending: model.playback?.subtitlesPending == true, ready: model.playback?.phase == "ready").text
+        let listed = TrackPicker.languages(model.playback?.subtitles ?? [], file: model.fileTextTracks).map(\.name)
+        var pills = [BarFit.Pill(word: names.subtitles, value: subtitleValue.text, reserve: BarFit.subtitleReserve(off: off, languages: listed))]
+        if target.season != nil { pills += [BarFit.Pill(word: names.episodes), BarFit.Pill(word: bar.next)] }
+        #if os(macOS)
+        pills.append(BarFit.Pill(word: nil))
+        #endif
+        return pills
     }
 
-    private func scrolling(_ row: some View) -> some View {
-        ScrollView(.horizontal) {
-            padded(row.fixedSize(horizontal: true, vertical: false))
-                .frame(minWidth: actionsWidth, alignment: metrics.wide && !Self.phone ? .trailing : .center)
-        }
-        .scrollIndicators(.hidden)
-        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { actionsWidth = $0 }
-        .onScrollGeometryChange(for: Bool.self) { $0.contentOffset.x + $0.containerSize.width < $0.contentSize.width - 1 } action: { moreAfter = $1 }
-        .mask {
-            HStack(spacing: 0) {
-                Color.black
-                LinearGradient(colors: [.black, .clear], startPoint: .leading, endPoint: .trailing)
-                    .frame(width: moreAfter ? 32 : 0)
-            }
-        }
-    }
-
-    private func actionRow(values: Bool) -> some View {
-        HStack(spacing: metrics.wide ? 26 : 16) {
-            Button { openPicker(.audio) } label: { action("Audio", "volume-2", audioValue, shown: values) }
+    /// Audio, Speed, Versions.
+    private func leftGroup(words: Bool) -> some View {
+        HStack(spacing: Self.phone ? BarFit.phoneGap : BarFit.gap) {
+            Button { toggle(.audio) } label: { action(names.audio, "audio-lines", audioValue, words: words) }
                 .focused($focus, equals: .audio)
-            // Languages with flags and a search, then a language's options and its timing (plans/player-polish.md 2.4).
-            Button { openPicker(.subtitles) } label: {
-                action("Subtitles", "captions", subtitleValue.text, searching: subtitleValue.searching, shown: values)
+                .accessibilityAddTraits(model.strip == .audio ? .isSelected : [])
+            menu(names.speed, "gauge", speedText(model.rate), words: words) {
+                ForEach([0.5, 0.75, 1, 1.25, 1.5, 2] as [Float], id: \.self) { speed in
+                    Button { model.rate = speed; hold(false) } label: {
+                        Choice(text: speedText(speed), selected: model.rate == speed)
+                    }
+                }
             }
-            .focused($focus, equals: .subtitles)
+            .focused($focus, equals: .speed)
             if let versions, let snapshot = versions.snapshot {
-                menu("Versions", "layers", currentQuality(snapshot), values: values) {
+                menu(names.versions, "layers", currentQuality(snapshot), words: words) {
                     ForEach([snapshot.recommended].compactMap { $0 } + snapshot.rows.prefix(12)) { row in
                         Button { model.switchVersion(row.key); hold(false) } label: {
                             Choice(text: VersionWords.rowSpoken(row), selected: row.key == playingKey)
@@ -457,69 +559,108 @@ struct PlayerControls: View {
                 }
                 .focused($focus, equals: .versions)
             }
-            menu("Speed", "gauge", speedText(model.rate), values: values) {
-                ForEach([0.5, 0.75, 1, 1.25, 1.5, 2] as [Float], id: \.self) { speed in
-                    Button { model.rate = speed; hold(false) } label: {
-                        Choice(text: speedText(speed), selected: model.rate == speed)
-                    }
-                }
-            }
-            .focused($focus, equals: .speed)
         }
         .menuStyle(.button)
-        .buttonStyle(FocusPlainStyle(shape: RoundedRectangle(cornerRadius: Theme.Radius.s, style: .continuous)))
+        .buttonStyle(FocusPlainStyle(shape: Capsule()))
+        .fixedSize()
+    }
+
+    /// Subtitles, the shift, Episodes, Next, Full screen.
+    private func rightGroup(words: Bool, chevrons: Bool) -> some View {
+        HStack(spacing: Self.phone ? BarFit.phoneGap : BarFit.gap) {
+            subtitlesPill(words: words)
+            shift(chevrons: chevrons)
+            episodesAndNext(words: words)
+            #if os(macOS)
+            Button { NSApp.keyWindow?.toggleFullScreen(nil) } label: {
+                action(fullScreen ? names.exitFullScreen : names.fullScreen, fullScreen ? "minimize" : "maximize", nil, words: false)
+            }
+            .focused($focus, equals: .fullScreen)
+            .buttonStyle(FocusPlainStyle(shape: Capsule()))
+            .onReceive(NotificationCenter.default.publisher(for: NSWindow.didEnterFullScreenNotification)) { _ in fullScreen = true }
+            .onReceive(NotificationCenter.default.publisher(for: NSWindow.didExitFullScreenNotification)) { _ in fullScreen = false }
+            .onAppear { fullScreen = NSApp.keyWindow?.styleMask.contains(.fullScreen) == true }
+            #endif
+        }
+        .fixedSize()
+    }
+
+    private func subtitlesPill(words: Bool) -> some View {
+        Button { toggle(.subtitles) } label: {
+            action(names.subtitles, "captions", subtitleValue.text, words: words, searching: subtitleValue.searching)
+        }
+        .focused($focus, equals: .subtitles)
+        .buttonStyle(FocusPlainStyle(shape: Capsule()))
+        .accessibilityAddTraits(model.strip == .subtitles ? .isSelected : [])
+    }
+
+    /// The quick shift beside Subtitles, only while the subtitle on can be timed (D4).
+    @ViewBuilder private func shift(chevrons: Bool) -> some View {
+        #if !os(tvOS)
+        if BarRules.shiftShown(timingKey: model.timingKey), let key = model.timingKey {
+            QuickShift(value: model.subtitleDelay, track: key, chevrons: chevrons, textSize: Self.phone ? 14 : Theme.type.callout, move: { by, spoken in
+                model.shiftSubtitles(by: by, spoken: spoken)
+                activity()
+            }, holding: hold)
+        }
+        #endif
+    }
+
+    /// Episodes for a series, Next while the core names a next episode (D14).
+    @ViewBuilder private func episodesAndNext(words: Bool) -> some View {
+        let shows = BarRules.shows(season: target.season, next: model.next)
+        if shows.episodes, let episodes {
+            Button(action: episodes) { action(names.episodes, "list-video", nil, words: words) }
+                .focused($focus, equals: .episodes)
+                .buttonStyle(FocusPlainStyle(shape: Capsule()))
+        }
+        if shows.next, let next = model.next {
+            Button { Task { await model.playNext() } } label: { action(bar.next, "skip-forward", nil, words: words) }
+                .focused($focus, equals: .next)
+                .buttonStyle(FocusPlainStyle(shape: Capsule()))
+                .accessibilityLabel(BarRules.nextName(next))
+        }
     }
 
     /// An OSD menu that keeps the controls up while it is open, so they never
     /// hide (and close it) under the viewer's finger. Each pick ends the hold;
     /// iOS never calls the content's `onDisappear`, so a tap outside ends it
     /// at the next touch or at `PlayerLayout.menuHoldLimit`.
-    private func menu<Items: View>(_ title: String, _ symbol: String, _ value: String, searching: Bool = false, values: Bool = true, @ViewBuilder items: () -> Items) -> some View {
+    private func menu<Items: View>(_ title: String, _ symbol: String, _ value: String, words: Bool, @ViewBuilder items: () -> Items) -> some View {
         Menu {
             Group { items() }
                 .onAppear { hold(true) }
                 .onDisappear { hold(false) }
         } label: {
-            action(title, symbol, value, searching: searching, shown: values)
+            action(title, symbol, value, words: words)
         }
     }
 
-    /// `shown` false: the value is left out of sight and said with the word.
-    private func action(_ title: String, _ symbol: String, _ value: String, searching: Bool = false, shown: Bool = true) -> some View {
-        let current = HStack(spacing: 4) {
-            // Capped: a long track name ("English Audio Description") must not widen the row without end.
-            Text(value).textFont(Theme.type.caption, relativeTo: .caption)
-                .lineLimit(1)
-            // More may come: the core is still asking subtitle addons.
-            if searching {
-                Glyph("loader-circle", size: Theme.type.caption, relativeTo: .caption)
-                    .accessibilityLabel("still searching")
-            }
-        }
-        .foregroundStyle(.white.opacity(0.75))
-        .frame(maxWidth: metrics.wide ? 220 : 120)
-        return Group {
-            if Self.phone {
-                // One compact line under the scrubber: icon, word, value.
-                HStack(spacing: 6) {
-                    Glyph(symbol, size: 16)
-                    Text(title).textFont(Theme.type.caption + 1, weight: .semibold, relativeTo: .caption)
-                        .fixedSize()
-                    if shown { current }
-                }
-                .frame(minHeight: Theme.minTarget)
-                .contentShape(Rectangle())
-                .accessibilityValue(shown ? "" : value)
-            } else {
-                VStack(spacing: 3) {
-                    Glyph(symbol, size: 18)
-                    Text(title).textFont(Theme.type.caption + 1, weight: .semibold, relativeTo: .caption)
-                    current
+    /// A bar pill: the icon, then (`words`) the word and the value, capped so a long track name truncates. Without
+    /// words it is the icon alone, the word and value said to VoiceOver. Its size is `BarFit.pillWidth`'s.
+    private func action(_ title: String, _ symbol: String, _ value: String?, words: Bool, searching: Bool = false) -> some View {
+        HStack(spacing: BarFit.inner) {
+            Glyph(symbol, size: BarFit.icon)
+            if words {
+                Text(title).textFont(Theme.type.callout, weight: .semibold, relativeTo: .callout).fixedSize()
+                if let value {
+                    Text(value).textFont(Theme.type.callout, relativeTo: .callout)
+                        .lineLimit(1)
+                        .foregroundStyle(.white.opacity(0.75))
+                        .frame(maxWidth: BarFit.valueCap)
                 }
             }
         }
+        .padding(.leading, words ? BarFit.lead : 0)
+        .padding(.trailing, words ? BarFit.trail : 0)
+        .frame(minWidth: Theme.minTarget, minHeight: Theme.minTarget)
+        .background(Capsule().fill(.white.opacity(0.16)))
+        .contentShape(Capsule())
         .foregroundStyle(.white)
-        .accessibilityElement(children: .combine)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(title)
+        // More may come: the core is still asking subtitle addons.
+        .accessibilityValue([value, searching ? "still searching" : nil].compactMap { $0 }.joined(separator: ", "))
     }
 
     /// The track playing, by name; "Default" when the file names none.
@@ -560,14 +701,14 @@ struct PlayerControls: View {
 /// round glass button.
 private struct SkipGlyph: View {
     let name: String
-    let wide: Bool
+    let size: CGFloat
 
     var body: some View {
-        Glyph(name, size: 26)
+        Glyph(name, size: size * 0.46)
             .overlay {
                 Text("10").textFont(9, weight: .bold).monospacedDigit().offset(y: 1)
             }
-            .frame(width: wide ? 56 : 50, height: wide ? 56 : 50)
+            .frame(width: size, height: size)
             .glass(Circle())
     }
 }

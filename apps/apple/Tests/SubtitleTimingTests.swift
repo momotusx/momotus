@@ -220,9 +220,10 @@ func playerModel() throws -> String {
     }
 }
 
-@Test func noTimingControlSaysEarlierOrLater() throws {
-    // The owner: the timing is a signed value. The tvOS items and the stepper's labels, as drawn
-    // and as VoiceOver reads them; comments may say which way a sign moves the words.
+@Test func theFullPickersTimingIsASignedValue() throws {
+    // The full picker's stepper keeps the signed value (the owner, 2026-10-22). The bar's quick shift says Earlier
+    // and Later (the owner's pick, 2026-11-09) and lives in PlayerStrip.swift, outside this check. The tvOS items
+    // and the stepper's labels, as drawn and as VoiceOver reads them; comments may say which way a sign moves the words.
     let player = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appending(path: "../Marquee/Player")
     let code = try ["PlayerControls.swift", "SubtitlePicker.swift"].map { try String(contentsOf: player.appending(path: $0), encoding: .utf8) }
         .joined(separator: "\n").split(separator: "\n")

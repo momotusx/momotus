@@ -44,7 +44,11 @@ struct PlayerScreen: View {
     /// Skip's and Up Next's measured heights, which the phone's subtitle keeps over.
     @State private var skipHeight: CGFloat = 0
     @State private var upNextHeight: CGFloat = 0
+    /// Episodes' way to the title page (section 5, Apple Episodes).
+    @Environment(\.openTitle) private var openTitle
     #if os(macOS)
+    /// G and H held: the quick shift's hold (D11).
+    @State private var shiftKeys: TimingHold?
     /// The player holds the keyboard focus itself: pushed over a page whose plain buttons take none (no Full
     /// Keyboard Access), it would inherit none, and its keys and the Playback menu's would reach nothing.
     @FocusState private var keysFocused: Bool
@@ -176,18 +180,9 @@ struct PlayerScreen: View {
                     PlayerControls(model: model, versions: model.versions, back: close, hold: { open in
                         menuOpenedAt = open ? .now : nil
                         lastTouch = .now
-                    }, activity: { lastTouch = .now }, pip: pipControl, windowHeight: windowHeight, measured: { controlsHeight = $0 }, measuredTop: { topBarFoot = $0 })
-                        .transition(.opacity)
-                } else if model.traktNotice, model.playback?.phase != "failed", let trakt = model.playback?.trakt, TraktRules.playbackMark(trakt)?.warn == true {
-                    // A Trakt warning shows with the controls hidden too, for its few seconds once per play.
-                    TraktMark(trakt: trakt)
-                        .padding(.horizontal, Theme.Space.s)
-                        .padding(.vertical, Theme.Space.xs)
-                        .background(Capsule().fill(.black.opacity(0.55)))
-                        .frame(maxWidth: 520, alignment: .leading)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                        .padding(Theme.Space.m)
-                        .allowsHitTesting(false)
+                    }, activity: { lastTouch = .now }, pip: pipControl, windowHeight: windowHeight, measured: { controlsHeight = $0 },
+                    measuredTop: { topBarFoot = $0 }, chooseVersion: model.versions == nil ? nil : { openVersions() },
+                    episodes: model.route.target.season == nil ? nil : { openEpisodes() })
                         .transition(.opacity)
                 }
                 // The file's bitmap subtitles (PGS, DVD, DVB) on the second engine, where the disc placed them.
@@ -221,7 +216,7 @@ struct PlayerScreen: View {
                         // Its foot stays put; a larger caption style or a second line grows upward. Scaled as one, so
                         // the shrink near the controls takes both lines.
                         SubtitleBlock(
-                            first: first, second: split ? nil : second, size: model.subtitleSize,
+                            first: first, second: split ? nil : second, size: model.subtitleSize, background: model.subtitleBackground,
                             oneBox: model.subtitleLayout == .oneBox, firstHidden: model.subtitle == nil)
                             .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { subtitleBox = $0 }
                             .scaleEffect(place.scale, anchor: .bottom)
@@ -233,7 +228,7 @@ struct PlayerScreen: View {
                 }
                 if split, let second, model.playback?.phase != "failed" {
                     GeometryReader { geo in
-                        SubtitleBlock(first: nil, second: second, size: model.subtitleSize, scale: 1)
+                        SubtitleBlock(first: nil, second: second, size: model.subtitleSize, background: model.subtitleBackground, scale: 1)
                             .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { secondBox = $0 }
                             .padding(.top, subtitleTop(geo.size))
                             .frame(width: geo.size.width, height: geo.size.height, alignment: .top)
@@ -330,13 +325,12 @@ struct PlayerScreen: View {
         .animation(Theme.Motion.panel, value: model.showEndCard)
         .animation(Theme.Motion.panel, value: model.segment)
         .animation(Theme.Motion.panel, value: model.statusLine)
-        // Said once, as it shows.
+        // Said once, as it shows (Trakt's `reconnect` line included, plans/player-bar.md 5.1).
         .onChange(of: model.statusLine) { _, now in if let now { announce(now) } }
-        // A Trakt warning is said once per play, as its notice shows.
-        .onChange(of: model.traktNotice) { _, shown in
-            if shown, let mark = TraktRules.playbackMark(model.playback?.trakt), mark.warn { announce(mark.label) }
+        // Skip or Up Next appearing closes an open strip (D23).
+        .onChange(of: skipShown || upNextShown) { _, now in
+            if model.strip != nil, BarRules.strip(model.strip, skipOrUpNext: now) == nil { model.strip = nil }
         }
-        .animation(Theme.Motion.panel, value: model.traktNotice)
         // Back from the card's Settings: the versions are asked again, so a source added there plays.
         .onChange(of: settingsPlace) { old, new in
             if old != nil, new == nil, model.noPick { model.retryPick() }
@@ -385,6 +379,8 @@ struct PlayerScreen: View {
             #endif
             #if os(macOS)
             keysFocused = true
+            let model = model
+            shiftKeys = TimingHold(rule: .quick) { model.shiftSubtitles(by: $0) }
             // Every move in the window is over the player, which fills it: the controls follow the same moves that
             // bring back the pointer, whatever view lies under it.
             pointerMoves = NSEvent.addLocalMonitorForEvents(matching: .mouseMoved) { event in
@@ -398,6 +394,7 @@ struct PlayerScreen: View {
             #if os(macOS)
             if let pointerMoves { NSEvent.removeMonitor(pointerMoves) }
             pointerMoves = nil
+            shiftKeys?.stop(single: false)
             #endif
             #if os(iOS)
             if let across = PlayerOrientation.leave() { model.lastAcross = across }
@@ -423,7 +420,7 @@ struct PlayerScreen: View {
                     Button("Play or Pause") { model.togglePlay() }.keyboardShortcut(.space, modifiers: [])
                     Button("Back 10 Seconds") { model.skip(-10) }.keyboardShortcut(.leftArrow, modifiers: [])
                     Button("Forward 10 Seconds") { model.skip(10) }.keyboardShortcut(.rightArrow, modifiers: [])
-                    Button("Close Player") { close() }.keyboardShortcut(.escape, modifiers: [])
+                    Button("Close Player") { escape() }.keyboardShortcut(.escape, modifiers: [])
                 }
                 .opacity(0)
                 .accessibilityHidden(true)
@@ -444,6 +441,21 @@ struct PlayerScreen: View {
         .onKeyPress(.escape) {
             guard !model.pickerOpen else { return .ignored }
             escape()
+            return .handled
+        }
+        // G earlier, H later (D11), held by the shift's own rule (the keyboard's repeats are swallowed); with the
+        // controls hidden the press wakes them and shifts at once, so the new value is in sight.
+        .onKeyPress(keys: ["g", "h"], phases: [.down, .repeat, .up]) { press in
+            guard !showVersions, !model.pickerOpen, BarRules.shiftShown(timingKey: model.timingKey),
+                  PlayerLayout.stepperTakes(down: press.phase == .down, modifiers: press.modifiers) else { return .ignored }
+            let direction = press.key == "g" ? -1 : 1
+            switch press.phase {
+            case .down:
+                touched(toggle: false)
+                shiftKeys?.start(direction)
+            case .up: if shiftKeys?.direction == direction { shiftKeys?.stop(single: true) }
+            default: break
+            }
             return .handled
         }
         // A new value as a picker opens or closes, so the menu's bare keys follow it.
@@ -527,6 +539,8 @@ struct PlayerScreen: View {
 
     /// A double tap steps 10 s back on the left half, forward on the right, while the picture shows.
     private func seekTap(_ at: CGPoint) {
+        // With a strip open the first tap only closes it; double tap seeking starts from the next tap (D21).
+        if BarRules.pictureTapClosesStrip(model.strip) { return touched(toggle: true) }
         let seeks = SwipeRules.active(
             phone: false, across: true, status: overlayStatus, endCard: model.showEndCard, pickerOpen: model.pickerOpen,
             versions: showVersions, floating: model.floating, assistive: false)
@@ -618,12 +632,13 @@ struct PlayerScreen: View {
             return PhoneFrame.subtitle(
                 screenHeight: size.height, pictureHeight: fittedHeight(size), safeBottom: safeBottom,
                 controlsShown: controlsShown, scrubberTop: size.height - safeBottom - controlsHeight, boxHeight: subtitleBox,
-                pillTop: pillHeight.map { size.height - safeBottom - PlayerLayout.overlayBottom(controlsShown: controlsShown, controlsHeight: controlsHeight) - $0 })
+                pillTop: pillHeight.map { size.height - safeBottom - PlayerLayout.overlayBottom(controlsShown: controlsShown, controlsHeight: controlsHeight) - $0 },
+                position: model.subtitlePosition)
         }
         #endif
         let foot = PlayerLayout.subtitleFoot(
             screenHeight: size.height, pictureHeight: fittedHeight(size), safeBottom: safeBottom,
-            controlsShown: controlsShown, controlsHeight: controlsHeight)
+            controlsShown: controlsShown, controlsHeight: controlsHeight, position: model.subtitlePosition)
         // Hidden, the foot is the rule's (8% of the picture over its foot); shown, it keeps 10 pt more over the
         // controls, as it had.
         return (controlsShown ? foot - 10 : foot, 1)
@@ -668,8 +683,13 @@ struct PlayerScreen: View {
     }
     #endif
 
+    /// Escape or Back: the Style row first, then the strip, then Versions, then the player (section 6).
     private func escape() {
-        if showVersions { closeVersions() } else { close() }
+        switch BarRules.back(strip: model.strip, style: model.styleOpen) {
+        case .closeStyle: withAnimation(Theme.Motion.panel) { model.styleOpen = false }
+        case .closeStrip: withAnimation(Theme.Motion.panel) { model.strip = nil }
+        case .player: if showVersions { closeVersions() } else { close() }
+        }
     }
 
     /// Versions over the paused player; the attempt keeps resolving under it.
@@ -686,7 +706,22 @@ struct PlayerScreen: View {
     private func touched(toggle: Bool) {
         lastTouch = .now
         menuOpenedAt = nil
+        // With a strip open, a tap on the picture only closes the strip (D21).
+        if toggle, BarRules.pictureTapClosesStrip(model.strip) {
+            withAnimation(Theme.Motion.panel) { model.strip = nil }
+            return
+        }
         withAnimation(Theme.Motion.panel) { controls = toggle ? !controls : true }
+    }
+
+    /// Episodes (section 5, Apple Episodes): the player leaves first, then the title opens on this season and
+    /// episode, so the player is never left under it. The title page this player sits on answers for its own title.
+    private func openEpisodes() {
+        let target = model.route.target
+        let route = TitleRoute(kind: target.kind, id: target.itemId, name: target.title, season: target.season, videoId: target.videoId)
+        let open = openTitle
+        close()
+        DispatchQueue.main.async { MainActor.assumeIsolated { open(route) } }
     }
 
     /// Hides the controls after three quiet seconds of playback, never while
@@ -699,7 +734,7 @@ struct PlayerScreen: View {
             // A walk's picker shot keeps the controls (and the picker in them) up.
             if DebugHooks.openPicker != nil { continue }
             #endif
-            if controls, model.playing, !menuOpen, !model.pickerOpen, !assistiveTechRunning, ContinuousClock.now - lastTouch > .seconds(3) {
+            if controls, model.playing, !menuOpen, !model.pickerOpen, model.strip == nil, !assistiveTechRunning, ContinuousClock.now - lastTouch > .seconds(3) {
                 withAnimation(Theme.Motion.panel) { controls = false }
                 #if os(macOS)
                 // The pointer goes with the controls and comes back with them on the next move;
@@ -755,6 +790,8 @@ private struct SubtitleBlock: View {
     let first: String?
     let second: String?
     let size: SubtitleSize
+    /// The profile's background (D8), unless the viewer's caption settings decide it.
+    let background: SubtitleBackground
     var oneBox = false
     /// The player's own file subtitles were never spoken line by line, so the file's are not; an addon track's
     /// lines stay readable, as they were.
@@ -764,7 +801,7 @@ private struct SubtitleBlock: View {
     @ScaledMetric(relativeTo: .title3) private var unit: CGFloat = 1
 
     var body: some View {
-        let style = CaptionStyle.current
+        let style = CaptionStyle.current.with(background, systemInsists: CaptionStyle.systemInsists)
         VStack(spacing: SubtitleLine.points(style, size) * 0.25 * unit) {
             if let second {
                 SubtitleLine(text: second, style: style, size: size, scale: scale, boxed: !oneBox)

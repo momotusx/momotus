@@ -16,7 +16,19 @@ private func source(_ path: String) throws -> String {
     // Read from the sources: a Menu's label builds no frames in a hosted view outside a running app.
     let controls = try source("Player/PlayerControls.swift")
     let pill = try body(of: "private func action(", in: controls)
-    #expect(pill.contains(".frame(minHeight: Theme.minTarget)"), "the player's pills lost the minimum")
+    #expect(pill.contains(".frame(minWidth: Theme.minTarget, minHeight: Theme.minTarget)"), "the player's pills lost the minimum")
+    // The bar's strips and its quick shift (plans/player-bar.md section 8): each chip, step, Close and each of the
+    // shift's three parts.
+    let strip = try source("Player/PlayerStrip.swift")
+    let chip = try body(of: "struct StripChip<Mark: View>: View", in: strip)
+    #expect(chip.contains(".frame(minWidth: Theme.minTarget, minHeight: Theme.minTarget)"), "the strip's chips lost the minimum")
+    let shift = try body(of: "struct QuickShift: View", in: strip)
+    #expect(shift.contains(".frame(minWidth: BarFit.shiftValue, minHeight: Theme.minTarget)"), "the shift's value lost the minimum")
+    #expect(try body(of: "private func side(", in: shift).contains(".frame(minWidth: Theme.minTarget, minHeight: Theme.minTarget)"),
+            "Earlier and Later lost the minimum")
+    #expect(try body(of: "private func stepButton(", in: strip).contains(".frame(width: Theme.minTarget, height: Theme.minTarget)"))
+    #expect(try body(of: "private func closeButton(", in: strip).contains(".frame(width: Theme.minTarget, height: Theme.minTarget)"))
+    #expect(BarFit.shiftValue >= Theme.minTarget)
     let top = try body(of: "private var top: some View", in: controls)
     #expect(top.components(separatedBy: ".frame(width: Theme.minTarget, height: Theme.minTarget)").count - 1 >= 3,
             "Back, Picture in Picture and AirPlay each keep the minimum")

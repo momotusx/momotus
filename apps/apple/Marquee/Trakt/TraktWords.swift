@@ -199,31 +199,14 @@ enum TraktRules {
         fill(TraktWords.synced, ["pushed": "\(report.pushed)", "applied": "\(report.applied)"])
     }
 
-    /// The player's mark: none when the profile does not use Trakt; a warning says itself on screen.
-    static func playbackMark(_ trakt: TraktPlayback?) -> (warn: Bool, label: String)? {
-        switch trakt {
-        case .on: (false, TraktWords.playerOn)
-        case .unmapped: (true, TraktWords.playerUnmapped)
-        case .thisDeviceOff: (true, TraktWords.playerThisDeviceOff)
-        case .reconnect: (true, TraktWords.playerReconnect)
-        case .off, nil: nil
-        }
-    }
-
     /// How long the player's Trakt notice shows, once per play (owner, 2026-11-08: it must never stay on the video).
     static let noticeSeconds: TimeInterval = 4
 
-    /// When this play's notice first showed, or nil before it did. Once set it stays for the play, so a pause, a
+    /// When this play's notice first showed, or nil before it did. Only `reconnect` shows one (plans/player-bar.md
+    /// D9: the one state where watched progress silently stops). Once set it stays for the play, so a pause, a
     /// seek, a resume or a later state never shows it again; Settings, Trakt keeps the state.
     static func noticeSince(_ since: Date?, trakt: TraktPlayback?, now: Date) -> Date? {
-        since ?? (playbackMark(trakt)?.warn == true ? now : nil)
-    }
-
-    /// Whether the notice shows at `now`: only in its first `noticeSeconds`.
-    static func noticeShows(since: Date?, now: Date) -> Bool {
-        guard let since else { return false }
-        let age = now.timeIntervalSince(since)
-        return age >= 0 && age < noticeSeconds
+        since ?? (trakt == .reconnect ? now : nil)
     }
 
     /// The code read letter by letter, once, when it shows.

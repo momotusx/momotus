@@ -106,6 +106,61 @@ struct StreamChoiceWords: Decodable, Sendable {
         /// "Audio {n}" by its place.
         let audio: String
         let audioNumbered: String
+        /// The player bar (plans/player-bar.md): the quick shift, the strips and their Style row, and what a
+        /// screen reader says of them.
+        let bar: Bar
+
+        struct Bar: Decodable, Sendable {
+            let earlier: String
+            let later: String
+            let reset: String
+            let style: String
+            let size: String
+            let position: String
+            let `default`: String
+            let lower: String
+            let higher: String
+            let background: String
+            let backgrounds: [String: String]
+            let moreLanguages: String
+            let next: String
+            let close: String
+            let setByDevice: String
+            let sidewaysOnly: String
+            let saidLater: String
+            let saidEarlier: String
+            let saidInSync: String
+            /// Size and Position values: "{n}%".
+            let percent: String
+            let names: Names
+
+            struct Names: Decodable, Sendable {
+                let audio: String
+                let speed: String
+                let versions: String
+                let subtitles: String
+                let episodes: String
+                let nextEpisode: String
+                let fullScreen: String
+                let exitFullScreen: String
+                let timing: String
+                let earlier: String
+                let later: String
+                let valueLater: String
+                let valueEarlier: String
+                let valueInSync: String
+                let pressToReset: String
+                let pressOkToAdjust: String
+                let smaller: String
+                let larger: String
+                let subtitleLanguage: String
+                let audioTrack: String
+            }
+
+            func backgroundName(_ background: SubtitleBackground) -> String {
+                backgrounds[background.rawValue] ?? background.rawValue.capitalized
+            }
+        }
     }
 
     struct Learned: Decodable, Sendable {

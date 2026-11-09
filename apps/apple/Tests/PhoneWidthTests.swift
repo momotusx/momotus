@@ -46,8 +46,8 @@ private let content = 375 - 2 * Metrics.compact.gutter
     #expect(2 * Theme.Space.s + 28 + Theme.Space.s + Theme.Space.s + 20 + 200 <= content)
     let row = try body(of: "struct SettingsRow: View", in: read("Settings/SettingsScreen.swift"))
     #expect(!row.contains("lineLimit"))
-    // The player's actions on a narrow window (PlayerControls.swift:76, not the iPhone's own layout) scroll
-    // sideways rather than overflow.
+    // The player's bar on a narrow window (not the iPhone's own layout): past its second row the groups scroll
+    // sideways rather than overflow (plans/player-bar.md D16; the widths are PlayerBarRulesTests').
     let controls = try read("Player/PlayerControls.swift")
-    #expect(controls.contains("} else {\n                scrolling(actionRow(values: true))\n            }"))
+    #expect(controls.contains("ScrollView(.horizontal) { HStack(spacing: BarFit.columnGap) { left; right }.padding(.vertical, 4) }"))
 }

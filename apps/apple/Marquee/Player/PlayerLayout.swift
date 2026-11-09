@@ -1,6 +1,11 @@
 import CoreGraphics
 import Foundation
 import SwiftUI
+#if canImport(AppKit)
+import AppKit
+#elseif canImport(UIKit)
+import UIKit
+#endif
 
 /// Where the phone player puts its parts, as Android settled after three
 /// review rounds (plans/android-design-v2.md, slices 14 to 16). Heights are
@@ -117,13 +122,14 @@ enum PlayerLayout {
 
     /// What one repeat moves after `heldMs` of holding: 0.3 s a tick in the first second, 0.4 and 0.5
     /// in the next two, 0.6 from the third on.
-    static func holdStep(heldMs: Int) -> Double {
-        subtitleStep * Double(min(heldMs / 1000 + 3, 6))
-    }
+    static func holdStep(heldMs: Int) -> Double { HoldRule.fine.step(heldMs: heldMs) }
 
-    /// `value` moved by `by`, snapped to 0.1 s and kept within 60 s either way.
+    /// The bar's quick shift (plans/player-bar.md D2): 0.25 s a tap.
+    static let quickStep = 0.25
+
+    /// `value` moved by `by`, snapped to 0.05 s (the grid both steps land on, D3) and kept within 60 s either way.
     static func nudge(_ value: Double, by: Double) -> Double {
-        let next = ((value + by) * 10).rounded() / 10
+        let next = ((value + by) * 20).rounded() / 20
         let kept = min(maxSubtitleDelay, max(-maxSubtitleDelay, next))
         return kept == 0 ? 0 : kept
     }
@@ -133,8 +139,8 @@ enum PlayerLayout {
     /// for none.
     static func startDelay(_ track: SubtitleTrack?, kept: [String: Double] = [:]) -> Double {
         guard let track else { return 0 }
-        // The core's value to the tenth the stepper shows (a 40 ms delay is 0.0 s, with no Reset).
-        return kept[track.url] ?? (Double(track.delayMs ?? 0) / 100).rounded() / 10
+        // The core's value on the 0.05 s grid the controls show (a 20 ms delay is 0.0 s, with nothing to reset).
+        return kept[track.url] ?? (Double(track.delayMs ?? 0) / 50).rounded() / 20
     }
 
     /// The core's `subtitleDelay` for a settled value: the track's URL and the value in ms.
@@ -154,10 +160,34 @@ enum PlayerLayout {
         !down || stepperKey(modifiers)
     }
 
-    /// The value as the stepper shows it: "+0.3 s", "\u{2212}1.2 s" (a true minus), "0.0 s".
+    /// The value as the controls show it (D3): "+0.25 s", "+0.5 s", "\u{2212}1.0 s" (a true minus), "0.0 s".
     static func delayText(_ delay: Double) -> String {
         let sign = delay > 0 ? "+" : delay < 0 ? "\u{2212}" : ""
-        return sign + String(format: "%.1f s", abs(delay))
+        return sign + seconds(delay) + " s"
+    }
+
+    /// The amount without a sign: at least one decimal, at most two ("0.25", "0.5", "1.0").
+    static func seconds(_ delay: Double) -> String {
+        let two = String(format: "%.2f", abs(delay))
+        return two.hasSuffix("0") ? String(two.dropLast()) : two
+    }
+
+    /// What a screen reader hears once a shift settles (D12): "Subtitles 0.25 seconds later".
+    static func shiftSaid(_ delay: Double) -> String {
+        let w = StreamChoice.words.player.bar
+        if delay == 0 { return w.saidInSync }
+        return (delay > 0 ? w.saidLater : w.saidEarlier).replacingOccurrences(of: "{n}", with: seconds(delay))
+    }
+
+    /// The shift's value as a screen reader names it (section 8): its visible text first, then which way, then
+    /// what a press does ("+0.25 s, subtitles later, press to reset"); at 0 a press does nothing, so the name ends
+    /// there. A remote's OK always enters adjust mode.
+    static func shiftValueName(_ delay: Double, tv: Bool = false) -> String {
+        let n = StreamChoice.words.player.bar.names
+        let way = (delay > 0 ? n.valueLater : delay < 0 ? n.valueEarlier : n.valueInSync)
+            .replacingOccurrences(of: "{value}", with: delayText(delay))
+        if tv { return way + ", " + n.pressOkToAdjust }
+        return delay == 0 ? way : way + ", " + n.pressToReset
     }
 
     /// Where the cues are read: a positive delay shows each line later.
@@ -234,8 +264,8 @@ enum PlayerLayout {
     /// once it settles. Never "earlier" or "later" (the owner, 2026-10-22).
 
     static func delayWords(_ delay: Double) -> String {
-        let amount = String(format: "%.1f seconds", abs(delay))
-        guard abs(delay) >= 0.05 else { return "0.0 seconds" }
+        let amount = seconds(delay) + " seconds"
+        guard abs(delay) >= 0.025 else { return "0.0 seconds" }
         return delay > 0 ? "Plus \(amount)" : "Minus \(amount)"
     }
 
@@ -429,16 +459,8 @@ enum PlayerLayout {
         return paused
     }
 
-    /// Below this the transport joins the actions' row, so the controls stay
-    /// clear of the title and the status line; from it the transport keeps its
-    /// centered place above the scrubber.
-    static let shortHeight: CGFloat = 360
     /// Below this Up Next and the controls do not show together.
     static let upNextRoom: CGFloat = 420
-
-    static func joinsTransport(windowHeight: CGFloat) -> Bool {
-        windowHeight > 0 && windowHeight < shortHeight
-    }
 
     /// Up Next shows when it is due, unless a track menu is open, or the
     /// controls are up on a window too short for both: it waits until they
@@ -536,11 +558,32 @@ extension PlayerLayout {
     /// controls' foot block (on the iPhone the scrubber and the actions) while
     /// they show, the safe area's foot counted: the lower part of the screen,
     /// never its top, never on a landscape screen's band.
-    static func subtitleFoot(screenHeight: CGFloat, pictureHeight: CGFloat, safeBottom: CGFloat, controlsShown: Bool, controlsHeight: CGFloat) -> CGFloat {
-        let pictureFoot = (screenHeight + pictureHeight) / 2 - pictureHeight * subtitleRise
-        let clear = controlsShown ? safeBottom + controlsHeight + 16 : subtitleClear(screenHeight: screenHeight, safeBottom: safeBottom)
-        return min(pictureFoot, screenHeight - clear)
+    /// `position` is the profile's (plans/player-bar.md D7, percent of the picture): hidden controls hang the foot that
+    /// far over the picture's foot, never under the title-safe line; shown, the lifted foot rises by what it asks
+    /// over the default 8, so a change shows live.
+    static func subtitleFoot(
+        screenHeight: CGFloat, pictureHeight: CGFloat, safeBottom: CGFloat, controlsShown: Bool, controlsHeight: CGFloat,
+        position: Int = defaultPosition
+    ) -> CGFloat {
+        let pictureBottom = (screenHeight + pictureHeight) / 2
+        guard controlsShown else {
+            return min(pictureBottom - pictureHeight * rise(position), screenHeight - subtitleClear(screenHeight: screenHeight, safeBottom: safeBottom))
+        }
+        let lifted = min(pictureBottom - pictureHeight * subtitleRise, screenHeight - (safeBottom + controlsHeight + 16))
+        return lifted - extraLift(pictureHeight: pictureHeight, position: position)
     }
+
+    /// The profile's position as a share of the picture's height.
+    static func rise(_ position: Int) -> CGFloat { CGFloat(position) / 100 }
+
+    /// With the controls up: how much higher than the default the profile asks (none at or under 8).
+    static func extraLift(pictureHeight: CGFloat, position: Int) -> CGFloat {
+        pictureHeight * CGFloat(max(0, position - defaultPosition)) / 100
+    }
+
+    /// The core's default and its steps (D7); 8 reads "Default".
+    static let defaultPosition = 8
+    static let positions = [5, 8, 12, 16, 20, 25]
 
     /// Split's second line, hung from the top (plans/dual-subtitles.md 4 B): its top edge, from the screen's top,
     /// the mirror of the foot: 8% of the picture's height under the picture's top, never over the 5% line or the
@@ -604,17 +647,24 @@ extension PhoneFrame {
     /// the box at 75% still clears the transport there, else it stays on the
     /// capsule and the pill covers its end while they show (a phone across).
     /// `boxHeight` is the box at full size.
-    static func subtitle(screenHeight: CGFloat, pictureHeight: CGFloat, safeBottom: CGFloat, controlsShown: Bool, scrubberTop: CGFloat, boxHeight: CGFloat, pillTop: CGFloat? = nil) -> (foot: CGFloat, scale: CGFloat) {
+    /// `position` (D7) moves a line that hangs from the picture's foot; in the band it does nothing.
+    static func subtitle(
+        screenHeight: CGFloat, pictureHeight: CGFloat, safeBottom: CGFloat, controlsShown: Bool, scrubberTop: CGFloat, boxHeight: CGFloat,
+        pillTop: CGFloat? = nil, position: Int = PlayerLayout.defaultPosition
+    ) -> (foot: CGFloat, scale: CGFloat) {
         let pictureBottom = (screenHeight + pictureHeight) / 2
         let plain = controlsShown ? scrubberTop - subtitleGap : screenHeight - PlayerLayout.subtitleClear(screenHeight: screenHeight, safeBottom: safeBottom)
         let overPill = pillTop.map { $0 - subtitleGap } ?? .infinity
         if min(plain, overPill) - pictureBottom >= boxHeight + bandGap {
             return (pictureBottom + bandGap + boxHeight, 1)
         }
+        guard controlsShown else {
+            let pictureFoot = pictureBottom - max(16, pictureHeight * PlayerLayout.rise(position))
+            return (min(min(pictureFoot, plain) - 10, overPill), 1)
+        }
         let pictureFoot = pictureBottom - max(16, pictureHeight * PlayerLayout.subtitleRise)
-        guard controlsShown else { return (min(min(pictureFoot, plain) - 10, overPill), 1) }
         let clear = screenHeight / 2 + transportHalfHeight + subtitleClearance
-        let low = min(pictureFoot, plain)
+        let low = min(pictureFoot, plain) - PlayerLayout.extraLift(pictureHeight: pictureHeight, position: position)
         let foot = overPill - boxHeight * subtitleFloor >= clear ? min(low, overPill) : low
         let room = foot - clear
         guard boxHeight > room else { return (foot, 1) }
@@ -652,32 +702,52 @@ struct StepperClock: Sendable {
     }()
 }
 
-/// A press or hold on the timing stepper's minus or plus by `PlayerLayout`'s rules: `start` on the
-/// press, `stop(single: true)` on its release (one 0.1 s step when no repeat came yet), `stop(single:
-/// false)` when it is cut off (a cancelled touch, lost focus, the app going inactive). `move` gets
-/// each step with its sign.
+/// How a press and a hold move a timing: one `tap` a press; held, the first repeat at `firstMs`, then one every
+/// `everyMs`, each `tap` times min(whole seconds held + `from`, `most`).
+struct HoldRule: Sendable {
+    let tap: Double
+    let firstMs: Int
+    let everyMs: Int
+    let from: Int
+    let most: Int
+
+    func step(heldMs: Int) -> Double { tap * Double(min(heldMs / 1000 + from, most)) }
+
+    /// The full picker's stepper (Stremio's): 0.1 s, 350 ms, 100 ms, 0.3 s a tick growing to 0.6.
+    static let fine = HoldRule(
+        tap: PlayerLayout.subtitleStep, firstMs: PlayerLayout.firstRepeatMs, everyMs: PlayerLayout.repeatMs, from: 3, most: 6)
+    /// The bar's quick shift (plans/player-bar.md D2, the prototype's `hold`): 0.25 s, 400 ms, 150 ms, growing to 1.0 s
+    /// a tick, so a 2.0 s hold moves exactly 4.5 s.
+    static let quick = HoldRule(tap: PlayerLayout.quickStep, firstMs: 400, everyMs: 150, from: 1, most: 4)
+}
+
+/// A press or hold on a timing control by its `HoldRule`: `start` on the press, `stop(single: true)` on its
+/// release (one tap when no repeat came yet), `stop(single: false)` when it is cut off (a cancelled touch, lost
+/// focus, the app going inactive). `move` gets each step with its sign. A key's own repeats are never passed in,
+/// so the speed is the rule's, not the keyboard's or the remote's.
 @MainActor final class TimingHold {
     private let move: (Double) -> Void
     private let clock: StepperClock
+    private let rule: HoldRule
     private var task: Task<Void, Never>?
     private(set) var direction = 0
     private var repeated = false
 
-    init(clock: StepperClock = .real, move: @escaping (Double) -> Void) {
-        (self.clock, self.move) = (clock, move)
+    init(rule: HoldRule = .fine, clock: StepperClock = .real, move: @escaping (Double) -> Void) {
+        (self.rule, self.clock, self.move) = (rule, clock, move)
     }
 
     func start(_ direction: Int) {
         stop(single: false)
         (self.direction, repeated) = (direction, false)
-        let (clock, since) = (clock, clock.now())
+        let (clock, since, rule) = (clock, clock.now(), rule)
         task = Task { [weak self] in
-            await clock.sleep(.milliseconds(PlayerLayout.firstRepeatMs))
+            await clock.sleep(.milliseconds(rule.firstMs))
             while !Task.isCancelled, let self {
                 repeated = true
                 let held = Int((clock.now() - since) / .milliseconds(1))
-                move(Double(direction) * PlayerLayout.holdStep(heldMs: held))
-                await clock.sleep(.milliseconds(PlayerLayout.repeatMs))
+                move(Double(direction) * rule.step(heldMs: held))
+                await clock.sleep(.milliseconds(rule.everyMs))
             }
         }
     }
@@ -685,7 +755,7 @@ struct StepperClock: Sendable {
     func stop(single: Bool) {
         task?.cancel()
         task = nil
-        if direction != 0, single, !repeated { move(Double(direction) * PlayerLayout.subtitleStep) }
+        if direction != 0, single, !repeated { move(Double(direction) * rule.tap) }
         direction = 0
     }
 }
@@ -861,6 +931,326 @@ enum WalkReadBack {
     static func tracks(text: [String], activeText: Int?, audio: [String], activeAudio: Int?) -> String {
         let index = { (i: Int?) in i.map(String.init) ?? "none" }
         return "tracks text=[\(text.joined(separator: " | "))] text_on=\(index(activeText)) audio=[\(audio.joined(separator: " | "))] audio_on=\(index(activeAudio))"
+    }
+}
+
+// MARK: the player bar (plans/player-bar.md)
+
+/// A strip opened over the bar: Subtitles' over its right end, Audio's over its left (section 5).
+enum BarStrip: Hashable { case subtitles, audio }
+
+/// What Episodes does from the player (section 5, Apple Episodes): the title page the player sits on, for the same
+/// title, pops back to itself and shows the episode; any other place pushes the title.
+enum EpisodesStep: Equatable { case selectInPlace, push }
+
+/// The bar's rules, pure so the tests see them.
+enum BarRules {
+    /// Episodes for a series; Next only when the core names a next episode (D14), so it agrees with Up Next.
+    static func shows(season: Int?, next: NextEpisode?) -> (episodes: Bool, next: Bool) {
+        (season != nil, season != nil && next != nil)
+    }
+
+    /// The quick shift shows while the subtitle on can be timed (D4): the picker's own Timing condition
+    /// (`PlayerModel.timingKey`: an addon track, or a file track the app draws).
+    static func shiftShown(timingKey: String?) -> Bool { timingKey != nil }
+
+    /// Next's spoken name: "Next episode, S1:E3 Name".
+    static func nextName(_ next: NextEpisode) -> String {
+        StreamChoice.words.player.bar.names.nextEpisode
+            .replacingOccurrences(of: "{episode}", with: "S\(next.season):E\(next.episode) \(next.title)")
+    }
+
+    /// The language chips (D5): the language on now, then the profile's languages that have tracks, then the core's
+    /// order, `cap` at most (Off and More languages are not counted). The other line's language is never a chip.
+    static func chips(_ languages: [TrackPicker.Language], on: String?, preferred: [String], cap: Int) -> [TrackPicker.Language] {
+        let open = languages.filter { !$0.disabled }
+        var out: [TrackPicker.Language] = []
+        func add(_ l: TrackPicker.Language?) { if let l, !out.contains(l), out.count < cap { out.append(l) } }
+        add(open.first { $0.language == on })
+        for tag in preferred { add(open.first { TrackPicker.sameLanguage($0.language, tag) }) }
+        open.forEach(add)
+        return out
+    }
+
+    /// Five chips on the Mac and iPad, three on a phone (D5).
+    static func chipCap(phone: Bool) -> Int { phone ? 3 : 5 }
+
+    /// A tap or click on the picture (D21): with a strip open it only closes the strip; else the controls toggle.
+    static func pictureTapClosesStrip(_ strip: BarStrip?) -> Bool { strip != nil }
+
+    /// Skip or Up Next appearing closes an open strip (D23): they carry a time-bound action.
+    static func strip(_ strip: BarStrip?, skipOrUpNext: Bool) -> BarStrip? { skipOrUpNext ? nil : strip }
+
+    /// Escape or Back on the Mac and iPad (section 6): the Style row first, then the strip, then the player's own.
+    enum Back: Equatable { case closeStyle, closeStrip, player }
+    static func back(strip: BarStrip?, style: Bool) -> Back {
+        guard strip != nil else { return .player }
+        return style ? .closeStyle : .closeStrip
+    }
+
+    /// What Episodes does, from the title the player plays and the place it sits on.
+    static func episodes(playing: String, page: String?) -> EpisodesStep {
+        page == playing ? .selectInPlace : .push
+    }
+
+    /// The Size steps and their shown value (D6): the platform's real factor.
+    static func sizeText(_ size: SubtitleSize) -> String { percent(Int((CaptionStyle.factor(size) * 100).rounded())) }
+
+    private static func percent(_ n: Int) -> String {
+        StreamChoice.words.player.bar.percent.replacingOccurrences(of: "{n}", with: "\(n)")
+    }
+
+    static func sizeStep(_ size: SubtitleSize, by: Int) -> SubtitleSize? {
+        let all = SubtitleSize.allCases
+        guard let at = all.firstIndex(of: size), all.indices.contains(at + by) else { return nil }
+        return all[at + by]
+    }
+
+    /// The Position steps (D7): the next one up or down, nil past the ends; a value off the steps goes to the nearest.
+    static func positionStep(_ position: Int, by: Int) -> Int? {
+        let all = PlayerLayout.positions
+        let at = all.firstIndex(of: position) ?? all.enumerated().min { abs($0.element - position) < abs($1.element - position) }!.offset
+        return all.indices.contains(at + by) ? all[at + by] : nil
+    }
+
+    static func positionText(_ position: Int) -> String {
+        position == PlayerLayout.defaultPosition ? StreamChoice.words.player.bar.default : percent(position)
+    }
+}
+
+/// Whether the bar fits, from measured widths alone (D15 to D17): the window's width, film or series, and each
+/// pill's words and longest value. The shift's room is always counted, so a subtitle turning on or off never
+/// changes the layout; no group's box ever meets the transport's, and no target shrinks.
+enum BarFit {
+    /// Between pills in a group, and between a group and the transport.
+    static let gap: CGFloat = 10
+    static let columnGap: CGFloat = 16
+    /// An icon-only pill, and a word pill's inner parts.
+    static let pill: CGFloat = 44
+    static let lead: CGFloat = 14
+    static let trail: CGFloat = 16
+    static let icon: CGFloat = 18
+    static let inner: CGFloat = 8
+    /// A long value truncates here (section 7: Apple's 220 pt cap).
+    static let valueCap: CGFloat = 220
+    /// The shift: its value's least width and the room inside a word button.
+    static let shiftValue: CGFloat = 76
+    static let shiftPad: CGFloat = 12
+    /// Mac and iPad: skips 48, Play 56, 14 apart.
+    static let skip: CGFloat = 48
+    static let play: CGFloat = 56
+    static let transportGap: CGFloat = 14
+    static var transport: CGFloat { 2 * skip + play + 2 * transportGap }
+    /// The phone's least scrubber (D17) and its gaps.
+    static let phoneGap: CGFloat = 6
+    static let phoneRowGap: CGFloat = 8
+    static let minScrubber: CGFloat = 120
+
+    /// One bar pill: its word (nil: an icon alone, as Full screen) and value. `reserve` holds the other values it may
+    /// show (Subtitles off, or on in any listed language), whose room is kept too.
+    struct Pill: Sendable {
+        let word: String?
+        var value: String?
+        var reserve: [String] = []
+    }
+
+    /// Every value the Subtitles pill may show in this list: off, and each language on (by the viewer or Auto).
+    // ponytail: two lines on ("English + Spanish") are not reserved; a second line is chosen in the full picker.
+    static func subtitleReserve(off: String, languages: [String]) -> [String] {
+        [off] + languages.flatMap { [$0, "\($0), Auto"] }
+    }
+
+    /// The text sizes the bar draws at before Dynamic Type: the Mac's and iPad's callout; on the iPhone the shift's
+    /// words at 14 and the times at the caption's 12.
+    struct TextSizes: Sendable {
+        let word: CGFloat
+        let value: CGFloat
+        static let wide = TextSizes(word: 15, value: 15)
+        static let phone = TextSizes(word: 14, value: 12)
+    }
+
+    /// A text's width in the system font, as the bar draws it; kept, since the bar redraws with the playhead.
+    static func textWidth(_ text: String, size: CGFloat, bold: Bool) -> CGFloat {
+        let key = "\(size)|\(bold)|\(text)" as NSString
+        if let kept = widths.object(forKey: key) { return CGFloat(kept.doubleValue) }
+        #if canImport(AppKit)
+        let font = NSFont.systemFont(ofSize: size, weight: bold ? .semibold : .regular)
+        #else
+        let font = UIFont.systemFont(ofSize: size, weight: bold ? .semibold : .regular)
+        #endif
+        let width = ceil((text as NSString).size(withAttributes: [.font: font]).width)
+        widths.setObject(NSNumber(value: Double(width)), forKey: key)
+        return width
+    }
+
+    // NSCache is thread safe; Swift 6 cannot see that.
+    nonisolated(unsafe) private static let widths = NSCache<NSString, NSNumber>()
+
+    static func pillWidth(_ p: Pill, words: Bool, type: TextSizes = .wide) -> CGFloat {
+        guard words, let word = p.word else { return pill }
+        let values = ([p.value].compactMap { $0 } + p.reserve).map { min(textWidth($0, size: type.value, bold: false), valueCap) }
+        let value = values.max().map { inner + $0 } ?? 0
+        return max(pill, lead + icon + inner + textWidth(word, size: type.word, bold: true) + value + trail)
+    }
+
+    /// The shift, Earlier and Later in words or as chevrons; each part at least a target wide.
+    static func shiftWidth(words: Bool, type: TextSizes = .wide) -> CGFloat {
+        guard words else { return 2 * pill + shiftValue }
+        let w = StreamChoice.words.player.bar
+        let side = { (s: String) in max(pill, textWidth(s, size: type.word, bold: true) + 2 * shiftPad) }
+        return side(w.earlier) + shiftValue + side(w.later)
+    }
+
+    static func groupWidth(_ widths: [CGFloat], gap: CGFloat = gap) -> CGFloat {
+        widths.reduce(0, +) + gap * CGFloat(max(widths.count - 1, 0))
+    }
+
+    /// Where the groups go when they do not fit beside the transport (D16 c): Right on its own row under it, or
+    /// both groups under it.
+    enum Under: Equatable { case none, right, both }
+
+    /// The Mac's and iPad's bar at a width (D16).
+    struct Desktop: Equatable {
+        var leftWords = true
+        var rightWords = true
+        var chevrons = false
+        var under = Under.none
+    }
+
+    /// Mac and iPad (D16): each side's column is (width minus transport) / 2. A side that overflows drops its words
+    /// and values; then the shift's words become chevrons; then the bar takes a second row: Right under the
+    /// transport, or both groups when Left does not fit its column either. On a second row the groups take back
+    /// what fits its full width.
+    static func desktop(width: CGFloat, left: [Pill], right: [Pill], type: TextSizes = .wide) -> Desktop {
+        let l = { (words: Bool) in groupWidth(left.map { pillWidth($0, words: words, type: type) }) }
+        let r = { (words: Bool, shiftWords: Bool) in
+            groupWidth(right.map { pillWidth($0, words: words, type: type) } + [shiftWidth(words: shiftWords, type: type)])
+        }
+        let column = (width - transport - 2 * columnGap) / 2
+        var plan = Desktop()
+        plan.leftWords = l(true) <= column
+        plan.rightWords = r(true, true) <= column
+        plan.chevrons = !plan.rightWords && r(false, true) > column
+        let lw = l(plan.leftWords)
+        let rw = r(plan.rightWords, !plan.chevrons)
+        if lw <= column && rw <= column { return plan }
+        // A row of its own for Right; Left too when even its icons overflow the column.
+        let leftBeside = l(false) <= column
+        plan.under = leftBeside ? .right : .both
+        let room = leftBeside ? width : width - columnGap - l(false)
+        plan.rightWords = r(true, true) <= room
+        plan.chevrons = !plan.rightWords && r(false, true) > room
+        if leftBeside {
+            plan.leftWords = l(true) <= column
+        } else {
+            plan.leftWords = l(true) + columnGap + r(plan.rightWords, !plan.chevrons) <= width
+        }
+        return plan
+    }
+
+    /// The groups' widths for a plan, and each side's room, to check a plan never meets the transport.
+    static func fits(_ plan: Desktop, width: CGFloat, left: [Pill], right: [Pill], type: TextSizes = .wide) -> Bool {
+        let lw = groupWidth(left.map { pillWidth($0, words: plan.leftWords, type: type) })
+        let rw = groupWidth(right.map { pillWidth($0, words: plan.rightWords, type: type) } + [shiftWidth(words: !plan.chevrons, type: type)])
+        let column = (width - transport - 2 * columnGap) / 2
+        switch plan.under {
+        case .none: return lw <= column && rw <= column
+        case .right: return lw <= column && rw <= width
+        case .both: return lw + columnGap + rw <= width
+        }
+    }
+
+    /// The iPhone across (D17): one row of the Left icons, elapsed, the scrubber, remaining and the Right icons with
+    /// the shift; the shift's words become chevrons when the scrubber would get under 120 pt, and the bar takes two
+    /// rows (the scrubber's, then the controls') when even that leaves it short.
+    struct Phone: Equatable {
+        var chevrons = false
+        var twoRows = false
+    }
+
+    /// `left` and `right` count the icon pills (the shift is added); `times` is elapsed's and remaining's room.
+    static func phone(width: CGFloat, left: Int, right: Int, times: CGFloat, type: TextSizes = .phone) -> Phone {
+        let icons = { (n: Int) in groupWidth(Array(repeating: pill, count: n), gap: phoneGap) }
+        let rightWidth = { (words: Bool) in icons(right) + phoneGap + shiftWidth(words: words, type: type) }
+        let scrubber = { (words: Bool) in width - icons(left) - rightWidth(words) - times - 4 * phoneRowGap }
+        if scrubber(true) >= minScrubber { return Phone() }
+        if scrubber(false) >= minScrubber { return Phone(chevrons: true) }
+        return Phone(chevrons: icons(left) + phoneRowGap + rightWidth(true) > width, twoRows: true)
+    }
+
+    /// The scrubber's width in the phone's one row.
+    static func phoneScrubber(width: CGFloat, left: Int, right: Int, times: CGFloat, chevrons: Bool, type: TextSizes = .phone) -> CGFloat {
+        let icons = { (n: Int) in groupWidth(Array(repeating: pill, count: n), gap: phoneGap) }
+        return width - icons(left) - icons(right) - phoneGap - shiftWidth(words: !chevrons, type: type) - times - 4 * phoneRowGap
+    }
+
+    /// The iPhone upright (D15): three rows, the scrubber's, then Audio, Speed and Versions left with Episodes and
+    /// Next right, then Subtitles and the shift right-aligned; the shift's words become chevrons when that row is short.
+    static func uprightChevrons(width: CGFloat, type: TextSizes = .phone) -> Bool {
+        pill + phoneGap + shiftWidth(words: true, type: type) > width
+    }
+
+    /// Elapsed and remaining at their longest ("-0:00:00"), in the phone's numbers.
+    static func phoneTimes(type: TextSizes = .phone) -> CGFloat { 2 * textWidth("-0:00:00", size: type.value, bold: false) }
+}
+
+/// The player's one notice line (plans/player-bar.md 5.1): subtitle notes, a move or a heat pause, and Trakt's
+/// `reconnect`. A line with priority holds the slot for its full time; a line that comes meanwhile waits and then
+/// shows for its own full time; a line already up when a priority line comes gives way and shows again after it.
+/// At most one line waits, the newest. A line with no time (`seconds` nil) stays until `clear`.
+@MainActor final class NoticeSlot {
+    private(set) var line: String?
+    private var priority = false
+    private var waiting: (words: String, seconds: Double?)?
+    private var shown = 0
+    private let sleep: @Sendable (Duration) async -> Void
+    private let changed: (String?) -> Void
+
+    init(sleep: @escaping @Sendable (Duration) async -> Void = { try? await Task.sleep(for: $0) }, changed: @escaping (String?) -> Void) {
+        (self.sleep, self.changed) = (sleep, changed)
+    }
+
+    func show(_ words: String, seconds: Double? = 5, priority: Bool = false) {
+        if self.priority, !priority {
+            waiting = (words, seconds)
+            return
+        }
+        if priority, !self.priority, let line { waiting = (line, lineSeconds) }
+        put(words, seconds: seconds, priority: priority)
+    }
+
+    /// A line with no time goes (the viewer played again after a heat pause), shown or waiting.
+    func clear(_ words: String) {
+        if waiting?.words == words { waiting = nil }
+        guard line == words else { return }
+        next()
+    }
+
+    /// The time the line in sight was given, so a line that gives way returns with its full time.
+    private var lineSeconds: Double?
+
+    private func put(_ words: String, seconds: Double?, priority: Bool) {
+        shown += 1
+        (line, self.priority, lineSeconds) = (words, priority, seconds)
+        changed(words)
+        guard let seconds else { return }
+        let id = shown
+        Task { [weak self, sleep] in
+            await sleep(.milliseconds(Int(seconds * 1000)))
+            guard let self, self.shown == id else { return }
+            self.next()
+        }
+    }
+
+    private func next() {
+        if let waiting {
+            self.waiting = nil
+            put(waiting.words, seconds: waiting.seconds, priority: false)
+        } else {
+            (line, priority, lineSeconds) = (nil, false, nil)
+            shown += 1
+            changed(nil)
+        }
     }
 }
 
