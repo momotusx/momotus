@@ -487,19 +487,29 @@ private fun AppNav(
         if (pulling) return
         pulling = true
         scope.launch {
-            withTimeoutOrNull(
-                PULL_WAIT_MS,
-            ) { snapshotFlow { sync.lastSynced != null || sync.problem != null }.first { it } }
+            // A problem from before the join (an earlier unreachable try) is not this pull's answer.
+            val before = sync.problem
+            withTimeoutOrNull(PULL_WAIT_MS) {
+                snapshotFlow {
+                    sync.lastSynced != null || (sync.problem != null && sync.problem !== before)
+                }.first { it }
+            }
             pulling = false
             nav.go(FirstRun.After.Joined)
         }
     }
     // A join met while a first-run page other than the sign-in shows (a pairing page, Account's kit): the same way on.
-    LaunchedEffect(sync.joined, top) {
-        if (sync.joined && firstRun && top !is Route.SignIn && !created) joined()
+    // Not while a sign-in is under way: it says itself whether it made the account (onCreated) or joined one (onIn).
+    val signInOpen = marquee.accounts.signIn != null || top is Route.SignIn
+    LaunchedEffect(sync.joined, top, signInOpen) {
+        if (joinGoesOn(sync.joined, firstRun, signInOpen, created)) joined()
     }
-    // The wall over every first-run step and sign-in sheet, asked again at each while it has none.
-    val overWall = overWall(top, routes)
+    // "Getting your profiles" holds Back too: nothing under it moves while the pull decides.
+    BackHandler(enabled = pulling) {}
+    // The wall over every first-run step and sign-in sheet, asked again at each while it has none; a setup opened
+    // from an empty Home is a sheet with no wall (3.1: the wall is first run's and Sign in's only).
+    val sheetTop = sheetTop(top, routes)
+    val overWall = wallShows(top, routes, firstRun = app.start == Start.Onboarding)
     LaunchedEffect(top) { if (overWall) app.askWall() }
 
     // Sign in another device (the app shortcut, or a pairing code by link): the approve sheet, after the sign-in when
@@ -626,7 +636,7 @@ private fun AppNav(
                                 app.setup,
                                 AccountRules.activeProfile(gate.snapshot)?.name.orEmpty(),
                                 rememberSetupChips(session),
-                                onStart = { subtitle -> app.setup.start(subtitle, nav::setupDone) },
+                                onStart = { subtitle, chosen -> app.setup.start(subtitle, chosen, nav::setupDone) },
                                 onSkip = { app.setup.skip { nav.setupDone(false) } },
                                 onReview = { backStack.add(Route.Defaults(DefaultsMode.Review)) },
                             )
@@ -802,7 +812,10 @@ private fun AppNav(
                                     app.tvHome,
                                     onOpen = ::open,
                                     onPlay = ::playTile,
-                                    onSetup = { backStack.add(Route.Setup) },
+                                    onSetup = {
+                                        app.setup.reset()
+                                        backStack.add(Route.Setup)
+                                    },
                                     onAddons = ::addAnAddon,
                                     rowsHidden = rowsHidden,
                                     onHomeRows = onHomeRows,
@@ -816,7 +829,10 @@ private fun AppNav(
                                     app.home,
                                     onOpen = ::open,
                                     onPlay = ::playTile,
-                                    onSetup = { backStack.add(Route.Setup) },
+                                    onSetup = {
+                                        app.setup.reset()
+                                        backStack.add(Route.Setup)
+                                    },
                                     onAddons = ::addAnAddon,
                                     rowsHidden = rowsHidden,
                                     onHomeRows = onHomeRows,
@@ -845,7 +861,10 @@ private fun AppNav(
                                 ::open,
                                 request = app.discoverRequest,
                                 onRequestSent = { app.discoverRequest = null },
-                                onSetup = { backStack.add(Route.Setup) },
+                                onSetup = {
+                                    app.setup.reset()
+                                    backStack.add(Route.Setup)
+                                },
                                 onAddons = ::addAnAddon,
                                 focus = app.discoverFocus,
                             )
@@ -1160,8 +1179,8 @@ private fun AppNav(
             selected = selected,
             showTabs = framed,
             onSelect = ::choose,
-            statusStrip = top !is Route.Title && top !is Route.Player && !overWall,
-            insetSides = top !is Route.Player && !overWall,
+            statusStrip = top !is Route.Title && top !is Route.Player && !sheetTop,
+            insetSides = top !is Route.Player && !sheetTop,
             onBack = if (top.hasBackLink) ({ systemBack?.onBackPressed() ?: pop() }) else null,
             profile = phoneProfile,
             // Offline, every page but the player says so, one press from the downloads (plans/offline-downloads.md 3.5).
@@ -1230,8 +1249,23 @@ internal fun RemovalNote(
     }
 }
 
-/** Whether [top] shows over first run's wall: a first-run step, any sign-in sheet (D10), or Import from setup. */
-internal fun overWall(
+/** Whether a join met on first run goes on by the rule: not during a sign-in, nor after this device made the account. */
+internal fun joinGoesOn(
+    joined: Boolean,
+    firstRun: Boolean,
+    signingIn: Boolean,
+    created: Boolean,
+) = joined && firstRun && !signingIn && !created
+
+/** Whether the wall shows under [top]: a sheet page while the start is first run, and any sign-in sheet (3.1). */
+internal fun wallShows(
+    top: Route,
+    routes: List<Route>,
+    firstRun: Boolean,
+) = sheetTop(top, routes) && (firstRun || top is Route.SignIn || top == Route.TvSignIn)
+
+/** Whether [top] is a sheet page: a first-run step, any sign-in sheet (D10), or Import from setup. */
+internal fun sheetTop(
     top: Route,
     routes: List<Route>,
 ): Boolean =

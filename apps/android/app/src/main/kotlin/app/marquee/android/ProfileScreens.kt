@@ -913,7 +913,9 @@ internal fun AddProfileSheet(
 ) {
     val scope = rememberCoroutineScope()
     var name by rememberSaveable { mutableStateOf("") }
-    val next = ProfileCopy.parseAvatar(ProfileCopy.nextAvatar(avatars)).color ?: "ember"
+    // The first swatch no profile has, so one always shows chosen.
+    val used = avatars.map { ProfileCopy.parseAvatar(it).color }.toSet()
+    val next = SWATCHES.firstOrNull { it !in used } ?: SWATCHES.first()
     var color by rememberSaveable { mutableStateOf(next) }
     var busy by remember { mutableStateOf(false) }
     var said by remember { mutableStateOf<String?>(null) }

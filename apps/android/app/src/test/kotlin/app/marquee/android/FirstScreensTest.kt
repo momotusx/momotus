@@ -3,12 +3,9 @@ package app.marquee.android
 import android.app.Application
 import android.graphics.Bitmap
 import android.os.Looper
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -18,8 +15,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asAndroidBitmap
@@ -38,6 +33,7 @@ import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onFirst
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
@@ -57,6 +53,7 @@ import app.marquee.core.client.CoreJson
 import app.marquee.core.client.CoreTransport
 import app.marquee.core.model.LanguageChoice
 import app.marquee.core.model.ProfileInfo
+import app.marquee.core.model.ProfilesSnapshot
 import app.marquee.core.route.Route
 import app.marquee.core.session.CoreSession
 import app.marquee.design.Form
@@ -95,8 +92,9 @@ import kotlin.test.assertTrue
 
 /**
  * First run's screens on Android (plans/first-screens.md 3, 5, 9; vectors parts b and c): every path's screens and
- * presses through FirstRunNav and the real Welcome, profile, setup, TV Login and picker tile pieces; the sign-in's
- * own steps are SignInScreen's (AccountSignInTest), so the phone Login here is its sheet with the same buttons. Also
+ * presses through FirstRunNav and the shipped Welcome, Login sheet (LoginSheet and loginStart, SignInScreen's own),
+ * profile form, setup sheet, TV Login sheet and the picker (PickerScreen over a ProfileGate). Stand-ins: the relay's
+ * answers (AccountSignIn's steps are AccountSignInTest's), the TV pairing code and the other device's join. Also
  * the untouched Continue, the first focus on TV, 48 dp targets, no addon name, the stacks Back walks, a large font
  * and the chip rows. With MQ_SHOTS set, the render tests save theirs there.
  */
@@ -108,6 +106,7 @@ class FirstScreensTest {
     val compose = createComposeRule()
 
     private val session = CoreSession(RuntimeEnvironment.getApplication())
+    private val gate = ProfileGate(session)
     private val sent = CopyOnWriteArrayList<JsonObject>()
 
     private val prefs =
@@ -170,6 +169,19 @@ class FirstScreensTest {
                             "[]"
                         }
 
+                        // The profiles view after a join to two profiles: Who's watching? opens on the start picker.
+                        "subscribe" -> {
+                            val who =
+                                ProfilesSnapshot(
+                                    listOf(owner, owner.copy(id = "p2", name = "Deniz", position = 1, isOwner = false)),
+                                    active = owner.id,
+                                    locked = false,
+                                    max = 5,
+                                    kids = false,
+                                )
+                            """{"sub":9,"snapshot":${CoreJson.encodeToString(ProfilesSnapshot.serializer(), who)}}"""
+                        }
+
                         else -> {
                             "{}"
                         }
@@ -177,6 +189,8 @@ class FirstScreensTest {
                 session.client.onMessage("""{"id":$id,"ok":true,"result":$result}""")
             },
         )
+        session.opened(running = true)
+        gate.start()
     }
 
     @After
@@ -286,14 +300,23 @@ class FirstScreensTest {
                         setup,
                         "Main",
                         SetupChips(FirstRun.chips("en", emptyList()), languages),
-                        onStart = { setup.start(it, r.nav::setupDone) },
+                        onStart = { subtitle, chosen -> setup.start(subtitle, chosen, r.nav::setupDone) },
                         onSkip = { setup.skip { r.nav.setupDone(false) } },
                         onReview = {},
                     )
                 }
 
                 "who" -> {
-                    Who(listOf(owner, owner.copy(id = "p2", name = "Deniz", isOwner = false))) { r.home = true }
+                    // The shipped picker, as the gate draws it over the wall after a join.
+                    LaunchedEffect(gate.open) { if (gate.open) r.home = true }
+                    PickerScreen(
+                        gate,
+                        session,
+                        PickerMode.Start,
+                        onAdd = {},
+                        sheet = true,
+                        line = FirstRunCopy.WHO_SIGNED_IN,
+                    )
                 }
 
                 else -> {
@@ -303,55 +326,42 @@ class FirstScreensTest {
         }
     }
 
-    /** The Login sheet's Start step as SignInScreen draws it in the sheet: Not now, the providers, another device. */
+    /**
+     * The phone Login sheet as SignInScreen draws its first stage: the shipped LoginSheet and loginStart. Stand-ins:
+     * the relay's provider list (Google, Facebook and email, as AccountSignIn would offer them) and its answers (a
+     * Google press is an account made at once, 2026-11-05); the pairing code under Use another device is not drawn.
+     */
     @Composable
     private fun PhoneLogin(
         r: Run,
         returning: Boolean,
     ) {
-        FirstSheet(
+        var another by remember { mutableStateOf(false) }
+        LoginSheet(
             AccountCopy.SIGN_IN_TITLE,
-            corner = { SheetLink(AccountCopy.NOT_NOW, { r.nav.go(FirstRun.After.NotNow) }) },
-            line = if (returning) FirstRunCopy.LOGIN_RETURNING else FirstRunCopy.LOGIN_LINE,
+            start = true,
+            returning = returning,
+            onNotNow = { r.nav.go(FirstRun.After.NotNow) },
+            onBack = {},
         ) {
-            if (returning) {
-                app.marquee.design.SecondaryButton(
-                    FirstRunCopy.USE_ANOTHER_DEVICE,
-                    {},
-                    Modifier.fillMaxWidth(),
-                )
-            }
-            ProviderButton("google", {
-                r.inAccount = true
-                r.nav.go(FirstRun.After.Created)
-            })
-            ProviderButton("facebook", {})
-            if (!returning) {
-                app.marquee.design.SecondaryButton(
-                    FirstRunCopy.USE_ANOTHER_DEVICE,
-                    {},
-                    Modifier.fillMaxWidth(),
-                )
-            }
-            SheetLink(AccountCopy.OTHER_WAYS, {})
-        }
-    }
-
-    /** Who's watching?'s sheet with the picker's own tiles, the first focused on TV. */
-    @Composable
-    private fun Who(
-        profiles: List<ProfileInfo>,
-        onPick: () -> Unit,
-    ) {
-        val first = remember { FocusRequester() }
-        LaunchedEffect(Unit) { app.marquee.design.focusSoon(first, 60) }
-        FirstSheet(FirstRunCopy.WHO_TITLE, width = 760.dp, line = FirstRunCopy.WHO_SIGNED_IN) {
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                profiles.forEachIndexed { i, p ->
-                    val focus = if (i == 0) Modifier.focusRequester(first) else Modifier
-                    ProfileTile(p, i == 0, focus, onPick, avatar = 84.dp)
-                }
-            }
+            loginStart(
+                listOf("google", "facebook"),
+                email = true,
+                continueHere = null,
+                returning = returning,
+                another = another,
+                onAnother = { another = !another },
+                pairing = {},
+                choose = { provider ->
+                    if (provider == "google") {
+                        r.inAccount = true
+                        r.nav.go(FirstRun.After.Created)
+                    }
+                },
+                onEmail = {},
+                others = false,
+                onOthers = {},
+            ) {}
         }
     }
 
@@ -465,6 +475,103 @@ class FirstScreensTest {
         val tv = Run(Form.Tv, server = true)
         tv.nav.go(FirstRun.After.AlreadyUse)
         assertEquals(Route.TvSignIn, tv.stack.last())
+        // A restart with the profile step answered: Back from setup is the form.
+        val restart = FirstRun.State(true, false, true, false, profileStepDone = true, 1, false, false)
+        assertEquals(listOf<Route>(Route.FirstProfile, Route.Setup), FirstRunNav.initial(restart))
+        // A sign-in pushed over the form (a pairing link): its Not now comes back to that form, not a second one.
+        val linked = Run(Form.Phone, server = true)
+        linked.stack.add(Route.FirstProfile)
+        linked.stack.add(Route.SignIn(firstRun = true))
+        linked.nav.go(FirstRun.After.NotNow)
+        assertEquals(listOf(Route.Welcome, Route.FirstProfile), linked.stack.toList())
+    }
+
+    @Test
+    fun `a join goes on by the rule only with no sign-in open and no account made here`() {
+        assertTrue(joinGoesOn(joined = true, firstRun = true, signingIn = false, created = false))
+        // Back from a stage after the account was made: the sign-in is still open, so the made account is not a join.
+        assertTrue(!joinGoesOn(joined = true, firstRun = true, signingIn = true, created = false))
+        assertTrue(!joinGoesOn(joined = true, firstRun = true, signingIn = false, created = true))
+        assertTrue(!joinGoesOn(joined = true, firstRun = false, signingIn = false, created = false))
+        assertTrue(!joinGoesOn(joined = false, firstRun = true, signingIn = false, created = false))
+    }
+
+    @Test
+    fun `the wall shows on first run's sheets and every sign-in, never on a setup opened from Home`() {
+        val home = listOf(Route.Home, Route.Setup)
+        assertTrue(!wallShows(Route.Setup, home, firstRun = false))
+        assertTrue(sheetTop(Route.Setup, home))
+        assertTrue(wallShows(Route.Setup, listOf(Route.FirstProfile, Route.Setup), firstRun = true))
+        assertTrue(
+            wallShows(Route.SignIn(firstRun = false), listOf(Route.Settings, Route.SignIn(false)), firstRun = false),
+        )
+        assertTrue(wallShows(Route.TvSignIn, listOf(Route.Settings, Route.TvSignIn), firstRun = false))
+        assertTrue(!wallShows(Route.Import, listOf(Route.Settings, Route.Import), firstRun = false))
+    }
+
+    @Test
+    @Config(qualifiers = "w960dp-h540dp-xhdpi")
+    fun `Getting your profiles holds taps and the remote's keys from the sheet under it`() {
+        var pressed = 0
+        var pulling by mutableStateOf(false)
+        compose.setContent {
+            MarqueeTheme(Form.Tv) {
+                Box(Modifier.fillMaxSize()) {
+                    TvLoginSheet(null, false, null, { pressed++ }, { pressed++ }, null)
+                    if (pulling) GettingProfiles()
+                }
+            }
+        }
+        // As in the app: Not now has the focus when the join comes and the pull begins.
+        compose.waitUntil(
+            5_000,
+        ) { runCatching { compose.onNodeWithText(AccountCopy.NOT_NOW).assert(isFocused()) }.isSuccess }
+        pulling = true
+        idle()
+        // The layer has the focus, not Not now under it, and OK goes nowhere.
+        compose.waitUntil(5_000) {
+            runCatching { compose.onNodeWithTag(GETTING_PROFILES_LAYER).assert(isFocused()) }.isSuccess
+        }
+        compose.onNodeWithTag(GETTING_PROFILES_LAYER).performKeyInput {
+            pressKey(Key.DirectionCenter)
+            pressKey(Key.DirectionDown)
+            pressKey(Key.Enter)
+        }
+        compose.onNodeWithText(AccountCopy.NOT_NOW).performClick()
+        idle()
+        assertEquals(0, pressed)
+        compose
+            .onNodeWithText(
+                AccountCopy.NOT_NOW,
+            ).assert(SemanticsMatcher.expectValue(SemanticsProperties.Focused, false))
+    }
+
+    @Test
+    fun `the benchmarks walk the new first run to Home`() {
+        val flows = File("../macrobenchmark/src/main/kotlin/app/marquee/macrobenchmark/Flows.kt").readText()
+        val walk = flows.substringAfter("fun MacrobenchmarkScope.onboardIfAsked()").substringBefore("\n}\n")
+        val presses =
+            listOf(FirstRunCopy.GET_STARTED, AccountCopy.NOT_NOW, FirstRunCopy.CONTINUE, FirstRunCopy.START_WATCHING)
+        val at = presses.map { walk.indexOf("By.text(\"$it\")") }
+        assertTrue(at.all { it >= 0 } && at == at.sorted(), "Flows.kt presses $presses at $at")
+        assertTrue("Popular" in walk)
+    }
+
+    @Test
+    fun `the baseline profiles name only routes that exist, in rule form`() {
+        val rule = Regex("""^[HSP]*L[\w/$-]+;(->.+)?$""")
+        for (name in listOf("baseline-prof.txt", "startup-prof.txt")) {
+            val lines = File("src/main/generated/baselineProfiles/$name").readLines().filter { it.isNotBlank() }
+            for (line in lines) {
+                assertTrue(rule.matches(line) && !Regex("""^[HSP]*LL""").containsMatchIn(line), "$name: $line")
+            }
+            val routes =
+                lines
+                    .mapNotNull { Regex("""core/route/Route\$(\w+);""").find(it)?.groupValues?.get(1) }
+                    .toSet()
+            for (route in routes) Class.forName("app.marquee.core.route.Route\$$route")
+            assertTrue(setOf("Welcome", "FirstProfile", "Setup").all { it in routes }, "$name lists $routes")
+        }
     }
 
     private fun profileForm(form: Form) =
@@ -521,7 +628,7 @@ class FirstScreensTest {
                             remember { FirstSetup(session.ops, scope) },
                             "Main",
                             SetupChips(FirstRun.chips("en", emptyList()), languages),
-                            {},
+                            { _, _ -> },
                             {},
                             {},
                         )
@@ -610,7 +717,7 @@ class FirstScreensTest {
                     FirstSetup(session.ops, rememberCoroutineScope()),
                     "A thirty character profile nm",
                     SetupChips(FirstRun.chips("tr", listOf("de")), languages),
-                    {},
+                    { _, _ -> },
                     {},
                     {},
                 )
@@ -631,7 +738,7 @@ class FirstScreensTest {
         var chips by mutableStateOf(SetupChips(FirstRun.chips(null, emptyList()), languages))
         compose.setContent {
             MarqueeTheme(Form.Phone) {
-                SetupSheet(FirstSetup(session.ops, rememberCoroutineScope()), "Main", chips, {}, {}, {})
+                SetupSheet(FirstSetup(session.ops, rememberCoroutineScope()), "Main", chips, { _, _ -> }, {}, {})
             }
         }
         for (row in vectors.getValue("chips").jsonArray.map { it.jsonObject }) {

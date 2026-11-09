@@ -4,6 +4,7 @@ import android.content.Context
 import android.os.SystemClock
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
@@ -55,8 +56,11 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
@@ -156,8 +160,21 @@ internal class FirstRunNav(
             }
 
             FirstRun.Step.Profile -> {
-                if (after == FirstRun.After.Created) stack.clear()
-                stack.add(Route.FirstProfile)
+                when {
+                    after == FirstRun.After.Created -> {
+                        stack.clear()
+                        stack.add(Route.FirstProfile)
+                    }
+
+                    // A sign-in pushed over the form (a pairing link) whose Not now comes back to it, not a second form.
+                    Route.FirstProfile in stack -> {
+                        while (stack.last() != Route.FirstProfile) stack.removeAt(stack.lastIndex)
+                    }
+
+                    else -> {
+                        stack.add(Route.FirstProfile)
+                    }
+                }
             }
 
             FirstRun.Step.Setup -> {
@@ -186,13 +203,14 @@ internal class FirstRunNav(
     companion object {
         /** The stack a (re)start opens on while the profile is fresh. */
         fun initial(s: FirstRun.State): List<Route> =
-            listOf(
-                when (FirstRun.next(s, FirstRun.After.Start)) {
-                    FirstRun.Step.Profile -> Route.FirstProfile
-                    FirstRun.Step.Setup -> Route.Setup
-                    else -> Route.Welcome
-                },
-            )
+            when (FirstRun.next(s, FirstRun.After.Start)) {
+                FirstRun.Step.Profile -> listOf(Route.FirstProfile)
+
+                // Back from setup is the profile form (5), on a restart too.
+                FirstRun.Step.Setup -> listOf(Route.FirstProfile, Route.Setup)
+
+                else -> listOf(Route.Welcome)
+            }
     }
 }
 
@@ -494,7 +512,21 @@ internal fun WelcomeScreen(
 /** While a first-run join pulls the account (15 s at most): the sheet says so over the still wall (6). */
 @Composable
 internal fun GettingProfiles() {
-    Box(Modifier.fillMaxSize().background(Tokens.wallDimNoBlur)) {
+    // It holds every input while it shows: taps, the remote's keys (focus is taken here) and, in AppNav, Back.
+    val hold = remember { FocusRequester() }
+    LaunchedEffect(Unit) { runCatching { hold.requestFocus() } }
+    Box(
+        Modifier
+            .fillMaxSize()
+            .testTag(GETTING_PROFILES_LAYER)
+            .background(Tokens.wallDimNoBlur)
+            .pointerInput(
+                Unit,
+            ) { awaitPointerEventScope { while (true) awaitPointerEvent().changes.forEach { it.consume() } } }
+            .onPreviewKeyEvent { true }
+            .focusRequester(hold)
+            .focusable(),
+    ) {
         FirstSheet(null, width = 760.dp) {
             Row(
                 horizontalArrangement = Arrangement.spacedBy(Marquee.space.s),
@@ -508,6 +540,9 @@ internal fun GettingProfiles() {
         }
     }
 }
+
+/** The pull's layer, for tests. */
+internal const val GETTING_PROFILES_LAYER = "getting-profiles"
 
 /** Welcome's ramp into black (round2.html `.v1 .shade`), the TV's rising sooner under its centered block. */
 internal fun welcomeShade(tv: Boolean): Array<Pair<Float, Color>> =
@@ -640,6 +675,10 @@ internal fun FirstProfileSheet(
 internal class SetupChips(
     val rule: FirstRun.Chips,
     val all: List<LanguageChoice>,
+    /** The profile's subtitle languages as stored, kept whole when its first is the chip shown chosen. */
+    val chosen: List<String> = emptyList(),
+    /** The core's languages and the profile's answered (or failed): Start watching waits for it. */
+    val loaded: Boolean = true,
 ) {
     /** The chips with a language found under More placed before No subtitles. */
     fun shown(picked: String?): List<String> =
@@ -668,7 +707,7 @@ internal fun SetupSheet(
     setup: FirstSetup,
     profile: String,
     chips: SetupChips,
-    onStart: (subtitle: String) -> Unit,
+    onStart: (subtitle: String, chosen: List<String>) -> Unit,
     onSkip: () -> Unit,
     onReview: () -> Unit,
 ) {
@@ -775,9 +814,18 @@ internal fun SetupSheet(
                             verticalAlignment = Alignment.CenterVertically,
                             content = sources,
                         )
-                        PrimaryButton(start, {
-                            onStart(selected)
-                        }, Modifier.widthIn(min = 240.dp), big = true, busy = setup.busy, focusRequester = go)
+                        PrimaryButton(
+                            start,
+                            {
+                                if (chips.loaded) onStart(selected, chips.chosen)
+                            },
+                            Modifier.widthIn(
+                                min = 240.dp,
+                            ),
+                            big = true,
+                            busy = setup.busy || !chips.loaded,
+                            focusRequester = go,
+                        )
                     }
                 } else {
                     Row(
@@ -787,10 +835,10 @@ internal fun SetupSheet(
                     )
                     PrimaryButton(
                         start,
-                        { onStart(selected) },
+                        { if (chips.loaded) onStart(selected, chips.chosen) },
                         Modifier.fillMaxWidth(),
                         big = true,
-                        busy = setup.busy,
+                        busy = setup.busy || !chips.loaded,
                         focusRequester = go,
                     )
                 }
@@ -969,11 +1017,17 @@ private fun MoreLanguages(
 @Composable
 internal fun rememberSetupChips(session: CoreSession): SetupChips {
     val device = DeviceCaps.languageCode(androidx.compose.ui.platform.LocalConfiguration.current.locales[0])
-    var chips by remember { mutableStateOf(SetupChips(FirstRun.chips(null, emptyList()), emptyList())) }
+    // The device's language from the first frame; a list that failed to come keeps it.
+    var chips by remember {
+        mutableStateOf(
+            SetupChips(FirstRun.chips(device, emptyList()), emptyList(), loaded = false),
+        )
+    }
     LaunchedEffect(device) {
         val all = runCatching { session.ops.languages(device) }.getOrDefault(emptyList())
         val chosen = prefsNow(session)?.subtitleLanguages.orEmpty()
-        chips = SetupChips(FirstRun.chips(all.firstOrNull { it.device }?.code, chosen), all)
+        val mine = if (all.isEmpty()) device else all.firstOrNull { it.device }?.code
+        chips = SetupChips(FirstRun.chips(mine, chosen), all, chosen)
     }
     return chips
 }

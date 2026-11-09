@@ -251,135 +251,85 @@ fun SignInScreen(
         onProvider(p)
         signIn.choose(p)
     }
-    // The Login sheet over the still wall, on first run and from Settings alike (plans/first-screens.md 3.3, D10).
-    FirstSheet(
+    // A stage after the account was made (the passkey nag) answers Back as Later; a stage at work holds it, so Back
+    // never leaves the sheet with an account the first run has not heard of.
+    BackHandler(enabled = step is Step.SecondWay) { signIn.later() }
+    BackHandler(enabled = step is Step.Working || step == Step.Loading || step is Step.Done) {}
+    LoginSheet(
         if (step == Step.New) AccountCopy.CREATE_ACCOUNT else AccountCopy.SIGN_IN_TITLE,
-        width = 860.dp,
-        corner = if (step is Step.Start && !own) ({ SheetLink(AccountCopy.NOT_NOW, notNow) }) else null,
-        line =
-            when {
-                step !is Step.Start -> null
-                returning -> FirstRunCopy.LOGIN_RETURNING
-                else -> FirstRunCopy.LOGIN_LINE
-            },
-        onDrag = onBack,
-        scroll = false,
-        pad = false,
+        start = step is Step.Start,
+        returning = returning,
+        onNotNow = notNow.takeIf { step is Step.Start && !own },
+        onBack = onBack,
     ) {
-        LazyColumn(
-            Modifier.focusRestorer(),
-            verticalArrangement = Arrangement.spacedBy(Marquee.space.s),
-        ) {
-            if (!firstRun && step is Step.Start) {
-                block("added") { MqText(AccountCopy.LIBRARY_ADDED, color = Marquee.colors.muted) }
+        if (!firstRun && step is Step.Start) {
+            block("added") { MqText(AccountCopy.LIBRARY_ADDED, color = Marquee.colors.muted) }
+        }
+        signIn.failure?.let { f -> block("failure") { FailureNote(f, onAct = act) } }
+        when (step) {
+            Step.Loading, is Step.Working, is Step.Done -> {
+                block("working") { Spinner() }
             }
-            signIn.failure?.let { f -> block("failure") { FailureNote(f, onAct = act) } }
-            when (step) {
-                Step.Loading, is Step.Working, is Step.Done -> {
-                    block("working") { Spinner() }
-                }
 
-                is Step.Start -> {
-                    if (own) {
-                        block("own") {
-                            OwnServer(flows, onProviders = {
-                                own = false
-                                flows.endSignIn()
-                                flows.startSignIn(context)
-                            }, onNone = onNoProviders)
-                        }
-                    } else {
-                        // "I already use Momotus": the other device's way first, one more press on that path.
-                        if (returning &&
-                            !tv
-                        ) {
-                            anotherDevice(another, session, sync, flows, signIn) { another = !another }
-                        }
-                        providers(step.providers, choose)
-                        // Email is its own row under the providers, the primary one when it is the only way (D6: never
-                        // on a TV, whose sign-in is the QR).
-                        val email = step.email && !tv
-                        if (email) {
-                            block("email-row") {
-                                val choose = { signIn.choose(AccountRules.EMAIL) }
-                                if (step.providers.isEmpty()) {
-                                    PrimaryButton(
-                                        AccountCopy.CONTINUE_WITH_EMAIL,
-                                        choose,
-                                        icon = Icons.Mail,
-                                        focusRequester = stepFocus(),
-                                    )
-                                } else {
-                                    SecondaryButton(AccountCopy.CONTINUE_WITH_EMAIL, choose, icon = Icons.Mail)
-                                }
-                            }
-                        }
-                        // No provider on this sync service: Continue, a passkey here or a new account (plans/tv-qr-login.md
-                        // 5.4); under email when email is the way in. Not while the service did not answer: its failure
-                        // and Try again say what to do.
-                        if (step.providers.isEmpty() && signIn.failure == null) {
-                            block("continue") {
-                                if (email) {
-                                    SecondaryButton(AccountCopy.CONTINUE, signIn::continueHere)
-                                } else {
-                                    PrimaryButton(
-                                        AccountCopy.CONTINUE,
-                                        signIn::continueHere,
-                                        focusRequester = stepFocus(),
-                                    )
-                                }
-                            }
-                        }
-                        if (!returning &&
-                            !tv
-                        ) {
-                            anotherDevice(another, session, sync, flows, signIn) { another = !another }
-                        }
-                        // Other ways to sign in: a 48 dp link that opens the rest (a passkey, a scan, a kit, one's server).
-                        block("other-link") { SheetLink(AccountCopy.OTHER_WAYS, { others = !others }) }
-                        if (others) {
-                            otherWays(flows.passkeys, signIn::usePasskey, onScan, onKit, onOwnServer = {
-                                own =
-                                    true
-                            })
-                        }
+            is Step.Start -> {
+                if (own) {
+                    block("own") {
+                        OwnServer(flows, onProviders = {
+                            own = false
+                            flows.endSignIn()
+                            flows.startSignIn(context)
+                        }, onNone = onNoProviders)
                     }
+                } else {
+                    loginStart(
+                        step.providers,
+                        email = step.email && !tv,
+                        continueHere = signIn::continueHere.takeIf { signIn.failure == null },
+                        returning = returning,
+                        another = another,
+                        onAnother = { another = !another },
+                        pairing = { SignInPairing(session, sync, flows.server(context), onJoined = signIn::joined) },
+                        choose = choose,
+                        onEmail = { signIn.choose(AccountRules.EMAIL) },
+                        others = others,
+                        onOthers = { others = !others },
+                    ) { otherWays(flows.passkeys, signIn::usePasskey, onScan, onKit, onOwnServer = { own = true }) }
                 }
+            }
 
-                Step.Email -> {
-                    block("email") { EmailStages(signIn.email, act) }
+            Step.Email -> {
+                block("email") { EmailStages(signIn.email, act) }
+            }
+
+            // The words and buttons are the failure's: "Scan this code with a device that's signed in."
+            is Step.Found -> {
+                block("found") {
+                    SignInPairing(session, sync, flows.server(context), onJoined = signIn::joined)
                 }
+            }
 
-                // The words and buttons are the failure's: "Scan this code with a device that's signed in."
-                is Step.Found -> {
-                    block("found") {
-                        SignInPairing(session, sync, flows.server(context), onJoined = signIn::joined)
-                    }
+            Step.New -> {
+                block("new") { NewAccount(session, sync, flows.server(context), signIn) }
+            }
+
+            Step.StartOverAsk -> {
+                block("start-over") {
+                    Callout(Icons.TriangleAlert, AccountCopy.START_OVER_WARNING)
+                    PrimaryButton(AccountCopy.START_OVER, signIn::confirmStartOver, focusRequester = stepFocus())
+                    SecondaryButton(SyncCopy.CANCEL, { signIn.act(Act.Cancel) })
                 }
+            }
 
-                Step.New -> {
-                    block("new") { NewAccount(session, sync, flows.server(context), signIn) }
-                }
-
-                Step.StartOverAsk -> {
-                    block("start-over") {
-                        Callout(Icons.TriangleAlert, AccountCopy.START_OVER_WARNING)
-                        PrimaryButton(AccountCopy.START_OVER, signIn::confirmStartOver, focusRequester = stepFocus())
-                        SecondaryButton(SyncCopy.CANCEL, { signIn.act(Act.Cancel) })
-                    }
-                }
-
-                Step.SecondWay -> {
-                    block("second-way") {
-                        val (again, kit, later) = AccountCopy.NO_SECOND_WAY_IN_ACTIONS
-                        Callout(Icons.ShieldAlert, AccountCopy.NO_SECOND_WAY_IN)
-                        PrimaryButton(again, signIn::savePasskeyAgain, focusRequester = stepFocus())
-                        SecondaryButton(kit, {
-                            kitNext = true
-                            signIn.later()
-                        })
-                        SecondaryButton(later, signIn::later)
-                    }
+            Step.SecondWay -> {
+                block("second-way") {
+                    val (again, kit, later) = AccountCopy.NO_SECOND_WAY_IN_ACTIONS
+                    Callout(Icons.ShieldAlert, AccountCopy.NO_SECOND_WAY_IN)
+                    PrimaryButton(again, signIn::savePasskeyAgain, focusRequester = stepFocus())
+                    SecondaryButton(kit, {
+                        kitNext = true
+                        signIn.later()
+                    })
+                    SecondaryButton(later, signIn::later)
                 }
             }
         }
@@ -488,28 +438,103 @@ internal fun ProviderButton(
     }
 }
 
-/** Use another device: the pairing code in the sheet, under its button (the phone only; TV and wide show the QR). */
-private fun LazyListScope.anotherDevice(
-    open: Boolean,
-    session: CoreSession,
-    sync: SyncController,
-    flows: AccountFlows,
-    signIn: AccountSignIn,
-    onToggle: () -> Unit,
+/**
+ * The Login sheet over the still wall, on first run and from Settings alike (plans/first-screens.md 3.3, D10): its
+ * title, Not now at the right on the first stage ([onNotNow] null on the others), the line ([returning]: another
+ * device's), the grabber whose drag goes back, and the stage's [items].
+ */
+@Composable
+internal fun LoginSheet(
+    title: String,
+    start: Boolean,
+    returning: Boolean,
+    onNotNow: (() -> Unit)?,
+    onBack: () -> Unit,
+    items: LazyListScope.() -> Unit,
 ) {
-    block("another") {
-        SecondaryButton(
-            FirstRunCopy.USE_ANOTHER_DEVICE,
-            onToggle,
-            Modifier.fillMaxWidth(),
-            icon = Icons.QrCode,
-            selected = open,
+    FirstSheet(
+        title,
+        width = 860.dp,
+        corner = onNotNow?.let { { SheetLink(AccountCopy.NOT_NOW, it) } },
+        line =
+            when {
+                !start -> null
+                returning -> FirstRunCopy.LOGIN_RETURNING
+                else -> FirstRunCopy.LOGIN_LINE
+            },
+        onDrag = onBack,
+        scroll = false,
+        pad = false,
+    ) {
+        LazyColumn(
+            Modifier.focusRestorer(),
+            verticalArrangement = Arrangement.spacedBy(Marquee.space.s),
+            content = items,
         )
-        if (open) {
-            val context = LocalContext.current
-            SignInPairing(session, sync, flows.server(context), onJoined = signIn::joined)
+    }
+}
+
+/**
+ * The Login sheet's first stage (3.3): each provider as it draws itself, Continue with email (the primary when it
+ * is the only way; [email] is false on a TV, D6), Continue when the service offers no provider ([continueHere], none
+ * while its failure shows), Use another device on the phone ([returning]: first) with the pairing code under it,
+ * and Other ways to sign in, a 48 dp link that opens [otherWays].
+ */
+internal fun LazyListScope.loginStart(
+    offered: List<String>,
+    email: Boolean,
+    continueHere: (() -> Unit)?,
+    returning: Boolean,
+    another: Boolean,
+    onAnother: () -> Unit,
+    pairing: @Composable () -> Unit,
+    choose: (String) -> Unit,
+    onEmail: () -> Unit,
+    others: Boolean,
+    onOthers: () -> Unit,
+    otherWays: LazyListScope.() -> Unit,
+) {
+    val device: LazyListScope.() -> Unit = {
+        block("another") {
+            // The phone only: TV and wide show the QR itself.
+            if (Marquee.form != Form.Tv) {
+                SecondaryButton(
+                    FirstRunCopy.USE_ANOTHER_DEVICE,
+                    onAnother,
+                    Modifier.fillMaxWidth(),
+                    icon = Icons.QrCode,
+                    selected = another,
+                )
+                if (another) pairing()
+            }
         }
     }
+    // "I already use Momotus": the other device's way first, one more press on that path.
+    if (returning) device()
+    providers(offered, choose)
+    if (email) {
+        block("email-row") {
+            if (offered.isEmpty()) {
+                PrimaryButton(AccountCopy.CONTINUE_WITH_EMAIL, onEmail, icon = Icons.Mail, focusRequester = stepFocus())
+            } else {
+                SecondaryButton(AccountCopy.CONTINUE_WITH_EMAIL, onEmail, icon = Icons.Mail)
+            }
+        }
+    }
+    // No provider on this sync service: Continue, a passkey here or a new account (plans/tv-qr-login.md 5.4); under
+    // email when email is the way in.
+    if (offered.isEmpty() && continueHere != null) {
+        block("continue") {
+            if (email) {
+                SecondaryButton(AccountCopy.CONTINUE, continueHere)
+            } else {
+                PrimaryButton(AccountCopy.CONTINUE, continueHere, focusRequester = stepFocus())
+            }
+        }
+    }
+    if (!returning) device()
+    block("other-link") { SheetLink(AccountCopy.OTHER_WAYS, onOthers) }
+    if (others) otherWays()
 }
 
 private fun LazyListScope.providers(

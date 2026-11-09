@@ -189,6 +189,32 @@ class FirstSetupTest {
         }
 
     @Test
+    fun `a profile's chosen list stays whole when its first is the chip shown, and reset starts the answers over`() =
+        runBlocking {
+            val setup = FirstSetup(ops, scope)
+            setup.start("tr", listOf("tr", "en")) {}!!.join()
+            setup.start("de", listOf("tr", "en")) {}!!.join()
+            val written =
+                sent("setPrefs").map { p ->
+                    p
+                        .getValue(
+                            "patch",
+                        ).jsonObject
+                        .getValue("subtitleLanguages")
+                        .jsonArray
+                        .map { it.jsonPrimitive.content }
+                }
+            assertEquals(listOf(listOf("tr", "en"), listOf("de")), written)
+            setup.bring = true
+            setup.best = true
+            setup.picked = "de"
+            setup.reset()
+            assertFalse(setup.bring)
+            assertFalse(setup.best)
+            assertNull(setup.picked)
+        }
+
+    @Test
     fun `Skip installs the defaults and writes no prefs`() =
         runBlocking {
             val setup = FirstSetup(ops, scope)

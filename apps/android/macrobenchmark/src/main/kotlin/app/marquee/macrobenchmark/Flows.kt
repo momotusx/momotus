@@ -28,16 +28,16 @@ fun MacrobenchmarkScope.openTitle() {
 }
 
 /**
- * A fresh install opens on onboarding: Start fresh with the recommended addons and Start fast, as a new viewer
- * does, so later starts open on Home. Nothing when Home is already there.
+ * A fresh install opens on first run's Welcome (plans/first-screens.md 2): Get started, Not now when a sync service
+ * offers sign-in (with none the profile form comes at once), Continue with the profile untouched, then Start watching
+ * with every answer as it is, as a new viewer does, so later starts open on Home. Nothing when Home is already there.
  */
 fun MacrobenchmarkScope.onboardIfAsked() {
-    val fresh = device.wait(Until.findObject(By.text("Start fresh")), 8_000) ?: return
-    fresh.click()
+    val start = device.wait(Until.findObject(By.text("Get started")), 8_000) ?: return
+    start.click()
+    device.wait(Until.findObject(By.text("Not now")), 5_000)?.click()
     device.wait(Until.findObject(By.text("Continue")), 10_000)?.click()
-    device.wait(Until.findObject(By.text("Start fast")), 10_000)?.click()
-    // The subtitles step, with the device's language chosen.
-    device.wait(Until.findObject(By.text("Continue")), 10_000)?.click()
+    device.wait(Until.findObject(By.text("Start watching")), 10_000)?.click()
     device.wait(Until.hasObject(By.textContains("Popular")), 30_000)
 }
 

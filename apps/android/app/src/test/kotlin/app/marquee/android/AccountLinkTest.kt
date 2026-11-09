@@ -57,7 +57,7 @@ class AccountLinkTest {
         assertEquals(listOf(Route.Welcome), FirstRunNav.initial(fresh))
         assertEquals(listOf(Route.Welcome), FirstRunNav.initial(fresh.copy(server = false)))
         assertEquals(listOf(Route.FirstProfile), FirstRunNav.initial(fresh.copy(inAccount = true)))
-        assertEquals(listOf(Route.Setup), FirstRunNav.initial(fresh.copy(profileStepDone = true)))
+        assertEquals(listOf(Route.FirstProfile, Route.Setup), FirstRunNav.initial(fresh.copy(profileStepDone = true)))
     }
 
     @Test

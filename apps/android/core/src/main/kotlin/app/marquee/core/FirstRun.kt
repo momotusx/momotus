@@ -149,12 +149,21 @@ class FirstSetup(
     var failed by mutableStateOf<Part?>(null)
         private set
 
-    /** Start watching with [subtitle] shown chosen (a code or [FirstRun.NONE]); [then] says whether Import is next. */
+    /**
+     * Start watching with [subtitle] shown chosen (a code or [FirstRun.NONE]); [then] says whether Import is next. The
+     * profile's [chosen] list stays whole when its first is the one shown (a setup opened again from an empty Home).
+     */
     fun start(
         subtitle: String,
+        chosen: List<String> = emptyList(),
         then: (import: Boolean) -> Unit,
     ): Job? {
-        val languages = if (subtitle == FirstRun.NONE) emptyList() else listOf(JsonPrimitive(subtitle))
+        val languages =
+            when (subtitle) {
+                FirstRun.NONE -> emptyList()
+                chosen.firstOrNull() -> chosen
+                else -> listOf(subtitle)
+            }.map(::JsonPrimitive)
         val patch =
             buildMap {
                 put("subtitleLanguages", JsonArray(languages))
@@ -166,6 +175,14 @@ class FirstSetup(
             if (!import) install(DefaultsMode.FirstRun)
             then(import)
         }
+    }
+
+    /** A setup opened again (an empty Home's): the answers start over, as the sheet pre-chooses them. */
+    fun reset() {
+        bring = false
+        best = false
+        picked = null
+        failed = null
     }
 
     /** Skip: the defaults go in (so first run ends), no prefs. */
