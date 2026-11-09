@@ -83,6 +83,7 @@ class TraktCopyTest {
                     "playerOn" to PLAYER_ON,
                     "playerUnmapped" to PLAYER_UNMAPPED,
                     "playerThisDeviceOff" to PLAYER_THIS_DEVICE_OFF,
+                    "playerReconnect" to PLAYER_RECONNECT,
                 )
             }
         assertEquals(shared.keys, ours.keys)
@@ -149,6 +150,7 @@ class TraktCopyTest {
         assertEquals(TraktCopy.PLAYER_ON, TraktCopy.player(TraktPlayback.On))
         assertEquals(TraktCopy.PLAYER_UNMAPPED, TraktCopy.player(TraktPlayback.Unmapped))
         assertEquals(TraktCopy.PLAYER_THIS_DEVICE_OFF, TraktCopy.player(TraktPlayback.ThisDeviceOff))
+        assertEquals(TraktCopy.PLAYER_RECONNECT, TraktCopy.player(TraktPlayback.Reconnect))
         assertNull(TraktCopy.player(TraktPlayback.Off))
         assertNull(TraktCopy.player(null))
     }

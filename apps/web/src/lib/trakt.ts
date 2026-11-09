@@ -104,6 +104,18 @@ export const pendingLine = (count: number) =>
 
 export const syncedLine = (r: TraktReport) => fill(traktWords.synced, { pushed: r.pushed, applied: r.applied });
 
+/** How long the player's Trakt notice shows, once per play (owner, 2026-11-08: it must never stay on the video). */
+export const NOTICE_MS = 4000;
+
+/** When this play's notice first showed, or null before it did. Once set it stays for the play, so a pause,
+ * a seek, a resume or a later state never shows it again; Settings, Trakt keeps the state. */
+export const noticeSince = (since: number | null, t: TraktPlayback | undefined, now: number): number | null =>
+  since ?? (playbackMark(t)?.tone === "warn" ? now : null);
+
+/** Whether the notice shows at `now`: only in its first `NOTICE_MS`. */
+export const noticeShows = (since: number | null, now: number): boolean =>
+  since !== null && now >= since && now - since < NOTICE_MS;
+
 /** The player's mark: none when the profile does not use Trakt. */
 export function playbackMark(t: TraktPlayback | undefined): { tone: "on" | "warn"; label: string } | null {
   switch (t) {
@@ -113,6 +125,8 @@ export function playbackMark(t: TraktPlayback | undefined): { tone: "on" | "warn
       return { tone: "warn", label: traktWords.playerUnmapped };
     case "thisDeviceOff":
       return { tone: "warn", label: traktWords.playerThisDeviceOff };
+    case "reconnect":
+      return { tone: "warn", label: traktWords.playerReconnect };
     default:
       return null;
   }

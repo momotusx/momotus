@@ -70,6 +70,7 @@ object TraktCopy {
     const val PLAYER_ON = "Trakt: this play is recorded"
     const val PLAYER_UNMAPPED = "Trakt: this title could not be matched, so this play is not recorded"
     const val PLAYER_THIS_DEVICE_OFF = "Trakt: this device is not signed in, so this play is not recorded"
+    const val PLAYER_RECONNECT = "Trakt: sign in again in Settings, so this play is not recorded"
 
     /** Android only, not in the shared words: the core signed out, the file kept the sign-in. */
     const val SIGN_OUT_NOT_STORED =
@@ -163,6 +164,7 @@ object TraktCopy {
             TraktPlayback.On -> PLAYER_ON
             TraktPlayback.Unmapped -> PLAYER_UNMAPPED
             TraktPlayback.ThisDeviceOff -> PLAYER_THIS_DEVICE_OFF
+            TraktPlayback.Reconnect -> PLAYER_RECONNECT
             TraktPlayback.Off, TraktPlayback.Unknown, null -> null
         }
 }

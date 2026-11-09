@@ -87,7 +87,26 @@ private func status(_ json: String) throws -> TraktStatus {
         #expect(TraktRules.playbackMark(.on)! == (false, W.playerOn))
         #expect(TraktRules.playbackMark(.unmapped)! == (true, W.playerUnmapped))
         #expect(TraktRules.playbackMark(.thisDeviceOff)! == (true, W.playerThisDeviceOff))
+        #expect(TraktRules.playbackMark(.reconnect)! == (true, W.playerReconnect))
         #expect(TraktRules.playbackMark(.off) == nil && TraktRules.playbackMark(nil) == nil)
+    }
+
+    @Test func thePlayerNoticeShowsOncePerPlayForAFewSecondsAndNeverStays() {
+        let start = Date(timeIntervalSince1970: 1000)
+        #expect(TraktRules.noticeSince(nil, trakt: .on, now: start) == nil)
+        #expect(TraktRules.noticeSince(nil, trakt: .off, now: start) == nil)
+        let since = TraktRules.noticeSince(nil, trakt: .thisDeviceOff, now: start)
+        #expect(since == start)
+        #expect(TraktRules.noticeShows(since: since, now: start))
+        #expect(TraktRules.noticeShows(since: since, now: start + TraktRules.noticeSeconds - 0.01))
+        // Gone after its seconds, and still gone an hour into the play.
+        #expect(!TraktRules.noticeShows(since: since, now: start + TraktRules.noticeSeconds))
+        #expect(!TraktRules.noticeShows(since: since, now: start + 3600))
+        // A pause, a seek, a resume or another warning later keeps the first time: never shown again.
+        #expect(TraktRules.noticeSince(since, trakt: .on, now: start + 60) == since)
+        #expect(TraktRules.noticeSince(since, trakt: .reconnect, now: start + 120) == since)
+        #expect(!TraktRules.noticeShows(since: TraktRules.noticeSince(since, trakt: .unmapped, now: start + 120), now: start + 120))
+        #expect(!TraktRules.noticeShows(since: nil, now: start))
     }
 
     @Test func theScreensNeverReadTheRecord() throws {

@@ -3270,16 +3270,74 @@ async fn a_dead_sign_in_never_shows_a_playback_as_recorded() {
     assert_eq!(playing.snapshot().trakt, TraktPlayback::On);
     playing.report_progress(at(10), MINUTES, false);
     until("the dead start shown", || {
-        playing.snapshot().trakt == TraktPlayback::ThisDeviceOff
+        playing.snapshot().trakt == TraktPlayback::Reconnect
     })
     .await;
     assert!(matches!(status(&core).state, TraktState::Reconnect { .. }));
     drop(playing);
     // A playback opened now, paused (nothing to send): never shown recorded.
     let paused = PlaybackView::open(&core, Vec::new(), episode(2));
-    assert_eq!(paused.snapshot().trakt, TraktPlayback::ThisDeviceOff);
+    assert_eq!(paused.snapshot().trakt, TraktPlayback::Reconnect);
     paused.report_progress(at(10), MINUTES, true);
     tokio::time::sleep(Duration::from_millis(1500)).await;
-    assert_eq!(paused.snapshot().trakt, TraktPlayback::ThisDeviceOff);
+    assert_eq!(paused.snapshot().trakt, TraktPlayback::Reconnect);
     assert!(fake.seen("POST", "/scrobble/start").len() == 1);
+}
+
+/// The Fire TV report (2026-11-08): the phone signed the profile in, then
+/// this device signed in by code as a TV does, played, and later its chain
+/// died (a 401, then the refresh refused). A device whose user signed in
+/// never reads "this device is not signed in": it says to sign in again.
+#[tokio::test]
+async fn a_device_whose_user_connected_never_reads_not_signed_in() {
+    let (core, fake) = setup("a-tv").await;
+    // The phone's sign-in, synced: the profile uses Trakt.
+    for key in ["trakt.account", "trakt.device.99"] {
+        core.library()
+            .set_setting("p", key, "\"a-tv\"", core.clock())
+            .unwrap();
+    }
+    fake.queue(
+        "POST /oauth/device/code",
+        vec![reply(
+            200,
+            json!({"device_code": "dev", "user_code": "TV123456",
+                   "verification_url": "https://auth.trakt.tv/activate", "expires_in": 600, "interval": 1}),
+        )],
+    );
+    let tokens = json!({"access_token": "at", "refresh_token": "rt", "expires_in": 604_800,
+                        "created_at": now() / 1000, "scope": "public", "token_type": "bearer"});
+    fake.queue("POST /oauth/device/token", vec![reply(200, tokens)]);
+    let login = TraktLoginView::open(&core);
+    until("the TV's sign-in", || {
+        matches!(login.snapshot(), TraktLoginSnapshot::Done { .. })
+    })
+    .await;
+    // The app stores the record, then acknowledges it.
+    let record = status(&core).record.expect("offered to the app");
+    core.set_trakt(Some(record)).await.unwrap();
+    let playing = PlaybackView::open(&core, Vec::new(), episode(1));
+    assert_ne!(playing.snapshot().trakt, TraktPlayback::ThisDeviceOff);
+    playing.report_progress(at(10), MINUTES, false);
+    fake.wait_for("the TV's start", |f| f.scrobbles().len() == 1)
+        .await;
+    until("recorded", || playing.snapshot().trakt == TraktPlayback::On).await;
+    drop(playing);
+    // Later the chain dies: the next start meets a 401, the refresh is refused.
+    fake.queue("POST /scrobble/start", vec![reply(401, json!({}))]);
+    fake.queue(
+        "POST /oauth/token",
+        vec![reply(400, json!({"error": "invalid_grant"}))],
+    );
+    let next = PlaybackView::open(&core, Vec::new(), episode(2));
+    next.report_progress(at(10), MINUTES, false);
+    until("the dead sign-in seen", || {
+        matches!(status(&core).state, TraktState::Reconnect { .. })
+    })
+    .await;
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    assert_eq!(next.snapshot().trakt, TraktPlayback::Reconnect);
+    drop(next);
+    let after = PlaybackView::open(&core, Vec::new(), episode(3));
+    assert_eq!(after.snapshot().trakt, TraktPlayback::Reconnect);
 }

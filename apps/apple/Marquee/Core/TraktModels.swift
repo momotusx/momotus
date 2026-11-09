@@ -109,5 +109,5 @@ struct TraktReport: Decodable, Hashable, Sendable {
 
 /// Trakt's side of a playback (`PlaybackSnapshot.trakt`).
 enum TraktPlayback: String, Decodable, Hashable, Sendable {
-    case on, unmapped, off, thisDeviceOff
+    case on, unmapped, off, thisDeviceOff, reconnect
 }

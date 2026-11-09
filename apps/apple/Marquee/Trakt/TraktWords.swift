@@ -1,3 +1,5 @@
+import Foundation
+
 /// Trakt copy, the same as apps/shared/trakt-words.json (the web and Android
 /// read that file; TraktTests checks this one against it), then the app's own.
 enum TraktWords {
@@ -49,6 +51,7 @@ enum TraktWords {
     static let playerOn = "Trakt: this play is recorded"
     static let playerUnmapped = "Trakt: this title could not be matched, so this play is not recorded"
     static let playerThisDeviceOff = "Trakt: this device is not signed in, so this play is not recorded"
+    static let playerReconnect = "Trakt: sign in again in Settings, so this play is not recorded"
 
     /// Every shared word by its key, for the parity test.
     static let table: [String: String] = [
@@ -100,6 +103,7 @@ enum TraktWords {
         "playerOn": playerOn,
         "playerUnmapped": playerUnmapped,
         "playerThisDeviceOff": playerThisDeviceOff,
+        "playerReconnect": playerReconnect,
     ]
 }
 
@@ -201,8 +205,25 @@ enum TraktRules {
         case .on: (false, TraktWords.playerOn)
         case .unmapped: (true, TraktWords.playerUnmapped)
         case .thisDeviceOff: (true, TraktWords.playerThisDeviceOff)
+        case .reconnect: (true, TraktWords.playerReconnect)
         case .off, nil: nil
         }
+    }
+
+    /// How long the player's Trakt notice shows, once per play (owner, 2026-11-08: it must never stay on the video).
+    static let noticeSeconds: TimeInterval = 4
+
+    /// When this play's notice first showed, or nil before it did. Once set it stays for the play, so a pause, a
+    /// seek, a resume or a later state never shows it again; Settings, Trakt keeps the state.
+    static func noticeSince(_ since: Date?, trakt: TraktPlayback?, now: Date) -> Date? {
+        since ?? (playbackMark(trakt)?.warn == true ? now : nil)
+    }
+
+    /// Whether the notice shows at `now`: only in its first `noticeSeconds`.
+    static func noticeShows(since: Date?, now: Date) -> Bool {
+        guard let since else { return false }
+        let age = now.timeIntervalSince(since)
+        return age >= 0 && age < noticeSeconds
     }
 
     /// The code read letter by letter, once, when it shows.

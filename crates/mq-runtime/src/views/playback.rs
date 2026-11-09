@@ -146,7 +146,7 @@ pub struct PlaybackSnapshot {
     pub next_at_ms: Option<u64>,
     /// Trakt's side: `on` scrobbles, `unmapped` (Trakt cannot name it),
     /// `off`, `thisDeviceOff` (the profile uses Trakt, this device is not
-    /// signed in).
+    /// signed in), `reconnect` (this device signed in, Trakt ended it).
     pub trakt: crate::trakt::TraktPlayback,
     /// The recommended version failed for a reason of its own (no picture
     /// on this device, a dead swarm, the wrong file) and the view moved on

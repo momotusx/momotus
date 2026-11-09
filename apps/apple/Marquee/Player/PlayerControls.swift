@@ -174,7 +174,7 @@ struct PlayerControls: View {
                         .foregroundStyle(.white.opacity(0.75))
                         .accessibilityLabel(spokenEpisode(season: season, episode: episode))
                 }
-                TraktMark(trakt: model.playback?.trakt)
+                TraktMark(trakt: model.playback?.trakt, notice: model.traktNotice)
             }
             Spacer()
             // Right: Picture in Picture, AirPlay when the stream allows it, then the end time.

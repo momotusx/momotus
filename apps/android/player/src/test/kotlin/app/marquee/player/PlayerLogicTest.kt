@@ -13,6 +13,24 @@ import kotlin.test.assertTrue
 
 class PlayerLogicTest {
     @Test
+    fun `the Trakt notice shows once per play for a few seconds and never stays`() {
+        // Nothing to say: no notice.
+        assertNull(traktNoticeSince(null, warns = false, nowMs = 1_000))
+        val since = traktNoticeSince(null, warns = true, nowMs = 1_000)
+        assertEquals(1_000L, since)
+        assertTrue(traktNoticeShows(since, 1_000))
+        assertTrue(traktNoticeShows(since, 1_000 + TRAKT_NOTICE_MS - 1))
+        // Gone after its seconds, and still gone an hour into the play.
+        assertFalse(traktNoticeShows(since, 1_000 + TRAKT_NOTICE_MS))
+        assertFalse(traktNoticeShows(since, 3_600_000))
+        // A pause, a seek, a resume or another warning state later keeps the first time: never shown again.
+        assertEquals(since, traktNoticeSince(since, warns = false, nowMs = 60_000))
+        assertEquals(since, traktNoticeSince(since, warns = true, nowMs = 120_000))
+        assertFalse(traktNoticeShows(traktNoticeSince(since, warns = true, nowMs = 120_000), 120_000))
+        assertFalse(traktNoticeShows(null, 1_000))
+    }
+
+    @Test
     fun `the core's start audio goes before the device's language`() {
         assertEquals(listOf("ja", "en"), audioLanguages(core = listOf("ja"), device = listOf("en")))
         assertEquals(listOf("en"), audioLanguages(core = listOf("en"), device = listOf("en")))

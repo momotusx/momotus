@@ -65,6 +65,10 @@ final class PlayerModel {
     private(set) var notice: String?
     /// A few seconds of words over the video: why the picked subtitle file did not load, or why the play moved or paused.
     private(set) var statusLine: String?
+    /// When this play's Trakt notice first showed (`TraktRules.noticeSince`), kept for the play.
+    @ObservationIgnored private var traktNoticeAt: Date?
+    /// The Trakt notice is in sight: once per play, `TraktRules.noticeSeconds`, never again on pause, seek or resume.
+    private(set) var traktNotice = false
     /// The picture's size, for placing subtitles on it rather than on the screen.
     private(set) var videoSize: CGSize = .zero
     private(set) var subtitle: SubtitleTrack?
@@ -1063,6 +1067,19 @@ final class PlayerModel {
         }
     }
 
+    /// The first Trakt warning of the play shows for a few seconds, then never again in this play.
+    private func showTraktNotice(_ trakt: TraktPlayback?) {
+        let now = Date.now
+        let since = TraktRules.noticeSince(traktNoticeAt, trakt: trakt, now: now)
+        guard since != traktNoticeAt, let since else { return }
+        traktNoticeAt = since
+        traktNotice = TraktRules.noticeShows(since: since, now: now)
+        Task {
+            try? await Task.sleep(for: .seconds(TraktRules.noticeSeconds))
+            traktNotice = TraktRules.noticeShows(since: since, now: .now)
+        }
+    }
+
     // MARK: core and player plumbing
 
     /// Milliseconds since the play was tapped, for the metric lines.
@@ -1086,6 +1103,7 @@ final class PlayerModel {
         }
         let startAudioChanged = snapshot.audioLanguages != playback?.audioLanguages
         playback = snapshot
+        showTraktNotice(snapshot.trakt)
         // The core named the start audio after the tracks came: it turns on while the engine's own pick still plays.
         if startAudioChanged, !viewerPickedAudio { startAudio() }
         if PlayerLayout.retryRose(old: lastRetries, new: snapshot.retries) { showTryingAgain() }

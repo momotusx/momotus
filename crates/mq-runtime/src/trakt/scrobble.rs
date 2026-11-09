@@ -56,6 +56,9 @@ pub enum TraktPlayback {
     Off,
     /// The profile uses Trakt; this device is not signed in.
     ThisDeviceOff,
+    /// This device signed in, but Trakt ended its sign-in (a refresh
+    /// refused): sign in again. Never shown as "not signed in".
+    Reconnect,
 }
 
 pub(crate) type Report = Box<dyn Fn(TraktPlayback) + Send>;
@@ -719,11 +722,11 @@ fn remember(core: &Core, at: Bind<'_>, video_id: &str, percent: f64) {
 }
 
 /// What a playback with a connection shows: `On` while its sign-in works.
-/// A dead one (sign in again) records nothing, which the apps show as
-/// `ThisDeviceOff` (this device is not signed in).
+/// A dead one records nothing and says to sign in again: this device did
+/// sign in, so it never reads as `ThisDeviceOff`.
 fn shown(conn: &Conn) -> TraktPlayback {
     match futures_util::FutureExt::now_or_never(conn.auth.status()) {
-        Some(Err(AuthError::Reconnect(_))) => TraktPlayback::ThisDeviceOff,
+        Some(Err(AuthError::Reconnect(_))) => TraktPlayback::Reconnect,
         _ => TraktPlayback::On,
     }
 }

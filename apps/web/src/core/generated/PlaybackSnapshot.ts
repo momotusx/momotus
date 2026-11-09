@@ -122,7 +122,7 @@ nextAtMs: number | null,
 /**
  * Trakt's side: `on` scrobbles, `unmapped` (Trakt cannot name it),
  * `off`, `thisDeviceOff` (the profile uses Trakt, this device is not
- * signed in).
+ * signed in), `reconnect` (this device signed in, Trakt ended it).
  */
 trakt: TraktPlayback, 
 /**

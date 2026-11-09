@@ -24,6 +24,7 @@ import androidx.media3.common.text.Cue
 import androidx.media3.datasource.HttpDataSource
 import androidx.media3.exoplayer.ExoPlaybackException
 import app.marquee.core.StreamChoiceCopy
+import app.marquee.core.TraktCopy
 import app.marquee.core.client.CoreLog
 import app.marquee.core.model.Attempt
 import app.marquee.core.model.EmptyKind
@@ -198,6 +199,10 @@ class PlaybackController(
 
     /** Trakt's side of this play, for the player's mark; null until the core says. */
     var trakt: TraktPlayback? by mutableStateOf(null)
+        private set
+
+    /** When this play's Trakt notice first showed (elapsed realtime), kept for the play ([traktNoticeSince]). */
+    var traktNoticeAt: Long? by mutableStateOf(null)
         private set
 
     /** Where Skip credits was pressed: Up Next shows at once from there, until the viewer seeks back before it. */
@@ -502,6 +507,8 @@ class PlaybackController(
         segments = s.segments
         nextAtMs = s.nextAtMs
         trakt = s.trakt
+        val warns = s.trakt != TraktPlayback.On && TraktCopy.player(s.trakt) != null
+        traktNoticeAt = traktNoticeSince(traktNoticeAt, warns, SystemClock.elapsedRealtime())
         offer = s.offer
         empty = s.empty.takeIf { s.phase == PlaybackPhase.Failed }
         chooseAnother = s.chooseAnother

@@ -345,12 +345,14 @@ private struct TraktConnect: View {
 }
 
 /// The player's mark under the title: Trakt and a check while the play is
-/// recorded; a warning says itself on screen, not only to VoiceOver.
+/// recorded; a warning says itself on screen, not only to VoiceOver, but only
+/// while `notice` is on (`PlayerModel.traktNotice`: once per play, a few seconds).
 struct TraktMark: View {
     let trakt: TraktPlayback?
+    var notice = true
 
     var body: some View {
-        if let mark = TraktRules.playbackMark(trakt) {
+        if let mark = TraktRules.playbackMark(trakt), !mark.warn || notice {
             HStack(spacing: Theme.Space.xs) {
                 Glyph(mark.warn ? "triangle-alert" : "circle-check", size: Theme.type.callout)
                     .foregroundStyle(mark.warn ? Theme.Palette.warn : Theme.Palette.ok)

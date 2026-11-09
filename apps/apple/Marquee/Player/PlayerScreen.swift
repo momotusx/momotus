@@ -178,8 +178,8 @@ struct PlayerScreen: View {
                         lastTouch = .now
                     }, activity: { lastTouch = .now }, pip: pipControl, windowHeight: windowHeight, measured: { controlsHeight = $0 }, measuredTop: { topBarFoot = $0 })
                         .transition(.opacity)
-                } else if model.playback?.phase != "failed", let trakt = model.playback?.trakt, TraktRules.playbackMark(trakt)?.warn == true {
-                    // A Trakt warning stays in sight with the controls hidden: it often comes after they hid.
+                } else if model.traktNotice, model.playback?.phase != "failed", let trakt = model.playback?.trakt, TraktRules.playbackMark(trakt)?.warn == true {
+                    // A Trakt warning shows with the controls hidden too, for its few seconds once per play.
                     TraktMark(trakt: trakt)
                         .padding(.horizontal, Theme.Space.s)
                         .padding(.vertical, Theme.Space.xs)
@@ -332,10 +332,11 @@ struct PlayerScreen: View {
         .animation(Theme.Motion.panel, value: model.statusLine)
         // Said once, as it shows.
         .onChange(of: model.statusLine) { _, now in if let now { announce(now) } }
-        // A Trakt warning is said once, when it arrives.
-        .onChange(of: model.playback?.trakt) { _, now in
-            if let mark = TraktRules.playbackMark(now), mark.warn { announce(mark.label) }
+        // A Trakt warning is said once per play, as its notice shows.
+        .onChange(of: model.traktNotice) { _, shown in
+            if shown, let mark = TraktRules.playbackMark(model.playback?.trakt), mark.warn { announce(mark.label) }
         }
+        .animation(Theme.Motion.panel, value: model.traktNotice)
         // Back from the card's Settings: the versions are asked again, so a source added there plays.
         .onChange(of: settingsPlace) { old, new in
             if old != nil, new == nil, model.noPick { model.retryPick() }

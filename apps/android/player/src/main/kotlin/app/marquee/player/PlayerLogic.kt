@@ -38,6 +38,25 @@ fun progressReport(
     return ProgressReport(positionMs.coerceAtMost(durationMs), durationMs, !playWhenReady || ended || suppressed)
 }
 
+/** How long the player's Trakt notice shows, once per play (owner, 2026-11-08: it must never stay on the video). */
+const val TRAKT_NOTICE_MS = 4_000L
+
+/**
+ * When this play's Trakt notice first showed, or null before it ever did. Once set it is kept for the whole
+ * play, so a pause, a seek, a resume or a later state never shows it again; Settings, Trakt keeps the state.
+ */
+fun traktNoticeSince(
+    since: Long?,
+    warns: Boolean,
+    nowMs: Long,
+): Long? = since ?: nowMs.takeIf { warns }
+
+/** Whether the notice shows at [nowMs]: only in its first [TRAKT_NOTICE_MS], then it fades out for good. */
+fun traktNoticeShows(
+    since: Long?,
+    nowMs: Long,
+): Boolean = since != null && nowMs - since in 0 until TRAKT_NOTICE_MS
+
 /**
  * How far one D-pad seek press jumps. A held key grows the step as it repeats: 10 s for the first
  * presses, then 20, 30 and 60, so a two hour film can be crossed without hundreds of presses.

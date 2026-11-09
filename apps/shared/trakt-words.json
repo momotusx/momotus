@@ -46,5 +46,6 @@
   "unmappedLede": "Trakt and Momotus could not agree on these, so they are not sent or brought in.",
   "playerOn": "Trakt: this play is recorded",
   "playerUnmapped": "Trakt: this title could not be matched, so this play is not recorded",
-  "playerThisDeviceOff": "Trakt: this device is not signed in, so this play is not recorded"
+  "playerThisDeviceOff": "Trakt: this device is not signed in, so this play is not recorded",
+  "playerReconnect": "Trakt: sign in again in Settings, so this play is not recorded"
 }

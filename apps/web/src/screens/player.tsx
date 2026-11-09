@@ -48,6 +48,7 @@ import { DELAY_SETTLE_MS } from "../lib/delay";
 import { cuePlace, cueSpot, cueTop, SAFE_LINE } from "../lib/cues";
 import { bufferShare, loadingLines, STALL_AHEAD_S, startFill } from "../lib/loading";
 import { fileChoice, offSummary, pickerLanguages, sameLanguage, startOption } from "../lib/subtitles";
+import { NOTICE_MS, noticeShows, noticeSince } from "../lib/trakt";
 import { audioTrackName, choiceWords, emptyWords, languageName, nextVersion, qualityCell, qualityText, restartLine, subtitleNote, subtitleNoteLines } from "../lib/words";
 import { VersionsPage } from "./versions";
 import "./player.css";
@@ -277,6 +278,24 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
     );
   });
   const snap = () => playback()?.state.data ?? null;
+  // The Trakt notice: once per play (the page is keyed per play), a few seconds, then never again.
+  const [traktSince, setTraktSince] = createSignal<number | null>(null);
+  const [traktNow, setTraktNow] = createSignal(Date.now());
+  createEffect(() => {
+    const was = untrack(traktSince);
+    const since = noticeSince(was, snap()?.trakt, Date.now());
+    if (since !== was) setTraktSince(since);
+  });
+  // Its end: tied to the start alone, so a later snapshot never cancels the timer.
+  createEffect(
+    on(traktSince, (since) => {
+      if (since === null) return;
+      setTraktNow(since);
+      const t = setTimeout(() => setTraktNow(Date.now()), NOTICE_MS);
+      onCleanup(() => clearTimeout(t));
+    }),
+  );
+  const traktNotice = () => noticeShows(traktSince(), traktNow());
   const failed = () => snap()?.phase === "failed";
   // A failed play's reason in the shared table: unreachable (Try again), none plays
   // here (another version); notStarted keeps Try again and Choose another version. A hand pick with an
@@ -1184,7 +1203,7 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
       inert={layer() || undefined}
       data-scheme="dark"
       data-subsize={prefs.state.data?.subtitleSize ?? "medium"}
-      classList={{ idle: idle(), started: started(), paused: pausedNow(), loading: wait() === "start", stalling: wait() === "stall", offering: another() }}
+      classList={{ idle: idle(), started: started(), paused: pausedNow(), loading: wait() === "start", stalling: wait() === "stall", offering: another(), noticing: traktNotice() }}
       onPointerMove={wake}
       // A control taking focus (a Tab, a click) brings the controls up, so it is never focused out of sight.
       on:focusin={(e) => (e.target as Element).closest(".osd, .ptitle") && wake()}
@@ -1299,7 +1318,7 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
         <h1>{ctx.details()?.name ?? ""}</h1>
         <Show when={ctx.label()}>{(l) => <p>{l()}</p>}</Show>
         <Show when={pausedNow() && (ctx.episode()?.overview ?? ctx.details()?.description)}>{(t) => <p class="psyn">{t()}</p>}</Show>
-        <TraktMark state={snap()?.trakt} />
+        <TraktMark state={snap()?.trakt} notice={traktNotice()} />
       </header>
       <Show when={endsAt()}>{(t) => <p class="clock num">Ends at {t()}</p>}</Show>
 

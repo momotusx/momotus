@@ -451,9 +451,10 @@ fun TvPlayer(
             }
         }
 
-        // Not recorded on Trakt: said under the title block, and still there when the controls hide.
+        // Not recorded on Trakt: said under the title block once per play, for a few seconds.
         TraktWarning(
             controller.trakt,
+            controller.traktNoticeAt,
             Modifier.align(Alignment.TopStart).padding(start = safe.side, top = safe.top + 150.dp),
         )
 

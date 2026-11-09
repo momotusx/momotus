@@ -34,6 +34,9 @@ html[data-engine="mpv"] .player-scr.started .player-bd { opacity: 0; }
  * phone): Back and the offer only. */
 .player-scr.idle.offering .ptitle { opacity: 1; pointer-events: auto; }
 .player-scr.idle.offering .ptitle > :not(.pback-row) { visibility: hidden; }
+/* The Trakt notice shows its few seconds with the controls hidden too: the notice only. */
+.player-scr.idle.noticing .ptitle { opacity: 1; }
+.player-scr.idle.noticing .ptitle > :not(.trakt-mark) { visibility: hidden; }
 
 .ptitle { position: absolute; left: var(--safe-side); top: var(--safe-top); max-width: 1200px; }
 .ptitle h1 { font: 800 var(--type-title2) / 1.05 var(--font-display); }

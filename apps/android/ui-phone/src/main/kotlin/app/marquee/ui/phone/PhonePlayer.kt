@@ -416,10 +416,11 @@ fun PhonePlayer(
                 }
             }
         }
-        // Not recorded on Trakt: said under the title row, and still there when the controls hide.
+        // Not recorded on Trakt: said under the title row once per play, for a few seconds.
         if (!inPip) {
             TraktWarning(
                 controller.trakt,
+                controller.traktNoticeAt,
                 Modifier
                     .align(Alignment.TopStart)
                     .windowInsetsPadding(WindowInsets.displayCutout)

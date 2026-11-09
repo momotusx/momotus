@@ -1,6 +1,10 @@
 package app.marquee.player
 
+import android.os.SystemClock
 import android.view.accessibility.AccessibilityManager
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -29,6 +33,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -1082,33 +1087,50 @@ fun TraktMark(
 }
 
 /**
- * Why this play does not reach Trakt (unmapped, or this device not signed in), as a visible sentence on
- * a glass pill. It stays while the controls hide, so a viewer who never opens them still learns it.
+ * Why this play does not reach Trakt (unmapped, this device not signed in, or its sign-in ended), as a
+ * visible sentence on a glass pill, said once to a screen reader. It shows once per play, for
+ * [TRAKT_NOTICE_MS] from [since] (`PlaybackController.traktNoticeAt`), then fades out for good: a pause, a
+ * seek or a resume never brings it back, and Settings, Trakt keeps the state (owner, 2026-11-08).
  */
 @Composable
 fun TraktWarning(
     trakt: TraktPlayback?,
+    since: Long?,
     modifier: Modifier = Modifier,
 ) {
-    if (trakt != TraktPlayback.Unmapped && trakt != TraktPlayback.ThisDeviceOff) return
-    val words = TraktCopy.player(trakt) ?: return
+    // Every state with words except On (its own mark) is one where the play is not recorded.
+    val words = TraktCopy.player(trakt)?.takeIf { trakt != TraktPlayback.On }
+    var now by remember { mutableLongStateOf(SystemClock.elapsedRealtime()) }
+    LaunchedEffect(since) {
+        if (since == null) return@LaunchedEffect
+        delay((since + TRAKT_NOTICE_MS - SystemClock.elapsedRealtime()).coerceAtLeast(0))
+        now = SystemClock.elapsedRealtime()
+    }
     val tv = Marquee.form == Form.Tv
     val shape = RoundedCornerShape(Marquee.radius.pill)
-    Row(
-        modifier
-            .widthIn(max = if (tv) 720.dp else 420.dp)
-            .clip(shape)
-            .background(Marquee.colors.glass)
-            .padding(horizontal = if (tv) 16.dp else 12.dp, vertical = if (tv) 10.dp else 8.dp),
-        horizontalArrangement = Arrangement.spacedBy(if (tv) 10.dp else 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
+    AnimatedVisibility(
+        visible = words != null && traktNoticeShows(since, now),
+        modifier = modifier,
+        enter = fadeIn(),
+        exit = fadeOut(),
     ) {
-        MqIcon(
-            if (trakt == TraktPlayback.Unmapped) Icons.CircleQuestionMark else Icons.Unlink,
-            tint = Marquee.colors.warn,
-            size = if (tv) 20.dp else 16.dp,
-        )
-        MqText(words, role = TextRole.Caption, color = Marquee.colors.text)
+        Row(
+            Modifier
+                .widthIn(max = if (tv) 720.dp else 420.dp)
+                .clip(shape)
+                .background(Marquee.colors.glass)
+                .semantics { liveRegion = LiveRegionMode.Polite }
+                .padding(horizontal = if (tv) 16.dp else 12.dp, vertical = if (tv) 10.dp else 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(if (tv) 10.dp else 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            MqIcon(
+                if (trakt == TraktPlayback.Unmapped) Icons.CircleQuestionMark else Icons.Unlink,
+                tint = Marquee.colors.warn,
+                size = if (tv) 20.dp else 16.dp,
+            )
+            MqText(words.orEmpty(), role = TextRole.Caption, color = Marquee.colors.text)
+        }
     }
 }
 
