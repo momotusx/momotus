@@ -157,7 +157,7 @@ impl Device {
         (self.own.len(), self.nets.len(), self.tunnels)
     }
 
-    #[cfg(any(test, feature = "test-dns"))]
+    #[cfg(all(any(test, feature = "test-dns"), not(target_arch = "wasm32")))]
     pub(crate) fn own(&self) -> &[IpAddr] {
         &self.own
     }
@@ -228,8 +228,36 @@ pub(crate) fn interfaces() -> std::io::Result<Vec<Interface>> {
     Ok(list)
 }
 
+/// The service's `os.networkInterfaces()` on webOS (plans/webos.md 3.2).
+#[cfg(target_arch = "wasm32")]
+pub(crate) fn interfaces() -> std::io::Result<Vec<Interface>> {
+    from_node(&crate::host::interfaces_json())
+}
+
+/// Node's `os.networkInterfaces()` as JSON (`{name: [{address, netmask,
+/// internal, ...}]}`); Node does not say which links are point to point.
+#[cfg(any(target_arch = "wasm32", test))]
+pub(crate) fn from_node(json: &str) -> std::io::Result<Vec<Interface>> {
+    let ip = |v: &serde_json::Value| v.as_str()?.split('%').next()?.parse::<IpAddr>().ok();
+    let names: serde_json::Map<String, serde_json::Value> =
+        serde_json::from_str(json).map_err(|_| std::io::ErrorKind::InvalidData)?;
+    Ok(names
+        .values()
+        .filter_map(|list| list.as_array())
+        .flatten()
+        .filter_map(|entry| {
+            Some(Interface {
+                addr: ip(&entry["address"])?,
+                mask: ip(&entry["netmask"]),
+                loopback: entry["internal"].as_bool().unwrap_or(false),
+                point_to_point: false,
+            })
+        })
+        .collect())
+}
+
 // ponytail: no Windows build ships; read GetAdaptersAddresses if one does.
-#[cfg(not(unix))]
+#[cfg(all(not(unix), not(target_arch = "wasm32")))]
 pub(crate) fn interfaces() -> std::io::Result<Vec<Interface>> {
     Err(std::io::ErrorKind::Unsupported.into())
 }
@@ -519,6 +547,28 @@ mod tests {
             let len = i.mask.and_then(prefix_len);
             assert!(len.is_some_and(|l| (8..=32).contains(&l)), "{i:?}");
         }
+    }
+
+    /// webOS: the service's `os.networkInterfaces()` gives the same device
+    /// (own addresses, on-link prefixes, loopback skipped for prefixes).
+    #[test]
+    fn the_device_is_read_from_node_interfaces() {
+        let json = r#"{
+            "lo": [{"address": "127.0.0.1", "netmask": "255.0.0.0", "family": "IPv4", "internal": true}],
+            "wlan0": [
+                {"address": "192.168.1.20", "netmask": "255.255.255.0", "family": "IPv4", "internal": false},
+                {"address": "fe80::1%wlan0", "netmask": "ffff:ffff:ffff:ffff::", "family": 6, "internal": false},
+                {"address": "not an address", "netmask": "", "internal": false}
+            ]
+        }"#;
+        let list = from_node(json).unwrap();
+        assert_eq!(list.len(), 3, "{list:?}");
+        assert!(list[0].loopback && list[0].addr == ip("127.0.0.1"));
+        let device = Device::from_interfaces(list);
+        assert_eq!(device.sizes(), (3, 2, 0));
+        assert!(permitted(ip("8.8.8.8"), &[], &device));
+        assert!(!permitted(ip("192.168.1.77"), &[], &device));
+        assert!(from_node("[]").is_err() && from_node("").is_err());
     }
 
     #[test]

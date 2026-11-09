@@ -10,9 +10,6 @@ publish.workspace = true
 test-dns = []
 
 [dependencies]
-reqwest = { version = "0.13", default-features = false, features = ["rustls-no-provider", "gzip", "stream", "charset"] }
-rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
-tokio = { workspace = true, features = ["net"] }
 futures-util = "0.3"
 bytes = "1"
 url.workspace = true
@@ -20,6 +17,22 @@ thiserror.workspace = true
 tracing.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+# `Method` and `HeaderMap` (reqwest re-exports the same types natively).
+http = "1"
+# The host fetch's bodies and URL credentials (plans/webos.md 3.2).
+base64 = "0.22"
+percent-encoding = "2"
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+reqwest = { version = "0.13", default-features = false, features = ["rustls-no-provider", "gzip", "stream", "charset"] }
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
+tokio = { workspace = true, features = ["net"] }
+
+# The webOS core (plans/webos.md 3.2): every hop goes through the service's
+# host fetch, and tokio keeps only its semaphores.
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+tokio = { version = "1", default-features = false, features = ["sync"] }
+wasm-bindgen = "=0.2.129"
 
 [target.'cfg(unix)'.dependencies]
 # getifaddrs: the device's own addresses and on-link prefixes.
@@ -27,5 +40,16 @@ libc = "0.2"
 
 [dev-dependencies]
 mq-http = { path = ".", features = ["test-dns"] }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 tokio = { workspace = true, features = ["net", "io-util"] }
 tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt"] }
+
+# `host_e2e`: the webOS transport in Node over the service's real host.
+[target.'cfg(target_arch = "wasm32")'.dev-dependencies]
+js-sys = "0.3.106"
+wasm-bindgen-futures = "0.4.79"
+
+[[example]]
+name = "host_e2e"
+crate-type = ["cdylib"]

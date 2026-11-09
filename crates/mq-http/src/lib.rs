@@ -2,26 +2,40 @@
 //! size caps, per-host and global concurrency limits, and request priorities.
 
 mod budget;
+// The webOS core's transport (plans/webos.md 3.2); native test builds run it
+// against a fake host.
+#[cfg(any(target_arch = "wasm32", test))]
+mod host;
 mod net;
 
 pub use budget::Priority;
+#[cfg(target_arch = "wasm32")]
+pub use host::{Prefix, fetched, resolved};
+pub use http::Method;
+pub use http::header::HeaderMap;
 pub use net::{is_private_host, is_private_ip, local_addrs, redact_url};
-pub use reqwest::Method;
-pub use reqwest::header::HeaderMap;
 pub use url::Url;
 
 use budget::Budget;
-use bytes::{Bytes, BytesMut};
+use bytes::Bytes;
+#[cfg(not(target_arch = "wasm32"))]
+use bytes::BytesMut;
+#[cfg(not(target_arch = "wasm32"))]
 use futures_util::StreamExt;
+use http::header::{ACCEPT_ENCODING, HeaderName, HeaderValue, RANGE};
+#[cfg(not(target_arch = "wasm32"))]
+use http::header::{CONTENT_TYPE, LOCATION, RETRY_AFTER};
 use net::Device;
-use reqwest::header::{
-    ACCEPT_ENCODING, CONTENT_TYPE, HeaderName, HeaderValue, LOCATION, RANGE, RETRY_AFTER,
-};
 use std::collections::HashMap;
-use std::net::{IpAddr, SocketAddr};
+use std::net::IpAddr;
+#[cfg(not(target_arch = "wasm32"))]
+use std::net::SocketAddr;
+#[cfg(not(target_arch = "wasm32"))]
+use std::sync::Once;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::{Arc, Mutex, MutexGuard, Once, RwLock};
+use std::sync::{Arc, Mutex, MutexGuard, RwLock};
 use std::time::Duration;
+#[cfg(not(target_arch = "wasm32"))]
 use tokio::time::Instant;
 
 /// Redirects a request follows at most.
@@ -151,6 +165,7 @@ impl HttpError {
         }
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
     fn from_reqwest(e: reqwest::Error, timeout: Duration) -> Self {
         if e.is_timeout() {
             HttpError::Timeout(timeout)
@@ -163,10 +178,12 @@ impl HttpError {
 }
 
 /// Whether a scoped resolver's refusal is among `e`'s causes.
+#[cfg(not(target_arch = "wasm32"))]
 fn is_blocked(e: &(dyn std::error::Error + 'static)) -> bool {
     std::iter::successors(Some(e), |e| e.source()).any(|e| e.is::<Blocked>())
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 fn redact_error(e: reqwest::Error) -> String {
     let url = e.url().map(redact_url);
     let e = e.without_url();
@@ -326,6 +343,7 @@ impl Default for ClientConfig {
 pub struct HttpClient {
     /// The unscoped clients, shared by every clone and replaced as a whole by
     /// `network_changed`.
+    #[cfg(not(target_arch = "wasm32"))]
     pools: Arc<RwLock<Arc<Pools>>>,
     budget: Arc<Budget>,
     scopes: Arc<Scopes>,
@@ -390,6 +408,7 @@ impl std::fmt::Debug for HopRule {
 }
 
 /// The unscoped clients and their connection pools.
+#[cfg(not(target_arch = "wasm32"))]
 struct Pools {
     /// For requests allowed to reach private addresses (local addons).
     inner: reqwest::Client,
@@ -402,6 +421,7 @@ struct Pools {
     direct: reqwest::Client,
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl Pools {
     fn build(config: &ClientConfig) -> Result<Self, HttpError> {
         let follow = || builder(config).redirect(reqwest::redirect::Policy::custom(redirect));
@@ -497,7 +517,11 @@ impl Scopes {
             return scope.clone();
         }
         let scope = self.build(local.to_vec());
-        if scope.client.is_ok() {
+        #[cfg(not(target_arch = "wasm32"))]
+        let keep = scope.client.is_ok();
+        #[cfg(target_arch = "wasm32")]
+        let keep = true;
+        if keep {
             clients.insert(local.to_vec(), scope.clone());
         }
         scope
@@ -512,13 +536,19 @@ impl Scopes {
             device: self.device.clone(),
             refused: Default::default(),
         };
-        let client = builder(&self.config)
-            .redirect(reqwest::redirect::Policy::none())
-            .no_proxy()
-            .dns_resolver(allowed.clone())
-            .build()
-            .map_err(|e| HttpError::Network(e.to_string()));
-        Scope { client, allowed }
+        // The host fetch connects only to the addresses `host` approved.
+        #[cfg(target_arch = "wasm32")]
+        return Scope { allowed };
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let client = builder(&self.config)
+                .redirect(reqwest::redirect::Policy::none())
+                .no_proxy()
+                .dns_resolver(allowed.clone())
+                .build()
+                .map_err(|e| HttpError::Network(e.to_string()));
+            Scope { client, allowed }
+        }
     }
 }
 
@@ -526,6 +556,7 @@ impl Scopes {
 struct Scope {
     /// A client that could not be built fails every request: nothing falls
     /// back to a wider one.
+    #[cfg(not(target_arch = "wasm32"))]
     client: Result<reqwest::Client, HttpError>,
     allowed: Allowed,
 }
@@ -586,6 +617,7 @@ impl AddressScope {
     /// Names through the system resolver (the test table first), keeping
     /// permitted answers; none left fails as `blocked address`. Refusals
     /// count on this scope.
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn resolver(&self) -> Arc<dyn reqwest::dns::Resolve> {
         Arc::new(self.allowed.clone())
     }
@@ -599,6 +631,7 @@ impl std::fmt::Debug for AddressScope {
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl reqwest::dns::Resolve for Allowed {
     fn resolve(&self, name: reqwest::dns::Name) -> reqwest::dns::Resolving {
         let allowed = self.clone();
@@ -619,18 +652,22 @@ impl reqwest::dns::Resolve for Allowed {
 }
 
 /// A scoped resolver's refusal: no address it found is in scope.
+#[cfg(not(target_arch = "wasm32"))]
 #[derive(Debug)]
 struct Blocked;
 
+#[cfg(not(target_arch = "wasm32"))]
 impl std::fmt::Display for Blocked {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(OUT_OF_SCOPE)
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl std::error::Error for Blocked {}
 
 /// The system resolver's answer, or the test table's.
+#[cfg(not(target_arch = "wasm32"))]
 async fn lookup(name: &str) -> std::io::Result<Vec<SocketAddr>> {
     #[cfg(any(test, feature = "test-dns"))]
     if let Some(found) = test_dns::get(name) {
@@ -645,7 +682,7 @@ async fn lookup(name: &str) -> std::io::Result<Vec<SocketAddr>> {
 /// Names the scoped resolver answers before the system resolver, so a test
 /// can point a name at a fixture and change its answer, and interface lists
 /// a client reads instead of the device's. Only dev-dependencies enable it.
-#[cfg(any(test, feature = "test-dns"))]
+#[cfg(all(any(test, feature = "test-dns"), not(target_arch = "wasm32")))]
 pub mod test_dns {
     pub use crate::net::Interface;
     use crate::{HttpClient, lock};
@@ -919,8 +956,10 @@ pub mod test_dns {
 
 /// Resolves with the system resolver (or the test table) and keeps only
 /// public addresses.
+#[cfg(not(target_arch = "wasm32"))]
 struct PublicOnly;
 
+#[cfg(not(target_arch = "wasm32"))]
 impl reqwest::dns::Resolve for PublicOnly {
     fn resolve(&self, name: reqwest::dns::Name) -> reqwest::dns::Resolving {
         Box::pin(async move {
@@ -939,10 +978,10 @@ impl reqwest::dns::Resolve for PublicOnly {
 
 /// The system resolver behind the test table, every address kept (test
 /// builds' private-reach client).
-#[cfg(any(test, feature = "test-dns"))]
+#[cfg(all(any(test, feature = "test-dns"), not(target_arch = "wasm32")))]
 struct TestTable;
 
-#[cfg(any(test, feature = "test-dns"))]
+#[cfg(all(any(test, feature = "test-dns"), not(target_arch = "wasm32")))]
 impl reqwest::dns::Resolve for TestTable {
     fn resolve(&self, name: reqwest::dns::Name) -> reqwest::dns::Resolving {
         Box::pin(async move {
@@ -954,6 +993,7 @@ impl reqwest::dns::Resolve for TestTable {
 
 /// `lookup`, and the answers a test lets stand for public addresses
 /// (`test_dns::set_public`), after the name's other test answers.
+#[cfg(not(target_arch = "wasm32"))]
 async fn public_lookup(name: &str) -> std::io::Result<(Vec<SocketAddr>, Vec<IpAddr>)> {
     #[cfg(any(test, feature = "test-dns"))]
     if let Some(stand_ins) = test_dns::public(name) {
@@ -965,8 +1005,10 @@ async fn public_lookup(name: &str) -> std::io::Result<(Vec<SocketAddr>, Vec<IpAd
     Ok((lookup(name).await?, Vec::new()))
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 static CRYPTO: Once = Once::new();
 
+#[cfg(not(target_arch = "wasm32"))]
 fn install_crypto_provider() {
     CRYPTO.call_once(|| {
         // Ignore the error: another component may have installed one already.
@@ -977,6 +1019,7 @@ fn install_crypto_provider() {
 /// Follows at most 5 redirects. Callers check only the first URL against
 /// `allow_private`, so a chain that starts at a public address may not
 /// lead to a private one.
+#[cfg(not(target_arch = "wasm32"))]
 fn redirect(attempt: reqwest::redirect::Attempt) -> reqwest::redirect::Action {
     let first = attempt.previous().first();
     let last = attempt.previous().last();
@@ -1011,6 +1054,7 @@ fn redirect_allowed(first: &Url, next: &Url) -> bool {
 
 /// Where Android keeps the system's trusted CAs: the Conscrypt APEX since
 /// Android 14 (updated through the Play Store), else the system image.
+#[cfg(not(target_arch = "wasm32"))]
 #[cfg_attr(not(target_os = "android"), allow(dead_code))]
 const ANDROID_CA_DIRS: [&str; 2] = [
     "/apex/com.android.conscrypt/cacerts",
@@ -1018,6 +1062,7 @@ const ANDROID_CA_DIRS: [&str; 2] = [
 ];
 
 /// System CAs the user turned off in Settings, by the same file names.
+#[cfg(not(target_arch = "wasm32"))]
 #[cfg_attr(not(target_os = "android"), allow(dead_code))]
 const ANDROID_CA_REMOVED: &str = "/data/misc/user/0/cacerts-removed";
 
@@ -1032,6 +1077,7 @@ const ANDROID_CA_REMOVED: &str = "/data/misc/user/0/cacerts-removed";
 /// targeting API 24 and up), and ones the user turned off are left out.
 /// `None` elsewhere, and on a device whose store cannot be read: each
 /// system's own verifier then, never an empty store that trusts nothing.
+#[cfg(not(target_arch = "wasm32"))]
 pub fn device_roots() -> Option<Vec<reqwest::Certificate>> {
     #[cfg(target_os = "android")]
     {
@@ -1052,6 +1098,7 @@ pub fn device_roots() -> Option<Vec<reqwest::Certificate>> {
 /// certificate, Android's layout), less the ones a file of the same name in
 /// `removed` turns off; a file that is no certificate is passed over. None
 /// when no folder holds one.
+#[cfg(not(target_arch = "wasm32"))]
 #[cfg_attr(not(target_os = "android"), allow(dead_code))]
 fn roots_in(
     dirs: &[&std::path::Path],
@@ -1077,6 +1124,7 @@ fn roots_in(
 
 /// A PEM file's certificate when rustls takes it as a root; reqwest itself
 /// reads any text as one and would fail the client's build on it.
+#[cfg(not(target_arch = "wasm32"))]
 #[cfg_attr(not(target_os = "android"), allow(dead_code))]
 fn trust_anchor(pem: &[u8]) -> Option<reqwest::Certificate> {
     use rustls::pki_types::{CertificateDer, pem::PemObject};
@@ -1086,6 +1134,7 @@ fn trust_anchor(pem: &[u8]) -> Option<reqwest::Certificate> {
 }
 
 /// `builder` verifying against `device_roots` where there are some.
+#[cfg(not(target_arch = "wasm32"))]
 pub fn with_device_roots(builder: reqwest::ClientBuilder) -> reqwest::ClientBuilder {
     match device_roots() {
         Some(roots) => builder.tls_certs_only(roots),
@@ -1096,6 +1145,7 @@ pub fn with_device_roots(builder: reqwest::ClientBuilder) -> reqwest::ClientBuil
 /// What every client shares, scoped or not. TCP keepalive finds a pooled
 /// connection the network dropped on platforms that send no network change
 /// (`network_changed` drops the pools at once where they do).
+#[cfg(not(target_arch = "wasm32"))]
 fn builder(config: &ClientConfig) -> reqwest::ClientBuilder {
     let builder = with_device_roots(reqwest::Client::builder())
         .user_agent(config.user_agent.clone())
@@ -1110,8 +1160,10 @@ fn builder(config: &ClientConfig) -> reqwest::ClientBuilder {
 
 impl HttpClient {
     pub fn new(config: ClientConfig) -> Result<Self, HttpError> {
+        #[cfg(not(target_arch = "wasm32"))]
         install_crypto_provider();
         Ok(Self {
+            #[cfg(not(target_arch = "wasm32"))]
             pools: Arc::new(RwLock::new(Arc::new(Pools::build(&config)?))),
             budget: Arc::new(Budget::new(config.per_host_limit, config.global_limit)),
             scopes: Arc::new(Scopes::new(config)),
@@ -1137,11 +1189,8 @@ impl HttpClient {
         // Built here, so a playback's open pays for it rather than its first read.
         let _ = self.scopes.client(&key);
         HttpClient {
-            pools: self.pools.clone(),
-            budget: self.budget.clone(),
-            scopes: self.scopes.clone(),
             scope: Some(key.into()),
-            hops: self.hops.clone(),
+            ..self.clone()
         }
     }
 
@@ -1186,6 +1235,7 @@ impl HttpClient {
     /// clients forgotten, for every clone of this client. Requests already
     /// sent keep their connection.
     pub fn network_changed(&self) {
+        #[cfg(not(target_arch = "wasm32"))]
         match Pools::build(&self.scopes.config) {
             Ok(pools) => *self.pools.write().unwrap_or_else(|e| e.into_inner()) = Arc::new(pools),
             Err(e) => tracing::warn!("could not build new connection pools: {e}"),
@@ -1272,8 +1322,13 @@ impl HttpClient {
             timeout: Some(opts.timeout),
         };
         let via = self.via(replay.is_some());
-        let (response, _permit) = via.fetch(request, opts).await?;
-        let mut response = read_capped(response, opts).await?;
+        #[cfg(not(target_arch = "wasm32"))]
+        let mut response = {
+            let (response, _permit) = via.fetch(request, opts).await?;
+            read_capped(response, opts).await?
+        };
+        #[cfg(target_arch = "wasm32")]
+        let mut response = via.host_send(request, opts).await?;
         if replay.is_some() {
             response.final_url = url;
         }
@@ -1319,10 +1374,13 @@ impl HttpClient {
         }
     }
 
-    /// Streams a response body without buffering it, for playback. The
-    /// per-host permit is held until the body is dropped; `opts.timeout` is an
-    /// idle timeout between chunks, not a total limit. Non-2xx statuses are
-    /// returned as responses so a proxy can pass them through.
+    /// Streams a response body without buffering it, for playback. Not on
+    /// webOS, so nothing there can buffer a whole video by mistake
+    /// (plans/webos.md 3.4). The per-host permit is held until the body is
+    /// dropped; `opts.timeout` is an idle timeout between chunks, not a total
+    /// limit. Non-2xx statuses are returned as responses so a proxy can pass
+    /// them through.
+    #[cfg(not(target_arch = "wasm32"))]
     pub async fn stream(
         &self,
         url: &str,
@@ -1372,6 +1430,7 @@ impl HttpClient {
     /// `fetch_hops`, timed: time to headers by host, logged at debug for the
     /// walks (debug builds log debug), every request and stream alike. The
     /// host is logged as its tag, never by name: logs never name an origin.
+    #[cfg(not(target_arch = "wasm32"))]
     async fn fetch(
         &self,
         req: Request,
@@ -1391,6 +1450,7 @@ impl HttpClient {
         fetched
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
     async fn fetch_hops(
         &self,
         req: Request,
@@ -1430,6 +1490,7 @@ impl HttpClient {
     /// included. Release before acquire: a hop's answer and host slot are
     /// dropped before the next hop asks for a slot, since holding both
     /// deadlocks same-host redirects at the per-host limit.
+    #[cfg(not(target_arch = "wasm32"))]
     async fn follow(
         &self,
         local: &[IpAddr],
@@ -1540,6 +1601,7 @@ fn header_limit(req: &Request, opts: &RequestOptions) -> Duration {
 
 /// Sends one hop. Its wait for response headers is bounded by
 /// `header_limit`; when that passes, the hop's future is dropped.
+#[cfg(not(target_arch = "wasm32"))]
 async fn open(
     client: &reqwest::Client,
     req: &Request,
@@ -1649,6 +1711,7 @@ fn upgrades(owner: &Url, url: &Url) -> bool {
 }
 
 /// A response whose body arrives as a stream of chunks.
+#[cfg(not(target_arch = "wasm32"))]
 pub struct StreamingResponse {
     pub status: u16,
     pub headers: HeaderMap,
@@ -1659,6 +1722,7 @@ pub struct StreamingResponse {
     _permit: budget::Permit,
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl StreamingResponse {
     /// Next chunk, or `Timeout` when the origin stalls past the idle limit.
     pub async fn next_chunk(&mut self) -> Option<Result<Bytes, HttpError>> {
@@ -1696,6 +1760,7 @@ fn build_headers(pairs: &[(String, String)], range: Option<String>) -> HeaderMap
     headers
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 async fn read_capped(
     response: reqwest::Response,
     opts: &RequestOptions,
@@ -1745,6 +1810,7 @@ async fn read_capped(
 
 /// A declared length past the limit. Compared as `u64`: on a 32-bit device `len as usize` would wrap a
 /// length above 4 GiB onto a small one that passes.
+#[cfg(not(target_arch = "wasm32"))]
 fn over_limit(len: u64, max_bytes: usize) -> bool {
     len > max_bytes as u64
 }
