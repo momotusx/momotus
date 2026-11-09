@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { type Clock, delayText, delayWords, hold, holdStep, MAX_DELAY, nudge } from "./delay";
+import { type Clock, delayText, delayWords, hold, holdStep, MAX_DELAY, nudge, QUICK, QUICK_STEP } from "./delay";
 
 /** A clock that only moves when told to, running each timer at its time. */
 function testClock() {
@@ -65,23 +65,66 @@ test("a held press speeds up as Stremio's: 0.3 s a tick, then 0.4, 0.5 and 0.6 f
   expect(holdStep(60_000)).toBeCloseTo(0.6, 10);
 });
 
-test("a step lands on a tenth and stays within 60 s either way", () => {
-  // 0.2 + 0.1 is 0.30000000000000004 in floating point: the value is the tenth.
+test("a step lands on the 0.05 s grid and stays within 60 s either way", () => {
+  // 0.2 + 0.1 is 0.30000000000000004 in floating point: the value is on the grid.
   expect(nudge(0.2, 0.1)).toBe(0.3);
   expect(nudge(0.1, -0.1)).toBe(0);
   expect(Object.is(nudge(0.1, -0.1), -0)).toBe(false);
   expect(nudge(-1.1, -0.6)).toBe(-1.7);
+  // Both steps on one grid: an old 0.1 value takes a quarter, and back.
+  expect(nudge(0.1, 0.25)).toBe(0.35);
+  expect(nudge(0.35, -0.1)).toBe(0.25);
+  expect(nudge(0.123, 0)).toBe(0.1);
   expect(nudge(59.9, 0.6)).toBe(MAX_DELAY);
   expect(nudge(-59.9, -0.6)).toBe(-MAX_DELAY);
   expect(nudge(60, 0.1)).toBe(60);
+  expect(nudge(59.9, QUICK_STEP)).toBe(60);
 });
 
-test("the value shows its sign and one decimal, and reads in words", () => {
+test("the value shows its sign, at least one decimal and at most two, and reads in words", () => {
   expect(delayText(0)).toBe("0.0 s");
+  expect(delayText(0.25)).toBe("+0.25 s");
+  expect(delayText(0.5)).toBe("+0.5 s");
+  expect(delayText(1)).toBe("+1.0 s");
   expect(delayText(0.3)).toBe("+0.3 s");
+  expect(delayText(-0.25)).toBe("−0.25 s");
   expect(delayText(-1.2)).toBe("−1.2 s");
   expect(delayText(60)).toBe("+60.0 s");
   expect(delayWords(0)).toBe("0.0 seconds");
   expect(delayWords(0.3)).toBe("Plus 0.3 seconds");
-  expect(delayWords(-1.2)).toBe("Minus 1.2 seconds");
+  expect(delayWords(-1.25)).toBe("Minus 1.25 seconds");
+});
+
+/** A quick-shift press held `ms` and released, the value it leaves (from 0). */
+function quick(ms: number, dir = 1) {
+  const { clock, run } = testClock();
+  let value = 0;
+  const h = hold((by) => (value = nudge(value, by)), clock, QUICK);
+  h.start(dir);
+  run(ms);
+  h.stop(true);
+  return value;
+}
+
+test("the quick shift: 0.25 s a tap, four taps read +1.0 s, a reset reads 0.0 s", () => {
+  let v = 0;
+  for (let i = 0; i < 4; i++) v = nudge(v, QUICK_STEP);
+  expect(delayText(v)).toBe("+1.0 s");
+  expect(delayText(nudge(0, -QUICK_STEP))).toBe("−0.25 s");
+  expect(quick(100)).toBe(0.25);
+  expect(quick(100, -1)).toBe(-0.25);
+});
+
+test("a held quick shift: first repeat at 400 ms, then every 150 ms, faster each second, 2.0 s moves exactly 4.5 s", () => {
+  // Released before the first repeat: one tap.
+  expect(quick(300)).toBe(0.25);
+  // Ticks at 400, 550, 700 and 850 ms, a quarter each: the release at 990 ms adds nothing.
+  expect(quick(990)).toBe(1);
+  // Then half a second a tick through the second second: 4 x 0.25 + 7 x 0.5.
+  expect(quick(2000)).toBe(4.5);
+  expect(quick(2000, -1)).toBe(-4.5);
+  // At most a second a tick from the fourth second on; within 60 s.
+  expect(QUICK.ramp(3000)).toBe(4);
+  expect(QUICK.ramp(60_000)).toBe(4);
+  expect(quick(60_000)).toBe(MAX_DELAY);
 });

@@ -107,30 +107,16 @@ export const syncedLine = (r: TraktReport) => fill(traktWords.synced, { pushed: 
 /** How long the player's Trakt notice shows, once per play (owner, 2026-11-08: it must never stay on the video). */
 export const NOTICE_MS = 4000;
 
-/** When this play's notice first showed, or null before it did. Once set it stays for the play, so a pause,
- * a seek, a resume or a later state never shows it again; Settings, Trakt keeps the state. */
+/** When this play's notice first showed, or null before it did. Only `reconnect` starts it (plans/player-bar.md D9:
+ * the one state where progress silently stops being recorded); the other states show nothing in the player. Once
+ * set it stays for the play, so a pause, a seek, a resume or a later state never shows it again; Settings, Trakt
+ * keeps the state and its Sign in again. */
 export const noticeSince = (since: number | null, t: TraktPlayback | undefined, now: number): number | null =>
-  since ?? (playbackMark(t)?.tone === "warn" ? now : null);
+  since ?? (t === "reconnect" ? now : null);
 
 /** Whether the notice shows at `now`: only in its first `NOTICE_MS`. */
 export const noticeShows = (since: number | null, now: number): boolean =>
   since !== null && now >= since && now - since < NOTICE_MS;
-
-/** The player's mark: none when the profile does not use Trakt. */
-export function playbackMark(t: TraktPlayback | undefined): { tone: "on" | "warn"; label: string } | null {
-  switch (t) {
-    case "on":
-      return { tone: "on", label: traktWords.playerOn };
-    case "unmapped":
-      return { tone: "warn", label: traktWords.playerUnmapped };
-    case "thisDeviceOff":
-      return { tone: "warn", label: traktWords.playerThisDeviceOff };
-    case "reconnect":
-      return { tone: "warn", label: traktWords.playerReconnect };
-    default:
-      return null;
-  }
-}
 
 /** The record the core hands over (`TraktRecord`, camelCase on the wire). */
 export interface TraktRecord {

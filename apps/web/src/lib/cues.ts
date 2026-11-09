@@ -27,14 +27,22 @@ export type CueRects = {
   top?: Span;
   scrubber?: Span;
   transport?: Span;
+  /** The open subtitle or audio strip over the bar (plans/player-bar.md 5): the lines keep 8 px over it. */
+  strip?: Span;
   /** The controls show. */
   up: boolean;
   /** The lines' height at full size, px. */
   lines: number;
+  /** The profile's position (Prefs.subtitlePosition, 5 to 25): the foot's height over the picture's foot, a percent
+   * of the picture's height; 8, the default, is FOOT. */
+  position?: number;
 };
 
-/** The lines' box: its top or its foot as px from the element's top or foot, and whether it draws at 85%. */
-export function cuePlace({ box, video, bar, scrubber, transport, up, lines }: CueRects): { at: { top?: number; bottom?: number }; shrink: boolean } {
+/** The lines' box: its top or its foot as px from the element's top or foot, and whether it draws at 85%. With
+ * the controls hidden the foot sits `position` percent of the picture over its foot, never under the 5% line; with
+ * them up it is today's lift (8 px over the scrubber and the open strip) raised by the position's share over 8, so a
+ * change shows live. The band of an upright screen ignores the position (plans/player-bar.md D7). */
+export function cuePlace({ box, video, bar, scrubber, transport, strip, up, lines, position = FOOT * 100 }: CueRects): { at: { top?: number; bottom?: number }; shrink: boolean } {
   // The picture inside the element (object-fit: contain).
   const scale = video.width && video.height ? Math.min(box.width / video.width, box.height / video.height) : 0;
   const picture = scale ? video.height * scale : box.height;
@@ -44,8 +52,14 @@ export function cuePlace({ box, video, bar, scrubber, transport, up, lines }: Cu
   // The band takes the lines only upright: on a landscape screen it is a thin bar, and a cue that fits it while the
   // next does not would jump between the bar and the picture.
   if (box.height > box.width && band > 0 && Math.min(bar?.top ?? box.bottom, safe) - pictureFoot >= lines + 10) return { at: { top: pictureFoot - box.top + 10 }, shrink: false };
-  let foot = Math.min(pictureFoot - picture * FOOT, safe);
-  if (up && scrubber) foot = Math.min(foot, scrubber.top - 8);
+  const share = position / 100;
+  let foot: number;
+  if (up && (scrubber || strip)) {
+    foot = Math.min(pictureFoot - picture * FOOT, safe);
+    if (scrubber) foot = Math.min(foot, scrubber.top - 8);
+    if (strip) foot = Math.min(foot, strip.top - 8);
+    foot -= picture * Math.max(0, share - FOOT);
+  } else foot = Math.min(pictureFoot - picture * share, safe);
   return { at: { bottom: box.bottom - foot }, shrink: up && !!transport && foot - lines < transport.bottom && foot > transport.top };
 }
 

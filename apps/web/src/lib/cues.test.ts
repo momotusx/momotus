@@ -80,6 +80,44 @@ test("a wide film with the controls up: the higher of its 8% foot and 8 px over 
   expect(drawn({ ...rects, scrubber: { top: 850, bottom: 858 } }).bottom).toBeCloseTo(842, 5);
 });
 
+test("the position moves the hidden-controls foot: 5, 8 and 25 percent of the picture, never under the 5% line", () => {
+  const full = { width: 1920, height: 1080 };
+  const at = (position: number, video = full) => drawn({ box: tv, video, up: false, lines: two, position }).bottom;
+  expect(at(8)).toBeCloseTo(1080 - 1080 * 0.08, 5);
+  expect(at(25)).toBeCloseTo(1080 - 1080 * 0.25, 5);
+  // 5 percent of a full picture is the safe line itself.
+  expect(at(5)).toBeCloseTo(Math.min(1080 - 1080 * 0.05, safeLine), 5);
+  // A wide film: 5 percent over its foot, the band under it, is over the safe line.
+  expect(at(5, wide)).toBeCloseTo(wideFoot - wideHeight * 0.05, 5);
+  expect(at(25, wide)).toBeCloseTo(wideFoot - wideHeight * 0.25, 5);
+  // No position given: the 8% default.
+  expect(drawn({ box: tv, video: full, up: false, lines: two }).bottom).toBeCloseTo(at(8), 5);
+});
+
+test("the controls up: the lifted foot plus the position's share over 8, and 8 px over an open strip", () => {
+  const full = { width: 1920, height: 1080 };
+  const scrubber = { top: 900, bottom: 908 };
+  const at = (position: number, strip?: { top: number; bottom: number }) => drawn({ box: tv, video: full, scrubber, strip, up: true, lines: two, position }).bottom;
+  expect(at(8)).toBeCloseTo(892, 5);
+  // 5 is lower than 8: the lift holds, the line never goes down onto the bar.
+  expect(at(5)).toBeCloseTo(892, 5);
+  expect(at(12)).toBeCloseTo(892 - 1080 * 0.04, 5);
+  expect(at(25)).toBeCloseTo(892 - 1080 * 0.17, 5);
+  // A strip open over the bar: its top, 8 px clear, then the position's share.
+  expect(at(8, { top: 800, bottom: 848 })).toBeCloseTo(792, 5);
+  expect(at(12, { top: 800, bottom: 848 })).toBeCloseTo(792 - 1080 * 0.04, 5);
+});
+
+test("a phone upright keeps the band whatever the position", () => {
+  const phone = { top: 0, bottom: 844, width: 390, height: 844 };
+  const pictureFoot = 844 - (844 - (1080 * 390) / 1920) / 2;
+  for (const position of [5, 8, 25]) {
+    const lines = drawn({ box: phone, video: { width: 1920, height: 1080 }, bar: { top: 700, bottom: 820 }, up: false, lines: 2 * 24 * 1.3, position });
+    expect(lines.fromFoot).toBe(false);
+    expect(lines.top).toBeCloseTo(pictureFoot + 10, 5);
+  }
+});
+
 test("a phone upright draws under the picture, in the band over the controls, as before", () => {
   const phone = { top: 0, bottom: 844, width: 390, height: 844 };
   const lines = drawn({ box: phone, video: { width: 1920, height: 1080 }, bar: { top: 700, bottom: 820 }, up: false, lines: 2 * 24 * 1.3 });

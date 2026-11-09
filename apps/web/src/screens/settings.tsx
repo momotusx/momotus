@@ -49,6 +49,7 @@ import { addonsSummary, choiceSummary, choiceWords, findAddons, languageName, sy
 import * as sync from "../core/sync";
 import { traktLink, traktLockedHere, traktStatus, traktStorage } from "../core/trakt";
 import { rowLine, traktWords } from "../lib/trakt";
+import { barWords, POSITIONS, positionText } from "../lib/bar";
 import "./browse.css";
 import { markSrc } from "../components/marks";
 import "./settings.css";
@@ -735,6 +736,15 @@ export default function SettingsScreen() {
                         ]}
                         isOn={(v) => x().subtitleSize === v}
                         onPick={(v) => patch({ subtitleSize: v })}
+                      />
+                      {/* Where subtitles sit over the picture's foot (plans/player-bar.md D7; the player's Style row
+                          writes the same profile value). */}
+                      <Choice<number>
+                        label={barWords.position}
+                        group="pref-subpos"
+                        items={POSITIONS.map((p) => ({ value: p, label: positionText(p) }))}
+                        isOn={(v) => (x().subtitlePosition ?? 8) === v}
+                        onPick={(v) => patch({ subtitlePosition: v })}
                       />
                       <LanguagePicker
                         audio

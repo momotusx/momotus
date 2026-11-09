@@ -3,7 +3,6 @@ import ArrowLeft from "lucide-solid/icons/arrow-left";
 import AudioLines from "lucide-solid/icons/audio-lines";
 import Captions from "lucide-solid/icons/captions";
 import CaptionsOff from "lucide-solid/icons/captions-off";
-import Check from "lucide-solid/icons/check";
 import CircleAlert from "lucide-solid/icons/circle-alert";
 import Gauge from "lucide-solid/icons/gauge";
 import Layers from "lucide-solid/icons/layers";
@@ -17,38 +16,38 @@ import RefreshCw from "lucide-solid/icons/refresh-cw";
 import RotateCcw from "lucide-solid/icons/rotate-ccw";
 import RotateCw from "lucide-solid/icons/rotate-cw";
 import SkipForward from "lucide-solid/icons/skip-forward";
-import Volume2 from "lucide-solid/icons/volume-2";
-import VolumeX from "lucide-solid/icons/volume-x";
 import { createEffect, createMemo, createSignal, For, Match, on, onCleanup, onMount, Show, Switch, untrack } from "solid-js";
 import { Backdrop } from "../components/art";
 import { played } from "../components/row";
 import { EmptyActs } from "../components/empty-acts";
 import { Why } from "../components/why";
 import { KeyedPage } from "../components/keyed-page";
-import { TraktMark } from "../components/trakt-mark";
 import { liveView, op, prefsView, rawOf, serverMoves } from "../core/client";
 import type { EmptyVersions } from "../core/generated/EmptyVersions";
 import type { PlaybackSnapshot } from "../core/generated/PlaybackSnapshot";
 import type { Segment } from "../core/generated/Segment";
 import type { SegmentKind } from "../core/generated/SegmentKind";
+import type { SubtitleBackground } from "../core/generated/SubtitleBackground";
 import type { SubtitleSize } from "../core/generated/SubtitleSize";
 import type { SubtitleTrack } from "../core/generated/SubtitleTrack";
 import { videoContext } from "../core/video";
-import { autoFocusSoon, goBack, isBackKey, restoreSoon } from "../focus/dom";
+import { autoFocusSoon, focusEl, goBack, isBackKey, restoreSoon } from "../focus/dom";
 import { touchChangedScreen } from "../focus/ghost-tap";
-import { form } from "../form";
+import { form, viewport } from "../form";
 import { backThenReplace, entryFrom, historyBase, historyDepth, markBack, ownState, takeBack } from "../history";
 import { setMuted as setTrailerMuted } from "../components/yt-player";
 import { Loading, type Wait } from "../player/loading";
 import { SubtitlePicker } from "../player/subtitle-picker";
+import { AudioStrip, inStrip, QuickShift, type ShiftAt, stripEntry, SubtitleStrip } from "../player/bar-strip";
 import { createVideoEngine } from "../player/video-engine";
 import { loadedSource, type Retry, sourceStart, TRYING_AGAIN_MS, tryingAgain } from "../lib/failover";
-import { bytes, clock, decoded, startsText, episodeLabel, groupFailures, playPath, playState, seasonName, titlePath, versionsPath } from "../lib/format";
-import { DELAY_SETTLE_MS } from "../lib/delay";
+import { bytes, clock, decoded, startsText, episodeLabel, groupFailures, playPath, playState, titlePath, versionsPath } from "../lib/format";
+import { DELAY_SETTLE_MS, nudge, QUICK_STEP } from "../lib/delay";
+import { barWords, chipCap, desktopFit, type Fit, nextShown, phoneFit, positionStep, positionText, shiftSaid, shiftShown, stripLanguages } from "../lib/bar";
 import { cuePlace, cueSpot, cueTop, SAFE_LINE } from "../lib/cues";
 import { bufferShare, loadingLines, STALL_AHEAD_S, startFill } from "../lib/loading";
-import { fileChoice, offSummary, pickerLanguages, sameLanguage, startOption } from "../lib/subtitles";
-import { NOTICE_MS, noticeShows, noticeSince } from "../lib/trakt";
+import { bestOption, fileChoice, offSummary, pickerLanguages, sameLanguage, startOption } from "../lib/subtitles";
+import { NOTICE_MS, noticeShows, noticeSince, traktWords } from "../lib/trakt";
 import { audioTrackName, choiceWords, emptyWords, languageName, nextVersion, qualityCell, qualityText, restartLine, subtitleNote, subtitleNoteLines } from "../lib/words";
 import { VersionsPage } from "./versions";
 import "./player.css";
@@ -104,8 +103,8 @@ function cut(node: Node): Node[] {
 /** A cue its file placed, and its lines. */
 type Placed = { spot: NonNullable<ReturnType<typeof cueSpot>>; lines: Node[][] };
 
-// The viewer's sound for this app run: one episode's level and mute are the next one's.
-// A walk build starts muted (VITE_MQ_MUTE=1, the web twin of Apple's -MQMute).
+// The player has no volume control (plans/player-bar.md D10: the system's covers it). A walk build plays muted
+// (VITE_MQ_MUTE=1, the web twin of Apple's -MQMute).
 const sound = { volume: 100, muted: import.meta.env.VITE_MQ_MUTE === "1" };
 
 export default function Player() {
@@ -337,7 +336,15 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
   const playing = () => [...(versions()?.recommended ? [versions()?.recommended] : []), ...(versions()?.rows ?? [])].find((r) => r?.key === (snap()?.key ?? key())) ?? null;
 
   const [osd, setOsd] = createSignal(true);
-  const [panel, setPanel] = createSignal<"subs" | "audio" | null>(null);
+  // The full subtitle picker, behind the strip's More languages.
+  const [panel, setPanel] = createSignal<"subs" | null>(null);
+  // The strip over the bar (plans/player-bar.md 5): Subtitles' or Audio's, one at a time, and Style's row above it.
+  const [strip, setStrip] = createSignal<"subs" | "audio" | null>(null);
+  const [styleOpen, setStyleOpen] = createSignal(false);
+  createEffect(on(strip, (s) => s !== "subs" && setStyleOpen(false)));
+  // TV adjust mode on a shift, and a held shift: the controls never hide meanwhile (section 5).
+  const [adjust, setAdjust] = createSignal<ShiftAt | null>(null);
+  const [holding, setHolding] = createSignal(false);
   // The language whose options the subtitle picker shows (its second level off the TV).
   const [subLanguage, setSubLanguage] = createSignal<string | null>(null);
   createEffect(on(panel, (p) => p !== "subs" && setSubLanguage(null)));
@@ -408,17 +415,31 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
     clearTimeout(settle);
     settle = setTimeout(sendDelay, DELAY_SETTLE_MS);
   };
-  // A desktop has no volume keys of its own here: a mute button and a level,
-  // and full screen (with Back in the header on a desktop and a phone). The
-  // level and mute carry on to the next episode (`sound`); full screen stays
-  // through the next episode or version and ends with the play (app.tsx).
-  const [volume, setVolumeLevel] = createSignal(sound.volume);
-  const [muted, setMuted] = createSignal(sound.muted);
-  createEffect(() => {
-    sound.volume = volume();
-    sound.muted = muted();
-    engine.setVolume(muted() ? 0 : volume());
-  });
+  // The bar's quick shift (plans/player-bar.md 5) drives the same per-track delay: shown only while a core track is
+  // on (D4); each press restarts the hide timer; once it settles, one polite line says the value (D12), never one
+  // per tick of a hold.
+  const canShift = () => shiftShown(track()?.url, snap()?.subtitles ?? []);
+  const [said, setSaid] = createSignal("");
+  let sayTimer: ReturnType<typeof setTimeout> | undefined;
+  const say = () => {
+    clearTimeout(sayTimer);
+    sayTimer = setTimeout(() => !holding() && setSaid(shiftSaid(subDelay())), DELAY_SETTLE_MS);
+  };
+  onCleanup(() => clearTimeout(sayTimer));
+  const shiftTo = (sec: number) => {
+    setSubDelay(sec);
+    wake();
+    say();
+  };
+  const onHold = (on: boolean) => {
+    setHolding(on);
+    wake();
+    if (!on) say();
+  };
+  const shiftProps = () => ({ value: subDelay(), set: shiftTo, track: track()?.url ?? "" });
+  // No volume control, not even keys (D10); full screen stays through the next episode or version and ends with the
+  // play (app.tsx).
+  engine.setVolume(sound.muted ? 0 : sound.volume);
   // The page draws the lines itself on every form, as Stremio does, so they
   // are placed exactly (lib/cues.ts): the browser's own cues end under the
   // title-safe line and never clear the controls.
@@ -487,6 +508,7 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
     };
     const bar = rect(".osd");
     const scrubber = rect(".scrub");
+    const strip = rect(".bstrip");
     const up = osd() && !ended() && !!bar;
     // Split's second line: the top bar and the first line's signs in the top half, in the page's px.
     if (topEl?.isConnected) {
@@ -509,7 +531,9 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
         bar,
         scrubber,
         transport: rect(".transport"),
+        strip,
         up,
+        position: prefs.state.data?.subtitlePosition ?? 8,
         // The lines' height at full size (drawn now at 85% when shrunk).
         lines: cuesEl.getBoundingClientRect().height / k / (shrink() ? 0.85 : 1),
       });
@@ -521,7 +545,7 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
     // lines (8 px clear) when it would meet them. The block's whole width counts: a narrow cue at one side also
     // clears lines it would not touch.
     const safe = local(screen).bottom - local(screen).height * SAFE_LINE;
-    const floor = up && scrubber ? Math.min(safe, scrubber.top - 8) : safe;
+    const floor = Math.min(safe, up && scrubber ? scrubber.top - 8 : safe, up && strip ? strip.top - 8 : safe);
     const block = cuesEl?.isConnected ? local(cuesEl.getBoundingClientRect()) : null;
     for (const el of document.querySelectorAll<HTMLElement>(".player-scr .cue-at")) {
       el.style.transform = "";
@@ -531,7 +555,11 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
       if (foot < r.bottom) el.style.transform = `translateY(${foot - r.bottom}px)`;
     }
   };
-  createEffect(on([lines, secondLines, layout, placed, cuesShown, osd, ended, panel, () => prefs.state.data?.subtitleSize], () => requestAnimationFrame(placeCues)));
+  createEffect(
+    on([lines, secondLines, layout, placed, cuesShown, osd, ended, panel, () => prefs.state.data?.subtitleSize, () => prefs.state.data?.subtitlePosition], () =>
+      requestAnimationFrame(placeCues),
+    ),
+  );
   onMount(() => {
     const video = engine.view as HTMLVideoElement;
     window.addEventListener("resize", placeCues);
@@ -564,8 +592,126 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
     setOsd(true);
     clearTimeout(hideTimer);
     hideTimer = setTimeout(() => {
-      if (!paused() && !panel()) setOsd(false);
+      if (!paused() && !panel() && !strip() && !holding() && !adjust()) setOsd(false);
     }, HIDE_MS);
+  };
+
+  // The strips (plans/player-bar.md 5, 6). The bar's control under them, and their own way in and out.
+  let osdEl: HTMLElement | undefined;
+  const toggleStrip = (s: "subs" | "audio") => {
+    setStrip(strip() === s ? null : s);
+    wake();
+  };
+  const closeStrip = () => setStrip(null);
+  // Back: adjust mode, then Style's row (focus on Style), then the strip.
+  const stepBack = () => {
+    if (adjust()) return setAdjust(null);
+    if (styleOpen()) {
+      setStyleOpen(false);
+      const style = document.querySelector<HTMLElement>('[data-f="strip:style"]');
+      if (style) focusEl(style);
+      return;
+    }
+    closeStrip();
+  };
+  const focusOn = (el: HTMLElement | null | undefined) => {
+    if (!el) return false;
+    focusEl(el);
+    return true;
+  };
+  /** Up from the strip's opener, a bar control under it or the scrubber enters it on its checked chip; Up from its
+   * row goes to Style's row while open; Down from its row goes back to the opener and leaves it open. */
+  const stripKey = (key: string): boolean => {
+    const at = document.activeElement as HTMLElement | null;
+    const box = osdEl?.querySelector<HTMLElement>(".bstrip");
+    if (!at || !box) return false;
+    if (at.closest(".bstrip .s1")) {
+      if (key === "ArrowDown") return focusOn(document.querySelector<HTMLElement>(`[data-f="player:${strip()}"]`));
+      if (key === "ArrowUp" && styleOpen()) return focusOn(box.querySelector<HTMLElement>(".s2 [data-f]:not(:disabled)"));
+      return false;
+    }
+    if (key !== "ArrowUp" || inStrip(at) || !at.closest(".osd")) return false;
+    const s = box.getBoundingClientRect();
+    const r = at.getBoundingClientRect();
+    return (at.matches(".scrub") || (r.right > s.left && r.left < s.right)) && focusOn(stripEntry());
+  };
+  // Opened by keys or a remote, the focus goes to the checked chip (else the first); a pointer leaves it where it was.
+  // Closed, it goes back to the opener when it was in the strip (gone with it now).
+  createEffect(
+    on(
+      strip,
+      (s, was) => {
+        if (s) return autoFocusSoon(stripEntry);
+        const at = document.activeElement;
+        if (was && (!at || at === document.body || !at.isConnected)) focusOn(document.querySelector<HTMLElement>(`[data-f="player:${was}"]:not([inert] *)`));
+      },
+      { defer: true },
+    ),
+  );
+  // Whether the press under way only closed a strip (D21): no play or pause, no seek, no full screen with it.
+  let closedStrip = -Infinity;
+
+  // How the row fits (D16 desktop and TV, D17 phone): measured, at any width. Each candidate state is laid out in
+  // turn within one task (nothing paints between) with the shift's and Next's room and the Subtitles value's longest
+  // width always counted (`data-measure`), so the answer depends on the width and film or series alone.
+  const fitBar = () => {
+    const el = osdEl;
+    const left = el?.querySelector<HTMLElement>(".bl");
+    const right = el?.querySelector<HTMLElement>(".br");
+    if (!el?.isConnected || !left || !right) return;
+    let fit: Fit = { leftWords: false, rightWords: false, chevrons: false, rows: 1 };
+    if (!upright()) {
+      el.toggleAttribute("data-measure", true);
+      el.dataset.rows = "1";
+      const at = (words: boolean, chevrons: boolean) => {
+        el.toggleAttribute("data-lw", words);
+        el.toggleAttribute("data-rw", words);
+        el.toggleAttribute("data-chev", chevrons);
+        return { l: left.offsetWidth, r: right.offsetWidth };
+      };
+      const gap = parseFloat(getComputedStyle(el).columnGap) || 0;
+      if (form() === "phone") {
+        const [words, chevrons] = [at(false, false), at(false, true)];
+        const tl = el.querySelector<HTMLElement>(".tl");
+        const inner = tl ? parseFloat(getComputedStyle(tl).columnGap) || 0 : 0;
+        const times = [...el.querySelectorAll<HTMLElement>(".tl .num")].reduce((sum, n) => sum + n.offsetWidth + inner, 2 * gap);
+        fit = phoneFit(el.clientWidth, times, words.l, { words: words.r, chevrons: chevrons.r });
+      } else {
+        const [words, icons, chevrons] = [at(true, false), at(false, false), at(false, true)];
+        const transport = el.querySelector<HTMLElement>(".transport")?.offsetWidth ?? 0;
+        fit = desktopFit((el.clientWidth - transport - 2 * gap) / 2, { words: words.l, icons: icons.l }, { words: words.r, icons: icons.r, chevrons: chevrons.r });
+      }
+      el.removeAttribute("data-measure");
+    }
+    el.toggleAttribute("data-lw", fit.leftWords);
+    el.toggleAttribute("data-rw", fit.rightWords);
+    el.toggleAttribute("data-chev", fit.chevrons);
+    el.dataset.rows = String(fit.rows);
+  };
+  // The bar's height and its top (the strip's, when one is open), from its foot: Skip, Up Next, the subtitle
+  // picker and the bottom scrim follow them (section 5), never a fixed offset.
+  const barVars = () => {
+    const el = osdEl;
+    if (!el?.isConnected || !surface) return;
+    const open = el.querySelector<HTMLElement>(".bstrip");
+    surface.style.setProperty("--osd-h", `${el.offsetHeight}px`);
+    surface.style.setProperty("--chrome", `${el.offsetHeight - (open?.offsetTop ?? 0)}px`);
+  };
+  let barWidth = -1;
+  const mountBar = (el: HTMLElement) => {
+    osdEl = el;
+    barWidth = -1;
+    const sizes = new ResizeObserver(() => {
+      // Only a new width can change the fit; the rows it chose change the height.
+      if (el.clientWidth !== barWidth) {
+        barWidth = el.clientWidth;
+        fitBar();
+      }
+      barVars();
+      placeCues();
+    });
+    sizes.observe(el);
+    onCleanup(() => sizes.disconnect());
   };
 
   const report = () => {
@@ -626,9 +772,32 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
         setPanel(null);
         return;
       }
+      // Back with a shift in adjust mode or a strip open (plans/player-bar.md 6): adjust mode first, then Style's row,
+      // then the strip (focus back to its opener); then today's order.
+      if (back && (adjust() || strip())) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        stepBack();
+        return;
+      }
       // An end or no-version card owns the screen: keys work on it as usual.
       if (ended() || document.querySelector(".endcard")) return;
       if (!panel() && !(e.target as Element | null)?.closest?.("input, textarea, select")) {
+        // G and H shift the subtitles earlier and later on a desktop (D11), with no modifier and only while the shift
+        // shows; with the controls hidden the same press wakes them, so the new value is in sight.
+        if ((e.key === "g" || e.key === "h") && form() === "desktop" && !e.altKey && !e.ctrlKey && !e.metaKey && canShift()) {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          shiftTo(nudge(subDelay(), (e.key === "g" ? -1 : 1) * QUICK_STEP));
+          return;
+        }
+        // Into and out of an open strip by arrows (section 6).
+        if (osd() && strip() && !adjust() && stripKey(e.key)) {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          wake();
+          return;
+        }
         // Space and K play or pause from anywhere; Space on a focused control
         // with the controls up stays that control's own press.
         const onControl = (document.activeElement as Element | null)?.closest("button, a, [role=slider], input");
@@ -972,6 +1141,8 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
       { defer: true },
     ),
   );
+  // D23: Skip or Up Next appearing closes an open strip; they take their usual place and focus.
+  createEffect(on(() => showSkip() || showNext(), (shown) => shown && closeStrip()));
   // Up Next takes focus when it appears, like Skip buttons on other players.
   createEffect(
     on(showNext, (shown, was) => {
@@ -1060,11 +1231,62 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
       more: at < LAYOUTS.length - 1 ? () => set(at + 1) : undefined,
     };
   };
+  // The profile's look, written on each press and synced (plans/player-bar.md 4): size, position and background,
+  // set from the strip's Style row (size also from the full picker).
+  const setPref = (patch: Record<string, unknown>) => void op("setPrefs", { patch }).catch(() => undefined);
   const sizeAt = () => Math.max(0, SIZES.findIndex((s) => s.size === (prefs.state.data?.subtitleSize ?? "medium")));
   const setSize = (i: number) => {
     const s = SIZES[i];
-    if (s) void op("setPrefs", { patch: { subtitleSize: s.size } }).catch(() => undefined);
+    if (s) setPref({ subtitleSize: s.size });
   };
+  const sizeTune = () => ({
+    text: SIZES[sizeAt()]?.text ?? "100%",
+    less: sizeAt() > 0 ? () => setSize(sizeAt() - 1) : undefined,
+    more: sizeAt() < SIZES.length - 1 ? () => setSize(sizeAt() + 1) : undefined,
+  });
+  const position = () => prefs.state.data?.subtitlePosition ?? 8;
+  const positionTune = () => {
+    const [lower, higher] = [positionStep(position(), -1), positionStep(position(), 1)];
+    return {
+      text: positionText(position()),
+      less: lower === null ? undefined : () => setPref({ subtitlePosition: lower }),
+      more: higher === null ? undefined : () => setPref({ subtitlePosition: higher }),
+    };
+  };
+  const background = (): SubtitleBackground => prefs.state.data?.subtitleBackground ?? "box";
+  // D15: an upright phone draws three rows, and its lines sit in the band under the picture (Position does nothing).
+  const upright = () => form() === "phone" && viewport().h > viewport().w;
+  // The strip's languages (D5): the picker's own list, the one on now first, then the profile's, then the core's.
+  const languages = createMemo(() => pickerLanguages(snap()?.subtitles ?? [], fileSubs(), languageName));
+  const chosenLanguage = () =>
+    languages().find((l) => l.tracks.some((t) => t.url === track()?.url) || l.file.some((f) => !track() && f.selected))?.language ?? null;
+  const chips = () => stripLanguages(languages(), chosenLanguage(), prefs.state.data?.subtitleLanguages ?? [], chipCap(form()));
+  // A chip turns on its language's best option, as the picker's language row does; Off turns the first line off.
+  const pickLanguage = (language: string | null) => {
+    const l = language === null ? null : languages().find((x) => x.language === language);
+    const best = l ? bestOption(l) : null;
+    if (!language) chooseSubtitle(null);
+    else if (best && "file" in best) pickFileSub(best.file.id);
+    else if (best) chooseSubtitle(best.track);
+  };
+  const nextName = () => {
+    const n = next();
+    return n ? barWords.names.nextEpisode.replace("{episode}", `${episodeLabel(n.season, n.episode)} ${n.title}`.trim()) : barWords.next;
+  };
+  // The fit again when what the groups hold changes (a value, a series' Next, full screen, the form or the phone
+  // turned); the bar's measures when a strip or Style's row opens or closes.
+  const later = (f: () => void) => requestAnimationFrame(f);
+  createEffect(
+    on([audioText, rate, () => playing()?.quality, subsText, () => !!ctx.ref, () => !!next(), full, form, upright, canShift], () =>
+      later(() => {
+        fitBar();
+        barVars();
+        placeCues();
+      }),
+    ),
+  );
+  createEffect(on([strip, styleOpen], () => later(() => (barVars(), placeCues()))));
+  onMount(() => void document.fonts?.ready.then(() => (fitBar(), barVars())));
   const pct = (x: number) => `${duration() ? Math.min(100, (x / duration()) * 100) : 0}%`;
   // The failure card's way to Versions (the plan's shared Step 3 table): "Choose another version"
   // after a failure, "Choose a version" when none plays here; primary and focused when nothing else is.
@@ -1203,7 +1425,8 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
       inert={layer() || undefined}
       data-scheme="dark"
       data-subsize={prefs.state.data?.subtitleSize ?? "medium"}
-      classList={{ idle: idle(), started: started(), paused: pausedNow(), loading: wait() === "start", stalling: wait() === "stall", offering: another(), noticing: traktNotice() }}
+      data-subbg={background()}
+      classList={{ idle: idle(), started: started(), paused: pausedNow(), loading: wait() === "start", stalling: wait() === "stall", offering: another() }}
       onPointerMove={wake}
       // A control taking focus (a Tab, a click) brings the controls up, so it is never focused out of sight.
       on:focusin={(e) => (e.target as Element).closest(".osd, .ptitle") && wake()}
@@ -1216,18 +1439,24 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
           wake();
           if (!onControls(e)) touchChangedScreen();
         }
+        // D21: with a strip open, the first press outside it and the bar only closes it.
+        if (strip() && !e.composedPath().some((n) => n instanceof Element && n.matches(".osd, .skip-wrap, .next"))) {
+          closedStrip = e.timeStamp;
+          closeStrip();
+          wake();
+        }
       }}
       onClick={(e) => {
         // With the controls up, a click on the picture plays or pauses (a
         // mouse; a touch screen shows and hides the controls).
-        if (woke || form() !== "desktop" || !started()) return;
+        if (woke || form() !== "desktop" || !started() || e.timeStamp - closedStrip < 1000) return;
         if (onControls(e)) return;
         toggle();
       }}
       // A double click on the picture: full screen in and out (its two
       // clicks played and paused, so the play goes on as it was).
       onDblClick={(e) => {
-        if (form() !== "desktop" || onControls(e)) return;
+        if (form() !== "desktop" || onControls(e) || e.timeStamp - closedStrip < 1000) return;
         toggleFull();
       }}
     >
@@ -1301,6 +1530,10 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
       <p class="sr" aria-live="polite">
         {another() ? nextVersion.anotherReady : ""}
       </p>
+      {/* The quick shift's one line once it settles (D12). */}
+      <p class="sr said" aria-live="polite">
+        {said()}
+      </p>
       <div class="osd-top" />
       <div class="osd-bot" />
 
@@ -1318,7 +1551,6 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
         <h1>{ctx.details()?.name ?? ""}</h1>
         <Show when={ctx.label()}>{(l) => <p>{l()}</p>}</Show>
         <Show when={pausedNow() && (ctx.episode()?.overview ?? ctx.details()?.description)}>{(t) => <p class="psyn">{t()}</p>}</Show>
-        <TraktMark state={snap()?.trakt} notice={traktNotice()} />
       </header>
       <Show when={endsAt()}>{(t) => <p class="clock num">Ends at {t()}</p>}</Show>
 
@@ -1453,13 +1685,20 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
         </section>
       </Show>
 
-      <Show when={subError()}>
+      {/* The shared notice slot (plans/player-bar.md 5.1): Trakt's `reconnect` line first, for its 4 s, text only; a
+          subtitle notice waits behind it and shows once it ends. */}
+      <Show when={traktNotice()}>
+        <p class="toast quiet trakt-toast" role="status">
+          {traktWords.playerReconnect}
+        </p>
+      </Show>
+      <Show when={!traktNotice() && subError()}>
         <p class="toast bad" role="status">
           <CircleAlert aria-hidden />
           {subError()}
         </p>
       </Show>
-      <Show when={!subError() && subQuiet()}>
+      <Show when={!traktNotice() && !subError() && subQuiet()}>
         {(text) => (
           <p class="toast quiet" role="status">
             <CaptionsOff aria-hidden />
@@ -1471,7 +1710,7 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
       {/* Not before the first frame: the loading screen has nothing to act on
           but Back (and on TV no focus at all). */}
       <Show when={url() && !ended() && wait() !== "start"}>
-        <section class="osd" aria-label="Playback controls" inert={panel() !== null || undefined}>
+        <section class="osd" ref={mountBar} classList={{ upright: upright() }} aria-label="Playback controls" inert={panel() !== null || undefined}>
           <div class="tl">
             <span class="num">{clock(time())}</span>
             <div
@@ -1504,37 +1743,39 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
             </div>
             <span class="num">-{clock(remaining())}</span>
           </div>
-          <div class="ctl">
-            <Show when={form() === "desktop"}>
-              <div class="pdesk">
-                <button class="picon" data-f="player:mute" aria-label={muted() ? "Unmute" : "Mute"} aria-pressed={muted()} onClick={() => setMuted(!muted())}>
-                  <Show when={muted() || volume() === 0} fallback={<Volume2 aria-hidden />}>
-                    <VolumeX aria-hidden />
-                  </Show>
-                </button>
-                <input
-                  class="pvol"
-                  type="range"
-                  min="0"
-                  max="100"
-                  step="5"
-                  value={volume()}
-                  aria-label="Volume"
-                  data-f="player:volume"
-                  autocomplete="off"
-                  onInput={(e) => {
-                    setVolumeLevel(Number(e.currentTarget.value));
-                    setMuted(false);
-                  }}
-                />
-                <button class="picon" data-f="player:fullscreen" aria-label={full() ? "Exit full screen" : "Full screen"} onClick={toggleFull}>
-                  <Show when={full()} fallback={<Maximize aria-hidden />}>
-                    <Minimize aria-hidden />
-                  </Show>
-                </button>
-              </div>
-            </Show>
-            <div class="transport">
+          {/* Left: Audio, Speed, Versions, each its icon and value (D1). */}
+          <div class="bl">
+            <button
+              class="pill"
+              data-f="player:audio"
+              aria-label={`${barWords.names.audio}, ${audioText()}`}
+              title={barWords.names.audio}
+              aria-expanded={strip() === "audio"}
+              onClick={() => toggleStrip("audio")}
+            >
+              <AudioLines aria-hidden />
+              <small class="w">{audioText()}</small>
+            </button>
+            <button class="pill" data-f="player:speed" aria-label={`${barWords.names.speed}, ${rate()}x`} title={barWords.names.speed} onClick={cycleSpeed}>
+              <Gauge aria-hidden />
+              <small class="w num">{rate()}x</small>
+            </button>
+            {/* Leaving for Versions or Episodes replaces this play in history:
+                Back from the next play goes to Versions, then the title, never to this one. */}
+            <RouteA
+              class="pill"
+              href={versionsPath(props.kind, props.id, props.videoId)}
+              replace
+              on:click={toVersions}
+              data-f="player:versionsact"
+              aria-label={[barWords.names.versions, playing() ? qualityCell(playing()?.quality ?? "") : ""].filter(Boolean).join(", ")}
+              title={barWords.names.versions}
+            >
+              <Layers aria-hidden />
+              <small class="w">{playing() ? qualityCell(playing()?.quality ?? "") : ""}</small>
+            </RouteA>
+          </div>
+          <div class="transport">
               <button class="round" data-f="player:back10" aria-label="Back 10 seconds" onClick={() => seek(-10)}>
                 <RotateCcw aria-hidden />
                 <span class="round-n num" aria-hidden="true">
@@ -1553,106 +1794,106 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
                 </span>
               </button>
             </div>
-            {/* Audio, Subtitles, Versions, Speed, then Episodes for series. */}
-            <div class="pacts">
-              <button class="pa" data-f="player:audio" onClick={() => setPanel(panel() ? null : "audio")} aria-expanded={panel() === "audio"}>
-                <AudioLines aria-hidden />
-                <b>Audio</b>
-                <small>{audioText()}</small>
-              </button>
-              <button class="pa" data-f="player:subs" onClick={() => setPanel(panel() ? null : "subs")} aria-expanded={panel() === "subs"}>
-                <Captions aria-hidden />
-                <b>Subtitles</b>
-                <small>
-                  {subsText()}
-                  <Show when={!track() && subsOff().searching}>
-                    <LoaderCircle class="spin mark" role="img" aria-label="Still searching" />
-                  </Show>
-                </small>
-              </button>
-              {/* Leaving for Versions or Episodes replaces this play in history:
-                  Back from the next play goes to Versions, then the title, never to this one. */}
-              <RouteA
-                class="pa"
-                href={versionsPath(props.kind, props.id, props.videoId)}
-                replace
-                on:click={toVersions}
-                data-f="player:versionsact"
+          {/* Right: Subtitles and the quick shift, Episodes, Next and Full screen. The shift and Next keep their room
+              while hidden (`.rsv`), so the row's fit never flips when a subtitle turns on (D16). */}
+          <div class="br">
+            <div class="bsub">
+              <button
+                class="pill"
+                data-f="player:subs"
+                aria-label={`${barWords.names.subtitles}, ${subsText()}${!track() && subsOff().searching ? ", still searching" : ""}`}
+                title={barWords.names.subtitles}
+                aria-expanded={strip() === "subs"}
+                onClick={() => toggleStrip("subs")}
               >
-                <Layers aria-hidden />
-                <b>Versions</b>
-                <small>{playing() ? qualityCell(playing()?.quality ?? "") : ""}</small>
-              </RouteA>
-              <button class="pa" data-f="player:speed" onClick={cycleSpeed}>
-                <Gauge aria-hidden />
-                <b>Speed</b>
-                <small class="num">{rate()}x</small>
+                <Captions aria-hidden />
+                <b class="w">{barWords.names.subtitles}</b>
+                <small class="w subv">{subsText()}</small>
+                {/* The core still asks: a small spinner after the value, or on the icon's corner when the pill is
+                    an icon (D16 a), so the state never hides. */}
+                <Show when={!track() && subsOff().searching}>
+                  <LoaderCircle class="spin mark" role="img" aria-label="Still searching" />
+                </Show>
               </button>
+              <div class="bshift rsv" classList={{ off: !canShift() }} inert={!canShift() || undefined}>
+                <QuickShift at="bar" {...shiftProps()} adjusting={adjust() === "bar"} setAdjusting={(on) => setAdjust(on ? "bar" : null)} onHold={onHold} />
+              </div>
+            </div>
+            <div class="bnav">
               <Show when={ctx.ref}>
-                {(r) => (
-                  <RouteA class="pa" href={titlePath(props.kind, props.id)} replace on:click={toTitle} data-f="player:episodes">
-                    <ListVideo aria-hidden />
-                    <b>Episodes</b>
-                    <small>{r().season === null ? "" : seasonName(r().season as number)}</small>
-                  </RouteA>
-                )}
+                <RouteA class="pill ico" href={titlePath(props.kind, props.id)} replace on:click={toTitle} data-f="player:episodes" aria-label={barWords.names.episodes} title={barWords.names.episodes}>
+                  <ListVideo aria-hidden />
+                </RouteA>
+                {/* D14: Next plays the next episode at once, Up Next's own Play now; only when the core names one. */}
+                <RouteA
+                  class="pill rsv"
+                  classList={{ off: !nextShown(next()) }}
+                  inert={!nextShown(next()) || undefined}
+                  href={nextHref() ?? "#"}
+                  replace
+                  state={carried()}
+                  data-f="player:next"
+                  aria-label={nextName()}
+                  title={nextName()}
+                >
+                  <SkipForward aria-hidden />
+                  <b class="w">{barWords.next}</b>
+                </RouteA>
+              </Show>
+              <Show when={form() === "desktop"}>
+                <button class="pill ico" data-f="player:fullscreen" aria-label={full() ? barWords.names.exitFullScreen : barWords.names.fullScreen} title={full() ? barWords.names.exitFullScreen : barWords.names.fullScreen} onClick={toggleFull}>
+                  <Show when={full()} fallback={<Maximize aria-hidden />}>
+                    <Minimize aria-hidden />
+                  </Show>
+                </button>
               </Show>
             </div>
           </div>
-        </section>
-      </Show>
-
-      <Show when={panel() === "audio"}>
-        <aside class="panel" aria-label="Audio" data-fgroup="audio">
-          <h2>Audio</h2>
-          <div class="panel-list" data-vscroll>
-            {/* The engine's own tracks when the file has a choice (mpv lists
-                every one); otherwise the one this version plays. */}
-            <Show
-              when={audioTracks().length > 1}
-              fallback={
-                <button class="opt on" data-f="audio:current" data-autofocus onClick={() => setPanel(null)}>
-                  <Check aria-hidden class="opt-check" />
-                  <b>{audioText()}</b>
-                  <span>The track this version plays</span>
-                </button>
+          {/* The open strip, last in the bar's Tab order (section 6). */}
+          <Show when={strip() === "subs"}>
+            <SubtitleStrip
+              languages={chips()}
+              checked={chosenLanguage()}
+              pick={pickLanguage}
+              searching={!!snap()?.subtitlesPending && languages().length === 0}
+              more={() => {
+                setStrip(null);
+                setPanel("subs");
+              }}
+              shift={canShift() ? shiftProps() : null}
+              adjusting={adjust() === "strip"}
+              setAdjusting={(on) => setAdjust(on ? "strip" : null)}
+              onHold={onHold}
+              style={styleOpen()}
+              toggleStyle={() => {
+                const open = !styleOpen();
+                setStyleOpen(open);
+                if (open) autoFocusSoon(() => document.querySelector<HTMLElement>('[data-f="strip:smaller"]:not(:disabled), .bstrip .s2 [data-f]:not(:disabled)'));
+              }}
+              size={sizeTune()}
+              position={positionTune()}
+              positionNote={upright() ? barWords.sidewaysOnly : undefined}
+              background={{ value: background(), set: (b) => setPref({ subtitleBackground: b }) }}
+              close={closeStrip}
+            />
+          </Show>
+          <Show when={strip() === "audio"}>
+            <AudioStrip
+              tracks={
+                audioTracks().length > 1
+                  ? audioTracks().map((t, i) => ({ id: t.id, name: audioTrackName(t, i, audioTracks().length), checked: t.selected }))
+                  : [{ id: "current", name: audioText(), checked: true }]
               }
-            >
-              <For each={audioTracks()}>
-                {(t, i) => (
-                  <button
-                    class="opt"
-                    classList={{ on: t.selected }}
-                    data-f={`audio:${t.id}`}
-                    onClick={() => {
-                      engine.selectTrack("audio", t.id);
-                      setPanel(null);
-                    }}
-                  >
-                    <Show when={t.selected}>
-                      <Check aria-hidden class="opt-check" />
-                    </Show>
-                    <b>{audioTrackName(t, i(), audioTracks().length)}</b>
-                    <Show when={t.lang && t.label && t.label !== t.lang}>
-                      <span>{t.label}</span>
-                    </Show>
-                  </button>
-                )}
-              </For>
-            </Show>
-            <p class="opt-note">Other languages come with other versions.</p>
-            <RouteA
-              class="opt"
-              href={versionsPath(props.kind, props.id, props.videoId)}
-              replace
-              on:click={toVersions}
-              data-f="audio:versions"
-            >
-              <b>Choose a version</b>
-              <span>{versions()?.rows.length ? `${versions()?.rows.length} more listed` : "See what is listed"}</span>
-            </RouteA>
-          </div>
-        </aside>
+              pick={(id) => id !== "current" && engine.selectTrack("audio", id)}
+              versions={
+                <RouteA class="chip3 ghost" href={versionsPath(props.kind, props.id, props.videoId)} replace on:click={toVersions} data-f="audio:versions">
+                  <span class="cl">Choose a version</span>
+                </RouteA>
+              }
+              close={closeStrip}
+            />
+          </Show>
+        </section>
       </Show>
 
       <Show when={panel() === "subs"}>
@@ -1681,11 +1922,7 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
             pick: chooseSecond,
             keepSpoken,
           }}
-          size={{
-            text: SIZES[sizeAt()]?.text ?? "100%",
-            less: sizeAt() > 0 ? () => setSize(sizeAt() - 1) : undefined,
-            more: sizeAt() < SIZES.length - 1 ? () => setSize(sizeAt() + 1) : undefined,
-          }}
+          size={sizeTune()}
           pick={chooseSubtitle}
           pickFile={pickFileSub}
           close={() => setPanel(null)}

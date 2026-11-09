@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import shared from "../../../shared/trakt-words.json";
 import type { TraktLoginSnapshot } from "../core/generated/TraktLoginSnapshot";
 import type { TraktStatus } from "../core/generated/TraktStatus";
-import { fill, rowLine, loginLine, loginRetry, newer, NOTICE_MS, noticeShows, noticeSince, pendingLine, playbackMark, stateCard, timeLeft, type TraktRecord, TraktRecords, traktWords } from "./trakt";
+import { fill, rowLine, loginLine, loginRetry, newer, NOTICE_MS, noticeShows, noticeSince, pendingLine, stateCard, timeLeft, type TraktRecord, TraktRecords, traktWords } from "./trakt";
 
 const base = { user: "ana", lastOkMs: 0, lastError: null, pendingWrites: 0, unmapped: [], importing: null, record: null };
 const clock = () => "2:05 PM";
@@ -51,19 +51,16 @@ test("the code's time left counts down and never goes below zero", () => {
   expect(timeLeft(0, 5000)).toBe("0:00");
 });
 
-test("the player's mark: tracked, not tracked and why, and nothing for a profile without Trakt", () => {
-  expect(playbackMark("on")).toEqual({ tone: "on", label: traktWords.playerOn });
-  expect(playbackMark("unmapped")?.tone).toBe("warn");
-  expect(playbackMark("thisDeviceOff")?.label).toBe(traktWords.playerThisDeviceOff);
-  expect(playbackMark("reconnect")).toEqual({ tone: "warn", label: traktWords.playerReconnect });
-  expect(playbackMark("off")).toBeNull();
-  expect(playbackMark(undefined)).toBeNull();
+test("the player's Trakt notice starts only for reconnect: on, unmapped, off and this device off show nothing", () => {
+  for (const state of ["on", "unmapped", "off", "thisDeviceOff", undefined] as const) expect(noticeSince(null, state, 1000)).toBeNull();
+  expect(noticeSince(null, "reconnect", 1000)).toBe(1000);
+  expect(traktWords.playerReconnect).toBe("Trakt: sign in again in Settings, so this play is not recorded");
 });
 
 test("the player's Trakt notice shows once per play for a few seconds and never stays", () => {
   expect(noticeSince(null, "on", 1000)).toBeNull();
   expect(noticeSince(null, "off", 1000)).toBeNull();
-  const since = noticeSince(null, "thisDeviceOff", 1000);
+  const since = noticeSince(null, "reconnect", 1000);
   expect(since).toBe(1000);
   expect(noticeShows(since, 1000)).toBe(true);
   expect(noticeShows(since, 1000 + NOTICE_MS - 1)).toBe(true);
