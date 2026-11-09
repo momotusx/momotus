@@ -132,11 +132,18 @@ test("phone: the player's Audio, Speed and the subtitle sheet's search field rea
   await startIfPaused(page);
   await page.locator('[data-f="player:toggle"]').tap();
   await expect(page.locator('[data-f="player:audio"]')).toBeVisible();
-  expectReach("player controls", await reaches(page, '[data-f="player:audio"], [data-f="player:speed"], [data-f="player:subs"], [data-f="player:versions"], [data-f="player:leave"]', 5));
+  expectReach(
+    "player controls",
+    await reaches(page, '[data-f="player:audio"], [data-f="player:speed"], [data-f="player:versionsact"], [data-f="player:subs"], .bshift:not(.off) [data-f^="bar:"], [data-f="player:leave"]', 8),
+  );
   // QA r3 measured the drawn box of Back (44 x 44), which the reach test above does not see.
   const back = await page.locator('[data-f="player:leave"]').boundingBox();
   expect.soft([back?.width, back?.height]).toEqual([48, 48]);
+  // The strip over the bar (plans/player-bar.md 5): its chips, the shift and Close, then More languages opens the sheet.
   await page.locator('[data-f="player:subs"]').tap();
+  await expect(page.locator(".bstrip")).toBeVisible();
+  expectReach("subtitle strip", await reaches(page, '.bstrip [data-f^="strip:sub:"], [data-f="strip:more"], [data-f^="strip:"]:is(.qsb, .qv), [data-f="strip:close"]', 6));
+  await page.locator('[data-f="strip:more"]').tap();
   await expect(page.locator('[data-f="sub:search"]')).toBeVisible();
   expectReach("subtitle sheet", await reaches(page, '[data-f="sub:search"], [data-f="sub:done"], [data-f^="subopen:"], [data-f^="sub:line"]', 8));
   // Done and the line tabs by their drawn box too (QA r3: 55 x 44, 166 x 44).

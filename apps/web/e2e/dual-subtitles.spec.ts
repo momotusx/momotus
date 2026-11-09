@@ -7,7 +7,7 @@ import { expect, type Page, test } from "./fixture";
 import type { ChildProcess } from "node:child_process";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
-import { Client, cleanup, DUAL_PORT, startBridge, startIfPaused } from "./core";
+import { Client, cleanup, DUAL_PORT, openSubtitlePicker, startBridge, startIfPaused } from "./core";
 import { type Json, patchedContext } from "./patch";
 import { BBB_ID, NAME, startSource } from "./source";
 
@@ -129,7 +129,7 @@ test("a second line in the spoken language over the first, at 85%, its own timin
   await expect.poll(() => texts(page), { timeout: 30_000 }).toEqual(["Turkish line"]);
   await expect.poll(() => subsValue(page)).toBe("Turkish");
   // The switch shows with a first line on; the Second line tab names the spoken language and disables Turkish.
-  await page.locator('[data-f="player:subs"]').click();
+  await openSubtitlePicker(page);
   await page.locator('[data-f="sub:line2"]').click();
   await expect(page.locator('[data-f="sub:spoken"]')).toContainText("Spoken language");
   await expect(page.locator('[data-f="sub:spoken"]')).toContainText("English");
@@ -155,7 +155,7 @@ test("a second line in the spoken language over the first, at 85%, its own timin
   // The second line's timing moves its cues alone.
   const starts = () => page.evaluate(() => [1, 2].map((n) => document.querySelector<HTMLTrackElement>(`video track[data-line="${n}"]`)?.track.cues?.[0]?.startTime ?? -1));
   expect(await starts()).toEqual([0, 0]);
-  await page.locator('[data-f="player:subs"]').click();
+  await openSubtitlePicker(page);
   await expect(page.locator('[data-f="sub:line2"]')).toHaveAttribute("aria-checked", "true");
   await page.locator('[data-f="subopen:en"]').click();
   for (let i = 0; i < 3; i++) await page.locator('[data-f="sub:later"]').click();
@@ -172,13 +172,13 @@ test("a second line in the spoken language over the first, at 85%, its own timin
   await startIfPaused(page);
   await expect.poll(() => texts(page), { timeout: 30_000 }).toEqual(["ENGLISH SIGN", "English line", "Turkish line"]);
   // Off on the first line: both go.
-  await page.locator('[data-f="player:subs"]').click();
+  await openSubtitlePicker(page);
   await page.locator('[data-f="sub:line1"]').click();
   await expect(page.locator('[data-f="sublang:en"]')).toBeDisabled();
   await page.locator('[data-f="sub:off"]').click();
   await expect.poll(() => texts(page)).toEqual([]);
   // Turkish again, so the title's memory is not Off for the next tests; with no first line, no switch.
-  await page.locator('[data-f="player:subs"]').click();
+  await openSubtitlePicker(page);
   await expect(page.locator('[data-f="sub:line1"]')).toHaveCount(0);
   await page.locator('[data-f="sublang:tr"]').click();
   await expect.poll(() => texts(page)).toEqual(["ENGLISH SIGN", "English line", "Turkish line"]);
@@ -280,7 +280,7 @@ test("the core's second line going null turns it off", async ({ browser }) => {
   await expect.poll(() => texts(page), { timeout: 30_000 }).toEqual(["ENGLISH SIGN", "English line", "Turkish line"]);
   drop = true;
   // Any next snapshot carries it: a delay sent for the first line makes one.
-  await page.locator('[data-f="player:subs"]').click();
+  await openSubtitlePicker(page);
   await page.locator('[data-f="sub:line1"]').click();
   await page.locator('[data-f="subopen:tr"]').click();
   await page.locator('[data-f="sub:later"]').click();
@@ -292,8 +292,7 @@ test("TV: Up from the search reaches the switch, Left and Right move on it, OK l
   await setPrefs({ secondSubtitle: "en" });
   const { context, page } = await open(browser, "tv", { width: 960, height: 540 });
   await expect.poll(() => texts(page), { timeout: 30_000 }).toEqual(["ENGLISH SIGN", "English line", "Turkish line"]);
-  await page.locator('[data-f="player:subs"]').focus();
-  await page.keyboard.press("Enter");
+  await openSubtitlePicker(page, true);
   const focused = () => page.evaluate(() => document.activeElement?.getAttribute("data-f"));
   await expect.poll(focused).toMatch(/^sub/);
   // The switch's labels sit centred in their segments, and the panel clears the "Ends at" clock (QA r1 Q5 rows 17, 32).
@@ -338,8 +337,7 @@ test("TV: the Second line tab with no second line never opens the first line's l
   await setPrefs({ secondSubtitle: null });
   const { context, page } = await open(browser, "tv", { width: 960, height: 540 });
   await expect.poll(() => texts(page), { timeout: 30_000 }).toEqual(["Turkish line"]);
-  await page.locator('[data-f="player:subs"]').focus();
-  await page.keyboard.press("Enter");
+  await openSubtitlePicker(page, true);
   const focused = () => page.evaluate(() => document.activeElement?.getAttribute("data-f"));
   await expect.poll(focused).toMatch(/^sub/);
   for (let i = 0; i < 8 && !(await focused())?.startsWith("sub:line"); i++) await page.keyboard.press("ArrowUp");

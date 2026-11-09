@@ -13,7 +13,7 @@ import type { ChildProcess } from "node:child_process";
 import { fakeYouTube, ytLog } from "./yt-fake";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
-import { Client, cleanup, JOURNEY_PORT, PORTS, SHOTS, startBridge, startIfPaused, until, watch } from "./core";
+import { Client, cleanup, JOURNEY_PORT, openSubtitlePicker, PORTS, SHOTS, startBridge, startIfPaused, until, watch } from "./core";
 import { patchedContext } from "./patch";
 import { NAME, startSource } from "./source";
 import { applyDiffs } from "../src/core/diff";
@@ -311,8 +311,8 @@ test("subtitle size is the profile's; timing steps, holds and resets, and moves 
     return c ? [c.startTime, c.endTime] : null;
   });
   await expect.poll(cue, { timeout: 30_000 }).toEqual([1, 30]);
-  // Timing sits under the options of a language.
-  await p.locator('[data-f="player:subs"]').dispatchEvent("click");
+  // Fine timing sits under the options of a language, in the full picker behind More languages.
+  await openSubtitlePicker(p);
   await p.locator('[data-f="subopen:en"]').dispatchEvent("click");
   const timing = p.locator(".sub-delay .sub-val");
   const reset = p.locator('[data-f="sub:reset"]');
@@ -843,7 +843,7 @@ test("the player: no control holds focus out of sight; the picture holds it whil
   await context.close();
 });
 
-test("tv player: the controls bar draws focus as the white fill with no ring, the menus over the picture keep theirs", async ({ browser }) => {
+test("tv player: the controls bar and its strips draw focus as the white fill with no ring, the picker keeps its own", async ({ browser }) => {
   const { context, page: p } = await page(browser, { width: 1920, height: 1080 });
   await p.goto("/play/movie/mqjm/mqjm?form=tv");
   await expect(p.locator('[data-f="player:toggle"]')).toBeVisible({ timeout: 30_000 });
@@ -863,15 +863,20 @@ test("tv player: the controls bar draws focus as the white fill with no ring, th
   await expect.poll(() => look("player:back10")).toEqual({ ring: "0px", fill: "rgba(255, 255, 255, 0.92)" });
   await expect.poll(() => look("player:toggle")).toMatchObject({ fill: "rgba(255, 255, 255, 0.16)" });
   await p.locator('[data-f="player:audio"]').focus();
-  // The audio menu opens on its first row, which keeps the player's ring.
+  // The audio strip opens on its checked chip, white with no ring as the bar's controls (plans/player-bar.md 6).
   await p.keyboard.press("Enter");
-  await expect(p.locator(".panel .opt").first()).toBeVisible();
+  await expect.poll(() => p.evaluate(() => (document.activeElement as HTMLElement | null)?.dataset.f)).toBe("strip:aud:current");
+  await expect.poll(() => look("strip:aud:current")).toEqual({ ring: "0px", fill: "rgba(255, 255, 255, 0.92)" });
+  // The full subtitle picker, by More languages, opens on a row drawn the picker's own way: the white fill, no ring.
+  await p.keyboard.press("Escape");
+  await openSubtitlePicker(p, true);
   await expect.poll(() => p.evaluate(() => document.activeElement?.classList.contains("opt") ?? false)).toBe(true);
-  const row = await p.evaluate(() => {
-    const s = getComputedStyle(document.activeElement as Element);
-    return { ring: s.outlineStyle === "none" ? "0px" : s.outlineWidth };
-  });
-  expect(row.ring).toBe("4px");
+  const row = () =>
+    p.evaluate(() => {
+      const s = getComputedStyle(document.activeElement as Element);
+      return { ring: s.outlineStyle === "none" ? "0px" : s.outlineWidth, fill: s.backgroundColor };
+    });
+  await expect.poll(row).toEqual({ ring: "0px", fill: "rgba(255, 255, 255, 0.92)" });
   await context.close();
 });
 
@@ -1359,8 +1364,7 @@ test("TV: a late subtitle addon leaves the remote on the subtitle it was on", as
   const { context, page: p } = await page(browser, { width: 1920, height: 1080 });
   await p.goto("/play/movie/mqjm/mqjm?form=tv");
   await expect(p.locator('[data-f="player:toggle"]')).toBeVisible({ timeout: 30_000 });
-  await p.locator('[data-f="player:subs"]').focus();
-  await p.keyboard.press("Enter");
+  await openSubtitlePicker(p, true);
   await expect.poll(() => focusedKey(p)).toBe("sub:off");
   await expect(p.locator('[data-f^="sublang:"]').first()).toBeVisible({ timeout: 30_000 });
   // Brazilian Portuguese is still on its way (the Late Subs addon answers 5 s in).
@@ -1379,7 +1383,7 @@ test("TV: a late subtitle addon leaves the remote on the subtitle it was on", as
   await context.close();
 });
 
-test("desktop: full screen, the level and mute carry on to the next episode; F and a double click", async ({ browser }) => {
+test("desktop: full screen carries on to the next episode; F and a double click; no volume control (D10)", async ({ browser }) => {
   const c = new Client(`ws://127.0.0.1:${JOURNEY_PORT}/ws`);
   await c.req("setPrefs", { patch: { autoplayNext: false } }).finally(() => c.close());
   const { context, page: p } = await page(browser);
@@ -1395,13 +1399,13 @@ test("desktop: full screen, the level and mute carry on to the next episode; F a
   await p.mouse.move(700, 300);
   await p.mouse.dblclick(700, 300);
   await expect.poll(full).toBe(true);
-  // Lower, then muted.
+  // No mute, no level, and no key for them: the system's volume covers it.
   await p.mouse.move(700, 320);
-  await p.locator('[data-f="player:volume"]').evaluate((el) => {
-    (el as HTMLInputElement).value = "30";
-    el.dispatchEvent(new Event("input", { bubbles: true }));
-  });
-  await p.locator('[data-f="player:mute"]').click();
+  await expect(p.locator('[data-f="player:volume"], [data-f="player:mute"], .player-scr input[type="range"]')).toHaveCount(0);
+  const volume = () => p.evaluate(() => document.querySelector("video")?.volume);
+  const level = await volume();
+  for (const key of ["m", "ArrowUp", "ArrowDown"]) await p.keyboard.press(key);
+  expect(await volume()).toBe(level);
   // The next episode from Up next, near the end.
   await p.evaluate(() => {
     const v = document.querySelector("video");
@@ -1411,8 +1415,6 @@ test("desktop: full screen, the level and mute carry on to the next episode; F a
   await expect(p).toHaveURL(/mqj2:1:2/);
   await expect(p.locator('[data-f="player:toggle"]')).toBeVisible({ timeout: 30_000 });
   expect(await full()).toBe(true);
-  await expect(p.locator('[data-f="player:volume"]')).toHaveValue("30");
-  await expect(p.locator('[data-f="player:mute"]')).toHaveAttribute("aria-pressed", "true");
   // Leaving the play leaves full screen.
   await p.locator('[data-f="player:leave"]').click();
   await expect(p).toHaveURL(/\/title\/series\/mqj2/);
@@ -1807,8 +1809,8 @@ test("TV: Up Next waits while a panel is open", async ({ browser }) => {
     await p.goto("/play/series/mqj2/mqj2:1:1?form=tv");
     await expect(p.locator('[data-f="player:toggle"]')).toBeVisible({ timeout: 30_000 });
     await startIfPaused(p);
-    await p.locator('[data-f="player:subs"]').focus();
-    await p.keyboard.press("Enter");
+    // The full picker (More languages); the strip itself gives way to Up Next instead (player-bar.spec, D23).
+    await openSubtitlePicker(p, true);
     await expect.poll(() => focusedKey(p)).toBe("sub:off");
     // The credits start with the Subtitles panel open.
     await p.evaluate(() => {
@@ -1954,15 +1956,16 @@ test("phone player, portrait and landscape: transport centred, scrubber then opt
       await expect(p.locator(".player-scr")).not.toHaveClass(/idle/);
       await p.waitForTimeout(400);
       const box = (sel: string) => p.locator(sel).first().evaluate((el) => el.getBoundingClientRect().toJSON() as DOMRect);
-      const [transport, scrub, options] = [await box(".transport"), await box(".tl"), await box(".pacts")];
+      const [transport, scrub, options, bar] = [await box(".transport"), await box(".tl"), await box(".osd .bl"), await box(".osd")];
       // The transport in the middle of the screen.
       expect(Math.abs(transport.left + transport.width / 2 - size.width / 2)).toBeLessThan(3);
       expect(Math.abs(transport.top + transport.height / 2 - size.height / 2)).toBeLessThan(3);
-      // At the foot: the scrubber, then the options row under it, above the safe area.
+      // At the foot, above the safe area: upright the scrubber, then the options under it (plans/player-bar.md D15);
+      // sideways one row, the options either side of the scrubber (D17).
       expect(transport.bottom).toBeLessThan(scrub.top);
-      expect(scrub.bottom).toBeLessThanOrEqual(options.top);
-      expect(options.bottom).toBeLessThanOrEqual(size.height - 8);
-      expect(size.height - options.bottom).toBeLessThan(40);
+      if (size.height > size.width) expect(scrub.bottom).toBeLessThanOrEqual(options.top);
+      expect(bar.bottom).toBeLessThanOrEqual(size.height - 8);
+      expect(size.height - bar.bottom).toBeLessThan(40);
       // A phone draws its lines itself (the track runs hidden): their box,
       // their size, and the picture they belong to.
       expect(await p.evaluate(() => document.querySelector<HTMLTrackElement>('video track[data-line="1"]')?.track?.mode)).toBe("hidden");
@@ -1991,22 +1994,20 @@ test("phone player, portrait and landscape: transport centred, scrubber then opt
         expect(c?.bottom ?? Infinity).toBeLessThanOrEqual(scrub.top);
         expect(clear(c, transport)).toBe(true);
       } else {
-        // The controls cover the picture: the foot 8 px over the scrubber, and
-        // two large lines that would meet the transport drawn at 85%.
-        await expect.poll(async () => (await cue())?.font).toBeCloseTo(20.4, 1);
+        // The controls cover the picture: the foot 8 px over the scrubber; the one-row bar sits low enough that two
+        // large lines clear the transport at full size.
+        await expect.poll(async () => (await cue())?.font).toBe(24);
         const track = await box(".scrub");
         await expect.poll(async () => track.top - ((await cue())?.bottom ?? 0)).toBeGreaterThanOrEqual(6);
         const c = await cue();
         expect(track.top - (c?.bottom ?? 0)).toBeLessThanOrEqual(14);
         expect(clear(c, transport)).toBe(true);
-        // The title beside Back on one line; the options between the bar's ends.
-        const [back, title, bar] = [await box(".pback"), await box(".ptitle h1"), await box(".scrub")];
+        // The title beside Back on one line; the options either side of the scrubber.
+        const [back, title, line] = [await box(".pback"), await box(".ptitle h1"), await box(".scrub")];
         expect(Math.abs(back.top + back.height / 2 - (title.top + title.height / 2))).toBeLessThan(4);
         expect(title.left).toBeGreaterThan(back.right);
-        const first = await box(".pacts .pa:first-child");
-        const last = await box(".pacts .pa:last-child");
-        expect(first.left).toBeGreaterThanOrEqual(bar.left - 2);
-        expect(last.right).toBeLessThanOrEqual(bar.right + 2);
+        expect((await box(".osd .bl")).right).toBeLessThan(line.left);
+        expect((await box(".osd .br")).left).toBeGreaterThan(line.right);
       }
       await p.screenshot({ path: `${SHOTS}/phone-player-${size.width}x${size.height}.png` });
       // Controls hidden: portrait keeps the lines in the band; landscape takes

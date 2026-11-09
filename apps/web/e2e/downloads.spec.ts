@@ -13,7 +13,7 @@ import type { ChildProcess } from "node:child_process";
 import { createReadStream, statSync } from "node:fs";
 import { createServer, type Server, type ServerResponse } from "node:http";
 import type { AddressInfo, Socket } from "node:net";
-import { Client, cleanup, DOWNLOADS_PORT, SHOTS, startBridge, startIfPaused } from "./core";
+import { Client, cleanup, DOWNLOADS_PORT, openSubtitlePicker, SHOTS, startBridge, startIfPaused } from "./core";
 import { patchedContext } from "./patch";
 import { BBB_ID, FILM_FILE, NAME } from "./source";
 
@@ -325,7 +325,7 @@ test("offline, every page says so, Home once, a download plays from Downloads, t
   await page.waitForFunction(() => (document.querySelector("video")?.currentTime ?? 0) > 0.5, null, { timeout: 30_000 });
   console.log(`offline start: ${Date.now() - started} ms from the row's press to 0.5 s played`);
   // The kept track is listed under its language and, chosen, its cue shows, with no source to ask.
-  await page.locator('[data-f="player:subs"]').dispatchEvent("click");
+  await openSubtitlePicker(page);
   const english = page.locator('[data-f="sublang:en"]');
   await expect(english).toBeVisible();
   await english.dispatchEvent("click");

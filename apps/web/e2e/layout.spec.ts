@@ -310,7 +310,7 @@ test("phone: a meta line that wraps never ends or starts a line with a dot", asy
   await context.close();
 });
 
-test("desktop and phone players say Back on screen; a desktop adds volume and full screen", async ({ browser }) => {
+test("desktop and phone players say Back on screen; a desktop adds full screen and no volume", async ({ browser }) => {
   for (const form of ["desktop", "phone"] as const) {
     const { context, page, go } = await open(browser, form, `/play/movie/tt1254207/tt1254207`);
     // Full screen asked for is counted; a headless page cannot enter it.
@@ -335,31 +335,22 @@ test("desktop and phone players say Back on screen; a desktop adds volume and fu
     const volume = () => page.evaluate(() => document.querySelector("video")?.volume ?? -1);
     const paused = () => page.evaluate(() => document.querySelector("video")?.paused);
     if (form === "desktop") {
-      const mute = page.locator('[data-f="player:mute"]');
       await startIfPaused(page);
       await expect.poll(paused).toBe(false);
+      // No volume control at all (plans/player-bar.md D10): the system's covers it, and nothing on the page moves the level.
+      await expect(page.locator('[data-f="player:mute"], [data-f="player:volume"]')).toHaveCount(0);
+      const level = await volume();
       // Real clicks land on the icon, which each click swaps: the surface
       // must not take them for a click on the picture (QA r1 Q5 rows 8, 9).
       await page.mouse.move(400, 300);
-      await mute.click();
-      await expect.poll(volume).toBe(0);
-      await expect(mute).toHaveAttribute("aria-label", "Unmute");
-      expect(await paused()).toBe(false);
-      await mute.click();
-      await expect.poll(volume).toBe(1);
-      expect(await paused()).toBe(false);
       const toggle = page.locator('[data-f="player:toggle"]');
       await toggle.click();
       await expect.poll(paused).toBe(true);
       await toggle.click();
       await expect.poll(paused).toBe(false);
-      await page.locator('[data-f="player:volume"]').evaluate((el) => {
-        (el as HTMLInputElement).value = "30";
-        el.dispatchEvent(new Event("input", { bubbles: true }));
-      });
-      await expect.poll(volume).toBeCloseTo(0.3, 2);
       await page.locator('[data-f="player:fullscreen"]').dispatchEvent("click");
       await expect.poll(() => page.evaluate(() => (window as unknown as { fullAsked: number }).fullAsked)).toBe(1);
+      expect(await volume()).toBe(level);
     } else {
       await expect(page.locator('[data-f="player:fullscreen"], [data-f="player:mute"], [data-f="player:volume"]')).toHaveCount(0);
     }

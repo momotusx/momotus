@@ -14,7 +14,7 @@ import { readFileSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { fileURLToPath } from "node:url";
-import { Client, cleanup, LANGS_PORT, PORTS, SHOTS, startBridge, startIfPaused } from "./core";
+import { Client, cleanup, LANGS_PORT, openSubtitlePicker, PORTS, SHOTS, startBridge, startIfPaused } from "./core";
 import { type Json, patchedContext } from "./patch";
 import { BBB_ID, NAME, startSource } from "./source";
 
@@ -147,7 +147,7 @@ test("the profile's language turns on at start; Off wins and is remembered", asy
   await expect(summary).toHaveText("Turkish", { timeout: 30_000 });
   await expect.poll(() => page.evaluate(() => document.querySelector<HTMLTrackElement>('video track[data-line="1"]')?.track?.mode)).toBe("hidden");
   // The viewer turns it off: off now, and on the next play of the title.
-  await page.locator('[data-f="player:subs"]').dispatchEvent("click");
+  await openSubtitlePicker(page);
   await page.locator('[data-f="sub:off"]').dispatchEvent("click");
   await expect(summary).toHaveText(/^Off, \d+ languages$/);
   await open();
@@ -167,7 +167,7 @@ test("while the core still asks, Subtitles counts what is in and marks the searc
     const { context, page, open } = await playerPage(browser);
     await open();
     const summary = page.locator('[data-f="player:subs"] small');
-    const mark = summary.locator("svg.mark");
+    const mark = page.locator('[data-f="player:subs"] svg.mark');
     // The stream's own languages are in; the slow addon is still being asked.
     await expect(summary).toHaveText(/^Off, \d+ languages$/);
     await expect(mark).toBeVisible();
@@ -209,7 +209,7 @@ const focusedKey = (page: Page) => page.evaluate(() => (document.activeElement a
 
 test("the picker lists languages first, in the core's order, with flags and counts", async ({ browser }) => {
   const { context, page, errors, panel } = await picker(browser, "desktop");
-  await page.locator('[data-f="player:subs"]').dispatchEvent("click");
+  await openSubtitlePicker(page);
   const rows = panel.locator('[data-f^="sublang:"]');
   // Turkish, the profile's; English, the browser's language standing in for audio languages
   // the profile never set; then the rest by name.
@@ -247,7 +247,7 @@ test("the picker lists languages first, in the core's order, with flags and coun
 
 test("the search field matches English names, own names and codes", async ({ browser }) => {
   const { context, page, errors, panel } = await picker(browser, "desktop");
-  await page.locator('[data-f="player:subs"]').dispatchEvent("click");
+  await openSubtitlePicker(page);
   const names = panel.locator('[data-f^="sublang:"] .nm');
   const search = panel.locator('[data-f="sub:search"]');
   for (const [typed, shown] of [
@@ -283,7 +283,7 @@ test("the search field matches English names, own names and codes", async ({ bro
 
 test("a language opens its options: names, the quiet detail, the fit, the chosen one checked", async ({ browser }) => {
   const { context, page, errors, commands, panel } = await picker(browser, "desktop");
-  await page.locator('[data-f="player:subs"]').dispatchEvent("click");
+  await openSubtitlePicker(page);
   await panel.locator('[data-f="subopen:en"]').dispatchEvent("click");
   const opts = panel.locator(".subp-opts");
   await expect(opts.locator(".subp-head h2")).toHaveText("English");
@@ -307,7 +307,7 @@ test("a language opens its options: names, the quiet detail, the fit, the chosen
   await fitting.dispatchEvent("click");
   await expect(page.locator('[data-f="player:subs"] small')).toHaveText("English");
   // Opened again: the languages, English checked; its options, that one checked, and timing.
-  await page.locator('[data-f="player:subs"]').dispatchEvent("click");
+  await openSubtitlePicker(page);
   await expect(panel.locator('[data-f="sublang:en"]')).toHaveClass(/\bon\b/);
   await expect(panel.locator('[data-f="sublang:en"] .ck svg')).toHaveCount(1);
   await expect(panel.locator('[data-f="sublang:en"]')).toHaveAttribute("aria-checked", "true");
@@ -321,7 +321,7 @@ test("a language opens its options: names, the quiet detail, the fit, the chosen
   // The delay is the track's: Many Subs starts at 0 and OPENFILM keeps its own.
   const timing = opts.locator(".sub-val");
   const reopen = async () => {
-    await page.locator('[data-f="player:subs"]').dispatchEvent("click");
+    await openSubtitlePicker(page);
     await panel.locator('[data-f="subopen:en"]').dispatchEvent("click");
   };
   await expect(timing).toHaveText("0.0 s");
@@ -355,8 +355,7 @@ test("a language opens its options: names, the quiet detail, the fit, the chosen
 test("TV: two columns, the right one follows the focused language, Right moves into it", async ({ browser }) => {
   // German's flag file fails: its row shows the round mark with its letters instead, at the TV's floor.
   const { context, page, errors, panel } = await picker(browser, "tv", "de");
-  await page.locator('[data-f="player:subs"]').focus();
-  await page.keyboard.press("Enter");
+  await openSubtitlePicker(page, true);
   // The remote starts on the language that is on, and the right column shows its options.
   const on = panel.locator('[data-f^="sublang:"].on');
   await expect.poll(() => focusedKey(page)).toBe((await on.getAttribute("data-f")) ?? "");
@@ -394,7 +393,7 @@ test("TV: two columns, the right one follows the focused language, Right moves i
   await expect.poll(() => focusedKey(page)).toBe("player:subs");
   await expect(page.locator('[data-f="player:subs"] small')).toHaveText("English");
   // Timing on the remote: the value holds the focus, Left and Right step it (held, they repeat), Enter resets.
-  await page.keyboard.press("Enter");
+  await openSubtitlePicker(page, true);
   await expect.poll(() => focusedKey(page)).toBe("sublang:en");
   await page.keyboard.press("ArrowRight");
   await expect.poll(() => focusedKey(page)).toMatch(/^sub:http/);
@@ -422,7 +421,7 @@ test("TV: two columns, the right one follows the focused language, Right moves i
 
 test("phone: a full-height sheet with Done, a language's options a level down", async ({ browser }) => {
   const { context, page, errors, panel } = await picker(browser, "phone");
-  await page.locator('[data-f="player:subs"]').dispatchEvent("click");
+  await openSubtitlePicker(page);
   await expect(panel.locator('[data-f="sub:done"]')).toBeVisible();
   const box = await panel.boundingBox();
   // Full height between 12 pt margins.
@@ -461,7 +460,7 @@ test("the core's marks show in the detail line; timing goes to the core once it 
   const { context, page, errors, commands, panel } = await picker(browser, "desktop", undefined, mark);
   const opts = panel.locator(".subp-opts");
   const openEnglish = async () => {
-    await page.locator('[data-f="player:subs"]').dispatchEvent("click");
+    await openSubtitlePicker(page);
     await panel.locator('[data-f="subopen:en"]').dispatchEvent("click");
   };
   await openEnglish();
@@ -583,7 +582,7 @@ test("an addon's label that names a file reads as the viewer's words, its langua
   await c.req("installAddon", { url });
   try {
     const { context, page, errors, panel } = await picker(browser, "desktop");
-    await page.locator('[data-f="player:subs"]').dispatchEvent("click");
+    await openSubtitlePicker(page);
     await panel.locator('[data-f="subopen:en"]').dispatchEvent("click");
     const opts = panel.locator(".subp-opts");
     // The stream's own two, then SubSense's three English files: no provider, no "[SRT]", no

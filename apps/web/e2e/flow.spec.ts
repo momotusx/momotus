@@ -83,8 +83,11 @@ test("plays a direct source through the core's stream server", async ({ page }) 
   await expect.poll(time, { timeout: 30_000 }).toBeGreaterThan(153);
   const src = await page.evaluate(() => document.querySelector("video")?.src ?? "");
   expect(src).toMatch(/^http:\/\/127\.0\.0\.1:\d+\//);
-  // Actions in one order everywhere: Audio, Subtitles, Versions, Speed.
-  expect(await page.locator(".pacts .pa b").allTextContents()).toEqual(["Audio", "Subtitles", "Versions", "Speed"]);
+  // The bar in one order everywhere (plans/player-bar.md 5): Audio, Speed and Versions left of the transport,
+  // Subtitles right of it.
+  const keys = (sel: string) => page.locator(sel).evaluateAll((els) => els.map((e) => (e as HTMLElement).dataset.f));
+  expect(await keys(".osd .bl [data-f]")).toEqual(["player:audio", "player:speed", "player:versionsact"]);
+  expect((await keys(".osd .br [data-f]"))[0]).toBe("player:subs");
 
   // Subtitles from OpenSubtitles load into the video as a text track, all by
   // remote: the first press only wakes the hidden controls (Left and Right
@@ -96,6 +99,11 @@ test("plays a direct source through the core's stream server", async ({ page }) 
   await expect.poll(() => focused(page)).toBe("player:toggle");
   for (let i = 0; i < 4 && (await focused(page)) !== "player:subs"; i++) await page.keyboard.press("ArrowRight");
   await expect.poll(() => focused(page)).toBe("player:subs");
+  // OK opens the strip on its checked chip; Right walks the chips to More languages, which opens the picker.
+  await page.keyboard.press("Enter");
+  await expect.poll(() => focused(page), { timeout: 30_000 }).toMatch(/^strip:sub:/);
+  for (let i = 0; i < 8 && (await focused(page)) !== "strip:more"; i++) await page.keyboard.press("ArrowRight");
+  await expect.poll(() => focused(page)).toBe("strip:more");
   await page.keyboard.press("Enter");
   // With no subtitle languages the device's stands in (English here, and the file's audio names no
   // language), so English started on its own and the picker opens on it. Languages go by their tag, so a
@@ -182,7 +190,7 @@ async function skipCredits(page: Page, time: () => Promise<number>, seekTo: (s: 
       return r ? { top: r.top, bottom: r.bottom, mid: (r.top + r.bottom) / 2 } : { top: 0, bottom: 0, mid: 0 };
     }, sel);
   const inRow = async () => {
-    const [b, row] = [await box('[data-f="player:skip"]'), await box(".ctl")];
+    const [b, row] = [await box('[data-f="player:skip"]'), await box(".osd .transport")];
     return b.mid >= row.top && b.mid <= row.bottom && b.bottom > 1080 * 0.88;
   };
   await expect.poll(inRow).toBe(true);

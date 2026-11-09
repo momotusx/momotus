@@ -9,7 +9,7 @@ import { expect, type Page, test } from "./fixture";
 import type { ChildProcess } from "node:child_process";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
-import { Client, cleanup, NOTES_PORT, PORTS, startBridge, startIfPaused } from "./core";
+import { Client, cleanup, NOTES_PORT, openSubtitlePicker, PORTS, startBridge, startIfPaused } from "./core";
 import { BBB_ID, NAME, startSource } from "./source";
 
 const CINEMETA = "https://v3-cinemeta.strem.io/manifest.json";
@@ -93,7 +93,7 @@ test.afterAll(() => {
 
 /** Opens the subtitle picker, then English's options (both files are English), and picks the track labelled `label`. */
 async function pick(page: Page, label: string) {
-  await page.locator('[data-f="player:subs"]').dispatchEvent("click");
+  await openSubtitlePicker(page);
   await page.locator('[data-f="subopen:en"]').dispatchEvent("click");
   await page.locator('aside[aria-label="Subtitles"] .opt', { hasText: label }).dispatchEvent("click");
 }
@@ -126,7 +126,7 @@ test("a subtitle that does not load leaves a note and the video plays on", async
   // A file that did not answer: a toast and a note; the track stays.
   await pick(page, "Gone");
   await expect(page.locator(".toast.bad")).toHaveText(GONE);
-  await page.locator('[data-f="player:subs"]').dispatchEvent("click");
+  await openSubtitlePicker(page);
   await expect(panel.locator(".opt-note")).toHaveText([GONE]);
   await panel.locator('[data-f="subopen:en"]').dispatchEvent("click");
   await expect(panel.locator(".opt", { hasText: "Gone" })).toBeVisible();
@@ -140,7 +140,7 @@ test("a subtitle that does not load leaves a note and the video plays on", async
   // A file that holds no subtitle: it leaves the list and subtitles go off.
   await pick(page, "Broken");
   await expect(page.locator(".toast.bad")).toHaveText(BROKEN);
-  await page.locator('[data-f="player:subs"]').dispatchEvent("click");
+  await openSubtitlePicker(page);
   await expect(panel.locator(".opt-note")).toHaveText([GONE, BROKEN]);
   await expect(panel.locator('[data-f="sub:off"]')).toHaveClass(/\bon\b/);
   await panel.locator('[data-f="subopen:en"]').dispatchEvent("click");

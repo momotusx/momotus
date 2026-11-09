@@ -60,6 +60,8 @@ export const DUAL_PORT = 17832 + shift;
 export const SIGN_IN_PORTS = { relay: 17833 + shift, mock: 17834 + shift, core: 17835 + shift };
 /** The kind chips' own: a core with a streaming account, so a title lists debrid torrents beside direct links. */
 export const KINDS_PORT = 17836 + shift;
+/** The player bar spec's own: a core with a local addon's series and film, each with subtitles in many languages. */
+export const BAR_PORT = 17840 + shift;
 /** The zoom spec's saved zooms, each on its own host in one Chrome profile (Chrome keeps a zoom per host and sends every
  * *.localhost to this machine): the core lets these pages open its socket too. */
 export const ZOOM_HOSTS = new Map([1, 1.25, 1.75, 2, 2.5].map((zoom) => [zoom, `z${zoom * 100}.localhost`]));
@@ -251,6 +253,24 @@ export async function startIfPaused(page: Page) {
   await page.waitForTimeout(500);
   const toggle = page.locator('[data-f="player:toggle"]');
   if ((await toggle.getAttribute("aria-label")) === "Play") await toggle.press("Enter");
+}
+
+/** The full subtitle picker, as a viewer reaches it (plans/player-bar.md 5): Subtitles opens the strip over the bar,
+ * and its More languages opens the picker. By a dispatched click (no pointer moves, the controls stay as they are),
+ * or by keys when `keys` is set (Enter on Subtitles, then on More languages). */
+export async function openSubtitlePicker(page: Page, keys = false) {
+  const subs = page.locator('[data-f="player:subs"]');
+  const more = page.locator('[data-f="strip:more"]');
+  if (keys) {
+    await subs.focus();
+    await page.keyboard.press("Enter");
+    await more.focus();
+    await page.keyboard.press("Enter");
+  } else {
+    await subs.dispatchEvent("click");
+    await more.dispatchEvent("click");
+  }
+  await page.locator(".subp").waitFor();
 }
 
 type Row = { key: string; via: string };

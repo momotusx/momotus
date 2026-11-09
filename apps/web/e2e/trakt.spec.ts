@@ -2,9 +2,10 @@
  * a local fake (e2e/trakt-fake.ts, reached through the dev bridge's
  * MQ_DEV_TRAKT), and a second core built as a release without a Trakt app
  * would be (no MQ_DEV_TRAKT). Connect shows the code, the fake approves it,
- * the card says who is connected, Sync now runs a round, a playback shows the
- * Trakt mark and scrobbles, a refused stop lists the film as not on Trakt,
- * and signing out ends it. The fake's tokens are looked for in storage, the
+ * the card says who is connected, Sync now runs a round, a playback scrobbles
+ * with nothing of Trakt in the player, a refused stop lists the film as not on
+ * Trakt, signing out ends it, and a connection Trakt refuses shows the
+ * player's one 4 s line. The fake's tokens are looked for in storage, the
  * URL, history, the console and the page at every shot. */
 
 import { type Browser, expect, type Page, test } from "./fixture";
@@ -200,15 +201,15 @@ test.describe.serial("Trakt on the web", () => {
     await noTokenKept(page);
   });
 
-  test("a playback shows the Trakt mark and scrobbles; a stop Trakt refuses lists the film", async () => {
+  test("a playback scrobbles with no Trakt mark in the player; a stop Trakt refuses lists the film, still unmarked", async () => {
     await go(page, `/play/movie/${BBB_ID}/${BBB_ID}`);
-    const mark = page.locator(".trakt-mark");
-    await expect(mark).toHaveAttribute("data-trakt", "on", { timeout: 30_000 });
-    await expect(mark.locator(".sr")).toHaveText("Trakt: this play is recorded");
+    // Trakt records the play (the fake hears it); the player shows nothing of Trakt (plans/player-bar.md D9).
     await expect.poll(() => asked("POST", "/scrobble/start"), { timeout: 30_000 }).toBeGreaterThan(0);
-    // The controls up, so the mark shows under the title.
+    const marks = page.locator(".trakt-mark, .trakt-toast, .player-scr [data-trakt]");
     await page.mouse.move(700, 450);
     await page.mouse.move(720, 470);
+    await expect(page.locator(".osd")).toBeVisible();
+    await expect(marks).toHaveCount(0);
     await shot(page, "trakt-player-desktop");
     // Half way (said with the next tick), then the page is left: the core pauses the scrobble.
     await page.evaluate(() => {
@@ -226,11 +227,10 @@ test.describe.serial("Trakt on the web", () => {
     fake.answer("POST /scrobble/pause", [404]);
     await page.evaluate(() => document.querySelector("video")?.pause());
     await expect.poll(() => asked("POST", "/scrobble/pause"), { timeout: 15_000 }).toBeGreaterThan(paused);
-    // The mark says why, in words that show on every form.
-    await expect(mark).toHaveAttribute("data-trakt", "unmapped", { timeout: 15_000 });
-    await expect(mark.locator("span:not(.sr)")).toContainText("this title could not be matched");
+    // Unmapped shows nothing in the player either: Settings, Trakt lists the film.
     await page.mouse.move(700, 450);
-    await shot(page, "trakt-player-unmapped-desktop");
+    await page.waitForTimeout(1000);
+    await expect(marks).toHaveCount(0);
     await go(page, "/trakt");
     await expect(page.locator(".trakt-unmapped li").first()).toBeVisible({ timeout: 30_000 });
     await expect(page.locator(".trakt-unmapped")).toContainText("Big Buck Bunny");
@@ -244,6 +244,31 @@ test.describe.serial("Trakt on the web", () => {
     await expect(card(page)).toHaveAttribute("data-state", "off", { timeout: 15_000 });
     await expect(card(page)).toContainText("Signed out of Trakt on this device.");
     await expect.poll(() => asked("POST", "/oauth/revoke"), { timeout: 15_000 }).toBeGreaterThan(0);
+  });
+
+  test("Trakt asking to sign in again: the player says so once, a 4 s text line with no logo or button", async () => {
+    // Connected again, then Trakt refuses the token and a fresh one: the core's `reconnect`.
+    await go(page, "/trakt");
+    await page.locator('[data-f="trakt:connect"]').click();
+    await expect(page.locator(".trakt-connect .st.ok")).toHaveText(`Connected as ${USER}`, { timeout: 15_000 });
+    await page.locator('[data-f="trakt:done"]').click();
+    fake.answer("GET /sync/last_activities", [401]);
+    fake.answer("POST /oauth/token", [400]);
+    await page.locator('[data-f="trakt:sync"]').click();
+    await expect(card(page)).toHaveAttribute("data-state", "reconnect", { timeout: 20_000 });
+    await go(page, `/play/movie/${BBB_ID}/${BBB_ID}`);
+    const toast = page.locator(".trakt-toast");
+    await expect(toast).toHaveText("Trakt: sign in again in Settings, so this play is not recorded", { timeout: 30_000 });
+    await expect(toast).toHaveAttribute("role", "status");
+    await expect(toast.locator("svg, img, button, a")).toHaveCount(0);
+    await expect(page.locator(".trakt-mark")).toHaveCount(0);
+    await shot(page, "trakt-player-reconnect-desktop");
+    // Its 4 s, then gone for the rest of the play, a pause included.
+    await expect(toast).toHaveCount(0, { timeout: 6000 });
+    await page.evaluate(() => document.querySelector("video")?.pause());
+    await page.waitForTimeout(1000);
+    await expect(toast).toHaveCount(0);
+    await go(page, "/trakt");
   });
 
   test("a build without a Trakt app says so and offers nothing to press", async () => {
