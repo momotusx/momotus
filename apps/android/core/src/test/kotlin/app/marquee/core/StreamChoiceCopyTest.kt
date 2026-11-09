@@ -242,6 +242,7 @@ class StreamChoiceCopyTest {
                                 put("saidLater", Bar.SAID_LATER)
                                 put("saidEarlier", Bar.SAID_EARLIER)
                                 put("saidInSync", Bar.SAID_IN_SYNC)
+                                put("percent", Bar.PERCENT)
                                 put(
                                     "names",
                                     buildJsonObject {
@@ -261,6 +262,8 @@ class StreamChoiceCopyTest {
                                         put("valueInSync", Bar.Names.VALUE_IN_SYNC)
                                         put("pressToReset", Bar.Names.PRESS_TO_RESET)
                                         put("pressOkToAdjust", Bar.Names.PRESS_OK_TO_ADJUST)
+                                        put("smaller", Bar.Names.SMALLER)
+                                        put("larger", Bar.Names.LARGER)
                                         put("subtitleLanguage", Bar.Names.SUBTITLE_LANGUAGE)
                                         put("audioTrack", Bar.Names.AUDIO_TRACK)
                                     },

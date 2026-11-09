@@ -2101,10 +2101,12 @@ async fn offline_the_next_episode_is_the_next_downloaded_one() {
     assert!(last.snapshot().next.is_none());
 }
 
-/// Offline with the title's meta cached, the next episode is the next
-/// released one whether or not it is downloaded, as the Up Next card has it
-/// (plans/player-bar.md section 4, D14): only e1 is downloaded here, the
-/// addon is gone, and e2 is still offered.
+/// Offline with the title's meta still in the addon cache, the next episode
+/// is the next released one whether or not it is downloaded, as the Up Next
+/// card has it (plans/player-bar.md section 4, D14): only e1 is downloaded
+/// here, the addon is gone, and e2 is still offered. Once the cache runs out
+/// (max age plus stale-if-error), the next downloaded episode is offered, as
+/// the test above pins.
 #[tokio::test]
 async fn offline_with_cached_meta_the_next_episode_is_the_next_released_one() {
     // An addon that answers the series meta once, cached for an hour, and

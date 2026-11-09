@@ -94,6 +94,10 @@ async fn the_subtitle_position_and_background_are_preferences() {
     let prefs = core.set_prefs(&json!({"autoplayNext": false})).unwrap();
     assert!(!prefs.autoplay_next);
     assert_eq!(prefs.subtitle_position, 25);
+    core.library()
+        .set_setting("p", "subtitlePosition", "2", &core.hlc())
+        .unwrap();
+    assert_eq!(core.prefs().subtitle_position, 5, "clamped from below too");
 }
 
 /// Plans/dual-subtitles.md 3.1: the second subtitle line's preferences.

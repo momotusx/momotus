@@ -289,6 +289,11 @@ object StreamChoiceCopy {
         const val LOWER = "Lower"
         const val HIGHER = "Higher"
         const val BACKGROUND = "Background"
+
+        /**
+         * By the profile's `subtitleBackground`. [SubtitleBackground.Unknown] (a newer core's value) reads as Box:
+         * `BACKGROUNDS[bg] ?: BACKGROUNDS.getValue(SubtitleBackground.Box)`; never send `Unknown.wire` in a patch.
+         */
         val BACKGROUNDS =
             mapOf(
                 SubtitleBackground.Box to "Box",
@@ -310,9 +315,14 @@ object StreamChoiceCopy {
         const val SAID_EARLIER = "Subtitles {n} seconds earlier"
         const val SAID_IN_SYNC = "Subtitles in sync"
 
+        /** Size's and Position's value, `{n}` a whole number (Size its scale, 130%); Position at 8 shows [DEFAULT]. */
+        const val PERCENT = "{n}%"
+
         /**
          * What screen readers say (plans/player-bar.md section 8). `{episode}` is the episode as the bar shows it;
-         * `{value}` the shift's visible text, followed by ", " and [PRESS_TO_RESET] (TV: [PRESS_OK_TO_ADJUST]).
+         * `{value}` the shift's visible text, then ", " and [PRESS_TO_RESET] only while the value is not 0 (at 0 the
+         * press does nothing); on TV ", " and [PRESS_OK_TO_ADJUST] at every value. [SMALLER] and [LARGER] are Size's
+         * minus and plus.
          */
         object Names {
             const val AUDIO = "Audio"
@@ -331,6 +341,8 @@ object StreamChoiceCopy {
             const val VALUE_IN_SYNC = "{value}, subtitles in sync"
             const val PRESS_TO_RESET = "press to reset"
             const val PRESS_OK_TO_ADJUST = "press OK to adjust"
+            const val SMALLER = "Smaller"
+            const val LARGER = "Larger"
             const val SUBTITLE_LANGUAGE = "Subtitle language"
             const val AUDIO_TRACK = "Audio track"
         }

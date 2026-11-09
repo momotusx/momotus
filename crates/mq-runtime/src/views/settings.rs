@@ -228,6 +228,8 @@ impl Core {
             from_quality(&mut prefs.streams);
         }
         // A row from a newer version may hold a wider range; apps never clamp.
+        // One outside u8 ("300", "-1") cannot be read and is skipped above,
+        // so the last readable value (or 8) stands.
         prefs.subtitle_position = prefs
             .subtitle_position
             .clamp(*SUBTITLE_POSITIONS.start(), *SUBTITLE_POSITIONS.end());
@@ -251,11 +253,9 @@ impl Core {
         merge(&mut merged, patch);
         let mut prefs: Prefs =
             serde_json::from_value(merged).map_err(|e| CoreError::BadPrefs(e.to_string()))?;
-        // Only a patch that names the position is checked, so a stored row
-        // from a newer version never blocks other changes.
-        if fields.contains_key("subtitlePosition")
-            && !SUBTITLE_POSITIONS.contains(&prefs.subtitle_position)
-        {
+        // Only a patch can be out of range here: `prefs()` clamps a stored
+        // row, so one from a newer version never blocks other changes.
+        if !SUBTITLE_POSITIONS.contains(&prefs.subtitle_position) {
             return Err(CoreError::BadPrefs(format!(
                 "subtitlePosition must be 5 to 25, not {}",
                 prefs.subtitle_position

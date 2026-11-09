@@ -5,9 +5,12 @@ import Testing
 // (search for "thrones", Discover switched to series, a one-title library,
 // two addons, default settings, an import waiting for its link).
 
+private func fixtureURL(_ name: String) -> URL {
+    URL(fileURLWithPath: #filePath).deletingLastPathComponent().appending(path: "Fixtures/\(name)")
+}
+
 private func fixture<T: Decodable>(_ name: String, as type: T.Type) throws -> T {
-    let url = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appending(path: "Fixtures/\(name)")
-    return try JSONDecoder().decode(T.self, from: Data(contentsOf: url))
+    try JSONDecoder().decode(T.self, from: Data(contentsOf: fixtureURL(name)))
 }
 
 @Test func searchRowsReuseHomeRows() throws {
@@ -55,8 +58,8 @@ private func fixture<T: Decodable>(_ name: String, as type: T.Type) throws -> T 
 /// plans/player-bar.md section 4: a core from before the subtitle position and background sends neither, and
 /// its settings still decode, with both nil; a background the core sets decodes.
 @Test func settingsDecodeWithoutThePositionAndBackground() throws {
-    let url = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appending(path: "Fixtures/settings.json")
-    var json = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
+    let data = try Data(contentsOf: fixtureURL("settings.json"))
+    var json = try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
     json["subtitlePosition"] = nil
     json["subtitleBackground"] = nil
     let older = try JSONDecoder().decode(Prefs.self, from: JSONSerialization.data(withJSONObject: json))
