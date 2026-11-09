@@ -24,7 +24,9 @@ import { firstRunWords as fw } from "../lib/first-run";
 import { autoFocusSoon, goBack } from "../focus/dom";
 import { holdModal } from "../focus/modal";
 import { markBack, setLeaveGuarded, takeAfterBack, takeBack } from "../history";
-import { type AvatarColor, formatAvatar, GLYPHS, type Glyph, nextAvatar, parseAvatar } from "../lib/avatar";
+import { type AvatarColor, formatAvatar, formColors, GLYPHS, type Glyph, nextAvatar, parseAvatar } from "../lib/avatar";
+import { pushBack } from "../focus/back";
+import { form } from "../form";
 import { current, INCOGNITO, inIncognito, profileProblem, waitText } from "../lib/profiles";
 import { kidsSession, ownerOf, pinAsked } from "../lib/kids";
 import { kidsLine } from "../lib/words";
@@ -348,6 +350,8 @@ export function Picker(props: { mode: "start" | "locked" | "switch" }) {
   // saying how this device signed in, and Add profile after the tiles.
   const overWall = () => props.mode !== "switch" && whoLine();
   const addsHere = () => !!overWall() && owner() && !locked() && (s()?.profiles.length ?? 0) < (s()?.max ?? 0);
+  // Add profile opens today's create form inside the sheet; once made, Home.
+  const [adding, setAdding] = createSignal(false);
   const body = () => (
       <Show
         when={target()}
@@ -377,12 +381,12 @@ export function Picker(props: { mode: "start" | "locked" | "switch" }) {
                 </button>
               </Show>
               <Show when={addsHere()}>
-                <A class="ptile add" href="/profiles/new?then=home" data-f="profile:add" aria-label={fw.addProfile} onClick={() => markChosen()}>
+                <button class="ptile add" data-f="profile:add" aria-label={fw.addProfile} onClick={() => setAdding(true)}>
                   <span class="avatar avatar-l add-art">
                     <Plus aria-hidden />
                   </span>
                   <span class="pname">{fw.addProfile}</span>
-                </A>
+                </button>
               </Show>
               <Show when={canAdd()}>
                 <A class="ptile add" href="/profiles/new" data-f="profile:add" aria-label="Add profile">
@@ -429,10 +433,147 @@ export function Picker(props: { mode: "start" | "locked" | "switch" }) {
     <Show when={overWall()} fallback={<main class="profiles page" data-vscroll>{body()}</main>}>
       <WallPage label="Profiles">
         <Sheet size="narrow" class="who">
-          {body()}
+          <Show when={adding()} fallback={body()}>
+            <AddInSheet
+              onCancel={() => {
+                setAdding(false);
+                autoFocusSoon(() => document.querySelector<HTMLElement>('[data-f="profile:add"]'));
+              }}
+            />
+          </Show>
         </Sheet>
       </WallPage>
     </Show>
+  );
+}
+
+/** Add profile inside first run's Who's watching? sheet (plans/first-screens.md 3.4): today's create form (a name, a
+ * colour, the Kids switch while the main profile has a PIN), then Home on the profile this device runs. Cancel,
+ * Back and Escape return to the tiles. */
+function AddInSheet(props: { onCancel: () => void }) {
+  const s = () => profiles();
+  const first = parseAvatar(nextAvatar(s()?.profiles.map((p) => p.avatar) ?? [])).color ?? "ember";
+  const [name, setName] = createSignal("");
+  const [color, setColor] = createSignal<AvatarColor>(first);
+  const [kids, setKids] = createSignal(false);
+  const kidsOpen = () => ownerOf(s())?.hasPin === true;
+  const [busy, setBusy] = createSignal(false);
+  const [nameError, setNameError] = createSignal<string | null>(null);
+  const [problem, setProblem] = createSignal<string | null>(null);
+  let field: HTMLInputElement | undefined;
+  onCleanup(pushBack(props.onCancel));
+  // One profile per press: a second Add while the first is with the core does nothing.
+  const add = async () => {
+    if (busy()) return;
+    const n = name().trim();
+    if (!n || n.length > 30) {
+      setNameError(profileProblem("badName", ""));
+      field?.focus();
+      return;
+    }
+    setBusy(true);
+    setNameError(null);
+    setProblem(null);
+    try {
+      const avatar = formatAvatar({ glyph: "letter", color: color() });
+      if (kids()) await createKidsProfile(n, avatar);
+      else await op<ProfilesSnapshot>("createProfile", { name: n, avatar });
+      markChosen();
+    } catch (e) {
+      const t = tried(e);
+      setProblem(t.kind === "problem" ? t.text : "That did not work.");
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <form
+      class="add-in-sheet"
+      aria-labelledby="add-q"
+      onSubmit={(e) => {
+        e.preventDefault();
+        void add();
+      }}
+    >
+      <h1 id="add-q" tabindex="-1">
+        Add profile
+      </h1>
+      <div class="idr">
+        <AvatarArt avatar={formatAvatar({ glyph: "letter", color: color() })} name={name().trim() || "?"} size="l" />
+        <label class="fr-field">
+          <small>Name</small>
+          <input
+            ref={field}
+            type="text"
+            maxLength={30}
+            value={name()}
+            autocomplete="off"
+            enterkeyhint="done"
+            data-f="add:name"
+            data-autofocus={form() === "desktop" ? "" : undefined}
+            aria-invalid={nameError() ? "true" : undefined}
+            aria-describedby={nameError() ? "add-name-error" : undefined}
+            onInput={(e) => {
+              setName(e.currentTarget.value);
+              setNameError(null);
+            }}
+          />
+        </label>
+      </div>
+      <Show when={nameError()}>
+        <p class="st bad" id="add-name-error" role="status">
+          <i class="dot" />
+          {nameError()}
+        </p>
+      </Show>
+      <div class="swx" role="radiogroup" aria-label="Colour" data-fgroup="add:colours">
+        <For each={formColors(first)}>
+          {(c) => (
+            <button
+              type="button"
+              role="radio"
+              aria-checked={color() === c}
+              aria-label={c.charAt(0).toUpperCase() + c.slice(1)}
+              data-f={`add:colour:${c}`}
+              style={{ background: `var(--avatar-${c})` }}
+              onClick={() => setColor(c)}
+            />
+          )}
+        </For>
+      </div>
+      <button
+        type="button"
+        class="fr-opt"
+        role="switch"
+        aria-checked={kids()}
+        aria-disabled={!kidsOpen()}
+        aria-describedby="add-kids-note"
+        data-f="add:kids"
+        onClick={() => kidsOpen() && setKids(!kids())}
+      >
+        <span class="tx">
+          <b>{kidsLine("switchLabel")}</b>
+          <small id="add-kids-note">{kidsOpen() ? kidsLine("switchNote") : kidsLine("switchNeedsPin", { owner: ownerOf(s())?.name ?? "Main" })}</small>
+        </span>
+        <span class="switch" aria-hidden="true">
+          <i />
+        </span>
+      </button>
+      <Show when={problem()}>
+        <p class="st bad" role="alert">
+          <i class="dot" />
+          {problem()}
+        </p>
+      </Show>
+      <div class="fr-foot">
+        <button class="btn primary" type="submit" data-f="add:save" aria-busy={busy() || undefined}>
+          Add profile
+        </button>
+        <button class="btn" type="button" data-f="add:cancel" onClick={() => props.onCancel()}>
+          Cancel
+        </button>
+      </div>
+    </form>
   );
 }
 
@@ -617,8 +758,7 @@ export function EditProfile() {
   const save = async (e: Event) => {
     e.preventDefault();
     const adding = isNew();
-    // From first run's picker (`then=home`), Home once the profile is made.
-    if ((await commit()) && adding) leave(new URLSearchParams(location.search).get("then") === "home" ? "/" : "/profiles/manage");
+    if ((await commit()) && adding) leave("/profiles/manage");
   };
   // The router put the page back with a second popstate (which marked a Back again), and a Back from the TV rail left
   // its "then Home" behind: staying clears both, or a later Save would open its page as a Back.

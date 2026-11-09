@@ -9,6 +9,7 @@ import Play from "lucide-solid/icons/play";
 import { createEffect, createSignal, For, type JSX, onCleanup, Show } from "solid-js";
 import { op } from "../core/client";
 import { form } from "../form";
+import { resetHistoryBase } from "../history";
 import { firstRunWords as w } from "../lib/first-run";
 import "./wall.css";
 
@@ -56,12 +57,49 @@ const phase = () => ran + (since === null ? 0 : (performance.now() - since) / 10
 const [hidden, setHidden] = createSignal(typeof document !== "undefined" && document.hidden);
 if (typeof document !== "undefined") document.addEventListener("visibilitychange", () => setHidden(document.hidden));
 
+// The walk builds' line (plans/first-screens.md 3.1, 9), once per app run: ms from the wall's first frame to the first
+// poster drawn, and the tiles filled at 6 s over the tiles in view. The bench reads it from the console.
+let settleWatched = false;
+let firstPoster: number | null = null;
+function watchSettle() {
+  if (settleWatched) return;
+  settleWatched = true;
+  const t0 = performance.now();
+  const seen = (e: Event) => {
+    if (firstPoster === null && e.target instanceof HTMLImageElement && e.target.closest(".wall-tile")) firstPoster = Math.round(performance.now() - t0);
+  };
+  document.addEventListener("load", seen, true);
+  setTimeout(() => {
+    document.removeEventListener("load", seen, true);
+    const inView = [...document.querySelectorAll(".wall-tile")].filter((t) => {
+      const r = t.getBoundingClientRect();
+      return r.bottom > 0 && r.right > 0 && r.top < innerHeight && r.left < innerWidth;
+    });
+    const filled = inView.filter((t) => t.querySelector("img.in")).length;
+    console.info(`first-wall poster ${firstPoster ?? -1} tiles6s ${filled}/${inView.length}`);
+  }, 6000);
+}
+
+/** Leaving first run for Home (3.6): the wall and its sheet fade out in 260 ms (none for reduced motion), then Home
+ * opens as the root, so Back never walks into first run. */
+export function intoHome(navigate: (to: string, o?: { replace?: boolean }) => void) {
+  const go = () => {
+    resetHistoryBase();
+    navigate("/", { replace: true });
+  };
+  const page = document.querySelector(".first.page");
+  if (!page || matchMedia("(prefers-reduced-motion: reduce)").matches) return go();
+  page.classList.add("leaving");
+  setTimeout(go, 260);
+}
+
 /** Posters per column, each drawn twice so the loop is seamless. */
 const PER_COLUMN = 6;
 
 /** The wall itself. `moving`: this step drifts (Welcome); every sheet holds it still. */
 export function Wall(props: { moving: boolean }) {
   askWall();
+  watchSettle();
   const columns = () => (form() === "phone" ? 4 : 9);
   const runs = () => props.moving && !paused() && !hidden();
   // The phase at mount: each column starts where the drift stopped, whatever page drew it before.

@@ -6,6 +6,7 @@
 [data-form="desktop"] .first { --u: var(--px); }
 [data-form="tv"] .first { --u: 1.6px; }
 
+.first.page.leaving { opacity: 0; transition: opacity 260ms linear; pointer-events: none; }
 .first.page { position: absolute; inset: 0; overflow: hidden; isolation: isolate; background: #000; color: var(--text);
   font: 400 calc(17 * var(--u)) / 1.4 var(--font-text); letter-spacing: -.011em; }
 [data-form="phone"] .first.page { position: fixed; inset: 0; }
@@ -204,16 +205,24 @@
 .sheet.who .picker h1 { margin: 0; font: 700 calc(28 * var(--u)) / 1.15 var(--font-text); letter-spacing: -.022em; color: #fff; }
 .sheet .ptile .pname { color: #fff; }
 
+/* Add profile in the sheet: the Kids switch as a row, its switch as Settings draws it. */
+.add-in-sheet .fr-opt { margin-top: calc(16 * var(--u)); }
+.add-in-sheet .fr-opt[aria-disabled="true"] { opacity: .7; }
+.add-in-sheet .fr-opt[aria-checked="true"] .switch { background: var(--primary); box-shadow: none; }
+.add-in-sheet .fr-opt[aria-checked="true"] .switch i { transform: translateX(26px); background: var(--on-primary); }
+[data-form="phone"] .add-in-sheet .fr-opt[aria-checked="true"] .switch i { transform: translateX(18px); }
+
 /* The import sheet: Import's own states, in the sheet's type. */
 .sheet.import .lede { margin-top: calc(6 * var(--u)); color: var(--muted); font-size: calc(16 * var(--u)); }
 .sheet.import .problem, .sheet.import .summary { margin-top: calc(20 * var(--u)); }
 .sheet.import :is(.problem, .summary) h2 { font: 700 calc(20 * var(--u)) / 1.25 var(--font-text); color: #fff; }
 
 /* TV focus: the white lift every control takes (design/DECISION.md); every word inside turns dark (5, WEAK 6). */
-[data-form="tv"] .first :is(.btn, .flink, .fr-opt, .seg button, .fr-chips .chip, .ptile, .wall-pause, .swx button):focus {
+[data-form="tv"] .first :is(.btn, .flink, .fr-opt, .seg button, .fr-chips .chip, .ptile, .wall-pause, .swx button, .fr-field input):focus {
   --text: var(--on-primary); --muted: rgba(0, 0, 0, .6); background: #fff; color: rgba(0, 0, 0, .88); transform: scale(1.06);
   box-shadow: 0 16px 36px rgba(0, 0, 0, .55); outline: none; }
 [data-form="tv"] .first .fr-opt:focus .rad { box-shadow: inset 0 0 0 2px rgba(0, 0, 0, .6); }
 [data-form="tv"] .first .fr-opt[aria-checked="true"]:focus .rad { box-shadow: inset 0 0 0 7px rgba(0, 0, 0, .88); }
 [data-form="tv"] .first .ptile:focus .avatar { transform: none; }
+[data-form="tv"] .first .fr-field input:focus { transform: none; border-radius: calc(8 * var(--u)); padding: 0 calc(6 * var(--u)); }
 [data-form="tv"] .first .ptile:focus :is(.pname, small) { color: rgba(0, 0, 0, .88); }

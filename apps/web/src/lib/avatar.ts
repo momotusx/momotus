@@ -22,6 +22,10 @@ export function parseAvatar(stored: string): Avatar {
 
 export const formatAvatar = (a: { glyph: Glyph; color: AvatarColor }) => `${a.glyph}:${a.color}`;
 
+/** The five colours first run's forms offer (plans/first-screens.md 3.4): `own` first, then others of the set, spread apart. */
+const FORM_COLORS: readonly AvatarColor[] = ["ember", "moss", "sky", "plum", "graphite"];
+export const formColors = (own: AvatarColor) => [own, ...FORM_COLORS.filter((c) => c !== own)].slice(0, 5);
+
 // Older TV browsers have no Segmenter: they draw the first code point instead.
 const graphemes = typeof Intl.Segmenter === "function" ? new Intl.Segmenter(undefined, { granularity: "grapheme" }) : null;
 

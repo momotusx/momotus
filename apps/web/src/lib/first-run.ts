@@ -66,6 +66,31 @@ export function setupChips(device: string | null, chosen: readonly string[], nam
   return { chips: [...langs, NONE, MORE], selected: langs[0] as string };
 }
 
+/** Device locales the core lists under another tag (crates/mq-runtime/src/languages.rs `ALIASES`, its device
+ * locales): Norway's Bokmål and Nynorsk are Norwegian, the Philippines' Filipino is Tagalog, and the regional
+ * Portuguese, Chinese and Spanish have rows of their own. */
+const DEVICE_ALIASES: Record<string, string> = {
+  nb: "no",
+  nn: "no",
+  fil: "tl",
+  "pt-pt": "pt",
+  "pt-br": "pt-BR",
+  "zh-cn": "zh-Hans",
+  "zh-sg": "zh-Hans",
+  "zh-tw": "zh-Hant",
+  "zh-hk": "zh-Hant",
+  "es-mx": "es-419",
+  "es-la": "es-419",
+};
+
+/** The device's language as the core lists it: the whole locale first ("pt-BR"), then its language ("nb-NO" is
+ * Norwegian, "no"); a language with no alias as it is. */
+export function deviceSubtitleLanguage(locale: string): string {
+  const tag = locale.toLowerCase();
+  const lang = tag.split("-")[0] ?? tag;
+  return DEVICE_ALIASES[tag] ?? DEVICE_ALIASES[lang] ?? lang;
+}
+
 /** What Start watching writes: the shown chip as the profile's subtitle languages (`[]` for No subtitles, always
  * written) and the stream patch only for Best quality. */
 export function setupPatch(chip: Chip, best: Record<string, unknown> | null): Record<string, unknown> {

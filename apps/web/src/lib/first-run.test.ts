@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import vectors from "../../../shared/fixtures/first-run-vectors.json";
-import { type After, type Entry, MORE, NONE, nextStep, setupChips, setupPatch, type Step } from "./first-run";
+import { type After, deviceSubtitleLanguage, type Entry, MORE, NONE, nextStep, setupChips, setupPatch, type Step } from "./first-run";
 
 test("part entry: every row's next step", () => {
   for (const row of vectors.entry) {
@@ -71,6 +71,27 @@ test("part chips: order and the chosen chip, device language first (D11)", () =>
   }
   // A device language with no subtitle name counts as absent.
   expect(setupChips("xx", [], (c) => c !== "xx")).toEqual({ chips: ["en", NONE, MORE], selected: "en" });
+});
+
+test("a device locale reads as the core lists it: Bokmål and Nynorsk are Norwegian, regions with rows of their own keep them", () => {
+  const cases: [string, string][] = [
+    ["nb-NO", "no"],
+    ["nn-NO", "no"],
+    ["nb", "no"],
+    ["fil-PH", "tl"],
+    ["pt-BR", "pt-BR"],
+    ["pt-PT", "pt"],
+    ["zh-CN", "zh-Hans"],
+    ["zh-TW", "zh-Hant"],
+    ["zh-HK", "zh-Hant"],
+    ["es-MX", "es-419"],
+    ["es-ES", "es"],
+    ["tr-TR", "tr"],
+    ["en-US", "en"],
+  ];
+  for (const [locale, want] of cases) expect(deviceSubtitleLanguage(locale), locale).toBe(want);
+  // A Norwegian device's chip is Norwegian, chosen.
+  expect(setupChips(deviceSubtitleLanguage("nb-NO"), [], () => true)).toEqual({ chips: ["no", "en", NONE, MORE], selected: "no" });
 });
 
 test("Start watching writes the shown chip always, streams only for Best quality", () => {

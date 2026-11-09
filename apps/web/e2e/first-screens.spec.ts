@@ -72,6 +72,7 @@ async function device(browser: Browser, form: Form, o: { server?: boolean; reduc
     firstRunWall: () => world.wall,
     relayInfo: () => ({ providers: ["google", "facebook", "email"] }),
     finishProfileStep: () => null,
+    createProfile: () => null,
     setPrefs: () => null,
     installDefaults: () => {
       world.fresh = false;
@@ -640,6 +641,83 @@ test("desktop, keyboard only: Not now's path with Tab and Enter", async ({ brows
   await expect.poll(() => screen(page)).toBe("setup");
   await tabTo("setup:start");
   await expect.poll(() => screen(page)).toBe("home");
+  await d.context.close();
+});
+
+test("the wall's settle line: first poster ms and the tiles filled at 6 s, once", async ({ browser }) => {
+  const d = await device(browser, "wide");
+  const lines: string[] = [];
+  d.page.on("console", (m) => m.text().startsWith("first-wall") && lines.push(m.text()));
+  await open(d, "wide");
+  await expect.poll(() => lines.length, { timeout: 10_000 }).toBe(1);
+  expect(lines[0]).toMatch(/^first-wall poster \d+ tiles6s (\d+)\/(\d+)$/);
+  const [, filled, visible] = /tiles6s (\d+)\/(\d+)/.exec(lines[0] as string) ?? [];
+  expect(Number(visible)).toBeGreaterThan(10);
+  expect(Number(filled)).toBe(Number(visible));
+  await d.page.locator('[data-f="welcome:start"]').click();
+  await d.page.waitForTimeout(6500);
+  expect(lines).toHaveLength(1);
+  await d.context.close();
+});
+
+test("into Home the wall and its sheet fade out in 260 ms; none for reduced motion", async ({ browser }) => {
+  for (const reduced of [false, true]) {
+    const d = await device(browser, "wide", { reducedMotion: reduced, world: { profileStepDone: true } });
+    await open(d, "wide", "/welcome?step=setup");
+    await expect(d.page.locator('[data-f="setup:start"]')).toBeVisible();
+    await d.page.evaluate(() => {
+      const w = window as unknown as { faded: string | null };
+      w.faded = null;
+      new MutationObserver(() => {
+        const p = document.querySelector(".first.page.leaving");
+        if (p) w.faded = getComputedStyle(p).transition;
+      }).observe(document.body, { subtree: true, attributes: true, attributeFilter: ["class"] });
+    });
+    await d.page.locator('[data-f="setup:start"]').click();
+    await expect.poll(() => screen(d.page)).toBe("home");
+    const faded = await d.page.evaluate(() => (window as unknown as { faded: string | null }).faded);
+    if (reduced) expect(faded).toBeNull();
+    else expect(faded).toContain("0.26s");
+    await d.context.close();
+  }
+});
+
+test("Who's watching: Add profile is a form inside the sheet; it adds one profile, then Home", async ({ browser }) => {
+  const d = await device(browser, "wide");
+  const page = d.page;
+  await open(d, "wide");
+  await page.locator('[data-f="welcome:returning"]').click();
+  await expect.poll(() => screen(page)).toBe("login");
+  await join(d, 3);
+  await expect.poll(() => screen(page), { timeout: 30_000 }).toBe("who");
+  await page.locator('[data-f="profile:add"]').click();
+  const sheet = page.locator(".sheet.who .add-in-sheet");
+  await expect(sheet.locator("h1")).toHaveText("Add profile");
+  await expect(page).toHaveURL(/\/(\?form=desktop)?$/);
+  // Escape returns to the tiles; an empty name says so under the field.
+  await page.keyboard.press("Escape");
+  await expect(page.locator('.sheet.who [data-f="profile:add"]')).toBeVisible();
+  await page.locator('[data-f="profile:add"]').click();
+  await page.locator('[data-f="add:save"]').click();
+  await expect(sheet.locator("#add-name-error")).toHaveText("Names are 1 to 30 characters.");
+  await page.locator('[data-f="add:name"]').fill("Ada");
+  await page.locator('[data-f="add:colour:sky"]').click();
+  await page.waitForTimeout(400);
+  await page.screenshot({ path: `${SHOTS}/wide-add-profile.png` });
+  await page.locator('[data-f="add:save"]').dblclick();
+  await expect.poll(() => screen(page)).toBe("home");
+  expect(d.sent("createProfile").map((c) => ({ name: c.args.name, avatar: c.args.avatar }))).toEqual([{ name: "Ada", avatar: "letter:sky" }]);
+  await d.context.close();
+});
+
+test("a Norwegian device's subtitle chip is Norwegian, as the core lists it", async ({ browser }) => {
+  const d = await device(browser, "wide", { locale: "nb-NO", world: { profileStepDone: true } });
+  await open(d, "wide", "/welcome?step=setup");
+  await expect(d.page.locator('[data-f="setup:sub:no"]')).toHaveAttribute("aria-checked", "true");
+  await expect(d.page.locator('[data-f="setup:sub:nb"]')).toHaveCount(0);
+  await d.page.locator('[data-f="setup:start"]').click();
+  await expect.poll(() => screen(d.page)).toBe("home");
+  expect(d.sent("setPrefs").map((p) => p.args.patch)).toEqual([{ subtitleLanguages: ["no"] }]);
   await d.context.close();
 });
 

@@ -14,14 +14,13 @@ import Server from "lucide-solid/icons/server";
 import { createEffect, createResource, createSignal, For, type JSX, on, onCleanup, onMount, Show } from "solid-js";
 import { Dynamic } from "solid-js/web";
 import { markSrc } from "../components/marks";
-import { Sheet, SheetHead, WallPage } from "../components/wall";
+import { intoHome, Sheet, SheetHead, WallPage } from "../components/wall";
 import { askWho, profiles } from "../core/profiles";
 import { type EmailFlow, emailCode, emailStart, held, openSignInWindow, relayProviders, runSignIn, type SignInEnd, type SignInRun, setHeld, signInServer } from "../core/sign-in";
 import * as sync from "../core/sync";
 import { pushBack } from "../focus/back";
 import { autoFocusSoon } from "../focus/dom";
 import { form } from "../form";
-import { resetHistoryBase } from "../history";
 import {
   type Act,
   codeDigits,
@@ -230,8 +229,7 @@ export async function homeAfterPull(navigate: (to: string, o?: { replace?: boole
     if (sync.problem() && !sync.report()) await sync.syncNow();
   };
   await Promise.race([pull(), new Promise((done) => setTimeout(done, 15_000))]);
-  resetHistoryBase();
-  navigate("/", { replace: true });
+  intoHome(navigate);
   const s = profiles();
   if (!s) return;
   const only = s.profiles.length === 1 ? s.profiles[0] : undefined;

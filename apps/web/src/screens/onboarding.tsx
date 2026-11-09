@@ -15,7 +15,7 @@ import SearchIcon from "lucide-solid/icons/search";
 import Zap from "lucide-solid/icons/zap";
 import { createEffect, createMemo, createSignal, For, Index, Match, on, onCleanup, Show, Switch } from "solid-js";
 import { createStore, reconcile } from "solid-js/store";
-import { deviceLanguage, displayCaps, link, liveView, op, ping, prefsView, reasonOf } from "../core/client";
+import { displayCaps, link, liveView, op, ping, prefsView, reasonOf } from "../core/client";
 import type { AddonsSnapshot } from "../core/generated/AddonsSnapshot";
 import type { DefaultAddonInfo } from "../core/generated/DefaultAddonInfo";
 import type { DefaultAddons } from "../core/generated/DefaultAddons";
@@ -25,14 +25,14 @@ import { signInServer } from "../core/sign-in";
 import * as sync from "../core/sync";
 import { AvatarArt } from "../components/avatar";
 import Brand from "../components/brand";
-import { askWall, MotionToggle, Sheet, SheetHead, WallPage } from "../components/wall";
+import { askWall, intoHome, MotionToggle, Sheet, SheetHead, WallPage } from "../components/wall";
 import { autoFocusSoon, goBack } from "../focus/dom";
 import { screenChanged } from "../focus/ghost-tap";
 import { form } from "../form";
 import { resetHistoryBase } from "../history";
-import { type AvatarColor, formatAvatar, parseAvatar } from "../lib/avatar";
+import { type AvatarColor, formatAvatar, formColors, parseAvatar } from "../lib/avatar";
 import { catalogMissing, choicesFor, defaultsWords, grouped, switchable } from "../lib/defaults";
-import { firstRunWords as fw, MORE, nextStep, NONE, setupChips, setupPatch, type Step } from "../lib/first-run";
+import { deviceSubtitleLanguage, firstRunWords as fw, MORE, nextStep, NONE, setupChips, setupPatch, type Step } from "../lib/first-run";
 import { kidsSession, ownerOf } from "../lib/kids";
 import { profileProblem } from "../lib/profiles";
 import { choiceWords, findAddons, languageName, type Tone } from "../lib/words";
@@ -75,8 +75,8 @@ function useDefaults() {
 /** Leaving first run: the step never stays under the next one, and Home opens as the root, so Back never walks back
  * into the sheets. */
 function leave(navigate: (to: string, o?: { replace?: boolean }) => void, to: string) {
-  if (to === "/") resetHistoryBase();
-  navigate(to, { replace: true });
+  if (to === "/") intoHome(navigate);
+  else navigate(to, { replace: true });
 }
 
 /** Every recommended default the profile does not have, on: what Start watching, Skip and an import's Done send.
@@ -248,9 +248,6 @@ function focusHeading() {
   h?.focus({ preventScroll: true });
 }
 
-/** The five colours the form offers: the profile's own first, then the others of the avatar set, spread apart. */
-const SWATCHES: readonly AvatarColor[] = ["ember", "moss", "sky", "plum", "graphite"];
-const swatchesFor = (own: AvatarColor) => [own, ...SWATCHES.filter((c) => c !== own)].slice(0, 5);
 const colourName = (c: string) => c.charAt(0).toUpperCase() + c.slice(1);
 
 /** Make your first profile: names the owner profile every device already has (never a new one). Nothing is filled
@@ -323,7 +320,7 @@ function ProfileStep(props: { onDone: () => void }) {
           </p>
         </Show>
         <div class="swx" role="radiogroup" aria-label={fw.colourLabel} data-fgroup="profile:colours">
-          <For each={swatchesFor(stored().color ?? "ember")}>
+          <For each={formColors(stored().color ?? "ember")}>
             {(c) => (
               <button
                 type="button"
@@ -383,7 +380,7 @@ function SetupStep() {
   const chips = createMemo(() => {
     const p = prefs.state.data;
     if (!p) return null;
-    const base = setupChips(deviceLanguage(), p.subtitleLanguages, named);
+    const base = setupChips(deviceSubtitleLanguage(navigator.language || "en"), p.subtitleLanguages, named);
     // A language picked from More takes its place before No subtitles.
     const extra = setup.picked && !base.chips.includes(setup.picked) ? [setup.picked] : [];
     return { chips: [...base.chips.filter((c) => c !== NONE && c !== MORE), ...extra, NONE, MORE], selected: base.selected };
