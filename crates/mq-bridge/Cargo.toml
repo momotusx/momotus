@@ -31,6 +31,8 @@ futures-util = "0.3"
 serde.workspace = true
 serde_json.workspace = true
 tracing.workspace = true
+# The bridge binary's subscriber: the error reports' layer (plans/error-reports.md 6.1).
+tracing-subscriber = { version = "0.3", default-features = false, features = ["registry"] }
 
 [dev-dependencies]
 # Paused time for the Incognito clock's timer tests.

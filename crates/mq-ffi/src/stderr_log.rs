@@ -3,25 +3,30 @@
 //! Xcode's console shows them; a simulator run keeps them with
 //! `SIMCTL_CHILD_MARQUEE_LOG=... xcrun simctl launch --stderr=<file> ...`.
 //! Errors already redact URLs and keys (`mq_http::redact_url`).
+//!
+//! The error reports' layer is always installed (plans/error-reports.md
+//! 6.1): it keeps warn and error callsites, never a formatted line.
 
 use std::sync::Once;
 use tracing_subscriber::prelude::*;
 
-/// Installs the stderr subscriber once per process, if asked for.
+/// Installs the subscriber once per process: the reports' layer always,
+/// the stderr log when asked for.
 pub fn init() {
     static ONCE: Once = Once::new();
     ONCE.call_once(|| {
-        let Some(filter) = std::env::var("MARQUEE_LOG")
+        let log = std::env::var("MARQUEE_LOG")
             .ok()
             .and_then(|spec| crate::log_filter::targets(&spec))
-        else {
-            return;
-        };
-        let layer = tracing_subscriber::fmt::layer()
-            .with_writer(std::io::stderr)
-            .with_ansi(false);
+            .map(|filter| {
+                tracing_subscriber::fmt::layer()
+                    .with_writer(std::io::stderr)
+                    .with_ansi(false)
+                    .with_filter(filter)
+            });
         let _ = tracing_subscriber::registry()
-            .with(layer.with_filter(filter))
+            .with(mq_runtime::reports::layer())
+            .with(log)
             .try_init();
     });
 }

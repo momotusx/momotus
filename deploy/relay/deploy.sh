@@ -28,7 +28,7 @@ echo "deploy: mq-sync-server $COMMIT sha256 $HASH"
 
 STAGE=$(ssh "$SSH" 'sudo mktemp -d /root/momotus-deploy.XXXXXX')
 # shellcheck disable=SC2029 # the staging folder's name expands here, on purpose
-tar -cf - -C deploy/relay momotus-relay.service momotus-backup.service momotus-backup.timer backup.py identity.py -C "$BIN_DIR" mq-sync-server |
+tar -cf - -C deploy/relay momotus-relay.service momotus-backup.service momotus-backup.timer backup.py identity.py reports.py -C "$BIN_DIR" mq-sync-server |
   ssh "$SSH" "sudo tar -C '$STAGE' -xf -"
 
 # The remote script is quoted: its values come in as arguments.
@@ -45,7 +45,7 @@ health() { # url seconds
 [ "$(sha256sum "$STAGE/mq-sync-server" | cut -d' ' -f1)" = "$HASH" ] || { echo "remote: hash differs" >&2; exit 1; }
 install -d -m 0755 /opt/momotus /opt/momotus/bin
 install -m 0755 "$STAGE/mq-sync-server" "/opt/momotus/bin/mq-sync-server-$COMMIT"
-install -m 0644 "$STAGE/backup.py" "$STAGE/identity.py" /opt/momotus/
+install -m 0644 "$STAGE/backup.py" "$STAGE/identity.py" "$STAGE/reports.py" /opt/momotus/
 install -m 0644 "$STAGE"/momotus-*.service "$STAGE"/momotus-*.timer /etc/systemd/system/
 systemctl daemon-reload
 
@@ -66,11 +66,16 @@ if grep -q '^ExecStart=.*--mail' /etc/systemd/system/momotus-relay.service; then
   MAIL_CRED=(-p LoadCredential=ses.json:/etc/momotus/ses.json)
   MAIL_FLAG=" --mail \"\$CREDENTIALS_DIRECTORY/ses.json\""
 fi
+# Error reports (plans/error-reports.md 8) only when the unit takes them, on the preflight's own file.
+REPORTS_FLAG=""
+if grep -q '^ExecStart=.*--reports' /etc/systemd/system/momotus-relay.service; then
+  REPORTS_FLAG=" --reports /var/lib/momotus-preflight/reports.sqlite"
+fi
 systemd-run --unit=momotus-preflight --quiet --collect -p User=momotus -p Group=momotus \
   -p LoadCredential=identity.json:/etc/momotus/identity.json ${MAIL_CRED[@]+"${MAIL_CRED[@]}"} -p ProtectSystem=strict -p ProtectHome=yes \
   -p PrivateTmp=yes -p NoNewPrivileges=yes -p ReadWritePaths=/var/lib/momotus-preflight \
   sh -c "exec /opt/momotus/bin/mq-sync-server-$COMMIT --db /var/lib/momotus-preflight/relay.sqlite --listen 127.0.0.1:8789 \
-    --public-host momotus.normalisdead.mom --identity \"\$CREDENTIALS_DIRECTORY/identity.json\"$MAIL_FLAG"
+    --public-host momotus.normalisdead.mom --identity \"\$CREDENTIALS_DIRECTORY/identity.json\"$MAIL_FLAG$REPORTS_FLAG"
 if ! health http://127.0.0.1:8789 10; then
   echo "remote: the new binary did not start on a copy of the database; nothing switched:" >&2
   journalctl -u momotus-preflight -n 20 --no-pager >&2 || true

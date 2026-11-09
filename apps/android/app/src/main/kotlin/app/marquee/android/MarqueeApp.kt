@@ -118,8 +118,13 @@ class MarqueeApp :
         }
         // Debug builds only: local fakes (Trakt, Find addons' lists), read by a dev build of the core library.
         DebugEntry.devFakes(this)
-        // Open the core on a boot thread right away; the first frame does not wait for it.
-        session = CoreSession(this).also { it.start() }
+        // Open the core on a boot thread right away; the first frame does not wait for it. Error reports first: the
+        // JVM handler from here on, and each core's `reportContext` (plans/error-reports.md 6.2).
+        session =
+            CoreSession(this).also {
+                Reports.start(this, it) { ::profiles.isInitialized && ProfileCopy.inIncognito(profiles.snapshot) }
+                it.start()
+            }
         // An own build whose core has no engine tells the owner (CoreBuild), never the viewer in words.
         session.scope.launch {
             if (runCatching { session.ready.await() }.isSuccess) {

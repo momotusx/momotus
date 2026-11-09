@@ -1,6 +1,10 @@
 //! `mq-sync-server --db PATH [--listen 127.0.0.1:8787] [--invite CODE] [--open]
 //! [--new-generation] [--trust-proxy] [--public-host HOST] [--identity FILE]
-//! [--mail FILE] [--clients-per-address N] [--mail-gap-ms MS]`
+//! [--mail FILE] [--reports FILE] [--clients-per-address N] [--mail-gap-ms MS]`
+//!
+//! `--reports`: take error and crash reports at `POST /v1/reports` into
+//! their own database (plans/error-reports.md 7). Without it the route is
+//! absent; a file that does not open leaves it absent and sync running.
 //!
 //! `--trust-proxy`: behind a reverse proxy (needed for TLS), rate limits go
 //! by the client address the proxy appends to `X-Forwarded-For`.
@@ -59,6 +63,7 @@ async fn main() {
                     "--public-host" => config.public_host = Some(value),
                     "--identity" => identity = Some(PathBuf::from(value)),
                     "--mail" => mail = Some(PathBuf::from(value)),
+                    "--reports" => config.reports = Some(PathBuf::from(value)),
                     // Tests only (the web e2e): never in the relay's unit.
                     "--clients-per-address" => {
                         config.clients_per_address = value.parse().unwrap_or_else(|_| usage(&flag))
@@ -130,6 +135,6 @@ fn refuse(why: &str) -> ! {
 
 fn usage(flag: &str) -> ! {
     refuse(&format!(
-        "bad argument {flag}; usage: mq-sync-server --db PATH [--listen ADDR] [--invite CODE] [--open] [--new-generation] [--trust-proxy] [--public-host HOST] [--identity FILE] [--mail FILE]"
+        "bad argument {flag}; usage: mq-sync-server --db PATH [--listen ADDR] [--invite CODE] [--open] [--new-generation] [--trust-proxy] [--public-host HOST] [--identity FILE] [--mail FILE] [--reports FILE]"
     ));
 }

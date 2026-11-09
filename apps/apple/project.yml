@@ -291,6 +291,8 @@ targets:
       - path: Marquee/Home/HeroFrame.swift
       # Own or store build beside the core's engine (Tests/CoreBuildTests.swift).
       - path: Marquee/App/CoreBuild.swift
+      # Error reports' words, device fields and MetricKit reading (Tests/ReportTests.swift).
+      - path: Marquee/Core/ReportRules.swift
       # A catalog tile, laid out for real in Tests/PosterRowTests.swift.
       - path: Marquee/Home/PosterTile.swift
       # The title hero, laid out from plain values in Tests/TitleHeroTests.swift, with what it draws with.
@@ -312,6 +314,8 @@ targets:
       - path: Marquee/Theme/ArtLoader.swift
       - path: Core/marquee_core.swift
       - path: Marquee/Core/CoreClient.swift
+      # CoreClient sends `reportContext` and MetricKit's reports (plans/error-reports.md 6.3).
+      - path: Marquee/Core/Diagnostics.swift
       - path: Marquee/Core/CoreRouter.swift
       - path: Marquee/Core/DeviceId.swift
       - path: Marquee/Core/LiveRecord.swift

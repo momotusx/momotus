@@ -185,6 +185,10 @@ androidComponents {
         if (!benchmark && walkSuffix.isNotEmpty()) variant.applicationId.set("app.momotus.android$walkSuffix")
         val walk = variant.buildType == "debug" && walkSuffix.isNotEmpty()
         variant.buildConfigFields?.put("WALK", BuildConfigField("boolean", "$walk", "a debug walk build"))
+        // Error reports (plans/error-reports.md 5.1): a release build sends them; a debug or walk build only with
+        // -Pmarquee.reports=true (a live check); a benchmark build never.
+        val reports = !benchmark && (variant.buildType == "release" || property("marquee.reports").toString() == "true")
+        variant.buildConfigFields?.put("REPORTS", BuildConfigField("boolean", "$reports", "error reports are sent"))
         // The home-screen shortcut opens the package it came with (res/xml/shortcuts.xml), never the owner's app.
         variant.resValues.put(
             variant.makeResValueKey("string", "shortcut_package"),

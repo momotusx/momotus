@@ -96,6 +96,9 @@ impl MarqueeCore {
         logcat::init();
         #[cfg(target_vendor = "apple")]
         stderr_log::init();
+        // The panic hook for error reports; it imports nothing until the
+        // app's `reportContext` starts the drain (plans/error-reports.md 6.1).
+        mq_runtime::reports::install(std::path::Path::new(&data_dir));
         let runtime = tokio::runtime::Builder::new_multi_thread()
             .worker_threads(2)
             .thread_name("marquee-core")

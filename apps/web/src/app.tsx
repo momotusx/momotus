@@ -15,6 +15,8 @@ import Brand from "./components/brand";
 import { DownloadStatus, OfflineBanner } from "./components/download";
 import { KidsMenuHost } from "./components/kids";
 import { bridge, link, listEveryKind, lostWords, takenOff } from "./core/client";
+// Error reports: the core hears who this app is and its uncaught errors (plans/error-reports.md 6.5).
+import "./core/reports";
 // The debrid accounts follow the core from the start, whatever screen is open.
 import "./core/debrid";
 import "./core/trakt";

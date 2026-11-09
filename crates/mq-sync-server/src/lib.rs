@@ -28,6 +28,7 @@
 
 mod identity;
 mod jwt;
+mod reports;
 
 pub use identity::IdentityFile;
 pub use identity::email::EmailConfig;
@@ -124,6 +125,10 @@ pub struct Config {
     pub signup_bytes: u64,
     /// How long a pairing slot lives (5 minutes; tests shorten it).
     pub pairing_ms: u64,
+    /// Error and crash reports (`--reports`, plans/error-reports.md 7): the
+    /// database file. `None`, or a file that fails to open, leaves
+    /// `/v1/reports` off and sync as it is.
+    pub reports: Option<PathBuf>,
 }
 
 impl Default for Config {
@@ -141,6 +146,7 @@ impl Default for Config {
             mail_gap_ms: 60 * 1000,
             signup_bytes: 5 * 1024 * 1024 * 1024,
             pairing_ms: PAIRING_MS,
+            reports: None,
         }
     }
 }
@@ -181,6 +187,8 @@ struct AppState {
     near_checks: Arc<[std::sync::atomic::AtomicU64; 2]>,
     /// Sign-ups without a sign-in refused since the last housekeeping line.
     signups_refused: Arc<std::sync::atomic::AtomicU64>,
+    /// Error and crash reports, when `--reports` opened.
+    reports: Option<Arc<reports::Reports>>,
 }
 
 /// Opens (or creates) the relay database at `db` and its roster journal
@@ -220,7 +228,22 @@ pub fn router(db: &Path, config: Config) -> Result<Router, String> {
     let journal_path = db.with_extension("roster.jsonl");
     let journal = open_journal(&journal_path, &conn)?;
     let every = config.housekeeping_every;
+    // A reports file that does not open costs the route only, never sync.
+    let reports = config
+        .reports
+        .as_deref()
+        .and_then(|path| match reports::Reports::open(path) {
+            Ok(reports) => Some(Arc::new(reports)),
+            Err(e) => {
+                tracing::error!(
+                    "reports database {}: {e}; /v1/reports is off",
+                    path.display()
+                );
+                None
+            }
+        });
     let state = AppState {
+        reports,
         db: Arc::new(Mutex::new(conn)),
         journal: Arc::new(Mutex::new(journal)),
         journal_path: Arc::new(journal_path),
@@ -255,6 +278,13 @@ pub fn router(db: &Path, config: Config) -> Result<Router, String> {
         .route("/v1/pairings/{id}/near", get(near_pairing))
         .route("/v1/pairings/{id}/take", post(take_pairing))
         .route("/v1/recovery/redeem", post(redeem_kit));
+    if state.reports.is_some() {
+        // The route's own body cap; it wins over the relay-wide one below.
+        routes = routes.route(
+            "/v1/reports",
+            post(reports::receive).layer(DefaultBodyLimit::max(mq_reports::MAX_BATCH_BYTES)),
+        );
+    }
     if state.identity.is_some() {
         use identity::*;
         routes = routes
@@ -367,6 +397,11 @@ fn run_due(state: &AppState) {
             "{refused} sign-ups without a sign-in refused; accounts store {stored} of {} bytes",
             state.config.signup_bytes
         );
+    }
+    // Before anything that may stop early: the 30 days the privacy page
+    // promises hold even while roster writes are stopped.
+    if let Some(reports) = &state.reports {
+        reports.housekeeping(now);
     }
     let mut db = lock(state);
     if let Err(e) = identity::expire(&db, now) {
@@ -2255,7 +2290,7 @@ impl ClockWatch {
 #[derive(Default)]
 pub(crate) struct Limits {
     per_client: HashMap<(usize, IpAddr), (u64, u32)>,
-    global: [(u64, u32); 8],
+    global: [(u64, u32); 9],
     /// Codes mailed per client today (IPv6 per /48), in memory only
     /// (plans/accounts-email.md E6): (window start, mails).
     daily: HashMap<IpAddr, (u64, u32)>,
@@ -2855,6 +2890,7 @@ mod tests {
             old_lists: Arc::default(),
             near_checks: Arc::default(),
             signups_refused: Arc::default(),
+            reports: None,
         };
         let create = || {
             let (entry, _) =
@@ -2911,6 +2947,7 @@ mod tests {
             old_lists: Arc::default(),
             near_checks: Arc::default(),
             signups_refused: Arc::default(),
+            reports: None,
         };
         let member = MemberSecret::generate();
         let genesis = || Roster::genesis_entry(&member, Hex(random()), "a", now_ms()).0;
@@ -2999,5 +3036,61 @@ mod tests {
         let later = 3_000 + CLOCK_WATCH_MS;
         assert_eq!(watch.ahead(vec![4], later), Some(2), "devices 3 and 4");
         assert_eq!(watch.ahead(vec![5], later + 2 * CLOCK_WATCH_MS), None);
+    }
+
+    /// Reports past 30 days go even while roster writes are stopped, which
+    /// makes `run_due` return early (plans/error-reports.md 8).
+    #[test]
+    fn report_retention_runs_while_the_journal_is_stopped() {
+        let dir = std::env::temp_dir().join(format!("mq-reports-{}", random_hex(8)));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("relay.roster.jsonl");
+        std::fs::write(&path, "").unwrap();
+        let reports_path = dir.join("reports.sqlite");
+        let conn = Connection::open_in_memory().unwrap();
+        let (conn, generation, since, relay_id) = open_database(conn, &Config::default()).unwrap();
+        let state = AppState {
+            db: Arc::new(Mutex::new(conn)),
+            journal: Arc::new(Mutex::new(std::fs::File::open(&path).unwrap())),
+            journal_path: Arc::new(path.clone()),
+            journal_failed: Arc::new(AtomicBool::new(true)),
+            config: Arc::new(Config::default()),
+            generation: Arc::new(generation),
+            generation_since_ms: since,
+            relay_id,
+            limits: Arc::default(),
+            clock: Arc::default(),
+            identity: None,
+            grace_created: Arc::default(),
+            open_pairings: Arc::default(),
+            old_lists: Arc::default(),
+            near_checks: Arc::default(),
+            signups_refused: Arc::default(),
+            reports: Some(Arc::new(reports::Reports::open(&reports_path).unwrap())),
+        };
+        let today = (state.now_ms() / (24 * 60 * 60 * 1000)) as i64;
+        {
+            let db = Connection::open(&reports_path).unwrap();
+            for day in [today - reports::KEEP_DAYS - 1, today] {
+                db.execute(
+                    "INSERT INTO report (day, hour, batch, app, version, kind, grp, count, body)
+                     VALUES (?1, 0, 1, 'android', '1', 'panic', 'g', 1, '{}')",
+                    params![day],
+                )
+                .unwrap();
+            }
+        }
+        assert!(journal_stopped(&state).is_some());
+        run_due(&state);
+        let days: Vec<i64> = Connection::open(&reports_path)
+            .unwrap()
+            .prepare("SELECT day FROM report")
+            .unwrap()
+            .query_map([], |r| r.get(0))
+            .unwrap()
+            .collect::<rusqlite::Result<_>>()
+            .unwrap();
+        assert_eq!(days, vec![today], "only the old row went");
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 }

@@ -1,0 +1,9 @@
+{
+  "about": "Error reports (plans/error-reports.md section 10): the Settings row in This device and the About Privacy row, the same words on web, Android and Apple. On by default, no prompt. The privacy page is `privacyPath` on the sync service's own host. Each platform's reader test checks every key.",
+  "label": "Error reports",
+  "on": "On",
+  "off": "Off",
+  "note": "When Momotus crashes or something fails, it sends the Momotus team a short technical report: what failed, the app and system version and the device model. Never your account, addons, what you watch or file names, and we keep no network address. Turning this off deletes reports not sent yet.",
+  "privacy": "Privacy",
+  "privacyPath": "/privacy"
+}

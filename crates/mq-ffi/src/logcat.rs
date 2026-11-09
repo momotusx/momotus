@@ -30,7 +30,10 @@ pub fn init() {
             .with_ansi(false)
             .with_level(false)
             .without_time();
+        // The error reports' layer beside the log's (plans/error-reports.md
+        // 6.1): it keeps warn and error callsites, never a formatted line.
         let _ = tracing_subscriber::registry()
+            .with(mq_runtime::reports::layer())
             .with(layer.with_filter(filter))
             .try_init();
     });

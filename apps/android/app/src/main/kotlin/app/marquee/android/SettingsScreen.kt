@@ -1,5 +1,7 @@
 package app.marquee.android
 
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -68,6 +70,7 @@ import app.marquee.core.LanguagePicks
 import app.marquee.core.LinkInstall
 import app.marquee.core.PluginCopy
 import app.marquee.core.ProfileCopy
+import app.marquee.core.ReportCopy
 import app.marquee.core.StreamChoiceCopy
 import app.marquee.core.SyncCopy
 import app.marquee.core.TraktCopy
@@ -114,7 +117,10 @@ import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 
 // Settings (A1, SettingsA1.kt): the profile on a film's backdrop, then Sources, Account, Home, Playback, This device and
@@ -401,9 +407,14 @@ fun SettingsScreen(
             // Downloads are the phone's (plans/offline-downloads.md 3.7); the section comes with its content, so
             // nothing shows before the view answers.
             if (downloads) add(SettingsPart(SettingsSection.Downloads) { DownloadsSettings(session) })
-            // This device only, never synced (plans/appletv-polish.md decision 13): on a TV where its title pages may
-            // play the header trailer (plans/trailer-inline.md 4a).
-            if (!tv || TrailerPreviews.headerOnTv(context)) add(SettingsPart(SettingsSection.Device) { DevicePrefs() })
+            // This device only, never synced (plans/appletv-polish.md decision 13): Error reports on every form
+            // (plans/error-reports.md 10); Trailer previews where its title pages may play the header trailer
+            // (plans/trailer-inline.md 4a).
+            add(
+                SettingsPart(
+                    SettingsSection.Device,
+                ) { DevicePrefs(trailers = !tv || TrailerPreviews.headerOnTv(context)) },
+            )
             add(SettingsPart(SettingsSection.About) { About() })
         }.filter { incognitoShows(incognito, it.section) && kidsShows(kids, it.section) }
     if (tv) {
@@ -1220,28 +1231,90 @@ internal const val PAUSED_HELP = "The second line shows only while the video is 
  * its title pages may play the header trailer (plans/trailer-inline.md 4a); its Home has none.
  */
 @Composable
-internal fun DevicePrefs() {
+internal fun DevicePrefs(trailers: Boolean = true) {
     val context = LocalContext.current
     var previews by remember { mutableStateOf(TrailerPreviews.on(context)) }
     Section(0.dp, groupRadius()) {
         Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.s)) {
-            SettingSwitch(
-                "Trailer previews",
-                if (Marquee.form == Form.Tv) {
-                    "Plays trailers muted on title pages, from YouTube, when the connection is not metered."
-                } else {
-                    "Plays trailers muted on Home and title pages, from YouTube, when the connection is not metered."
-                },
-                previews,
-            ) {
-                previews = !previews
-                TrailerPreviews.set(context, previews)
+            if (trailers) {
+                SettingSwitch(
+                    "Trailer previews",
+                    if (Marquee.form == Form.Tv) {
+                        "Plays trailers muted on title pages, from YouTube, when the connection is not metered."
+                    } else {
+                        "Plays trailers muted on Home and title pages, from YouTube, when the connection is not metered."
+                    },
+                    previews,
+                ) {
+                    previews = !previews
+                    TrailerPreviews.set(context, previews)
+                }
+                // The switch keeps its value; Incognito plays no trailer (plans/batch-10-incognito.md 5.5).
+                if (LocalIncognito.current) {
+                    MqText(ProfileCopy.INCOGNITO_TRAILERS_OFF, role = TextRole.Caption, color = Marquee.colors.muted)
+                }
             }
-            // The switch keeps its value; Incognito plays no trailer (plans/batch-10-incognito.md 5.5).
-            if (LocalIncognito.current) {
-                MqText(ProfileCopy.INCOGNITO_TRAILERS_OFF, role = TextRole.Caption, color = Marquee.colors.muted)
-            }
+            ReportsSwitch()
         }
+    }
+}
+
+/**
+ * Settings > This device > Error reports (plans/error-reports.md 10): on by default, no prompt; the core keeps the
+ * switch and off deletes what waits there, and the app's own pending crash files go with it ([CrashReports.off]). A
+ * change that fails shows the old value again and says so.
+ */
+@Composable
+private fun ReportsSwitch() {
+    // Only where the app runs its core (a screen test renders Settings without one).
+    val app = LocalContext.current.applicationContext as? MarqueeApp ?: return
+    if (!Reports.started) return
+    val scope = rememberCoroutineScope()
+    var on by remember { mutableStateOf(!Reports.crashes.off) }
+    var failed by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(Unit) {
+        runCatching { app.session.client.request("getReports") }.onSuccess { answer ->
+            on = answer.jsonObject["on"]?.jsonPrimitive?.booleanOrNull ?: on
+            Reports.crashes.off = !on
+        }
+    }
+    SettingSwitch(ReportCopy.LABEL, ReportCopy.NOTE, on) {
+        val next = !on
+        val was = on
+        on = next
+        failed = null
+        scope.launch {
+            runCatching { app.session.client.request("setReports", mapOf("on" to JsonPrimitive(next))) }
+                .onSuccess { Reports.crashes.off = !next }
+                .onFailure {
+                    on = was
+                    failed = "Could not change Error reports. ${ErrorCopy.words(it)}"
+                }
+        }
+    }
+    failed?.let { MqText(it, role = TextRole.Caption, color = Marquee.colors.muted) }
+    PrivacyLine()
+}
+
+/** The privacy page: a row that opens it on a phone, its address as text on a TV (no browser there). */
+@Composable
+internal fun PrivacyLine() {
+    val url = ReportCopy.privacyUrl(BuildConfig.SYNC_SERVER) ?: return
+    val context = LocalContext.current
+    if (Marquee.form == Form.Tv) {
+        MqText(
+            "${ReportCopy.PRIVACY}: ${url.removePrefix("https://").removePrefix("http://")}",
+            role = TextRole.Caption,
+            color = Marquee.colors.muted,
+        )
+    } else {
+        SettingsRow(Icons.Lock, Tone.Grey, ReportCopy.PRIVACY, url.removePrefix("https://"), {
+            runCatching {
+                context.startActivity(
+                    Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                )
+            }
+        }, lines = 1)
     }
 }
 
@@ -1404,6 +1477,7 @@ private fun About() {
                 MqText(TMDB_CREDIT, role = TextRole.Caption, color = Marquee.colors.muted)
             }
             if (CoreBuild.missing) MqText(CoreBuild.ABOUT_LINE, role = TextRole.Caption, color = Marquee.colors.muted)
+            PrivacyLine()
         }
     }
 }

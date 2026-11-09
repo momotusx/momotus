@@ -26,8 +26,9 @@ function hits(sources: string[], raw: RegExp, log: RegExp, kept: string[]): stri
 
 test("no web screen shows an error's own text", () => {
   // words.ts keeps the core's `said` sentence; client.ts keeps the raw text for Details; the sync
-  // helpers read the core's own `pairing:` sentences; failover.ts hands the player's error to the core.
-  const kept = ["lib/words.ts", "core/client.ts", "core/sync.ts", "screens/sync.tsx", "lib/failover.ts"];
+  // helpers read the core's own `pairing:` sentences; failover.ts hands the player's error to the core;
+  // reports.ts hands an uncaught error to the core's error reports, whose uploader scrubs it.
+  const kept = ["lib/words.ts", "core/client.ts", "core/sync.ts", "screens/sync.tsx", "lib/failover.ts", "lib/reports.ts"];
   expect(hits(files("web/src", ".ts").concat(files("web/src", ".tsx")), /\b(e|err|error)\.message\b|String\((e|err|error)\)/, /console\./, kept)).toEqual([]);
 });
 

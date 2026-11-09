@@ -26,6 +26,15 @@ async fn main() {
     let data = std::env::var("MQ_DATA")
         .map(PathBuf::from)
         .unwrap_or_else(|_| PathBuf::from(".mq-data"));
+    // Error reports (plans/error-reports.md 6.1): the bridge prints no log,
+    // so the reports' layer is its only subscriber; the panic hook first.
+    {
+        use tracing_subscriber::prelude::*;
+        let _ = tracing_subscriber::registry()
+            .with(mq_runtime::reports::layer())
+            .try_init();
+    }
+    mq_runtime::reports::install(&data);
     let core = Core::open(CoreConfig {
         data_dir: data,
         profile_id: std::env::var("MQ_PROFILE").unwrap_or_else(|_| "default".into()),

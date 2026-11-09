@@ -55,6 +55,10 @@ serde.workspace = true
 serde_json = { workspace = true, features = ["raw_value"] }
 thiserror.workspace = true
 tracing.workspace = true
+# Error and crash reports (plans/error-reports.md 6.1): the shape and scrubber,
+# and the `tracing` layer the hosts add beside their log layer.
+mq-reports = { path = "../mq-reports" }
+tracing-subscriber = { version = "0.3", default-features = false, features = ["std"] }
 
 [dev-dependencies]
 mq-http = { path = "../mq-http", features = ["test-dns"] }

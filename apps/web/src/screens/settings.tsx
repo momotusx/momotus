@@ -44,6 +44,7 @@ import { chooseForm, type Form, form, pinned } from "../form";
 import { headerOnTvNow, previewsOn, setPreviewsOn } from "../lib/trailers";
 import { defaultsWords } from "../lib/defaults";
 import { isWebOS } from "../lib/webos";
+import reportWords from "../../../shared/report-words.json";
 import { addonsSummary, choiceSummary, choiceWords, findAddons, languageName, syncSummary, syncWords, tmdbCredit } from "../lib/words";
 import * as sync from "../core/sync";
 import { traktLink, traktLockedHere, traktStatus, traktStorage } from "../core/trakt";
@@ -799,6 +800,9 @@ export default function SettingsScreen() {
                   onPick={(v) => chooseForm(v)}
                 />
               </div>
+              <Show when={!isWebOS()}>
+                <ReportsRow />
+              </Show>
             </section>
           </Show>
 
@@ -818,12 +822,84 @@ export default function SettingsScreen() {
                   <img class="credit-mark" src={markSrc("tmdb")} alt="" />
                   {tmdbCredit}
                 </p>
+                <Show when={privacyUrl()}>{(url) => <PrivacyLink url={url()} />}</Show>
               </div>
             </section>
           </Show>
         </div>
       </div>
     </main>
+  );
+}
+
+/** The privacy page on the sync service's own host (the link host's pages share it), or null in a
+ * build without one. */
+const privacyUrl = (): string | null =>
+  sync.buildServer ? sync.buildServer.replace(/\/+$/, "") + reportWords.privacyPath : null;
+
+/** The privacy page: a link, or its address as text on a TV, which opens no browser. */
+function PrivacyLink(props: { url: string }) {
+  return (
+    <p class="note" data-f="settings:privacy">
+      <Show when={form() !== "tv"} fallback={`${reportWords.privacy}: ${props.url.replace(/^https?:\/\//, "")}`}>
+        <a href={props.url} target="_blank" rel="noopener noreferrer">
+          {reportWords.privacy}
+        </a>
+      </Show>
+    </p>
+  );
+}
+
+/** Settings > This device > Error reports (plans/error-reports.md 10): on by default, no prompt.
+ * The switch is the device's, kept by the core; a failed change shows the old value again and says so. */
+function ReportsRow() {
+  const [on, setOn] = createSignal<boolean | null>(null);
+  const [error, setError] = createSignal<string | null>(null);
+  onMount(() => void op<{ on: boolean }>("getReports").then((r) => setOn(r.on), (e) => setError(reasonOf(e))));
+  const pick = (next: boolean) => {
+    const was = on();
+    setOn(next);
+    setError(null);
+    op<{ on: boolean }>("setReports", { on: next }).then(
+      (r) => setOn(r.on),
+      (e) => {
+        setOn(was);
+        setError(`Could not change Error reports. ${reasonOf(e)}`);
+      },
+    );
+  };
+  return (
+    <>
+      <div class="sgroup filters">
+        <Choice<boolean>
+          label={reportWords.label}
+          group="dev-reports"
+          items={[
+            { value: true, label: reportWords.on },
+            { value: false, label: reportWords.off },
+          ]}
+          isOn={(v) => on() === v}
+          onPick={pick}
+        />
+      </div>
+      <p class="note small" data-f="settings:reports-note">
+        {reportWords.note}{" "}
+        <Show when={privacyUrl()}>
+          {(url) => (
+            <Show when={form() !== "tv"} fallback={`${reportWords.privacy}: ${url().replace(/^https?:\/\//, "")}`}>
+              <a href={url()} target="_blank" rel="noopener noreferrer">
+                {reportWords.privacy}
+              </a>
+            </Show>
+          )}
+        </Show>
+      </p>
+      <Show when={error()}>
+        <p class="note small" role="alert">
+          {error()}
+        </p>
+      </Show>
+    </>
   );
 }
 

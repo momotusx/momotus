@@ -112,6 +112,13 @@ final class CoreClient {
                     core_open_ms=\(took, format: .fixed(precision: 1), privacy: .public)
                     """)
                 self.core = core
+                // Error reports first (plans/error-reports.md 5.1): who the app is, before anything queued.
+                if Diagnostics.wanted {
+                    send("reportContext", Diagnostics.context(coreVersion: core.version()))
+                    #if canImport(MetricKit) && !os(tvOS)
+                    Diagnostics.listen { [weak self] report in self?.send("report", ["report": report]) }
+                    #endif
+                }
                 for text in queued { core.send(json: text) }
                 queued = []
             case .failure(let error):

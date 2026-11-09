@@ -16,7 +16,9 @@ LoadCredential=identity.json:/etc/momotus/identity.json
 # Email sign-in's SES key (plans/accounts-email.md). Remove this line and `--mail` with the file:
 # systemd may refuse to start a unit whose credential file is missing.
 LoadCredential=ses.json:/etc/momotus/ses.json
-ExecStart=/opt/momotus/bin/mq-sync-server --db /var/lib/momotus/relay.sqlite --listen 127.0.0.1:8787 --trust-proxy --public-host momotus.normalisdead.mom --identity %d/identity.json --mail %d/ses.json
+# Error and crash reports (plans/error-reports.md 7, 8): their own database, 30 days, not backed up.
+# The privacy page's Error reports section must be live before a relay with this flag is.
+ExecStart=/opt/momotus/bin/mq-sync-server --db /var/lib/momotus/relay.sqlite --listen 127.0.0.1:8787 --trust-proxy --public-host momotus.normalisdead.mom --identity %d/identity.json --mail %d/ses.json --reports /var/lib/momotus/reports.sqlite
 Restart=always
 RestartSec=2
 # The relay's refusals (a bad identity file, a database of another schema) exit 2: no restart loop.

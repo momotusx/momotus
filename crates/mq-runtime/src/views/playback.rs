@@ -663,6 +663,9 @@ struct State {
     loading_since: tokio::time::Instant,
     /// What the failures of this start say, for `empty`.
     failed_as: Option<EmptyKind>,
+    /// The failed sources as an error report names them: classes, never a
+    /// title or a link (plans/error-reports.md 2, `playback`).
+    report_attempts: Vec<mq_reports::Attempt>,
     /// The playing source played `PLAYED_PAST_START`, counted from the
     /// first position reported after it started: a decode error after that
     /// is not the version's.
@@ -871,6 +874,7 @@ impl State {
             tries: 0,
             loading_since: tokio::time::Instant::now(),
             failed_as: None,
+            report_attempts: Vec::new(),
             candidates,
             next: 0,
             version_failed: None,
@@ -1267,6 +1271,9 @@ impl PlaybackView {
                 .cloned();
             if let Some(stream) = &failed {
                 s.snapshot.attempts.push(attempt(stream, error));
+                if s.report_attempts.len() < 5 {
+                    s.report_attempts.push(report_attempt(stream, kind, status));
+                }
             }
             // The player could not decode it before it ever played (Apple
             // reports a frame that never came this way): the version's own
@@ -1274,6 +1281,20 @@ impl PlaybackView {
             // good playback is not the version's (code review 2026-10-20
             // P2-2).
             let decode = kind == Some("decode") && !s.progressed;
+            // A decoder that cannot play a file on this device is ours to
+            // fix: one report per decode failure (plans/error-reports.md 2).
+            if kind == Some("decode")
+                && let Some(stream) = &failed
+            {
+                let mut report =
+                    mq_reports::Report::new(mq_reports::Kind::Playback, mq_library::hlc::now_ms());
+                report.context = Some(mq_reports::Context {
+                    failure_kind: Some("decode".into()),
+                    ..Default::default()
+                });
+                report.attempts = vec![report_attempt(stream, kind, status)];
+                crate::reports::push(report);
+            }
             // An audio output that failed on the version's own bitstream (a
             // format this device passes through, E-AC-3 to a receiver that
             // will not take it) before the source played at all is the
@@ -2246,8 +2267,52 @@ async fn until(at: Option<tokio::time::Instant>) {
     }
 }
 
-/// Nothing played: the failure card, with why.
+/// The report's view of a failed source: its kind, service, the player's
+/// failure class and status, and the release's format.
+fn report_attempt(
+    stream: &ParsedStream,
+    kind: Option<&str>,
+    status: Option<u16>,
+) -> mq_reports::Attempt {
+    let source = match &stream.source {
+        Source::Http { .. } => "http",
+        Source::Torrent { .. } => "torrent",
+        Source::ClientResolve(_) => "clientResolve",
+        Source::Archive { .. } => "archive",
+        Source::Usenet { .. } => "usenet",
+        _ => "other",
+    };
+    let word = |value: serde_json::Value| value.as_str().map(str::to_owned);
+    let release = &stream.release;
+    mq_reports::Attempt {
+        source: Some(source.into()),
+        store: stream.service.clone(),
+        failure: kind.map(str::to_owned),
+        status,
+        resolution: serde_json::to_value(release.resolution).ok().and_then(word),
+        codec: serde_json::to_value(release.codec).ok().and_then(word),
+        hdr: release
+            .hdr
+            .first()
+            .and_then(|h| serde_json::to_value(h).ok())
+            .and_then(word),
+        audio: release
+            .audio
+            .first()
+            .and_then(|a| serde_json::to_value(a).ok())
+            .and_then(word),
+    }
+}
+
+/// Nothing played: the failure card, with why, and a `playback` report
+/// with the sources tried (never in Incognito: `reports::push` drops it).
 fn failed(s: &mut State) {
+    if s.snapshot.phase != PlaybackPhase::Failed {
+        let mut report =
+            mq_reports::Report::new(mq_reports::Kind::Playback, mq_library::hlc::now_ms());
+        report.attempts = std::mem::take(&mut s.report_attempts);
+        crate::reports::push(report);
+    }
     s.snapshot.phase = PlaybackPhase::Failed;
     s.snapshot.start = None;
     s.snapshot.choose_another = false;

@@ -139,6 +139,8 @@ impl Output {
     pub fn overflow(&self) {
         if !self.budget.closed.swap(true, Ordering::AcqRel) {
             let _ = self.tx.send(Outgoing::Overflow);
+            // The app fell behind the core: an error report (plans/error-reports.md 2).
+            mq_runtime::reports::push(crate::core_report("failed", "Overflow"));
         }
     }
 

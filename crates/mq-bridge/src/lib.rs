@@ -488,6 +488,39 @@ enum Request {
     Ping {
         id: u64,
     },
+    /// Error reports (plans/error-reports.md 5.1): who the app is and the
+    /// relay to send to, right after `open`. Starts this open's drain and
+    /// uploader; without it nothing is ever sent. Replies `{}`.
+    ReportContext {
+        id: u64,
+        device: mq_runtime::reports::Device,
+        #[serde(default)]
+        server: String,
+    },
+    /// A crash or error the app saw (a JVM crash file, MetricKit, a page
+    /// error), raw: the core strips it in Incognito and the uploader scrubs
+    /// it. `incognito`: the app's own word for a crash read after the fact.
+    /// Replies `{}`.
+    Report {
+        id: u64,
+        report: mq_runtime::reports::Report,
+        #[serde(default)]
+        incognito: bool,
+    },
+    /// Settings, This device, Error reports. Replies `{on}`.
+    GetReports {
+        id: u64,
+    },
+    /// The switch; off deletes every report not sent yet. Replies `{on}`.
+    SetReports {
+        id: u64,
+        on: bool,
+    },
+    /// Debug builds only: a real panic in a core thread, for the reports
+    /// live check (plans/error-reports.md 13). Refused in release builds.
+    DebugPanic {
+        id: u64,
+    },
     /// "Remove from Continue Watching": the title leaves Continue Watching
     /// and Next Up until it is played again. Replies `{}`.
     RemoveFromContinue {
@@ -763,6 +796,12 @@ impl Request {
             | Request::SetDebridKey { .. }
             | Request::DisconnectDebrid { .. }
             | Request::Ping { .. }
+            // Error reports are the device's, whoever holds the session.
+            | Request::ReportContext { .. }
+            | Request::Report { .. }
+            | Request::GetReports { .. }
+            | Request::SetReports { .. }
+            | Request::DebugPanic { .. }
             // The ended notice shows over the chooser too, and a Leave
             // pressed as the away end locked the session answers it.
             | Request::AckIncognitoEnded { .. }
@@ -837,6 +876,12 @@ impl Request {
             | Request::LockSession { .. }
             | Request::SyncNow { .. }
             | Request::Ping { .. }
+            // Error reports are the device's, whoever holds the session.
+            | Request::ReportContext { .. }
+            | Request::Report { .. }
+            | Request::GetReports { .. }
+            | Request::SetReports { .. }
+            | Request::DebugPanic { .. }
             | Request::Lifecycle { .. }
             | Request::SetDebridKeys { .. }
             | Request::RestoreDebrid { .. }
@@ -916,6 +961,12 @@ impl Request {
             Request::Unsubscribe { .. }
             | Request::Command { .. }
             | Request::Ping { .. }
+            // Error reports are the device's, whoever holds the session.
+            | Request::ReportContext { .. }
+            | Request::Report { .. }
+            | Request::GetReports { .. }
+            | Request::SetReports { .. }
+            | Request::DebugPanic { .. }
             | Request::Lifecycle { .. }
             | Request::SyncNow { .. }
             | Request::AckAnnouncements { .. }
@@ -1023,6 +1074,12 @@ impl Request {
             | Request::AckDebrid { .. }
             | Request::SyncNow { .. }
             | Request::Ping { .. }
+            // Error reports are the device's, whoever holds the session.
+            | Request::ReportContext { .. }
+            | Request::Report { .. }
+            | Request::GetReports { .. }
+            | Request::SetReports { .. }
+            | Request::DebugPanic { .. }
             | Request::DownloadsAllowed { .. }
             | Request::Lifecycle { .. } => false,
             Request::Subscribe { .. }
@@ -2356,6 +2413,40 @@ impl Session {
                 let live = core.live_scope_count();
                 self.reply(json!(id), Ok::<_, Failure>(json!({ "liveScopes": live })))
             }
+            Request::ReportContext { id, device, server } => {
+                core.report_context(device, server);
+                self.reply(json!(id), Ok::<_, Failure>(json!({})))
+            }
+            Request::Report {
+                id,
+                report,
+                incognito,
+            } => {
+                mq_runtime::reports::push_from_app(report, incognito);
+                self.reply(json!(id), Ok::<_, Failure>(json!({})))
+            }
+            Request::GetReports { id } => self.reply(
+                json!(id),
+                Ok::<_, Failure>(json!({ "on": core.reports_on() })),
+            ),
+            Request::SetReports { id, on } => {
+                let result = core
+                    .set_reports(on)
+                    .map(|()| json!({ "on": core.reports_on() }));
+                self.reply(json!(id), result)
+            }
+            Request::DebugPanic { id } => {
+                #[cfg(debug_assertions)]
+                {
+                    mq_runtime::reports::debug_panic();
+                    self.reply(json!(id), Ok::<_, Failure>(json!({})))
+                }
+                #[cfg(not(debug_assertions))]
+                self.reply(
+                    json!(id),
+                    Err("debugPanic is for debug builds only".to_owned()),
+                )
+            }
             Request::RemoveFromContinue { id, item_id } => {
                 let result = core.remove_from_continue(&item_id);
                 self.reply(json!(id), done(result));
@@ -2498,6 +2589,8 @@ impl Session {
             Request::Lifecycle { id, event, .. } if event == "background" => {
                 self.background_ms = Some(mq_library::hlc::now_ms());
                 self.incognito_away(false);
+                // The app may not come back: error reports into the queue now.
+                core.reports_flush();
                 self.spawn(id, async move {
                     let _ = tokio::time::timeout(TRAKT_FLUSH, core.trakt_background()).await;
                     Ok::<_, Failure>(json!({}))
@@ -3578,6 +3671,10 @@ struct Failure {
     kind: &'static str,
     code: Option<&'static str>,
     extra: Value,
+    /// The `CoreError` variant when it is one an error report names
+    /// (plans/error-reports.md 2, `core`): `Library` and `Io` only, our own
+    /// faults; never set for refusals or a third party's state.
+    class: Option<&'static str>,
 }
 
 impl Failure {
@@ -3600,6 +3697,7 @@ impl From<String> for Failure {
             kind: "failed",
             code: None,
             extra: Value::Null,
+            class: None,
         }
     }
 }
@@ -3607,6 +3705,11 @@ impl From<String> for Failure {
 impl From<mq_runtime::CoreError> for Failure {
     fn from(e: mq_runtime::CoreError) -> Self {
         let kind = e.failure_kind();
+        let class = match &e {
+            mq_runtime::CoreError::Library(_) => Some("Library"),
+            mq_runtime::CoreError::Io(_) => Some("Io"),
+            _ => None,
+        };
         // A Trakt sentence is shown as it is, without the log's "Trakt: ".
         let error = match e {
             mq_runtime::CoreError::Trakt(said) => said,
@@ -3614,6 +3717,7 @@ impl From<mq_runtime::CoreError> for Failure {
         };
         Self {
             kind,
+            class,
             ..Failure::from(error)
         }
     }
@@ -3680,6 +3784,19 @@ fn too_large() -> Failure {
     Failure::coded("tooLarge", "the answer is too large to send")
 }
 
+/// A `core` report: the failure's kind and class (`Library`, `Io`,
+/// `Overflow`), no text (plans/error-reports.md 3.1).
+pub(crate) fn core_report(kind: &str, class: &str) -> mq_runtime::reports::Report {
+    use mq_runtime::reports::{Context, Kind, Report};
+    let mut report = Report::new(Kind::Core, mq_library::hlc::now_ms());
+    report.context = Some(Context {
+        failure_kind: Some(kind.to_owned()),
+        class: Some(class.to_owned()),
+        ..Context::default()
+    });
+    report
+}
+
 fn message(id: Value, result: Result<Value, Failure>) -> Value {
     match result {
         Ok(value) => json!({ "id": id, "ok": true, "result": value }),
@@ -3688,7 +3805,13 @@ fn message(id: Value, result: Result<Value, Failure>) -> Value {
             kind,
             code,
             extra,
+            class,
         }) => {
+            // Every failed reply passes here: the allowlisted ones become a
+            // `core` report naming the class, never the failure's text.
+            if let Some(class) = class {
+                mq_runtime::reports::push(core_report(kind, class));
+            }
             let mut reply = json!({ "id": id, "ok": false, "error": error, "kind": kind });
             if let Some(code) = code {
                 reply["code"] = json!(code);
@@ -3997,6 +4120,40 @@ fn refuse_token_link(out: &Output, id: u64, url: &str, acknowledged: bool) -> bo
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Error reports' allowlist (plans/error-reports.md 2, `core`): only our own
+    /// faults (`Library`, `Io`) carry a class and so a report; a network failure,
+    /// a designed refusal and the bridge's own `internal error` path carry none.
+    #[test]
+    fn only_our_own_faults_name_a_report_class() {
+        use mq_runtime::CoreError;
+        let class = |e: CoreError| Failure::from(e).class;
+        let json = serde_json::from_str::<Value>("{").unwrap_err();
+        assert_eq!(
+            class(CoreError::Library(mq_library::LibraryError::Json(json))),
+            Some("Library")
+        );
+        assert_eq!(
+            class(CoreError::Io(std::io::Error::other("disk"))),
+            Some("Io")
+        );
+        assert_eq!(
+            class(CoreError::Http(mq_http::HttpError::Network(
+                "refused".into()
+            ))),
+            None
+        );
+        assert_eq!(class(CoreError::NotLoaded), None);
+        assert_eq!(class(CoreError::KidsLibrary), None);
+        assert_eq!(
+            Failure::from("internal error: task 7 panicked".to_owned()).class,
+            None
+        );
+        assert_eq!(
+            Failure::coded("locked", "the profile is locked").class,
+            None
+        );
+    }
 
     /// A push's keys go out sorted, as every snapshot's do, never in the
     /// struct's order: the web store applies a push key by key, and the

@@ -18,6 +18,7 @@ pub mod plugin_directory;
 pub mod plugins;
 mod profiles;
 pub mod ratings;
+pub mod reports;
 pub mod segments;
 mod services;
 pub mod speed;

@@ -209,6 +209,9 @@ struct Inner {
     /// Offline downloads' files (plans/offline-downloads.md 4.2).
     downloads_dir: PathBuf,
     downloads: std::sync::OnceLock<Arc<crate::downloads::Downloads>>,
+    /// The error reports' drain and uploader runs for this open
+    /// (plans/error-reports.md 5.2), started by the app's `reportContext`.
+    reports_started: std::sync::atomic::AtomicBool,
 }
 
 /// What is one per data directory however often it is opened: the library
@@ -419,6 +422,7 @@ impl Core {
                 downloads_dir,
                 downloads: std::sync::OnceLock::new(),
                 walk,
+                reports_started: std::sync::atomic::AtomicBool::new(false),
             }),
             profile: profile.into(),
             scope: None,
@@ -501,6 +505,21 @@ impl Core {
 
     pub(crate) fn live_scopes(&self) -> &Arc<std::sync::atomic::AtomicUsize> {
         &self.inner.device.live_scopes
+    }
+
+    /// True the first time only: this open's report task may start.
+    pub(crate) fn start_reports(&self) -> bool {
+        !self
+            .inner
+            .reports_started
+            .swap(true, std::sync::atomic::Ordering::SeqCst)
+    }
+
+    /// This open's report task runs (the app sent `reportContext`).
+    pub(crate) fn reports_running(&self) -> bool {
+        self.inner
+            .reports_started
+            .load(std::sync::atomic::Ordering::SeqCst)
     }
 
     /// A title id as a log line may name it: never in Incognito, whose logs

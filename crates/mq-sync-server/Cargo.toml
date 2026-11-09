@@ -12,6 +12,8 @@ path = "src/main.rs"
 [dependencies]
 mq-sync = { path = "../mq-sync" }
 mq-library = { path = "../mq-library" }
+# Error and crash reports (plans/error-reports.md 7): the shape, checks and scrubber.
+mq-reports = { path = "../mq-reports" }
 axum = "0.8"
 rusqlite = { version = "0.40", features = ["bundled"] }
 tokio = { workspace = true, features = ["net", "signal"] }

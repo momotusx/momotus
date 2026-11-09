@@ -487,7 +487,10 @@ struct SettingsScreen: View {
                 section(.downloads) { DownloadSettingsSection(keeper: keeper, snapshot: snapshot) }
             }
             section(.device) {
-                panel { trailerPreviews }
+                VStack(alignment: .leading, spacing: 16) {
+                    panel { trailerPreviews }
+                    panel { ReportsRow(core: core) }
+                }
             }
             #endif
             section(.about) { panel { about } }
@@ -567,6 +570,7 @@ struct SettingsScreen: View {
             Text("Playback: AetherEngine 7.36.0, LGPL-3 with App Store exception. FFmpeg and libzvbi, LGPL-2.1. dav1d, BSD. zimg, WTFPL. LibTrueHD, LibDTSX and LibDovi, MIT and Apache-2.0.")
                 .modifier(Note())
                 .modifier(ReadableOnTV())
+            PrivacyLink()
         }
     }
 
@@ -697,6 +701,63 @@ struct SettingsScreen: View {
         prefs.performNow("setPrefs", ["patch": patch])
     }
 }
+
+/// The privacy page (plans/error-reports.md 10): a link on a phone or Mac, its address as text on a TV.
+struct PrivacyLink: View {
+    var body: some View {
+        if let url = ReportWords.privacyURL(server: AccountServer.default) {
+            #if os(tvOS)
+            Text("\(ReportWords.privacy): \(url.host() ?? "")\(url.path())").modifier(Note())
+            #else
+            Link(ReportWords.privacy, destination: url)
+                .frame(minHeight: 44, alignment: .leading)
+            #endif
+        }
+    }
+}
+
+#if !os(tvOS)
+/// Settings > This device > Error reports (plans/error-reports.md 10): on by default, no prompt. The core keeps the
+/// switch; off deletes every report not sent yet. A change that fails shows the old value again and says so.
+struct ReportsRow: View {
+    let core: CoreClient
+    @State private var on: Bool?
+    @State private var failed: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            ChipRow(label: ReportWords.label,
+                    chips: [Chip(id: true, title: ReportWords.on), Chip(id: false, title: ReportWords.off)],
+                    isSelected: { $0 == on }) { pick($0) }
+            Text(ReportWords.note).modifier(Note())
+            if let failed { Text(failed).modifier(Note()) }
+        }
+        .task {
+            on = try? await core.request("getReports", [:]) { data in try Self.decode(data) }
+        }
+    }
+
+    private func pick(_ next: Bool) {
+        let was = on
+        on = next
+        failed = nil
+        Task {
+            do {
+                on = try await core.request("setReports", ["on": next]) { data in try Self.decode(data) }
+            } catch {
+                on = was
+                failed = "Could not change Error reports. \(ErrorWords.of(error))"
+            }
+        }
+    }
+
+    private struct Answer: Decodable { let result: Result; struct Result: Decodable { let on: Bool } }
+
+    nonisolated static func decode(_ data: Data) throws -> Bool {
+        try JSONDecoder().decode(Answer.self, from: data).result.on
+    }
+}
+#endif
 
 /// A row that leads somewhere: icon, title, one line of detail, chevron.
 struct SettingsRow: View {

@@ -2694,6 +2694,7 @@ dependencies = [
  "tokio-tungstenite 0.28.0",
  "tower-http 0.7.1",
  "tracing",
+ "tracing-subscriber",
  "url",
 ]
 
@@ -2889,6 +2890,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "mq-reports"
+version = "0.1.0"
+dependencies = [
+ "proptest",
+ "regex",
+ "serde",
+ "serde_json",
+ "sha2 0.11.1",
+]
+
+[[package]]
 name = "mq-runtime"
 version = "0.1.0"
 dependencies = [
@@ -2912,6 +2924,7 @@ dependencies = [
  "mq-plugins",
  "mq-protocol",
  "mq-relparse",
+ "mq-reports",
  "mq-server",
  "mq-streams",
  "mq-sync",
@@ -3006,6 +3019,7 @@ dependencies = [
  "hmac",
  "mq-http",
  "mq-library",
+ "mq-reports",
  "mq-sync",
  "proptest",
  "reqwest",

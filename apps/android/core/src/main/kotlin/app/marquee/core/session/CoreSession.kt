@@ -181,6 +181,10 @@ class CoreSession(
 
     fun version(): String? = core?.version()
 
+    /** Runs on the boot thread right after each core is attached, before anything else is asked of it. */
+    @Volatile
+    var onAttached: (() -> Unit)? = null
+
     fun start(keepCallbackThreadsAttached: Boolean = true) {
         keepAttached = keepCallbackThreadsAttached
         client.onCoreDied = ::onCoreDied
@@ -224,6 +228,8 @@ class CoreSession(
                 // Pushes from a revived `debrid` view wait for this core's restore.
                 debridAccounts.pause()
                 client.attach { text -> opened.send(text) }
+                // Each core this process opens hears who the app is (error reports, plans/error-reports.md 5.1).
+                onAttached?.invoke()
                 // Accounts come back before anything may play (plans/c10-handoff.md, phase 3a).
                 runBlocking { debridAccounts.opened { debrid.snapshot?.pending } }
                 openMillis = (System.nanoTime() - started) / 1_000_000
