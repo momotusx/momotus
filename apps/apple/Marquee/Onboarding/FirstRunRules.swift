@@ -203,6 +203,14 @@ enum FirstRunRules {
         return ["name": name, "avatar": pressed.map { ProfileRules.formatAvatar(glyph: glyph, color: $0) } ?? ""]
     }
 
+    /// Add profile on first run's Who's watching? (parity with the web and Android): what `createProfile` gets, the typed
+    /// name (trimmed, 30 at most) and the letter on the swatch shown; nil for an empty name, which creates nothing.
+    static func newProfile(typed: String, swatch: String) -> [String: String]? {
+        let name = String(typed.trimmingCharacters(in: .whitespacesAndNewlines).prefix(30))
+        guard !name.isEmpty else { return nil }
+        return ["name": name, "avatar": ProfileRules.formatAvatar(glyph: "letter", color: swatch)]
+    }
+
     /// Where focus starts on the profile form: Continue on TV, nothing on the phone, iPad and Mac (no keyboard over
     /// Continue); never the Name field.
     enum ProfileFocus: Equatable { case none, continueButton }

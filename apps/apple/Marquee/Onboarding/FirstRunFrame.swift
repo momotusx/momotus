@@ -126,6 +126,74 @@ struct SignInPage<Content: View>: View {
     }
 }
 
+/// A profile form's fields (plans/first-screens.md 3.4): the avatar at 72, the Name field (never focused on open, so no
+/// keyboard covers Continue; 30 characters at most), and the five swatches on the grey avatar tokens.
+struct ProfileFields: View {
+    @Binding var typed: String
+    let placeholder: String
+    let glyph: String
+    let selected: String?
+    /// The name the avatar's letter shows while the field is empty.
+    let fallbackName: String
+    let pick: (String) -> Void
+    private var words: FirstRunWords { .shared }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack(spacing: 16) {
+                ProfileAvatar(ProfileRules.Avatar(glyph: glyph, color: selected), name: typed.isEmpty ? fallbackName : typed, size: 72)
+                nameField
+            }
+            swatches
+        }
+    }
+
+    private var nameField: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(words.nameLabel)
+                .textFont(12, weight: .medium, relativeTo: .caption)
+                .foregroundStyle(Color.white.opacity(0.64))
+                .accessibilityHidden(true)
+            TextField(words.nameLabel, text: $typed, prompt: Text(placeholder))
+                .textFieldStyle(.plain)
+                .textFont(18, relativeTo: .body)
+                .foregroundStyle(.white)
+                #if os(iOS)
+                .textContentType(.nickname)
+                .submitLabel(.done)
+                #endif
+                .onChange(of: typed) { _, now in if now.count > 30 { typed = String(now.prefix(30)) } }
+        }
+        .padding(.horizontal, 16)
+        .frame(maxWidth: .infinity, minHeight: 60, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(.white.opacity(0.1)))
+        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(.white.opacity(0.55), lineWidth: 1.5))
+    }
+
+    private var swatches: some View {
+        HStack(spacing: 12) {
+            ForEach(FirstRunRules.swatches, id: \.self) { colour in
+                let on = colour == selected
+                Button { pick(colour) } label: {
+                    Circle()
+                        .fill(ProfileAvatar.color(colour))
+                        .frame(width: FirstRunRules.Size.swatch, height: FirstRunRules.Size.swatch)
+                        .overlay {
+                            if on { Circle().strokeBorder(.white, lineWidth: 2).padding(-5) }
+                        }
+                        .contentShape(Circle())
+                }
+                .buttonStyle(FocusPlainStyle(shape: Circle()))
+                .accessibilityLabel("\(words.colourLabel): \(colour.capitalized)")
+                .accessibilityAddTraits(on ? .isSelected : [])
+            }
+        }
+        .padding(.horizontal, 5)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(words.colourLabel)
+    }
+}
+
 /// A sheet's Back link, at its top left: one step back inside first run.
 struct WallBack: View {
     let back: () -> Void

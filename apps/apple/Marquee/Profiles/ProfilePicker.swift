@@ -32,6 +32,8 @@ struct ProfilePicker: View {
     @State private var said: String?
     @State private var showManage: Bool
     @State private var showAdd = false
+    /// First run's sheet: the create form in place of the tiles.
+    @State private var adding = false
     @FocusState private var focused: String?
 
     var body: some View {
@@ -85,6 +87,9 @@ struct ProfilePicker: View {
                     .foregroundStyle(Theme.Palette.text)
             }
             .padding(.top, Theme.Space.xl)
+        } else if joinedLine != nil, adding {
+            // First run's Add profile: the create form in the sheet, Back to the tiles, the new profile then Home.
+            AddProfileForm(core: core) { adding = false }
         } else if case let (target, incognito)? = keypadTarget(snapshot) {
             // Incognito asks another profile's PIN (the owner's, or the host's own): the keypad says which and why.
             let keyed = incognito ? Incognito.id : target.id
@@ -203,7 +208,7 @@ struct ProfilePicker: View {
                 .accessibilityLabel(Incognito.spoken(snapshot))
             }
             if addable {
-                Button { showAdd = true } label: {
+                Button { if joinedLine != nil { adding = true } else { showAdd = true } } label: {
                     VStack(spacing: 10) {
                         Circle()
                             .fill(Theme.Palette.raised)
@@ -495,5 +500,58 @@ struct TileButtonStyle: ButtonStyle {
         CardButtonStyle(radius: Theme.Radius.l, scale: Theme.Focus.scaleTile)
             .makeBody(configuration: configuration)
             .padding(4)
+    }
+}
+
+/// First run's Add profile, inside the Who's watching? sheet (parity with the web and Android): the name, the five
+/// swatches on the grey avatar tokens, Continue and Back to the tiles. An empty name is refused and creates nothing;
+/// Continue creates one profile with the swatch shown, then opens it (Home).
+private struct AddProfileForm: View {
+    let core: CoreClient
+    let back: () -> Void
+    @Environment(ProfileSession.self) private var profiles
+    @State private var typed = ""
+    @State private var swatch = FirstRunRules.swatches[0]
+    @State private var busy = false
+    @State private var said: String?
+    @FocusState private var onContinue: Bool
+    private var words: FirstRunWords { .shared }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            WallBack(back: back)
+            SheetHead(title: words.addProfile)
+            ProfileFields(typed: $typed, placeholder: "", glyph: "letter", selected: swatch, fallbackName: words.addProfile) { swatch = $0 }
+                .padding(.top, 22)
+            if let said {
+                StatusDot(tone: .bad, text: said).padding(.top, Theme.Space.s)
+            }
+            Button { Task { await create() } } label: {
+                Text(words.continue).frame(maxWidth: .infinity, minHeight: FirstRunRules.Size.primary - 2 * PillButtonStyle.vertical)
+            }
+            .buttonStyle(PillButtonStyle(prominent: true))
+            .disabled(busy || FirstRunRules.newProfile(typed: typed, swatch: swatch) == nil)
+            .focused($onContinue)
+            .padding(.top, 22)
+        }
+        #if !os(iOS)
+        .onExitCommand(perform: back)
+        #endif
+    }
+
+    /// One press, one profile: `createProfile` with the rule's fields, then the switch to the profile it made.
+    private func create() async {
+        guard !busy, let fields = FirstRunRules.newProfile(typed: typed, swatch: swatch) else { return }
+        busy = true
+        said = nil
+        defer { busy = false }
+        do {
+            let before = Set(profiles.snapshot?.profiles.map(\.id) ?? [])
+            let after = try await core.call("createProfile", fields, as: ProfilesSnapshot.self)
+            guard let made = after.profiles.first(where: { !before.contains($0.id) }) else { return back() }
+            _ = await profiles.switchTo(made.id, pin: nil)
+        } catch {
+            said = ErrorWords.of(error)
+        }
     }
 }

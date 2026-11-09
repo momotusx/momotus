@@ -147,11 +147,11 @@ private actor Asks {
 @Test func everyFirstRunControlKeepsTheFortyFourPointFloor() throws {
     #expect(FirstRunRules.Size.all.allSatisfy { $0 >= Theme.minTarget })
     let onboarding = try source("Onboarding/OnboardingScreen.swift")
-    for size in ["Size.primary", "Size.toggle", "Size.swatch", "Size.segment", "Size.link"] {
+    for size in ["Size.primary", "Size.toggle", "Size.segment", "Size.link"] {
         #expect(onboarding.contains("FirstRunRules.\(size)"), "\(size) is not used by first run")
     }
     let frame = try source("Onboarding/FirstRunFrame.swift")
-    for size in ["Size.option", "Size.chip", "Size.grabber", "Size.link"] {
+    for size in ["Size.option", "Size.chip", "Size.grabber", "Size.link", "Size.swatch"] {
         #expect(frame.contains("FirstRunRules.\(size)"), "\(size) is not used by the sheets")
     }
     #expect(try source("Account/SignInScreen.swift").contains("FirstRunRules.Size.provider"))
@@ -243,9 +243,10 @@ private let sheet = over(29.0 / 255, 0.97, over(0, 0.62, 1))
     #expect(FirstRunRules.profileFocus(tv: true) == .continueButton)
     #expect(FirstRunRules.profileFocus(tv: false) == .none)
     #expect(onboarding.contains(".defaultFocus($onContinue, FirstRunRules.profileFocus(tv: tvForm) == .continueButton)"))
-    let field = try body(of: "private var nameField: some View", in: onboarding)
-    #expect(!field.contains(".focused("), "the Name field takes focus on open")
-    #expect(field.contains("prompt: Text(words.namePlaceholder)"), "Main is the placeholder, never a prefill")
+    let fields = try body(of: "struct ProfileFields: View", in: source("Onboarding/FirstRunFrame.swift"))
+    #expect(!fields.contains(".focused("), "the Name field takes focus on open")
+    #expect(fields.contains("TextField(words.nameLabel, text: $typed, prompt: Text(placeholder))"))
+    #expect(onboarding.contains("ProfileFields(typed: $typed, placeholder: words.namePlaceholder,"), "Main is the placeholder, never a prefill")
     #expect(FirstRunRules.swatches.count == 5 && FirstRunRules.swatches.allSatisfy(ProfileRules.colors.contains))
     // The line under the heading: an account made here, or Not now and no server.
     #expect(FirstRunRules.profileLine(made: true) == FirstRunWords.shared.profileLineAccount)
@@ -351,4 +352,30 @@ private let sheet = over(29.0 / 255, 0.97, over(0, 0.62, 1))
     #expect(FirstRunRules.whoDetail(profile(pin: true)) == "PIN set")
     #expect(FirstRunRules.whoDetail(profile()) == nil, "a plain profile gets no filler line")
     #expect(try source("Profiles/ProfilePicker.swift").contains("joinedLine != nil, metrics.wide, let detail = FirstRunRules.whoDetail(profile)"))
+}
+
+@Test func addProfileOnFirstRunsPickerCreatesOneNamedProfileWithTheSwatchShown() throws {
+    // An empty or blank name is refused: nothing is created.
+    #expect(FirstRunRules.newProfile(typed: "", swatch: "sky") == nil)
+    #expect(FirstRunRules.newProfile(typed: "   ", swatch: "sky") == nil)
+    #expect(FirstRunRules.newProfile(typed: "  Ada ", swatch: "sky") == ["name": "Ada", "avatar": "letter:sky"])
+    #expect(FirstRunRules.newProfile(typed: String(repeating: "a", count: 40), swatch: "teal")?["name"]?.count == 30)
+    // The swatches stay on the grey avatar tokens (the lead's call for every app).
+    let tokens: [String: Color] = ["ember": Theme.Palette.avatarEmber, "sky": Theme.Palette.avatarSky, "teal": Theme.Palette.avatarTeal,
+                                   "moss": Theme.Palette.avatarMoss, "plum": Theme.Palette.avatarPlum]
+    for swatch in FirstRunRules.swatches {
+        let token = try #require(tokens[swatch], "\(swatch) has no token")
+        let rgb = try #require(NSColor(token).usingColorSpace(.sRGB))
+        #expect(abs(rgb.redComponent - rgb.greenComponent) < 0.02 && abs(rgb.greenComponent - rgb.blueComponent) < 0.03, "\(swatch) is not grey")
+    }
+    // In the sheet: the tile opens the form in place, Back returns to the tiles, one press creates one profile and opens it.
+    let picker = try source("Profiles/ProfilePicker.swift")
+    #expect(picker.contains("Button { if joinedLine != nil { adding = true } else { showAdd = true } } label: {"))
+    #expect(picker.contains("AddProfileForm(core: core) { adding = false }"))
+    let form = try body(of: "private struct AddProfileForm: View", in: picker)
+    #expect(form.contains("WallBack(back: back)"))
+    #expect(form.contains(".disabled(busy || FirstRunRules.newProfile(typed: typed, swatch: swatch) == nil)"))
+    #expect(form.contains("guard !busy, let fields = FirstRunRules.newProfile(typed: typed, swatch: swatch) else { return }"))
+    #expect(form.components(separatedBy: "\"createProfile\"").count - 1 == 1, "more than one create")
+    #expect(form.contains("await profiles.switchTo(made.id, pin: nil)"))
 }

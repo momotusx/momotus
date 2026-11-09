@@ -318,13 +318,10 @@ private struct FirstRun: View {
         return WallSheet(sheet: .profile) {
             VStack(alignment: .leading, spacing: 0) {
                 SheetHead(title: words.profileTitle, line: FirstRunRules.profileLine(made: made || sync.joined))
-                HStack(spacing: 16) {
-                    ProfileAvatar(ProfileRules.Avatar(glyph: opening.glyph, color: pressed ?? opening.color),
-                                  name: typed.isEmpty ? (owner?.name ?? words.namePlaceholder) : typed, size: 72)
-                    nameField
-                }
-                .padding(.top, 22)
-                swatches(selected: pressed ?? opening.color).padding(.top, 16)
+                // "Main" as the placeholder and no prefill (the relay sends no name); empty keeps the name.
+                ProfileFields(typed: $typed, placeholder: words.namePlaceholder, glyph: opening.glyph, selected: pressed ?? opening.color,
+                              fallbackName: owner?.name ?? words.namePlaceholder) { pressed = $0 }
+                    .padding(.top, 22)
                 if let failure {
                     StatusDot(tone: .bad, text: failure).padding(.top, Theme.Space.s)
                 }
@@ -339,52 +336,6 @@ private struct FirstRun: View {
         }
         // TV starts on Continue (the field by up); the phone, iPad and Mac focus nothing, so no keyboard covers it.
         .defaultFocus($onContinue, FirstRunRules.profileFocus(tv: tvForm) == .continueButton)
-    }
-
-    /// The Name field: "Main" as its placeholder and no prefill (the relay sends no name); empty keeps the name.
-    private var nameField: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(words.nameLabel)
-                .textFont(12, weight: .medium, relativeTo: .caption)
-                .foregroundStyle(Color.white.opacity(0.64))
-                .accessibilityHidden(true)
-            TextField(words.nameLabel, text: $typed, prompt: Text(words.namePlaceholder))
-                .textFieldStyle(.plain)
-                .textFont(18, relativeTo: .body)
-                .foregroundStyle(.white)
-                #if os(iOS)
-                .textContentType(.nickname)
-                .submitLabel(.done)
-                #endif
-                .onChange(of: typed) { _, now in if now.count > 30 { typed = String(now.prefix(30)) } }
-        }
-        .padding(.horizontal, 16)
-        .frame(maxWidth: .infinity, minHeight: 60, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(.white.opacity(0.1)))
-        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(.white.opacity(0.55), lineWidth: 1.5))
-    }
-
-    private func swatches(selected: String?) -> some View {
-        HStack(spacing: 12) {
-            ForEach(FirstRunRules.swatches, id: \.self) { colour in
-                let on = colour == selected
-                Button { pressed = colour } label: {
-                    Circle()
-                        .fill(ProfileAvatar.color(colour))
-                        .frame(width: FirstRunRules.Size.swatch, height: FirstRunRules.Size.swatch)
-                        .overlay {
-                            if on { Circle().strokeBorder(.white, lineWidth: 2).padding(-5) }
-                        }
-                        .contentShape(Circle())
-                }
-                .buttonStyle(FocusPlainStyle(shape: Circle()))
-                .accessibilityLabel("\(words.colourLabel): \(colour.capitalized)")
-                .accessibilityAddTraits(on ? .isSelected : [])
-            }
-        }
-        .padding(.horizontal, 5)
-        .accessibilityElement(children: .contain)
-        .accessibilityLabel(words.colourLabel)
     }
 
     /// Continue: `finishProfileStep` with only what the user typed or pressed (an untouched form sends both empty and
