@@ -27,7 +27,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
-import app.marquee.core.DefaultsCopy
+import app.marquee.core.FirstRunCopy
 import app.marquee.core.model.ImportSnapshot
 import app.marquee.core.model.ImportSummary
 import app.marquee.core.session.CoreSession
@@ -68,12 +68,18 @@ class ImportHolder(
     override fun onCleared() = view.close()
 }
 
+/**
+ * Import from Stremio. From first run's setup ([onSkip] given) it is a sheet over the still wall (plans/first-screens.md
+ * 3.5): waiting, failed and expired add Skip import, and Done or Skip import add the defaults the import did not bring
+ * before Home ([finishing] while that runs, [failed] when it did not go through).
+ */
 @Composable
 fun ImportScreen(
     session: CoreSession,
     onDone: () -> Unit,
-    /** First run goes on to the recommended addons, not straight Home. */
-    toDefaults: Boolean = false,
+    onSkip: (() -> Unit)? = null,
+    finishing: Boolean = false,
+    failed: Boolean = false,
 ) {
     val holder =
         viewModel<ImportHolder>(
@@ -82,6 +88,12 @@ fun ImportScreen(
         )
     val view = holder.view
     val tv = Marquee.form == Form.Tv
+    if (onSkip != null) {
+        FirstSheet("Import from Stremio", width = 980.dp, onDrag = null) {
+            Attempt(view, holder::retry, onDone, onSkip, finishing, failed)
+        }
+        return
+    }
     LazyColumn(
         Modifier.fillMaxSize().focusRestorer(),
         contentPadding = pagePadding(framed = false),
@@ -101,7 +113,7 @@ fun ImportScreen(
         }
         item(key = "state") {
             Column(Modifier.padding(horizontal = Marquee.safe.side)) {
-                Attempt(view, holder::retry, onDone, toDefaults)
+                Attempt(view, holder::retry, onDone, null, finishing = false, failed = false)
             }
         }
     }
@@ -112,8 +124,20 @@ private fun Attempt(
     view: ImportView,
     onRetry: () -> Unit,
     onDone: () -> Unit,
-    toDefaults: Boolean,
+    onSkip: (() -> Unit)?,
+    finishing: Boolean,
+    failed: Boolean,
 ) {
+    val skip: @Composable () -> Unit = {
+        onSkip?.let {
+            SecondaryButton(
+                FirstRunCopy.SKIP_IMPORT,
+                it,
+                busy = finishing,
+            )
+        }
+    }
+    if (failed) StatusWord(FirstRunCopy.SETUP_SOURCES_FAILED, Status.Bad)
     val status = view.status
     if (status is ViewStatus.Failed) {
         StateMessage(
@@ -123,6 +147,7 @@ private fun Attempt(
             actionLabel = "Try again",
             onAction = onRetry,
         )
+        skip()
         return
     }
     when (val s = view.current()) {
@@ -132,6 +157,7 @@ private fun Attempt(
 
         is ImportSnapshot.WaitingForLink -> {
             Waiting(s, onRetry)
+            skip()
         }
 
         is ImportSnapshot.Importing -> {
@@ -139,7 +165,7 @@ private fun Attempt(
         }
 
         is ImportSnapshot.Done -> {
-            Done(s.summary, onDone, toDefaults)
+            Done(s.summary, onDone, onSkip != null, finishing)
         }
 
         ImportSnapshot.Expired -> {
@@ -150,6 +176,7 @@ private fun Attempt(
                 actionLabel = "Get a new code",
                 onAction = onRetry,
             )
+            skip()
         }
 
         is ImportSnapshot.Failed -> {
@@ -160,6 +187,7 @@ private fun Attempt(
                 actionLabel = "Get a new code",
                 onAction = onRetry,
             )
+            skip()
         }
     }
 }
@@ -233,7 +261,8 @@ private fun Step(
 private fun Done(
     summary: ImportSummary,
     onDone: () -> Unit,
-    toDefaults: Boolean,
+    firstRun: Boolean,
+    finishing: Boolean,
 ) {
     val colors = Marquee.colors
     // On a TV the remote lands on the way on as soon as the import is done.
@@ -272,8 +301,8 @@ private fun Done(
                 color = colors.muted,
             )
         }
-        if (toDefaults) {
-            PrimaryButton(DefaultsCopy.CONTINUE, onDone, icon = Icons.ChevronRight, focusRequester = home)
+        if (firstRun) {
+            PrimaryButton(FirstRunCopy.START_WATCHING, onDone, focusRequester = home, busy = finishing)
         } else {
             PrimaryButton("Go to Home", onDone, icon = Icons.House, focusRequester = home)
         }

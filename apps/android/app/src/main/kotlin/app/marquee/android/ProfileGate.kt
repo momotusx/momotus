@@ -167,6 +167,11 @@ class ProfileGate(
         if (count > resetCount) resetCount = count
     }
 
+    /** A first-run join to two or more profiles or a PIN (plans/first-screens.md 2): the start picker asks once more. */
+    fun ask() {
+        chosen = false
+    }
+
     /** The current profile, unlocked: the start picker's answer. */
     fun markChosen() {
         chosen = true

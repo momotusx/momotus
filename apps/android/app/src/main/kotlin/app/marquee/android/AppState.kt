@@ -9,14 +9,16 @@ import androidx.lifecycle.ViewModelStore
 import androidx.lifecycle.ViewModelStoreOwner
 import androidx.lifecycle.viewModelScope
 import app.marquee.core.DefaultsCard
+import app.marquee.core.FirstProfileStep
+import app.marquee.core.FirstSetup
 import app.marquee.core.InstallCards
 import app.marquee.core.LinkInstall
 import app.marquee.core.PendingRemoval
 import app.marquee.core.client.CoreLog
-import app.marquee.core.model.FirstRunStill
 import app.marquee.core.session.CoreSession
 import app.marquee.core.startsFresh
 import app.marquee.core.views.HomeView
+import app.marquee.design.WallDrift
 import app.marquee.ui.tv.FocusMemory
 import app.marquee.ui.tv.TvHomeState
 import kotlinx.coroutines.CancellationException
@@ -77,32 +79,47 @@ class AppState(
     val defaultsCard = DefaultsCard(session.ops, viewModelScope)
 
     /**
-     * The still first run frames its question steps with (`firstRunStill`, B4): asked at the first framed step and
-     * kept for the others once it came; null for none (the frame stays black). None (a phone's first requests past
-     * the core's budget, offline) or a failed ask is asked again by the next framed step: late art, never none for
-     * the whole run.
+     * First run's wall (`firstRunWall`, plans/first-screens.md 3.1): asked as soon as the start is first run, and at
+     * each first-run step or sign-in sheet while it has none, so an empty answer (offline, past the core's budget) is
+     * asked again and the art comes late instead of never; a list that came is kept for the run.
      */
-    var still: FirstRunStill? by mutableStateOf(null)
+    var wall: List<String> by mutableStateOf(emptyList())
         private set
-    private var stillAsking = false
+    private var wallAsking = false
 
-    fun askStill() {
-        if (still != null || stillAsking) return
-        stillAsking = true
+    fun askWall() {
+        if (wall.isNotEmpty() || wallAsking) return
+        wallAsking = true
         viewModelScope.launch {
-            still =
+            wall =
                 try {
-                    session.ops.firstRunStill()
+                    session.ops.firstRunWall()
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
-                    CoreLog.w("first-run still: ${CoreLog.describe(e)}")
-                    null
+                    CoreLog.w("first-run wall: ${CoreLog.describe(e)}")
+                    emptyList()
                 } finally {
-                    stillAsking = false
+                    wallAsking = false
                 }
         }
     }
+
+    /** The wall's drift, kept for the run: back on Welcome it goes on where it stopped. */
+    val drift = WallDrift()
+
+    /** A first-run join opened Who's watching? over the wall, until a profile is picked. */
+    var who by mutableStateOf(false)
+
+    /** The provider of a first-run sign-in, for Who's watching?'s line; memory only. */
+    var joinedWith: String? = null
+
+    /** Who's watching?'s Add profile: the create form opens once the app shows (it is today's page). */
+    var addProfile by mutableStateOf(false)
+
+    /** Make your first profile's and the setup sheet's writes, shared by the setup sheet and Import after it. */
+    val firstProfile = FirstProfileStep(session.ops, viewModelScope)
+    val setup = FirstSetup(session.ops, viewModelScope)
 
     private var homeView: HomeView? = null
 
@@ -163,6 +180,7 @@ class AppState(
         resetProfile(resetAt, home = false)
         sentHome = true
         start = Start.Onboarding
+        askWall()
     }
 
     /** Onboarding is done: a restart from here on opens Home, not onboarding again. */
@@ -194,6 +212,8 @@ class AppState(
             mainAtLimit.cancel()
             // A switch or a lock meanwhile (a lock at start) already chose Home for the next profile.
             if (!sentHome) start = decided
+            // First run's wall is asked at once, and only then: never on an ordinary start.
+            if (start == Start.Onboarding) askWall()
         }
     }
 

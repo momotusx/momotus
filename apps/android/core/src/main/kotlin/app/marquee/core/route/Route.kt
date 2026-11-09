@@ -10,8 +10,17 @@ import kotlinx.serialization.Serializable
  */
 @Serializable
 sealed interface Route : NavKey {
+    /** First run's first screen (plans/first-screens.md 3.2): over the drifting wall. */
     @Serializable
-    data object Onboarding : Route
+    data object Welcome : Route
+
+    /** First run's Make your first profile (3.4): names the owner profile every device has, never a new one. */
+    @Serializable
+    data object FirstProfile : Route
+
+    /** First run's one-page setup (3.5): Stremio or fresh, how to pick what to play, subtitles. */
+    @Serializable
+    data object Setup : Route
 
     @Serializable
     data object Home : Route
@@ -52,12 +61,14 @@ sealed interface Route : NavKey {
     data object Pairing : Route
 
     /**
-     * A phone's sign-in (plans/accounts.md 4.1): the providers, Other ways, Not now. [firstRun] from the first
-     * screen; else from Account or a scan asked for before this device had an account.
+     * A phone's sign-in (plans/accounts.md 4.1): the providers, Other ways, Not now. [firstRun] from first run; else
+     * from Account or a scan asked for before this device had an account. [returning]: from "I already use Momotus",
+     * another device's way first (plans/first-screens.md 3.3).
      */
     @Serializable
     data class SignIn(
         val firstRun: Boolean,
+        val returning: Boolean = false,
     ) : Route
 
     /** A TV's first run (4.2): Sign in with your phone, its pairing code and six digits. */
@@ -107,14 +118,6 @@ sealed interface Route : NavKey {
     /** How Marquee picks the version to play (plans/m13-stream-choice.md 4.4). */
     @Serializable
     data object StreamChoice : Route
-
-    /** The one question of a first run, after the recommended addons: start fast or best quality (4.5). */
-    @Serializable
-    data object StreamQuestion : Route
-
-    /** A first run's subtitles step, after the question: the language subtitles start in. */
-    @Serializable
-    data object SubtitleLanguage : Route
 
     /**
      * "Add a source" from a title: the link field first, then the source addons. Pushed over the
@@ -227,6 +230,7 @@ val Route.openToKids: Boolean
             Route.Discover, Route.Calendar, Route.Import, Route.Pairing, Route.TvSignIn, Route.Sync,
             Route.RecoveryKit, Route.SyncFork, Route.Debrid, Route.Trakt, Route.HomeRows, Route.Sources,
             Route.Addons, Route.FindAddons, Route.Plugins, Route.PluginDirectory, Route.ManageProfiles,
+            Route.Welcome, Route.FirstProfile, Route.Setup,
             -> false
 
             is Route.Defaults, is Route.SignIn, is Route.SyncJoin, is Route.ReportLost, is Route.EditProfile -> false
@@ -274,10 +278,10 @@ fun linkedTo(
 /** Where the recommended addons step was opened from, which decides its rows and where it goes next. */
 @Serializable
 enum class DefaultsMode {
-    /** First run (Start fresh, Browse first) or setup from an empty Home: every row, then Home. */
+    /** First run's setup sheet (Start watching, Skip; plans/first-screens.md 3.5): every row as it starts. */
     FirstRun,
 
-    /** After a Stremio import: the ones it brought say so instead of a switch, then Home. */
+    /** After first run's Stremio import: the ones it brought keep how they are, the others go in. */
     AfterImport,
 
     /** The Home card's Review: the missing ones only, then back. */

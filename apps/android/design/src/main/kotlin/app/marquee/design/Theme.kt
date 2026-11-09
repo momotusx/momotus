@@ -63,13 +63,20 @@ object Marquee {
         get() = if (LocalReducedMotion.current) 0 else Tokens.PANEL_MS
 }
 
-/** Animations are off when the system animator scale is zero (Developer options, accessibility). */
+/**
+ * A debug walk's `reduceMotion` launch extra (plans/first-screens.md 10): reduced motion without changing the
+ * device's settings. Set once by the activity of a debuggable build, before the first frame.
+ */
+var launchReducedMotion = false
+
+/** Animations are off when the system animator scale is zero (Developer options), or by [launchReducedMotion]. */
 @Composable
 fun rememberReducedMotion(): Boolean {
     val resolver = LocalContext.current.contentResolver
     return remember(resolver) {
-        runCatching { Settings.Global.getFloat(resolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f) == 0f }
-            .getOrDefault(false)
+        launchReducedMotion ||
+            runCatching { Settings.Global.getFloat(resolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f) == 0f }
+                .getOrDefault(false)
     }
 }
 

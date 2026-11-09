@@ -51,7 +51,7 @@ class RouteTest {
 
     @Test
     fun `a stack that does not start at Home keeps its own root`() {
-        assertEquals(listOf(Route.Onboarding, Route.Search), switchedTo(listOf(Route.Onboarding), Route.Search))
+        assertEquals(listOf(Route.Welcome, Route.Search), switchedTo(listOf(Route.Welcome), Route.Search))
     }
 
     @Test
@@ -60,7 +60,7 @@ class RouteTest {
         assertTrue(Route.Calendar.isTopLevel)
         assertTrue(Route.Settings.isTopLevel)
         assertFalse(title.isTopLevel)
-        assertFalse(Route.Onboarding.isTopLevel)
+        assertFalse(Route.Welcome.isTopLevel)
     }
 
     @Test
@@ -81,7 +81,7 @@ class RouteTest {
             )
         assertTrue(pushed.all { it.hasBackLink })
         assertFalse(Route.SettingsSection("Sources").isTopLevel)
-        assertFalse(listOf(Route.Home, Route.Settings, Route.Onboarding, player, Route.Sync).any { it.hasBackLink })
+        assertFalse(listOf(Route.Home, Route.Settings, Route.Welcome, player, Route.Sync).any { it.hasBackLink })
     }
 
     private fun tile(id: String) = Tile(id = id, kind = "movie", name = id, posterShape = "poster")

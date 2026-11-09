@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
@@ -81,6 +82,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import app.marquee.core.AccountRules
 import app.marquee.core.ErrorCopy
+import app.marquee.core.FirstRunCopy
 import app.marquee.core.ProfileCopy
 import app.marquee.core.client.CoreError
 import app.marquee.core.model.ProfileInfo
@@ -566,11 +568,18 @@ fun PickerScreen(
     onBack: () -> Unit = {},
     onAdd: (() -> Unit)? = null,
     onManage: (() -> Unit)? = null,
+    /** First run's Who's watching? (plans/first-screens.md 3.4): a sheet over the still wall, its [line] under the title. */
+    sheet: Boolean = false,
+    line: String? = null,
 ) {
     val tv = Marquee.form == Form.Tv
     val colors = Marquee.colors
     val scope = rememberCoroutineScope()
     val s = gate.snapshot ?: return
+    // A keypad or a wait inside the sheet when first run draws it, else as the page has it.
+    val sheeted: @Composable (@Composable ColumnScope.() -> Unit) -> Unit = { c ->
+        if (sheet) FirstSheet(null, width = 760.dp, body = c) else Column(content = c)
+    }
     val locked = s.locked
     val me = s.profiles.firstOrNull { it.id == s.active }
     val owner = me?.isOwner == true
@@ -701,89 +710,91 @@ fun PickerScreen(
     }
 
     Box(
-        Modifier
-            .fillMaxSize()
-            .background(colors.bg)
-            .verticalScroll(rememberScrollState())
-            .padding(
-                start = Marquee.safe.side,
-                end = Marquee.safe.side,
-                // Under the status bar and the back link's row when the shell draws one, where the page scrolls.
-                top = maxOf(if (tv) 64.dp else 48.dp, pageTop()),
-                bottom = if (tv) 64.dp else 48.dp,
-            ),
+        if (sheet) {
+            Modifier.fillMaxSize()
+        } else {
+            Modifier
+                .fillMaxSize()
+                .background(colors.bg)
+                .verticalScroll(rememberScrollState())
+                .padding(
+                    start = Marquee.safe.side,
+                    end = Marquee.safe.side,
+                    // Under the status bar and the back link's row when the shell draws one, where the page scrolls.
+                    top = maxOf(if (tv) 64.dp else 48.dp, pageTop()),
+                    bottom = if (tv) 64.dp else 48.dp,
+                )
+        },
         contentAlignment = Alignment.Center,
     ) {
         if (chosen != null && target == ProfileCopy.INCOGNITO) {
-            Keypad(
-                title = ProfileCopy.incognitoPinTitle(chosen.name),
-                onSubmit = ::enterIncognito,
-                onCancel = {
-                    if (picked != null && picked == asked) {
-                        onBack()
-                    } else {
-                        picked = null
-                        if (gate.switching != null) gate.cancelSwitch()
-                    }
-                },
-                lede = ProfileCopy.INCOGNITO_KIDS_REASON.takeIf { ProfileCopy.incognitoKidsReason(s) },
-                cancelLabel = if (picked != null && picked == asked) "Cancel" else "Choose another profile",
-                initialProblem = gate.switchProblem?.takeIf { gate.switching == target }?.let(::tried),
-            )
+            sheeted {
+                Keypad(
+                    title = ProfileCopy.incognitoPinTitle(chosen.name),
+                    onSubmit = ::enterIncognito,
+                    onCancel = {
+                        if (picked != null && picked == asked) {
+                            onBack()
+                        } else {
+                            picked = null
+                            if (gate.switching != null) gate.cancelSwitch()
+                        }
+                    },
+                    lede = ProfileCopy.INCOGNITO_KIDS_REASON.takeIf { ProfileCopy.incognitoKidsReason(s) },
+                    cancelLabel = if (picked != null && picked == asked) "Cancel" else "Choose another profile",
+                    initialProblem = gate.switchProblem?.takeIf { gate.switching == target }?.let(::tried),
+                )
+            }
             return@Box
         }
         if (chosen != null) {
             val problem = gate.switchProblem?.takeIf { gate.switching == chosen.id }
-            Keypad(
-                title = "Enter the PIN for ${chosen.name}",
-                onSubmit = { pin -> enter(chosen, pin) },
-                onCancel = {
-                    if (picked != null && picked == asked) {
-                        onBack()
-                    } else {
-                        picked = null
-                        if (gate.switching != null) gate.cancelSwitch()
-                    }
-                },
-                // Opened by the bar's menu: Cancel goes back where the menu was, not to the tiles.
-                cancelLabel = if (picked != null && picked == asked) "Cancel" else "Choose another profile",
-                extra =
-                    if (chosen.isOwner) {
-                        (
-                            {
-                                ForgotPin(
-                                    gate,
-                                    session,
-                                    chosen,
-                                    locked && chosen.id == s.active,
-                                )
-                            }
-                        )
-                    } else {
-                        null
+            sheeted {
+                Keypad(
+                    title = "Enter the PIN for ${chosen.name}",
+                    onSubmit = { pin -> enter(chosen, pin) },
+                    onCancel = {
+                        if (picked != null && picked == asked) {
+                            onBack()
+                        } else {
+                            picked = null
+                            if (gate.switching != null) gate.cancelSwitch()
+                        }
                     },
-                initialProblem = problem?.let(::tried),
-            )
-            return@Box
-        }
-        if (gate.switching != null && gate.switchProblem == null) {
-            if (gate.switching == ProfileCopy.INCOGNITO) {
-                StatusWord(ProfileCopy.INCOGNITO_OPENING, Status.Warn)
-            } else {
-                val name = s.profiles.firstOrNull { it.id == gate.switching }?.name ?: "the profile"
-                StatusWord("Opening $name", Status.Warn)
+                    // Opened by the bar's menu: Cancel goes back where the menu was, not to the tiles.
+                    cancelLabel = if (picked != null && picked == asked) "Cancel" else "Choose another profile",
+                    extra =
+                        if (chosen.isOwner) {
+                            (
+                                {
+                                    ForgotPin(
+                                        gate,
+                                        session,
+                                        chosen,
+                                        locked && chosen.id == s.active,
+                                    )
+                                }
+                            )
+                        } else {
+                            null
+                        },
+                    initialProblem = problem?.let(::tried),
+                )
             }
             return@Box
         }
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(if (tv) 28.dp else 20.dp),
-        ) {
-            MqText(
-                "Who's watching?",
-                role = if (tv) TextRole.Title1 else TextRole.Title2,
-                weight = FontWeight.ExtraBold,
-            )
+        if (gate.switching != null && gate.switchProblem == null) {
+            sheeted {
+                if (gate.switching == ProfileCopy.INCOGNITO) {
+                    StatusWord(ProfileCopy.INCOGNITO_OPENING, Status.Warn)
+                } else {
+                    val name = s.profiles.firstOrNull { it.id == gate.switching }?.name ?: "the profile"
+                    StatusWord("Opening $name", Status.Warn)
+                }
+            }
+            return@Box
+        }
+        val tiles: @Composable ColumnScope.() -> Unit = {
             // Only a profile with a PIN is locked (plans/batch-10-incognito.md 5.4): a Leave to the chooser from a
             // host without one says nothing of a lock.
             if (locked && me?.hasPin == true) {
@@ -813,10 +824,13 @@ fun PickerScreen(
                         active = p.id == s.active,
                         modifier = if (p.id == focusId) Modifier.focusRequester(first) else Modifier,
                         onClick = { pick(p) },
+                        avatar = if (sheet) (if (tv) 104.dp else 84.dp) else null,
+                        line = FirstRunCopy.WHO_KIDS.takeIf { sheet && tv && p.kids },
                     )
                 }
-                // Incognito after the profiles, before Add profile; never a way out of a kids session (5.1).
-                if (!(s.kids && !locked)) {
+                // Incognito after the profiles, before Add profile; never a way out of a kids session (5.1), nor on first
+                // run's sheet.
+                if (!(s.kids && !locked) && !sheet) {
                     QuietTile(
                         "Incognito",
                         Icons.HatGlasses,
@@ -849,6 +863,21 @@ fun PickerScreen(
             }
             if (onManage != null && owner && !locked) SecondaryButton("Manage profiles", onManage)
         }
+        if (sheet) {
+            FirstSheet(FirstRunCopy.WHO_TITLE, width = 760.dp, line = line, body = tiles)
+        } else {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(if (tv) 28.dp else 20.dp),
+            ) {
+                MqText(
+                    "Who's watching?",
+                    role = if (tv) TextRole.Title1 else TextRole.Title2,
+                    weight = FontWeight.ExtraBold,
+                )
+                tiles()
+            }
+        }
         LaunchedEffect(Unit) {
             if (tv) focusSoon(first)
         }
@@ -863,10 +892,13 @@ internal fun ProfileTile(
     onClick: () -> Unit,
     /** Shows the focused look without focus (screenshots, tests). */
     forceFocus: Boolean = false,
+    /** First run's sheet: a smaller avatar (84, TV 104), and the kids line under the name on TV. */
+    avatar: Dp? = null,
+    line: String? = null,
 ) {
     val tv = Marquee.form == Form.Tv
     val colors = Marquee.colors
-    val size = if (tv) 168.dp else 112.dp
+    val size = avatar ?: if (tv) 168.dp else 112.dp
     var hasFocus by remember { mutableStateOf(false) }
     // The ring follows the tile's focus on every form; the white and the name's brightening on TV only.
     val look = hasFocus || forceFocus
@@ -905,6 +937,7 @@ internal fun ProfileTile(
             if (p.hasPin && !p.syncing) MqIcon(Icons.Lock, tint = colors.dim, size = if (tv) 22.dp else 16.dp)
         }
         if (p.syncing) MqText("Syncing", role = TextRole.Caption, color = colors.dim)
+        line?.let { MqText(it, role = TextRole.Caption, color = if (focused) colors.text else colors.muted) }
     }
 }
 

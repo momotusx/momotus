@@ -5,7 +5,6 @@ import android.content.Intent
 import android.net.Uri
 import app.marquee.core.AccountCopy
 import app.marquee.core.route.Route
-import app.marquee.design.Form
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -53,10 +52,12 @@ class AccountLinkTest {
     }
 
     @Test
-    fun `a first run opens the sign-in over the doors where a sync service is known`() {
-        assertEquals(listOf(Route.Onboarding), firstRun("", Form.Phone), "no service: the doors")
-        assertEquals(listOf(Route.Onboarding, Route.SignIn(firstRun = true)), firstRun("sync.example.org", Form.Phone))
-        assertEquals(listOf(Route.Onboarding, Route.TvSignIn), firstRun("sync.example.org", Form.Tv))
+    fun `a first run opens on Welcome, or resumes at the profile form or setup`() {
+        val fresh = firstState(null, "sync.example.org", joined = false)
+        assertEquals(listOf(Route.Welcome), FirstRunNav.initial(fresh))
+        assertEquals(listOf(Route.Welcome), FirstRunNav.initial(fresh.copy(server = false)))
+        assertEquals(listOf(Route.FirstProfile), FirstRunNav.initial(fresh.copy(inAccount = true)))
+        assertEquals(listOf(Route.Setup), FirstRunNav.initial(fresh.copy(profileStepDone = true)))
     }
 
     @Test

@@ -1,35 +1,39 @@
 package app.marquee.android
 
-import android.graphics.Bitmap
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
+import android.content.Context
+import android.os.SystemClock
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.draggable
+import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
-import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.asPaddingValues
-import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -37,673 +41,941 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.BiasAlignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalConfiguration
-import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
-import androidx.compose.ui.semantics.isTraversalGroup
 import androidx.compose.ui.semantics.paneTitle
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import androidx.navigation3.runtime.NavKey
 import app.marquee.core.DefaultsCopy
 import app.marquee.core.DefaultsStep
+import app.marquee.core.FirstRun
+import app.marquee.core.FirstRunCopy
+import app.marquee.core.FirstSetup
+import app.marquee.core.LanguagePicks
+import app.marquee.core.ProfileCopy
 import app.marquee.core.StreamChoiceCopy
-import app.marquee.core.StreamChoiceSettings
-import app.marquee.core.SubtitleStep
+import app.marquee.core.client.CoreLog
 import app.marquee.core.model.DefaultAddonInfo
 import app.marquee.core.model.DefaultAddons
 import app.marquee.core.model.DefaultInstalled
-import app.marquee.core.model.FirstRunStill
+import app.marquee.core.model.LanguageChoice
 import app.marquee.core.model.Prefs
+import app.marquee.core.model.ProfileInfo
 import app.marquee.core.route.DefaultsMode
+import app.marquee.core.route.Route
 import app.marquee.core.session.CoreSession
+import app.marquee.design.AvatarArt
 import app.marquee.design.BrandLockup
 import app.marquee.design.FocusInk
 import app.marquee.design.Form
 import app.marquee.design.Icons
-import app.marquee.design.KeyPresses
 import app.marquee.design.LiveSpoken
 import app.marquee.design.MarkTile
 import app.marquee.design.Marquee
 import app.marquee.design.MqIcon
 import app.marquee.design.MqText
+import app.marquee.design.MqTextField
+import app.marquee.design.PosterWall
 import app.marquee.design.PrimaryButton
 import app.marquee.design.SecondaryButton
+import app.marquee.design.Spinner
 import app.marquee.design.StateMessage
 import app.marquee.design.Status
 import app.marquee.design.StatusWord
 import app.marquee.design.SwitchRow
 import app.marquee.design.TextRole
 import app.marquee.design.Tokens
+import app.marquee.design.WallDrift
+import app.marquee.design.avatarColor
 import app.marquee.design.focusClickable
 import app.marquee.design.focusPalette
 import app.marquee.design.focusSelectable
-import app.marquee.design.focusSoon
 import app.marquee.design.marqueeFocus
-import coil3.compose.AsyncImage
-import coil3.compose.LocalPlatformContext
-import coil3.request.ImageRequest
-import coil3.request.transformations
-import coil3.transform.Transformation
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
-import kotlin.math.abs
+
+// First run, Poster Wall (plans/first-screens.md, design/exploration/first-screens/round2.html combo A): Welcome over
+// the drifting wall, then sheets over the same wall held still: Login, Make your first profile, the one-page setup,
+// then Home. The order is FirstRun.next's; FirstRunNav applies it to the back stack.
 
 /**
- * A new user's first screen, one decision: how to begin. "I use Stremio" brings a library over (only
- * offered when [onImport] is given), "Start fresh" and "Browse first" open the recommended addons
- * ([onDefaults]), and "I already use Marquee" joins that device's sync account (only offered when
- * [onPair] is given). Nothing is typed here, and nothing is installed before the addons step.
+ * First run's order on the back stack: [FirstRun.next] over the app's [state], each step pushed so Back follows
+ * plans/first-screens.md 5 (an account made here makes the profile form the root, so Back leaves the app).
  */
-@Composable
-fun OnboardingScreen(
-    onDefaults: () -> Unit,
-    onImport: (() -> Unit)? = null,
-    onPair: (() -> Unit)? = null,
-    /** The still behind the step (V1); null keeps it black. */
-    still: FirstRunStill? = null,
+internal class FirstRunNav(
+    private val stack: MutableList<NavKey>,
+    private val tv: Boolean,
+    private val state: () -> FirstRun.State,
+    private val onHome: () -> Unit,
+    private val onWho: () -> Unit,
 ) {
-    val first = remember { FocusRequester() }
-    AutoFocus(first)
-    FramedPage(
-        1,
-        "Browse first",
-        onDefaults,
-        null,
-        still,
-        "How would you like to begin?",
-        "No account needed. Everything stays on this device until you turn on sync.",
-    ) {
-        Doors {
-            onImport?.let {
-                Door(
-                    "I use Stremio",
-                    "Bring your addons, library and Continue Watching over with a code.",
-                    Icons.DoorOpen,
-                    it,
-                    first,
+    fun go(after: FirstRun.After) {
+        when (FirstRun.next(state(), after)) {
+            FirstRun.Step.Login -> {
+                stack.add(
+                    if (tv) {
+                        Route.TvSignIn
+                    } else {
+                        Route.SignIn(
+                            firstRun = true,
+                            returning =
+                                after == FirstRun.After.AlreadyUse,
+                        )
+                    },
                 )
             }
-            Door(
-                "Start fresh",
-                "Choose from the recommended addons, then start watching.",
-                Icons.Sparkles,
-                onDefaults,
-                first.takeIf { onImport == null },
-            )
-            onPair?.let {
-                Door(
-                    "I already use Momotus",
-                    "Join your other device's sync account with a code. Library and addons follow.",
-                    Icons.QrCode,
-                    it,
-                    null,
-                )
+
+            FirstRun.Step.Profile -> {
+                if (after == FirstRun.After.Created) stack.clear()
+                stack.add(Route.FirstProfile)
+            }
+
+            FirstRun.Step.Setup -> {
+                stack.add(Route.Setup)
+            }
+
+            FirstRun.Step.Home -> {
+                onHome()
+            }
+
+            FirstRun.Step.Who -> {
+                onWho()
+            }
+
+            FirstRun.Step.Welcome, FirstRun.Step.None -> {
+                Unit
             }
         }
     }
+
+    /** Start watching or Skip went through: the Import sheet when the Stremio library comes, else Home. */
+    fun setupDone(import: Boolean) {
+        if (import) stack.add(Route.Import) else onHome()
+    }
+
+    companion object {
+        /** The stack a (re)start opens on while the profile is fresh. */
+        fun initial(s: FirstRun.State): List<Route> =
+            listOf(
+                when (FirstRun.next(s, FirstRun.After.Start)) {
+                    FirstRun.Step.Profile -> Route.FirstProfile
+                    FirstRun.Step.Setup -> Route.Setup
+                    else -> Route.Welcome
+                },
+            )
+    }
 }
 
-/** The doors, stacked in the step's block on every form. */
+/** Welcome's Pause motion, kept on this device and never synced. */
+internal object WallPause {
+    private const val PREFS = "first-wall"
+
+    fun on(context: Context): Boolean =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean("paused", false)
+
+    fun set(
+        context: Context,
+        on: Boolean,
+    ) = context
+        .getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        .edit()
+        .putBoolean("paused", on)
+        .apply()
+}
+
+/**
+ * The wall with the walk build's line (plans/first-screens.md 3.1, 9): `first-wall poster <ms> tiles6s <n>/<tiles>`,
+ * the time from its first frame to its first poster and the tiles filled at 6 s (of every first-copy tile).
+ */
 @Composable
-private fun Doors(doors: @Composable ColumnScope.() -> Unit) {
-    Column(
-        Modifier.fillMaxWidth().semantics { isTraversalGroup = true },
-        verticalArrangement = Arrangement.spacedBy(if (Marquee.form == Form.Tv) 12.dp else 10.dp),
-        content = doors,
+internal fun FirstWall(
+    posters: List<String>,
+    drift: WallDrift,
+    sheet: Boolean,
+) {
+    val walk = BuildConfig.WALK
+    val shown = remember { SystemClock.elapsedRealtime() }
+    val seen = remember { longArrayOf(-1L, 0L) }
+    val tiles = if (Marquee.form == Form.Tv) 9 * 6 else 4 * 6
+    if (walk) {
+        LaunchedEffect(Unit) {
+            delay(6_000)
+            CoreLog.d("first-wall poster ${seen[0].takeIf { it >= 0 } ?: "none"} tiles6s ${seen[1]}/$tiles")
+        }
+    }
+    PosterWall(
+        posters,
+        drift,
+        sheet,
+        onPoster =
+            if (walk) {
+                {
+                    if (seen[0] < 0) seen[0] = SystemClock.elapsedRealtime() - shown
+                    seen[1]++
+                }
+            } else {
+                null
+            },
     )
 }
 
 /**
- * A first-run question step (V1 Full Bleed, the owner's pick of 2026-10-30, design/exploration/onboarding-v2): one
- * still fills the screen behind the step's header and its block, the question (a heading), its lead line, the
- * choices ([bar]) and [foot]. The phone keeps the block at the foot on a ramp rising into black, the still showing
- * above; TV and wide windows keep it in a column at the lower left over Apple's wash. A block taller than the screen
- * scrolls, the still staying behind. With no still the screen stays black.
+ * A first-run sheet over the still wall (round2.html `.sheet`): on the phone a bottom sheet (radius 30, the grabber
+ * when [onDrag] is given, a drag down going back), on TV a centered sheet [width] wide. Its title is a heading and
+ * names the pane; [corner] sits at its right (Not now, Skip). The body scrolls and [foot] stays in sight under it,
+ * above the keyboard.
  */
 @Composable
-private fun FramedPage(
-    step: Int,
-    skip: String,
-    onSkip: () -> Unit,
-    onBack: (() -> Unit)?,
-    still: FirstRunStill?,
-    question: String,
-    lead: String,
+internal fun FirstSheet(
+    title: String?,
+    modifier: Modifier = Modifier,
+    width: Dp = 980.dp,
+    corner: (@Composable () -> Unit)? = null,
+    line: String? = null,
+    onDrag: (() -> Unit)? = null,
+    scroll: Boolean = true,
+    pad: Boolean = true,
     foot: (@Composable () -> Unit)? = null,
-    bar: @Composable ColumnScope.() -> Unit,
+    body: @Composable ColumnScope.() -> Unit,
 ) {
     val tv = Marquee.form == Form.Tv
-    BoxWithConstraints(
-        Modifier
+    val side = if (tv) 48.dp else 20.dp
+    val shape =
+        if (tv) {
+            RoundedCornerShape(
+                28.dp,
+            )
+        } else {
+            RoundedCornerShape(topStart = Tokens.sheetRadius, topEnd = Tokens.sheetRadius)
+        }
+    Box(
+        modifier
             .fillMaxSize()
-            .background(Color.Black)
-            // A step change is announced by its question (TalkBack reads a new pane by its title).
-            .semantics { paneTitle = question }
-            .testTag(FILM_FRAME),
+            .then(
+                if (tv) {
+                    Modifier.padding(vertical = Marquee.safe.top, horizontal = Marquee.safe.side)
+                } else {
+                    Modifier.windowInsetsPadding(
+                        WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal),
+                    )
+                },
+            ),
+        contentAlignment = if (tv) Alignment.Center else Alignment.BottomCenter,
     ) {
-        val wide = tv || (maxWidth >= 840.dp && maxHeight >= 480.dp)
-        val side =
-            when {
-                tv -> Marquee.safe.side
-                wide -> 56.dp
-                else -> 16.dp
+        Column(
+            Modifier
+                .then(if (tv) Modifier.widthIn(max = width) else Modifier.fillMaxWidth().padding(top = 24.dp))
+                .clip(shape)
+                .background(Tokens.sheetFill)
+                .semantics { title?.let { paneTitle = it } }
+                .then(if (tv) Modifier else Modifier.windowInsetsPadding(WindowInsets.navigationBars).imePadding())
+                .padding(top = if (tv) 36.dp else 10.dp, bottom = if (tv) 40.dp else 24.dp),
+        ) {
+            if (onDrag != null && !tv) Grabber(onDrag)
+            if (title != null || corner != null) {
+                Row(
+                    Modifier.fillMaxWidth().padding(horizontal = side),
+                    horizontalArrangement = Arrangement.spacedBy(Marquee.space.s),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    MqText(
+                        title.orEmpty(),
+                        Modifier.weight(1f).semantics { heading() },
+                        role = if (tv) TextRole.Title1 else TextRole.Title2,
+                        color = Color.White,
+                        weight = FontWeight.Bold,
+                    )
+                    corner?.invoke()
+                }
             }
-        val column = if (tv) 840.dp else 580.dp
-        Still(still, wide, side + minOf(column, maxWidth - side * 2))
-        val bottom = if (tv) Marquee.safe.bottom else 34.dp
-        val below = bottom + WindowInsets.systemBars.asPaddingValues().calculateBottomPadding()
+            line?.let {
+                MqText(
+                    it,
+                    Modifier.padding(horizontal = side).padding(top = 6.dp),
+                    role = TextRole.Callout,
+                    color = Marquee.colors.muted,
+                )
+            }
+            Column(
+                Modifier
+                    .weight(1f, fill = false)
+                    .then(if (scroll) Modifier.verticalScroll(rememberScrollState()) else Modifier)
+                    .padding(horizontal = if (pad) side else 0.dp)
+                    .padding(top = if (tv) 26.dp else 18.dp),
+                content = body,
+            )
+            foot?.let { Box(Modifier.padding(horizontal = side).padding(top = 16.dp)) { it() } }
+        }
+    }
+}
+
+/** The phone sheet's grabber: a drag down of 48 dp goes back; Back does the same, so it is not read out. */
+@Composable
+private fun ColumnScope.Grabber(onDrag: () -> Unit) {
+    var dragged by remember { mutableStateOf(0f) }
+    val far = with(LocalDensity.current) { 48.dp.toPx() }
+    Box(
+        Modifier
+            .align(Alignment.CenterHorizontally)
+            .size(width = 96.dp, height = 24.dp)
+            .clearAndSetSemantics { }
+            .draggable(
+                rememberDraggableState { dragged += it },
+                Orientation.Vertical,
+                onDragStarted = { dragged = 0f },
+                onDragStopped = { if (dragged > far) onDrag() },
+            ),
+        contentAlignment = Alignment.Center,
+    ) { Box(Modifier.size(40.dp, 5.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.3f))) }
+}
+
+/** A sheet's text action at its top right (Not now, Skip): 48 dp tall, the key colour; white with dark words on TV focus. */
+@Composable
+internal fun SheetLink(
+    label: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    focusRequester: FocusRequester? = null,
+) {
+    var focused by remember { mutableStateOf(false) }
+    val tv = Marquee.form == Form.Tv
+    val lit = focused && tv
+    Box(
+        modifier
+            .heightIn(min = 48.dp)
+            .widthIn(min = 48.dp)
+            .then(focusRequester?.let { Modifier.focusRequester(it) } ?: Modifier)
+            .marqueeFocus(Marquee.radius.m)
+            .onFocusChanged { focused = it.isFocused }
+            .clip(RoundedCornerShape(Marquee.radius.m))
+            .background(if (lit) Marquee.colors.primary else Color.Transparent)
+            .focusClickable(onClick, Role.Button)
+            .padding(horizontal = Marquee.space.s),
+        contentAlignment = Alignment.Center,
+    ) {
+        MqText(
+            label,
+            role = TextRole.Headline,
+            weight = FontWeight.SemiBold,
+            color =
+                when {
+                    lit -> Marquee.colors.onPrimary
+                    tv -> Color.White
+                    else -> Marquee.colors.key
+                },
+        )
+    }
+}
+
+/**
+ * Welcome (3.2): the lockup, the line, the lead and the two ways in over the drifting wall, on a ramp into black; the
+ * Pause motion toggle at the top right. [onAlreadyUse] null: no sync server, no "I already use Momotus". TV centers a
+ * 760 block with the buttons in a row, Get started focused.
+ */
+@Composable
+internal fun WelcomeScreen(
+    drift: WallDrift,
+    onGetStarted: () -> Unit,
+    onAlreadyUse: (() -> Unit)?,
+) {
+    val tv = Marquee.form == Form.Tv
+    val go = remember { FocusRequester() }
+    AutoFocus(go)
+    BoxWithConstraints(Modifier.fillMaxSize().semantics { paneTitle = FirstRunCopy.WELCOME_TITLE }) {
+        Box(Modifier.matchParentSize().background(Brush.verticalGradient(*welcomeShade(tv))))
         Column(
             Modifier
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
                 .heightIn(min = maxHeight)
-                .windowInsetsPadding(WindowInsets.systemBars)
-                .padding(start = side, end = side, top = Marquee.safe.top, bottom = bottom),
+                .windowInsetsPadding(WindowInsets.safeDrawing)
+                .padding(
+                    start = if (tv) Marquee.safe.side else 24.dp,
+                    end = if (tv) Marquee.safe.side else 24.dp,
+                    top = if (tv) Marquee.safe.top else 4.dp,
+                    bottom = if (tv) Marquee.safe.bottom else 40.dp,
+                ),
             verticalArrangement = Arrangement.SpaceBetween,
+            horizontalAlignment = if (tv) Alignment.CenterHorizontally else Alignment.Start,
         ) {
-            // Over the art the header's words are white: the wash under the header is there for them.
-            FocusInk(Marquee.colors.copy(muted = Color.White, dim = Color.White)) {
-                StepHeader(step, skip, onSkip, onBack, Modifier.testTag(STEP_HEADER))
-            }
+            Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) { MotionToggle(drift) }
             Column(
-                Modifier
-                    .padding(top = Marquee.space.m)
-                    .then(if (wide) Modifier.widthIn(max = column) else Modifier)
-                    .fillMaxWidth()
-                    .then(if (wide) Modifier else Modifier.ramp(side, below))
-                    .testTag(FILM_BAR),
+                Modifier.padding(top = Marquee.space.l).then(if (tv) Modifier.widthIn(max = 760.dp) else Modifier),
+                horizontalAlignment = if (tv) Alignment.CenterHorizontally else Alignment.Start,
             ) {
+                BrandLockup(if (tv) 64.dp else 52.dp)
                 MqText(
-                    question,
-                    Modifier.semantics { heading() },
-                    role = TextRole.Hero,
+                    FirstRunCopy.WELCOME_TITLE,
+                    Modifier.padding(top = 22.dp).semantics { heading() },
+                    role = if (tv) TextRole.Hero else TextRole.Title1,
                     color = Color.White,
                     weight = FontWeight.Bold,
+                    textAlign = if (tv) TextAlign.Center else null,
                 )
                 MqText(
-                    lead,
-                    Modifier.padding(top = if (wide) 14.dp else 10.dp),
-                    role = if (tv) TextRole.Body else TextRole.Callout,
+                    FirstRunCopy.WELCOME_LEAD,
+                    Modifier.padding(top = 12.dp),
+                    role = if (tv) TextRole.Title3 else TextRole.Body,
                     color = Marquee.colors.muted,
+                    textAlign = if (tv) TextAlign.Center else null,
                 )
-                Column(
-                    Modifier.padding(top = if (wide) 34.dp else 22.dp),
-                    verticalArrangement = Arrangement.spacedBy(Marquee.space.s),
-                    content = bar,
-                )
-                foot?.let { Box(Modifier.padding(top = 14.dp)) { it() } }
+                if (tv) {
+                    Row(Modifier.padding(top = 26.dp), horizontalArrangement = Arrangement.spacedBy(Marquee.space.s)) {
+                        PrimaryButton(
+                            FirstRunCopy.GET_STARTED,
+                            onGetStarted,
+                            Modifier.widthIn(min = 220.dp),
+                            big = true,
+                            focusRequester = go,
+                        )
+                        onAlreadyUse?.let {
+                            SecondaryButton(
+                                FirstRunCopy.ALREADY_USE,
+                                it,
+                                Modifier.widthIn(min = 220.dp),
+                                big = true,
+                            )
+                        }
+                    }
+                } else {
+                    Column(Modifier.padding(top = 26.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        PrimaryButton(
+                            FirstRunCopy.GET_STARTED,
+                            onGetStarted,
+                            Modifier.fillMaxWidth(),
+                            big = true,
+                            focusRequester = go,
+                        )
+                        onAlreadyUse?.let {
+                            SecondaryButton(
+                                FirstRunCopy.ALREADY_USE,
+                                it,
+                                Modifier.fillMaxWidth(),
+                                big = true,
+                            )
+                        }
+                    }
+                }
             }
         }
     }
 }
 
-/**
- * The phone's ramp under the step's block, over the still: clear 170 dp over the question, black 82 percent at its top
- * line, black from 135 dp under it down [below] past the block (the page's foot), [side] past either edge.
- */
-private fun Modifier.ramp(
-    side: Dp,
-    below: Dp,
-) = drawBehind {
-    val top = -170.dp.toPx()
-    drawRect(
-        Brush.verticalGradient(
-            0f to Color.Transparent,
-            170f / 305f to Color.Black.copy(alpha = 0.82f),
-            1f to Color.Black,
-            startY = top,
-            endY = top + 305.dp.toPx(),
-        ),
-        topLeft = Offset(-side.toPx(), top),
-        size = Size(size.width + 2 * side.toPx(), size.height - top + below.toPx()),
-    )
-}
-
-/**
- * The still behind the whole step, decorative, faded in by opacity, under its wash: on TV and wide windows Apple's
- * (from the leading edge, dark to 60 dp past the column's end at [columnEnd], from the foot and under the header), on
- * the phone one under the header. Every word over it keeps 4.5:1 over a white still. Black with none.
- */
+/** While a first-run join pulls the account (15 s at most): the sheet says so over the still wall (6). */
 @Composable
-private fun BoxScope.Still(
-    still: FirstRunStill?,
-    wide: Boolean,
-    columnEnd: Dp,
-) {
-    still?.let { s ->
-        var landed by remember(s.background) { mutableStateOf(false) }
-        val alpha by animateFloatAsState(if (landed) 1f else 0f, tween(Marquee.panelMs), label = "still")
-        AsyncImage(
-            model =
-                ImageRequest
-                    .Builder(LocalPlatformContext.current)
-                    .data(s.background)
-                    .transformations(TrimFlatEdges)
-                    .build(),
-            contentDescription = null,
-            contentScale = ContentScale.Crop,
-            alignment = if (wide) BiasAlignment(0.44f, -0.2f) else BiasAlignment(0.28f, 0f),
-            onSuccess = { landed = true },
-            modifier = Modifier.matchParentSize().graphicsLayer { this.alpha = alpha },
-        )
-    }
-    Box(
-        Modifier.matchParentSize().drawBehind {
-            val black = Color.Black
-            if (!wide) {
-                drawRect(
-                    Brush.verticalGradient(
-                        0f to black.copy(alpha = 0.72f),
-                        120f / 220f to black.copy(alpha = 0.66f),
-                        1f to Color.Transparent,
-                        endY = 220.dp.toPx(),
-                    ),
-                )
-                return@drawBehind
+internal fun GettingProfiles() {
+    Box(Modifier.fillMaxSize().background(Tokens.wallDimNoBlur)) {
+        FirstSheet(null, width = 760.dp) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(Marquee.space.s),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Spinner()
+                LiveSpoken(FirstRunCopy.GETTING_PROFILES) {
+                    MqText(FirstRunCopy.GETTING_PROFILES, role = TextRole.Headline, color = Color.White)
+                }
             }
-            val ltr = layoutDirection == LayoutDirection.Ltr
-            // A narrow wide window keeps its whole column dark: the 86 percent stop never falls inside it.
-            val dark = maxOf(0.5f, (columnEnd + 60.dp).toPx() / size.width).coerceAtMost(1f)
-            drawRect(
-                Brush.horizontalGradient(
-                    0f to black.copy(alpha = 0.92f),
-                    dark to black.copy(alpha = 0.86f),
-                    (dark + 0.28f).coerceAtMost(1f) to Color.Transparent,
-                    startX = if (ltr) 0f else size.width,
-                    endX = if (ltr) size.width else 0f,
-                ),
-            )
-            drawRect(Brush.verticalGradient(0.6f to Color.Transparent, 1f to black.copy(alpha = 0.7f)))
-            drawRect(
-                Brush.verticalGradient(
-                    0f to black.copy(alpha = 0.74f),
-                    0.2f to black.copy(alpha = 0.66f),
-                    0.36f to Color.Transparent,
-                ),
-            )
-        },
-    )
+        }
+    }
 }
 
-/** Crops the still's flat margin before the frame's crop ([trimFlatEdges]). */
-private object TrimFlatEdges : Transformation() {
-    override val cacheKey = "trimFlatEdges"
+/** Welcome's ramp into black (round2.html `.v1 .shade`), the TV's rising sooner under its centered block. */
+internal fun welcomeShade(tv: Boolean): Array<Pair<Float, Color>> =
+    if (tv) {
+        arrayOf(0f to black(0.2f), 0.3f to black(0.5f), 0.54f to black(0.9f), 0.72f to Color.Black)
+    } else {
+        arrayOf(0f to black(0.25f), 0.35f to black(0.45f), 0.66f to black(0.92f), 0.82f to Color.Black)
+    }
 
-    override suspend fun transform(
-        input: Bitmap,
-        size: coil3.size.Size,
-    ) = trimFlatEdges(input)
-}
+private fun black(alpha: Float) = Color.Black.copy(alpha = alpha)
 
-/**
- * [b] without its flat margin: the rows and columns at its edges in one colour, its corners' colour, such as a promo
- * collage's cream ground, which in the black film frame reads as a light strip. A framed picture has the same colour at
- * opposite corners; a side whose run reaches a third of the picture is the picture itself, not a margin, and stays.
- */
-internal fun trimFlatEdges(b: Bitmap): Bitmap {
-    val w = b.width
-    val h = b.height
-    val ground = b.getPixel(0, 0)
-
-    fun near(p: Int) =
-        abs(android.graphics.Color.red(p) - android.graphics.Color.red(ground)) <= FLAT_SPREAD &&
-            abs(android.graphics.Color.green(p) - android.graphics.Color.green(ground)) <= FLAT_SPREAD &&
-            abs(android.graphics.Color.blue(p) - android.graphics.Color.blue(ground)) <= FLAT_SPREAD
-    if (!near(b.getPixel(w - 1, h - 1))) return b
-    val line = IntArray(maxOf(w, h))
-
-    fun row(y: Int) = b.getPixels(line, 0, w, 0, y, w, 1).let { (0 until w).all { near(line[it]) } }
-
-    fun column(x: Int) = b.getPixels(line, 0, 1, x, 0, 1, h).let { (0 until h).all { near(line[it]) } }
-
-    // The run from one edge, or 0 when it reaches a third of the side.
-    fun run(
-        count: Int,
-        flat: (Int) -> Boolean,
-    ) = (0 until count / 3).firstOrNull { !flat(it) } ?: 0
-
-    val top = run(h, ::row)
-    val bottom = run(h) { row(h - 1 - it) }
-    val left = run(w, ::column)
-    val right = run(w) { column(w - 1 - it) }
-    if (top + bottom + left + right == 0) return b
-    return Bitmap.createBitmap(b, left, top, w - left - right, h - top - bottom)
-}
-
-/** How far a margin pixel may stray from its ground per channel: JPEG noise, not a picture's edge. */
-private const val FLAT_SPREAD = 12
-
-/**
- * A first-run step's header: the mark and name at the left; Back (from step 2), "Step N of 4" with its dots and the
- * step's skip at the right. The phone reads the count without showing it.
- */
+/** Pause motion or Play motion (WCAG 2.2.2, D4): named by what pressing it does, kept on this device. */
 @Composable
-private fun StepHeader(
-    step: Int,
-    skip: String?,
-    onSkip: () -> Unit,
-    onBack: (() -> Unit)?,
-    modifier: Modifier = Modifier,
-) {
+private fun MotionToggle(drift: WallDrift) {
+    val context = LocalContext.current
+    // The choice this device kept: a paused wall stays paused at the next first run's Welcome.
+    LaunchedEffect(Unit) { if (WallPause.on(context)) drift.paused = true }
     val tv = Marquee.form == Form.Tv
-    Row(
-        modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(if (tv) Marquee.space.m else 0.dp),
-        verticalAlignment = Alignment.CenterVertically,
+    var focused by remember { mutableStateOf(false) }
+    val lit = focused && tv
+    val size = if (tv) 64.dp else 48.dp
+    Box(
+        Modifier
+            .size(size)
+            .marqueeFocus(size / 2)
+            .onFocusChanged { focused = it.isFocused }
+            .clip(CircleShape)
+            .background(if (lit) Marquee.colors.primary else Color.Black.copy(alpha = 0.4f))
+            .semantics {
+                contentDescription = if (drift.paused) FirstRunCopy.PLAY_MOTION else FirstRunCopy.PAUSE_MOTION
+            }.focusClickable({
+                drift.paused = !drift.paused
+                WallPause.set(context, drift.paused)
+            }, Role.Button),
+        contentAlignment = Alignment.Center,
     ) {
-        Box(Modifier.weight(1f)) { BrandLockup(if (tv) 44.dp else 32.dp) }
-        onBack?.let { SkipLink("Back", it, back = true) }
-        StepCount(step)
-        skip?.let { SkipLink(it, onSkip) }
+        MqIcon(
+            if (drift.paused) Icons.Play else Icons.Pause,
+            tint = if (lit) Marquee.colors.onPrimary else Color.White,
+            size = size * 0.45f,
+        )
     }
 }
 
-/** "Step N of 4": its dots and words on TV; the phone has no room for them and reads them only. */
-@Composable
-private fun StepCount(step: Int) {
-    val words = "Step $step of $FIRST_RUN_STEPS"
-    if (Marquee.form != Form.Tv) {
-        Box(Modifier.size(1.dp).semantics { contentDescription = words })
-        return
-    }
-    Row(horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.CenterVertically) {
-        Row(Modifier.clearAndSetSemantics { }, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            for (i in 1..FIRST_RUN_STEPS) {
-                Box(
-                    Modifier
-                        .size(if (i == step) 28.dp else 10.dp, 10.dp)
-                        .clip(RoundedCornerShape(5.dp))
-                        .background(if (i == step) Color.White else Color.White.copy(alpha = 0.4f)),
-                )
-            }
-        }
-        MqText(words, role = TextRole.Caption, weight = FontWeight.SemiBold, color = Marquee.colors.dim)
-    }
-}
-
-/** The question's write for the page's life. */
-class StreamQuestionHolder(
-    session: CoreSession,
-) : ViewModel() {
-    val page = StreamChoiceSettings(session.ops, viewModelScope)
-}
+/** The swatches Make your first profile offers: the first five avatar colours. */
+internal val SWATCHES = ProfileCopy.COLORS.take(5)
 
 /**
- * The one question of a first run, after the recommended addons (plans/m13-stream-choice.md 4.5): how
- * Marquee should pick what to play. Start fast has focus; each answer writes its patch, then [onDone].
- * Skip writes nothing, since the defaults are Start fast's.
+ * Make your first profile (3.4): the avatar, the Name field ("Main" as its placeholder, never focused on open), five
+ * colour swatches and Continue. [account]: a made account's line, else the local one. Continue sends the typed name
+ * or "" and the pressed swatch or "" ([onContinue]): the swatch the form opens on is never sent. TV focuses Continue;
+ * up reaches the swatches, then the field.
  */
 @Composable
-fun StreamQuestionScreen(
-    session: CoreSession,
-    still: FirstRunStill? = null,
-    onBack: (() -> Unit)? = null,
-    onDone: () -> Unit,
-) {
-    val holder =
-        viewModel<StreamQuestionHolder>(
-            key = "stream-question",
-            factory = viewModelFactory { initializer { StreamQuestionHolder(session) } },
-        )
-    val page = holder.page
-    StreamQuestionPage(still, page.problem, onBack, onDone) { page.answer(it, onDone) }
-}
-
-/** The question's page: the still, the two answers in its block, and why a save failed ([problem]). */
-@Composable
-internal fun StreamQuestionPage(
-    still: FirstRunStill?,
+internal fun FirstProfileSheet(
+    owner: ProfileInfo?,
+    account: Boolean,
+    busy: Boolean,
     problem: String?,
     onBack: (() -> Unit)?,
-    onSkip: () -> Unit,
-    onAnswer: (StreamChoiceCopy.Answer) -> Unit,
+    onContinue: (name: String, avatar: String) -> Unit,
 ) {
-    val fast = remember { FocusRequester() }
-    AutoFocus(fast)
-    FramedPage(
-        3,
-        StreamChoiceCopy.SKIP,
-        onSkip,
-        onBack,
-        still,
-        StreamChoiceCopy.QUESTION_TITLE,
-        StreamChoiceCopy.QUESTION_LEAD,
+    val tv = Marquee.form == Form.Tv
+    val stored = ProfileCopy.parseAvatar(owner?.avatar.orEmpty())
+    var name by rememberSaveable { mutableStateOf("") }
+    var picked by rememberSaveable { mutableStateOf<String?>(null) }
+    val go = remember { FocusRequester() }
+    AutoFocus(go)
+    FirstSheet(
+        FirstRunCopy.PROFILE_TITLE,
+        width = 760.dp,
+        line = if (account) FirstRunCopy.PROFILE_LINE_ACCOUNT else FirstRunCopy.PROFILE_LINE_LOCAL,
+        onDrag = onBack,
+        foot = {
+            Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.s)) {
+                problem?.let { StatusWord(it, Status.Bad) }
+                PrimaryButton(
+                    FirstRunCopy.CONTINUE,
+                    { onContinue(name, picked?.let { ProfileCopy.formatAvatar(stored.glyph, it) }.orEmpty()) },
+                    if (tv) Modifier else Modifier.fillMaxWidth(),
+                    big = true,
+                    busy = busy,
+                    focusRequester = go,
+                )
+            }
+        },
     ) {
-        Doors {
-            Door(StreamChoiceCopy.FAST.label, StreamChoiceCopy.FAST.text, Icons.Zap, {
-                onAnswer(StreamChoiceCopy.FAST)
-            }, fast)
-            Door(StreamChoiceCopy.BEST.label, StreamChoiceCopy.BEST.text, Icons.Gem, {
-                onAnswer(StreamChoiceCopy.BEST)
-            }, null)
+        Row(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
+            AvatarArt(
+                stored.glyph,
+                picked ?: stored.color,
+                ProfileCopy.initial(name.ifBlank { owner?.name ?: FirstRunCopy.NAME_PLACEHOLDER }),
+                72.dp,
+            )
+            Box(Modifier.weight(1f)) {
+                MqTextField(
+                    name,
+                    { name = it.take(30) },
+                    label = FirstRunCopy.NAME_LABEL,
+                    placeholder = FirstRunCopy.NAME_PLACEHOLDER,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
         }
-        problem?.let { StatusWord("Could not save the choice: $it", Status.Bad) }
+        Row(
+            Modifier
+                .padding(
+                    top = 16.dp,
+                ).selectableGroup()
+                .semantics { contentDescription = FirstRunCopy.COLOUR_LABEL },
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            for (color in SWATCHES) {
+                Choice(
+                    selected = color == (picked ?: stored.color),
+                    label = color.replaceFirstChar { it.uppercase() },
+                    size = 48.dp,
+                    onClick = { picked = color },
+                ) {
+                    Box(
+                        Modifier.size(48.dp).clip(CircleShape).background(avatarColor(color) ?: Marquee.colors.raised),
+                    )
+                }
+            }
+        }
     }
 }
 
-/** The subtitles step for the page's life (the state and the write live in [SubtitleStep]). */
-class SubtitleStepHolder(
-    session: CoreSession,
-    device: String?,
-) : ViewModel() {
-    val step = SubtitleStep(session.ops, viewModelScope, device).also { it.load() }
+/** Setup's subtitle chips over the core's languages: the shown codes, the one chosen, and the names. */
+internal class SetupChips(
+    val rule: FirstRun.Chips,
+    val all: List<LanguageChoice>,
+) {
+    /** The chips with a language found under More placed before No subtitles. */
+    fun shown(picked: String?): List<String> =
+        if (picked == null || picked in rule.chips) {
+            rule.chips
+        } else {
+            rule.chips.dropLast(2) + picked + rule.chips.takeLast(2)
+        }
+
+    fun name(code: String): String =
+        when (code) {
+            FirstRun.NONE -> FirstRunCopy.NO_SUBTITLES
+            FirstRun.MORE -> FirstRunCopy.MORE_LANGUAGES
+            else -> LanguagePicks.name(code, all)
+        }
 }
 
 /**
- * A first run's subtitles step, after the question (plans/m13-subtitle-languages.md 7): the language
- * subtitles start in, one choice, this device's chosen at first. Continue writes it, then [onDone]; Skip
- * writes nothing. A profile with subtitle languages already passes by. Continue sits under the list; on
- * TV it has focus first, so one press keeps the device's language.
+ * The one-page setup (3.5): Bring anything from Stremio?, How should Momotus pick what to play?, Subtitles start in;
+ * every answer pre-chosen, so Start watching alone finishes first run (TV focuses it). Skip at the top right, the
+ * sources line with Review left of Start watching. A failure names its part with Try again and keeps every answer.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun SubtitleStepScreen(
-    session: CoreSession,
-    still: FirstRunStill? = null,
-    onBack: (() -> Unit)? = null,
-    onDone: () -> Unit,
-) {
-    val device = DeviceCaps.languageCode(LocalConfiguration.current.locales[0])
-    val holder =
-        viewModel<SubtitleStepHolder>(
-            key = "subtitle-step",
-            factory = viewModelFactory { initializer { SubtitleStepHolder(session, device) } },
-        )
-    SubtitleStepGate({ prefsNow(session)?.subtitleLanguages.isNullOrEmpty() }, holder.step, still, onBack, onDone)
-}
-
-/** Asks [asks] once, before anything shows: the page when it says yes, else [onDone] at once. */
-@Composable
-internal fun SubtitleStepGate(
-    asks: suspend () -> Boolean,
-    step: SubtitleStep,
-    still: FirstRunStill? = null,
-    onBack: (() -> Unit)? = null,
-    onDone: () -> Unit,
-) {
-    val leave by rememberUpdatedState(onDone)
-    // Answered once: a step that passes by leaves once.
-    val shows by produceState<Boolean?>(null) { value = asks().also { if (!it) leave() } }
-    if (shows == true) SubtitleStepPage(step, still, onBack, onDone)
-}
-
-/** The subtitles step's page over [step]: the still, the languages in its block, Continue and More languages. */
-@Composable
-internal fun SubtitleStepPage(
-    step: SubtitleStep,
-    still: FirstRunStill? = null,
-    onBack: (() -> Unit)? = null,
-    onDone: () -> Unit,
+internal fun SetupSheet(
+    setup: FirstSetup,
+    profile: String,
+    chips: SetupChips,
+    onStart: (subtitle: String) -> Unit,
+    onSkip: () -> Unit,
+    onReview: () -> Unit,
 ) {
     val tv = Marquee.form == Form.Tv
     val go = remember { FocusRequester() }
     AutoFocus(go)
-    // A disabled Continue cannot take focus: on TV it is asked again once the list is in, unless a key has
-    // moved the focus since the page came.
-    val keys = remember { KeyPresses.count }
-    LaunchedEffect(step.loaded) {
-        if (tv && step.loaded && KeyPresses.count == keys) focusSoon(go, 60)
-    }
-    var more by remember { mutableStateOf(false) }
-    // Not while Continue saves: the step leaves once.
-    FramedPage(
-        4,
-        SubtitleStep.SKIP,
-        { if (!step.busy) onDone() },
-        onBack,
-        still,
-        SubtitleStep.TITLE,
-        SubtitleStep.LEAD,
-        foot = {
-            val actions: @Composable (Modifier) -> Unit = { fill ->
-                PrimaryButton(
-                    DefaultsCopy.CONTINUE,
-                    { step.save(onDone) },
-                    fill,
-                    icon = Icons.Check,
-                    // Not before the language list: the device's language is unknown until then.
-                    enabled = !step.busy && step.loaded,
-                    focusRequester = go,
-                )
-                SecondaryButton(if (more) SubtitleStep.FEWER else SubtitleStep.MORE, { more = !more }, fill)
+    var more by rememberSaveable { mutableStateOf(false) }
+    val selected = setup.picked ?: chips.rule.selected
+    val bring: @Composable () -> Unit = {
+        SetupSection(FirstRunCopy.BRING_TITLE) {
+            Column(Modifier.selectableGroup(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OptionRow(FirstRunCopy.BRING_LIBRARY, FirstRunCopy.BRING_LIBRARY_LINE.takeIf { tv }, setup.bring) {
+                    setup.bring = true
+                }
+                OptionRow(FirstRunCopy.START_FRESH, FirstRunCopy.START_FRESH_LINE.takeIf { tv }, !setup.bring) {
+                    setup.bring = false
+                }
             }
-            // The phone stacks them the block's width; TV keeps them side by side.
-            if (tv) {
-                Row(horizontalArrangement = Arrangement.spacedBy(Marquee.space.xs)) { actions(Modifier) }
-            } else {
-                Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.xs)) {
-                    actions(Modifier.fillMaxWidth())
+        }
+    }
+    val stream: @Composable () -> Unit = {
+        SetupSection(StreamChoiceCopy.QUESTION_TITLE) {
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(Color.White.copy(alpha = 0.08f))
+                    .padding(4.dp)
+                    .selectableGroup(),
+            ) {
+                Segment(StreamChoiceCopy.FAST.label, Icons.Zap, !setup.best) { setup.best = false }
+                Segment(StreamChoiceCopy.BEST.label, Icons.Gem, setup.best) { setup.best = true }
+            }
+            MqText(
+                if (setup.best) StreamChoiceCopy.BEST.text else StreamChoiceCopy.FAST.text,
+                Modifier.padding(top = 8.dp),
+                role = TextRole.Caption,
+                color = Marquee.colors.muted,
+            )
+        }
+    }
+    val subtitles: @Composable () -> Unit = {
+        SetupSection(FirstRunCopy.SUBTITLES_TITLE) {
+            FlowRow(
+                Modifier.selectableGroup(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                for (code in chips.shown(setup.picked)) {
+                    if (code == FirstRun.MORE) {
+                        SetupChip(chips.name(code), more, Icons.Search) { more = !more }
+                    } else {
+                        SetupChip(chips.name(code), code == selected) {
+                            setup.picked = code
+                            more = false
+                        }
+                    }
+                }
+            }
+            if (more) {
+                MoreLanguages(chips.all) { code ->
+                    setup.picked = code
+                    more = false
+                }
+            }
+        }
+    }
+    FirstSheet(
+        FirstRunCopy.SETUP_TITLE.replace("{profile}", profile),
+        // Wider than the design's 1140: the TV's type scale needs it for three columns.
+        width = 1500.dp,
+        corner = { SheetLink(FirstRunCopy.SKIP, { if (!setup.busy) onSkip() }) },
+        line = FirstRunCopy.SETUP_LINE.takeIf { tv },
+        foot = {
+            Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.s)) {
+                setup.failed?.let { part ->
+                    val words =
+                        if (part ==
+                            FirstSetup.Part.Prefs
+                        ) {
+                            FirstRunCopy.SETUP_PREFS_FAILED
+                        } else {
+                            FirstRunCopy.SETUP_SOURCES_FAILED
+                        }
+                    LiveSpoken(words) { StatusWord(words, Status.Bad) }
+                }
+                val sources: @Composable RowScope.() -> Unit = {
+                    MqIcon(Icons.Layers, tint = Marquee.colors.muted)
+                    MqText(
+                        FirstRunCopy.SOURCES_ON,
+                        Modifier.weight(1f, fill = false),
+                        role = TextRole.Callout,
+                        color = Marquee.colors.muted,
+                    )
+                    SheetLink(FirstRunCopy.REVIEW, onReview)
+                }
+                val start =
+                    if (setup.failed != null) FirstRunCopy.TRY_AGAIN else FirstRunCopy.START_WATCHING
+                if (tv) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Row(
+                            Modifier.weight(1f),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            content = sources,
+                        )
+                        PrimaryButton(start, {
+                            onStart(selected)
+                        }, Modifier.widthIn(min = 240.dp), big = true, busy = setup.busy, focusRequester = go)
+                    }
+                } else {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        content = sources,
+                    )
+                    PrimaryButton(
+                        start,
+                        { onStart(selected) },
+                        Modifier.fillMaxWidth(),
+                        big = true,
+                        busy = setup.busy,
+                        focusRequester = go,
+                    )
                 }
             }
         },
     ) {
-        val rows =
-            step.common.map { language ->
-                Language(
-                    language.name,
-                    SubtitleStep.DEVICE.takeIf { language.code == step.mine },
-                    step.chosen == language.code,
-                ) {
-                    step.choose(language.code)
-                }
-            } + Language(SubtitleStep.NONE, SubtitleStep.NONE_LINE, step.chosen == null) { step.choose(null) }
-        LanguageRows(rows)
-        if (more) {
-            Kicker(SubtitleStep.MORE, side = 0.dp)
-            LanguageRows(step.rest.map { Language(it.name, null, step.chosen == it.code) { step.choose(it.code) } })
-        }
-        step.listProblem?.let { StatusWord("${SubtitleStep.LIST_FAILED}: $it", Status.Bad) }
-        step.problem?.let { StatusWord("${SubtitleStep.FAILED}: $it", Status.Bad) }
-    }
-}
-
-/** One language of the subtitles step, as a row shows it. */
-private class Language(
-    val name: String,
-    val line: String?,
-    val chosen: Boolean,
-    val onClick: () -> Unit,
-)
-
-/** The languages, two columns on every form. */
-@Composable
-private fun LanguageRows(rows: List<Language>) {
-    val columns = 2
-    Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.xs)) {
-        for (line in rows.chunked(columns)) {
-            Row(Modifier.height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(Marquee.space.xs)) {
-                for (row in line) {
-                    LanguageRow(
-                        row.name,
-                        row.line,
-                        row.chosen,
-                        Modifier.weight(1f).fillMaxHeight(),
-                        row.onClick,
-                    )
-                }
-                // A short last line keeps its rows the width of the others.
-                repeat(columns - line.size) { Box(Modifier.weight(1f)) }
+        if (tv) {
+            Row(horizontalArrangement = Arrangement.spacedBy(36.dp)) {
+                Box(Modifier.weight(1.15f)) { bring() }
+                Box(Modifier.weight(1f)) { stream() }
+                Box(Modifier.weight(1f)) { subtitles() }
+            }
+        } else {
+            Column(verticalArrangement = Arrangement.spacedBy(22.dp)) {
+                bring()
+                stream()
+                subtitles()
             }
         }
     }
 }
 
-/**
- * One language of the subtitles step: its name, a line when it has one, a check when chosen. One focus stop. Chosen
- * is a fill, not an edge (design/DECISION.md, Selected): white 24 percent under the chosen row, 12 under the rest.
- */
 @Composable
-private fun LanguageRow(
-    name: String,
+private fun SetupSection(
+    title: String,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    Column {
+        MqText(
+            title,
+            Modifier.padding(bottom = 10.dp).semantics { heading() },
+            role = TextRole.Headline,
+            color = Color.White,
+            weight = FontWeight.Bold,
+        )
+        content()
+    }
+}
+
+/** One of Bring's two answers: a radio row, chosen with a white edge (round2.html `.opt`). */
+@Composable
+private fun OptionRow(
+    title: String,
     line: String?,
     chosen: Boolean,
-    modifier: Modifier,
     onClick: () -> Unit,
 ) {
-    val tv = Marquee.form == Form.Tv
     var focused by remember { mutableStateOf(false) }
-    val radius = if (tv) 22.dp else 16.dp
-    val shape = RoundedCornerShape(radius)
-    // On TV the focused row turns white with dark words (focusPalette).
+    val tv = Marquee.form == Form.Tv
+    val shape = RoundedCornerShape(16.dp)
     FocusInk(focusPalette(focused)) {
         val colors = Marquee.colors
+        val lit = focused && tv
         Row(
-            modifier
-                .marqueeFocus(radius, Tokens.FOCUS_SCALE_TILE)
+            Modifier
+                .fillMaxWidth()
+                .marqueeFocus(16.dp, Tokens.FOCUS_SCALE_TILE)
                 .onFocusChanged { focused = it.isFocused }
                 .clip(shape)
                 .background(
                     when {
-                        focused && tv -> colors.surface
-                        chosen -> CHOSEN_FILL
-                        else -> DOOR_FILL
+                        lit -> colors.primary
+                        chosen -> Color.White.copy(alpha = 0.14f)
+                        else -> Color.White.copy(alpha = 0.06f)
                     },
-                ).focusSelectable(chosen, onClick)
-                .heightIn(min = if (tv) 72.dp else 52.dp)
-                .padding(horizontal = if (tv) 22.dp else 14.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(Marquee.space.xs),
+                ).then(if (chosen && !lit) Modifier.border(1.5.dp, Color.White.copy(alpha = 0.7f), shape) else Modifier)
+                .focusSelectable(chosen, onClick)
+                .heightIn(min = 56.dp)
+                .padding(horizontal = 14.dp, vertical = 10.dp),
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                MqText(name, role = TextRole.Headline, weight = FontWeight.SemiBold, maxLines = 1)
-                line?.let { MqText(it, role = TextRole.Caption, color = colors.muted) }
+            Column(Modifier.weight(1f)) {
+                MqText(title, role = TextRole.Headline, weight = FontWeight.SemiBold, color = colors.text)
+                line?.let {
+                    MqText(
+                        it,
+                        role = TextRole.Caption,
+                        color = if (lit) colors.onPrimary.copy(alpha = 0.6f) else colors.muted,
+                    )
+                }
             }
-            if (chosen) MqIcon(Icons.Check)
+            Box(
+                Modifier
+                    .size(22.dp)
+                    .clip(CircleShape)
+                    .border(if (chosen) 7.dp else 2.dp, if (chosen) colors.text else colors.dim, CircleShape),
+            )
         }
     }
+}
+
+/** One half of the segmented Start fast / Best quality. */
+@Composable
+private fun RowScope.Segment(
+    label: String,
+    icon: ImageVector,
+    chosen: Boolean,
+    onClick: () -> Unit,
+) {
+    var focused by remember { mutableStateOf(false) }
+    val white = chosen || (focused && Marquee.form == Form.Tv)
+    val ink = if (white) Marquee.colors.onPrimary else Marquee.colors.muted
+    Row(
+        Modifier
+            .weight(1f)
+            .heightIn(min = 48.dp)
+            .marqueeFocus(11.dp)
+            .onFocusChanged { focused = it.isFocused }
+            .clip(RoundedCornerShape(11.dp))
+            .background(if (white) Marquee.colors.primary else Color.Transparent)
+            .focusSelectable(chosen, onClick),
+        horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        MqIcon(icon, tint = ink)
+        MqText(label, role = TextRole.Headline, weight = FontWeight.SemiBold, color = ink)
+    }
+}
+
+/** A subtitle chip, 48 high (round2.html `.chip`): the chosen one white with dark words. */
+@Composable
+private fun SetupChip(
+    label: String,
+    chosen: Boolean,
+    icon: ImageVector? = null,
+    onClick: () -> Unit,
+) {
+    var focused by remember { mutableStateOf(false) }
+    val white = chosen || (focused && Marquee.form == Form.Tv)
+    val ink = if (white) Marquee.colors.onPrimary else Color.White
+    Row(
+        Modifier
+            .heightIn(min = 48.dp)
+            .widthIn(min = 48.dp)
+            .marqueeFocus(24.dp)
+            .onFocusChanged { focused = it.isFocused }
+            .clip(RoundedCornerShape(24.dp))
+            .background(if (white) Marquee.colors.primary else Color.White.copy(alpha = 0.08f))
+            .then(
+                if (icon ==
+                    null
+                ) {
+                    Modifier.focusSelectable(chosen, onClick)
+                } else {
+                    Modifier.focusClickable(onClick, Role.Button)
+                },
+            ).padding(start = 12.dp, end = 16.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        icon?.let { MqIcon(it, tint = ink) }
+        MqText(label, role = TextRole.Callout, weight = FontWeight.SemiBold, color = ink)
+    }
+}
+
+/** More: every language the core knows, found by name. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun MoreLanguages(
+    all: List<LanguageChoice>,
+    onPick: (String) -> Unit,
+) {
+    var query by remember { mutableStateOf("") }
+    Column(Modifier.padding(top = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        MqTextField(query, { query = it }, label = "Find a language", placeholder = "Polish, Korean, Arabic")
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            for (choice in LanguagePicks.search(all, query, emptyList())) {
+                SetupChip(choice.name, false) { onPick(choice.code) }
+            }
+        }
+    }
+}
+
+/** The setup sheet's chips: the core's languages (the device's as it lists it) and the profile's chosen ones. */
+@Composable
+internal fun rememberSetupChips(session: CoreSession): SetupChips {
+    val device = DeviceCaps.languageCode(androidx.compose.ui.platform.LocalConfiguration.current.locales[0])
+    var chips by remember { mutableStateOf(SetupChips(FirstRun.chips(null, emptyList()), emptyList())) }
+    LaunchedEffect(device) {
+        val all = runCatching { session.ops.languages(device) }.getOrDefault(emptyList())
+        val chosen = prefsNow(session)?.subtitleLanguages.orEmpty()
+        chips = SetupChips(FirstRun.chips(all.firstOrNull { it.device }?.code, chosen), all)
+    }
+    return chips
 }
 
 /** The defaults step for the page's life (the state and the install live in [DefaultsStep]). */
@@ -714,17 +986,14 @@ class DefaultsHolder(
 }
 
 /**
- * The recommended addons (plans/m13-default-addons.md 6): the core's list grouped, a switch per row,
- * on unless the profile has it off, and one Continue that installs them in one write. Continue stays
- * in sight under the list; on TV it has focus first, so one press accepts them all, and down from the
- * last row reaches it.
+ * The recommended addons (plans/m13-default-addons.md 6): the core's list grouped, a switch per row, on unless the
+ * profile has it off, and one Continue that installs them in one write: the Home card's Review, setup's Review link
+ * and Settings. Continue stays in sight under the list; on TV it has focus first, so one press accepts them all.
  */
 @Composable
 fun DefaultsScreen(
     session: CoreSession,
     mode: DefaultsMode,
-    /** Back, in the first run's header (step 2 of 4). */
-    onBack: (() -> Unit)? = null,
     onDone: () -> Unit,
 ) {
     val holder =
@@ -742,14 +1011,13 @@ fun DefaultsScreen(
     Column(
         Modifier
             .fillMaxSize()
+            .background(Marquee.colors.bg)
             .semantics { paneTitle = title }
-            .windowInsetsPadding(WindowInsets.systemBars)
+            .windowInsetsPadding(WindowInsets.safeDrawing)
             .padding(horizontal = Marquee.safe.side, vertical = Marquee.safe.top),
         verticalArrangement = Arrangement.spacedBy(Marquee.space.m),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        // The first run counts this step as its second, with no frame: the list is not a question.
-        if (mode == DefaultsMode.FirstRun || mode == DefaultsMode.AfterImport) StepHeader(2, null, {}, onBack)
         val width = Modifier.widthIn(max = 900.dp).fillMaxWidth()
         // More air between groups than between the rows of a group.
         Column(
@@ -757,16 +1025,9 @@ fun DefaultsScreen(
             verticalArrangement = Arrangement.spacedBy(Marquee.space.l),
         ) {
             Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.xs)) {
+                MqText(title, role = if (tv) TextRole.Title1 else TextRole.Title2)
                 MqText(
-                    title,
-                    role = if (tv) TextRole.Title1 else TextRole.Title2,
-                )
-                MqText(
-                    when (mode) {
-                        DefaultsMode.Review -> DefaultsCopy.REVIEW_LEAD
-                        DefaultsMode.Settings -> DefaultsCopy.SETTINGS_LEAD
-                        else -> DefaultsCopy.LEAD
-                    },
+                    if (mode == DefaultsMode.Settings) DefaultsCopy.SETTINGS_LEAD else DefaultsCopy.REVIEW_LEAD,
                     role = TextRole.Body,
                     color = Marquee.colors.muted,
                 )
@@ -786,7 +1047,6 @@ fun DefaultsScreen(
                     // The group's label sits over the marks.
                     Kicker(DefaultsCopy.group(group), side = 0.dp)
                     for (addon in addons) {
-                        // After an import, the ones it brought keep how they are and say where they came from.
                         val on = DefaultsCopy.on(addon, mode, step.switches)
                         DefaultRow(addon, on.takeIf { DefaultsCopy.hasSwitch(addon, mode) }) {
                             if (!step.busy) step.switches[addon.key] = !on
@@ -803,9 +1063,6 @@ fun DefaultsScreen(
             }
             step.failed?.let {
                 StateMessage(DefaultsCopy.FAILED, "$it. Try again.", icon = Icons.CircleAlert)
-            }
-            if (tv && (mode == DefaultsMode.FirstRun || mode == DefaultsMode.AfterImport)) {
-                Note(DefaultsCopy.TV_MORE, side = 0.dp)
             }
         }
         Row(width) {
@@ -917,100 +1174,3 @@ internal fun RecommendedCard(
         }
     }
 }
-
-/**
- * One of the ways to begin, stacked in the step's block: a pill filled white 12 percent, its icon in a circle, a title,
- * one line and a chevron. On TV the focused one turns white.
- */
-@Composable
-private fun Door(
-    title: String,
-    body: String,
-    icon: ImageVector,
-    onClick: () -> Unit,
-    focusRequester: FocusRequester?,
-) {
-    val tv = Marquee.form == Form.Tv
-    var focused by remember { mutableStateOf(false) }
-    val radius = if (tv) Marquee.radius.pill else 26.dp
-    val shape = RoundedCornerShape(radius)
-    // On TV the focused row turns white with dark words (focusPalette).
-    FocusInk(focusPalette(focused)) {
-        val colors = Marquee.colors
-        val lit = focused && tv
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
-                .marqueeFocus(radius)
-                .onFocusChanged { focused = it.isFocused }
-                .clip(shape)
-                .background(if (lit) colors.surface else DOOR_FILL)
-                .focusClickable(onClick, Role.Button)
-                .heightIn(min = if (tv) 120.dp else 72.dp)
-                .padding(
-                    start = if (tv) 20.dp else 12.dp,
-                    end = if (tv) 32.dp else 14.dp,
-                    top = if (tv) 18.dp else 12.dp,
-                    bottom = if (tv) 18.dp else 12.dp,
-                ),
-            horizontalArrangement = Arrangement.spacedBy(if (tv) Marquee.space.m else 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Box(
-                Modifier
-                    .size(if (tv) 76.dp else 44.dp)
-                    .clip(CircleShape)
-                    .background(if (lit) Color.Black.copy(alpha = 0.08f) else DOOR_FILL),
-                contentAlignment = Alignment.Center,
-            ) { MqIcon(icon, size = if (tv) 36.dp else 20.dp) }
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(if (tv) 4.dp else 2.dp)) {
-                MqText(title, role = TextRole.Headline, weight = FontWeight.SemiBold, maxLines = 2)
-                MqText(body, role = if (tv) TextRole.Callout else TextRole.Caption, color = colors.muted)
-            }
-            MqIcon(Icons.ChevronRight, tint = (if (lit) Color.Black else Color.White).copy(alpha = 0.4f))
-        }
-    }
-}
-
-/** A quiet text action in a screen's corner; [back] puts its chevron first, pointing back. */
-@Composable
-internal fun SkipLink(
-    label: String,
-    onClick: () -> Unit,
-    back: Boolean = false,
-    focusRequester: FocusRequester? = null,
-) {
-    var focused by remember { mutableStateOf(false) }
-    // On TV the focused link turns white with dark words (focusPalette).
-    val colors = focusPalette(focused)
-    Row(
-        Modifier
-            .heightIn(min = 48.dp)
-            .then(focusRequester?.let { Modifier.focusRequester(it) } ?: Modifier)
-            .marqueeFocus(Marquee.radius.m)
-            .onFocusChanged { focused = it.isFocused }
-            .clip(RoundedCornerShape(Marquee.radius.m))
-            .background(if (focused && Marquee.form == Form.Tv) colors.surface else Color.Transparent)
-            .focusClickable(onClick, Role.Button)
-            .padding(horizontal = Marquee.space.s),
-        horizontalArrangement = Arrangement.spacedBy(Marquee.space.xs),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        if (back) MqIcon(Icons.ChevronLeft, tint = colors.muted)
-        MqText(label, role = TextRole.Callout, weight = FontWeight.SemiBold, color = colors.muted)
-        if (!back) MqIcon(Icons.ChevronRight, tint = colors.muted)
-    }
-}
-
-/** The first run's steps that count: the doors, the recommended addons, the stream question and subtitles. */
-internal const val FIRST_RUN_STEPS = 4
-
-/** A door's pill and its icon's circle, and a language's row; the chosen language's row. */
-private val DOOR_FILL = Color.White.copy(alpha = 0.12f)
-private val CHOSEN_FILL = Color.White.copy(alpha = 0.24f)
-
-/** The step's whole screen, the still behind it; and its block, from the question's top line to the last choice. */
-internal const val FILM_FRAME = "film-frame"
-internal const val FILM_BAR = "film-bar"
-internal const val STEP_HEADER = "step-header"

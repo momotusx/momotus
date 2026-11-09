@@ -3,6 +3,7 @@ package app.marquee.android
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.LocalOnBackPressedDispatcherOwner
 import androidx.activity.compose.ReportDrawnWhen
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.ContentTransform
 import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.core.tween
@@ -26,6 +27,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -48,12 +50,14 @@ import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
 import androidx.navigation3.ui.NavDisplay
 import app.marquee.core.AccountCopy
 import app.marquee.core.AccountRules
+import app.marquee.core.FirstRun
+import app.marquee.core.FirstRunCopy
 import app.marquee.core.Format
 import app.marquee.core.PendingRemoval
 import app.marquee.core.ProfileCopy
 import app.marquee.core.TileCopy
-import app.marquee.core.model.FirstRunStill
 import app.marquee.core.model.HomeCatalog
+import app.marquee.core.model.ProfilesSnapshot
 import app.marquee.core.model.Tile
 import app.marquee.core.model.playVideoId
 import app.marquee.core.route.DefaultsMode
@@ -90,7 +94,9 @@ import app.marquee.ui.tv.focusFirstRow
 import app.marquee.ui.tv.shownHero
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 
 /** The whole app below the theme: the start decision, the frame, the pages, and the core-stopped cover. */
 @Composable
@@ -129,6 +135,8 @@ fun MarqueeRoot(
     LaunchedEffect(gate.snapshot?.wipePending, gate.snapshot?.active, marquee.sync.joined) { accounts.resumeRemoval() }
     LaunchedEffect(accounts.removal.wiped) { if (accounts.removal.wiped) app.wiped() }
     val incognito = ProfileCopy.inIncognito(gate.snapshot)
+    // Who's watching? over the wall ends with its answer.
+    LaunchedEffect(gate.open) { if (gate.open) app.who = false }
     Box(Modifier.fillMaxSize().semantics { testTagsAsResourceId = true }) {
         val locked = gate.snapshot?.locked == true
         when {
@@ -142,7 +150,27 @@ fun MarqueeRoot(
             }
 
             !gate.open -> {
-                PickerScreen(gate, session, if (locked) PickerMode.Locked else PickerMode.Start)
+                val mode = if (locked) PickerMode.Locked else PickerMode.Start
+                // A first-run join (D2), or a locked first start: the picker is a sheet over the still wall.
+                if (app.who || app.start == Start.Onboarding) {
+                    LaunchedEffect(Unit) { app.askWall() }
+                    Box(Modifier.fillMaxSize()) {
+                        FirstWall(app.wall, app.drift, sheet = true)
+                        PickerScreen(
+                            gate,
+                            session,
+                            mode,
+                            onAdd = {
+                                app.addProfile = true
+                                gate.markChosen()
+                            },
+                            sheet = true,
+                            line = whoLine(app, marquee.sync),
+                        )
+                    }
+                } else {
+                    PickerScreen(gate, session, mode)
+                }
             }
 
             // Every Incognito entry opens on its intro (plans/batch-10-incognito.md 5.1).
@@ -177,9 +205,24 @@ fun MarqueeRoot(
                 ) {
                     ProfileKeyed(gate.snapshot?.active) {
                         when (app.start) {
-                            Start.Loading -> Unit
-                            Start.Onboarding -> AppNav(session, form, app, firstRun(accounts.server(marquee), form))
-                            Start.Home -> AppNav(session, form, app, debugStack ?: listOf(Route.Home))
+                            Start.Loading -> {
+                                Unit
+                            }
+
+                            Start.Onboarding -> {
+                                AppNav(
+                                    session,
+                                    form,
+                                    app,
+                                    FirstRunNav.initial(
+                                        firstState(gate.snapshot, accounts.server(marquee), marquee.sync.joined),
+                                    ),
+                                )
+                            }
+
+                            Start.Home -> {
+                                AppNav(session, form, app, debugStack ?: listOf(Route.Home))
+                            }
                         }
                     }
                 }
@@ -189,19 +232,47 @@ fun MarqueeRoot(
     }
 }
 
-/**
- * A first run's stack (plans/accounts.md 4.1, 4.2): the doors, with the sign-in over them where a sync service is
- * known (Not now and Back lead to the doors).
- */
-internal fun firstRun(
+/** First run's inputs while the profile is fresh (plans/first-screens.md 4.3): the core's and this device's state. */
+internal fun firstState(
+    s: ProfilesSnapshot?,
     server: String,
-    form: Form,
-): List<Route> =
-    when {
-        server.isEmpty() -> listOf(Route.Onboarding)
-        form == Form.Tv -> listOf(Route.Onboarding, Route.TvSignIn)
-        else -> listOf(Route.Onboarding, Route.SignIn(firstRun = true))
+    joined: Boolean,
+) = FirstRun.State(
+    fresh = true,
+    kidsSession = s?.kids == true,
+    server = server.isNotEmpty(),
+    inAccount = joined,
+    profileStepDone = s?.profileStepDone == true,
+    profiles = s?.profiles?.size ?: 1,
+    pin = s?.profiles?.any { it.hasPin } == true,
+    locked = s?.locked == true,
+)
+
+/** Who's watching?'s line after a first-run join: the provider, else the device that approved it (3.4). */
+private fun whoLine(
+    app: AppState,
+    sync: SyncController,
+): String? {
+    if (!app.who) return null
+    val by = sync.joinedBy
+    val with = app.joinedWith
+    return when {
+        by != null -> {
+            AccountRules.fill(FirstRunCopy.WHO_DEVICE, mapOf("device" to by))
+        }
+
+        with != null -> {
+            AccountRules.fill(
+                FirstRunCopy.WHO_PROVIDER,
+                mapOf("provider" to AccountRules.providerName(with)),
+            )
+        }
+
+        else -> {
+            FirstRunCopy.WHO_SIGNED_IN
+        }
     }
+}
 
 /**
  * TV, on Home: Back moves focus to the first tile of the first lane unless it is there already or
@@ -392,13 +463,53 @@ private fun AppNav(
         if (backStack.lastOrNull() != Route.Sources) backStack.add(Route.Sources)
     }
 
-    // A join from the first screen settles how to begin: back on it, the app goes Home. An account created there
-    // goes on through the doors (I use Stremio or Start fresh, 4.1.5).
+    // First run (plans/first-screens.md 2): FirstRun.next over this device's state, on this stack. A join pulls the
+    // account first ("Getting your profiles", 15 s at most), then opens Who's watching? or Home (D2). An account made
+    // here goes on to the profile form.
+    val firstRun = Route.Welcome in routes
     var created by rememberSaveable { mutableStateOf(false) }
-    val onFirstScreen = backStack.singleOrNull() == Route.Onboarding
-    LaunchedEffect(sync.joined, onFirstScreen) {
-        if (sync.joined && onFirstScreen && !created) arrive()
+    var pulling by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    val nav =
+        remember(backStack) {
+            FirstRunNav(
+                backStack,
+                tv,
+                state = { firstState(gate.snapshot, marquee.accounts.server(marquee), sync.joined) },
+                onHome = ::arrive,
+                onWho = {
+                    arrive()
+                    app.who = true
+                    gate.ask()
+                },
+            )
+        }
+
+    fun joined() {
+        if (pulling) return
+        pulling = true
+        scope.launch {
+            withTimeoutOrNull(
+                PULL_WAIT_MS,
+            ) { snapshotFlow { sync.lastSynced != null || sync.problem != null }.first { it } }
+            pulling = false
+            nav.go(FirstRun.After.Joined)
+        }
     }
+    // A join met while a first-run page other than the sign-in shows (a pairing page, Account's kit): the same way on.
+    LaunchedEffect(sync.joined, top) {
+        if (sync.joined && firstRun && top !is Route.SignIn && !created) joined()
+    }
+    // Who's watching?'s Add profile, once the app shows: today's create form over Home.
+    LaunchedEffect(app.addProfile) {
+        if (app.addProfile) {
+            app.addProfile = false
+            backStack.add(Route.EditProfile(null))
+        }
+    }
+    // The wall over every first-run step and sign-in sheet, asked again at each while it has none.
+    val overWall = overWall(top, routes)
+    LaunchedEffect(top) { if (overWall) app.askWall() }
 
     // Sign in another device (the app shortcut, or a pairing code by link): the approve sheet, after the sign-in when
     // this device has no account yet. A TV approves nothing; a kids profile hears to ask a grown-up (the sheet says).
@@ -420,7 +531,7 @@ private fun AppNav(
             }
 
             else -> {
-                backStack.add(Route.SignIn(firstRun = Route.Onboarding in routes))
+                backStack.add(Route.SignIn(firstRun = firstRun))
             }
         }
     }
@@ -464,505 +575,546 @@ private fun AppNav(
                 onSection = { backStack.add(Route.SettingsSection(it)) },
             )
         }
-        NavDisplay(
-            backStack = backStack,
-            onBack = {
-                // TV: Back in a place's content first puts focus on its tab, as Menu does on Apple TV; Back on the bar
-                // then goes Home. Home keeps its own chain (HomeBackHandler).
-                val toBar = tv && top.isTopLevel && tvNav.backToBar()
-                if (!toBar && backStack.size > 1) backStack.removeAt(backStack.lastIndex)
-            },
-            entryDecorators =
-                listOf(
-                    rememberSaveableStateHolderNavEntryDecorator(),
-                    rememberViewModelStoreNavEntryDecorator(),
-                ),
-            transitionSpec = { fade },
-            popTransitionSpec = { fade },
-            predictivePopTransitionSpec = { fade },
-            entryProvider =
-                entryProvider {
-                    entry<Route.Onboarding> {
-                        OnboardingScreen(
-                            onDefaults = { backStack.add(Route.Defaults(DefaultsMode.FirstRun)) },
-                            onImport = { backStack.add(Route.Import) },
-                            onPair = if (created) null else ({ backStack.add(Route.Pairing) }),
-                            still = app.firstRunStill(),
-                        )
-                    }
-                    entry<Route.SignIn> { route ->
-                        SignInScreen(
-                            marquee.accounts,
-                            session,
-                            sync,
-                            route.firstRun,
-                            onNotNow = {
-                                marquee.pendingScan = false
-                                pop()
-                            },
-                            onScan = { backStack.add(Route.Pairing) },
-                            onKit = { backStack.add(Route.SyncJoin(kit = true)) },
-                            onNoProviders = {
-                                pop()
-                                backStack.add(Route.Sync)
-                            },
-                            onCreated = { kit ->
-                                if (route.firstRun) created = true
-                                pop()
-                                if (kit) backStack.add(Route.RecoveryKit)
-                            },
-                            onIn = { if (route.firstRun) arrive() else pop() },
-                        )
-                    }
-                    entry<Route.TvSignIn> {
-                        TvSignInScreen(
-                            session,
-                            sync,
-                            marquee.accounts.server(marquee),
-                            onDoors = ::pop,
-                            onIn = ::arrive,
-                        )
-                    }
-                    entry<Route.Import> {
-                        // From the first screen a finished import goes on to the recommended addons.
-                        val firstRun = Route.Onboarding in routes
-                        ImportScreen(
-                            session,
-                            onDone = {
-                                if (firstRun) {
-                                    backStack.add(
-                                        Route.Defaults(DefaultsMode.AfterImport),
-                                    )
-                                } else {
-                                    arrive()
-                                }
-                            },
-                            toDefaults = firstRun,
-                        )
-                    }
-                    entry<Route.Defaults> { route ->
-                        DefaultsScreen(session, route.mode, onBack = ::pop, onDone = {
-                            when (route.mode) {
-                                // A first run asks the one question (plans/m13-stream-choice.md 4.5).
-                                DefaultsMode.FirstRun, DefaultsMode.AfterImport -> backStack.add(Route.StreamQuestion)
-
-                                DefaultsMode.Review, DefaultsMode.Settings -> pop()
-                            }
-                        })
-                    }
-                    // The subtitles step takes the question's place: Back from it goes to the addons.
-                    entry<Route.StreamQuestion> {
-                        StreamQuestionScreen(
-                            session,
-                            still = app.firstRunStill(),
-                            onBack = ::pop,
-                            onDone = {
-                                // A Back during the save took the question away: nothing to replace.
-                                if (backStack.lastOrNull() == Route.StreamQuestion) {
-                                    backStack[backStack.lastIndex] = Route.SubtitleLanguage
-                                }
-                            },
-                        )
-                    }
-                    entry<Route.SubtitleLanguage> {
-                        SubtitleStepScreen(session, still = app.firstRunStill(), onBack = ::pop, onDone = ::arrive)
-                    }
-                    entry<Route.Home> {
-                        // Fully drawn once the first rows show: the start's end for the system and the benchmarks.
-                        ReportDrawnWhen { app.home.rows.isNotEmpty() }
-                        // An empty Home asks once whether catalogs exist and are all hidden.
-                        val empty = app.home.status == ViewStatus.Open && app.home.rows.isEmpty()
-                        val rowsHidden by produceState(false, empty) {
-                            value = empty &&
-                                runCatching { session.ops.homeCatalogs() }
-                                    .getOrNull()
-                                    ?.let { it.isNotEmpty() && it.all(HomeCatalog::hidden) } == true
-                        }
-                        val onHomeRows: () -> Unit = { backStack.add(Route.HomeRows) }
-                        // New recommended addons, once per list version (plans/m13-default-addons.md 7).
-                        // Not beside an empty Home's setup, which offers the same addons.
-                        val profile = gate.snapshot
-                        LaunchedEffect(profile?.active) {
-                            // Incognito offers no recommended addons: the core refuses them there.
-                            app.defaultsCard.check(kids = profile?.kids != false || incognito) { defaultsSeen(session) }
-                        }
-                        // Home's one account card slot comes first (plans/accounts.md 4.3): a scheduled deletion
-                        // is the one thing that must not wait behind the addons card.
-                        // Right after a pairing, "Signed in from" the device that approved it, for 8 s: a line nothing
-                        // focuses, so first focus and the tabs bar stay as they are (plans/tv-qr-login.md 5.5).
-                        // A scheduled deletion still comes first.
-                        val shownCard = marquee.accounts.homeCard()
-                        val signedInFrom = sync.joinedBy.takeUnless { shownCard is AccountRules.Card.Deletion }
-                        LaunchedEffect(signedInFrom) {
-                            if (signedInFrom != null) {
-                                delay(8_000)
-                                sync.joinedBy = null
-                            }
-                        }
-                        // A deletion, the account gone, a new device: first on Home, above the hero (the owner,
-                        // 2026-11-02); "Signed in from" and the second way in stay after the first row.
-                        val alertCard = shownCard?.takeIf { signedInFrom == null && AccountRules.urgent(it) }
-                        val alert: (@Composable () -> Unit)? =
-                            alertCard?.let { shown ->
-                                {
-                                    AccountCard(
-                                        marquee.accounts,
-                                        sync,
-                                        shown,
-                                        onSignIn = {
-                                            backStack.add(if (tv) Route.TvSignIn else Route.SignIn(firstRun = false))
-                                        },
-                                        onMakeKit = { backStack.add(Route.RecoveryKit) },
-                                    )
-                                }
-                            }
-                        val accountCard: (@Composable () -> Unit)? =
-                            signedInFrom?.let { by ->
-                                {
-                                    Said(
-                                        AccountRules.fill(AccountCopy.TV_SIGNED_IN_FROM, mapOf("device" to by)),
-                                        Status.Ok,
-                                    )
-                                }
-                            } ?: shownCard?.takeIf { alertCard == null }?.let { shown ->
-                                {
-                                    AccountCard(
-                                        marquee.accounts,
-                                        sync,
-                                        shown,
-                                        onSignIn = {
-                                            backStack.add(if (tv) Route.TvSignIn else Route.SignIn(firstRun = false))
-                                        },
-                                        onMakeKit = { backStack.add(Route.RecoveryKit) },
-                                    )
-                                }
-                            }
-                        val addonsCard: (@Composable () -> Unit)? =
-                            app.defaultsCard.offer?.takeIf { app.home.rows.isNotEmpty() }?.let { answer ->
-                                {
-                                    RecommendedCard(
-                                        answer,
-                                        onReview = {
-                                            app.defaultsCard.answer()
-                                            backStack.add(Route.Defaults(DefaultsMode.Review))
-                                        },
-                                        onNotNow = { app.defaultsCard.answer() },
-                                    )
-                                }
-                            }
-                        // An Incognito end this session has not read: first, until its OK (plans/batch-10-incognito.md 5.4).
-                        val endedCard: (@Composable () -> Unit)? =
-                            if (profile?.incognitoEnded == true) ({ IncognitoEndedCard(gate::ackEnded) }) else null
-                        // Both show, the account card first, as on the web.
-                        val cards = listOfNotNull(endedCard, accountCard, addonsCard)
-                        val card: (@Composable () -> Unit)? =
-                            cards.takeIf { it.isNotEmpty() }?.let {
-                                {
-                                    Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.m)) {
-                                        cards.forEach { it() }
-                                    }
-                                }
-                            }
-                        val removal = app.removal
-                        val notice: (@Composable () -> Unit)? =
-                            if (removal.removing != null || removal.failed != null) ({ RemovalNote(removal) }) else null
-                        if (tv) {
-                            TvHome(
-                                app.home,
-                                app.tvHome,
-                                onOpen = ::open,
-                                onPlay = ::playTile,
-                                onSetup = { backStack.add(Route.Onboarding) },
-                                onAddons = ::addAnAddon,
-                                rowsHidden = rowsHidden,
-                                onHomeRows = onHomeRows,
-                                kids = kids,
-                                alert = alert,
-                                card = card,
-                                removal = app.removal,
-                            )
-                        } else {
-                            PhoneHome(
-                                app.home,
-                                onOpen = ::open,
-                                onPlay = ::playTile,
-                                onSetup = { backStack.add(Route.Onboarding) },
-                                onAddons = ::addAnAddon,
-                                rowsHidden = rowsHidden,
-                                onHomeRows = onHomeRows,
-                                kids = kids,
-                                alert = alert,
-                                card = card,
-                                onRemove = { app.removal.remove(it, accessibility::actionWindow) },
-                                removing = app.removal.removing?.id,
-                                notice = notice,
+        // The wall under the first-run pages, held still under every sheet, fading out with the last one.
+        Box(Modifier.fillMaxSize()) {
+            AnimatedVisibility(
+                overWall,
+                enter = fadeIn(tween(Marquee.panelMs)),
+                exit = fadeOut(tween(Marquee.panelMs)),
+            ) {
+                FirstWall(app.wall, app.drift, sheet = top != Route.Welcome)
+            }
+            NavDisplay(
+                backStack = backStack,
+                onBack = {
+                    // TV: Back in a place's content first puts focus on its tab, as Menu does on Apple TV; Back on the bar
+                    // then goes Home. Home keeps its own chain (HomeBackHandler).
+                    val toBar = tv && top.isTopLevel && tvNav.backToBar()
+                    if (!toBar && backStack.size > 1) backStack.removeAt(backStack.lastIndex)
+                },
+                entryDecorators =
+                    listOf(
+                        rememberSaveableStateHolderNavEntryDecorator(),
+                        rememberViewModelStoreNavEntryDecorator(),
+                    ),
+                transitionSpec = { fade },
+                popTransitionSpec = { fade },
+                predictivePopTransitionSpec = { fade },
+                entryProvider =
+                    entryProvider {
+                        entry<Route.Welcome> {
+                            WelcomeScreen(
+                                app.drift,
+                                onGetStarted = { nav.go(FirstRun.After.GetStarted) },
+                                onAlreadyUse =
+                                    if (marquee.accounts
+                                            .server(
+                                                marquee,
+                                            ).isEmpty()
+                                    ) {
+                                        null
+                                    } else {
+                                        ({ nav.go(FirstRun.After.AlreadyUse) })
+                                    },
                             )
                         }
-                    }
-                    entry<Route.Search> {
-                        SearchScreen(
-                            session,
-                            ::open,
-                            request = app.searchRequest,
-                            onRequestSent = { app.searchRequest = null },
-                            onAddons = { backStack.add(Route.Defaults(DefaultsMode.Settings)) },
-                            kids = kids,
-                        )
-                    }
-                    entry<Route.Discover> {
-                        DiscoverScreen(
-                            session,
-                            ::open,
-                            request = app.discoverRequest,
-                            onRequestSent = { app.discoverRequest = null },
-                            onSetup = { backStack.add(Route.Onboarding) },
-                            onAddons = ::addAnAddon,
-                            focus = app.discoverFocus,
-                        )
-                    }
-                    entry<Route.Library> {
-                        // On the phone Calendar is a row at the top of Library, pushed over it (D6).
-                        LibraryScreen(
-                            session,
-                            ::open,
-                            onCalendar = if (tv || kids) null else ({ backStack.add(Route.Calendar) }),
-                            onDiscover = if (kids) null else ({ choose(Route.Discover) }),
-                            onDownloads = if (tv) null else ({ backStack.add(Route.Downloads) }),
-                        )
-                    }
-                    entry<Route.Downloads> {
-                        DownloadsScreen(session, app.downloads, downloadsNav, kids = gate.snapshot?.kids != false)
-                    }
-                    entry<Route.DownloadedSeries> { route ->
-                        DownloadedSeriesScreen(
-                            session,
-                            route.itemId,
-                            app.downloads,
-                            downloadsNav,
-                            kids = gate.snapshot?.kids != false,
-                            onGone = { if (backStack.lastOrNull() == route) pop() },
-                        )
-                    }
-                    entry<Route.Calendar> {
-                        CalendarScreen(
-                            session,
-                            onOpen = { backStack.add(Route.Title("series", it.itemId, it.season)) },
-                            onDiscover = { choose(Route.Discover) },
-                        )
-                    }
-                    entry<Route.Profiles> {
-                        PickerScreen(
-                            gate,
-                            session,
-                            PickerMode.Switch,
-                            onBack = ::pop,
-                            onAdd = { backStack.add(Route.EditProfile(null)) },
-                            onManage = { backStack.add(Route.ManageProfiles) },
-                        )
-                    }
-                    entry<Route.ManageProfiles> {
-                        ManageProfilesScreen(
-                            gate,
-                            onEdit = { backStack.add(Route.EditProfile(it)) },
-                            onAdd = { backStack.add(Route.EditProfile(null)) },
-                        )
-                    }
-                    entry<Route.EditProfile> { route -> EditProfileScreen(gate, session, route.id, onDone = ::pop) }
-                    entry<Route.Settings> { settings(null) }
-                    entry<Route.SettingsSection> { route -> settings(route.id) }
-                    entry<Route.Addons> {
-                        AddonsScreen(
-                            session,
-                            app.linkInstall,
-                            onFindAddons = { backStack.add(Route.FindAddons) },
-                            sourcesOnly = false,
-                        )
-                    }
-                    entry<Route.Sources> {
-                        AddonsScreen(
-                            session,
-                            app.linkInstall,
-                            onFindAddons = { backStack.add(Route.FindAddons) },
-                            sourcesOnly = true,
-                        )
-                    }
-                    entry<Route.FindAddons> {
-                        // TV's Paste a link: the page with the link field, back to it when Find addons came from there.
-                        val fromSources =
-                            routes.getOrNull(routes.lastIndex - 1).let {
-                                it == Route.Sources ||
-                                    it == Route.Addons
-                            }
-                        FindAddonsScreen(session, app.installCards, app.linkInstall, onPlugins = {
-                            backStack.add(Route.PluginDirectory)
-                        }, onPasteLink = {
-                            if (fromSources) pop() else backStack.add(Route.Sources)
-                        })
-                    }
-                    entry<Route.Debrid> { DebridScreen(session) }
-                    entry<Route.Plugins> { PluginsScreen(session) }
-                    entry<Route.PluginDirectory> { PluginDirectoryScreen(session) }
-                    entry<Route.Trakt> {
-                        TraktScreen(
-                            session,
-                            (LocalContext.current.applicationContext as MarqueeApp).trakt,
-                        )
-                    }
-                    entry<Route.HomeRows> { HomeRowsScreen(session) }
-                    entry<Route.StreamChoice> { StreamChoiceScreen(session) }
-                    entry<Route.Pairing> {
-                        // From onboarding, a join is the way in: Done goes Home. From Settings it goes back.
-                        PairingScreen(session, sync, onDone = {
-                            when {
-                                // Also when setup was opened again from an empty Home or Discover.
-                                Route.Onboarding in backStack -> {
-                                    arrive()
-                                }
-
-                                else -> {
+                        entry<Route.FirstProfile> {
+                            FirstProfileSheet(
+                                owner = gate.snapshot?.profiles?.firstOrNull { it.isOwner },
+                                account = sync.joined,
+                                busy = app.firstProfile.busy,
+                                problem = app.firstProfile.problem,
+                                onBack = if (backStack.size > 1) ::pop else null,
+                                onContinue = { name, avatar ->
+                                    app.firstProfile.finish(name, avatar) { nav.go(FirstRun.After.ProfileDone) }
+                                },
+                            )
+                        }
+                        entry<Route.Setup> {
+                            SetupSheet(
+                                app.setup,
+                                AccountRules.activeProfile(gate.snapshot)?.name.orEmpty(),
+                                rememberSetupChips(session),
+                                onStart = { subtitle -> app.setup.start(subtitle, nav::setupDone) },
+                                onSkip = { app.setup.skip { nav.setupDone(false) } },
+                                onReview = { backStack.add(Route.Defaults(DefaultsMode.Review)) },
+                            )
+                        }
+                        entry<Route.SignIn> { route ->
+                            SignInScreen(
+                                marquee.accounts,
+                                session,
+                                sync,
+                                route.firstRun,
+                                returning = route.returning,
+                                onNotNow = {
+                                    marquee.pendingScan = false
+                                    if (route.firstRun) nav.go(FirstRun.After.NotNow) else pop()
+                                },
+                                onScan = { backStack.add(Route.Pairing) },
+                                onKit = { backStack.add(Route.SyncJoin(kit = true)) },
+                                onNoProviders = {
                                     pop()
-                                    // Scanned in from a sign-in's Other ways: that sign-in is done with.
-                                    if (sync.joined && backStack.lastOrNull() is Route.SignIn) {
-                                        marquee.accounts.endSignIn()
+                                    backStack.add(Route.Sync)
+                                },
+                                onCreated = { kit ->
+                                    if (route.firstRun) {
+                                        created = true
+                                        nav.go(FirstRun.After.Created)
+                                    } else {
                                         pop()
                                     }
+                                    if (kit) backStack.add(Route.RecoveryKit)
+                                },
+                                onIn = { if (route.firstRun) joined() else pop() },
+                                onBack = ::pop,
+                                onProvider = { app.joinedWith = it },
+                            )
+                        }
+                        entry<Route.TvSignIn> {
+                            TvSignInScreen(
+                                session,
+                                sync,
+                                marquee.accounts.server(marquee),
+                                onNotNow = { if (firstRun) nav.go(FirstRun.After.NotNow) else pop() },
+                                onOther = { backStack.add(Route.Sync) },
+                                onIn = { if (firstRun) joined() else arrive() },
+                            )
+                        }
+                        entry<Route.Import> {
+                            // From setup: a sheet over the wall; Done or Skip import adds the defaults the import did not
+                            // bring, then Home (3.5).
+                            val first = Route.Setup in routes
+                            ImportScreen(
+                                session,
+                                onDone = { if (first) app.setup.afterImport(::arrive) else arrive() },
+                                onSkip = if (first) ({ app.setup.afterImport(::arrive) }) else null,
+                                finishing = first && app.setup.busy,
+                                failed = first && app.setup.failed != null,
+                            )
+                        }
+                        entry<Route.Defaults> { route -> DefaultsScreen(session, route.mode, onDone = ::pop) }
+                        entry<Route.Home> {
+                            // Fully drawn once the first rows show: the start's end for the system and the benchmarks.
+                            ReportDrawnWhen { app.home.rows.isNotEmpty() }
+                            // An empty Home asks once whether catalogs exist and are all hidden.
+                            val empty = app.home.status == ViewStatus.Open && app.home.rows.isEmpty()
+                            val rowsHidden by produceState(false, empty) {
+                                value = empty &&
+                                    runCatching { session.ops.homeCatalogs() }
+                                        .getOrNull()
+                                        ?.let { it.isNotEmpty() && it.all(HomeCatalog::hidden) } == true
+                            }
+                            val onHomeRows: () -> Unit = { backStack.add(Route.HomeRows) }
+                            // New recommended addons, once per list version (plans/m13-default-addons.md 7).
+                            // Not beside an empty Home's setup, which offers the same addons.
+                            val profile = gate.snapshot
+                            LaunchedEffect(profile?.active) {
+                                // Incognito offers no recommended addons: the core refuses them there.
+                                app.defaultsCard.check(
+                                    kids = profile?.kids != false || incognito,
+                                ) { defaultsSeen(session) }
+                            }
+                            // Home's one account card slot comes first (plans/accounts.md 4.3): a scheduled deletion
+                            // is the one thing that must not wait behind the addons card.
+                            // Right after a pairing, "Signed in from" the device that approved it, for 8 s: a line nothing
+                            // focuses, so first focus and the tabs bar stay as they are (plans/tv-qr-login.md 5.5).
+                            // A scheduled deletion still comes first.
+                            val shownCard = marquee.accounts.homeCard()
+                            val signedInFrom = sync.joinedBy.takeUnless { shownCard is AccountRules.Card.Deletion }
+                            LaunchedEffect(signedInFrom) {
+                                if (signedInFrom != null) {
+                                    delay(8_000)
+                                    sync.joinedBy = null
                                 }
                             }
-                        })
-                    }
-                    entry<Route.Sync> {
-                        SyncScreen(
-                            sync,
-                            marquee.accounts,
-                            onPair = { backStack.add(Route.Pairing) },
-                            onJoin = { backStack.add(Route.SyncJoin(it)) },
-                            onAdd = { backStack.add(Route.AddDevice) },
-                            onKit = { backStack.add(Route.RecoveryKit) },
-                            onLost = { backStack.add(Route.ReportLost(it)) },
-                            onCompare = { backStack.add(Route.SyncFork) },
-                            onSignIn = { backStack.add(Route.SignIn(firstRun = false)) },
-                            rows = marquee.accounts.rows(tv),
-                        )
-                    }
-                    entry<Route.SyncFork> { ForkScreen(sync, onDone = ::pop) }
-                    entry<Route.SyncJoin> { route -> SyncJoinScreen(sync, route.kit, onDone = ::pop) }
-                    entry<Route.AddDevice> {
-                        AddDeviceScreen(
-                            sync,
-                            marquee.accounts.approval,
-                            approves = marquee.accounts.rows(tv).approve,
-                            linked = marquee.pendingCode,
-                            onTaken = { marquee.pendingCode = null },
-                            onDone = ::pop,
-                        )
-                    }
-                    entry<Route.RecoveryKit> { RecoveryKitScreen(sync, onDone = ::pop) }
-                    entry<Route.ReportLost> { route -> ReportLostScreen(sync, route.id, onDone = ::pop) }
-                    entry<Route.Title> { route ->
-                        TitleScreen(
-                            route,
-                            session,
-                            app,
-                            form,
-                            onBack = ::pop,
-                            onPlay = { key, videoId, title ->
-                                backStack.add(Route.Player(route.kind, route.id, videoId, title, key))
-                            },
-                            onStartOver = { key, videoId, title ->
-                                backStack.add(Route.Player(route.kind, route.id, videoId, title, key, startOver = true))
-                            },
-                            onVersions = { videoId, name ->
-                                backStack.add(Route.Versions(route.kind, route.id, videoId, name))
-                            },
-                            onPlayEpisode = { videoId, name ->
-                                backStack.add(Route.Player(route.kind, route.id, videoId, name))
-                            },
-                            onGenre = { kind, genre ->
-                                app.discoverRequest = DiscoverRequest(kind, genre)
-                                link(Route.Discover)
-                            },
-                            onOpen = ::open,
-                            onPerson = { name ->
-                                app.searchRequest = name
-                                link(Route.Search)
-                            },
-                            canDownload = !tv && gate.snapshot?.kids == false,
-                            onDownloadVersion = { videoId, name ->
-                                backStack.add(Route.Versions(route.kind, route.id, videoId, name, download = true))
-                            },
-                        )
-                    }
-                    entry<Route.Versions> { route ->
-                        VersionsScreen(
-                            route,
-                            app,
-                            form,
-                            onPlay = { key ->
-                                val next =
-                                    afterChoice(
-                                        routes,
-                                        Route.Player(route.kind, route.id, route.videoId, route.title, key),
-                                    )
-                                backStack.clear()
-                                backStack.addAll(next)
-                            },
-                            // A kids profile adds no source: no Settings to a page it cannot open.
-                            onAddSource = if (kids) null else ({ backStack.add(Route.Sources) }),
-                            onBack = ::pop,
-                            onUndo = { session.ops.undoLearned(it.screenClass, it.choice) },
-                            // Over the paused player its attempt keeps resolving: the rows hold their order.
-                            held = backStack.getOrNull(backStack.indexOf(route) - 1) is Route.Player,
-                        )
-                    }
-                    entry<Route.Player> { route ->
-                        // Removed from Continue Watching a moment ago and played now: the removal waiting for Undo goes.
-                        LaunchedEffect(route) { app.removal.played(route.id) }
-                        // The player's controls sit over the picture with no scrim: they keep an opaque fill. Their TV
-                        // focus is the white invert, as everywhere.
-                        CompositionLocalProvider(LocalOverPicture provides true) {
-                            PlayerScreen(
+                            // A deletion, the account gone, a new device: first on Home, above the hero (the owner,
+                            // 2026-11-02); "Signed in from" and the second way in stay after the first row.
+                            val alertCard = shownCard?.takeIf { signedInFrom == null && AccountRules.urgent(it) }
+                            val alert: (@Composable () -> Unit)? =
+                                alertCard?.let { shown ->
+                                    {
+                                        AccountCard(
+                                            marquee.accounts,
+                                            sync,
+                                            shown,
+                                            onSignIn = {
+                                                backStack.add(
+                                                    if (tv) Route.TvSignIn else Route.SignIn(firstRun = false),
+                                                )
+                                            },
+                                            onMakeKit = { backStack.add(Route.RecoveryKit) },
+                                        )
+                                    }
+                                }
+                            val accountCard: (@Composable () -> Unit)? =
+                                signedInFrom?.let { by ->
+                                    {
+                                        Said(
+                                            AccountRules.fill(AccountCopy.TV_SIGNED_IN_FROM, mapOf("device" to by)),
+                                            Status.Ok,
+                                        )
+                                    }
+                                } ?: shownCard?.takeIf { alertCard == null }?.let { shown ->
+                                    {
+                                        AccountCard(
+                                            marquee.accounts,
+                                            sync,
+                                            shown,
+                                            onSignIn = {
+                                                backStack.add(
+                                                    if (tv) Route.TvSignIn else Route.SignIn(firstRun = false),
+                                                )
+                                            },
+                                            onMakeKit = { backStack.add(Route.RecoveryKit) },
+                                        )
+                                    }
+                                }
+                            val addonsCard: (@Composable () -> Unit)? =
+                                app.defaultsCard.offer?.takeIf { app.home.rows.isNotEmpty() }?.let { answer ->
+                                    {
+                                        RecommendedCard(
+                                            answer,
+                                            onReview = {
+                                                app.defaultsCard.answer()
+                                                backStack.add(Route.Defaults(DefaultsMode.Review))
+                                            },
+                                            onNotNow = { app.defaultsCard.answer() },
+                                        )
+                                    }
+                                }
+                            // An Incognito end this session has not read: first, until its OK (plans/batch-10-incognito.md 5.4).
+                            val endedCard: (@Composable () -> Unit)? =
+                                if (profile?.incognitoEnded == true) ({ IncognitoEndedCard(gate::ackEnded) }) else null
+                            // Both show, the account card first, as on the web.
+                            val cards = listOfNotNull(endedCard, accountCard, addonsCard)
+                            val card: (@Composable () -> Unit)? =
+                                cards.takeIf { it.isNotEmpty() }?.let {
+                                    {
+                                        Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.m)) {
+                                            cards.forEach { it() }
+                                        }
+                                    }
+                                }
+                            val removal = app.removal
+                            val notice: (@Composable () -> Unit)? =
+                                if (removal.removing != null ||
+                                    removal.failed != null
+                                ) {
+                                    ({ RemovalNote(removal) })
+                                } else {
+                                    null
+                                }
+                            if (tv) {
+                                TvHome(
+                                    app.home,
+                                    app.tvHome,
+                                    onOpen = ::open,
+                                    onPlay = ::playTile,
+                                    onSetup = { backStack.add(Route.Setup) },
+                                    onAddons = ::addAnAddon,
+                                    rowsHidden = rowsHidden,
+                                    onHomeRows = onHomeRows,
+                                    kids = kids,
+                                    alert = alert,
+                                    card = card,
+                                    removal = app.removal,
+                                )
+                            } else {
+                                PhoneHome(
+                                    app.home,
+                                    onOpen = ::open,
+                                    onPlay = ::playTile,
+                                    onSetup = { backStack.add(Route.Setup) },
+                                    onAddons = ::addAnAddon,
+                                    rowsHidden = rowsHidden,
+                                    onHomeRows = onHomeRows,
+                                    kids = kids,
+                                    alert = alert,
+                                    card = card,
+                                    onRemove = { app.removal.remove(it, accessibility::actionWindow) },
+                                    removing = app.removal.removing?.id,
+                                    notice = notice,
+                                )
+                            }
+                        }
+                        entry<Route.Search> {
+                            SearchScreen(
+                                session,
+                                ::open,
+                                request = app.searchRequest,
+                                onRequestSent = { app.searchRequest = null },
+                                onAddons = { backStack.add(Route.Defaults(DefaultsMode.Settings)) },
+                                kids = kids,
+                            )
+                        }
+                        entry<Route.Discover> {
+                            DiscoverScreen(
+                                session,
+                                ::open,
+                                request = app.discoverRequest,
+                                onRequestSent = { app.discoverRequest = null },
+                                onSetup = { backStack.add(Route.Setup) },
+                                onAddons = ::addAnAddon,
+                                focus = app.discoverFocus,
+                            )
+                        }
+                        entry<Route.Library> {
+                            // On the phone Calendar is a row at the top of Library, pushed over it (D6).
+                            LibraryScreen(
+                                session,
+                                ::open,
+                                onCalendar = if (tv || kids) null else ({ backStack.add(Route.Calendar) }),
+                                onDiscover = if (kids) null else ({ choose(Route.Discover) }),
+                                onDownloads = if (tv) null else ({ backStack.add(Route.Downloads) }),
+                            )
+                        }
+                        entry<Route.Downloads> {
+                            DownloadsScreen(session, app.downloads, downloadsNav, kids = gate.snapshot?.kids != false)
+                        }
+                        entry<Route.DownloadedSeries> { route ->
+                            DownloadedSeriesScreen(
+                                session,
+                                route.itemId,
+                                app.downloads,
+                                downloadsNav,
+                                kids = gate.snapshot?.kids != false,
+                                onGone = { if (backStack.lastOrNull() == route) pop() },
+                            )
+                        }
+                        entry<Route.Calendar> {
+                            CalendarScreen(
+                                session,
+                                onOpen = { backStack.add(Route.Title("series", it.itemId, it.season)) },
+                                onDiscover = { choose(Route.Discover) },
+                            )
+                        }
+                        entry<Route.Profiles> {
+                            PickerScreen(
+                                gate,
+                                session,
+                                PickerMode.Switch,
+                                onBack = ::pop,
+                                onAdd = { backStack.add(Route.EditProfile(null)) },
+                                onManage = { backStack.add(Route.ManageProfiles) },
+                            )
+                        }
+                        entry<Route.ManageProfiles> {
+                            ManageProfilesScreen(
+                                gate,
+                                onEdit = { backStack.add(Route.EditProfile(it)) },
+                                onAdd = { backStack.add(Route.EditProfile(null)) },
+                            )
+                        }
+                        entry<Route.EditProfile> { route -> EditProfileScreen(gate, session, route.id, onDone = ::pop) }
+                        entry<Route.Settings> { settings(null) }
+                        entry<Route.SettingsSection> { route -> settings(route.id) }
+                        entry<Route.Addons> {
+                            AddonsScreen(
+                                session,
+                                app.linkInstall,
+                                onFindAddons = { backStack.add(Route.FindAddons) },
+                                sourcesOnly = false,
+                            )
+                        }
+                        entry<Route.Sources> {
+                            AddonsScreen(
+                                session,
+                                app.linkInstall,
+                                onFindAddons = { backStack.add(Route.FindAddons) },
+                                sourcesOnly = true,
+                            )
+                        }
+                        entry<Route.FindAddons> {
+                            // TV's Paste a link: the page with the link field, back to it when Find addons came from there.
+                            val fromSources =
+                                routes.getOrNull(routes.lastIndex - 1).let {
+                                    it == Route.Sources ||
+                                        it == Route.Addons
+                                }
+                            FindAddonsScreen(session, app.installCards, app.linkInstall, onPlugins = {
+                                backStack.add(Route.PluginDirectory)
+                            }, onPasteLink = {
+                                if (fromSources) pop() else backStack.add(Route.Sources)
+                            })
+                        }
+                        entry<Route.Debrid> { DebridScreen(session) }
+                        entry<Route.Plugins> { PluginsScreen(session) }
+                        entry<Route.PluginDirectory> { PluginDirectoryScreen(session) }
+                        entry<Route.Trakt> {
+                            TraktScreen(
+                                session,
+                                (LocalContext.current.applicationContext as MarqueeApp).trakt,
+                            )
+                        }
+                        entry<Route.HomeRows> { HomeRowsScreen(session) }
+                        entry<Route.StreamChoice> { StreamChoiceScreen(session) }
+                        entry<Route.Pairing> {
+                            // From onboarding, a join is the way in: Done goes Home. From Settings it goes back.
+                            PairingScreen(session, sync, onDone = {
+                                when {
+                                    // First run's other device: the join pulls, then Who's watching? or Home.
+                                    firstRun -> {
+                                        joined()
+                                    }
+
+                                    else -> {
+                                        pop()
+                                        // Scanned in from a sign-in's Other ways: that sign-in is done with.
+                                        if (sync.joined && backStack.lastOrNull() is Route.SignIn) {
+                                            marquee.accounts.endSignIn()
+                                            pop()
+                                        }
+                                    }
+                                }
+                            })
+                        }
+                        entry<Route.Sync> {
+                            SyncScreen(
+                                sync,
+                                marquee.accounts,
+                                onPair = { backStack.add(Route.Pairing) },
+                                onJoin = { backStack.add(Route.SyncJoin(it)) },
+                                onAdd = { backStack.add(Route.AddDevice) },
+                                onKit = { backStack.add(Route.RecoveryKit) },
+                                onLost = { backStack.add(Route.ReportLost(it)) },
+                                onCompare = { backStack.add(Route.SyncFork) },
+                                onSignIn = { backStack.add(Route.SignIn(firstRun = false)) },
+                                rows = marquee.accounts.rows(tv),
+                            )
+                        }
+                        entry<Route.SyncFork> { ForkScreen(sync, onDone = ::pop) }
+                        entry<Route.SyncJoin> { route -> SyncJoinScreen(sync, route.kit, onDone = ::pop) }
+                        entry<Route.AddDevice> {
+                            AddDeviceScreen(
+                                sync,
+                                marquee.accounts.approval,
+                                approves = marquee.accounts.rows(tv).approve,
+                                linked = marquee.pendingCode,
+                                onTaken = { marquee.pendingCode = null },
+                                onDone = ::pop,
+                            )
+                        }
+                        entry<Route.RecoveryKit> { RecoveryKitScreen(sync, onDone = ::pop) }
+                        entry<Route.ReportLost> { route -> ReportLostScreen(sync, route.id, onDone = ::pop) }
+                        entry<Route.Title> { route ->
+                            TitleScreen(
                                 route,
                                 session,
                                 app,
                                 form,
-                                // Leaving (fading out) it lets Back through to the page that is coming.
-                                active = backStack.lastOrNull() == route,
-                                // Only this entry pops itself: a held or double Back reaches the leaving entry
-                                // again during its fade, and must not pop the screen under it.
-                                onBack = {
-                                    val top = backStack.lastOrNull() == route
-                                    if (top) backStack.removeAt(backStack.lastIndex)
+                                onBack = ::pop,
+                                onPlay = { key, videoId, title ->
+                                    backStack.add(Route.Player(route.kind, route.id, videoId, title, key))
                                 },
-                                // Over the player, which waits paused: Back returns to it, a choice takes its place.
-                                onVersions = {
-                                    if (backStack.lastOrNull() == route) {
-                                        backStack.add(Route.Versions(route.kind, route.id, route.videoId, route.title))
-                                    }
-                                },
-                                onTitle = if (Format.parseVideo(route.videoId) != null) ({ toTitle(route) }) else null,
-                                onNext = { next, binge ->
-                                    replacePlayer(
-                                        route,
-                                        Route.Player(
-                                            route.kind,
-                                            route.id,
-                                            next.videoId,
-                                            route.title,
-                                            key = null,
-                                            binge = binge,
-                                        ),
+                                onStartOver = { key, videoId, title ->
+                                    backStack.add(
+                                        Route.Player(route.kind, route.id, videoId, title, key, startOver = true),
                                     )
                                 },
-                                // The same video and Versions view, the offered version's key.
-                                // Another version mid-play goes on from where it was, never from the start again.
-                                onOffer = { key -> replacePlayer(route, route.copy(key = key, startOver = false)) },
-                                // Where an addon is added (noSource). Accounts are set up in Settings only.
-                                onSettings = if (kids) null else ({ backStack.add(Route.Sources) }),
+                                onVersions = { videoId, name ->
+                                    backStack.add(Route.Versions(route.kind, route.id, videoId, name))
+                                },
+                                onPlayEpisode = { videoId, name ->
+                                    backStack.add(Route.Player(route.kind, route.id, videoId, name))
+                                },
+                                onGenre = { kind, genre ->
+                                    app.discoverRequest = DiscoverRequest(kind, genre)
+                                    link(Route.Discover)
+                                },
+                                onOpen = ::open,
+                                onPerson = { name ->
+                                    app.searchRequest = name
+                                    link(Route.Search)
+                                },
+                                canDownload = !tv && gate.snapshot?.kids == false,
+                                onDownloadVersion = { videoId, name ->
+                                    backStack.add(Route.Versions(route.kind, route.id, videoId, name, download = true))
+                                },
                             )
                         }
-                    }
-                },
-        )
+                        entry<Route.Versions> { route ->
+                            VersionsScreen(
+                                route,
+                                app,
+                                form,
+                                onPlay = { key ->
+                                    val next =
+                                        afterChoice(
+                                            routes,
+                                            Route.Player(route.kind, route.id, route.videoId, route.title, key),
+                                        )
+                                    backStack.clear()
+                                    backStack.addAll(next)
+                                },
+                                // A kids profile adds no source: no Settings to a page it cannot open.
+                                onAddSource = if (kids) null else ({ backStack.add(Route.Sources) }),
+                                onBack = ::pop,
+                                onUndo = { session.ops.undoLearned(it.screenClass, it.choice) },
+                                // Over the paused player its attempt keeps resolving: the rows hold their order.
+                                held = backStack.getOrNull(backStack.indexOf(route) - 1) is Route.Player,
+                            )
+                        }
+                        entry<Route.Player> { route ->
+                            // Removed from Continue Watching a moment ago and played now: the removal waiting for Undo goes.
+                            LaunchedEffect(route) { app.removal.played(route.id) }
+                            // The player's controls sit over the picture with no scrim: they keep an opaque fill. Their TV
+                            // focus is the white invert, as everywhere.
+                            CompositionLocalProvider(LocalOverPicture provides true) {
+                                PlayerScreen(
+                                    route,
+                                    session,
+                                    app,
+                                    form,
+                                    // Leaving (fading out) it lets Back through to the page that is coming.
+                                    active = backStack.lastOrNull() == route,
+                                    // Only this entry pops itself: a held or double Back reaches the leaving entry
+                                    // again during its fade, and must not pop the screen under it.
+                                    onBack = {
+                                        val top = backStack.lastOrNull() == route
+                                        if (top) backStack.removeAt(backStack.lastIndex)
+                                    },
+                                    // Over the player, which waits paused: Back returns to it, a choice takes its place.
+                                    onVersions = {
+                                        if (backStack.lastOrNull() == route) {
+                                            backStack.add(
+                                                Route.Versions(route.kind, route.id, route.videoId, route.title),
+                                            )
+                                        }
+                                    },
+                                    onTitle =
+                                        if (Format.parseVideo(route.videoId) !=
+                                            null
+                                        ) {
+                                            ({ toTitle(route) })
+                                        } else {
+                                            null
+                                        },
+                                    onNext = { next, binge ->
+                                        replacePlayer(
+                                            route,
+                                            Route.Player(
+                                                route.kind,
+                                                route.id,
+                                                next.videoId,
+                                                route.title,
+                                                key = null,
+                                                binge = binge,
+                                            ),
+                                        )
+                                    },
+                                    // The same video and Versions view, the offered version's key.
+                                    // Another version mid-play goes on from where it was, never from the start again.
+                                    onOffer = { key -> replacePlayer(route, route.copy(key = key, startOver = false)) },
+                                    // Where an addon is added (noSource). Accounts are set up in Settings only.
+                                    onSettings = if (kids) null else ({ backStack.add(Route.Sources) }),
+                                )
+                            }
+                        }
+                    },
+            )
+            if (pulling) GettingProfiles()
+        }
     }
 
     val selected = routes.lastOrNull { it.isTopLevel } ?: Route.Home
@@ -1017,8 +1169,8 @@ private fun AppNav(
             selected = selected,
             showTabs = framed,
             onSelect = ::choose,
-            statusStrip = top !is Route.Title && top !is Route.Player,
-            insetSides = top !is Route.Player,
+            statusStrip = top !is Route.Title && top !is Route.Player && !overWall,
+            insetSides = top !is Route.Player && !overWall,
             onBack = if (top.hasBackLink) ({ systemBack?.onBackPressed() ?: pop() }) else null,
             profile = phoneProfile,
             // Offline, every page but the player says so, one press from the downloads (plans/offline-downloads.md 3.5).
@@ -1087,12 +1239,16 @@ internal fun RemovalNote(
     }
 }
 
-/** The first run's still (V1): asked at the first framed step that shows, then kept for the others. */
-@Composable
-private fun AppState.firstRunStill(): FirstRunStill? {
-    LaunchedEffect(this) { askStill() }
-    return still
-}
+/** Whether [top] shows over first run's wall: a first-run step, any sign-in sheet (D10), or Import from setup. */
+internal fun overWall(
+    top: Route,
+    routes: List<Route>,
+): Boolean =
+    top == Route.Welcome || top == Route.FirstProfile || top == Route.Setup || top is Route.SignIn ||
+        top == Route.TvSignIn || (top == Route.Import && Route.Setup in routes)
+
+/** How long a first-run join waits for its first pull before it decides on the profiles it has. */
+private const val PULL_WAIT_MS = 15_000L
 
 /**
  * The shell's offline banner on page [top] (plans/offline-downloads.md 3.5): null for none (online, or the player),

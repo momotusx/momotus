@@ -71,6 +71,43 @@ object Marks {
             }.build()
     }
 
+    /** Google's "G", 48x48, in its four colours: Continue with Google (plans/first-screens.md 3.3). */
+    val Google: ImageVector by lazy {
+        ImageVector
+            .Builder("Google", 48.dp, 48.dp, 48f, 48f)
+            .apply { GOOGLE.forEach { (fill, d) -> addPath(nodes(d), fill = SolidColor(Color(fill))) } }
+            .build()
+    }
+
+    /** Facebook's round "f" mark, 40x40, white on its blue: Continue with Facebook. */
+    val Facebook: ImageVector by lazy {
+        ImageVector
+            .Builder("Facebook", 40.dp, 40.dp, 40f, 40f)
+            .addPath(nodes(FACEBOOK[0]), fill = SolidColor(Color.White))
+            .addPath(nodes(FACEBOOK[1]), fill = SolidColor(Color(FACEBOOK_BLUE)))
+            .build()
+    }
+
+    /** Facebook's blue, the button's fill. */
+    const val FACEBOOK_BLUE = 0xFF1877F2
+
+    internal val GOOGLE =
+        listOf(
+            0xFFEA4335 to
+                "M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z",
+            0xFF4285F4 to
+                "M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z",
+            0xFFFBBC05 to
+                "M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z",
+            0xFF34A853 to
+                "M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z",
+        )
+    internal val FACEBOOK =
+        listOf(
+            "M16.7 39.8C7.2 38.1 0 29.9 0 20 0 9 9 0 20 0s20 9 20 20c0 9.9-7.2 18.1-16.7 19.8l-1.1-.9h-4.4l-1.1.9z",
+            "m27.8 25.6.9-5.6h-5.3v-3.9c0-1.6.6-2.8 3-2.8H29V8.2c-1.4-.2-3-.4-4.4-.4-4.6 0-7.8 2.8-7.8 7.8V20h-5v5.6h5v14.1c1.1.2 2.2.3 3.3.3 1.1 0 2.2-.1 3.3-.3V25.6h4.4z",
+        )
+
     /** The rounded rectangles the SVGs draw with `rect`, as paths. */
     private const val IMDB_BADGE =
         "M4,0 H60 A4,4 0 0 1 64,4 V28 A4,4 0 0 1 60,32 H4 A4,4 0 0 1 0,28 V4 A4,4 0 0 1 4,0 Z"

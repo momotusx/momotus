@@ -1,17 +1,23 @@
 package app.marquee.android
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
-import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.Composable
@@ -24,12 +30,16 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.autofill.ContentType
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusRestorer
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.paneTitle
@@ -47,6 +57,7 @@ import app.marquee.core.AccountCopy
 import app.marquee.core.AccountRules
 import app.marquee.core.AccountRules.Act
 import app.marquee.core.AccountRules.Card
+import app.marquee.core.FirstRunCopy
 import app.marquee.core.SyncCopy
 import app.marquee.core.SyncRules
 import app.marquee.core.model.IdentityLink
@@ -55,19 +66,24 @@ import app.marquee.core.session.CoreSession
 import app.marquee.core.sync.AccountSignIn
 import app.marquee.core.sync.AccountSignIn.Step
 import app.marquee.core.sync.EmailCode
+import app.marquee.core.views.ViewStatus
 import app.marquee.design.Form
 import app.marquee.design.Icons
 import app.marquee.design.LiveSpoken
+import app.marquee.design.Marks
 import app.marquee.design.Marquee
 import app.marquee.design.MqText
 import app.marquee.design.MqTextField
 import app.marquee.design.PrimaryButton
+import app.marquee.design.Qr
 import app.marquee.design.SecondaryButton
 import app.marquee.design.Spinner
 import app.marquee.design.Status
 import app.marquee.design.SwitchRow
 import app.marquee.design.TextRole
+import app.marquee.design.focusClickable
 import app.marquee.design.focusSoon
+import app.marquee.design.marqueeFocus
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -166,6 +182,12 @@ fun SignInScreen(
     /** [kit]: the second-way step's "Use a recovery kit instead", whose page comes next. */
     onCreated: (kit: Boolean) -> Unit,
     onIn: () -> Unit,
+    /** From "I already use Momotus": another device's way first, and its line (plans/first-screens.md 3.3). */
+    returning: Boolean = false,
+    /** The grabber's drag down: back, as the system Back. */
+    onBack: () -> Unit = {},
+    /** The provider pressed, for Who's watching?'s line after a join. */
+    onProvider: (String) -> Unit = {},
 ) {
     val context = LocalContext.current
     LaunchedEffect(Unit) { if (flows.signIn == null) flows.startSignIn(context) }
@@ -223,102 +245,141 @@ fun SignInScreen(
             }
         }
     }
-    LazyColumn(
-        Modifier.fillMaxSize().focusRestorer(),
-        contentPadding = pagePadding(framed = false),
-        verticalArrangement = Arrangement.spacedBy(Marquee.space.m),
+    var another by rememberSaveable { mutableStateOf(false) }
+    var others by rememberSaveable { mutableStateOf(false) }
+    val choose = { p: String ->
+        onProvider(p)
+        signIn.choose(p)
+    }
+    // The Login sheet over the still wall, on first run and from Settings alike (plans/first-screens.md 3.3, D10).
+    FirstSheet(
+        if (step == Step.New) AccountCopy.CREATE_ACCOUNT else AccountCopy.SIGN_IN_TITLE,
+        width = 860.dp,
+        corner = if (step is Step.Start && !own) ({ SheetLink(AccountCopy.NOT_NOW, notNow) }) else null,
+        line =
+            when {
+                step !is Step.Start -> null
+                returning -> FirstRunCopy.LOGIN_RETURNING
+                else -> FirstRunCopy.LOGIN_LINE
+            },
+        onDrag = onBack,
+        scroll = false,
+        pad = false,
     ) {
-        item(key = "head") {
-            BrowseHeader(if (step == Step.New) AccountCopy.CREATE_ACCOUNT else AccountCopy.SIGN_IN_TITLE)
-        }
-        if (!firstRun && step is Step.Start) {
-            block("added") { MqText(AccountCopy.LIBRARY_ADDED, color = Marquee.colors.muted) }
-        }
-        signIn.failure?.let { f -> block("failure") { FailureNote(f, onAct = act) } }
-        when (step) {
-            Step.Loading, is Step.Working, is Step.Done -> {
-                block("working") { Spinner() }
+        LazyColumn(
+            Modifier.focusRestorer(),
+            verticalArrangement = Arrangement.spacedBy(Marquee.space.s),
+        ) {
+            if (!firstRun && step is Step.Start) {
+                block("added") { MqText(AccountCopy.LIBRARY_ADDED, color = Marquee.colors.muted) }
             }
+            signIn.failure?.let { f -> block("failure") { FailureNote(f, onAct = act) } }
+            when (step) {
+                Step.Loading, is Step.Working, is Step.Done -> {
+                    block("working") { Spinner() }
+                }
 
-            is Step.Start -> {
-                if (own) {
-                    block("own") {
-                        OwnServer(flows, onProviders = {
-                            own = false
-                            flows.endSignIn()
-                            flows.startSignIn(context)
-                        }, onNone = onNoProviders)
-                    }
-                } else {
-                    providers(step.providers, signIn::choose)
-                    // Email is its own row under the providers, the primary one when it is the only way (D6: never
-                    // on a TV, whose sign-in is the QR).
-                    val email = step.email && !tv
-                    if (email) {
-                        block("email-row") {
-                            val choose = { signIn.choose(AccountRules.EMAIL) }
-                            if (step.providers.isEmpty()) {
-                                PrimaryButton(
-                                    AccountCopy.CONTINUE_WITH_EMAIL,
-                                    choose,
-                                    icon = Icons.Mail,
-                                    focusRequester = stepFocus(),
-                                )
-                            } else {
-                                SecondaryButton(AccountCopy.CONTINUE_WITH_EMAIL, choose, icon = Icons.Mail)
+                is Step.Start -> {
+                    if (own) {
+                        block("own") {
+                            OwnServer(flows, onProviders = {
+                                own = false
+                                flows.endSignIn()
+                                flows.startSignIn(context)
+                            }, onNone = onNoProviders)
+                        }
+                    } else {
+                        // "I already use Momotus": the other device's way first, one more press on that path.
+                        if (returning &&
+                            !tv
+                        ) {
+                            anotherDevice(another, session, sync, flows, signIn) { another = !another }
+                        }
+                        providers(step.providers, choose)
+                        // Email is its own row under the providers, the primary one when it is the only way (D6: never
+                        // on a TV, whose sign-in is the QR).
+                        val email = step.email && !tv
+                        if (email) {
+                            block("email-row") {
+                                val choose = { signIn.choose(AccountRules.EMAIL) }
+                                if (step.providers.isEmpty()) {
+                                    PrimaryButton(
+                                        AccountCopy.CONTINUE_WITH_EMAIL,
+                                        choose,
+                                        icon = Icons.Mail,
+                                        focusRequester = stepFocus(),
+                                    )
+                                } else {
+                                    SecondaryButton(AccountCopy.CONTINUE_WITH_EMAIL, choose, icon = Icons.Mail)
+                                }
                             }
                         }
-                    }
-                    // No provider on this sync service: Continue, a passkey here or a new account (plans/tv-qr-login.md
-                    // 5.4); under email when email is the way in. Not while the service did not answer: its failure
-                    // and Try again say what to do.
-                    if (step.providers.isEmpty() && signIn.failure == null) {
-                        block("continue") {
-                            if (email) {
-                                SecondaryButton(AccountCopy.CONTINUE, signIn::continueHere)
-                            } else {
-                                PrimaryButton(AccountCopy.CONTINUE, signIn::continueHere, focusRequester = stepFocus())
+                        // No provider on this sync service: Continue, a passkey here or a new account (plans/tv-qr-login.md
+                        // 5.4); under email when email is the way in. Not while the service did not answer: its failure
+                        // and Try again say what to do.
+                        if (step.providers.isEmpty() && signIn.failure == null) {
+                            block("continue") {
+                                if (email) {
+                                    SecondaryButton(AccountCopy.CONTINUE, signIn::continueHere)
+                                } else {
+                                    PrimaryButton(
+                                        AccountCopy.CONTINUE,
+                                        signIn::continueHere,
+                                        focusRequester = stepFocus(),
+                                    )
+                                }
                             }
                         }
+                        if (!returning &&
+                            !tv
+                        ) {
+                            anotherDevice(another, session, sync, flows, signIn) { another = !another }
+                        }
+                        // Other ways to sign in: a 48 dp link that opens the rest (a passkey, a scan, a kit, one's server).
+                        block("other-link") { SheetLink(AccountCopy.OTHER_WAYS, { others = !others }) }
+                        if (others) {
+                            otherWays(flows.passkeys, signIn::usePasskey, onScan, onKit, onOwnServer = {
+                                own =
+                                    true
+                            })
+                        }
                     }
-                    otherWays(flows.passkeys, signIn::usePasskey, onScan, onKit, onOwnServer = { own = true })
-                    block("not-now") { SecondaryButton(AccountCopy.NOT_NOW, notNow) }
                 }
-            }
 
-            Step.Email -> {
-                block("email") { EmailStages(signIn.email, act) }
-            }
-
-            // The words and buttons are the failure's: "Scan this code with a device that's signed in."
-            is Step.Found -> {
-                block("found") {
-                    SignInPairing(session, sync, flows.server(context), onJoined = signIn::joined)
+                Step.Email -> {
+                    block("email") { EmailStages(signIn.email, act) }
                 }
-            }
 
-            Step.New -> {
-                block("new") { NewAccount(session, sync, flows.server(context), signIn) }
-            }
-
-            Step.StartOverAsk -> {
-                block("start-over") {
-                    Callout(Icons.TriangleAlert, AccountCopy.START_OVER_WARNING)
-                    PrimaryButton(AccountCopy.START_OVER, signIn::confirmStartOver, focusRequester = stepFocus())
-                    SecondaryButton(SyncCopy.CANCEL, { signIn.act(Act.Cancel) })
+                // The words and buttons are the failure's: "Scan this code with a device that's signed in."
+                is Step.Found -> {
+                    block("found") {
+                        SignInPairing(session, sync, flows.server(context), onJoined = signIn::joined)
+                    }
                 }
-            }
 
-            Step.SecondWay -> {
-                block("second-way") {
-                    val (again, kit, later) = AccountCopy.NO_SECOND_WAY_IN_ACTIONS
-                    Callout(Icons.ShieldAlert, AccountCopy.NO_SECOND_WAY_IN)
-                    PrimaryButton(again, signIn::savePasskeyAgain, focusRequester = stepFocus())
-                    SecondaryButton(kit, {
-                        kitNext = true
-                        signIn.later()
-                    })
-                    SecondaryButton(later, signIn::later)
+                Step.New -> {
+                    block("new") { NewAccount(session, sync, flows.server(context), signIn) }
+                }
+
+                Step.StartOverAsk -> {
+                    block("start-over") {
+                        Callout(Icons.TriangleAlert, AccountCopy.START_OVER_WARNING)
+                        PrimaryButton(AccountCopy.START_OVER, signIn::confirmStartOver, focusRequester = stepFocus())
+                        SecondaryButton(SyncCopy.CANCEL, { signIn.act(Act.Cancel) })
+                    }
+                }
+
+                Step.SecondWay -> {
+                    block("second-way") {
+                        val (again, kit, later) = AccountCopy.NO_SECOND_WAY_IN_ACTIONS
+                        Callout(Icons.ShieldAlert, AccountCopy.NO_SECOND_WAY_IN)
+                        PrimaryButton(again, signIn::savePasskeyAgain, focusRequester = stepFocus())
+                        SecondaryButton(kit, {
+                            kitNext = true
+                            signIn.later()
+                        })
+                        SecondaryButton(later, signIn::later)
+                    }
                 }
             }
         }
@@ -389,6 +450,68 @@ private fun OwnServer(
     }, enabled = !busy, focusRequester = stepFocus())
 }
 
+/**
+ * Continue with a provider as the provider draws it (plans/first-screens.md 3.3): Google white with its "G", Facebook
+ * blue with its mark; any other a secondary pill. The label is large text (20 bold), so white on Facebook's blue keeps
+ * the 3:1 large text needs.
+ */
+@Composable
+internal fun ProviderButton(
+    provider: String,
+    onClick: () -> Unit,
+    focusRequester: FocusRequester? = null,
+) {
+    val label = AccountRules.continueWith(provider)
+    val (mark, fill) =
+        when (provider) {
+            "google" -> Marks.Google to Color.White
+            "facebook" -> Marks.Facebook to Color(Marks.FACEBOOK_BLUE)
+            else -> return SecondaryButton(label, onClick, Modifier.fillMaxWidth(), focusRequester = focusRequester)
+        }
+    val ink = if (provider == "google") Marquee.colors.onPrimary else Color.White
+    val tv = Marquee.form == Form.Tv
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .then(focusRequester?.let { Modifier.focusRequester(it) } ?: Modifier)
+            .marqueeFocus(Marquee.radius.pill)
+            .clip(RoundedCornerShape(Marquee.radius.pill))
+            .background(fill)
+            .focusClickable(onClick, Role.Button)
+            .heightIn(min = if (tv) 72.dp else 52.dp)
+            .padding(horizontal = 20.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Image(mark, contentDescription = null, modifier = Modifier.size(if (tv) 32.dp else 22.dp))
+        MqText(label, role = TextRole.Title3, weight = FontWeight.Bold, color = ink, maxLines = 2)
+    }
+}
+
+/** Use another device: the pairing code in the sheet, under its button (the phone only; TV and wide show the QR). */
+private fun LazyListScope.anotherDevice(
+    open: Boolean,
+    session: CoreSession,
+    sync: SyncController,
+    flows: AccountFlows,
+    signIn: AccountSignIn,
+    onToggle: () -> Unit,
+) {
+    block("another") {
+        SecondaryButton(
+            FirstRunCopy.USE_ANOTHER_DEVICE,
+            onToggle,
+            Modifier.fillMaxWidth(),
+            icon = Icons.QrCode,
+            selected = open,
+        )
+        if (open) {
+            val context = LocalContext.current
+            SignInPairing(session, sync, flows.server(context), onJoined = signIn::joined)
+        }
+    }
+}
+
 private fun LazyListScope.providers(
     providers: List<String>,
     choose: (String) -> Unit,
@@ -396,9 +519,9 @@ private fun LazyListScope.providers(
     providers.forEachIndexed { i, p ->
         block("provider-$p") {
             if (i == 0) {
-                PrimaryButton(AccountRules.continueWith(p), { choose(p) }, focusRequester = stepFocus())
+                ProviderButton(p, { choose(p) }, stepFocus())
             } else {
-                SecondaryButton(AccountRules.continueWith(p), { choose(p) })
+                ProviderButton(p, { choose(p) })
             }
         }
     }
@@ -423,15 +546,19 @@ private fun LazyListScope.otherWays(
 }
 
 /**
- * A TV's first run (plans/tv-qr-login.md 5.5): Sign in with your phone, the QR and "Scan with your phone's camera",
- * and Browse first, which leads to the doors. A phone on the TV's network signs it in with one tap; then Home.
+ * A TV's Login sheet over the still wall (plans/first-screens.md 3.3, D3; plans/tv-qr-login.md 5.5): the live QR, "Sign
+ * in to Momotus" and its line, the three steps, the waiting line, then Not now (the first focus) and Other ways to sign
+ * in (Account: a recovery kit, one's own server; no email on a TV). A phone on the TV's network signs it in with one
+ * tap. With no QR (no sync service, a code that did not come, or one the service refused) the sheet says so in one
+ * line with the reason under it, Try again and Not now, Not now focused.
  */
 @Composable
 fun TvSignInScreen(
     session: CoreSession,
     sync: SyncController,
     server: String,
-    onDoors: () -> Unit,
+    onNotNow: () -> Unit,
+    onOther: () -> Unit,
     onIn: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -442,33 +569,107 @@ fun TvSignInScreen(
         )
     val name = remember { context.deviceName(tv = true) }
     LaunchedEffect(server) {
-        if (holder.view == null) {
+        if (holder.view == null && server.isNotEmpty()) {
             context.rememberJoin(server, name)
             holder.start(server, name)
         }
     }
-    val joined = holder.view?.current() is PairingSnapshot.Joined
-    val browse = remember { FocusRequester() }
-    // Browse first is the one focus stop, and has it (plans/tv-qr-login.md 5.5).
-    LaunchedEffect(Unit) { focusSoon(browse) }
-    LazyColumn(
-        Modifier.fillMaxSize().focusRestorer(),
-        contentPadding = pagePadding(framed = false),
-        verticalArrangement = Arrangement.spacedBy(Marquee.space.m),
-    ) {
-        item(key = "head") { BrowseHeader(AccountCopy.TV_SIGN_IN) }
-        holder.view?.let { view ->
-            item(key = "session") {
-                Column(Modifier.padding(horizontal = Marquee.safe.side).widthIn(max = 1100.dp)) {
-                    Session(view, sync, onDone = onIn)
-                }
+    val view = holder.view
+    val p = view?.current()
+    // A code that has not come after PAIRING_LATE_MS is no code: the sheet says so, and Try again waits that long again.
+    var late by remember(view) { mutableStateOf(false) }
+    LaunchedEffect(view) {
+        delay(SyncRules.PAIRING_LATE_MS)
+        late = true
+    }
+    val failed = (view?.status as? ViewStatus.Failed)?.reason
+    val noQr = server.isEmpty() || failed != null || (late && (p == null || p == PairingSnapshot.Starting))
+    if (p is PairingSnapshot.Joined && !sync.joining) LaunchedEffect(Unit) { onIn() }
+    TvLoginSheet(
+        qr = (p as? PairingSnapshot.Waiting)?.qr,
+        approving = p == PairingSnapshot.Joining || p is PairingSnapshot.Joined,
+        noQr = if (noQr) failed?.let(SyncCopy::pairingProblem) ?: AccountCopy.UNREACHABLE else null,
+        onNotNow = onNotNow,
+        onOther = onOther,
+        onRetry = if (server.isEmpty()) null else ({ holder.start(server, name) }),
+    )
+}
+
+/**
+ * The TV Login sheet's look: the QR [qr] (none yet: an empty white square), the steps and the waiting line, or with
+ * [noQr] (its reason) the one line, Try again ([onRetry]) and Not now. Not now has the first focus either way.
+ */
+@Composable
+internal fun TvLoginSheet(
+    qr: String?,
+    approving: Boolean,
+    noQr: String?,
+    onNotNow: () -> Unit,
+    onOther: () -> Unit,
+    onRetry: (() -> Unit)?,
+) {
+    val notNow = remember { FocusRequester() }
+    LaunchedEffect(noQr != null) { focusSoon(notNow, 60) }
+    FirstSheet(null, width = 1200.dp) {
+        Row(horizontalArrangement = Arrangement.spacedBy(48.dp), verticalAlignment = Alignment.CenterVertically) {
+            if (noQr == null) {
+                Box(
+                    Modifier
+                        .size(296.dp)
+                        .clip(RoundedCornerShape(20.dp))
+                        .background(Color.White)
+                        .padding(18.dp),
+                    contentAlignment = Alignment.Center,
+                ) { qr?.let { Qr(it, AccountCopy.TV_QR_LABEL, 260.dp, pairing = true) } }
             }
-        }
-        // A recovery kit is reachable from the doors (Settings, Account), for a person who cannot scan.
-        if (!joined) {
-            item(key = "browse") {
-                Box(Modifier.padding(horizontal = Marquee.safe.side)) {
-                    SkipLink(AccountCopy.BROWSE_FIRST, onDoors, focusRequester = browse)
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                MqText(
+                    FirstRunCopy.TV_LOGIN_TITLE,
+                    Modifier.semantics { heading() },
+                    role = TextRole.Title1,
+                    color = Color.White,
+                    weight = FontWeight.Bold,
+                )
+                if (noQr != null) {
+                    LiveSpoken(FirstRunCopy.TV_NO_QR) { MqText(FirstRunCopy.TV_NO_QR, role = TextRole.Body) }
+                    MqText(
+                        noQr,
+                        role = TextRole.Callout,
+                        color = Marquee.colors.muted,
+                    )
+                    Row(Modifier.padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                        onRetry?.let { SecondaryButton(FirstRunCopy.TRY_AGAIN, it, icon = Icons.RefreshCw) }
+                        SecondaryButton(AccountCopy.NOT_NOW, onNotNow, focusRequester = notNow)
+                    }
+                } else {
+                    MqText(FirstRunCopy.LOGIN_LINE, role = TextRole.Body, color = Marquee.colors.muted)
+                    FirstRunCopy.TV_STEPS.forEachIndexed { i, step ->
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Box(
+                                Modifier.size(40.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.16f)),
+                                contentAlignment = Alignment.Center,
+                            ) { MqText("${i + 1}", role = TextRole.Callout, weight = FontWeight.Bold) }
+                            MqText(step, role = TextRole.Callout, color = Marquee.colors.muted)
+                        }
+                    }
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Spinner(size = 24.dp)
+                        MqText(
+                            if (approving) AccountCopy.APPROVE_SIGNING_IN else FirstRunCopy.QR_WAITING,
+                            role = TextRole.Callout,
+                            color = Marquee.colors.muted,
+                        )
+                    }
+                    Row(Modifier.padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                        SecondaryButton(AccountCopy.NOT_NOW, onNotNow, focusRequester = notNow)
+                        SecondaryButton(AccountCopy.OTHER_WAYS, onOther)
+                    }
                 }
             }
         }

@@ -64,6 +64,8 @@ class MainActivity : ComponentActivity() {
             app.marquee.design.HeroTrailers.walk = WalkMute.on
             app.marquee.design.HeroTrailers.walkSwitch = intent.getBooleanExtra("soundSwitch", false)
             WalkLog.read(this, intent)
+            // A walk's reduced motion (plans/first-screens.md 10): the device's own setting stays as it is.
+            app.marquee.design.launchReducedMotion = intent.getBooleanExtra("reduceMotion", false)
         }
         DebugEntry.launched(this)
         if (DebugEntry.show(this, form)) return
