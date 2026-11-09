@@ -1887,7 +1887,7 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
               pick={(id) => id !== "current" && engine.selectTrack("audio", id)}
               versions={
                 <RouteA class="chip3 ghost" href={versionsPath(props.kind, props.id, props.videoId)} replace on:click={toVersions} data-f="audio:versions">
-                  <span class="cl">Choose a version</span>
+                  <span class="cl">{barWords.chooseVersion}</span>
                 </RouteA>
               }
               close={closeStrip}

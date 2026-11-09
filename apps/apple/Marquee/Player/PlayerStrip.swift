@@ -241,7 +241,7 @@ struct SubtitleStrip: View {
         let all = languages
         let on = checked
         HStack(spacing: 8) {
-            StripChip(title: "Off", checked: on == nil) { model.chooseSubtitle(nil) }
+            StripChip(title: bar.off, checked: on == nil) { model.chooseSubtitle(nil) }
                 .focused($focus, equals: "off")
             ForEach(BarRules.chips(all, on: on, preferred: model.subtitleLanguages, cap: BarRules.chipCap(phone: phone))) { l in
                 StripChip(title: l.name, checked: on == l.language) {
@@ -256,7 +256,7 @@ struct SubtitleStrip: View {
                 .focused($focus, equals: l.language)
             }
             if all.isEmpty, model.playback?.subtitlesPending == true || model.playback?.phase != "ready" {
-                Text("Searching").textFont(Theme.type.callout, relativeTo: .callout).foregroundStyle(Theme.Palette.muted).fixedSize()
+                Text(bar.stillSearching).textFont(Theme.type.callout, relativeTo: .callout).foregroundStyle(Theme.Palette.muted).fixedSize()
             }
         }
         .accessibilityElement(children: .contain)
@@ -276,7 +276,7 @@ struct SubtitleStrip: View {
                 withAnimation(Theme.Motion.panel) { model.styleOpen.toggle() }
             }
             .accessibilityAddTraits(.isButton)
-            .accessibilityValue(model.styleOpen ? "Expanded" : "Collapsed")
+            .accessibilityValue(model.styleOpen ? bar.names.expanded : bar.names.collapsed)
         }
         closeButton(close)
     }
@@ -367,7 +367,7 @@ struct AudioStrip: View {
             .accessibilityElement(children: .contain)
             .accessibilityLabel(bar.names.audioTrack)
             if model.audioTracks.count <= 1, let chooseVersion {
-                StripChip(title: PlayerLayout.failureLabel(.versions, offer: nil), ghost: true, mark: { EmptyView() }, action: chooseVersion)
+                StripChip(title: bar.chooseVersion, ghost: true, mark: { EmptyView() }, action: chooseVersion)
             }
             closeButton(close)
         }

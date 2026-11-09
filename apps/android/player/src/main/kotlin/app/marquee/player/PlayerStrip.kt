@@ -656,7 +656,7 @@ fun SubtitleStrip(
                 horizontalArrangement = Arrangement.spacedBy(stripGap()),
             ) {
                 StripChip(
-                    "Off",
+                    Bar.OFF,
                     { if (!off) controller.selectText(TRACK_OFF) },
                     down.then(if (offFirst && first != null) Modifier.focusRequester(first) else Modifier),
                     checked = off,
@@ -675,7 +675,7 @@ fun SubtitleStrip(
                 }
             }
             if (rows.size <= 1 && controller.subtitlesPending) {
-                MqText(STILL_SEARCHING, role = pillText(), color = Marquee.colors.muted, maxLines = 1)
+                MqText(Bar.STILL_SEARCHING, role = pillText(), color = Marquee.colors.muted, maxLines = 1)
             }
             StripChip(Bar.MORE_LANGUAGES, onMore, down, ghost = true, trailing = Icons.ChevronRight)
             controller.quickShift?.let { delay ->
@@ -712,9 +712,6 @@ fun SubtitleStrip(
         }
     }
 }
-
-/** Said in the subtitle strip while the core still looks and nothing is listed yet (plans/player-bar.md 7). */
-const val STILL_SEARCHING = "Still searching"
 
 /** The Style row (section 5): Size, Position and Background, on a glass pill over the strip's row. */
 @Composable
@@ -864,7 +861,7 @@ fun AudioStrip(
         }
         if (tracks.size <= 1) {
             StripChip(
-                CHOOSE_A_VERSION,
+                Bar.CHOOSE_VERSION,
                 onVersions,
                 down.then(if (tracks.isEmpty() && first != null) Modifier.focusRequester(first) else Modifier),
                 ghost = true,
@@ -874,6 +871,3 @@ fun AudioStrip(
         StripChip(Bar.CLOSE, onClose, down, ghost = true, icon = Icons.X, spoken = Bar.CLOSE)
     }
 }
-
-/** The audio strip's way to another version when this one has one track or none (web's "Choose a version"). */
-const val CHOOSE_A_VERSION = "Choose a version"

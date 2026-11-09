@@ -1,6 +1,8 @@
 import { expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import type { SubtitleTrack } from "../core/generated/SubtitleTrack";
-import { chipCap, desktopFit, MIN_SCRUBBER, nextShown, phoneFit, positionStep, positionText, shiftName, shiftSaid, shiftShown, stripLanguages } from "./bar";
+import { barWords, chipCap, desktopFit, MIN_SCRUBBER, nextShown, phoneFit, positionStep, positionText, shiftName, shiftSaid, shiftShown, stripLanguages } from "./bar";
 
 const track = (url: string, language = "en") => ({ url, lang: language, language, languageName: language }) as unknown as SubtitleTrack;
 
@@ -93,4 +95,14 @@ test("the shift's spoken line and its value's name", () => {
   expect(shiftName(0, false)).toBe("0.0 s, subtitles in sync");
   expect(shiftName(0.25, true)).toBe("+0.25 s, subtitles later, press OK to adjust");
   expect(shiftName(0, true)).toBe("0.0 s, subtitles in sync, press OK to adjust");
+});
+
+test("the strips take Off, Still searching and Choose a version from the shared words, as Android and Apple do", () => {
+  expect([barWords.off, barWords.stillSearching, barWords.chooseVersion]).toEqual(["Off", "Still searching", "Choose a version"]);
+  const strip = readFileSync(join(import.meta.dir, "../player/bar-strip.tsx"), "utf8");
+  expect(strip).not.toMatch(/>\s*(Off|Still searching)\s*</);
+  expect(strip).toContain("{barWords.off}");
+  expect(strip).toContain("{barWords.stillSearching}");
+  const player = readFileSync(join(import.meta.dir, "../screens/player.tsx"), "utf8");
+  expect(player).toMatch(/data-f="audio:versions">\s*<span class="cl">\{barWords\.chooseVersion\}<\/span>/);
 });

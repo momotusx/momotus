@@ -167,7 +167,10 @@
       "higher": "Higher",
       "background": "Background",
       "backgrounds": { "box": "Box", "outline": "Outline", "shadow": "Shadow" },
+      "off": "Off",
+      "stillSearching": "Still searching",
       "moreLanguages": "More languages",
+      "chooseVersion": "Choose a version",
       "next": "Next",
       "close": "Close",
       "setByDevice": "Set by your device's caption settings",
@@ -196,7 +199,9 @@
         "smaller": "Smaller",
         "larger": "Larger",
         "subtitleLanguage": "Subtitle language",
-        "audioTrack": "Audio track"
+        "audioTrack": "Audio track",
+        "expanded": "Expanded",
+        "collapsed": "Collapsed"
       }
     },
     "subtitleNotes": {

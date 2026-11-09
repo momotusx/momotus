@@ -234,7 +234,10 @@ class StreamChoiceCopyTest {
                                 put("higher", Bar.HIGHER)
                                 put("background", Bar.BACKGROUND)
                                 put("backgrounds", buildJsonObject { for ((b, w) in Bar.BACKGROUNDS) put(b.wire, w) })
+                                put("off", Bar.OFF)
+                                put("stillSearching", Bar.STILL_SEARCHING)
                                 put("moreLanguages", Bar.MORE_LANGUAGES)
+                                put("chooseVersion", Bar.CHOOSE_VERSION)
                                 put("next", Bar.NEXT)
                                 put("close", Bar.CLOSE)
                                 put("setByDevice", Bar.SET_BY_DEVICE)
@@ -266,6 +269,8 @@ class StreamChoiceCopyTest {
                                         put("larger", Bar.Names.LARGER)
                                         put("subtitleLanguage", Bar.Names.SUBTITLE_LANGUAGE)
                                         put("audioTrack", Bar.Names.AUDIO_TRACK)
+                                        put("expanded", Bar.Names.EXPANDED)
+                                        put("collapsed", Bar.Names.COLLAPSED)
                                     },
                                 )
                             },

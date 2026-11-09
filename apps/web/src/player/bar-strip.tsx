@@ -215,7 +215,7 @@ export function SubtitleStrip(props: SubtitleStripProps) {
             <svg class="fs" viewBox="0 0 26 26" aria-hidden="true">
               <circle cx="13" cy="13" r="12" fill="none" stroke="currentColor" stroke-opacity=".3" stroke-width="2" />
             </svg>
-            <span class="cl">Off</span>
+            <span class="cl">{barWords.off}</span>
           </button>
           <For each={props.languages}>
             {(l) => (
@@ -228,7 +228,7 @@ export function SubtitleStrip(props: SubtitleStripProps) {
           <Show when={props.searching}>
             <span class="snote" role="status">
               <LoaderCircle class="spin" aria-hidden />
-              Still searching
+              {barWords.stillSearching}
             </span>
           </Show>
           <button class="chip3 ghost" data-f="strip:more" onClick={() => props.more()}>

@@ -1,6 +1,7 @@
 package app.marquee.player
 
 import androidx.compose.ui.unit.dp
+import java.io.File
 import kotlin.math.pow
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -111,6 +112,21 @@ class PlayerBarRulesTest {
     }
 
     /** The relative luminance of an sRGB grey [value] 0 to 255. */
+    @Test
+    fun `the strips take Off, Still searching and Choose a version from the shared words`() {
+        // Review 11 of bar-android: the words are player.bar's (StreamChoiceCopyTest holds them to the file), never
+        // literals here, so the web and Apple cannot drift.
+        val strip =
+            File("src/main/kotlin/app/marquee/player/PlayerStrip.kt")
+                .readLines()
+                .filterNot { it.trimStart().startsWith("*") || it.trimStart().startsWith("/") }
+                .joinToString("\n")
+        for (literal in listOf("\"Off\"", "\"Still searching\"", "\"Choose a version\"")) {
+            assertTrue(literal !in strip, "$literal is a literal in PlayerStrip.kt")
+        }
+        for (word in listOf("Bar.OFF", "Bar.STILL_SEARCHING", "Bar.CHOOSE_VERSION")) assertTrue(word in strip, word)
+    }
+
     private fun luminance(value: Float): Float {
         val c = value / 255f
         return if (c <= 0.04045f) c / 12.92f else ((c + 0.055f) / 1.055f).pow(2.4f)

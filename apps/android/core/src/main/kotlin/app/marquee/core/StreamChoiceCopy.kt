@@ -300,7 +300,16 @@ object StreamChoiceCopy {
                 SubtitleBackground.Outline to "Outline",
                 SubtitleBackground.Shadow to "Shadow",
             )
+
+        /** The subtitle strip's first chip. */
+        const val OFF = "Off"
+
+        /** The subtitle strip while the core still looks and nothing is listed yet (plans/player-bar.md 7). */
+        const val STILL_SEARCHING = "Still searching"
         const val MORE_LANGUAGES = "More languages"
+
+        /** The audio strip's way to Versions. */
+        const val CHOOSE_VERSION = "Choose a version"
         const val NEXT = "Next"
         const val CLOSE = "Close"
 
@@ -345,6 +354,10 @@ object StreamChoiceCopy {
             const val LARGER = "Larger"
             const val SUBTITLE_LANGUAGE = "Subtitle language"
             const val AUDIO_TRACK = "Audio track"
+
+            /** Style's state where the platform has no expanded state of its own (Apple). */
+            const val EXPANDED = "Expanded"
+            const val COLLAPSED = "Collapsed"
         }
     }
 

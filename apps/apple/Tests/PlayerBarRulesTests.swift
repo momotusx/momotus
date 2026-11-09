@@ -213,6 +213,17 @@ private final class ManualTime: @unchecked Sendable {
     #expect(strip.contains("StripChip(title: bar.style, checked: model.styleOpen, choice: false)"))
 }
 
+@Test func theStripsTakeEveryWordFromTheSharedFile() throws {
+    // Review P3-10 of bar-apple: Off, Still searching (never "Searching"), Choose a version and Style's state are
+    // player.bar's words, as on Android and the web.
+    let bar = StreamChoice.words.player.bar
+    #expect([bar.off, bar.stillSearching, bar.chooseVersion, bar.names.expanded, bar.names.collapsed]
+        == ["Off", "Still searching", "Choose a version", "Expanded", "Collapsed"])
+    let strip = try String(contentsOf: URL(fileURLWithPath: #filePath).deletingLastPathComponent().appending(path: "../Marquee/Player/PlayerStrip.swift"), encoding: .utf8)
+    #expect(!strip.contains("title: \"") && !strip.contains("Text(\"") && !strip.contains("accessibilityValue(model.styleOpen ? \""))
+    #expect(strip.contains("Text(bar.stillSearching)") && strip.contains("StripChip(title: bar.chooseVersion"))
+}
+
 @Test func theShiftReadsAtLeastOneDecimalAndAtMostTwo() {
     #expect(PlayerLayout.delayText(0.25) == "+0.25 s")
     #expect(PlayerLayout.delayText(0.5) == "+0.5 s")

@@ -122,7 +122,10 @@ struct StreamChoiceWords: Decodable, Sendable {
             let higher: String
             let background: String
             let backgrounds: [String: String]
+            let off: String
+            let stillSearching: String
             let moreLanguages: String
+            let chooseVersion: String
             let next: String
             let close: String
             let setByDevice: String
@@ -155,6 +158,9 @@ struct StreamChoiceWords: Decodable, Sendable {
                 let larger: String
                 let subtitleLanguage: String
                 let audioTrack: String
+                /// Style's state: SwiftUI has no expanded trait.
+                let expanded: String
+                let collapsed: String
             }
 
             func backgroundName(_ background: SubtitleBackground) -> String {
