@@ -10,7 +10,6 @@ import app.marquee.core.model.DefaultAddons
 import app.marquee.core.model.DefaultChoice
 import app.marquee.core.model.Devices
 import app.marquee.core.model.EmailStart
-import app.marquee.core.model.FirstRunStill
 import app.marquee.core.model.ForkPreview
 import app.marquee.core.model.HomeCatalog
 import app.marquee.core.model.Identities
@@ -40,7 +39,6 @@ import app.marquee.core.model.SyncReport
 import app.marquee.core.model.TraktReport
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.builtins.ListSerializer
-import kotlinx.serialization.builtins.nullable
 import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
@@ -278,12 +276,6 @@ class CoreOps(
 
     /** The default addons in order, each with whether the profile has it (plans/m13-default-addons.md). */
     suspend fun defaultAddons(): DefaultAddons = call("defaultAddons", emptyMap(), DefaultAddons.serializer())
-
-    /**
-     * The still first run frames its questions with: a title of the default catalog's first catalog, asked
-     * without installing it. Null when none came within its budget: the frame then stays black.
-     */
-    suspend fun firstRunStill(): FirstRunStill? = call("firstRunStill", emptyMap(), FirstRunStill.serializer().nullable)
 
     /**
      * The posters first run's wall shows (plans/first-screens.md 4.1): links from the default catalog's first

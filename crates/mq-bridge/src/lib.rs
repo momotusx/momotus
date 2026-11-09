@@ -99,11 +99,6 @@ enum Request {
     DefaultAddons {
         id: u64,
     },
-    /// The still first run frames its questions with (`Core::first_run_still`),
-    /// or null past its budget. Replies `FirstRunStill` or null.
-    FirstRunStill {
-        id: u64,
-    },
     /// The posters first run's wall shows (`Core::first_run_wall`), empty
     /// past its budget. Replies `[string]`.
     FirstRunWall {
@@ -905,7 +900,6 @@ impl Request {
             | Request::RestoreDebrid { .. }
             | Request::AckDebrid { .. } => true,
             Request::DefaultAddons { .. }
-            | Request::FirstRunStill { .. }
             | Request::FirstRunWall { .. }
             | Request::FinishProfileStep { .. }
             | Request::ProfilesLastWatched { .. }
@@ -1009,7 +1003,6 @@ impl Request {
             Request::PreviewAddon { .. }
             | Request::InstallAddon { .. }
             | Request::DefaultAddons { .. }
-            | Request::FirstRunStill { .. }
             | Request::FirstRunWall { .. }
             | Request::FinishProfileStep { .. }
             // Other profiles' history is not a kid's to read.
@@ -1108,7 +1101,6 @@ impl Request {
             | Request::PreviewAddon { .. }
             | Request::InstallAddon { .. }
             | Request::DefaultAddons { .. }
-            | Request::FirstRunStill { .. }
             | Request::FirstRunWall { .. }
             | Request::FinishProfileStep { .. }
             | Request::ProfilesLastWatched { .. }
@@ -1908,9 +1900,6 @@ impl Session {
                     let defaults = core.default_addons().await?;
                     Ok::<_, Failure>(to_value(&defaults)?)
                 });
-            }
-            Request::FirstRunStill { id } => {
-                self.spawn_fenced(id, async move { to_value(&core.first_run_still().await) });
             }
             Request::FirstRunWall { id } => {
                 self.spawn_fenced(id, async move { to_value(&core.first_run_wall().await) });

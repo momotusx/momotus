@@ -96,5 +96,4 @@ private func source(_ path: String) throws -> String {
     let later = try body(of: "struct LaterSignIn: View", in: screen)
     #expect(later.contains("WallSheet(sheet: .login)") && later.contains("PosterWall("))
     #expect(later.contains("core.call(\"firstRunWall\""))
-    #expect(!screen.contains("firstRunStill"), "the sign-in still asks for the old still")
 }

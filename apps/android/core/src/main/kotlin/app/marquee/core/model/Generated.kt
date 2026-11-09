@@ -678,14 +678,6 @@ data class Episode(
     val download: DownloadBadge? = null,
 )
 
-/** The `firstRunStill` answer: a title's backdrop, its logo when it has one, and its name. */
-@Serializable
-data class FirstRunStill(
-    val background: String,
-    val logo: String? = null,
-    val name: String,
-)
-
 /** Both sides of a fork, for the user to choose from before `use_server_roster`: this device's members, the relay's, and what taking the relay's would drop on its own. */
 @Serializable
 data class ForkPreview(

@@ -348,50 +348,6 @@ impl Core {
         Ok(())
     }
 
-    /// The still the first-run question steps frame (`firstRunStill`), from
-    /// the default catalog addon's first catalog, asked from its bundled
-    /// manifest without installing it (no account, nothing written).
-    ///
-    /// With TMDB (the owner's builds): the first of its top `STILL_TRIES`
-    /// titles TMDB holds a textless backdrop for, a scene frame with nothing
-    /// printed on it, never the key art a catalog's own backdrop often is
-    /// (the owner, 2026-10-30, plans/batch-2.md R2); TMDB's answers are kept
-    /// a day. Without TMDB (no token, a throwaway core): the first title with
-    /// a backdrop. None when the catalog gave no answer within
-    /// `WALL_BUDGET`, TMDB none within another, or nothing fits: the frame
-    /// stays black.
-    pub async fn first_run_still(&self) -> Option<FirstRunStill> {
-        let catalog = first_run_source()?.1;
-        let metas = self.first_run_catalog().await?;
-        if self.tmdb_ready() {
-            let textless = async {
-                for m in metas.iter().take(STILL_TRIES) {
-                    if let Some(background) =
-                        self.tmdb_textless_backdrop(&catalog.r#type, &m.id).await
-                    {
-                        return Some(FirstRunStill {
-                            background,
-                            logo: m.logo.as_ref().map(|u| u.to_string()),
-                            name: m.name.clone(),
-                        });
-                    }
-                }
-                None
-            };
-            return tokio::time::timeout(WALL_BUDGET, textless)
-                .await
-                .ok()
-                .flatten();
-        }
-        metas.into_iter().find_map(|m| {
-            Some(FirstRunStill {
-                background: m.background?.to_string(),
-                logo: m.logo.map(|u| u.to_string()),
-                name: m.name,
-            })
-        })
-    }
-
     /// The posters first run's wall shows (`firstRunWall`;
     /// plans/first-screens.md 4.1): up to `WALL_POSTERS` links from the
     /// default catalog addon's first catalog, in its order, without repeats,
@@ -470,33 +426,14 @@ fn first_run_source() -> Option<(&'static DefaultAddon, &'static ManifestCatalog
 }
 
 /// How long first run waits for its art before it keeps the wall's tiles
-/// empty (and the still's frame black): for the catalog, then for TMDB. No
-/// screen waits on it (each fades the art in when it lands), so the budget
-/// is sized for a phone's first requests after install: cold DNS and TLS to
-/// the catalog, its redirect host and TMDB. 1.5 s gave none on most cold
+/// empty. No screen waits on it (each fades the art in when it lands), so
+/// the budget is sized for a phone's first requests after install: cold DNS
+/// and TLS to the catalog and its redirect host. 1.5 s gave none on most cold
 /// starts with 150 ms of round trip (plans/batch-15.md, E images).
 const WALL_BUDGET: Duration = Duration::from_secs(6);
 
 /// The most posters the wall is given.
 const WALL_POSTERS: usize = 30;
-
-/// How many of the catalog's top titles TMDB is asked for a textless still.
-const STILL_TRIES: usize = 5;
-
-/// The `firstRunStill` answer: a title's backdrop, its logo when it has
-/// one, and its name.
-#[derive(Debug, Clone, PartialEq, Serialize)]
-#[cfg_attr(
-    feature = "ts",
-    derive(ts_rs::TS),
-    ts(export, export_to = "../../../apps/web/src/core/generated/")
-)]
-#[serde(rename_all = "camelCase")]
-pub struct FirstRunStill {
-    pub background: String,
-    pub logo: Option<String>,
-    pub name: String,
-}
 
 #[cfg(test)]
 mod tests {

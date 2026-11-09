@@ -583,14 +583,6 @@ struct DefaultAddonInfo: Decodable, Hashable, Sendable, Identifiable {
     }
 }
 
-/// The still first run frames its question steps with (`firstRunStill`): a title's backdrop, its logo
-/// when it has one, and its name. The core answers null when none came within its budget: the frame stays black.
-struct FirstRunStill: Decodable, Hashable, Sendable {
-    let background: String
-    let logo: String?
-    let name: String
-}
-
 /// Menu (Back) at the top of a TV place, as on Android: a place other than
 /// Home puts focus on the bar, then goes to Home, Home scrolled down goes back to its top row, and only
 /// then does the app exit. A pushed page pops first; that is the stack's.

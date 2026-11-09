@@ -206,7 +206,6 @@ async fn incognito_refuses_the_device_ops_and_views() {
         json!({"op": "setDownloadSettings", "wifiOnly": true}),
         json!({"op": "defaultAddons"}),
         json!({"op": "installDefaults", "choices": []}),
-        json!({"op": "firstRunStill"}),
         json!({"op": "firstRunWall"}),
         json!({"op": "finishProfileStep", "name": "", "avatar": ""}),
         json!({"op": "profilesLastWatched"}),
