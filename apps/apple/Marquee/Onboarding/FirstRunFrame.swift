@@ -70,6 +70,76 @@ private struct Grabber: View {
     }
 }
 
+extension EnvironmentValues {
+    /// A page pushed from the Login sheet: drawn as the same sheet over the still wall (plans/first-screens.md 3.3).
+    @Entry var onWall = false
+}
+
+/// A sign-in page (email, Other ways, the pairing code, a recovery kit): pushed from the Login sheet it is the same
+/// sheet over the still wall, its Back (a press, Escape on the Mac) returning to Login; elsewhere the app's page.
+struct SignInPage<Content: View>: View {
+    let title: String
+    /// False while the page holds the way out itself (a recovery kit on screen: I saved it).
+    var backShown = true
+    @ViewBuilder let content: Content
+    @Environment(\.onWall) private var onWall
+    @Environment(\.metrics) private var metrics
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        if onWall { wall } else { page }
+    }
+
+    private var wall: some View {
+        ZStack {
+            PosterWall(posters: WallOnce.shared.posters, columns: FirstRunRules.columns(FirstRunRules.form(wide: metrics.wide, tv: tvForm)),
+                       running: false, dimmed: true)
+            WallSheet(sheet: .login) {
+                VStack(alignment: .leading, spacing: Theme.Space.m) {
+                    if backShown { WallBack { dismiss() } }
+                    SheetHead(title: title)
+                    content
+                }
+            }
+        }
+        #if os(iOS)
+        .toolbar(.hidden, for: .navigationBar)
+        #else
+        .onExitCommand(perform: backShown ? { dismiss() } : nil)
+        #endif
+    }
+
+    private var page: some View {
+        ScrollView(.vertical) {
+            VStack(alignment: .leading, spacing: Theme.Space.m) {
+                ScreenTitle(text: title)
+                content
+            }
+            .frame(maxWidth: 760, alignment: .leading)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, metrics.gutter)
+            .padding(.vertical, Theme.Space.l)
+        }
+        .scrollIndicators(.hidden)
+        .background(Theme.Palette.bg)
+        .topScrim()
+    }
+}
+
+/// A sheet's Back link, at its top left: one step back inside first run.
+struct WallBack: View {
+    let back: () -> Void
+
+    var body: some View {
+        Button(action: back) { Label("Back", glyph: "chevron-left") }
+            .buttonStyle(.textLink)
+            .textFont(17, weight: .semibold, relativeTo: .body)
+            .foregroundStyle(tvForm ? Theme.Palette.text : Theme.Palette.key)
+            .frame(minHeight: FirstRunRules.Size.link)
+            .contentShape(Rectangle())
+    }
+}
+
 /// A sheet's heading with its link at the right (Not now, Skip) and its line under it. The heading is the step's real
 /// heading: a screen reader lands on it when the step changes (off TV).
 struct SheetHead: View {

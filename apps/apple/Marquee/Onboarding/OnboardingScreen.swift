@@ -424,7 +424,8 @@ private struct FirstRun: View {
     private var setupSheet: some View {
         let q = StreamChoice.words.question
         let wide = metrics.wide
-        let columns = wide ? AnyLayout(HStackLayout(alignment: .top, spacing: 36)) : AnyLayout(VStackLayout(alignment: .leading, spacing: 22))
+        // Wide forms: three columns at 1.15 / 1 / 1 (round2.html `.g3`); the phone stacks them.
+        let columns = wide ? AnyLayout(ShareColumns.setup) : AnyLayout(VStackLayout(alignment: .leading, spacing: 22))
         return WallSheet(sheet: .setup) {
             VStack(alignment: .leading, spacing: 0) {
                 SheetHead(title: AccountRules.fill(words.setupTitle, ["profile": profileName]), line: wide ? words.setupLine : nil,
@@ -600,12 +601,7 @@ private struct FirstRun: View {
     private var importSheet: some View {
         WallSheet(sheet: .importing) {
             VStack(alignment: .leading, spacing: Theme.Space.s) {
-                Button { go(.setup) } label: { Label("Back", glyph: "chevron-left") }
-                    .buttonStyle(.textLink)
-                    .textFont(17, weight: .semibold, relativeTo: .body)
-                    .foregroundStyle(tvForm ? Theme.Palette.text : Theme.Palette.key)
-                    .frame(minHeight: FirstRunRules.Size.link)
-                    .contentShape(Rectangle())
+                WallBack { go(.setup) }
                 // Done brings the defaults the import did not bring and opens Home; Skip import the same without it.
                 ImportScreen(core: core, finished: { Task { await installSources() } }, skip: { Task { await installSources() } })
                 if let failure { StatusDot(tone: .bad, text: failure) }

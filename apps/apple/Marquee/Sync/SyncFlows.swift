@@ -37,35 +37,26 @@ struct SyncJoinScreen: View {
     @FocusState private var typing: String?
 
     var body: some View {
-        ScrollView(.vertical) {
-            VStack(alignment: .leading, spacing: Theme.Space.m) {
-                ScreenTitle(text: kit ? W.recoverTitle : W.startTitle)
-                Text(kit ? W.recoverLede : W.startText)
-                    .textFont(Theme.type.body)
-                    .foregroundStyle(Theme.Palette.muted)
-                    .fixedSize(horizontal: false, vertical: true)
-                if kit { SyncField(label: W.kit, text: $extra, prompt: W.kitHint, typing: $typing, mono: true, secret: true) }
-                SyncField(label: W.device, text: $name, prompt: DeviceName.current, typing: $typing, help: W.deviceHelp)
-                if !kit { SyncField(label: W.invite, text: $extra, prompt: W.inviteHint, typing: $typing) }
-                Button { advanced.toggle() } label: { Label(W.advanced, glyph: "settings") }
-                    .buttonStyle(PillButtonStyle())
-                    .accessibilityAddTraits(advanced ? .isSelected : [])
-                if advanced { SyncField(label: W.server, text: $server, prompt: W.serverHint, typing: $typing, url: true) }
-                if let error { Said(tone: .bad, text: error) }
-                Button { submit(confirmed: false) } label: {
-                    Label(busy ? (kit ? W.recovering : W.starting) : (kit ? W.recoverButton : W.startButton), glyph: kit ? "life-buoy" : "check")
-                }
-                .buttonStyle(PillButtonStyle(prominent: true))
-                .disabled(busy)
+        // A sheet over the wall when pushed from the Login sheet (`SignInPage`), the app's page elsewhere.
+        SignInPage(title: kit ? W.recoverTitle : W.startTitle) {
+            Text(kit ? W.recoverLede : W.startText)
+                .textFont(Theme.type.body)
+                .foregroundStyle(Theme.Palette.muted)
+                .fixedSize(horizontal: false, vertical: true)
+            if kit { SyncField(label: W.kit, text: $extra, prompt: W.kitHint, typing: $typing, mono: true, secret: true) }
+            SyncField(label: W.device, text: $name, prompt: DeviceName.current, typing: $typing, help: W.deviceHelp)
+            if !kit { SyncField(label: W.invite, text: $extra, prompt: W.inviteHint, typing: $typing) }
+            Button { advanced.toggle() } label: { Label(W.advanced, glyph: "settings") }
+                .buttonStyle(PillButtonStyle())
+                .accessibilityAddTraits(advanced ? .isSelected : [])
+            if advanced { SyncField(label: W.server, text: $server, prompt: W.serverHint, typing: $typing, url: true) }
+            if let error { Said(tone: .bad, text: error) }
+            Button { submit(confirmed: false) } label: {
+                Label(busy ? (kit ? W.recovering : W.starting) : (kit ? W.recoverButton : W.startButton), glyph: kit ? "life-buoy" : "check")
             }
-            .frame(maxWidth: 760, alignment: .leading)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, metrics.gutter)
-            .padding(.vertical, Theme.Space.l)
+            .buttonStyle(PillButtonStyle(prominent: true))
+            .disabled(busy)
         }
-        .scrollIndicators(.hidden)
-        .background(Theme.Palette.bg)
-        .topScrim()
         // The kit leaves with the page: nothing keeps it.
         .onDisappear { extra = "" }
         .confirmationDialog(W.replaceAsk, isPresented: $replacing, titleVisibility: .visible) {
@@ -456,29 +447,21 @@ struct RecoveryKitScreen: View {
     private var shown: HeldKit? { gate.unlocked ? sync.kits.held : nil }
 
     var body: some View {
-        ScrollView(.vertical) {
-            VStack(alignment: .leading, spacing: Theme.Space.m) {
-                ScreenTitle(text: W.kitTitle)
-                #if os(tvOS)
-                Elsewhere(glyph: "key-round", title: W.tvOnly, text: W.tvKit)
-                #else
-                if let shown {
-                    kit(shown)
-                } else if sync.kits.held != nil {
-                    waiting
-                } else {
-                    ask
-                }
-                #endif
+        // A sheet over the wall when pushed from the Login sheet (`SignInPage`); while the kit shows, I saved it is the
+        // way out, so the sheet's Back hides as the system's does.
+        SignInPage(title: W.kitTitle, backShown: shown == nil) {
+            #if os(tvOS)
+            Elsewhere(glyph: "key-round", title: W.tvOnly, text: W.tvKit)
+            #else
+            if let shown {
+                kit(shown)
+            } else if sync.kits.held != nil {
+                waiting
+            } else {
+                ask
             }
-            .frame(maxWidth: 760, alignment: .leading)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, metrics.gutter)
-            .padding(.vertical, Theme.Space.l)
+            #endif
         }
-        .scrollIndicators(.hidden)
-        .background(Theme.Palette.bg)
-        .topScrim()
         .onAppear {
             sync.kitPage(open: true)
             #if DEBUG

@@ -31,7 +31,21 @@ struct SignInStage<Block: View, Corner: View>: View {
                 .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { frames.block = $0; placed?(frames.block, frames.corner) }
             corner
                 .frame(width: Self.cornerWidth, alignment: .leading)
+                .overlay(alignment: .leading) { Self.divider(beside: Self.beside(width)) }
                 .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { frames.corner = $0; placed?(frames.block, frames.corner) }
+        }
+        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
+    }
+
+    @State private var width: CGFloat = 0
+
+    static func beside(_ width: CGFloat) -> Bool { width >= besideFrom }
+
+    /// The line between the columns (round2.html `.qrc` border-left): `gap` left of the code, the column's height; none
+    /// when the code sits under the ways.
+    @ViewBuilder static func divider(beside: Bool) -> some View {
+        if beside {
+            Rectangle().fill(Theme.Palette.line).frame(width: 1).offset(x: -(gap + 1)).accessibilityHidden(true)
         }
     }
 }

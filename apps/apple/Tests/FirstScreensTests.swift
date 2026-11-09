@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import SwiftUI
 import Testing
@@ -291,4 +292,63 @@ private let sheet = over(29.0 / 255, 0.97, over(0, 0.62, 1))
         #expect(text.contains("FullScreen(isPresented: $onboarding, fillsWindow: true)"), "\(page) opens first run in a small sheet")
         #expect(text.contains("OnboardingScreen(core: core) { onboarding = false }"))
     }
+}
+
+// MARK: combo A's details
+
+@MainActor @Test func setupsWideColumnsKeepRound2s115To1To1() throws {
+    // The 1140 sheet less its 40 sides: three columns 36 apart, laid out for real.
+    @MainActor final class Frames { var all: [Int: CGRect] = [:] }
+    let frames = Frames()
+    let columns = ShareColumns.setup {
+        ForEach(0..<3, id: \.self) { i in
+            Color.gray.frame(height: CGFloat(100 + i * 40))
+                .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { frames.all[i] = $0 }
+        }
+    }
+    let host = NSHostingView(rootView: columns.frame(width: 1060).frame(maxHeight: .infinity, alignment: .top))
+    host.frame = CGRect(x: 0, y: 0, width: 1060, height: 600)
+    host.layoutSubtreeIfNeeded()
+    RunLoop.main.run(until: Date().addingTimeInterval(0.3))
+    let (a, b, c) = (try #require(frames.all[0]), try #require(frames.all[1]), try #require(frames.all[2]))
+    #expect(abs(a.width / b.width - 1.15) < 0.01, "the first column is \(a.width), the second \(b.width)")
+    #expect(abs(b.width - c.width) < 0.5)
+    #expect(abs(b.minX - a.maxX - 36) < 0.5 && abs(c.minX - b.maxX - 36) < 0.5, "the gaps are not 36")
+    #expect(abs(a.minY - c.minY) < 0.5, "the columns are not aligned at the top")
+    #expect(try source("Onboarding/OnboardingScreen.swift").contains("let columns = wide ? AnyLayout(ShareColumns.setup)"))
+}
+
+@Test func signInPagesPushedFromLoginAreSheetsOverTheStillWall() throws {
+    // Email (both stages), Other ways, the pairing code and a recovery kit: the same sheet over the still wall, Back to Login.
+    let frame = try source("Onboarding/FirstRunFrame.swift")
+    let page = try body(of: "struct SignInPage<Content: View>: View", in: frame)
+    #expect(page.contains("running: false, dimmed: true)\n            WallSheet(sheet: .login) {"))
+    #expect(page.contains("if backShown { WallBack { dismiss() } }"))
+    #expect(page.contains(".onExitCommand(perform: backShown ? { dismiss() } : nil)"), "Escape does not go back to Login")
+    let screen = try source("Account/SignInScreen.swift")
+    for push in ["otherWays.environment(\\.onWall, true)", "lede: words.phoneScanHow).environment(\\.onWall, true)",
+                 "SyncJoinScreen(kit: true, server: flow.server).environment(\\.onWall, true)", "RecoveryKitScreen().environment(\\.onWall, true)",
+                 "EmailSignIn(flow: flow) { otherAfterPop = true; flow.back() }.environment(\\.onWall, true)",
+                 "EmailCode(flow: flow, otherWays: otherWays).environment(\\.onWall, onWall)"] {
+        #expect(screen.contains(push), "\(push) is not on the wall")
+    }
+    #expect(screen.contains("SignInPage(title: words.otherWays) {"))
+    #expect(try body(of: "private struct EmailPage<Content: View>: View", in: screen).contains("SignInPage(title: title) { content }"))
+    #expect(try source("Settings/PairingScreen.swift").contains("SignInPage(title: heading ?? \"Pair this device\") {"))
+    let flows = try source("Sync/SyncFlows.swift")
+    #expect(flows.contains("SignInPage(title: kit ? W.recoverTitle : W.startTitle) {"))
+    // While a kit shows, I saved it is the way out: the sheet's Back hides as the system's does.
+    #expect(flows.contains("SignInPage(title: W.kitTitle, backShown: shown == nil) {"))
+}
+
+@Test func whosWatchingWideSecondLineSaysWhatThePickerKnows() throws {
+    func profile(owner: Bool = false, pin: Bool = false, kids: Bool = false) -> ProfileInfo {
+        ProfileInfo(id: "p", name: "P", avatar: "", position: 0, hasPin: pin, isOwner: owner, syncing: false, kids: kids)
+    }
+    // No last title in the snapshot: kids, the main profile and a PIN are what the picker knows.
+    #expect(FirstRunRules.whoDetail(profile(kids: true)) == FirstRunWords.shared.whoKids)
+    #expect(FirstRunRules.whoDetail(profile(owner: true)) == "Main profile")
+    #expect(FirstRunRules.whoDetail(profile(pin: true)) == "PIN set")
+    #expect(FirstRunRules.whoDetail(profile()) == nil, "a plain profile gets no filler line")
+    #expect(try source("Profiles/ProfilePicker.swift").contains("joinedLine != nil, metrics.wide, let detail = FirstRunRules.whoDetail(profile)"))
 }

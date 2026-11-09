@@ -169,8 +169,8 @@ struct ProfilePicker: View {
                         .textFont(Theme.type.headline, weight: .semibold, relativeTo: .headline)
                         if profile.syncing {
                             Text("Syncing").textFont(Theme.type.caption, relativeTo: .caption).foregroundStyle(Theme.Palette.muted)
-                        } else if joinedLine != nil, metrics.wide, profile.kids {
-                            Text(FirstRunWords.shared.whoKids).textFont(13, relativeTo: .caption).foregroundStyle(Color.white.opacity(0.64))
+                        } else if joinedLine != nil, metrics.wide, let detail = FirstRunRules.whoDetail(profile) {
+                            Text(detail).textFont(13, relativeTo: .caption).foregroundStyle(Color.white.opacity(0.64))
                         }
                     }
                     .foregroundStyle(Theme.Palette.text)

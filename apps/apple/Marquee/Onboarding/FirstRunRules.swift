@@ -1,5 +1,36 @@
-import CoreGraphics
 import Foundation
+import SwiftUI
+
+/// Columns side by side whose widths keep the given shares of the room left after the gaps (round2.html setup's
+/// 1.15 / 1 / 1 on wide forms), each as tall as it needs, aligned at the top.
+struct ShareColumns: Layout {
+    let shares: [CGFloat]
+    let spacing: CGFloat
+
+    /// Setup's three columns, 36 apart.
+    static let setup = ShareColumns(shares: [1.15, 1, 1], spacing: 36)
+
+    func widths(_ total: CGFloat, count: Int) -> [CGFloat] {
+        let used = Array(shares.prefix(count)) + Array(repeating: 1, count: max(count - shares.count, 0))
+        let room = max(total - spacing * CGFloat(max(count - 1, 0)), 0)
+        let sum = used.reduce(0, +)
+        return used.map { sum > 0 ? room * $0 / sum : 0 }
+    }
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let width = proposal.width ?? 1060
+        let heights = zip(subviews, widths(width, count: subviews.count)).map { $0.sizeThatFits(ProposedViewSize(width: $1, height: nil)).height }
+        return CGSize(width: width, height: heights.max() ?? 0)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        var x = bounds.minX
+        for (subview, width) in zip(subviews, widths(bounds.width, count: subviews.count)) {
+            subview.place(at: CGPoint(x: x, y: bounds.minY), proposal: ProposedViewSize(width: width, height: nil))
+            x += width + spacing
+        }
+    }
+}
 
 /// First run's words (apps/shared/first-run-words.json), bundled as they are, shared with the web and Android:
 /// a key the file adds or drops fails the reader test (FirstScreensTests).
@@ -188,6 +219,16 @@ enum FirstRunRules {
         if let provider { return AccountRules.fill(words.whoProvider, ["provider": AccountRules.providerName(provider)]) }
         if let device, !device.isEmpty { return AccountRules.fill(words.whoDevice, ["device": device]) }
         return words.whoSignedIn
+    }
+
+    /// A tile's second line on wide forms (round2.html `.pk small`). The design draws the profile's last title, but the
+    /// profiles snapshot carries none (ProfileInfo has no such field, and another profile's library cannot be read
+    /// without switching to it), so the line says what the picker knows: "Only titles for children" for a kids
+    /// profile, else the Manage row's own detail ("Main profile", "PIN set"); nothing for a plain profile.
+    static func whoDetail(_ profile: ProfileInfo, words: FirstRunWords = .shared) -> String? {
+        if profile.kids { return words.whoKids }
+        let detail = ProfileRules.detail(profile)
+        return detail == "No PIN" ? nil : detail
     }
 
     /// How long the sheet says "Getting your profiles" after a join before it decides anyway.

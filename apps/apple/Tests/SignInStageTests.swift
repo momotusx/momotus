@@ -46,6 +46,16 @@ import Testing
     #expect(f.corner.minY >= f.block.maxY, "the code \(f.corner) is not under the ways \(f.block)")
 }
 
+@Test func aLineSeparatesTheColumnsOnlyWhenTheyStandSideBySide() throws {
+    typealias Stage = SignInStage<EmptyView, EmptyView>
+    #expect(Stage.beside(780))
+    #expect(!Stage.beside(Stage.besideFrom - 1))
+    // The line sits in the middle of the gap, as tall as the code's column.
+    let stage = try source("Account/SignInStage.swift")
+    #expect(stage.contains(".overlay(alignment: .leading) { Self.divider(beside: Self.beside(width)) }"))
+    #expect(stage.contains("Rectangle().fill(Theme.Palette.line).frame(width: 1).offset(x: -(gap + 1))"))
+}
+
 @Test func providersDrawTheirOwnButtonsOnlyForGoogleAndFacebook() {
     #expect(ProviderButtonStyle.draws("google"))
     #expect(ProviderButtonStyle.draws("facebook"))

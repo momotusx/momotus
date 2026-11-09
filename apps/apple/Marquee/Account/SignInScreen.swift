@@ -64,15 +64,16 @@ struct SignInScreen: View {
                 }
             }
         }
-        .navigationDestination(isPresented: $showOther) { otherWays }
+        // Every later stage is the same sheet over the still wall, its Back returning here (plans/first-screens.md 3.3).
+        .navigationDestination(isPresented: $showOther) { otherWays.environment(\.onWall, true) }
         .navigationDestination(isPresented: $showPairing) {
-            PairingScreen(core: core, done: { joined(nil) }, autostart: flow.server, lede: words.phoneScanHow)
+            PairingScreen(core: core, done: { joined(nil) }, autostart: flow.server, lede: words.phoneScanHow).environment(\.onWall, true)
         }
-        .navigationDestination(isPresented: $showKit) { SyncJoinScreen(kit: true, server: flow.server) }
-        .navigationDestination(isPresented: $showMakeKit) { RecoveryKitScreen() }
+        .navigationDestination(isPresented: $showKit) { SyncJoinScreen(kit: true, server: flow.server).environment(\.onWall, true) }
+        .navigationDestination(isPresented: $showMakeKit) { RecoveryKitScreen().environment(\.onWall, true) }
         // Sign in with email as a push, so the system Back and the edge swipe work (accounts-email.md 4.8).
         .navigationDestination(isPresented: Binding(get: { flow.onEmail }, set: { shown in if !shown, flow.onEmail { flow.back() } })) {
-            EmailSignIn(flow: flow) { otherAfterPop = true; flow.back() }
+            EmailSignIn(flow: flow) { otherAfterPop = true; flow.back() }.environment(\.onWall, true)
         }
         // Other ways from the email screen: pushed once its pop has settled, or iOS drops the push.
         .task(id: flow.stage) {
@@ -216,9 +217,8 @@ struct SignInScreen: View {
 
     /// Other ways to sign in: a passkey, a scan, a recovery kit, the user's own server.
     private var otherWays: some View {
-        ScrollView(.vertical) {
+        SignInPage(title: words.otherWays) {
             VStack(alignment: .leading, spacing: Theme.Space.s) {
-                ScreenTitle(text: words.otherWays)
                 if PasskeyContract.relyingParty != nil {
                     Button { showOther = false; Task { await flow.usePasskey(name: DeviceName.current) } } label: {
                         SettingsRow(symbol: "key-round", title: words.usePasskey, detail: "")
@@ -238,12 +238,7 @@ struct SignInScreen: View {
                 }
                 .buttonStyle(.row)
             }
-            .frame(maxWidth: 760, alignment: .leading)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, metrics.gutter)
-            .padding(.vertical, Theme.Space.l)
         }
-        .background(Theme.Palette.bg)
     }
 
     /// Found, but no passkey here opens it: the QR on a signed-in device, a
@@ -364,11 +359,12 @@ struct EmailSignIn: View {
     let otherWays: () -> Void
     @FocusState private var focused: Bool
     @AccessibilityFocusState private var heard: Bool
+    /// From the Login sheet: the code stage is a sheet over the wall too.
+    @Environment(\.onWall) private var onWall
     private var words: AccountWords { .shared }
 
     var body: some View {
-        EmailPage {
-            ScreenTitle(text: words.emailTitle)
+        EmailPage(title: words.emailTitle) {
             EmailFieldBox(label: words.emailLabel, focused: focused) {
                 // Read-only while sending (not disabled), so focus stays.
                 TextField(words.emailLabel, text: Binding(get: { flow.address }, set: { if !flow.sending { flow.address = $0 } }), prompt: Text(verbatim: ""))
@@ -388,7 +384,7 @@ struct EmailSignIn: View {
                 .disabled(flow.sending)
         }
         .navigationDestination(isPresented: Binding(get: { flow.stage == .code }, set: { shown in if !shown, flow.stage == .code { flow.toAddress() } })) {
-            EmailCode(flow: flow, otherWays: otherWays)
+            EmailCode(flow: flow, otherWays: otherWays).environment(\.onWall, onWall)
         }
         // Each arrival at this stage (and back from the code): its field, its title said.
         .task(id: flow.stage) {
@@ -413,8 +409,7 @@ struct EmailCode: View {
     private var words: AccountWords { .shared }
 
     var body: some View {
-        EmailPage {
-            ScreenTitle(text: words.codeTitle)
+        EmailPage(title: words.codeTitle) {
             Text(AccountRules.fill(words.codeSentTo, ["email": flow.sentTo]))
                 .textFont(Theme.type.body, relativeTo: .body)
                 .foregroundStyle(Theme.Palette.text)
@@ -520,23 +515,14 @@ private struct EmailTrouble: View {
     }
 }
 
-/// An email stage's page, as the other sign-in pages.
+/// An email stage's page, as the other sign-in pages (a sheet over the wall from the Login sheet).
 private struct EmailPage<Content: View>: View {
+    let title: String
     @ViewBuilder let content: Content
-    @Environment(\.metrics) private var metrics
 
     var body: some View {
-        ScrollView(.vertical) {
-            VStack(alignment: .leading, spacing: Theme.Space.m) { content }
-                .frame(maxWidth: 760, alignment: .leading)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, metrics.gutter)
-                .padding(.vertical, Theme.Space.l)
-        }
-        .scrollIndicators(.hidden)
-        .scrollDismissesKeyboard(.interactively)
-        .background(Theme.Palette.bg)
-        .topScrim()
+        SignInPage(title: title) { content }
+            .scrollDismissesKeyboard(.interactively)
     }
 }
 

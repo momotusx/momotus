@@ -36,9 +36,9 @@ struct PairingScreen: View {
     @Environment(SyncModel.self) private var sync
 
     var body: some View {
-        ScrollView(.vertical) {
+        // A sheet over the wall when pushed from the Login sheet (`SignInPage`), the app's page elsewhere.
+        SignInPage(title: heading ?? "Pair this device") {
             VStack(alignment: .leading, spacing: Theme.Space.m) {
-                ScreenTitle(text: heading ?? "Pair this device")
                 // Once joined, the page is the result, the last sync and Done: no second pairing starts here.
                 if !joinedHere {
                     Text(lede ?? "Join your sync account by scanning a code with a device that already syncs. Your library stays end to end encrypted.")
@@ -67,14 +67,7 @@ struct PairingScreen: View {
                     .padding(.top, Theme.Space.s)
                 }
             }
-            .frame(maxWidth: 760, alignment: .leading)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, metrics.gutter)
-            .padding(.vertical, Theme.Space.l)
         }
-        .scrollIndicators(.hidden)
-        .background(Theme.Palette.bg)
-        .topScrim()
         // Opens it again after a core restart; the model started it already.
         .task(id: sync.pairing?.taskId) { sync.pairing?.start() }
         // The hosted relay: the code at once, no form to fill.
