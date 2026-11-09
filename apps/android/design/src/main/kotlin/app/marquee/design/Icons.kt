@@ -22,6 +22,18 @@ object Icons {
         )
     }
 
+    val AudioLines: ImageVector by lazy {
+        strokeIcon(
+            "audio-lines",
+        "M2 10v3",
+        "M6 6v11",
+        "M10 3v18",
+        "M14 8v7",
+        "M18 5v13",
+        "M22 10v3",
+        )
+    }
+
     val Ban: ImageVector by lazy {
         strokeIcon(
             "ban",
@@ -517,6 +529,23 @@ object Icons {
         )
     }
 
+    val Maximize: ImageVector by lazy {
+        strokeIcon(
+            "maximize",
+        "M8 3H5a2 2 0 0 0-2 2v3",
+        "M21 8V5a2 2 0 0 0-2-2h-3",
+        "M3 16v3a2 2 0 0 0 2 2h3",
+        "M16 21h3a2 2 0 0 0 2-2v-3",
+        )
+    }
+
+    val Minus: ImageVector by lazy {
+        strokeIcon(
+            "minus",
+        "M5 12h14",
+        )
+    }
+
     val Monitor: ImageVector by lazy {
         strokeIcon(
             "monitor",
@@ -833,6 +862,15 @@ object Icons {
             "tv",
         "m17 2-5 5-5-5",
         "M4 7h16a2 2 0 0 1 2 2v11a2 2 0 0 1 -2 2h-16a2 2 0 0 1 -2 -2v-11a2 2 0 0 1 2 -2z",
+        )
+    }
+
+    val Type: ImageVector by lazy {
+        strokeIcon(
+            "type",
+        "M12 4v16",
+        "M4 7V5a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1v2",
+        "M9 20h6",
         )
     }
 
