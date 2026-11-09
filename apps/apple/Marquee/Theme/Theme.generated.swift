@@ -208,6 +208,19 @@ enum Theme {
         static let hover = Color(RGBA(0.2000, 0.2000, 0.2000, 0.3))
     }
 
+    /// First run's poster wall under a sheet (`wall`): the dim with a blur, the dim where blur is costly, the blur.
+    enum Wall {
+        static let dim = Color(RGBA(0.0000, 0.0000, 0.0000, 0.62))
+        static let dimNoBlur = Color(RGBA(0.0000, 0.0000, 0.0000, 0.72))
+        static let blur: CGFloat = 8
+    }
+
+    /// First run's sheets (`sheet`): their fill and corner.
+    enum Sheet {
+        static let fill = Color(RGBA(0.1098, 0.1098, 0.1176, 0.97))
+        static let radius: CGFloat = 30
+    }
+
     /// Font weights, 100 to 900.
     enum Weight {
         static let display: CGFloat = 700

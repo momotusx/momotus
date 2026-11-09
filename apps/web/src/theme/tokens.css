@@ -103,6 +103,11 @@
   --selected-fill: #636366;
   --selected-edge: inset 0 0 0 0 rgba(255, 255, 255, 0);
   --scrim-hover: rgba(51, 51, 51, 0.3);
+  --wall-dim: rgba(0, 0, 0, 0.62);
+  --wall-dim-no-blur: rgba(0, 0, 0, 0.72);
+  --wall-blur: 8px;
+  --sheet-fill: rgba(28, 28, 30, 0.97);
+  --sheet-radius: 30px;
   --motion-focus: 180ms;
   --motion-panel: 260ms;
   --ease: cubic-bezier(0.22, 1, 0.36, 1);

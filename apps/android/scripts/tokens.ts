@@ -35,6 +35,8 @@ export interface Tokens {
   weight: Scale;
   tracking: Scale;
   selected: { fill: string };
+  wall: { dim: string; dimNoBlur: string; blur: number };
+  sheet: { fill: string; radius: number };
 }
 
 export const tokensPath = join(import.meta.dir, "../../../design/tokens.json");
@@ -193,6 +195,13 @@ export function generate(t: Tokens): string {
     ...artShadow(t.lift.focusArt),
     // A selected segment or toggle: a grey, never white, which on TV is focus.
     `    val selectedFill = Color(0x${argb(t.selected.fill)})`,
+    // First run's poster wall under a sheet: the dim with a blur (API 31 and up), the dim without one, the blur.
+    `    val wallDim = Color(0x${argb(t.wall.dim)})`,
+    `    val wallDimNoBlur = Color(0x${argb(t.wall.dimNoBlur)})`,
+    `    val wallBlur = ${dp(t.wall.blur)}`,
+    // First run's sheets: their fill and corner.
+    `    val sheetFill = Color(0x${argb(t.sheet.fill)})`,
+    `    val sheetRadius = ${dp(t.sheet.radius)}`,
     "",
     `    const val FOCUS_MS = ${t.motion.focusMs}`,
     `    const val PANEL_MS = ${t.motion.panelMs}`,

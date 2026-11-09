@@ -350,6 +350,11 @@ object Tokens {
     val focusArtShadowBlur = 88.dp
     const val FOCUS_ART_SHADOW_ALPHA = 0.55f
     val selectedFill = Color(0xFF636366)
+    val wallDim = Color(0x9E000000)
+    val wallDimNoBlur = Color(0xB8000000)
+    val wallBlur = 8.dp
+    val sheetFill = Color(0xF71C1C1E)
+    val sheetRadius = 30.dp
 
     const val FOCUS_MS = 180
     const val PANEL_MS = 260

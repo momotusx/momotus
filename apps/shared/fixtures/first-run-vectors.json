@@ -1,0 +1,73 @@
+{
+  "about": "First run's order (plans/first-screens.md 2, 4.3, 9), held equal on the web, Android and Apple by each app's rule function and flow tests; changed only through the lead. Part entry: what first run shows next. Inputs: fresh is the core's addons fresh (the profile never had an addon list and the device is in no account it did not make); kidsSession the session runs a kids profile; server a sync server is built in; inAccount the device belongs to an account (made here, or joined); profileStepDone is ProfilesSnapshot.profileStepDone; profiles how many profiles the account has; pin the joined profile (the account's only one) has a PIN; locked the session is locked; after is what just happened: start (a cold start or restart), getStarted, alreadyUse, notNow, created (an account made in first run, after the web's recovery kit), joined (a sign-in or QR join pulled an account), profileDone (Continue on Make your first profile). step is welcome, login, profile, who (Who's watching?: the start picker drawn over the wall), setup, home (first run ends, Home is the root) or none (no first run: the app opens as it does today). A locked session meets the picker gate before first run; a kids session never sees first run. Part paths: per path and form (phone, wide, tv) the screens shown before Home (in order), the presses on this device (an activation: a tap, a click, OK, Enter; typing, provider sheets and the other device's actions are not counted; the controls pressed, in order) and on TV the D-pad moves (null: not pinned here, the setup sheet's TV layout decides how many moves reach Bring my Stremio library; the TV tests assert screens and presses only); a form missing from a path does not offer it (no provider sign-in on TV). web marks a web-only difference (the recovery kit after a made account). plusImportCode: the Stremio import code is typed and confirmed on top. Part chips: Setup's 'Subtitles start in' chips (D11), in order, and the one chosen when the sheet opens: the profile's already chosen language first, else the device language, then the device language and English when not already shown, then none ('No subtitles'), then more (the language picker, always last). A device language that is unknown or has no subtitle name counts as absent: English is chosen.",
+  "entry": [
+    { "fresh": true, "kidsSession": false, "server": true, "inAccount": false, "profileStepDone": false, "profiles": 1, "pin": false, "locked": false, "after": "start", "step": "welcome" },
+    { "fresh": true, "kidsSession": false, "server": false, "inAccount": false, "profileStepDone": false, "profiles": 1, "pin": false, "locked": false, "after": "start", "step": "welcome" },
+    { "fresh": true, "kidsSession": false, "server": true, "inAccount": true, "profileStepDone": false, "profiles": 1, "pin": false, "locked": false, "after": "start", "step": "profile" },
+    { "fresh": true, "kidsSession": false, "server": true, "inAccount": false, "profileStepDone": true, "profiles": 1, "pin": false, "locked": false, "after": "start", "step": "setup" },
+    { "fresh": true, "kidsSession": false, "server": true, "inAccount": true, "profileStepDone": true, "profiles": 1, "pin": false, "locked": false, "after": "start", "step": "setup" },
+    { "fresh": true, "kidsSession": false, "server": false, "inAccount": false, "profileStepDone": true, "profiles": 1, "pin": false, "locked": false, "after": "start", "step": "setup" },
+    { "fresh": false, "kidsSession": false, "server": true, "inAccount": false, "profileStepDone": false, "profiles": 1, "pin": false, "locked": false, "after": "start", "step": "none" },
+    { "fresh": false, "kidsSession": false, "server": true, "inAccount": true, "profileStepDone": true, "profiles": 3, "pin": false, "locked": false, "after": "start", "step": "none" },
+    { "fresh": true, "kidsSession": true, "server": true, "inAccount": false, "profileStepDone": false, "profiles": 2, "pin": false, "locked": false, "after": "start", "step": "none" },
+    { "fresh": true, "kidsSession": false, "server": true, "inAccount": false, "profileStepDone": false, "profiles": 2, "pin": true, "locked": true, "after": "start", "step": "who" },
+    { "fresh": true, "kidsSession": false, "server": true, "inAccount": false, "profileStepDone": false, "profiles": 1, "pin": false, "locked": false, "after": "getStarted", "step": "login" },
+    { "fresh": true, "kidsSession": false, "server": false, "inAccount": false, "profileStepDone": false, "profiles": 1, "pin": false, "locked": false, "after": "getStarted", "step": "profile" },
+    { "fresh": true, "kidsSession": false, "server": true, "inAccount": false, "profileStepDone": false, "profiles": 1, "pin": false, "locked": false, "after": "alreadyUse", "step": "login" },
+    { "fresh": true, "kidsSession": false, "server": true, "inAccount": false, "profileStepDone": false, "profiles": 1, "pin": false, "locked": false, "after": "notNow", "step": "profile" },
+    { "fresh": true, "kidsSession": false, "server": true, "inAccount": true, "profileStepDone": false, "profiles": 1, "pin": false, "locked": false, "after": "created", "step": "profile" },
+    { "fresh": false, "kidsSession": false, "server": true, "inAccount": true, "profileStepDone": false, "profiles": 1, "pin": false, "locked": false, "after": "joined", "step": "home" },
+    { "fresh": false, "kidsSession": false, "server": true, "inAccount": true, "profileStepDone": true, "profiles": 1, "pin": false, "locked": false, "after": "joined", "step": "home" },
+    { "fresh": false, "kidsSession": false, "server": true, "inAccount": true, "profileStepDone": false, "profiles": 1, "pin": true, "locked": false, "after": "joined", "step": "who" },
+    { "fresh": false, "kidsSession": false, "server": true, "inAccount": true, "profileStepDone": false, "profiles": 2, "pin": false, "locked": false, "after": "joined", "step": "who" },
+    { "fresh": false, "kidsSession": false, "server": true, "inAccount": true, "profileStepDone": false, "profiles": 3, "pin": true, "locked": false, "after": "joined", "step": "who" },
+    { "fresh": true, "kidsSession": false, "server": true, "inAccount": false, "profileStepDone": true, "profiles": 1, "pin": false, "locked": false, "after": "profileDone", "step": "setup" },
+    { "fresh": true, "kidsSession": false, "server": false, "inAccount": false, "profileStepDone": true, "profiles": 1, "pin": false, "locked": false, "after": "profileDone", "step": "setup" }
+  ],
+  "paths": [
+    {
+      "path": "newNotNow",
+      "phone": { "screens": ["welcome", "login", "profile", "setup"], "presses": ["getStarted", "notNow", "continue", "startWatching"] },
+      "wide": { "screens": ["welcome", "login", "profile", "setup"], "presses": ["getStarted", "notNow", "continue", "startWatching"] },
+      "tv": { "screens": ["welcome", "login", "profile", "setup"], "presses": ["getStarted", "notNow", "continue", "startWatching"], "moves": 0 }
+    },
+    {
+      "path": "newProvider",
+      "phone": { "screens": ["welcome", "login", "profile", "setup"], "presses": ["getStarted", "continueWithGoogle", "continue", "startWatching"] },
+      "wide": { "screens": ["welcome", "login", "profile", "setup"], "presses": ["getStarted", "continueWithGoogle", "continue", "startWatching"] },
+      "web": { "screens": ["welcome", "login", "recoveryKit", "profile", "setup"], "presses": ["getStarted", "continueWithGoogle", "kitDone", "continue", "startWatching"] }
+    },
+    {
+      "path": "newStremio",
+      "plusImportCode": true,
+      "phone": { "screens": ["welcome", "login", "profile", "setup", "import"], "presses": ["getStarted", "notNow", "continue", "bringLibrary", "startWatching"] },
+      "wide": { "screens": ["welcome", "login", "profile", "setup", "import"], "presses": ["getStarted", "notNow", "continue", "bringLibrary", "startWatching"] },
+      "tv": { "screens": ["welcome", "login", "profile", "setup", "import"], "presses": ["getStarted", "notNow", "continue", "bringLibrary", "startWatching"], "moves": null }
+    },
+    {
+      "path": "joinOneProfile",
+      "phone": { "screens": ["welcome", "login"], "presses": ["alreadyUse", "useAnotherDevice"] },
+      "wide": { "screens": ["welcome", "login"], "presses": ["alreadyUse"] },
+      "tv": { "screens": ["welcome", "login"], "presses": ["alreadyUse"], "moves": 1 }
+    },
+    {
+      "path": "joinManyProfilesOrPin",
+      "phone": { "screens": ["welcome", "login", "who"], "presses": ["alreadyUse", "useAnotherDevice", "profileTile"] },
+      "wide": { "screens": ["welcome", "login", "who"], "presses": ["alreadyUse", "profileTile"] },
+      "tv": { "screens": ["welcome", "login", "who"], "presses": ["alreadyUse", "profileTile"], "moves": 1 }
+    },
+    {
+      "path": "noServer",
+      "phone": { "screens": ["welcome", "profile", "setup"], "presses": ["getStarted", "continue", "startWatching"] },
+      "wide": { "screens": ["welcome", "profile", "setup"], "presses": ["getStarted", "continue", "startWatching"] },
+      "tv": { "screens": ["welcome", "profile", "setup"], "presses": ["getStarted", "continue", "startWatching"], "moves": 0 }
+    }
+  ],
+  "chips": [
+    { "device": "en", "chosen": [], "chips": ["en", "none", "more"], "selected": "en" },
+    { "device": "tr", "chosen": [], "chips": ["tr", "en", "none", "more"], "selected": "tr" },
+    { "device": null, "chosen": [], "chips": ["en", "none", "more"], "selected": "en" },
+    { "device": "en", "chosen": ["de"], "chips": ["de", "en", "none", "more"], "selected": "de" },
+    { "device": "tr", "chosen": ["de"], "chips": ["de", "tr", "en", "none", "more"], "selected": "de" }
+  ]
+}

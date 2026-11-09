@@ -25,6 +25,10 @@ export interface Tokens {
   selected: { fill: string; edge: string };
   /** Laid over art: the desktop poster's hover (tv.apple.com). */
   scrim: Record<string, string>;
+  /** First run's poster wall under a sheet: the dim with a blur, the dim where blur is costly (TV), the blur. */
+  wall: { dim: string; dimNoBlur: string; blur: number };
+  /** First run's sheets: their fill and corner. */
+  sheet: { fill: string; radius: number };
 }
 
 // The self-hosted @fontsource-variable packages register these family names.
@@ -83,6 +87,11 @@ export function generate(t: Tokens): string {
     ...Object.entries(t.lift).map(([k, v]) => `--lift-${kebab(k)}: ${v};`),
     ...Object.entries(t.selected).map(([k, v]) => `--selected-${kebab(k)}: ${v};`),
     ...Object.entries(t.scrim).map(([k, v]) => `--scrim-${kebab(k)}: ${v};`),
+    `--wall-dim: ${t.wall.dim};`,
+    `--wall-dim-no-blur: ${t.wall.dimNoBlur};`,
+    `--wall-blur: ${t.wall.blur}px;`,
+    `--sheet-fill: ${t.sheet.fill};`,
+    `--sheet-radius: ${t.sheet.radius}px;`,
     `--motion-focus: ${t.motion.focusMs}ms;`,
     `--motion-panel: ${t.motion.panelMs}ms;`,
     `--ease: ${t.motion.ease};`,

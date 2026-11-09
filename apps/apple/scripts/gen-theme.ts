@@ -173,6 +173,19 @@ ${radius}
         static let hover = Color(${rgba(tokens.scrim.hover)})
     }
 
+    /// First run's poster wall under a sheet (\`wall\`): the dim with a blur, the dim where blur is costly, the blur.
+    enum Wall {
+        static let dim = Color(${rgba(tokens.wall.dim)})
+        static let dimNoBlur = Color(${rgba(tokens.wall.dimNoBlur)})
+        static let blur: CGFloat = ${tokens.wall.blur}
+    }
+
+    /// First run's sheets (\`sheet\`): their fill and corner.
+    enum Sheet {
+        static let fill = Color(${rgba(tokens.sheet.fill)})
+        static let radius: CGFloat = ${tokens.sheet.radius}
+    }
+
     /// Font weights, 100 to 900.
     enum Weight {
 ${lets(tokens.weight)}
