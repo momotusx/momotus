@@ -307,7 +307,8 @@ test("the loading screen offers Choose another version when the core does: laid 
     await mute(page);
     await expect(page.locator(".ld.on")).toBeVisible({ timeout: 30_000 });
     const button = page.locator('[data-f="player:another"]');
-    const said = page.locator('p.sr[aria-live="polite"]');
+    // The loading line's own region; the bar's quick shift says its line in `p.sr.said`.
+    const said = page.locator('p.sr:not(.said)[aria-live="polite"]');
     // The button's box and the stage line's top (the logo pulses gently and the stage words change, so only these).
     const rects = () => page.evaluate(() => [JSON.stringify(document.querySelector("[data-f=\"player:another\"]")?.getBoundingClientRect()), document.querySelector(".ld-cap")?.getBoundingClientRect().top]);
     const active = () => page.evaluate(() => (document.activeElement as HTMLElement | null)?.dataset.f ?? null);
